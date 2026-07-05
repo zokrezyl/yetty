@@ -14,6 +14,7 @@
 
 #include <yetty/yframework/yframework.h>
 
+#include <yetty/ycore/memtag.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yplatform/yplatform/platform.h>
@@ -711,6 +712,19 @@ struct yetty_yframework_ptr_result yetty_yframework_create(struct yetty_yclass_o
         return YETTY_ERR(yetty_yframework_ptr, "yframework: gpu init failed", gpu_res);
     }
 
+    /* Per-owner allocation accounting registry (memtags). Best-effort — the
+     * app runs fine without it, consumers just skip registration. */
+    {
+        struct yetty_ycore_memtag_registry_ptr_result memtag_res =
+            yetty_ycore_memtag_registry_create();
+        if (YETTY_IS_OK(memtag_res)) {
+            rt->memtag_registry = memtag_res.value;
+        } else {
+            yerror("yframework: memtag registry create failed: %s", memtag_res.error.msg);
+            yetty_ycore_error_destroy(memtag_res.error);
+        }
+    }
+
     /* RPC server (optional). Created here so any app that wants the
      * generic key/mouse/resize/shutdown injection just toggles
      * `rpc/port` in its config. Apps can register more handlers on
@@ -724,6 +738,7 @@ struct yetty_yframework_ptr_result yetty_yframework_create(struct yetty_yclass_o
         struct yetty_rpc_server_ptr_result rpc_res = yetty_yctl_server_create(rt->event_loop);
         if (YETTY_IS_OK(rpc_res)) {
             rt->rpc_server = rpc_res.value;
+            yetty_yctl_server_set_memtag_registry(rt->rpc_server, rt->memtag_registry);
             struct yetty_ycore_void_result sr =
                 yetty_yctl_server_start(rt->rpc_server, rpc_host, rpc_port);
             if (YETTY_IS_OK(sr)) {
@@ -757,6 +772,15 @@ struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework 
             first_err = r;
         }
         rt->rpc_server = NULL;
+    }
+
+    /* After the RPC server (its memtags handler reads the registry); before
+     * the figure/terminal teardown is NOT required — tag owners unregister
+     * themselves at their own destroy, and by the time we get here the app
+     * objects are already gone. */
+    if (rt->memtag_registry) {
+        yetty_ycore_memtag_registry_destroy(rt->memtag_registry);
+        rt->memtag_registry = NULL;
     }
 
     /* Tear down the per-kind factory bundles BEFORE the GPU goes away

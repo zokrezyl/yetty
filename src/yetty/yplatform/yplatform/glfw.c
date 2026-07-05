@@ -27,6 +27,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if !defined(_WIN32)
+#include <signal.h>
+#endif
 
 #include <yetty/ycore/result.h>
 #include <yetty/yclass/class.h>
@@ -195,6 +198,15 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
     if (!app) {
         return YETTY_ERR(yetty_ycore_void, "glfw_platform_run: app object is required");
     }
+
+#if !defined(_WIN32)
+    /* A write(2) to a peer that vanished (a killed PTY client's pipe end, a
+     * dropped RPC/VNC connection, a dead helper's stdin) must surface as
+     * EPIPE through the Result chain — the default SIGPIPE disposition
+     * silently kills the whole terminal instead. libuv shields only its own
+     * socket writes; the raw PTY/pipe paths are not covered. */
+    signal(SIGPIPE, SIG_IGN);
+#endif
 
     /* Config resolves the platform directory layout itself, exports the YETTY_*
      * env vars, and parses argv. -h/--help and unknown-flag errors exit() from

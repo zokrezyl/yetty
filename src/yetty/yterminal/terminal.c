@@ -447,6 +447,30 @@ static struct yetty_ycore_void_result terminal_clear_figures_callback(void *user
     return YETTY_OK_VOID();
 }
 
+/* Figure re-materialization hook: replay a wire envelope retained on a grid
+ * line through the composite factory — the same call that minted the figure
+ * when the envelope first arrived over the PTY. The grid invokes this when an
+ * evicted history line (past the scrollback hot window) scrolls back into
+ * view; the fresh instance's ownership transfers to the grid line. */
+static struct yetty_ycore_void_result terminal_materialize_figure_callback(
+    const uint32_t *envelope_words, uint32_t envelope_word_count, void *userdata,
+    struct yetty_ydraw_composite **out_instance)
+{
+    struct yetty_yterminal_terminal *terminal = userdata;
+    *out_instance = NULL;
+    if (!terminal || !terminal->composite_factory || envelope_word_count == 0) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ydraw_composite_ptr_result instance_res =
+        yetty_ydraw_composite_factory_create_instance(
+            terminal->composite_factory, envelope_words,
+            (size_t)envelope_word_count * sizeof(uint32_t), /*rolling_row=*/0u);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, instance_res,
+                        "terminal_materialize_figure: create_instance");
+    *out_instance = instance_res.value;
+    return YETTY_OK_VOID();
+}
+
 /* yetty_yclass_rpc_dcs_emit_fn impl — ships an already-encoded DCS
  * envelope through the PTY master so the subprocess sees it on its
  * stdin. Looping write because pty write ops are single-shot (one
@@ -1244,6 +1268,18 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
             }
         }
         if (yetty_ydraw_is_composite(data[0]) && terminal->composite_factory) {
+            /* Retain the creating wire envelope on the line FIRST (verbatim, in
+             * the same arena the SDF records use — the SDF pass skips
+             * composite-type records). When the line ages past the scrollback
+             * hot window the figure runtime is destroyed and this envelope is
+             * what re-materializes it on scroll-back. Best-effort: a figure
+             * without a retained envelope still displays, it just cannot be
+             * rebuilt after eviction. */
+            struct yetty_ycore_uint32_result envelope_res = yetty_yvterm_vterm_append_primitive(
+                terminal->grid, cur_row, data, (uint32_t)(size_res.value / sizeof(uint32_t)));
+            if (YETTY_IS_ERR(envelope_res)) {
+                yetty_ycore_error_destroy(envelope_res.error);
+            }
             /* Mint the figure instance and hand it to the line; the grid owns it
              * and vterm's rich pass draws it at the line's pixel origin. */
             struct yetty_ydraw_composite_ptr_result ir =
@@ -2047,6 +2083,15 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         terminal->grid, terminal_clear_figures_callback, terminal);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, clear_hook_res,
                         "terminal_create: set clear hook failed");
+
+    /* Figure re-materialization for the tiered scroll buffer: lines aging past
+     * the scrollback hot window lose their figure runtimes but keep the
+     * creating wire envelopes; this hook replays an envelope through the
+     * composite factory when such a line scrolls back into view. */
+    struct yetty_ycore_void_result materialize_res = yetty_yvterm_vterm_set_materialize(
+        terminal->grid, terminal_materialize_figure_callback, terminal);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, materialize_res,
+                        "terminal_create: set materialize hook failed");
 
     /* Client-input reinject — pane-wide subscribers bounce unconsumed
      * mouse events back here for default handling (wheel → scrollback).

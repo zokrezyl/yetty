@@ -1,6 +1,9 @@
 add_library(yetty_yvterm STATIC
     grid.c
     vterm.c
+    # Tiered scroll buffer archive engine: line serialization, lz4 warm
+    # segments, the session-scoped cold spill file, materialization cache.
+    scroll-tiers.c
     # yvterm's own SDF/glyph/text renderer for the raw ydraw records (ycat
     # PDF/SVG/markdown) stored on the grid ring. Standalone — does not use ygrid.
     sdf-layer.c
@@ -35,6 +38,7 @@ target_link_libraries(yetty_yvterm PUBLIC
     yetty_yplatform_core # SDF layer wire-font cache: cache dir + mkdir/file_exists
     webgpu               # wgpu* pipeline/buffers/draw for the text + SDF render
     vterm
+    lz4_static           # scroll-tiers: warm-segment compression
 )
 
 # vterm.c carries `[[clang::annotate(...)]]` on its class struct (codegen reads

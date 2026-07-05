@@ -1,7 +1,9 @@
 /* RPC server implementation using event loop TCP server */
 
 #include <yetty/yctl/rpc-server.h>
+#include <yetty/ycore/memtag.h>
 #include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ytrace/ytrace.h>
@@ -56,6 +58,13 @@ struct yetty_yctl_server {
 
     /* Client count */
     size_t client_count;
+
+    /* Borrowed per-owner allocation-accounting registry (framework-owned);
+     * NULL when the app runs without one. Feeds the `memtags` method. */
+    struct yetty_ycore_memtag_registry *memtag_registry;
+    /* Reusable response encoding buffer for the memtags dump; the handler
+     * result points into it and the transport copies before the next call. */
+    msgpack_sbuffer memtag_response;
 };
 
 static struct yetty_yctl_handler_entry *find_handler(struct yetty_yctl_server *server,
@@ -288,14 +297,26 @@ struct yetty_rpc_server_ptr_result yetty_yctl_server_create(
 
     server->event_loop = event_loop;
     server->server_id = -1;
+    msgpack_sbuffer_init(&server->memtag_response);
 
     res = register_builtin_handlers(server);
     if (YETTY_IS_ERR(res)) {
+        msgpack_sbuffer_destroy(&server->memtag_response);
         free(server);
         return YETTY_ERR(yetty_rpc_server_ptr, res.error.msg);
     }
 
     return YETTY_OK(yetty_rpc_server_ptr, server);
+}
+
+/* Hand the server the (framework-owned) memtag registry the `memtags` method
+ * dumps. NULL-safe on both sides. */
+void yetty_yctl_server_set_memtag_registry(struct yetty_yctl_server *server,
+                                           struct yetty_ycore_memtag_registry *registry)
+{
+    if (server) {
+        server->memtag_registry = registry;
+    }
 }
 
 struct yetty_ycore_void_result yetty_yctl_server_destroy(struct yetty_yctl_server *server)
@@ -305,6 +326,7 @@ struct yetty_ycore_void_result yetty_yctl_server_destroy(struct yetty_yctl_serve
     }
 
     struct yetty_ycore_void_result stop_r = yetty_yctl_server_stop(server);
+    msgpack_sbuffer_destroy(&server->memtag_response);
     free(server);
 
     if (YETTY_IS_ERR(stop_r)) {
@@ -746,6 +768,34 @@ static struct yetty_rpc_handler_result handle_mouse_scroll(const struct yetty_yc
     return YETTY_YCTL_HANDLER_OK_BOOL(1);
 }
 
+/* Request: dump the per-owner allocation-accounting registry as one
+ * preformatted text table (a msgpack str). Params: none. */
+static struct yetty_rpc_handler_result handle_memtags(const struct yetty_yctl_message *msg,
+                                                      void *userdata)
+{
+    (void)msg;
+    struct yetty_yctl_server *server = userdata;
+    if (!server->memtag_registry) {
+        return YETTY_YCTL_HANDLER_ERR("no memtag registry");
+    }
+    struct yetty_ycore_buffer table = {0};
+    struct yetty_ycore_void_result format_res =
+        yetty_ycore_memtag_registry_format(server->memtag_registry, &table);
+    if (YETTY_IS_ERR(format_res)) {
+        yetty_ycore_error_destroy(format_res.error);
+        yetty_ycore_buffer_destroy(&table);
+        return YETTY_YCTL_HANDLER_ERR("memtag format failed");
+    }
+    msgpack_sbuffer_clear(&server->memtag_response);
+    msgpack_packer packer;
+    msgpack_packer_init(&packer, &server->memtag_response, msgpack_sbuffer_write);
+    msgpack_pack_str(&packer, table.size);
+    msgpack_pack_str_body(&packer, table.data, table.size);
+    yetty_ycore_buffer_destroy(&table);
+    return YETTY_YCTL_HANDLER_OK_DATA((const uint8_t *)server->memtag_response.data,
+                                      server->memtag_response.size);
+}
+
 /* Notification: capture the current frame to disk. Posts the same
  * YETTY_YCORE_SCREENSHOT event the test harness uses; yetty's handler
  * reads the last-rendered texture back and writes a PPM. Params:
@@ -866,6 +916,7 @@ static struct yetty_ycore_void_result register_builtin_handlers(struct yetty_yct
     REG("resize", handle_resize);
     REG("screenshot", handle_screenshot);
     REG("shutdown", handle_shutdown);
+    REG("memtags", handle_memtags);
 
 #undef REG
 

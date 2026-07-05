@@ -26,3 +26,14 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract terminal
     TIMEOUT 30)
+
+# Tiered scrollback (#466): hot-window figure-runtime eviction, wire-envelope
+# retention in the line arena, view-driven re-materialization + sweep.
+# Composites are fabricated with a test-local ops table — no factory, no GPU.
+yetty_add_c_test(
+    NAME    yvterm_scroll_tiers
+    SOURCES scroll-tiers-test.c
+    LIBS    yetty_yvterm yetty_yclass yetty_ywire yetty_ydraw_factory yetty_ydraw_core yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract terminal scrollback
+    TIMEOUT 30)

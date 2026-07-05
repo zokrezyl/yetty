@@ -1,6 +1,7 @@
 # yetty core (C)
 add_library(yetty_ycore STATIC
     memstats.c
+    memtag.c
     result.c
     types.c
     util.c

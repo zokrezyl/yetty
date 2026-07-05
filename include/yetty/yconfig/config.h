@@ -109,6 +109,17 @@ struct yetty_yconfig_config {
 #define YETTY_YCONFIG_KEY_RENDERING_DAMAGE_TRACKING "rendering/damage-tracking"
 #define YETTY_YCONFIG_KEY_RENDERING_SHOW_FPS "rendering/show-fps"
 #define YETTY_YCONFIG_KEY_SCROLLBACK_LINES "scrollback/lines"
+/* Hot window of the tiered scroll buffer: the newest N lines keep their
+ * anchored figures fully materialized (decoded pixels, GPU binders, video
+ * decoders). Lines aging past it keep only their creating wire envelopes;
+ * the runtime is rebuilt on demand when scrolled back into view. */
+#define YETTY_YCONFIG_KEY_SCROLLBACK_HOT_LINES "scrollback/hot-lines"
+/* Warm-tier byte budget: lz4-compressed scrollback segments held in RAM
+ * before spilling to the session-scoped cold file. 0 = built-in default. */
+#define YETTY_YCONFIG_KEY_SCROLLBACK_WARM_BYTES "scrollback/warm-bytes"
+/* Cold-tier cap: maximum bytes of the session-scoped spill file. 0 =
+ * unlimited (scrollback depth is bounded only by disk). */
+#define YETTY_YCONFIG_KEY_SCROLLBACK_FILE_MAX_BYTES "scrollback/file-max-bytes"
 #define YETTY_YCONFIG_KEY_DEBUG_DAMAGE_RECTS "debug/damage-rects"
 #define YETTY_YCONFIG_KEY_FONT_FAMILY "font/family"
 #define YETTY_YCONFIG_KEY_TERMINAL_FONT_RENDER_METHOD "terminal/text-layer/font/render-method"

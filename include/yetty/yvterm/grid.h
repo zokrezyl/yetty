@@ -17,11 +17,14 @@ extern "C" {
 #endif
 
 struct yetty_ycore_buffer;
+struct yetty_ycore_memtag_registry;
 struct yetty_ydraw_composite;
 struct yetty_ywire_wire_statemachine;
 
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, void *);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);
+typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(
+    const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_pty_write_fn)(const char *, size_t,
                                                                          void *);
 
@@ -86,7 +89,8 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_grid_create(struct yetty_ycla
 struct yetty_ycore_void_result yetty_yvterm_register(void);
 
 struct yetty_yclass_object_ptr_result yetty_yvterm_grid_make(uint32_t cols, uint32_t rows,
-                                                             uint32_t scrollback_rows);
+                                                             uint32_t scrollback_rows,
+                                                             uint32_t hot_rows);
 struct yetty_ycore_void_result yetty_yvterm_grid_dispose(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yvterm_grid_set_pty_write(struct yetty_yclass_object *obj,
                                                                yetty_yvterm_grid_pty_write_fn fn,
@@ -97,6 +101,11 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_clear_hook(struct yetty_ycl
 struct yetty_ycore_void_result yetty_yvterm_grid_set_card_sub(struct yetty_yclass_object *obj,
                                                               yetty_yvterm_grid_card_sub_fn fn,
                                                               void *userdata);
+/* Register the figure re-materialization hook. The integration layer (which
+ * owns the composite factory) supplies it; the grid replays retained wire
+ * envelopes through it when an evicted history line scrolls back into view. */
+struct yetty_ycore_void_result yetty_yvterm_grid_set_materialize(
+    struct yetty_yclass_object *obj, yetty_yvterm_grid_materialize_fn fn, void *userdata);
 struct yetty_ycore_void_result yetty_yvterm_grid_feed(struct yetty_yclass_object *obj,
                                                       const char *bytes, size_t len);
 struct yetty_ycore_void_result yetty_yvterm_grid_resize(struct yetty_yclass_object *obj,
@@ -165,10 +174,11 @@ struct yetty_ycore_int_result yetty_yvterm_grid_line_dirty(struct yetty_yclass_o
  * NULL. */
 struct yetty_ydraw_composite_const_ptr_ptr_result yetty_yvterm_grid_line_composites(
     struct yetty_yclass_object *obj, uint32_t row, uint32_t *out_count);
-/* Composite array on RAW ring slot `slot` (0..slot_count). Distinct from the
- * visible-row accessor above: the text upload + shader address the ring by raw
- * slot via root_row, so the composite pass must read by the SAME slot to scroll
- * in lockstep (live AND scrolled-back). Sets *out_count; may be NULL. */
+/* Composite array on RAW ring slot `slot` (0..slot_count) or an extended
+ * view-window id. Distinct from the visible-row accessor above: the text
+ * upload + shader address the ring by raw slot via the resolved window, so
+ * the composite pass must read by the SAME slot to scroll in lockstep (live
+ * AND scrolled-back). Sets *out_count; may be NULL. */
 struct yetty_ydraw_composite_const_ptr_ptr_result yetty_yvterm_grid_slot_composites(
     struct yetty_yclass_object *obj, uint32_t slot, uint32_t *out_count);
 /* Number of raw drawable records (SDF / glyph / TEXT_DRAWABLE_LIST / FONT) stored
@@ -188,6 +198,37 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_span(struct yetty_yclass
  * range. The returned span aliases the line's arena — read it, do not retain it. */
 struct yetty_ycore_const_uint32_ptr_result yetty_yvterm_grid_slot_primitive_words(
     struct yetty_yclass_object *obj, uint32_t slot, uint32_t index, uint32_t *out_word_count);
+/* Timeline index of the live screen top (rows above it are history). */
+struct yetty_ycore_uint32_result yetty_yvterm_grid_live_anchor(struct yetty_yclass_object *obj);
+/* Timeline index of the oldest line still reachable across all tiers — the
+ * scrollback floor. With the cold tier unbounded this stays 0 for the whole
+ * session ("effectively infinite" scrollback). */
+struct yetty_ycore_uint32_result yetty_yvterm_grid_history_floor(struct yetty_yclass_object *obj);
+/* Enter/leave the scrolled-back view. `view_top_line` is the TIMELINE index
+ * of the line to show at the window's top row (see grid_live_anchor /
+ * grid_history_floor for the valid range). */
+struct yetty_ycore_void_result yetty_yvterm_grid_set_view(struct yetty_yclass_object *obj,
+                                                          int active, uint32_t view_top_line);
+/* Resolve the renderer's window for this frame: `row_count` rows starting at
+ * the view top (live top when no view is active). Returns a grid-owned array
+ * of one slot id per window row — real ring slots for hot rows (the text,
+ * composite and SDF passes read them exactly as before), or extended ids
+ * (>= slot_count) that the slot accessors transparently serve from the
+ * archive materialization cache. Also sweeps archive figure runtimes whose
+ * lines left the window, and prefetches the adjacent segment in the scroll
+ * direction so figure re-decode hides behind the scroll. */
+struct yetty_ycore_const_uint32_ptr_result yetty_yvterm_grid_view_window(
+    struct yetty_yclass_object *obj, uint32_t row_count, uint32_t *out_row_count);
+/* Warm / cold tier budgets (scrollback/warm-bytes, scrollback/file-max-bytes;
+ * 0 keeps the built-in warm default / unlimited file). */
+struct yetty_ycore_void_result yetty_yvterm_grid_set_tier_budgets(struct yetty_yclass_object *obj,
+                                                                  uint32_t warm_bytes,
+                                                                  uint32_t file_max_bytes);
+/* Register the grid's per-owner byte accounting (ring + archive tags) with
+ * the framework's memtag registry, feeding the yctl `memtags` dump. The grid
+ * unregisters itself at dispose. */
+struct yetty_ycore_void_result yetty_yvterm_grid_register_memtags(
+    struct yetty_yclass_object *obj, struct yetty_ycore_memtag_registry *registry);
 /* Current selection rectangle (raw anchor/head; the renderer normalises to a
  * reading-order stream). active=0 → no selection. */
 struct yetty_ycore_void_result yetty_yvterm_grid_selection(

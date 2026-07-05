@@ -30,7 +30,8 @@
 static struct yetty_yclass_object *make_grid(struct ytest *test, uint32_t cols, uint32_t rows,
                                              uint32_t scrollback)
 {
-    struct yetty_yclass_object_ptr_result r = yetty_yvterm_grid_make(cols, rows, scrollback);
+    struct yetty_yclass_object_ptr_result r =
+        yetty_yvterm_grid_make(cols, rows, scrollback, /*hot_rows=*/0);
     YTEST_REQUIRE_OK(test, r);
     return r.value;
 }

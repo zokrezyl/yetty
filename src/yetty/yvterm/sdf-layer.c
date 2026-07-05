@@ -978,6 +978,13 @@ void yetty_yvterm_sdf_layer_destroy(struct yetty_yvterm_sdf_layer *layer)
     if (layer->binder) {
         layer->binder->ops->destroy(layer->binder);
     }
+    /* layer->fonts[] holds cache-owned borrows (wire + system fonts, their
+     * MSDF atlases and glyph maps); destroying the cache tears every entry
+     * down regardless of refcount. After the binder, which references the
+     * fonts' resource sets as children. */
+    if (layer->font_cache) {
+        yetty_yfont_cache_destroy(layer->font_cache);
+    }
     size_t cell_count = (size_t)layer->cell_cols * (size_t)layer->cell_rows;
     for (size_t i = 0; i < cell_count; ++i) {
         free(layer->cells[i].indices);
@@ -1000,14 +1007,15 @@ void yetty_yvterm_sdf_layer_destroy(struct yetty_yvterm_sdf_layer *layer)
 struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
     struct yetty_yvterm_sdf_layer *layer, struct yetty_yclass_object *grid_obj,
     struct yetty_ydraw_target *target, struct yetty_ycore_rectangle rect, float cell_width,
-    float cell_height, uint32_t cols, uint32_t rows, uint32_t root_row, uint32_t slot_count,
-    uint32_t back, float visual_zoom_scale, float visual_zoom_off_x, float visual_zoom_off_y,
-    float cell_zoom_scale)
+    float cell_height, uint32_t cols, uint32_t rows, const uint32_t *window_slots,
+    uint32_t window_rows, uint32_t slot_count, float visual_zoom_scale, float visual_zoom_off_x,
+    float visual_zoom_off_y, float cell_zoom_scale)
 {
     if (!layer || layer->headless || !layer->binder) {
         return YETTY_OK_VOID();
     }
-    if (cols == 0 || rows == 0 || slot_count == 0 || cell_width <= 0.0f || cell_height <= 0.0f) {
+    if (cols == 0 || rows == 0 || slot_count == 0 || cell_width <= 0.0f || cell_height <= 0.0f ||
+        !window_slots || window_rows == 0) {
         return YETTY_OK_VOID();
     }
 
@@ -1021,11 +1029,16 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
     layer->cur_cols = cols;
     layer->cur_rows = rows;
 
-    /* Pass 1 — install every FONT record across the whole ring FIRST. Records
-     * are visited per-slot, which is not emission order, so a text run can sit
-     * at a lower slot index than the FONT it references; installing all fonts up
-     * front guarantees the glyph expansion in pass 2 always finds its font. */
-    for (uint32_t slot = 0; slot < slot_count; ++slot) {
+    /* Pass 1 — install every FONT record FIRST. Records are visited per-line,
+     * which is not emission order, so a text run can sit before the FONT it
+     * references; installing all fonts up front guarantees the glyph expansion
+     * in pass 2 always finds its font. The walk covers the whole hot ring plus
+     * the resolved window (archive rows served from the tier cache): a font is
+     * installed while its record is hot and the layer's font table persists,
+     * so archived text keeps resolving; the window walk covers records that
+     * archived before this layer ever rendered them. */
+    for (uint32_t walk = 0; walk < slot_count + window_rows; ++walk) {
+        uint32_t slot = walk < slot_count ? walk : window_slots[walk - slot_count];
         struct yetty_ycore_uint32_result prim_count_res =
             yetty_yvterm_grid_slot_primitive_count(grid_obj, slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_count_res,
@@ -1053,24 +1066,15 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
         }
     }
 
-    /* A block is anchored on its BOTTOM line; a bottom that sits just below the
-     * viewport may still have its top poking into the pane in a scrolled-back
-     * view. The fold point therefore extends one screen height plus a look-ahead
-     * below the viewport before a slot is treated as "above" (negative anchor).
-     * The look-ahead is capped by the live scroll distance `back` (0 in the live
-     * view), so the oldest scrollback slots — which alias "below the bottom" on
-     * the ring — are never misread as bottom anchors. */
-    uint32_t lookahead = back < (uint32_t)YVTERM_SDF_ANCHOR_LOOKAHEAD_ROWS
-                             ? back
-                             : (uint32_t)YVTERM_SDF_ANCHOR_LOOKAHEAD_ROWS;
-    int fold_threshold = (int)rows + (int)lookahead;
-
-    /* Pass 2 — index the drawables (SDF shapes, glyphs, expanded text runs). The
-     * slot's signed visible row is the block's BOTTOM; the block's top row, where
-     * its local coordinates are anchored, is (bottom − (span − 1)). The shader's
-     * rolling-row offset places it at that top, so the block draws top-down from
-     * where its text sits while staying owned/evicted by its bottom line. */
-    for (uint32_t slot = 0; slot < slot_count; ++slot) {
+    /* Pass 2 — index the drawables (SDF shapes, glyphs, expanded text runs)
+     * of the resolved window. Window row r IS the viewport row: a block is
+     * anchored on its BOTTOM line (a bottom just below the viewport is inside
+     * the window's look-ahead tail); the block's top row, where its local
+     * coordinates are anchored, is (bottom − (span − 1)). The shader's
+     * rolling-row offset places it at that top, so the block draws top-down
+     * from where its text sits while staying owned by its bottom line. */
+    for (uint32_t window_row = 0; window_row < window_rows; ++window_row) {
+        uint32_t slot = window_slots[window_row];
         struct yetty_ycore_uint32_result prim_count_res =
             yetty_yvterm_grid_slot_primitive_count(grid_obj, slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_count_res, "sdf-layer: slot primitive count");
@@ -1078,18 +1082,10 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
         if (prim_count == 0) {
             continue;
         }
-        int row = (int)slot - (int)root_row;
-        row %= (int)slot_count;
-        if (row < 0) {
-            row += (int)slot_count;
-        }
-        if (row >= fold_threshold) {
-            row -= (int)slot_count; /* above the viewport — negative anchor */
-        }
         struct yetty_ycore_uint32_result span_res = yetty_yvterm_grid_slot_span(grid_obj, slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, span_res, "sdf-layer: slot span");
         uint32_t span = span_res.value;
-        layer->cur_rolling_row = row - (int)(span ? span - 1u : 0u);
+        layer->cur_rolling_row = (int)window_row - (int)(span ? span - 1u : 0u);
         for (uint32_t prim = 0; prim < prim_count; ++prim) {
             uint32_t word_count = 0;
             struct yetty_ycore_const_uint32_ptr_result words_res =
