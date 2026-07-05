@@ -9,7 +9,7 @@
 #   - Linux x86_64  → dawn-exotic (Wayland surface support enabled)
 #   - Linux aarch64 → dawn-exotic (Wayland surface support enabled)
 #   - macOS x86_64/aarch64 → google/dawn (macos-15-intel, macos-latest)
-#   - Windows x86_64       → google/dawn (windows-latest)
+#   - Windows x86_64       → dawn-exotic (OpenGL/GLES backends enabled)
 #   - iOS arm64            → google/dawn (dawn-apple xcframework)
 #   - tvOS                 → dawn-exotic (google/dawn has no tvOS slices)
 #
@@ -31,8 +31,8 @@
 include(FetchContent)
 
 # Dawn release version (date-based versioning)
-set(DAWN_VERSION "20260422.215810" CACHE STRING "Dawn version to use")
-set(DAWN_COMMIT "6701fe7a9a10398164e847bf6cdf2c580d3d150c" CACHE STRING "Dawn commit hash")
+set(DAWN_VERSION "20260624.223603" CACHE STRING "Dawn version to use")
+set(DAWN_COMMIT "11ab3f92ed451db8c1e1366abcddd9c202e0738d" CACHE STRING "Dawn commit hash")
 
 # iOS uses XCFramework from upstream Google dawn-apple package.
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
@@ -245,7 +245,16 @@ else()
     # Build type for Dawn (use Release for both Debug and Release builds - Dawn debug is huge)
     set(DAWN_BUILD_TYPE "Release")
 
-    set(DAWN_URL "https://github.com/google/dawn/releases/download/v${DAWN_VERSION}/Dawn-${DAWN_COMMIT}-${DAWN_PLATFORM}-${DAWN_BUILD_TYPE}.tar.gz")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+        # Windows uses the in-house dawn-exotic build: Google's windows-latest
+        # prebuilt ships without the OpenGL/GLES backends, so on virtualized
+        # GPUs (VMware SVGA 3D: hardware GL, no usable D3D12/Vulkan) Dawn falls
+        # back to the WARP software rasterizer. dawn-exotic enables desktop GL
+        # and GLES on top of the stock D3D11/D3D12/Vulkan set.
+        set(DAWN_URL "https://github.com/zokrezyl/dawn-exotic/releases/download/v${DAWN_VERSION}/dawn-windows-x86_64-release-${DAWN_VERSION}.tar.gz")
+    else()
+        set(DAWN_URL "https://github.com/google/dawn/releases/download/v${DAWN_VERSION}/Dawn-${DAWN_COMMIT}-${DAWN_PLATFORM}-${DAWN_BUILD_TYPE}.tar.gz")
+    endif()
 
     # Use FetchContent for reliable downloads (handles GitHub 302 redirects properly)
     message(STATUS "Downloading Dawn v${DAWN_VERSION} for ${DAWN_PLATFORM}...")
