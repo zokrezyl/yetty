@@ -32,6 +32,14 @@ struct yetty_platform_pty_ops {
                                              uint32_t rows, uint32_t pixel_w, uint32_t pixel_h);
     struct yetty_ycore_void_result (*stop)(struct yetty_platform_pty *self);
     struct yetty_platform_pty_pipe_source *(*pipe_source)(struct yetty_platform_pty *self);
+    /* Whether the backing process is still running: 1 = alive, 0 = gone,
+     * -1 = unknown. Optional (NULL = unknown) — backends without a child
+     * process (memory pair, network transports) leave it unset. The
+     * terminal uses this to tell a real child exit from a transient tty
+     * hangup: a pty master can read EIO while the shell is perfectly
+     * alive (client-side session games, killed foreground groups), and
+     * that must not close the pane. */
+    int (*child_alive)(struct yetty_platform_pty *self);
 };
 
 /* Pty base */
