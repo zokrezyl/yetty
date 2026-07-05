@@ -98,6 +98,16 @@ struct yetty_yplatform_timer_handle {
     int id;
     int timeout_ms;
     int active;
+    /* Slot occupancy, independent of `active`: a created-but-stopped timer
+     * is !active yet still `used`. create_timer reuses !used slots so a
+     * create/destroy churn (animated yplot/yvideo/yshadertoy figures cycling
+     * through the scrollback hot window) doesn't monotonically exhaust the
+     * table. Mirrors the webasm loop's fix. */
+    int used;
+    /* 1 while the destroyed timer's uv_close is still pending. libuv closes
+     * asynchronously — the handle memory must not be reused until the close
+     * callback confirms, so a closing slot stays unavailable to create. */
+    int closing;
     struct yetty_yevent_event_listener *listeners[MAX_LISTENERS_PER_TIMER];
     int listener_count;
 };
@@ -125,8 +135,10 @@ struct yetty_yplatform_libuv_event_loop {
     struct yetty_yplatform_pty_pipe_handle pty_pipes[MAX_PTY_PIPES];
     int next_pty_pipe_id;
 
+    /* Timer slots are allocated by free-slot scan (see libuv_create_timer),
+     * not a monotonic counter — destroy returns the slot once its async
+     * uv_close confirms. */
     struct yetty_yplatform_timer_handle timers[MAX_TIMERS];
-    int next_timer_id;
 
     struct yetty_yplatform_tcp_server_handle tcp_servers[MAX_TCP_SERVERS];
     int next_tcp_server_id;
@@ -203,6 +215,9 @@ static struct yetty_ycore_size_result libuv_tcp_send(struct yetty_yevent_conn *c
                                                      const void *data, size_t len);
 static struct yetty_ycore_void_result libuv_tcp_close(struct yetty_yevent_conn *conn);
 static void write_pool_drain(struct yetty_yevent_conn *conn);
+static void on_tcp_server_conn_closed(uv_handle_t *handle);
+static void tcp_server_conn_detach(struct yetty_yplatform_tcp_server_handle *server,
+                                   const struct yetty_yevent_conn *conn);
 static void libuv_request_render(struct yetty_yevent_event_loop *self);
 static void libuv_post_to_loop(struct yetty_yevent_event_loop *self, void (*fn)(void *), void *arg);
 static void libuv_post_fatal_error(struct yetty_yevent_event_loop *self,
@@ -601,20 +616,43 @@ static struct yetty_ycore_void_result libuv_unregister_pty_pipe(
 
 /* Timers */
 
+/* uv_close completion for a destroyed timer: only now may the slot be
+ * handed out again (libuv requires the handle memory untouched until the
+ * close callback runs). */
+YETTY_EXTERNAL_CALLBACK
+static void on_timer_closed(uv_handle_t *handle)
+{
+    struct yetty_yplatform_timer_handle *th = handle->data;
+    th->closing = 0;
+    th->used = 0;
+}
+
 static struct yetty_yevent_timer_id_result libuv_create_timer(struct yetty_yevent_event_loop *self)
 {
     struct yetty_yplatform_libuv_event_loop *impl =
         container_of(self, struct yetty_yplatform_libuv_event_loop, base);
-    int id = impl->next_timer_id++;
     struct yetty_yplatform_timer_handle *th;
 
-    if (id >= MAX_TIMERS) {
+    /* Reuse a freed slot rather than only ever bumping a counter — otherwise
+     * a steady create/destroy churn (animated figures aging out of the
+     * scrollback hot window and re-materializing on scroll-back) walks past
+     * MAX_TIMERS and create starts failing while most of the table sits
+     * idle. A slot whose uv_close is still pending stays skipped. */
+    int id = -1;
+    for (int slot = 0; slot < MAX_TIMERS; slot++) {
+        if (!impl->timers[slot].used && !impl->timers[slot].closing) {
+            id = slot;
+            break;
+        }
+    }
+    if (id < 0) {
         return YETTY_ERR(yetty_yevent_timer_id, "too many timers");
     }
 
     th = &impl->timers[id];
     memset(th, 0, sizeof(*th));
     th->id = id;
+    th->used = 1;
     uv_timer_init(impl->loop, &th->timer);
     th->timer.data = th;
 
@@ -682,9 +720,15 @@ static struct yetty_ycore_void_result libuv_destroy_timer(struct yetty_yevent_ev
         return YETTY_ERR(yetty_ycore_void, "invalid timer id");
     }
 
-    uv_timer_stop(&impl->timers[id].timer);
-    uv_close((uv_handle_t *)&impl->timers[id].timer, NULL);
-    impl->timers[id].active = 0;
+    struct yetty_yplatform_timer_handle *th = &impl->timers[id];
+    if (!th->used || th->closing) {
+        return YETTY_OK_VOID(); /* never created, already destroyed, or closing */
+    }
+    uv_timer_stop(&th->timer);
+    th->active = 0;
+    th->listener_count = 0; /* subscribers are gone; never carry into a reuse */
+    th->closing = 1;
+    uv_close((uv_handle_t *)&th->timer, on_timer_closed);
     return YETTY_OK_VOID();
 }
 
@@ -820,9 +864,10 @@ static void on_server_conn_read(uv_stream_t *stream, ssize_t nread, const uv_buf
         if (server->callbacks.on_disconnect) {
             server->callbacks.on_disconnect(conn->conn_ctx);
         }
-        uv_close((uv_handle_t *)stream, NULL);
         conn->active = 0;
         write_pool_drain(conn);
+        tcp_server_conn_detach(server, conn);
+        uv_close((uv_handle_t *)stream, on_tcp_server_conn_closed);
         server->conn_count--;
         return;
     }
@@ -833,6 +878,31 @@ static void on_server_conn_read(uv_stream_t *stream, ssize_t nread, const uv_buf
 
     if (server->callbacks.on_data) {
         server->callbacks.on_data(conn->conn_ctx, conn, buf->base, nread);
+    }
+}
+
+/* uv_close completion for a server connection: pending-write callbacks have
+ * already run (libuv orders them before the close callback), so drain the
+ * write pool once more and release the struct. Freeing earlier would race
+ * libuv's own use of the handle. */
+YETTY_EXTERNAL_CALLBACK
+static void on_tcp_server_conn_closed(uv_handle_t *handle)
+{
+    struct yetty_yevent_conn *conn = handle->data;
+    write_pool_drain(conn);
+    free(conn);
+}
+
+/* Detach a departing connection from its server slot so the accept path can
+ * never hand out a struct whose uv_close is still pending. */
+static void tcp_server_conn_detach(struct yetty_yplatform_tcp_server_handle *server,
+                                   const struct yetty_yevent_conn *conn)
+{
+    for (int i = 0; i < MAX_TCP_CLIENTS; i++) {
+        if (server->conns[i] == conn) {
+            server->conns[i] = NULL;
+            return;
+        }
     }
 }
 
@@ -848,7 +918,9 @@ static void on_tcp_server_connection(uv_stream_t *server_stream, int status)
         return;
     }
 
-    /* Find free connection slot */
+    /* Find a free connection slot. Departed connections leave a NULL slot
+     * (their structs free in the uv_close callback), so a slot is either
+     * NULL or a live connection — no reuse of a handle mid-close. */
     conn = NULL;
     for (i = 0; i < MAX_TCP_CLIENTS; i++) {
         if (server->conns[i] == NULL) {
@@ -858,9 +930,6 @@ static void on_tcp_server_connection(uv_stream_t *server_stream, int status)
                 return;
             }
             server->conns[i] = conn;
-            break;
-        } else if (!server->conns[i]->active) {
-            conn = server->conns[i];
             break;
         }
     }
@@ -902,8 +971,9 @@ static void on_tcp_server_connection(uv_stream_t *server_stream, int status)
         if (server->callbacks.on_disconnect) {
             server->callbacks.on_disconnect(conn->conn_ctx);
         }
-        uv_close((uv_handle_t *)&conn->tcp, NULL);
         conn->active = 0;
+        tcp_server_conn_detach(server, conn);
+        uv_close((uv_handle_t *)&conn->tcp, on_tcp_server_conn_closed);
         server->conn_count--;
     }
 }
@@ -1005,16 +1075,21 @@ static struct yetty_ycore_void_result libuv_stop_tcp_server(struct yetty_yevent_
         return YETTY_OK_VOID();
     }
 
-    /* Close all connections */
+    /* Close all connections. Slots hold live connections only (departed ones
+     * detach + free via their close callback), so every remaining struct is
+     * released the same way here. */
     for (int i = 0; i < MAX_TCP_CLIENTS; i++) {
-        if (server->conns[i] && server->conns[i]->active) {
-            if (server->callbacks.on_disconnect) {
-                server->callbacks.on_disconnect(server->conns[i]->conn_ctx);
-            }
-            uv_close((uv_handle_t *)&server->conns[i]->tcp, NULL);
-            server->conns[i]->active = 0;
-            write_pool_drain(server->conns[i]);
+        struct yetty_yevent_conn *conn = server->conns[i];
+        if (!conn) {
+            continue;
         }
+        if (server->callbacks.on_disconnect) {
+            server->callbacks.on_disconnect(conn->conn_ctx);
+        }
+        conn->active = 0;
+        write_pool_drain(conn);
+        server->conns[i] = NULL;
+        uv_close((uv_handle_t *)&conn->tcp, on_tcp_server_conn_closed);
     }
     server->conn_count = 0;
 

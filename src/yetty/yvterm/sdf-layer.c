@@ -978,6 +978,13 @@ void yetty_yvterm_sdf_layer_destroy(struct yetty_yvterm_sdf_layer *layer)
     if (layer->binder) {
         layer->binder->ops->destroy(layer->binder);
     }
+    /* layer->fonts[] holds cache-owned borrows (wire + system fonts, their
+     * MSDF atlases and glyph maps); destroying the cache tears every entry
+     * down regardless of refcount. After the binder, which references the
+     * fonts' resource sets as children. */
+    if (layer->font_cache) {
+        yetty_yfont_cache_destroy(layer->font_cache);
+    }
     size_t cell_count = (size_t)layer->cell_cols * (size_t)layer->cell_rows;
     for (size_t i = 0; i < cell_count; ++i) {
         free(layer->cells[i].indices);

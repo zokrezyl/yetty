@@ -111,7 +111,11 @@ CMAKE := cmake
 CMAKE_GENERATOR := -G Ninja
 CMAKE_RELEASE := -DCMAKE_BUILD_TYPE=Release
 CMAKE_DEBUG := -DCMAKE_BUILD_TYPE=Debug
-CMAKE_ASAN := -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
+# mimalloc is force-disabled under ASAN: its MI_OVERRIDE archive defines
+# malloc/free ahead of the sanitizer runtime, which routes every allocation
+# around ASAN's interceptors — no redzones, no use-after-free detection, no
+# leak tracking. The sanitizer must own the heap.
+CMAKE_ASAN := -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" -DYETTY_ENABLE_LIB_MIMALLOC=OFF
 
 # Desktop compiler — clang/clang++ by default (the FFI annotate attribute
 # is Clang-only; using gcc here produces ~1000 -Wattributes warnings).
