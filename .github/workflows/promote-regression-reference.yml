@@ -1,0 +1,245 @@
+# Manual promotion of the regression reference corpus (issue #454).
+#
+# The ONLY path that mutates the `regression-corpus` release. Regenerates
+# references from an explicit ref, validates them (stability double-run,
+# completeness, checksums, promotion metadata), self-checks against the
+# candidate pack, and — unless dry_run — swaps the active Release asset:
+#
+#   1. keep the outgoing pack as the single previous-* backup asset
+#      (older backups are deleted: no accumulation),
+#   2. replace yetty-regression-corpus-current.zip (+ .sha256 sidecar),
+#   3. round-trip verify: fetch the published asset back and require the
+#      regression check to pass against it.
+#
+# A short 404 window exists while the asset is swapped; consumer jobs retry
+# and, if they still fail, are simply restarted after promotion completes.
+# Do NOT enable release immutability for this repo (or scope any such
+# ruleset to exclude the `regression-corpus` tag) — the swap requires
+# mutable release assets.
+name: promote-regression-reference
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit/ref to regenerate references from'
+        required: true
+        default: 'main'
+      scenario_filter:
+        description: "Glob over scenario ids ('*' = all scenarios)"
+        required: false
+        default: '*'
+      reason:
+        description: 'Why the new output is correct'
+        required: true
+        type: choice
+        options:
+          - intentional-change
+          - bugfix-new-correct-output
+          - oracle-fix
+          - normalization-change
+      issue_or_pr:
+        description: 'Issue/PR URL or number explaining why the new output is correct'
+        required: true
+      dry_run:
+        description: 'Validate and upload the candidate pack as a workflow artifact only; do not touch the release'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote-regression-corpus
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: regression-corpus
+  ASSET_CURRENT: yetty-regression-corpus-current.zip
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            automake autoconf libtool \
+            meson ninja-build nasm \
+            brotli \
+            libfontconfig1-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev \
+            libx11-dev \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libwebp-dev \
+            clang-20 llvm-20-dev libclang-20-dev
+
+      - name: Build
+        run: make build-desktop-ytrace-release
+
+      # Double run: every scenario must produce byte-identical output twice
+      # within this workflow run, or recording aborts.
+      - name: Record references (stability-checked)
+        run: |
+          mkdir -p tmp/regression
+          python3 test/regression/regression.py record \
+            --out tmp/regression/recorded \
+            --filter '${{ inputs.scenario_filter }}' \
+            --stability-runs 2 \
+            --commit "$(git rev-parse HEAD)" \
+            --reason '${{ inputs.reason }}' \
+            --issue '${{ inputs.issue_or_pr }}'
+
+      # The current pack is the merge base for filtered promotions and the
+      # outgoing backup for full ones. Exit 3 (nothing published yet) is the
+      # bootstrap case and fine; transient unavailability is not.
+      - name: Fetch current corpus
+        id: current
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          fetch_status=0
+          python3 test/regression/regression.py fetch \
+            --dest tmp/regression/current.zip || fetch_status=$?
+          if [ "$fetch_status" = "0" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif [ "$fetch_status" = "3" ]; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "no corpus published yet — bootstrap promotion"
+          else
+            echo "::error::Current corpus unavailable — retry once the release is reachable."
+            exit "$fetch_status"
+          fi
+
+      # Scenarios outside the filter keep their references (and their
+      # per-scenario provenance) from the current pack; scenarios that no
+      # longer exist are dropped here.
+      - name: Merge onto current corpus
+        run: |
+          if [ "${{ steps.current.outputs.exists }}" = "true" ]; then
+            python3 test/regression/regression.py merge \
+              --base tmp/regression/current.zip \
+              --overlay tmp/regression/recorded \
+              --out tmp/regression/merged
+          else
+            cp -r tmp/regression/recorded tmp/regression/merged
+          fi
+
+      # No missing scenarios, no empty artifacts, checksums consistent,
+      # inputs match the checked-out tree, promotion reason/issue present.
+      - name: Validate merged corpus
+        run: |
+          python3 test/regression/regression.py validate \
+            --corpus tmp/regression/merged \
+            --require-promotion-meta
+
+      - name: Pack candidate corpus
+        run: |
+          python3 test/regression/regression.py pack \
+            --corpus tmp/regression/merged \
+            --out "tmp/regression/$ASSET_CURRENT"
+
+      # Issue #454 step 8: the normal regression check must pass against the
+      # candidate pack before it may replace the active asset. For filtered
+      # promotions this also proves the untouched references still match.
+      - name: Self-check against candidate pack
+        run: |
+          python3 test/regression/regression.py check \
+            --corpus "tmp/regression/$ASSET_CURRENT" \
+            --evidence tmp/regression/self-check-evidence
+
+      # Always kept for inspection; on a dry run this is the sole output.
+      - name: Upload candidate pack as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-corpus-candidate-${{ github.run_id }}
+          path: |
+            tmp/regression/${{ env.ASSET_CURRENT }}
+            tmp/regression/${{ env.ASSET_CURRENT }}.sha256
+          retention-days: 7
+
+      - name: Publish (swap release asset)
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd tmp/regression
+
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Prerelease so this utility release never surfaces as the
+            # repo's "Latest release".
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --prerelease \
+              --title "Regression reference corpus" \
+              --notes "Active regression reference corpus. Managed exclusively by the promote-regression-reference workflow — do not edit assets by hand."
+          fi
+
+          # Rotate the backup: exactly one previous-* asset is kept.
+          if [ "${{ steps.current.outputs.exists }}" = "true" ]; then
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name' \
+              | grep '^yetty-regression-corpus-previous-' \
+              | while read -r old_backup; do
+                  gh release delete-asset "$RELEASE_TAG" "$old_backup" \
+                    --repo "$GITHUB_REPOSITORY" --yes
+                done || true
+            outgoing_commit=$(python3 -c "import json, zipfile; print(json.loads(zipfile.ZipFile('current.zip').read('manifest.json')).get('promotion', {}).get('commit', 'unknown')[:12])")
+            backup_name="yetty-regression-corpus-previous-$(date -u +%Y%m%d)-${outgoing_commit}.zip"
+            cp current.zip "$backup_name"
+            gh release upload "$RELEASE_TAG" "$backup_name" --repo "$GITHUB_REPOSITORY"
+          fi
+
+          # The swap. Consumers fetching inside this short window retry; a
+          # job that still fails is restarted after promotion completes.
+          gh release delete-asset "$RELEASE_TAG" "$ASSET_CURRENT" \
+            --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
+          gh release delete-asset "$RELEASE_TAG" "$ASSET_CURRENT.sha256" \
+            --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
+          gh release upload "$RELEASE_TAG" \
+            "$ASSET_CURRENT" "$ASSET_CURRENT.sha256" \
+            --repo "$GITHUB_REPOSITORY"
+
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes "Active regression reference corpus.
+
+          Last promotion:
+          - commit: $(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)
+          - reason: ${{ inputs.reason }}
+          - issue/PR: ${{ inputs.issue_or_pr }}
+          - scenario filter: ${{ inputs.scenario_filter }}
+          - promoted at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          - workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+
+          Managed exclusively by the promote-regression-reference workflow — do not edit assets by hand."
+
+      # Fetch the published asset back through the same consumer path and
+      # require the regression check to pass against it.
+      - name: Round-trip verify published corpus
+        if: ${{ !inputs.dry_run }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 test/regression/regression.py fetch \
+            --dest tmp/regression/verify.zip
+          expected_sha256=$(cut -d' ' -f1 "tmp/regression/$ASSET_CURRENT.sha256")
+          actual_sha256=$(sha256sum tmp/regression/verify.zip | cut -d' ' -f1)
+          if [ "$expected_sha256" != "$actual_sha256" ]; then
+            echo "::error::Published asset does not match the promoted pack ($actual_sha256 != $expected_sha256)"
+            exit 1
+          fi
+          python3 test/regression/regression.py check \
+            --corpus tmp/regression/verify.zip \
+            --evidence tmp/regression/verify-evidence

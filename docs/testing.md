@@ -51,6 +51,7 @@ Developer- and CI-facing targets:
 | `make test-render` | `render`/GPU tests (needs a display/GPU). Nightly/manual. |
 | `make test-e2e` | Launched-`yetty` + `yctl`-driven E2E tests (needs a display). Nightly/manual; self-skips headless. |
 | `make test-nightly` | All non-fast lanes at once: `network` + `wpt` + `render` + `e2e`. |
+| `make test-regression` | Fetch the accepted reference corpus (GitHub Release asset) and diff deterministic ycat/decode-ydraw scenario output against it. See `test/regression/README.md`. |
 
 `make test-fast` is defined as build-if-needed plus:
 
@@ -272,6 +273,17 @@ locally with `make test-render` / `make test-e2e` / `make test-network` /
 - `yctl`-driven E2E: launched-`yetty` process startup → RPC bind → clean
   shutdown (`e2e`, `display`, `slow`). `test/e2e/yctl-smoke.py`; self-skips when
   there is no display or yetty binary.
+
+**Regression corpus (L3, both CIs).** The deterministic ycat →
+`decode-ydraw` golden scenarios (`test/regression/`) run against an
+accepted reference corpus stored as a GitHub Release asset — never in git.
+The Woodpecker per-PR lane checks it after `test-fast`
+(`.woodpecker/linux.yml` step `regression`), and
+`.github/workflows/regression.yml` runs the same check on GitHub-hosted
+runners (manual + daily cron + opt-in per push). Both lanes are read-only;
+new references are promoted exclusively through the manual
+`promote-regression-reference` workflow. Details, statuses, and the
+promotion rules: `test/regression/README.md`.
 
 **Other platforms (Windows/macOS/webasm):** at minimum configure + build; then
 run the headless C tests that do not depend on unavailable platform pieces.
