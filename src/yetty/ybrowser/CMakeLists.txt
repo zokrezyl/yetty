@@ -26,6 +26,7 @@ target_link_libraries(yetty_ybrowser
         lexbor_static
         yetty_ydraw_core
         yetty_ysdf
+        yetty_ysvg
         yetty_ycore
         yetty_yimage_core
         stb

@@ -39,8 +39,12 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ysdf/funcs.gen.h>
+#include <yetty/ysdf/merge.h>
+#include <yetty/ysvg/ysvg.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/ytrace/ytrace.h>
+
+#include <lexbor/html/serialize.h>
 
 static uint32_t pack_rgba(struct yetty_ylexbor_color c)
 {
@@ -158,142 +162,125 @@ static int decode_other(const uint8_t *bytes, size_t len, uint32_t **out_pixels,
     return 1;
 }
 
-/* SVG sniff — parse width/height/viewBox from the XML header so the
- * placeholder we emit lands at the correct aspect ratio, even without
- * a real SVG rasterizer. We render a small grey/checker pattern as
- * the actual pixels so users can tell where SVGs would go. */
-static float parse_svg_length(const char *s, size_t len)
+/* SVG — real vector rendering through ysvg. A source renders ONCE into a
+ * drawable list; paint MERGES that scene into the page's output under the
+ * image box's transform (yetty_ydraw_drawable_list_merge_transformed), so
+ * the primitives stay vectors end to end — no rasterization, no checker
+ * placeholders. */
+static int bytes_look_like_svg(const uint8_t *bytes, size_t len)
 {
-    while (len > 0 && (*s == ' ' || *s == '\t')) {
-        s++;
-        len--;
-    }
-    if (len == 0) {
-        return 0;
-    }
-    char buf[32];
-    size_t n = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
-    memcpy(buf, s, n);
-    buf[n] = 0;
-    return (float)atof(buf);
-}
-
-static int sniff_svg_dimensions(const uint8_t *bytes, size_t len, int *out_w, int *out_h)
-{
-    if (len < 4) {
-        return 0;
-    }
-    const char *p = (const char *)bytes;
-    const char *end = p + len;
-    /* Skip leading XML declaration / DOCTYPE / whitespace; cap at
-	 * the first 4 KB so we don't scan an entire file. */
-    if (end - p > 4096) {
-        end = p + 4096;
-    }
-    const char *svg = NULL;
-    for (const char *q = p; q + 4 <= end; q++) {
-        if (q[0] == '<' && q[1] == 's' && q[2] == 'v' && q[3] == 'g' &&
-            (q[4] == ' ' || q[4] == '\t' || q[4] == '\n' || q[4] == '\r' || q[4] == '>')) {
-            svg = q + 4;
-            break;
+    /* The document element must be <svg> — skip whitespace, comments and
+	 * the <!DOCTYPE>/<?xml?> prologue, then check the first real tag. */
+    size_t scan = len < 1024 ? len : 1024;
+    size_t i = 0;
+    while (i < scan) {
+        while (i < scan && (bytes[i] == ' ' || bytes[i] == '\t' || bytes[i] == '\r' ||
+                            bytes[i] == '\n' || bytes[i] == '\f')) {
+            i++;
         }
-    }
-    if (!svg) {
-        return 0;
-    }
-    const char *gt = memchr(svg, '>', (size_t)(end - svg));
-    if (!gt) {
-        gt = end;
-    }
-    float w = 0, h = 0, vb_w = 0, vb_h = 0;
-    /* width="..." */
-    const char *q = svg;
-    while (q < gt) {
-        if (gt - q >= 7 && memcmp(q, "width=\"", 7) == 0) {
-            const char *e2 = memchr(q + 7, '"', (size_t)(gt - q - 7));
-            if (e2) {
-                w = parse_svg_length(q + 7, e2 - q - 7);
-            }
+        if (i >= scan || bytes[i] != '<') {
+            return 0;
         }
-        if (gt - q >= 8 && memcmp(q, "height=\"", 8) == 0) {
-            const char *e2 = memchr(q + 8, '"', (size_t)(gt - q - 8));
-            if (e2) {
-                h = parse_svg_length(q + 8, e2 - q - 8);
-            }
-        }
-        if (gt - q >= 9 && memcmp(q, "viewBox=\"", 9) == 0) {
-            const char *e2 = memchr(q + 9, '"', (size_t)(gt - q - 9));
-            if (e2) {
-                /* "minx miny width height" — pick last 2. */
-                char vb[64];
-                size_t vlen = (size_t)(e2 - q - 9);
-                if (vlen < sizeof(vb)) {
-                    memcpy(vb, q + 9, vlen);
-                    vb[vlen] = 0;
-                    float a, b, c, d;
-                    if (sscanf(vb, "%f %f %f %f", &a, &b, &c, &d) == 4) {
-                        vb_w = c;
-                        vb_h = d;
-                    }
+        if (i + 4 <= scan && memcmp(bytes + i, "<!--", 4) == 0) {
+            const uint8_t *close = NULL;
+            for (size_t j = i + 4; j + 3 <= scan; j++) {
+                if (memcmp(bytes + j, "-->", 3) == 0) {
+                    close = bytes + j;
+                    break;
                 }
             }
+            if (!close) {
+                return 0;
+            }
+            i = (size_t)(close - bytes) + 3;
+            continue;
         }
-        q++;
-    }
-    if (w <= 0) {
-        w = vb_w;
-    }
-    if (h <= 0) {
-        h = vb_h;
-    }
-    if (w > 0 && h > 0) {
-        *out_w = (int)w;
-        *out_h = (int)h;
-        return 1;
+        if (i + 1 < scan && (bytes[i + 1] == '!' || bytes[i + 1] == '?')) {
+            size_t j = i + 2;
+            while (j < scan && bytes[j] != '>') {
+                j++;
+            }
+            if (j >= scan) {
+                return 0;
+            }
+            i = j + 1;
+            continue;
+        }
+        return i + 4 < scan && (bytes[i + 1] | 0x20) == 's' && (bytes[i + 2] | 0x20) == 'v' &&
+               (bytes[i + 3] | 0x20) == 'g' &&
+               (bytes[i + 4] == '>' || bytes[i + 4] == ' ' || bytes[i + 4] == '\t' ||
+                bytes[i + 4] == '\r' || bytes[i + 4] == '\n' || bytes[i + 4] == '/');
     }
     return 0;
 }
 
-/* Render a tiny checker-pattern placeholder for SVGs we can't fully
- * rasterize — at least the user sees there's an image there at the
- * right aspect ratio rather than a blank slot. */
-static int decode_svg_placeholder(const uint8_t *bytes, size_t len, uint32_t **out_pixels,
-                                  int *out_w, int *out_h)
+int yetty_ylexbor_svg_scene_render(const char *bytes, size_t len,
+                                   struct yetty_ydraw_drawable_list **out_scene, float *out_min_x,
+                                   float *out_min_y, float *out_w, float *out_h)
 {
-    int w = 0, h = 0;
-    if (!sniff_svg_dimensions(bytes, len, &w, &h)) {
-        w = 24;
-        h = 24;
-    }
-    /* Cap the placeholder to keep memory + GPU upload sensible. */
-    if (w > 256) {
-        h = (int)((float)h * 256.0f / (float)w);
-        w = 256;
-    }
-    if (h > 256) {
-        w = (int)((float)w * 256.0f / (float)h);
-        h = 256;
-    }
-    if (w <= 0) {
-        w = 1;
-    }
-    if (h <= 0) {
-        h = 1;
-    }
-    uint32_t *px = malloc((size_t)w * (size_t)h * 4);
-    if (!px) {
+    /* The cell size only seeds ysvg's default font-size fallback — the CSS
+	 * initial font-size (16px) is the right analogue in a page context. */
+    struct yetty_ysvg_render_config config = {
+        .cell_width = 8,
+        .cell_height = 16,
+        .width_cells = 32,
+        .height_cells = 8,
+    };
+    struct yetty_ysvg_render_result render_res = yetty_ysvg_render(bytes, len, NULL, 0, &config);
+    if (YETTY_IS_ERR(render_res)) {
+        yetty_ycore_error_destroy(render_res.error);
         return 0;
     }
-    uint32_t a = 0xFFD0D0D0u, b = 0xFFE8E8E8u;
-    for (int y = 0; y < h; y++) {
-        for (int x = 0; x < w; x++) {
-            int cx = x / 8, cy = y / 8;
-            px[y * w + x] = ((cx ^ cy) & 1) ? a : b;
-        }
+    struct yetty_ydraw_drawable_list *scene = render_res.value.buffer;
+    if (!scene) {
+        return 0;
     }
-    *out_pixels = px;
-    *out_w = w;
-    *out_h = h;
+    float min_x = yetty_ydraw_drawable_list_scene_min_x(scene);
+    float min_y = yetty_ydraw_drawable_list_scene_min_y(scene);
+    float scene_w = render_res.value.scene_width;
+    float scene_h = render_res.value.scene_height;
+    if (scene_w <= 0.0f) {
+        scene_w = yetty_ydraw_drawable_list_scene_max_x(scene) - min_x;
+    }
+    if (scene_h <= 0.0f) {
+        scene_h = yetty_ydraw_drawable_list_scene_max_y(scene) - min_y;
+    }
+    if (scene_w <= 0.0f || scene_h <= 0.0f) {
+        yetty_ydraw_drawable_list_destroy(scene);
+        return 0;
+    }
+    *out_scene = scene;
+    *out_min_x = min_x;
+    *out_min_y = min_y;
+    *out_w = scene_w;
+    *out_h = scene_h;
+    return 1;
+}
+
+/* When `bytes` is an SVG document, render it into the cache entry's vector
+ * scene (w/h become the scene extent so layout keeps the aspect ratio) and
+ * return 1 — the caller then skips the raster decode. Returns 0 for
+ * rasters. A source that IS SVG but fails to render marks the entry failed
+ * (grey placeholder at paint) and still returns 1. */
+static int img_cache_entry_fill_svg(struct yetty_ylexbor_img_cache_entry *entry, const char *bytes,
+                                    size_t len)
+{
+    if (!bytes || len == 0 || !bytes_look_like_svg((const uint8_t *)bytes, len)) {
+        return 0;
+    }
+    if (!yetty_ylexbor_svg_scene_render(bytes, len, &entry->svg_scene, &entry->svg_min_x,
+                                        &entry->svg_min_y, &entry->svg_w, &entry->svg_h)) {
+        entry->failed = 1;
+        return 1;
+    }
+    entry->w = (int)(entry->svg_w + 0.5f);
+    entry->h = (int)(entry->svg_h + 0.5f);
+    if (entry->w <= 0) {
+        entry->w = 1;
+    }
+    if (entry->h <= 0) {
+        entry->h = 1;
+    }
     return 1;
 }
 
@@ -368,16 +355,12 @@ static int decode_image(const uint8_t *bytes, size_t len, uint32_t **out_pixels,
 #endif
         return decode_other(bytes, len, out_pixels, out_w, out_h);
     }
-    /* SVG / XML payloads — no rasterizer linked, so emit a sized
-	 * checker-pattern placeholder. The geometry is sniffed from the
-	 * SVG XML so the box ends up at the right aspect ratio. */
-    if (len >= 5 && (memcmp(bytes, "<?xml", 5) == 0 || memcmp(bytes, "<svg ", 5) == 0 ||
-                     memcmp(bytes, "<svg>", 5) == 0)) {
-        return decode_svg_placeholder(bytes, len, out_pixels, out_w, out_h);
-    }
+    /* Markup payloads never raster-decode: SVG sources take the vector
+	 * path (img_cache_entry_fill_svg, checked by every cache-fill site
+	 * BEFORE this decoder), so reaching here with markup means an HTML
+	 * error page or unrenderable XML — a failed image. */
     if (len >= 1 && bytes[0] == '<') {
-        /* Generic XML/HTML — treat as SVG-ish. */
-        return decode_svg_placeholder(bytes, len, out_pixels, out_w, out_h);
+        return 0;
     }
     return decode_other(bytes, len, out_pixels, out_w, out_h);
 }
@@ -555,6 +538,14 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(struct
     }
     (void)fmt; /* consumed only by the ydebug() calls below */
 
+    /* Vector source? Render through ysvg and keep the drawable list —
+	 * paint merges it under the box transform, no rasterization. */
+    if (img_cache_entry_fill_svg(e, response.body, response.body_len)) {
+        ydebug("img SVG %s wh=%dx%d url=%s", e->failed ? "FAIL" : "OK", e->w, e->h, url);
+        yetty_ybrowser_response_dispose(&response);
+        return e;
+    }
+
     if (!decorate_image_response(r->loader, url, &response)) {
         ydebug("img DECODE FAIL fmt=%s len=%zu first8=%02x%02x%02x%02x%02x%02x%02x%02x url=%s", fmt,
                blen, (uint8_t)bytes[0], (uint8_t)bytes[1], (uint8_t)bytes[2], (uint8_t)bytes[3],
@@ -660,8 +651,16 @@ int yetty_ylexbor_fetch_pending_images(struct yetty_ylexbor *r, int max_count)
             memset(e, 0, sizeof(*e));
             e->url = urls[k]; /* transfer ownership */
             urls[k] = NULL;
-            if (!image_response_ok(response) ||
-                !decorate_image_response(r->loader, e->url, response)) {
+            if (!image_response_ok(response)) {
+                yetty_ybrowser_response_dispose(response);
+                e->failed = 1;
+                continue;
+            }
+            if (img_cache_entry_fill_svg(e, response->body, response->body_len)) {
+                yetty_ybrowser_response_dispose(response);
+                continue;
+            }
+            if (!decorate_image_response(r->loader, e->url, response)) {
                 yetty_ybrowser_response_dispose(response);
                 e->failed = 1;
                 continue;
@@ -699,14 +698,20 @@ struct ylexbor_img_job {
     uint64_t generation;                  /* engine fetch_generation at submit; stale if changed */
     struct yetty_ybrowser_loader *loader; /* borrowed from the engine; the engine
                                            * outlives every job (destroy defers) */
-    const uint64_t *cancel_generation;    /* &engine->fetch_generation — valid for
-                                           * the job's whole life (teardown defers) */
+    const _Atomic uint64_t *cancel_generation; /* &engine->fetch_generation — valid for
+                                                * the job's whole life (teardown defers) */
     char *url;                            /* owned */
     char *base_url;                       /* owned copy — read on the worker thread */
     /* Filled by run() on the worker thread: */
     uint32_t *pixels;
     int w, h;
     int failed;
+    /* SVG sources: the worker carries the raw bytes back instead of
+	 * decoding — the ysvg render happens in done() on the LOOP thread
+	 * (the css/lwc internals under ysvg are not audited for concurrent
+	 * worker use). */
+    char *svg_source; /* owned */
+    size_t svg_source_len;
 };
 
 /* WORKER THREAD. Touches ONLY the job's own copies — never the engine, which
@@ -717,7 +722,7 @@ static void img_job_run(void *ctx)
     /* cancel_generation points into the engine, but reading it here is
 	 * safe: the engine defers its teardown until every job has drained,
 	 * so the pointer outlives the job. A navigation bumps the counter
-	 * and this transfer aborts at its next received chunk. */
+	 * and this transfer aborts at its next progress tick or chunk. */
     struct yetty_ybrowser_request request = {
         .url = job->url,
         .kind = YETTY_YBROWSER_REQUEST_IMAGE,
@@ -731,8 +736,20 @@ static void img_job_run(void *ctx)
     if (YETTY_IS_ERR(fetch_res)) {
         yetty_ycore_error_destroy(fetch_res.error);
     }
-    if (!image_response_ok(&response) ||
-        !decorate_image_response(job->loader, job->url, &response)) {
+    if (!image_response_ok(&response)) {
+        yetty_ybrowser_response_dispose(&response);
+        job->failed = 1;
+        return;
+    }
+    if (response.body && response.body_len > 0 &&
+        bytes_look_like_svg((const uint8_t *)response.body, response.body_len)) {
+        job->svg_source = response.body;
+        job->svg_source_len = response.body_len;
+        response.body = NULL; /* ownership moved to the job */
+        yetty_ybrowser_response_dispose(&response);
+        return;
+    }
+    if (!decorate_image_response(job->loader, job->url, &response)) {
         yetty_ybrowser_response_dispose(&response);
         job->failed = 1;
         return;
@@ -761,7 +778,10 @@ static void img_job_done(void *ctx)
             if (r->img_cache[i].url && strcmp(r->img_cache[i].url, job->url) == 0) {
                 struct yetty_ylexbor_img_cache_entry *e = &r->img_cache[i];
                 e->loading = 0;
-                if (job->failed || job->pixels == NULL) {
+                if (job->svg_source) {
+                    /* Loop thread — safe to run ysvg here. */
+                    (void)img_cache_entry_fill_svg(e, job->svg_source, job->svg_source_len);
+                } else if (job->failed || job->pixels == NULL) {
                     e->failed = 1;
                 } else {
                     e->pixels = job->pixels;
@@ -777,6 +797,7 @@ static void img_job_done(void *ctx)
         }
     }
     free(job->pixels); /* non-NULL only when stale / url vanished */
+    free(job->svg_source);
     free(job->url);
     free(job->base_url);
     free(job);
@@ -1002,6 +1023,118 @@ char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el)
     return abs;
 }
 
+/* Merge a rendered SVG scene into the page output inside the box rect —
+ * uniform scale, centered: preserveAspectRatio's default xMidYMid meet.
+ * Advances *z past the merged records so later page prims stay on top. */
+static void svg_scene_merge(struct yetty_ydraw_drawable_list *buf,
+                            const struct yetty_ydraw_drawable_list *scene, float min_x, float min_y,
+                            float scene_w, float scene_h, float box_x, float box_y, float box_w,
+                            float box_h, uint32_t *z)
+{
+    if (scene_w <= 0.0f || scene_h <= 0.0f || box_w <= 0.0f || box_h <= 0.0f) {
+        return;
+    }
+    float scale_x = box_w / scene_w;
+    float scale_y = box_h / scene_h;
+    float scale = scale_x < scale_y ? scale_x : scale_y;
+    float offset_x = box_x + (box_w - scene_w * scale) * 0.5f - min_x * scale;
+    float offset_y = box_y + (box_h - scene_h * scale) * 0.5f - min_y * scale;
+    struct yetty_ycore_int_result merge_res =
+        yetty_ydraw_drawable_list_merge_transformed(buf, scene, offset_x, offset_y, scale, scale,
+                                                    *z);
+    if (YETTY_IS_ERR(merge_res)) {
+        ydebug("svg merge failed: %s", merge_res.error.msg);
+        yetty_ycore_error_destroy(merge_res.error);
+        return;
+    }
+    *z += (uint32_t)merge_res.value;
+}
+
+/* Serializer sink for inline <svg> subtrees — plain growable byte buffer,
+ * so no lexbor mraw ownership is involved. */
+struct svg_serialize_sink {
+    char *data;
+    size_t len, cap;
+    int failed;
+};
+
+YETTY_EXTERNAL_CALLBACK
+static lxb_status_t svg_serialize_append(const lxb_char_t *chunk, size_t chunk_len, void *ctx)
+{
+    struct svg_serialize_sink *sink = ctx;
+    if (sink->failed) {
+        return LXB_STATUS_ERROR;
+    }
+    if (sink->len + chunk_len + 1 > sink->cap) {
+        size_t new_cap = sink->cap ? sink->cap * 2 : 1024;
+        while (new_cap < sink->len + chunk_len + 1) {
+            new_cap *= 2;
+        }
+        char *grown = realloc(sink->data, new_cap);
+        if (!grown) {
+            sink->failed = 1;
+            return LXB_STATUS_ERROR;
+        }
+        sink->data = grown;
+        sink->cap = new_cap;
+    }
+    memcpy(sink->data + sink->len, chunk, chunk_len);
+    sink->len += chunk_len;
+    sink->data[sink->len] = '\0';
+    return LXB_STATUS_OK;
+}
+
+void yetty_ylexbor_svg_inline_cache_clear(struct yetty_ylexbor *r)
+{
+    if (!r) {
+        return;
+    }
+    for (int i = 0; i < r->svg_inline_count; i++) {
+        yetty_ydraw_drawable_list_destroy(r->svg_inline_cache[i].scene);
+    }
+    free(r->svg_inline_cache);
+    r->svg_inline_cache = NULL;
+    r->svg_inline_count = 0;
+    r->svg_inline_cap = 0;
+}
+
+/* Rendered scene for an inline <svg> element, cached per element (one
+ * ysvg parse+render per element per document — repaints just re-merge).
+ * Returns the cache entry (scene NULL when serialization/render failed)
+ * or NULL on allocation failure. */
+static struct yetty_ylexbor_svg_inline_entry *svg_inline_scene_get(struct yetty_ylexbor *r,
+                                                                   lxb_dom_element_t *element)
+{
+    for (int i = 0; i < r->svg_inline_count; i++) {
+        if (r->svg_inline_cache[i].element == (const void *)element) {
+            return &r->svg_inline_cache[i];
+        }
+    }
+    if (r->svg_inline_count == r->svg_inline_cap) {
+        int new_cap = r->svg_inline_cap ? r->svg_inline_cap * 2 : 8;
+        struct yetty_ylexbor_svg_inline_entry *grown =
+            realloc(r->svg_inline_cache, (size_t)new_cap * sizeof(*grown));
+        if (!grown) {
+            return NULL;
+        }
+        r->svg_inline_cache = grown;
+        r->svg_inline_cap = new_cap;
+    }
+    struct yetty_ylexbor_svg_inline_entry *entry = &r->svg_inline_cache[r->svg_inline_count++];
+    memset(entry, 0, sizeof(*entry));
+    entry->element = element;
+
+    struct svg_serialize_sink sink = {0};
+    lxb_status_t serialize_status =
+        lxb_html_serialize_tree_cb(lxb_dom_interface_node(element), svg_serialize_append, &sink);
+    if (serialize_status == LXB_STATUS_OK && !sink.failed && sink.data && sink.len > 0) {
+        (void)yetty_ylexbor_svg_scene_render(sink.data, sink.len, &entry->scene, &entry->min_x,
+                                             &entry->min_y, &entry->w, &entry->h);
+    }
+    free(sink.data);
+    return entry;
+}
+
 struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                                                    struct yetty_ydraw_drawable_list *buf)
 {
@@ -1115,8 +1248,16 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                         memset(e, 0, sizeof(*e));
                         e->url = urls[k]; /* transfer ownership */
                         urls[k] = NULL;
-                        if (!image_response_ok(response) ||
-                            !decorate_image_response(r->loader, e->url, response)) {
+                        if (!image_response_ok(response)) {
+                            yetty_ybrowser_response_dispose(response);
+                            e->failed = 1;
+                            continue;
+                        }
+                        if (img_cache_entry_fill_svg(e, response->body, response->body_len)) {
+                            yetty_ybrowser_response_dispose(response);
+                            continue;
+                        }
+                        if (!decorate_image_response(r->loader, e->url, response)) {
                             yetty_ybrowser_response_dispose(response);
                             e->failed = 1;
                             continue;
@@ -1255,11 +1396,16 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
         }
 
         case YL_BOX_INLINE_IMAGE: {
-            /* <svg> replaced boxes reserve layout space but have no
-			 * raster to draw and no URL to fetch — emit NOTHING. The
-			 * grey placeholder here turned every icon on a story page
-			 * into a grey slab and bloated the drawable payload. */
+            /* Inline <svg>: serialize the element subtree, render it
+			 * through ysvg once (per-element cache), and merge the vector
+			 * scene into the page output at the box rect. */
             if (b->element != NULL && b->element->node.local_name == LXB_TAG_SVG) {
+                struct yetty_ylexbor_svg_inline_entry *inline_svg =
+                    svg_inline_scene_get(r, b->element);
+                if (inline_svg && inline_svg->scene) {
+                    svg_scene_merge(buf, inline_svg->scene, inline_svg->min_x, inline_svg->min_y,
+                                    inline_svg->w, inline_svg->h, b->x, b->y, b->w, b->h, &z);
+                }
                 break;
             }
             char *url = yetty_ylexbor_img_pick_url(r, b->element);
@@ -1268,6 +1414,13 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                 cached = yetty_ylexbor_img_cache_get_or_load(r, url);
             }
             free(url);
+
+            /* Vector image — merge the rendered scene, keep it vector. */
+            if (cached && cached->svg_scene) {
+                svg_scene_merge(buf, cached->svg_scene, cached->svg_min_x, cached->svg_min_y,
+                                cached->svg_w, cached->svg_h, b->x, b->y, b->w, b->h, &z);
+                break;
+            }
 
             if (!cached || cached->failed || !cached->pixels) {
                 /* Fetch/decode failed (or no src) — fall back

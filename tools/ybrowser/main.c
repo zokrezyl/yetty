@@ -30,6 +30,7 @@
 #include <yetty/ycore/terminal-detect.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yface/yface.h>
+#include <yetty/ysvg/ysvg.h>
 #include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -59,14 +60,20 @@ int ybrowser_looks_like_url(const char *s)
  * connection it opens stays warm in the loader for the CSS/image
  * fetches that follow. */
 static char *slurp_url(struct yetty_ybrowser_loader *loader, const char *url, size_t *out_len,
-                       char **out_effective_url)
+                       char **out_effective_url, char **out_content_type, uint64_t generation,
+                       const _Atomic uint64_t *cancel_generation)
 {
     if (out_effective_url) {
         *out_effective_url = NULL;
     }
+    if (out_content_type) {
+        *out_content_type = NULL;
+    }
     struct yetty_ybrowser_request request = {
         .url = url,
         .kind = YETTY_YBROWSER_REQUEST_DOCUMENT,
+        .generation = generation,
+        .cancel_generation = cancel_generation,
     };
     struct yetty_ybrowser_response response = {0};
     struct yetty_ycore_void_result fetch_res = yetty_ybrowser_fetch(loader, &request, &response);
@@ -88,6 +95,10 @@ static char *slurp_url(struct yetty_ybrowser_loader *loader, const char *url, si
         *out_effective_url = response.effective_url;
         response.effective_url = NULL; /* ownership to the caller */
     }
+    if (out_content_type && response.content_type) {
+        *out_content_type = response.content_type;
+        response.content_type = NULL; /* ownership to the caller */
+    }
     *out_len = response.body_len;
     char *body = response.body;
     response.body = NULL; /* ownership to the caller */
@@ -95,14 +106,47 @@ static char *slurp_url(struct yetty_ybrowser_loader *loader, const char *url, si
     return body;
 }
 
-char *ybrowser_slurp_file(struct yetty_ybrowser_loader *loader, const char *path, size_t *out_len,
-                          char **out_effective_url)
+char *ybrowser_local_file_url(const char *path)
+{
+    if (!path || strcmp(path, "-") == 0 || ybrowser_looks_like_url(path)) {
+        return NULL;
+    }
+    char *absolute = realpath(path, NULL);
+    if (!absolute) {
+        return NULL;
+    }
+    size_t absolute_len = strlen(absolute);
+    char *url = malloc(7 + absolute_len + 1);
+    if (url) {
+        memcpy(url, "file://", 7);
+        memcpy(url + 7, absolute, absolute_len + 1);
+    }
+    free(absolute);
+    return url;
+}
+
+char *ybrowser_slurp_document(struct yetty_ybrowser_loader *loader, const char *path,
+                              uint64_t generation, const _Atomic uint64_t *cancel_generation,
+                              size_t *out_len, char **out_effective_url, char **out_content_type)
 {
     if (ybrowser_looks_like_url(path)) {
-        return slurp_url(loader, path, out_len, out_effective_url);
+        return slurp_url(loader, path, out_len, out_effective_url, out_content_type, generation,
+                         cancel_generation);
+    }
+    return ybrowser_slurp_file(loader, path, out_len, out_effective_url, out_content_type);
+}
+
+char *ybrowser_slurp_file(struct yetty_ybrowser_loader *loader, const char *path, size_t *out_len,
+                          char **out_effective_url, char **out_content_type)
+{
+    if (ybrowser_looks_like_url(path)) {
+        return slurp_url(loader, path, out_len, out_effective_url, out_content_type, 0, NULL);
     }
     if (out_effective_url) {
         *out_effective_url = NULL;
+    }
+    if (out_content_type) {
+        *out_content_type = NULL;
     }
 
     FILE *f = strcmp(path, "-") == 0 ? stdin : fopen(path, "rb");
@@ -180,6 +224,47 @@ static int emit_bin_osc(const uint8_t *bytes, size_t blen)
 /* ===========================================================================
  * main
  * ===========================================================================*/
+
+/* Strict numeric operand parsing — the whole operand must be consumed and
+ * land inside a sane range; anything else is a usage error (silently
+ * accepted garbage used to reach layout/GPU code as 0). */
+static int parse_int_arg(const char *flag, const char *text, long min_value, long max_value,
+                         int *out_value)
+{
+    if (!text || !*text) {
+        fprintf(stderr, "ybrowser: %s needs a value\n", flag);
+        return -1;
+    }
+    char *end = NULL;
+    errno = 0;
+    long value = strtol(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0' || value < min_value || value > max_value) {
+        fprintf(stderr, "ybrowser: invalid %s value '%s' (expected %ld..%ld)\n", flag, text,
+                min_value, max_value);
+        return -1;
+    }
+    *out_value = (int)value;
+    return 0;
+}
+
+static int parse_float_arg(const char *flag, const char *text, float min_value, float max_value,
+                           float *out_value)
+{
+    if (!text || !*text) {
+        fprintf(stderr, "ybrowser: %s needs a value\n", flag);
+        return -1;
+    }
+    char *end = NULL;
+    errno = 0;
+    float value = strtof(text, &end);
+    if (errno != 0 || end == text || *end != '\0' || value < min_value || value > max_value) {
+        fprintf(stderr, "ybrowser: invalid %s value '%s' (expected %g..%g)\n", flag, text,
+                (double)min_value, (double)max_value);
+        return -1;
+    }
+    *out_value = value;
+    return 0;
+}
 
 static void usage(const char *argv0)
 {
@@ -293,18 +378,45 @@ int main(int argc, char **argv)
             interactive = 1;
         } else if (!strcmp(a, "--no-ui")) {
             no_ui = 1;
-        } else if (!strcmp(a, "--record") && i + 1 < argc) {
+        } else if (!strcmp(a, "--record")) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "ybrowser: --record needs a file argument\n");
+                usage(argv[0]);
+                return 2;
+            }
             record_path = argv[++i];
-        } else if (!strcmp(a, "-w") && i + 1 < argc) {
-            width = atoi(argv[++i]);
-        } else if (!strcmp(a, "-H") && i + 1 < argc) {
-            height = atoi(argv[++i]);
-        } else if (!strcmp(a, "--font-size") && i + 1 < argc) {
-            font_size = (float)atof(argv[++i]);
+        } else if (!strcmp(a, "-w")) {
+            if (i + 1 >= argc || parse_int_arg("-w", argv[i + 1], 64, 16384, &width) != 0) {
+                usage(argv[0]);
+                return 2;
+            }
+            i++;
+        } else if (!strcmp(a, "-H")) {
+            if (i + 1 >= argc || parse_int_arg("-H", argv[i + 1], 64, 16384, &height) != 0) {
+                usage(argv[0]);
+                return 2;
+            }
+            i++;
+        } else if (!strcmp(a, "--font-size")) {
+            if (i + 1 >= argc ||
+                parse_float_arg("--font-size", argv[i + 1], 4.0f, 200.0f, &font_size) != 0) {
+                usage(argv[0]);
+                return 2;
+            }
+            i++;
         } else if (!strcmp(a, "-h") || !strcmp(a, "--help")) {
             usage(argv[0]);
             return 0;
-        } else if (a[0] != '-' || !strcmp(a, "-")) {
+        } else if (a[0] == '-' && strcmp(a, "-") != 0) {
+            fprintf(stderr, "ybrowser: unknown option '%s'\n", a);
+            usage(argv[0]);
+            return 2;
+        } else {
+            if (path) {
+                fprintf(stderr, "ybrowser: more than one input ('%s' and '%s')\n", path, a);
+                usage(argv[0]);
+                return 2;
+            }
             path = a;
         }
     }
@@ -366,11 +478,49 @@ int main(int argc, char **argv)
     }
     size_t html_len = 0;
     char *effective_url = NULL;
-    char *html = ybrowser_slurp_file(loader, src, &html_len, &effective_url);
+    char *content_type = NULL;
+    char *html = ybrowser_slurp_file(loader, src, &html_len, &effective_url, &content_type);
     if (html == NULL) {
         (void)yetty_ybrowser_loader_destroy(loader);
         return 1;
     }
+
+    /* Standalone SVG input renders through ysvg — same envelope as a page.
+	 * The geometry-dump modes stay on the HTML engine (they inspect the
+	 * box tree, which an SVG scene does not have). */
+    if (!dump_boxes && !dump_wpt && !dump_geo &&
+        ybrowser_content_is_svg(content_type, (const unsigned char *)html, html_len)) {
+        struct yetty_ysvg_render_config svg_cfg = {
+            .cell_width = 8,
+            .cell_height = 16,
+            .width_cells = (uint32_t)(width > 8 ? width / 8 : 1),
+            .height_cells = (uint32_t)(height > 16 ? height / 16 : 1),
+        };
+        struct yetty_ysvg_render_result svg_res =
+            yetty_ysvg_render(html, html_len, NULL, 0, &svg_cfg);
+        free(html);
+        free(effective_url);
+        free(content_type);
+        if (YETTY_IS_ERR(svg_res)) {
+            fprintf(stderr, "ysvg_render: %s\n", svg_res.error.msg);
+            yetty_ycore_error_destroy(svg_res.error);
+            (void)yetty_ybrowser_loader_destroy(loader);
+            return 1;
+        }
+        const uint8_t *svg_bytes = NULL;
+        size_t svg_blen = yetty_ydraw_drawable_list_serialize(svg_res.value.buffer, &svg_bytes);
+        if (osc) {
+            (void)emit_bin_osc(svg_bytes, svg_blen);
+        } else {
+            fwrite(svg_bytes, 1, svg_blen, stdout);
+        }
+        fflush(stdout);
+        yetty_ydraw_drawable_list_destroy(svg_res.value.buffer);
+        (void)yetty_ybrowser_loader_destroy(loader);
+        return 0;
+    }
+    free(content_type);
+    content_type = NULL;
 
     struct yetty_ylexbor_config cfg = {
         .viewport_width = width,
@@ -390,12 +540,20 @@ int main(int argc, char **argv)
     /* Tell the engine where the document came from so JS fetch() and
 	 * external <script src=...> can resolve relative URLs. Prefer the
 	 * post-redirect effective URL — gets us onto HTTPS (HTTP/2
-	 * multiplexed image fetches) when the user typed an http://. */
+	 * multiplexed image fetches) when the user typed an http://. Local
+	 * files get a file:// base so their relative references resolve
+	 * against the file's directory, not a leftover origin. */
     if (effective_url) {
         (void)yetty_ylexbor_set_base_url(yl, effective_url);
         free(effective_url);
     } else if (ybrowser_looks_like_url(src)) {
         (void)yetty_ylexbor_set_base_url(yl, src);
+    } else {
+        char *file_base = ybrowser_local_file_url(src);
+        if (file_base) {
+            (void)yetty_ylexbor_set_base_url(yl, file_base);
+            free(file_base);
+        }
     }
 
     struct yetty_ycore_void_result lr = yetty_ylexbor_load_html(yl, html, html_len);
@@ -532,9 +690,9 @@ int main(int argc, char **argv)
             const char *width_source = "?";
             const char *height_source = "?";
             (void)yetty_ylexbor_test_box_sources_at(yl, bi, &width_source, &height_source);
-            printf("%d\t%s\t%s\t%.1f\t%.1f\t%.1f\t%.1f\tw=%d\ti=%d\tu=%d\tws=%s\ths=%s\t%s\n",
-                   kind, tag[0] ? tag : "-", data_test[0] ? data_test : "-", x, y, w, h, weight,
-                   italic, underline, width_source, height_source, snippet);
+            printf("%d\t%s\t%s\t%.1f\t%.1f\t%.1f\t%.1f\tw=%d\ti=%d\tu=%d\tws=%s\ths=%s\t%s\n", kind,
+                   tag[0] ? tag : "-", data_test[0] ? data_test : "-", x, y, w, h, weight, italic,
+                   underline, width_source, height_source, snippet);
         }
         fflush(stdout);
         yetty_ylexbor_destroy(yl);

@@ -3,26 +3,27 @@
 
 /*
  * ylexbor — permissively-licensed in-process HTML/CSS renderer for
- * yetty. Sits on top of lexbor (Apache-2.0): HTML parser, CSS parser,
- * selectors, computed-style cascade. Layout + paint live here.
+ * yetty. Sits on top of lexbor (Apache-2.0) for HTML parsing and on
+ * libcss for the CSS cascade. Layout + paint live here.
  *
- * Status: MVP. Implements:
- *   - HTML5 parsing (via lexbor)
- *   - CSS parsing + selector matching + computed style (via lexbor)
- *   - Naive block-flow layout: vertical stacking of block-level elements,
- *     line-by-line text wrapping inside inline content
- *   - Painting: emit ydraw primitives (boxes + TEXT_DRAWABLE_LIST) into a buffer
+ * Implements:
+ *   - HTML5 parsing (via lexbor); CSS cascade incl. @import (via libcss)
+ *   - Block flow with floats/clear, flexbox (iterative flexible-length
+ *     resolution, per-line wrap), reduced grid (templates, spans,
+ *     stretch, occupancy placement), simple tables
+ *   - position: relative/absolute/fixed incl. static-position fallback
+ *   - Images (PNG/JPEG/GIF/WebP/BMP via decoders, SVG as merged vector
+ *     scenes through ysvg) with sync/batch/worker-pool fetch paths
+ *   - JavaScript (QuickJS): DOM, timers, async fetch()/XHR, storage
+ *   - Painting: ydraw primitives (boxes + TEXT_DRAWABLE_LIST) into a buffer
  *
- * Explicitly NOT implemented (TODO, separate work):
- *   - Float layout
- *   - Flexbox / Grid / Tables (treated as plain block)
- *   - Background images, gradients, borders with radii
- *   - z-index / stacking contexts
- *   - position: absolute/fixed/sticky
- *   - Form input rendering (rendered as plain text)
- *   - JavaScript / DOM events
- *   - Image fetching (external resources skipped)
- *   - Animations / transitions
+ * Known gaps (tracked in the correctness-audit issue):
+ *   - custom properties are text-substituted, not cascade-correct
+ *   - grid intrinsic track sizing; flex reverse/order/align-self;
+ *     column wrap; automatic content-based flex minimums
+ *   - background images, gradients, border radii at paint
+ *   - z-index stacking contexts (two-pass positioned-subtree paint only)
+ *   - animations / transitions
  *
  * License note: this module is BSL-1.1 (yetty's main license) — unlike
  * src/yetty/ynetsurf which is GPL-2.0 due to NetSurf core. ylexbor uses
@@ -30,6 +31,7 @@
  * directly into the main yetty binary.
  */
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -88,11 +90,12 @@ struct yetty_ybrowser_request {
     int extra_header_count;
 
     /* Cancellation. When cancel_generation is non-NULL, the transfer
-	 * aborts at the next received chunk once *cancel_generation no
-	 * longer equals generation (the engine bumps its counter on
-	 * navigation). NULL → not cancellable. */
+	 * aborts at the next progress tick or received chunk once
+	 * *cancel_generation no longer equals generation (the engine bumps
+	 * its counter on navigation). Atomic because workers read it while
+	 * the loop thread increments. NULL → not cancellable. */
     uint64_t generation;
-    const uint64_t *cancel_generation;
+    const _Atomic uint64_t *cancel_generation;
 };
 
 struct yetty_ybrowser_response {
@@ -101,6 +104,7 @@ struct yetty_ybrowser_response {
     size_t body_len;
     char *effective_url; /* post-redirect URL; may be NULL */
     char *content_type;  /* Content-Type header value; may be NULL */
+    int http_version;    /* negotiated wire version ×10 (11, 20, 30); 0 unknown */
 
     /* Decorations — attached by pipeline stages after the transfer,
 	 * consumed at render time. */
@@ -150,6 +154,13 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
  * theme. */
 struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, const char *css,
                                                      size_t css_len);
+
+/* Same, with the stylesheet's own absolute URL — @import rules inside the
+ * sheet resolve against it (falling back to the document base when NULL).
+ * The engine fetches, parses and cascades imported sheets recursively,
+ * imported rules preceding the importing sheet's rules in source order. */
+struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *r, const char *css,
+                                                          size_t css_len, const char *sheet_url);
 
 /* Resize the viewport — invalidates the layout. */
 struct yetty_ycore_void_result yetty_ylexbor_set_viewport(struct yetty_ylexbor *r, int width,

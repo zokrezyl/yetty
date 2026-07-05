@@ -1014,6 +1014,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 		 * re-selecting is cheap relative to the rest of box-build, so
 		 * we discard here and select again inside the block branch. */
         int libcss_disp = -1;
+        bool cascade_sized = false;
         if (r->libcss) {
             size_t pre_istylen = 0;
             const lxb_char_t *pre_istyle =
@@ -1022,6 +1023,18 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 r, el, (const char *)pre_istyle, pre_istyle ? pre_istylen : 0);
             if (pre_cs) {
                 libcss_disp = yetty_ybrowser_libcss_display(pre_cs, parent_style == NULL);
+                /* Inline-block promotion (below) needs to know whether the
+				 * CASCADE sizes this element — stylesheet-sized buttons
+				 * (48x48 toolbar icons) must become real boxes even amid
+				 * inline text. Only the yes/no matters here, so rough
+				 * font-size / percent bases are fine. */
+                if (libcss_disp == CSS_DISPLAY_INLINE_BLOCK ||
+                    libcss_disp == CSS_DISPLAY_INLINE_FLEX) {
+                    float probe_px = 0.0f;
+                    cascade_sized =
+                        yetty_ybrowser_libcss_width(r, pre_cs, 16.0f, 0.0f, &probe_px) ||
+                        yetty_ybrowser_libcss_height(r, pre_cs, 16.0f, 0.0f, &probe_px);
+                }
                 yetty_ybrowser_libcss_release(pre_cs);
                 if (libcss_disp == CSS_DISPLAY_NONE) {
                     continue;
@@ -1086,7 +1099,11 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 bool sized_inline =
                     ibs != NULL && (find_inline_decl(ibs, ibs_len, "width", 5, NULL) != NULL ||
                                     find_inline_decl(ibs, ibs_len, "height", 6, NULL) != NULL);
-                if (sized_inline || !has_inline_text_siblings(node)) {
+                /* cascade_sized: the stylesheet supplies width/height (the
+				 * gnews 48x48 icon buttons) — same promotion as an inline
+				 * size. Content-sized badges amid text (Wikipedia) have
+				 * neither and stay inline. */
+                if (sized_inline || cascade_sized || !has_inline_text_siblings(node)) {
                     effective_disp = YL_DISP_BLOCK;
                     promote_shrink_to_fit = true;
                 }
@@ -1099,6 +1116,23 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 break;
             }
         }
+        /* Custom elements (hyphenated names — <c-wiz>, <ytd-app>, …) are
+		 * structural containers in practice; sites pair them with
+		 * display:block rules that don't always survive into our cascade.
+		 * A standalone one (no inline text flowing around it) renders as
+		 * a block so it produces a box and its subtree joins block flow —
+		 * matching how Chrome lays these containers out on real pages. A
+		 * custom element amid text keeps the inline default. */
+        if (effective_disp == YL_DISP_INLINE &&
+            (libcss_disp < 0 || libcss_disp == CSS_DISPLAY_INLINE) &&
+            !has_inline_text_siblings(node)) {
+            size_t custom_name_len = 0;
+            const lxb_char_t *custom_name = lxb_dom_element_local_name(el, &custom_name_len);
+            if (custom_name && memchr(custom_name, '-', custom_name_len) != NULL) {
+                effective_disp = YL_DISP_BLOCK;
+            }
+        }
+
         /* Grid/flex items are blockified: an inline-level element child
 		 * of a grid/flex container computes to a block-level box. Without
 		 * this an unstyled wrapper (gnews <c-wiz>, plain <a>/<span>

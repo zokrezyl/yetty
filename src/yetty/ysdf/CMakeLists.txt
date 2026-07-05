@@ -2,6 +2,7 @@ add_library(yetty_ysdf STATIC
     funcs.gen.c
     aabb.gen.c
     yaml-factory.gen.c
+    merge.c
 )
 
 target_include_directories(yetty_ysdf PUBLIC

@@ -223,7 +223,6 @@ static int yframework_adapter_is_warp(WGPUAdapter adapter)
     return is_warp;
 }
 
-
 /* Request an adapter synchronously. Native Dawn fires the callback inline
  * during the request; the emscripten path spins the loop. Returns NULL on
  * failure (e.g. a forced backend that isn't compiled in). */
@@ -277,8 +276,7 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
      * featureLevel means Core, which silently filters GL out of adapter
      * discovery. Requesting Compatibility is required, not optional, for
      * the GL backends. */
-    if (forced_backend == WGPUBackendType_OpenGL ||
-        forced_backend == WGPUBackendType_OpenGLES) {
+    if (forced_backend == WGPUBackendType_OpenGL || forced_backend == WGPUBackendType_OpenGLES) {
         adapter_opts.featureLevel = WGPUFeatureLevel_Compatibility;
     }
 

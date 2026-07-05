@@ -98,7 +98,7 @@ int yetty_ybrowser_libcss_apply_wikipedia_quirks(struct yetty_ylexbor *r)
     	 * navigation. */
         "nav { display: none !important; }\n";
     return yetty_ybrowser_libcss_add_sheet(r, UA_WIKIPEDIA_CSS, sizeof(UA_WIKIPEDIA_CSS) - 1,
-                                           CSS_ORIGIN_USER);
+                                           CSS_ORIGIN_USER, NULL);
 }
 
 /* ===========================================================================
@@ -880,7 +880,7 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
         " .skip-link, .visualClear"
         " { display: none !important; }\n";
     if (yetty_ybrowser_libcss_add_sheet(r, UA_DEFAULT_CSS, sizeof(UA_DEFAULT_CSS) - 1,
-                                        CSS_ORIGIN_UA) != 0) {
+                                        CSS_ORIGIN_UA, NULL) != 0) {
         ydebug("libcss: UA stylesheet append failed");
     }
     /* Hostile-author nav hider, installed as CSS_ORIGIN_USER with
@@ -913,7 +913,7 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
          * compiled-in defaults for <figure> beat the UA origin. */
         "figure { display: block !important; }\n";
     if (yetty_ybrowser_libcss_add_sheet(r, NAV_HIDE_CSS, sizeof(NAV_HIDE_CSS) - 1,
-                                        CSS_ORIGIN_USER) != 0) {
+                                        CSS_ORIGIN_USER, NULL) != 0) {
         ydebug("libcss: nav-hide stylesheet append failed");
     }
     return 0;
@@ -936,8 +936,11 @@ void yetty_ybrowser_libcss_destroy(struct yetty_ylexbor *r)
     r->libcss = NULL;
 }
 
+static void libcss_load_imports(struct yetty_ylexbor *r, css_stylesheet *parent,
+                                const char *parent_url, css_origin origin);
+
 int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, size_t len,
-                                    css_origin origin)
+                                    css_origin origin, const char *sheet_url)
 {
     if (r == NULL || r->libcss == NULL || css == NULL || len == 0) {
         return -1;
@@ -948,7 +951,7 @@ int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, si
     params.params_version = CSS_STYLESHEET_PARAMS_VERSION_1;
     params.level = CSS_LEVEL_DEFAULT;
     params.charset = "UTF-8";
-    params.url = "ybrowser:inline";
+    params.url = sheet_url ? sheet_url : "ybrowser:inline";
     params.allow_quirks = false;
     params.inline_style = false;
     params.resolve = url_resolve;
@@ -977,12 +980,16 @@ int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, si
     }
     err = css_stylesheet_data_done(sheet);
     free(resolved);
-    /* CSS_IMPORTS_PENDING is success-with-imports; we don't resolve
-     * them today, so the sheet is usable as-is. */
     if (err != CSS_OK && err != CSS_IMPORTS_PENDING) {
         ydebug("libcss data_done -> %d (len=%zu)", (int)err, len);
         css_stylesheet_destroy(sheet);
         return -1;
+    }
+    /* @import: fetch + parse every imported sheet now, appending each to
+	 * the select ctx BEFORE this sheet — imported rules precede the
+	 * importing sheet's rules in cascade source order. */
+    if (err == CSS_IMPORTS_PENDING) {
+        libcss_load_imports(r, sheet, sheet_url, origin);
     }
 
     /* Keep alive — select_ctx_append_sheet does not take ownership. */
@@ -1003,6 +1010,123 @@ int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, si
         return -1;
     }
     return 0;
+}
+
+/* Register a parse of `css` (may be empty) as the child for one pending
+ * import — a pending import that never gets a registered child would be
+ * handed out by css_stylesheet_next_pending_import forever. Returns the
+ * child so failures can register a stub. */
+static css_stylesheet *libcss_import_child_build(struct yetty_ylexbor *r, const char *css,
+                                                 size_t len, css_origin origin,
+                                                 const char *child_url)
+{
+    struct yetty_ybrowser_libcss *lc = r->libcss;
+    if (css && len > 0) {
+        /* Full path: parses, resolves ITS imports recursively, appends to
+		 * the select ctx, and stores in lc->sheets — the child is the
+		 * last stored sheet on success. */
+        if (yetty_ybrowser_libcss_add_sheet(r, css, len, origin, child_url) == 0) {
+            return lc->sheets[lc->sheet_count - 1];
+        }
+    }
+    /* Stub: an empty, never-selected sheet that only satisfies the
+	 * pending-import bookkeeping. */
+    css_stylesheet_params params = {0};
+    params.params_version = CSS_STYLESHEET_PARAMS_VERSION_1;
+    params.level = CSS_LEVEL_DEFAULT;
+    params.charset = "UTF-8";
+    params.url = child_url ? child_url : "ybrowser:import-failed";
+    params.resolve = url_resolve;
+    css_stylesheet *stub = NULL;
+    if (css_stylesheet_create(&params, &stub) != CSS_OK) {
+        return NULL;
+    }
+    (void)css_stylesheet_append_data(stub, (const uint8_t *)" ", 1);
+    (void)css_stylesheet_data_done(stub);
+    if (lc->sheet_count == lc->sheet_cap) {
+        size_t ncap = lc->sheet_cap ? lc->sheet_cap * 2 : 8;
+        css_stylesheet **na = realloc(lc->sheets, ncap * sizeof(*na));
+        if (!na) {
+            css_stylesheet_destroy(stub);
+            return NULL;
+        }
+        lc->sheets = na;
+        lc->sheet_cap = ncap;
+    }
+    lc->sheets[lc->sheet_count++] = stub;
+    return stub;
+}
+
+static void libcss_load_imports(struct yetty_ylexbor *r, css_stylesheet *parent,
+                                const char *parent_url, css_origin origin)
+{
+    struct yetty_ybrowser_libcss *lc = r->libcss;
+    lwc_string *pending = NULL;
+    while (css_stylesheet_next_pending_import(parent, &pending) == CSS_OK && pending) {
+        /* lwc strings are length-counted, not NUL-guaranteed — copy. */
+        size_t raw_len = lwc_string_length(pending);
+        char raw_url[1024];
+        if (raw_len >= sizeof(raw_url)) {
+            raw_len = sizeof(raw_url) - 1;
+        }
+        memcpy(raw_url, lwc_string_data(pending), raw_len);
+        raw_url[raw_len] = '\0';
+
+        /* @import URLs resolve against the importing SHEET, falling back
+		 * to the document base for inline <style> imports. */
+        char *absolute = yetty_ylexbor_resolve_url_against(
+            parent_url ? parent_url : r->base_url, raw_url);
+
+        int cyclic = 0;
+        for (int i = 0; absolute && i < lc->import_depth; i++) {
+            if (lc->import_chain[i] && strcmp(lc->import_chain[i], absolute) == 0) {
+                cyclic = 1;
+                break;
+            }
+        }
+        int too_deep = lc->import_depth >= (int)(sizeof(lc->import_chain) /
+                                                 sizeof(lc->import_chain[0]));
+
+        css_stylesheet *child = NULL;
+        if (absolute && !cyclic && !too_deep) {
+            lc->import_chain[lc->import_depth++] = absolute;
+            struct yetty_ybrowser_request request = {
+                .url = absolute,
+                .kind = YETTY_YBROWSER_REQUEST_STYLE,
+                .referer = r->base_url,
+            };
+            struct yetty_ybrowser_response response = {0};
+            struct yetty_ycore_void_result fetch_res =
+                yetty_ybrowser_fetch(r->loader, &request, &response);
+            if (YETTY_IS_ERR(fetch_res)) {
+                yetty_ycore_error_destroy(fetch_res.error);
+            }
+            if (response.body && response.status >= 200 && response.status < 300) {
+                child = libcss_import_child_build(r, response.body, response.body_len, origin,
+                                                  absolute);
+                r->css_sheets_loaded++;
+            } else {
+                ydebug("@import fetch failed status=%ld %s", response.status, absolute);
+                r->css_sheets_failed++;
+            }
+            yetty_ybrowser_response_dispose(&response);
+            lc->import_depth--;
+            lc->import_chain[lc->import_depth] = NULL;
+        } else if (cyclic || too_deep) {
+            ydebug("@import %s: %s", cyclic ? "cycle" : "chain too deep",
+                   absolute ? absolute : raw_url);
+        }
+        if (!child) {
+            child = libcss_import_child_build(r, NULL, 0, origin, absolute);
+        }
+        free(absolute);
+        if (!child) {
+            break; /* cannot even build a stub — abandon the remainder */
+        }
+        if (css_stylesheet_register_import(parent, child) != CSS_OK) {
+            break;
+        }
+    }
 }
 
 css_computed_style *yetty_ybrowser_libcss_select(struct yetty_ylexbor *r, lxb_dom_element_t *el,
@@ -1807,32 +1931,6 @@ int yetty_ybrowser_libcss_text_decoration(const css_computed_style *style)
         return 0;
     }
     return css_computed_text_decoration(style);
-}
-
-int yetty_ybrowser_libcss_bg_image_url(const css_computed_style *style, char **out_url)
-{
-    if (!style || !out_url) {
-        return 0;
-    }
-    *out_url = NULL;
-    lwc_string *url = NULL;
-    uint8_t kind = css_computed_background_image(style, &url);
-    if (kind != CSS_BACKGROUND_IMAGE_IMAGE || url == NULL) {
-        return 0;
-    }
-    size_t len = lwc_string_length(url);
-    const char *data = lwc_string_data(url);
-    if (len == 0 || data == NULL) {
-        return 0;
-    }
-    char *copy = malloc(len + 1);
-    if (!copy) {
-        return 0;
-    }
-    memcpy(copy, data, len);
-    copy[len] = '\0';
-    *out_url = copy;
-    return 1;
 }
 
 int yetty_ybrowser_libcss_list_style_type(const css_computed_style *style)

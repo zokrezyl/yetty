@@ -33,6 +33,17 @@ yetty_add_c_test(
     LABELS  contract browser
     TIMEOUT 30)
 
+# Storage isolation (#444): localStorage / sessionStorage / document.cookie
+# are engine-owned — two live engines share none of them. Offline; self-skips
+# when the build carries no JS engine.
+yetty_add_c_test(
+    NAME    ybrowser_storage_isolation
+    SOURCES ybrowser-storage-isolation-test.c
+    LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    SHIMS   trace workpool
+    LABELS  contract browser
+    TIMEOUT 30)
+
 # Wikipedia rendering test — loads the actual Photography page snapshot
 # (committed alongside this CMakeLists.txt) and asserts geometric facts about
 # its layout. The canonical regression net for the user-reported "garbage

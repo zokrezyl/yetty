@@ -223,6 +223,14 @@ struct yetty_ylexbor_box {
     /* Layout result — set by ylexbor-layout.c. */
     float x, y, w, h;
 
+    /* Static position — where this box's border box WOULD land in normal
+	 * flow. Recorded (page coordinates) by the flow pass when it skips an
+	 * absolutely-positioned / fixed child; layout_absolute_child falls
+	 * back to it when neither inset of an axis is set (the spec's
+	 * static-position rectangle, instead of the containing-block origin). */
+    float static_x, static_y;
+    bool static_pos_set;
+
     /* Style snapshot used at layout + paint time. Resolved from the
 	 * lexbor computed style during box generation. */
     struct yetty_ylexbor_color bg;
@@ -655,31 +663,65 @@ struct yetty_ylexbor {
     struct yetty_ylexbor_img_cache_entry *img_cache;
     int img_cache_count, img_cache_cap;
 
+    /* Rendered inline-<svg> scenes, keyed by element (see
+	 * yetty_ylexbor_svg_inline_entry). */
+    struct yetty_ylexbor_svg_inline_entry *svg_inline_cache;
+    int svg_inline_count, svg_inline_cap;
+
     /* Async image fetching. When `img_pool` is set, yetty_ylexbor_start_image_fetch
 	 * submits each pending <img> to the worker pool (parallel fetch+decode on
 	 * background threads) instead of blocking the caller. `on_resource_ready`
 	 * is invoked on the loop thread when a fetch lands so the host repaints.
-	 * `img_jobs_in_flight`, `destroy_pending`, `fetch_generation` are touched
-	 * ONLY on the loop thread (submit + done + load_html + destroy), so no
-	 * locking is needed. `fetch_generation` is bumped on document replace so a
-	 * late job from a previous page is discarded. `destroy_pending` defers the
-	 * real teardown until the last in-flight job's done() runs — a job's
-	 * done() must never touch a freed engine. */
+	 * `img_jobs_in_flight` and `destroy_pending` are touched ONLY on the loop
+	 * thread (submit + done + load_html + destroy), so no locking is needed.
+	 * `fetch_generation` is bumped on document replace so a late job from a
+	 * previous page is discarded — it is ATOMIC because worker-thread transfer
+	 * callbacks poll it (via request->cancel_generation) while the loop thread
+	 * increments. `destroy_pending` defers the real teardown until the last
+	 * in-flight job's done() runs — a job's done() must never touch a freed
+	 * engine. */
     struct yetty_yplatform_yworkpool *img_pool;
     void (*on_resource_ready)(void *user);
     void *resource_ready_user;
     int img_jobs_in_flight;
     int destroy_pending;
-    uint64_t fetch_generation;
+    _Atomic uint64_t fetch_generation;
 };
 
 struct yetty_ylexbor_img_cache_entry {
     char *url;        /* owned */
-    uint32_t *pixels; /* RGBA8 row-major; owned */
-    int w, h;         /* source pixel dims */
+    uint32_t *pixels; /* RGBA8 row-major; owned — NULL for vector entries */
+    int w, h;         /* source pixel dims (scene dims for vectors) */
     int failed;       /* fetch/decode failed — don't retry */
     int loading;      /* an async fetch job is in flight for this url */
+    /* Vector images: an SVG source renders through ysvg into a drawable
+	 * list that paint MERGES into the page's output under the image box's
+	 * transform — vector primitives survive, nothing is rasterized. */
+    struct yetty_ydraw_drawable_list *svg_scene; /* owned; NULL for rasters */
+    float svg_min_x, svg_min_y;                  /* scene-space origin */
+    float svg_w, svg_h;                          /* scene-space extent */
 };
+
+/* Inline <svg> elements have no URL — their rendered scenes cache per
+ * DOM element. Cleared on document replace (element pointers die with
+ * the parse) and at destroy. */
+struct yetty_ylexbor_svg_inline_entry {
+    const void *element; /* lxb element pointer — cache key only, never deref'd */
+    struct yetty_ydraw_drawable_list *scene; /* owned; NULL when failed */
+    float min_x, min_y, w, h;
+};
+
+/* Render `bytes` through ysvg. On success fills scene + scene-space frame
+ * and returns 1; returns 0 when ysvg cannot parse/render the source.
+ * Defined in ybrowser-paint.c. */
+int yetty_ylexbor_svg_scene_render(const char *bytes, size_t len,
+                                   struct yetty_ydraw_drawable_list **out_scene, float *out_min_x,
+                                   float *out_min_y, float *out_w, float *out_h);
+
+/* Destroy every cached inline-<svg> scene and reset the cache. Called on
+ * document replace (the element keys die with the old parse) and from the
+ * engine teardown. Defined in ybrowser-paint.c. */
+void yetty_ylexbor_svg_inline_cache_clear(struct yetty_ylexbor *r);
 
 /* Defined in ylexbor-paint.c so the fetch/decode plumbing lives next
  * to the prim-emission code. Box-build calls this eagerly to learn
@@ -910,6 +952,10 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r, const char *t
 /* Resolve a possibly-relative URL against r->base_url. Caller frees
  * the returned string. Returns NULL on failure. */
 char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href);
+
+/* Same resolution against an explicit base — @import URLs resolve against
+ * the IMPORTING stylesheet's URL, not the document base. */
+char *yetty_ylexbor_resolve_url_against(const char *base_url, const char *href);
 
 /* Publish decoded RGBA pixels onto the loader's resource cache entry for
  * `url` (copies), so the next navigation reuses the decode as well as

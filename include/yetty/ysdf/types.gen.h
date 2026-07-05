@@ -334,6 +334,200 @@ static inline size_t yetty_ysdf_primitive_size(uint32_t type)
     return yetty_ysdf_word_count((enum yetty_ysdf_type)type) * sizeof(float);
 }
 
+// Affine 2D transform of an SDF primitive's geometry words: translate by
+// (offset_x, offset_y) after scaling by (scale_x, scale_y). `geom` points at
+// the first geometry word (word 5 of the primitive). Axis-free lengths
+// (radii, thickness) scale by the mean of the two factors — exact under
+// uniform scale, an approximation otherwise. Direction components, counts,
+// ratios, colors and z extents are left untouched.
+static inline void yetty_ysdf_geometry_transform(uint32_t type, float *geom, float offset_x,
+                                                 float offset_y, float scale_x, float scale_y)
+{
+    float scale_mean = 0.5f * (scale_x + scale_y);
+    (void)scale_mean;
+    switch ((enum yetty_ysdf_type)type) {
+    case YETTY_YSDF_CIRCLE:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_mean;
+        break;
+    case YETTY_YSDF_BOX:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_x;
+        geom[3] *= scale_y;
+        geom[4] *= scale_mean;
+        break;
+    case YETTY_YSDF_SEGMENT:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] = geom[2] * scale_x + offset_x;
+        geom[3] = geom[3] * scale_y + offset_y;
+        break;
+    case YETTY_YSDF_TRIANGLE:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] = geom[2] * scale_x + offset_x;
+        geom[3] = geom[3] * scale_y + offset_y;
+        geom[4] = geom[4] * scale_x + offset_x;
+        geom[5] = geom[5] * scale_y + offset_y;
+        break;
+    case YETTY_YSDF_ELLIPSE:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_x;
+        geom[3] *= scale_y;
+        break;
+    case YETTY_YSDF_ARC:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[4] *= scale_mean;
+        geom[5] *= scale_mean;
+        break;
+    case YETTY_YSDF_ROUNDED_BOX:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_x;
+        geom[3] *= scale_y;
+        geom[4] *= scale_mean;
+        geom[5] *= scale_mean;
+        geom[6] *= scale_mean;
+        geom[7] *= scale_mean;
+        break;
+    case YETTY_YSDF_RHOMBUS:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_x;
+        geom[3] *= scale_y;
+        break;
+    case YETTY_YSDF_PENTAGON:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_mean;
+        break;
+    case YETTY_YSDF_HEXAGON:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_mean;
+        break;
+    case YETTY_YSDF_STAR:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_mean;
+        break;
+    case YETTY_YSDF_PIE:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[4] *= scale_mean;
+        break;
+    case YETTY_YSDF_RING:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[4] *= scale_mean;
+        geom[5] *= scale_mean;
+        break;
+    case YETTY_YSDF_HEART:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_mean;
+        break;
+    case YETTY_YSDF_CROSS:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_x;
+        geom[3] *= scale_y;
+        geom[4] *= scale_mean;
+        break;
+    case YETTY_YSDF_ROUNDED_X:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_mean;
+        geom[3] *= scale_mean;
+        break;
+    case YETTY_YSDF_CAPSULE:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] = geom[2] * scale_x + offset_x;
+        geom[3] = geom[3] * scale_y + offset_y;
+        geom[4] *= scale_mean;
+        break;
+    case YETTY_YSDF_MOON:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_mean;
+        geom[3] *= scale_mean;
+        geom[4] *= scale_mean;
+        break;
+    case YETTY_YSDF_EGG:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_mean;
+        geom[3] *= scale_mean;
+        break;
+    case YETTY_YSDF_OCTOGON:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_mean;
+        break;
+    case YETTY_YSDF_HEXAGRAM:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_mean;
+        break;
+    case YETTY_YSDF_PENTAGRAM:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_mean;
+        break;
+    case YETTY_YSDF_LINEAR_GRADIENT_BOX:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_x;
+        geom[3] *= scale_y;
+        geom[4] *= scale_mean;
+        geom[5] = geom[5] * scale_x + offset_x;
+        geom[6] = geom[6] * scale_y + offset_y;
+        geom[7] = geom[7] * scale_x + offset_x;
+        geom[8] = geom[8] * scale_y + offset_y;
+        break;
+    case YETTY_YSDF_RADIAL_GRADIENT_BOX:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[2] *= scale_x;
+        geom[3] *= scale_y;
+        geom[4] *= scale_mean;
+        geom[5] = geom[5] * scale_x + offset_x;
+        geom[6] = geom[6] * scale_y + offset_y;
+        geom[7] *= scale_mean;
+        break;
+    case YETTY_YSDF_SPHERE_3D:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[3] *= scale_mean;
+        break;
+    case YETTY_YSDF_BOX_3D:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[3] *= scale_x;
+        geom[4] *= scale_y;
+        break;
+    case YETTY_YSDF_TORUS_3D:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[3] *= scale_mean;
+        geom[4] *= scale_mean;
+        break;
+    case YETTY_YSDF_CYLINDER_3D:
+        geom[0] = geom[0] * scale_x + offset_x;
+        geom[1] = geom[1] * scale_y + offset_y;
+        geom[3] *= scale_mean;
+        geom[4] *= scale_y;
+        break;
+    default:
+        break;
+    }
+}
+
 // Compute AABB for an SDF primitive
 // data: full primitive data (type + z_order + style + geometry)
 // word_count: number of 32-bit words in data

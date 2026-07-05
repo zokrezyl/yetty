@@ -48,6 +48,7 @@
 
 #include "ybrowser-internal.h"
 
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -76,7 +77,7 @@
  * URL resolution + sync HTTP fetch.
  * ===========================================================================*/
 
-char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href)
+char *yetty_ylexbor_resolve_url_against(const char *base_url, const char *href)
 {
     if (!href) {
         return NULL;
@@ -85,42 +86,42 @@ char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href)
         strncmp(href, "data:", 5) == 0 || strncmp(href, "file://", 7) == 0) {
         return strdup(href);
     }
-    if (!r->base_url) {
+    if (!base_url) {
         return strdup(href); /* best effort */
     }
 
     /* Two cases: absolute path (starts with /) or relative. */
     if (href[0] == '/' && href[1] == '/') {
         /* protocol-relative — splice the base's protocol. */
-        const char *p = strstr(r->base_url, "://");
-        size_t plen = p ? (size_t)(p - r->base_url) : 4;
+        const char *p = strstr(base_url, "://");
+        size_t plen = p ? (size_t)(p - base_url) : 4;
         size_t hl = strlen(href);
         char *out = malloc(plen + 1 + hl + 1);
-        memcpy(out, r->base_url, plen);
+        memcpy(out, base_url, plen);
         out[plen] = ':';
         memcpy(out + plen + 1, href, hl + 1);
         return out;
     }
     if (href[0] == '/') {
         /* absolute path — splice scheme://host/ */
-        const char *p = strstr(r->base_url, "://");
+        const char *p = strstr(base_url, "://");
         if (!p) {
             return strdup(href);
         }
         const char *slash = strchr(p + 3, '/');
-        size_t prefix = slash ? (size_t)(slash - r->base_url) : strlen(r->base_url);
+        size_t prefix = slash ? (size_t)(slash - base_url) : strlen(base_url);
         size_t hl = strlen(href);
         char *out = malloc(prefix + hl + 1);
-        memcpy(out, r->base_url, prefix);
+        memcpy(out, base_url, prefix);
         memcpy(out + prefix, href, hl + 1);
         return out;
     }
     /* relative — strip last path segment of base_url, append href */
-    size_t blen = strlen(r->base_url);
-    const char *base_end = r->base_url + blen;
+    size_t blen = strlen(base_url);
+    const char *base_end = base_url + blen;
     const char *slash = NULL;
-    const char *p = strstr(r->base_url, "://");
-    const char *path_start = p ? strchr(p + 3, '/') : r->base_url;
+    const char *p = strstr(base_url, "://");
+    const char *path_start = p ? strchr(p + 3, '/') : base_url;
     if (path_start) {
         for (const char *q = base_end; q > path_start; q--) {
             if (*(q - 1) == '/') {
@@ -129,12 +130,17 @@ char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href)
             }
         }
     }
-    size_t prefix = slash ? (size_t)(slash - r->base_url + 1) : blen;
+    size_t prefix = slash ? (size_t)(slash - base_url + 1) : blen;
     size_t hl = strlen(href);
     char *out = malloc(prefix + hl + 1);
-    memcpy(out, r->base_url, prefix);
+    memcpy(out, base_url, prefix);
     memcpy(out + prefix, href, hl + 1);
     return out;
+}
+
+char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href)
+{
+    return yetty_ylexbor_resolve_url_against(r ? r->base_url : NULL, href);
 }
 
 #if YETTY_HAVE_CURL
@@ -143,15 +149,23 @@ struct fetch_transfer {
     char *data;
     size_t size, cap;
     /* Cancellation: when cancel_generation is non-NULL and its current
-	 * value no longer matches generation, the write callback aborts the
-	 * transfer at the next received chunk. The pointed-to counter is
-	 * bumped by the engine on navigation; a torn read on a 32-bit
-	 * target merely delays or repeats one abort check by a chunk. */
+	 * value no longer matches generation, the transfer aborts — the
+	 * progress callback catches stalls in DNS/connect/TLS/headers, the
+	 * write callback catches streaming bodies at the next chunk. The
+	 * pointed-to counter is bumped by the engine on navigation; atomic
+	 * because workers poll while the loop thread increments. */
     uint64_t generation;
-    const uint64_t *cancel_generation;
+    const _Atomic uint64_t *cancel_generation;
     /* Response headers we care about, captured by fetch_header_cb. */
     char cache_control[160];
 };
+
+static int fetch_transfer_is_stale(const struct fetch_transfer *transfer)
+{
+    return transfer->cancel_generation != NULL &&
+           atomic_load_explicit(transfer->cancel_generation, memory_order_acquire) !=
+               transfer->generation;
+}
 
 /* Hard ceiling on a single fetched response. Without it, an endpoint that
  * streams without end (SSE / long-poll / analytics beacon) or ships a
@@ -168,8 +182,7 @@ static size_t fetch_write_cb(char *chunk, size_t chunk_size, size_t chunk_count,
     /* Stale transfer (the page navigated away) — abort now instead of
 	 * downloading the rest just to throw it away. Returning a short
 	 * count fails the easy handle with CURLE_WRITE_ERROR. */
-    if (transfer->cancel_generation != NULL &&
-        *transfer->cancel_generation != transfer->generation) {
+    if (fetch_transfer_is_stale(transfer)) {
         return 0;
     }
     if (transfer->size + add > FETCH_MAX_RESPONSE) {
@@ -219,6 +232,22 @@ static size_t fetch_header_cb(char *line, size_t line_size, size_t line_count, v
     return len;
 }
 
+/* Cancellation for the phases the write callback never sees: a transfer
+ * stuck in DNS/connect/TLS/headers (or a body-less response) gets progress
+ * ticks but no write callbacks, so a navigation would otherwise keep it
+ * alive until the timeout. Non-zero return aborts with
+ * CURLE_ABORTED_BY_CALLBACK. */
+static int fetch_progress_cb(void *userdata, curl_off_t download_total, curl_off_t download_now,
+                             curl_off_t upload_total, curl_off_t upload_now)
+{
+    (void)download_total;
+    (void)download_now;
+    (void)upload_total;
+    (void)upload_now;
+    const struct fetch_transfer *transfer = userdata;
+    return fetch_transfer_is_stale(transfer) ? 1 : 0;
+}
+
 #include <pthread.h>
 
 /* Network loader — the owner of everything fetch-related that outlives a
@@ -236,6 +265,11 @@ static size_t fetch_header_cb(char *line, size_t line_size, size_t line_count, v
  * skip both the network AND the decode. */
 struct loader_cache_entry {
     char *url;
+    /* Request kind the response was negotiated for. Part of the key: the
+	 * same URL fetched as STYLE vs IMAGE carries different Accept /
+	 * Sec-Fetch-Dest headers, and Vary-sensitive CDNs serve different
+	 * representations — never hand one kind's bytes to another. */
+    enum yetty_ybrowser_request_kind kind;
     char *bytes;
     size_t bytes_len;
     long status;
@@ -284,10 +318,12 @@ static void loader_cache_entry_free(struct loader_cache_entry *entry)
 }
 
 /* cache_mutex held. Returns the entry index or -1. */
-static int loader_cache_find(struct yetty_ybrowser_loader *loader, const char *url)
+static int loader_cache_find(struct yetty_ybrowser_loader *loader, const char *url,
+                             enum yetty_ybrowser_request_kind kind)
 {
     for (int i = 0; i < loader->cache_count; i++) {
-        if (loader->cache_entries[i].url && strcmp(loader->cache_entries[i].url, url) == 0) {
+        if (loader->cache_entries[i].url && loader->cache_entries[i].kind == kind &&
+            strcmp(loader->cache_entries[i].url, url) == 0) {
             return i;
         }
     }
@@ -339,7 +375,7 @@ static int loader_cache_lookup(struct yetty_ybrowser_loader *loader,
     }
     int hit = 0;
     pthread_mutex_lock(&loader->cache_mutex);
-    int idx = loader_cache_find(loader, request->url);
+    int idx = loader_cache_find(loader, request->url, request->kind);
     if (idx >= 0) {
         struct loader_cache_entry *entry = &loader->cache_entries[idx];
         if (entry->expires_at <= time(NULL)) {
@@ -409,7 +445,7 @@ static void loader_cache_store(struct yetty_ybrowser_loader *loader,
         return; /* one entry must not dominate the budget */
     }
     pthread_mutex_lock(&loader->cache_mutex);
-    if (loader_cache_find(loader, request->url) >= 0) {
+    if (loader_cache_find(loader, request->url, request->kind) >= 0) {
         pthread_mutex_unlock(&loader->cache_mutex); /* raced fetch already stored it */
         return;
     }
@@ -436,6 +472,7 @@ static void loader_cache_store(struct yetty_ybrowser_loader *loader,
     memcpy(entry->bytes, response->body, response->body_len);
     entry->bytes[response->body_len] = '\0';
     entry->bytes_len = response->body_len;
+    entry->kind = request->kind;
     entry->status = response->status;
     entry->content_type = response->content_type ? strdup(response->content_type) : NULL;
     entry->effective_url = response->effective_url ? strdup(response->effective_url) : NULL;
@@ -461,7 +498,8 @@ void yetty_ybrowser_loader_cache_put_pixels(struct yetty_ybrowser_loader *loader
         return;
     }
     pthread_mutex_lock(&loader->cache_mutex);
-    int idx = loader_cache_find(loader, url);
+    /* Pixels are the image pipeline's decoration — only IMAGE entries. */
+    int idx = loader_cache_find(loader, url, YETTY_YBROWSER_REQUEST_IMAGE);
     if (idx >= 0 && !loader->cache_entries[idx].pixels) {
         struct loader_cache_entry *entry = &loader->cache_entries[idx];
         entry->pixels = malloc(pixel_bytes);
@@ -792,6 +830,11 @@ static void fetch_configure_easy(struct yetty_ybrowser_loader *loader, CURL *eas
     curl_easy_setopt(easy, CURLOPT_WRITEDATA, transfer);
     curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, fetch_header_cb);
     curl_easy_setopt(easy, CURLOPT_HEADERDATA, transfer);
+    /* Progress ticks fire during resolve/connect/TLS — the only chance
+	 * to cancel a transfer that never delivers body bytes. */
+    curl_easy_setopt(easy, CURLOPT_XFERINFOFUNCTION, fetch_progress_cb);
+    curl_easy_setopt(easy, CURLOPT_XFERINFODATA, transfer);
+    curl_easy_setopt(easy, CURLOPT_NOPROGRESS, 0L);
     if (request->referer && *request->referer) {
         curl_easy_setopt(easy, CURLOPT_REFERER, request->referer);
     }
@@ -817,6 +860,28 @@ static void fetch_finish_response(CURL *easy, CURLcode curl_code, struct fetch_t
 {
     long status = 0;
     curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &status);
+    long wire_version = 0;
+    if (curl_easy_getinfo(easy, CURLINFO_HTTP_VERSION, &wire_version) == CURLE_OK) {
+        switch (wire_version) {
+        case CURL_HTTP_VERSION_1_0:
+            response->http_version = 10;
+            break;
+        case CURL_HTTP_VERSION_1_1:
+            response->http_version = 11;
+            break;
+        case CURL_HTTP_VERSION_2_0:
+            response->http_version = 20;
+            break;
+#ifdef CURL_VERSION_HTTP3
+        case CURL_HTTP_VERSION_3:
+            response->http_version = 30;
+            break;
+#endif
+        default:
+            response->http_version = 0;
+            break;
+        }
+    }
     if (curl_code != CURLE_OK) {
         free(transfer->data);
         transfer->data = NULL;
@@ -870,9 +935,10 @@ struct yetty_ycore_void_result yetty_ybrowser_fetch(struct yetty_ybrowser_loader
     double t_request = yetty_ylexbor_prof_now_ms();
     CURLcode curl_code = curl_easy_perform(easy);
     fetch_finish_response(easy, curl_code, &transfer, response);
-    yetty_ylexbor_prof("    HTTP %.0fms status=%ld bytes=%zu rc=%d kind=%d %.90s",
+    yetty_ylexbor_prof("    HTTP %.0fms status=%ld bytes=%zu rc=%d kind=%d http=%d %.90s",
                        yetty_ylexbor_prof_now_ms() - t_request, response->status,
-                       response->body_len, (int)curl_code, (int)request->kind, request->url);
+                       response->body_len, (int)curl_code, (int)request->kind,
+                       response->http_version, request->url);
     loader_cache_store(loader, request, response, transfer.cache_control);
     curl_slist_free_all(headers);
     curl_easy_cleanup(easy);
@@ -999,6 +1065,9 @@ struct yetty_ycore_void_result yetty_ybrowser_fetch_many(
             }
             fetch_finish_response(message->easy_handle, message->data.result, &slot->transfer,
                                   &responses[slot->idx]);
+            yetty_ylexbor_prof("      done status=%ld bytes=%zu http=%d %.60s",
+                               responses[slot->idx].status, responses[slot->idx].body_len,
+                               responses[slot->idx].http_version, requests[slot->idx].url);
             loader_cache_store(loader, &requests[slot->idx], &responses[slot->idx],
                                slot->transfer.cache_control);
             curl_multi_remove_handle(multi, message->easy_handle);

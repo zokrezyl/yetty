@@ -18,6 +18,7 @@
 #include <lexbor/dom/dom.h>
 #include <lexbor/tag/const.h>
 
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* ===========================================================================
@@ -267,8 +268,10 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
     for (int i = 0; i < r->img_cache_count; i++) {
         free(r->img_cache[i].url);
         free(r->img_cache[i].pixels);
+        yetty_ydraw_drawable_list_destroy(r->img_cache[i].svg_scene);
     }
     free(r->img_cache);
+    yetty_ylexbor_svg_inline_cache_clear(r);
     yetty_ylexbor_css_vars_destroy(r);
     free(r);
     return YETTY_OK_VOID();
@@ -525,8 +528,12 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
             }
             struct yetty_ybrowser_response *response = slot >= 0 ? &fetch_responses[slot] : NULL;
             if (response && response->body && response->status >= 200 && response->status < 300) {
+                /* The sheet's own (post-redirect) URL anchors @import
+				 * resolution inside it. */
+                const char *sheet_url =
+                    response->effective_url ? response->effective_url : e->url;
                 struct yetty_ycore_void_result ar =
-                    yetty_ylexbor_add_css(r, response->body, response->body_len);
+                    yetty_ylexbor_add_css_from(r, response->body, response->body_len, sheet_url);
                 if (YETTY_IS_ERR(ar)) {
                     if (YETTY_IS_OK(apply_res)) {
                         apply_res =
@@ -595,6 +602,9 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     /* Invalidate any in-flight async image jobs from the previous document —
      * their done() will find a mismatched generation and discard. */
     r->fetch_generation++;
+    /* Inline-<svg> scenes are keyed by element pointers that die with the
+	 * old parse — drop them before the new document takes over. */
+    yetty_ylexbor_svg_inline_cache_clear(r);
     r->css_sheets_loaded = 0;
     r->css_sheets_failed = 0;
     r->css_sheets_inline = 0;
@@ -678,8 +688,8 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, const char *css,
-                                                     size_t css_len)
+struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *r, const char *css,
+                                                          size_t css_len, const char *sheet_url)
 {
     if (r == NULL || css == NULL) {
         return YETTY_ERR(yetty_ycore_void, "ylexbor_add_css: null");
@@ -707,8 +717,9 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, co
     yetty_ylexbor_css_scan_grid_spans(r, css, css_len);
     yetty_ylexbor_css_scan_flex_gaps(r, css, css_len);
 
-    /* Also push the same CSS through libcss so its cascade sees it. */
-    (void)yetty_ybrowser_libcss_add_sheet(r, css, css_len, CSS_ORIGIN_AUTHOR);
+    /* Also push the same CSS through libcss so its cascade sees it —
+	 * the sheet URL anchors @import resolution. */
+    (void)yetty_ybrowser_libcss_add_sheet(r, css, css_len, CSS_ORIGIN_AUTHOR, sheet_url);
 
     lxb_css_stylesheet_t *sheet = lxb_css_stylesheet_create(NULL);
     if (sheet == NULL) {
@@ -729,6 +740,14 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, co
         return YETTY_ERR(yetty_ycore_void, "stylesheet_attach");
     }
     return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, const char *css,
+                                                     size_t css_len)
+{
+    /* No sheet URL — inline <style> and API callers; @import inside these
+	 * resolves against the document base. */
+    return yetty_ylexbor_add_css_from(r, css, css_len, NULL);
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_set_viewport(struct yetty_ylexbor *r, int width,
@@ -969,16 +988,14 @@ const char *yetty_ylexbor_size_source_name(int source)
         [YL_SRC_ABS_FIT] = "abs-fit",
         [YL_SRC_IMG_INTRINSIC] = "img",
     };
-    if (source < 0 || (size_t)source >= sizeof(names) / sizeof(names[0]) ||
-        names[source] == NULL) {
+    if (source < 0 || (size_t)source >= sizeof(names) / sizeof(names[0]) || names[source] == NULL) {
         return "?";
     }
     return names[source];
 }
 
 int yetty_ylexbor_test_box_sources_at(const struct yetty_ylexbor *r, int index,
-                                      const char **width_source_out,
-                                      const char **height_source_out)
+                                      const char **width_source_out, const char **height_source_out)
 {
     if (width_source_out) {
         *width_source_out = "?";
