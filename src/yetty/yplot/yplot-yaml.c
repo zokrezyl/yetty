@@ -1,5 +1,15 @@
-// Auto-generated from yplot.yaml - DO NOT EDIT
-// YAML parser factory for yplot composite
+/*
+ * yplot-yaml.c — HAND-WRITTEN yaml factory for the yplot composite
+ * (schema: `yaml_factory: manual`).
+ *
+ * This parser goes far beyond the generic generated shape: it feeds the
+ * `source:` expression through yexpr-plot parsing and yfsvm compilation,
+ * maps buffer declarations to wire data buffers (inline values or
+ * zero-filled baselines), and applies per-function color attributes. It
+ * grew out of the generated parser and is maintained by hand; the
+ * registration entry point (yetty_yplot_register_yaml_factory) is declared
+ * in the generated yplot-gen.h.
+ */
 
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>

@@ -104,7 +104,14 @@ run yvideo/basic.sh
 # local-page renders are offline; each script's live-URL step degrades
 # gracefully when there is no network.
 # run ynetsurf/basic.sh
-run ybrowser/basic.sh
+run ybrowser/once/basic.sh
+# One page per engine aspect (demo/assets/ybrowser/) — all offline.
+run ybrowser/once/css.sh
+run ybrowser/once/flexbox.sh
+run ybrowser/once/grid.sh
+run ybrowser/once/tables.sh
+run ybrowser/once/svg.sh
+run ybrowser/once/images.sh
 
 # BROKEN — yrich apps fail at construction (yclass dispatch_lookup: slot index
 # out of range). Re-enable once the yrich/yclass fix lands.

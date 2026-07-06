@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ybrowser — SVG</title>
+<style>
+  body { margin: 0; background: #0B1014; color: #E0E5E4; font-family: sans-serif; padding: 28px 36px; }
+  h1 { color: #74C5A5; }
+  h2 { color: #6BA892; border-bottom: 1px solid #364A47; padding-bottom: 4px; margin-top: 26px; }
+  p  { color: #9FA7A8; }
+  a  { color: #6BA892; }
+  .strip { display: flex; gap: 16px; align-items: flex-start;
+           background: #141A1F; border: 1px solid #364A47; padding: 12px; }
+  .strip figure { margin: 0; }
+  .strip figcaption { color: #556162; font-size: 12px; margin-top: 4px; }
+</style>
+</head>
+<body>
+  <h1>SVG</h1>
+  <p><a href="index.html">back to the hub</a> — every graphic on this page stays a
+     vector: the scenes render through ysvg and merge into the page's drawable
+     list under the image-box transform. Nothing is rasterized.</p>
+
+  <h2>Inline &lt;svg&gt;</h2>
+  <div class="strip">
+    <figure>
+      <svg width="140" height="90" viewBox="0 0 140 90">
+        <rect x="6" y="6" width="128" height="78" fill="#141A1F" stroke="#364A47"/>
+        <circle cx="40" cy="45" r="24" fill="#6BA892"/>
+        <rect x="78" y="21" width="48" height="48" fill="#5A8979"/>
+      </svg>
+      <figcaption>shapes, viewBox 1:1</figcaption>
+    </figure>
+    <figure>
+      <svg width="90" height="90" viewBox="0 0 300 300">
+        <circle cx="150" cy="150" r="130" fill="#1E262C" stroke="#74C5A5"/>
+        <circle cx="105" cy="115" r="18" fill="#74C5A5"/>
+        <circle cx="195" cy="115" r="18" fill="#74C5A5"/>
+        <rect x="95" y="190" width="110" height="16" fill="#74C5A5"/>
+      </svg>
+      <figcaption>viewBox scaled 300→90</figcaption>
+    </figure>
+  </div>
+
+  <h2>&lt;img src="*.svg"&gt;</h2>
+  <div class="strip">
+    <figure>
+      <img src="../svg/svg-logo.svg" width="90" height="90">
+      <figcaption>svg-logo.svg</figcaption>
+    </figure>
+    <figure>
+      <img src="../svg/smiley-green-alien.svg" width="90" height="90">
+      <figcaption>smiley-green-alien.svg</figcaption>
+    </figure>
+    <figure>
+      <img src="../svg/de-flag.svg" width="150" height="90">
+      <figcaption>de-flag.svg</figcaption>
+    </figure>
+  </div>
+
+  <h2>data-URI SVG</h2>
+  <div class="strip">
+    <figure>
+      <img width="120" height="60" src="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20120%2060'%3E%3Crect%20width='120'%20height='60'%20fill='%231E262C'/%3E%3Ccircle%20cx='30'%20cy='30'%20r='18'%20fill='%236BA892'/%3E%3Ccircle%20cx='90'%20cy='30'%20r='18'%20fill='%235A8979'/%3E%3C/svg%3E">
+      <figcaption>URL-encoded data: URI</figcaption>
+    </figure>
+  </div>
+</body>
+</html>

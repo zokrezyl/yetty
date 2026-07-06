@@ -2891,6 +2891,53 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
          * them are read for flow, collapsing, or float placement. */
         resolve_pct_metrics(c, content_width);
 
+        if (c->float_side != 0 && c->kind == YL_BOX_INLINE_IMAGE) {
+            /* Expire floats the cursor has scrolled past, then register
+			 * this one against the fresh state. */
+            float_advance_y(&fl, cursor_y);
+            /* Floated replaced element (an <img>/<svg> pulled out of
+				 * its paragraph's inline flow): the box producer already
+				 * resolved its pixel size, so place it directly — no
+				 * block recursion. Margins widen the band the in-flow
+				 * text wraps around and offset the box inside it. */
+            if (c->kind == YL_BOX_INLINE_IMAGE) {
+                float replaced_w = c->w > 0.0f ? c->w : 100.0f;
+                float replaced_h = c->h > 0.0f ? c->h : 100.0f;
+                if (replaced_w > content_width && content_width > 0.0f) {
+                    replaced_h *= content_width / replaced_w;
+                    replaced_w = content_width;
+                }
+                float band_w = replaced_w + c->margin_left + c->margin_right;
+                float replaced_y = cursor_y;
+                float replaced_x;
+                if (c->float_side == 1) {
+                    if (fl.left_width > 0) {
+                        replaced_y = fl.left_bottom;
+                    }
+                    replaced_x = content_origin_x + c->margin_left;
+                } else {
+                    if (fl.right_width > 0) {
+                        replaced_y = fl.right_bottom;
+                    }
+                    replaced_x = content_origin_x + content_width - replaced_w - c->margin_right;
+                }
+                c->x = replaced_x;
+                c->y = replaced_y + c->margin_top;
+                c->w = replaced_w;
+                c->h = replaced_h;
+                float band_bottom = c->y + replaced_h + c->margin_bottom;
+                if (c->float_side == 1) {
+                    fl.left_width = band_w;
+                    fl.left_bottom = band_bottom;
+                } else {
+                    fl.right_width = band_w;
+                    fl.right_bottom = band_bottom;
+                }
+                cidx = r->boxes.data[cidx].next_sibling;
+                continue;
+            }
+        }
+
         if (c->kind == YL_BOX_BLOCK) {
             float mt = c->margin_top;
             float collapsed = has_prev ? (mt > prev_margin_bottom ? mt : prev_margin_bottom) : mt;

@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ybrowser demo pages</title>
+<style>
+  :root {
+    --bg: #0B1014;
+    --bg-lifted: #141A1F;
+    --bg-row: #1E262C;
+    --border: #364A47;
+    --text: #E0E5E4;
+    --muted: #9FA7A8;
+    --accent: #6BA892;
+    --accent-bright: #74C5A5;
+  }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; padding: 32px 40px; }
+  h1 { color: var(--accent-bright); margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 28px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 16px; }
+  .card { flex: 1 1 300px; background: var(--bg-lifted); border: 1px solid var(--border);
+          border-radius: 8px; padding: 18px 20px; }
+  .card h2 { margin: 0 0 6px 0; font-size: 18px; }
+  .card h2 a { color: var(--accent); text-decoration: none; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  .foot { margin-top: 28px; color: #556162; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>ybrowser</h1>
+  <div class="sub">Demo pages — each link exercises one aspect of the engine. Click a card title.</div>
+
+  <div class="cards">
+    <div class="card">
+      <h2><a href="css.html">CSS basics</a></h2>
+      <p>Box model, borders, colors, custom properties (media-gated and element-scoped), floats, positioning.</p>
+    </div>
+    <div class="card">
+      <h2><a href="flexbox.html">Flexbox</a></h2>
+      <p>Grow / shrink ratios, min-width floors, wrap with per-line distribution, order, row-reverse, align-self.</p>
+    </div>
+    <div class="card">
+      <h2><a href="grid.html">Grid</a></h2>
+      <p>Track templates (px / fr / auto), column spans, gaps, row stretch, a large auto-flow grid.</p>
+    </div>
+    <div class="card">
+      <h2><a href="tables.html">Tables</a></h2>
+      <p>Data tables and an infobox — rows, headers, zebra striping.</p>
+    </div>
+    <div class="card">
+      <h2><a href="svg.html">SVG</a></h2>
+      <p>Inline &lt;svg&gt; merged as vectors, &lt;img src=*.svg&gt;, and data-URI SVG — no rasterization.</p>
+    </div>
+    <div class="card">
+      <h2><a href="images.html">Images</a></h2>
+      <p>PNG and JPEG decoding, intrinsic sizing, attribute and CSS sizing, aspect-ratio preservation.</p>
+    </div>
+  </div>
+
+  <div class="foot">All pages are offline, committed under demo/assets/ybrowser/. Use the address bar or back button to return here.</div>
+</body>
+</html>

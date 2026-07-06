@@ -99,7 +99,16 @@ def calculate_layout(schema):
     for b in schema.get('buffers', []):
         buffers.append({
             'name': b['name'],
+            # RS binding name. The FIRST storage buffer keeps the literal
+            # "buffer" for backwards compatibility (existing shaders);
+            # later ones default to "<name>_buffer" unless the yaml sets
+            # rs_name explicitly.
+            'rs_name': b.get('rs_name'),
             'element_type': b['element_type'],
+            # array: true — variable-count list of element buffers,
+            # count-prefixed on the wire; forces the MERGED storage layout
+            # (one RS buffer spanning the whole post-uniform payload).
+            'array': b.get('array', False),
             'diverted': False,
         })
 
@@ -156,7 +165,38 @@ def yaml_factory_mode(schema):
     mode = schema.get('yaml_factory', 'default')
     if mode in (None, False, 'none', 'skip'):
         return 'none'
+    if mode == 'manual':
+        # Registration decl only — a hand-written <name>-yaml.c implements it.
+        return 'manual'
     return 'default'
+
+
+def external_uniforms(schema):
+    """Server-side uniform slots: present in the RS (and WGSL accessors) but
+    NOT on the wire — some hand-written companion (e.g. yplot-time.c) writes
+    them directly into the instance RS."""
+    return schema.get('external_uniforms', []) or []
+
+
+def merged_storage(buffers):
+    """True when any buffer is array-valued: the whole post-uniform payload
+    becomes ONE self-describing RS storage buffer the shader walks."""
+    arrays = [b for b in buffers if b.get('array')]
+    if not arrays:
+        return False
+    if len(arrays) > 1 or not buffers[-1].get('array'):
+        raise ValueError('array: true is only supported on the LAST buffer, once')
+    return True
+
+
+def update_mode(schema):
+    """'hooks' (generic hook dispatch), 'extern' (hand-written
+    yetty_<name>_instance_update in a companion TU), or None."""
+    if hooks_enabled(schema):
+        return 'hooks'
+    if schema.get('update') == 'extern':
+        return 'extern'
+    return None
 
 
 def hooks_enabled(schema):
@@ -214,11 +254,64 @@ def generate_c_header(schema, uniforms, buffers, textures, yaml_mode):
             struct_fields.append(f'    {u["c_type"]} {u["name"]};')
     struct_fields_str = '\n'.join(struct_fields)
 
+    element_ctype = {'u32': 'uint32_t', 'f32': 'float'}
+    array_structs = []
     buf_struct_fields = []
     for b in buffers:
-        buf_struct_fields.append(f'    const uint32_t *{b["name"]};')
-        buf_struct_fields.append(f'    size_t {b["name"]}_len;')
+        if b.get('array'):
+            ctype = element_ctype[b['element_type']]
+            array_structs.append(f'''/* One `{b["name"]}` entry. The wire encoding repeats [len][samples...]
+ * per entry, prefixed by a single [{b["name"]}_count]. */
+struct yetty_{name}_{b["name"]}_buffer {{
+    const {ctype} *samples;
+    size_t count; /* in {ctype} elements */
+}};
+''')
+            buf_struct_fields.append(
+                f'    const struct yetty_{name}_{b["name"]}_buffer *{b["name"]};')
+            buf_struct_fields.append(f'    size_t {b["name"]}_count;')
+        else:
+            buf_struct_fields.append(f'    const uint32_t *{b["name"]};')
+            buf_struct_fields.append(f'    size_t {b["name"]}_len;')
     buf_struct_fields_str = '\n'.join(buf_struct_fields)
+    array_structs_str = ''.join(array_structs)
+
+    uniforms_word_count = sum(u['count'] for u in uniforms)
+    ext_defines = ''
+    externals = external_uniforms(schema)
+    if externals:
+        # RS slot indices of the server-side uniforms: wire uniforms, then
+        # zoom(6) + viewport(2), then one region slot per texture, then the
+        # externals in declaration order.
+        base_slot = uniforms_word_count + 8 + len(textures)
+        for ei, ext in enumerate(externals):
+            ext_defines += (f'\n/* RS slot of the server-side `{ext["name"]}` uniform '
+                            f'(not on the wire). */\n'
+                            f'#define YETTY_{NAME}_UNIFORM_{ext["name"].upper()}_SLOT '
+                            f'{base_slot + ei}u')
+        ext_defines += '\n'
+
+    mode = update_mode(schema)
+    extern_api = ''
+    if mode == 'extern':
+        extern_api += f'''
+/* CMD_UPDATE entry point — implemented by hand in a companion TU (the
+ * decode of target_field/body is {name}-specific). Installed as the
+ * per-instance ops->update at create time. */
+struct yetty_ycore_void_result yetty_{name}_instance_update(
+    struct yetty_ydraw_composite *instance, uint32_t target_field,
+    const void *body, size_t body_size);
+'''
+    if schema.get('lifecycle_extern'):
+        extern_api += f'''
+/* Lifecycle callouts — implemented by hand in a companion TU. `created`
+ * runs after a successful create (failure is non-fatal: the figure still
+ * renders); `destroying` runs FIRST in instance destroy, before any
+ * teardown. */
+struct yetty_ycore_void_result yetty_{name}_instance_created(
+    struct yetty_ydraw_composite *instance);
+void yetty_{name}_instance_destroying(struct yetty_ydraw_composite *instance);
+'''
 
     yaml_section = '' if yaml_mode == 'none' else f'''
 //=============================================================================
@@ -242,21 +335,27 @@ extern "C" {{
 #endif
 
 /* Forward-declared so this header stays GPU-less and can be included by
- * client-side wire emitters that don't link Dawn. The full type lives in
+ * client-side wire emitters that don't link Dawn. The full types live in
  * yetty/ydraw-factory/composite-factory.h (server side). */
 struct yetty_ydraw_concrete_factory;
+struct yetty_ydraw_composite;
 
 #define YETTY_{NAME}_TYPE_ID 0x{type_id:08x}u
 
+/* Number of u32 words the uniforms occupy in the wire (and as a prefix in
+ * the payload before the storage region). */
+#define YETTY_{NAME}_UNIFORMS_WORDS {uniforms_word_count}u
+{ext_defines}
 // Uniforms struct (goes to GPU uniform buffer)
 struct yetty_{name}_uniforms {{
 {struct_fields_str}
 }};
 
-// Buffers struct (goes to GPU storage buffer)
+{array_structs_str}// Buffers struct (goes to GPU storage buffer)
 struct yetty_{name}_buffers {{
 {buf_struct_fields_str}
 }};
+{extern_api}
 
 //=============================================================================
 // Serialization API
@@ -294,6 +393,9 @@ def generate_c_wire_source(schema, uniforms, buffers):
 
     uniforms_word_count = sum(u['count'] for u in uniforms)
     buffer_len_fields = len(buffers)
+
+    if merged_storage(buffers):
+        return generate_c_wire_source_merged(schema, uniforms, buffers)
 
     buf_len_sum_parts = [f'buffers->{b["name"]}_len' for b in buffers]
     buf_len_sum = ' + '.join(buf_len_sum_parts) if buf_len_sum_parts else '0'
@@ -362,6 +464,114 @@ struct yetty_ycore_size_result yetty_{name}_uniforms_serialize(
 '''
 
 
+def generate_c_wire_source_merged(schema, uniforms, buffers):
+    """Wire helpers for the MERGED storage layout (one array-valued buffer):
+      [type_id][payload_size][uniforms...]
+      [len_0][buf_0...]... (fixed buffers, in declaration order)
+      [<array>_count] then per entry: [len_i][samples_i...]
+    Everything after the uniforms is handed verbatim to the GPU storage
+    buffer; the shader walks the same header at render time."""
+    name = schema['name']
+    NAME = name.upper()
+    fixed = [b for b in buffers if not b.get('array')]
+    arr = next(b for b in buffers if b.get('array'))
+    elem_ctype = {'u32': 'uint32_t', 'f32': 'float'}[arr['element_type']]
+
+    fixed_words = '\n'.join(
+        f'    w += 1 /* {b["name"]}_len */ + buffers->{b["name"]}_len;' for b in fixed)
+    fixed_writes = '\n'.join(f'''    *p++ = (uint32_t)buffers->{b["name"]}_len;
+    if (buffers->{b["name"]} && buffers->{b["name"]}_len > 0) {{
+        memcpy(p, buffers->{b["name"]}, buffers->{b["name"]}_len * sizeof(uint32_t));
+        p += buffers->{b["name"]}_len;
+    }}''' for b in fixed)
+
+    return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
+//
+// Wire-format helpers for the {name} composite. Pure CPU code: packs
+// caller-supplied uniforms + buffers into the on-the-wire byte layout. Lives
+// in yetty_{name}_core (no Dawn, no WebGPU, safe for riscv64 / wasm / any
+// cross-target without a GPU).
+//
+// Wire layout (u32 words):
+//   [0]              type_id
+//   [1]              payload_size (bytes after this header)
+//   [2 ..]           uniforms (YETTY_{NAME}_UNIFORMS_WORDS words)
+//   --- storage payload (handed verbatim to the GPU storage_buffer) ---
+//   per fixed buffer: [len][data...]
+//   [{arr["name"]}_count], then per entry: [len_i][samples_i...]
+
+#include <yetty/{name}/{name}-gen.h>
+#include <yetty/ycore/result.h>
+
+#include <stdint.h>
+#include <string.h>
+
+/* Total words the storage payload occupies (everything after the uniforms,
+ * i.e. what gets handed to the GPU storage_buffer). */
+static size_t storage_words(const struct yetty_{name}_buffers *buffers)
+{{
+    size_t w = 1 /* {arr["name"]}_count */;
+{fixed_words}
+    for (size_t i = 0; i < buffers->{arr["name"]}_count; i++) {{
+        w += 1 /* len_i */ + buffers->{arr["name"]}[i].count;
+    }}
+    return w;
+}}
+
+size_t yetty_{name}_uniforms_serialized_size(
+    const struct yetty_{name}_uniforms *uniforms,
+    const struct yetty_{name}_buffers *buffers)
+{{
+    (void)uniforms;
+    size_t total_words = 2 /* type_id + payload_size */
+                         + YETTY_{NAME}_UNIFORMS_WORDS + storage_words(buffers);
+    return total_words * sizeof(uint32_t);
+}}
+
+struct yetty_ycore_size_result yetty_{name}_uniforms_serialize(
+    const struct yetty_{name}_uniforms *uniforms,
+    const struct yetty_{name}_buffers *buffers,
+    uint8_t *out, size_t out_capacity)
+{{
+    if (!uniforms || !buffers) {{
+        return YETTY_ERR(yetty_ycore_size, "null argument");
+    }}
+    if (!out) {{
+        return YETTY_ERR(yetty_ycore_size, "out is NULL");
+    }}
+
+    size_t required = yetty_{name}_uniforms_serialized_size(uniforms, buffers);
+    if (out_capacity < required) {{
+        return YETTY_ERR(yetty_ycore_size, "buffer too small");
+    }}
+
+    uint32_t *p = (uint32_t *)out;
+    *p++ = YETTY_{NAME}_TYPE_ID;
+    *p++ = (uint32_t)(required - 2 * sizeof(uint32_t));
+
+    /* Uniforms: copy as raw u32 words — all 4-byte scalars, packs without
+     * padding, so a memcpy reproduces the wire layout exactly. */
+    memcpy(p, uniforms, YETTY_{NAME}_UNIFORMS_WORDS * sizeof(uint32_t));
+    p += YETTY_{NAME}_UNIFORMS_WORDS;
+
+    /* Storage payload: fixed buffers first, then the variable list. */
+{fixed_writes}
+
+    *p++ = (uint32_t)buffers->{arr["name"]}_count;
+    for (size_t i = 0; i < buffers->{arr["name"]}_count; i++) {{
+        const struct yetty_{name}_{arr["name"]}_buffer *entry = &buffers->{arr["name"]}[i];
+        *p++ = (uint32_t)entry->count;
+        if (entry->samples && entry->count > 0) {{
+            memcpy(p, entry->samples, entry->count * sizeof({elem_ctype}));
+            p += entry->count;
+        }}
+    }}
+
+    return YETTY_OK(yetty_ycore_size, required);
+}}
+'''
+
+
 def generate_c_source(schema, uniforms, buffers, textures):
     name = schema['name']
     NAME = name.upper()
@@ -378,7 +588,9 @@ def generate_c_source(schema, uniforms, buffers, textures):
     has_textures = len(textures) > 0
     needs_webgpu_h = has_textures  # for WGPUTextureFormat_* constants
 
-    lib_includes = '\n'.join([f'#include <yetty/{lib}/compiler.h>' for lib in libraries])
+    # compiler.h (bytecode API) + shader-rs.h (the library's shared
+    # GPU resource set consumed as a binder child).
+    lib_includes = '\n'.join([f'#include <yetty/{lib}/compiler.h>\n#include <yetty/{lib}/shader-rs.h>' for lib in libraries])
 
     # Generate buffer length sum expression
     buf_len_sum_parts = [f'buffers->{b["name"]}_len' for b in buffers]
@@ -464,6 +676,18 @@ def generate_c_source(schema, uniforms, buffers, textures):
     rs->uniforms[{uniform_idx}].vec4[3] = 1.0f;''')
         uniform_idx += 1
 
+    # Server-side (external) uniforms — RS slots the wire never carries;
+    # a hand-written companion TU writes them into the instance RS (see the
+    # YETTY_<NAME>_UNIFORM_<EXT>_SLOT define in the generated header).
+    for ext in external_uniforms(schema):
+        ext_render_type = 'YETTY_YRENDER_UNIFORM_F32' if ext['type'] == 'f32' else 'YETTY_YRENDER_UNIFORM_U32'
+        ext_zero = 'f32 = 0.0f' if ext['type'] == 'f32' else 'u32 = 0'
+        uniform_setup.append(f'''    /* `{ext["name"]}` — server-side, not on the wire. */
+    strncpy(rs->uniforms[{uniform_idx}].name, "{ext["name"]}", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[{uniform_idx}].type = {ext_render_type};
+    rs->uniforms[{uniform_idx}].{ext_zero};''')
+        uniform_idx += 1
+
     uniform_setup_str = '\n'.join(uniform_setup)
     total_uniform_count = uniform_idx
 
@@ -475,16 +699,16 @@ def generate_c_source(schema, uniforms, buffers, textures):
         if u['count'] > 1:
             for i in range(u['count']):
                 if u['type'] == 'f32':
-                    uniform_update.append(f'    rs->uniforms[{uniform_idx}].f32 = *(float *)&payload[{wire_offset + i}];')
+                    uniform_update.append(f'    rs->uniforms[{uniform_idx}].f32 = *(float *)&payload[{wire_offset + i}]; /* {u["name"]}_{i} */')
                 else:
-                    uniform_update.append(f'    rs->uniforms[{uniform_idx}].u32 = payload[{wire_offset + i}];')
+                    uniform_update.append(f'    rs->uniforms[{uniform_idx}].u32 = payload[{wire_offset + i}]; /* {u["name"]}_{i} */')
                 uniform_idx += 1
             wire_offset += u['count']
         else:
             if u['type'] == 'f32':
-                uniform_update.append(f'    rs->uniforms[{uniform_idx}].f32 = *(float *)&payload[{wire_offset}];')
+                uniform_update.append(f'    rs->uniforms[{uniform_idx}].f32 = *(float *)&payload[{wire_offset}]; /* {u["name"]} */')
             else:
-                uniform_update.append(f'    rs->uniforms[{uniform_idx}].u32 = payload[{wire_offset}];')
+                uniform_update.append(f'    rs->uniforms[{uniform_idx}].u32 = payload[{wire_offset}]; /* {u["name"]} */')
             uniform_idx += 1
             wire_offset += 1
     uniform_update_str = '\n'.join(uniform_update)
@@ -512,16 +736,34 @@ def generate_c_source(schema, uniforms, buffers, textures):
     # buffer; the current generator named it "buffer" generically so we
     # keep the literal name for backwards compatibility.
     # ------------------------------------------------------------------
-    if len(storage_buffers) == 0:
-        buffer_setup_str = '    // No storage buffers (all buffers diverted to textures)\n    rs->buffer_count = 0;'
-    else:
-        # Only the first storage buffer is wired today (matches existing
-        # yplot output). Multi-storage-buffer support can extend this.
-        buffer_setup_str = '''    // Setup storage buffer for buffer data
+    def storage_rs_name(storage_idx, buf):
+        if storage_idx == 0:
+            return buf.get('rs_name') or 'buffer'
+        return buf.get('rs_name') or f"{buf['name']}_buffer"
+
+    merged = merged_storage(buffers)
+    if merged and textures:
+        raise ValueError('merged storage (array buffer) + textures is unsupported')
+    if merged:
+        # One RS buffer spans the whole post-uniform payload; the shader
+        # walks the self-describing layout, so no per-buffer wiring exists.
+        buffer_setup_str = '''    // Single merged storage buffer — the shader walks the
+    // self-describing [len][data]... layout at runtime.
     rs->buffer_count = 1;
     strncpy(rs->buffers[0].name, "buffer", YETTY_YRENDER_NAME_MAX - 1);
     strncpy(rs->buffers[0].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
     rs->buffers[0].readonly = 1;'''
+    elif len(storage_buffers) == 0:
+        buffer_setup_str = '    // No storage buffers (all buffers diverted to textures)\n    rs->buffer_count = 0;'
+    else:
+        setup_lines = ['    // Setup storage buffers for wire buffer data',
+                       f'    rs->buffer_count = {len(storage_buffers)};']
+        for storage_idx, buf in enumerate(storage_buffers):
+            setup_lines.append(
+                f'    strncpy(rs->buffers[{storage_idx}].name, "{storage_rs_name(storage_idx, buf)}", YETTY_YRENDER_NAME_MAX - 1);\n'
+                f'    strncpy(rs->buffers[{storage_idx}].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);\n'
+                f'    rs->buffers[{storage_idx}].readonly = 1;')
+        buffer_setup_str = '\n'.join(setup_lines)
 
     # ------------------------------------------------------------------
     # Texture setup in the template -- placeholder dimensions (1x1, NULL
@@ -556,10 +798,28 @@ def generate_c_source(schema, uniforms, buffers, textures):
     # Per-instance wire-format wiring for storage buffer + textures
     # ------------------------------------------------------------------
     # Storage-buffer wiring: existing single-buffer code path (yplot).
-    if len(storage_buffers) == 0:
+    if merged:
+        instance_buffer_wiring = f'''        uint32_t payload_bytes = data[1];
+        const uint32_t *storage = payload + {uniforms_word_count};
+        size_t storage_size = (size_t)payload_bytes - {uniforms_word_count}u * sizeof(uint32_t);
+        instance->resource_set->buffers[0].data = (uint8_t *)(uintptr_t)storage;
+        instance->resource_set->buffers[0].size = storage_size;
+        instance->resource_set->buffers[0].dirty = 1;'''
+        render_buffer_wiring = f'''    /* Merged storage region: everything after the uniforms, handed
+     * verbatim to the storage buffer (the shader walks its header).
+     * Deliberately NOT marked dirty here — the initial upload happens at
+     * create, and incremental sample updates write directly to GPU via
+     * the binder's write_buffer_chunk op; a per-frame dirty would
+     * re-upload the whole region every frame. */
+    uint32_t payload_bytes = data[1];
+    const uint32_t *storage = payload + {uniforms_word_count};
+    size_t storage_size = (size_t)payload_bytes - {uniforms_word_count}u * sizeof(uint32_t);
+    rs->buffers[0].data = (uint8_t *)(uintptr_t)storage;
+    rs->buffers[0].size = storage_size;'''
+    elif len(storage_buffers) == 0:
         instance_buffer_wiring = ''
         render_buffer_wiring = ''
-    else:
+    elif len(storage_buffers) == 1:
         # The first buffer in declaration order maps to rs->buffers[0].
         # If buffers[0] is diverted (texture-only), we'd need to skip it
         # — supported below by the wire-offset computation.
@@ -585,6 +845,40 @@ def generate_c_source(schema, uniforms, buffers, textures):
     rs->buffers[0].data = (uint8_t *)buffer_data;
     rs->buffers[0].size = buffer_words * sizeof(uint32_t);
     rs->buffers[0].dirty = 1;'''
+    else:
+        # Several storage buffers: walk the wire once, cumulatively — each
+        # buffer's payload starts where the previous one ends. Length words
+        # sit at payload[uwc + wire_index] in declaration order (diverted
+        # buffers included in the walk, excluded from rs->buffers[]).
+        walk_lines = []
+        for wire_idx, buf in enumerate(buffers):
+            walk_lines.append(
+                f"size_t {buf['name']}_words = payload[{uniforms_word_count + wire_idx}];")
+        prev = None
+        for buf in buffers:
+            if prev is None:
+                walk_lines.append(
+                    f"const uint32_t *{buf['name']}_payload = payload + {buffer_data_offset};")
+            else:
+                walk_lines.append(
+                    f"const uint32_t *{buf['name']}_payload = "
+                    f"{prev['name']}_payload + {prev['name']}_words;")
+            prev = buf
+        wire_blocks_instance = []
+        wire_blocks_render = []
+        for storage_idx, buf in enumerate(storage_buffers):
+            for target_prefix, sink in (('instance->resource_set', wire_blocks_instance),
+                                        ('rs', wire_blocks_render)):
+                sink.append(
+                    f"{target_prefix}->buffers[{storage_idx}].data = (uint8_t *){buf['name']}_payload;\n"
+                    f"{target_prefix}->buffers[{storage_idx}].size = {buf['name']}_words * sizeof(uint32_t);\n"
+                    f"{target_prefix}->buffers[{storage_idx}].dirty = 1;"
+                    .replace('rs->buffers', 'rs->buffers'))
+        def indent_block(lines, pad):
+            return '\n'.join(pad + line for chunk in lines for line in chunk.split('\n'))
+        instance_buffer_wiring = indent_block(walk_lines + wire_blocks_instance, ' ' * 8)
+        render_buffer_wiring = ('    // Wire each storage buffer to its slice of the payload\n'
+                                + indent_block(walk_lines + wire_blocks_render, ' ' * 4))
 
     # Texture wiring: for each texture with pixels_buffer, compute wire
     # offsets at codegen time and emit a block setting data/width/height.
@@ -776,13 +1070,63 @@ extern struct yetty_ycore_void_result {name}_hook_instance_render_pre(
     struct yetty_ydraw_composite *instance,
     struct yetty_ydraw_target *target, float x, float y);
 
+static struct yetty_ycore_void_result {name}_instance_update(struct yetty_ydraw_composite *instance,
+                                                             uint32_t target_field,
+                                                             const void *body, size_t body_size)
+{{
+    if (!instance) {{
+        return YETTY_ERR(yetty_ycore_void, "{name} update: instance NULL");
+    }}
+    if (body_size > 0 && !body) {{
+        return YETTY_ERR(yetty_ycore_void, "{name} update: NULL body with non-zero size");
+    }}
+    /* Reassemble the [op][reserved×3][body] payload the hook still
+     * expects. Avoid a heap alloc for typical update sizes; fall back
+     * to malloc only for unusually large bodies. */
+    enum {{ STACK_PAYLOAD_MAX = 4096u }};
+    uint8_t stack_buf[STACK_PAYLOAD_MAX];
+    size_t total = 4u + body_size;
+    uint8_t *payload;
+    bool heap = false;
+    if (total <= sizeof(stack_buf)) {{
+        payload = stack_buf;
+    }} else {{
+        payload = (uint8_t *)malloc(total);
+        if (!payload) {{
+            return YETTY_ERR(yetty_ycore_void, "{name} update: payload alloc failed");
+        }}
+        heap = true;
+    }}
+    payload[0] = (uint8_t)(target_field & 0xFFu);
+    payload[1] = (uint8_t)((target_field >> 8) & 0xFFu);
+    payload[2] = (uint8_t)((target_field >> 16) & 0xFFu);
+    payload[3] = (uint8_t)((target_field >> 24) & 0xFFu);
+    if (body_size > 0) {{
+        memcpy(payload + 4u, body, body_size);
+    }}
+    struct yetty_ycore_void_result r = {name}_hook_instance_update(instance, payload, total);
+    if (heap) {{
+        free(payload);
+    }}
+    return r;
+}}
+
+/* Legacy factory adapter — kept so the abstract factory's
+ * update_instance slot still resolves. scene-canvas now routes through
+ * fi->ops->update directly, so this is dead in the runtime path but
+ * gets removed when the factory loses the slot. */
 static struct yetty_ycore_void_result {name}_update_dispatch(
     struct yetty_ydraw_concrete_factory *self,
     struct yetty_ydraw_composite *instance,
     const void *payload, size_t size)
 {{
     (void)self;
-    return {name}_hook_instance_update(instance, payload, size);
+    if (!payload || size < 4u) {{
+        return YETTY_ERR(yetty_ycore_void, "{name} update_dispatch: payload header truncated");
+    }}
+    uint32_t target_field = ((const uint32_t *)payload)[0];
+    return {name}_instance_update(instance, target_field, (const uint8_t *)payload + 4u,
+                                  size - 4u);
 }}
 '''
         hooks_create_call = f'''
@@ -816,13 +1160,59 @@ static struct yetty_ycore_void_result {name}_update_dispatch(
     }}
 '''
         hooks_factory_wire = f'    factory->base.update_instance = {name}_update_dispatch;\n'
+        ops_update_member = f'{name}_instance_update'
     else:
         hooks_externs = ''
+        if update_mode(schema) == 'extern':
+            ops_update_member = f'yetty_{name}_instance_update'
+            hooks_externs = f'''
+/* Legacy factory adapter — kept so the abstract factory's
+ * update_instance slot still resolves. scene-canvas now routes through
+ * fi->ops->update directly, so this is dead in the runtime path but
+ * gets removed when the factory loses the slot. The instance_update
+ * itself is hand-written in a companion TU (see the generated header). */
+static struct yetty_ycore_void_result {name}_update_dispatch(
+    struct yetty_ydraw_concrete_factory *self,
+    struct yetty_ydraw_composite *instance,
+    const void *payload, size_t size)
+{{
+    (void)self;
+    if (!payload || size < 4u) {{
+        return YETTY_ERR(yetty_ycore_void, "{name} update_dispatch: payload header truncated");
+    }}
+    uint32_t target_field = ((const uint32_t *)payload)[0];
+    return yetty_{name}_instance_update(instance, target_field,
+                                        (const uint8_t *)payload + 4u, size - 4u);
+}}
+'''
+        else:
+            ops_update_member = ('NULL /* the wire never carries CMD_UPDATE for this figure — '
+                                 'producers swap the whole record instead */')
         hooks_create_call = ''
         hooks_create_rollback = '        '
         hooks_destroy_call = ''
         hooks_render_call = ''
         hooks_factory_wire = ''
+        if update_mode(schema) == 'extern':
+            hooks_factory_wire = f'    factory->base.update_instance = {name}_update_dispatch;\n'
+    lifecycle_create_call = ''
+    if schema.get('lifecycle_extern'):
+        lifecycle_create_call = f'''
+    /* Companion-TU lifecycle callout (e.g. hooking the instance into a
+     * shared animation timer). Runs after the binder is fully finalized.
+     * Failure is non-fatal — the figure still renders, it just skips
+     * whatever the callout would have enabled. */
+    {{
+        struct yetty_ycore_void_result created_res = yetty_{name}_instance_created(instance);
+        if (YETTY_IS_ERR(created_res)) {{
+            ywarn("{name}: instance_created callout failed: %s", created_res.error.msg);
+            yetty_ycore_error_destroy(created_res.error);
+        }}
+    }}
+'''
+        hooks_destroy_call = (f'    /* Companion-TU teardown FIRST — e.g. dropping a timer listener\n'
+                              f'\t * whose list holds a pointer into this instance. */\n'
+                              f'    yetty_{name}_instance_destroying(instance);\n') + hooks_destroy_call
 
     # webgpu.h is pulled in via the ydraw-factory header (server-only).
     # Wire format / type-id ranges come from ydraw-core/composite.h.
@@ -971,18 +1361,18 @@ static struct yetty_ycore_void_result
     rs->uniforms[{vp_w_idx}].f32 = target->viewport.w;
     rs->uniforms[{vp_h_idx}].f32 = target->viewport.h;
 
-    // Override bounds_x / bounds_y with the caller-provided screen position
-    // (wire bounds are the pre-scroll origin; x,y are the post-scroll pane
-    // position the instance should render at).
-    rs->uniforms[0].f32 = x;
-    rs->uniforms[1].f32 = y;
-
-    // HiDPI: wire bounds_w/h (uniforms[2]/[3]) are LOGICAL pixels; scale to
-    // physical so the figure fills its laid-out footprint (origin x,y above is
-    // already physical). self->content_scale is 1.0 in the terminal's local
-    // compositor, so this is a no-op there.
+    // Compose the caller-provided pane position with the record's own
+    // ENVELOPE-LOCAL origin: a multi-figure envelope (a browser page's
+    // images) lays its figures out internally, so each record's wire
+    // bounds_x/y is its offset inside the block anchored at (x, y).
+    // Single-figure producers (ycat) ship a 0,0 origin — for them this
+    // reduces to the plain caller position. bounds_w/h are LOGICAL pixels;
+    // the offset and body both scale by content_scale (1.0 in the
+    // terminal's local compositor).
     {{
         float figure_content_scale = self->content_scale > 0.0f ? self->content_scale : 1.0f;
+        rs->uniforms[0].f32 = x + rs->uniforms[0].f32 * figure_content_scale;
+        rs->uniforms[1].f32 = y + rs->uniforms[1].f32 * figure_content_scale;
         rs->uniforms[2].f32 *= figure_content_scale;
         rs->uniforms[3].f32 *= figure_content_scale;
     }}
@@ -1033,9 +1423,38 @@ static struct yetty_ycore_void_result
      * pane_pixel comment in the matching shader. */
     wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
         target->viewport.w, target->viewport.h, 0.0f, 1.0f);
-    wgpuRenderPassEncoderSetScissorRect(pass,
-        (uint32_t)target->viewport.x, (uint32_t)target->viewport.y,
-        (uint32_t)target->viewport.w, (uint32_t)target->viewport.h);
+
+    /* Scissor to the viewport, intersected with the compositor's clip rect
+     * when one is set (e.g. a scrolling ygrid's scroll-area bounds) so the
+     * figure is clipped to its container instead of bleeding over
+     * surrounding chrome such as the tab bar. */
+    float scissor_x0 = target->viewport.x;
+    float scissor_y0 = target->viewport.y;
+    float scissor_x1 = target->viewport.x + target->viewport.w;
+    float scissor_y1 = target->viewport.y + target->viewport.h;
+    if (target->clip.w > 0.0f && target->clip.h > 0.0f) {{
+        if (target->clip.x > scissor_x0) {{
+            scissor_x0 = target->clip.x;
+        }}
+        if (target->clip.y > scissor_y0) {{
+            scissor_y0 = target->clip.y;
+        }}
+        if (target->clip.x + target->clip.w < scissor_x1) {{
+            scissor_x1 = target->clip.x + target->clip.w;
+        }}
+        if (target->clip.y + target->clip.h < scissor_y1) {{
+            scissor_y1 = target->clip.y + target->clip.h;
+        }}
+    }}
+    if (scissor_x1 < scissor_x0) {{
+        scissor_x1 = scissor_x0;
+    }}
+    if (scissor_y1 < scissor_y0) {{
+        scissor_y1 = scissor_y0;
+    }}
+    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)scissor_x0, (uint32_t)scissor_y0,
+                                        (uint32_t)(scissor_x1 - scissor_x0),
+                                        (uint32_t)(scissor_y1 - scissor_y0));
 
     float w = self->bounds.max.x - self->bounds.min.x;
     float h = self->bounds.max.y - self->bounds.min.y;
@@ -1101,6 +1520,10 @@ static WGPURenderPipeline {name}_get_pipeline(struct yetty_ydraw_concrete_factor
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }}
 
+/* Forward decl — vtable definition lives below; create_instance just
+ * needs its address. */
+static const struct yetty_ydraw_composite_ops {name}_figure_ops;
+
 static struct yetty_ydraw_composite_ptr_result
 {name}_create_instance(struct yetty_ydraw_concrete_factory *self,
                        const void *buffer_data, size_t size, uint32_t rolling_row)
@@ -1129,6 +1552,7 @@ static struct yetty_ydraw_composite_ptr_result
     instance->factory = self;
     instance->rolling_row = rolling_row;
     instance->render = {name}_instance_render;
+    instance->ops = &{name}_figure_ops;
 
     struct rectangle_result aabb_res = yetty_ydraw_composite_record_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res))
@@ -1154,6 +1578,7 @@ static struct yetty_ydraw_composite_ptr_result
         yetty_yrender_gpu_resource_binder_create_with_pipeline(
             factory->device, factory->queue, factory->allocator, factory->pipeline);
     if (YETTY_IS_ERR(br)) {{
+        ydebug("{name}_create_instance: binder_create FAILED: %s", br.error.msg);
 {hooks_create_rollback}free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
@@ -1183,13 +1608,13 @@ static struct yetty_ydraw_composite_ptr_result
                          "binder finalize failed", fr);
     }}
 
+{lifecycle_create_call}    ydebug("{name}_create_instance: OK bounds=(%.0f,%.0f,%.0f,%.0f)", instance->bounds.min.x,
+           instance->bounds.min.y, instance->bounds.max.x, instance->bounds.max.y);
     return YETTY_OK(yetty_ydraw_composite_ptr, instance);
 }}
 
-static void {name}_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                    struct yetty_ydraw_composite *instance)
+static void {name}_instance_destroy(struct yetty_ydraw_composite *instance)
 {{
-    (void)self;
     if (!instance)
         return;
 {hooks_destroy_call}    if (instance->binder)
@@ -1197,6 +1622,21 @@ static void {name}_destroy_instance(struct yetty_ydraw_concrete_factory *self,
     free(instance->resource_set);
     free(instance->buffer_data);
     free(instance);
+}}
+
+/* Per-instance vtable installed on every {name} figure_instance. */
+static const struct yetty_ydraw_composite_ops {name}_figure_ops = {{
+    .destroy = {name}_instance_destroy,
+    .update = {ops_update_member},
+}};
+
+/* Legacy factory adapter — kept for the factory->destroy_instance
+ * fallback path. */
+static void {name}_destroy_instance(struct yetty_ydraw_concrete_factory *self,
+                                    struct yetty_ydraw_composite *instance)
+{{
+    (void)self;
+    {name}_instance_destroy(instance);
 }}
 
 static struct yetty_yrender_gpu_resource_set *{name}_get_shared_rs(
@@ -1300,6 +1740,48 @@ fn {name}_get_{u["name"]}(idx: u32) -> {u["wgsl_type"]} {{
             out += f'''
 fn {name}_get_{u["name"]}() -> {u["wgsl_type"]} {{
     return uniforms.{name}_{u["name"]};
+}}
+'''
+
+    for ext in external_uniforms(schema):
+        out += f'''
+// `{ext["name"]}` — server-side uniform, written CPU-side by a companion
+// TU straight into the instance RS (never on the wire). Always present in
+// the uniform buffer; reads its zero-default until something writes it.
+fn {name}_get_{ext["name"]}() -> {ext["type"]} {{
+    return uniforms.{name}_{ext["name"]};
+}}
+'''
+
+    if merged_storage(buffers):
+        # Storage-walk helpers for the merged layout: per fixed buffer a
+        # len/offset pair (running offsets, resolved in-shader), then the
+        # count accessor for the trailing array buffer.
+        out += '\n// ---- storage layout helpers (merged storage region) ----\n'
+        fixed = [b for b in buffers if not b.get('array')]
+        arr = next(b for b in buffers if b.get('array'))
+        offset_expr = '0u'
+        for b in fixed:
+            out += f'''
+// Length of the {b["name"]} block (in u32 words); data starts right after
+// its length word.
+fn {name}_{b["name"]}_len() -> u32 {{
+    return storage_buffer[{offset_expr}];
+}}
+fn {name}_{b["name"]}_offset() -> u32 {{
+    return {offset_expr} + 1u;
+}}
+'''
+            offset_expr = f'{name}_{b["name"]}_offset() + {name}_{b["name"]}_len()'
+        out += f'''
+// Word index of the {arr["name"]}_count u32 (right after the fixed blocks).
+fn {name}_{arr["name"]}_count_offset() -> u32 {{
+    return {offset_expr};
+}}
+
+// Number of {arr["name"]} buffers carried by this instance (0 is valid).
+fn {name}_{arr["name"]}_count() -> u32 {{
+    return storage_buffer[{name}_{arr["name"]}_count_offset()];
 }}
 '''
 
@@ -1577,6 +2059,13 @@ def main():
         if yaml_path.exists():
             yaml_path.unlink()
         print(f'  (no yaml factory generated; yaml_factory: none)')
+    elif yaml_mode == 'manual':
+        # A hand-written {name}-yaml.c implements the registration entry
+        # point; only the decl is generated (in the header). Drop any
+        # stale generated parser so it cannot shadow the hand file.
+        if yaml_path.exists():
+            yaml_path.unlink()
+        print(f'  (yaml factory is hand-written: {name}-yaml.c)')
     else:
         yaml_parser = generate_yaml_parser(schema, uniforms, buffers)
         yaml_path.write_text(yaml_parser + '\n')

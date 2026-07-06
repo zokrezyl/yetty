@@ -423,6 +423,18 @@ float yetty_ydraw_composite_pixel_height(const struct yetty_ydraw_composite *ins
     return height > 0.0f ? height : 0.0f;
 }
 
+/* Bottom edge of the figure's wire bounds (envelope-local px). Culling
+ * must use THIS, not the height: a multi-figure envelope's record can sit
+ * deep inside its block (origin at bounds.min), so the visible extent
+ * below the block anchor is max.y, not max.y - min.y. */
+float yetty_ydraw_composite_pixel_bottom(const struct yetty_ydraw_composite *instance)
+{
+    if (!instance) {
+        return 0.0f;
+    }
+    return instance->bounds.max.y > 0.0f ? instance->bounds.max.y : 0.0f;
+}
+
 void yetty_ydraw_composite_set_content_scale(struct yetty_ydraw_composite *instance, float scale)
 {
     if (!instance) {

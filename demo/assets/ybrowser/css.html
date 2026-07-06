@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ybrowser — CSS basics</title>
+<style>
+  :root {
+    --bg: #0B1014;
+    --panel: #141A1F;
+    --row: #1E262C;
+    --border: #364A47;
+    --text: #E0E5E4;
+    --muted: #9FA7A8;
+    --accent: #6BA892;
+    --accent-bright: #74C5A5;
+    --demo-width: 220px;
+  }
+  /* A media-gated override: on viewports wider than 700px the demo boxes
+     widen — proves @media evaluation feeds the custom-property table. */
+  @media (min-width: 700px) {
+    :root { --demo-width: 300px; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; padding: 28px 36px; }
+  h1 { color: var(--accent-bright); }
+  h2 { color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-top: 28px; }
+  p  { color: var(--muted); }
+  a  { color: var(--accent); }
+
+  .box-model {
+    width: var(--demo-width);
+    margin: 12px 24px;
+    padding: 16px;
+    border: 3px solid var(--accent);
+    background: var(--panel);
+  }
+  .border-box { box-sizing: border-box; width: var(--demo-width); padding: 16px;
+                border: 3px solid var(--border); background: var(--row); margin: 12px 24px; }
+
+  .swatches div { display: inline-block; width: 90px; height: 40px; margin-right: 8px; }
+
+  .float-demo { background: var(--panel); border: 1px solid var(--border); padding: 12px; }
+  .float-left  { float: left;  width: 120px; height: 60px; background: var(--accent); margin-right: 12px; }
+  .float-right { float: right; width: 120px; height: 60px; background: #5A8979; margin-left: 12px; }
+
+  .rel { position: relative; background: var(--panel); border: 1px solid var(--border);
+         height: 120px; margin-top: 12px; }
+  .abs-corner { position: absolute; right: 8px; bottom: 8px; width: 110px; height: 34px;
+                background: var(--row); border: 1px solid var(--accent); }
+  .abs-cover { position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+               border: 1px dashed #556162; }
+  .abs-static { position: absolute; width: 140px; height: 24px; background: #5A8979; }
+</style>
+</head>
+<body>
+  <h1>CSS basics</h1>
+  <p><a href="index.html">back to the hub</a></p>
+
+  <h2>Box model &amp; custom properties</h2>
+  <p>Both boxes read <code>--demo-width</code>; a media query widens it on viewports over 700px.</p>
+  <div class="box-model">content-box: padding and border grow the box.</div>
+  <div class="border-box">border-box: the width includes padding and border.</div>
+  <div style="--demo-width: 460px;">
+    <div class="box-model">element-scoped override: this subtree sets its own <code>--demo-width</code>.</div>
+  </div>
+
+  <h2>Colors</h2>
+  <div class="swatches">
+    <div style="background:#0B1014"></div>
+    <div style="background:#1E262C"></div>
+    <div style="background:#364A47"></div>
+    <div style="background:#5A8979"></div>
+    <div style="background:#6BA892"></div>
+    <div style="background:#74C5A5"></div>
+  </div>
+
+  <h2>Floats</h2>
+  <div class="float-demo">
+    <div class="float-left"></div>
+    <div class="float-right"></div>
+    Text flows between a left float and a right float. The floats reserve their
+    rectangles and the inline content wraps around them, the classic
+    magazine-column layout primitive that predates every flexbox and grid.
+    Clearing happens automatically at the container's end.
+  </div>
+
+  <h2>Positioning</h2>
+  <div class="rel">
+    <div class="abs-cover"></div>
+    <div class="abs-static">static position</div>
+    <div class="abs-corner">right/bottom pinned</div>
+    relative container — the dashed overlay stretches inset:0, the pinned box
+    anchors to the corner, the unpinned one sits at its static position.
+  </div>
+
+  <h2>Text styles</h2>
+  <p><b>bold</b>, <i>italic</i>, <u>underline</u>, <b><i>bold italic</i></b>,
+     and <span style="color:#74C5A5">accent-colored</span> inline spans.</p>
+</body>
+</html>

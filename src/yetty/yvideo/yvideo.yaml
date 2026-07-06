@@ -116,6 +116,7 @@ buffers:
   - name: nal_stream
     element_type: u32
   - name: audio_stream
+    rs_name: audio_buffer
     element_type: u32
 
 # Three-plane YUV 4:2:0 (per #198 item 1 — in-shader convert):

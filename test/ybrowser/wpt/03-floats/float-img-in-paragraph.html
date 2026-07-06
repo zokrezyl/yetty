@@ -1,0 +1,10 @@
+<!doctype html><meta charset=utf-8>
+<title>float:right on an img INSIDE a text paragraph leaves the inline flow and sits at the right edge</title>
+<style>body{margin:0}</style>
+<div style="width:600px">
+  <p style="margin:0">
+    <img data-test="thumb" data-expect="500,0,100,80" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="100" height="80" style="float:right; margin-left:12px">
+    article text that wraps down the left side of the floated thumbnail, the
+    classic wiki-article pattern with more than one line of copy
+  </p>
+</div>

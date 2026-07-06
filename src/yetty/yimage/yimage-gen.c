@@ -74,7 +74,8 @@ static struct yetty_yimage_factory *yetty_yimage_factory_from_base(
     return (struct yetty_yimage_factory *)base;
 }
 
-// Wire-format serialize helpers live in yimage-gen-wire.c (yetty_yimage_core).
+// Wire-format serialize helpers live in yimage-gen-wire.c
+// (yetty_yimage_core, GPU-less, riscv64-safe).
 
 //=============================================================================
 // Resource Set Setup — populates a target RS with this prim's structure
@@ -189,12 +190,12 @@ static struct yetty_ycore_void_result yimage_instance_render(struct yetty_ydraw_
     const uint32_t *payload = data + 2; // skip type_id and payload_size
 
     // Update uniforms from wire format
-    rs->uniforms[0].f32 = *(float *)&payload[0];
-    rs->uniforms[1].f32 = *(float *)&payload[1];
-    rs->uniforms[2].f32 = *(float *)&payload[2];
-    rs->uniforms[3].f32 = *(float *)&payload[3];
-    rs->uniforms[4].u32 = payload[4];
-    rs->uniforms[5].u32 = payload[5];
+    rs->uniforms[0].f32 = *(float *)&payload[0]; /* bounds_x */
+    rs->uniforms[1].f32 = *(float *)&payload[1]; /* bounds_y */
+    rs->uniforms[2].f32 = *(float *)&payload[2]; /* bounds_w */
+    rs->uniforms[3].f32 = *(float *)&payload[3]; /* bounds_h */
+    rs->uniforms[4].u32 = payload[4];            /* image_w */
+    rs->uniforms[5].u32 = payload[5];            /* image_h */
 
     // Pull current zoom state from the factory into this instance's RS.
     rs->uniforms[6].f32 = factory->visual_zoom_scale > 0.0f ? factory->visual_zoom_scale : 1.0f;
@@ -208,18 +209,18 @@ static struct yetty_ycore_void_result yimage_instance_render(struct yetty_ydraw_
     rs->uniforms[12].f32 = target->viewport.w;
     rs->uniforms[13].f32 = target->viewport.h;
 
-    // Override bounds_x / bounds_y with the caller-provided screen position
-    // (wire bounds are the pre-scroll origin; x,y are the post-scroll pane
-    // position the instance should render at).
-    rs->uniforms[0].f32 = x;
-    rs->uniforms[1].f32 = y;
-
-    // HiDPI: wire bounds_w/h (uniforms[2]/[3]) are LOGICAL pixels; scale to
-    // physical so the figure fills its laid-out footprint (origin x,y above is
-    // already physical). self->content_scale is 1.0 in the terminal's local
-    // compositor, so this is a no-op there.
+    // Compose the caller-provided pane position with the record's own
+    // ENVELOPE-LOCAL origin: a multi-figure envelope (a browser page's
+    // images) lays its figures out internally, so each record's wire
+    // bounds_x/y is its offset inside the block anchored at (x, y).
+    // Single-figure producers (ycat) ship a 0,0 origin — for them this
+    // reduces to the plain caller position. bounds_w/h are LOGICAL pixels;
+    // the offset and body both scale by content_scale (1.0 in the
+    // terminal's local compositor).
     {
         float figure_content_scale = self->content_scale > 0.0f ? self->content_scale : 1.0f;
+        rs->uniforms[0].f32 = x + rs->uniforms[0].f32 * figure_content_scale;
+        rs->uniforms[1].f32 = y + rs->uniforms[1].f32 * figure_content_scale;
         rs->uniforms[2].f32 *= figure_content_scale;
         rs->uniforms[3].f32 *= figure_content_scale;
     }
@@ -275,17 +276,18 @@ static struct yetty_ycore_void_result yimage_instance_render(struct yetty_ydraw_
     /* The pane's render target may sit at a non-zero offset inside the
      * big surface (e.g. yui pushes the terminal pane down by the titlebar
      * height). The layer's simple-prim pass already draws to
-     * (vp.x, vp.y, vp.w, vp.h); yimage must use the same rect, otherwise
-     * its fullscreen triangle covers a different region of the framebuffer
-     * than the rest of the layer and the FS would compare canvas-local
-     * bounds against the wrong coordinate system — see yimage.wgsl
-     * pane_pixel comment for the matching shader-side fix. */
+     * (vp.x, vp.y, vp.w, vp.h); the complex prim must use the same rect,
+     * otherwise its fullscreen triangle covers a different region of the
+     * framebuffer than the rest of the layer and the FS would compare
+     * canvas-local bounds against the wrong coordinate system — see the
+     * pane_pixel comment in the matching shader. */
     wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
                                      target->viewport.w, target->viewport.h, 0.0f, 1.0f);
+
     /* Scissor to the viewport, intersected with the compositor's clip rect
      * when one is set (e.g. a scrolling ygrid's scroll-area bounds) so the
-     * image is clipped to its container instead of bleeding over surrounding
-     * chrome such as the tab bar. */
+     * figure is clipped to its container instead of bleeding over
+     * surrounding chrome such as the tab bar. */
     float scissor_x0 = target->viewport.x;
     float scissor_y0 = target->viewport.y;
     float scissor_x1 = target->viewport.x + target->viewport.w;
@@ -371,15 +373,15 @@ static struct yetty_ycore_void_result yimage_compile_pipeline(
     return YETTY_OK_VOID();
 }
 
-/* Forward decl — vtable definition lives below; create_instance just
- * needs its address. */
-static const struct yetty_ydraw_composite_ops yimage_figure_ops;
-
 static WGPURenderPipeline yimage_get_pipeline(struct yetty_ydraw_concrete_factory *self)
 {
     struct yetty_yimage_factory *factory = yetty_yimage_factory_from_base(self);
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }
+
+/* Forward decl — vtable definition lives below; create_instance just
+ * needs its address. */
+static const struct yetty_ydraw_composite_ops yimage_figure_ops;
 
 static struct yetty_ydraw_composite_ptr_result yimage_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
@@ -389,18 +391,14 @@ static struct yetty_ydraw_composite_ptr_result yimage_create_instance(
         return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
     }
 
-    /* Bounds-check declared buffer payloads against the wire record. */
+    /* Bounds-check the wire record against its declared payload_size. */
     {
-        const uint32_t *payload = (const uint32_t *)buffer_data + 2;
-        if (size < (size_t)9u * sizeof(uint32_t)) {
-            return YETTY_ERR(yetty_ydraw_composite_ptr,
-                             "yimage: record too small for buffer header");
+        if (size < 2u * sizeof(uint32_t)) {
+            return YETTY_ERR(yetty_ydraw_composite_ptr, "yimage: record too small for header");
         }
-        uint64_t buffer_words = 0;
-        buffer_words += payload[6];
-        uint64_t record_words = (uint64_t)(2u + 7u) + buffer_words;
-        if (record_words * sizeof(uint32_t) > (uint64_t)size) {
-            return YETTY_ERR(yetty_ydraw_composite_ptr, "yimage: buffers exceed record");
+        uint64_t declared_payload = (uint64_t)((const uint32_t *)buffer_data)[1];
+        if (2u * sizeof(uint32_t) + declared_payload > (uint64_t)size) {
+            return YETTY_ERR(yetty_ydraw_composite_ptr, "yimage: payload exceeds wire record");
         }
     }
     /* Bounds-check texture 'image' pixels against the wire record. */
@@ -489,9 +487,7 @@ static struct yetty_ydraw_composite_ptr_result yimage_create_instance(
         yetty_yrender_gpu_resource_binder_create_with_pipeline(
             factory->device, factory->queue, factory->allocator, factory->pipeline);
     if (YETTY_IS_ERR(br)) {
-        ydebug("yimage_create_instance: binder_create FAILED for %ux%u: %s",
-               instance->resource_set->textures[0].width,
-               instance->resource_set->textures[0].height, br.error.msg);
+        ydebug("yimage_create_instance: binder_create FAILED: %s", br.error.msg);
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
@@ -502,9 +498,6 @@ static struct yetty_ydraw_composite_ptr_result yimage_create_instance(
     struct yetty_ycore_void_result sr =
         instance->binder->ops->submit(instance->binder, instance->resource_set);
     if (YETTY_IS_ERR(sr)) {
-        ydebug("yimage_create_instance: submit FAILED for %ux%u: %s",
-               instance->resource_set->textures[0].width,
-               instance->resource_set->textures[0].height, sr.error.msg);
         instance->binder->ops->destroy(instance->binder);
         free(instance->resource_set);
         free(instance->buffer_data);
@@ -514,9 +507,6 @@ static struct yetty_ydraw_composite_ptr_result yimage_create_instance(
 
     struct yetty_ycore_void_result fr = instance->binder->ops->finalize(instance->binder);
     if (YETTY_IS_ERR(fr)) {
-        ydebug("yimage_create_instance: finalize FAILED for %ux%u: %s",
-               instance->resource_set->textures[0].width,
-               instance->resource_set->textures[0].height, fr.error.msg);
         instance->binder->ops->destroy(instance->binder);
         free(instance->resource_set);
         free(instance->buffer_data);
@@ -524,10 +514,8 @@ static struct yetty_ydraw_composite_ptr_result yimage_create_instance(
         return YETTY_ERR(yetty_ydraw_composite_ptr, "binder finalize failed", fr);
     }
 
-    ydebug("yimage_create_instance: OK %ux%u bounds=(%.0f,%.0f,%.0f,%.0f)",
-           instance->resource_set->textures[0].width, instance->resource_set->textures[0].height,
-           instance->bounds.min.x, instance->bounds.min.y, instance->bounds.max.x,
-           instance->bounds.max.y);
+    ydebug("yimage_create_instance: OK bounds=(%.0f,%.0f,%.0f,%.0f)", instance->bounds.min.x,
+           instance->bounds.min.y, instance->bounds.max.x, instance->bounds.max.y);
     return YETTY_OK(yetty_ydraw_composite_ptr, instance);
 }
 
@@ -544,15 +532,16 @@ static void yimage_instance_destroy(struct yetty_ydraw_composite *instance)
     free(instance);
 }
 
-/* yimage's vtable — no update path; the wire never carries CMD_UPDATE
- * for image figures (the widget swaps the whole prim via set_buffer
- * if the image source changes). */
+/* Per-instance vtable installed on every yimage figure_instance. */
 static const struct yetty_ydraw_composite_ops yimage_figure_ops = {
     .destroy = yimage_instance_destroy,
-    .update = NULL,
+    .update =
+        NULL /* the wire never carries CMD_UPDATE for this figure — producers swap the whole record instead */
+    ,
 };
 
-/* Legacy factory adapter — see yplot / yvideo equivalents. */
+/* Legacy factory adapter — kept for the factory->destroy_instance
+ * fallback path. */
 static void yimage_destroy_instance(struct yetty_ydraw_concrete_factory *self,
                                     struct yetty_ydraw_composite *instance)
 {
@@ -597,6 +586,7 @@ struct yetty_ydraw_concrete_factory *yetty_yimage_factory_create(void)
     }
 
     factory->base.type_id = YETTY_YIMAGE_TYPE_ID;
+    factory->base.destroy = yetty_yimage_factory_destroy;
     factory->base.compile_pipeline = yimage_compile_pipeline;
     factory->base.get_pipeline = yimage_get_pipeline;
     factory->base.create_instance = yimage_create_instance;

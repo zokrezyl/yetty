@@ -52,7 +52,7 @@ run ylottie/frames.sh
 #   demo/scripts/ytop/basic.sh          live monitor; renders in-terminal, but
 #                                        needs a real pane size the nested `-e`
 #                                        tour can't give it.
-#   demo/scripts/ybrowser/interactive.sh interactive browser; opens its OWN
+#   demo/scripts/ybrowser/interactive/browser.sh interactive browser; opens its OWN
 #                                        window (the in-terminal client path
 #                                        does not render its page embed yet).
 #   demo/scripts/yaudio/basic.sh         audio analyzer; opens its OWN window.

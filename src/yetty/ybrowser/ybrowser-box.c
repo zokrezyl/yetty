@@ -2117,6 +2117,32 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             px > 0.0f) {
                             css_img_h = px;
                         }
+                        /* float on a replaced inline element pulls it out of
+					 * the inline flow into the block float path — the
+					 * classic article-thumbnail-with-text-wrap pattern.
+					 * Margins matter there (they widen the band the text
+					 * wraps around), so capture them alongside. */
+                        int img_float = yetty_ybrowser_libcss_float(img_cs);
+                        if (img_float == CSS_FLOAT_LEFT) {
+                            ib->float_side = 1;
+                        } else if (img_float == CSS_FLOAT_RIGHT) {
+                            ib->float_side = 2;
+                        }
+                        if (ib->float_side != 0) {
+                            float *img_margin_dst[4] = {&ib->margin_top, &ib->margin_right,
+                                                        &ib->margin_bottom, &ib->margin_left};
+                            for (int side = 0; side < 4; side++) {
+                                bool margin_auto = false;
+                                bool margin_pct = false;
+                                float margin_px = 0.0f;
+                                if (yetty_ybrowser_libcss_margin(r, img_cs, side, s.font_size,
+                                                                 basis, &margin_px, &margin_auto,
+                                                                 &margin_pct) &&
+                                    !margin_auto && !margin_pct) {
+                                    *img_margin_dst[side] = margin_px;
+                                }
+                            }
+                        }
                         yetty_ybrowser_libcss_release(img_cs);
                         ib = &r->boxes.data[iidx];
                     }
@@ -2220,6 +2246,29 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                                          &px) &&
                             px > 0.0f) {
                             css_h = px;
+                        }
+                        /* Same replaced-element float handling as <img>. */
+                        int svg_float = yetty_ybrowser_libcss_float(svg_cs);
+                        if (svg_float == CSS_FLOAT_LEFT) {
+                            svg_box->float_side = 1;
+                        } else if (svg_float == CSS_FLOAT_RIGHT) {
+                            svg_box->float_side = 2;
+                        }
+                        if (svg_box->float_side != 0) {
+                            float *svg_margin_dst[4] = {
+                                &svg_box->margin_top, &svg_box->margin_right,
+                                &svg_box->margin_bottom, &svg_box->margin_left};
+                            for (int side = 0; side < 4; side++) {
+                                bool margin_auto = false;
+                                bool margin_pct = false;
+                                float margin_px = 0.0f;
+                                if (yetty_ybrowser_libcss_margin(r, svg_cs, side, s.font_size,
+                                                                 pct_basis_svg, &margin_px,
+                                                                 &margin_auto, &margin_pct) &&
+                                    !margin_auto && !margin_pct) {
+                                    *svg_margin_dst[side] = margin_px;
+                                }
+                            }
                         }
                         yetty_ybrowser_libcss_release(svg_cs);
                         svg_box = &r->boxes.data[svg_idx];

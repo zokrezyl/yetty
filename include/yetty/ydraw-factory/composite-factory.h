@@ -290,6 +290,10 @@ struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_c
 // Returns 0 for a NULL instance or one with no/empty bounds.
 float yetty_ydraw_composite_pixel_height(const struct yetty_ydraw_composite *instance);
 
+/* Bottom edge of the figure's wire bounds (envelope-local px) — the
+ * culling extent for records positioned inside a multi-figure block. */
+float yetty_ydraw_composite_pixel_bottom(const struct yetty_ydraw_composite *instance);
+
 // Set the figure's content scale (paint size relative to its laid-out bounds).
 // The hosting grid uses it to magnify a figure under visual (Ctrl+wheel) zoom in
 // lockstep with the zoomed text, so the figure keeps filling its reserved rows

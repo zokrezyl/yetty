@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ybrowser — flexbox</title>
+<style>
+  body { margin: 0; background: #0B1014; color: #E0E5E4; font-family: sans-serif; padding: 28px 36px; }
+  h1 { color: #74C5A5; }
+  h2 { color: #6BA892; border-bottom: 1px solid #364A47; padding-bottom: 4px; margin-top: 26px; }
+  p  { color: #9FA7A8; }
+  a  { color: #6BA892; }
+  .row { display: flex; background: #141A1F; border: 1px solid #364A47; padding: 8px; gap: 8px; }
+  .item { background: #1E262C; border: 1px solid #5A8979; padding: 10px; text-align: center; }
+
+  .grow .a { flex: 1; }
+  .grow .b { flex: 2; }
+  .grow .c { flex: 1; }
+
+  .shrink .fixed { flex: 0 0 260px; background: #364A47; }
+  .shrink .floor { flex: 1 1 400px; min-width: 180px; }
+  .shrink .soft  { flex: 1 1 400px; }
+
+  .wrapdemo { display: flex; flex-wrap: wrap; gap: 8px; background: #141A1F;
+              border: 1px solid #364A47; padding: 8px; }
+  .wrapdemo .card { flex: 1 1 190px; height: 44px; background: #1E262C; border: 1px solid #5A8979; }
+
+  .between { justify-content: space-between; }
+  .centered { justify-content: center; }
+
+  .ordered .first  { order: 2; }
+  .ordered .second { order: 1; background: #5A8979; }
+
+  .reversed { flex-direction: row-reverse; }
+
+  .tall { height: 90px; align-items: flex-start; }
+  .tall .self-end    { align-self: flex-end; }
+  .tall .self-center { align-self: center; background: #5A8979; }
+  .tall .stretchy    { align-self: stretch; }
+</style>
+</head>
+<body>
+  <h1>Flexbox</h1>
+  <p><a href="index.html">back to the hub</a></p>
+
+  <h2>Grow ratios — flex: 1 / 2 / 1</h2>
+  <div class="row grow">
+    <div class="item a">1</div>
+    <div class="item b">2 — twice the share</div>
+    <div class="item c">1</div>
+  </div>
+
+  <h2>Shrink with a min-width floor</h2>
+  <p>Three over-wide items shrink to fit; the middle one refuses to go below 180px,
+     so the others give up more — the iterative freeze/redistribute loop.</p>
+  <div class="row shrink">
+    <div class="item fixed">flex: 0 0 260px</div>
+    <div class="item floor">min-width: 180px</div>
+    <div class="item soft">no floor</div>
+  </div>
+
+  <h2>Wrap with per-line distribution</h2>
+  <p>Cards have a 190px basis and grow; each LINE distributes its own leftover,
+     so the last, shorter line fills the row too.</p>
+  <div class="wrapdemo">
+    <div class="card"></div><div class="card"></div><div class="card"></div>
+    <div class="card"></div><div class="card"></div><div class="card"></div>
+    <div class="card"></div>
+  </div>
+
+  <h2>justify-content</h2>
+  <div class="row between">
+    <div class="item">start</div><div class="item">middle</div><div class="item">end</div>
+  </div>
+  <div class="row centered" style="margin-top:8px">
+    <div class="item">centered</div><div class="item">pair</div>
+  </div>
+
+  <h2>order</h2>
+  <p>Document order is "first, second" — the green box wins with <code>order: 1</code>.</p>
+  <div class="row ordered">
+    <div class="item first">first in the DOM</div>
+    <div class="item second">second in the DOM</div>
+  </div>
+
+  <h2>row-reverse</h2>
+  <div class="row reversed">
+    <div class="item">A</div><div class="item">B</div><div class="item">C</div>
+  </div>
+
+  <h2>align-self</h2>
+  <div class="row tall">
+    <div class="item">top (container default)</div>
+    <div class="item self-center">center</div>
+    <div class="item self-end">flex-end</div>
+    <div class="item stretchy">stretch</div>
+  </div>
+</body>
+</html>

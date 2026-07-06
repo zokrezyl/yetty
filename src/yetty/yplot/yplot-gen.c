@@ -26,12 +26,23 @@
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/yfsvm/shader-rs.h>
 
-/* yplot-time.c — animates the `time` uniform when the compiled
- * bytecode references LOAD_T. Forward-declared here instead of a
- * header since the only call sites are below in this same TU. */
-struct yetty_ydraw_composite;
-struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_composite *instance);
-void yetty_yplot_time_detach(struct yetty_ydraw_composite *instance);
+/* Legacy factory adapter — kept so the abstract factory's
+ * update_instance slot still resolves. scene-canvas now routes through
+ * fi->ops->update directly, so this is dead in the runtime path but
+ * gets removed when the factory loses the slot. The instance_update
+ * itself is hand-written in a companion TU (see the generated header). */
+static struct yetty_ycore_void_result yplot_update_dispatch(
+    struct yetty_ydraw_concrete_factory *self, struct yetty_ydraw_composite *instance,
+    const void *payload, size_t size)
+{
+    (void)self;
+    if (!payload || size < 4u) {
+        return YETTY_ERR(yetty_ycore_void, "yplot update_dispatch: payload header truncated");
+    }
+    uint32_t target_field = ((const uint32_t *)payload)[0];
+    return yetty_yplot_instance_update(instance, target_field, (const uint8_t *)payload + 4u,
+                                       size - 4u);
+}
 
 extern const unsigned char gyplot_shaderData[];
 extern const unsigned int gyplot_shaderSize;
@@ -83,7 +94,8 @@ static struct yetty_yplot_factory *yetty_yplot_factory_from_base(
     return (struct yetty_yplot_factory *)base;
 }
 
-// Wire-format serialize helpers live in yplot-gen-wire.c (yetty_yplot_core).
+// Wire-format serialize helpers live in yplot-gen-wire.c
+// (yetty_yplot_core, GPU-less, riscv64-safe).
 
 //=============================================================================
 // Resource Set Setup — populates a target RS with this prim's structure
@@ -189,17 +201,14 @@ static void yplot_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
     strncpy(rs->uniforms[25].name, "viewport_h", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[25].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[25].f32 = 0.0f;
-    /* Slot 26: `time` — server-only uniform written by yplot-time.c's
-     * tick handler when the compiled bytecode references LOAD_T. The
-     * wire format doesn't carry this; it's filled at runtime. Slot
-     * index hard-coded in YETTY_YPLOT_TIME_UNIFORM_SLOT (yplot-time.h)
-     * so both sites stay in sync. */
+    /* `time` — server-side, not on the wire. */
     strncpy(rs->uniforms[26].name, "time", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[26].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[26].f32 = 0.0f;
     rs->uniform_count = 27;
 
-    // Setup storage buffer for buffer data
+    // Single merged storage buffer — the shader walks the
+    // self-describing [len][data]... layout at runtime.
     rs->buffer_count = 1;
     strncpy(rs->buffers[0].name, "buffer", YETTY_YRENDER_NAME_MAX - 1);
     strncpy(rs->buffers[0].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
@@ -229,69 +238,67 @@ static struct yetty_ycore_void_result yplot_instance_render(struct yetty_ydraw_c
 
     struct yetty_yrender_gpu_resource_set *rs = self->resource_set;
 
-    /* Wire layout (see yplot-gen-wire.c for the serializer):
-     *   [0]  type_id
-     *   [1]  payload_size (bytes after this header)
-     *   [2 .. 2+UN-1]  uniforms (UN = YETTY_YPLOT_UNIFORMS_WORDS = 18)
-     *   [2+UN .. end]  storage payload — handed verbatim to storage_buffer */
+    // Parse wire format: [type_id][payload_size][uniforms...][buffer_lens...][buffer_data...]
     const uint32_t *data = (const uint32_t *)self->buffer_data;
-    const uint32_t *payload = data + 2;
-    enum { UN = YETTY_YPLOT_UNIFORMS_WORDS };
+    const uint32_t *payload = data + 2; // skip type_id and payload_size
 
-    /* Uniforms 0..7: f32 bounds + ranges. */
-    rs->uniforms[0].f32 = *(const float *)&payload[0];
-    rs->uniforms[1].f32 = *(const float *)&payload[1];
-    rs->uniforms[2].f32 = *(const float *)&payload[2];
-    rs->uniforms[3].f32 = *(const float *)&payload[3];
-    rs->uniforms[4].f32 = *(const float *)&payload[4];
-    rs->uniforms[5].f32 = *(const float *)&payload[5];
-    rs->uniforms[6].f32 = *(const float *)&payload[6];
-    rs->uniforms[7].f32 = *(const float *)&payload[7];
-    /* Uniforms 8..17: u32 flags + function_count + colors[8]. */
-    rs->uniforms[8].u32 = payload[8];
-    rs->uniforms[9].u32 = payload[9];
-    rs->uniforms[10].u32 = payload[10];
-    rs->uniforms[11].u32 = payload[11];
-    rs->uniforms[12].u32 = payload[12];
-    rs->uniforms[13].u32 = payload[13];
-    rs->uniforms[14].u32 = payload[14];
-    rs->uniforms[15].u32 = payload[15];
-    rs->uniforms[16].u32 = payload[16];
-    rs->uniforms[17].u32 = payload[17];
+    // Update uniforms from wire format
+    rs->uniforms[0].f32 = *(float *)&payload[0]; /* bounds_x */
+    rs->uniforms[1].f32 = *(float *)&payload[1]; /* bounds_y */
+    rs->uniforms[2].f32 = *(float *)&payload[2]; /* bounds_w */
+    rs->uniforms[3].f32 = *(float *)&payload[3]; /* bounds_h */
+    rs->uniforms[4].f32 = *(float *)&payload[4]; /* x_min */
+    rs->uniforms[5].f32 = *(float *)&payload[5]; /* x_max */
+    rs->uniforms[6].f32 = *(float *)&payload[6]; /* y_min */
+    rs->uniforms[7].f32 = *(float *)&payload[7]; /* y_max */
+    rs->uniforms[8].u32 = payload[8];            /* flags */
+    rs->uniforms[9].u32 = payload[9];            /* function_count */
+    rs->uniforms[10].u32 = payload[10];          /* colors_0 */
+    rs->uniforms[11].u32 = payload[11];          /* colors_1 */
+    rs->uniforms[12].u32 = payload[12];          /* colors_2 */
+    rs->uniforms[13].u32 = payload[13];          /* colors_3 */
+    rs->uniforms[14].u32 = payload[14];          /* colors_4 */
+    rs->uniforms[15].u32 = payload[15];          /* colors_5 */
+    rs->uniforms[16].u32 = payload[16];          /* colors_6 */
+    rs->uniforms[17].u32 = payload[17];          /* colors_7 */
 
-    /* Per-frame factory-side zoom state (uniforms 18..25 — outside the wire). */
+    // Pull current zoom state from the factory into this instance's RS.
     rs->uniforms[18].f32 = factory->visual_zoom_scale > 0.0f ? factory->visual_zoom_scale : 1.0f;
     rs->uniforms[19].f32 = factory->visual_zoom_off_x;
     rs->uniforms[20].f32 = factory->visual_zoom_off_y;
     rs->uniforms[21].f32 = factory->cell_zoom_scale > 0.0f ? factory->cell_zoom_scale : 1.0f;
     rs->uniforms[22].f32 = factory->cell_zoom_off_x;
     rs->uniforms[23].f32 = factory->cell_zoom_off_y;
+
+    // Visual-zoom viewport — read from the target every frame.
     rs->uniforms[24].f32 = target->viewport.w;
     rs->uniforms[25].f32 = target->viewport.h;
 
-    /* Override bounds_x / bounds_y with the canvas-provided position. */
-    rs->uniforms[0].f32 = x;
-    rs->uniforms[1].f32 = y;
-
-    // HiDPI: wire bounds_w/h (uniforms[2]/[3]) are LOGICAL pixels; scale to
-    // physical so the figure fills its laid-out footprint (origin x,y above is
-    // already physical). self->content_scale is 1.0 in the terminal's local
-    // compositor, so this is a no-op there.
+    // Compose the caller-provided pane position with the record's own
+    // ENVELOPE-LOCAL origin: a multi-figure envelope (a browser page's
+    // images) lays its figures out internally, so each record's wire
+    // bounds_x/y is its offset inside the block anchored at (x, y).
+    // Single-figure producers (ycat) ship a 0,0 origin — for them this
+    // reduces to the plain caller position. bounds_w/h are LOGICAL pixels;
+    // the offset and body both scale by content_scale (1.0 in the
+    // terminal's local compositor).
     {
         float figure_content_scale = self->content_scale > 0.0f ? self->content_scale : 1.0f;
+        rs->uniforms[0].f32 = x + rs->uniforms[0].f32 * figure_content_scale;
+        rs->uniforms[1].f32 = y + rs->uniforms[1].f32 * figure_content_scale;
         rs->uniforms[2].f32 *= figure_content_scale;
         rs->uniforms[3].f32 *= figure_content_scale;
     }
 
-    /* Storage buffer: the bytes immediately after the uniforms ARE the
-     * storage payload (bytecode + variable data buffers, self-describing
-     * via the [bytecode_len][...][data_count][...] header the shader walks).
-     * The pointer doesn't move between renders, so we leave `dirty` alone —
-     * the initial submit/finalize uploaded everything; subsequent chunk
-     * updates write directly to GPU via the binder's write_buffer_chunk op. */
-    const uint32_t payload_bytes = data[1];
-    const uint32_t *storage = payload + UN;
-    size_t storage_size = (size_t)payload_bytes - UN * sizeof(uint32_t);
+    /* Merged storage region: everything after the uniforms, handed
+     * verbatim to the storage buffer (the shader walks its header).
+     * Deliberately NOT marked dirty here — the initial upload happens at
+     * create, and incremental sample updates write directly to GPU via
+     * the binder's write_buffer_chunk op; a per-frame dirty would
+     * re-upload the whole region every frame. */
+    uint32_t payload_bytes = data[1];
+    const uint32_t *storage = payload + 18;
+    size_t storage_size = (size_t)payload_bytes - 18u * sizeof(uint32_t);
     rs->buffers[0].data = (uint8_t *)(uintptr_t)storage;
     rs->buffers[0].size = storage_size;
 
@@ -335,16 +342,45 @@ static struct yetty_ycore_void_result yplot_instance_render(struct yetty_ydraw_c
     /* The pane's render target may sit at a non-zero offset inside the
      * big surface (e.g. yui pushes the terminal pane down by the titlebar
      * height). The layer's simple-prim pass already draws to
-     * (vp.x, vp.y, vp.w, vp.h); yplot must use the same rect, otherwise
-     * its fullscreen triangle covers a different region of the framebuffer
-     * than the rest of the layer and the FS would compare canvas-local
-     * bounds against the wrong coordinate system — see yplot.wgsl
-     * pane_pixel comment for the matching shader-side fix. */
+     * (vp.x, vp.y, vp.w, vp.h); the complex prim must use the same rect,
+     * otherwise its fullscreen triangle covers a different region of the
+     * framebuffer than the rest of the layer and the FS would compare
+     * canvas-local bounds against the wrong coordinate system — see the
+     * pane_pixel comment in the matching shader. */
     wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
                                      target->viewport.w, target->viewport.h, 0.0f, 1.0f);
-    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)target->viewport.x,
-                                        (uint32_t)target->viewport.y, (uint32_t)target->viewport.w,
-                                        (uint32_t)target->viewport.h);
+
+    /* Scissor to the viewport, intersected with the compositor's clip rect
+     * when one is set (e.g. a scrolling ygrid's scroll-area bounds) so the
+     * figure is clipped to its container instead of bleeding over
+     * surrounding chrome such as the tab bar. */
+    float scissor_x0 = target->viewport.x;
+    float scissor_y0 = target->viewport.y;
+    float scissor_x1 = target->viewport.x + target->viewport.w;
+    float scissor_y1 = target->viewport.y + target->viewport.h;
+    if (target->clip.w > 0.0f && target->clip.h > 0.0f) {
+        if (target->clip.x > scissor_x0) {
+            scissor_x0 = target->clip.x;
+        }
+        if (target->clip.y > scissor_y0) {
+            scissor_y0 = target->clip.y;
+        }
+        if (target->clip.x + target->clip.w < scissor_x1) {
+            scissor_x1 = target->clip.x + target->clip.w;
+        }
+        if (target->clip.y + target->clip.h < scissor_y1) {
+            scissor_y1 = target->clip.y + target->clip.h;
+        }
+    }
+    if (scissor_x1 < scissor_x0) {
+        scissor_x1 = scissor_x0;
+    }
+    if (scissor_y1 < scissor_y0) {
+        scissor_y1 = scissor_y0;
+    }
+    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)scissor_x0, (uint32_t)scissor_y0,
+                                        (uint32_t)(scissor_x1 - scissor_x0),
+                                        (uint32_t)(scissor_y1 - scissor_y0));
 
     float w = self->bounds.max.x - self->bounds.min.x;
     float h = self->bounds.max.y - self->bounds.min.y;
@@ -409,8 +445,8 @@ static WGPURenderPipeline yplot_get_pipeline(struct yetty_ydraw_concrete_factory
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }
 
-/* Forward decl — vtable definition lives below, after the instance
- * method bodies; create_instance just needs its address. */
+/* Forward decl — vtable definition lives below; create_instance just
+ * needs its address. */
 static const struct yetty_ydraw_composite_ops yplot_figure_ops;
 
 static struct yetty_ydraw_composite_ptr_result yplot_create_instance(
@@ -421,23 +457,7 @@ static struct yetty_ydraw_composite_ptr_result yplot_create_instance(
         return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
     }
 
-    /* Bounds-check the wire record against its declared payload_size.
-     *
-     * The generic per-buffer offset sum (payload[18] + payload[19]) is WRONG
-     * for yplot: its buffers are not contiguous — a variable-length bytecode
-     * payload sits between the buffer-length words — so payload[18] is
-     * bytecode_len and payload[19] is the first bytecode instruction, not two
-     * buffer lengths. That misread inflated record_words and falsely rejected
-     * every valid record ("buffers exceed record"), so no yplot ever rendered.
-     * payload_size (header word[1], written by yetty_yplot_uniforms_serialize)
-     * is the authoritative count of bytes after the 8-byte header, which is
-     * correct regardless of internal layout.
-     *
-     * NOTE: applied by hand. The committed yplot-gen.c has diverged from
-     * ydraw-gen/generate.py (the generator does not emit the yplot-time
-     * integration that lives in this file), so regenerating would drop that
-     * feature; the matching fix is also in generate.py for when the two are
-     * reconciled. */
+    /* Bounds-check the wire record against its declared payload_size. */
     {
         if (size < 2u * sizeof(uint32_t)) {
             return YETTY_ERR(yetty_ydraw_composite_ptr, "yplot: record too small for header");
@@ -488,15 +508,15 @@ static struct yetty_ydraw_composite_ptr_result yplot_create_instance(
     memcpy(instance->resource_set, &factory->template_rs,
            sizeof(struct yetty_yrender_gpu_resource_set));
 
-    /* Point the storage buffer descriptor at the wire's storage payload
-     * (bytes after the uniforms), so the binder's first finalize allocates
-     * a GPU buffer of the right size and queueWriteBuffers the data. */
+    /* Point the storage buffer descriptor at this instance's bytecode now,
+     * so the binder's first finalize allocates a GPU buffer of the right
+     * size and queueWriteBuffers the data. */
     {
         const uint32_t *data = (const uint32_t *)instance->buffer_data;
         const uint32_t *payload = data + 2;
         uint32_t payload_bytes = data[1];
-        const uint32_t *storage = payload + YETTY_YPLOT_UNIFORMS_WORDS;
-        size_t storage_size = (size_t)payload_bytes - YETTY_YPLOT_UNIFORMS_WORDS * sizeof(uint32_t);
+        const uint32_t *storage = payload + 18;
+        size_t storage_size = (size_t)payload_bytes - 18u * sizeof(uint32_t);
         instance->resource_set->buffers[0].data = (uint8_t *)(uintptr_t)storage;
         instance->resource_set->buffers[0].size = storage_size;
         instance->resource_set->buffers[0].dirty = 1;
@@ -508,6 +528,7 @@ static struct yetty_ydraw_composite_ptr_result yplot_create_instance(
         yetty_yrender_gpu_resource_binder_create_with_pipeline(
             factory->device, factory->queue, factory->allocator, factory->pipeline);
     if (YETTY_IS_ERR(br)) {
+        ydebug("yplot_create_instance: binder_create FAILED: %s", br.error.msg);
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
@@ -534,61 +555,20 @@ static struct yetty_ydraw_composite_ptr_result yplot_create_instance(
         return YETTY_ERR(yetty_ydraw_composite_ptr, "binder finalize failed", fr);
     }
 
-    /* yplot-time.c hooks the instance into the shared animation timer
-     * iff the wire flags carry YETTY_YPLOT_FLAG_USES_TIME. No-op on
-     * static plots. Failure is non-fatal — the plot still renders, it
-     * just stays frozen at t=0. */
+    /* Companion-TU lifecycle callout (e.g. hooking the instance into a
+     * shared animation timer). Runs after the binder is fully finalized.
+     * Failure is non-fatal — the figure still renders, it just skips
+     * whatever the callout would have enabled. */
     {
-        struct yetty_ycore_void_result tr = yetty_yplot_time_attach(instance);
-        if (YETTY_IS_ERR(tr)) {
-            ywarn("yplot: time-attach failed: %s", tr.error.msg);
-            yetty_ycore_error_destroy(tr.error);
+        struct yetty_ycore_void_result created_res = yetty_yplot_instance_created(instance);
+        if (YETTY_IS_ERR(created_res)) {
+            ywarn("yplot: instance_created callout failed: %s", created_res.error.msg);
+            yetty_ycore_error_destroy(created_res.error);
         }
     }
-
+    ydebug("yplot_create_instance: OK bounds=(%.0f,%.0f,%.0f,%.0f)", instance->bounds.min.x,
+           instance->bounds.min.y, instance->bounds.max.x, instance->bounds.max.y);
     return YETTY_OK(yetty_ydraw_composite_ptr, instance);
-}
-
-/* CMD_UPDATE payload schema (defined by yplot):
- *   u32 buffer_index   — index into the `data` array of the yplot
- *   u32 sample_offset  — first sample to overwrite (in f32s into THAT buffer)
- *   u32 count          — number of f32 samples
- *   f32 samples[count] — new sample values
- * Total header = 12 bytes, plus count * 4 bytes of samples. */
-/* Adapter: legacy update_instance signature → new ops->update.
- *
- * The wire payload yplot accepts is:
- *   [u32 buffer_index][u32 sample_offset][u32 count][f32 samples × count]
- *
- * Under the generic CMD_UPDATE dispatcher in scene-canvas, the first
- * u32 of the payload is peeled off as `target_field` (= buffer_index
- * here); the rest is handed in as `body` / `body_size`. So `body`
- * starts at `sample_offset` and yplot decodes:
- *   target_field        = buffer_index
- *   body[0..3]          = u32 sample_offset
- *   body[4..7]          = u32 count
- *   body[8..]           = f32 samples[count]
- */
-static struct yetty_ycore_void_result yplot_instance_update(struct yetty_ydraw_composite *instance,
-                                                            uint32_t target_field, const void *body,
-                                                            size_t body_size)
-{
-    if (!instance) {
-        return YETTY_ERR(yetty_ycore_void, "yplot update: instance NULL");
-    }
-    if (!body || body_size < 8u) {
-        return YETTY_ERR(yetty_ycore_void, "yplot update: body header truncated");
-    }
-    const uint32_t *header = (const uint32_t *)body;
-    uint32_t sample_offset = header[0];
-    uint32_t count = header[1];
-    size_t expected = 8u + (size_t)count * sizeof(float);
-    if (body_size < expected) {
-        return YETTY_ERR(yetty_ycore_void, "yplot update: body samples truncated");
-    }
-    const float *samples = (const float *)((const uint8_t *)body + 8u);
-    return yetty_yplot_update_data_chunk(instance, /*buffer_index=*/target_field, sample_offset,
-                                         samples, count);
 }
 
 static void yplot_instance_destroy(struct yetty_ydraw_composite *instance)
@@ -596,10 +576,9 @@ static void yplot_instance_destroy(struct yetty_ydraw_composite *instance)
     if (!instance) {
         return;
     }
-    /* yplot-time.c — drop the timer listener BEFORE freeing the
-     * instance struct (its embedded listener pointer is what the
-     * timer's listener-list holds). */
-    yetty_yplot_time_detach(instance);
+    /* Companion-TU teardown FIRST — e.g. dropping a timer listener
+	 * whose list holds a pointer into this instance. */
+    yetty_yplot_instance_destroying(instance);
     if (instance->binder) {
         instance->binder->ops->destroy(instance->binder);
     }
@@ -608,30 +587,14 @@ static void yplot_instance_destroy(struct yetty_ydraw_composite *instance)
     free(instance);
 }
 
-/* Vtable installed on every yplot figure_instance at create time. */
+/* Per-instance vtable installed on every yplot figure_instance. */
 static const struct yetty_ydraw_composite_ops yplot_figure_ops = {
     .destroy = yplot_instance_destroy,
-    .update = yplot_instance_update,
+    .update = yetty_yplot_instance_update,
 };
 
-/* Legacy factory adapters — kept so the abstract factory's
- * update_instance / destroy_instance pointers still resolve. The
- * scene-canvas's UPDATE dispatch routes through fi->ops->update
- * directly, so these are only reached by callers that still go
- * through the old factory path. Will be removed once the factory
- * struct loses those slots. */
-static struct yetty_ycore_void_result yplot_update_instance(
-    struct yetty_ydraw_concrete_factory *self, struct yetty_ydraw_composite *instance,
-    const void *payload, size_t size)
-{
-    (void)self;
-    if (!payload || size < 4u) {
-        return YETTY_ERR(yetty_ycore_void, "yplot update_instance: payload header truncated");
-    }
-    uint32_t target_field = ((const uint32_t *)payload)[0];
-    return yplot_instance_update(instance, target_field, (const uint8_t *)payload + 4u, size - 4u);
-}
-
+/* Legacy factory adapter — kept for the factory->destroy_instance
+ * fallback path. */
 static void yplot_destroy_instance(struct yetty_ydraw_concrete_factory *self,
                                    struct yetty_ydraw_composite *instance)
 {
@@ -676,11 +639,12 @@ struct yetty_ydraw_concrete_factory *yetty_yplot_factory_create(void)
     }
 
     factory->base.type_id = YETTY_YPLOT_TYPE_ID;
+    factory->base.destroy = yetty_yplot_factory_destroy;
     factory->base.compile_pipeline = yplot_compile_pipeline;
     factory->base.get_pipeline = yplot_get_pipeline;
     factory->base.create_instance = yplot_create_instance;
     factory->base.destroy_instance = yplot_destroy_instance;
-    factory->base.update_instance = yplot_update_instance;
+    factory->base.update_instance = yplot_update_dispatch;
     factory->base.get_shared_rs = yplot_get_shared_rs;
     factory->base.set_visual_zoom = yplot_set_visual_zoom;
     factory->base.set_cell_zoom = yplot_set_cell_zoom;
@@ -703,67 +667,4 @@ void yetty_yplot_factory_destroy(struct yetty_ydraw_concrete_factory *self)
         yetty_yrender_pipeline_destroy(factory->pipeline);
     }
     free(factory);
-}
-
-//=============================================================================
-// Chunk-update API — push a fresh slice of samples into one of the
-// instance's data buffers. Writes both into the in-memory wire (so the next
-// re-finalize / re-upload picks up the same bytes) and directly to GPU via
-// the binder's write_buffer_chunk op (so no whole-buffer re-upload occurs).
-//=============================================================================
-
-struct yetty_ycore_void_result yetty_yplot_update_data_chunk(struct yetty_ydraw_composite *instance,
-                                                             uint32_t buffer_index,
-                                                             uint32_t sample_offset,
-                                                             const float *data, size_t count)
-{
-    if (!instance || !instance->buffer_data || !instance->binder) {
-        return YETTY_ERR(yetty_ycore_void, "update_data_chunk: invalid instance");
-    }
-    if (!data || count == 0) {
-        return YETTY_OK_VOID();
-    }
-    if (instance->type != YETTY_YPLOT_TYPE_ID) {
-        return YETTY_ERR(yetty_ycore_void, "update_data_chunk: not a yplot instance");
-    }
-
-    /* Walk the storage payload to find buffer_index's [len][samples...]
-     * slot inside the merged region. Storage starts right after the
-     * uniforms in the wire payload. */
-    uint32_t *wire = (uint32_t *)instance->buffer_data;
-    uint32_t *storage = wire + 2 + YETTY_YPLOT_UNIFORMS_WORDS;
-
-    uint32_t bytecode_len = storage[0];
-    uint32_t *p = storage + 1u + bytecode_len; /* points at data_count */
-    uint32_t data_count = *p++;
-    if (buffer_index >= data_count) {
-        return YETTY_ERR(yetty_ycore_void, "update_data_chunk: buffer_index out of range");
-    }
-    for (uint32_t i = 0; i < buffer_index; i++) {
-        uint32_t li = *p++;
-        p += li;
-    }
-    uint32_t this_len = *p; /* len_buffer_index */
-    if ((size_t)sample_offset + count > (size_t)this_len) {
-        return YETTY_ERR(yetty_ycore_void, "update_data_chunk: chunk would overflow buffer length");
-    }
-
-    /* Destination word in the merged storage region (in u32 units, then × 4
-     * for bytes — every word is a 32-bit float bitcast). */
-    uint32_t *dst_samples = p + 1u + sample_offset;
-    size_t bytes = count * sizeof(float);
-
-    /* 1) Keep the in-memory wire consistent — any re-finalize / cold
-     *    re-upload (e.g. after the binder resizes its slot) will see the
-     *    latest samples without going back through the high-level
-     *    yetty_yplot_render path. */
-    memcpy(dst_samples, data, bytes);
-
-    /* 2) Push the same bytes to GPU directly — single wgpuQueueWriteBuffer
-     *    at the precomputed offset, no whole-buffer re-upload. */
-    size_t byte_offset_in_storage = (size_t)((uint8_t *)dst_samples - (uint8_t *)storage);
-    struct yetty_ycore_void_result wr = instance->binder->ops->write_buffer_chunk(
-        instance->binder, /*buffer_index=*/0, byte_offset_in_storage, data, bytes);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "update_data_chunk: binder write failed");
-    return YETTY_OK_VOID();
 }

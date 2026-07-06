@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ybrowser — grid</title>
+<style>
+  body { margin: 0; background: #0B1014; color: #E0E5E4; font-family: sans-serif; padding: 28px 36px; }
+  h1 { color: #74C5A5; }
+  h2 { color: #6BA892; border-bottom: 1px solid #364A47; padding-bottom: 4px; margin-top: 26px; }
+  p  { color: #9FA7A8; }
+  a  { color: #6BA892; }
+  .cell { background: #1E262C; border: 1px solid #5A8979; padding: 10px; }
+
+  .tracks { display: grid; grid-template-columns: 140px 1fr 2fr; gap: 8px;
+            background: #141A1F; border: 1px solid #364A47; padding: 8px; }
+
+  .layout { display: grid; grid-template-columns: 220px 1fr; gap: 10px;
+            background: #141A1F; border: 1px solid #364A47; padding: 8px; }
+  .layout aside { background: #1E262C; border: 1px solid #364A47; padding: 10px; }
+  .layout main  { background: #1E262C; border: 1px solid #5A8979; padding: 10px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+           background: #141A1F; border: 1px solid #364A47; padding: 8px; }
+  .tile { background: #1E262C; border: 1px solid #5A8979; padding: 10px; }
+  .tile.feature { grid-column: span 2; background: #364A47; }
+
+  .swarm { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
+           background: #141A1F; border: 1px solid #364A47; padding: 6px; }
+  .dot { height: 18px; background: #1E262C; border: 1px solid #364A47; }
+</style>
+</head>
+<body>
+  <h1>Grid</h1>
+  <p><a href="index.html">back to the hub</a></p>
+
+  <h2>Track templates — 140px / 1fr / 2fr</h2>
+  <div class="tracks">
+    <div class="cell">fixed 140px</div>
+    <div class="cell">1fr</div>
+    <div class="cell">2fr — double the flexible share</div>
+  </div>
+
+  <h2>Sidebar layout with row stretch</h2>
+  <p>The short sidebar stretches to the tall content row — <code>align-items: stretch</code>,
+     the grid default.</p>
+  <div class="layout">
+    <aside>sidebar</aside>
+    <main>
+      Main content, tall enough to make the point. Grid rows size to the tallest
+      cell and every auto-height sibling stretches to match — the two boxes on
+      this row always share one bottom edge, no matter which one is longer.
+      More filler text keeps this cell comfortably taller than the sidebar.
+    </main>
+  </div>
+
+  <h2>Column spans</h2>
+  <div class="tiles">
+    <div class="tile feature">grid-column: span 2</div>
+    <div class="tile">3</div>
+    <div class="tile">4</div>
+    <div class="tile">5</div>
+    <div class="tile">6</div>
+  </div>
+
+  <h2>Auto-flow at scale</h2>
+  <p>Thirty six cells flow row-major into six fr columns.</p>
+  <div class="swarm">
+    <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+  </div>
+</body>
+</html>
