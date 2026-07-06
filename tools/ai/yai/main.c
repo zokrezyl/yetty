@@ -3691,6 +3691,23 @@ static struct yetty_ycore_void_result show_usage(struct yai_app *app)
 /* Print the /help block: yai's own keys and input model, the local
  * command list (from the same table the completion menu shows), and the
  * active engine's live configuration via its describe_config slot. */
+/* Print one "/name <hint>   description" row, column-aligned by display
+ * width (argument hints can carry multi-byte '…'). Shared by the yai and
+ * engine command sections of /help. */
+static void help_print_command(const struct yai_command *command)
+{
+    char name_and_hint[96];
+    snprintf(name_and_hint, sizeof(name_and_hint), "/%s %s", command->name,
+             command->argument_hint);
+    size_t display_width = 0;
+    for (const char *byte = name_and_hint; *byte; byte++) {
+        display_width += ((*byte & 0xC0) != 0x80);
+    }
+    int padding = display_width < 24 ? (int)(24 - display_width) : 0;
+    printf("  " YAI_BOLD "%s%*s" YAI_RESET " " YAI_DIM "%s" YAI_RESET "\n", name_and_hint, padding,
+           "", command->description);
+}
+
 static struct yetty_ycore_void_result show_help(struct yai_app *app)
 {
     struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
@@ -3732,26 +3749,34 @@ static struct yetty_ycore_void_result show_help(struct yai_app *app)
     printf("  " YAI_DIM "y allow · n deny · a always this tool · ! bypass (approve "
            "all)" YAI_RESET "\n");
 
-    printf("\n" YAI_MINT "local commands" YAI_RESET "\n");
+    /* The command table merges both sources: yai's own local commands and
+     * the ones the engine CLI advertised in its initialize handshake. /help
+     * aggregates the two into separate sections so nothing is hidden behind
+     * a "type / to browse" hint. Both stay alphabetical (the table is
+     * sorted); filtering by the local flag preserves that within a group. */
+    printf("\n" YAI_MINT "yai commands" YAI_RESET "\n");
+    for (size_t index = 0; index < app->commands.count; index++) {
+        const struct yai_command *command = &app->commands.items[index];
+        if (command->local) {
+            help_print_command(command);
+        }
+    }
+
+    printf("\n" YAI_MINT "engine commands · %s" YAI_RESET "\n", app->engine_name);
+    size_t engine_command_count = 0;
     for (size_t index = 0; index < app->commands.count; index++) {
         const struct yai_command *command = &app->commands.items[index];
         if (!command->local) {
-            continue;
+            help_print_command(command);
+            engine_command_count++;
         }
-        char name_and_hint[96];
-        snprintf(name_and_hint, sizeof(name_and_hint), "/%s %s", command->name,
-                 command->argument_hint);
-        /* Column-align by codepoints, not bytes — hints carry '…'. */
-        size_t display_width = 0;
-        for (const char *byte = name_and_hint; *byte; byte++) {
-            display_width += ((*byte & 0xC0) != 0x80);
-        }
-        int padding = display_width < 24 ? (int)(24 - display_width) : 0;
-        printf("  " YAI_BOLD "%s%*s" YAI_RESET " " YAI_DIM "%s" YAI_RESET "\n", name_and_hint,
-               padding, "", command->description);
+    }
+    if (engine_command_count == 0) {
+        printf("  " YAI_DIM "(none yet — the %s handshake may still be pending)" YAI_RESET "\n",
+               app->engine_name);
     }
 
-    printf("\n" YAI_MINT "engine: %s" YAI_RESET "\n", app->engine_name);
+    printf("\n" YAI_MINT "engine settings · %s" YAI_RESET "\n", app->engine_name);
     char engine_rows[1024] = "";
     struct yetty_ycore_void_result describe_res =
         yetty_yai_describe_config(app->engine, app, engine_rows, sizeof(engine_rows));
@@ -3763,9 +3788,6 @@ static struct yetty_ycore_void_result show_help(struct yai_app *app)
     for (char *row = strtok(engine_rows, "\n"); row; row = strtok(NULL, "\n")) {
         printf("  " YAI_DIM "%s" YAI_RESET "\n", row);
     }
-    printf("  " YAI_DIM "other /commands come from the %s CLI itself — type / to browse "
-           "them" YAI_RESET "\n",
-           app->engine_name);
     printf("\n");
 
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
