@@ -168,6 +168,19 @@ static char *yshadertoy_prim_assemble_shader(const char *user_src, size_t user_l
  * Factory + per-instance state
  *===========================================================================*/
 
+enum { YSHADERTOY_PIPELINE_CACHE_SLOTS = 16 };
+
+/* One cached compiled pipeline, keyed by the FNV-1a hash of the assembled
+ * WGSL. Identical shader bodies are the norm — demos re-cat the same files
+ * and scroll-back re-materialization replays byte-identical envelopes — so
+ * caching kills the steady-state Tint recompiles the profiler showed. */
+struct yshadertoy_pipeline_cache_entry {
+    uint64_t shader_hash;
+    struct yetty_yrender_pipeline *pipeline;
+    uint32_t refcount;
+    int used;
+};
+
 struct yetty_yshadertoy_prim_factory {
     struct yetty_ydraw_concrete_factory base;
     /* GPU handles stashed at compile_pipeline (registration) time; needed
@@ -176,6 +189,7 @@ struct yetty_yshadertoy_prim_factory {
     WGPUQueue queue;
     WGPUTextureFormat target_format;
     struct yetty_ydraw_gpu_allocator *allocator;
+    struct yshadertoy_pipeline_cache_entry pipeline_cache[YSHADERTOY_PIPELINE_CACHE_SLOTS];
 };
 
 static struct yetty_yshadertoy_prim_factory *yshadertoy_prim_factory_from_base(
@@ -184,10 +198,84 @@ static struct yetty_yshadertoy_prim_factory *yshadertoy_prim_factory_from_base(
     return (struct yetty_yshadertoy_prim_factory *)base;
 }
 
+static uint64_t yshadertoy_shader_hash(const char *bytes, size_t length)
+{
+    uint64_t hash = 1469598103934665603ULL; /* FNV-1a 64 */
+    for (size_t index = 0; index < length; ++index) {
+        hash ^= (uint8_t)bytes[index];
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+/* Cache hit: bump the refcount and hand out the shared pipeline. */
+static struct yetty_yrender_pipeline *yshadertoy_pipeline_cache_get(
+    struct yetty_yshadertoy_prim_factory *factory, uint64_t shader_hash)
+{
+    for (int slot = 0; slot < YSHADERTOY_PIPELINE_CACHE_SLOTS; ++slot) {
+        struct yshadertoy_pipeline_cache_entry *entry = &factory->pipeline_cache[slot];
+        if (entry->used && entry->shader_hash == shader_hash) {
+            entry->refcount++;
+            return entry->pipeline;
+        }
+    }
+    return NULL;
+}
+
+/* Insert a freshly compiled pipeline (refcount 1). A full cache evicts an
+ * unreferenced entry; if every slot is referenced the pipeline stays
+ * instance-owned (caller keeps ownership) — returns 0 in that case. */
+static int yshadertoy_pipeline_cache_put(struct yetty_yshadertoy_prim_factory *factory,
+                                         uint64_t shader_hash,
+                                         struct yetty_yrender_pipeline *pipeline)
+{
+    struct yshadertoy_pipeline_cache_entry *victim = NULL;
+    for (int slot = 0; slot < YSHADERTOY_PIPELINE_CACHE_SLOTS; ++slot) {
+        struct yshadertoy_pipeline_cache_entry *entry = &factory->pipeline_cache[slot];
+        if (!entry->used) {
+            victim = entry;
+            break;
+        }
+        if (entry->refcount == 0 && !victim) {
+            victim = entry;
+        }
+    }
+    if (!victim) {
+        return 0;
+    }
+    if (victim->used && victim->pipeline) {
+        yetty_yrender_pipeline_destroy(victim->pipeline);
+    }
+    victim->used = 1;
+    victim->shader_hash = shader_hash;
+    victim->pipeline = pipeline;
+    victim->refcount = 1;
+    return 1;
+}
+
+static void yshadertoy_pipeline_cache_release(struct yetty_yshadertoy_prim_factory *factory,
+                                              struct yetty_yrender_pipeline *pipeline)
+{
+    for (int slot = 0; slot < YSHADERTOY_PIPELINE_CACHE_SLOTS; ++slot) {
+        struct yshadertoy_pipeline_cache_entry *entry = &factory->pipeline_cache[slot];
+        if (entry->used && entry->pipeline == pipeline) {
+            if (entry->refcount) {
+                entry->refcount--;
+            }
+            /* Keep zero-ref entries cached — that IS the win (the next
+             * identical envelope, e.g. a re-materialization, reuses it). */
+            return;
+        }
+    }
+}
+
 /* Per-instance state, hung off instance->instance_data. */
 struct yshadertoy_prim_instance_state {
-    /* Per-instance pipeline compiled from the wire's WGSL. Owned here. */
+    /* Pipeline for the wire's WGSL. Owned here when pipeline_cached is
+     * false; a shared, factory-cache-owned reference otherwise (released
+     * back to the cache on destroy, never destroyed directly). */
     struct yetty_yrender_pipeline *pipeline;
+    bool pipeline_cached;
     /* Assembled WGSL text — rs->shader references it, so it must outlive
      * the resource set. Owned here. */
     char *shader_source;
@@ -460,7 +548,12 @@ static void yshadertoy_prim_instance_destroy(struct yetty_ydraw_composite *insta
     }
     if (state) {
         if (state->pipeline) {
-            yetty_yrender_pipeline_destroy(state->pipeline);
+            if (state->pipeline_cached && instance->factory) {
+                yshadertoy_pipeline_cache_release(
+                    yshadertoy_prim_factory_from_base(instance->factory), state->pipeline);
+            } else {
+                yetty_yrender_pipeline_destroy(state->pipeline);
+            }
         }
         free(state->shader_source);
         free(state);
@@ -576,17 +669,29 @@ static struct yetty_ydraw_composite_ptr_result yshadertoy_prim_create_instance(
     }
     yshadertoy_prim_populate_rs(instance->resource_set, state->shader_source, shader_source_size);
 
-    /* Per-instance pipeline compiled from the assembled WGSL. A broken
-     * user shader fails here — the envelope is rejected with the error,
-     * nothing is leaked. */
-    struct yetty_yrender_pipeline_ptr_result pipeline_res = yetty_yrender_pipeline_create(
-        factory->device, factory->target_format, factory->allocator, instance->resource_set);
-    if (YETTY_IS_ERR(pipeline_res)) {
-        yshadertoy_prim_instance_destroy(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: pipeline create",
-                         pipeline_res);
+    /* Pipeline for the assembled WGSL — shared via the factory cache when an
+     * identical shader was compiled before (same demo re-run, scroll-back
+     * re-materialization), compiled through Tint only on a genuine miss. A
+     * broken user shader fails on the miss path — the envelope is rejected
+     * with the error, nothing is leaked. */
+    uint64_t shader_hash = yshadertoy_shader_hash(state->shader_source, shader_source_size);
+    struct yetty_yrender_pipeline *cached_pipeline =
+        yshadertoy_pipeline_cache_get(factory, shader_hash);
+    if (cached_pipeline) {
+        state->pipeline = cached_pipeline;
+        state->pipeline_cached = true;
+    } else {
+        struct yetty_yrender_pipeline_ptr_result pipeline_res = yetty_yrender_pipeline_create(
+            factory->device, factory->target_format, factory->allocator, instance->resource_set);
+        if (YETTY_IS_ERR(pipeline_res)) {
+            yshadertoy_prim_instance_destroy(instance);
+            return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: pipeline create",
+                             pipeline_res);
+        }
+        state->pipeline = pipeline_res.value;
+        state->pipeline_cached =
+            yshadertoy_pipeline_cache_put(factory, shader_hash, state->pipeline) != 0;
     }
-    state->pipeline = pipeline_res.value;
 
     struct yetty_yrender_gpu_resource_binder_result binder_res =
         yetty_yrender_gpu_resource_binder_create_with_pipeline(factory->device, factory->queue,
@@ -667,6 +772,16 @@ void yetty_yshadertoy_prim_factory_destroy(struct yetty_ydraw_concrete_factory *
         return;
     }
     struct yetty_yshadertoy_prim_factory *factory = yshadertoy_prim_factory_from_base(self);
+    /* Drain the shared-pipeline cache (all instances are gone by now, so
+     * every entry is zero-ref; destroy regardless). */
+    for (int slot = 0; slot < YSHADERTOY_PIPELINE_CACHE_SLOTS; ++slot) {
+        struct yshadertoy_pipeline_cache_entry *entry = &factory->pipeline_cache[slot];
+        if (entry->used && entry->pipeline) {
+            yetty_yrender_pipeline_destroy(entry->pipeline);
+            entry->pipeline = NULL;
+            entry->used = 0;
+        }
+    }
     /* The shared timer is torn down when the last instance unsubscribes;
      * by destroy time only the bookkeeping struct can remain. */
     free(self->hook_data);

@@ -75,7 +75,7 @@ static void cursor_of(struct ytest *test, struct yetty_yclass_object *grid, uint
 
 static uint32_t scroll_origin(struct ytest *test, struct yetty_yclass_object *grid)
 {
-    struct yetty_ycore_uint32_result r = yetty_yvterm_grid_scroll_origin(grid);
+    struct yetty_ycore_uint64_result r = yetty_yvterm_grid_scroll_origin(grid);
     YTEST_REQUIRE_OK(test, r);
     return r.value;
 }

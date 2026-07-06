@@ -176,14 +176,14 @@ static void test_scrollback(struct ytest *test)
 {
     struct yetty_yclass_object *grid = make_grid(test, 80, 5, 100);
 
-    struct yetty_ycore_uint32_result before = yetty_yvterm_grid_scroll_origin(grid);
+    struct yetty_ycore_uint64_result before = yetty_yvterm_grid_scroll_origin(grid);
     YTEST_REQUIRE_OK(test, before);
     YTEST_CHECK_EQ_SIZE(test, before.value, 0);
 
     /* 12 lines into a 5-row screen forces the top lines into scrollback. */
     feed(test, grid, "L0\nL1\nL2\nL3\nL4\nL5\nL6\nL7\nL8\nL9\nL10\nL11");
 
-    struct yetty_ycore_uint32_result after = yetty_yvterm_grid_scroll_origin(grid);
+    struct yetty_ycore_uint64_result after = yetty_yvterm_grid_scroll_origin(grid);
     YTEST_REQUIRE_OK(test, after);
     YTEST_CHECK(test, after.value > 0); /* content scrolled off the top */
 

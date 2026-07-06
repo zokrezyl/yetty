@@ -103,7 +103,7 @@ struct yetty_yvterm_screen {
      * `total_scrolled`; the cursor's absolute row is `total_scrolled +
      * cursor_row`. Anchored rich content (the ydraw ygrid) uses this to scroll
      * in lockstep with the text. */
-    uint32_t total_scrolled;
+    uint64_t total_scrolled;
 };
 
 /*===========================================================================
@@ -141,6 +141,16 @@ struct yetty_yvterm_tier_builder {
  * die with the entry. */
 struct yetty_yvterm_tier_cache_entry {
     int valid;
+    /* Deferred release: the entry was evicted/invalidated while pinned by
+     * the live view window — its lines (which window_lines may still point
+     * into) stay allocated until the next window resolution frees zombies. */
+    int zombie;
+    /* Window generation that last resolved lines out of this entry. An entry
+     * pinned to the LIVE generation is never re-used as an inflate victim
+     * and never freed in place — continued PTY output must not pull lines
+     * out from under the window being rendered (the scroll-back-while-
+     * streaming crash). */
+    uint32_t pin_stamp;
     uint64_t first_line;
     uint32_t line_count;
     struct yetty_yvterm_line *lines;
@@ -197,6 +207,10 @@ struct yetty_yvterm_tiers {
     /* Optional per-owner byte accounting for the archive's long-lived
      * allocations (builder, sealed blobs, cache lines). NULL = untagged. */
     struct yetty_ycore_memtag *memtag;
+
+    /* The live view-window generation (set by the grid each resolution).
+     * Cache entries pinned to it are protected from eviction/release. */
+    uint32_t live_pin_stamp;
 };
 
 /* Line helpers owned by grid.c (they know how to destroy composites). */
@@ -239,6 +253,11 @@ typedef void (*yetty_yvterm_tiers_line_visit_fn)(struct yetty_yvterm_line *line,
                                                  uint64_t timeline_idx, void *userdata);
 void yetty_yvterm_tiers_visit_cache(struct yetty_yvterm_tiers *tiers,
                                     yetty_yvterm_tiers_line_visit_fn visit, void *userdata);
+
+/* Free zombie cache entries whose pin generation is no longer live. The grid
+ * calls this at the START of each window resolution, right after advancing
+ * the generation. */
+void yetty_yvterm_tiers_release_zombies(struct yetty_yvterm_tiers *tiers);
 
 #ifdef __cplusplus
 }

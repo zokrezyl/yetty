@@ -176,11 +176,9 @@ struct yetty_yterminal_terminal {
     struct yetty_yface *emit_yface;
 
     /* tmux-style scrollback view. Mouse wheel enters scrollback and shifts
-   * the absolute viewport top (view_top_total_idx). Enter exits back to
+   * the absolute viewport top (grid-owned view state). Enter exits back to
    * live. While active, both layers freeze their viewport at this index
    * even as new content keeps arriving. */
-    int scrollback_active;
-    uint32_t view_top_total_idx;
 
     /* Currently focused ymgui figure (click-focus model). Tracked
      * directly on the terminal now that hit-testing walks the root
@@ -399,7 +397,23 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
      * render path from doing further GPU work while the close event is in
      * flight. */
         struct yetty_platform_pty *pty = terminal->context.pty;
-        if (pty && pty->ops->child_alive && pty->ops->child_alive(pty) == 1) {
+        int child_alive = 0;
+        if (pty && pty->ops->child_alive) {
+            /* A dying child closes its pty fds a hair BEFORE it becomes
+             * waitable (exit_files precedes exit_notify), so the read error
+             * can outrun the zombie transition. Re-poll briefly: a normal
+             * exit resolves within microseconds; only a child that stays
+             * alive through all rechecks is a genuine transient hangup.
+             * Without this, Ctrl-C'ing the shell could leave the pane open
+             * forever (the errored stream never delivers a second EOF). */
+            for (int attempt = 0; attempt < 64; ++attempt) {
+                child_alive = pty->ops->child_alive(pty) == 1;
+                if (!child_alive) {
+                    break;
+                }
+            }
+        }
+        if (child_alive) {
             ywarn("terminal_pty_pipe_read: PTY read error (nread=%ld) with the child still "
                   "alive — transient tty hangup, keeping the terminal open",
                   nread);
@@ -756,7 +770,7 @@ static struct yetty_ycore_int_result terminal_emit_figure_key(
  *---------------------------------------------------------------------*/
 
 /* Live anchor of the content grid (it maxes its own text + ydraw anchors). */
-static struct yetty_ycore_uint32_result terminal_live_anchor(
+static struct yetty_ycore_uint64_result terminal_live_anchor(
     struct yetty_yterminal_terminal *terminal)
 {
     return yetty_yvterm_vterm_get_live_anchor(terminal->grid);
@@ -765,18 +779,19 @@ static struct yetty_ycore_uint32_result terminal_live_anchor(
 /* Oldest absolute line index a scrollback view may scroll up to. Lines below
  * this have aged out of the grid's bounded history (scrollback/lines), so a
  * wheel-up clamps here instead of marching into blank evicted rows. */
-static struct yetty_ycore_uint32_result terminal_scrollback_floor(
+static struct yetty_ycore_uint64_result terminal_scrollback_floor(
     struct yetty_yterminal_terminal *terminal)
 {
     return yetty_yvterm_vterm_get_scrollback_floor(terminal->grid);
 }
 
-/* Push the current scrollback view state into the content grid. */
+/* Push a scrollback view transition into the content grid (the single view
+ * owner) and schedule a repaint. */
 static struct yetty_ycore_void_result terminal_push_view_top(
-    struct yetty_yterminal_terminal *terminal)
+    struct yetty_yterminal_terminal *terminal, int active, uint64_t view_top)
 {
-    struct yetty_ycore_void_result r = yetty_yvterm_vterm_set_view_top(
-        terminal->grid, terminal->scrollback_active, terminal->view_top_total_idx);
+    struct yetty_ycore_void_result r =
+        yetty_yvterm_vterm_set_view_top(terminal->grid, active, view_top);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_push_view_top: set_view_top failed");
     /* Rich content rides yvterm's own line ring, so set_view_top already scrolls
      * it with the text — nothing extra to pin. */
@@ -792,20 +807,28 @@ static struct yetty_ycore_void_result terminal_push_view_top(
 static struct yetty_ycore_void_result terminal_scrollback_apply(
     struct yetty_yterminal_terminal *terminal, int lines)
 {
-    struct yetty_ycore_uint32_result live_res = terminal_live_anchor(terminal);
+    struct yetty_ycore_uint64_result live_res = terminal_live_anchor(terminal);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, live_res, "terminal_scrollback_apply: live anchor");
-    uint32_t live = live_res.value;
+    uint64_t live = live_res.value;
 
-    if (!terminal->scrollback_active) {
+    /* The grid owns the view — read the CURRENT state instead of trusting a
+     * local copy that resize or eviction may have invalidated meanwhile. */
+    int active = 0;
+    uint64_t view_top = 0;
+    struct yetty_ycore_void_result view_res =
+        yetty_yvterm_vterm_get_view(terminal->grid, &active, &view_top);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, view_res, "terminal_scrollback_apply: get view");
+
+    if (!active) {
         if (lines <= 0) {
             return YETTY_OK_VOID(); /* downward wheel in live mode: nothing to do */
         }
         if (live == 0) {
             return YETTY_OK_VOID(); /* nothing in scrollback yet */
         }
-        terminal->scrollback_active = 1;
-        terminal->view_top_total_idx = live - 1;
-        if ((uint32_t)lines > 1) {
+        active = 1;
+        view_top = live - 1u;
+        if (lines > 1) {
             lines -= 1; /* the entry already consumed one notch */
         } else {
             lines = 0;
@@ -816,31 +839,31 @@ static struct yetty_ycore_void_result terminal_scrollback_apply(
         /* Clamp to the oldest line still retained, not to 0 — once eviction
          * starts the floor rises above 0 and scrolling to 0 would show blank
          * aged-out rows. */
-        struct yetty_ycore_uint32_result floor_res = terminal_scrollback_floor(terminal);
+        struct yetty_ycore_uint64_result floor_res = terminal_scrollback_floor(terminal);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, floor_res,
                             "terminal_scrollback_apply: scrollback floor");
-        uint32_t floor = floor_res.value;
-        if (terminal->view_top_total_idx < floor ||
-            (uint32_t)lines >= terminal->view_top_total_idx - floor) {
-            terminal->view_top_total_idx = floor;
+        uint64_t floor = floor_res.value;
+        uint64_t step = (uint64_t)lines;
+        if (view_top < floor || step >= view_top - floor) {
+            view_top = floor;
         } else {
-            terminal->view_top_total_idx -= (uint32_t)lines;
+            view_top -= step;
         }
     } else if (lines < 0) {
-        uint32_t n = (uint32_t)(-lines);
-        uint64_t target = (uint64_t)terminal->view_top_total_idx + n;
+        uint64_t step = (uint64_t)(-(int64_t)lines);
+        uint64_t target = view_top + step;
         if (target >= live) {
             /* Scrolled forward into the live region — exit scrollback. */
-            terminal->scrollback_active = 0;
-            terminal->view_top_total_idx = live;
+            active = 0;
+            view_top = live;
         } else {
-            terminal->view_top_total_idx = (uint32_t)target;
+            view_top = target;
         }
     }
 
-    ydebug("scrollback: active=%d view_top=%u live=%u", terminal->scrollback_active,
-           terminal->view_top_total_idx, live);
-    struct yetty_ycore_void_result r = terminal_push_view_top(terminal);
+    ydebug("scrollback: active=%d view_top=%llu live=%llu", active, (unsigned long long)view_top,
+           (unsigned long long)live);
+    struct yetty_ycore_void_result r = terminal_push_view_top(terminal, active, view_top);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_scrollback_apply: push_view_top failed");
     return YETTY_OK_VOID();
 }
@@ -849,17 +872,32 @@ static struct yetty_ycore_void_result terminal_scrollback_apply(
 static struct yetty_ycore_void_result terminal_scrollback_exit(
     struct yetty_yterminal_terminal *terminal)
 {
-    if (!terminal->scrollback_active) {
+    int active = 0;
+    struct yetty_ycore_void_result view_res =
+        yetty_yvterm_vterm_get_view(terminal->grid, &active, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, view_res, "terminal_scrollback_exit: get view");
+    if (!active) {
         return YETTY_OK_VOID();
     }
-    terminal->scrollback_active = 0;
-    struct yetty_ycore_uint32_result live_res = terminal_live_anchor(terminal);
+    struct yetty_ycore_uint64_result live_res = terminal_live_anchor(terminal);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, live_res, "terminal_scrollback_exit: live anchor");
-    terminal->view_top_total_idx = live_res.value;
     ydebug("scrollback: EXIT");
-    struct yetty_ycore_void_result r = terminal_push_view_top(terminal);
+    struct yetty_ycore_void_result r = terminal_push_view_top(terminal, 0, live_res.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_scrollback_exit: push_view_top failed");
     return YETTY_OK_VOID();
+}
+
+/* Whether a scrolled-back view is currently active (grid-owned state). */
+static int terminal_scrollback_is_active(struct yetty_yterminal_terminal *terminal)
+{
+    int active = 0;
+    struct yetty_ycore_void_result view_res =
+        yetty_yvterm_vterm_get_view(terminal->grid, &active, NULL);
+    if (YETTY_IS_ERR(view_res)) {
+        yetty_ycore_error_destroy(view_res.error);
+        return 0;
+    }
+    return active;
 }
 
 /*---------------------------------------------------------------------------
@@ -2706,7 +2744,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * start of a chord like Ctrl+wheel (non-intrusive zoom). It must NOT
          * exit scrollback, or holding Ctrl to zoom would snap back to live. */
         bool is_bare_modifier = (event->key.key >= 340 && event->key.key <= 347);
-        if (terminal->scrollback_active && !is_bare_modifier) {
+        if (terminal_scrollback_is_active(terminal) && !is_bare_modifier) {
             int is_enter = (event->key.key == 257); /* GLFW_KEY_ENTER */
             struct yetty_ycore_void_result xr = terminal_scrollback_exit(terminal);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, xr,
@@ -2754,7 +2792,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
 
     case YETTY_YCORE_CHAR:
         ydebug("terminal: CHAR codepoint=U+%04X mods=%d", event->chr.codepoint, event->chr.mods);
-        if (terminal->scrollback_active) {
+        if (terminal_scrollback_is_active(terminal)) {
             struct yetty_ycore_void_result xr = terminal_scrollback_exit(terminal);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, xr,
                                 "terminal_view_on_event: scrollback_exit failed");
@@ -2970,7 +3008,8 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         float ly_sel = event->mouse.y - view->bounds.y;
         int in_bounds = !(lx_sel < 0.0f || ly_sel < 0.0f || lx_sel >= view->bounds.w ||
                           ly_sel >= view->bounds.h);
-        int term_owns_click = !terminal->mouse_click_subscribed && !terminal->scrollback_active;
+        int term_owns_click =
+            !terminal->mouse_click_subscribed && !terminal_scrollback_is_active(terminal);
 
         /* X-Windows-style middle-click paste. Button 2 press inside the
          * pane, when no subscriber owns the click, pulls the current
@@ -3253,7 +3292,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * if a figure is under the cursor, the wheel goes outbound; else
          * scrollback. */
         int wheel_mods = event->mouse_scroll.mods;
-        if (!terminal->scrollback_active && terminal->mouse_click_subscribed) {
+        if (!terminal_scrollback_is_active(terminal) && terminal->mouse_click_subscribed) {
             /* Window coords, same reason as MOUSE_DOWN. */
             struct yetty_yfigure_hit_result hit_res = terminal_resolve_figure_hit(
                 terminal, event->mouse_scroll.x, event->mouse_scroll.y, 0);
