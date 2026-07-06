@@ -1671,7 +1671,12 @@ struct yetty_ycore_size_result yetty_ywire_wire_statemachine_read(
         }
 
         if (sm->state == SCAN_OSC_BODY || sm->state == SCAN_OSC_BODY_ESC) {
-            if (!sm->terminator_seen) {
+            /* Keep pumping after the terminator while the LZ4F decoder still
+             * holds decompressed tail bytes — reporting end-of-envelope with
+             * bytes stuck in the decompressor silently truncated the last
+             * record of every lz4 envelope whose final flush didn't coincide
+             * with a carry drain. */
+            if (!sm->terminator_seen || (sm->lz4_mode && !sm->lz4_drain_done)) {
                 struct yetty_ycore_void_result r = body_pump(sm, n);
                 YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "wire_sm: body_pump");
                 copied = out_carry_drain(sm, dst, n);
@@ -1679,7 +1684,8 @@ struct yetty_ycore_size_result yetty_ywire_wire_statemachine_read(
                     return YETTY_OK(yetty_ycore_size, copied);
                 }
             }
-            if (sm->terminator_seen && out_carry_avail(sm) == 0) {
+            if (sm->terminator_seen && out_carry_avail(sm) == 0 &&
+                (!sm->lz4_mode || sm->lz4_drain_done)) {
                 return YETTY_OK(yetty_ycore_size, 0);
             }
         } else if (sm->state == SCAN_RAW) {
@@ -1714,7 +1720,12 @@ int yetty_ywire_wire_statemachine_at_end(const struct yetty_ywire_wire_statemach
     if (!sm || !sm->dispatching) {
         return 0;
     }
-    return sm->terminator_seen;
+    /* An lz4 envelope is not over until the decompressor's tail has been
+     * drained into out_carry AND consumed — see the read() end condition. */
+    if (sm->lz4_mode && !sm->lz4_drain_done) {
+        return 0;
+    }
+    return sm->terminator_seen && out_carry_avail(sm) == 0;
 }
 
 int yetty_ywire_wire_statemachine_code(const struct yetty_ywire_wire_statemachine *sm)
