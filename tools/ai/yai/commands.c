@@ -3,6 +3,8 @@
  */
 #include "commands.h"
 
+#include "fzy/match.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -58,6 +60,8 @@ struct yetty_ycore_void_result yai_command_table_init(struct yai_command_table *
 {
     memset(table, 0, sizeof(*table));
     struct yetty_ycore_void_result res;
+    res = table_add(table, "help", "yai help: keys, local commands, engine setup", "", 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: help");
     res = table_add(table, "exit", "exit yai", "", 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: exit");
     res = table_add(table, "quit", "exit yai", "", 1);
@@ -67,6 +71,10 @@ struct yetty_ycore_void_result yai_command_table_init(struct yai_command_table *
     YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: shell");
     res = table_add(table, "config", "toggle the engine + yai configuration dialog", "", 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: config");
+    res = table_add(table, "model", "pick the model (queried from the engine)", "[name]", 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: model");
+    res = table_add(table, "agents", "list background agents (from the engine)", "", 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: agents");
     res = table_add(table, "usage", "show this session's token usage and cost", "", 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: usage");
     res = table_add(table, "title", "set this session's title (shown in the HUD)", "<title>", 1);
@@ -108,14 +116,53 @@ struct yetty_ycore_void_result yai_command_table_load(struct yai_command_table *
     return YETTY_OK_VOID();
 }
 
+/* Upper bound on `max` — the completion menu asks for a handful of rows. */
+#define YAI_COMMAND_MATCH_MAX 32
+
 size_t yai_command_table_match(const struct yai_command_table *table, const char *prefix,
                                size_t prefix_len, size_t *out_indices, size_t max)
 {
+    /* Fuzzy matching (vendored fzy): every command whose name contains the
+     * typed characters in order qualifies; the best-scored `max` fill
+     * out_indices best-first. An empty prefix matches everything with an
+     * equal score, so the table's name order shows through — same rows a
+     * plain prefix walk produced before. fzy wants a NUL-terminated
+     * needle; names are shorter than the name field, so a longer prefix
+     * cannot match anything. */
+    char needle[sizeof(((struct yai_command *)0)->name)];
+    if (prefix_len >= sizeof(needle)) {
+        return 0;
+    }
+    memcpy(needle, prefix, prefix_len);
+    needle[prefix_len] = '\0';
+    if (max > YAI_COMMAND_MATCH_MAX) {
+        max = YAI_COMMAND_MATCH_MAX;
+    }
+
+    score_t scores[YAI_COMMAND_MATCH_MAX];
     size_t found = 0;
-    for (size_t index = 0; index < table->count && found < max; index++) {
-        if (strncmp(table->items[index].name, prefix, prefix_len) == 0) {
-            out_indices[found++] = index;
+    for (size_t index = 0; index < table->count; index++) {
+        if (!has_match(needle, table->items[index].name)) {
+            continue;
         }
+        score_t score = match(needle, table->items[index].name);
+        /* Stable descending insertion: equal scores keep name order. */
+        size_t pos = found;
+        while (pos > 0 && scores[pos - 1] < score) {
+            pos--;
+        }
+        if (pos >= max) {
+            continue;
+        }
+        if (found < max) {
+            found++;
+        }
+        for (size_t shift = found - 1; shift > pos; shift--) {
+            scores[shift] = scores[shift - 1];
+            out_indices[shift] = out_indices[shift - 1];
+        }
+        scores[pos] = score;
+        out_indices[pos] = index;
     }
     return found;
 }

@@ -23,7 +23,9 @@ add_executable(yai
     event.c
     control.c
     proxy.c
+    shell.c
     picohttpparser/picohttpparser.c
+    fzy/match.c
     engine.c
     turn-engine.c
     claude.c
@@ -75,6 +77,7 @@ if(NOT MSVC)
         C_STANDARD_REQUIRED ON
     )
     target_compile_options(yai PRIVATE -Wall -Wextra)
-    # Vendored third-party parser: don't hold it to our warning flags.
+    # Vendored third-party code: don't hold it to our warning flags.
     set_source_files_properties(picohttpparser/picohttpparser.c PROPERTIES COMPILE_OPTIONS "-w")
+    set_source_files_properties(fzy/match.c PROPERTIES COMPILE_OPTIONS "-w")
 endif()

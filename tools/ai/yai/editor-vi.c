@@ -59,21 +59,21 @@ static size_t vi_last_char(const struct yai_app *app, size_t past_end)
 static int vi_csi(struct yai_app *app, char final_byte, int param)
 {
     switch (final_byte) {
-    case 'A':
-        return YAI_EDIT_NAV_PREV;
-    case 'B':
-        return YAI_EDIT_NAV_NEXT;
+    case 'A': /* up: previous line, or history at the top line */
+        return editor_cmd_line_up(app);
+    case 'B': /* down: next line, or history at the bottom line */
+        return editor_cmd_line_down(app);
     case 'C':
         app->stdin_cursor = editor_ops_next_char(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
     case 'D':
         app->stdin_cursor = editor_ops_prev_char(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
-    case 'H':
-        app->stdin_cursor = 0;
+    case 'H': /* home: start of the current line */
+        app->stdin_cursor = editor_ops_line_start(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
-    case 'F':
-        app->stdin_cursor = app->stdin_len;
+    case 'F': /* end: end of the current line */
+        app->stdin_cursor = editor_ops_line_end(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
     case '~':
         if (param == 3) {
@@ -92,9 +92,25 @@ static int vi_csi(struct yai_app *app, char final_byte, int param)
 static int vi_motion_span(struct yai_app *app, char op, char motion, size_t *from, size_t *to)
 {
     size_t cursor = app->stdin_cursor;
-    if (motion == op) { /* dd / cc: the whole line */
-        *from = 0;
-        *to = app->stdin_len;
+    if (motion == op) { /* dd / cc: the whole current line */
+        size_t line_start = editor_ops_line_start(app, cursor);
+        size_t line_end = editor_ops_line_end(app, cursor);
+        if (op == 'c') {
+            /* cc clears the line's text but keeps it as a line (newline stays). */
+            *from = line_start;
+            *to = line_end;
+        } else if (line_end < app->stdin_len) {
+            /* dd removes the line and its trailing newline (joins the next up). */
+            *from = line_start;
+            *to = line_end + 1;
+        } else if (line_start > 0) {
+            /* Last line: take the preceding newline so no blank line is left. */
+            *from = line_start - 1;
+            *to = line_end;
+        } else {
+            *from = line_start; /* the only line */
+            *to = line_end;
+        }
         return 1;
     }
     switch (motion) {
@@ -112,11 +128,14 @@ static int vi_motion_span(struct yai_app *app, char op, char motion, size_t *fro
         return 1;
     case '$':
         *from = cursor;
-        *to = app->stdin_len;
+        *to = editor_ops_line_end(app, cursor);
         return 1;
     case '0':
+        *from = editor_ops_line_start(app, cursor);
+        *to = cursor;
+        return 1;
     case '^':
-        *from = 0;
+        *from = editor_ops_line_first_nonblank(app, cursor);
         *to = cursor;
         return 1;
     case 'l':
@@ -170,13 +189,22 @@ static int vi_normal_cmd(struct yai_app *app, struct yetty_yai_vi *vi, char byte
     case ' ':
         app->stdin_cursor = editor_ops_next_char(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
-    case '0':
-    case '^':
-        app->stdin_cursor = 0;
+    case 'k': /* up: previous line, or history at the top line */
+        return editor_cmd_line_up(app);
+    case 'j': /* down: next line, or history at the bottom line */
+        return editor_cmd_line_down(app);
+    case '0': /* first column of the current line */
+        app->stdin_cursor = editor_ops_line_start(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
-    case '$':
-        app->stdin_cursor = vi_last_char(app, app->stdin_len);
+    case '^': /* first non-blank of the current line */
+        app->stdin_cursor = editor_ops_line_first_nonblank(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
+    case '$': { /* last char of the current line */
+        size_t line_start = editor_ops_line_start(app, app->stdin_cursor);
+        size_t line_end = editor_ops_line_end(app, app->stdin_cursor);
+        app->stdin_cursor = line_end > line_start ? vi_last_char(app, line_end) : line_start;
+        return YAI_EDIT_MOVED;
+    }
     case 'w':
         app->stdin_cursor = editor_ops_word_forward(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
@@ -199,18 +227,20 @@ static int vi_normal_cmd(struct yai_app *app, struct yetty_yai_vi *vi, char byte
         vi->normal = 0;
         app->stdin_cursor = editor_ops_next_char(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
-    case 'A':
+    case 'A': /* append at end of the current line */
         vi->normal = 0;
-        app->stdin_cursor = app->stdin_len;
+        app->stdin_cursor = editor_ops_line_end(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
-    case 'I':
+    case 'I': /* insert before the first non-blank of the current line */
         vi->normal = 0;
-        app->stdin_cursor = 0;
+        app->stdin_cursor = editor_ops_line_first_nonblank(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
-    case 'D':
-        return editor_cmd_kill(app, app->stdin_cursor, app->stdin_len);
-    case 'C': {
-        int action = editor_cmd_kill(app, app->stdin_cursor, app->stdin_len);
+    case 'D': /* kill to end of the current line */
+        return editor_cmd_kill(app, app->stdin_cursor,
+                               editor_ops_line_end(app, app->stdin_cursor));
+    case 'C': { /* change to end of the current line */
+        int action =
+            editor_cmd_kill(app, app->stdin_cursor, editor_ops_line_end(app, app->stdin_cursor));
         vi->normal = 0;
         return action == YAI_EDIT_NONE ? YAI_EDIT_MOVED : action;
     }
@@ -237,7 +267,7 @@ static int vi_normal_cmd(struct yai_app *app, struct yetty_yai_vi *vi, char byte
     }
     case '\r':
     case '\n':
-        return YAI_EDIT_SUBMIT;
+        return editor_cmd_enter(app, /*modified=*/0);
     case 0x03: /* Ctrl-C */
         return YAI_EDIT_INTERRUPT;
     case 0x04: /* Ctrl-D */
@@ -253,7 +283,7 @@ static int vi_insert(struct yai_app *app, struct yetty_yai_vi *vi, char byte)
     switch ((unsigned char)byte) {
     case '\r':
     case '\n':
-        return YAI_EDIT_SUBMIT;
+        return editor_cmd_enter(app, /*modified=*/0);
     case '\t':
         return YAI_EDIT_COMPLETE;
     case 0x7F:
@@ -309,9 +339,15 @@ static struct yetty_ycore_int_result vi_feed_byte(struct yetty_yclass_object *ob
         action = vi_csi(app, final_byte, param);
         break;
     case YAI_CSI_META:
-        /* lone ESC then a byte: already in normal mode — run it there. */
+        /* lone ESC then a byte: already in normal mode — run it there.
+         * ESC-then-Enter and Alt+Enter are the same bytes, so a Meta Enter
+         * is treated as the modified Enter (the opposite of a plain Enter). */
         vi->normal = 1;
-        action = vi_normal_cmd(app, vi, final_byte);
+        if (final_byte == '\r' || final_byte == '\n') {
+            action = editor_cmd_enter(app, /*modified=*/1);
+        } else {
+            action = vi_normal_cmd(app, vi, final_byte);
+        }
         break;
     default: /* YAI_CSI_PLAIN */
         if (vi->normal) {

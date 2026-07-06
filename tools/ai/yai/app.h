@@ -127,7 +127,8 @@ struct yai_engine_config {
     char model[128]; /* "" = the engine CLI's own default */
     char effort[16]; /* claude: auto..max; codex: default..high; gemini: unused */
     /* claude */
-    char permission_mode[24]; /* default | acceptEdits | plan | auto */
+    char permission_mode[24]; /* manual | acceptEdits | plan | auto | dontAsk | bypass
+                               * (legacy "default"/"bypassPermissions" still translate) */
     char allowed_preset[16];  /* curated | readonly | edit | full */
     char allowed_tools[1024]; /* explicit allowlist; "" = derive from preset */
     /* codex */
@@ -155,12 +156,14 @@ struct yai_config {
      * app->engine_name, which --engine overrides without touching this field
      * (a CLI override is a per-invocation choice, not a config change). */
     char engine[16];
-    char edit_mode[8]; /* "emacs" | "vi" */
-    int fold_lines;    /* folded-output line budget */
-    int show_thinking; /* 1 = show the model's thinking blocks */
-    int hud_on;        /* 1 = ygui HUD window; 0 = stats as plain text */
-    int hud_float;     /* 1 = float the HUD instead of docking */
-    char hud_mode[8];  /* "yetty" = ygui HUD; "text" = plain text bar */
+    char edit_mode[8];   /* "emacs" | "vi" */
+    char submit_key[12]; /* "enter" = Enter submits, Alt+Enter newline;
+                          * "alt-enter" = Enter newline, Alt+Enter submits */
+    int fold_lines;      /* folded-output line budget */
+    int show_thinking;   /* 1 = show the model's thinking blocks */
+    int hud_on;          /* 1 = ygui HUD window; 0 = stats as plain text */
+    int hud_float;       /* 1 = float the HUD instead of docking */
+    char hud_mode[8];    /* "yetty" = ygui HUD; "text" = plain text bar */
     /* Markdown rendering backend for completed assistant answers, the sibling
      * of hud_mode: "yetty" = render through yetty's SDF/MSDF markdown facility
      * (a ycat figure envelope); "text" = plain styled text. "yetty" only takes
@@ -177,6 +180,56 @@ struct yai_config {
     struct yai_engine_config claude;
     struct yai_engine_config codex;
     struct yai_engine_config gemini;
+};
+
+/* One engine JSONL line deferred while the interop shell owns the
+ * screen (see shell_focus); replayed at focus return. */
+struct yai_deferred_line {
+    char *bytes; /* malloc'd, len bytes */
+    size_t len;
+};
+
+/* Upper bound on the models the /model picker lists for one engine. */
+#define YAI_MODEL_CHOICES_MAX 16
+
+/* Upper bound on the agents the /agents picker lists. */
+#define YAI_AGENTS_MAX 32
+
+/* One background/interactive agent from `claude agents --json` (the
+ * /agents picker). Background agents carry a name + state; interactive
+ * ones only a session — name falls back to the short id, state to "". */
+struct yai_agent_entry {
+    char session_id[64];
+    char name[96];
+    char state[16]; /* "blocked" / "running" / … ; "" for interactive */
+    char kind[16];  /* "background" | "interactive" */
+    char cwd[256];
+};
+
+/* One model offered by the /model picker. For claude these are parsed
+ * from the CLI's initialize response (so the list is never hardcoded and
+ * always current); other engines use a small built-in list. `value` is
+ * the token passed to --model / set_model — "" means the CLI's own
+ * default. */
+struct yai_model_choice {
+    char value[96];
+    char display_name[48];
+    char description[128];
+};
+
+/* One decomposed account quota: the 5-hour ("session") and 7-day ("week")
+ * utilization windows and their reset epochs (UTC seconds; 0 when unknown).
+ * Percentages are 0..100, or -1 when that window's utilization has not been
+ * reported (the engine-fed source may learn resets before percentages).
+ * `valid` is 0 until any source produced data. Sources: claude's
+ * rate_limit_event stream events, the usage proxy's ratelimit headers,
+ * codex's rollout file. */
+struct yai_quota {
+    int valid;
+    int session_pct;         /* 5h utilization, 0..100; -1 = unknown */
+    int week_pct;            /* 7d utilization, 0..100; -1 = unknown */
+    long long session_reset; /* epoch seconds; 0 = unknown */
+    long long week_reset;    /* epoch seconds; 0 = unknown */
 };
 
 /* The last completed turn's raw usage, kept so the HUD format variables
@@ -204,6 +257,41 @@ struct yai_app {
     uv_signal_t sighup_handle;
     uv_timer_t kill_timer;
 
+    /* Persistent interop shell (the "!" focus switch): one interactive
+     * $SHELL (zsh/bash) on a PTY, spawned lazily, living for the whole
+     * session. While shell_focus is set every keyboard byte is forwarded
+     * to the master and the shell's output is relayed to the screen;
+     * focus returns to yai at the injected precmd marker. See shell.c. */
+    uv_poll_t shell_poll;
+    uv_signal_t sigchld_handle; /* reaps ONLY the interop shell child */
+    int shell_poll_initialized;
+    int shell_master_fd; /* -1 when the shell is down */
+    pid_t shell_pid;     /* 0 when the shell is down */
+    int shell_focus;     /* 1 = the keyboard belongs to the shell */
+    /* Per-shell-session random token embedded in the OSC-7771 hook
+     * markers, so ordinary command output (or a program echoing the bare
+     * sequence) cannot forge a precmd/preexec marker and yank focus back.
+     * Regenerated on every spawn. */
+    char shell_marker_nonce[24];
+    /* The spawn-time first prompt arms the marker machinery instead of
+     * ending focus (the user may already be typing into the fresh
+     * shell). */
+    int shell_saw_first_prompt;
+    /* OSC-7771 marker filter state — sequences can split across reads. */
+    int shell_filter_state;
+    char shell_filter_hold[64];
+    size_t shell_filter_hold_len;
+    /* Shell output that arrived while yai owned the screen (prompt
+     * paints, background jobs) — replayed on the next "!". */
+    char *shell_pending;
+    size_t shell_pending_len;
+    size_t shell_pending_cap;
+    /* Engine JSONL lines deferred while the shell owns the screen —
+     * replayed through yai_handle_child_line when focus returns. */
+    struct yai_deferred_line *deferred_lines;
+    size_t deferred_count;
+    size_t deferred_cap;
+
     struct yai_hud *hud;
     struct yai_renderer renderer;
     struct yai_session_usage usage;
@@ -218,6 +306,11 @@ struct yai_app {
      * usage. The rest come straight from usage / config / engine_name. */
     char state_text[64];
     char quota_text[96];
+    /* Live quota fed by the engine's own protocol — claude's
+     * rate_limit_event stream events land here. yai_quota_get prefers the
+     * proxy's richer header capture when it has data and falls back to
+     * this, so the HUD quota works without --usage-proxy. */
+    struct yai_quota engine_quota;
     struct yai_turn_usage last_turn;
     /* User-set session title (/title <text>); the #{title} variable. In-memory
      * for this session only — not persisted to the config. */
@@ -324,6 +417,14 @@ struct yai_app {
     char stdin_buf[8192];
     size_t stdin_len;
     size_t stdin_cursor; /* byte offset of the editing cursor */
+    /* Vertical (up/down line) motion goal column, in codepoints. A run of
+     * consecutive up/down keystrokes keeps the column the cursor started from
+     * even across short lines — vi `j`/`k`, emacs C-n/C-p. `edit_vmotion_cursor`
+     * is the cursor byte offset the last vertical move left behind; when the
+     * cursor still sits there the next up/down is a continuation (keep the goal),
+     * otherwise the goal is recomputed. (size_t)-1 = no run in progress. */
+    size_t edit_goal_column;
+    size_t edit_vmotion_cursor;
     /* Kill ring / vi register: one slot, shared by emacs yank and vi
      * delete-into-register. */
     char kill_buf[8192];
@@ -357,6 +458,11 @@ struct yai_app {
      * switching mode recreates this as the other class. */
     struct yetty_yclass_object *editor;
     const char *editor_mode_name; /* "emacs" / "vi", for /config */
+    int enter_submits;            /* resolved submit-key: 1 = plain Enter submits
+                                   * (Alt+Enter inserts a newline); 0 = the reverse */
+    int in_paste;                 /* processing a multi-line paste burst: Enter
+                                   * inserts a newline instead of submitting, so a
+                                   * paste becomes one message, not one per line */
 
     /* input history (submitted lines, newest last; up/down browses) */
     char *history[YAI_HISTORY_MAX];
@@ -402,6 +508,29 @@ struct yai_app {
     int config_tui_selected;
     int config_tui_escape; /* arrow-key decode: 0 none, 1 ESC, 2 ESC[ */
     int config_tui_initial[YAI_HUD_CONFIG_MAX_KNOBS];
+
+    /* Models the claude CLI advertised in its initialize response
+     * (value/displayName/description). count 0 = not queried yet (or a
+     * non-claude engine); the picker/knob fall back to a built-in list. */
+    struct yai_model_choice claude_models[YAI_MODEL_CHOICES_MAX];
+    int claude_model_count;
+
+    /* /model picker: a focused alt-screen list modal (its own keyboard
+     * owner while active, like the config TUI). choices are snapshotted
+     * from the active engine when it opens. */
+    int model_picker_active;
+    int model_picker_selected;
+    int model_picker_escape; /* arrow-key decode: 0 none, 1 ESC, 2 ESC[ */
+    struct yai_model_choice model_picker_choices[YAI_MODEL_CHOICES_MAX];
+    int model_picker_count;
+
+    /* /agents picker: background/interactive agents queried from the CLI
+     * (`claude agents --json`). Same focused alt-screen modal as /model. */
+    int agents_picker_active;
+    int agents_picker_selected;
+    int agents_picker_escape; /* arrow-key decode: 0 none, 1 ESC, 2 ESC[ */
+    struct yai_agent_entry agents[YAI_AGENTS_MAX];
+    int agents_count;
 
     /* Slash commands: locals + the CLI's list from `initialize`. */
     struct yai_command_table commands;
@@ -494,6 +623,24 @@ void yai_control_stop(struct yai_app *app);
 int yai_control_client_main(const char *host, int port, const char *method, const char *const *args,
                             int arg_count);
 
+/* Persistent interop shell (shell.c): "!" hands the keyboard to one
+ * interactive $SHELL (zsh/bash only — others are refused with a warning)
+ * on a PTY until the invoked command finishes. focus_begin spawns on
+ * demand, replays buffered output and sets shell_focus (left 0 on
+ * refusal); forward ships raw keyboard bytes to the master; resize
+ * mirrors the terminal size onto the PTY; sigchld_start arms the reaper
+ * (returns -1 on failure); stop tears the child down. focus_end — the
+ * return path (marker, Ctrl-], shell death) — lives in main.c: it
+ * restores the prompt and replays the deferred engine lines; `note`
+ * (may be NULL) is printed dim first. */
+struct yetty_ycore_void_result yai_shell_focus_begin(struct yai_app *app);
+struct yetty_ycore_void_result yai_shell_forward(struct yai_app *app, const char *bytes,
+                                                 size_t len);
+struct yetty_ycore_void_result yai_shell_focus_end(struct yai_app *app, const char *note);
+void yai_shell_resize(struct yai_app *app);
+int yai_shell_sigchld_start(struct yai_app *app);
+void yai_shell_stop(struct yai_app *app);
+
 /* Usage proxy (proxy.c): a builtin localhost HTTP→HTTPS forwarder on an
  * ephemeral port. start() points the spawned child's ANTHROPIC_BASE_URL at
  * it, replays the child's API traffic to the real upstream, and captures the
@@ -511,18 +658,6 @@ void yai_usage_proxy_status(struct yai_app *app, char *out, size_t out_size);
  * (empty until the first API call is captured). */
 void yai_usage_proxy_summary(struct yai_app *app, char *out, size_t out_size);
 
-/* The captured account quota, decomposed: the 5-hour ("session") and 7-day
- * ("week") utilization windows and their reset epochs (UTC seconds; 0 when the
- * header was absent). `valid` is 0 until the proxy captures the first
- * ratelimit headers. */
-struct yai_quota {
-    int valid;
-    int session_pct;         /* 5h utilization, 0..100 */
-    int week_pct;            /* 7d utilization, 0..100 */
-    long long session_reset; /* epoch seconds; 0 = unknown */
-    long long week_reset;    /* epoch seconds; 0 = unknown */
-};
-
 /* Copy the latest decomposed quota into `out` (out->valid = 0 when none yet,
  * or when there is no proxy — codex / gemini). */
 void yai_usage_proxy_quota(struct yai_app *app, struct yai_quota *out);
@@ -532,8 +667,9 @@ void yai_usage_proxy_quota(struct yai_app *app, struct yai_quota *out);
  * success, 0 if no session/rollout/rate-limits yet. See codex-quota.c. */
 int yai_codex_quota_read(const struct yai_app *app, struct yai_quota *out);
 
-/* The active engine's quota, dispatched by source: codex reads its rollout file,
- * everyone else reads the proxy. `out->valid` is 0 when none is available. */
+/* The active engine's quota, dispatched by source: codex reads its rollout
+ * file; everyone else reads the proxy when it has data, else the engine-fed
+ * app->engine_quota. `out->valid` is 0 when none is available. */
 void yai_quota_get(struct yai_app *app, struct yai_quota *out);
 
 /* The active engine's compact one-line quota summary for #{quota} (e.g.

@@ -2,8 +2,8 @@
  * commands.h — yai's slash-command table.
  *
  * Two sources merge into one table:
- *   - yai's own LOCAL commands (/exit, /quit, /shell, /config)
- *     dispatched by the line editor itself;
+ *   - yai's own LOCAL commands (/help, /exit, /quit, /shell, /config,
+ *     /usage, /title) dispatched by the line editor itself;
  *   - the CLI's commands, loaded at startup from the `initialize`
  *     control_response (name + description + argumentHint — the same
  *     list the interactive UI completes from). Non-local commands are
@@ -42,8 +42,9 @@ void yai_command_table_destroy(struct yai_command_table *table);
 struct yetty_ycore_void_result yai_command_table_load(struct yai_command_table *table,
                                                       yyjson_val *commands_array);
 
-/* Fill `out_indices` with up to `max` table indices whose name starts
- * with prefix[0..prefix_len). Returns the number filled. */
+/* Fill `out_indices` with up to `max` table indices fuzzy-matching
+ * prefix[0..prefix_len) (fzy scoring, best first; an empty prefix matches
+ * everything in name order). Returns the number filled. */
 size_t yai_command_table_match(const struct yai_command_table *table, const char *prefix,
                                size_t prefix_len, size_t *out_indices, size_t max);
 
