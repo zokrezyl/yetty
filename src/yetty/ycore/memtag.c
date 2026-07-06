@@ -33,6 +33,16 @@ static size_t memtag_usable_size(void *ptr)
 }
 #endif
 
+/* Fault injection (tests): non-zero fail_after counts down; the allocation
+ * that reaches zero fails. */
+static int memtag_should_fail(struct yetty_ycore_memtag *tag)
+{
+    if (!tag || atomic_load(&tag->fail_after) <= 0) {
+        return 0;
+    }
+    return atomic_fetch_sub(&tag->fail_after, 1) == 1;
+}
+
 static void memtag_account_alloc(struct yetty_ycore_memtag *tag, void *ptr)
 {
     if (!tag || !ptr) {
@@ -58,6 +68,9 @@ static void memtag_account_free(struct yetty_ycore_memtag *tag, void *ptr)
 
 void *yetty_ycore_memtag_alloc(struct yetty_ycore_memtag *tag, size_t size)
 {
+    if (memtag_should_fail(tag)) {
+        return NULL;
+    }
     void *ptr = malloc(size);
     memtag_account_alloc(tag, ptr);
     return ptr;
@@ -66,6 +79,9 @@ void *yetty_ycore_memtag_alloc(struct yetty_ycore_memtag *tag, size_t size)
 void *yetty_ycore_memtag_calloc(struct yetty_ycore_memtag *tag, size_t member_count,
                                 size_t member_size)
 {
+    if (memtag_should_fail(tag)) {
+        return NULL;
+    }
     void *ptr = calloc(member_count, member_size);
     memtag_account_alloc(tag, ptr);
     return ptr;
@@ -73,6 +89,9 @@ void *yetty_ycore_memtag_calloc(struct yetty_ycore_memtag *tag, size_t member_co
 
 void *yetty_ycore_memtag_realloc(struct yetty_ycore_memtag *tag, void *ptr, size_t size)
 {
+    if (memtag_should_fail(tag)) {
+        return NULL;
+    }
     memtag_account_free(tag, ptr);
     void *grown = realloc(ptr, size);
     if (!grown && size) {

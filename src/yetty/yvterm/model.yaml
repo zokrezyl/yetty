@@ -270,14 +270,6 @@ classes:
         type: "void *"
         get: false
         set: false
-      - name: view_top_active
-        type: int
-        get: false
-        set: false
-      - name: view_top_total_idx
-        type: uint32_t
-        get: false
-        set: false
       - name: view_dirty
         type: int
         get: false
@@ -579,7 +571,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_scroll_origin
-    return_type: struct yetty_ycore_uint32_result
+    return_type: struct yetty_ycore_uint64_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -820,20 +812,27 @@ exposed:
  * range. The returned span aliases the line's arena — read it, do not retain it. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_live_anchor
-    return_type: struct yetty_ycore_uint32_result
+    return_type: struct yetty_ycore_uint64_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: "/* Timeline index of the live screen top (rows above it are history). */"
   - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_history_floor
-    return_type: struct yetty_ycore_uint32_result
+    name: grid_history_floor_value
+    return_type: uint64_t
     args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
+      - name: grid
+        type: "struct yetty_yvterm_grid *"
     doc: "/* Timeline index of the oldest line still reachable across all tiers — the
  * scrollback floor. With the cold tier unbounded this stays 0 for the whole
  * session (\"effectively infinite\" scrollback). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_history_floor
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_set_view
     return_type: struct yetty_ycore_void_result
@@ -843,10 +842,47 @@ exposed:
       - name: active
         type: int
       - name: view_top_line
-        type: uint32_t
+        type: uint64_t
     doc: "/* Enter/leave the scrolled-back view. `view_top_line` is the TIMELINE index
  * of the line to show at the window's top row (see grid_live_anchor /
  * grid_history_floor for the valid range). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_active
+        type: "int *"
+      - name: out_view_top
+        type: "uint64_t *"
+    doc: "/* Current scrollback view state — the grid is the ONE owner; the terminal's
+ * wheel driver reads this fresh on every event instead of holding its own
+ * copy (which could reactivate a stale position after a resize or after
+ * eviction moved the floor past it). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_seed_timeline
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: base
+        type: uint64_t
+    doc: "/* Test/diagnostic seam: pre-age the timeline so 32-bit-wrap behavior is
+ * testable without feeding four billion lines. Only meaningful on a fresh
+ * grid (nothing archived or scrolled yet); the seeded range [base, base)
+ * resolves as dropped history. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_inject_ring_alloc_failure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: nth_allocation
+        type: uint32_t
+    doc: "/* Test/diagnostic seam: make the Nth upcoming ring allocation fail, so the
+ * transactional-resize rollback (and any other alloc-failure branch) is
+ * actually exercisable. 0 disables. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_view_window
     return_type: struct yetty_ycore_const_uint32_ptr_result
@@ -1103,7 +1139,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_scroll_origin
-    return_type: struct yetty_ycore_uint32_result
+    return_type: struct yetty_ycore_uint64_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1216,7 +1252,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_get_live_anchor
-    return_type: struct yetty_ycore_uint32_result
+    return_type: struct yetty_ycore_uint64_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1224,7 +1260,7 @@ exposed:
  * so far. A wheel-up anchors one line below this and walks toward the floor. */"
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_get_scrollback_floor
-    return_type: struct yetty_ycore_uint32_result
+    return_type: struct yetty_ycore_uint64_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1240,8 +1276,21 @@ exposed:
       - name: active
         type: int
       - name: view_top_total_idx
-        type: uint32_t
+        type: uint64_t
     doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_get_view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_active
+        type: "int *"
+      - name: out_view_top
+        type: "uint64_t *"
+    doc: "/* Current scrollback view state, read from the grid (the single owner). The
+ * terminal's wheel driver derives every transition from this instead of
+ * holding its own copy. */"
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_set_visual_zoom
     return_type: struct yetty_ycore_void_result
@@ -1480,6 +1529,8 @@ types:
         type: _Atomic(int64_t)
       - name: total_allocs
         type: _Atomic(int64_t)
+      - name: fail_after
+        type: _Atomic(int64_t)
   - name: yetty_ycore_pixel_size
     kind: struct
     fields:
@@ -1497,6 +1548,18 @@ types:
         fields:
           - name: value
             type: uint32_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_uint64_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: uint64_t
           - name: error
             type: struct yetty_ycore_error
   - name: yetty_ycore_void_result
@@ -1578,7 +1641,7 @@ types:
       - name: base
         type: uint32_t
       - name: total_scrolled
-        type: uint32_t
+        type: uint64_t
   - name: yetty_yvterm_text_cell_const_ptr_result
     kind: result
     fields:

@@ -74,12 +74,9 @@ void yetty_yvterm_tiers_init(struct yetty_yvterm_tiers *tiers)
     memset(tiers, 0, sizeof(*tiers));
 }
 
-static void tier_cache_entry_release(struct yetty_yvterm_tiers *tiers,
-                                     struct yetty_yvterm_tier_cache_entry *entry)
+static void tier_cache_entry_free_lines(struct yetty_yvterm_tiers *tiers,
+                                        struct yetty_yvterm_tier_cache_entry *entry)
 {
-    if (!entry->valid) {
-        return;
-    }
     for (uint32_t index = 0; index < entry->line_count; ++index) {
         yetty_yvterm_line_release_rich(&entry->lines[index]);
         yetty_ycore_memtag_free(tiers->memtag, entry->lines[index].text_cells);
@@ -88,12 +85,48 @@ static void tier_cache_entry_release(struct yetty_yvterm_tiers *tiers,
     entry->lines = NULL;
     entry->line_count = 0;
     entry->valid = 0;
+    entry->zombie = 0;
+}
+
+static void tier_cache_entry_release(struct yetty_yvterm_tiers *tiers,
+                                     struct yetty_yvterm_tier_cache_entry *entry)
+{
+    if (!entry->valid) {
+        return;
+    }
+    if (entry->pin_stamp && entry->pin_stamp == tiers->live_pin_stamp) {
+        /* The live window resolved lines out of this entry — freeing them now
+         * would leave the renderer's window_lines dangling (the scroll-back-
+         * while-streaming crash). Hide the entry from lookups and defer the
+         * free to the next window resolution. */
+        entry->valid = 0;
+        entry->zombie = 1;
+        return;
+    }
+    tier_cache_entry_free_lines(tiers, entry);
+}
+
+/* Free zombies from earlier window generations (grid calls this right after
+ * advancing the generation, so nothing pinned-live is ever touched). */
+void yetty_yvterm_tiers_release_zombies(struct yetty_yvterm_tiers *tiers)
+{
+    for (uint32_t index = 0; index < YETTY_YVTERM_TIER_CACHE_ENTRIES; ++index) {
+        struct yetty_yvterm_tier_cache_entry *entry = &tiers->cache[index];
+        if (entry->zombie && entry->pin_stamp != tiers->live_pin_stamp) {
+            tier_cache_entry_free_lines(tiers, entry);
+        }
+    }
 }
 
 void yetty_yvterm_tiers_destroy(struct yetty_yvterm_tiers *tiers)
 {
+    tiers->live_pin_stamp = 0; /* nothing is live at teardown */
     for (uint32_t index = 0; index < YETTY_YVTERM_TIER_CACHE_ENTRIES; ++index) {
-        tier_cache_entry_release(tiers, &tiers->cache[index]);
+        if (tiers->cache[index].zombie) {
+            tier_cache_entry_free_lines(tiers, &tiers->cache[index]);
+        } else {
+            tier_cache_entry_release(tiers, &tiers->cache[index]);
+        }
     }
     for (uint32_t index = tiers->segment_head; index < tiers->segment_count; ++index) {
         yetty_ycore_memtag_free(tiers->memtag, tiers->segments[index].bytes);
@@ -622,18 +655,35 @@ static struct yetty_ycore_void_result tier_cache_inflate(
     struct yetty_yvterm_tiers *tiers, struct yetty_yvterm_tier_segment *segment, uint32_t cols,
     uint32_t blank_fg, uint32_t blank_bg, struct yetty_yvterm_tier_cache_entry **out_entry)
 {
-    struct yetty_yvterm_tier_cache_entry *victim = &tiers->cache[0];
+    struct yetty_yvterm_tier_cache_entry *victim = NULL;
     for (uint32_t index = 0; index < YETTY_YVTERM_TIER_CACHE_ENTRIES; ++index) {
         struct yetty_yvterm_tier_cache_entry *entry = &tiers->cache[index];
+        if (entry->zombie) {
+            continue; /* still owed to a previous window's pointers */
+        }
         if (!entry->valid) {
             victim = entry;
             break;
         }
-        if (entry->last_used_tick < victim->last_used_tick) {
+        if (entry->pin_stamp && entry->pin_stamp == tiers->live_pin_stamp) {
+            continue; /* pinned by the window being resolved right now */
+        }
+        if (!victim || entry->last_used_tick < victim->last_used_tick) {
             victim = entry;
         }
     }
+    if (!victim) {
+        /* Every slot is pinned or zombie — do not pull lines out from under
+         * the live window; the caller renders this row blank instead. */
+        *out_entry = NULL;
+        return YETTY_OK_VOID();
+    }
     tier_cache_entry_release(tiers, victim);
+    if (victim->zombie) {
+        /* Release deferred it (pinned) — cannot re-use this slot either. */
+        *out_entry = NULL;
+        return YETTY_OK_VOID();
+    }
 
     uint8_t *raw = NULL;
     struct yetty_ycore_void_result raw_res = tier_segment_raw(tiers, segment, &raw);
@@ -679,6 +729,8 @@ static struct yetty_ycore_void_result tier_cache_inflate(
     free(raw);
 
     victim->valid = 1;
+    victim->zombie = 0;
+    victim->pin_stamp = tiers->live_pin_stamp;
     victim->first_line = segment->first_line;
     victim->line_count = segment->line_count;
     victim->lines = lines;
@@ -699,6 +751,7 @@ static struct yetty_ycore_void_result tier_cache_lookup(
         if (entry->valid && timeline_idx >= entry->first_line &&
             timeline_idx < entry->first_line + entry->line_count) {
             entry->last_used_tick = ++tiers->cache_tick;
+            entry->pin_stamp = tiers->live_pin_stamp;
             *out_entry = entry;
             return YETTY_OK_VOID();
         }

@@ -29,6 +29,10 @@ struct yetty_ycore_memtag {
     _Atomic int64_t live_bytes;
     _Atomic int64_t peak_bytes;
     _Atomic int64_t total_allocs;
+    /* Fault injection for tests: when > 0, each allocation through this tag
+     * decrements it and the allocation that reaches 0 FAILS (returns NULL).
+     * 0 = disabled (the default; a single relaxed load on the hot path). */
+    _Atomic int64_t fail_after;
 };
 
 void *yetty_ycore_memtag_alloc(struct yetty_ycore_memtag *tag, size_t size);

@@ -178,8 +178,8 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("include@yetty/ytermi
     void *mouse_sub_userdata;
 
     /* Scrollback view (not yet backed by a scrollback ring — see methods). */
-    int view_top_active;
-    uint32_t view_top_total_idx;
+    /* Scrollback view state lives on the GRID (single owner); the renderer
+     * queries it per frame. Only the repaint marker stays here. */
 
     /* Renderer-local dirty bit: set when view/zoom state changes (which the grid
      * model knows nothing about) so yetty_yvterm_vterm_is_dirty() still reports a
@@ -1062,11 +1062,16 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
      * the adjacent segment. `back` (how deep the view sits behind the live
      * top) caps the look-ahead exactly as before. */
     uint32_t back = 0;
-    if (vterm->view_top_active) {
-        struct yetty_ycore_uint32_result live_anchor_res = yetty_yvterm_grid_live_anchor(grid);
+    int view_active = 0;
+    uint64_t view_top = 0;
+    struct yetty_ycore_void_result view_res = yetty_yvterm_grid_view(grid, &view_active, &view_top);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, view_res, "vterm_render: grid view");
+    if (view_active) {
+        struct yetty_ycore_uint64_result live_anchor_res = yetty_yvterm_grid_live_anchor(grid);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, live_anchor_res, "vterm_render: live anchor");
-        if (vterm->view_top_total_idx < live_anchor_res.value) {
-            back = live_anchor_res.value - vterm->view_top_total_idx;
+        if (view_top < live_anchor_res.value) {
+            uint64_t distance = live_anchor_res.value - view_top;
+            back = distance > UINT32_MAX ? UINT32_MAX : (uint32_t)distance;
         }
     }
     int comp_lookahead = (int)(back < (uint32_t)YVTERM_COMPOSITE_ANCHOR_LOOKAHEAD_ROWS
@@ -1122,7 +1127,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     vterm->uniforms.cursor_row = cursor_row;
     /* Hide the cursor while scrolled back — it belongs to the live bottom, not
      * the historical rows on screen. */
-    vterm->uniforms.cursor_visible = vterm->view_top_active ? 0u : cursor_visible;
+    vterm->uniforms.cursor_visible = view_active ? 0u : cursor_visible;
     /* Selection highlight: normalise (anchor, head) to reading order so the
      * shader's start<=end stream test is simple. */
     int sel_active = 0;
@@ -1137,7 +1142,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
         sh_row = tr;
         sh_col = tc;
     }
-    vterm->uniforms.sel_active = (sel_active && !vterm->view_top_active) ? 1u : 0u;
+    vterm->uniforms.sel_active = (sel_active && !view_active) ? 1u : 0u;
     vterm->uniforms.sel_start_row = sa_row;
     vterm->uniforms.sel_start_col = sa_col;
     vterm->uniforms.sel_end_row = sh_row;
@@ -1635,8 +1640,8 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_obj
     YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_res, "yvterm vterm_resize: grid_resize");
     /* Reflow re-bases the grid's absolute row numbering, so any scrolled-back
      * view anchored on the old numbering is stale — snap back to the live tail. */
-    vterm->view_top_active = 0;
-    vterm->view_top_total_idx = 0;
+    /* The grid (single view owner) already ended any scrolled-back view
+     * inside its resize — nothing to reset here. */
     vterm->grid_size = grid_size;
     vterm->cell_size = cell_size;
     if (vterm->baseline_cell_height <= 0.0f) {
@@ -1772,10 +1777,10 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_word_bounds(struct yetty_yclas
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_uint32_result yetty_yvterm_vterm_scroll_origin(struct yetty_yclass_object *obj)
+struct yetty_ycore_uint64_result yetty_yvterm_vterm_scroll_origin(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm vterm_scroll_origin: from_obj");
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, vterm_res, "yvterm vterm_scroll_origin: from_obj");
     return yetty_yvterm_grid_scroll_origin(vterm_res.value->grid_obj);
 }
 
@@ -1884,13 +1889,13 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_get_selection_text(
 /* Timeline index of the line at the live screen top: everything scrolled off
  * so far. A wheel-up anchors one line below this and walks toward the floor. */
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_live_anchor(struct yetty_yclass_object *obj)
+struct yetty_ycore_uint64_result yetty_yvterm_vterm_get_live_anchor(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm vterm_get_live_anchor: from_obj");
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, vterm_res, "yvterm vterm_get_live_anchor: from_obj");
     struct yetty_yvterm_vterm *vterm = vterm_res.value;
     if (!vterm->grid_obj) {
-        return YETTY_OK(yetty_ycore_uint32, 0u);
+        return YETTY_OK(yetty_ycore_uint64, 0u);
     }
     return yetty_yvterm_grid_live_anchor(vterm->grid_obj);
 }
@@ -1899,15 +1904,15 @@ struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_live_anchor(struct yetty
  * → warm lz4 segments → cold spill file). A wheel-up clamps here. With the
  * cold tier unbounded this is 0 for the whole session. */
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_scrollback_floor(
+struct yetty_ycore_uint64_result yetty_yvterm_vterm_get_scrollback_floor(
     struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res,
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, vterm_res,
                         "yvterm vterm_get_scrollback_floor: from_obj");
     struct yetty_yvterm_vterm *vterm = vterm_res.value;
     if (!vterm->grid_obj) {
-        return YETTY_OK(yetty_ycore_uint32, 0u);
+        return YETTY_OK(yetty_ycore_uint64, 0u);
     }
     return yetty_yvterm_grid_history_floor(vterm->grid_obj);
 }
@@ -1915,27 +1920,45 @@ struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_scrollback_floor(
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_view_top(struct yetty_yclass_object *obj,
                                                                int active,
-                                                               uint32_t view_top_total_idx)
+                                                               uint64_t view_top_total_idx)
 {
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm set_view_top: from_obj");
     struct yetty_yvterm_vterm *vterm = vterm_res.value;
-    vterm->view_top_active = active;
-    vterm->view_top_total_idx = view_top_total_idx;
     vterm->view_dirty = 1;
-    /* The grid's tier resolver drives its window from this view state. */
+    /* The grid is the single view owner; this figure only forwards. */
     if (vterm->grid_obj) {
         struct yetty_ycore_void_result view_res =
             yetty_yvterm_grid_set_view(vterm->grid_obj, active, view_top_total_idx);
-        if (YETTY_IS_ERR(view_res)) {
-            yetty_ycore_error_destroy(view_res.error);
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, view_res, "yvterm set_view_top: grid set_view");
     }
     struct yetty_ycore_void_result dr = yetty_yfigure_figure_dirty_set(obj, 1);
     if (YETTY_IS_ERR(dr)) {
         yetty_ycore_error_destroy(dr.error);
     }
     return YETTY_OK_VOID();
+}
+
+/* Current scrollback view state, read from the grid (the single owner). The
+ * terminal's wheel driver derives every transition from this instead of
+ * holding its own copy. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_get_view(struct yetty_yclass_object *obj,
+                                                           int *out_active, uint64_t *out_view_top)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm get_view: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
+    if (!vterm->grid_obj) {
+        if (out_active) {
+            *out_active = 0;
+        }
+        if (out_view_top) {
+            *out_view_top = 0;
+        }
+        return YETTY_OK_VOID();
+    }
+    return yetty_yvterm_grid_view(vterm->grid_obj, out_active, out_view_top);
 }
 
 YETTY_ANNOTATE("expose")

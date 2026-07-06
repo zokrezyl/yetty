@@ -19,6 +19,7 @@ extern "C" {
 struct yetty_ycore_buffer;
 struct yetty_ycore_memtag_registry;
 struct yetty_ydraw_composite;
+struct yetty_yvterm_grid;
 struct yetty_ywire_wire_statemachine;
 
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, void *);
@@ -118,7 +119,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_cursor(struct yetty_yclass_obje
  * cursor's absolute output row is this + the visible cursor row — used to place
  * anchored rich content on the rolling-row scroll. Each screen carries its own
  * origin; the alternate one restarts at 0 on every entry. */
-struct yetty_ycore_uint32_result yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj);
+struct yetty_ycore_uint64_result yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj);
 struct yetty_ycore_uint32_result yetty_yvterm_grid_append_primitive(struct yetty_yclass_object *obj,
                                                                     uint32_t row,
                                                                     const uint32_t *words,
@@ -199,16 +200,34 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_span(struct yetty_yclass
 struct yetty_ycore_const_uint32_ptr_result yetty_yvterm_grid_slot_primitive_words(
     struct yetty_yclass_object *obj, uint32_t slot, uint32_t index, uint32_t *out_word_count);
 /* Timeline index of the live screen top (rows above it are history). */
-struct yetty_ycore_uint32_result yetty_yvterm_grid_live_anchor(struct yetty_yclass_object *obj);
+struct yetty_ycore_uint64_result yetty_yvterm_grid_live_anchor(struct yetty_yclass_object *obj);
 /* Timeline index of the oldest line still reachable across all tiers — the
  * scrollback floor. With the cold tier unbounded this stays 0 for the whole
  * session ("effectively infinite" scrollback). */
-struct yetty_ycore_uint32_result yetty_yvterm_grid_history_floor(struct yetty_yclass_object *obj);
+uint64_t grid_history_floor_value(struct yetty_yvterm_grid *grid);
+struct yetty_ycore_uint64_result yetty_yvterm_grid_history_floor(struct yetty_yclass_object *obj);
 /* Enter/leave the scrolled-back view. `view_top_line` is the TIMELINE index
  * of the line to show at the window's top row (see grid_live_anchor /
  * grid_history_floor for the valid range). */
 struct yetty_ycore_void_result yetty_yvterm_grid_set_view(struct yetty_yclass_object *obj,
-                                                          int active, uint32_t view_top_line);
+                                                          int active, uint64_t view_top_line);
+/* Current scrollback view state — the grid is the ONE owner; the terminal's
+ * wheel driver reads this fresh on every event instead of holding its own
+ * copy (which could reactivate a stale position after a resize or after
+ * eviction moved the floor past it). */
+struct yetty_ycore_void_result yetty_yvterm_grid_view(struct yetty_yclass_object *obj,
+                                                      int *out_active, uint64_t *out_view_top);
+/* Test/diagnostic seam: pre-age the timeline so 32-bit-wrap behavior is
+ * testable without feeding four billion lines. Only meaningful on a fresh
+ * grid (nothing archived or scrolled yet); the seeded range [base, base)
+ * resolves as dropped history. */
+struct yetty_ycore_void_result yetty_yvterm_grid_seed_timeline(struct yetty_yclass_object *obj,
+                                                               uint64_t base);
+/* Test/diagnostic seam: make the Nth upcoming ring allocation fail, so the
+ * transactional-resize rollback (and any other alloc-failure branch) is
+ * actually exercisable. 0 disables. */
+struct yetty_ycore_void_result yetty_yvterm_grid_inject_ring_alloc_failure(
+    struct yetty_yclass_object *obj, uint32_t nth_allocation);
 /* Resolve the renderer's window for this frame: `row_count` rows starting at
  * the view top (live top when no view is active). Returns a grid-owned array
  * of one slot id per window row — real ring slots for hot rows (the text,
