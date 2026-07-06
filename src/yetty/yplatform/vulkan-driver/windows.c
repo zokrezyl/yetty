@@ -18,8 +18,7 @@
 void yetty_yplatform_vulkan_register_bundled_driver(void)
 {
     /* The user's own loader configuration always wins. */
-    if (getenv("VK_ADD_DRIVER_FILES") || getenv("VK_DRIVER_FILES") ||
-        getenv("VK_ICD_FILENAMES")) {
+    if (getenv("VK_ADD_DRIVER_FILES") || getenv("VK_DRIVER_FILES") || getenv("VK_ICD_FILENAMES")) {
         return;
     }
     char path[MAX_PATH];

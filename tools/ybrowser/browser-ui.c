@@ -131,7 +131,8 @@ struct cache_entry {
     char *url;
     uint8_t *data;
     size_t len;
-    char *eff; /* effective (post-redirect) URL, or NULL */
+    char *eff;   /* effective (post-redirect) URL, or NULL */
+    char *ctype; /* response Content-Type, or NULL */
     uint64_t seq;
 };
 
@@ -149,8 +150,17 @@ struct tab {
     size_t raw_len;
     int img_w, img_h; /* IMAGE: source pixel dimensions (aspect) */
     char *url;        /* current location (owned) */
-    char *title;      /* tab label (owned) */
-    char **back;      /* history stacks (owned strings) */
+
+    /* Async navigation state. nav_id identifies the navigation this tab is
+	 * showing/awaiting; a completing fetch job applies only when its own id
+	 * still matches (Stop, a superseding navigation, or closing the tab
+	 * orphans the job). nav_cancel_cell is a borrowed view of the in-flight
+	 * job's cancel cell (the job owns it) — flipping it aborts the transfer
+	 * at its next progress tick; NULL when no navigation is in flight. */
+    uint64_t nav_id;
+    _Atomic uint64_t *nav_cancel_cell;
+    char *title; /* tab label (owned) */
+    char **back; /* history stacks (owned strings) */
     size_t n_back, cap_back;
     char **fwd;
     size_t n_fwd, cap_fwd;
@@ -185,6 +195,8 @@ struct app {
     struct tab tabs[MAX_TABS];
     int n_tabs;
     int active;
+
+    uint64_t nav_seq; /* navigation id source — see struct tab */
 
     struct url_cache cache;
 
@@ -287,6 +299,7 @@ static void ui_new_tab(struct app *a);
 static void ui_close_tab(struct app *a, int idx);
 static void switch_tab(struct app *a, int idx);
 static void navigate(struct app *a, struct tab *t, char *url, int push_to_back);
+static void nav_abort(struct tab *t);
 static void go_back(struct app *a);
 static void go_forward(struct app *a);
 static void reload(struct app *a);
@@ -405,7 +418,7 @@ static char *derive_title(const char *url)
  * URL → bytes LRU cache.
  * ===========================================================================*/
 static void cache_store(struct url_cache *c, const char *url, const uint8_t *data, size_t len,
-                        const char *eff)
+                        const char *eff, const char *ctype)
 {
     if (len == 0 || len > CACHE_MAX_ENTRY) {
         return;
@@ -423,9 +436,11 @@ static void cache_store(struct url_cache *c, const char *url, const uint8_t *dat
         c->total -= c->e[i].len;
         free(c->e[i].data);
         free(c->e[i].eff);
+        free(c->e[i].ctype);
         c->e[i].data = nd;
         c->e[i].len = len;
         c->e[i].eff = eff ? str_dup(eff) : NULL;
+        c->e[i].ctype = ctype ? str_dup(ctype) : NULL;
         c->e[i].seq = ++c->seq;
         c->total += len;
         return;
@@ -442,6 +457,7 @@ static void cache_store(struct url_cache *c, const char *url, const uint8_t *dat
         free(c->e[lru].url);
         free(c->e[lru].data);
         free(c->e[lru].eff);
+        free(c->e[lru].ctype);
         c->e[lru] = c->e[c->n - 1];
         c->n--;
     }
@@ -455,6 +471,7 @@ static void cache_store(struct url_cache *c, const char *url, const uint8_t *dat
     e->data = nd;
     e->len = len;
     e->eff = eff ? str_dup(eff) : NULL;
+    e->ctype = ctype ? str_dup(ctype) : NULL;
     e->seq = ++c->seq;
     c->total += len;
     c->n++;
@@ -466,17 +483,19 @@ static void cache_free(struct url_cache *c)
         free(c->e[i].url);
         free(c->e[i].data);
         free(c->e[i].eff);
+        free(c->e[i].ctype);
     }
     memset(c, 0, sizeof(*c));
 }
 
-/* Fetch `url`, preferring the cache. Always returns owned bytes (caller
- * frees *out and *out_eff); NULL on failure. Misses are fetched and cached. */
-static uint8_t *cache_fetch(struct yetty_ybrowser_loader *loader, struct url_cache *c,
-                            const char *url, size_t *out_len, char **out_eff)
+/* Cache lookup only — returns an owned copy on a hit (caller frees *out,
+ * *out_eff, *out_ctype), NULL on a miss. */
+static uint8_t *cache_lookup(struct url_cache *c, const char *url, size_t *out_len, char **out_eff,
+                             char **out_ctype)
 {
     *out_len = 0;
     *out_eff = NULL;
+    *out_ctype = NULL;
     for (int i = 0; i < c->n; i++) {
         if (strcmp(c->e[i].url, url) != 0) {
             continue;
@@ -489,27 +508,68 @@ static uint8_t *cache_fetch(struct yetty_ybrowser_loader *loader, struct url_cac
         memcpy(copy, c->e[i].data, c->e[i].len);
         *out_len = c->e[i].len;
         *out_eff = c->e[i].eff ? str_dup(c->e[i].eff) : NULL;
+        *out_ctype = c->e[i].ctype ? str_dup(c->e[i].ctype) : NULL;
         return copy;
     }
+    return NULL;
+}
+
+/* Fetch `url`, preferring the cache. Always returns owned bytes (caller
+ * frees *out, *out_eff and *out_ctype); NULL on failure. Misses are fetched
+ * and cached. `bypass_cache` skips the lookup (Reload must observe server
+ * and local-file changes) — the fresh bytes still replace the stored entry
+ * so history moves stay hits. */
+static uint8_t *cache_fetch(struct yetty_ybrowser_loader *loader, struct url_cache *c,
+                            const char *url, int bypass_cache, size_t *out_len, char **out_eff,
+                            char **out_ctype)
+{
+    if (!bypass_cache) {
+        uint8_t *hit = cache_lookup(c, url, out_len, out_eff, out_ctype);
+        if (hit) {
+            return hit;
+        }
+    }
+    *out_len = 0;
+    *out_eff = NULL;
+    *out_ctype = NULL;
     size_t len = 0;
     char *eff = NULL;
+    char *ctype = NULL;
     double t_fetch = yetty_ylexbor_prof_now_ms();
-    char *raw = ybrowser_slurp_file(loader, url, &len, &eff);
+    char *raw = ybrowser_slurp_file(loader, url, &len, &eff, &ctype);
     yetty_ylexbor_prof("HTML fetch     %.0f ms  bytes=%zu  %.80s",
                        yetty_ylexbor_prof_now_ms() - t_fetch, len, url);
     if (!raw) {
         free(eff);
+        free(ctype);
         return NULL;
     }
-    cache_store(c, url, (const uint8_t *)raw, len, eff); /* keeps its own copy */
+    cache_store(c, url, (const uint8_t *)raw, len, eff, ctype); /* keeps its own copy */
     *out_len = len;
-    *out_eff = eff; /* transfer to caller */
+    *out_eff = eff;     /* transfer to caller */
+    *out_ctype = ctype; /* transfer to caller */
     return (uint8_t *)raw;
 }
 
-/* Sniff the content kind from the leading bytes. */
-static enum content_kind detect_kind(const uint8_t *d, size_t n)
+/* Sniff the content kind. The response Content-Type wins when present;
+ * otherwise magic bytes, then root-element sniffing. */
+static enum content_kind detect_kind(const char *content_type, const uint8_t *d, size_t n)
 {
+    if (content_type) {
+        /* Prefix match — the header may carry ";charset=...". */
+        if (strncasecmp(content_type, "text/html", 9) == 0 ||
+            strncasecmp(content_type, "application/xhtml", 17) == 0) {
+            return CK_HTML;
+        }
+        if (strncasecmp(content_type, "image/svg", 9) == 0) {
+            return CK_SVG;
+        }
+        if (strncasecmp(content_type, "image/", 6) == 0) {
+            return CK_IMAGE;
+        }
+        /* Anything else (text/plain, application/json, servers that lie)
+		 * falls through to sniffing — the HTML engine is the safe default. */
+    }
     if (n >= 3 && d[0] == 0xFF && d[1] == 0xD8 && d[2] == 0xFF) {
         return CK_IMAGE; /* JPEG */
     }
@@ -525,15 +585,64 @@ static enum content_kind detect_kind(const uint8_t *d, size_t n)
     if (n >= 2 && d[0] == 'B' && d[1] == 'M') {
         return CK_IMAGE; /* BMP */
     }
-    /* SVG: an "<svg" tag near the top (after an optional xml decl/doctype). */
-    size_t scan = n < 512 ? n : 512;
-    for (size_t i = 0; i + 4 <= scan; i++) {
-        if (d[i] == '<' && (d[i + 1] | 0x20) == 's' && (d[i + 2] | 0x20) == 'v' &&
-            (d[i + 3] | 0x20) == 'g') {
+    /* SVG only when <svg> is the DOCUMENT element — skip whitespace,
+	 * comments, doctype, and processing instructions, then look at the
+	 * first real tag. An inline <svg> icon inside early HTML must NOT
+	 * reclassify the whole document (it used to: any "<svg" in the first
+	 * 512 bytes sent normal pages to the standalone SVG renderer). */
+    size_t scan = n < 1024 ? n : 1024;
+    size_t i = 0;
+    while (i < scan) {
+        while (i < scan &&
+               (d[i] == ' ' || d[i] == '\t' || d[i] == '\r' || d[i] == '\n' || d[i] == '\f')) {
+            i++;
+        }
+        if (i >= scan || d[i] != '<') {
+            break; /* leading text content — not a standalone SVG document */
+        }
+        if (i + 4 <= scan && memcmp(d + i, "<!--", 4) == 0) {
+            const uint8_t *close = NULL;
+            for (size_t j = i + 4; j + 3 <= scan; j++) {
+                if (memcmp(d + j, "-->", 3) == 0) {
+                    close = d + j;
+                    break;
+                }
+            }
+            if (!close) {
+                break;
+            }
+            i = (size_t)(close - d) + 3;
+            continue;
+        }
+        if (i + 1 < scan && (d[i + 1] == '!' || d[i + 1] == '?')) {
+            /* <!DOCTYPE ...> or <?xml ...?> — skip to the closing '>'. */
+            size_t j = i + 2;
+            while (j < scan && d[j] != '>') {
+                j++;
+            }
+            if (j >= scan) {
+                break;
+            }
+            i = j + 1;
+            continue;
+        }
+        /* First real element. */
+        if (i + 4 < scan && (d[i + 1] | 0x20) == 's' && (d[i + 2] | 0x20) == 'v' &&
+            (d[i + 3] | 0x20) == 'g' &&
+            (d[i + 4] == '>' || d[i + 4] == ' ' || d[i + 4] == '\t' || d[i + 4] == '\r' ||
+             d[i + 4] == '\n' || d[i + 4] == '/')) {
             return CK_SVG;
         }
+        break;
     }
     return CK_HTML;
+}
+
+/* Shared with the one-shot path (main.c): standalone-SVG detection with
+ * the same Content-Type + root-element rules the interactive shell uses. */
+int ybrowser_content_is_svg(const char *content_type, const uint8_t *data, size_t len)
+{
+    return detect_kind(content_type, data, len) == CK_SVG;
 }
 
 /* ===========================================================================
@@ -599,9 +708,9 @@ static int tab_ensure_engine(struct app *a, struct tab *t)
 /* Install fetched content into the tab, detecting whether it's HTML (→
  * ylexbor), an SVG (→ ysvg) or a raster image (→ yimage). */
 static void tab_set_document(struct app *a, struct tab *t, const char *data, size_t len,
-                             const char *base_url)
+                             const char *base_url, const char *content_type)
 {
-    t->kind = detect_kind((const uint8_t *)data, len);
+    t->kind = detect_kind(content_type, (const uint8_t *)data, len);
     free(t->raw);
     t->raw = NULL;
     t->raw_len = 0;
@@ -617,10 +726,13 @@ static void tab_set_document(struct app *a, struct tab *t, const char *data, siz
 		 * /w/load.php skin CSS). Without the base set first they can't be
 		 * resolved, so the page renders with only its inline <style> —
 		 * which is why interactive mode looked far more broken than the
-		 * one-shot path that already ordered these correctly. */
-        if (base_url) {
-            err_ok(yetty_ylexbor_set_base_url(t->engine, base_url));
-        }
+		 * one-shot path that already ordered these correctly.
+		 *
+		 * ALWAYS replace the base — a NULL base_url must CLEAR the old one,
+		 * or generated start/error documents and local files inherit the
+		 * previous page's origin and their relative references (CSS,
+		 * images, fetch()) silently target the wrong site. */
+        err_ok(yetty_ylexbor_set_base_url(t->engine, base_url));
         err_ok(yetty_ylexbor_load_html(t->engine, data, len));
         /* Scripts were deferred (see tab_ensure_engine) — the first paint shows
 		 * HTML+CSS; pump_active runs the scripts once that paint has landed. */
@@ -642,6 +754,8 @@ static void tab_set_document(struct app *a, struct tab *t, const char *data, siz
 
 static void tab_free(struct tab *t)
 {
+    nav_abort(t); /* orphan any in-flight navigation — its completion
+                   * finds no tab with this nav_id and discards */
     if (t->engine) {
         err_ok(yetty_ylexbor_destroy(t->engine));
     }
@@ -657,7 +771,7 @@ static void tab_free(struct tab *t)
 
 static void load_start_page(struct app *a, struct tab *t)
 {
-    tab_set_document(a, t, START_HTML, strlen(START_HTML), NULL);
+    tab_set_document(a, t, START_HTML, strlen(START_HTML), NULL, NULL);
     free(t->url);
     t->url = str_dup(START_URL);
     free(t->title);
@@ -770,12 +884,176 @@ static void set_loading(struct app *a, int loading)
     }
 }
 
+/* Escape text for interpolation into generated HTML (the error page shows
+ * the failed URL — an attacker-controlled string must not close the <code>
+ * element and inject markup). Truncates to fit; always NUL-terminates. */
+static void html_escape_into(char *dst, size_t dst_size, const char *src)
+{
+    size_t used = 0;
+    for (const char *p = src; *p && used + 8 < dst_size; p++) {
+        const char *rep = NULL;
+        switch (*p) {
+        case '&':
+            rep = "&amp;";
+            break;
+        case '<':
+            rep = "&lt;";
+            break;
+        case '>':
+            rep = "&gt;";
+            break;
+        case '"':
+            rep = "&quot;";
+            break;
+        case '\'':
+            rep = "&#39;";
+            break;
+        default:
+            dst[used++] = *p;
+            continue;
+        }
+        size_t rep_len = strlen(rep);
+        memcpy(dst + used, rep, rep_len);
+        used += rep_len;
+    }
+    dst[used] = '\0';
+}
+
+/* Install fetched (or failed) navigation results into the tab — shared by
+ * the synchronous path and the async job's completion. Borrows everything. */
+static void navigate_apply(struct app *a, struct tab *t, const char *url, const uint8_t *data,
+                           size_t len, const char *eff, const char *ctype)
+{
+    if (data) {
+        /* Base priority: post-redirect URL, the URL itself when absolute,
+		 * else a file:// base for local paths — never a stale carry-over. */
+        char *file_base = NULL;
+        const char *base = NULL;
+        if (eff) {
+            base = eff;
+        } else if (ybrowser_looks_like_url(url)) {
+            base = url;
+        } else {
+            file_base = ybrowser_local_file_url(url);
+            base = file_base;
+        }
+        tab_set_document(a, t, (const char *)data, len, base, ctype);
+        free(file_base);
+    } else {
+        char escaped_url[1024];
+        html_escape_into(escaped_url, sizeof(escaped_url), url);
+        char err[2048];
+        int n = snprintf(err, sizeof(err), ERROR_HTML_FMT, escaped_url);
+        if (n < 0) {
+            n = 0;
+        }
+        tab_set_document(a, t, err, (size_t)n, NULL, NULL);
+    }
+}
+
+/* Finish a navigation: location, title, chrome sync, repaint. Takes
+ * ownership of `url`. */
+static void navigate_finish(struct app *a, struct tab *t, char *url)
+{
+    free(t->url);
+    t->url = url;
+    free(t->title);
+    t->title = derive_title(url);
+    if (t == &a->tabs[a->active]) {
+        sync_active_ui(a);
+    }
+    a->pending_render = 1;
+    yetty_ygui_framework_mark_dirty(a->fw);
+}
+
+/* Abort the tab's in-flight navigation, if any: flip the cancel cell (the
+ * transfer aborts at its next progress tick / chunk) and detach — the
+ * orphaned job's completion frees its results and touches nothing. */
+static void nav_abort(struct tab *t)
+{
+    if (t->nav_cancel_cell) {
+        atomic_fetch_add_explicit(t->nav_cancel_cell, 1, memory_order_release);
+        t->nav_cancel_cell = NULL;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+ * Async document navigation: the fetch runs as a worker-pool job so the UI
+ * loop keeps handling input, resize, tab switches and Stop while the
+ * network works (a navigation used to freeze the window for up to the full
+ * transfer timeout). Completion runs on the loop thread and applies only
+ * when the tab still awaits THIS navigation.
+ * ------------------------------------------------------------------------- */
+struct nav_job {
+    struct app *app; /* loader read on the worker; everything else loop-only */
+    uint64_t nav_id;
+    char *url;                     /* owned until applied */
+    _Atomic uint64_t *cancel_cell; /* owned; holds nav_id while wanted */
+    /* Worker results: */
+    char *data;
+    size_t len;
+    char *eff;
+    char *ctype;
+};
+
+/* WORKER THREAD — touches only the job and the (stable) loader. */
+static void nav_job_run(void *job_ptr)
+{
+    struct nav_job *job = job_ptr;
+    if (atomic_load_explicit(job->cancel_cell, memory_order_acquire) != job->nav_id) {
+        return; /* cancelled before the fetch started */
+    }
+    double t_fetch = yetty_ylexbor_prof_now_ms();
+    job->data = ybrowser_slurp_document(job->app->loader, job->url, job->nav_id, job->cancel_cell,
+                                        &job->len, &job->eff, &job->ctype);
+    yetty_ylexbor_prof("HTML fetch     %.0f ms  bytes=%zu  %.80s (async)",
+                       yetty_ylexbor_prof_now_ms() - t_fetch, job->len, job->url);
+}
+
+/* LOOP THREAD. Signature dictated by the work pool (void (*)(void *)) —
+ * absorb inner Results at this boundary. */
+YETTY_EXTERNAL_CALLBACK
+static void nav_job_done(void *job_ptr)
+{
+    struct nav_job *job = job_ptr;
+    struct app *a = job->app;
+    struct tab *t = NULL;
+    for (int i = 0; i < a->n_tabs; i++) {
+        if (a->tabs[i].nav_id == job->nav_id) {
+            t = &a->tabs[i];
+            break;
+        }
+    }
+    int still_wanted = t != NULL && t->nav_cancel_cell == job->cancel_cell &&
+                       atomic_load_explicit(job->cancel_cell, memory_order_acquire) == job->nav_id;
+    if (still_wanted) {
+        t->nav_cancel_cell = NULL;
+        if (job->data) {
+            cache_store(&a->cache, job->url, (const uint8_t *)job->data, job->len, job->eff,
+                        job->ctype);
+        }
+        navigate_apply(a, t, job->url, (const uint8_t *)job->data, job->len, job->eff, job->ctype);
+        navigate_finish(a, t, job->url); /* takes url ownership */
+        job->url = NULL;
+    }
+    free(job->url);
+    free(job->data);
+    free(job->eff);
+    free(job->ctype);
+    free(job->cancel_cell);
+    free(job);
+}
+
 /* Load `url` (owned — navigate takes ownership) into tab `t`. With
  * push_to_back, the previous location is pushed onto the back stack and the
- * forward stack cleared (a fresh navigation, not a history move). */
-static void navigate(struct app *a, struct tab *t, char *url, int push_to_back)
+ * forward stack cleared (a fresh navigation, not a history move). With
+ * bypass_cache, the shell cache is skipped so Reload observes server and
+ * local-file changes (history moves keep using the cache). */
+static void navigate_full(struct app *a, struct tab *t, char *url, int push_to_back,
+                          int bypass_cache)
 {
     set_loading(a, 1);
+    nav_abort(t); /* a superseding navigation kills the in-flight one */
     if (push_to_back && t->url && strcmp(t->url, START_URL) != 0) {
         hist_push(&t->back, &t->n_back, &t->cap_back, str_dup(t->url));
         hist_clear(t->fwd, &t->n_fwd);
@@ -783,31 +1061,56 @@ static void navigate(struct app *a, struct tab *t, char *url, int push_to_back)
 
     size_t len = 0;
     char *eff = NULL;
-    uint8_t *data = cache_fetch(a->loader, &a->cache, url, &len, &eff);
-    if (data) {
-        const char *base = eff ? eff : (ybrowser_looks_like_url(url) ? url : NULL);
-        tab_set_document(a, t, (const char *)data, len, base);
-        free(data);
-    } else {
-        char err[2048];
-        int n = snprintf(err, sizeof(err), ERROR_HTML_FMT, url);
-        if (n < 0) {
-            n = 0;
+    char *ctype = NULL;
+    uint8_t *data = NULL;
+    if (!bypass_cache) {
+        data = cache_lookup(&a->cache, url, &len, &eff, &ctype);
+    }
+
+    /* Cache miss with a worker pool (standalone): fetch asynchronously.
+	 * The in-yetty client has no pool and stays synchronous. */
+    if (!data && a->img_pool) {
+        struct nav_job *job = calloc(1, sizeof(*job));
+        _Atomic uint64_t *cancel_cell = job ? malloc(sizeof(*cancel_cell)) : NULL;
+        if (job && cancel_cell) {
+            t->nav_id = ++a->nav_seq;
+            atomic_store_explicit(cancel_cell, t->nav_id, memory_order_release);
+            job->app = a;
+            job->nav_id = t->nav_id;
+            job->url = url;
+            job->cancel_cell = cancel_cell;
+            struct yetty_yplatform_yworkpool_job pool_job = {
+                .run = nav_job_run,
+                .done = nav_job_done,
+                .ctx = job,
+            };
+            struct yetty_ycore_void_result submit_res =
+                yetty_yplatform_yworkpool_submit(a->img_pool, pool_job);
+            if (YETTY_IS_OK(submit_res)) {
+                t->nav_cancel_cell = cancel_cell;
+                return; /* completion applies on the loop thread */
+            }
+            yetty_ycore_error_destroy(submit_res.error);
         }
-        tab_set_document(a, t, err, (size_t)n, NULL);
+        free(cancel_cell);
+        free(job);
+        /* Fall through to the synchronous path. */
     }
+
+    if (!data) {
+        data = cache_fetch(a->loader, &a->cache, url, bypass_cache, &len, &eff, &ctype);
+    }
+    navigate_apply(a, t, url, data, len, eff, ctype);
+    free(data);
     free(eff);
+    free(ctype);
+    navigate_finish(a, t, url);
+}
 
-    free(t->url);
-    t->url = url; /* take ownership */
-    free(t->title);
-    t->title = derive_title(url);
-
-    if (t == &a->tabs[a->active]) {
-        sync_active_ui(a);
-    }
-    a->pending_render = 1;
-    yetty_ygui_framework_mark_dirty(a->fw);
+/* Plain navigation — cache-preferring (link clicks, address bar, history). */
+static void navigate(struct app *a, struct tab *t, char *url, int push_to_back)
+{
+    navigate_full(a, t, url, push_to_back, 0);
 }
 
 static void go_back(struct app *a)
@@ -838,7 +1141,9 @@ static void reload(struct app *a)
 {
     struct tab *t = &a->tabs[a->active];
     if (t->url && strcmp(t->url, START_URL) != 0) {
-        navigate(a, t, str_dup(t->url), 0);
+        /* Bypass the shell cache — Reload's whole point is observing
+		 * server-side and local-file changes. */
+        navigate_full(a, t, str_dup(t->url), 0, 1);
     }
 }
 
@@ -940,9 +1245,11 @@ static struct yetty_ycore_void_result on_reload_click(struct yetty_yclass_object
     (void)o;
     struct app *a = ud;
     if (a->loading) {
-        /* Stop: drop the pending deferred-script run and leave the page as
-		 * painted. Images already in flight finish on their own; no new
-		 * work is started for this load. */
+        /* Stop: abort the in-flight document fetch (the transfer dies at
+		 * its next progress tick), drop the pending deferred-script run,
+		 * and leave the page as painted. Images already in flight finish
+		 * on their own; no new work is started for this load. */
+        nav_abort(&a->tabs[a->active]);
         a->tabs[a->active].scripts_pending = 0;
         set_loading(a, 0);
     } else {
@@ -1182,7 +1489,7 @@ static int pump_active(struct app *a)
 	 * heavy pages (Wikipedia's lazy loader) would show "loading" forever. */
     if (a->loading) {
         int quiet = t->engine == NULL ||
-                    (t->scripts_pending == 0 && images_fetched == 0 &&
+                    (t->nav_cancel_cell == NULL && t->scripts_pending == 0 && images_fetched == 0 &&
                      (a->img_pool == NULL ||
                       (yetty_ylexbor_images_in_flight(t->engine) == 0 && a->img_dirty == 0)));
         yetty_ylexbor_prof("pump loading: scripts_pending=%d images_fetched=%d quiet=%d",
@@ -1908,7 +2215,8 @@ struct YETTY_ANNOTATE("class@ybrowser:app") YETTY_ANNOTATE("parent@yapp:app") ye
     char *prefetch_url;  /* normalized URL the thread fetched (owned) */
     char *prefetch_data; /* fetched bytes (owned); NULL on failure */
     size_t prefetch_len;
-    char *prefetch_eff; /* effective URL after redirects (owned) */
+    char *prefetch_eff;   /* effective URL after redirects (owned) */
+    char *prefetch_ctype; /* response Content-Type (owned), or NULL */
 };
 
 /* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
@@ -1935,8 +2243,8 @@ struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_
 static void *sa_prefetch_main(void *arg)
 {
     struct yetty_ybrowser_app *s = arg;
-    s->prefetch_data =
-        ybrowser_slurp_file(s->app.loader, s->prefetch_url, &s->prefetch_len, &s->prefetch_eff);
+    s->prefetch_data = ybrowser_slurp_file(s->app.loader, s->prefetch_url, &s->prefetch_len,
+                                           &s->prefetch_eff, &s->prefetch_ctype);
     return NULL;
 }
 
@@ -2431,13 +2739,15 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         s->prefetch_started = 0;
         if (s->prefetch_data) {
             cache_store(&s->app.cache, s->prefetch_url, (const uint8_t *)s->prefetch_data,
-                        s->prefetch_len, s->prefetch_eff);
+                        s->prefetch_len, s->prefetch_eff, s->prefetch_ctype);
             yetty_ylexbor_prof("prefetch DONE  bytes=%zu (folded into cache)", s->prefetch_len);
         }
         free(s->prefetch_data);
         s->prefetch_data = NULL;
         free(s->prefetch_eff);
         s->prefetch_eff = NULL;
+        free(s->prefetch_ctype);
+        s->prefetch_ctype = NULL;
         free(s->prefetch_url);
         s->prefetch_url = NULL;
     }

@@ -10,11 +10,16 @@ extern "C" {
 #endif
 
 /* Forward-declared so this header stays GPU-less and can be included by
- * client-side wire emitters that don't link Dawn. The full type lives in
+ * client-side wire emitters that don't link Dawn. The full types live in
  * yetty/ydraw-factory/composite-factory.h (server side). */
 struct yetty_ydraw_concrete_factory;
+struct yetty_ydraw_composite;
 
 #define YETTY_YIMAGE_TYPE_ID 0x80000004u
+
+/* Number of u32 words the uniforms occupy in the wire (and as a prefix in
+ * the payload before the storage region). */
+#define YETTY_YIMAGE_UNIFORMS_WORDS 6u
 
 // Uniforms struct (goes to GPU uniform buffer)
 struct yetty_yimage_uniforms {

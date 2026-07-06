@@ -1014,6 +1014,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 		 * re-selecting is cheap relative to the rest of box-build, so
 		 * we discard here and select again inside the block branch. */
         int libcss_disp = -1;
+        bool cascade_sized = false;
         if (r->libcss) {
             size_t pre_istylen = 0;
             const lxb_char_t *pre_istyle =
@@ -1022,6 +1023,18 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 r, el, (const char *)pre_istyle, pre_istyle ? pre_istylen : 0);
             if (pre_cs) {
                 libcss_disp = yetty_ybrowser_libcss_display(pre_cs, parent_style == NULL);
+                /* Inline-block promotion (below) needs to know whether the
+				 * CASCADE sizes this element — stylesheet-sized buttons
+				 * (48x48 toolbar icons) must become real boxes even amid
+				 * inline text. Only the yes/no matters here, so rough
+				 * font-size / percent bases are fine. */
+                if (libcss_disp == CSS_DISPLAY_INLINE_BLOCK ||
+                    libcss_disp == CSS_DISPLAY_INLINE_FLEX) {
+                    float probe_px = 0.0f;
+                    cascade_sized =
+                        yetty_ybrowser_libcss_width(r, pre_cs, 16.0f, 0.0f, &probe_px) ||
+                        yetty_ybrowser_libcss_height(r, pre_cs, 16.0f, 0.0f, &probe_px);
+                }
                 yetty_ybrowser_libcss_release(pre_cs);
                 if (libcss_disp == CSS_DISPLAY_NONE) {
                     continue;
@@ -1086,7 +1099,11 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 bool sized_inline =
                     ibs != NULL && (find_inline_decl(ibs, ibs_len, "width", 5, NULL) != NULL ||
                                     find_inline_decl(ibs, ibs_len, "height", 6, NULL) != NULL);
-                if (sized_inline || !has_inline_text_siblings(node)) {
+                /* cascade_sized: the stylesheet supplies width/height (the
+				 * gnews 48x48 icon buttons) — same promotion as an inline
+				 * size. Content-sized badges amid text (Wikipedia) have
+				 * neither and stay inline. */
+                if (sized_inline || cascade_sized || !has_inline_text_siblings(node)) {
                     effective_disp = YL_DISP_BLOCK;
                     promote_shrink_to_fit = true;
                 }
@@ -1099,6 +1116,23 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 break;
             }
         }
+        /* Custom elements (hyphenated names — <c-wiz>, <ytd-app>, …) are
+		 * structural containers in practice; sites pair them with
+		 * display:block rules that don't always survive into our cascade.
+		 * A standalone one (no inline text flowing around it) renders as
+		 * a block so it produces a box and its subtree joins block flow —
+		 * matching how Chrome lays these containers out on real pages. A
+		 * custom element amid text keeps the inline default. */
+        if (effective_disp == YL_DISP_INLINE &&
+            (libcss_disp < 0 || libcss_disp == CSS_DISPLAY_INLINE) &&
+            !has_inline_text_siblings(node)) {
+            size_t custom_name_len = 0;
+            const lxb_char_t *custom_name = lxb_dom_element_local_name(el, &custom_name_len);
+            if (custom_name && memchr(custom_name, '-', custom_name_len) != NULL) {
+                effective_disp = YL_DISP_BLOCK;
+            }
+        }
+
         /* Grid/flex items are blockified: an inline-level element child
 		 * of a grid/flex container computes to a block-level box. Without
 		 * this an unstyled wrapper (gnews <c-wiz>, plain <a>/<span>
@@ -1386,6 +1420,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                           fd == CSS_FLEX_DIRECTION_COLUMN_REVERSE)
                                              ? YL_LAYOUT_FLEX_COLUMN
                                              : YL_LAYOUT_FLEX_ROW;
+                        b->main_reverse = (fd == CSS_FLEX_DIRECTION_ROW_REVERSE ||
+                                           fd == CSS_FLEX_DIRECTION_COLUMN_REVERSE);
                         b->justify_content = yetty_ybrowser_libcss_justify_content(cs);
                         b->align_items = yetty_ybrowser_libcss_align_items(cs);
                         /* flex-wrap + align-content from the CASCADE (stylesheet),
@@ -1394,6 +1430,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         int fw = yetty_ybrowser_libcss_flex_wrap(cs);
                         if (fw == CSS_FLEX_WRAP_WRAP || fw == CSS_FLEX_WRAP_WRAP_REVERSE) {
                             b->flex_wrap = 1;
+                            b->wrap_reverse = (fw == CSS_FLEX_WRAP_WRAP_REVERSE);
                         }
                         b->align_content = yetty_ybrowser_libcss_align_content(cs);
                         /* Flex `gap` (stored in grid_col_gap — a box is flex OR
@@ -1420,8 +1457,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                 const lxb_char_t *tag_name =
                                     lxb_dom_element_local_name(el, &tag_len);
                                 float gap = yetty_ylexbor_flex_gap_lookup(
-                                    r, (const char *)gap_cls, gap_cls_len, (const char *)tag_name,
-                                    tag_len);
+                                    r, el, (const char *)gap_cls, gap_cls_len,
+                                    (const char *)tag_name, tag_len);
                                 if (gap > 0.0f) {
                                     b->grid_col_gap = gap;
                                 }
@@ -1573,6 +1610,12 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     if (yetty_ybrowser_libcss_flex_grow(cs, &fg)) {
                         b->flex_grow = fg;
                     }
+                    (void)yetty_ybrowser_libcss_order(cs, &b->flex_order);
+                    int self_align = yetty_ybrowser_libcss_align_self(cs);
+                    b->align_self =
+                        (self_align == CSS_ALIGN_SELF_AUTO || self_align == CSS_ALIGN_SELF_INHERIT)
+                            ? 0
+                            : (int8_t)self_align;
                     /* flex-shrink: -1 sentinel = unset (solver uses the CSS
 					 * initial 1.0); a definite value (incl. 0 = `shrink-0`) is
 					 * stored as-is so fixed sidebars don't collapse. */
@@ -2074,6 +2117,32 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             px > 0.0f) {
                             css_img_h = px;
                         }
+                        /* float on a replaced inline element pulls it out of
+					 * the inline flow into the block float path — the
+					 * classic article-thumbnail-with-text-wrap pattern.
+					 * Margins matter there (they widen the band the text
+					 * wraps around), so capture them alongside. */
+                        int img_float = yetty_ybrowser_libcss_float(img_cs);
+                        if (img_float == CSS_FLOAT_LEFT) {
+                            ib->float_side = 1;
+                        } else if (img_float == CSS_FLOAT_RIGHT) {
+                            ib->float_side = 2;
+                        }
+                        if (ib->float_side != 0) {
+                            float *img_margin_dst[4] = {&ib->margin_top, &ib->margin_right,
+                                                        &ib->margin_bottom, &ib->margin_left};
+                            for (int side = 0; side < 4; side++) {
+                                bool margin_auto = false;
+                                bool margin_pct = false;
+                                float margin_px = 0.0f;
+                                if (yetty_ybrowser_libcss_margin(r, img_cs, side, s.font_size,
+                                                                 basis, &margin_px, &margin_auto,
+                                                                 &margin_pct) &&
+                                    !margin_auto && !margin_pct) {
+                                    *img_margin_dst[side] = margin_px;
+                                }
+                            }
+                        }
                         yetty_ybrowser_libcss_release(img_cs);
                         ib = &r->boxes.data[iidx];
                     }
@@ -2177,6 +2246,29 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                                          &px) &&
                             px > 0.0f) {
                             css_h = px;
+                        }
+                        /* Same replaced-element float handling as <img>. */
+                        int svg_float = yetty_ybrowser_libcss_float(svg_cs);
+                        if (svg_float == CSS_FLOAT_LEFT) {
+                            svg_box->float_side = 1;
+                        } else if (svg_float == CSS_FLOAT_RIGHT) {
+                            svg_box->float_side = 2;
+                        }
+                        if (svg_box->float_side != 0) {
+                            float *svg_margin_dst[4] = {
+                                &svg_box->margin_top, &svg_box->margin_right,
+                                &svg_box->margin_bottom, &svg_box->margin_left};
+                            for (int side = 0; side < 4; side++) {
+                                bool margin_auto = false;
+                                bool margin_pct = false;
+                                float margin_px = 0.0f;
+                                if (yetty_ybrowser_libcss_margin(r, svg_cs, side, s.font_size,
+                                                                 pct_basis_svg, &margin_px,
+                                                                 &margin_auto, &margin_pct) &&
+                                    !margin_auto && !margin_pct) {
+                                    *svg_margin_dst[side] = margin_px;
+                                }
+                            }
                         }
                         yetty_ybrowser_libcss_release(svg_cs);
                         svg_box = &r->boxes.data[svg_idx];

@@ -124,6 +124,52 @@ static struct yetty_ylexbor *runtime_ylex(JSContext *ctx)
 }
 
 /* Mutator helper. Always paired with a DOM modification. */
+/* Detach `node` from its parent, guarding a lexbor crash: the removing
+ * steps for a <style> element pass style->stylesheet straight into
+ * lxb_dom_document_stylesheet_remove with NO NULL check — and a style
+ * inserted while EMPTY (the CSS-in-JS pattern: append the element first,
+ * fill textContent afterwards; theguardian.com does this on every page)
+ * never received a stylesheet, so removing or re-appending it segfaulted.
+ * Such elements take the steps-free removal; everything else keeps full
+ * removing-steps semantics. */
+static void node_remove_safe(lxb_dom_node_t *node)
+{
+    if (node->type == LXB_DOM_NODE_TYPE_ELEMENT && node->local_name == LXB_TAG_STYLE &&
+        lxb_html_interface_style(node)->stylesheet == NULL) {
+        lxb_dom_node_remove_wo_events(node);
+        return;
+    }
+    lxb_dom_node_remove(node);
+}
+
+/* CSS-in-JS ingestion: a <style> element that reaches the document — or
+ * gains text while in it — must feed the engine cascade; libcss only saw
+ * the sheets present at load time, so JS-injected styles never applied.
+ * Re-ingesting the same rules on a re-append is tolerated (identical
+ * author-origin rules cascade to the same result). */
+static void collect_text(lxb_dom_node_t *node, char **buf, size_t *len, size_t *cap);
+
+static void style_element_ingest(JSContext *ctx, lxb_dom_node_t *node)
+{
+    if (node->type != LXB_DOM_NODE_TYPE_ELEMENT || node->local_name != LXB_TAG_STYLE) {
+        return;
+    }
+    struct yetty_ylexbor *r = runtime_ylex(ctx);
+    if (!r) {
+        return;
+    }
+    char *css_text = NULL;
+    size_t css_len = 0, css_cap = 0;
+    collect_text(node, &css_text, &css_len, &css_cap);
+    if (css_text && css_len > 0) {
+        struct yetty_ycore_void_result add_res = yetty_ylexbor_add_css(r, css_text, css_len);
+        if (YETTY_IS_ERR(add_res)) {
+            yetty_ycore_error_destroy(add_res.error);
+        }
+    }
+    free(css_text);
+}
+
 static void mark_dirty(JSContext *ctx)
 {
     struct yetty_ylexbor *r = runtime_ylex(ctx);
@@ -531,9 +577,10 @@ static JSValue js_el_appendChild(JSContext *ctx, JSValueConst this_val, int argc
 	 * sibling chain (next/prev becomes ambiguous), so a later tree
 	 * walk on the old parent infinite-loops. */
     if (child->parent) {
-        lxb_dom_node_remove(child);
+        node_remove_safe(child);
     }
     lxb_dom_node_insert_child(parent, child);
+    style_element_ingest(ctx, child);
     mark_dirty(ctx);
     return JS_DupValue(ctx, argv[0]);
 }
@@ -548,7 +595,7 @@ static JSValue js_el_removeChild(JSContext *ctx, JSValueConst this_val, int argc
     if (!child) {
         return JS_UNDEFINED;
     }
-    lxb_dom_node_remove(child);
+    node_remove_safe(child);
     mark_dirty(ctx);
     return JS_DupValue(ctx, argv[0]);
 }
@@ -611,7 +658,7 @@ static lxb_dom_node_t *coerce_to_node(JSContext *ctx, JSValueConst v, lxb_dom_do
 static void detach(lxb_dom_node_t *n)
 {
     if (n && n->parent) {
-        lxb_dom_node_remove(n);
+        node_remove_safe(n);
     }
 }
 
@@ -686,7 +733,7 @@ static JSValue js_el_replaceWith(JSContext *ctx, JSValueConst this_val, int argc
         detach(n);
         lxb_dom_node_insert_before(self, n);
     }
-    lxb_dom_node_remove(self);
+    node_remove_safe(self);
     mark_dirty(ctx);
     return JS_UNDEFINED;
 }
@@ -768,7 +815,7 @@ static JSValue js_el_insertBefore(JSContext *ctx, JSValueConst this_val, int arg
     /* Detach from the current parent first — lexbor's insert paths assume an
      * unlinked node (see appendChild). */
     if (node->parent) {
-        lxb_dom_node_remove(node);
+        node_remove_safe(node);
     }
     if (ref && ref->parent == parent) {
         lxb_dom_node_insert_before(ref, node);
@@ -799,10 +846,10 @@ static JSValue js_el_replaceChild(JSContext *ctx, JSValueConst this_val, int arg
         return JS_DupValue(ctx, argv[1]);
     }
     if (node->parent) {
-        lxb_dom_node_remove(node);
+        node_remove_safe(node);
     }
     lxb_dom_node_insert_before(old, node);
-    lxb_dom_node_remove(old);
+    node_remove_safe(old);
     mark_dirty(ctx);
     return JS_DupValue(ctx, argv[1]);
 }
@@ -1464,9 +1511,12 @@ static JSValue js_el_textContent_set(JSContext *ctx, JSValueConst this_val, JSVa
 		 * nodes stay allocated until the document dies — same contract
 		 * as the innerHTML setter below. */
         while (n->first_child) {
-            lxb_dom_node_remove(n->first_child);
+            node_remove_safe(n->first_child);
         }
         lxb_dom_node_text_content_set(n, (const lxb_char_t *)s, slen);
+        if (n->parent) {
+            style_element_ingest(ctx, n);
+        }
         JS_FreeCString(ctx, s);
         mark_dirty(ctx);
     }
@@ -1528,7 +1578,7 @@ static JSValue js_el_innerHTML_set(JSContext *ctx, JSValueConst this_val, JSValu
     }
     /* Wipe existing children. */
     while (n->first_child) {
-        lxb_dom_node_remove(n->first_child);
+        node_remove_safe(n->first_child);
     }
     /* Parse fragment under this element's context. */
     lxb_html_document_t *doc = lxb_html_interface_document(n->owner_document);

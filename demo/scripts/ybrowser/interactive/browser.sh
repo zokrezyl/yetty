@@ -4,11 +4,13 @@
 # keeps DOM, JS, timers and click dispatch alive across frames, so links and
 # forms actually work.
 #
-# Loads a committed local page by default, so it comes up OFFLINE. Pass a URL
+# Loads the committed demo hub page by default (demo/assets/ybrowser/ —
+# clickable links to the CSS / flexbox / grid / tables / SVG / image demo
+# pages), so it comes up OFFLINE. Pass a URL
 # (or set YBROWSER_URL) to browse the live web.
 #
-#   demo/scripts/ybrowser/interactive.sh
-#   YBROWSER_URL=https://example.com demo/scripts/ybrowser/interactive.sh
+#   demo/scripts/ybrowser/interactive/browser.sh
+#   YBROWSER_URL=https://example.com demo/scripts/ybrowser/interactive/browser.sh
 #
 # Controls: click links / type a URL in the address bar / scroll / Ctrl-C quits.
 #
@@ -19,9 +21,9 @@
 
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$DIR/../../.." && pwd)"
+ROOT="$(cd "$DIR/../../../.." && pwd)"
 YBROWSER="${YBROWSER:-$ROOT/build-desktop-ytrace-release/tools/ybrowser/ybrowser}"
-TARGET="${YBROWSER_URL:-$ROOT/demo/assets/web/welcome.html}"
+TARGET="${YBROWSER_URL:-$ROOT/demo/assets/ybrowser/index.html}"
 
 if [ ! -x "$YBROWSER" ]; then
     YBROWSER="$(command -v "${YBROWSER##*/}" 2>/dev/null || true)"

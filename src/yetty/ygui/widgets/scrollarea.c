@@ -65,11 +65,18 @@ static struct yetty_ycore_void_result scrollarea_set_offset(struct yetty_yclass_
 }
 
 /* Drag callback installed on the draggable mixin (fires for a drag anywhere
- * in the area). Treated as a DIRECT content drag — the content tracks the
- * finger/cursor 1:1, the natural touch-scroll gesture: dragging down (dy>0)
- * pulls the content down, revealing what's above (offset toward the top).
- * This is the inverse of scrollbar-thumb dragging; on touch nobody grabs the
- * 6 px thumb, and the wheel path (on_scroll) still drives precise scrolling. */
+ * in the area). WHERE the drag started picks the gesture:
+ *
+ *   - on the scrollbar gutter → THUMB drag: the thumb follows the cursor,
+ *     so the offset moves WITH dy, scaled from track pixels to content
+ *     pixels (max_offset / thumb_travel). Dragging the thumb down scrolls
+ *     down, like every desktop scrollbar.
+ *   - anywhere else → DIRECT content drag: the content tracks the
+ *     finger/cursor 1:1, the natural touch-scroll gesture — dragging down
+ *     (dy>0) pulls the content down, revealing what's above. The inverse
+ *     mapping of the thumb.
+ *
+ * The wheel path (on_scroll) is separate and unaffected. */
 static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_yclass_object *obj, float dx,
                                                          float dy, void *userdata)
 {
@@ -83,7 +90,23 @@ static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_yclass_obj
     if (d->max_offset <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    float new_off = d->offset - dy;
+    float press_x = 0.0f, press_y = 0.0f;
+    struct yetty_ycore_void_result press_res =
+        yetty_ygui_draggable_press_point(obj, &press_x, &press_y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, press_res, "scrollarea_on_drag: press_point");
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "scrollarea_on_drag: rect");
+    int on_gutter = press_x >= rect_res.value.max.x - SCROLLBAR_W - 4.0f;
+
+    float new_off;
+    if (on_gutter) {
+        /* thumb_travel is cached by the last paint — a drag can only start
+		 * on a thumb that has been painted. */
+        float track_to_content = d->thumb_travel > 0.0f ? (d->max_offset / d->thumb_travel) : 0.0f;
+        new_off = d->offset + dy * track_to_content;
+    } else {
+        new_off = d->offset - dy;
+    }
     if (new_off == d->offset) {
         return YETTY_OK_VOID();
     }

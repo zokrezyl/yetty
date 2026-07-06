@@ -91,6 +91,14 @@ struct yl_grid_class {
     uint8_t inherit_template;
     float col_gap;
     float row_gap;
+    /* Full selector alternative as written. Compiled lazily through the
+	 * lexbor selector engine so lookups do REAL matching — combinators,
+	 * attribute selectors, pseudo-classes — instead of the reduced
+	 * class-key approximation (kept as the fallback when compilation
+	 * fails). selector_state: 0 uncompiled, 1 compiled, 2 failed. */
+    char *selector;          /* owned */
+    void *compiled_selector; /* lxb_css_selector_list_t*; owned */
+    uint8_t selector_state;
 };
 
 /* A class-scoped `grid-column` / `grid-row` placement parsed from the
@@ -112,6 +120,14 @@ struct yl_grid_span_class {
     uint8_t axis;  /* 0 = grid-column, 1 = grid-row */
     uint8_t start; /* 1-based explicit start line; 0 = auto */
     uint8_t span;
+    /* Full selector alternative as written. Compiled lazily through the
+	 * lexbor selector engine so lookups do REAL matching — combinators,
+	 * attribute selectors, pseudo-classes — instead of the reduced
+	 * class-key approximation (kept as the fallback when compilation
+	 * fails). selector_state: 0 uncompiled, 1 compiled, 2 failed. */
+    char *selector;          /* owned */
+    void *compiled_selector; /* lxb_css_selector_list_t*; owned */
+    uint8_t selector_state;
 };
 
 /* Resolved grid placement for one element, both axes (0 = auto). */
@@ -132,6 +148,14 @@ struct yl_flex_gap_class {
     char *key; /* owned; freed on document replace */
     uint8_t match_tag;
     float col_gap;
+    /* Full selector alternative as written. Compiled lazily through the
+	 * lexbor selector engine so lookups do REAL matching — combinators,
+	 * attribute selectors, pseudo-classes — instead of the reduced
+	 * class-key approximation (kept as the fallback when compilation
+	 * fails). selector_state: 0 uncompiled, 1 compiled, 2 failed. */
+    char *selector;          /* owned */
+    void *compiled_selector; /* lxb_css_selector_list_t*; owned */
+    uint8_t selector_state;
 };
 
 /* Which engine decision produced a box's used width/height — stamped by
@@ -223,6 +247,14 @@ struct yetty_ylexbor_box {
     /* Layout result — set by ylexbor-layout.c. */
     float x, y, w, h;
 
+    /* Static position — where this box's border box WOULD land in normal
+	 * flow. Recorded (page coordinates) by the flow pass when it skips an
+	 * absolutely-positioned / fixed child; layout_absolute_child falls
+	 * back to it when neither inset of an axis is set (the spec's
+	 * static-position rectangle, instead of the containing-block origin). */
+    float static_x, static_y;
+    bool static_pos_set;
+
     /* Style snapshot used at layout + paint time. Resolved from the
 	 * lexbor computed style during box generation. */
     struct yetty_ylexbor_color bg;
@@ -303,6 +335,12 @@ struct yetty_ylexbor_box {
 	 * 1 = wrap (items overflowing the main axis move to the next flex
 	 * line). Only acted on for FLEX_ROW. */
     uint8_t flex_wrap;
+    uint8_t main_reverse; /* container: flex-direction row/column-REVERSE */
+    uint8_t wrap_reverse; /* container: flex-wrap: wrap-reverse */
+    int32_t flex_order;   /* item: CSS `order` (0 default) */
+    /* item: CSS align-self as a CSS_ALIGN_ITEMS_-compatible value
+	 * (the libcss enums alias); 0 / AUTO = defer to the container. */
+    int8_t align_self;
 
     /* Flex-container properties (meaningful when this box has
 	 * layout_mode == YL_LAYOUT_FLEX_ROW/COLUMN). Values are the
@@ -482,6 +520,11 @@ struct yetty_ylexbor_timer;
 struct yetty_ylexbor_custom_prop {
     char *name;  /* e.g. "--bgColor-default" — without trailing : */
     char *value; /* serialized value, e.g. "#0d1117" or "var(--x)" */
+    /* Coarse selector specificity of the defining rule (classes/pseudo
+	 * x10 + tags x1; `*` = 0). A later definition only overrides when
+	 * its specificity is >= the stored one — `html { --x }` no longer
+	 * beats an earlier `:root.theme-light { --x }`. */
+    uint16_t specificity;
 };
 
 struct yetty_ylexbor_customs {
@@ -655,31 +698,70 @@ struct yetty_ylexbor {
     struct yetty_ylexbor_img_cache_entry *img_cache;
     int img_cache_count, img_cache_cap;
 
+    /* Shared lexbor selector-match engine for the supplementary
+	 * cascade lookups (grid templates / spans / flex gaps). Lazy;
+	 * destroyed with the engine. */
+    void *supp_selector_matcher; /* lxb_selectors_t* */
+
+    /* Rendered inline-<svg> scenes, keyed by element (see
+	 * yetty_ylexbor_svg_inline_entry). */
+    struct yetty_ylexbor_svg_inline_entry *svg_inline_cache;
+    int svg_inline_count, svg_inline_cap;
+
     /* Async image fetching. When `img_pool` is set, yetty_ylexbor_start_image_fetch
 	 * submits each pending <img> to the worker pool (parallel fetch+decode on
 	 * background threads) instead of blocking the caller. `on_resource_ready`
 	 * is invoked on the loop thread when a fetch lands so the host repaints.
-	 * `img_jobs_in_flight`, `destroy_pending`, `fetch_generation` are touched
-	 * ONLY on the loop thread (submit + done + load_html + destroy), so no
-	 * locking is needed. `fetch_generation` is bumped on document replace so a
-	 * late job from a previous page is discarded. `destroy_pending` defers the
-	 * real teardown until the last in-flight job's done() runs — a job's
-	 * done() must never touch a freed engine. */
+	 * `img_jobs_in_flight` and `destroy_pending` are touched ONLY on the loop
+	 * thread (submit + done + load_html + destroy), so no locking is needed.
+	 * `fetch_generation` is bumped on document replace so a late job from a
+	 * previous page is discarded — it is ATOMIC because worker-thread transfer
+	 * callbacks poll it (via request->cancel_generation) while the loop thread
+	 * increments. `destroy_pending` defers the real teardown until the last
+	 * in-flight job's done() runs — a job's done() must never touch a freed
+	 * engine. */
     struct yetty_yplatform_yworkpool *img_pool;
     void (*on_resource_ready)(void *user);
     void *resource_ready_user;
     int img_jobs_in_flight;
     int destroy_pending;
-    uint64_t fetch_generation;
+    _Atomic uint64_t fetch_generation;
 };
 
 struct yetty_ylexbor_img_cache_entry {
     char *url;        /* owned */
-    uint32_t *pixels; /* RGBA8 row-major; owned */
-    int w, h;         /* source pixel dims */
+    uint32_t *pixels; /* RGBA8 row-major; owned — NULL for vector entries */
+    int w, h;         /* source pixel dims (scene dims for vectors) */
     int failed;       /* fetch/decode failed — don't retry */
     int loading;      /* an async fetch job is in flight for this url */
+    /* Vector images: an SVG source renders through ysvg into a drawable
+	 * list that paint MERGES into the page's output under the image box's
+	 * transform — vector primitives survive, nothing is rasterized. */
+    struct yetty_ydraw_drawable_list *svg_scene; /* owned; NULL for rasters */
+    float svg_min_x, svg_min_y;                  /* scene-space origin */
+    float svg_w, svg_h;                          /* scene-space extent */
 };
+
+/* Inline <svg> elements have no URL — their rendered scenes cache per
+ * DOM element. Cleared on document replace (element pointers die with
+ * the parse) and at destroy. */
+struct yetty_ylexbor_svg_inline_entry {
+    const void *element; /* lxb element pointer — cache key only, never deref'd */
+    struct yetty_ydraw_drawable_list *scene; /* owned; NULL when failed */
+    float min_x, min_y, w, h;
+};
+
+/* Render `bytes` through ysvg. On success fills scene + scene-space frame
+ * and returns 1; returns 0 when ysvg cannot parse/render the source.
+ * Defined in ybrowser-paint.c. */
+int yetty_ylexbor_svg_scene_render(const char *bytes, size_t len,
+                                   struct yetty_ydraw_drawable_list **out_scene, float *out_min_x,
+                                   float *out_min_y, float *out_w, float *out_h);
+
+/* Destroy every cached inline-<svg> scene and reset the cache. Called on
+ * document replace (the element keys die with the old parse) and from the
+ * engine teardown. Defined in ybrowser-paint.c. */
+void yetty_ylexbor_svg_inline_cache_clear(struct yetty_ylexbor *r);
 
 /* Defined in ylexbor-paint.c so the fetch/decode plumbing lives next
  * to the prim-emission code. Box-build calls this eagerly to learn
@@ -790,10 +872,19 @@ int yetty_ylexbor_grid_parse_placement(const char *src, size_t val_start, size_t
 void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *css_source,
                                       size_t css_len);
 
-/* Resolve a flex gap for an element (by class attribute, then tag name)
- * against the scanned table. Returns the gap in px, or 0. */
-float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const char *class_attr,
-                                    size_t class_len, const char *tag_name, size_t tag_len);
+/* Element-scoped var() resolution for inline styles — style="--x: v"
+ * definitions on the element/ancestors beat the global table. Caller
+ * frees. Defined in ybrowser-css-vars.c. */
+char *yetty_ylexbor_css_vars_resolve_for_element(struct yetty_ylexbor *r,
+                                                 const lxb_dom_element_t *element, const char *css,
+                                                 size_t len);
+
+/* Resolve a flex gap for an element: real selector matching against the
+ * scanned table first, class-attribute / tag-name key fallback for
+ * entries whose selector could not compile. Returns the gap in px, or 0. */
+float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const lxb_dom_element_t *element,
+                                    const char *class_attr, size_t class_len, const char *tag_name,
+                                    size_t tag_len);
 
 /* Expand every `flex: …` shorthand declaration in `css_source` into its
  * longhands (flex-grow / flex-shrink / flex-basis). libcss in this tree
@@ -910,6 +1001,10 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r, const char *t
 /* Resolve a possibly-relative URL against r->base_url. Caller frees
  * the returned string. Returns NULL on failure. */
 char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href);
+
+/* Same resolution against an explicit base — @import URLs resolve against
+ * the IMPORTING stylesheet's URL, not the document base. */
+char *yetty_ylexbor_resolve_url_against(const char *base_url, const char *href);
 
 /* Publish decoded RGBA pixels onto the loader's resource cache entry for
  * `url` (copies), so the next navigation reuses the decode as well as

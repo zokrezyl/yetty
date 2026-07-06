@@ -34,17 +34,6 @@ extern struct yetty_ycore_void_result yvideo_hook_instance_update(
 extern struct yetty_ycore_void_result yvideo_hook_instance_render_pre(
     struct yetty_ydraw_composite *instance, struct yetty_ydraw_target *target, float x, float y);
 
-/* Instance update via the figure_ops vtable.
- *
- * yvideo's legacy wire payload is `[u8 op][u8 reserved×3][body…]` — the
- * first u32 of the payload is `op | reserved<<8…`, so under the new
- * generic CMD_UPDATE dispatcher (scene-canvas peels the first u32 off
- * as `target_field`) we get `target_field == op` (with the reserved
- * bytes folded into the upper bits, which were always zero on the
- * wire). To keep yvideo_hook_instance_update unmodified, repack the
- * header into the legacy shape before forwarding. The repack is
- * stack-sized + cheap; only the 4-byte header has to be re-emitted,
- * the body is referenced in place. */
 static struct yetty_ycore_void_result yvideo_instance_update(struct yetty_ydraw_composite *instance,
                                                              uint32_t target_field,
                                                              const void *body, size_t body_size)
@@ -85,10 +74,6 @@ static struct yetty_ycore_void_result yvideo_instance_update(struct yetty_ydraw_
     }
     return r;
 }
-
-/* Forward decl — vtable definition lives below; the create + legacy
- * factory adapter both need its address. */
-static const struct yetty_ydraw_composite_ops yvideo_figure_ops;
 
 /* Legacy factory adapter — kept so the abstract factory's
  * update_instance slot still resolves. scene-canvas now routes through
@@ -213,7 +198,6 @@ static void yvideo_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
     strncpy(rs->uniforms[10].name, "flags", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[10].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[10].u32 = 0;
-    /* v2 audio uniforms — see yvideo.yaml. */
     strncpy(rs->uniforms[11].name, "audio_codec", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[11].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[11].u32 = 0;
@@ -247,8 +231,6 @@ static void yvideo_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
     strncpy(rs->uniforms[21].name, "viewport_h", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[21].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[21].f32 = 0.0f;
-    /* Per-texture atlas region uniforms — one vec4(u0,v0,u1,v1) each.
-     * Order matches the textures: array below: y_plane, u_plane, v_plane. */
     strncpy(rs->uniforms[22].name, "y_plane_region", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[22].type = YETTY_YRENDER_UNIFORM_VEC4;
     rs->uniforms[22].vec4[0] = 0.0f;
@@ -269,11 +251,7 @@ static void yvideo_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
     rs->uniforms[24].vec4[3] = 1.0f;
     rs->uniform_count = 25;
 
-    // Setup storage buffers — nal_stream and audio_stream. The shader
-    // doesn't read either today (decode happens host-side in
-    // yvideo-hooks.c); they're bound as a side-effect of the wire-format
-    // generator pattern. The `host_only` flag in ydraw-gen that would
-    // elide the GPU binding is still pending.
+    // Setup storage buffers for wire buffer data
     rs->buffer_count = 2;
     strncpy(rs->buffers[0].name, "buffer", YETTY_YRENDER_NAME_MAX - 1);
     strncpy(rs->buffers[0].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
@@ -282,31 +260,28 @@ static void yvideo_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
     strncpy(rs->buffers[1].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
     rs->buffers[1].readonly = 1;
 
-    /* Three R8 plane textures — y_plane (full-res), u_plane and
-     * v_plane (chroma 4:2:0 half-res). Each carries its own atlas
-     * region uniform; the shader does the YUV→RGB matrix. Width/height
-     * placeholders (1×1) are overwritten per-instance from the wire
-     * video_w / video_h / chroma_w / chroma_h values before
-     * binder->submit so atlas packing sees real dimensions. */
+    /* Texture: y_plane (format=r8, sampler=linear) */
     strncpy(rs->textures[0].name, "y_plane", YETTY_YRENDER_NAME_MAX - 1);
     strncpy(rs->textures[0].wgsl_type, "texture_2d<f32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
     rs->textures[0].format = WGPUTextureFormat_R8Unorm;
     rs->textures[0].sampler_filter = 1;
-    rs->textures[0].width = 1;
+    rs->textures[0].width = 1; /* placeholder for pipeline compile; overwritten per-instance */
     rs->textures[0].height = 1;
     rs->textures[0].data = NULL;
+    /* Texture: u_plane (format=r8, sampler=linear) */
     strncpy(rs->textures[1].name, "u_plane", YETTY_YRENDER_NAME_MAX - 1);
     strncpy(rs->textures[1].wgsl_type, "texture_2d<f32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
     rs->textures[1].format = WGPUTextureFormat_R8Unorm;
     rs->textures[1].sampler_filter = 1;
-    rs->textures[1].width = 1;
+    rs->textures[1].width = 1; /* placeholder for pipeline compile; overwritten per-instance */
     rs->textures[1].height = 1;
     rs->textures[1].data = NULL;
+    /* Texture: v_plane (format=r8, sampler=linear) */
     strncpy(rs->textures[2].name, "v_plane", YETTY_YRENDER_NAME_MAX - 1);
     strncpy(rs->textures[2].wgsl_type, "texture_2d<f32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
     rs->textures[2].format = WGPUTextureFormat_R8Unorm;
     rs->textures[2].sampler_filter = 1;
-    rs->textures[2].width = 1;
+    rs->textures[2].width = 1; /* placeholder for pipeline compile; overwritten per-instance */
     rs->textures[2].height = 1;
     rs->textures[2].data = NULL;
     rs->texture_count = 3;
@@ -339,11 +314,11 @@ static struct yetty_ycore_void_result yvideo_instance_render(struct yetty_ydraw_
     const uint32_t *data = (const uint32_t *)self->buffer_data;
     const uint32_t *payload = data + 2; // skip type_id and payload_size
 
-    // Update uniforms from wire format (14 wire uniforms — v2 layout).
-    rs->uniforms[0].f32 = *(float *)&payload[0];
-    rs->uniforms[1].f32 = *(float *)&payload[1];
-    rs->uniforms[2].f32 = *(float *)&payload[2];
-    rs->uniforms[3].f32 = *(float *)&payload[3];
+    // Update uniforms from wire format
+    rs->uniforms[0].f32 = *(float *)&payload[0]; /* bounds_x */
+    rs->uniforms[1].f32 = *(float *)&payload[1]; /* bounds_y */
+    rs->uniforms[2].f32 = *(float *)&payload[2]; /* bounds_w */
+    rs->uniforms[3].f32 = *(float *)&payload[3]; /* bounds_h */
     rs->uniforms[4].u32 = payload[4];            /* video_w */
     rs->uniforms[5].u32 = payload[5];            /* video_h */
     rs->uniforms[6].u32 = payload[6];            /* chroma_w */
@@ -367,34 +342,32 @@ static struct yetty_ycore_void_result yvideo_instance_render(struct yetty_ydraw_
     rs->uniforms[20].f32 = target->viewport.w;
     rs->uniforms[21].f32 = target->viewport.h;
 
-    // Override bounds_x / bounds_y with the caller-provided screen position
-    // (wire bounds are the pre-scroll origin; x,y are the post-scroll pane
-    // position the instance should render at).
-    rs->uniforms[0].f32 = x;
-    rs->uniforms[1].f32 = y;
-
-    // HiDPI: wire bounds_w/h (uniforms[2]/[3]) are LOGICAL pixels; scale to
-    // physical so the figure fills its laid-out footprint (origin x,y above is
-    // already physical). self->content_scale is 1.0 in the terminal's local
-    // compositor, so this is a no-op there.
+    // Compose the caller-provided pane position with the record's own
+    // ENVELOPE-LOCAL origin: a multi-figure envelope (a browser page's
+    // images) lays its figures out internally, so each record's wire
+    // bounds_x/y is its offset inside the block anchored at (x, y).
+    // Single-figure producers (ycat) ship a 0,0 origin — for them this
+    // reduces to the plain caller position. bounds_w/h are LOGICAL pixels;
+    // the offset and body both scale by content_scale (1.0 in the
+    // terminal's local compositor).
     {
         float figure_content_scale = self->content_scale > 0.0f ? self->content_scale : 1.0f;
+        rs->uniforms[0].f32 = x + rs->uniforms[0].f32 * figure_content_scale;
+        rs->uniforms[1].f32 = y + rs->uniforms[1].f32 * figure_content_scale;
         rs->uniforms[2].f32 *= figure_content_scale;
         rs->uniforms[3].f32 *= figure_content_scale;
     }
 
-    // Wire layout: 14 uniforms, then 2 buffer length fields, then both
-    // buffer payloads in declaration order (nal_stream then audio_stream).
-    size_t nal_words = payload[14];
-    size_t audio_words = payload[15];
-    const uint32_t *nal_payload = payload + 16;
-    const uint32_t *audio_payload = nal_payload + nal_words;
-
-    rs->buffers[0].data = (uint8_t *)nal_payload;
-    rs->buffers[0].size = nal_words * sizeof(uint32_t);
+    // Wire each storage buffer to its slice of the payload
+    size_t nal_stream_words = payload[14];
+    size_t audio_stream_words = payload[15];
+    const uint32_t *nal_stream_payload = payload + 16;
+    const uint32_t *audio_stream_payload = nal_stream_payload + nal_stream_words;
+    rs->buffers[0].data = (uint8_t *)nal_stream_payload;
+    rs->buffers[0].size = nal_stream_words * sizeof(uint32_t);
     rs->buffers[0].dirty = 1;
-    rs->buffers[1].data = (uint8_t *)audio_payload;
-    rs->buffers[1].size = audio_words * sizeof(uint32_t);
+    rs->buffers[1].data = (uint8_t *)audio_stream_payload;
+    rs->buffers[1].size = audio_stream_words * sizeof(uint32_t);
     rs->buffers[1].dirty = 1;
 
     /* hook_instance_render_pre runs after the wire→RS uniform refresh
@@ -448,16 +421,45 @@ static struct yetty_ycore_void_result yvideo_instance_render(struct yetty_ydraw_
     /* The pane's render target may sit at a non-zero offset inside the
      * big surface (e.g. yui pushes the terminal pane down by the titlebar
      * height). The layer's simple-prim pass already draws to
-     * (vp.x, vp.y, vp.w, vp.h); yvideo must use the same rect, otherwise
-     * its fullscreen triangle covers a different region of the framebuffer
-     * than the rest of the layer and the FS would compare canvas-local
-     * bounds against the wrong coordinate system — see yvideo.wgsl
-     * pane_pixel comment for the matching shader-side fix. */
+     * (vp.x, vp.y, vp.w, vp.h); the complex prim must use the same rect,
+     * otherwise its fullscreen triangle covers a different region of the
+     * framebuffer than the rest of the layer and the FS would compare
+     * canvas-local bounds against the wrong coordinate system — see the
+     * pane_pixel comment in the matching shader. */
     wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
                                      target->viewport.w, target->viewport.h, 0.0f, 1.0f);
-    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)target->viewport.x,
-                                        (uint32_t)target->viewport.y, (uint32_t)target->viewport.w,
-                                        (uint32_t)target->viewport.h);
+
+    /* Scissor to the viewport, intersected with the compositor's clip rect
+     * when one is set (e.g. a scrolling ygrid's scroll-area bounds) so the
+     * figure is clipped to its container instead of bleeding over
+     * surrounding chrome such as the tab bar. */
+    float scissor_x0 = target->viewport.x;
+    float scissor_y0 = target->viewport.y;
+    float scissor_x1 = target->viewport.x + target->viewport.w;
+    float scissor_y1 = target->viewport.y + target->viewport.h;
+    if (target->clip.w > 0.0f && target->clip.h > 0.0f) {
+        if (target->clip.x > scissor_x0) {
+            scissor_x0 = target->clip.x;
+        }
+        if (target->clip.y > scissor_y0) {
+            scissor_y0 = target->clip.y;
+        }
+        if (target->clip.x + target->clip.w < scissor_x1) {
+            scissor_x1 = target->clip.x + target->clip.w;
+        }
+        if (target->clip.y + target->clip.h < scissor_y1) {
+            scissor_y1 = target->clip.y + target->clip.h;
+        }
+    }
+    if (scissor_x1 < scissor_x0) {
+        scissor_x1 = scissor_x0;
+    }
+    if (scissor_y1 < scissor_y0) {
+        scissor_y1 = scissor_y0;
+    }
+    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)scissor_x0, (uint32_t)scissor_y0,
+                                        (uint32_t)(scissor_x1 - scissor_x0),
+                                        (uint32_t)(scissor_y1 - scissor_y0));
 
     float w = self->bounds.max.x - self->bounds.min.x;
     float h = self->bounds.max.y - self->bounds.min.y;
@@ -522,6 +524,10 @@ static WGPURenderPipeline yvideo_get_pipeline(struct yetty_ydraw_concrete_factor
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }
 
+/* Forward decl — vtable definition lives below; create_instance just
+ * needs its address. */
+static const struct yetty_ydraw_composite_ops yvideo_figure_ops;
+
 static struct yetty_ydraw_composite_ptr_result yvideo_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
@@ -530,19 +536,14 @@ static struct yetty_ydraw_composite_ptr_result yvideo_create_instance(
         return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
     }
 
-    /* Bounds-check declared buffer payloads against the wire record. */
+    /* Bounds-check the wire record against its declared payload_size. */
     {
-        const uint32_t *payload = (const uint32_t *)buffer_data + 2;
-        if (size < (size_t)18u * sizeof(uint32_t)) {
-            return YETTY_ERR(yetty_ydraw_composite_ptr,
-                             "yvideo: record too small for buffer header");
+        if (size < 2u * sizeof(uint32_t)) {
+            return YETTY_ERR(yetty_ydraw_composite_ptr, "yvideo: record too small for header");
         }
-        uint64_t buffer_words = 0;
-        buffer_words += payload[14];
-        buffer_words += payload[15];
-        uint64_t record_words = (uint64_t)(2u + 16u) + buffer_words;
-        if (record_words * sizeof(uint32_t) > (uint64_t)size) {
-            return YETTY_ERR(yetty_ydraw_composite_ptr, "yvideo: buffers exceed record");
+        uint64_t declared_payload = (uint64_t)((const uint32_t *)buffer_data)[1];
+        if (2u * sizeof(uint32_t) + declared_payload > (uint64_t)size) {
+            return YETTY_ERR(yetty_ydraw_composite_ptr, "yvideo: payload exceeds wire record");
         }
     }
 
@@ -590,20 +591,19 @@ static struct yetty_ydraw_composite_ptr_result yvideo_create_instance(
      * buffers (if any) point into the wire bytes; textures whose
      * pixels_buffer was diverted have their data + dimensions populated
      * here BEFORE binder->submit so the first finalize sees real
-     * dimensions and atlas-packs accordingly. v2 wire layout: 14
-     * uniform words, 2 buffer length fields, then payloads in order. */
+     * dimensions and atlas-packs accordingly. */
     {
         const uint32_t *data = (const uint32_t *)instance->buffer_data;
         const uint32_t *payload = data + 2;
-        size_t nal_words = payload[14];
-        size_t audio_words = payload[15];
-        const uint32_t *nal_payload = payload + 16;
-        const uint32_t *audio_payload = nal_payload + nal_words;
-        instance->resource_set->buffers[0].data = (uint8_t *)nal_payload;
-        instance->resource_set->buffers[0].size = nal_words * sizeof(uint32_t);
+        size_t nal_stream_words = payload[14];
+        size_t audio_stream_words = payload[15];
+        const uint32_t *nal_stream_payload = payload + 16;
+        const uint32_t *audio_stream_payload = nal_stream_payload + nal_stream_words;
+        instance->resource_set->buffers[0].data = (uint8_t *)nal_stream_payload;
+        instance->resource_set->buffers[0].size = nal_stream_words * sizeof(uint32_t);
         instance->resource_set->buffers[0].dirty = 1;
-        instance->resource_set->buffers[1].data = (uint8_t *)audio_payload;
-        instance->resource_set->buffers[1].size = audio_words * sizeof(uint32_t);
+        instance->resource_set->buffers[1].data = (uint8_t *)audio_stream_payload;
+        instance->resource_set->buffers[1].size = audio_stream_words * sizeof(uint32_t);
         instance->resource_set->buffers[1].dirty = 1;
     }
 
@@ -627,6 +627,7 @@ static struct yetty_ydraw_composite_ptr_result yvideo_create_instance(
         yetty_yrender_gpu_resource_binder_create_with_pipeline(
             factory->device, factory->queue, factory->allocator, factory->pipeline);
     if (YETTY_IS_ERR(br)) {
+        ydebug("yvideo_create_instance: binder_create FAILED: %s", br.error.msg);
         yvideo_hook_instance_destroy(instance);
         free(instance->resource_set);
         free(instance->buffer_data);
@@ -656,6 +657,8 @@ static struct yetty_ydraw_composite_ptr_result yvideo_create_instance(
         return YETTY_ERR(yetty_ydraw_composite_ptr, "binder finalize failed", fr);
     }
 
+    ydebug("yvideo_create_instance: OK bounds=(%.0f,%.0f,%.0f,%.0f)", instance->bounds.min.x,
+           instance->bounds.min.y, instance->bounds.max.x, instance->bounds.max.y);
     return YETTY_OK(yetty_ydraw_composite_ptr, instance);
 }
 
@@ -673,16 +676,14 @@ static void yvideo_instance_destroy(struct yetty_ydraw_composite *instance)
     free(instance);
 }
 
-/* Vtable installed on every yvideo figure_instance at create time. */
+/* Per-instance vtable installed on every yvideo figure_instance. */
 static const struct yetty_ydraw_composite_ops yvideo_figure_ops = {
     .destroy = yvideo_instance_destroy,
     .update = yvideo_instance_update,
 };
 
-/* Legacy factory adapter — kept so the abstract factory's
- * destroy_instance slot still resolves. yetty_ydraw_composite_destroy
- * now routes through fi->ops->destroy directly; this is reached only
- * from the few call sites that still go through the factory path. */
+/* Legacy factory adapter — kept for the factory->destroy_instance
+ * fallback path. */
 static void yvideo_destroy_instance(struct yetty_ydraw_concrete_factory *self,
                                     struct yetty_ydraw_composite *instance)
 {
@@ -727,6 +728,7 @@ struct yetty_ydraw_concrete_factory *yetty_yvideo_factory_create(void)
     }
 
     factory->base.type_id = YETTY_YVIDEO_TYPE_ID;
+    factory->base.destroy = yetty_yvideo_factory_destroy;
     factory->base.compile_pipeline = yvideo_compile_pipeline;
     factory->base.get_pipeline = yvideo_get_pipeline;
     factory->base.create_instance = yvideo_create_instance;

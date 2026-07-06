@@ -1271,6 +1271,8 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
      * ycat ships one envelope per PDF page with y=0 origin, so without this the
      * pages would all stack at the same row. */
     float content_bottom_px = 0.0f;
+    uint32_t ingested_records = 0;
+    uint32_t ingested_composites = 0;
 
     struct yetty_ycore_void_result result = YETTY_OK_VOID();
     for (;;) {
@@ -1342,10 +1344,16 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
                 struct yetty_ycore_uint32_result at =
                     yetty_yvterm_vterm_attach_composite(terminal->grid, cur_row, ir.value);
                 if (YETTY_IS_ERR(at)) {
+                    ydebug("ydraw ingest: attach_composite type=0x%08x FAILED: %s", data[0],
+                           at.error.msg);
                     yetty_ydraw_composite_destroy(ir.value);
                     yetty_ycore_error_destroy(at.error);
+                } else {
+                    ingested_composites++;
                 }
             } else {
+                ydebug("ydraw ingest: create_instance type=0x%08x FAILED: %s", data[0],
+                       ir.error.msg);
                 yetty_ycore_error_destroy(ir.error);
             }
         } else {
@@ -1357,8 +1365,11 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
                 yetty_ycore_error_destroy(ap.error); /* skip one bad record, keep parsing */
             }
         }
+        ingested_records++;
     }
 
+    ydebug("ydraw ingest: %u records (%u composites) bottom=%.0fpx ok=%d", ingested_records,
+           ingested_composites, content_bottom_px, YETTY_IS_OK(result));
     yetty_ydraw_drawable_iterator_destroy(&iter);
 
     /* Reserve vertical space for this envelope's content by advancing the

@@ -34,6 +34,12 @@ struct yetty_ybrowser_libcss {
 
     /* Back-pointer for callbacks that need viewport metrics / lookups. */
     struct yetty_ylexbor *r;
+
+    /* @import recursion state: absolute URLs currently being loaded, so a
+	 * cyclic import (a imports b imports a) terminates instead of looping.
+	 * Bounded — deeper chains are cut off. */
+    char *import_chain[8];
+    int import_depth;
 };
 
 /* Lifecycle. */
@@ -47,11 +53,15 @@ void yetty_ybrowser_libcss_destroy(struct yetty_ylexbor *r);
 int yetty_ybrowser_libcss_apply_wikipedia_quirks(struct yetty_ylexbor *r);
 
 /* Parse one CSS source string through libcss and append to the select
- * ctx. origin is CSS_ORIGIN_AUTHOR for everything we see today. Returns
- * 0 on success, -1 on error (caller may still continue — the cascade
- * just won't include this sheet). */
+ * ctx. origin is CSS_ORIGIN_AUTHOR for everything we see today.
+ * `sheet_url` is the stylesheet's own absolute URL (NULL for inline /
+ * built-in sheets) — @import references resolve against it, and imported
+ * sheets are fetched through the loader and appended BEFORE this sheet so
+ * cascade source order matches the spec. Returns 0 on success, -1 on
+ * error (caller may still continue — the cascade just won't include this
+ * sheet). */
 int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, size_t len,
-                                    css_origin origin);
+                                    css_origin origin, const char *sheet_url);
 
 /* Run libcss's selector matching against the cascade for `el` and
  * return the cascaded computed style for the unstyled-pseudo (i.e.
@@ -156,6 +166,13 @@ int yetty_ybrowser_libcss_flex_basis(struct yetty_ylexbor *r, const css_computed
 int yetty_ybrowser_libcss_justify_content(const css_computed_style *style);
 int yetty_ybrowser_libcss_align_items(const css_computed_style *style);
 
+/* CSS `order` — returns 1 with *out set when the cascade sets it. */
+int yetty_ybrowser_libcss_order(const css_computed_style *style, int32_t *out);
+
+/* CSS `align-self` — CSS_ALIGN_SELF_* (aliases CSS_ALIGN_ITEMS_*);
+ * CSS_ALIGN_SELF_AUTO when unset. */
+int yetty_ybrowser_libcss_align_self(const css_computed_style *style);
+
 /* Float / clear. Returns the CSS_FLOAT_* / CSS_CLEAR_* enum. */
 int yetty_ybrowser_libcss_float(const css_computed_style *style);
 int yetty_ybrowser_libcss_clear(const css_computed_style *style);
@@ -182,12 +199,6 @@ int yetty_ybrowser_libcss_white_space(const css_computed_style *style);
  * (0x10) ORed when the property is explicitly `none`. The caller masks
  * out the bits it cares about; CSS_TEXT_DECORATION_NONE forces a clear. */
 int yetty_ybrowser_libcss_text_decoration(const css_computed_style *style);
-
-/* Background-image: when the computed value is an absolute URL,
- * fills *out_url with a freshly malloc'd NUL-terminated copy that the
- * caller must free(). Returns 1 on success, 0 on `none` / `inherit` /
- * any non-url() value. */
-int yetty_ybrowser_libcss_bg_image_url(const css_computed_style *style, char **out_url);
 
 /* List-style-type: returns the CSS_LIST_STYLE_TYPE_* enum (DISC /
  * CIRCLE / SQUARE / DECIMAL / NONE / …). Used by box-build to pick

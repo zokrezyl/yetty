@@ -5,14 +5,14 @@
 # the terminal like any other ycat-style figure.
 #
 # This is the OFFLINE, scrolling counterpart to the interactive Chrome-like
-# mode (see interactive.sh). The local render needs no network.
+# mode (see ../interactive/browser.sh). The local render needs no network.
 #
 # Usage (from inside yetty):
-#   ./build-desktop-ytrace-release/yetty -e demo/scripts/ybrowser/basic.sh
+#   ./build-desktop-ytrace-release/yetty -e demo/scripts/ybrowser/once/basic.sh
 
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$DIR/../../.." && pwd)"
+ROOT="$(cd "$DIR/../../../.." && pwd)"
 YBROWSER="${YBROWSER:-$ROOT/build-desktop-ytrace-release/tools/ybrowser/ybrowser}"
 PAGE="$ROOT/demo/assets/web/welcome.html"
 PAUSE="${DEMO_PAUSE:-0}"

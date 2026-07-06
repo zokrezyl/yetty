@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ybrowser — tables</title>
+<style>
+  body { margin: 0; background: #0B1014; color: #E0E5E4; font-family: sans-serif; padding: 28px 36px; }
+  h1 { color: #74C5A5; }
+  h2 { color: #6BA892; border-bottom: 1px solid #364A47; padding-bottom: 4px; margin-top: 26px; }
+  p  { color: #9FA7A8; }
+  a  { color: #6BA892; }
+  table { border: 1px solid #364A47; background: #141A1F; width: 100%; }
+  th { background: #1E262C; color: #74C5A5; padding: 8px; text-align: left; }
+  td { padding: 8px; border: 1px solid #364A47; }
+  tr.alt td { background: #1E262C; }
+  .infobox { width: 320px; float: right; margin-left: 16px; }
+  .infobox th { width: 110px; color: #9FA7A8; }
+</style>
+</head>
+<body>
+  <h1>Tables</h1>
+  <p><a href="index.html">back to the hub</a></p>
+
+  <h2>Infobox (floated)</h2>
+  <table class="infobox">
+    <tr><th>Engine</th><td>lexbor + libcss</td></tr>
+    <tr class="alt"><th>Layout</th><td>block, flex, grid, table</td></tr>
+    <tr><th>Scripting</th><td>QuickJS</td></tr>
+    <tr class="alt"><th>Paint</th><td>ydraw SDF primitives</td></tr>
+    <tr><th>License</th><td>BSL-1.1</td></tr>
+  </table>
+  <p>The infobox floats right, Wikipedia-style, and this paragraph flows around
+     it. Cells split label and value into two aligned columns; alternate rows
+     carry a lifted background. The main data table below spans the full
+     content width with a header row.</p>
+
+  <h2>Data table</h2>
+  <table>
+    <tr><th>Feature</th><th>Mechanism</th><th>Where</th></tr>
+    <tr><td>Cookies</td><td>libcurl cookie engine, shared jar</td><td>loader</td></tr>
+    <tr class="alt"><td>HTTP cache</td><td>LRU + ETag revalidation</td><td>loader</td></tr>
+    <tr><td>Transfers</td><td>one curl-multi scheduler thread</td><td>loader</td></tr>
+    <tr class="alt"><td>Images</td><td>PNG / JPEG / WebP / GIF decode</td><td>paint</td></tr>
+    <tr><td>SVG</td><td>vector merge via ysvg</td><td>paint</td></tr>
+    <tr class="alt"><td>CSS-in-JS</td><td>style-element ingestion</td><td>DOM bindings</td></tr>
+  </table>
+</body>
+</html>

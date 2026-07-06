@@ -4,7 +4,7 @@
 add_library(yetty_yplot_core STATIC
     yplot.c
     yplot-gen-wire.c
-    yplot-gen-yaml.c
+    yplot-yaml.c
 )
 
 target_include_directories(yetty_yplot_core PUBLIC
@@ -28,6 +28,7 @@ if(YETTY_ENABLE_LIB_WEBGPU)
     add_library(yetty_yplot STATIC
         yplot-gen.c
         yplot-time.c
+        yplot-update.c
     )
 
     target_include_directories(yetty_yplot PUBLIC

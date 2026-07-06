@@ -128,6 +128,7 @@ struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_c
  * the rich pass keep a figure drawn while any of its rows is still on screen,
  * instead of dropping it the moment its anchor (top) line scrolls off. */
 float yetty_ydraw_composite_pixel_height(const struct yetty_ydraw_composite *instance);
+float yetty_ydraw_composite_pixel_bottom(const struct yetty_ydraw_composite *instance);
 /* Set a figure's content scale so it magnifies with the zoomed text — same
  * reason for the hand declaration. */
 void yetty_ydraw_composite_set_content_scale(struct yetty_ydraw_composite *instance, float scale);
@@ -1272,7 +1273,31 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
                            ? vterm->cell_size.height / vterm->baseline_cell_height
                            : 1.0f;
     float figure_scale = zoom * cell_ratio;
-    /* A figure is anchored on its BOTTOM line and spans upward, so the scan
+    /* Rich SDF pass: the raw ydraw records (ycat PDF/SVG/markdown — SDF shapes,
+     * glyphs, text runs) stored per line. Anchored by the same resolved window
+     * as the text, so they scroll in lockstep across all tiers. Drawn after
+     * the text and BEFORE the anchored composites: producers layer their
+     * figures over the SDF chrome (a browser page's images sit on its
+     * background rectangles; the old composites-first order painted every
+     * page background OVER its images, blanking them). Best-effort — never
+     * fail the frame on it. */
+    if (vterm->sdf_layer) {
+        struct yetty_ycore_void_result sdf_res = yetty_yvterm_sdf_layer_render(
+            vterm->sdf_layer, grid, target, rect, vterm->cell_size.width, vterm->cell_size.height,
+            cols, rows, window_slots, window_rows, slot_count, zoom, vz_off_x, vz_off_y,
+            cell_ratio);
+        if (YETTY_IS_ERR(sdf_res)) {
+            ywarn("vterm_render: SDF layer: %s", sdf_res.error.msg);
+            yetty_ycore_error_destroy(sdf_res.error);
+        }
+    }
+
+    /* Anchored-composite pass — after the SDF records, so figures render
+     * on top of any page chrome sharing their lines (see the SDF pass
+     * comment above; a z-aware unified ordering across both record kinds
+     * is the eventual replacement for this two-pass split).
+     *
+     * A figure is anchored on its BOTTOM line and spans upward, so the scan
      * runs the whole resolved window: the visible rows plus the look-ahead
      * BELOW the bottom (already folded into window_rows above) — in a
      * scrolled-back view a figure whose bottom sits below the viewport may
@@ -1310,8 +1335,14 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
              * the pane top (scrolled off the top), or its top below the pane
              * bottom (scrolled off / pushed down under zoom). A figure with no
              * reported height is drawn whenever its top row is on screen. */
-            float fig_height = yetty_ydraw_composite_pixel_height(comps[ci]) * figure_scale;
-            if (comp_y_local + fig_height <= 0.0f) {
+            /* Cull on the figure's BOTTOM extent within its block —
+			 * bounds.max.y, not the bare height: a multi-figure envelope
+			 * (a browser page) positions records deep inside the block, so
+			 * a small figure far down must survive the block top scrolling
+			 * off. A figure with no reported extent draws whenever its
+			 * block top is on screen. */
+            float fig_bottom = yetty_ydraw_composite_pixel_bottom(comps[ci]) * figure_scale;
+            if (fig_bottom > 0.0f && comp_y_local + fig_bottom <= 0.0f) {
                 continue;
             }
             if (comp_y_local >= pane_height) {
@@ -1325,23 +1356,9 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
             struct yetty_ycore_void_result cr =
                 yetty_ydraw_composite_render(comps[ci], target, comp_x, comp_y);
             if (YETTY_IS_ERR(cr)) {
+                ydebug("vterm composite: render FAILED: %s", cr.error.msg);
                 yetty_ycore_error_destroy(cr.error);
             }
-        }
-    }
-
-    /* Rich SDF pass: the raw ydraw records (ycat PDF/SVG/markdown — SDF shapes,
-     * glyphs, text runs) stored per line. Anchored by the same resolved window
-     * as the text, so they scroll in lockstep across all tiers. Drawn after
-     * the text + composites, on top. Best-effort — never fail the frame on it. */
-    if (vterm->sdf_layer) {
-        struct yetty_ycore_void_result sdf_res = yetty_yvterm_sdf_layer_render(
-            vterm->sdf_layer, grid, target, rect, vterm->cell_size.width, vterm->cell_size.height,
-            cols, rows, window_slots, window_rows, slot_count, zoom, vz_off_x, vz_off_y,
-            cell_ratio);
-        if (YETTY_IS_ERR(sdf_res)) {
-            ywarn("vterm_render: SDF layer: %s", sdf_res.error.msg);
-            yetty_ycore_error_destroy(sdf_res.error);
         }
     }
 

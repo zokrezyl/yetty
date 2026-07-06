@@ -1244,10 +1244,59 @@ static void test_grid_content_column_cap(void)
     yetty_ylexbor_destroy(yl);
 }
 
+/* ============================================================================
+ * Flex containers lay out EVERY in-flow child — a fixed 256-slot scratch
+ * used to silently drop children past the cap, leaving them unplaced.
+ * ============================================================================*/
+static void test_flex_beyond_256_children(void)
+{
+    fprintf(stderr, "[test_flex_beyond_256_children]\n");
+    enum { CHILD_COUNT = 300 };
+    static const char head[] = "<html><head><style>.row { display: flex; } "
+                               ".item { flex: 1; height: 10px; }</style></head>"
+                               "<body><div class='row'>";
+    static const char item[] = "<div class='item'>x</div>";
+    static const char tail[] = "</div></body></html>";
+    size_t cap = sizeof(head) + (size_t)CHILD_COUNT * (sizeof(item) - 1) + sizeof(tail);
+    char *html = malloc(cap);
+    if (!html) {
+        fprintf(stderr, "  oom\n");
+        g_failures++;
+        return;
+    }
+    size_t used = (size_t)snprintf(html, cap, "%s", head);
+    for (int i = 0; i < CHILD_COUNT; i++) {
+        used += (size_t)snprintf(html + used, cap - used, "%s", item);
+    }
+    (void)snprintf(html + used, cap - used, "%s", tail);
+    struct yetty_ylexbor *yl = load(html, 1200, 600);
+    free(html);
+
+    /* The LAST item must have a real box: non-zero width, sitting at the
+	 * row's right edge. Truncation left every child past 256 unplaced. */
+    struct box_info last = {0};
+    if (find_box(yl, "div", CHILD_COUNT, &last) != 0) {
+        fprintf(stderr, "  item %d has no box\n", CHILD_COUNT);
+        g_failures++;
+    } else {
+        if (last.w <= 0.01f) {
+            fprintf(stderr, "  item %d has zero width\n", CHILD_COUNT);
+            g_failures++;
+        } else if (last.x < 1100.0f) {
+            fprintf(stderr, "  item %d not at the row end (x=%.1f)\n", CHILD_COUNT, last.x);
+            g_failures++;
+        } else {
+            g_passed++;
+        }
+    }
+    yetty_ylexbor_destroy(yl);
+}
+
 int main(void)
 {
     fprintf(stderr, "ybrowser-layout-test\n");
 
+    test_flex_beyond_256_children();
     test_grid_content_column_cap();
     test_box_sizing();
     test_percent_padding_basis();

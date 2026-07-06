@@ -1,0 +1,22 @@
+<!doctype html><meta charset=utf-8><title>moving/removing style elements never crashes; CSS-in-JS styles apply</title>
+<style>body{margin:0}</style>
+<div data-test="target" data-expect="0,*,321,7">sized by injected style</div>
+<script>
+/* theguardian.com regression: a <style> inserted while EMPTY has no
+   lexbor stylesheet; removing or re-appending it crashed inside the
+   removing steps. Also pins CSS-in-JS ingestion: text set after
+   insertion must reach the cascade. */
+var empty = document.createElement("style");
+document.head.appendChild(empty);
+document.head.removeChild(empty);
+
+var moved = document.createElement("style");
+document.head.appendChild(moved);
+moved.textContent = "i{}";
+document.body.appendChild(moved);
+document.body.removeChild(moved);
+
+var styler = document.createElement("style");
+document.head.appendChild(styler);
+styler.textContent = "[data-test=target]{width:321px;height:7px}";
+</script>

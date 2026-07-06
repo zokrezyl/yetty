@@ -75,6 +75,46 @@ fn ysdf_length3_safe(v: vec3<f32>) -> f32 {
 
 GEOMETRY_OFFSET = 5
 
+# ---------------------------------------------------------------------------
+# 2D affine-transform classification for geometry args, keyed by arg NAME.
+# Drives the generated yetty_ysdf_geometry_transform(): embedding a produced
+# drawable list into another scene (SVG-in-HTML, thumbnails) needs every
+# geometry word translated/scaled correctly per its meaning.
+#
+#   x     : x coordinate                -> v * scale_x + offset_x
+#   y     : y coordinate                -> v * scale_y + offset_y
+#   len_x : extent along x              -> v * scale_x
+#   len_y : extent along y              -> v * scale_y
+#   len   : axis-free length (radius)   -> v * mean(scale_x, scale_y)
+#   none  : direction component / count / ratio / color / z — untouched
+#
+# EVERY arg name that appears in the YAML must be classified here; the
+# generator refuses to run otherwise, so a new primitive cannot silently
+# ship with untransformable geometry.
+# ---------------------------------------------------------------------------
+TRANSFORM_KIND_BY_ARG_NAME = {
+    "center_x": "x", "position_x": "x", "start_x": "x", "end_x": "x",
+    "vertex_a_x": "x", "vertex_b_x": "x", "vertex_c_x": "x",
+    "grad_x0": "x", "grad_x1": "x", "grad_cx": "x",
+    "center_y": "y", "position_y": "y", "start_y": "y", "end_y": "y",
+    "vertex_a_y": "y", "vertex_b_y": "y", "vertex_c_y": "y",
+    "grad_y0": "y", "grad_y1": "y", "grad_cy": "y",
+    "half_width": "len_x", "half_size_x": "len_x", "radius_x": "len_x",
+    "half_height": "len_y", "half_size_y": "len_y", "radius_y": "len_y",
+    "radius": "len", "corner_radius": "len", "thickness": "len",
+    "radius_outer": "len", "radius_inner": "len",
+    "radius_top_right": "len", "radius_bottom_right": "len",
+    "radius_top_left": "len", "radius_bottom_left": "len",
+    "scale": "len", "minor_radius": "len", "major_radius": "len",
+    "grad_radius": "len", "offset": "len", "width": "len",
+    "aperture_x": "none", "aperture_y": "none",
+    "normal_x": "none", "normal_y": "none",
+    "num_points": "none", "inner_ratio": "none",
+    "color0": "none", "color1": "none",
+    "color_inner": "none", "color_outer": "none",
+    "position_z": "none", "half_size_z": "none",
+}
+
 # The YAML is the single source of truth for primitive type ids. Each
 # entry's `type:` field is the actual on-wire / dispatch id — this
 # generator does NOT transform it.
@@ -143,6 +183,51 @@ def generate_sdf_types(prims: list[dict], out: Path) -> None:
     lines.append("// Primitive size in bytes - use as yetty_ydraw_primitive_size_fn callback")
     lines.append("static inline size_t yetty_ysdf_primitive_size(uint32_t type) {")
     lines.append("    return yetty_ysdf_word_count((enum yetty_ysdf_type)type) * sizeof(float);")
+    lines.append("}")
+    lines.append("")
+
+    # 2D affine transform of the geometry words (translate + scale).
+    lines.append("// Affine 2D transform of an SDF primitive's geometry words: translate by")
+    lines.append("// (offset_x, offset_y) after scaling by (scale_x, scale_y). `geom` points at")
+    lines.append("// the first geometry word (word 5 of the primitive). Axis-free lengths")
+    lines.append("// (radii, thickness) scale by the mean of the two factors — exact under")
+    lines.append("// uniform scale, an approximation otherwise. Direction components, counts,")
+    lines.append("// ratios, colors and z extents are left untouched.")
+    lines.append("static inline void yetty_ysdf_geometry_transform(uint32_t type, float *geom,")
+    lines.append("                                                 float offset_x, float offset_y,")
+    lines.append("                                                 float scale_x, float scale_y) {")
+    lines.append("    float scale_mean = 0.5f * (scale_x + scale_y);")
+    lines.append("    (void)scale_mean;")
+    lines.append("    switch ((enum yetty_ysdf_type)type) {")
+    for p in prims:
+        name = p["name"]
+        args = p.get("args", [])
+        body = []
+        for i, arg in enumerate(args):
+            arg_name = arg["name"]
+            if arg_name not in TRANSFORM_KIND_BY_ARG_NAME:
+                raise SystemExit(
+                    f"sdf-drawables.yaml: arg '{arg_name}' of primitive '{name}' has no "
+                    f"entry in TRANSFORM_KIND_BY_ARG_NAME — classify it (x/y/len_x/len_y/len/none)")
+            kind = TRANSFORM_KIND_BY_ARG_NAME[arg_name]
+            if kind == "x":
+                body.append(f"            geom[{i}] = geom[{i}] * scale_x + offset_x;")
+            elif kind == "y":
+                body.append(f"            geom[{i}] = geom[{i}] * scale_y + offset_y;")
+            elif kind == "len_x":
+                body.append(f"            geom[{i}] *= scale_x;")
+            elif kind == "len_y":
+                body.append(f"            geom[{i}] *= scale_y;")
+            elif kind == "len":
+                body.append(f"            geom[{i}] *= scale_mean;")
+        if not body:
+            continue
+        lines.append(f"        case YETTY_YSDF_{to_upper(name)}:")
+        lines.extend(body)
+        lines.append("            break;")
+    lines.append("        default:")
+    lines.append("            break;")
+    lines.append("    }")
     lines.append("}")
     lines.append("")
 

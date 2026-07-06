@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ybrowser — images</title>
+<style>
+  body { margin: 0; background: #0B1014; color: #E0E5E4; font-family: sans-serif; padding: 28px 36px; }
+  h1 { color: #74C5A5; }
+  h2 { color: #6BA892; border-bottom: 1px solid #364A47; padding-bottom: 4px; margin-top: 26px; }
+  p  { color: #9FA7A8; }
+  a  { color: #6BA892; }
+  .strip { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;
+           background: #141A1F; border: 1px solid #364A47; padding: 12px; }
+  .strip figure { margin: 0; }
+  .strip figcaption { color: #556162; font-size: 12px; margin-top: 4px; }
+  .css-sized { width: 180px; }
+  .logos img { border: 1px solid #364A47; }
+</style>
+</head>
+<body>
+  <h1>Images</h1>
+  <p><a href="index.html">back to the hub</a> — PNG and JPEG sources from the
+     repo's committed assets, exercising intrinsic, attribute and CSS sizing.</p>
+
+  <h2>PNG — demo/assets/yimage</h2>
+  <div class="strip">
+    <figure>
+      <img src="../yimage/rose.png" width="160">
+      <figcaption>width attr only — height keeps aspect</figcaption>
+    </figure>
+    <figure>
+      <img src="../yimage/gradient.png" width="140" height="90">
+      <figcaption>both attrs</figcaption>
+    </figure>
+    <figure>
+      <img class="css-sized" src="../yimage/wordmark.png">
+      <figcaption>CSS width: 180px</figcaption>
+    </figure>
+  </div>
+
+  <h2>JPEG — the yetty logo set (assets/logo-*.jpeg)</h2>
+  <div class="strip logos">
+    <figure>
+      <img src="../../../assets/logo-2.jpeg" width="170">
+      <figcaption>logo-2</figcaption>
+    </figure>
+    <figure>
+      <img src="../../../assets/logo-4.jpeg" width="120">
+      <figcaption>logo-4</figcaption>
+    </figure>
+    <figure>
+      <img src="../../../assets/logo-6.jpeg" width="90">
+      <figcaption>logo-6</figcaption>
+    </figure>
+  </div>
+
+  <h2>Text flow around a floated image</h2>
+  <p>
+    <img src="../../../assets/logo-1.jpeg" width="150" style="float:right; margin-left:12px;">
+    A floated image reserves its rectangle and the paragraph wraps along its
+    edge. The engine decodes each source once into the shared loader cache, so
+    revisiting this page re-uses both the bytes and the decoded pixels; the GPU
+    samples the original resolution into whatever box the layout assigns, which
+    keeps downscaled logos crisp.
+  </p>
+</body>
+</html>
