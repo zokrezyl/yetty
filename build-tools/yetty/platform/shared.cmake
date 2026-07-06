@@ -677,6 +677,13 @@ function(yetty_embed_assets TARGET)
     # Generated SDF dispatcher + sdf_* functions — attached at runtime as a
     # child resource set of ydraw-layer; see src/yetty/ysdf/gen-sdf-code.py.
     file(COPY "${YETTY_ROOT}/src/yetty/ysdf/ysdf.gen.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    # yvterm-sdf-layer.wgsl — the yvterm "vterm-as-figure" SDF pass that
+    # renders per-line rich records (ycat / ybrowser --osc envelopes).
+    # sdf-layer.c loads it from <paths/shaders>; without it packaged here
+    # sdf_layer_create fails ("load_layer_shader") and every inline rich
+    # envelope is silently dropped on desktop. The webasm staging already
+    # ships it — this is the desktop counterpart.
+    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/yvterm-sdf-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yrender/blend.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(RENAME "${EMBED_DATA_DIR}/shaders/blend.wgsl" "${EMBED_DATA_DIR}/shaders/blender.wgsl")
     file(COPY "${YETTY_ROOT}/src/yetty/yfont/ms-msdf-font.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
