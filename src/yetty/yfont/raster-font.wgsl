@@ -19,7 +19,7 @@ fn font_base_size() -> f32 {
 }
 
 fn font_glyph_size(glyph_index: u32) -> vec2<f32> {
-    let base = raster_font_buffer_offset + glyph_index * 6u;
+    let base = uniforms.raster_font_buffer_offset + glyph_index * 6u;
     return vec2<f32>(
         bitcast<f32>(storage_buffer[base + 0u]),
         bitcast<f32>(storage_buffer[base + 1u])
@@ -31,7 +31,7 @@ fn font_glyph_size(glyph_index: u32) -> vec2<f32> {
 fn font_glyph_sample(glyph_index: u32,
                      glyph_uv: vec2<f32>,
                      pixel_scale: f32) -> f32 {
-    let meta_base = raster_font_buffer_offset + glyph_index * 6u;
+    let meta_base = uniforms.raster_font_buffer_offset + glyph_index * 6u;
     let glyph_size = vec2<f32>(
         bitcast<f32>(storage_buffer[meta_base + 0u]),
         bitcast<f32>(storage_buffer[meta_base + 1u])

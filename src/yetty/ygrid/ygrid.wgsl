@@ -9,8 +9,8 @@
 //   uniforms.ydraw_ydraw_cell_size
 //   uniforms.ydraw_ydraw_rolling_row_0
 //   uniforms.ydraw_ydraw_drawable_count
-//   ydraw_grid_offset
-//   ydraw_prims_offset
+//   uniforms.ydraw_grid_offset
+//   uniforms.ydraw_prims_offset
 
 // RENDER_LAYER_BINDINGS_PLACEHOLDER
 
@@ -168,8 +168,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);  // Fully transparent
     }
 
-    let grid_offset = ydraw_grid_offset;
-    let prims_offset = ydraw_prims_offset;
+    let grid_offset = uniforms.ydraw_grid_offset;
+    let prims_offset = uniforms.ydraw_prims_offset;
 
     // Grid pixel bounds
     let grid_pixel_w = grid_size.x * cell_size.x;

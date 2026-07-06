@@ -99,6 +99,17 @@ struct yetty_yrender_gpu_resource_binder_impl {
     struct flat_uniform flat_uniforms[MAX_FLAT_UNIFORMS];
     size_t flat_uniform_count;
 
+    /* Binder-owned uniforms carrying each flat buffer's mega-buffer offset
+     * (in u32 units), emitted into the Uniforms struct as <ns>_<name>_offset.
+     * Keeping offsets as runtime data instead of compile-time constants makes
+     * two binders whose buffers differ only in size produce byte-identical
+     * WGSL, so they share one pipeline through the allocator's pipeline cache
+     * (e.g. the workspace grid and the tabbar grid). Only populated when the
+     * binder owns its pipeline — two-tier binders must mirror the uniform
+     * layout emitted by yrender_pipeline, which still bakes offset constants.
+     * Indexed like flat_buffers[]. */
+    struct yetty_yrender_uniform buffer_offset_uniforms[MAX_FLAT_BUFFERS];
+
     /* Merged shader code from all providers */
     struct yetty_yrender_buffer shader_code;
 
@@ -246,10 +257,11 @@ static void collect_resources(struct yetty_yrender_gpu_resource_binder_impl *imp
         }
     }
 
-    /* Buffers - always collect even if empty (shader needs offset constants).
-     * mega_offset is stable across re-finalizes as long as the cap fits — the
-     * shader hard-codes `const X_offset: u32 = …` for every buffer, so an
-     * offset shift means a full WGSL → SPIR-V → NVIDIA-IR recompile chain. */
+    /* Buffers - always collect even if empty (shader needs the offsets).
+     * For binder-owned pipelines each offset is published as a u32 uniform
+     * (<ns>_<name>_offset) rather than a compile-time constant, so an offset
+     * shift on re-finalize only re-uploads the uniform buffer — the WGSL stays
+     * byte-identical and the compiled pipeline is reused. */
     for (size_t i = 0; i < rs->buffer_count && impl->flat_buffer_count < MAX_FLAT_BUFFERS; i++) {
         struct flat_buffer *fb = &impl->flat_buffers[impl->flat_buffer_count++];
         fb->src = &rs->buffers[i];
@@ -257,6 +269,21 @@ static void collect_resources(struct yetty_yrender_gpu_resource_binder_impl *imp
         fb->mega_offset = impl->storage_buffer_size;
         fb->cap = round_buffer_capacity(rs->buffers[i].size);
         impl->storage_buffer_size += fb->cap;
+
+        /* Two-tier binders (external_pipeline) skip this: their uniform
+         * packing must mirror the struct yrender_pipeline generated, which
+         * knows nothing of these extra fields. */
+        if (!impl->external_pipeline && impl->flat_uniform_count < MAX_FLAT_UNIFORMS) {
+            struct yetty_yrender_uniform *offset_uniform =
+                &impl->buffer_offset_uniforms[impl->flat_buffer_count - 1];
+            snprintf(offset_uniform->name, sizeof(offset_uniform->name), "%s_offset",
+                     rs->buffers[i].name);
+            offset_uniform->type = YETTY_YRENDER_UNIFORM_U32;
+            offset_uniform->u32 = (uint32_t)(fb->mega_offset / 4);
+            struct flat_uniform *fu = &impl->flat_uniforms[impl->flat_uniform_count++];
+            fu->src = offset_uniform;
+            fu->ns = rs->namespace;
+        }
     }
 
     /* Textures */
@@ -691,16 +718,9 @@ static void generate_wgsl_bindings(struct yetty_yrender_gpu_resource_binder_impl
             rem -= n;
         }
 
-        /* Buffer offset constants (in u32 units) */
-        for (size_t i = 0; i < impl->flat_buffer_count; i++) {
-            const struct flat_buffer *fb = &impl->flat_buffers[i];
-            n = snprintf(p, rem, "const %s_%s_offset: u32 = %uu;\n", fb->ns, fb->src->name,
-                         (uint32_t)(fb->mega_offset / 4));
-            if (n > 0 && (size_t)n < rem) {
-                p += n;
-                rem -= n;
-            }
-        }
+        /* Buffer offsets are NOT baked as constants here — collect_resources
+         * published each one as a uniforms.<ns>_<name>_offset field, keeping
+         * the generated WGSL independent of the actual buffer sizes. */
     }
 
     /* Texture atlas region constants (in UV space) */
@@ -909,6 +929,20 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(
     merged[total_len - 1] = '\0';
 
     ydebug("GpuResourceBinder: merged shader %zu bytes", total_len);
+
+    /* Debugging aid, mirrors yrender_pipeline's dump: one file per unique
+     * shader so two binders that SHOULD share a pipeline can be diffed. */
+    {
+        char dump_path[128];
+        snprintf(dump_path, sizeof(dump_path), "tmp/binder_merged_%016llx.wgsl",
+                 (unsigned long long)fnv1a64(merged, total_len - 1));
+        FILE *dump_file = fopen(dump_path, "wb");
+        if (dump_file) {
+            fwrite(merged, 1, total_len - 1, dump_file);
+            fclose(dump_file);
+            ydebug("GpuResourceBinder: dumped merged shader to %s", dump_path);
+        }
+    }
 
     /* Reuse a previously compiled pipeline when the generated shader is
      * byte-identical (the common case: every ygrid shares one font dispatcher,
