@@ -143,6 +143,36 @@ static struct yetty_ycore_void_result handle_control_response(struct yai_app *ap
         YETTY_RETURN_IF_ERR(yetty_ycore_void, load_res, "handle_control_response: command table");
         ydebug("yai claude: command table loaded, %zu entries", app->commands.count);
     }
+    /* The CLI advertises the exact model list its own /model picker shows —
+     * value (the --model / set_model token), displayName and description.
+     * Capture it so /model and the config knob never hardcode models and
+     * always offer the current set (fable, …). "default" is normalized to
+     * the empty value yai uses for "the CLI's own default". */
+    yyjson_val *models_array = payload ? yyjson_obj_get(payload, "models") : NULL;
+    if (yyjson_is_arr(models_array)) {
+        app->claude_model_count = 0;
+        yyjson_val *entry;
+        yyjson_arr_iter iter;
+        yyjson_arr_iter_init(models_array, &iter);
+        while ((entry = yyjson_arr_iter_next(&iter)) != NULL &&
+               app->claude_model_count < YAI_MODEL_CHOICES_MAX) {
+            const char *value = yyjson_get_str(yyjson_obj_get(entry, "value"));
+            if (!value) {
+                continue;
+            }
+            struct yai_model_choice *choice = &app->claude_models[app->claude_model_count];
+            snprintf(choice->value, sizeof(choice->value), "%s",
+                     strcmp(value, "default") == 0 ? "" : value);
+            const char *display_name = yyjson_get_str(yyjson_obj_get(entry, "displayName"));
+            snprintf(choice->display_name, sizeof(choice->display_name), "%s",
+                     display_name ? display_name : value);
+            const char *description = yyjson_get_str(yyjson_obj_get(entry, "description"));
+            snprintf(choice->description, sizeof(choice->description), "%s",
+                     description ? description : "");
+            app->claude_model_count++;
+        }
+        ydebug("yai claude: %d models advertised", app->claude_model_count);
+    }
     return YETTY_OK_VOID();
 }
 
@@ -246,16 +276,29 @@ static struct yetty_ycore_void_result handle_control_request(struct yai_app *app
     if (!tool_name) {
         tool_name = "?";
     }
+    /* The CLI ships a friendlier display label and a human-readable summary
+     * of the call (e.g. the target path). The summary is a useful detail,
+     * but display_name is attacker-influenceable and must NOT stand in for
+     * the tool's identity — a hostile one could read "Read File" over a
+     * Bash call. Keep the raw tool_name as the authoritative label and show
+     * display_name only as a parenthetical hint when it genuinely differs. */
+    const char *display_name = yyjson_get_str(yyjson_obj_get(request, "display_name"));
+    int has_alias = display_name && display_name[0] && strcmp(display_name, tool_name) != 0;
+    const char *description = yyjson_get_str(yyjson_obj_get(request, "description"));
     yyjson_val *input = yyjson_obj_get(request, "input");
 
-    /* Auto-approve without prompting when the session is in "auto" mode
-     * (yai enforces it here, so it holds even if the live set_permission_mode
-     * push didn't), or when this tool was marked "always allow". Preserve
-     * the tool input on the response (fail closed if it can't be copied —
-     * never approve with empty input). */
+    /* Auto-approve without prompting when the session is in full-bypass
+     * mode (yai enforces it here, so it holds even if the live
+     * set_permission_mode push didn't), or when this tool was marked
+     * "always allow". The CLI's own "auto" mode is NOT bypass: its
+     * classifier only escalates what it couldn't decide, so those requests
+     * still deserve a prompt. Preserve the tool input on the response
+     * (fail closed if it can't be copied — never approve with empty
+     * input). */
     const char *perm_mode = app->config.claude.permission_mode;
-    int auto_mode = strcmp(perm_mode, "auto") == 0 || strcmp(perm_mode, "bypassPermissions") == 0;
-    if (auto_mode || yai_tool_always_allowed(app, tool_name)) {
+    int bypass_mode =
+        strcmp(perm_mode, "bypass") == 0 || strcmp(perm_mode, "bypassPermissions") == 0;
+    if (bypass_mode || yai_tool_always_allowed(app, tool_name)) {
         yyjson_mut_doc *input_copy = yyjson_mut_doc_new(NULL);
         if (input_copy && input) {
             yyjson_mut_val *copy = yyjson_val_mut_copy(input_copy, input);
@@ -291,21 +334,35 @@ static struct yetty_ycore_void_result handle_control_request(struct yai_app *app
     }
 
     char summary[80];
-    yai_summarize_tool_input(input, summary, sizeof(summary));
+    if (description && description[0]) {
+        snprintf(summary, sizeof(summary), "%s", description);
+    } else {
+        yai_summarize_tool_input(input, summary, sizeof(summary));
+    }
+    char alias_hint[64];
+    if (has_alias) {
+        snprintf(alias_hint, sizeof(alias_hint), " " YAI_DIM "(%s)" YAI_RESET, display_name);
+    } else {
+        alias_hint[0] = '\0';
+    }
 
     struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "handle_control_request: suspend");
-    printf("\n" YAI_MINT "? permission: " YAI_RESET YAI_BOLD "%s" YAI_RESET " " YAI_DIM
+    printf("\n" YAI_MINT "? permission: " YAI_RESET YAI_BOLD "%s" YAI_RESET "%s " YAI_DIM
            "%s" YAI_RESET "\n" YAI_DIM
-           "  press a key:  y=yes  n=no  a=always this tool  !=auto (approve all)  ·  Ctrl-C "
+           "  press a key:  y=yes  n=no  a=always this tool  !=bypass (approve all)  ·  Ctrl-C "
            "interrupts" YAI_RESET "\n",
-           tool_name, summary);
+           tool_name, alias_hint, summary);
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "handle_control_request: flush");
     /* The status line + HUD mirror the pending question (display-only —
      * the verdict is typed at the prompt). */
-    char state_line[96];
-    snprintf(state_line, sizeof(state_line), "? %s %s", tool_name, summary);
+    char state_line[128];
+    if (has_alias) {
+        snprintf(state_line, sizeof(state_line), "? %s (%s) %s", tool_name, display_name, summary);
+    } else {
+        snprintf(state_line, sizeof(state_line), "? %s %s", tool_name, summary);
+    }
     struct yetty_ycore_void_result activity_res = yai_set_activity(app, "hourglass", state_line);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, activity_res, "handle_control_request: activity");
     return YETTY_OK_VOID();
@@ -361,6 +418,59 @@ static const char *lookup_tool_name(struct yetty_yai_claude *claude, const char 
 /*---------------------------------------------------------------------------
  * Stream-json event handling
  *---------------------------------------------------------------------------*/
+
+/* rate_limit_event — the CLI reports the account's live rate-limit state
+ * around each API call: one event per window (rateLimitType "five_hour" or
+ * "seven_day…"), with resetsAt always present and utilization only once the
+ * window passes a warning threshold. Fold each into app->engine_quota so the
+ * HUD quota works without the usage proxy (yai_quota_get prefers the proxy's
+ * richer capture when it has data). */
+static struct yetty_ycore_void_result handle_rate_limit_event(struct yai_app *app,
+                                                              yyjson_val *event)
+{
+    yyjson_val *info = yyjson_obj_get(event, "rate_limit_info");
+    const char *window_type = yyjson_get_str(yyjson_obj_get(info, "rateLimitType"));
+    if (!window_type) {
+        return YETTY_OK_VOID();
+    }
+    int is_session = strcmp(window_type, "five_hour") == 0;
+    int is_week = strncmp(window_type, "seven_day", 9) == 0;
+    if (!is_session && !is_week) {
+        return YETTY_OK_VOID(); /* an unknown window — nothing to file it under */
+    }
+    struct yai_quota *quota = &app->engine_quota;
+    if (!quota->valid) {
+        quota->session_pct = -1; /* -1 = utilization not reported yet */
+        quota->week_pct = -1;
+        quota->valid = 1;
+    }
+    yyjson_val *utilization = yyjson_obj_get(info, "utilization");
+    yyjson_val *resets_at = yyjson_obj_get(info, "resetsAt");
+    if (is_session) {
+        if (yyjson_is_num(utilization)) {
+            quota->session_pct = (int)(yyjson_get_num(utilization) * 100.0 + 0.5);
+        }
+        if (yyjson_is_num(resets_at)) {
+            quota->session_reset = (long long)yyjson_get_num(resets_at);
+        }
+    } else {
+        if (yyjson_is_num(utilization)) {
+            quota->week_pct = (int)(yyjson_get_num(utilization) * 100.0 + 0.5);
+        }
+        if (yyjson_is_num(resets_at)) {
+            quota->week_reset = (long long)yyjson_get_num(resets_at);
+        }
+    }
+    /* Keep the #{quota} composite and the decomposed HUD variables live. */
+    char quota_summary[96];
+    yai_quota_summary(app, quota_summary, sizeof(quota_summary));
+    if (quota_summary[0]) {
+        snprintf(app->quota_text, sizeof(app->quota_text), "%s", quota_summary);
+    }
+    struct yetty_ycore_void_result refresh_res = yai_refresh_hud_stats(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, refresh_res, "handle_rate_limit_event: hud refresh");
+    return YETTY_OK_VOID();
+}
 
 static struct yetty_ycore_void_result handle_stream_event(struct yai_app *app, yyjson_val *event)
 {
@@ -570,7 +680,24 @@ static struct yetty_ycore_void_result claude_handle_event(struct yetty_yclass_ob
                 yai_set_activity(app, "typing-dots", state);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, activity_res,
                                 "claude handle_event: thinking activity");
+        } else if (subtype && strcmp(subtype, "status") == 0) {
+            /* The CLI's own phase report ("requesting", retry states, …) —
+             * mirror it in the activity while a turn is in flight. */
+            const char *status = yyjson_get_str(yyjson_obj_get(event, "status"));
+            if (status && status[0] && app->waiting) {
+                char state[64];
+                snprintf(state, sizeof(state), "… %s", status);
+                struct yetty_ycore_void_result activity_res =
+                    yai_set_activity(app, "typing-dots", state);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, activity_res,
+                                    "claude handle_event: status activity");
+            }
         }
+        return YETTY_OK_VOID();
+    }
+    if (kind && strcmp(kind, "rate_limit_event") == 0) {
+        struct yetty_ycore_void_result quota_res = handle_rate_limit_event(app, event);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, quota_res, "claude handle_event: rate limit");
         return YETTY_OK_VOID();
     }
     if (kind && strcmp(kind, "stream_event") == 0) {
@@ -671,15 +798,20 @@ static struct yetty_ycore_void_result claude_interrupt(struct yetty_yclass_objec
     return YETTY_OK_VOID();
 }
 
-/* The config dialog and the permission prompt both call the full-bypass
- * mode "auto"; the claude CLI names it "bypassPermissions". Translate at
- * the CLI boundary (--permission-mode arg, set_permission_mode push) and
- * back for display/selection, so one word — "auto" — is used everywhere
- * in yai's UI. */
+/* yai's UI names for the CLI's permission modes. They match the CLI's own
+ * set — manual, acceptEdits, plan, auto (the CLI's classifier-driven
+ * auto-accept), dontAsk — except that "bypass" is the UI's short name for
+ * "bypassPermissions". Legacy persisted values still translate: "default"
+ * is the CLI's old name for manual. NOTE: "auto" used to be yai's word for
+ * full bypass; it now means the CLI's own auto mode — the full-bypass
+ * shortcut ('!' at the prompt) stores "bypass". */
 static const char *claude_permission_cli_mode(const char *mode)
 {
-    if (mode && strcmp(mode, "auto") == 0) {
+    if (mode && strcmp(mode, "bypass") == 0) {
         return "bypassPermissions";
+    }
+    if (mode && strcmp(mode, "default") == 0) {
+        return "manual";
     }
     return mode;
 }
@@ -687,7 +819,10 @@ static const char *claude_permission_cli_mode(const char *mode)
 static const char *claude_permission_ui_mode(const char *mode)
 {
     if (mode && strcmp(mode, "bypassPermissions") == 0) {
-        return "auto";
+        return "bypass";
+    }
+    if (mode && strcmp(mode, "default") == 0) {
+        return "manual";
     }
     return mode;
 }
@@ -848,18 +983,20 @@ static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_obj
                                                          size_t out_size)
 {
     (void)obj;
-    /* Show the same "auto" the permission prompt offers; a legacy
-     * bypassPermissions value still selects the "auto" radio. */
+    /* Translate legacy stored values (default → manual, bypassPermissions →
+     * bypass) so they select the matching radio. */
     const char *permission_mode = claude_permission_ui_mode(app->config.claude.permission_mode);
     /* One knob spec per line: ENGINE_FIELD|label|options|current. "tools" is a
      * preset; claude_preset_tools maps the preset name → the concrete tool
      * list at spawn. Radio option values must stay comma-free, hence the
-     * preset names. "auto" is yai's name for claude's bypassPermissions
-     * (apply_config / claude_start translate it). Reasoning effort is a model
-     * parameter, so it lives on the model tab (main.c build_effort_knob). */
+     * preset names. The modes mirror the CLI's: manual asks, auto is the
+     * CLI's classifier-driven auto-accept, dontAsk resolves without asking,
+     * bypass approves everything (the CLI's bypassPermissions). Reasoning
+     * effort is a model parameter, so it lives on the model tab (main.c
+     * build_effort_knob). */
     int written = snprintf(out, out_size,
                            "permission-mode|permission mode|"
-                           "default,acceptEdits,plan,auto|%s\n"
+                           "manual,acceptEdits,plan,auto,dontAsk,bypass|%s\n"
                            "allowed-preset|tools|curated,readonly,edit,full|%s",
                            permission_mode, app->config.claude.allowed_preset);
     if (written < 0 || (size_t)written >= out_size) {
@@ -868,8 +1005,11 @@ static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_obj
     return YETTY_OK_VOID();
 }
 
-/* A live set_permission_mode control_request into the running session, so a
- * permission-mode change applies immediately (storage is in app->config). */
+/* Live control_request pushes into the running session, so a config change
+ * applies without waiting for the next spawn (storage is in app->config,
+ * written by the caller): permission mode → set_permission_mode, model →
+ * set_model. Everything else (tools preset, effort) has no live control
+ * command and is read fresh at the next spawn. */
 YETTY_ANNOTATE("override@yai:claude:apply_config")
 static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_object *obj,
                                                           struct yai_app *app, const char *key,
@@ -881,11 +1021,21 @@ static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ob
     if (!key || !key[0] || !value) {
         return YETTY_ERR(yetty_ycore_void, "claude apply_config: missing key/value");
     }
-    /* Storage lives in app->config (written by the caller). The only live
-     * side-effect is pushing a new permission mode into the running session
-     * so it takes effect without waiting for the next spawn; everything else
-     * (tools preset, model) is read fresh at the next spawn. */
-    if (strcmp(key, "permission-mode") != 0 || !app->child_alive || !app->child_stdin_open) {
+    const char *subtype = NULL;
+    const char *field = NULL;
+    const char *field_value = NULL;
+    if (strcmp(key, "permission-mode") == 0) {
+        subtype = "set_permission_mode";
+        field = "mode";
+        field_value = claude_permission_cli_mode(value);
+    } else if (strcmp(key, "model") == 0 && value[0]) {
+        /* An empty model means "the CLI's default" — there is no live
+         * "reset to default" push; it takes effect at the next spawn. */
+        subtype = "set_model";
+        field = "model";
+        field_value = value;
+    }
+    if (!subtype || !app->child_alive || !app->child_stdin_open) {
         return YETTY_OK_VOID();
     }
     char request_id[32];
@@ -899,11 +1049,11 @@ static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ob
     yyjson_mut_obj_add_str(doc, envelope, "type", "control_request");
     yyjson_mut_obj_add_str(doc, envelope, "request_id", request_id);
     yyjson_mut_val *request = yyjson_mut_obj(doc);
-    yyjson_mut_obj_add_str(doc, request, "subtype", "set_permission_mode");
-    yyjson_mut_obj_add_str(doc, request, "mode", claude_permission_cli_mode(value));
+    yyjson_mut_obj_add_str(doc, request, "subtype", subtype);
+    yyjson_mut_obj_add_str(doc, request, field, field_value);
     yyjson_mut_obj_add_val(doc, envelope, "request", request);
     struct yetty_ycore_void_result send_res = write_json_to_child(app, doc);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, send_res, "claude apply_config: live mode push");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, send_res, "claude apply_config: live push");
     return YETTY_OK_VOID();
 }
 

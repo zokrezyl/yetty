@@ -61,33 +61,99 @@ static inline size_t editor_ops_next_char(const struct yai_app *app, size_t posi
 }
 
 /*---------------------------------------------------------------------------
- * Word motion (whitespace-delimited; matches the old Ctrl-W behaviour).
+ * Word motion (whitespace-delimited). A newline is a separator, not part of a
+ * word, so word motions cross line breaks without merging the lines on either
+ * side into one word.
  *---------------------------------------------------------------------------*/
 
-/* Start of the word at/just before `position`: skip trailing spaces,
+static inline int editor_ops_is_word_sep(char byte)
+{
+    return byte == ' ' || byte == '\t' || byte == '\n';
+}
+
+/* Start of the word at/just before `position`: skip trailing separators,
  * then the word body. */
 static inline size_t editor_ops_word_back(const struct yai_app *app, size_t position)
 {
-    while (position > 0 && app->stdin_buf[position - 1] == ' ') {
+    while (position > 0 && editor_ops_is_word_sep(app->stdin_buf[position - 1])) {
         position--;
     }
-    while (position > 0 && app->stdin_buf[position - 1] != ' ') {
+    while (position > 0 && !editor_ops_is_word_sep(app->stdin_buf[position - 1])) {
         position--;
     }
     return position;
 }
 
 /* Just past the end of the word at/after `position`: skip leading
- * spaces, then the word body. */
+ * separators, then the word body. */
 static inline size_t editor_ops_word_forward(const struct yai_app *app, size_t position)
 {
-    while (position < app->stdin_len && app->stdin_buf[position] == ' ') {
+    while (position < app->stdin_len && editor_ops_is_word_sep(app->stdin_buf[position])) {
         position++;
     }
-    while (position < app->stdin_len && app->stdin_buf[position] != ' ') {
+    while (position < app->stdin_len && !editor_ops_is_word_sep(app->stdin_buf[position])) {
         position++;
     }
     return position;
+}
+
+/*---------------------------------------------------------------------------
+ * Logical-line motion (lines split on '\n'; the buffer may be multi-line when
+ * the user inserts newlines). Columns are counted in codepoints.
+ *---------------------------------------------------------------------------*/
+
+/* Byte offset of the start of the logical line containing `position` (just
+ * after the preceding '\n', or 0). */
+static inline size_t editor_ops_line_start(const struct yai_app *app, size_t position)
+{
+    while (position > 0 && app->stdin_buf[position - 1] != '\n') {
+        position--;
+    }
+    return position;
+}
+
+/* Byte offset of the end of the logical line containing `position` (the next
+ * '\n', or stdin_len). */
+static inline size_t editor_ops_line_end(const struct yai_app *app, size_t position)
+{
+    while (position < app->stdin_len && app->stdin_buf[position] != '\n') {
+        position++;
+    }
+    return position;
+}
+
+/* Byte offset of the first non-blank on the line containing `position`
+ * (vi `^` / `I`), or the line end when the line is all blanks. */
+static inline size_t editor_ops_line_first_nonblank(const struct yai_app *app, size_t position)
+{
+    size_t cursor = editor_ops_line_start(app, position);
+    while (cursor < app->stdin_len &&
+           (app->stdin_buf[cursor] == ' ' || app->stdin_buf[cursor] == '\t')) {
+        cursor++;
+    }
+    return cursor;
+}
+
+/* Codepoints between `from` and `to` (to >= from). */
+static inline size_t editor_ops_column_span(const struct yai_app *app, size_t from, size_t to)
+{
+    size_t columns = 0;
+    while (from < to) {
+        from = editor_ops_next_char(app, from);
+        columns++;
+    }
+    return columns;
+}
+
+/* Advance `columns` codepoints from `from`, stopping at `limit`. */
+static inline size_t editor_ops_advance_columns(const struct yai_app *app, size_t from, size_t limit,
+                                                size_t columns)
+{
+    while (columns > 0 && from < limit) {
+        from = editor_ops_next_char(app, from);
+        columns--;
+    }
+    return from > limit ? limit : from;
 }
 
 /*---------------------------------------------------------------------------
@@ -377,6 +443,87 @@ static inline int editor_cmd_replace_char(struct yai_app *app, size_t from, size
 static inline int editor_cmd_undo(struct yai_app *app)
 {
     return editor_ops_undo_pop(app) ? YAI_EDIT_CHANGED : YAI_EDIT_NONE;
+}
+
+/* Resolve the goal column for a vertical move: a fresh run (the cursor is not
+ * where the last vertical move left it) seeds the goal from the current column;
+ * a continuation keeps it, so up/down across short lines returns to the column
+ * the run started from. */
+static inline void editor_ops_vmotion_seed_goal(struct yai_app *app)
+{
+    if (app->stdin_cursor != app->edit_vmotion_cursor) {
+        size_t line_start = editor_ops_line_start(app, app->stdin_cursor);
+        app->edit_goal_column = editor_ops_column_span(app, line_start, app->stdin_cursor);
+    }
+}
+
+/* Move the cursor up one logical line at the goal column. Returns MOVED when a
+ * line above exists, or NAV_PREV at the top (the caller falls back to history /
+ * the menu — the up-line-or-history idiom). */
+static inline int editor_cmd_line_up(struct yai_app *app)
+{
+    size_t line_start = editor_ops_line_start(app, app->stdin_cursor);
+    if (line_start == 0) {
+        app->edit_vmotion_cursor = (size_t)-1; /* boundary → end the run */
+        return YAI_EDIT_NAV_PREV;
+    }
+    editor_ops_vmotion_seed_goal(app);
+    size_t prev_start = editor_ops_line_start(app, line_start - 1);
+    app->stdin_cursor =
+        editor_ops_advance_columns(app, prev_start, line_start - 1, app->edit_goal_column);
+    app->edit_vmotion_cursor = app->stdin_cursor;
+    return YAI_EDIT_MOVED;
+}
+
+/* Move the cursor down one logical line at the goal column. Returns MOVED when a
+ * line below exists, or NAV_NEXT at the bottom (history / menu fallback). */
+static inline int editor_cmd_line_down(struct yai_app *app)
+{
+    size_t line_end = editor_ops_line_end(app, app->stdin_cursor);
+    if (line_end >= app->stdin_len) {
+        app->edit_vmotion_cursor = (size_t)-1; /* boundary → end the run */
+        return YAI_EDIT_NAV_NEXT;
+    }
+    editor_ops_vmotion_seed_goal(app);
+    size_t next_start = line_end + 1;
+    size_t next_end = editor_ops_line_end(app, next_start);
+    app->stdin_cursor =
+        editor_ops_advance_columns(app, next_start, next_end, app->edit_goal_column);
+    app->edit_vmotion_cursor = app->stdin_cursor;
+    return YAI_EDIT_MOVED;
+}
+
+/* Insert a literal newline at the cursor (one discrete undo step). The buffer
+ * may then span several lines; the renderer wraps it across rows and the whole
+ * multi-line text is sent as one prompt on submit. */
+static inline int editor_cmd_newline(struct yai_app *app)
+{
+    char pre[sizeof(app->stdin_buf)];
+    size_t pre_len = app->stdin_len;
+    size_t pre_cursor = app->stdin_cursor;
+    memcpy(pre, app->stdin_buf, pre_len);
+    char newline = '\n';
+    if (!editor_ops_insert(app, &newline, 1)) {
+        return YAI_EDIT_NONE;
+    }
+    editor_ops_undo_note_discrete(app, pre, pre_len, pre_cursor);
+    return YAI_EDIT_CHANGED;
+}
+
+/* Resolve an Enter keystroke to its action under the configured submit-key
+ * policy. `modified` is the Alt/Meta-Enter variant, which always does the
+ * opposite of a plain Enter. app->enter_submits selects which one submits:
+ * when set, plain Enter submits and Alt+Enter inserts a newline; when clear,
+ * the two swap. */
+static inline int editor_cmd_enter(struct yai_app *app, int modified)
+{
+    /* Inside a paste burst every line break is literal content, never a submit
+     * — otherwise a pasted N-line block fires N messages. */
+    if (app->in_paste) {
+        return editor_cmd_newline(app);
+    }
+    int submit = modified ? !app->enter_submits : app->enter_submits;
+    return submit ? YAI_EDIT_SUBMIT : editor_cmd_newline(app);
 }
 
 /*---------------------------------------------------------------------------

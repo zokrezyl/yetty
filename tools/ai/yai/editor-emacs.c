@@ -36,33 +36,33 @@ YETTY_YRESULT_DECLARE(yetty_yai_emacs_ptr, struct yetty_yai_emacs *);
 static int emacs_csi(struct yai_app *app, char final_byte, int param)
 {
     switch (final_byte) {
-    case 'A':
-        return YAI_EDIT_NAV_PREV; /* up */
-    case 'B':
-        return YAI_EDIT_NAV_NEXT; /* down */
-    case 'C':                     /* right */
+    case 'A': /* up: previous line, or history at the top line */
+        return editor_cmd_line_up(app);
+    case 'B': /* down: next line, or history at the bottom line */
+        return editor_cmd_line_down(app);
+    case 'C': /* right */
         app->stdin_cursor = editor_ops_next_char(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
     case 'D': /* left */
         app->stdin_cursor = editor_ops_prev_char(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
-    case 'H': /* home */
-        app->stdin_cursor = 0;
+    case 'H': /* home: start of the current line */
+        app->stdin_cursor = editor_ops_line_start(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
-    case 'F': /* end */
-        app->stdin_cursor = app->stdin_len;
+    case 'F': /* end: end of the current line */
+        app->stdin_cursor = editor_ops_line_end(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
     case '~':
         if (param == 3) { /* delete: codepoint under the cursor */
             return editor_cmd_delete(app, app->stdin_cursor,
                                      editor_ops_next_char(app, app->stdin_cursor));
         }
-        if (param == 1 || param == 7) {
-            app->stdin_cursor = 0;
+        if (param == 1 || param == 7) { /* home */
+            app->stdin_cursor = editor_ops_line_start(app, app->stdin_cursor);
             return YAI_EDIT_MOVED;
         }
-        if (param == 4 || param == 8) {
-            app->stdin_cursor = app->stdin_len;
+        if (param == 4 || param == 8) { /* end */
+            app->stdin_cursor = editor_ops_line_end(app, app->stdin_cursor);
             return YAI_EDIT_MOVED;
         }
         return YAI_EDIT_NONE;
@@ -91,6 +91,9 @@ static int emacs_meta(struct yai_app *app, char byte)
     case 0x08: /* Meta-Backspace: kill word backward */
         return editor_cmd_kill(app, editor_ops_word_back(app, app->stdin_cursor),
                                app->stdin_cursor);
+    case '\r':
+    case '\n': /* Alt+Enter: the opposite of a plain Enter */
+        return editor_cmd_enter(app, /*modified=*/1);
     default:
         return YAI_EDIT_NONE;
     }
@@ -102,14 +105,14 @@ static int emacs_plain(struct yai_app *app, char byte)
     switch ((unsigned char)byte) {
     case '\r':
     case '\n':
-        return YAI_EDIT_SUBMIT;
+        return editor_cmd_enter(app, /*modified=*/0);
     case '\t':
         return YAI_EDIT_COMPLETE;
-    case 0x01: /* Ctrl-A */
-        app->stdin_cursor = 0;
+    case 0x01: /* Ctrl-A: start of the current line */
+        app->stdin_cursor = editor_ops_line_start(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
-    case 0x05: /* Ctrl-E */
-        app->stdin_cursor = app->stdin_len;
+    case 0x05: /* Ctrl-E: end of the current line */
+        app->stdin_cursor = editor_ops_line_end(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
     case 0x02: /* Ctrl-B */
         app->stdin_cursor = editor_ops_prev_char(app, app->stdin_cursor);
@@ -117,10 +120,10 @@ static int emacs_plain(struct yai_app *app, char byte)
     case 0x06: /* Ctrl-F */
         app->stdin_cursor = editor_ops_next_char(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
-    case 0x10: /* Ctrl-P */
-        return YAI_EDIT_NAV_PREV;
-    case 0x0E: /* Ctrl-N */
-        return YAI_EDIT_NAV_NEXT;
+    case 0x10: /* Ctrl-P: previous line, or history at the top line */
+        return editor_cmd_line_up(app);
+    case 0x0E: /* Ctrl-N: next line, or history at the bottom line */
+        return editor_cmd_line_down(app);
     case 0x04: /* Ctrl-D: delete under cursor, or EOF on empty line */
         if (app->stdin_len == 0) {
             return YAI_EDIT_EOF;
@@ -134,10 +137,16 @@ static int emacs_plain(struct yai_app *app, char byte)
                                      app->stdin_cursor);
         }
         return YAI_EDIT_NONE;
-    case 0x0B: /* Ctrl-K: kill to end of line */
-        return editor_cmd_kill(app, app->stdin_cursor, app->stdin_len);
-    case 0x15: /* Ctrl-U: kill the line */
-        return editor_cmd_kill(app, 0, app->stdin_len);
+    case 0x0B: { /* Ctrl-K: kill to end of line; on the newline, kill it (join) */
+        size_t line_end = editor_ops_line_end(app, app->stdin_cursor);
+        if (app->stdin_cursor == line_end && line_end < app->stdin_len) {
+            return editor_cmd_kill(app, app->stdin_cursor, app->stdin_cursor + 1);
+        }
+        return editor_cmd_kill(app, app->stdin_cursor, line_end);
+    }
+    case 0x15: /* Ctrl-U: kill from start of line to cursor (backward-kill-line) */
+        return editor_cmd_kill(app, editor_ops_line_start(app, app->stdin_cursor),
+                               app->stdin_cursor);
     case 0x17: /* Ctrl-W: kill word before cursor */
         return editor_cmd_kill(app, editor_ops_word_back(app, app->stdin_cursor),
                                app->stdin_cursor);

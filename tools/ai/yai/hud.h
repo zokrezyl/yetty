@@ -79,8 +79,8 @@ float yai_hud_dock_height(const struct yai_hud *hud);
  *---------------------------------------------------------------------------*/
 
 #define YAI_HUD_CONFIG_KNOB_MAX_OPTIONS 8
-/* edit-mode (1) + several backend knobs + model (1). */
-#define YAI_HUD_CONFIG_MAX_KNOBS 6
+/* edit-mode (1) + submit-key (1) + several backend knobs + model (1) + effort (1). */
+#define YAI_HUD_CONFIG_MAX_KNOBS 7
 #define YAI_HUD_CONFIG_TAB_MAX 4
 
 /* One editable choice rendered as a radio group on tab `tab`: the yai

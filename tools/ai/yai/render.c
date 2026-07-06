@@ -64,6 +64,11 @@
 /* "you ▸ " — 6 display columns; the glyph prefix adds 2 more. */
 #define YAI_PROMPT_COLUMNS 6
 
+/* Upper bound on the visual rows the wrapped prompt may occupy. A taller
+ * prompt scrolls vertically inside this window, keeping the cursor visible.
+ * The effective cap is also clamped to the room left on screen. */
+#define YAI_PROMPT_MAX_ROWS 12
+
 /* Render `len` bytes of markdown to a yetty figure (via ycat) and write
  * it under the engine label. Defined below; forward-declared so the
  * stream finish path (above its definition) can reach it. Value 1 =
@@ -156,6 +161,15 @@ static int terminal_columns(void)
     return size.ws_col;
 }
 
+static int terminal_rows(void)
+{
+    struct winsize size = {0};
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) != 0 || size.ws_row == 0) {
+        return 24;
+    }
+    return size.ws_row;
+}
+
 /* Tail of [bytes, bytes+len) that fits `max_columns` display cells
  * (counting UTF-8 codepoints as one cell each — same simplification as
  * the rest of the editor). Sets *clipped when something was cut. */
@@ -175,31 +189,74 @@ static const char *clip_tail(const char *bytes, size_t len, int max_columns, siz
     return bytes + start;
 }
 
-/* Codepoints in [bytes, bytes+len). */
-static size_t count_chars(const char *bytes, size_t len)
+/* Move to the next visual prompt row. When drawing, a `\n` + line-erase is
+ * emitted for every visible row past the first one in the window — the first
+ * visible row is where the caller already parked the cursor (after the prefix
+ * for row 0, or column 0 for a scrolled continuation row). */
+static void prompt_row_break(int *row, int *col, int draw, int win_first, int win_count)
 {
-    size_t chars = 0;
-    for (size_t index = 0; index < len; index++) {
-        if (((unsigned char)bytes[index] & 0xC0) != 0x80) {
-            chars++;
-        }
+    (*row)++;
+    *col = 0;
+    if (draw && *row > win_first && *row < win_first + win_count) {
+        fputs("\n\033[2K", stdout);
     }
-    return chars;
 }
 
-/* Byte offset of the codepoint with index `target_chars`. */
-static size_t char_index_to_byte(const char *bytes, size_t len, size_t target_chars)
+/* Walk the editor buffer as it wraps onto the prompt rows. One cell per
+ * codepoint (same simplification as the rest of the editor); a literal '\n'
+ * or reaching `max_columns` starts a new visual row. Row 0 begins at column
+ * `prefix_columns` (just past "you ▸ "); continuation rows begin at column 0.
+ * Returns the total visual row count and reports the cursor's row and 0-based
+ * screen column. When `draw` is set, the buffer text for rows in
+ * [win_first, win_first + win_count) is emitted to stdout. */
+static int prompt_walk(const struct yai_renderer *renderer, int prefix_columns, int max_columns,
+                       int draw, int win_first, int win_count, int *out_cursor_row,
+                       int *out_cursor_col)
 {
-    size_t chars = 0;
-    for (size_t index = 0; index < len; index++) {
-        if (((unsigned char)bytes[index] & 0xC0) != 0x80) {
-            if (chars == target_chars) {
-                return index;
-            }
-            chars++;
-        }
+    const char *buffer = renderer->edit_buffer;
+    size_t length = (renderer->edit_buffer && renderer->edit_length) ? *renderer->edit_length : 0;
+    size_t cursor = renderer->edit_cursor ? *renderer->edit_cursor : length;
+    if (cursor > length) {
+        cursor = length;
     }
-    return len;
+    if (max_columns < 1) {
+        max_columns = 1;
+    }
+
+    int row = 0;
+    int col = prefix_columns;
+    int cursor_row = 0;
+    int cursor_col = prefix_columns;
+    size_t index = 0;
+    while (1) {
+        if (index == cursor) {
+            cursor_row = row;
+            cursor_col = col;
+        }
+        if (index >= length) {
+            break;
+        }
+        if ((unsigned char)buffer[index] == '\n') {
+            prompt_row_break(&row, &col, draw, win_first, win_count);
+            index++;
+            continue;
+        }
+        if (col >= max_columns) {
+            prompt_row_break(&row, &col, draw, win_first, win_count);
+        }
+        size_t glyph_start = index;
+        index++;
+        while (index < length && ((unsigned char)buffer[index] & 0xC0) == 0x80) {
+            index++;
+        }
+        if (draw && row >= win_first && row < win_first + win_count) {
+            fwrite(buffer + glyph_start, 1, index - glyph_start, stdout);
+        }
+        col++;
+    }
+    *out_cursor_row = cursor_row;
+    *out_cursor_col = cursor_col;
+    return row + 1;
 }
 
 /* The current in-progress streamed line, shown as a single clipped
@@ -221,40 +278,6 @@ static void zone_draw_ticker(const struct yai_renderer *renderer, int columns)
     printf("%s%s%.*s" YAI_RESET, style, clipped ? "…" : "", (int)tail_len, tail);
 }
 
-/* Editor window: the slice of the buffer shown on the prompt row, slid
- * so the cursor always falls inside it. All units are codepoints; byte
- * bounds come out for printing. */
-static void editor_window(const struct yai_renderer *renderer, int max_columns,
-                          size_t *out_start_byte, size_t *out_window_bytes, int *out_clipped_left,
-                          size_t *out_cursor_window_chars)
-{
-    const char *buffer = renderer->edit_buffer;
-    size_t length = renderer->edit_length ? *renderer->edit_length : 0;
-    size_t cursor = renderer->edit_cursor ? *renderer->edit_cursor : length;
-    if (cursor > length) {
-        cursor = length;
-    }
-    size_t total_chars = count_chars(buffer, length);
-    size_t cursor_chars = count_chars(buffer, cursor);
-    size_t window_chars = (size_t)(max_columns > 0 ? max_columns : 1);
-
-    size_t window_start_chars = 0;
-    if (total_chars > window_chars) {
-        if (cursor_chars + 1 > window_chars) {
-            window_start_chars = cursor_chars + 1 - window_chars;
-        }
-        if (window_start_chars > total_chars - window_chars) {
-            window_start_chars = total_chars - window_chars;
-        }
-    }
-    size_t start_byte = char_index_to_byte(buffer, length, window_start_chars);
-    size_t end_byte = char_index_to_byte(buffer, length, window_start_chars + window_chars);
-    *out_start_byte = start_byte;
-    *out_window_bytes = end_byte - start_byte;
-    *out_clipped_left = window_start_chars > 0;
-    *out_cursor_window_chars = cursor_chars - window_start_chars;
-}
-
 /* Display width of the mode indicator prefix ("[N] " etc.), 0 when the
  * editor has no modal status (emacs). The status string is ASCII, so
  * byte length == column count; plus one trailing space. */
@@ -266,41 +289,67 @@ static int status_columns(const struct yai_renderer *renderer)
     return 0;
 }
 
-/* 1-based terminal column where the editor cursor parks. */
-static size_t prompt_cursor_column(const struct yai_renderer *renderer, int columns)
+/* Draw the prompt, wrapping the editor buffer across as many rows as it needs
+ * (hard-wrap at the terminal width, plus any newlines the user inserted). A
+ * prompt taller than the on-screen budget scrolls vertically so the cursor row
+ * stays visible. Records the row count and the cursor's row in the renderer
+ * (for the zone bookkeeping) and returns the 1-based screen column the cursor
+ * parks on. Auto-wrap is disabled while drawing so a full-width row never spills
+ * onto an extra screen line and desyncs the row count — the `\n`s this emits are
+ * the only row breaks. */
+static int zone_draw_prompt(struct yai_renderer *renderer, int columns)
 {
     int prefix_columns =
         status_columns(renderer) + YAI_PROMPT_COLUMNS + (renderer->activity_glyph[0] ? 2 : 0);
-    size_t start_byte = 0;
-    size_t window_bytes = 0;
-    int clipped_left = 0;
-    size_t cursor_window_chars = 0;
-    editor_window(renderer, columns - prefix_columns - 2, &start_byte, &window_bytes, &clipped_left,
-                  &cursor_window_chars);
-    return 1 + (size_t)prefix_columns + (clipped_left ? 1 : 0) + cursor_window_chars;
-}
 
-static void zone_draw_prompt(const struct yai_renderer *renderer, int columns)
-{
-    int prefix_columns =
-        status_columns(renderer) + YAI_PROMPT_COLUMNS + (renderer->activity_glyph[0] ? 2 : 0);
-    if (status_columns(renderer) > 0) {
-        printf(YAI_MUTED "%s" YAI_RESET " ", renderer->edit_status_ptr);
+    /* Measure the full wrapped layout first, so the visible window can be slid
+     * to keep the cursor row on screen. */
+    int total_rows = 0;
+    int cursor_row = 0;
+    int cursor_col = 0;
+    total_rows = prompt_walk(renderer, prefix_columns, columns, /*draw=*/0, 0, 0, &cursor_row,
+                             &cursor_col);
+
+    /* The menu / HUD rows are drawn below the prompt (after this call), so
+     * count them from their sources rather than the not-yet-set zone_rows_below. */
+    int rows_below = (int)renderer->menu_row_count + (renderer->text_hud ? 1 : 0);
+    int rows_budget = terminal_rows() - renderer->zone_rows_above - rows_below - 1;
+    int cap = rows_budget < 1 ? 1 : rows_budget;
+    if (cap > YAI_PROMPT_MAX_ROWS) {
+        cap = YAI_PROMPT_MAX_ROWS;
     }
-    if (renderer->activity_glyph[0]) {
-        printf(YAI_MINT "%s" YAI_RESET " ", renderer->activity_glyph);
+    int visible_rows = total_rows < cap ? total_rows : cap;
+    int window_first = 0;
+    if (cursor_row >= visible_rows) {
+        window_first = cursor_row - visible_rows + 1;
     }
-    fputs(YAI_MINT "you ▸ " YAI_RESET, stdout);
-    if (renderer->edit_buffer && renderer->edit_length && *renderer->edit_length > 0) {
-        size_t start_byte = 0;
-        size_t window_bytes = 0;
-        int clipped_left = 0;
-        size_t cursor_window_chars = 0;
-        editor_window(renderer, columns - prefix_columns - 2, &start_byte, &window_bytes,
-                      &clipped_left, &cursor_window_chars);
-        printf("%s%.*s", clipped_left ? "…" : "", (int)window_bytes,
-               renderer->edit_buffer + start_byte);
+    if (window_first > total_rows - visible_rows) {
+        window_first = total_rows - visible_rows;
     }
+    if (window_first < 0) {
+        window_first = 0;
+    }
+
+    fputs("\033[?7l", stdout); /* DECAWM off: our own '\n's are the only breaks */
+    /* The prefix sits on the first visible row's screen line; a scrolled
+     * window (window_first > 0) opens on a continuation row, which carries no
+     * prefix, so its text starts at column 0. */
+    if (window_first == 0) {
+        if (status_columns(renderer) > 0) {
+            printf(YAI_MUTED "%s" YAI_RESET " ", renderer->edit_status_ptr);
+        }
+        if (renderer->activity_glyph[0]) {
+            printf(YAI_MINT "%s" YAI_RESET " ", renderer->activity_glyph);
+        }
+        fputs(YAI_MINT "you ▸ " YAI_RESET, stdout);
+    }
+    prompt_walk(renderer, prefix_columns, columns, /*draw=*/1, window_first, visible_rows,
+                &cursor_row, &cursor_col);
+    fputs("\033[?7h", stdout); /* DECAWM back on */
+
+    renderer->zone_prompt_rows = visible_rows;
+    renderer->zone_prompt_cursor_row = cursor_row - window_first;
+    return cursor_col + 1; /* 0-based screen column → 1-based for CHA */
 }
 
 /* Display columns of `s`: one cell per UTF-8 codepoint, skipping CSI
@@ -411,7 +460,7 @@ static struct yetty_ycore_void_result zone_draw(struct yai_renderer *renderer)
         fputc('\n', stdout);
         renderer->zone_rows_above++;
     }
-    zone_draw_prompt(renderer, columns);
+    int prompt_cursor_col = zone_draw_prompt(renderer, columns);
     /* Menu rows walk down with newlines (scrolling at the screen
      * bottom), then the cursor comes back up — scroll-proof. */
     renderer->zone_rows_below = 0;
@@ -427,10 +476,15 @@ static struct yetty_ycore_void_result zone_draw(struct yai_renderer *renderer)
         zone_draw_hud_bar(renderer, columns);
         renderer->zone_rows_below++;
     }
-    if (renderer->zone_rows_below > 0) {
-        printf("\033[%dA", renderer->zone_rows_below);
+    /* Park the cursor on its prompt row: walk up from the bottom-most zone row
+     * past the menu/HUD rows and any prompt rows below the cursor's row. */
+    int rows_below_cursor =
+        (renderer->zone_prompt_rows - 1 - renderer->zone_prompt_cursor_row) +
+        renderer->zone_rows_below;
+    if (rows_below_cursor > 0) {
+        printf("\033[%dA", rows_below_cursor);
     }
-    printf("\033[%zuG", prompt_cursor_column(renderer, columns));
+    printf("\033[%dG", prompt_cursor_col);
     renderer->zone_visible = 1;
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "zone_draw: flush");
@@ -442,21 +496,29 @@ struct yetty_ycore_void_result yai_renderer_zone_suspend(struct yai_renderer *re
     if (!renderer->zone_visible) {
         return YETTY_OK_VOID();
     }
-    /* Cursor sits on the prompt row. Erase it, the menu rows below,
-     * then the ticker above; end at the top zone row, column 0. */
+    /* The cursor sits on its prompt row. Erase it, then everything below it
+     * (the rest of the prompt rows, the menu rows, the HUD), then everything
+     * above it (the earlier prompt rows, the ticker); end at the top zone row,
+     * column 0. */
+    int rows_below_cursor =
+        (renderer->zone_prompt_rows - 1 - renderer->zone_prompt_cursor_row) +
+        renderer->zone_rows_below;
+    int rows_above_cursor = renderer->zone_rows_above + renderer->zone_prompt_cursor_row;
     fputs("\r\033[2K", stdout);
-    for (int row = 0; row < renderer->zone_rows_below; row++) {
+    for (int row = 0; row < rows_below_cursor; row++) {
         fputs("\033[1B\033[2K", stdout);
     }
-    if (renderer->zone_rows_below > 0) {
-        printf("\033[%dA", renderer->zone_rows_below);
+    if (rows_below_cursor > 0) {
+        printf("\033[%dA", rows_below_cursor);
     }
-    for (int row = 0; row < renderer->zone_rows_above; row++) {
+    for (int row = 0; row < rows_above_cursor; row++) {
         fputs("\033[1A\033[2K", stdout);
     }
     renderer->zone_visible = 0;
     renderer->zone_rows_above = 0;
     renderer->zone_rows_below = 0;
+    renderer->zone_prompt_rows = 0;
+    renderer->zone_prompt_cursor_row = 0;
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "zone_suspend: flush");
     return YETTY_OK_VOID();
