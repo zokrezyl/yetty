@@ -1,0 +1,7 @@
+<!doctype html><meta charset=utf-8>
+<title>align-items:baseline offsets a smaller-font item down to the shared first baseline</title>
+<style>body{margin:0}div{font-family:Ahem}</style>
+<div style="display:flex;width:600px;align-items:baseline">
+  <div style="font-size:32px;width:100px">Big</div>
+  <div data-test="small" data-expect="100,13,100,*" style="font-size:16px;width:100px">small</div>
+</div>

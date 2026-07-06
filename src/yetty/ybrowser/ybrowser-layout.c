@@ -671,6 +671,85 @@ static struct yetty_ycore_void_result flex_mirror_axis(struct yetty_ylexbor *r,
     return YETTY_OK_VOID();
 }
 
+/* Longest unbreakable word of a text box, in px — the reduced automatic
+ * minimum (min-content) a flex item must not shrink below. Word boundaries
+ * only; no hyphenation/break-opportunity analysis. */
+static float flex_text_min_content(const struct yetty_ylexbor *r,
+                                   const struct yetty_ylexbor_box *box)
+{
+    if (box->kind != YL_BOX_INLINE_TEXT || !box->text || box->text_len == 0) {
+        return 0.0f;
+    }
+    float advance =
+        box->glyph_advance > 0.0f ? box->glyph_advance : yetty_ylexbor_glyph_advance_ratio(r);
+    size_t longest_start = 0, longest_len = 0;
+    size_t run_start = 0, run_len = 0;
+    for (size_t i = 0; i <= box->text_len; i++) {
+        unsigned char ch = i < box->text_len ? (unsigned char)box->text[i] : ' ';
+        if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
+            if (run_len > longest_len) {
+                longest_start = run_start;
+                longest_len = run_len;
+            }
+            run_start = i + 1;
+            run_len = 0;
+        } else {
+            run_len++;
+        }
+    }
+    if (longest_len == 0) {
+        return 0.0f;
+    }
+    return yetty_ylexbor_naive_text_width(box->text + longest_start, longest_len, box->font_size,
+                                          advance);
+}
+
+/* Automatic minimum main size of a row flex item with min-width:auto —
+ * the reduced content-based minimum: a replaced item's intrinsic width,
+ * a text item's longest word, a block's widest direct text child. */
+static float flex_item_auto_min(const struct yetty_ylexbor *r, uint32_t idx,
+                                float image_intrinsic_w)
+{
+    const struct yetty_ylexbor_box *box = &r->boxes.data[idx];
+    if (box->kind == YL_BOX_INLINE_IMAGE) {
+        return image_intrinsic_w;
+    }
+    if (box->kind == YL_BOX_INLINE_TEXT) {
+        return flex_text_min_content(r, box);
+    }
+    float widest = 0.0f;
+    for (uint32_t child = box->first_child; child != 0;
+         child = r->boxes.data[child].next_sibling) {
+        float child_min = flex_text_min_content(r, &r->boxes.data[child]);
+        if (child_min > widest) {
+            widest = child_min;
+        }
+    }
+    return widest;
+}
+
+/* First-line baseline ascent of a flex item, from the container's top —
+ * reduced: 0.8 × the leading text's font-size (no font metrics at layout
+ * time); a replaced item's baseline is its bottom edge (`fallback_h`). */
+static float flex_item_first_ascent(const struct yetty_ylexbor *r, uint32_t idx, float fallback_h)
+{
+    const struct yetty_ylexbor_box *box = &r->boxes.data[idx];
+    if (box->kind == YL_BOX_INLINE_IMAGE) {
+        return fallback_h;
+    }
+    if (box->kind == YL_BOX_INLINE_TEXT) {
+        return box->font_size > 0.0f ? box->font_size * 0.8f : 12.8f;
+    }
+    for (uint32_t child = box->first_child; child != 0;
+         child = r->boxes.data[child].next_sibling) {
+        const struct yetty_ylexbor_box *child_box = &r->boxes.data[child];
+        if (child_box->kind == YL_BOX_INLINE_TEXT) {
+            return child_box->font_size > 0.0f ? child_box->font_size * 0.8f : 12.8f;
+        }
+    }
+    return box->font_size > 0.0f ? box->font_size * 0.8f : 12.8f;
+}
+
 /* Per-item scratch for one layout_flex_run invocation: 1 u32 + 10 float
  * arrays + 2 bool + 1 u8 array, all of length `cap`, carved out of one
  * caller-provided block (stack for typical containers, heap beyond that —
@@ -1274,6 +1353,15 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                 if (floor_main < 0.0f) {
                     floor_main = 0.0f;
                 }
+                /* min-width:auto — the spec's automatic minimum: don't
+				 * shrink below the (reduced) content-based minimum, capped
+				 * at the base size so a floor can never GROW an item. */
+                if (!column_dir && floor_main <= 0.0f) {
+                    floor_main = flex_item_auto_min(r, children[i], img_w_intr[i]);
+                    if (floor_main > item_content[i]) {
+                        floor_main = item_content[i];
+                    }
+                }
                 if (target < floor_main) {
                     main_size[i] = floor_main;
                     min_locked[i] = true;
@@ -1291,6 +1379,33 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
             }
         }
         leftover = 0.0f;
+    }
+
+    /* Auto margins on the MAIN axis absorb all positive free space before
+	 * justify-content sees any — the navbar `margin-left:auto` push-right
+	 * idiom. Row direction only: the box producer records auto flags for
+	 * the horizontal margins. */
+    if (!column_dir && leftover > 0.0f) {
+        uint32_t auto_margin_count = 0;
+        for (uint32_t i = 0; i < n_children; i++) {
+            const struct yetty_ylexbor_box *c = &r->boxes.data[children[i]];
+            auto_margin_count +=
+                (c->margin_left_auto ? 1u : 0u) + (c->margin_right_auto ? 1u : 0u);
+        }
+        if (auto_margin_count > 0) {
+            float share = leftover / (float)auto_margin_count;
+            for (uint32_t i = 0; i < n_children; i++) {
+                const struct yetty_ylexbor_box *c = &r->boxes.data[children[i]];
+                if (c->margin_left_auto) {
+                    margin_main_start[i] += share;
+                    margin_main_total[i] += share;
+                }
+                if (c->margin_right_auto) {
+                    margin_main_total[i] += share;
+                }
+            }
+            leftover = 0.0f;
+        }
     }
 
     /* If anything's still left over, distribute via justify-content. */
@@ -1405,6 +1520,22 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
     if (cross_budget < max_cross) {
         cross_budget = max_cross;
     }
+    /* Baseline pre-pass (row direction, reduced model): the line's shared
+	 * baseline is the tallest first-line ascent among baseline-aligned
+	 * items; each such item then offsets by the ascent difference. */
+    float max_baseline_ascent = 0.0f;
+    if (!column_dir) {
+        for (uint32_t i = 0; i < n_children; i++) {
+            const struct yetty_ylexbor_box *c = &r->boxes.data[children[i]];
+            int item_align = c->align_self != 0 ? c->align_self : align;
+            if (item_align == CSS_ALIGN_ITEMS_BASELINE) {
+                float ascent = flex_item_first_ascent(r, children[i], natural_h[i]);
+                if (ascent > max_baseline_ascent) {
+                    max_baseline_ascent = ascent;
+                }
+            }
+        }
+    }
     for (uint32_t i = 0; i < n_children; i++) {
         uint32_t cidx = children[i];
         struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
@@ -1450,6 +1581,10 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                 cross_pos = cross_origin +
                             (cross_budget - cross_used - margin_cross_total[i]) * 0.5f +
                             margin_cross_start[i];
+            } else if (item_align == CSS_ALIGN_ITEMS_BASELINE && !column_dir) {
+                float ascent = flex_item_first_ascent(r, cidx, natural_h[i]);
+                cross_pos =
+                    cross_origin + (max_baseline_ascent - ascent) + margin_cross_start[i];
             }
         }
         if (column_dir) {

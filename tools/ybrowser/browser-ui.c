@@ -33,6 +33,7 @@
 #include <sys/time.h>
 #include <termios.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include <yetty/ybrowser/ybrowser.h>
 #include <yetty/ycore/result.h>
@@ -1982,6 +1983,60 @@ static void set_mouse_forwarding(int on)
     fflush(stdout);
 }
 
+/* Minimal event-loop adapter for the in-yetty client's select() loop. The
+ * worker pool needs exactly ONE op — post_to_loop — to hand completions to
+ * the loop thread. Each post is one atomic write of a (fn, ctx) pair
+ * through a self-pipe (16 bytes, far under PIPE_BUF); the select loop
+ * drains the pipe and invokes the completions in order. */
+struct client_pipe_completion {
+    void (*fn)(void *);
+    void *ctx;
+};
+
+struct client_pipe_loop {
+    struct yetty_yevent_event_loop base;
+    int read_fd;
+    int write_fd;
+};
+
+/* ops-vtable impl — signature fixed by the event-loop ops table. */
+static void client_pipe_post_to_loop(struct yetty_yevent_event_loop *self, void (*fn)(void *),
+                                     void *arg)
+{
+    struct client_pipe_loop *loop = (struct client_pipe_loop *)self;
+    struct client_pipe_completion completion = {.fn = fn, .ctx = arg};
+    ssize_t wrote = write(loop->write_fd, &completion, sizeof(completion));
+    if (wrote != (ssize_t)sizeof(completion)) {
+        /* Pipe full/broken: run inline as a last resort — the callbacks
+		 * only set repaint flags, and losing one wedges a navigation. */
+        fn(arg);
+    }
+}
+
+static const struct yetty_yevent_event_loop_ops *client_pipe_loop_ops(void)
+{
+    static const struct yetty_yevent_event_loop_ops ops = {
+        .post_to_loop = client_pipe_post_to_loop,
+    };
+    return &ops;
+}
+
+/* Drain every queued completion. Returns the number invoked. */
+static int client_pipe_drain(struct client_pipe_loop *loop)
+{
+    int drained = 0;
+    struct client_pipe_completion completion;
+    for (;;) {
+        ssize_t got = read(loop->read_fd, &completion, sizeof(completion));
+        if (got != (ssize_t)sizeof(completion)) {
+            break;
+        }
+        completion.fn(completion.ctx);
+        drained++;
+    }
+    return drained;
+}
+
 int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, float font_size)
 {
     ytrace_init();
@@ -2013,6 +2068,34 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
             a.loader = loader_res.value;
         } else {
             yetty_ycore_error_destroy(loader_res.error);
+        }
+    }
+
+    /* Self-pipe completion loop + worker pool: navigations and image
+	 * fetches run on background threads in the client too, so a slow
+	 * origin never freezes input handling. a.event_loop stays NULL — the
+	 * client-specific paths (render pacing, the DCS size guard) key on
+	 * it. */
+    struct client_pipe_loop pipe_loop = {.base.ops = client_pipe_loop_ops(),
+                                         .read_fd = -1,
+                                         .write_fd = -1};
+    {
+        int pipe_fds[2];
+        if (getenv("YBROWSER_SYNC_NAV") != NULL) {
+            /* Debug escape hatch: forces the old synchronous client
+			 * navigation (no worker pool, no completion pipe). */
+        } else if (pipe(pipe_fds) == 0) {
+            pipe_loop.read_fd = pipe_fds[0];
+            pipe_loop.write_fd = pipe_fds[1];
+            fcntl(pipe_loop.read_fd, F_SETFL,
+                  fcntl(pipe_loop.read_fd, F_GETFL, 0) | O_NONBLOCK);
+            struct yetty_yplatform_yworkpool_ptr_result pool_res =
+                yetty_yplatform_yworkpool_create(&pipe_loop.base, "ybrowser-client", 8);
+            if (YETTY_IS_OK(pool_res)) {
+                a.img_pool = pool_res.value;
+            } else {
+                yetty_ycore_error_destroy(pool_res.error);
+            }
         }
     }
 
@@ -2110,13 +2193,25 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
         fd_set rfds;
         FD_ZERO(&rfds);
         FD_SET(STDIN_FILENO, &rfds);
+        int max_fd = STDIN_FILENO;
+        if (pipe_loop.read_fd >= 0) {
+            FD_SET(pipe_loop.read_fd, &rfds);
+            if (pipe_loop.read_fd > max_fd) {
+                max_fd = pipe_loop.read_fd;
+            }
+        }
         struct timeval tv = {wait_ms / 1000, (wait_ms % 1000) * 1000};
-        int rc = select(STDIN_FILENO + 1, &rfds, NULL, NULL, &tv);
+        int rc = select(max_fd + 1, &rfds, NULL, NULL, &tv);
         if (rc < 0) {
             if (errno == EINTR) {
                 continue;
             }
             break;
+        }
+        if (rc > 0 && pipe_loop.read_fd >= 0 && FD_ISSET(pipe_loop.read_fd, &rfds)) {
+            /* Worker completions: nav results + image arrivals. They set
+			 * repaint/apply state consumed at the top of the next tick. */
+            (void)client_pipe_drain(&pipe_loop);
         }
         if (rc > 0 && FD_ISSET(STDIN_FILENO, &rfds)) {
             ssize_t got = read(STDIN_FILENO, buf, sizeof(buf));
@@ -2136,6 +2231,17 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
     set_mouse_forwarding(0);
     err_ok(yetty_ygui_framework_clear(a.fw));
     fflush(stdout);
+    /* Stop the workers BEFORE the tabs/engines they reference die; then
+	 * run any completions the shutdown flushed through the pipe. */
+    if (a.img_pool) {
+        yetty_yplatform_yworkpool_destroy(a.img_pool);
+        a.img_pool = NULL;
+    }
+    if (pipe_loop.read_fd >= 0) {
+        (void)client_pipe_drain(&pipe_loop);
+        close(pipe_loop.read_fd);
+        close(pipe_loop.write_fd);
+    }
     for (int i = 0; i < a.n_tabs; i++) {
         tab_free(&a.tabs[i]);
     }

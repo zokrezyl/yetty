@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #if YETTY_HAVE_LIBPNG
 #include <png.h>
@@ -214,7 +215,75 @@ static int bytes_look_like_svg(const uint8_t *bytes, size_t len)
     return 0;
 }
 
-int yetty_ylexbor_svg_scene_render(const char *bytes, size_t len,
+void yetty_ylexbor_svg_parse_preserve_aspect(const char *bytes, size_t len, float *out_align_x,
+                                             float *out_align_y, uint8_t *out_mode)
+{
+    *out_align_x = 0.5f;
+    *out_align_y = 0.5f;
+    *out_mode = 0; /* meet */
+    if (!bytes || len == 0) {
+        return;
+    }
+    /* Scope the scan to the root <svg ...> start tag. */
+    const char *root = NULL;
+    for (size_t i = 0; i + 4 < len; i++) {
+        if (bytes[i] == '<' && (bytes[i + 1] | 0x20) == 's' && (bytes[i + 2] | 0x20) == 'v' &&
+            (bytes[i + 3] | 0x20) == 'g') {
+            root = bytes + i;
+            break;
+        }
+    }
+    if (!root) {
+        return;
+    }
+    const char *tag_end = memchr(root, '>', (size_t)(bytes + len - root));
+    if (!tag_end) {
+        return;
+    }
+    static const char attr_name[] = "preserveAspectRatio";
+    const char *attr = NULL;
+    for (const char *scan = root; scan + sizeof(attr_name) - 1 < tag_end; scan++) {
+        if (strncmp(scan, attr_name, sizeof(attr_name) - 1) == 0) {
+            attr = scan + sizeof(attr_name) - 1;
+            break;
+        }
+    }
+    if (!attr) {
+        return;
+    }
+    while (attr < tag_end && (*attr == ' ' || *attr == '=' || *attr == '"' || *attr == '\'')) {
+        attr++;
+    }
+    /* Optional "defer" prefix (image-only, ignored). */
+    if (strncmp(attr, "defer", 5) == 0) {
+        attr += 5;
+        while (attr < tag_end && *attr == ' ') {
+            attr++;
+        }
+    }
+    if (strncmp(attr, "none", 4) == 0) {
+        *out_mode = 2;
+        return;
+    }
+    /* x(Min|Mid|Max)Y(Min|Mid|Max) — the discriminating letter is the
+	 * second of each keyword: i / i / a for Min / Mid / Max is ambiguous,
+	 * so use the THIRD letter: n / d / x. */
+    if ((*attr | 0x20) == 'x' && attr + 8 < tag_end) {
+        char x_third = (char)(attr[3] | 0x20);
+        *out_align_x = x_third == 'n' ? 0.0f : (x_third == 'x' ? 1.0f : 0.5f);
+        char y_third = (char)(attr[7] | 0x20);
+        *out_align_y = y_third == 'n' ? 0.0f : (y_third == 'x' ? 1.0f : 0.5f);
+        attr += 8;
+    }
+    while (attr < tag_end && (*attr == ' ' || *attr == '"' || *attr == '\'')) {
+        attr++;
+    }
+    if (attr + 5 <= tag_end && strncmp(attr, "slice", 5) == 0) {
+        *out_mode = 1;
+    }
+}
+
+int yetty_ylexbor_svg_scene_render(const char *bytes, size_t len, float default_font_px,
                                    struct yetty_ydraw_drawable_list **out_scene, float *out_min_x,
                                    float *out_min_y, float *out_w, float *out_h)
 {
@@ -222,7 +291,7 @@ int yetty_ylexbor_svg_scene_render(const char *bytes, size_t len,
 	 * initial font-size (16px) is the right analogue in a page context. */
     struct yetty_ysvg_render_config config = {
         .cell_width = 8,
-        .cell_height = 16,
+        .cell_height = default_font_px > 0.0f ? default_font_px : 16,
         .width_cells = 32,
         .height_cells = 8,
     };
@@ -268,7 +337,9 @@ static int img_cache_entry_fill_svg(struct yetty_ylexbor_img_cache_entry *entry,
     if (!bytes || len == 0 || !bytes_look_like_svg((const uint8_t *)bytes, len)) {
         return 0;
     }
-    if (!yetty_ylexbor_svg_scene_render(bytes, len, &entry->svg_scene, &entry->svg_min_x,
+    yetty_ylexbor_svg_parse_preserve_aspect(bytes, len, &entry->svg_par_align_x,
+                                            &entry->svg_par_align_y, &entry->svg_par_mode);
+    if (!yetty_ylexbor_svg_scene_render(bytes, len, 0.0f, &entry->svg_scene, &entry->svg_min_x,
                                         &entry->svg_min_y, &entry->svg_w, &entry->svg_h)) {
         entry->failed = 1;
         return 1;
@@ -402,16 +473,27 @@ static char *data_uri_decode(const char *url, size_t *out_len)
         *out_len = n;
         return (char *)buf;
     }
-    /* URL-encoded text payload (e.g. inline SVG). Pass through —
-	 * full %XX decoding isn't worth the complexity for a path
-	 * stb/libpng can't decode anyway. */
+    /* Percent-encoded text payload — the standard way to inline SVG
+	 * (`data:image/svg+xml,%3Csvg...`). Decode %XX so the downstream
+	 * SVG sniff sees real `<svg` markup; every other byte (including
+	 * `+`, which is literal in data: URIs) passes through unchanged. */
     char *buf = malloc(plen + 1);
     if (!buf) {
         return NULL;
     }
-    memcpy(buf, payload, plen);
-    buf[plen] = 0;
-    *out_len = plen;
+    size_t out = 0;
+    for (size_t i = 0; i < plen;) {
+        if (payload[i] == '%' && i + 2 < plen + 1 && isxdigit((unsigned char)payload[i + 1]) &&
+            isxdigit((unsigned char)payload[i + 2])) {
+            char hex[3] = {payload[i + 1], payload[i + 2], 0};
+            buf[out++] = (char)strtol(hex, NULL, 16);
+            i += 3;
+        } else {
+            buf[out++] = payload[i++];
+        }
+    }
+    buf[out] = 0;
+    *out_len = out;
     return buf;
 }
 
@@ -1023,24 +1105,34 @@ char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el)
     return abs;
 }
 
-/* Merge a rendered SVG scene into the page output inside the box rect —
- * uniform scale, centered: preserveAspectRatio's default xMidYMid meet.
- * Advances *z past the merged records so later page prims stay on top. */
+/* Merge a rendered SVG scene into the page output inside the box rect,
+ * honoring the root's preserveAspectRatio: `none` stretches per axis;
+ * meet / slice pick the min / max uniform scale and distribute the
+ * leftover by the alignment factors (0 / 0.5 / 1). A slice overflow is
+ * not clipped — the merge path has no clip records (documented
+ * limitation). Advances *z past the merged records so later page prims
+ * stay on top. */
 static void svg_scene_merge(struct yetty_ydraw_drawable_list *buf,
                             const struct yetty_ydraw_drawable_list *scene, float min_x, float min_y,
                             float scene_w, float scene_h, float box_x, float box_y, float box_w,
-                            float box_h, uint32_t *z)
+                            float box_h, float par_align_x, float par_align_y, uint8_t par_mode,
+                            uint32_t *z)
 {
     if (scene_w <= 0.0f || scene_h <= 0.0f || box_w <= 0.0f || box_h <= 0.0f) {
         return;
     }
     float scale_x = box_w / scene_w;
     float scale_y = box_h / scene_h;
-    float scale = scale_x < scale_y ? scale_x : scale_y;
-    float offset_x = box_x + (box_w - scene_w * scale) * 0.5f - min_x * scale;
-    float offset_y = box_y + (box_h - scene_h * scale) * 0.5f - min_y * scale;
+    if (par_mode != 2) { /* meet / slice: uniform scale */
+        float scale = par_mode == 1 ? (scale_x > scale_y ? scale_x : scale_y)
+                                    : (scale_x < scale_y ? scale_x : scale_y);
+        scale_x = scale;
+        scale_y = scale;
+    }
+    float offset_x = box_x + (box_w - scene_w * scale_x) * par_align_x - min_x * scale_x;
+    float offset_y = box_y + (box_h - scene_h * scale_y) * par_align_y - min_y * scale_y;
     struct yetty_ycore_int_result merge_res = yetty_ydraw_drawable_list_merge_transformed(
-        buf, scene, offset_x, offset_y, scale, scale, *z);
+        buf, scene, offset_x, offset_y, scale_x, scale_y, *z);
     if (YETTY_IS_ERR(merge_res)) {
         ydebug("svg merge failed: %s", merge_res.error.msg);
         yetty_ycore_error_destroy(merge_res.error);
@@ -1102,7 +1194,9 @@ void yetty_ylexbor_svg_inline_cache_clear(struct yetty_ylexbor *r)
  * Returns the cache entry (scene NULL when serialization/render failed)
  * or NULL on allocation failure. */
 static struct yetty_ylexbor_svg_inline_entry *svg_inline_scene_get(struct yetty_ylexbor *r,
-                                                                   lxb_dom_element_t *element)
+                                                                   lxb_dom_element_t *element,
+                                                                   uint32_t inherited_rgba,
+                                                                   float inherited_font_px)
 {
     for (int i = 0; i < r->svg_inline_count; i++) {
         if (r->svg_inline_cache[i].element == (const void *)element) {
@@ -1127,8 +1221,36 @@ static struct yetty_ylexbor_svg_inline_entry *svg_inline_scene_get(struct yetty_
     lxb_status_t serialize_status =
         lxb_html_serialize_tree_cb(lxb_dom_interface_node(element), svg_serialize_append, &sink);
     if (serialize_status == LXB_STATUS_OK && !sink.failed && sink.data && sink.len > 0) {
-        (void)yetty_ylexbor_svg_scene_render(sink.data, sink.len, &entry->scene, &entry->min_x,
-                                             &entry->min_y, &entry->w, &entry->h);
+        /* HTML → SVG inheritance: resolve `currentColor` against the
+		 * element's computed CSS color (ysvg alone would default it to
+		 * black). Textual substitution in the serialized subtree —
+		 * "#rrggbb" (7 bytes) always fits where "currentColor" (12)
+		 * stood, so the rewrite shrinks in place. */
+        {
+            char resolved_color[8];
+            snprintf(resolved_color, sizeof(resolved_color), "#%02x%02x%02x",
+                     (inherited_rgba >> 24) & 0xff, (inherited_rgba >> 16) & 0xff,
+                     (inherited_rgba >> 8) & 0xff);
+            size_t write_pos = 0;
+            for (size_t read_pos = 0; read_pos < sink.len;) {
+                if (read_pos + 12 <= sink.len &&
+                    strncasecmp(sink.data + read_pos, "currentColor", 12) == 0) {
+                    memcpy(sink.data + write_pos, resolved_color, 7);
+                    write_pos += 7;
+                    read_pos += 12;
+                } else {
+                    sink.data[write_pos++] = sink.data[read_pos++];
+                }
+            }
+            sink.len = write_pos;
+            sink.data[sink.len] = '\0';
+            ydebug("svg inline: currentColor -> %s (inherited rgba %08x)", resolved_color,
+                   inherited_rgba);
+        }
+        yetty_ylexbor_svg_parse_preserve_aspect(sink.data, sink.len, &entry->par_align_x,
+                                                &entry->par_align_y, &entry->par_mode);
+        (void)yetty_ylexbor_svg_scene_render(sink.data, sink.len, inherited_font_px, &entry->scene,
+                                             &entry->min_x, &entry->min_y, &entry->w, &entry->h);
     }
     free(sink.data);
     return entry;
@@ -1399,11 +1521,15 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 			 * through ysvg once (per-element cache), and merge the vector
 			 * scene into the page output at the box rect. */
             if (b->element != NULL && b->element->node.local_name == LXB_TAG_SVG) {
+                uint32_t inherited_rgba = ((uint32_t)b->fg.r << 24) | ((uint32_t)b->fg.g << 16) |
+                                          ((uint32_t)b->fg.b << 8) | (uint32_t)b->fg.a;
                 struct yetty_ylexbor_svg_inline_entry *inline_svg =
-                    svg_inline_scene_get(r, b->element);
+                    svg_inline_scene_get(r, b->element, inherited_rgba, b->font_size);
                 if (inline_svg && inline_svg->scene) {
                     svg_scene_merge(buf, inline_svg->scene, inline_svg->min_x, inline_svg->min_y,
-                                    inline_svg->w, inline_svg->h, b->x, b->y, b->w, b->h, &z);
+                                    inline_svg->w, inline_svg->h, b->x, b->y, b->w, b->h,
+                                    inline_svg->par_align_x, inline_svg->par_align_y,
+                                    inline_svg->par_mode, &z);
                 }
                 break;
             }
@@ -1417,7 +1543,9 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
             /* Vector image — merge the rendered scene, keep it vector. */
             if (cached && cached->svg_scene) {
                 svg_scene_merge(buf, cached->svg_scene, cached->svg_min_x, cached->svg_min_y,
-                                cached->svg_w, cached->svg_h, b->x, b->y, b->w, b->h, &z);
+                                cached->svg_w, cached->svg_h, b->x, b->y, b->w, b->h,
+                                cached->svg_par_align_x, cached->svg_par_align_y,
+                                cached->svg_par_mode, &z);
                 break;
             }
 
