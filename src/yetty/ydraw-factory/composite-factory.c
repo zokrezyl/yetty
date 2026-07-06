@@ -150,6 +150,11 @@ struct yetty_ydraw_composite_factory {
      * factories that need it will gracefully degrade. */
     struct yetty_yevent_event_loop *event_loop;
     struct yetty_ydraw_concrete_factory *factories[MAX_CONCRETE_FACTORIES];
+    /* Deferred pipeline compilation: registration only records the concrete
+     * factory; the (expensive — WGSL → SPIR-V → driver ISA) compile_pipeline
+     * runs at the first create_instance of that type. A plain text session
+     * never pays for figure shaders it doesn't use. Indexed like factories[]. */
+    uint8_t pipeline_ready[MAX_CONCRETE_FACTORIES];
     uint32_t count;
     /* Bounds how many minted figures stay GPU-resident at once. Every
      * instance this factory creates back-points here for LRU bookkeeping. */
@@ -226,13 +231,10 @@ struct yetty_ycore_void_result yetty_ydraw_composite_factory_register(
     // its instances can subscribe to timers / mouse / etc.
     concrete->event_loop = factory->event_loop;
 
-    // Compile pipeline for this concrete factory
-    if (concrete->compile_pipeline) {
-        struct yetty_ycore_void_result res = concrete->compile_pipeline(
-            concrete, factory->device, factory->queue, factory->target_format, factory->allocator);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "composite_factory: compile_pipeline failed");
-    }
-
+    /* Pipeline compilation is deferred to the first create_instance of this
+     * type (see composite_factory_ensure_pipeline). Compiling here would make
+     * every startup pay for every figure shader, used or not. */
+    factory->pipeline_ready[factory->count] = concrete->compile_pipeline ? 0 : 1;
     factory->factories[factory->count++] = concrete;
     ydebug("composite_factory: registered type 0x%08x", concrete->type_id);
     return YETTY_OK_VOID();
@@ -242,19 +244,40 @@ struct yetty_ycore_void_result yetty_ydraw_composite_factory_register(
 // Abstract factory lookup
 //=============================================================================
 
-static struct yetty_ydraw_concrete_factory *composite_factory_get(
-    struct yetty_ydraw_composite_factory *factory, uint32_t type_id)
+/* Returns the factories[] slot for `type_id`, or -1 if not registered. The
+ * slot (not the pointer) is what lookups hand out so callers can reach the
+ * parallel pipeline_ready[] flag. */
+static int composite_factory_get_slot(struct yetty_ydraw_composite_factory *factory,
+                                      uint32_t type_id)
 {
     if (!factory) {
-        return NULL;
+        return -1;
     }
 
     for (uint32_t i = 0; i < factory->count; i++) {
         if (factory->factories[i]->type_id == type_id) {
-            return factory->factories[i];
+            return (int)i;
         }
     }
-    return NULL;
+    return -1;
+}
+
+/* Run the deferred compile_pipeline for the factory in `slot` if it hasn't run
+ * yet. Idempotent; called on every create_instance, a boolean test after the
+ * first time. */
+static struct yetty_ycore_void_result composite_factory_ensure_pipeline(
+    struct yetty_ydraw_composite_factory *factory, uint32_t slot)
+{
+    struct yetty_ydraw_concrete_factory *concrete = factory->factories[slot];
+    if (factory->pipeline_ready[slot]) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result compile_res = concrete->compile_pipeline(
+        concrete, factory->device, factory->queue, factory->target_format, factory->allocator);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, compile_res,
+                        "composite_factory: deferred compile_pipeline failed");
+    factory->pipeline_ready[slot] = 1;
+    return YETTY_OK_VOID();
 }
 
 //=============================================================================
@@ -277,10 +300,17 @@ struct yetty_ydraw_composite_ptr_result yetty_ydraw_composite_factory_create_ins
     uint32_t type_id = prim->header.type;
 
     // Get concrete factory
-    struct yetty_ydraw_concrete_factory *concrete = composite_factory_get(factory, type_id);
-    if (!concrete) {
+    int slot = composite_factory_get_slot(factory, type_id);
+    if (slot < 0) {
         return YETTY_ERR(yetty_ydraw_composite_ptr, "type not registered");
     }
+    struct yetty_ydraw_concrete_factory *concrete = factory->factories[slot];
+
+    /* First instance of this type: run the deferred pipeline compile. */
+    struct yetty_ycore_void_result ensure_res =
+        composite_factory_ensure_pipeline(factory, (uint32_t)slot);
+    YETTY_RETURN_IF_ERR(yetty_ydraw_composite_ptr, ensure_res,
+                        "composite_factory: pipeline compile on first use failed");
 
     // Delegate to concrete factory
     struct yetty_ydraw_composite_ptr_result inst_res =

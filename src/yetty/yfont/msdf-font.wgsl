@@ -17,7 +17,7 @@
 //   uniforms.__NS___pixel_range     — MSDF range, in pixels
 //   uniforms.__NS___texture_region  — vec4(u_min, v_min, u_max, v_max) of
 //                                     this font's slice in the packed atlas
-//   __NS___buffer_offset            — start of glyph metadata in storage
+//   uniforms.__NS___buffer_offset   — start of glyph metadata in storage
 //
 // Glyph metadata layout (6 u32 / glyph):
 //   [0] size_x    bitmap width  in px at base_size
@@ -36,7 +36,7 @@ fn __NS___base_size() -> f32 {
 }
 
 fn __NS___glyph_size(glyph_index: u32) -> vec2<f32> {
-    let base = __NS___buffer_offset + glyph_index * 6u;
+    let base = uniforms.__NS___buffer_offset + glyph_index * 6u;
     return vec2<f32>(
         bitcast<f32>(storage_buffer[base + 0u]),
         bitcast<f32>(storage_buffer[base + 1u])
@@ -48,7 +48,7 @@ fn __NS___glyph_size(glyph_index: u32) -> vec2<f32> {
 fn __NS___glyph_sample(glyph_index: u32,
                        glyph_uv: vec2<f32>,
                        pixel_scale: f32) -> f32 {
-    let meta_base = __NS___buffer_offset + glyph_index * 6u;
+    let meta_base = uniforms.__NS___buffer_offset + glyph_index * 6u;
     let glyph_size = vec2<f32>(
         bitcast<f32>(storage_buffer[meta_base + 0u]),
         bitcast<f32>(storage_buffer[meta_base + 1u])

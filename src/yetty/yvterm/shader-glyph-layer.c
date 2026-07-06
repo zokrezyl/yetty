@@ -393,7 +393,7 @@ static const char *sg_template_wgsl(void)
         "@vertex\n"
         "fn vs_main(input: VertexInput, @builtin(instance_index) inst: u32) -> VertexOutput {\n"
         "    var output: VertexOutput;\n"
-        "    let base = shader_glyph_instances_offset + inst * 5u;\n"
+        "    let base = uniforms.shader_glyph_instances_offset + inst * 5u;\n"
         "    let col = f32(storage_buffer[base + 0u]);\n"
         "    let row = f32(storage_buffer[base + 1u]);\n"
         "    output.local_id = storage_buffer[base + 2u];\n"

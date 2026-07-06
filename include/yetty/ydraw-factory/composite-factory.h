@@ -194,13 +194,17 @@ struct yetty_ydraw_concrete_factory {
      * Allocator/free is entirely up to the hook impl. */
     void *hook_data;
 
-    // Compile pipeline (called once during registration)
+    /* Compile the shared pipeline. Deferred: the composite factory calls this
+     * once, right before the FIRST create_instance of this type — never at
+     * registration — so startup doesn't pay for figure shaders that are never
+     * used. Implementations may rely on it having run before create_instance /
+     * get_pipeline / get_shared_rs, but must not expect it at register time. */
     struct yetty_ycore_void_result (*compile_pipeline)(struct yetty_ydraw_concrete_factory *self,
                                                        WGPUDevice device, WGPUQueue queue,
                                                        WGPUTextureFormat target_format,
                                                        struct yetty_ydraw_gpu_allocator *allocator);
 
-    // Get pre-compiled pipeline
+    // Get the shared pipeline (compiled on first instance creation)
     WGPURenderPipeline (*get_pipeline)(struct yetty_ydraw_concrete_factory *self);
 
     // Create instance from buffer data
