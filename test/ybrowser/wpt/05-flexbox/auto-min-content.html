@@ -1,0 +1,7 @@
+<!doctype html><meta charset=utf-8>
+<title>min-width:auto — a flex item never shrinks below its longest word (automatic minimum size)</title>
+<style>body{margin:0}div{font-family:Ahem;font-size:16px}</style>
+<div style="display:flex;width:300px">
+  <div data-test="worded" data-expect="0,0,160,*" style="flex:1 1 240px">tenletters word</div>
+  <div style="flex:1 1 240px">x</div>
+</div>

@@ -740,6 +740,9 @@ struct yetty_ylexbor_img_cache_entry {
     struct yetty_ydraw_drawable_list *svg_scene; /* owned; NULL for rasters */
     float svg_min_x, svg_min_y;                  /* scene-space origin */
     float svg_w, svg_h;                          /* scene-space extent */
+    /* Root preserveAspectRatio — see yetty_ylexbor_svg_inline_entry. */
+    float svg_par_align_x, svg_par_align_y;
+    uint8_t svg_par_mode;
 };
 
 /* Inline <svg> elements have no URL — their rendered scenes cache per
@@ -749,14 +752,24 @@ struct yetty_ylexbor_svg_inline_entry {
     const void *element; /* lxb element pointer — cache key only, never deref'd */
     struct yetty_ydraw_drawable_list *scene; /* owned; NULL when failed */
     float min_x, min_y, w, h;
+    /* preserveAspectRatio of the root element: align factors are 0 / 0.5 /
+	 * 1 for Min / Mid / Max; mode 0 = meet, 1 = slice, 2 = none. */
+    float par_align_x, par_align_y;
+    uint8_t par_mode;
 };
 
 /* Render `bytes` through ysvg. On success fills scene + scene-space frame
  * and returns 1; returns 0 when ysvg cannot parse/render the source.
  * Defined in ybrowser-paint.c. */
-int yetty_ylexbor_svg_scene_render(const char *bytes, size_t len,
+int yetty_ylexbor_svg_scene_render(const char *bytes, size_t len, float default_font_px,
                                    struct yetty_ydraw_drawable_list **out_scene, float *out_min_x,
                                    float *out_min_y, float *out_w, float *out_h);
+
+/* Parse the ROOT <svg> tag's preserveAspectRatio into align factors
+ * (0 / 0.5 / 1 for Min / Mid / Max) and mode (0 = meet, 1 = slice,
+ * 2 = none). Missing / malformed → the xMidYMid meet defaults. */
+void yetty_ylexbor_svg_parse_preserve_aspect(const char *bytes, size_t len, float *out_align_x,
+                                             float *out_align_y, uint8_t *out_mode);
 
 /* Destroy every cached inline-<svg> scene and reset the cache. Called on
  * document replace (the element keys die with the old parse) and from the

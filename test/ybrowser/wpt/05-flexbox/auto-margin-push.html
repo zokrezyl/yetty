@@ -1,0 +1,7 @@
+<!doctype html><meta charset=utf-8>
+<title>margin-left:auto on a flex item absorbs the free space (push-right navbar idiom)</title>
+<style>body{margin:0}</style>
+<div style="display:flex;width:600px">
+  <div style="width:100px;height:40px">a</div>
+  <div data-test="pushed" data-expect="500,0,100,40" style="width:100px;height:40px;margin-left:auto">b</div>
+</div>

@@ -158,6 +158,9 @@ struct fetch_transfer {
     const _Atomic uint64_t *cancel_generation;
     /* Response headers we care about, captured by fetch_header_cb. */
     char cache_control[160];
+    char age_header[32];
+    char expires_header[80];
+    char date_header[80];
     char etag[256];
     char last_modified[128];
     char vary[128];
@@ -244,7 +247,13 @@ static size_t fetch_header_cb(char *line, size_t line_size, size_t line_count, v
            header_capture(line, len, "etag:", 5, transfer->etag, sizeof(transfer->etag)) ||
            header_capture(line, len, "last-modified:", 14, transfer->last_modified,
                           sizeof(transfer->last_modified)) ||
-           header_capture(line, len, "vary:", 5, transfer->vary, sizeof(transfer->vary)));
+           header_capture(line, len, "vary:", 5, transfer->vary, sizeof(transfer->vary)) ||
+           header_capture(line, len, "age:", 4, transfer->age_header,
+                          sizeof(transfer->age_header)) ||
+           header_capture(line, len, "expires:", 8, transfer->expires_header,
+                          sizeof(transfer->expires_header)) ||
+           header_capture(line, len, "date:", 5, transfer->date_header,
+                          sizeof(transfer->date_header)));
     return len;
 }
 
@@ -547,23 +556,86 @@ static int loader_cache_entry_to_response(struct loader_cache_entry *entry,
     return 1;
 }
 
-/* Parse Cache-Control into a TTL. Returns 0 when the response must not be
- * cached (no-store / no-cache / non-positive max-age), else 1 with the
- * TTL in *out_ttl_seconds. */
-static int loader_cache_ttl(const char *cache_control, long *out_ttl_seconds)
+/* Token match inside a Cache-Control value: directives are comma-separated
+ * and a naive strstr("max-age=") also matches "s-maxage=" — walk tokens. */
+static const char *cache_control_token(const char *cache_control, const char *name)
+{
+    size_t name_len = strlen(name);
+    const char *cursor = cache_control;
+    while (cursor && *cursor) {
+        while (*cursor == ' ' || *cursor == '\t' || *cursor == ',') {
+            cursor++;
+        }
+        if (!*cursor) {
+            break;
+        }
+        size_t token_len = strcspn(cursor, ",");
+        size_t bare_len = strcspn(cursor, ",= \t");
+        if (bare_len == name_len && strncasecmp(cursor, name, name_len) == 0) {
+            return cursor;
+        }
+        cursor += token_len;
+    }
+    return NULL;
+}
+
+/* Freshness policy from the response headers. This is a PRIVATE (per-user,
+ * in-process) cache, so `private` is storable and `s-maxage` is a
+ * shared-cache directive we deliberately ignore. `must-revalidate` needs
+ * no special casing: a stale entry is only ever served through a
+ * successful conditional revalidation, never as-is.
+ *
+ * Returns:
+ *   -1  do not store (no-store)
+ *    0  store but immediately stale — serve only via revalidation
+ *       (no-cache, or freshness that has already expired per Age/Expires)
+ *    1  fresh for *out_ttl_seconds */
+static int loader_cache_ttl(const char *cache_control, const char *age_header,
+                            const char *expires_header, const char *date_header,
+                            long *out_ttl_seconds)
 {
     long ttl_seconds = LOADER_CACHE_DEFAULT_TTL_SECONDS;
+    int have_explicit_freshness = 0;
     if (cache_control && *cache_control) {
-        if (strstr(cache_control, "no-store") || strstr(cache_control, "no-cache")) {
+        if (cache_control_token(cache_control, "no-store")) {
+            return -1;
+        }
+        if (cache_control_token(cache_control, "no-cache")) {
+            *out_ttl_seconds = 0;
             return 0;
         }
-        const char *max_age = strstr(cache_control, "max-age=");
+        const char *max_age = cache_control_token(cache_control, "max-age");
         if (max_age) {
-            ttl_seconds = atol(max_age + 8);
-            if (ttl_seconds <= 0) {
-                return 0;
-            }
+            const char *value = strchr(max_age, '=');
+            ttl_seconds = value ? atol(value + 1) : 0;
+            have_explicit_freshness = 1;
         }
+    }
+    if (!have_explicit_freshness && expires_header && *expires_header) {
+        time_t expires_at = curl_getdate(expires_header, NULL);
+        if (expires_at != (time_t)-1) {
+            /* Relative to the origin's Date when present (clock-skew
+			 * safe), else our own clock. */
+            time_t origin_now = (time_t)-1;
+            if (date_header && *date_header) {
+                origin_now = curl_getdate(date_header, NULL);
+            }
+            if (origin_now == (time_t)-1) {
+                origin_now = time(NULL);
+            }
+            ttl_seconds = (long)difftime(expires_at, origin_now);
+            have_explicit_freshness = 1;
+        }
+    }
+    if (have_explicit_freshness && age_header && *age_header) {
+        long age_seconds = atol(age_header);
+        if (age_seconds > 0) {
+            ttl_seconds -= age_seconds;
+        }
+    }
+    if (ttl_seconds <= 0) {
+        *out_ttl_seconds = 0;
+        return have_explicit_freshness ? 0 : -1;
     }
     *out_ttl_seconds = ttl_seconds;
     return 1;
@@ -658,7 +730,10 @@ static int loader_cache_serve_revalidated(struct yetty_ybrowser_loader *loader,
         return 0;
     }
     long ttl_seconds = LOADER_CACHE_DEFAULT_TTL_SECONDS;
-    (void)loader_cache_ttl(transfer->cache_control, &ttl_seconds);
+    if (loader_cache_ttl(transfer->cache_control, transfer->age_header, transfer->expires_header,
+                         transfer->date_header, &ttl_seconds) <= 0) {
+        ttl_seconds = 0; /* stays revalidate-on-every-use */
+    }
     int served = 0;
     pthread_mutex_lock(&loader->cache_mutex);
     int idx = loader_cache_find(loader, request->url, request->kind);
@@ -684,8 +759,14 @@ static void loader_cache_store(struct yetty_ybrowser_loader *loader,
         return;
     }
     long ttl_seconds = LOADER_CACHE_DEFAULT_TTL_SECONDS;
-    if (!loader_cache_ttl(transfer->cache_control, &ttl_seconds)) {
-        return;
+    int freshness = loader_cache_ttl(transfer->cache_control, transfer->age_header,
+                                     transfer->expires_header, transfer->date_header,
+                                     &ttl_seconds);
+    if (freshness < 0) {
+        return; /* no-store */
+    }
+    if (freshness == 0 && !transfer->etag[0] && !transfer->last_modified[0]) {
+        return; /* immediately stale and nothing to revalidate with */
     }
     if (!loader_cache_vary_ok(transfer->vary)) {
         return;

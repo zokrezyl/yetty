@@ -2050,6 +2050,11 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 struct yetty_ylexbor_box *ib = &r->boxes.data[iidx];
                 ib->kind = YL_BOX_INLINE_IMAGE;
                 ib->element = el;
+                /* Inherited style flows into the replaced element — the
+				 * SVG path resolves `currentColor` against fg and seeds
+				 * its default font-size from font_size. */
+                ib->fg = s.fg;
+                ib->font_size = s.font_size;
 
                 /* HTML width/height attrs (in px) take priority
 				 * — the spec calls these the "presentation
@@ -2200,6 +2205,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 struct yetty_ylexbor_box *svg_box = &r->boxes.data[svg_idx];
                 svg_box->kind = YL_BOX_INLINE_IMAGE;
                 svg_box->element = el;
+                svg_box->fg = s.fg;
+                svg_box->font_size = s.font_size;
 
                 float attr_w = 0.0f, attr_h = 0.0f;
                 size_t alen = 0;
@@ -2246,6 +2253,13 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                                          &px) &&
                             px > 0.0f) {
                             css_h = px;
+                        }
+                        /* The element's computed `color` (cascade-resolved,
+					 * so plain inheritance already flowed through it)
+					 * overrides the walker snapshot for currentColor. */
+                        struct yetty_ylexbor_color svg_color;
+                        if (yetty_ybrowser_libcss_color(svg_cs, &svg_color)) {
+                            svg_box->fg = svg_color;
                         }
                         /* Same replaced-element float handling as <img>. */
                         int svg_float = yetty_ybrowser_libcss_float(svg_cs);
