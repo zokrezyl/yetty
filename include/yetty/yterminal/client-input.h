@@ -54,8 +54,21 @@ extern "C" {
  * SIGWINCH — and the terminal content figure (text + ydraw rich content)
  * clips to the same rect, leaving the reserved band free for the client's
  * overlay. All-zero insets restore the full pane. Payload:
- * yetty_content_inset. */
+ * yetty_content_inset. Superseded by YETTY_OSC_CS_CONTENT_RECT (position +
+ * size); kept for existing clients — the last received envelope of either
+ * kind wins. */
 #define YETTY_OSC_CS_CONTENT_INSET 610012 /* yetty_content_inset, comp=0 */
+
+/* Client → server: place the terminal content surface (text grid + anchored
+ * rich content) on an explicit rect inside the pane. The generalisation of
+ * YETTY_OSC_CS_CONTENT_INSET: position AND size, so a client can dock its
+ * own overlay on any band — or carve the content into a corner — instead of
+ * only shrinking from the edges. Same reflow semantics as the inset: yetty
+ * derives whole rows/cols from the rect, resizes the libvterm surface (the
+ * child gets SIGWINCH), and the content figure renders inside the rect,
+ * leaving the rest of the pane free for the client's overlay figures.
+ * Payload: yetty_content_rect. */
+#define YETTY_OSC_CS_CONTENT_RECT 610013 /* yetty_content_rect, comp=0 */
 
 /* Server → client, figure-tagged variants. figure_id != 0; (x, y) are
  * card-local pixels. */
@@ -80,6 +93,7 @@ extern "C" {
 #define YETTY_CLIENT_INPUT_FOCUS_MAGIC 0x4D434F46u  /* "FOCM" */
 #define YETTY_CLIENT_INPUT_KEY_MAGIC 0x4D59454Bu    /* "KEYM" */
 #define YETTY_CONTENT_INSET_MAGIC 0x54534E49u       /* "INST" */
+#define YETTY_CONTENT_RECT_MAGIC 0x54435243u        /* "CRCT" */
 
 /*=============================================================================
  * Pane-wide subscription bitmask (YETTY_OSC_CS_CLIENT_INPUT_SUB).
@@ -112,6 +126,34 @@ struct yetty_content_inset {
     float right;
     float bottom;
     float left;
+};
+
+/* Content rect in pane-local pixels (YETTY_OSC_CS_CONTENT_RECT). Position and
+ * size of the terminal content surface inside the pane, with edge-anchored
+ * extents so the common reservations survive pane resizes without a client
+ * round-trip:
+ *
+ *   x, y          content origin (negative clamps to 0).
+ *   width  >  0   absolute width in pixels.
+ *   width  <= 0   anchored to the pane's right edge with |width| px margin
+ *                 (width = pane_w - x + width).
+ *   height >  0   absolute height in pixels.
+ *   height <= 0   anchored to the pane's bottom edge with |height| px margin
+ *                 (height = pane_h - y + height).
+ *
+ * The all-zero rect (the default) is therefore the full pane. A docked
+ * bottom bar of B px is {0, 0, 0, -B}; a left panel of W px leaves
+ * {W, 0, 0, 0} for the content. The receiver clamps the resolved rect into
+ * the pane and never lets it collapse below one cell. Supersedes
+ * yetty_content_inset (insets t/r/b/l == rect {l, t, -r, -b}); the last
+ * received envelope of either kind wins. */
+struct yetty_content_rect {
+    uint32_t magic;   /* YETTY_CONTENT_RECT_MAGIC */
+    uint32_t version; /* YMGUI_WIRE_VERSION */
+    float x;
+    float y;
+    float width;
+    float height;
 };
 
 /*=============================================================================

@@ -150,6 +150,20 @@ struct yetty_yterminal_terminal {
      * fn; the handler recovers the terminal by dereferencing it. */
     struct yetty_yterminal_terminal *inset_handler_self;
 
+    /* Same trick for the content-rect wire handler. */
+    struct yetty_yterminal_terminal *content_rect_handler_self;
+
+    /* Content reservation requested by the client (YETTY_OSC_CS_CONTENT_RECT,
+     * or the legacy _INSET converted to the same form), in pane-local pixels
+     * with edge-anchored extents: spec w/h > 0 are absolute; <= 0 anchor to
+     * the pane's right/bottom edge with |value| px margin. All zero (default)
+     * = full pane. terminal_apply_pane_geometry resolves this against the
+     * live pane size into the effective content rect. */
+    float content_spec_x;
+    float content_spec_y;
+    float content_spec_w;
+    float content_spec_h;
+
     /* Same self-back-pointer trick for the YDRAW handler coroutine. */
     struct yetty_yterminal_terminal *ydraw_handler_self;
 
@@ -1055,47 +1069,62 @@ static struct yetty_ycore_void_result terminal_reinject_process_input(
 }
 
 /*-------------------------------------------------------------------------
- * Content insets — YETTY_OSC_CS_CONTENT_INSET.
+ * Content reservation — YETTY_OSC_CS_CONTENT_RECT / _INSET.
  *
- * A client reserves a band of the pane (a docked status bar / HUD) by
- * sending per-edge insets in pixels. We own the real cell metrics, so we
- * convert px → whole rows/cols and shrink the actual libvterm surface
- * through the normal resize path: text reflows into the inset rect, the
- * PTY winsize shrinks, the child sees SIGWINCH, and the grid figure clips
- * its render to the same rect (grid.c). The reserved band is then free for
- * the client's own overlay figure.
+ * A client places the terminal content surface on part of the pane (a
+ * docked status bar / HUD keeps the rest) by sending a content rect
+ * (position + edge-anchored size) or the legacy per-edge insets. We own
+ * the real cell metrics, so we convert the resolved rect → whole rows/cols
+ * and shrink the actual libvterm surface through the normal resize path:
+ * text reflows into the content rect, the PTY winsize shrinks, the child
+ * sees SIGWINCH, and the grid figure renders inside the same rect
+ * (vterm.c). The reserved area is then free for the client's own overlay
+ * figure.
  *-----------------------------------------------------------------------*/
 
-/* Store a parsed inset on the content layer and reflow the grid at the
- * current pane size so the libvterm surface tracks the new content rect. */
-static struct yetty_ycore_void_result terminal_content_inset_apply(
-    struct yetty_yterminal_terminal *terminal, const struct yetty_content_inset *inset)
+/* Store a content spec (pane-local px, edge-anchored extents — see
+ * yetty_content_rect in client-input.h) and reflow the grid at the current
+ * pane size so the libvterm surface tracks the new content rect. */
+static struct yetty_ycore_void_result terminal_content_spec_apply(
+    struct yetty_yterminal_terminal *terminal, float spec_x, float spec_y, float spec_w,
+    float spec_h)
 {
     if (!terminal->grid) {
         return YETTY_OK_VOID();
     }
-    /* Clamp negatives to zero — a malformed client must never invert the rect. */
-    float top = inset->top > 0.0f ? inset->top : 0.0f;
-    float right = inset->right > 0.0f ? inset->right : 0.0f;
-    float bottom = inset->bottom > 0.0f ? inset->bottom : 0.0f;
-    float left = inset->left > 0.0f ? inset->left : 0.0f;
-
-    struct yetty_ycore_void_result inset_res =
-        yetty_yvterm_vterm_set_content_inset(terminal->grid, top, right, bottom, left);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, inset_res, "terminal_content_inset_apply: set inset");
-    ydebug("terminal: content inset t=%.0f r=%.0f b=%.0f l=%.0f", top, right, bottom, left);
+    /* Clamp a negative origin to zero — a malformed client must never push
+     * the content rect out of the pane. */
+    terminal->content_spec_x = spec_x > 0.0f ? spec_x : 0.0f;
+    terminal->content_spec_y = spec_y > 0.0f ? spec_y : 0.0f;
+    terminal->content_spec_w = spec_w;
+    terminal->content_spec_h = spec_h;
+    ydebug("terminal: content spec x=%.0f y=%.0f w=%.0f h=%.0f", terminal->content_spec_x,
+           terminal->content_spec_y, spec_w, spec_h);
 
     /* Reflow at the last applied pane size; the grid figure picks the new
-     * insets up on its next render. applied_w/h is 0 before the first
-     * layout — the first RESIZE then applies the stored insets for free. */
+     * content rect up on its next render. applied_w/h is 0 before the first
+     * layout — the first RESIZE then applies the stored spec for free. */
     if (terminal->applied_w > 0.0f && terminal->applied_h > 0.0f) {
         struct yetty_ycore_void_result gr =
             terminal_apply_pane_geometry(terminal, terminal->applied_w, terminal->applied_h);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "terminal_content_inset_apply: reflow");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "terminal_content_spec_apply: reflow");
     }
     terminal->context.yetty_context.event_loop->ops->request_render(
         terminal->context.yetty_context.event_loop);
     return YETTY_OK_VOID();
+}
+
+/* Legacy per-edge insets are the anchored-spec special case
+ * {left, top, -right, -bottom}: all-zero insets → all-zero spec → full
+ * pane. Negative insets clamp to zero before the sign flip. */
+static struct yetty_ycore_void_result terminal_content_inset_apply(
+    struct yetty_yterminal_terminal *terminal, const struct yetty_content_inset *inset)
+{
+    float top = inset->top > 0.0f ? inset->top : 0.0f;
+    float right = inset->right > 0.0f ? inset->right : 0.0f;
+    float bottom = inset->bottom > 0.0f ? inset->bottom : 0.0f;
+    float left = inset->left > 0.0f ? inset->left : 0.0f;
+    return terminal_content_spec_apply(terminal, left, top, -right, -bottom);
 }
 
 /* Read one content-inset envelope off the SM: exactly one
@@ -1152,6 +1181,63 @@ static struct yetty_ycore_void_result terminal_content_inset_process_input(
         struct yetty_ycore_void_result envelope_res =
             terminal_content_inset_consume_envelope(terminal, sm);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, envelope_res, "terminal_content_inset_process_input");
+        yetty_yplatform_coro_yield();
+    }
+}
+
+/* Read one content-rect envelope off the SM: exactly one yetty_content_rect,
+ * draining any trailing bytes a future revision adds. */
+static struct yetty_ycore_void_result terminal_content_rect_consume_envelope(
+    struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_content_rect msg;
+    uint8_t *cursor = (uint8_t *)&msg;
+    size_t have = 0;
+    while (have < sizeof(msg)) {
+        struct yetty_ycore_size_result read_res =
+            yetty_ywire_wire_statemachine_read(sm, cursor + have, sizeof(msg) - have);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, read_res, "terminal_content_rect: sm read");
+        if (read_res.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                if (have == 0) {
+                    return YETTY_OK_VOID(); /* empty envelope: nothing to do */
+                }
+                return YETTY_ERR(yetty_ycore_void, "terminal_content_rect: short payload at EOE");
+            }
+            yetty_yplatform_coro_yield();
+            continue;
+        }
+        have += read_res.value;
+    }
+    /* Drain any excess to keep the stream aligned. */
+    for (;;) {
+        uint8_t scratch[256];
+        struct yetty_ycore_size_result drain_res =
+            yetty_ywire_wire_statemachine_read(sm, scratch, sizeof(scratch));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drain_res, "terminal_content_rect: sm drain");
+        if (drain_res.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                break;
+            }
+            yetty_yplatform_coro_yield();
+        }
+    }
+    if (msg.magic != YETTY_CONTENT_RECT_MAGIC) {
+        return YETTY_ERR(yetty_ycore_void, "terminal_content_rect: bad payload magic");
+    }
+    return terminal_content_spec_apply(terminal, msg.x, msg.y, msg.width, msg.height);
+}
+
+static struct yetty_ycore_void_result terminal_content_rect_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    /* userdata is &terminal->content_rect_handler_self — same distinct-pointer
+     * coroutine trick as the inset handler above. */
+    struct yetty_yterminal_terminal *terminal = *(struct yetty_yterminal_terminal **)userdata;
+    for (;;) {
+        struct yetty_ycore_void_result envelope_res =
+            terminal_content_rect_consume_envelope(terminal, sm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, envelope_res, "terminal_content_rect_process_input");
         yetty_yplatform_coro_yield();
     }
 }
@@ -1545,6 +1631,16 @@ static struct yetty_ycore_void_result terminal_cell_from_local(
     if (cell.height > 0.0f) {
         cell_h = cell.height;
     }
+    /* The grid renders on the resolved content rect (a client reservation
+     * may offset it inside the pane) — shift into content-rect space so
+     * cell math lands on the rows the user actually sees. */
+    float content_x = 0.0f, content_y = 0.0f;
+    struct yetty_ycore_void_result content_rect_res =
+        yetty_yvterm_vterm_get_content_rect(terminal->grid, &content_x, &content_y, NULL, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, content_rect_res,
+                        "terminal_cell_from_local: content rect");
+    lx -= content_x;
+    ly -= content_y;
     if (lx < 0.0f) {
         lx = 0.0f;
     }
@@ -2181,6 +2277,15 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register content inset");
     ydebug("terminal_create: content inset registered for DCS %d", YETTY_OSC_CS_CONTENT_INSET);
 
+    /* Content rect — the inset's generalisation: the client places the text
+     * surface on an explicit (edge-anchored) rect inside the pane. */
+    terminal->content_rect_handler_self = terminal;
+    rr = yetty_ywire_wire_statemachine_register(
+        terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CONTENT_RECT, /*has_args=*/1,
+        terminal_content_rect_process_input, &terminal->content_rect_handler_self);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register content rect");
+    ydebug("terminal_create: content rect registered for DCS %d", YETTY_OSC_CS_CONTENT_RECT);
+
     /* Anchored rich content (yplot/yimage/SDF drawings) arrives as YDRAW DCS
      * envelopes from producers (yplot, ycat, …). One handler coroutine (distinct
      * userdata) serves CLEAR + BIN + OVERLAY, parsing records into the content
@@ -2475,12 +2580,20 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
     /* Root container has no grid-resize concept: each figure tracks
      * its own rect via wire SET_CHILD_RECT records. On terminal resize
      * the producer re-emits the layout in the new dims; the root
-     * container's own rect gets refreshed at viewport-offset push time. */
+     * container's own rect gets refreshed at viewport-offset push time.
+     *
+     * The rect spans the WHOLE pane, not the grid's pixel size — with a
+     * content reservation active the grid covers only part of the pane
+     * (vterm's render slot places it on the resolved content rect), and
+     * client overlay figures live in the remainder. Before the first
+     * layout applied_w/h is 0; the grid px size is the pane then. */
     if (terminal->root_container_obj) {
         struct yetty_ycore_rectangle new_rect = {
             .min = {.x = 0.0f, .y = 0.0f},
-            .max = {.x = (float)grid_size.cols * cell_size.width,
-                    .y = (float)grid_size.rows * cell_size.height},
+            .max = {.x = terminal->applied_w > 0.0f ? terminal->applied_w
+                                                    : (float)grid_size.cols * cell_size.width,
+                    .y = terminal->applied_h > 0.0f ? terminal->applied_h
+                                                    : (float)grid_size.rows * cell_size.height},
         };
         struct yetty_yfigure_figure_ptr_result rf_res =
             yetty_yfigure_container_as_figure(terminal->root_container_obj);
@@ -2511,12 +2624,51 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
     return YETTY_OK_VOID();
 }
 
-/* Derive the text grid from a pane pixel size, honoring the content insets a
- * client reserved (YETTY_OSC_CS_CONTENT_INSET), and drive the resize. The grid
- * is sized to exactly fill the inset content rect — cols*cell_w == content_w
- * and rows*cell_h == content_h — so the grid figure's viewport-narrowing in
- * grid.c lines up with the libvterm surface to the pixel. Shared by the RESIZE
- * event and the content-inset OSC handler so both paths reflow identically. */
+/* Resolve the client's content spec (edge-anchored; see yetty_content_rect)
+ * against a live pane size into the effective content rect, clamped into the
+ * pane and never below `min_w` x `min_h` (one cell). The all-zero spec
+ * resolves to the full pane. */
+static void terminal_resolve_content_rect(const struct yetty_yterminal_terminal *terminal,
+                                          float pane_w, float pane_h, float min_w, float min_h,
+                                          float *out_x, float *out_y, float *out_w, float *out_h)
+{
+    float origin_x = terminal->content_spec_x;
+    float origin_y = terminal->content_spec_y;
+    if (origin_x > pane_w - min_w) {
+        origin_x = pane_w - min_w > 0.0f ? pane_w - min_w : 0.0f;
+    }
+    if (origin_y > pane_h - min_h) {
+        origin_y = pane_h - min_h > 0.0f ? pane_h - min_h : 0.0f;
+    }
+    float width = terminal->content_spec_w > 0.0f ? terminal->content_spec_w
+                                                  : pane_w - origin_x + terminal->content_spec_w;
+    float height = terminal->content_spec_h > 0.0f ? terminal->content_spec_h
+                                                   : pane_h - origin_y + terminal->content_spec_h;
+    if (width > pane_w - origin_x) {
+        width = pane_w - origin_x;
+    }
+    if (height > pane_h - origin_y) {
+        height = pane_h - origin_y;
+    }
+    if (width < min_w) {
+        width = min_w;
+    }
+    if (height < min_h) {
+        height = min_h;
+    }
+    *out_x = origin_x;
+    *out_y = origin_y;
+    *out_w = width;
+    *out_h = height;
+}
+
+/* Derive the text grid from a pane pixel size, honoring the content rect a
+ * client reserved (YETTY_OSC_CS_CONTENT_RECT / _INSET), and drive the resize.
+ * The grid is sized to exactly fill the content rect — cols*cell_w ==
+ * content_w and rows*cell_h == content_h — so the grid figure's content-rect
+ * placement in vterm.c lines up with the libvterm surface to the pixel.
+ * Shared by the RESIZE event and the content OSC handlers so all paths
+ * reflow identically. */
 static struct yetty_ycore_void_result terminal_apply_pane_geometry(
     struct yetty_yterminal_terminal *terminal, float pane_w, float pane_h)
 {
@@ -2526,11 +2678,6 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
     struct pixel_size_result cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "terminal_apply_pane_geometry: cell size");
     struct yetty_ycore_pixel_size cell = cell_res.value;
-    float inset_top = 0.0f, inset_right = 0.0f, inset_bottom = 0.0f, inset_left = 0.0f;
-    struct yetty_ycore_void_result inset_res = yetty_yvterm_vterm_get_content_inset(
-        terminal->grid, &inset_top, &inset_right, &inset_bottom, &inset_left);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, inset_res,
-                        "terminal_apply_pane_geometry: get content inset");
 
     float cell_w_target = cell.width > 0 ? cell.width : 10.0f;
     float cell_h_target = cell.height > 0 ? cell.height : 20.0f;
@@ -2552,16 +2699,11 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
         }
     }
 
-    /* Subtract the reserved insets; never let the content rect collapse below a
+    /* Resolve the reservation; never let the content rect collapse below a
      * single cell in either axis (a client could reserve more than the pane). */
-    float content_w = pane_w - inset_left - inset_right;
-    float content_h = pane_h - inset_top - inset_bottom;
-    if (content_w < cell_w_target) {
-        content_w = cell_w_target;
-    }
-    if (content_h < cell_h_target) {
-        content_h = cell_h_target;
-    }
+    float content_x = 0.0f, content_y = 0.0f, content_w = 0.0f, content_h = 0.0f;
+    terminal_resolve_content_rect(terminal, pane_w, pane_h, cell_w_target, cell_h_target,
+                                  &content_x, &content_y, &content_w, &content_h);
 
     uint32_t new_cols = (uint32_t)(content_w / cell_w_target + 0.5f);
     uint32_t new_rows = (uint32_t)(content_h / cell_h_target + 0.5f);
@@ -2578,6 +2720,13 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
     struct yetty_ycore_void_result rgr = yetty_yterminal_terminal_resize_grid(
         terminal, (struct yetty_ycore_grid_size){.cols = new_cols, .rows = new_rows}, new_cell);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rgr, "terminal_apply_pane_geometry: resize_grid");
+
+    /* Hand the renderer the resolved rect: the grid figure spans the whole
+     * pane; vterm's render slot places the text surface on this rect. */
+    struct yetty_ycore_void_result content_rect_res = yetty_yvterm_vterm_set_content_rect(
+        terminal->grid, content_x, content_y, content_w, content_h);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, content_rect_res,
+                        "terminal_apply_pane_geometry: set content rect");
 
     /* Push the FULL pane pixel size to a subscribed figure client so it can
      * place its overlay in the reserved band — it needs the whole pane, not

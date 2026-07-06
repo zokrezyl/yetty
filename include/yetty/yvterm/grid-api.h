@@ -62,12 +62,6 @@ int yetty_yvterm_grid_is_dirty(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yvterm_grid_register_wire(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *sm);
 
-/* Content inset (the padding the chrome reserves around the text area). */
-void yetty_yvterm_grid_get_content_inset(struct yetty_yclass_object *obj, float *out_top,
-                                         float *out_right, float *out_bottom, float *out_left);
-void yetty_yvterm_grid_set_content_inset(struct yetty_yclass_object *obj, float top, float right,
-                                         float bottom, float left);
-
 /* Scrollback anchors. */
 uint32_t yetty_yvterm_grid_get_live_anchor(struct yetty_yclass_object *obj);
 uint32_t yetty_yvterm_grid_get_scrollback_floor(struct yetty_yclass_object *obj);
