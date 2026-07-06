@@ -110,16 +110,16 @@ static void feed_newlines(struct ytest *test, struct yetty_yclass_object *grid, 
     }
 }
 
-static uint32_t live_anchor(struct ytest *test, struct yetty_yclass_object *grid)
+static uint64_t live_anchor(struct ytest *test, struct yetty_yclass_object *grid)
 {
-    struct yetty_ycore_uint32_result r = yetty_yvterm_grid_live_anchor(grid);
+    struct yetty_ycore_uint64_result r = yetty_yvterm_grid_live_anchor(grid);
     YTEST_REQUIRE_OK(test, r);
     return r.value;
 }
 
-static uint32_t history_floor(struct ytest *test, struct yetty_yclass_object *grid)
+static uint64_t history_floor(struct ytest *test, struct yetty_yclass_object *grid)
 {
-    struct yetty_ycore_uint32_result r = yetty_yvterm_grid_history_floor(grid);
+    struct yetty_ycore_uint64_result r = yetty_yvterm_grid_history_floor(grid);
     YTEST_REQUIRE_OK(test, r);
     return r.value;
 }
@@ -127,7 +127,7 @@ static uint32_t history_floor(struct ytest *test, struct yetty_yclass_object *gr
 /* Point the view at timeline line `view_top` and resolve a window of
  * `row_count` rows; returns the grid-owned slot array. */
 static const uint32_t *view_window(struct ytest *test, struct yetty_yclass_object *grid, int active,
-                                   uint32_t view_top, uint32_t row_count)
+                                   uint64_t view_top, uint32_t row_count)
 {
     struct yetty_ycore_void_result view_res = yetty_yvterm_grid_set_view(grid, active, view_top);
     YTEST_REQUIRE_OK(test, view_res);
@@ -170,7 +170,7 @@ static uint32_t slot_codepoint(struct ytest *test, struct yetty_yclass_object *g
 /* Anchor one fake figure + its wire envelope on the cursor row, mirroring the
  * ingest order (envelope first, then the instance). Returns the line's
  * timeline index (== rows scrolled so far, since content starts at row 0). */
-static uint32_t anchor_figure(struct ytest *test, struct yetty_yclass_object *grid,
+static uint64_t anchor_figure(struct ytest *test, struct yetty_yclass_object *grid,
                               struct tier_fixture *fixture)
 {
     uint32_t row = 0, col = 0, visible = 0;
@@ -402,6 +402,140 @@ static void test_default_hot_window_keeps_runtime(struct ytest *test)
     yetty_yvterm_grid_dispose(grid);
 }
 
+/*---------------------------------------------------------------------------
+ * #486: a parked historical view must never resolve stale identities after
+ * eviction moved the floor past it — the grid clamps deterministically.
+ *-------------------------------------------------------------------------*/
+static void test_view_clamps_after_eviction(struct ytest *test)
+{
+    /* Total cap 50 with hot 8: old segments drop as output continues. */
+    struct yetty_yclass_object *grid = make_grid(test, 20, 4, 50, 8);
+    feed(test, grid, "old-line");
+    feed_newlines(test, grid, 100);
+    /* Park a view at the current floor... */
+    uint64_t parked = history_floor(test, grid);
+    (void)view_window(test, grid, 1, parked, 4);
+    /* ...then let continued output drop the parked range entirely. */
+    feed_newlines(test, grid, 700);
+    uint64_t floor_now = history_floor(test, grid);
+    YTEST_REQUIRE(test, floor_now > parked);
+    /* Resolving the window must clamp the grid's own view forward — never
+     * alias newer rows through ring modulo arithmetic. */
+    uint32_t resolved = 0;
+    struct yetty_ycore_const_uint32_ptr_result window_res =
+        yetty_yvterm_grid_view_window(grid, 4, &resolved);
+    YTEST_REQUIRE_OK(test, window_res);
+    int active = 0;
+    uint64_t view_top = 0;
+    struct yetty_ycore_void_result view_res = yetty_yvterm_grid_view(grid, &active, &view_top);
+    YTEST_REQUIRE_OK(test, view_res);
+    YTEST_CHECK(test, view_top >= floor_now);
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
+ * #486: logical line identities are 64-bit end to end — anchor, floor and
+ * view survive crossing UINT32_MAX without wrapping.
+ *-------------------------------------------------------------------------*/
+static void test_timeline_crosses_uint32_max(struct ytest *test)
+{
+    struct yetty_yclass_object *grid = make_grid(test, 20, 4, 0, 8);
+    uint64_t base = (uint64_t)UINT32_MAX - 4u;
+    struct yetty_ycore_void_result seed_res = yetty_yvterm_grid_seed_timeline(grid, base);
+    YTEST_REQUIRE_OK(test, seed_res);
+
+    feed(test, grid, "wrap-marker");
+    uint64_t marker_line = live_anchor(test, grid);
+    YTEST_CHECK(test, marker_line == base);
+    feed_newlines(test, grid, 40); /* pushes anchor + archive across 2^32 */
+
+    uint64_t anchor = live_anchor(test, grid);
+    uint64_t floor_val = history_floor(test, grid);
+    YTEST_CHECK(test, anchor > (uint64_t)UINT32_MAX);
+    YTEST_CHECK(test, floor_val == base);
+    YTEST_CHECK(test, floor_val < anchor);
+
+    /* A view across the 2^32 boundary resolves the archived text. */
+    const uint32_t *window = view_window(test, grid, 1, marker_line, 4);
+    YTEST_CHECK_EQ_INT(test, slot_codepoint(test, grid, window[0], 0), 'w');
+    YTEST_CHECK_EQ_INT(test, slot_codepoint(test, grid, window[0], 4), '-');
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
+ * #486: fault-injected resize — a failing allocation in EITHER ring build
+ * leaves rings, geometry and content untouched; a later resize succeeds.
+ *-------------------------------------------------------------------------*/
+static void check_resize_failure(struct ytest *test, uint32_t failing_allocation)
+{
+    struct yetty_yclass_object *grid = make_grid(test, 20, 4, 0, 8);
+    feed(test, grid, "keepsake");
+
+    struct yetty_ycore_void_result inject_res =
+        yetty_yvterm_grid_inject_ring_alloc_failure(grid, failing_allocation);
+    YTEST_REQUIRE_OK(test, inject_res);
+    struct yetty_ycore_void_result resize_res = yetty_yvterm_grid_resize(grid, 30, 6);
+    YTEST_REQUIRE_ERR(test, resize_res); /* the macro consumes the error chain */
+    (void)yetty_yvterm_grid_inject_ring_alloc_failure(grid, 0);
+
+    /* Geometry and content unchanged. */
+    uint32_t cols = 0, rows = 0;
+    struct yetty_ycore_void_result dims_res = yetty_yvterm_grid_dims(grid, &cols, &rows, NULL);
+    YTEST_REQUIRE_OK(test, dims_res);
+    YTEST_CHECK_EQ_INT(test, cols, 20);
+    YTEST_CHECK_EQ_INT(test, rows, 4);
+    const uint32_t *window = view_window(test, grid, 0, 0, 4);
+    YTEST_CHECK_EQ_INT(test, slot_codepoint(test, grid, window[0], 0), 'k');
+    YTEST_CHECK_EQ_INT(test, slot_codepoint(test, grid, window[0], 7), 'e');
+
+    /* The grid still works: feeding and a clean resize both succeed. */
+    feed(test, grid, "!");
+    struct yetty_ycore_void_result retry_res = yetty_yvterm_grid_resize(grid, 30, 6);
+    YTEST_REQUIRE_OK(test, retry_res);
+    dims_res = yetty_yvterm_grid_dims(grid, &cols, &rows, NULL);
+    YTEST_REQUIRE_OK(test, dims_res);
+    YTEST_CHECK_EQ_INT(test, cols, 30);
+    YTEST_CHECK_EQ_INT(test, rows, 6);
+    yetty_yvterm_grid_dispose(grid);
+}
+
+static void test_resize_failure_is_transactional(struct ytest *test)
+{
+    /* Allocation 1 = the first line of the new PRIMARY ring; with 6 new rows
+     * and no retained history the new primary consumes 6, so allocation 7 is
+     * the first line of the new ALTERNATE ring. Covers both build orders the
+     * acceptance asks for. */
+    check_resize_failure(test, 1);
+    check_resize_failure(test, 7);
+}
+
+/*---------------------------------------------------------------------------
+ * Scroll-back racing live output: while a historical window is resolved,
+ * continued feeding seals/drops segments underneath it. Cache pinning must
+ * keep every window row readable (never freed lines) each frame.
+ *-------------------------------------------------------------------------*/
+static void test_view_survives_streaming_output(struct ytest *test)
+{
+    /* Tiny cap + tiny hot: drops chase the view aggressively. */
+    struct yetty_yclass_object *grid = make_grid(test, 20, 4, 600, 8);
+    feed_newlines(test, grid, 1200);
+    uint64_t start_top = history_floor(test, grid) + 4;
+    (void)view_window(test, grid, 1, start_top, 8);
+    for (uint32_t round = 0; round < 200; ++round) {
+        feed_newlines(test, grid, 37); /* advances floor + seals + drops */
+        uint32_t resolved = 0;
+        struct yetty_ycore_const_uint32_ptr_result window_res =
+            yetty_yvterm_grid_view_window(grid, 8, &resolved);
+        YTEST_REQUIRE_OK(test, window_res);
+        for (uint32_t row = 0; row < resolved; ++row) {
+            /* Touch every window row's cells — a dangling cache line dies
+             * here under ASAN. */
+            (void)slot_codepoint(test, grid, window_res.value[row], 0);
+        }
+    }
+    yetty_yvterm_grid_dispose(grid);
+}
+
 int main(void)
 {
     struct ytest test = ytest_begin("yvterm_scroll_tiers");
@@ -413,5 +547,9 @@ int main(void)
     YTEST_RUN(&test, test_text_overwrite_drops_envelope);
     YTEST_RUN(&test, test_resize_drains_history);
     YTEST_RUN(&test, test_default_hot_window_keeps_runtime);
+    YTEST_RUN(&test, test_view_clamps_after_eviction);
+    YTEST_RUN(&test, test_timeline_crosses_uint32_max);
+    YTEST_RUN(&test, test_resize_failure_is_transactional);
+    YTEST_RUN(&test, test_view_survives_streaming_output);
     return ytest_end(&test);
 }
