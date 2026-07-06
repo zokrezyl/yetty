@@ -79,6 +79,10 @@ classes:
         type: "char *"
         get: false
         set: false
+      - name: prefetch_ctype
+        type: "char *"
+        get: false
+        set: false
     ops:
       - slot: init
         slot_domain: yapp
@@ -126,6 +130,8 @@ types:
         type: int
       - name: active
         type: int
+      - name: nav_seq
+        type: uint64_t
       - name: cache
         type: struct url_cache
       - name: address_focused
@@ -163,6 +169,8 @@ types:
         type: size_t
       - name: eff
         type: "char *"
+      - name: ctype
+        type: "char *"
       - name: seq
         type: uint64_t
   - name: content_kind
@@ -191,6 +199,10 @@ types:
         type: int
       - name: url
         type: "char *"
+      - name: nav_id
+        type: uint64_t
+      - name: nav_cancel_cell
+        type: "_Atomic(uint64_t) *"
       - name: title
         type: "char *"
       - name: back
@@ -271,6 +283,7 @@ local_types:
   url_cache: tools/ybrowser/browser-ui.c
   tab: tools/ybrowser/browser-ui.c
   app: tools/ybrowser/browser-ui.c
+  nav_job: tools/ybrowser/browser-ui.c
   yetty_ybrowser_app: tools/ybrowser/browser-ui.c
   yetty_ybrowser_app_ptr_result: tools/ybrowser/browser-ui.c
 local_typedefs:

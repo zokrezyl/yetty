@@ -91,6 +91,14 @@ struct yl_grid_class {
     uint8_t inherit_template;
     float col_gap;
     float row_gap;
+    /* Full selector alternative as written. Compiled lazily through the
+	 * lexbor selector engine so lookups do REAL matching — combinators,
+	 * attribute selectors, pseudo-classes — instead of the reduced
+	 * class-key approximation (kept as the fallback when compilation
+	 * fails). selector_state: 0 uncompiled, 1 compiled, 2 failed. */
+    char *selector;          /* owned */
+    void *compiled_selector; /* lxb_css_selector_list_t*; owned */
+    uint8_t selector_state;
 };
 
 /* A class-scoped `grid-column` / `grid-row` placement parsed from the
@@ -112,6 +120,14 @@ struct yl_grid_span_class {
     uint8_t axis;  /* 0 = grid-column, 1 = grid-row */
     uint8_t start; /* 1-based explicit start line; 0 = auto */
     uint8_t span;
+    /* Full selector alternative as written. Compiled lazily through the
+	 * lexbor selector engine so lookups do REAL matching — combinators,
+	 * attribute selectors, pseudo-classes — instead of the reduced
+	 * class-key approximation (kept as the fallback when compilation
+	 * fails). selector_state: 0 uncompiled, 1 compiled, 2 failed. */
+    char *selector;          /* owned */
+    void *compiled_selector; /* lxb_css_selector_list_t*; owned */
+    uint8_t selector_state;
 };
 
 /* Resolved grid placement for one element, both axes (0 = auto). */
@@ -132,6 +148,14 @@ struct yl_flex_gap_class {
     char *key; /* owned; freed on document replace */
     uint8_t match_tag;
     float col_gap;
+    /* Full selector alternative as written. Compiled lazily through the
+	 * lexbor selector engine so lookups do REAL matching — combinators,
+	 * attribute selectors, pseudo-classes — instead of the reduced
+	 * class-key approximation (kept as the fallback when compilation
+	 * fails). selector_state: 0 uncompiled, 1 compiled, 2 failed. */
+    char *selector;          /* owned */
+    void *compiled_selector; /* lxb_css_selector_list_t*; owned */
+    uint8_t selector_state;
 };
 
 /* Which engine decision produced a box's used width/height — stamped by
@@ -311,6 +335,12 @@ struct yetty_ylexbor_box {
 	 * 1 = wrap (items overflowing the main axis move to the next flex
 	 * line). Only acted on for FLEX_ROW. */
     uint8_t flex_wrap;
+    uint8_t main_reverse; /* container: flex-direction row/column-REVERSE */
+    uint8_t wrap_reverse; /* container: flex-wrap: wrap-reverse */
+    int32_t flex_order;   /* item: CSS `order` (0 default) */
+    /* item: CSS align-self as a CSS_ALIGN_ITEMS_-compatible value
+	 * (the libcss enums alias); 0 / AUTO = defer to the container. */
+    int8_t align_self;
 
     /* Flex-container properties (meaningful when this box has
 	 * layout_mode == YL_LAYOUT_FLEX_ROW/COLUMN). Values are the
@@ -490,6 +520,11 @@ struct yetty_ylexbor_timer;
 struct yetty_ylexbor_custom_prop {
     char *name;  /* e.g. "--bgColor-default" — without trailing : */
     char *value; /* serialized value, e.g. "#0d1117" or "var(--x)" */
+    /* Coarse selector specificity of the defining rule (classes/pseudo
+	 * x10 + tags x1; `*` = 0). A later definition only overrides when
+	 * its specificity is >= the stored one — `html { --x }` no longer
+	 * beats an earlier `:root.theme-light { --x }`. */
+    uint16_t specificity;
 };
 
 struct yetty_ylexbor_customs {
@@ -663,6 +698,11 @@ struct yetty_ylexbor {
     struct yetty_ylexbor_img_cache_entry *img_cache;
     int img_cache_count, img_cache_cap;
 
+    /* Shared lexbor selector-match engine for the supplementary
+	 * cascade lookups (grid templates / spans / flex gaps). Lazy;
+	 * destroyed with the engine. */
+    void *supp_selector_matcher; /* lxb_selectors_t* */
+
     /* Rendered inline-<svg> scenes, keyed by element (see
 	 * yetty_ylexbor_svg_inline_entry). */
     struct yetty_ylexbor_svg_inline_entry *svg_inline_cache;
@@ -832,10 +872,19 @@ int yetty_ylexbor_grid_parse_placement(const char *src, size_t val_start, size_t
 void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *css_source,
                                       size_t css_len);
 
-/* Resolve a flex gap for an element (by class attribute, then tag name)
- * against the scanned table. Returns the gap in px, or 0. */
-float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const char *class_attr,
-                                    size_t class_len, const char *tag_name, size_t tag_len);
+/* Element-scoped var() resolution for inline styles — style="--x: v"
+ * definitions on the element/ancestors beat the global table. Caller
+ * frees. Defined in ybrowser-css-vars.c. */
+char *yetty_ylexbor_css_vars_resolve_for_element(struct yetty_ylexbor *r,
+                                                 const lxb_dom_element_t *element, const char *css,
+                                                 size_t len);
+
+/* Resolve a flex gap for an element: real selector matching against the
+ * scanned table first, class-attribute / tag-name key fallback for
+ * entries whose selector could not compile. Returns the gap in px, or 0. */
+float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const lxb_dom_element_t *element,
+                                    const char *class_attr, size_t class_len, const char *tag_name,
+                                    size_t tag_len);
 
 /* Expand every `flex: …` shorthand declaration in `css_source` into its
  * longhands (flex-grow / flex-shrink / flex-basis). libcss in this tree

@@ -39,6 +39,8 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
                                         float origin_y, float content_w);
 static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
                                            float origin_y, float content_w, int text_align);
+static void abs_descendants_collect(struct yetty_ylexbor *r, uint32_t idx, uint32_t **list,
+                                    uint32_t *count, uint32_t *cap);
 static struct float_result layout_absolute_child(struct yetty_ylexbor *r, uint32_t cidx, float cb_x,
                                                  float cb_y, float cb_w, float cb_h);
 static struct yetty_ycore_void_result flex_layout_absolute_children(struct yetty_ylexbor *r,
@@ -576,20 +578,95 @@ static struct yetty_ycore_void_result flex_layout_absolute_children(struct yetty
     if (cb_h < 0.0f) {
         cb_h = 0.0f;
     }
-    for (uint32_t child_idx = r->boxes.data[idx].first_child; child_idx != 0;
-         child_idx = r->boxes.data[child_idx].next_sibling) {
+    int is_containing_block = (idx == 0) || (r->boxes.data[idx].position != YL_POS_STATIC);
+    uint32_t *deferred_absolute = NULL;
+    uint32_t deferred_count = 0;
+    uint32_t deferred_cap = 0;
+    if (is_containing_block) {
+        for (uint32_t child_idx = r->boxes.data[idx].first_child; child_idx != 0;
+             child_idx = r->boxes.data[child_idx].next_sibling) {
+            if (r->boxes.data[child_idx].position == YL_POS_STATIC) {
+                abs_descendants_collect(r, child_idx, &deferred_absolute, &deferred_count,
+                                        &deferred_cap);
+            }
+        }
+    }
+    uint32_t direct_child = r->boxes.data[idx].first_child;
+    uint32_t deferred_index = 0;
+    for (;;) {
+        uint32_t child_idx = 0;
+        if (direct_child != 0) {
+            child_idx = direct_child;
+            direct_child = r->boxes.data[direct_child].next_sibling;
+        } else if (deferred_index < deferred_count) {
+            child_idx = deferred_absolute[deferred_index++];
+        } else {
+            break;
+        }
         uint8_t child_pos = r->boxes.data[child_idx].position;
         if (child_pos != YL_POS_ABSOLUTE && child_pos != YL_POS_FIXED) {
             continue;
+        }
+        if (child_pos == YL_POS_ABSOLUTE && !is_containing_block) {
+            continue; /* the nearest positioned ancestor places it */
         }
         struct float_result placement_res =
             (child_pos == YL_POS_FIXED)
                 ? layout_absolute_child(r, child_idx, 0.0f, 0.0f, (float)r->viewport_w,
                                         (float)r->viewport_h)
                 : layout_absolute_child(r, child_idx, cb_x, cb_y, cb_w, cb_h);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, placement_res,
-                            "flex_layout_absolute_children: layout_absolute_child");
+        if (YETTY_IS_ERR(placement_res)) {
+            free(deferred_absolute);
+            return YETTY_ERR(yetty_ycore_void,
+                             "flex_layout_absolute_children: layout_absolute_child", placement_res);
+        }
         self = &r->boxes.data[idx];
+    }
+    free(deferred_absolute);
+    (void)self;
+    return YETTY_OK_VOID();
+}
+
+/* Mirror flex items along one axis inside [origin, origin+extent] — the
+ * placement half of row-reverse / column-reverse / wrap-reverse. Moved
+ * BLOCK/TEXT subtrees are re-laid at the mirrored origin so descendants
+ * follow; the caller re-pins any cross-axis size it computed. */
+static struct yetty_ycore_void_result flex_mirror_axis(struct yetty_ylexbor *r,
+                                                       const uint32_t *children,
+                                                       uint32_t n_children, bool mirror_y,
+                                                       float origin, float extent)
+{
+    for (uint32_t i = 0; i < n_children; i++) {
+        uint32_t cidx = children[i];
+        struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
+        float old_pos = mirror_y ? c->y : c->x;
+        float size = mirror_y ? c->h : c->w;
+        float mirrored = origin + extent - (old_pos - origin) - size;
+        if (mirrored < origin) {
+            mirrored = origin; /* overflowing content stays inside */
+        }
+        if (mirrored == old_pos) {
+            continue;
+        }
+        float keep_w = c->w;
+        float keep_h = c->h;
+        if (mirror_y) {
+            c->y = mirrored;
+        } else {
+            c->x = mirrored;
+        }
+        if (c->kind == YL_BOX_BLOCK) {
+            struct float_result relay_res = layout_block(r, cidx, c->x, c->y, keep_w);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, relay_res, "flex mirror: re-lay block");
+            c = &r->boxes.data[cidx];
+        } else if (c->kind == YL_BOX_INLINE_TEXT) {
+            struct float_result relay_res =
+                wrap_inline_box(r, cidx, c->x, c->y, keep_w, /*text_align=*/0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, relay_res, "flex mirror: re-lay inline");
+            c = &r->boxes.data[cidx];
+        }
+        c->w = keep_w;
+        c->h = keep_h;
     }
     return YETTY_OK_VOID();
 }
@@ -651,18 +728,46 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
         }
         /* Absolutely-positioned / fixed children are out of flow — they are
          * not flex items. Placed against this container in the pass below;
-         * their static position is the content-box corner (the spec's
-         * as-if-sole-flex-item alignment reduces to this for the default
-         * flex-start/stretch case). */
+         * the spec's static position treats each as the SOLE flex item, so
+         * align-items / justify-content shift the hypothetical box. The
+         * horizontal axis is computable here (content_width is known; the
+         * child's explicit CSS width stands in for its hypothetical size —
+         * gnews centers 1px overlay anchors exactly this way); the
+         * container's vertical extent isn't known yet, so the vertical
+         * static position stays at the content origin. */
         if (r->boxes.data[cidx].position == YL_POS_ABSOLUTE ||
             r->boxes.data[cidx].position == YL_POS_FIXED) {
             struct yetty_ylexbor_box *out_of_flow = &r->boxes.data[cidx];
-            out_of_flow->static_x = content_origin_x + out_of_flow->margin_left;
+            float child_w = out_of_flow->css_width > 0.0f ? out_of_flow->css_width : 0.0f;
+            float static_x = content_origin_x + out_of_flow->margin_left;
+            int horizontal_align =
+                column_dir ? (out_of_flow->align_self != 0 ? out_of_flow->align_self : align)
+                           : justify;
+            if (column_dir ? (horizontal_align == CSS_ALIGN_ITEMS_CENTER)
+                           : (horizontal_align == CSS_JUSTIFY_CONTENT_CENTER)) {
+                static_x = content_origin_x + (content_width - child_w) * 0.5f;
+            } else if (column_dir ? (horizontal_align == CSS_ALIGN_ITEMS_FLEX_END)
+                                  : (horizontal_align == CSS_JUSTIFY_CONTENT_FLEX_END)) {
+                static_x = content_origin_x + content_width - child_w - out_of_flow->margin_right;
+            }
+            out_of_flow->static_x = static_x;
             out_of_flow->static_y = content_origin_y + out_of_flow->margin_top;
             out_of_flow->static_pos_set = true;
             continue;
         }
         children[n_children++] = cidx;
+    }
+    /* CSS `order`: stable insertion sort — equal orders keep document
+	 * order, negative orders move ahead of the default 0. */
+    for (uint32_t i = 1; i < n_children; i++) {
+        uint32_t moved = children[i];
+        int32_t moved_order = r->boxes.data[moved].flex_order;
+        uint32_t j = i;
+        while (j > 0 && r->boxes.data[children[j - 1]].flex_order > moved_order) {
+            children[j] = children[j - 1];
+            j--;
+        }
+        children[j] = moved;
     }
     if (n_children == 0) {
         /* Still place any out-of-flow children before bailing. */
@@ -1026,9 +1131,27 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                 }
                 /* The item that forced the flush opens the next line. */
                 line_start = i;
-                line_used =
-                    i < n_children ? main_size[i] + margin_main_total[i] : 0.0f;
+                line_used = i < n_children ? main_size[i] + margin_main_total[i] : 0.0f;
             }
+        }
+        self = &r->boxes.data[idx];
+        if (self->main_reverse && n_children > 0) {
+            /* row-reverse inside each line: one whole-array x mirror works
+			 * because every line spans the same content box. */
+            struct yetty_ycore_void_result mirror_res = flex_mirror_axis(
+                r, children, n_children, /*mirror_y=*/false, content_origin_x, content_width);
+            YETTY_RETURN_IF_ERR(float, mirror_res, "layout_flex(wrap): reverse mirror");
+            self = &r->boxes.data[idx];
+        }
+        if (self->wrap_reverse && n_children > 0) {
+            /* wrap-reverse: the line STACK flips — first line lands at the
+			 * bottom. Mirroring every item's y inside the stack extent flips
+			 * whole lines while keeping each line intact. */
+            float stack_extent = (line_top + last_line_h) - content_origin_y;
+            struct yetty_ycore_void_result mirror_res = flex_mirror_axis(
+                r, children, n_children, /*mirror_y=*/true, content_origin_y, stack_extent);
+            YETTY_RETURN_IF_ERR(float, mirror_res, "layout_flex(wrap): wrap-reverse mirror");
+            self = &r->boxes.data[idx];
         }
         float container_h = (line_top + last_line_h) - origin_y + pad_bottom;
         struct yetty_ycore_void_result abs_res =
@@ -1145,9 +1268,8 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                     sh = 1.0f;
                 }
                 float scaled = sh * item_content[i];
-                float target = item_content[i] - (scaled > 0.0f
-                                                      ? overflow * (scaled / total_scaled)
-                                                      : 0.0f);
+                float target =
+                    item_content[i] - (scaled > 0.0f ? overflow * (scaled / total_scaled) : 0.0f);
                 float floor_main = !column_dir ? r->boxes.data[children[i]].css_min_width : 0.0f;
                 if (floor_main < 0.0f) {
                     floor_main = 0.0f;
@@ -1283,10 +1405,12 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
     if (cross_budget < max_cross) {
         cross_budget = max_cross;
     }
-    int do_stretch = (align == CSS_ALIGN_ITEMS_STRETCH || align == 0);
     for (uint32_t i = 0; i < n_children; i++) {
         uint32_t cidx = children[i];
         struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
+        /* align-self overrides the container's align-items per item. */
+        int item_align = c->align_self != 0 ? c->align_self : align;
+        int do_stretch = (item_align == CSS_ALIGN_ITEMS_STRETCH || item_align == 0);
         float cross = column_dir ? natural_w[i] : natural_h[i];
         float cross_origin = column_dir ? content_origin_x : content_origin_y;
         /* Stretch sizes the MARGIN box to the line — the border box gets
@@ -1319,10 +1443,10 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
         }
         float cross_pos = cross_origin + margin_cross_start[i];
         if (!do_stretch) {
-            if (align == CSS_ALIGN_ITEMS_FLEX_END) {
+            if (item_align == CSS_ALIGN_ITEMS_FLEX_END) {
                 cross_pos = cross_origin + (cross_budget - cross_used - margin_cross_total[i]) +
                             margin_cross_start[i];
-            } else if (align == CSS_ALIGN_ITEMS_CENTER) {
+            } else if (item_align == CSS_ALIGN_ITEMS_CENTER) {
                 cross_pos = cross_origin +
                             (cross_budget - cross_used - margin_cross_total[i]) * 0.5f +
                             margin_cross_start[i];
@@ -1344,6 +1468,18 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
     }
 
     float total_main = (column_dir ? cursor - content_origin_y : 0.0f);
+    /* row-reverse / column-reverse: the main axis runs backwards — mirror
+	 * every item's main position inside the used extent (this flips both
+	 * the visual order AND the pack side, exactly the reversed axis). */
+    self = &r->boxes.data[idx];
+    if (self->main_reverse && n_children > 0) {
+        float extent = column_dir ? (cursor - content_origin_y) : content_width;
+        struct yetty_ycore_void_result mirror_res =
+            flex_mirror_axis(r, children, n_children, column_dir,
+                             column_dir ? content_origin_y : content_origin_x, extent);
+        YETTY_RETURN_IF_ERR(float, mirror_res, "layout_flex: reverse mirror");
+        self = &r->boxes.data[idx];
+    }
     float container_h =
         column_dir ? (total_main + pad_bottom) : (cross_budget + pad_top + pad_bottom);
     /* Out-of-flow pass: place absolute / fixed children (e.g. the inset:0
@@ -2108,12 +2244,80 @@ static void grid_stretch_row_members(struct yetty_ylexbor *r, const uint32_t *me
     }
 }
 
-/* 2D cell-occupancy map for grid placement. Rows beyond the map are
- * treated as free (very tall grids degrade to overlap, not to a crash). */
-enum { YL_GRID_FLOW_MAX_ROWS = 96 };
+/* Append every ABSOLUTE box under `idx` whose nearest positioned ancestor
+ * is the caller: direct absolute children plus recursion through children
+ * that are unpositioned (a positioned child is the containing block for
+ * its own subtree — its pass handles it). Best-effort: OOM stops the
+ * collection, leaving the remainder where the legacy per-parent pass put
+ * them. */
+static void abs_descendants_collect(struct yetty_ylexbor *r, uint32_t idx, uint32_t **list,
+                                    uint32_t *count, uint32_t *cap)
+{
+    for (uint32_t child_idx = r->boxes.data[idx].first_child; child_idx != 0;
+         child_idx = r->boxes.data[child_idx].next_sibling) {
+        uint8_t child_pos = r->boxes.data[child_idx].position;
+        if (child_pos == YL_POS_ABSOLUTE) {
+            if (*count == *cap) {
+                uint32_t new_cap = *cap ? *cap * 2 : 8;
+                uint32_t *grown = realloc(*list, new_cap * sizeof(**list));
+                if (!grown) {
+                    return;
+                }
+                *list = grown;
+                *cap = new_cap;
+            }
+            (*list)[(*count)++] = child_idx;
+            continue; /* its subtree resolves against it */
+        }
+        if (child_pos == YL_POS_STATIC) {
+            abs_descendants_collect(r, child_idx, list, count, cap);
+        }
+        /* RELATIVE/FIXED child: containing block for its own subtree. */
+    }
+}
+
+/* 2D cell-occupancy map for grid placement. Rows grow on demand — a
+ * 500-item product grid places every child instead of overlapping past a
+ * fixed cap. YL_GRID_FLOW_MAX_ROWS is only the sane upper bound that
+ * keeps a pathological span from looping forever. */
+enum { YL_GRID_FLOW_MAX_ROWS = 65536 };
 struct yl_grid_occupancy {
-    bool cell[YL_GRID_FLOW_MAX_ROWS][YL_GRID_MAX_TRACKS];
+    bool *cell; /* row_cap x YL_GRID_MAX_TRACKS, row-major; heap */
+    int row_cap;
 };
+
+/* Grow the map to cover `rows_needed` rows. Returns 0 on OOM — the
+ * caller treats unmapped rows as free (degrades to overlap, no crash). */
+static int grid_occupancy_ensure(struct yl_grid_occupancy *occupancy, int rows_needed)
+{
+    if (rows_needed <= occupancy->row_cap) {
+        return 1;
+    }
+    int new_cap = occupancy->row_cap ? occupancy->row_cap : 96;
+    while (new_cap < rows_needed) {
+        new_cap *= 2;
+    }
+    bool *grown = calloc((size_t)new_cap * YL_GRID_MAX_TRACKS, sizeof(bool));
+    if (!grown) {
+        return 0;
+    }
+    if (occupancy->cell) {
+        memcpy(grown, occupancy->cell,
+               (size_t)occupancy->row_cap * YL_GRID_MAX_TRACKS * sizeof(bool));
+        free(occupancy->cell);
+    }
+    occupancy->cell = grown;
+    occupancy->row_cap = new_cap;
+    return 1;
+}
+
+static bool grid_cell_occupied(const struct yl_grid_occupancy *occupancy, int row, int col)
+{
+    if (row >= occupancy->row_cap) {
+        return false; /* unmapped rows read as free */
+    }
+    return occupancy->cell[(size_t)row * YL_GRID_MAX_TRACKS + col];
+}
 
 /* One grid child with its resolved cell (0-based) and spans. */
 struct yl_grid_item {
@@ -2130,7 +2334,7 @@ static bool grid_area_free(const struct yl_grid_occupancy *occupancy, int row, i
 {
     for (int rr = row; rr < row + row_span && rr < YL_GRID_FLOW_MAX_ROWS; rr++) {
         for (int cc = col; cc < col + col_span && cc < YL_GRID_MAX_TRACKS; cc++) {
-            if (occupancy->cell[rr][cc]) {
+            if (grid_cell_occupied(occupancy, rr, cc)) {
                 return false;
             }
         }
@@ -2141,9 +2345,12 @@ static bool grid_area_free(const struct yl_grid_occupancy *occupancy, int row, i
 static void grid_area_mark(struct yl_grid_occupancy *occupancy, int row, int col, int row_span,
                            int col_span)
 {
+    if (!grid_occupancy_ensure(occupancy, row + row_span)) {
+        return; /* OOM — later placements read these rows as free */
+    }
     for (int rr = row; rr < row + row_span && rr < YL_GRID_FLOW_MAX_ROWS; rr++) {
         for (int cc = col; cc < col + col_span && cc < YL_GRID_MAX_TRACKS; cc++) {
-            occupancy->cell[rr][cc] = true;
+            occupancy->cell[(size_t)rr * YL_GRID_MAX_TRACKS + cc] = true;
         }
     }
 }
@@ -2284,6 +2491,7 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
             }
             grid_area_mark(&occupancy, item->row, item->col, item->row_span, item->col_span);
         }
+        free(occupancy.cell);
     }
 
     /* `auto` / min-content / max-content tracks size to the max-content of the
@@ -2668,10 +2876,9 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
          * previous sibling approximated the same way the in-flow path
          * collapses). */
         if (c->position == YL_POS_ABSOLUTE || c->position == YL_POS_FIXED) {
-            float collapsed_top = has_prev
-                                      ? (c->margin_top > prev_margin_bottom ? c->margin_top
-                                                                            : prev_margin_bottom)
-                                      : c->margin_top;
+            float collapsed_top =
+                has_prev ? (c->margin_top > prev_margin_bottom ? c->margin_top : prev_margin_bottom)
+                         : c->margin_top;
             c->static_x = content_origin_x + c->margin_left;
             c->static_y = cursor_y + collapsed_top;
             c->static_pos_set = true;
@@ -3050,15 +3257,47 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
 	 * block height for any absolute children placed below. */
     float block_height = (cursor_y - origin_y) + pad_bottom;
 
-    /* Out-of-flow pass: place absolute / fixed children now that this
-	 * block's content box is known. `absolute` resolves against this block's
-	 * padding box; `fixed` against the viewport. Their heights do not feed
-	 * back into `block_height` — they are out of flow. */
-    for (uint32_t child_idx = r->boxes.data[idx].first_child; child_idx != 0;
-         child_idx = r->boxes.data[child_idx].next_sibling) {
+    /* Out-of-flow pass. CSS: an ABSOLUTE box resolves against its nearest
+	 * POSITIONED ancestor, not its parent. An unpositioned block therefore
+	 * leaves absolute children for an ancestor pass; a positioned block —
+	 * or the root, the final fallback — places its own absolute children
+	 * PLUS every absolute descendant reachable through unpositioned
+	 * intermediates. FIXED children resolve against the viewport and are
+	 * placed at any level. Out-of-flow heights do not feed back into
+	 * `block_height`. */
+    int is_containing_block = (idx == 0) || (r->boxes.data[idx].position != YL_POS_STATIC);
+    uint32_t *deferred_absolute = NULL;
+    uint32_t deferred_count = 0;
+    uint32_t deferred_cap = 0;
+    if (is_containing_block) {
+        /* Descendants first (through unpositioned chains) — direct
+		 * children are handled by the loop below. */
+        for (uint32_t child_idx = r->boxes.data[idx].first_child; child_idx != 0;
+             child_idx = r->boxes.data[child_idx].next_sibling) {
+            if (r->boxes.data[child_idx].position == YL_POS_STATIC) {
+                abs_descendants_collect(r, child_idx, &deferred_absolute, &deferred_count,
+                                        &deferred_cap);
+            }
+        }
+    }
+    uint32_t direct_child = r->boxes.data[idx].first_child;
+    uint32_t deferred_index = 0;
+    for (;;) {
+        uint32_t child_idx = 0;
+        if (direct_child != 0) {
+            child_idx = direct_child;
+            direct_child = r->boxes.data[direct_child].next_sibling;
+        } else if (deferred_index < deferred_count) {
+            child_idx = deferred_absolute[deferred_index++];
+        } else {
+            break;
+        }
         uint8_t child_pos = r->boxes.data[child_idx].position;
         if (child_pos != YL_POS_ABSOLUTE && child_pos != YL_POS_FIXED) {
             continue;
+        }
+        if (child_pos == YL_POS_ABSOLUTE && !is_containing_block) {
+            continue; /* the nearest positioned ancestor places it */
         }
         /* Re-fetch on every pass: the in-flow loop above (and each
          * layout_absolute_child recursion below) can grow the box vector
@@ -3096,8 +3335,12 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
         }
         struct float_result placement_res =
             layout_absolute_child(r, child_idx, cb_x, cb_y, cb_w, cb_h);
-        YETTY_RETURN_IF_ERR(float, placement_res, "layout_block: absolute child");
+        if (YETTY_IS_ERR(placement_res)) {
+            free(deferred_absolute);
+            return YETTY_ERR(float, "layout_block: absolute child", placement_res);
+        }
     }
+    free(deferred_absolute);
 
     /* Total consumed height includes our own padding-top + content +
 	 * padding-bottom. The caller stored origin_y as our top, so

@@ -159,8 +159,8 @@ struct tab {
 	 * at its next progress tick; NULL when no navigation is in flight. */
     uint64_t nav_id;
     _Atomic uint64_t *nav_cancel_cell;
-    char *title;      /* tab label (owned) */
-    char **back;      /* history stacks (owned strings) */
+    char *title; /* tab label (owned) */
+    char **back; /* history stacks (owned strings) */
     size_t n_back, cap_back;
     char **fwd;
     size_t n_fwd, cap_fwd;
@@ -593,8 +593,8 @@ static enum content_kind detect_kind(const char *content_type, const uint8_t *d,
     size_t scan = n < 1024 ? n : 1024;
     size_t i = 0;
     while (i < scan) {
-        while (i < scan && (d[i] == ' ' || d[i] == '\t' || d[i] == '\r' || d[i] == '\n' ||
-                            d[i] == '\f')) {
+        while (i < scan &&
+               (d[i] == ' ' || d[i] == '\t' || d[i] == '\r' || d[i] == '\n' || d[i] == '\f')) {
             i++;
         }
         if (i >= scan || d[i] != '<') {
@@ -1024,9 +1024,8 @@ static void nav_job_done(void *job_ptr)
             break;
         }
     }
-    int still_wanted =
-        t != NULL && t->nav_cancel_cell == job->cancel_cell &&
-        atomic_load_explicit(job->cancel_cell, memory_order_acquire) == job->nav_id;
+    int still_wanted = t != NULL && t->nav_cancel_cell == job->cancel_cell &&
+                       atomic_load_explicit(job->cancel_cell, memory_order_acquire) == job->nav_id;
     if (still_wanted) {
         t->nav_cancel_cell = NULL;
         if (job->data) {
@@ -1490,8 +1489,7 @@ static int pump_active(struct app *a)
 	 * heavy pages (Wikipedia's lazy loader) would show "loading" forever. */
     if (a->loading) {
         int quiet = t->engine == NULL ||
-                    (t->nav_cancel_cell == NULL && t->scripts_pending == 0 &&
-                     images_fetched == 0 &&
+                    (t->nav_cancel_cell == NULL && t->scripts_pending == 0 && images_fetched == 0 &&
                      (a->img_pool == NULL ||
                       (yetty_ylexbor_images_in_flight(t->engine) == 0 && a->img_dirty == 0)));
         yetty_ylexbor_prof("pump loading: scripts_pending=%d images_fetched=%d quiet=%d",

@@ -16,6 +16,7 @@
 #include <lexbor/style/style.h>
 #include <lexbor/html/html.h>
 #include <lexbor/dom/dom.h>
+#include <lexbor/selectors/selectors.h>
 #include <lexbor/tag/const.h>
 
 #include <yetty/ydraw-core/drawable-list.h>
@@ -272,6 +273,10 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
     }
     free(r->img_cache);
     yetty_ylexbor_svg_inline_cache_clear(r);
+    if (r->supp_selector_matcher) {
+        lxb_selectors_destroy((lxb_selectors_t *)r->supp_selector_matcher, true);
+        r->supp_selector_matcher = NULL;
+    }
     yetty_ylexbor_css_vars_destroy(r);
     free(r);
     return YETTY_OK_VOID();
@@ -530,8 +535,7 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
             if (response && response->body && response->status >= 200 && response->status < 300) {
                 /* The sheet's own (post-redirect) URL anchors @import
 				 * resolution inside it. */
-                const char *sheet_url =
-                    response->effective_url ? response->effective_url : e->url;
+                const char *sheet_url = response->effective_url ? response->effective_url : e->url;
                 struct yetty_ycore_void_result ar =
                     yetty_ylexbor_add_css_from(r, response->body, response->body_len, sheet_url);
                 if (YETTY_IS_ERR(ar)) {

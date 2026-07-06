@@ -700,8 +700,8 @@ struct ylexbor_img_job {
                                            * outlives every job (destroy defers) */
     const _Atomic uint64_t *cancel_generation; /* &engine->fetch_generation — valid for
                                                 * the job's whole life (teardown defers) */
-    char *url;                            /* owned */
-    char *base_url;                       /* owned copy — read on the worker thread */
+    char *url;                                 /* owned */
+    char *base_url;                            /* owned copy — read on the worker thread */
     /* Filled by run() on the worker thread: */
     uint32_t *pixels;
     int w, h;
@@ -1039,9 +1039,8 @@ static void svg_scene_merge(struct yetty_ydraw_drawable_list *buf,
     float scale = scale_x < scale_y ? scale_x : scale_y;
     float offset_x = box_x + (box_w - scene_w * scale) * 0.5f - min_x * scale;
     float offset_y = box_y + (box_h - scene_h * scale) * 0.5f - min_y * scale;
-    struct yetty_ycore_int_result merge_res =
-        yetty_ydraw_drawable_list_merge_transformed(buf, scene, offset_x, offset_y, scale, scale,
-                                                    *z);
+    struct yetty_ycore_int_result merge_res = yetty_ydraw_drawable_list_merge_transformed(
+        buf, scene, offset_x, offset_y, scale, scale, *z);
     if (YETTY_IS_ERR(merge_res)) {
         ydebug("svg merge failed: %s", merge_res.error.msg);
         yetty_ycore_error_destroy(merge_res.error);

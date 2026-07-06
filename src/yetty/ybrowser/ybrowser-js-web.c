@@ -158,6 +158,9 @@ struct fetch_transfer {
     const _Atomic uint64_t *cancel_generation;
     /* Response headers we care about, captured by fetch_header_cb. */
     char cache_control[160];
+    char etag[256];
+    char last_modified[128];
+    char vary[128];
 };
 
 static int fetch_transfer_is_stale(const struct fetch_transfer *transfer)
@@ -207,28 +210,41 @@ static size_t fetch_write_cb(char *chunk, size_t chunk_size, size_t chunk_count,
 
 /* Capture the response headers the cache policy needs (Cache-Control).
  * Content-Type comes from CURLINFO_CONTENT_TYPE after the transfer. */
+/* Copy one response header's trimmed value into `dst` when `line` is that
+ * header. Returns 1 on capture. */
+static int header_capture(const char *line, size_t len, const char *name, size_t name_len,
+                          char *dst, size_t dst_size)
+{
+    if (len <= name_len || strncasecmp(line, name, name_len) != 0) {
+        return 0;
+    }
+    const char *value = line + name_len;
+    size_t value_len = len - name_len;
+    while (value_len > 0 && (*value == ' ' || *value == '\t')) {
+        value++;
+        value_len--;
+    }
+    while (value_len > 0 && (value[value_len - 1] == '\r' || value[value_len - 1] == '\n')) {
+        value_len--;
+    }
+    if (value_len >= dst_size) {
+        value_len = dst_size - 1;
+    }
+    memcpy(dst, value, value_len);
+    dst[value_len] = '\0';
+    return 1;
+}
+
 static size_t fetch_header_cb(char *line, size_t line_size, size_t line_count, void *userdata)
 {
     struct fetch_transfer *transfer = userdata;
     size_t len = line_size * line_count;
-    const char *name = "cache-control:";
-    size_t name_len = 14;
-    if (len > name_len && strncasecmp(line, name, name_len) == 0) {
-        const char *value = line + name_len;
-        size_t value_len = len - name_len;
-        while (value_len > 0 && (*value == ' ' || *value == '\t')) {
-            value++;
-            value_len--;
-        }
-        while (value_len > 0 && (value[value_len - 1] == '\r' || value[value_len - 1] == '\n')) {
-            value_len--;
-        }
-        if (value_len >= sizeof(transfer->cache_control)) {
-            value_len = sizeof(transfer->cache_control) - 1;
-        }
-        memcpy(transfer->cache_control, value, value_len);
-        transfer->cache_control[value_len] = '\0';
-    }
+    (void)(header_capture(line, len, "cache-control:", 14, transfer->cache_control,
+                          sizeof(transfer->cache_control)) ||
+           header_capture(line, len, "etag:", 5, transfer->etag, sizeof(transfer->etag)) ||
+           header_capture(line, len, "last-modified:", 14, transfer->last_modified,
+                          sizeof(transfer->last_modified)) ||
+           header_capture(line, len, "vary:", 5, transfer->vary, sizeof(transfer->vary)));
     return len;
 }
 
@@ -280,6 +296,18 @@ struct loader_cache_entry {
     time_t expires_at;       /* wall clock; entry is stale past this */
     uint64_t last_used_tick; /* LRU ordinal */
     size_t charge;           /* bytes accounted against the budget */
+    /* Validators — a stale entry with either one becomes a conditional
+	 * refetch; a 304 re-serves the stored body with a refreshed TTL. */
+    char *etag;
+    char *last_modified;
+};
+
+/* Snapshot of a stale entry's validators, filled by the lookup so the
+ * fetch can go conditional. */
+struct loader_cache_revalidation {
+    int available;
+    char etag[256];
+    char last_modified[128];
 };
 
 /* Default freshness when the server sends no max-age: a session-cache
@@ -305,7 +333,132 @@ struct yetty_ybrowser_loader {
     int cache_count, cache_cap;
     size_t cache_charge;
     uint64_t cache_tick;
+
+    /* Single-flight coalescing: concurrent misses on the same (url, kind)
+	 * used to run duplicate transfers, first store wins. Followers now
+	 * wait for the leader and re-read the cache. Bounded — when the table
+	 * is full, extra requests just fetch (correct, merely unshared). */
+    pthread_mutex_t inflight_mutex;
+    pthread_cond_t inflight_cond;
+    struct {
+        char url[512];
+        int kind;
+        int active;
+    } inflight[16];
+
+    /* Central transfer scheduler: ONE curl_multi on its own thread
+	 * carries every easy handle. Submitting threads (loop thread, image/
+	 * fetch/nav workers) configure the handle, enqueue, and sleep until
+	 * completion — so all traffic multiplexes on shared H2 connections,
+	 * connection counts stay bounded process-wide, and no thread ever
+	 * owns a private network loop. */
+    pthread_t scheduler_thread;
+    int scheduler_running;
+    int scheduler_shutdown; /* scheduler_mutex held */
+    int scheduler_active;   /* handles inside the multi; scheduler_mutex held */
+    CURLM *scheduler_multi;
+    pthread_mutex_t scheduler_mutex;
+    pthread_cond_t scheduler_cond; /* broadcast per completion */
+    struct loader_scheduled_transfer *scheduler_pending;
 };
+
+/* One transfer parked on the scheduler. Lives on the submitting thread's
+ * stack — valid because that thread blocks until done is set. */
+struct loader_scheduled_transfer {
+    CURL *easy;
+    CURLcode result;
+    int done;
+    struct loader_scheduled_transfer *next;
+};
+
+/* SCHEDULER THREAD — the only place that touches scheduler_multi. */
+static void *loader_scheduler_main(void *loader_ptr)
+{
+    struct yetty_ybrowser_loader *loader = loader_ptr;
+    CURLM *multi = loader->scheduler_multi;
+    for (;;) {
+        pthread_mutex_lock(&loader->scheduler_mutex);
+        while (loader->scheduler_pending) {
+            struct loader_scheduled_transfer *node = loader->scheduler_pending;
+            loader->scheduler_pending = node->next;
+            node->next = NULL;
+            curl_easy_setopt(node->easy, CURLOPT_PRIVATE, node);
+            if (curl_multi_add_handle(multi, node->easy) == CURLM_OK) {
+                loader->scheduler_active++;
+            } else {
+                node->result = CURLE_FAILED_INIT;
+                node->done = 1;
+                pthread_cond_broadcast(&loader->scheduler_cond);
+            }
+        }
+        int shutdown_now = loader->scheduler_shutdown && loader->scheduler_active == 0;
+        pthread_mutex_unlock(&loader->scheduler_mutex);
+        if (shutdown_now) {
+            break;
+        }
+        int running_handles = 0;
+        curl_multi_perform(multi, &running_handles);
+        int msgs_left = 0;
+        CURLMsg *message;
+        while ((message = curl_multi_info_read(multi, &msgs_left)) != NULL) {
+            if (message->msg != CURLMSG_DONE) {
+                continue;
+            }
+            struct loader_scheduled_transfer *node = NULL;
+            curl_easy_getinfo(message->easy_handle, CURLINFO_PRIVATE, &node);
+            CURLcode transfer_result = message->data.result;
+            curl_multi_remove_handle(multi, message->easy_handle);
+            pthread_mutex_lock(&loader->scheduler_mutex);
+            loader->scheduler_active--;
+            if (node) {
+                node->result = transfer_result;
+                node->done = 1;
+            }
+            pthread_cond_broadcast(&loader->scheduler_cond);
+            pthread_mutex_unlock(&loader->scheduler_mutex);
+        }
+        int numfds = 0;
+        /* Sleeps until network activity or curl_multi_wakeup (submission /
+		 * shutdown). */
+        curl_multi_poll(multi, NULL, 0, 250, &numfds);
+    }
+    return NULL;
+}
+
+/* Enqueue a configured easy handle onto the scheduler. Pair with
+ * loader_scheduler_wait. */
+static void loader_scheduler_submit(struct yetty_ybrowser_loader *loader,
+                                    struct loader_scheduled_transfer *node)
+{
+    pthread_mutex_lock(&loader->scheduler_mutex);
+    node->next = loader->scheduler_pending;
+    loader->scheduler_pending = node;
+    pthread_mutex_unlock(&loader->scheduler_mutex);
+    curl_multi_wakeup(loader->scheduler_multi);
+}
+
+static CURLcode loader_scheduler_wait(struct yetty_ybrowser_loader *loader,
+                                      struct loader_scheduled_transfer *node)
+{
+    pthread_mutex_lock(&loader->scheduler_mutex);
+    while (!node->done) {
+        pthread_cond_wait(&loader->scheduler_cond, &loader->scheduler_mutex);
+    }
+    pthread_mutex_unlock(&loader->scheduler_mutex);
+    return node->result;
+}
+
+/* Run one configured easy handle: through the central scheduler when it
+ * is up (the norm), else a plain blocking perform. */
+static CURLcode loader_perform(struct yetty_ybrowser_loader *loader, CURL *easy)
+{
+    if (!loader || !loader->scheduler_running) {
+        return curl_easy_perform(easy);
+    }
+    struct loader_scheduled_transfer node = {.easy = easy};
+    loader_scheduler_submit(loader, &node);
+    return loader_scheduler_wait(loader, &node);
+}
 
 static void loader_cache_entry_free(struct loader_cache_entry *entry)
 {
@@ -314,6 +467,8 @@ static void loader_cache_entry_free(struct loader_cache_entry *entry)
     free(entry->content_type);
     free(entry->effective_url);
     free(entry->pixels);
+    free(entry->etag);
+    free(entry->last_modified);
     memset(entry, 0, sizeof(*entry));
 }
 
@@ -364,12 +519,96 @@ static int loader_cache_kind_ok(const struct yetty_ybrowser_request *request)
            request->kind == YETTY_YBROWSER_REQUEST_IMAGE;
 }
 
-/* Fresh-hit lookup: fills `response` with copies and returns 1, or
- * returns 0 on miss/stale. */
+/* cache_mutex held. Copy an entry's payload into `response`. Returns 1 on
+ * success, 0 on OOM (response zeroed). */
+static int loader_cache_entry_to_response(struct loader_cache_entry *entry,
+                                          struct yetty_ybrowser_response *response)
+{
+    response->status = entry->status;
+    response->body = malloc(entry->bytes_len + 1);
+    if (!response->body) {
+        memset(response, 0, sizeof(*response));
+        return 0;
+    }
+    memcpy(response->body, entry->bytes, entry->bytes_len);
+    response->body[entry->bytes_len] = '\0';
+    response->body_len = entry->bytes_len;
+    response->effective_url = entry->effective_url ? strdup(entry->effective_url) : NULL;
+    response->content_type = entry->content_type ? strdup(entry->content_type) : NULL;
+    if (entry->pixels && entry->pixels_width > 0 && entry->pixels_height > 0) {
+        size_t pixel_bytes = (size_t)entry->pixels_width * (size_t)entry->pixels_height * 4;
+        response->image_pixels = malloc(pixel_bytes);
+        if (response->image_pixels) {
+            memcpy(response->image_pixels, entry->pixels, pixel_bytes);
+            response->image_width = entry->pixels_width;
+            response->image_height = entry->pixels_height;
+        }
+    }
+    return 1;
+}
+
+/* Parse Cache-Control into a TTL. Returns 0 when the response must not be
+ * cached (no-store / no-cache / non-positive max-age), else 1 with the
+ * TTL in *out_ttl_seconds. */
+static int loader_cache_ttl(const char *cache_control, long *out_ttl_seconds)
+{
+    long ttl_seconds = LOADER_CACHE_DEFAULT_TTL_SECONDS;
+    if (cache_control && *cache_control) {
+        if (strstr(cache_control, "no-store") || strstr(cache_control, "no-cache")) {
+            return 0;
+        }
+        const char *max_age = strstr(cache_control, "max-age=");
+        if (max_age) {
+            ttl_seconds = atol(max_age + 8);
+            if (ttl_seconds <= 0) {
+                return 0;
+            }
+        }
+    }
+    *out_ttl_seconds = ttl_seconds;
+    return 1;
+}
+
+/* Vary policy: our requests hold Accept / Accept-Encoding / User-Agent
+ * constant per request kind (and kind is part of the cache key), so those
+ * dimensions are safe. Anything else — Cookie, Origin, a bare `*` — could
+ * serve a wrong variant cross-context: don't cache it. */
+static int loader_cache_vary_ok(const char *vary)
+{
+    if (!vary || !*vary) {
+        return 1;
+    }
+    const char *cursor = vary;
+    while (*cursor) {
+        while (*cursor == ' ' || *cursor == '\t' || *cursor == ',') {
+            cursor++;
+        }
+        if (!*cursor) {
+            break;
+        }
+        size_t token_len = strcspn(cursor, ", \t");
+        if (!((token_len == 6 && strncasecmp(cursor, "accept", 6) == 0) ||
+              (token_len == 15 && strncasecmp(cursor, "accept-encoding", 15) == 0) ||
+              (token_len == 10 && strncasecmp(cursor, "user-agent", 10) == 0))) {
+            return 0;
+        }
+        cursor += token_len;
+    }
+    return 1;
+}
+
+/* Fresh-hit lookup: fills `response` with copies and returns 1, or returns
+ * 0 on miss/stale. A stale entry that carries validators is KEPT and its
+ * validators snapshot into *revalidation — the caller refetches
+ * conditionally and a 304 re-serves the stored body. */
 static int loader_cache_lookup(struct yetty_ybrowser_loader *loader,
                                const struct yetty_ybrowser_request *request,
-                               struct yetty_ybrowser_response *response)
+                               struct yetty_ybrowser_response *response,
+                               struct loader_cache_revalidation *revalidation)
 {
+    if (revalidation) {
+        memset(revalidation, 0, sizeof(*revalidation));
+    }
     if (!loader || !loader_cache_kind_ok(request)) {
         return 0;
     }
@@ -379,75 +618,92 @@ static int loader_cache_lookup(struct yetty_ybrowser_loader *loader,
     if (idx >= 0) {
         struct loader_cache_entry *entry = &loader->cache_entries[idx];
         if (entry->expires_at <= time(NULL)) {
-            /* Stale — drop it; the caller re-fetches and re-stores. */
-            loader->cache_charge -= entry->charge;
-            loader_cache_entry_free(entry);
-            loader->cache_entries[idx] = loader->cache_entries[loader->cache_count - 1];
-            memset(&loader->cache_entries[loader->cache_count - 1], 0,
-                   sizeof(loader->cache_entries[0]));
-            loader->cache_count--;
+            if (revalidation && (entry->etag || entry->last_modified)) {
+                /* Stale but revalidatable — keep the body for a 304. */
+                revalidation->available = 1;
+                if (entry->etag) {
+                    snprintf(revalidation->etag, sizeof(revalidation->etag), "%s", entry->etag);
+                }
+                if (entry->last_modified) {
+                    snprintf(revalidation->last_modified, sizeof(revalidation->last_modified), "%s",
+                             entry->last_modified);
+                }
+            } else {
+                /* Stale, no validators — drop it; the caller re-fetches. */
+                loader->cache_charge -= entry->charge;
+                loader_cache_entry_free(entry);
+                loader->cache_entries[idx] = loader->cache_entries[loader->cache_count - 1];
+                memset(&loader->cache_entries[loader->cache_count - 1], 0,
+                       sizeof(loader->cache_entries[0]));
+                loader->cache_count--;
+            }
         } else {
             entry->last_used_tick = ++loader->cache_tick;
-            response->status = entry->status;
-            response->body = malloc(entry->bytes_len + 1);
-            if (response->body) {
-                memcpy(response->body, entry->bytes, entry->bytes_len);
-                response->body[entry->bytes_len] = '\0';
-                response->body_len = entry->bytes_len;
-                response->effective_url =
-                    entry->effective_url ? strdup(entry->effective_url) : NULL;
-                response->content_type = entry->content_type ? strdup(entry->content_type) : NULL;
-                if (entry->pixels && entry->pixels_width > 0 && entry->pixels_height > 0) {
-                    size_t pixel_bytes =
-                        (size_t)entry->pixels_width * (size_t)entry->pixels_height * 4;
-                    response->image_pixels = malloc(pixel_bytes);
-                    if (response->image_pixels) {
-                        memcpy(response->image_pixels, entry->pixels, pixel_bytes);
-                        response->image_width = entry->pixels_width;
-                        response->image_height = entry->pixels_height;
-                    }
-                }
-                hit = 1;
-            } else {
-                memset(response, 0, sizeof(*response));
-            }
+            hit = loader_cache_entry_to_response(entry, response);
         }
     }
     pthread_mutex_unlock(&loader->cache_mutex);
     return hit;
 }
 
-/* Store a fresh 2xx response. `cache_control` is the captured response
- * header value ("" when the server sent none). */
+/* A conditional refetch came back 304: refresh the stored entry's TTL and
+ * serve its body. Returns 1 when served, 0 when the entry vanished (the
+ * caller falls back to an unconditional refetch). */
+static int loader_cache_serve_revalidated(struct yetty_ybrowser_loader *loader,
+                                          const struct yetty_ybrowser_request *request,
+                                          const struct fetch_transfer *transfer,
+                                          struct yetty_ybrowser_response *response)
+{
+    if (!loader) {
+        return 0;
+    }
+    long ttl_seconds = LOADER_CACHE_DEFAULT_TTL_SECONDS;
+    (void)loader_cache_ttl(transfer->cache_control, &ttl_seconds);
+    int served = 0;
+    pthread_mutex_lock(&loader->cache_mutex);
+    int idx = loader_cache_find(loader, request->url, request->kind);
+    if (idx >= 0) {
+        struct loader_cache_entry *entry = &loader->cache_entries[idx];
+        entry->expires_at = time(NULL) + ttl_seconds;
+        entry->last_used_tick = ++loader->cache_tick;
+        served = loader_cache_entry_to_response(entry, response);
+    }
+    pthread_mutex_unlock(&loader->cache_mutex);
+    return served;
+}
+
+/* Store a fresh 2xx response; the transfer carries the response headers
+ * that drive cacheability (Cache-Control, Vary) and the validators. */
 static void loader_cache_store(struct yetty_ybrowser_loader *loader,
                                const struct yetty_ybrowser_request *request,
                                const struct yetty_ybrowser_response *response,
-                               const char *cache_control)
+                               const struct fetch_transfer *transfer)
 {
     if (!loader || !loader_cache_kind_ok(request) || !response->body || response->status < 200 ||
         response->status >= 300) {
         return;
     }
     long ttl_seconds = LOADER_CACHE_DEFAULT_TTL_SECONDS;
-    if (cache_control && *cache_control) {
-        if (strstr(cache_control, "no-store") || strstr(cache_control, "no-cache")) {
-            return;
-        }
-        const char *max_age = strstr(cache_control, "max-age=");
-        if (max_age) {
-            ttl_seconds = atol(max_age + 8);
-            if (ttl_seconds <= 0) {
-                return;
-            }
-        }
+    if (!loader_cache_ttl(transfer->cache_control, &ttl_seconds)) {
+        return;
+    }
+    if (!loader_cache_vary_ok(transfer->vary)) {
+        return;
     }
     if (response->body_len > LOADER_CACHE_BUDGET / 4) {
         return; /* one entry must not dominate the budget */
     }
     pthread_mutex_lock(&loader->cache_mutex);
-    if (loader_cache_find(loader, request->url, request->kind) >= 0) {
-        pthread_mutex_unlock(&loader->cache_mutex); /* raced fetch already stored it */
-        return;
+    int existing = loader_cache_find(loader, request->url, request->kind);
+    if (existing >= 0) {
+        /* Replace — a revalidation-refetch that came back 200 supersedes
+		 * the stale body (a raced same-URL store is byte-equal anyway). */
+        loader->cache_charge -= loader->cache_entries[existing].charge;
+        loader_cache_entry_free(&loader->cache_entries[existing]);
+        loader->cache_entries[existing] = loader->cache_entries[loader->cache_count - 1];
+        memset(&loader->cache_entries[loader->cache_count - 1], 0,
+               sizeof(loader->cache_entries[0]));
+        loader->cache_count--;
     }
     if (loader->cache_count == loader->cache_cap) {
         int new_cap = loader->cache_cap ? loader->cache_cap * 2 : 32;
@@ -476,6 +732,8 @@ static void loader_cache_store(struct yetty_ybrowser_loader *loader,
     entry->status = response->status;
     entry->content_type = response->content_type ? strdup(response->content_type) : NULL;
     entry->effective_url = response->effective_url ? strdup(response->effective_url) : NULL;
+    entry->etag = transfer->etag[0] ? strdup(transfer->etag) : NULL;
+    entry->last_modified = transfer->last_modified[0] ? strdup(transfer->last_modified) : NULL;
     entry->expires_at = time(NULL) + ttl_seconds;
     entry->last_used_tick = ++loader->cache_tick;
     entry->charge = response->body_len;
@@ -544,6 +802,8 @@ struct yetty_ybrowser_loader_ptr_result yetty_ybrowser_loader_create(void)
         pthread_mutex_init(&loader->share_locks[i], NULL);
     }
     pthread_mutex_init(&loader->cache_mutex, NULL);
+    pthread_mutex_init(&loader->inflight_mutex, NULL);
+    pthread_cond_init(&loader->inflight_cond, NULL);
     loader->share = curl_share_init();
     if (loader->share) {
         curl_share_setopt(loader->share, CURLSHOPT_LOCKFUNC, share_lock_cb);
@@ -579,6 +839,26 @@ struct yetty_ybrowser_loader_ptr_result yetty_ybrowser_loader_create(void)
         }
     }
 #endif
+    /* Central scheduler thread — every transfer this loader runs goes
+	 * through this ONE multi: same-origin requests multiplex on shared
+	 * H2 connections, per-host and total connection counts are bounded
+	 * globally, and workers wait instead of running private loops. */
+    loader->scheduler_multi = curl_multi_init();
+    if (loader->scheduler_multi) {
+        curl_multi_setopt(loader->scheduler_multi, CURLMOPT_PIPELINING, (long)CURLPIPE_MULTIPLEX);
+        curl_multi_setopt(loader->scheduler_multi, CURLMOPT_MAX_HOST_CONNECTIONS, 6L);
+        curl_multi_setopt(loader->scheduler_multi, CURLMOPT_MAX_TOTAL_CONNECTIONS, 32L);
+        pthread_mutex_init(&loader->scheduler_mutex, NULL);
+        pthread_cond_init(&loader->scheduler_cond, NULL);
+        if (pthread_create(&loader->scheduler_thread, NULL, loader_scheduler_main, loader) == 0) {
+            loader->scheduler_running = 1;
+        } else {
+            pthread_mutex_destroy(&loader->scheduler_mutex);
+            pthread_cond_destroy(&loader->scheduler_cond);
+            curl_multi_cleanup(loader->scheduler_multi);
+            loader->scheduler_multi = NULL;
+        }
+    }
     return YETTY_OK(yetty_ybrowser_loader_ptr, loader);
 }
 
@@ -588,6 +868,17 @@ struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrows
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result res = YETTY_OK_VOID();
+    if (loader->scheduler_running) {
+        pthread_mutex_lock(&loader->scheduler_mutex);
+        loader->scheduler_shutdown = 1;
+        pthread_mutex_unlock(&loader->scheduler_mutex);
+        curl_multi_wakeup(loader->scheduler_multi);
+        pthread_join(loader->scheduler_thread, NULL);
+        curl_multi_cleanup(loader->scheduler_multi);
+        pthread_mutex_destroy(&loader->scheduler_mutex);
+        pthread_cond_destroy(&loader->scheduler_cond);
+        loader->scheduler_running = 0;
+    }
     if (loader->share) {
         CURLSHcode code = curl_share_cleanup(loader->share);
         if (code != CURLSHE_OK) {
@@ -602,6 +893,8 @@ struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrows
     }
     free(loader->cache_entries);
     pthread_mutex_destroy(&loader->cache_mutex);
+    pthread_mutex_destroy(&loader->inflight_mutex);
+    pthread_cond_destroy(&loader->inflight_cond);
     free(loader);
     return res;
 }
@@ -907,6 +1200,113 @@ static void fetch_finish_response(CURL *easy, CURLcode curl_code, struct fetch_t
     }
 }
 
+/* Single-flight coalescing. Claim (url, kind) before fetching; concurrent
+ * fetchers of the same resource wait for the leader and re-read the cache.
+ * Returns the claimed slot index, or -1 when coalescing is unavailable
+ * (table full / oversized url) — the caller just fetches unshared. */
+static int loader_inflight_claim(struct yetty_ybrowser_loader *loader,
+                                 const struct yetty_ybrowser_request *request)
+{
+    if (!loader || !loader_cache_kind_ok(request) ||
+        strlen(request->url) >= sizeof(loader->inflight[0].url)) {
+        return -1;
+    }
+    pthread_mutex_lock(&loader->inflight_mutex);
+    for (;;) {
+        int free_slot = -1;
+        int busy_slot = -1;
+        for (int i = 0; i < (int)(sizeof(loader->inflight) / sizeof(loader->inflight[0])); i++) {
+            if (!loader->inflight[i].active) {
+                free_slot = i;
+            } else if (loader->inflight[i].kind == (int)request->kind &&
+                       strcmp(loader->inflight[i].url, request->url) == 0) {
+                busy_slot = i;
+                break;
+            }
+        }
+        if (busy_slot >= 0) {
+            /* A leader is already transferring this resource — wait for it
+			 * to finish, then let the caller re-read the cache. */
+            pthread_cond_wait(&loader->inflight_cond, &loader->inflight_mutex);
+            continue;
+        }
+        if (free_slot < 0) {
+            pthread_mutex_unlock(&loader->inflight_mutex);
+            return -1;
+        }
+        snprintf(loader->inflight[free_slot].url, sizeof(loader->inflight[free_slot].url), "%s",
+                 request->url);
+        loader->inflight[free_slot].kind = (int)request->kind;
+        loader->inflight[free_slot].active = 1;
+        pthread_mutex_unlock(&loader->inflight_mutex);
+        return free_slot;
+    }
+}
+
+static void loader_inflight_release(struct yetty_ybrowser_loader *loader, int slot)
+{
+    if (!loader || slot < 0) {
+        return;
+    }
+    pthread_mutex_lock(&loader->inflight_mutex);
+    loader->inflight[slot].active = 0;
+    loader->inflight[slot].url[0] = '\0';
+    pthread_cond_broadcast(&loader->inflight_cond);
+    pthread_mutex_unlock(&loader->inflight_mutex);
+}
+
+/* One transfer attempt: conditional headers when revalidating, 304 served
+ * from the store. The caller handles the rare 304-but-entry-evicted race
+ * with one unconditional retry. */
+static struct yetty_ycore_void_result fetch_transfer_once(
+    struct yetty_ybrowser_loader *loader, const struct yetty_ybrowser_request *request,
+    struct yetty_ybrowser_response *response, const struct loader_cache_revalidation *revalidation)
+{
+    CURL *easy = curl_easy_init();
+    if (!easy) {
+        return YETTY_ERR(yetty_ycore_void, "ybrowser_fetch: curl_easy_init");
+    }
+    struct fetch_transfer transfer = {0};
+    transfer.generation = request->generation;
+    transfer.cancel_generation = request->cancel_generation;
+    struct curl_slist *headers = build_request_headers(request);
+    if (revalidation && revalidation->available) {
+        char conditional[320];
+        if (revalidation->etag[0]) {
+            snprintf(conditional, sizeof(conditional), "If-None-Match: %s", revalidation->etag);
+            headers = curl_slist_append(headers, conditional);
+        }
+        if (revalidation->last_modified[0]) {
+            snprintf(conditional, sizeof(conditional), "If-Modified-Since: %s",
+                     revalidation->last_modified);
+            headers = curl_slist_append(headers, conditional);
+        }
+    }
+    fetch_configure_easy(loader, easy, request, &transfer, headers);
+    double t_request = yetty_ylexbor_prof_now_ms();
+    CURLcode curl_code = loader_perform(loader, easy);
+    fetch_finish_response(easy, curl_code, &transfer, response);
+    yetty_ylexbor_prof("    HTTP %.0fms status=%ld bytes=%zu rc=%d kind=%d http=%d %.90s",
+                       yetty_ylexbor_prof_now_ms() - t_request, response->status,
+                       response->body_len, (int)curl_code, (int)request->kind,
+                       response->http_version, request->url);
+    int served_304 = 0;
+    if (response->status == 304 && revalidation && revalidation->available) {
+        struct yetty_ybrowser_response revalidated = {0};
+        if (loader_cache_serve_revalidated(loader, request, &transfer, &revalidated)) {
+            yetty_ybrowser_response_dispose(response);
+            *response = revalidated;
+            served_304 = 1;
+        }
+    }
+    if (!served_304) {
+        loader_cache_store(loader, request, response, &transfer);
+    }
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(easy);
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ybrowser_fetch(struct yetty_ybrowser_loader *loader,
                                                     const struct yetty_ybrowser_request *request,
                                                     struct yetty_ybrowser_response *response)
@@ -919,30 +1319,29 @@ struct yetty_ycore_void_result yetty_ybrowser_fetch(struct yetty_ybrowser_loader
         response->body = fetch_local_file(request->url, &response->body_len, &response->status);
         return YETTY_OK_VOID();
     }
-    if (loader_cache_lookup(loader, request, response)) {
+    struct loader_cache_revalidation revalidation;
+    if (loader_cache_lookup(loader, request, response, &revalidation)) {
         yetty_ylexbor_prof("    HTTP cache-hit bytes=%zu %.90s", response->body_len, request->url);
         return YETTY_OK_VOID();
     }
-    CURL *easy = curl_easy_init();
-    if (!easy) {
-        return YETTY_ERR(yetty_ycore_void, "ybrowser_fetch: curl_easy_init");
+    /* Coalesce concurrent same-resource misses: followers block until the
+	 * leader finishes, then hit the cache it populated. */
+    int inflight_slot = loader_inflight_claim(loader, request);
+    if (inflight_slot >= 0 && loader_cache_lookup(loader, request, response, &revalidation)) {
+        loader_inflight_release(loader, inflight_slot);
+        yetty_ylexbor_prof("    HTTP coalesced bytes=%zu %.90s", response->body_len, request->url);
+        return YETTY_OK_VOID();
     }
-    struct fetch_transfer transfer = {0};
-    transfer.generation = request->generation;
-    transfer.cancel_generation = request->cancel_generation;
-    struct curl_slist *headers = build_request_headers(request);
-    fetch_configure_easy(loader, easy, request, &transfer, headers);
-    double t_request = yetty_ylexbor_prof_now_ms();
-    CURLcode curl_code = curl_easy_perform(easy);
-    fetch_finish_response(easy, curl_code, &transfer, response);
-    yetty_ylexbor_prof("    HTTP %.0fms status=%ld bytes=%zu rc=%d kind=%d http=%d %.90s",
-                       yetty_ylexbor_prof_now_ms() - t_request, response->status,
-                       response->body_len, (int)curl_code, (int)request->kind,
-                       response->http_version, request->url);
-    loader_cache_store(loader, request, response, transfer.cache_control);
-    curl_slist_free_all(headers);
-    curl_easy_cleanup(easy);
-    return YETTY_OK_VOID();
+
+    struct yetty_ycore_void_result fetch_res =
+        fetch_transfer_once(loader, request, response, &revalidation);
+    if (YETTY_IS_OK(fetch_res) && response->status == 304) {
+        /* Revalidation raced an eviction — one unconditional retry. */
+        yetty_ybrowser_response_dispose(response);
+        fetch_res = fetch_transfer_once(loader, request, response, NULL);
+    }
+    loader_inflight_release(loader, inflight_slot);
+    return fetch_res;
 }
 
 void yetty_ybrowser_response_dispose(struct yetty_ybrowser_response *response)
@@ -967,40 +1366,31 @@ struct yetty_ycore_void_result yetty_ybrowser_fetch_many(
     if (!requests || !responses) {
         return YETTY_ERR(yetty_ycore_void, "ybrowser_fetch_many: null arrays");
     }
-    if (host_connection_cap < 1) {
-        host_connection_cap = 1;
-    }
-    yetty_ylexbor_prof("    fetch_many START n=%d host_conns=%d", count, host_connection_cap);
+    /* Per-host / total connection limits live on the loader's central
+	 * scheduler now — the historical per-call cap is only used by the
+	 * no-scheduler fallback ordering (which is sequential anyway). */
+    (void)host_connection_cap;
+    yetty_ylexbor_prof("    fetch_many START n=%d", count);
     double t_many = yetty_ylexbor_prof_now_ms();
     memset(responses, 0, (size_t)count * sizeof(*responses));
 
-    /* Per-request scratch — a tag pointer (CURLOPT_PRIVATE) recovers the
-	 * slot when a handle finishes. */
     struct fetch_slot {
         CURL *easy;
         struct fetch_transfer transfer;
         struct curl_slist *headers;
+        struct loader_cache_revalidation revalidation;
+        struct loader_scheduled_transfer node;
+        int submitted;
         int idx;
     };
     struct fetch_slot *slots = calloc((size_t)count, sizeof(*slots));
     if (!slots) {
         return YETTY_ERR(yetty_ycore_void, "ybrowser_fetch_many: slots alloc");
     }
-    CURLM *multi = curl_multi_init();
-    if (!multi) {
-        free(slots);
-        return YETTY_ERR(yetty_ycore_void, "ybrowser_fetch_many: curl_multi_init");
-    }
-    /* HTTP/2 multiplexing — when the server speaks H2, concurrent
-	 * requests to the same origin share ONE TCP+TLS connection as
-	 * parallel streams. ALL transfers are added up front so libcurl can
-	 * multiplex the lot; the cap only limits CONNECTIONS per host (the
-	 * limit that matters for H1-only origins), not streams. */
-    curl_multi_setopt(multi, CURLMOPT_PIPELINING, (long)CURLPIPE_MULTIPLEX);
-    curl_multi_setopt(multi, CURLMOPT_MAX_HOST_CONNECTIONS, (long)host_connection_cap);
-    curl_multi_setopt(multi, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)(4 * host_connection_cap));
+    int use_scheduler = loader && loader->scheduler_running;
 
-    int added = 0;
+    /* Configure + submit every transfer up front — the scheduler
+	 * multiplexes the lot on shared connections. */
     for (int i = 0; i < count; i++) {
         const struct yetty_ybrowser_request *request = &requests[i];
         if (!request->url) {
@@ -1013,10 +1403,10 @@ struct yetty_ycore_void_result yetty_ybrowser_fetch_many(
                 fetch_local_file(request->url, &responses[i].body_len, &responses[i].status);
             continue;
         }
-        if (loader_cache_lookup(loader, request, &responses[i])) {
+        struct fetch_slot *slot = &slots[i];
+        if (loader_cache_lookup(loader, request, &responses[i], &slot->revalidation)) {
             continue;
         }
-        struct fetch_slot *slot = &slots[i];
         slot->idx = i;
         slot->easy = curl_easy_init();
         if (!slot->easy) {
@@ -1025,69 +1415,58 @@ struct yetty_ycore_void_result yetty_ybrowser_fetch_many(
         slot->transfer.generation = request->generation;
         slot->transfer.cancel_generation = request->cancel_generation;
         slot->headers = build_request_headers(request);
+        if (slot->revalidation.available) {
+            char conditional[320];
+            if (slot->revalidation.etag[0]) {
+                snprintf(conditional, sizeof(conditional), "If-None-Match: %s",
+                         slot->revalidation.etag);
+                slot->headers = curl_slist_append(slot->headers, conditional);
+            }
+            if (slot->revalidation.last_modified[0]) {
+                snprintf(conditional, sizeof(conditional), "If-Modified-Since: %s",
+                         slot->revalidation.last_modified);
+                slot->headers = curl_slist_append(slot->headers, conditional);
+            }
+        }
         fetch_configure_easy(loader, slot->easy, request, &slot->transfer, slot->headers);
-        curl_easy_setopt(slot->easy, CURLOPT_PRIVATE, slot);
-        if (curl_multi_add_handle(multi, slot->easy) != CURLM_OK) {
-            curl_easy_cleanup(slot->easy);
-            slot->easy = NULL;
+        if (use_scheduler) {
+            slot->node.easy = slot->easy;
+            loader_scheduler_submit(loader, &slot->node);
+            slot->submitted = 1;
+        }
+    }
+
+    /* Collect completions in slot order (the scheduler runs them all
+	 * concurrently; order here only sequences the bookkeeping). The
+	 * no-scheduler fallback performs each transfer inline. */
+    for (int i = 0; i < count; i++) {
+        struct fetch_slot *slot = &slots[i];
+        if (!slot->easy) {
             continue;
         }
-        added++;
-    }
-
-    /* Drive the transfers. Terminates when libcurl reports no running
-	 * handles — every added transfer has completed. curl_multi_poll (vs
-	 * _wait) actually sleeps when libcurl has no fds to watch — e.g.
-	 * during threaded-resolver DNS lookups — instead of returning
-	 * immediately and spinning this loop at 100% CPU. */
-    int running_handles = added;
-    while (running_handles > 0) {
-        CURLMcode multi_code = curl_multi_perform(multi, &running_handles);
-        if (multi_code != CURLM_OK) {
-            break;
-        }
-        if (running_handles > 0) {
-            int numfds = 0;
-            if (curl_multi_poll(multi, NULL, 0, 1000, &numfds) != CURLM_OK) {
-                break;
+        CURLcode transfer_code = slot->submitted ? loader_scheduler_wait(loader, &slot->node)
+                                                 : curl_easy_perform(slot->easy);
+        fetch_finish_response(slot->easy, transfer_code, &slot->transfer, &responses[slot->idx]);
+        yetty_ylexbor_prof("      done status=%ld bytes=%zu http=%d %.60s",
+                           responses[slot->idx].status, responses[slot->idx].body_len,
+                           responses[slot->idx].http_version, requests[slot->idx].url);
+        if (responses[slot->idx].status == 304 && slot->revalidation.available) {
+            /* Conditional refetch validated — serve the stored body. */
+            struct yetty_ybrowser_response revalidated = {0};
+            if (loader_cache_serve_revalidated(loader, &requests[slot->idx], &slot->transfer,
+                                               &revalidated)) {
+                yetty_ybrowser_response_dispose(&responses[slot->idx]);
+                responses[slot->idx] = revalidated;
             }
-        }
-        int msgs_left = 0;
-        CURLMsg *message;
-        while ((message = curl_multi_info_read(multi, &msgs_left)) != NULL) {
-            if (message->msg != CURLMSG_DONE) {
-                continue;
-            }
-            struct fetch_slot *slot = NULL;
-            curl_easy_getinfo(message->easy_handle, CURLINFO_PRIVATE, &slot);
-            if (!slot) {
-                continue;
-            }
-            fetch_finish_response(message->easy_handle, message->data.result, &slot->transfer,
-                                  &responses[slot->idx]);
-            yetty_ylexbor_prof("      done status=%ld bytes=%zu http=%d %.60s",
-                               responses[slot->idx].status, responses[slot->idx].body_len,
-                               responses[slot->idx].http_version, requests[slot->idx].url);
+        } else {
             loader_cache_store(loader, &requests[slot->idx], &responses[slot->idx],
-                               slot->transfer.cache_control);
-            curl_multi_remove_handle(multi, message->easy_handle);
-            curl_easy_cleanup(message->easy_handle);
-            slot->easy = NULL;
+                               &slot->transfer);
         }
+        curl_easy_cleanup(slot->easy);
+        slot->easy = NULL;
+        curl_slist_free_all(slot->headers);
+        slot->headers = NULL;
     }
-
-    /* An early break (multi error) can leave transfers unfinished —
-	 * release their handles and buffers so nothing leaks. */
-    for (int i = 0; i < count; i++) {
-        if (slots[i].easy) {
-            curl_multi_remove_handle(multi, slots[i].easy);
-            curl_easy_cleanup(slots[i].easy);
-            free(slots[i].transfer.data);
-            slots[i].easy = NULL;
-        }
-        curl_slist_free_all(slots[i].headers);
-    }
-    curl_multi_cleanup(multi);
     free(slots);
     yetty_ylexbor_prof("    fetch_many DONE  %.0f ms (n=%d)", yetty_ylexbor_prof_now_ms() - t_many,
                        count);

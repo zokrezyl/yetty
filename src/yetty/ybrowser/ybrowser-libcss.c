@@ -912,8 +912,8 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
         /* And re-pin our figure fix at user-origin too in case libcss's
          * compiled-in defaults for <figure> beat the UA origin. */
         "figure { display: block !important; }\n";
-    if (yetty_ybrowser_libcss_add_sheet(r, NAV_HIDE_CSS, sizeof(NAV_HIDE_CSS) - 1,
-                                        CSS_ORIGIN_USER, NULL) != 0) {
+    if (yetty_ybrowser_libcss_add_sheet(r, NAV_HIDE_CSS, sizeof(NAV_HIDE_CSS) - 1, CSS_ORIGIN_USER,
+                                        NULL) != 0) {
         ydebug("libcss: nav-hide stylesheet append failed");
     }
     return 0;
@@ -1074,8 +1074,8 @@ static void libcss_load_imports(struct yetty_ylexbor *r, css_stylesheet *parent,
 
         /* @import URLs resolve against the importing SHEET, falling back
 		 * to the document base for inline <style> imports. */
-        char *absolute = yetty_ylexbor_resolve_url_against(
-            parent_url ? parent_url : r->base_url, raw_url);
+        char *absolute =
+            yetty_ylexbor_resolve_url_against(parent_url ? parent_url : r->base_url, raw_url);
 
         int cyclic = 0;
         for (int i = 0; absolute && i < lc->import_depth; i++) {
@@ -1084,8 +1084,8 @@ static void libcss_load_imports(struct yetty_ylexbor *r, css_stylesheet *parent,
                 break;
             }
         }
-        int too_deep = lc->import_depth >= (int)(sizeof(lc->import_chain) /
-                                                 sizeof(lc->import_chain[0]));
+        int too_deep =
+            lc->import_depth >= (int)(sizeof(lc->import_chain) / sizeof(lc->import_chain[0]));
 
         css_stylesheet *child = NULL;
         if (absolute && !cyclic && !too_deep) {
@@ -1150,9 +1150,10 @@ css_computed_style *yetty_ybrowser_libcss_select(struct yetty_ylexbor *r, lxb_do
         p.inline_style = true;
         p.resolve = url_resolve;
         if (css_stylesheet_create(&p, &inline_sheet) == CSS_OK) {
-            /* Same var() pre-resolve as the stylesheet path — inline
-             * styles can reference custom properties too. */
-            char *iresolved = yetty_ylexbor_css_vars_resolve(r, inline_css, inline_css_len);
+            /* var() pre-resolve, ELEMENT-scoped: style="--x: v" tokens
+             * on this element or an ancestor beat the global table. */
+            char *iresolved =
+                yetty_ylexbor_css_vars_resolve_for_element(r, el, inline_css, inline_css_len);
             const char *ieff = iresolved ? iresolved : inline_css;
             size_t ieff_len = iresolved ? strlen(iresolved) : inline_css_len;
             css_stylesheet_append_data(inline_sheet, (const uint8_t *)ieff, ieff_len);
@@ -1931,6 +1932,27 @@ int yetty_ybrowser_libcss_text_decoration(const css_computed_style *style)
         return 0;
     }
     return css_computed_text_decoration(style);
+}
+
+int yetty_ybrowser_libcss_order(const css_computed_style *style, int32_t *out)
+{
+    if (!style) {
+        return 0;
+    }
+    int32_t value = 0;
+    if (css_computed_order(style, &value) != CSS_ORDER_SET) {
+        return 0;
+    }
+    *out = value;
+    return 1;
+}
+
+int yetty_ybrowser_libcss_align_self(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_ALIGN_SELF_AUTO;
+    }
+    return (int)css_computed_align_self(style);
 }
 
 int yetty_ybrowser_libcss_list_style_type(const css_computed_style *style)

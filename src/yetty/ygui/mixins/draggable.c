@@ -30,6 +30,10 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass
 struct YETTY_ANNOTATE("mixin@ygui:draggable") yetty_ygui_draggable {
     int dragging;
     float last_x, last_y;
+    /* Where the current drag STARTED — consumers pick gesture semantics
+	 * from it (a scrollarea grab on the thumb scrolls WITH the cursor,
+	 * a grab on the content scrolls inversely, touch-style). */
+    float press_x, press_y;
     yetty_ygui_drag_cb on_drag;
     void *userdata;
 };
@@ -57,6 +61,8 @@ static struct yetty_ycore_int_result draggable_on_press(struct yetty_yclass_obje
     dd->dragging = 1;
     dd->last_x = x;
     dd->last_y = y;
+    dd->press_x = x;
+    dd->press_y = y;
     struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return YETTY_ERR(yetty_ycore_int, "draggable_on_press: set_dirty", dr);
@@ -125,6 +131,21 @@ struct yetty_ycore_void_result yetty_ygui_draggable_on_drag_set(struct yetty_ycl
     struct yetty_ygui_draggable *dd = dd_dr.value;
     dd->on_drag = cb;
     dd->userdata = userdata;
+    return YETTY_OK_VOID();
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_draggable_press_point(struct yetty_yclass_object *obj,
+                                                                float *out_x, float *out_y)
+{
+    if (!obj || !out_x || !out_y) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_draggable_press_point: NULL arg");
+    }
+    struct yetty_ygui_draggable_ptr_result dd_dr = yetty_ygui_draggable_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dd_dr, "yetty_ygui_draggable_press_point: data_get");
+    struct yetty_ygui_draggable *dd = dd_dr.value;
+    *out_x = dd->press_x;
+    *out_y = dd->press_y;
     return YETTY_OK_VOID();
 }
 

@@ -322,6 +322,14 @@ classes:
         type: float
         get: false
         set: false
+      - name: press_x
+        type: float
+        get: false
+        set: false
+      - name: press_y
+        type: float
+        get: false
+        set: false
       - name: on_drag
         type: yetty_ygui_drag_cb
         get: false
@@ -2750,6 +2758,17 @@ exposed:
         type: yetty_ygui_drag_cb
       - name: userdata
         type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui/mixins/draggable.c
+    name: yetty_ygui_draggable_press_point
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_x
+        type: "float *"
+      - name: out_y
+        type: "float *"
     doc: null
   - source_file: src/yetty/ygui/mixins/draggable.c
     name: yetty_ygui_draggable_is_dragging

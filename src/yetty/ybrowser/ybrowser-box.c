@@ -1420,6 +1420,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                           fd == CSS_FLEX_DIRECTION_COLUMN_REVERSE)
                                              ? YL_LAYOUT_FLEX_COLUMN
                                              : YL_LAYOUT_FLEX_ROW;
+                        b->main_reverse = (fd == CSS_FLEX_DIRECTION_ROW_REVERSE ||
+                                           fd == CSS_FLEX_DIRECTION_COLUMN_REVERSE);
                         b->justify_content = yetty_ybrowser_libcss_justify_content(cs);
                         b->align_items = yetty_ybrowser_libcss_align_items(cs);
                         /* flex-wrap + align-content from the CASCADE (stylesheet),
@@ -1428,6 +1430,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         int fw = yetty_ybrowser_libcss_flex_wrap(cs);
                         if (fw == CSS_FLEX_WRAP_WRAP || fw == CSS_FLEX_WRAP_WRAP_REVERSE) {
                             b->flex_wrap = 1;
+                            b->wrap_reverse = (fw == CSS_FLEX_WRAP_WRAP_REVERSE);
                         }
                         b->align_content = yetty_ybrowser_libcss_align_content(cs);
                         /* Flex `gap` (stored in grid_col_gap — a box is flex OR
@@ -1454,8 +1457,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                 const lxb_char_t *tag_name =
                                     lxb_dom_element_local_name(el, &tag_len);
                                 float gap = yetty_ylexbor_flex_gap_lookup(
-                                    r, (const char *)gap_cls, gap_cls_len, (const char *)tag_name,
-                                    tag_len);
+                                    r, el, (const char *)gap_cls, gap_cls_len,
+                                    (const char *)tag_name, tag_len);
                                 if (gap > 0.0f) {
                                     b->grid_col_gap = gap;
                                 }
@@ -1607,6 +1610,12 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     if (yetty_ybrowser_libcss_flex_grow(cs, &fg)) {
                         b->flex_grow = fg;
                     }
+                    (void)yetty_ybrowser_libcss_order(cs, &b->flex_order);
+                    int self_align = yetty_ybrowser_libcss_align_self(cs);
+                    b->align_self =
+                        (self_align == CSS_ALIGN_SELF_AUTO || self_align == CSS_ALIGN_SELF_INHERIT)
+                            ? 0
+                            : (int8_t)self_align;
                     /* flex-shrink: -1 sentinel = unset (solver uses the CSS
 					 * initial 1.0); a definite value (incl. 0 = `shrink-0`) is
 					 * stored as-is so fixed sidebars don't collapse. */

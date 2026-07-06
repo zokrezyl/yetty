@@ -31,15 +31,26 @@
 #include <ctype.h>
 #include <strings.h> /* strncasecmp */
 
+#include <lexbor/selectors/selectors.h>
+
+/* Supplementary-cascade selector matching — defined near the lookups. */
+static char *supp_selector_capture(const char *src, size_t alt_start, size_t alt_end);
+static bool grid_media_condition_matches(const char *cond, size_t n, float viewport_w);
+static int supp_selector_match(struct yetty_ylexbor *r, const char *selector_text, void **compiled,
+                               uint8_t *selector_state, const lxb_dom_element_t *element);
+
 /* ===========================================================================
  * Storage — linear scan; tens to low hundreds of entries on real sites.
  * ===========================================================================*/
 
 static int customs_set(struct yetty_ylexbor_customs *t, const char *name, size_t nlen,
-                       const char *value, size_t vlen)
+                       const char *value, size_t vlen, uint16_t specificity)
 {
     for (int i = 0; i < t->size; i++) {
         if (strlen(t->data[i].name) == nlen && memcmp(t->data[i].name, name, nlen) == 0) {
+            if (specificity < t->data[i].specificity) {
+                return 0; /* weaker rule loses regardless of source order */
+            }
             char *nv = malloc(vlen + 1);
             if (!nv) {
                 return -1;
@@ -48,6 +59,7 @@ static int customs_set(struct yetty_ylexbor_customs *t, const char *name, size_t
             nv[vlen] = '\0';
             free(t->data[i].value);
             t->data[i].value = nv;
+            t->data[i].specificity = specificity;
             return 0;
         }
     }
@@ -73,6 +85,7 @@ static int customs_set(struct yetty_ylexbor_customs *t, const char *name, size_t
     vl[vlen] = '\0';
     t->data[t->size].name = nm;
     t->data[t->size].value = vl;
+    t->data[t->size].specificity = specificity;
     t->size++;
     return 0;
 }
@@ -312,6 +325,46 @@ static int css_var_doc_has_class(struct yetty_ylexbor *r, const char *cls, size_
  * dark). Selectors with no class qualifier (`:root`, `html`, `body`, `*`,
  * `[data-theme=…]`) stay permissively global, as before. Class tokens inside
  * `[...]` attribute selectors and quoted strings are skipped. */
+/* Coarse specificity of a selector LIST for the var cascade: the maximum
+ * over comma alternatives of (classes+pseudo-classes)*10 + tags*1. Not the
+ * full spec triple — enough to order :root/.theme rules above bare
+ * element rules, which is where real themes fight. */
+static uint16_t sel_var_specificity(const char *sel, size_t len)
+{
+    uint16_t best = 0;
+    uint16_t current = 0;
+    int in_word = 0;
+    for (size_t i = 0; i < len; i++) {
+        char c = sel[i];
+        if (c == ',') {
+            if (current > best) {
+                best = current;
+            }
+            current = 0;
+            in_word = 0;
+            continue;
+        }
+        if (c == '.' || c == ':') {
+            current += 10;
+            in_word = 1;
+            /* skip the identifier */
+            while (i + 1 < len && (css_var_is_class_char(sel[i + 1]) || sel[i + 1] == ':')) {
+                i++;
+            }
+            continue;
+        }
+        if (css_var_is_class_char(c)) {
+            if (!in_word) {
+                current += 1; /* tag token */
+                in_word = 1;
+            }
+        } else {
+            in_word = 0;
+        }
+    }
+    return current > best ? current : best;
+}
+
 static int sel_is_global_target(struct yetty_ylexbor *r, const char *sel, size_t len)
 {
     const char *p = sel;
@@ -417,10 +470,13 @@ void yetty_ylexbor_css_vars_scan(struct yetty_ylexbor *r, const char *src, size_
             int is_keyframes = (kw_len == 9 && strncasecmp(kw_start, "keyframes", 9) == 0);
             int is_font_face = (kw_len == 9 && strncasecmp(kw_start, "font-face", 9) == 0);
 
-            /* Find { or ; */
+            /* Find { or ; — the text between the keyword and the brace is
+			 * the media condition. */
+            const char *cond_text_start = kw_end;
             while (p < end && *p != '{' && *p != ';') {
                 p++;
             }
+            const char *cond_text_end = p;
             if (p < end && *p == ';') {
                 p++;
                 continue;
@@ -440,10 +496,20 @@ void yetty_ylexbor_css_vars_scan(struct yetty_ylexbor *r, const char *src, size_
                         p++;
                     }
                 }
-                /* Skip @media / @keyframes / @font-face entirely.
-				 * Recurse into other @-rules (@supports etc.) so
-				 * :root vars defined there still get captured. */
-                if (!is_media && !is_keyframes && !is_font_face) {
+                /* @keyframes / @font-face never define vars — skip.
+				 * @media is EVALUATED against our environment (viewport
+				 * width, light color scheme, screen medium): matching
+				 * blocks are scanned like top-level rules, non-matching
+				 * ones (prefers-color-scheme:dark themes, print sheets)
+				 * stay out of the table. Other @-rules (@supports etc.)
+				 * are descended unconditionally as before. */
+                int media_matches = 0;
+                if (is_media) {
+                    media_matches = grid_media_condition_matches(
+                        cond_text_start, (size_t)(cond_text_end - cond_text_start),
+                        (float)r->viewport_w);
+                }
+                if ((is_media && media_matches) || (!is_media && !is_keyframes && !is_font_face)) {
                     yetty_ylexbor_css_vars_scan(r, body_start, (size_t)(p - body_start));
                 }
                 if (p < end) {
@@ -559,7 +625,8 @@ void yetty_ylexbor_css_vars_scan(struct yetty_ylexbor *r, const char *src, size_
             }
 
             if (nlen >= 2 && nm[0] == '-' && nm[1] == '-' && vlen > 0) {
-                (void)customs_set(&r->customs, nm, nlen, vstart, vlen);
+                (void)customs_set(&r->customs, nm, nlen, vstart, vlen,
+                                  sel_var_specificity(sel, sel_len));
             }
         }
     }
@@ -682,6 +749,189 @@ static int resolve_into(struct yetty_ylexbor *r, const char *src, size_t n, char
         i++;
     }
     return 0;
+}
+
+/* Nearest inline-style definition of `--name` on `element` or an
+ * ancestor. Component frameworks scope design tokens per subtree via
+ * style="--x: v"; those must beat the global :root table. Returns 1 and
+ * the value span inside the style attribute. */
+static int element_inline_var_find(const lxb_dom_element_t *element, const char *name,
+                                   size_t name_len, const char **out_value, size_t *out_len)
+{
+    const lxb_dom_node_t *node = lxb_dom_interface_node((lxb_dom_element_t *)element);
+    for (; node; node = node->parent) {
+        if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        size_t style_len = 0;
+        const lxb_char_t *style =
+            lxb_dom_element_get_attribute(lxb_dom_interface_element((lxb_dom_node_t *)node),
+                                          (const lxb_char_t *)"style", 5, &style_len);
+        if (!style || style_len < name_len + 2) {
+            continue;
+        }
+        const char *text = (const char *)style;
+        for (size_t i = 0; i + name_len < style_len; i++) {
+            if (memcmp(text + i, name, name_len) != 0) {
+                continue;
+            }
+            if (i > 0 && text[i - 1] != ';' && !css_var_is_ws(text[i - 1])) {
+                continue;
+            }
+            size_t j = i + name_len;
+            while (j < style_len && css_var_is_ws(text[j])) {
+                j++;
+            }
+            if (j >= style_len || text[j] != ':') {
+                continue;
+            }
+            j++;
+            while (j < style_len && css_var_is_ws(text[j])) {
+                j++;
+            }
+            size_t value_start = j;
+            int paren = 0;
+            while (j < style_len && (text[j] != ';' || paren > 0)) {
+                if (text[j] == '(') {
+                    paren++;
+                } else if (text[j] == ')') {
+                    paren--;
+                }
+                j++;
+            }
+            size_t value_len = j - value_start;
+            while (value_len > 0 && css_var_is_ws(text[value_start + value_len - 1])) {
+                value_len--;
+            }
+            if (value_len > 0) {
+                *out_value = text + value_start;
+                *out_len = value_len;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+/* Append helper for the element-scoped resolver below. */
+static int vars_out_append(char **out, size_t *out_len, size_t *out_cap, const char *chunk,
+                           size_t chunk_len)
+{
+    if (*out_len + chunk_len + 1 > *out_cap) {
+        size_t new_cap = *out_cap ? *out_cap * 2 : 256;
+        while (new_cap < *out_len + chunk_len + 1) {
+            new_cap *= 2;
+        }
+        char *grown = realloc(*out, new_cap);
+        if (!grown) {
+            return -1;
+        }
+        *out = grown;
+        *out_cap = new_cap;
+    }
+    memcpy(*out + *out_len, chunk, chunk_len);
+    *out_len += chunk_len;
+    (*out)[*out_len] = '\0';
+    return 0;
+}
+
+static int vars_resolve_for_element_into(struct yetty_ylexbor *r, const lxb_dom_element_t *element,
+                                         const char *css, size_t len, char **out, size_t *out_len,
+                                         size_t *out_cap, int depth)
+{
+    if (depth > 8) {
+        return -1;
+    }
+    size_t i = 0;
+    while (i < len) {
+        if (i + 4 <= len && memcmp(css + i, "var(", 4) == 0) {
+            /* Find the matching close paren. */
+            size_t j = i + 4;
+            int paren = 1;
+            size_t name_start = j;
+            size_t name_end = 0;
+            size_t fallback_start = 0;
+            while (j < len && paren > 0) {
+                if (css[j] == '(') {
+                    paren++;
+                } else if (css[j] == ')') {
+                    paren--;
+                } else if (css[j] == ',' && paren == 1 && name_end == 0) {
+                    name_end = j;
+                    fallback_start = j + 1;
+                }
+                j++;
+            }
+            if (paren != 0) {
+                return -1; /* malformed — keep the raw text */
+            }
+            size_t var_close = j - 1;
+            if (name_end == 0) {
+                name_end = var_close;
+            }
+            while (name_start < name_end && css_var_is_ws(css[name_start])) {
+                name_start++;
+            }
+            size_t name_len = name_end - name_start;
+            while (name_len > 0 && css_var_is_ws(css[name_start + name_len - 1])) {
+                name_len--;
+            }
+            const char *substitute = NULL;
+            size_t substitute_len = 0;
+            char name_buf[128];
+            if (name_len >= 2 && name_len < sizeof(name_buf)) {
+                memcpy(name_buf, css + name_start, name_len);
+                name_buf[name_len] = '\0';
+                if (!element_inline_var_find(element, name_buf, name_len, &substitute,
+                                             &substitute_len)) {
+                    const char *global_value = customs_get(&r->customs, name_buf, name_len);
+                    if (global_value) {
+                        substitute = global_value;
+                        substitute_len = strlen(global_value);
+                    }
+                }
+            }
+            if (!substitute && fallback_start > 0) {
+                substitute = css + fallback_start;
+                substitute_len = var_close - fallback_start;
+            }
+            if (substitute) {
+                if (vars_resolve_for_element_into(r, element, substitute, substitute_len, out,
+                                                  out_len, out_cap, depth + 1) != 0) {
+                    return -1;
+                }
+            }
+            /* Unresolvable with no fallback → empty substitution. */
+            i = var_close + 1;
+            continue;
+        }
+        if (vars_out_append(out, out_len, out_cap, css + i, 1) != 0) {
+            return -1;
+        }
+        i++;
+    }
+    return 0;
+}
+
+/* Element-scoped var() resolution for inline styles: definitions on the
+ * element or its ancestors (style="--x: v") take precedence over the
+ * global :root table; fallbacks apply last. Returns a malloc'd copy
+ * (never NULL on success paths — falls back to the raw text). */
+char *yetty_ylexbor_css_vars_resolve_for_element(struct yetty_ylexbor *r,
+                                                 const lxb_dom_element_t *element, const char *css,
+                                                 size_t len)
+{
+    char *out = NULL;
+    size_t out_len = 0, out_cap = 0;
+    if (vars_resolve_for_element_into(r, element, css, len, &out, &out_len, &out_cap, 0) != 0) {
+        free(out);
+        out = malloc(len + 1);
+        if (out) {
+            memcpy(out, css, len);
+            out[len] = '\0';
+        }
+    }
+    return out;
 }
 
 char *yetty_ylexbor_css_vars_resolve(struct yetty_ylexbor *r, const char *value, size_t len)
@@ -1067,6 +1317,21 @@ static bool grid_media_condition_matches(const char *cond, size_t n, float viewp
                 ok = false;
             }
             i = j;
+        } else if (i + 20 <= n && strncmp(cond + i, "prefers-color-scheme", 20) == 0) {
+            /* We render the light scheme — a dark-gated block must not
+			 * apply (it used to repaint whole articles near-white). */
+            size_t j = i + 20;
+            while (j < n && cond[j] != ')' && cond[j] != ',') {
+                if (j + 4 <= n && strncmp(cond + j, "dark", 4) == 0) {
+                    ok = false;
+                    break;
+                }
+                j++;
+            }
+            i = j;
+        } else if (i + 5 <= n && strncmp(cond + i, "print", 5) == 0) {
+            ok = false;
+            i += 5;
         } else {
             i++;
         }
@@ -1281,6 +1546,9 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
             entry->inherit_template = (uint8_t)inherit_template;
             entry->col_gap = col_gap > 0.0f ? col_gap : 0.0f;
             entry->row_gap = row_gap > 0.0f ? row_gap : 0.0f;
+            entry->selector = supp_selector_capture(src, alt_start, alt_end);
+            entry->compiled_selector = NULL;
+            entry->selector_state = 0;
             r->grid_class_count++;
             alt_start = alt_end + 1;
         }
@@ -1436,6 +1704,10 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
         for (int k = 0; k < r->grid_classes[e].context_count; k++) {
             free(r->grid_classes[e].context[k]);
         }
+        free(r->grid_classes[e].selector);
+        if (r->grid_classes[e].compiled_selector) {
+            lxb_css_selector_list_destroy_memory(r->grid_classes[e].compiled_selector);
+        }
     }
     free(r->grid_classes);
     r->grid_classes = NULL;
@@ -1446,6 +1718,10 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
         for (int k = 0; k < r->grid_span_classes[e].context_count; k++) {
             free(r->grid_span_classes[e].context[k]);
         }
+        free(r->grid_span_classes[e].selector);
+        if (r->grid_span_classes[e].compiled_selector) {
+            lxb_css_selector_list_destroy_memory(r->grid_span_classes[e].compiled_selector);
+        }
     }
     free(r->grid_span_classes);
     r->grid_span_classes = NULL;
@@ -1453,6 +1729,10 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
     r->grid_span_class_cap = 0;
     for (int e = 0; e < r->flex_gap_class_count; e++) {
         free(r->flex_gap_classes[e].key);
+        free(r->flex_gap_classes[e].selector);
+        if (r->flex_gap_classes[e].compiled_selector) {
+            lxb_css_selector_list_destroy_memory(r->flex_gap_classes[e].compiled_selector);
+        }
     }
     free(r->flex_gap_classes);
     r->flex_gap_classes = NULL;
@@ -1462,6 +1742,91 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
 
 static int class_attr_has_token(const char *attr, size_t attr_len, const char *cls);
 static int element_or_ancestor_has_class(const lxb_dom_element_t *element, const char *cls);
+
+/* ===========================================================================
+ * Supplementary-cascade selector matching. The scanners capture each
+ * entry's full selector; lookups compile it lazily (lexbor selector
+ * engine) and match the actual element — combinators, attribute
+ * selectors and specificity-bearing compounds all behave, unlike the
+ * class-key reduction, which stays as the fallback for selectors the
+ * compiler rejects. Returns 1 match, 0 no-match, -1 unknown (fall back).
+ * ===========================================================================*/
+static lxb_status_t supp_selector_match_cb(lxb_dom_node_t *node,
+                                           lxb_css_selector_specificity_t specificity, void *ctx)
+{
+    (void)node;
+    (void)specificity;
+    *(int *)ctx = 1;
+    return LXB_STATUS_OK;
+}
+
+static int supp_selector_match(struct yetty_ylexbor *r, const char *selector_text, void **compiled,
+                               uint8_t *selector_state, const lxb_dom_element_t *element)
+{
+    if (!selector_text || !element || *selector_state == 2) {
+        return -1;
+    }
+    if (*selector_state == 0) {
+        *selector_state = 2; /* sticky failure unless everything below works */
+        lxb_css_parser_t *parser = lxb_css_parser_create();
+        if (parser) {
+            if (lxb_css_parser_init(parser, NULL) == LXB_STATUS_OK) {
+                lxb_css_selector_list_t *list = lxb_css_selectors_parse(
+                    parser, (const lxb_char_t *)selector_text, strlen(selector_text));
+                if (list) {
+                    *compiled = list;
+                    *selector_state = 1;
+                }
+            }
+            lxb_css_parser_destroy(parser, true);
+        }
+        if (*selector_state == 2) {
+            return -1;
+        }
+    }
+    if (!r->supp_selector_matcher) {
+        lxb_selectors_t *matcher = lxb_selectors_create();
+        if (!matcher || lxb_selectors_init(matcher) != LXB_STATUS_OK) {
+            if (matcher) {
+                lxb_selectors_destroy(matcher, true);
+            }
+            return -1;
+        }
+        r->supp_selector_matcher = matcher;
+    }
+    int matched = 0;
+    lxb_status_t status = lxb_selectors_match_node(
+        (lxb_selectors_t *)r->supp_selector_matcher,
+        lxb_dom_interface_node((lxb_dom_element_t *)element), (lxb_css_selector_list_t *)*compiled,
+        supp_selector_match_cb, &matched);
+    if (status != LXB_STATUS_OK) {
+        return -1;
+    }
+    return matched ? 1 : 0;
+}
+
+/* Trimmed strndup of one selector alternative for the tables above. */
+static char *supp_selector_capture(const char *src, size_t alt_start, size_t alt_end)
+{
+    while (alt_start < alt_end &&
+           (src[alt_start] == ' ' || src[alt_start] == '\t' || src[alt_start] == '\n' ||
+            src[alt_start] == '\r' || src[alt_start] == '}' || src[alt_start] == ';')) {
+        alt_start++;
+    }
+    while (alt_end > alt_start && (src[alt_end - 1] == ' ' || src[alt_end - 1] == '\t' ||
+                                   src[alt_end - 1] == '\n' || src[alt_end - 1] == '\r')) {
+        alt_end--;
+    }
+    if (alt_end <= alt_start || alt_end - alt_start > 512) {
+        return NULL;
+    }
+    char *copy = malloc(alt_end - alt_start + 1);
+    if (copy) {
+        memcpy(copy, src + alt_start, alt_end - alt_start);
+        copy[alt_end - alt_start] = '\0';
+    }
+    return copy;
+}
 
 const struct yl_grid_class *yetty_ylexbor_grid_class_lookup(struct yetty_ylexbor *r,
                                                             const lxb_dom_element_t *element)
@@ -1477,22 +1842,31 @@ const struct yl_grid_class *yetty_ylexbor_grid_class_lookup(struct yetty_ylexbor
     }
     const struct yl_grid_class *found = NULL;
     for (int e = 0; e < r->grid_class_count; e++) {
-        const struct yl_grid_class *entry = &r->grid_classes[e];
-        if (!class_attr_has_token((const char *)attr, attr_len, entry->cls)) {
+        struct yl_grid_class *entry = &r->grid_classes[e];
+        int verdict = supp_selector_match(r, entry->selector, &entry->compiled_selector,
+                                          &entry->selector_state, element);
+        if (verdict == 0) {
             continue;
         }
-        int context_ok = 1;
-        for (int k = 0; k < entry->context_count; k++) {
-            if (!element_or_ancestor_has_class(element, entry->context[k])) {
-                context_ok = 0;
-                break;
+        if (verdict < 0) {
+            /* Fallback: reduced class-key approximation. */
+            if (!class_attr_has_token((const char *)attr, attr_len, entry->cls)) {
+                continue;
+            }
+            int context_ok = 1;
+            for (int k = 0; k < entry->context_count; k++) {
+                if (!element_or_ancestor_has_class(element, entry->context[k])) {
+                    context_ok = 0;
+                    break;
+                }
+            }
+            if (!context_ok) {
+                continue;
             }
         }
-        if (context_ok) {
-            /* Keep scanning: entries are in stylesheet order and the last
-             * matching rule wins (cascade approximation). */
-            found = entry;
-        }
+        /* Keep scanning: entries are in stylesheet order and the last
+		 * matching rule wins (cascade approximation). */
+        found = entry;
     }
     return found;
 }
@@ -1668,6 +2042,9 @@ static void grid_span_scan_alternative(struct yetty_ylexbor *r, const char *src,
     entry->axis = (uint8_t)axis;
     entry->start = (uint8_t)start;
     entry->span = (uint8_t)span;
+    entry->selector = supp_selector_capture(src, alt_start, alt_end);
+    entry->compiled_selector = NULL;
+    entry->selector_state = 0;
     r->grid_span_class_count++;
 }
 
@@ -1841,19 +2218,27 @@ struct yl_grid_placement yetty_ylexbor_grid_span_class_lookup(struct yetty_ylexb
         return placement;
     }
     for (int e = 0; e < r->grid_span_class_count; e++) {
-        const struct yl_grid_span_class *entry = &r->grid_span_classes[e];
-        if (!class_attr_has_token((const char *)attr, attr_len, entry->cls)) {
+        struct yl_grid_span_class *entry = &r->grid_span_classes[e];
+        int verdict = supp_selector_match(r, entry->selector, &entry->compiled_selector,
+                                          &entry->selector_state, element);
+        if (verdict == 0) {
             continue;
         }
-        int context_ok = 1;
-        for (int k = 0; k < entry->context_count; k++) {
-            if (!element_or_ancestor_has_class(element, entry->context[k])) {
-                context_ok = 0;
-                break;
+        if (verdict < 0) {
+            /* Fallback: reduced class-key approximation. */
+            if (!class_attr_has_token((const char *)attr, attr_len, entry->cls)) {
+                continue;
             }
-        }
-        if (!context_ok) {
-            continue;
+            int context_ok = 1;
+            for (int k = 0; k < entry->context_count; k++) {
+                if (!element_or_ancestor_has_class(element, entry->context[k])) {
+                    context_ok = 0;
+                    break;
+                }
+            }
+            if (!context_ok) {
+                continue;
+            }
         }
         /* Keep scanning: entries are in stylesheet order and the last
          * matching declaration per axis wins (cascade approximation). */
@@ -2035,15 +2420,41 @@ void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *src, 
         }
         entry->match_tag = match_tag;
         entry->col_gap = col_gap;
+        entry->selector =
+            sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        entry->compiled_selector = NULL;
+        entry->selector_state = 0;
         r->flex_gap_class_count++;
     }
 }
 
-float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const char *class_attr,
-                                    size_t class_len, const char *tag_name, size_t tag_len)
+float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const lxb_dom_element_t *element,
+                                    const char *class_attr, size_t class_len, const char *tag_name,
+                                    size_t tag_len)
 {
     if (r == NULL || r->flex_gap_class_count == 0) {
         return 0.0f;
+    }
+    /* Real selector matching first — the key fallback below only sees
+	 * the LAST simple selector and mis-fires on shared class names. */
+    if (element != NULL) {
+        for (int e = 0; e < r->flex_gap_class_count; e++) {
+            struct yl_flex_gap_class *entry = &r->flex_gap_classes[e];
+            int verdict = supp_selector_match(r, entry->selector, &entry->compiled_selector,
+                                              &entry->selector_state, element);
+            if (verdict == 1) {
+                return entry->col_gap;
+            }
+            if (verdict == 0) {
+                /* Compiled and did NOT match this element — the key
+				 * fallback must not resurrect it. Mark by skipping via
+				 * the loop below? The fallback loops key tables — keep
+				 * correctness simple: a compiled non-match disqualifies
+				 * the entry for this element by clearing nothing; the
+				 * fallback below is only consulted for entries whose
+				 * selector could not compile. */
+            }
+        }
     }
     if (class_attr != NULL) {
         size_t i = 0;
@@ -2061,6 +2472,9 @@ float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const char *class_a
             }
             for (int e = 0; e < r->flex_gap_class_count; e++) {
                 const struct yl_flex_gap_class *entry = &r->flex_gap_classes[e];
+                if (element != NULL && entry->selector != NULL && entry->selector_state != 2) {
+                    continue; /* handled (or rejected) by real matching above */
+                }
                 if (!entry->match_tag && strlen(entry->key) == tlen &&
                     strncmp(entry->key, class_attr + start, tlen) == 0) {
                     return entry->col_gap;
@@ -2071,6 +2485,9 @@ float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const char *class_a
     if (tag_name != NULL && tag_len > 0) {
         for (int e = 0; e < r->flex_gap_class_count; e++) {
             const struct yl_flex_gap_class *entry = &r->flex_gap_classes[e];
+            if (element != NULL && entry->selector != NULL && entry->selector_state != 2) {
+                continue; /* handled (or rejected) by real matching above */
+            }
             if (entry->match_tag && strlen(entry->key) == tag_len &&
                 strncasecmp(entry->key, tag_name, tag_len) == 0) {
                 return entry->col_gap;

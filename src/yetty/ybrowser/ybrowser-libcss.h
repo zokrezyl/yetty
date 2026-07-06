@@ -166,6 +166,13 @@ int yetty_ybrowser_libcss_flex_basis(struct yetty_ylexbor *r, const css_computed
 int yetty_ybrowser_libcss_justify_content(const css_computed_style *style);
 int yetty_ybrowser_libcss_align_items(const css_computed_style *style);
 
+/* CSS `order` — returns 1 with *out set when the cascade sets it. */
+int yetty_ybrowser_libcss_order(const css_computed_style *style, int32_t *out);
+
+/* CSS `align-self` — CSS_ALIGN_SELF_* (aliases CSS_ALIGN_ITEMS_*);
+ * CSS_ALIGN_SELF_AUTO when unset. */
+int yetty_ybrowser_libcss_align_self(const css_computed_style *style);
+
 /* Float / clear. Returns the CSS_FLOAT_* / CSS_CLEAR_* enum. */
 int yetty_ybrowser_libcss_float(const css_computed_style *style);
 int yetty_ybrowser_libcss_clear(const css_computed_style *style);

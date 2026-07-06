@@ -32,8 +32,7 @@ static size_t merge_record_size(const uint32_t *prim, size_t remaining)
     uint32_t base = MERGE_TYPE_BASE(type);
     size_t sdf_bytes = yetty_ysdf_primitive_size(base);
     if (sdf_bytes > 0) {
-        size_t record_bytes =
-            sdf_bytes + ((type & YETTY_YDRAW_HAS_ID_FLAG) ? sizeof(uint32_t) : 0);
+        size_t record_bytes = sdf_bytes + ((type & YETTY_YDRAW_HAS_ID_FLAG) ? sizeof(uint32_t) : 0);
         return record_bytes <= remaining ? record_bytes : 0;
     }
     if (remaining < 2 * sizeof(uint32_t)) {
