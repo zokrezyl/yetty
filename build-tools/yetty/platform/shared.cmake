@@ -690,6 +690,10 @@ function(yetty_embed_assets TARGET)
     file(COPY "${YETTY_ROOT}/src/yetty/yfont/msdf-font.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yfont/ms-raster-font.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yfont/raster-font.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    # yvterm's SDF render pass (rich content anchored to text rows) loads
+    # <shaders_dir>/yvterm-sdf-layer.wgsl at init; without it the SDF layer
+    # is disabled and ycat rich content silently stops rendering.
+    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/yvterm-sdf-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     # GPU MSDF compute shader — used by the ymsdf-wgsl generator when the
     # canvas materialises a font-blob FONT prim (PDF embedded / fontconfig
     # substituted). Without this the GPU generator can't init its pipeline

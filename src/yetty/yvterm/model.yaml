@@ -238,19 +238,19 @@ classes:
         type: float
         get: false
         set: false
-      - name: content_inset_top
+      - name: content_rect_x
         type: float
         get: false
         set: false
-      - name: content_inset_right
+      - name: content_rect_y
         type: float
         get: false
         set: false
-      - name: content_inset_bottom
+      - name: content_rect_w
         type: float
         get: false
         set: false
-      - name: content_inset_left
+      - name: content_rect_h
         type: float
         get: false
         set: false
@@ -1055,33 +1055,36 @@ exposed:
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
-    name: yetty_yvterm_vterm_set_content_inset
+    name: yetty_yvterm_vterm_set_content_rect
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-      - name: top
+      - name: x
         type: float
-      - name: right
+      - name: y
         type: float
-      - name: bottom
+      - name: width
         type: float
-      - name: left
+      - name: height
         type: float
-    doc: null
+    doc: "/* Resolved content rect (figure-rect-local pixels): where the text surface
+ * renders inside the pane. The terminal resolves the client's reservation
+ * (content-rect / legacy inset envelope) against the pane and pushes the
+ * result here. width/height <= 0 restores the full figure rect. */"
   - source_file: src/yetty/yvterm/vterm.c
-    name: yetty_yvterm_vterm_get_content_inset
+    name: yetty_yvterm_vterm_get_content_rect
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-      - name: out_top
+      - name: out_x
         type: "float *"
-      - name: out_right
+      - name: out_y
         type: "float *"
-      - name: out_bottom
+      - name: out_width
         type: "float *"
-      - name: out_left
+      - name: out_height
         type: "float *"
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
@@ -1676,6 +1679,10 @@ types:
     fields:
       - name: valid
         type: int
+      - name: zombie
+        type: int
+      - name: pin_stamp
+        type: uint32_t
       - name: first_line
         type: uint64_t
       - name: line_count
@@ -1723,6 +1730,8 @@ types:
         type: uint64_t
       - name: memtag
         type: "struct yetty_ycore_memtag *"
+      - name: live_pin_stamp
+        type: uint32_t
 local_types:
   yetty_yvterm_text_attr: src/yetty/yvterm/grid.c
   yetty_yvterm_text_cell: src/yetty/yvterm/grid.c

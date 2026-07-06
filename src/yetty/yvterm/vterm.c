@@ -163,12 +163,15 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("include@yetty/ytermi
      * filling those N (now taller) rows. 0 until the first resize. */
     float baseline_cell_height;
 
-    /* Content insets in pane-local pixels — a docked status bar / HUD reserved
-     * a band of the pane; the render slot narrows its viewport to the rest. */
-    float content_inset_top;
-    float content_inset_right;
-    float content_inset_bottom;
-    float content_inset_left;
+    /* Resolved content rect in pane-local pixels — where the text surface sits
+     * inside the figure rect (a client reserved part of the pane for its own
+     * overlay via YETTY_OSC_CS_CONTENT_RECT / _INSET; the terminal resolves the
+     * request against the pane and pushes the result here). width/height <= 0
+     * (the default) means the content fills the whole figure rect. */
+    float content_rect_x;
+    float content_rect_y;
+    float content_rect_w;
+    float content_rect_h;
 
     /* Terminal-owned hooks. request_render asks the terminal for a frame;
      * mouse_sub reports libvterm mouse-mode changes. (pty_write lives on the
@@ -1173,10 +1176,12 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     vterm->uniforms.coord_fx_p3 = vterm->coord_fx_params[3];
     vterm->uniforms.coord_fx_p4 = vterm->coord_fx_params[4];
     vterm->uniforms.coord_fx_p5 = vterm->coord_fx_params[5];
-    /* Live pointer, or the cursor cell centre until the mouse first enters. */
+    /* Live pointer, or the cursor cell centre until the mouse first enters.
+     * mouse_local_* is pane-local; the shader works in content-rect space, so
+     * shift by the content origin (0,0 when the content fills the pane). */
     if (vterm->have_mouse) {
-        vterm->uniforms.mouse_x = vterm->mouse_local_x;
-        vterm->uniforms.mouse_y = vterm->mouse_local_y;
+        vterm->uniforms.mouse_x = vterm->mouse_local_x - vterm->content_rect_x;
+        vterm->uniforms.mouse_y = vterm->mouse_local_y - vterm->content_rect_y;
     } else {
         vterm->uniforms.mouse_x = ((float)cursor_col + 0.5f) * vterm->cell_size.width;
         vterm->uniforms.mouse_y = ((float)cursor_row + 0.5f) * vterm->cell_size.height;
@@ -1388,8 +1393,9 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
  *=========================================================================*/
 
 /* Render the unified model into the figure's target: walk dirty lines, resolve
- * glyphs, upload, draw the grid quad. The render narrows to the inset content
- * rect (a docked HUD reserved a band) before drawing. */
+ * glyphs, upload, draw the grid quad. The figure rect spans the whole pane;
+ * the render places the grid on the resolved content rect inside it (a docked
+ * HUD reserved part of the pane), clamped so it never escapes the figure. */
 YETTY_ANNOTATE("override@yvterm:vterm:yfigure:render")
 static struct yetty_ycore_void_result vterm_render_slot(struct yetty_yclass_object *obj,
                                                         struct yetty_ydraw_target *target)
@@ -1401,10 +1407,19 @@ static struct yetty_ycore_void_result vterm_render_slot(struct yetty_yclass_obje
     struct rectangle_result rect_res = yetty_yfigure_figure_rect_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "vterm_render: rect");
     struct yetty_ycore_rectangle rect = rect_res.value;
-    rect.min.x += vterm->content_inset_left;
-    rect.min.y += vterm->content_inset_top;
-    rect.max.x -= vterm->content_inset_right;
-    rect.max.y -= vterm->content_inset_bottom;
+    if (vterm->content_rect_w > 0.0f && vterm->content_rect_h > 0.0f) {
+        struct yetty_ycore_rectangle figure_rect = rect;
+        rect.min.x = figure_rect.min.x + vterm->content_rect_x;
+        rect.min.y = figure_rect.min.y + vterm->content_rect_y;
+        rect.max.x = rect.min.x + vterm->content_rect_w;
+        rect.max.y = rect.min.y + vterm->content_rect_h;
+        if (rect.max.x > figure_rect.max.x) {
+            rect.max.x = figure_rect.max.x;
+        }
+        if (rect.max.y > figure_rect.max.y) {
+            rect.max.y = figure_rect.max.y;
+        }
+    }
 
     return vterm_render_grid(vterm, target, rect);
 }
@@ -1705,42 +1720,45 @@ struct yetty_ycore_int_result yetty_yvterm_vterm_is_dirty(struct yetty_yclass_ob
     return YETTY_OK(yetty_ycore_int, vterm->view_dirty || grid_dirty_res.value);
 }
 
+/* Resolved content rect (figure-rect-local pixels): where the text surface
+ * renders inside the pane. The terminal resolves the client's reservation
+ * (content-rect / legacy inset envelope) against the pane and pushes the
+ * result here. width/height <= 0 restores the full figure rect. */
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_yvterm_vterm_set_content_inset(struct yetty_yclass_object *obj,
-                                                                    float top, float right,
-                                                                    float bottom, float left)
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_content_rect(struct yetty_yclass_object *obj,
+                                                                   float x, float y, float width,
+                                                                   float height)
 {
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_set_content_inset: from_obj");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_set_content_rect: from_obj");
     struct yetty_yvterm_vterm *vterm = vterm_res.value;
-    vterm->content_inset_top = top;
-    vterm->content_inset_right = right;
-    vterm->content_inset_bottom = bottom;
-    vterm->content_inset_left = left;
+    vterm->content_rect_x = x;
+    vterm->content_rect_y = y;
+    vterm->content_rect_w = width;
+    vterm->content_rect_h = height;
     return YETTY_OK_VOID();
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_yvterm_vterm_get_content_inset(struct yetty_yclass_object *obj,
-                                                                    float *out_top,
-                                                                    float *out_right,
-                                                                    float *out_bottom,
-                                                                    float *out_left)
+struct yetty_ycore_void_result yetty_yvterm_vterm_get_content_rect(struct yetty_yclass_object *obj,
+                                                                   float *out_x, float *out_y,
+                                                                   float *out_width,
+                                                                   float *out_height)
 {
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_get_content_inset: from_obj");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_get_content_rect: from_obj");
     struct yetty_yvterm_vterm *vterm = vterm_res.value;
-    if (out_top) {
-        *out_top = vterm->content_inset_top;
+    if (out_x) {
+        *out_x = vterm->content_rect_x;
     }
-    if (out_right) {
-        *out_right = vterm->content_inset_right;
+    if (out_y) {
+        *out_y = vterm->content_rect_y;
     }
-    if (out_bottom) {
-        *out_bottom = vterm->content_inset_bottom;
+    if (out_width) {
+        *out_width = vterm->content_rect_w;
     }
-    if (out_left) {
-        *out_left = vterm->content_inset_left;
+    if (out_height) {
+        *out_height = vterm->content_rect_h;
     }
     return YETTY_OK_VOID();
 }

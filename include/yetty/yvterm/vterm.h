@@ -72,14 +72,17 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_obj
                                                          struct yetty_ycore_pixel_size cell_size);
 struct pixel_size_result yetty_yvterm_vterm_cell_size(struct yetty_yclass_object *obj);
 struct yetty_ycore_int_result yetty_yvterm_vterm_is_dirty(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yvterm_vterm_set_content_inset(struct yetty_yclass_object *obj,
-                                                                    float top, float right,
-                                                                    float bottom, float left);
-struct yetty_ycore_void_result yetty_yvterm_vterm_get_content_inset(struct yetty_yclass_object *obj,
-                                                                    float *out_top,
-                                                                    float *out_right,
-                                                                    float *out_bottom,
-                                                                    float *out_left);
+/* Resolved content rect (figure-rect-local pixels): where the text surface
+ * renders inside the pane. The terminal resolves the client's reservation
+ * (content-rect / legacy inset envelope) against the pane and pushes the
+ * result here. width/height <= 0 restores the full figure rect. */
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_content_rect(struct yetty_yclass_object *obj,
+                                                                   float x, float y, float width,
+                                                                   float height);
+struct yetty_ycore_void_result yetty_yvterm_vterm_get_content_rect(struct yetty_yclass_object *obj,
+                                                                   float *out_x, float *out_y,
+                                                                   float *out_width,
+                                                                   float *out_height);
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_clear_hook(struct yetty_yclass_object *obj,
                                                                  yetty_yvterm_clear_hook_fn fn,
                                                                  void *userdata);

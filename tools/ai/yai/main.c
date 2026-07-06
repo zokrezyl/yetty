@@ -1910,18 +1910,19 @@ void yai_arm_child_kill_timer(struct yai_app *app)
     uv_timer_start(&app->kill_timer, on_kill_timer, YAI_KILL_TIMEOUT_MS, 0);
 }
 
-/* Reserve the bottom band for the docked HUD by asking yetty to inset the
- * terminal content surface (YETTY_OSC_CS_CONTENT_INSET). yetty owns the real
- * cell metrics, so it converts the px to whole rows, shrinks the libvterm grid
- * (text reflows, we get SIGWINCH with fewer rows) and clips terminal content
- * to the inset rect — so neither conversation text nor a tall figure (sheet
- * music, a plot) renders under the bar. This genuinely takes the band out of
- * the terminal size, unlike a DECSTBM scroll region which figures ignore.
- * Idempotent: emits only when the reserved height actually changes, because
- * the host re-asserts the stored inset across its own resizes and a redundant
- * emit would re-resize the grid and re-raise SIGWINCH (a reflow loop). Reset
- * with yai_release_dock_reservation. A no-op when the HUD floats or stdout is
- * not a tty. */
+/* Reserve the bottom band for the docked HUD by placing the terminal content
+ * surface on a content rect (YETTY_OSC_CS_CONTENT_RECT) anchored 'dock_px'
+ * above the pane's bottom edge ({0, 0, 0, -dock_px} — edge-anchored, so the
+ * host re-resolves it across its own resizes with no round-trip). yetty owns
+ * the real cell metrics, so it converts the rect to whole rows, shrinks the
+ * libvterm grid (text reflows, we get SIGWINCH with fewer rows) and renders
+ * terminal content inside the rect — so neither conversation text nor a tall
+ * figure (sheet music, a plot) renders under the bar. This genuinely takes
+ * the band out of the terminal size, unlike a DECSTBM scroll region which
+ * figures ignore. Idempotent: emits only when the reserved height actually
+ * changes, because a redundant emit would re-resize the grid and re-raise
+ * SIGWINCH (a reflow loop). Reset with yai_release_dock_reservation. A no-op
+ * when the HUD floats or stdout is not a tty. */
 static struct yetty_ycore_void_result yai_apply_dock_reservation(struct yai_app *app)
 {
     if (!app->hud || !app->renderer.pin_enabled) {
@@ -1931,45 +1932,45 @@ static struct yetty_ycore_void_result yai_apply_dock_reservation(struct yai_app 
     if (dock_px <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    /* Idempotent. The host resizes the grid to honor the inset and raises
+    /* Idempotent. The host resizes the grid to honor the rect and raises
      * SIGWINCH; our SIGWINCH handler re-applies the dock. If we re-emitted
-     * the unchanged inset that would resize + SIGWINCH again — an endless
-     * reflow loop. The host persists the inset across its OWN resizes
-     * (terminal_apply_pane_geometry reads it back), so re-asserting an
+     * the unchanged rect that would resize + SIGWINCH again — an endless
+     * reflow loop. The host persists the spec across its OWN resizes
+     * (terminal_apply_pane_geometry re-resolves it), so re-asserting an
      * unchanged value is also redundant. dock_px is a literal constant
      * (no arithmetic), so the exact compare is safe. */
     if (dock_px == app->dock_reserved_px) {
         return YETTY_OK_VOID();
     }
-    struct yetty_content_inset inset = {
-        .magic = YETTY_CONTENT_INSET_MAGIC,
+    struct yetty_content_rect content_rect = {
+        .magic = YETTY_CONTENT_RECT_MAGIC,
         .version = YMGUI_WIRE_VERSION,
-        .bottom = dock_px,
+        .height = -dock_px,
     };
     struct yetty_ycore_void_result emit_res =
-        yai_emit_stdout_envelope(YETTY_OSC_CS_CONTENT_INSET, &inset, sizeof(inset));
+        yai_emit_stdout_envelope(YETTY_OSC_CS_CONTENT_RECT, &content_rect, sizeof(content_rect));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "yai_apply_dock_reservation: emit");
     app->dock_reserved_px = dock_px;
     return YETTY_OK_VOID();
 }
 
-/* Drop the HUD reservation: zero insets restore the full-pane grid. */
+/* Drop the HUD reservation: the all-zero rect restores the full-pane grid. */
 static struct yetty_ycore_void_result yai_release_dock_reservation(struct yai_app *app)
 {
     if (!app->renderer.pin_enabled) {
         return YETTY_OK_VOID();
     }
     /* Nothing reserved → nothing to release (and don't send a redundant
-     * zero inset that would needlessly reflow the grid). */
+     * zero rect that would needlessly reflow the grid). */
     if (app->dock_reserved_px == 0.0f) {
         return YETTY_OK_VOID();
     }
-    struct yetty_content_inset inset = {
-        .magic = YETTY_CONTENT_INSET_MAGIC,
+    struct yetty_content_rect content_rect = {
+        .magic = YETTY_CONTENT_RECT_MAGIC,
         .version = YMGUI_WIRE_VERSION,
     };
     struct yetty_ycore_void_result emit_res =
-        yai_emit_stdout_envelope(YETTY_OSC_CS_CONTENT_INSET, &inset, sizeof(inset));
+        yai_emit_stdout_envelope(YETTY_OSC_CS_CONTENT_RECT, &content_rect, sizeof(content_rect));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "yai_release_dock_reservation: emit");
     app->dock_reserved_px = 0.0f;
     return YETTY_OK_VOID();
