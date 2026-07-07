@@ -2809,7 +2809,8 @@ static struct yetty_ycore_void_result load_effects_lib(struct yetty_ygrid_grid *
     /* No-op fallback — signature MUST match effects-lib.wgsl's fx_post_apply. */
     static const char fx_stub_wgsl[] =
         "fn fx_post_apply(index: u32, color: vec3<f32>, pixel: vec2<f32>, "
-        "screen: vec2<f32>, time: f32, p0: f32, p1: f32, p2: f32, p3: f32, "
+        "screen: vec2<f32>, time: f32, mouse: vec2<f32>, cursor: vec2<f32>, "
+        "cell: vec2<f32>, p0: f32, p1: f32, p2: f32, p3: f32, "
         "p4: f32, p5: f32) -> vec3<f32> { return color; }\n";
 
     struct yetty_yconfig_config *config = context->runtime->config;
