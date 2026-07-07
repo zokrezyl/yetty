@@ -60,12 +60,31 @@ struct yetty_ysvg_render_config {
     uint32_t height_cells;
     /* Optional <image> resolver; resolve == NULL skips <image> elements. */
     struct yetty_ysvg_image_resolver image_resolver;
+    /* When set, <a> subtrees record clickable regions into the render
+	 * output (scene pixel space). Off by default — callers that don't
+	 * consume links then have nothing to free. */
+    int collect_link_regions;
 };
+
+/* Clickable region of one SVG <a> subtree: the union of its rendered
+ * children's extents, in scene pixel space (same space the drawable
+ * list's coordinates use). Nested <a> regions belong to the INNERMOST
+ * anchor, matching browser click dispatch. */
+struct yetty_ysvg_link_region {
+    char *href; /* owned by the output; free via yetty_ysvg_links_free */
+    float min_x, min_y, max_x, max_y;
+};
+
+void yetty_ysvg_links_free(struct yetty_ysvg_link_region *links, size_t count);
 
 struct yetty_ysvg_render_output {
     struct yetty_ydraw_drawable_list *buffer;
     float scene_width;
     float scene_height;
+    /* <a> click regions — non-NULL only with config.collect_link_regions;
+	 * caller owns, frees via yetty_ysvg_links_free. */
+    struct yetty_ysvg_link_region *links;
+    size_t link_count;
 };
 
 YETTY_YRESULT_DECLARE(yetty_ysvg_render, struct yetty_ysvg_render_output);

@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <yetty/ycore/types.h>
+#include <yetty/ysvg/ysvg.h>
 #include <yetty/ybrowser/ybrowser.h>
 
 #include <lexbor/dom/interfaces/element.h>
@@ -756,6 +757,10 @@ struct yetty_ylexbor_svg_inline_entry {
 	 * 1 for Min / Mid / Max; mode 0 = meet, 1 = slice, 2 = none. */
     float par_align_x, par_align_y;
     uint8_t par_mode;
+    /* SVG-internal <a> click regions (scene pixel space); owned, freed
+	 * with the entry via yetty_ysvg_links_free. */
+    struct yetty_ysvg_link_region *links;
+    size_t link_count;
 };
 
 /* Render `bytes` through ysvg. On success fills scene + scene-space frame
@@ -764,7 +769,21 @@ struct yetty_ylexbor_svg_inline_entry {
 int yetty_ylexbor_svg_scene_render(struct yetty_ylexbor *r, const char *bytes, size_t len,
                                    float default_font_px,
                                    struct yetty_ydraw_drawable_list **out_scene, float *out_min_x,
-                                   float *out_min_y, float *out_w, float *out_h);
+                                   float *out_min_y, float *out_w, float *out_h,
+                                   struct yetty_ysvg_link_region **out_links,
+                                   size_t *out_link_count);
+
+/* The transform svg_scene_merge applies (scene → page px), exposed so the
+ * click hit-test can invert it. Defined in ybrowser-paint.c. */
+void yetty_ylexbor_svg_merge_transform(float min_x, float min_y, float scene_w, float scene_h,
+                                       float par_align_x, float par_align_y, uint8_t par_mode,
+                                       float box_x, float box_y, float box_w, float box_h,
+                                       float *out_scale_x, float *out_scale_y, float *out_offset_x,
+                                       float *out_offset_y);
+
+/* Inline-svg cache lookup WITHOUT creating (hit-test path). */
+struct yetty_ylexbor_svg_inline_entry *yetty_ylexbor_svg_inline_find(struct yetty_ylexbor *r,
+                                                                     const void *element);
 
 /* Parse the ROOT <svg> tag's preserveAspectRatio into align factors
  * (0 / 0.5 / 1 for Min / Mid / Max) and mode (0 = meet, 1 = slice,

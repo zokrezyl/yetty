@@ -52,6 +52,10 @@ struct ysvg_paint_state {
     float text_y;
     /* Depth of <use> expansion — cycle guard. */
     int use_depth;
+    /* Index of the innermost enclosing <a>'s link region in
+	 * ctx->links, or -1 outside any anchor. Inherited by child walk
+	 * states, so a whole subtree extends its anchor's region. */
+    int active_link;
 };
 
 /*=============================================================================
@@ -843,6 +847,142 @@ static struct yetty_ycore_void_result emit_text(struct ysvg_paint_state *ps,
 static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
                                            const struct yetty_ysvg_node *n);
 
+/* Extend the active anchor's click region by a pixel-space rectangle. */
+static void link_extend(struct ysvg_paint_state *ps, float min_x, float min_y, float max_x,
+                        float max_y)
+{
+    if (ps->active_link < 0 || (size_t)ps->active_link >= ps->ctx->link_count) {
+        return;
+    }
+    struct yetty_ysvg_link_region *region = &ps->ctx->links[ps->active_link];
+    if (min_x < region->min_x) {
+        region->min_x = min_x;
+    }
+    if (min_y < region->min_y) {
+        region->min_y = min_y;
+    }
+    if (max_x > region->max_x) {
+        region->max_x = max_x;
+    }
+    if (max_y > region->max_y) {
+        region->max_y = max_y;
+    }
+}
+
+/* Approximate a geometry element's bounds in USER space from its
+ * attributes. Returns 0 for non-geometry nodes. For points/path data the
+ * scan takes every number as a coordinate — relative path commands make
+ * this an over-approximation, which is fine for a click region. */
+static int node_user_bounds(const struct yetty_ysvg_node *n, float *out_x0, float *out_y0,
+                            float *out_x1, float *out_y1)
+{
+    switch (n->elem) {
+    case YETTY_YSVG_ELEM_RECT:
+    case YETTY_YSVG_ELEM_IMAGE: {
+        float x = attr_float(n, YETTY_YSVG_ATTR_X, 0.0f);
+        float y = attr_float(n, YETTY_YSVG_ATTR_Y, 0.0f);
+        float w = attr_float(n, YETTY_YSVG_ATTR_WIDTH, 0.0f);
+        float h = attr_float(n, YETTY_YSVG_ATTR_HEIGHT, 0.0f);
+        if (w <= 0.0f || h <= 0.0f) {
+            return 0;
+        }
+        *out_x0 = x;
+        *out_y0 = y;
+        *out_x1 = x + w;
+        *out_y1 = y + h;
+        return 1;
+    }
+    case YETTY_YSVG_ELEM_CIRCLE: {
+        float cx = attr_float(n, YETTY_YSVG_ATTR_CX, 0.0f);
+        float cy = attr_float(n, YETTY_YSVG_ATTR_CY, 0.0f);
+        float radius = attr_float(n, YETTY_YSVG_ATTR_R, 0.0f);
+        if (radius <= 0.0f) {
+            return 0;
+        }
+        *out_x0 = cx - radius;
+        *out_y0 = cy - radius;
+        *out_x1 = cx + radius;
+        *out_y1 = cy + radius;
+        return 1;
+    }
+    case YETTY_YSVG_ELEM_ELLIPSE: {
+        float cx = attr_float(n, YETTY_YSVG_ATTR_CX, 0.0f);
+        float cy = attr_float(n, YETTY_YSVG_ATTR_CY, 0.0f);
+        float rx = attr_float(n, YETTY_YSVG_ATTR_RX, 0.0f);
+        float ry = attr_float(n, YETTY_YSVG_ATTR_RY, 0.0f);
+        if (rx <= 0.0f || ry <= 0.0f) {
+            return 0;
+        }
+        *out_x0 = cx - rx;
+        *out_y0 = cy - ry;
+        *out_x1 = cx + rx;
+        *out_y1 = cy + ry;
+        return 1;
+    }
+    case YETTY_YSVG_ELEM_LINE: {
+        float x1 = attr_float(n, YETTY_YSVG_ATTR_X1, 0.0f);
+        float y1 = attr_float(n, YETTY_YSVG_ATTR_Y1, 0.0f);
+        float x2 = attr_float(n, YETTY_YSVG_ATTR_X2, 0.0f);
+        float y2 = attr_float(n, YETTY_YSVG_ATTR_Y2, 0.0f);
+        *out_x0 = x1 < x2 ? x1 : x2;
+        *out_y0 = y1 < y2 ? y1 : y2;
+        *out_x1 = x1 > x2 ? x1 : x2;
+        *out_y1 = y1 > y2 ? y1 : y2;
+        return 1;
+    }
+    case YETTY_YSVG_ELEM_POLYLINE:
+    case YETTY_YSVG_ELEM_POLYGON:
+    case YETTY_YSVG_ELEM_PATH: {
+        const struct yetty_ysvg_attr *data = yetty_ysvg_attr_find(
+            n, n->elem == YETTY_YSVG_ELEM_PATH ? YETTY_YSVG_ATTR_D : YETTY_YSVG_ATTR_POINTS);
+        if (!data || data->value_len == 0) {
+            return 0;
+        }
+        float min_x = INFINITY, min_y = INFINITY;
+        float max_x = -INFINITY, max_y = -INFINITY;
+        int axis_x = 1, seen_pair = 0;
+        const char *cursor = data->value;
+        const char *end = data->value + data->value_len;
+        while (cursor < end) {
+            char *next = NULL;
+            float value = strtof(cursor, &next);
+            if (next == cursor) {
+                cursor++;
+                continue;
+            }
+            if (axis_x) {
+                if (value < min_x) {
+                    min_x = value;
+                }
+                if (value > max_x) {
+                    max_x = value;
+                }
+            } else {
+                if (value < min_y) {
+                    min_y = value;
+                }
+                if (value > max_y) {
+                    max_y = value;
+                }
+                seen_pair = 1;
+            }
+            axis_x = !axis_x;
+            cursor = next;
+        }
+        if (!seen_pair) {
+            return 0;
+        }
+        *out_x0 = min_x;
+        *out_y0 = min_y;
+        *out_x1 = max_x;
+        *out_y1 = max_y;
+        return 1;
+    }
+    default:
+        return 0;
+    }
+}
+
 /* Paint a <use> element: instantiate the referenced subtree here, with the
  * <use>'s cascaded style as the inherited context and its x/y as an extra
  * translation. The <use>'s own transform is already folded into ps->ctm by
@@ -996,6 +1136,36 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
         return YETTY_OK_VOID();
     }
 
+    /* Anchor click regions: any geometry under an <a> widens that
+	 * anchor's region by its CTM-mapped bounds (axis-aligned frame). */
+    if (ps.active_link >= 0) {
+        float user_x0, user_y0, user_x1, user_y1;
+        if (node_user_bounds(n, &user_x0, &user_y0, &user_x1, &user_y1)) {
+            float corner_x[4], corner_y[4];
+            yetty_ysvg_xform_point(&ps.ctm, user_x0, user_y0, &corner_x[0], &corner_y[0]);
+            yetty_ysvg_xform_point(&ps.ctm, user_x1, user_y0, &corner_x[1], &corner_y[1]);
+            yetty_ysvg_xform_point(&ps.ctm, user_x0, user_y1, &corner_x[2], &corner_y[2]);
+            yetty_ysvg_xform_point(&ps.ctm, user_x1, user_y1, &corner_x[3], &corner_y[3]);
+            float px_min_x = corner_x[0], px_max_x = corner_x[0];
+            float px_min_y = corner_y[0], px_max_y = corner_y[0];
+            for (int corner = 1; corner < 4; corner++) {
+                if (corner_x[corner] < px_min_x) {
+                    px_min_x = corner_x[corner];
+                }
+                if (corner_x[corner] > px_max_x) {
+                    px_max_x = corner_x[corner];
+                }
+                if (corner_y[corner] < px_min_y) {
+                    px_min_y = corner_y[corner];
+                }
+                if (corner_y[corner] > px_max_y) {
+                    px_max_y = corner_y[corner];
+                }
+            }
+            link_extend(&ps, px_min_x, px_min_y, px_max_x, px_max_y);
+        }
+    }
+
     switch (n->elem) {
     case YETTY_YSVG_ELEM_RECT: {
         struct yetty_ycore_void_result r = emit_rect(&ps, n);
@@ -1064,6 +1234,47 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
         }
         return YETTY_OK_VOID();
     }
+    case YETTY_YSVG_ELEM_A: {
+        /* Register a click region for this anchor and make it the
+		 * innermost active one for the child recursion below. Only
+		 * when the embedder asked for link collection. */
+        struct yetty_ysvg_paint_ctx *paint_ctx = ps.ctx;
+        if (paint_ctx->collect_link_regions) {
+            const struct yetty_ysvg_attr *href = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_HREF);
+            if (!href) {
+                href = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_XLINK_HREF);
+            }
+            if (href && href->value_len > 0) {
+                if (paint_ctx->link_count == paint_ctx->link_cap) {
+                    size_t new_cap = paint_ctx->link_cap ? paint_ctx->link_cap * 2 : 8;
+                    struct yetty_ysvg_link_region *grown =
+                        realloc(paint_ctx->links, new_cap * sizeof(*grown));
+                    if (!grown) {
+                        break; /* no region — subtree still renders */
+                    }
+                    paint_ctx->links = grown;
+                    paint_ctx->link_cap = new_cap;
+                }
+                char *href_copy = malloc(href->value_len + 1);
+                if (!href_copy) {
+                    break;
+                }
+                memcpy(href_copy, href->value, href->value_len);
+                href_copy[href->value_len] = '\0';
+                struct yetty_ysvg_link_region *region =
+                    &paint_ctx->links[paint_ctx->link_count];
+                region->href = href_copy;
+                region->min_x = INFINITY;
+                region->min_y = INFINITY;
+                region->max_x = -INFINITY;
+                region->max_y = -INFINITY;
+                ps.active_link = (int)paint_ctx->link_count;
+                paint_ctx->link_count++;
+                ydebug("ysvg: <a> region %d href=%.60s", ps.active_link, href_copy);
+            }
+        }
+        break; /* containers recurse below with ps.active_link set */
+    }
     case YETTY_YSVG_ELEM_DEFS:
     case YETTY_YSVG_ELEM_TITLE:
     case YETTY_YSVG_ELEM_DESC:
@@ -1096,6 +1307,7 @@ struct yetty_ycore_void_result yetty_ysvg_paint(const struct yetty_ysvg_doc *doc
     struct ysvg_paint_state root = {0};
     root.ctx = ctx;
     root.doc = doc;
+    root.active_link = -1;
     /* Start from the viewBox → pixel transform (a uniform scale +
      * translate set up by ysvg.c). Walk recursion composes element
      * transforms on top of this. */

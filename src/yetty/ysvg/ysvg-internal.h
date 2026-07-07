@@ -504,6 +504,11 @@ struct yetty_ysvg_paint_ctx {
     float user_to_pixel_scale; /* uniform scale built into root_ctm */
     /* Embedder-supplied <image> content resolver (see ysvg.h). */
     struct yetty_ysvg_image_resolver image_resolver;
+    /* <a> click-region collection (active when links != NULL is allowed
+	 * by the config; see ysvg.h). Grown by the paint walk. */
+    int collect_link_regions;
+    struct yetty_ysvg_link_region *links;
+    size_t link_count, link_cap;
 };
 
 struct yetty_ycore_void_result yetty_ysvg_paint(const struct yetty_ysvg_doc *doc,
