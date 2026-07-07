@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <pthread.h>
+#include <time.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ysvg/ysvg.h>
 #include <yetty/ybrowser/ybrowser.h>
@@ -772,6 +774,38 @@ int yetty_ylexbor_svg_scene_render(struct yetty_ylexbor *r, const char *bytes, s
                                    float *out_min_y, float *out_w, float *out_h,
                                    struct yetty_ysvg_link_region **out_links,
                                    size_t *out_link_count);
+
+/* ===========================================================================
+ * Disk tier of the loader's HTTP cache (RFC 9111 private cache). The
+ * loader decides freshness / revalidation / Vary; this layer persists
+ * entries across restarts. Implemented in ybrowser-cache-disk.c.
+ * ===========================================================================*/
+
+struct yetty_ybrowser_disk_cache {
+    char dir[1024]; /* empty + enabled==0 → memory-only operation */
+    int enabled;
+    pthread_mutex_t mutex;
+};
+
+struct yetty_ybrowser_disk_cache_meta {
+    long status;
+    time_t expires_at; /* absolute; in the past = stale-but-revalidatable */
+    time_t stored_at;
+    char etag[256];
+    char last_modified[128];
+    char content_type[160];
+    char effective_url[1024];
+};
+
+struct yetty_ycore_void_result yetty_ybrowser_disk_cache_init(
+    struct yetty_ybrowser_disk_cache *cache);
+void yetty_ybrowser_disk_cache_shutdown(struct yetty_ybrowser_disk_cache *cache);
+int yetty_ybrowser_disk_cache_load(struct yetty_ybrowser_disk_cache *cache, const char *url,
+                                   int kind, struct yetty_ybrowser_disk_cache_meta *meta,
+                                   char **out_body, size_t *out_body_len);
+void yetty_ybrowser_disk_cache_store(struct yetty_ybrowser_disk_cache *cache, const char *url,
+                                     int kind, const struct yetty_ybrowser_disk_cache_meta *meta,
+                                     const char *body, size_t body_len);
 
 /* The transform svg_scene_merge applies (scene → page px), exposed so the
  * click hit-test can invert it. Defined in ybrowser-paint.c. */

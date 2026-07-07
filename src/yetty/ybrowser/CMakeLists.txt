@@ -15,6 +15,7 @@ add_library(yetty_ybrowser STATIC
     ybrowser-js.c
     ybrowser-js-dom.c
     ybrowser-js-web.c
+    ybrowser-cache-disk.c
 )
 
 target_include_directories(yetty_ybrowser PUBLIC
