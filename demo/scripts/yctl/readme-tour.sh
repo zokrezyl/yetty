@@ -5,7 +5,7 @@
 #   ./build-desktop-ytrace-release/yetty --rpc-port=9999 -e bash
 #
 # Then in another shell:
-#   ./demo/scripts/yctl-scripts/readme-tour.sh
+#   ./demo/scripts/yctl/readme-tour.sh
 
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"

@@ -41,5 +41,3 @@ script:
   - special-char: ENTER
   - sleep: 1.0
 
-  - type: "exit"
-  - special-char: ENTER

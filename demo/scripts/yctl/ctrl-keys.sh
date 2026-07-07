@@ -8,4 +8,4 @@
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$DIR/_common.sh"
-play_asset "$ROOT/demo/assets/yctl-scripts/ctrl-keys.yaml"
+play_asset "$ROOT/demo/assets/yctl/ctrl-keys.yaml"

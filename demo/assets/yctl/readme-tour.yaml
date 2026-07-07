@@ -25,7 +25,7 @@
 #
 # Prereq: in repo root, start yetty with
 #   ./build-desktop-ytrace-release/yetty --rpc-port=9999 -e bash
-# then run ./demo/scripts/yctl-scripts/readme-tour.sh from another shell.
+# then run ./demo/scripts/yctl/readme-tour.sh from another shell.
 #
 # Zoom anchor is parked at the bottom-left of the window (x=5, y=700) so
 # Ctrl+scroll grows content up-and-right from the prompt area instead of

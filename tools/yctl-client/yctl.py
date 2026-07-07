@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any
@@ -48,9 +49,11 @@ class RpcResponse:
 class RpcClient:
     """Async RPC client for yetty terminal."""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 9999):
+    def __init__(self, host: str = "127.0.0.1", port: int = 9999,
+                 ready_timeout: float = 30.0):
         self.host = host
         self.port = port
+        self.ready_timeout = ready_timeout
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._msgid = 0
@@ -60,10 +63,63 @@ class RpcClient:
         self._connected = False
 
     async def connect(self) -> None:
-        """Connect to the yetty RPC server."""
-        self._reader, self._writer = await asyncio.open_connection(self.host, self.port)
+        """Connect to the yetty RPC server and wait until its event loop
+        is actually processing messages.
+
+        The RPC listener binds early in yetty's startup, before GPU init /
+        shader compilation / terminal creation finish and before the event
+        loop starts running. A plain TCP connect succeeds as soon as the
+        kernel completes the handshake into the listen backlog — even while
+        yetty is still initializing — and every notification sent in that
+        window is buffered by the kernel and later dispatched in a single
+        burst, which collapses the typing rhythm of scripted sessions into
+        one batch of input.
+
+        Notifications are fire-and-forget, so readiness can only be proven
+        with a request/response round-trip: a response can only arrive once
+        the event loop is live. We retry the connect while yetty has not
+        bound the port yet, then ping and wait for any response before
+        letting callers send input.
+        """
+        loop_time = asyncio.get_event_loop().time
+        deadline = loop_time() + self.ready_timeout
+        started = loop_time()
+
+        while True:
+            try:
+                self._reader, self._writer = await asyncio.open_connection(self.host, self.port)
+                break
+            except ConnectionRefusedError:
+                if loop_time() >= deadline:
+                    raise
+                await asyncio.sleep(0.2)
+
         self._connected = True
         self._recv_task = asyncio.create_task(self._recv_loop())
+        await self._wait_ready(deadline)
+
+        waited = loop_time() - started
+        if waited > 0.5:
+            print(f"yctl: waited {waited:.1f}s for the yetty event loop", file=sys.stderr)
+
+    async def _wait_ready(self, deadline: float) -> None:
+        """Block until the server answers one request (loop is running)."""
+        remaining = deadline - asyncio.get_event_loop().time()
+        try:
+            await asyncio.wait_for(self._ping_once(), timeout=max(remaining, 0.1))
+        except asyncio.TimeoutError:
+            raise ConnectionError(
+                f"yetty accepted the connection but its event loop did not "
+                f"respond within {self.ready_timeout:.0f}s") from None
+
+    async def _ping_once(self) -> None:
+        try:
+            await self.request(Channel.EventLoop, "ping", {})
+        except RuntimeError:
+            # An error response (e.g. "method not found" from servers
+            # without a ping handler) still proves the event loop is
+            # processing messages — that is all readiness means here.
+            pass
 
     async def disconnect(self) -> None:
         """Disconnect from the server."""
