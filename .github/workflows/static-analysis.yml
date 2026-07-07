@@ -1,0 +1,247 @@
+# Static-analysis sweep, run on every release tag (and on demand via
+# workflow_dispatch). GitHub twin of .woodpecker/static-analysis.yml —
+# same checks, same helpers (qa-tools/ci/), same non-gating semantics:
+# every check records its findings, the final `report` job prints a
+# summary table plus one stable QA-TREND line per check and publishes it
+# to the run summary, so counts can be compared across tags over time.
+#
+# One desktop build feeds the build-dependent checkers. Jobs run on
+# separate runners, so the build job packs the minimal subset the checkers
+# consume (compile_commands.json, checker binaries, referenced generated /
+# 3rdparty headers — see qa-tools/ci/ci-package.py) into a `qa-build`
+# artifact instead of re-running the build per check.
+
+name: Static analysis
+
+on:
+  push:
+    tags:
+      # Main yetty release tags only, same namespace rule as
+      # cmake-multi-platform.yml.
+      - 'yetty-[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch: {}
+
+env:
+  BUILD_DIR: build-desktop-ytrace-release
+
+jobs:
+  # ===========================================================================
+  # One desktop build: compile_commands.json + LibTooling checker binaries
+  # ===========================================================================
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The 3rdparty version resolver in shared.cmake runs
+          # `git describe --tags HEAD`, which needs a reachable yetty-* tag.
+          fetch-depth: 0
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            automake autoconf libtool \
+            meson ninja-build nasm \
+            brotli \
+            libfontconfig1-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev \
+            libx11-dev \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libwebp-dev \
+            clang-20 llvm-20-dev libclang-20-dev
+
+      - name: Build Linux
+        run: make build-desktop-ytrace-release
+
+      - name: Package analysis inputs
+        run: python3 qa-tools/ci/ci-package.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qa-build
+          path: tmp/qa/ci/qa-build.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+
+  # ===========================================================================
+  # Checks that need the build (checker binaries / compile database)
+  # ===========================================================================
+  check-build-dependent:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [result-checker, out-param, naming-convention, clang-tidy]
+    name: ${{ matrix.check }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The checkers parse every compiled TU, so the same system dev headers
+      # the build uses must be present; clang-20 provides libLLVM.so and the
+      # clang builtin-header resource directory the LibTooling binaries need.
+      - name: Install analysis dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libfontconfig1-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev \
+            libx11-dev \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libwebp-dev \
+            clang-20 clang-tidy-20
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: qa-build
+
+      - name: Unpack analysis inputs
+        run: tar -xzf qa-build.tar.gz
+
+      - name: Run ${{ matrix.check }}
+        run: python3 qa-tools/ci/ci-step.py ${{ matrix.check }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-result-${{ matrix.check }}
+          path: tmp/qa/
+          if-no-files-found: warn
+
+  # ===========================================================================
+  # Source-only / repo-level checks — no build needed
+  # ===========================================================================
+  check-source:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - check: format
+            install: sudo apt-get update && sudo apt-get install -y clang-format-20
+          - check: cppcheck
+            install: sudo apt-get update && sudo apt-get install -y cppcheck
+          - check: osv-scanner
+            install: >
+              sudo curl -sSfL -o /usr/local/bin/osv-scanner
+              https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64
+              && sudo chmod +x /usr/local/bin/osv-scanner
+          - check: trivy
+            install: >
+              curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh
+              | sudo sh -s -- -b /usr/local/bin
+          - check: grype
+            install: >
+              curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh
+              | sudo sh -s -- -b /usr/local/bin
+    name: ${{ matrix.check }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ${{ matrix.check }}
+        run: ${{ matrix.install }}
+
+      - name: Run ${{ matrix.check }}
+        run: python3 qa-tools/ci/ci-step.py ${{ matrix.check }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-result-${{ matrix.check }}
+          path: tmp/qa/
+          if-no-files-found: warn
+
+  # ===========================================================================
+  # Clang Static Analyzer — heavyweight: configures and builds the whole
+  # tree a second time under scan-build (own build dir beneath tmp/qa/)
+  # ===========================================================================
+  scan-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # scan-build's cmake configure also runs `git describe --tags`.
+          fetch-depth: 0
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            automake autoconf libtool \
+            meson ninja-build nasm \
+            brotli \
+            libfontconfig1-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev \
+            libx11-dev \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libwebp-dev \
+            clang-20 llvm-20-dev libclang-20-dev clang-tools-20
+
+      - name: Run scan-build
+        run: python3 qa-tools/ci/ci-step.py scan-build
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-result-scan-build
+          path: |
+            tmp/qa/ci/
+            tmp/qa/scan-build.log
+            tmp/qa/scan-build-report/
+          if-no-files-found: warn
+
+  # ===========================================================================
+  # The report
+  # ===========================================================================
+  report:
+    needs: [check-build-dependent, check-source, scan-build]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      CI_COMMIT_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      CI_COMMIT_SHA: ${{ github.sha }}
+      CI_PIPELINE_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: qa-result-*
+          path: tmp/qa/
+          merge-multiple: true
+
+      - name: Aggregate report
+        run: python3 qa-tools/ci/ci-report.py
+
+      - name: Publish report to run summary
+        run: |
+          {
+            echo '```'
+            cat tmp/qa/ci/report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qa-report
+          path: tmp/qa/ci/report.txt
+          if-no-files-found: error

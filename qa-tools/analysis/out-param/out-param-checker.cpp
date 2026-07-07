@@ -102,7 +102,20 @@ static bool is_foreign_location(SourceLocation loc, const SourceManager &sm)
 	if (sm.isInSystemHeader(loc))
 		return true;
 	StringRef filename = sm.getFilename(sm.getSpellingLoc(loc));
-	return filename.contains("/3rdparty/") || filename.contains("/_deps/");
+	/* Bundled third-party trees inside the repo. The vendored libvterm and
+	 * tinyemu live directly under src/ (not /3rdparty/ or /_deps/), so name
+	 * them explicitly - their headers declare APIs we do not own. */
+	if (filename.contains("/3rdparty/") || filename.contains("/_deps/") ||
+	    filename.contains("/libvterm-") || filename.contains("/tinyemu/"))
+		return true;
+	/* External libraries pulled in via plain `-I` (not `-isystem`) are NOT
+	 * flagged by isInSystemHeader - e.g. freetype under /usr/include, or a
+	 * Nix-store dependency. Their headers live outside our source tree and
+	 * their APIs are not ours to reshape, so treat the standard external
+	 * include roots as foreign too. */
+	return filename.starts_with("/usr/") ||
+	       filename.starts_with("/nix/store/") ||
+	       filename.starts_with("/opt/");
 }
 
 /*
