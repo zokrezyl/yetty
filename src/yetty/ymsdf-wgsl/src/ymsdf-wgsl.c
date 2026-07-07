@@ -11,9 +11,12 @@
  * the cursor walks off the bottom; old contents are copied across via
  * texture-to-texture copy.
  *
- * Async waits poll wgpuInstanceProcessEvents in a tight sleep loop. This
- * blocks the calling thread but keeps the API simple — the CDB generator
- * is invoked once per font on cache miss, which is fine to block on.
+ * Async waits register their callbacks in WaitAnyOnly mode and block in
+ * wgpuInstanceWaitAny until the future completes — no polling, no sleep.
+ * This blocks the calling thread but keeps the API simple — the CDB
+ * generator is invoked once per font on cache miss, which is fine to
+ * block on. The caller's WGPUInstance must be created with the
+ * WGPUInstanceFeatureName_TimedWaitAny feature.
  */
 
 #include <yetty/ymsdf-wgsl/ymsdf-wgsl.h>
@@ -27,20 +30,14 @@
 #include FT_OUTLINE_H
 
 #include <math.h>
-#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#endif
-
-#ifdef _WIN32
 #include <windows.h>
 #else
 #include <unistd.h>
@@ -861,71 +858,65 @@ static char *find_shader_path(const char *user_path)
 }
 
 /*=============================================================================
- * Async wait helpers — poll wgpuInstanceProcessEvents until the callback
- * fires. Same pattern as poc; blocking but simple, no coroutines required.
+ * Async wait helpers — register the callback in WaitAnyOnly mode, then
+ * block in wgpuInstanceWaitAny until the future completes. The callback
+ * fires on this thread from inside the wait call, so no atomics and no
+ * polling are needed. Requires an instance created with
+ * WGPUInstanceFeatureName_TimedWaitAny (non-zero timeouts fail otherwise).
  *===========================================================================*/
 
-static void usleep_short(void)
+static void queue_done_callback(WGPUQueueWorkDoneStatus status, WGPUStringView message,
+                                void *userdata1, void *userdata2)
 {
-#ifdef _WIN32
-    /* Sleep(0) yields the rest of this quantum to any same-priority ready
-     * thread — the closest Win32 equivalent to a 100us nanosleep when used
-     * inside a polling loop (Sleep(1) actually waits 1–15ms). */
-    Sleep(0);
-#else
-    struct timespec ts = {0, 100000}; /* 100us */
-    nanosleep(&ts, NULL);
-#endif
+    (void)message;
+    (void)userdata2;
+    *(WGPUQueueWorkDoneStatus *)userdata1 = status;
 }
 
-static void queue_done_cb(WGPUQueueWorkDoneStatus status, WGPUStringView msg, void *u1, void *u2)
+static int wait_queue_done(WGPUQueue queue, WGPUInstance instance)
 {
-    (void)status;
-    (void)msg;
-    (void)u2;
-    atomic_store((atomic_int *)u1, 1);
-}
+    WGPUQueueWorkDoneStatus status = WGPUQueueWorkDoneStatus_Error;
+    WGPUQueueWorkDoneCallbackInfo callback_info = {0};
+    callback_info.mode = WGPUCallbackMode_WaitAnyOnly;
+    callback_info.callback = queue_done_callback;
+    callback_info.userdata1 = &status;
 
-static void wait_queue_done(WGPUQueue queue, WGPUInstance instance)
-{
-    atomic_int done = 0;
-    WGPUQueueWorkDoneCallbackInfo cb = {0};
-    cb.mode = WGPUCallbackMode_AllowSpontaneous;
-    cb.callback = queue_done_cb;
-    cb.userdata1 = &done;
-    wgpuQueueOnSubmittedWorkDone(queue, cb);
-    while (!atomic_load(&done)) {
-        if (instance) {
-            wgpuInstanceProcessEvents(instance);
-        }
-        usleep_short();
+    WGPUFutureWaitInfo wait_info = {0};
+    wait_info.future = wgpuQueueOnSubmittedWorkDone(queue, callback_info);
+
+    WGPUWaitStatus wait_status = wgpuInstanceWaitAny(instance, 1, &wait_info, UINT64_MAX);
+    if (wait_status != WGPUWaitStatus_Success) {
+        ywarn("ymsdf-wgsl: WaitAny for queue work-done failed (%d)", (int)wait_status);
+        return -1;
     }
+    return status == WGPUQueueWorkDoneStatus_Success ? 0 : -1;
 }
 
-static void map_done_cb(WGPUMapAsyncStatus status, WGPUStringView msg, void *u1, void *u2)
+static void map_done_callback(WGPUMapAsyncStatus status, WGPUStringView message, void *userdata1,
+                              void *userdata2)
 {
-    (void)msg;
-    atomic_store((atomic_int *)u2, (int)status);
-    atomic_store((atomic_int *)u1, 1);
+    (void)message;
+    (void)userdata2;
+    *(WGPUMapAsyncStatus *)userdata1 = status;
 }
 
-static int wait_buffer_map(WGPUBuffer buf, WGPUMapMode mode, size_t size, WGPUInstance instance)
+static int wait_buffer_map(WGPUBuffer buffer, WGPUMapMode mode, size_t size, WGPUInstance instance)
 {
-    atomic_int done = 0;
-    atomic_int status = (int)WGPUMapAsyncStatus_Error;
-    WGPUBufferMapCallbackInfo cb = {0};
-    cb.mode = WGPUCallbackMode_AllowSpontaneous;
-    cb.callback = map_done_cb;
-    cb.userdata1 = &done;
-    cb.userdata2 = &status;
-    wgpuBufferMapAsync(buf, mode, 0, size, cb);
-    while (!atomic_load(&done)) {
-        if (instance) {
-            wgpuInstanceProcessEvents(instance);
-        }
-        usleep_short();
+    WGPUMapAsyncStatus status = WGPUMapAsyncStatus_Error;
+    WGPUBufferMapCallbackInfo callback_info = {0};
+    callback_info.mode = WGPUCallbackMode_WaitAnyOnly;
+    callback_info.callback = map_done_callback;
+    callback_info.userdata1 = &status;
+
+    WGPUFutureWaitInfo wait_info = {0};
+    wait_info.future = wgpuBufferMapAsync(buffer, mode, 0, size, callback_info);
+
+    WGPUWaitStatus wait_status = wgpuInstanceWaitAny(instance, 1, &wait_info, UINT64_MAX);
+    if (wait_status != WGPUWaitStatus_Success) {
+        ywarn("ymsdf-wgsl: WaitAny for buffer map failed (%d)", (int)wait_status);
+        return -1;
     }
-    return atomic_load(&status) == WGPUMapAsyncStatus_Success ? 0 : -1;
+    return status == WGPUMapAsyncStatus_Success ? 0 : -1;
 }
 
 /*=============================================================================
@@ -1259,7 +1250,10 @@ static uint8_t *atlas_readback_rgba8(struct atlas *a, WGPUInstance instance)
     wgpuCommandBufferRelease(cb);
     wgpuCommandEncoderRelease(enc);
 
-    wait_queue_done(q, instance);
+    if (wait_queue_done(q, instance) < 0) {
+        wgpuBufferRelease(staging);
+        return NULL;
+    }
 
     if (wait_buffer_map(staging, WGPUMapMode_Read, total, instance) < 0) {
         wgpuBufferRelease(staging);
@@ -1608,7 +1602,7 @@ struct yetty_ycore_void_result yetty_ymsdf_wgsl_config_generate(
     wgpuCommandBufferRelease(cb);
     wgpuCommandEncoderRelease(enc);
 
-    wait_queue_done(queue, instance);
+    bool queue_wait_failed = wait_queue_done(queue, instance) < 0;
 
     /* Per-glyph cleanup */
     for (size_t i = 0; i < emit_count; i++) {
@@ -1629,6 +1623,18 @@ struct yetty_ycore_void_result yetty_ymsdf_wgsl_config_generate(
     if (pts_buf) {
         wgpuBufferDestroy(pts_buf);
         wgpuBufferRelease(pts_buf);
+    }
+
+    if (queue_wait_failed) {
+        free(emits);
+        u32_vec_free(&combined_meta);
+        f32_vec_free(&combined_pts);
+        u32_vec_free(&cps);
+        atlas_cleanup(&atlas);
+        compute_cleanup(&comp);
+        FT_Done_Face(face);
+        FT_Done_FreeType(lib);
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: queue wait failed after compute submit");
     }
 
     /* Atlas readback + CDB write. */

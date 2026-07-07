@@ -197,9 +197,15 @@ static void *render_thread_func(void *arg)
     _ptyFactory = pty_result.value;
     ydebug("PTY factory created");
 
-    /* WebGPU instance */
+    /* WebGPU instance. TimedWaitAny is required by
+     * yplatform/webgpu/default.c and ymsdf-wgsl — GPU futures are waited
+     * with a non-zero timeout. */
     ydebug("creating WebGPU instance");
-    _instance = wgpuCreateInstance(NULL);
+    WGPUInstanceFeatureName instance_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
+    WGPUInstanceDescriptor instance_desc = {0};
+    instance_desc.requiredFeatureCount = 1;
+    instance_desc.requiredFeatures = instance_features;
+    _instance = wgpuCreateInstance(&instance_desc);
     if (!_instance) {
         yerror("failed to create WebGPU instance");
         return;

@@ -13,10 +13,10 @@
 #include <yetty/ywebgpu/limits.h>
 #include <yetty/ywebgpu/request.h>
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include <webgpu/webgpu.h>
 
@@ -27,12 +27,6 @@ static void usage(const char *prog)
     fprintf(stderr, "  --size N        Font size in pixels (default: 32)\n");
     fprintf(stderr, "  --range N       MSDF pixel range (default: 4)\n");
     fprintf(stderr, "  --shader PATH   Path to msdf_gen.wgsl (auto-detected by default)\n");
-}
-
-static void usleep_short(void)
-{
-    struct timespec ts = {0, 100000}; /* 100us */
-    nanosleep(&ts, NULL);
 }
 
 int main(int argc, char *argv[])
@@ -73,8 +67,14 @@ int main(int argc, char *argv[])
     fprintf(stderr, "  Pixel range: %.0f\n", (double)pixel_range);
     fprintf(stderr, "  Shader: %s\n", shader_path ? shader_path : "<auto>");
 
-    /* WebGPU instance — no surface needed for compute-only workload. */
-    WGPUInstance instance = wgpuCreateInstance(NULL);
+    /* WebGPU instance — no surface needed for compute-only workload.
+     * TimedWaitAny is required: the request waits below and ymsdf-wgsl's
+     * async waits block in wgpuInstanceWaitAny with a non-zero timeout. */
+    WGPUInstanceFeatureName instance_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
+    WGPUInstanceDescriptor instance_desc = {0};
+    instance_desc.requiredFeatureCount = 1;
+    instance_desc.requiredFeatures = instance_features;
+    WGPUInstance instance = wgpuCreateInstance(&instance_desc);
     if (!instance) {
         fprintf(stderr, "wgpuCreateInstance failed\n");
         return 1;
@@ -86,17 +86,17 @@ int main(int argc, char *argv[])
     WGPURequestAdapterOptions adapter_opts = {0};
     adapter_opts.compatibleSurface = NULL;
     adapter_opts.powerPreference = WGPUPowerPreference_HighPerformance;
-    WGPURequestAdapterCallbackInfo a_cb = {0};
-    a_cb.mode = WGPUCallbackMode_AllowSpontaneous;
-    a_cb.callback = yetty_ywebgpu_adapter_request_callback;
-    a_cb.userdata1 = &adapter;
-    a_cb.userdata2 = &adapter_ready;
-    wgpuInstanceRequestAdapter(instance, &adapter_opts, a_cb);
-    while (!adapter_ready) {
-        wgpuInstanceProcessEvents(instance);
-        usleep_short();
-    }
-    if (!adapter) {
+    WGPURequestAdapterCallbackInfo adapter_callback_info = {0};
+    adapter_callback_info.mode = WGPUCallbackMode_WaitAnyOnly;
+    adapter_callback_info.callback = yetty_ywebgpu_adapter_request_callback;
+    adapter_callback_info.userdata1 = &adapter;
+    adapter_callback_info.userdata2 = &adapter_ready;
+    WGPUFutureWaitInfo adapter_wait = {0};
+    adapter_wait.future =
+        wgpuInstanceRequestAdapter(instance, &adapter_opts, adapter_callback_info);
+    WGPUWaitStatus adapter_wait_status =
+        wgpuInstanceWaitAny(instance, 1, &adapter_wait, UINT64_MAX);
+    if (adapter_wait_status != WGPUWaitStatus_Success || !adapter) {
         fprintf(stderr, "Failed to acquire WGPU adapter\n");
         wgpuInstanceRelease(instance);
         return 1;
@@ -112,22 +112,20 @@ int main(int argc, char *argv[])
     yetty_ywebgpu_fill_default_limits(adapter, NULL, &limits);
 
     WGPUDevice device = NULL;
-    struct yetty_ywebgpu_device_request_state ds = {{0}, 0};
+    struct yetty_ywebgpu_device_request_state device_state = {{0}, 0};
     WGPUDeviceDescriptor device_desc = {0};
     device_desc.requiredLimits = &limits;
-    WGPURequestDeviceCallbackInfo d_cb = {0};
-    d_cb.mode = WGPUCallbackMode_AllowSpontaneous;
-    d_cb.callback = yetty_ywebgpu_device_request_callback;
-    d_cb.userdata1 = &device;
-    d_cb.userdata2 = &ds;
-    wgpuAdapterRequestDevice(adapter, &device_desc, d_cb);
-    while (!ds.ready) {
-        wgpuInstanceProcessEvents(instance);
-        usleep_short();
-    }
-    if (!device) {
+    WGPURequestDeviceCallbackInfo device_callback_info = {0};
+    device_callback_info.mode = WGPUCallbackMode_WaitAnyOnly;
+    device_callback_info.callback = yetty_ywebgpu_device_request_callback;
+    device_callback_info.userdata1 = &device;
+    device_callback_info.userdata2 = &device_state;
+    WGPUFutureWaitInfo device_wait = {0};
+    device_wait.future = wgpuAdapterRequestDevice(adapter, &device_desc, device_callback_info);
+    WGPUWaitStatus device_wait_status = wgpuInstanceWaitAny(instance, 1, &device_wait, UINT64_MAX);
+    if (device_wait_status != WGPUWaitStatus_Success || !device) {
         fprintf(stderr, "Failed to acquire WGPU device: %s\n",
-                ds.error_msg[0] ? ds.error_msg : "(no message)");
+                device_state.error_msg[0] ? device_state.error_msg : "(no message)");
         wgpuAdapterRelease(adapter);
         wgpuInstanceRelease(instance);
         return 1;
