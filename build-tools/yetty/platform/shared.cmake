@@ -750,6 +750,13 @@ function(yetty_embed_assets TARGET)
     file(COPY "${YETTY_ROOT}/build-tools/yetty/platform/config-defaults.yaml"
          DESTINATION "${EMBED_CONFIG_DIR}")
     file(RENAME "${EMBED_CONFIG_DIR}/config-defaults.yaml" "${EMBED_CONFIG_DIR}/defaults.yaml")
+    # The file(COPY) calls above run at configure time, so an edited config
+    # yaml stays stale in embed-config/ until the next reconfigure — make
+    # the configs configure dependencies so editing them triggers one.
+    set_property(DIRECTORY "${CMAKE_SOURCE_DIR}" APPEND PROPERTY
+        CMAKE_CONFIGURE_DEPENDS
+        "${DEFAULT_CONFIG_FILE}"
+        "${YETTY_ROOT}/build-tools/yetty/platform/config-defaults.yaml")
 
     # Stage tinyemu cfgs under yconfig/temu/ so extract-assets drops them at
     # <config_dir>/temu/. tinyemu-pty.c reads <config_dir>/temu/yetty-temu-extended.cfg

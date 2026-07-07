@@ -44,6 +44,26 @@ rendering:
   present-mode: "auto"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# GPU Device Limits
+# ─────────────────────────────────────────────────────────────────────────────
+# WebGPU device limits requested at startup. Every value is clamped to the
+# adapter-supported maximum at request time, so a value larger than the
+# hardware supports degrades gracefully instead of rejecting the device
+# request. Values must be positive integers; delete a key to fall back to
+# the built-in default shown here.
+gpu:
+  # Largest 2D texture edge, in pixels (font/image atlases scale with this).
+  max-texture-dimension-2d: 16384
+  # Largest single storage-buffer binding, in MiB. The binder flattens all
+  # layer/figure data into one storage buffer, so this bounds the total
+  # rich-content data visible to a shader.
+  max-storage-binding-size-mb: 512
+  # Largest single GPU buffer allocation, in MiB.
+  max-buffer-size-mb: 1024
+  # Storage buffers visible to one shader stage.
+  max-storage-buffers-per-shader-stage: 10
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Terminal Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 terminal:
