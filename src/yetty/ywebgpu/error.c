@@ -85,6 +85,10 @@ WGPUUncapturedErrorCallbackInfo yetty_ywebgpu_get_error_callback_info(void)
 
 struct yetty_ywebgpu_error_scope_capture {
     int completed;
+    /* Set when the pop call returned before the callback fired (browser
+     * backend: the scope resolves on a later event-loop tick). The callback
+     * then owns the heap capture: it logs any error and frees it. */
+    int detached;
     int has_error;
     char message[512];
 };
@@ -94,17 +98,29 @@ static void error_scope_pop_callback(WGPUPopErrorScopeStatus status, WGPUErrorTy
 {
     (void)userdata2;
     struct yetty_ywebgpu_error_scope_capture *capture = userdata1;
-    capture->completed = 1;
-    if (status != WGPUPopErrorScopeStatus_Success || type == WGPUErrorType_NoError) {
+    if (!capture) {
         return;
     }
-    capture->has_error = 1;
-    size_t len = message.length < sizeof(capture->message) - 1 ? message.length
-                                                               : sizeof(capture->message) - 1;
-    if (message.data && len > 0) {
-        memcpy(capture->message, message.data, len);
+    capture->completed = 1;
+    if (status == WGPUPopErrorScopeStatus_Success && type != WGPUErrorType_NoError) {
+        capture->has_error = 1;
+        size_t len = message.length < sizeof(capture->message) - 1
+                         ? message.length
+                         : sizeof(capture->message) - 1;
+        if (message.data && len > 0) {
+            memcpy(capture->message, message.data, len);
+        }
+        capture->message[len] = '\0';
     }
-    capture->message[len] = '\0';
+    if (capture->detached) {
+        /* The caller has long returned — the error can no longer surface
+         * as a Result. Log it here so it is visible instead of lost. */
+        if (capture->has_error) {
+            yerror("WebGPU captured validation error (async, after pop returned): %s",
+                   capture->message);
+        }
+        free(capture);
+    }
 }
 
 void yetty_ywebgpu_error_scope_push(WGPUDevice device)
@@ -114,34 +130,46 @@ void yetty_ywebgpu_error_scope_push(WGPUDevice device)
 
 int yetty_ywebgpu_error_scope_pop(WGPUDevice device, char *message_out, size_t message_capacity)
 {
-    struct yetty_ywebgpu_error_scope_capture capture = {0};
+    /* Heap-allocated: on the browser backend the callback fires from a later
+     * event-loop tick, after this frame is gone — a stack capture would be a
+     * dangling write. */
+    struct yetty_ywebgpu_error_scope_capture *capture =
+        calloc(1, sizeof(struct yetty_ywebgpu_error_scope_capture));
     WGPUPopErrorScopeCallbackInfo info = {0};
     info.mode = WGPUCallbackMode_AllowSpontaneous;
     info.callback = error_scope_pop_callback;
-    info.userdata1 = &capture;
+    info.userdata1 = capture;
     (void)wgpuDevicePopErrorScope(device, info);
-    if (!capture.completed) {
-        /* Should not happen on Dawn native: synchronously-validated calls
-         * have the scope result resolved before pop returns, and
-         * AllowSpontaneous fires the callback inline. Log so a backend
-         * where this assumption breaks is visible. */
-        ywarn("ywebgpu: PopErrorScope did not complete inline; "
+    if (!capture) {
+        /* Allocation failed; the scope is still balanced, the error (if
+         * any) is dropped by the NULL-guard in the callback. */
+        ywarn("ywebgpu: PopErrorScope capture allocation failed; "
               "captured error (if any) is lost");
         return 0;
     }
-    if (!capture.has_error) {
+    if (!capture->completed) {
+        /* Dawn native resolves synchronously-validated scopes inline; the
+         * browser backend cannot. Detach: the callback will log any error
+         * when it eventually fires, and frees the capture. */
+        capture->detached = 1;
+        ywarn("ywebgpu: PopErrorScope did not complete inline; "
+              "captured error (if any) will be logged asynchronously");
         return 0;
     }
-    yerror("WebGPU captured validation error: %s", capture.message);
-    if (message_out && message_capacity > 0) {
-        size_t len = strlen(capture.message);
-        if (len > message_capacity - 1) {
-            len = message_capacity - 1;
+    int has_error = capture->has_error;
+    if (has_error) {
+        yerror("WebGPU captured validation error: %s", capture->message);
+        if (message_out && message_capacity > 0) {
+            size_t len = strlen(capture->message);
+            if (len > message_capacity - 1) {
+                len = message_capacity - 1;
+            }
+            memcpy(message_out, capture->message, len);
+            message_out[len] = '\0';
         }
-        memcpy(message_out, capture.message, len);
-        message_out[len] = '\0';
     }
-    return 1;
+    free(capture);
+    return has_error;
 }
 
 void yetty_ywebgpu_device_lost_callback(WGPUDevice const *device, WGPUDeviceLostReason reason,

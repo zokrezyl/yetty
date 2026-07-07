@@ -152,6 +152,11 @@ function(yetty_stage_webasm_assets)
             # shader staged here the chrome ygrid fails to create on webasm and
             # the whole UI silently fails to render.
             "${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl"
+            # effects-lib.wgsl — pointwise post/coord effect library defining
+            # the fx_post_apply()/fx_coord_apply() the layer shaders call
+            # (ygrid.wgsl, vterm's text shader). Without it staged the loaders
+            # fall back to built-in no-op stubs and effects are disabled.
+            "${YETTY_ROOT}/src/yetty/yshaders/effects-lib.wgsl"
             # yvterm-sdf-layer.wgsl — the yvterm "vterm-as-figure" SDF pass that
             # rasterizes ycat inline rich content (markdown/charts/diagrams). The
             # refactor made sdf-layer.c load this from <paths/shaders>; without it
