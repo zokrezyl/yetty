@@ -1,0 +1,131 @@
+# Static-analysis sweep, run on every tag build (and on demand via manual
+# trigger). Non-gating: every check records its findings and the final
+# `report` step prints a summary table plus one stable QA-TREND line per
+# check, so the counts can be compared across tag builds over time — grep
+# the report step logs for "QA-TREND" to build the series.
+#
+# One desktop build feeds the code-level checkers (compile_commands.json +
+# the LibTooling checker binaries; YETTY_ENABLE_TOOL_QA is ON for desktop).
+# Every check then runs as its own step; steps with satisfied dependencies
+# run in parallel. A check whose tool is missing from the build image shows
+# up as "unavailable" in the report instead of breaking the pipeline.
+
+labels:
+  platform: linux/amd64
+  backend: docker
+
+when:
+  - event: [tag, manual]
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      lfs: true
+
+steps:
+  # See android.yml for explanation.
+  fix-workspace-perms:
+    image: alpine
+    commands:
+      - chown -R 1000:1000 .
+
+  # plugin-git makes a shallow, tagless clone; the 3rdparty version resolver
+  # in shared.cmake runs `git describe --tags HEAD`. Both the main build and
+  # scan-build's own cmake configure need the repaired refs, so fetch once
+  # here (concurrent fetches in one workspace would race on .git locks).
+  fetch-tags:
+    depends_on: [fix-workspace-perms]
+    image: yetty-build:latest
+    commands:
+      - git fetch --unshallow --tags 2>/dev/null || git fetch --tags
+
+  build:
+    depends_on: [fetch-tags]
+    image: yetty-build:latest
+    commands:
+      - make build-desktop-ytrace-release
+
+  # --- checks that need the desktop build (compile DB / checker binaries) --
+
+  result-checker:
+    depends_on: [build]
+    image: yetty-build:latest
+    commands:
+      - python3 qa-tools/ci/ci-step.py result-checker
+
+  out-param:
+    depends_on: [build]
+    image: yetty-build:latest
+    commands:
+      - python3 qa-tools/ci/ci-step.py out-param
+
+  naming-convention:
+    depends_on: [build]
+    image: yetty-build:latest
+    commands:
+      - python3 qa-tools/ci/ci-step.py naming-convention
+
+  clang-tidy:
+    depends_on: [build]
+    image: yetty-build:latest
+    commands:
+      - python3 qa-tools/ci/ci-step.py clang-tidy
+
+  # --- source-only / repo-level checks, start as soon as the workspace is up
+
+  format:
+    depends_on: [fix-workspace-perms]
+    image: yetty-build:latest
+    commands:
+      - python3 qa-tools/ci/ci-step.py format
+
+  cppcheck:
+    depends_on: [fix-workspace-perms]
+    image: yetty-build:latest
+    commands:
+      - python3 qa-tools/ci/ci-step.py cppcheck
+
+  # Heavyweight: configures and builds the whole tree a second time under
+  # the Clang Static Analyzer (own build dir beneath tmp/qa/).
+  scan-build:
+    depends_on: [fetch-tags]
+    image: yetty-build:latest
+    commands:
+      - python3 qa-tools/ci/ci-step.py scan-build
+
+  osv-scanner:
+    depends_on: [fix-workspace-perms]
+    image: yetty-build:latest
+    commands:
+      - python3 qa-tools/ci/ci-step.py osv-scanner
+
+  trivy:
+    depends_on: [fix-workspace-perms]
+    image: yetty-build:latest
+    commands:
+      - python3 qa-tools/ci/ci-step.py trivy
+
+  grype:
+    depends_on: [fix-workspace-perms]
+    image: yetty-build:latest
+    commands:
+      - python3 qa-tools/ci/ci-step.py grype
+
+  # -------------------------------------------------------------- the report
+
+  report:
+    depends_on:
+      - result-checker
+      - out-param
+      - naming-convention
+      - clang-tidy
+      - format
+      - cppcheck
+      - scan-build
+      - osv-scanner
+      - trivy
+      - grype
+    image: yetty-build:latest
+    commands:
+      - python3 qa-tools/ci/ci-report.py
