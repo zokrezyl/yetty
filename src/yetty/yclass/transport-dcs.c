@@ -29,6 +29,10 @@
  * keeps a host-less invocation from hanging forever instead of failing. */
 #define DCS_RECV_TIMEOUT_MS 5000
 
+/* How long the flush waits for the write fd to drain when a large envelope
+ * overruns the PTY buffer (see the EAGAIN branch in dcs_flush_outbuf). */
+#define DCS_SEND_TIMEOUT_MS 5000
+
 struct dcs_transport {
     struct yetty_yclass_transport base;
     int read_fd;
@@ -103,6 +107,29 @@ static struct yetty_ycore_void_result dcs_flush_outbuf(struct dcs_transport *t)
             if (errno == EINTR) {
                 continue;
             }
+#ifndef _WIN32
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                /* The write fd is often O_NONBLOCK behind the caller's back:
+                 * raw-mode setup flips the flag on stdin, and stdin/stdout
+                 * usually share one open file description of the tty. A
+                 * large envelope (a full ImGui frame is ~30 KB of base64)
+                 * overruns the PTY buffer mid-write; bailing here would
+                 * leave HALF an envelope in the stream — the peer's scanner
+                 * then swallows the truncated tail plus the next envelopes
+                 * as garbage text. Wait for the fd to drain and finish the
+                 * envelope. */
+                struct pollfd poll_fd = {.fd = t->write_fd, .events = POLLOUT};
+                int poll_result = poll(&poll_fd, 1, DCS_SEND_TIMEOUT_MS);
+                if (poll_result < 0 && errno != EINTR) {
+                    return YETTY_ERR(yetty_ycore_void, "dcs_flush_outbuf: poll failed");
+                }
+                if (poll_result == 0) {
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "dcs_flush_outbuf: write stalled (peer not draining)");
+                }
+                continue;
+            }
+#endif
             return YETTY_ERR(yetty_ycore_void, "dcs_flush_outbuf: write failed");
         }
         off += (size_t)written;

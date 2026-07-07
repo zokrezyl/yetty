@@ -65,6 +65,11 @@ struct ymgui_figure_state {
     uint32_t id;
     ImGuiContext *ctx;
     bool atlas_uploaded;
+    /* CREATE_CHILD reached the host. False when the create-emit failed
+     * (attach not up yet at CreateFigure time) — every content emit
+     * retries it first, since the host silently skips uploads addressed
+     * to a child id it never minted. */
+    bool child_created;
     /* Latest pixel size announced by the server (DisplaySize). 0 until
      * the first RESIZE confirms placement. */
     float w_pixels;
@@ -331,6 +336,30 @@ static void figure_tree_rect_for_figure(const ymgui_figure_state *c, float *x0, 
     *y1 = *y0 + h_px;
 }
 
+/* CREATE_CHILD may fail transiently (the attach isn't up yet when the app
+ * calls CreateFigure at startup — common when the producer launches with
+ * the host terminal). Every content-emit path funnels through here to
+ * re-issue it, because the host silently skips atlas/frame uploads for a
+ * child id it never minted. On a late create the server-side figure is
+ * brand new — re-seed the atlas and drop the wire-dedup caches so the
+ * next frame ships in full. */
+static bool ensure_child_created(ymgui_figure_state *c)
+{
+    if (c->child_created) {
+        return true;
+    }
+    float x0, y0, x1, y1;
+    figure_tree_rect_for_figure(c, &x0, &y0, &x1, &y1);
+    if (!emit_admin_create_child_ymgui(c->id, x0, y0, x1, y1)) {
+        return false;
+    }
+    c->child_created = true;
+    c->atlas_uploaded = false;
+    c->prev_cl_hashes.clear();
+    c->prev_cmd_hashes.clear();
+    return true;
+}
+
 /*===========================================================================
  * Backend lifecycle
  *=========================================================================*/
@@ -383,6 +412,34 @@ bool yetty_ymgui_ImGui_ImplYetty_Init(void)
             }
         }
     }
+
+#ifndef _WIN32
+    /* Drop the tty out of canonical/echo mode BEFORE the attach handshake.
+     * The host's replies (translate_class tables, GET_ROOT) arrive on this
+     * tty; in cooked mode the line discipline ECHOES those envelopes straight
+     * back into the host terminal as visible garbage text, holds them in the
+     * canonical line buffer (a base64 envelope has no newline) so the
+     * handshake read stalls, and ISIG turns any 0x03 payload byte into a
+     * SIGINT. The fd stays BLOCKING here — the handshake reads
+     * synchronously; PlatformInit() flips it to non-blocking afterwards. */
+    if (isatty(g_state.in_fd) && !g_state.raw_mode_active) {
+        if (tcgetattr(g_state.in_fd, &g_state.saved_termios) == 0) {
+            struct termios handshake = g_state.saved_termios;
+            handshake.c_iflag &=
+                ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+            handshake.c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN | ISIG);
+            handshake.c_cflag &= ~(CSIZE | PARENB);
+            handshake.c_cflag |= CS8;
+            handshake.c_cc[VMIN] = 1;
+            handshake.c_cc[VTIME] = 0;
+            if (tcsetattr(g_state.in_fd, TCSANOW, &handshake) == 0) {
+                /* saved_termios now holds the ORIGINAL cooked state;
+                 * PlatformInit must not overwrite it. */
+                g_state.raw_mode_active = 1;
+            }
+        }
+    }
+#endif
 
     /* Attach to the host's root container now, while in_fd is still in
      * blocking mode — the attach handshake (GET_ROOT) reads the host's
@@ -484,7 +541,7 @@ uint32_t yetty_ymgui_ImGui_ImplYetty_CreateFigure(uint32_t figure_id, int col, i
      * real" gate clears immediately. */
     float x0, y0, x1, y1;
     figure_tree_rect_for_figure(c, &x0, &y0, &x1, &y1);
-    emit_admin_create_child_ymgui(figure_id, x0, y0, x1, y1);
+    c->child_created = emit_admin_create_child_ymgui(figure_id, x0, y0, x1, y1);
     yetty_ymgui_ImGui_ImplYetty_OnFigureResize(figure_id, x1 - x0, y1 - y0);
     return figure_id;
 }
@@ -506,7 +563,9 @@ void yetty_ymgui_ImGui_ImplYetty_MoveFigure(uint32_t figure_id, int col, int row
     c->h_pixels = 0.0f;
     float x0, y0, x1, y1;
     figure_tree_rect_for_figure(c, &x0, &y0, &x1, &y1);
-    emit_admin_set_child_rect(figure_id, x0, y0, x1, y1);
+    if (ensure_child_created(c)) {
+        emit_admin_set_child_rect(figure_id, x0, y0, x1, y1);
+    }
     yetty_ymgui_ImGui_ImplYetty_OnFigureResize(figure_id, x1 - x0, y1 - y0);
 }
 
@@ -604,7 +663,7 @@ void yetty_ymgui_ImGui_ImplYetty_BeginFigureFrame(uint32_t figure_id)
         return;
     }
     ImGui::SetCurrentContext(c->ctx);
-    if (!c->atlas_uploaded) {
+    if (ensure_child_created(c) && !c->atlas_uploaded) {
         upload_figure_atlas(c);
     }
 }
@@ -749,6 +808,15 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
         return;
     }
     if (!g_state.container && !ensure_attached()) {
+        return;
+    }
+    /* The host drops uploads for children it never minted — make sure the
+     * CREATE_CHILD (and, transitively, the atlas) actually went out before
+     * shipping frame bytes at it. */
+    if (!ensure_child_created(c)) {
+        return;
+    }
+    if (!c->atlas_uploaded && !upload_figure_atlas(c)) {
         return;
     }
     /* Static-size sanity — we memcpy ImDrawVert straight onto the wire. */
@@ -1073,10 +1141,19 @@ bool yetty_ymgui_ImGui_ImplYetty_PlatformInit(void)
 #ifdef _WIN32
     return false;
 #else
-    if (!platform_set_raw_mode(g_state.in_fd, &g_state.saved_termios)) {
+    /* Init() already dropped the tty to no-echo/non-canonical for the attach
+     * handshake and stashed the ORIGINAL cooked termios in saved_termios.
+     * Save into a scratch here so that original survives for the restore at
+     * PlatformShutdown; only a first-time save (headless Init, no tty) may
+     * claim the slot. */
+    struct termios pre_raw_termios;
+    if (!platform_set_raw_mode(g_state.in_fd, &pre_raw_termios)) {
         return false;
     }
-    g_state.raw_mode_active = 1;
+    if (!g_state.raw_mode_active) {
+        g_state.saved_termios = pre_raw_termios;
+        g_state.raw_mode_active = 1;
+    }
 
     /* Stdout stays in default (blocking) mode so partial writes can never
      * happen — the kernel just blocks the writer until the receiver drains.
