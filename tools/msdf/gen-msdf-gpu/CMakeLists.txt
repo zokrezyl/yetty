@@ -3,8 +3,9 @@
 # calls yetty_ymsdf_wgsl_config_generate(). Output CDB is byte-compatible
 # with yetty-ymsdf-gen (CPU/msdfgen) so cdb-diff can compare them.
 
-# main.c uses nanosleep + struct timespec (POSIX). The yetty_ymsdf_wgsl
-# library is portable; only this tool driver isn't. Skip on Windows.
+# main.c is portable C (async waits go through wgpuInstanceWaitAny, no
+# POSIX sleeps), but this tool target has never been brought up or
+# validated on Windows. Keep skipping it there until someone needs it.
 if(WIN32)
     return()
 endif()

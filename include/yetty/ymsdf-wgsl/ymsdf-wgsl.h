@@ -47,8 +47,9 @@ struct yetty_ymsdf_wgsl_config {
     float pixel_range;    /* default 4 px */
 
     /* WGPU resources to reuse. Both required. The generator submits to
-     * `device`'s queue and pumps `instance` (via wgpuInstanceProcessEvents)
-     * while waiting for completion + buffer mapping. */
+     * `device`'s queue and blocks in wgpuInstanceWaitAny on `instance`
+     * while waiting for completion + buffer mapping. `instance` must be
+     * created with the WGPUInstanceFeatureName_TimedWaitAny feature. */
     void *device;   /* WGPUDevice — opaque to keep webgpu.h out */
     void *instance; /* WGPUInstance */
 

@@ -109,7 +109,12 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
     }
     state->pipe = pipe_result.value;
 
+    /* TimedWaitAny is required by yplatform/webgpu/default.c and
+     * ymsdf-wgsl — GPU futures are waited with a non-zero timeout. */
+    WGPUInstanceFeatureName instance_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
     WGPUInstanceDescriptor instance_desc = {0};
+    instance_desc.requiredFeatureCount = 1;
+    instance_desc.requiredFeatures = instance_features;
     state->instance = wgpuCreateInstance(&instance_desc);
     if (!state->instance) {
         LOGE("android: WebGPU instance create failed");
