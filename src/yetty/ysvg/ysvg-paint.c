@@ -26,6 +26,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/yimage/yimage-gen.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ycore/types.h>
@@ -846,6 +847,95 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
  * <use>'s cascaded style as the inherited context and its x/y as an extra
  * translation. The <use>'s own transform is already folded into ps->ctm by
  * walk() before we get here. */
+/* <image href="..."> — a raster embedded in the scene. ysvg has no
+ * network or codec access, so the pixels come from the embedder's
+ * resolver (browser: href resolved against the document base, fetched
+ * through the loader, decoded there). The placement rect maps through
+ * the CTM like <rect>; rotation/skew degrade to the axis-aligned frame
+ * (composite records carry an axis-aligned bounds box). */
+static struct yetty_ycore_void_result emit_image(struct ysvg_paint_state *ps,
+                                                 const struct yetty_ysvg_node *n)
+{
+    if (!ps->ctx->image_resolver.resolve) {
+        ydebug("ysvg: <image> skipped — no resolver supplied by the embedder");
+        return YETTY_OK_VOID();
+    }
+    float x = attr_float(n, YETTY_YSVG_ATTR_X, 0.0f);
+    float y = attr_float(n, YETTY_YSVG_ATTR_Y, 0.0f);
+    float w = attr_float(n, YETTY_YSVG_ATTR_WIDTH, 0.0f);
+    float h = attr_float(n, YETTY_YSVG_ATTR_HEIGHT, 0.0f);
+    if (w <= 0.0f || h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    const struct yetty_ysvg_attr *href = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_HREF);
+    if (!href) {
+        href = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_XLINK_HREF);
+    }
+    if (!href || href->value_len == 0) {
+        return YETTY_OK_VOID();
+    }
+    char href_buf[2048];
+    if (href->value_len >= sizeof(href_buf)) {
+        ywarn("ysvg: <image> href longer than %zu bytes — skipped", sizeof(href_buf) - 1);
+        return YETTY_OK_VOID();
+    }
+    memcpy(href_buf, href->value, href->value_len);
+    href_buf[href->value_len] = '\0';
+
+    const uint32_t *pixels = NULL;
+    int pixel_w = 0, pixel_h = 0;
+    if (!ps->ctx->image_resolver.resolve(ps->ctx->image_resolver.userdata, href_buf, &pixels,
+                                         &pixel_w, &pixel_h) ||
+        !pixels || pixel_w <= 0 || pixel_h <= 0) {
+        ydebug("ysvg: <image> resolver could not serve '%.120s'", href_buf);
+        return YETTY_OK_VOID();
+    }
+
+    /* Map the placement rect corners through the CTM; the composite
+	 * bounds are the axis-aligned frame of the result. */
+    float corner_x0, corner_y0, corner_x1, corner_y1;
+    yetty_ysvg_xform_point(&ps->ctm, x, y, &corner_x0, &corner_y0);
+    yetty_ysvg_xform_point(&ps->ctm, x + w, y + h, &corner_x1, &corner_y1);
+    float bounds_x = corner_x0 < corner_x1 ? corner_x0 : corner_x1;
+    float bounds_y = corner_y0 < corner_y1 ? corner_y0 : corner_y1;
+    float bounds_w = fabsf(corner_x1 - corner_x0);
+    float bounds_h = fabsf(corner_y1 - corner_y0);
+    if (bounds_w <= 0.0f || bounds_h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+
+    struct yetty_yimage_uniforms uniforms = {
+        .bounds_x = bounds_x,
+        .bounds_y = bounds_y,
+        .bounds_w = bounds_w,
+        .bounds_h = bounds_h,
+        .image_w = (uint32_t)pixel_w,
+        .image_h = (uint32_t)pixel_h,
+    };
+    struct yetty_yimage_buffers buffers = {
+        .pixels = pixels,
+        .pixels_len = (size_t)pixel_w * (size_t)pixel_h,
+    };
+    size_t need = yetty_yimage_uniforms_serialized_size(&uniforms, &buffers);
+    uint8_t *record = malloc(need);
+    if (!record) {
+        return YETTY_ERR(yetty_ycore_void, "ysvg: <image> record oom");
+    }
+    struct yetty_ycore_size_result serialize_res =
+        yetty_yimage_uniforms_serialize(&uniforms, &buffers, record, need);
+    if (YETTY_IS_ERR(serialize_res)) {
+        free(record);
+        return YETTY_ERR(yetty_ycore_void, "ysvg: <image> serialize", serialize_res);
+    }
+    struct yetty_ydraw_id_result add_res =
+        yetty_ydraw_drawable_list_add_prim(ps->ctx->buf, record, need);
+    free(record);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_res, "ysvg: <image> add_prim");
+    /* Scene bounds stay viewBox-driven (ctx init) — same as every other
+	 * element; an out-of-viewBox image overflows like any shape would. */
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result emit_use(struct ysvg_paint_state *ps,
                                                const struct yetty_ysvg_node *n)
 {
@@ -967,9 +1057,13 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
         /* <use> paints the referenced subtree itself; it has no renderable
          * children of its own, so return rather than recurse. */
         return emit_use(&ps, n);
-    case YETTY_YSVG_ELEM_IMAGE:
-        ywarn("ysvg: <image> element not rendered (embedded raster unsupported)");
+    case YETTY_YSVG_ELEM_IMAGE: {
+        struct yetty_ycore_void_result image_res = emit_image(&ps, n);
+        if (YETTY_IS_ERR(image_res)) {
+            return image_res;
+        }
         return YETTY_OK_VOID();
+    }
     case YETTY_YSVG_ELEM_DEFS:
     case YETTY_YSVG_ELEM_TITLE:
     case YETTY_YSVG_ELEM_DESC:

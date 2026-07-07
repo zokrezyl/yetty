@@ -247,7 +247,9 @@ struct yetty_ysvg_render_result yetty_ysvg_render(const char *content, size_t co
                                        .scene_min_y = 0.0f,
                                        .scene_max_x = scene_w,
                                        .scene_max_y = scene_h,
-                                       .user_to_pixel_scale = scale};
+                                       .user_to_pixel_scale = scale,
+                                       .image_resolver = config ? config->image_resolver
+                                                                : (struct yetty_ysvg_image_resolver){0}};
     /* root_ctm = scale(scale) · translate(-vx, -vy)  — maps (x, y) in
      * SVG user space to (scale·(x-vx), scale·(y-vy)) in pixels. */
     ctx.root_ctm.a = scale;

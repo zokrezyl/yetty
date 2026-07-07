@@ -761,7 +761,8 @@ struct yetty_ylexbor_svg_inline_entry {
 /* Render `bytes` through ysvg. On success fills scene + scene-space frame
  * and returns 1; returns 0 when ysvg cannot parse/render the source.
  * Defined in ybrowser-paint.c. */
-int yetty_ylexbor_svg_scene_render(const char *bytes, size_t len, float default_font_px,
+int yetty_ylexbor_svg_scene_render(struct yetty_ylexbor *r, const char *bytes, size_t len,
+                                   float default_font_px,
                                    struct yetty_ydraw_drawable_list **out_scene, float *out_min_x,
                                    float *out_min_y, float *out_w, float *out_h);
 

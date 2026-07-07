@@ -283,7 +283,34 @@ void yetty_ylexbor_svg_parse_preserve_aspect(const char *bytes, size_t len, floa
     }
 }
 
-int yetty_ylexbor_svg_scene_render(const char *bytes, size_t len, float default_font_px,
+/* ysvg <image> resolver: href resolved against the document base, bytes
+ * through the shared loader (cache + cancellation), pixels from the
+ * per-document image cache — borrowed, valid for the render call. */
+YETTY_EXTERNAL_CALLBACK
+static int svg_image_resolver(void *userdata, const char *href, const uint32_t **out_pixels,
+                              int *out_width, int *out_height)
+{
+    struct yetty_ylexbor *r = userdata;
+    if (!r || !href) {
+        return 0;
+    }
+    char *absolute = yetty_ylexbor_resolve_url(r, href);
+    if (!absolute) {
+        return 0;
+    }
+    struct yetty_ylexbor_img_cache_entry *cached = yetty_ylexbor_img_cache_get_or_load(r, absolute);
+    free(absolute);
+    if (!cached || cached->failed || !cached->pixels) {
+        return 0;
+    }
+    *out_pixels = cached->pixels;
+    *out_width = cached->w;
+    *out_height = cached->h;
+    return 1;
+}
+
+int yetty_ylexbor_svg_scene_render(struct yetty_ylexbor *r, const char *bytes, size_t len,
+                                   float default_font_px,
                                    struct yetty_ydraw_drawable_list **out_scene, float *out_min_x,
                                    float *out_min_y, float *out_w, float *out_h)
 {
@@ -295,6 +322,12 @@ int yetty_ylexbor_svg_scene_render(const char *bytes, size_t len, float default_
         .width_cells = 32,
         .height_cells = 8,
     };
+    if (r) {
+        /* <image href> content flows through the document's base URL,
+		 * loader and image cache. */
+        config.image_resolver.resolve = svg_image_resolver;
+        config.image_resolver.userdata = r;
+    }
     struct yetty_ysvg_render_result render_res = yetty_ysvg_render(bytes, len, NULL, 0, &config);
     if (YETTY_IS_ERR(render_res)) {
         yetty_ycore_error_destroy(render_res.error);
@@ -331,7 +364,8 @@ int yetty_ylexbor_svg_scene_render(const char *bytes, size_t len, float default_
  * return 1 — the caller then skips the raster decode. Returns 0 for
  * rasters. A source that IS SVG but fails to render marks the entry failed
  * (grey placeholder at paint) and still returns 1. */
-static int img_cache_entry_fill_svg(struct yetty_ylexbor_img_cache_entry *entry, const char *bytes,
+static int img_cache_entry_fill_svg(struct yetty_ylexbor *r,
+                                    struct yetty_ylexbor_img_cache_entry *entry, const char *bytes,
                                     size_t len)
 {
     if (!bytes || len == 0 || !bytes_look_like_svg((const uint8_t *)bytes, len)) {
@@ -339,7 +373,7 @@ static int img_cache_entry_fill_svg(struct yetty_ylexbor_img_cache_entry *entry,
     }
     yetty_ylexbor_svg_parse_preserve_aspect(bytes, len, &entry->svg_par_align_x,
                                             &entry->svg_par_align_y, &entry->svg_par_mode);
-    if (!yetty_ylexbor_svg_scene_render(bytes, len, 0.0f, &entry->svg_scene, &entry->svg_min_x,
+    if (!yetty_ylexbor_svg_scene_render(r, bytes, len, 0.0f, &entry->svg_scene, &entry->svg_min_x,
                                         &entry->svg_min_y, &entry->svg_w, &entry->svg_h)) {
         entry->failed = 1;
         return 1;
@@ -622,7 +656,7 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(struct
 
     /* Vector source? Render through ysvg and keep the drawable list —
 	 * paint merges it under the box transform, no rasterization. */
-    if (img_cache_entry_fill_svg(e, response.body, response.body_len)) {
+    if (img_cache_entry_fill_svg(r, e, response.body, response.body_len)) {
         ydebug("img SVG %s wh=%dx%d url=%s", e->failed ? "FAIL" : "OK", e->w, e->h, url);
         yetty_ybrowser_response_dispose(&response);
         return e;
@@ -738,7 +772,7 @@ int yetty_ylexbor_fetch_pending_images(struct yetty_ylexbor *r, int max_count)
                 e->failed = 1;
                 continue;
             }
-            if (img_cache_entry_fill_svg(e, response->body, response->body_len)) {
+            if (img_cache_entry_fill_svg(r, e, response->body, response->body_len)) {
                 yetty_ybrowser_response_dispose(response);
                 continue;
             }
@@ -862,7 +896,7 @@ static void img_job_done(void *ctx)
                 e->loading = 0;
                 if (job->svg_source) {
                     /* Loop thread — safe to run ysvg here. */
-                    (void)img_cache_entry_fill_svg(e, job->svg_source, job->svg_source_len);
+                    (void)img_cache_entry_fill_svg(r, e, job->svg_source, job->svg_source_len);
                 } else if (job->failed || job->pixels == NULL) {
                     e->failed = 1;
                 } else {
@@ -1249,7 +1283,8 @@ static struct yetty_ylexbor_svg_inline_entry *svg_inline_scene_get(struct yetty_
         }
         yetty_ylexbor_svg_parse_preserve_aspect(sink.data, sink.len, &entry->par_align_x,
                                                 &entry->par_align_y, &entry->par_mode);
-        (void)yetty_ylexbor_svg_scene_render(sink.data, sink.len, inherited_font_px, &entry->scene,
+        (void)yetty_ylexbor_svg_scene_render(r, sink.data, sink.len, inherited_font_px,
+                                             &entry->scene,
                                              &entry->min_x, &entry->min_y, &entry->w, &entry->h);
     }
     free(sink.data);
@@ -1374,7 +1409,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                             e->failed = 1;
                             continue;
                         }
-                        if (img_cache_entry_fill_svg(e, response->body, response->body_len)) {
+                        if (img_cache_entry_fill_svg(r, e, response->body, response->body_len)) {
                             yetty_ybrowser_response_dispose(response);
                             continue;
                         }

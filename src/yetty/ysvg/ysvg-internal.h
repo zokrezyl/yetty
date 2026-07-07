@@ -502,6 +502,8 @@ struct yetty_ysvg_paint_ctx {
      * leaving it to the receiver. */
     struct yetty_ysvg_xform root_ctm;
     float user_to_pixel_scale; /* uniform scale built into root_ctm */
+    /* Embedder-supplied <image> content resolver (see ysvg.h). */
+    struct yetty_ysvg_image_resolver image_resolver;
 };
 
 struct yetty_ycore_void_result yetty_ysvg_paint(const struct yetty_ysvg_doc *doc,
