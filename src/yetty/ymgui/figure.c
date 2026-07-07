@@ -60,11 +60,33 @@ struct YETTY_ANNOTATE("class@ymgui:figure") YETTY_ANNOTATE("parent@yfigure:figur
     /* Borrowed — shared shader/pipeline/sampler. */
     struct yetty_ymgui_pipeline *pipeline;
 
-    /* Decoded ImGui frame. Layout: yetty_ymgui_wire_frame header followed
-     * by cmd_list_count × (cmd_list_hdr + vtx + idx + cmds). Owned. */
+    /* Decoded ImGui frame, fully denormalized: every cmd_list slot is
+     * inlined (slots the wire delivered as REPEAT or CMD_DIFF were
+     * rehydrated from the previous frame at set_frame time). Layout:
+     * yetty_ymgui_wire_frame header followed by cmd_list_count ×
+     * (cmd_list_hdr + vtx + idx + cmds). Owned. */
     uint8_t *frame_bytes;
     size_t frame_size;
     int has_frame;
+
+    /* Per-slot byte offsets / sizes within frame_bytes. Lets the next
+     * frame fill in REPEAT slots from this frame without re-walking.
+     * slot_offsets[i] points at the slot's cmd_list_hdr; slot_sizes[i]
+     * covers cmd_list_hdr + vtx + idx (padded) + cmds. Owned. */
+    size_t *slot_offsets;
+    size_t *slot_sizes;
+    size_t slot_count;
+
+    /* Stage 2 (CMD_DIFF) per-slot bookkeeping. The three parallel arrays
+     * slot_cmd_hashes[i], slot_cmd_vtx_counts[i], slot_cmd_orig_indices[i]
+     * each have slot_cmd_counts[i] entries — one per non-empty cmd in
+     * draw order. orig_indices points back into the slot's wire_cmd
+     * array so a CMD_DIFF reference can locate the source cmd's
+     * (vtx_offset, idx_offset, clip, tex, elem_count) directly. Owned. */
+    uint64_t **slot_cmd_hashes;
+    uint32_t **slot_cmd_vtx_counts;
+    uint32_t **slot_cmd_orig_indices;
+    uint32_t *slot_cmd_counts;
 
     /* Font atlas (R8). Owned. */
     int atlas_ready;
@@ -196,6 +218,688 @@ static void rebuild_bind_group(struct yetty_ymgui_figure *f)
     bgd.entryCount = 3;
     bgd.entries = e;
     f->bind_group = wgpuDeviceCreateBindGroup(f->pipeline->device, &bgd);
+}
+
+/*===========================================================================
+ * Wire dedup rehydration (REPEAT / CMD_DIFF)
+ *
+ * The frontend may compress a frame's cmd_list slots against the previous
+ * frame (see <yetty/ymgui/wire.h>): REPEAT ships only the 16-byte slot
+ * header, CMD_DIFF ships a draw-order hash list plus only the cmds whose
+ * content changed. set_frame flattens all slot modes back to one canonical
+ * layout (cmd_list_hdr + vtx + idx + cmds, flags=0) so frame_measure /
+ * frame_upload / render never need to know the wire was compressed.
+ *=========================================================================*/
+
+/* FNV-1a 64-bit update. Identical to the frontend's fnv64_update so
+ * Stage-2 hashes computed on both sides agree on the same content. */
+static inline uint64_t ymgui_fnv64_update(uint64_t hash, const void *data, size_t len)
+{
+    const uint8_t *bytes = (const uint8_t *)data;
+    for (size_t i = 0; i < len; i++) {
+        hash ^= bytes[i];
+        hash *= 0x100000001b3ULL;
+    }
+    return hash;
+}
+
+/* Mirror of the frontend's cmd_vtx_count — returns the number of
+ * vertices a single cmd actually references inside its cmd_list's vtx
+ * buffer, i.e. max(idx_slice) + 1. The cmd's vtx slice is then
+ * [vtx_offset, vtx_offset + vtx_count). idx32 must match the frame's
+ * IDX32 flag. */
+static uint32_t ymgui_cmd_vtx_count(const uint8_t *idx_slice, uint32_t elem_count, int idx32)
+{
+    if (elem_count == 0) {
+        return 0;
+    }
+    uint32_t max_idx = 0;
+    if (idx32) {
+        const uint32_t *indices = (const uint32_t *)idx_slice;
+        for (uint32_t i = 0; i < elem_count; i++) {
+            if (indices[i] > max_idx) {
+                max_idx = indices[i];
+            }
+        }
+    } else {
+        const uint16_t *indices = (const uint16_t *)idx_slice;
+        for (uint32_t i = 0; i < elem_count; i++) {
+            if ((uint32_t)indices[i] > max_idx) {
+                max_idx = (uint32_t)indices[i];
+            }
+        }
+    }
+    return max_idx + 1u;
+}
+
+/* Mirror of the frontend's hash_cmd. Same field order, same salts.
+ * Operates on raw wire bytes — vtx_slice points at the start of the
+ * cmd's vertex slice within the cmd_list's vtx buffer (already at
+ * vtx_offset), idx_slice at the start of the cmd's index slice (already
+ * at idx_offset). idx32 picks 2-byte vs 4-byte index size. */
+static uint64_t ymgui_hash_cmd(const struct yetty_ymgui_wire_cmd *wire_cmd,
+                               const uint8_t *vtx_slice, uint32_t vtx_count,
+                               const uint8_t *idx_slice, int idx32)
+{
+    uint64_t hash = 0xcbf29ce484222325ULL;
+    float clip[4] = {wire_cmd->clip_min_x, wire_cmd->clip_min_y, wire_cmd->clip_max_x,
+                     wire_cmd->clip_max_y};
+    uint32_t tex_id = wire_cmd->tex_id;
+    uint32_t elem_count = wire_cmd->elem_count;
+    uint32_t idx_size = idx32 ? 4u : 2u;
+    hash = ymgui_fnv64_update(hash, clip, sizeof(clip));
+    hash = ymgui_fnv64_update(hash, &tex_id, sizeof(tex_id));
+    hash = ymgui_fnv64_update(hash, &elem_count, sizeof(elem_count));
+    hash = ymgui_fnv64_update(hash, &vtx_count, sizeof(vtx_count));
+    hash = ymgui_fnv64_update(hash, &idx_size, sizeof(idx_size));
+    if (vtx_count) {
+        hash = ymgui_fnv64_update(hash, vtx_slice, (size_t)vtx_count * 20u);
+    }
+    if (elem_count) {
+        hash = ymgui_fnv64_update(hash, idx_slice, (size_t)elem_count * idx_size);
+    }
+    return hash;
+}
+
+/* Per-slot Stage-2 index. One entry per non-empty cmd in the slot, in
+ * original draw order. `cmd_indices` points into the slot's wire_cmd
+ * array so the reconstruction path can pull (clip, tex, elem_count,
+ * vtx_offset, idx_offset) directly. Empty cmds are skipped here AND on
+ * the frontend, so the indices line up across both sides. */
+struct ymgui_slot_index {
+    uint64_t *hashes;
+    uint32_t *vtx_counts;
+    uint32_t *cmd_indices;
+    uint32_t count;
+};
+
+/* Compute the per-slot index for a freshly-stored slot. Used both for
+ * SLOT_FULL receives (we just memcpy'd the wire body, now we also build
+ * the per-cmd index so the next frame can reference us) and for
+ * CMD_DIFF-reconstructed slots. Returns 0 on OOM. */
+static int ymgui_index_slot_cmds(const uint8_t *slot_bytes, int idx32, struct ymgui_slot_index *out)
+{
+    const struct yetty_ymgui_wire_cmd_list *clh =
+        (const struct yetty_ymgui_wire_cmd_list *)slot_bytes;
+    size_t idx_bpe = idx32 ? 4u : 2u;
+    size_t vbytes = (size_t)clh->vtx_count * 20u;
+    size_t ibytes = (size_t)clh->idx_count * idx_bpe;
+    if (ibytes & 3u) {
+        ibytes += 4u - (ibytes & 3u);
+    }
+    const uint8_t *vtx_base = slot_bytes + sizeof(*clh);
+    const uint8_t *idx_base = vtx_base + vbytes;
+    const struct yetty_ymgui_wire_cmd *cmds =
+        (const struct yetty_ymgui_wire_cmd *)(idx_base + ibytes);
+
+    uint64_t *hashes = NULL;
+    uint32_t *vtx_counts = NULL;
+    uint32_t *cmd_indices = NULL;
+    if (clh->cmd_count) {
+        hashes = malloc((size_t)clh->cmd_count * sizeof(uint64_t));
+        vtx_counts = malloc((size_t)clh->cmd_count * sizeof(uint32_t));
+        cmd_indices = malloc((size_t)clh->cmd_count * sizeof(uint32_t));
+        if (!hashes || !vtx_counts || !cmd_indices) {
+            free(hashes);
+            free(vtx_counts);
+            free(cmd_indices);
+            return 0;
+        }
+    }
+
+    uint32_t kept = 0;
+    for (uint32_t k = 0; k < clh->cmd_count; k++) {
+        const struct yetty_ymgui_wire_cmd *wire_cmd = &cmds[k];
+        if (wire_cmd->elem_count == 0) {
+            continue;
+        }
+        const uint8_t *idx_slice = idx_base + (size_t)wire_cmd->idx_offset * idx_bpe;
+        uint32_t vtx_count = ymgui_cmd_vtx_count(idx_slice, wire_cmd->elem_count, idx32);
+        const uint8_t *vtx_slice = vtx_base + (size_t)wire_cmd->vtx_offset * 20u;
+        hashes[kept] = ymgui_hash_cmd(wire_cmd, vtx_slice, vtx_count, idx_slice, idx32);
+        vtx_counts[kept] = vtx_count;
+        cmd_indices[kept] = k;
+        kept++;
+    }
+    out->hashes = hashes;
+    out->vtx_counts = vtx_counts;
+    out->cmd_indices = cmd_indices;
+    out->count = kept;
+    return 1;
+}
+
+/* Snapshot of one cmd's resolved content during CMD_DIFF reconstruction.
+ * Source bytes live elsewhere — these are non-owning pointers + counts
+ * used to compute slot size in pass 1 and to memcpy in pass 2. */
+struct ymgui_cmd_view {
+    struct yetty_ymgui_wire_cmd wire_cmd; /* clip / tex / elem_count (vtx_offset
+                                           * and idx_offset get reassigned when
+                                           * packing the rebuilt slot) */
+    uint32_t vtx_count;
+    const uint8_t *vtx_src;
+    const uint8_t *idx_src;
+};
+
+/* Slot resolution mode for the rehydration pass 1. */
+enum ymgui_slot_mode {
+    YMGUI_SLOT_FROM_WIRE = 0, /* SLOT_FULL: copy bytes from wire */
+    YMGUI_SLOT_FROM_PREV = 1, /* SLOT_REPEAT: copy bytes from prev frame */
+    YMGUI_SLOT_FROM_DIFF = 2, /* SLOT_CMD_DIFF: gather from inline+prev */
+};
+
+struct ymgui_slot_resolve {
+    enum ymgui_slot_mode mode;
+    /* WIRE / PREV: */
+    size_t src_off;
+    size_t size;
+    /* DIFF: array of resolved cmd views (owned). */
+    struct ymgui_cmd_view *cmd_views;
+    uint32_t cmd_view_count;
+};
+
+static void ymgui_free_slot_resolves(struct ymgui_slot_resolve *resolves, size_t count)
+{
+    if (!resolves) {
+        return;
+    }
+    for (size_t i = 0; i < count; i++) {
+        free(resolves[i].cmd_views);
+    }
+    free(resolves);
+}
+
+/* Resolve a CMD_DIFF body into a draw-order array of cmd_views, each
+ * pointing either into the wire (for inline entries) or into prev_slot
+ * bytes (for cached entries). On success returns 0 and *out_consumed is
+ * the # of wire bytes the body occupied (after the cmd_list_hdr). */
+static int ymgui_resolve_cmd_diff(const uint8_t *wire_body, size_t wire_remaining,
+                                  uint32_t expected_cmd_count, const uint8_t *prev_slot,
+                                  const uint64_t *prev_hashes, const uint32_t *prev_vtx_counts,
+                                  const uint32_t *prev_orig_indices, uint32_t prev_count, int idx32,
+                                  struct ymgui_cmd_view **out_views, uint32_t *out_count,
+                                  size_t *out_consumed)
+{
+    if (wire_remaining < 8) {
+        return -1;
+    }
+    uint32_t hash_count = *(const uint32_t *)(wire_body + 0);
+    uint32_t inline_count = *(const uint32_t *)(wire_body + 4);
+    if (hash_count != expected_cmd_count) {
+        return -1;
+    }
+    size_t off = 8;
+    if (off + (size_t)hash_count * 8u > wire_remaining) {
+        return -1;
+    }
+    const uint64_t *draw_hashes = (const uint64_t *)(wire_body + off);
+    off += (size_t)hash_count * 8u;
+
+    size_t idx_bpe = idx32 ? 4u : 2u;
+
+    /* Index inline entries by hash so the draw-order walk below can look
+     * them up. Linear search — frames have a few dozen cmds max. */
+    struct {
+        uint64_t hash;
+        const struct yetty_ymgui_wire_cmd_inline *hdr;
+        const struct yetty_ymgui_wire_cmd *cmd;
+        const uint8_t *vtx;
+        const uint8_t *idx;
+    } *inlines = NULL;
+    if (inline_count) {
+        inlines = calloc(inline_count, sizeof(*inlines));
+        if (!inlines) {
+            return -1;
+        }
+    }
+    for (uint32_t i = 0; i < inline_count; i++) {
+        if (off + sizeof(struct yetty_ymgui_wire_cmd_inline) > wire_remaining) {
+            free(inlines);
+            return -1;
+        }
+        const struct yetty_ymgui_wire_cmd_inline *inline_hdr =
+            (const struct yetty_ymgui_wire_cmd_inline *)(wire_body + off);
+        off += sizeof(*inline_hdr);
+        if (off + sizeof(struct yetty_ymgui_wire_cmd) > wire_remaining) {
+            free(inlines);
+            return -1;
+        }
+        const struct yetty_ymgui_wire_cmd *wire_cmd =
+            (const struct yetty_ymgui_wire_cmd *)(wire_body + off);
+        off += sizeof(*wire_cmd);
+        size_t vbytes = (size_t)inline_hdr->vtx_count * 20u;
+        size_t ibytes = (size_t)wire_cmd->elem_count * idx_bpe;
+        if (ibytes & 3u) {
+            ibytes += 4u - (ibytes & 3u);
+        }
+        if (off + vbytes + ibytes > wire_remaining) {
+            free(inlines);
+            return -1;
+        }
+        inlines[i].hash = inline_hdr->hash;
+        inlines[i].hdr = inline_hdr;
+        inlines[i].cmd = wire_cmd;
+        inlines[i].vtx = wire_body + off;
+        off += vbytes;
+        inlines[i].idx = wire_body + off;
+        off += ibytes;
+    }
+
+    /* Precompute prev slot's wire_cmd array + vtx/idx base pointers for
+     * looking up cached cmds by original index. */
+    const struct yetty_ymgui_wire_cmd *prev_cmds = NULL;
+    const uint8_t *prev_vtx_base = NULL;
+    const uint8_t *prev_idx_base = NULL;
+    if (prev_slot) {
+        const struct yetty_ymgui_wire_cmd_list *prev_clh =
+            (const struct yetty_ymgui_wire_cmd_list *)prev_slot;
+        size_t prev_vbytes = (size_t)prev_clh->vtx_count * 20u;
+        size_t prev_ibytes = (size_t)prev_clh->idx_count * idx_bpe;
+        if (prev_ibytes & 3u) {
+            prev_ibytes += 4u - (prev_ibytes & 3u);
+        }
+        prev_vtx_base = prev_slot + sizeof(*prev_clh);
+        prev_idx_base = prev_vtx_base + prev_vbytes;
+        prev_cmds = (const struct yetty_ymgui_wire_cmd *)(prev_idx_base + prev_ibytes);
+    }
+
+    struct ymgui_cmd_view *views = NULL;
+    if (hash_count) {
+        views = calloc(hash_count, sizeof(*views));
+        if (!views) {
+            free(inlines);
+            return -1;
+        }
+    }
+
+    for (uint32_t k = 0; k < hash_count; k++) {
+        uint64_t want = draw_hashes[k];
+        int found = 0;
+        /* Inline first — fresh content, no extraction needed. */
+        for (uint32_t i = 0; i < inline_count; i++) {
+            if (inlines[i].hash != want) {
+                continue;
+            }
+            views[k].wire_cmd = *inlines[i].cmd;
+            views[k].vtx_count = inlines[i].hdr->vtx_count;
+            views[k].vtx_src = inlines[i].vtx;
+            views[k].idx_src = inlines[i].idx;
+            found = 1;
+            break;
+        }
+        if (found) {
+            continue;
+        }
+        /* Fall back to prev slot — locate by hash in the prev index. */
+        for (uint32_t i = 0; i < prev_count; i++) {
+            if (prev_hashes[i] != want) {
+                continue;
+            }
+            uint32_t orig = prev_orig_indices[i];
+            views[k].wire_cmd = prev_cmds[orig];
+            views[k].vtx_count = prev_vtx_counts[i];
+            views[k].vtx_src = prev_vtx_base + (size_t)prev_cmds[orig].vtx_offset * 20u;
+            views[k].idx_src = prev_idx_base + (size_t)prev_cmds[orig].idx_offset * idx_bpe;
+            found = 1;
+            break;
+        }
+        if (!found) {
+            free(inlines);
+            free(views);
+            return -1;
+        }
+    }
+
+    free(inlines);
+    *out_views = views;
+    *out_count = hash_count;
+    *out_consumed = off;
+    return 0;
+}
+
+/* Compute the denormalized slot size given resolved cmd_views. Layout:
+ *   cl_hdr (16) + vtx (concat) + idx_padded (concat) + wire_cmds. */
+static size_t ymgui_diff_slot_size(const struct ymgui_cmd_view *views, uint32_t count, int idx32)
+{
+    size_t idx_bpe = idx32 ? 4u : 2u;
+    size_t vtx_total = 0;
+    size_t idx_total_elems = 0;
+    for (uint32_t k = 0; k < count; k++) {
+        vtx_total += (size_t)views[k].vtx_count;
+        idx_total_elems += (size_t)views[k].wire_cmd.elem_count;
+    }
+    size_t vbytes = vtx_total * 20u;
+    size_t ibytes = idx_total_elems * idx_bpe;
+    if (ibytes & 3u) {
+        ibytes += 4u - (ibytes & 3u);
+    }
+    return sizeof(struct yetty_ymgui_wire_cmd_list) + vbytes + ibytes +
+           (size_t)count * sizeof(struct yetty_ymgui_wire_cmd);
+}
+
+/* Write a denormalized slot from resolved cmd_views into `dst`. Returns
+ * # of bytes written. */
+static size_t ymgui_write_diff_slot(uint8_t *dst, const struct ymgui_cmd_view *views,
+                                    uint32_t count, int idx32)
+{
+    size_t idx_bpe = idx32 ? 4u : 2u;
+    size_t vtx_total = 0;
+    size_t idx_total_elems = 0;
+    for (uint32_t k = 0; k < count; k++) {
+        vtx_total += (size_t)views[k].vtx_count;
+        idx_total_elems += (size_t)views[k].wire_cmd.elem_count;
+    }
+    size_t vbytes = vtx_total * 20u;
+    size_t ibytes = idx_total_elems * idx_bpe;
+    size_t ipadded = ibytes;
+    if (ipadded & 3u) {
+        ipadded += 4u - (ipadded & 3u);
+    }
+
+    struct yetty_ymgui_wire_cmd_list *out_clh = (struct yetty_ymgui_wire_cmd_list *)dst;
+    out_clh->vtx_count = (uint32_t)vtx_total;
+    out_clh->idx_count = (uint32_t)idx_total_elems;
+    out_clh->cmd_count = count;
+    out_clh->flags = 0;
+
+    uint8_t *vtx_dst = dst + sizeof(*out_clh);
+    uint8_t *idx_dst = vtx_dst + vbytes;
+    struct yetty_ymgui_wire_cmd *cmd_dst = (struct yetty_ymgui_wire_cmd *)(idx_dst + ipadded);
+
+    uint32_t vtx_cursor = 0;
+    uint32_t idx_cursor = 0;
+    for (uint32_t k = 0; k < count; k++) {
+        const struct ymgui_cmd_view *view = &views[k];
+        if (view->vtx_count) {
+            memcpy(vtx_dst + (size_t)vtx_cursor * 20u, view->vtx_src,
+                   (size_t)view->vtx_count * 20u);
+        }
+        if (view->wire_cmd.elem_count) {
+            memcpy(idx_dst + (size_t)idx_cursor * idx_bpe, view->idx_src,
+                   (size_t)view->wire_cmd.elem_count * idx_bpe);
+        }
+        cmd_dst[k] = view->wire_cmd;
+        cmd_dst[k].vtx_offset = vtx_cursor;
+        cmd_dst[k].idx_offset = idx_cursor;
+        vtx_cursor += view->vtx_count;
+        idx_cursor += view->wire_cmd.elem_count;
+    }
+    if (ipadded > ibytes) {
+        memset(idx_dst + ibytes, 0, ipadded - ibytes);
+    }
+    return sizeof(*out_clh) + vbytes + ipadded + (size_t)count * sizeof(*cmd_dst);
+}
+
+/* Free the Stage-2 per-slot cmd index arrays (sized by slot_count). */
+static void figure_release_slot_caches(struct yetty_ymgui_figure *figure)
+{
+    if (figure->slot_cmd_hashes) {
+        for (size_t i = 0; i < figure->slot_count; i++) {
+            free(figure->slot_cmd_hashes[i]);
+        }
+        free(figure->slot_cmd_hashes);
+        figure->slot_cmd_hashes = NULL;
+    }
+    if (figure->slot_cmd_vtx_counts) {
+        for (size_t i = 0; i < figure->slot_count; i++) {
+            free(figure->slot_cmd_vtx_counts[i]);
+        }
+        free(figure->slot_cmd_vtx_counts);
+        figure->slot_cmd_vtx_counts = NULL;
+    }
+    if (figure->slot_cmd_orig_indices) {
+        for (size_t i = 0; i < figure->slot_count; i++) {
+            free(figure->slot_cmd_orig_indices[i]);
+        }
+        free(figure->slot_cmd_orig_indices);
+        figure->slot_cmd_orig_indices = NULL;
+    }
+    free(figure->slot_cmd_counts);
+    figure->slot_cmd_counts = NULL;
+}
+
+/* Drop the stored frame and every rehydration cache derived from it. */
+static void figure_drop_frame(struct yetty_ymgui_figure *figure)
+{
+    figure_release_slot_caches(figure);
+    free(figure->frame_bytes);
+    figure->frame_bytes = NULL;
+    figure->frame_size = 0;
+    figure->has_frame = 0;
+    free(figure->slot_offsets);
+    figure->slot_offsets = NULL;
+    free(figure->slot_sizes);
+    figure->slot_sizes = NULL;
+    figure->slot_count = 0;
+}
+
+/* Walk a validated wire frame, rehydrate REPEAT / CMD_DIFF slots from the
+ * figure's previous denormalized frame, and swap the result in as the new
+ * canonical frame_bytes (+ per-slot caches for the NEXT frame's dedup).
+ *
+ *   REPEAT   — copy the slot's bytes verbatim from the prev frame.
+ *   CMD_DIFF — gather cmds from inline entries (this wire) + previous
+ *              slot's cached cmds (matched by content hash), then pack
+ *              vtx | idx | cmds in draw order with fresh offsets.
+ *   FULL     — copy the slot's bytes verbatim from the wire.
+ *
+ * In all three cases the per-cmd hashes are (re)computed after composing
+ * the slot so the next frame's CMD_DIFF can reference us. */
+static struct yetty_ycore_void_result figure_apply_wire_frame(struct yetty_ymgui_figure *figure,
+                                                              const uint8_t *wire_bytes,
+                                                              size_t wire_size)
+{
+    const struct yetty_ymgui_wire_frame *fh = (const struct yetty_ymgui_wire_frame *)wire_bytes;
+    int idx32 = (fh->flags & YMGUI_FRAME_FLAG_IDX32) ? 1 : 0;
+    size_t idx_bpe = idx32 ? 4u : 2u;
+    size_t cl_count = fh->cmd_list_count;
+
+    /* Pass 1: classify each slot and (for CMD_DIFF) pre-resolve the
+     * cmd_view list so pass 2 can just memcpy. */
+    struct ymgui_slot_resolve *resolves = NULL;
+    if (cl_count) {
+        resolves = calloc(cl_count, sizeof(*resolves));
+        if (!resolves) {
+            return YETTY_ERR(yetty_ycore_void, "ymgui frame: oom (slot resolves)");
+        }
+    }
+
+    const uint8_t *wire_end = wire_bytes + wire_size;
+    size_t wire_off = sizeof(*fh);
+    size_t denorm_size = sizeof(*fh);
+
+    for (size_t i = 0; i < cl_count; i++) {
+        if (wire_bytes + wire_off + sizeof(struct yetty_ymgui_wire_cmd_list) > wire_end) {
+            ymgui_free_slot_resolves(resolves, cl_count);
+            return YETTY_ERR(yetty_ycore_void, "ymgui frame: truncated cmd_list_hdr");
+        }
+        const struct yetty_ymgui_wire_cmd_list *clh =
+            (const struct yetty_ymgui_wire_cmd_list *)(wire_bytes + wire_off);
+        wire_off += sizeof(*clh);
+
+        if (clh->flags & YMGUI_CMDLIST_FLAG_REPEAT) {
+            if (i >= figure->slot_count || !figure->frame_bytes) {
+                ymgui_free_slot_resolves(resolves, cl_count);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "ymgui frame: REPEAT slot has no cached predecessor");
+            }
+            resolves[i].mode = YMGUI_SLOT_FROM_PREV;
+            resolves[i].src_off = figure->slot_offsets[i];
+            resolves[i].size = figure->slot_sizes[i];
+        } else if (clh->flags & YMGUI_CMDLIST_FLAG_CMD_DIFF) {
+            const uint8_t *body = wire_bytes + wire_off;
+            size_t avail = (size_t)(wire_end - body);
+            const uint8_t *prev_slot = (i < figure->slot_count && figure->frame_bytes)
+                                           ? (figure->frame_bytes + figure->slot_offsets[i])
+                                           : NULL;
+            const uint64_t *prev_hashes = (figure->slot_cmd_hashes && i < figure->slot_count)
+                                              ? figure->slot_cmd_hashes[i]
+                                              : NULL;
+            const uint32_t *prev_vtx_counts =
+                (figure->slot_cmd_vtx_counts && i < figure->slot_count)
+                    ? figure->slot_cmd_vtx_counts[i]
+                    : NULL;
+            const uint32_t *prev_orig_indices =
+                (figure->slot_cmd_orig_indices && i < figure->slot_count)
+                    ? figure->slot_cmd_orig_indices[i]
+                    : NULL;
+            uint32_t prev_count = (figure->slot_cmd_counts && i < figure->slot_count)
+                                      ? figure->slot_cmd_counts[i]
+                                      : 0;
+            size_t consumed = 0;
+            if (ymgui_resolve_cmd_diff(body, avail, clh->cmd_count, prev_slot, prev_hashes,
+                                       prev_vtx_counts, prev_orig_indices, prev_count, idx32,
+                                       &resolves[i].cmd_views, &resolves[i].cmd_view_count,
+                                       &consumed) != 0) {
+                ymgui_free_slot_resolves(resolves, cl_count);
+                return YETTY_ERR(yetty_ycore_void, "ymgui frame: CMD_DIFF resolve failed");
+            }
+            wire_off += consumed;
+            resolves[i].mode = YMGUI_SLOT_FROM_DIFF;
+            resolves[i].size =
+                ymgui_diff_slot_size(resolves[i].cmd_views, resolves[i].cmd_view_count, idx32);
+        } else {
+            size_t vbytes = (size_t)clh->vtx_count * 20u;
+            size_t ibytes_padded = (size_t)clh->idx_count * idx_bpe;
+            if (ibytes_padded & 3u) {
+                ibytes_padded += 4u - (ibytes_padded & 3u);
+            }
+            size_t cmd_bytes = (size_t)clh->cmd_count * sizeof(struct yetty_ymgui_wire_cmd);
+            size_t body_size = vbytes + ibytes_padded + cmd_bytes;
+            if (wire_bytes + wire_off + body_size > wire_end) {
+                ymgui_free_slot_resolves(resolves, cl_count);
+                return YETTY_ERR(yetty_ycore_void, "ymgui frame: truncated slot body");
+            }
+            resolves[i].mode = YMGUI_SLOT_FROM_WIRE;
+            resolves[i].src_off = wire_off - sizeof(*clh); /* include cl_hdr */
+            resolves[i].size = sizeof(*clh) + body_size;
+            wire_off += body_size;
+        }
+        denorm_size += resolves[i].size;
+    }
+
+    /* Pass 2: allocate the denormalized buffer and write slots. The prev
+     * frame_bytes must stay readable until every FROM_PREV slot has been
+     * copied, so the swap happens at the very end. */
+    uint8_t *new_frame = malloc(denorm_size ? denorm_size : 1);
+    size_t *new_offsets = NULL;
+    size_t *new_sizes = NULL;
+    if (cl_count) {
+        new_offsets = malloc(cl_count * sizeof(*new_offsets));
+        new_sizes = malloc(cl_count * sizeof(*new_sizes));
+    }
+    if (!new_frame || (cl_count && (!new_offsets || !new_sizes))) {
+        free(new_frame);
+        free(new_offsets);
+        free(new_sizes);
+        ymgui_free_slot_resolves(resolves, cl_count);
+        return YETTY_ERR(yetty_ycore_void, "ymgui frame: oom (denormalized frame)");
+    }
+
+    memcpy(new_frame, fh, sizeof(*fh));
+    ((struct yetty_ymgui_wire_frame *)new_frame)->total_size = (uint32_t)denorm_size;
+
+    size_t out_off = sizeof(*fh);
+    for (size_t i = 0; i < cl_count; i++) {
+        new_offsets[i] = out_off;
+        new_sizes[i] = resolves[i].size;
+        if (resolves[i].mode == YMGUI_SLOT_FROM_PREV) {
+            memcpy(new_frame + out_off, figure->frame_bytes + resolves[i].src_off,
+                   resolves[i].size);
+        } else if (resolves[i].mode == YMGUI_SLOT_FROM_WIRE) {
+            memcpy(new_frame + out_off, wire_bytes + resolves[i].src_off, resolves[i].size);
+        } else { /* DIFF */
+            ymgui_write_diff_slot(new_frame + out_off, resolves[i].cmd_views,
+                                  resolves[i].cmd_view_count, idx32);
+        }
+        /* Always clear any wire flags in the denormalized cl_hdr. */
+        struct yetty_ymgui_wire_cmd_list *out_clh =
+            (struct yetty_ymgui_wire_cmd_list *)(new_frame + out_off);
+        out_clh->flags = 0;
+        out_off += resolves[i].size;
+    }
+
+    /* Build the per-slot Stage 2 index from the just-composed slots so
+     * the next frame's CMD_DIFF can look up against fresh arrays. */
+    uint64_t **new_cmd_hashes = NULL;
+    uint32_t **new_cmd_vtx_counts = NULL;
+    uint32_t **new_cmd_orig_indices = NULL;
+    uint32_t *new_cmd_counts = NULL;
+    if (cl_count) {
+        new_cmd_hashes = calloc(cl_count, sizeof(*new_cmd_hashes));
+        new_cmd_vtx_counts = calloc(cl_count, sizeof(*new_cmd_vtx_counts));
+        new_cmd_orig_indices = calloc(cl_count, sizeof(*new_cmd_orig_indices));
+        new_cmd_counts = calloc(cl_count, sizeof(*new_cmd_counts));
+        if (!new_cmd_hashes || !new_cmd_vtx_counts || !new_cmd_orig_indices || !new_cmd_counts) {
+            free(new_cmd_hashes);
+            free(new_cmd_vtx_counts);
+            free(new_cmd_orig_indices);
+            free(new_cmd_counts);
+            free(new_frame);
+            free(new_offsets);
+            free(new_sizes);
+            ymgui_free_slot_resolves(resolves, cl_count);
+            return YETTY_ERR(yetty_ycore_void, "ymgui frame: oom (slot index)");
+        }
+    }
+    for (size_t i = 0; i < cl_count; i++) {
+        struct ymgui_slot_index slot_index = {0};
+        if (!ymgui_index_slot_cmds(new_frame + new_offsets[i], idx32, &slot_index)) {
+            for (size_t j = 0; j < i; j++) {
+                free(new_cmd_hashes[j]);
+                free(new_cmd_vtx_counts[j]);
+                free(new_cmd_orig_indices[j]);
+            }
+            free(new_cmd_hashes);
+            free(new_cmd_vtx_counts);
+            free(new_cmd_orig_indices);
+            free(new_cmd_counts);
+            free(new_frame);
+            free(new_offsets);
+            free(new_sizes);
+            ymgui_free_slot_resolves(resolves, cl_count);
+            return YETTY_ERR(yetty_ycore_void, "ymgui frame: oom (cmd hash array)");
+        }
+        new_cmd_hashes[i] = slot_index.hashes;
+        new_cmd_vtx_counts[i] = slot_index.vtx_counts;
+        new_cmd_orig_indices[i] = slot_index.cmd_indices;
+        new_cmd_counts[i] = slot_index.count;
+    }
+
+    {
+        size_t full_slots = 0;
+        size_t repeat_slots = 0;
+        size_t diff_slots = 0;
+        for (size_t i = 0; i < cl_count; i++) {
+            if (resolves[i].mode == YMGUI_SLOT_FROM_PREV) {
+                repeat_slots++;
+            } else if (resolves[i].mode == YMGUI_SLOT_FROM_DIFF) {
+                diff_slots++;
+            } else {
+                full_slots++;
+            }
+        }
+        ydebug("ymgui frame: slots=%zu full=%zu repeat=%zu diff=%zu wire=%zu denorm=%zu", cl_count,
+               full_slots, repeat_slots, diff_slots, wire_size, denorm_size);
+    }
+
+    ymgui_free_slot_resolves(resolves, cl_count);
+
+    /* Swap in the new caches. */
+    figure_release_slot_caches(figure);
+    free(figure->frame_bytes);
+    free(figure->slot_offsets);
+    free(figure->slot_sizes);
+    figure->frame_bytes = new_frame;
+    figure->frame_size = denorm_size;
+    figure->slot_offsets = new_offsets;
+    figure->slot_sizes = new_sizes;
+    figure->slot_count = cl_count;
+    figure->slot_cmd_hashes = new_cmd_hashes;
+    figure->slot_cmd_vtx_counts = new_cmd_vtx_counts;
+    figure->slot_cmd_orig_indices = new_cmd_orig_indices;
+    figure->slot_cmd_counts = new_cmd_counts;
+    figure->has_frame = 1;
+    return YETTY_OK_VOID();
 }
 
 /* Per-cmd-list offsets inside the figure's packed vtx/idx buffers.
@@ -354,7 +1058,7 @@ static struct yetty_ycore_void_result ymgui_figure_destroy(struct yetty_yclass_o
     if (f->idx_buf) {
         wgpuBufferRelease(f->idx_buf);
     }
-    free(f->frame_bytes);
+    figure_drop_frame(f);
     /* Free the yclass allocation (header + every slice). */
     return yetty_yclass_object_free(obj);
 }
@@ -719,10 +1423,7 @@ static struct yetty_ycore_void_result ymgui_figure_process_input(
     case YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD:
         return stream_tex(obj, sm, /*tag_is_magic=*/0);
     case YETTY_YMGUI_FIGURE_SUB_CLEAR:
-        free(f->frame_bytes);
-        f->frame_bytes = NULL;
-        f->frame_size = 0;
-        f->has_frame = 0;
+        figure_drop_frame(f);
         {
             struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set");
@@ -784,10 +1485,7 @@ static struct yetty_ycore_void_result ymgui_figure_process_bytes(struct yetty_yc
         /* "Drop the visible frame" — represented by no-frame state. The
          * figure stays in the tree until the parent DELETE_CHILD removes
          * it; this just blanks its rect. */
-        free(f->frame_bytes);
-        f->frame_bytes = NULL;
-        f->frame_size = 0;
-        f->has_frame = 0;
+        figure_drop_frame(f);
         {
             struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set");
@@ -929,15 +1627,10 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_frame(struct yetty_yclass_
         return YETTY_ERR(yetty_ycore_void, "ymgui_figure_set_frame: total_size mismatch");
     }
 
-    uint8_t *copy = malloc(frame_size);
-    if (!copy) {
-        return YETTY_ERR(yetty_ycore_void, "ymgui_figure_set_frame: oom");
-    }
-    memcpy(copy, frame_bytes, frame_size);
-    free(f->frame_bytes);
-    f->frame_bytes = copy;
-    f->frame_size = frame_size;
-    f->has_frame = 1;
+    /* Rehydrate REPEAT / CMD_DIFF slots against the previous frame and
+     * store the denormalized result (full slots pass through verbatim). */
+    struct yetty_ycore_void_result apply_res = figure_apply_wire_frame(f, frame_bytes, frame_size);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "ymgui_figure_set_frame: rehydrate");
     {
         struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "drop: yetty_yfigure_figure_dirty_set");

@@ -179,6 +179,41 @@ static struct yetty_ycore_void_result connection_ship(struct yetty_ywire_connect
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yetty_ywire_connection_frame_envelope(
+    struct yetty_ywire_connection *connection, enum yetty_ywire_envelope_kind kind, int code,
+    int has_args, int compressed, const void *args, size_t args_len, const void *body,
+    size_t body_len)
+{
+    if (!connection) {
+        return YETTY_ERR(yetty_ycore_void, "ywire frame_envelope: NULL connection");
+    }
+    if (!connection->emit_sm) {
+        /* Encode-only SM: the scanner coro is spawned lazily on feed, so
+         * this never pays the inbound-side stack allocation. */
+        struct yetty_ywire_wire_statemachine_ptr_result sm_res =
+            yetty_ywire_wire_statemachine_create(NULL);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sm_res, "ywire frame_envelope: emit SM create");
+        connection->emit_sm = sm_res.value;
+    }
+    yetty_ycore_buffer_clear(&connection->emit_buf);
+    struct yetty_ycore_void_result frame_res = yetty_ywire_wire_statemachine_start_write(
+        connection->emit_sm, kind, code, has_args, compressed, args, args_len,
+        &connection->emit_buf);
+    if (YETTY_IS_OK(frame_res) && body && body_len > 0) {
+        frame_res = yetty_ywire_wire_statemachine_write(connection->emit_sm, body, body_len);
+    }
+    if (YETTY_IS_OK(frame_res)) {
+        frame_res = yetty_ywire_wire_statemachine_finish_write(connection->emit_sm);
+    }
+    if (YETTY_IS_ERR(frame_res)) {
+        /* The SM aborted the envelope and is reusable; drop the partial
+         * bytes so no caller can ship them. */
+        yetty_ycore_buffer_clear(&connection->emit_buf);
+        return YETTY_ERR(yetty_ycore_void, "ywire frame_envelope: encode", frame_res);
+    }
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ywire_connection_send_control(
     struct yetty_ywire_connection *connection, enum yetty_ywire_channel_msg msg,
     uint32_t channel_id, uint32_t window)
@@ -188,16 +223,12 @@ struct yetty_ycore_void_result yetty_ywire_connection_send_control(
     uint8_t header_bytes[YETTY_YWIRE_CHANNEL_WIRE_HEADER_LEN];
     wire_header_encode(&header, header_bytes);
 
-    struct yetty_ycore_buffer framed = {0};
-    struct yetty_ycore_void_result build =
-        yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YWIRE_CHANNEL, /*has_args=*/1,
-                         /*compressed=*/0, header_bytes, sizeof(header_bytes), NULL, 0, &framed);
-    if (YETTY_IS_ERR(build)) {
-        yetty_ycore_buffer_destroy(&framed);
-        return YETTY_ERR(yetty_ycore_void, "ywire_connection_send_control: emit", build);
-    }
-    struct yetty_ycore_void_result ship_res = connection_ship(connection, framed.data, framed.size);
-    yetty_ycore_buffer_destroy(&framed);
+    struct yetty_ycore_void_result build = yetty_ywire_connection_frame_envelope(
+        connection, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YWIRE_CHANNEL, /*has_args=*/1,
+        /*compressed=*/0, header_bytes, sizeof(header_bytes), NULL, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, build, "ywire_connection_send_control: frame");
+    struct yetty_ycore_void_result ship_res =
+        connection_ship(connection, connection->emit_buf.data, connection->emit_buf.size);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ship_res, "ywire_connection_send_control: ship");
     return YETTY_OK_VOID();
 }
@@ -391,26 +422,24 @@ static struct yetty_ycore_size_result emit_one(struct yetty_ywire_connection *co
     uint8_t header_bytes[YETTY_YWIRE_CHANNEL_WIRE_HEADER_LEN];
     wire_header_encode(&header, header_bytes);
 
-    struct yetty_ycore_buffer framed = {0};
-    struct yetty_ycore_void_result build =
-        yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YWIRE_CHANNEL, /*has_args=*/1,
-                         connection->compressed, header_bytes, sizeof(header_bytes),
-                         channel->outbuf.data + channel->outbuf_off, chunk, &framed);
-    if (YETTY_IS_ERR(build)) {
-        yetty_ycore_buffer_destroy(&framed);
-        return YETTY_ERR(yetty_ycore_size, "ywire emit_one: emit DATA", build);
-    }
+    struct yetty_ycore_void_result build = yetty_ywire_connection_frame_envelope(
+        connection, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YWIRE_CHANNEL, /*has_args=*/1,
+        connection->compressed, header_bytes, sizeof(header_bytes),
+        channel->outbuf.data + channel->outbuf_off, chunk);
+    YETTY_RETURN_IF_ERR(yetty_ycore_size, build, "ywire emit_one: frame DATA");
     struct yetty_ycore_void_result ship_res;
     if (connection->writer) {
         /* Attach mode: hand the whole chunk envelope to the host writer. */
-        ship_res = connection->writer(framed.data, framed.size, connection->writer_user);
+        ship_res = connection->writer(connection->emit_buf.data, connection->emit_buf.size,
+                                      connection->writer_user);
     } else {
-        /* Owned mode: queue only — pump_outbound drains the transport once
-         * per pump, after the fair round has been assembled. */
-        ship_res =
-            connection->reactor.ops->queue(connection->reactor.userdata, framed.data, framed.size);
+        /* Owned mode: queue only (the transport copies) — pump_outbound
+         * drains the transport once per pump, after the fair round has been
+         * assembled. */
+        ship_res = connection->reactor.ops->queue(connection->reactor.userdata,
+                                                  connection->emit_buf.data,
+                                                  connection->emit_buf.size);
     }
-    yetty_ycore_buffer_destroy(&framed);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, ship_res, "ywire emit_one: ship");
 
     channel->outbuf_off += chunk;
@@ -585,6 +614,20 @@ struct yetty_ycore_void_result yetty_ywire_connection_destroy(
             result = YETTY_ERR(yetty_ycore_void, "ywire_connection_destroy: sm", sm_res);
         }
     }
+    /* The outbound framer is connection-owned in both modes. */
+    if (connection->emit_sm) {
+        struct yetty_ycore_void_result emit_sm_res =
+            yetty_ywire_wire_statemachine_destroy(connection->emit_sm);
+        if (YETTY_IS_ERR(emit_sm_res)) {
+            if (YETTY_IS_ERR(result)) {
+                yetty_ycore_error_destroy(emit_sm_res.error);
+            } else {
+                result = YETTY_ERR(yetty_ycore_void, "ywire_connection_destroy: emit sm",
+                                   emit_sm_res);
+            }
+        }
+    }
+    yetty_ycore_buffer_destroy(&connection->emit_buf);
     for (size_t i = 0; i < YETTY_YWIRE_CHANNEL_MAX; i++) {
         yetty_ycore_buffer_destroy(&connection->channels[i].inbuf);
         yetty_ycore_buffer_destroy(&connection->channels[i].outbuf);

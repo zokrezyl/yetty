@@ -82,34 +82,43 @@ struct yetty_ycore_void_result yetty_ywire_channel_flush(struct yetty_ywire_chan
         return YETTY_OK_VOID();
     }
 
-    struct yetty_ycore_buffer framed = {0};
-    struct yetty_ycore_void_result build;
     if (channel->kind == YETTY_YWIRE_CHANNEL_KIND_RAW) {
         /* Verbatim control bytes (e.g. the DEC ?1500/?1501 card-mouse enable),
-         * tmux-wrapped so they survive a multiplexer. */
-        build = yetty_ywire_tmux_wrap((const char *)channel->outbuf.data, channel->outbuf.size,
-                                      &framed);
-    } else if (channel->wire_code >= 0) {
-        /* Envelope lane (rpc): one DCS/OSC envelope carrying the coalesced
-         * frame bytes. The host-side receiver's contract is one envelope = one
-         * rpc frame, so this lane is never chunked. */
-        build = yetty_ywire_emit(channel->wire_kind, channel->wire_code, channel->has_args,
-                                 channel->connection->compressed, NULL, 0, channel->outbuf.data,
-                                 channel->outbuf.size, &framed);
-    } else {
+         * tmux-wrapped so they survive a multiplexer. Rare — a transient
+         * buffer per flush is fine here. */
+        struct yetty_ycore_buffer framed = {0};
+        struct yetty_ycore_void_result build = yetty_ywire_tmux_wrap(
+            (const char *)channel->outbuf.data, channel->outbuf.size, &framed);
+        if (YETTY_IS_ERR(build)) {
+            yetty_ycore_buffer_destroy(&framed);
+            return YETTY_ERR(yetty_ycore_void, "ywire_channel_flush: frame", build);
+        }
+        struct yetty_ycore_void_result emit =
+            channel_emit(channel->connection, framed.data, framed.size);
+        yetty_ycore_buffer_destroy(&framed);
+        yetty_ycore_buffer_clear(&channel->outbuf);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, emit, "ywire_channel_flush: emit");
+        return YETTY_OK_VOID();
+    }
+    if (channel->wire_code < 0) {
         /* The input lane has no outbound framing — drop the coalesced bytes
          * rather than emit a malformed frame. */
         yetty_ycore_buffer_clear(&channel->outbuf);
         return YETTY_OK_VOID();
     }
-    if (YETTY_IS_ERR(build)) {
-        yetty_ycore_buffer_destroy(&framed);
-        return YETTY_ERR(yetty_ycore_void, "ywire_channel_flush: frame", build);
-    }
 
-    struct yetty_ycore_void_result emit =
-        channel_emit(channel->connection, framed.data, framed.size);
-    yetty_ycore_buffer_destroy(&framed);
+    /* Envelope lane (rpc): one DCS/OSC envelope carrying the coalesced frame
+     * bytes. The host-side receiver's contract is one envelope = one rpc
+     * frame, so this lane is never chunked. Framed through the connection's
+     * long-lived emit SM — this path runs at UI rate (every ygui framework
+     * flush), so it must not churn a transient SM per flush. */
+    struct yetty_ycore_void_result build = yetty_ywire_connection_frame_envelope(
+        channel->connection, channel->wire_kind, channel->wire_code, channel->has_args,
+        channel->connection->compressed, NULL, 0, channel->outbuf.data, channel->outbuf.size);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, build, "ywire_channel_flush: frame");
+
+    struct yetty_ycore_void_result emit = channel_emit(
+        channel->connection, channel->connection->emit_buf.data, channel->connection->emit_buf.size);
     yetty_ycore_buffer_clear(&channel->outbuf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emit, "ywire_channel_flush: emit");
     return YETTY_OK_VOID();
