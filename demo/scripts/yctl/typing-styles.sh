@@ -7,4 +7,4 @@
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$DIR/_common.sh"
-play_asset "$ROOT/demo/assets/yctl-scripts/typing-styles.yaml"
+play_asset "$ROOT/demo/assets/yctl/typing-styles.yaml"
