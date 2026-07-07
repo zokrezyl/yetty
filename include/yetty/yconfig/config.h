@@ -136,6 +136,18 @@ struct yetty_yconfig_config {
 #define YETTY_YCONFIG_KEY_WEBSOCKET_URL "websocket/url"
 #define YETTY_YCONFIG_KEY_NET_RELAY "net/relay"
 
+/* WebGPU device limits requested at device creation (ywebgpu/limits.c).
+ * Every requested value is clamped to the adapter-supported maximum at
+ * request time, so oversized values degrade gracefully instead of
+ * rejecting the device request. Values must be positive integers; a
+ * missing (or non-positive) key falls back to the built-in default.
+ * The two `-mb` keys are byte sizes expressed in MiB. */
+#define YETTY_YCONFIG_KEY_GPU_MAX_TEXTURE_DIMENSION_2D "gpu/max-texture-dimension-2d"
+#define YETTY_YCONFIG_KEY_GPU_MAX_STORAGE_BINDING_SIZE_MB "gpu/max-storage-binding-size-mb"
+#define YETTY_YCONFIG_KEY_GPU_MAX_BUFFER_SIZE_MB "gpu/max-buffer-size-mb"
+#define YETTY_YCONFIG_KEY_GPU_MAX_STORAGE_BUFFERS_PER_SHADER_STAGE                                 \
+    "gpu/max-storage-buffers-per-shader-stage"
+
 /* Logging / tracing (ytrace) control. `log/floor` is the severity floor
  * (trace|debug|info|warn|error|off); `log/all` is the master enable. The
  * `log/levels`, `log/files`, `log/functions` subtrees hold per-level /
