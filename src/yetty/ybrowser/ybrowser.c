@@ -1173,6 +1173,7 @@ char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)
      * coordinates (the layout origin), so the caller must subtract the
      * page's on-screen offset first. */
     lxb_dom_element_t *target = NULL;
+    const struct yetty_ylexbor_box *target_box = NULL;
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
         if (b->element == NULL) {
@@ -1180,10 +1181,45 @@ char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)
         }
         if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h) {
             target = b->element;
+            target_box = b;
         }
     }
     if (target == NULL) {
         return NULL;
+    }
+
+    /* Inline <svg>: map the click through the same scene→page transform
+	 * the paint merge used and test the SVG-internal <a> regions — the
+	 * innermost (last-registered) hit wins. Falls through to the DOM
+	 * ancestor walk (an enclosing HTML <a> around the whole svg) when no
+	 * internal anchor contains the point. */
+    if (target_box != NULL && target->node.local_name == LXB_TAG_SVG) {
+        struct yetty_ylexbor_svg_inline_entry *entry = yetty_ylexbor_svg_inline_find(r, target);
+        ydebug("link_at: svg box hit entry=%p links=%zu", (void *)entry,
+               entry ? entry->link_count : 0);
+        if (entry && entry->scene && entry->link_count > 0) {
+            float scale_x, scale_y, offset_x, offset_y;
+            yetty_ylexbor_svg_merge_transform(
+                entry->min_x, entry->min_y, entry->w, entry->h, entry->par_align_x,
+                entry->par_align_y, entry->par_mode, target_box->x, target_box->y, target_box->w,
+                target_box->h, &scale_x, &scale_y, &offset_x, &offset_y);
+            if (scale_x != 0.0f && scale_y != 0.0f) {
+                float scene_x = (x - offset_x) / scale_x;
+                float scene_y = (y - offset_y) / scale_y;
+                ydebug("link_at: svg scene point %.1f,%.1f", scene_x, scene_y);
+                for (size_t li = entry->link_count; li-- > 0;) {
+                    const struct yetty_ysvg_link_region *region = &entry->links[li];
+                    if (!region->href || region->href[0] == '#' ||
+                        region->min_x > region->max_x) {
+                        continue; /* fragment link or empty region */
+                    }
+                    if (scene_x >= region->min_x && scene_x <= region->max_x &&
+                        scene_y >= region->min_y && scene_y <= region->max_y) {
+                        return yetty_ylexbor_resolve_url(r, region->href);
+                    }
+                }
+            }
+        }
     }
     /* Walk up to the nearest element carrying an href (an <a>/<area>).
      * Return it resolved against the base URL; NULL for in-page fragments

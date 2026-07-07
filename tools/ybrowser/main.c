@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -147,6 +148,29 @@ char *ybrowser_slurp_file(struct yetty_ybrowser_loader *loader, const char *path
     }
     if (out_content_type) {
         *out_content_type = NULL;
+    }
+
+    /* file:// URLs come from link resolution against a local page's base
+	 * (every hub-page click). Strip the scheme and percent-decode so the
+	 * plain-path fopen below serves them — without this, navigating a
+	 * local link fails with "cannot open file:///..." even though the
+	 * file exists. */
+    char decoded_path[1024];
+    if (strncmp(path, "file://", 7) == 0) {
+        const char *raw = path + 7;
+        size_t out = 0;
+        for (size_t i = 0; raw[i] != '\0' && out + 1 < sizeof(decoded_path); i++) {
+            if (raw[i] == '%' && isxdigit((unsigned char)raw[i + 1]) &&
+                isxdigit((unsigned char)raw[i + 2])) {
+                char hex[3] = {raw[i + 1], raw[i + 2], 0};
+                decoded_path[out++] = (char)strtol(hex, NULL, 16);
+                i += 2;
+            } else {
+                decoded_path[out++] = raw[i];
+            }
+        }
+        decoded_path[out] = '\0';
+        path = decoded_path;
     }
 
     FILE *f = strcmp(path, "-") == 0 ? stdin : fopen(path, "rb");
