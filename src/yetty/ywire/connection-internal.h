@@ -17,11 +17,10 @@
 
 #include <yetty/yclass/transport-reactor.h>
 #include <yetty/ycore/types.h> /* struct yetty_ycore_buffer */
+#include <yetty/ywire/wire-statemachine.h>
 
 #include <stddef.h>
 #include <stdint.h>
-
-struct yetty_ywire_wire_statemachine;
 
 #define YETTY_YWIRE_CHANNEL_MAX 16
 
@@ -107,6 +106,15 @@ struct yetty_ywire_connection {
 
     struct yetty_ywire_wire_statemachine *sm; /* inbound demux */
 
+    /* Long-lived outbound framer + frame scratch. Every envelope this
+     * connection emits (rpc-lane flushes, DATA chunks, control frames) is
+     * built through this SM into emit_buf, so hot paths don't pay a
+     * transient SM + LZ4F context + buffer allocation per frame. Created
+     * lazily by yetty_ywire_connection_frame_envelope(); always owned by
+     * the connection (unlike `sm`, which is borrowed in attach mode). */
+    struct yetty_ywire_wire_statemachine *emit_sm;
+    struct yetty_ycore_buffer emit_buf;
+
     struct yetty_ywire_channel channels[YETTY_YWIRE_CHANNEL_MAX];
     struct yetty_ywire_channel *chan_rpc;
     struct yetty_ywire_channel *chan_input;
@@ -145,6 +153,17 @@ struct yetty_ycore_void_result yetty_ywire_connection_pump_outbound(
 struct yetty_ycore_void_result yetty_ywire_connection_send_control(
     struct yetty_ywire_connection *connection, enum yetty_ywire_channel_msg msg,
     uint32_t channel_id, uint32_t window);
+
+/* Frame one envelope through the connection's long-lived emit SM into
+ * connection->emit_buf (cleared on entry). On success the complete envelope
+ * is emit_buf[0 .. emit_buf.size); the view is only valid until the next
+ * frame call, so ship/queue (which copy) before framing again. On failure
+ * emit_buf is cleared — no partial envelope ever reaches the wire. Defined
+ * in connection.c; also used by channel.c for the rpc-lane flush. */
+struct yetty_ycore_void_result yetty_ywire_connection_frame_envelope(
+    struct yetty_ywire_connection *connection, enum yetty_ywire_envelope_kind kind, int code,
+    int has_args, int compressed, const void *args, size_t args_len, const void *body,
+    size_t body_len);
 
 /* Account `consumed` drained inbound bytes on a dynamic channel and send the
  * WINDOW_ADJUST grant back once half the initial window has been consumed. */

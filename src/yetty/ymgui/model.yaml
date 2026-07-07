@@ -27,6 +27,34 @@ classes:
         type: int
         get: false
         set: false
+      - name: slot_offsets
+        type: "size_t *"
+        get: false
+        set: false
+      - name: slot_sizes
+        type: "size_t *"
+        get: false
+        set: false
+      - name: slot_count
+        type: size_t
+        get: false
+        set: false
+      - name: slot_cmd_hashes
+        type: "uint64_t **"
+        get: false
+        set: false
+      - name: slot_cmd_vtx_counts
+        type: "uint32_t **"
+        get: false
+        set: false
+      - name: slot_cmd_orig_indices
+        type: "uint32_t **"
+        get: false
+        set: false
+      - name: slot_cmd_counts
+        type: "uint32_t *"
+        get: false
+        set: false
       - name: atlas_ready
         type: int
         get: false
@@ -223,6 +251,10 @@ local_types:
   yetty_ymgui_figure: src/yetty/ymgui/figure.c
   yetty_ymgui_figure_ptr_result: src/yetty/ymgui/figure.c
   yetty_ymgui_factory_args: src/yetty/ymgui/figure.c
+  ymgui_slot_index: src/yetty/ymgui/figure.c
+  ymgui_cmd_view: src/yetty/ymgui/figure.c
+  ymgui_slot_mode: src/yetty/ymgui/figure.c
+  ymgui_slot_resolve: src/yetty/ymgui/figure.c
   cl_offsets: src/yetty/ymgui/figure.c
 local_typedefs:
   __int128_t:

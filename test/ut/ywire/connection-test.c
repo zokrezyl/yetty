@@ -587,6 +587,87 @@ static void test_well_known_lanes_regression(struct ytest *test)
     link_down(&link);
 }
 
+/* Many sequential rpc-lane flushes on one connection (#30): every flush is
+ * framed through the connection's long-lived emit SM, so this loop proves
+ * the reused encoder produces clean frames envelope after envelope — on a
+ * compressed link (LZ4F context reuse) and interleaved with dynamic-channel
+ * DATA traffic that shares the same emit SM. */
+static void test_rpc_lane_sequential_flush_reuse(struct ytest *test)
+{
+    struct link link;
+    if (!link_up(test, &link, /*compressed=*/1)) {
+        return;
+    }
+    struct yetty_ywire_channel *a_rpc =
+        yetty_ywire_connection_channel(link.a.connection, YETTY_YWIRE_CHANNEL_RPC);
+    struct yetty_ywire_channel *b_rpc =
+        yetty_ywire_connection_channel(link.b.connection, YETTY_YWIRE_CHANNEL_RPC);
+    YTEST_REQUIRE(test, a_rpc && b_rpc);
+
+    enum { ROUNDS = 32, FRAME_MAX = 6000 };
+    uint8_t *frame = malloc(FRAME_MAX);
+    uint8_t *received = malloc(FRAME_MAX);
+    YTEST_REQUIRE(test, frame && received);
+
+    for (unsigned round = 0; round < ROUNDS; round++) {
+        size_t frame_len = 1 + (round * 191) % FRAME_MAX;
+        for (size_t i = 0; i < frame_len; i++) {
+            frame[i] = (uint8_t)(round * 31u + i * 7u);
+        }
+        struct yetty_ycore_size_result write_res =
+            yetty_ywire_channel_write(a_rpc, frame, frame_len);
+        YTEST_REQUIRE_OK(test, write_res);
+        struct yetty_ycore_void_result flush_res = yetty_ywire_channel_flush(a_rpc);
+        YTEST_REQUIRE_OK(test, flush_res);
+        pump(test, &link);
+
+        struct yetty_ycore_size_result read_res =
+            yetty_ywire_channel_read(b_rpc, received, FRAME_MAX);
+        YTEST_REQUIRE_OK(test, read_res);
+        YTEST_CHECK_EQ_SIZE(test, read_res.value, frame_len);
+        YTEST_CHECK_MEM_EQ(test, received, frame, frame_len);
+    }
+
+    /* Interleave: a dynamic channel's DATA frames ride the SAME emit SM as
+     * the rpc lane. Alternate the two for a few rounds. */
+    struct accept_capture accept = {0};
+    struct yetty_ycore_void_result cb_res =
+        yetty_ywire_connection_set_accept_cb(link.b.connection, on_accept, &accept);
+    YTEST_REQUIRE_OK(test, cb_res);
+    struct yetty_ywire_channel_ptr_result open_res =
+        yetty_ywire_connection_open_channel(link.a.connection, 0);
+    YTEST_REQUIRE_OK(test, open_res);
+    struct yetty_ywire_channel *a_dynamic = open_res.value;
+    pump(test, &link);
+    YTEST_REQUIRE(test, accept.channel != NULL);
+
+    for (unsigned round = 0; round < 8; round++) {
+        size_t frame_len = 100 + round * 517;
+        for (size_t i = 0; i < frame_len; i++) {
+            frame[i] = (uint8_t)(round * 13u + i * 3u);
+        }
+        struct yetty_ywire_channel *sender = (round % 2 == 0) ? a_rpc : a_dynamic;
+        struct yetty_ywire_channel *reader =
+            (round % 2 == 0) ? b_rpc : accept.channel;
+        struct yetty_ycore_size_result write_res =
+            yetty_ywire_channel_write(sender, frame, frame_len);
+        YTEST_REQUIRE_OK(test, write_res);
+        struct yetty_ycore_void_result flush_res = yetty_ywire_channel_flush(sender);
+        YTEST_REQUIRE_OK(test, flush_res);
+        pump(test, &link);
+
+        struct yetty_ycore_size_result read_res =
+            yetty_ywire_channel_read(reader, received, FRAME_MAX);
+        YTEST_REQUIRE_OK(test, read_res);
+        YTEST_CHECK_EQ_SIZE(test, read_res.value, frame_len);
+        YTEST_CHECK_MEM_EQ(test, received, frame, frame_len);
+    }
+
+    free(frame);
+    free(received);
+    link_down(&link);
+}
+
 int main(void)
 {
     struct ytest test = ytest_begin("ywire_connection");
@@ -598,5 +679,6 @@ int main(void)
     YTEST_RUN(&test, test_chunking_and_fair_interleaving);
     YTEST_RUN(&test, test_slot_exhaustion);
     YTEST_RUN(&test, test_well_known_lanes_regression);
+    YTEST_RUN(&test, test_rpc_lane_sequential_flush_reuse);
     return ytest_end(&test);
 }

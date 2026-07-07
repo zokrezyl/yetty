@@ -284,6 +284,8 @@ local_types:
   tab: tools/ybrowser/browser-ui.c
   app: tools/ybrowser/browser-ui.c
   nav_job: tools/ybrowser/browser-ui.c
+  client_pipe_completion: tools/ybrowser/browser-ui.c
+  client_pipe_loop: tools/ybrowser/browser-ui.c
   yetty_ybrowser_app: tools/ybrowser/browser-ui.c
   yetty_ybrowser_app_ptr_result: tools/ybrowser/browser-ui.c
 local_typedefs:

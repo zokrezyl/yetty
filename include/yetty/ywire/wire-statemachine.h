@@ -343,15 +343,26 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_write(
     struct yetty_ywire_wire_statemachine *sm, const void *src, size_t len);
 
 /* Flush LZ4F (if active) + the b64 tail, then append the envelope
- * terminator (ESC \\). out_buf now holds a complete envelope. */
+ * terminator (ESC \\). out_buf now holds a complete envelope. On success
+ * the LZ4F context and scratch stay allocated on the SM for the next
+ * envelope; on failure the in-flight envelope is aborted (encoder state
+ * reset, context dropped) and the SM is immediately reusable — the caller
+ * must discard whatever partial bytes landed in out_buf. The same abort
+ * semantics apply to a failed start_write/write. */
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_finish_write(
     struct yetty_ywire_wire_statemachine *sm);
 
 /*===========================================================================
  * One-shot helpers — no SM required, no streaming state retained
  *
- * Internally spin a transient SM, do the work, tear it down. Use the
- * streaming API above when emitting many envelopes back-to-back.
+ * NOT for hot paths. Each call allocates and destroys a transient SM —
+ * plus an LZ4F compression context and scratch when `compressed` — so an
+ * emitter that runs per frame / per flush (UI rate or faster) churns the
+ * allocator on every envelope. Cold paths (a CLI emitting once per file,
+ * a handshake frame) are the intended users. High-rate emitters must hold
+ * a long-lived SM (or yetty_yface) and use the streaming
+ * start_write/write/finish_write API above, which keeps the LZ4F context
+ * and scratch alive across envelopes.
  *=========================================================================*/
 
 /* Append a complete envelope to `out_buf`. `has_args` picks the shape:

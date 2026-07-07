@@ -147,7 +147,13 @@ struct yetty_ycore_void_result yetty_yface_write(struct yetty_yface *y, const vo
     if (!y->write_active) {
         return YETTY_ERR(yetty_ycore_void, "yface: write outside frame");
     }
-    return yetty_ywire_wire_statemachine_write(y->sm, src, len);
+    struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_write(y->sm, src, len);
+    if (YETTY_IS_ERR(r)) {
+        /* The SM aborted the envelope and reset its encoder — mirror that
+         * here so the yface can start a fresh write. */
+        y->write_active = 0;
+    }
+    return r;
 }
 
 struct yetty_ycore_void_result yetty_yface_finish_write(struct yetty_yface *y)

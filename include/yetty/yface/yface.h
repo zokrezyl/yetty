@@ -187,10 +187,15 @@ struct yetty_ycore_void_result yetty_yface_finish_read(struct yetty_yface *yface
 
 /*-----------------------------------------------------------------------------
  * One-shot helpers for callers that emit / consume a single OSC at a time
- * (ygui, ycat, ymarkdown, yrich, …). They internally spin up a transient
- * yface, do the encode/decode, tear it down. For high-rate emitters that
- * stream many OSCs back-to-back (the ymgui RenderDrawData path) keep a
- * long-lived yetty_yface around instead — saves the LZ4 context alloc.
+ * (ycat once per file, ythorvg once per invocation, …). They internally
+ * spin up a transient codec, do the encode/decode, tear it down — an
+ * allocation + LZ4F-context churn per call.
+ *
+ * NOT for hot paths: an emitter that runs per frame / per render / per
+ * flush must keep a long-lived yetty_yface and use the streaming
+ * start_write/write/finish_write API above (the ymgui RenderDrawData
+ * path is the reference example) — it reuses the LZ4F context and
+ * scratch across envelopes.
  *---------------------------------------------------------------------------*/
 
 /* Encode and append the full DCS sequence

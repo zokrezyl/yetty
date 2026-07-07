@@ -372,6 +372,16 @@ int main(int argc, char **argv)
 
     g_rng_state = seed ? seed : (uint64_t)time(NULL);
 
+    /* One yface for the whole run — loop mode emits at frame rate, so the
+     * LZ4F context and scratch buffers must be reused across envelopes, not
+     * re-created per iteration (the one-shot emit helpers do the latter). */
+    struct yetty_yface_ptr_result yface_res = yetty_yface_create();
+    if (YETTY_IS_ERR(yface_res)) {
+        fprintf(stderr, "yface_create: %s\n", yface_res.error.msg);
+        return 1;
+    }
+    struct yetty_yface *yface = yface_res.value;
+
     do {
         size_t raw_bytes;
 
@@ -407,13 +417,27 @@ int main(int argc, char **argv)
             .raw_size = raw_bytes,
             .reserved = {0, 0},
         };
-        struct yetty_ycore_void_result rr =
-            yetty_yface_emit_to_fd(fileno(stdout), YETTY_DCS_YDRAW_BIN,
-                                   /*compressed=*/1, &meta, sizeof(meta), g_buffer, raw_bytes);
-        if (YETTY_IS_ERR(rr)) {
-            fprintf(stderr, "yface_emit: %s\n", rr.error.msg);
+        struct yetty_ycore_void_result emit_res =
+            yetty_yface_start_write(yface, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YDRAW_BIN,
+                                    /*compressed=*/1, &meta, sizeof(meta));
+        if (YETTY_IS_OK(emit_res)) {
+            emit_res = yetty_yface_write(yface, g_buffer, raw_bytes);
+        }
+        if (YETTY_IS_OK(emit_res)) {
+            emit_res = yetty_yface_finish_write(yface);
+        }
+        if (YETTY_IS_ERR(emit_res)) {
+            fprintf(stderr, "yface_emit: %s\n", emit_res.error.msg);
+            yetty_yface_destroy(yface);
             return 1;
         }
+        struct yetty_ycore_buffer *envelope_buf = yetty_yface_out_buf(yface);
+        if (fwrite(envelope_buf->data, 1, envelope_buf->size, stdout) != envelope_buf->size) {
+            fprintf(stderr, "yface_emit: short write to stdout\n");
+            yetty_yface_destroy(yface);
+            return 1;
+        }
+        yetty_ycore_buffer_clear(envelope_buf);
         fflush(stdout);
 
         if (loop_count != 1) {
@@ -431,5 +455,6 @@ int main(int argc, char **argv)
         }
     } while (loop_count != 1);
 
+    yetty_yface_destroy(yface);
     return 0;
 }

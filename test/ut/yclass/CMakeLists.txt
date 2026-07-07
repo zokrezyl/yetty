@@ -29,3 +29,14 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract
     TIMEOUT 30)
+
+# DCS-over-PTY transport (#30): sequential flush reuse of the shared wire SM
+# (compressed and not), duplex encode/decode interleaving on one SM, empty
+# flush no-op. The test plays the host over two pipes.
+yetty_add_c_test(
+    NAME    yclass_transport_dcs
+    SOURCES transport-dcs-test.c
+    LIBS    yetty_yclass yetty_ywire yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract wire
+    TIMEOUT 30)

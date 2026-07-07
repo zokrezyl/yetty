@@ -29,6 +29,10 @@
  * keeps a host-less invocation from hanging forever instead of failing. */
 #define DCS_RECV_TIMEOUT_MS 5000
 
+/* How long the flush waits for the write fd to drain when a large envelope
+ * overruns the PTY buffer (see the EAGAIN branch in dcs_flush_outbuf). */
+#define DCS_SEND_TIMEOUT_MS 5000
+
 struct dcs_transport {
     struct yetty_yclass_transport base;
     int read_fd;
@@ -39,10 +43,15 @@ struct dcs_transport {
     /* Outbound: yrpc send() calls accumulate here; flushed as one
      * envelope on the next recv(). */
     struct yetty_ycore_buffer outbuf;
+    /* Reusable envelope scratch for the flush — cleared per flush, so a
+     * long-lived session doesn't allocate a frame buffer per envelope. */
+    struct yetty_ycore_buffer emit_buf;
 
     /* Inbound: wire_statemachine driven from `read_fd`; the buffered
      * handler appends decoded envelope bodies to `inbuf` and recv()
-     * hands bytes out from `inbuf_off`. */
+     * hands bytes out from `inbuf_off`. The SM doubles as the outbound
+     * framer (encoder state is disjoint from the scanner state), keeping
+     * one LZ4F context + scratch alive across the session. */
     struct yetty_ywire_wire_statemachine *sm;
     struct yetty_ycore_buffer inbuf;
     size_t inbuf_off;
@@ -75,11 +84,56 @@ static struct yetty_ycore_void_result dcs_flush_outbuf(struct dcs_transport *t)
     if (t->outbuf.size == 0) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result r = yetty_ywire_emit_to_fd(
-        t->write_fd, YETTY_YWIRE_ENVELOPE_DCS, t->dcs_code,
-        /*has_args=*/0, t->compressed, NULL, 0, t->outbuf.data, t->outbuf.size);
+    /* Frame through the transport's long-lived SM into the reusable
+     * emit_buf — steady-state figure calls flush at UI rate, so this path
+     * must not spin up a transient SM (and LZ4F context) per envelope. */
+    yetty_ycore_buffer_clear(&t->emit_buf);
+    struct yetty_ycore_void_result frame_res = yetty_ywire_wire_statemachine_start_write(
+        t->sm, YETTY_YWIRE_ENVELOPE_DCS, t->dcs_code, /*has_args=*/0, t->compressed, NULL, 0,
+        &t->emit_buf);
+    if (YETTY_IS_OK(frame_res)) {
+        frame_res = yetty_ywire_wire_statemachine_write(t->sm, t->outbuf.data, t->outbuf.size);
+    }
+    if (YETTY_IS_OK(frame_res)) {
+        frame_res = yetty_ywire_wire_statemachine_finish_write(t->sm);
+    }
     yetty_ycore_buffer_clear(&t->outbuf);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "dcs_flush_outbuf: emit_to_fd");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, frame_res, "dcs_flush_outbuf: frame");
+
+    size_t off = 0;
+    while (off < t->emit_buf.size) {
+        ptrdiff_t written = write(t->write_fd, t->emit_buf.data + off, t->emit_buf.size - off);
+        if (written < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+#ifndef _WIN32
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                /* The write fd is often O_NONBLOCK behind the caller's back:
+                 * raw-mode setup flips the flag on stdin, and stdin/stdout
+                 * usually share one open file description of the tty. A
+                 * large envelope (a full ImGui frame is ~30 KB of base64)
+                 * overruns the PTY buffer mid-write; bailing here would
+                 * leave HALF an envelope in the stream — the peer's scanner
+                 * then swallows the truncated tail plus the next envelopes
+                 * as garbage text. Wait for the fd to drain and finish the
+                 * envelope. */
+                struct pollfd poll_fd = {.fd = t->write_fd, .events = POLLOUT};
+                int poll_result = poll(&poll_fd, 1, DCS_SEND_TIMEOUT_MS);
+                if (poll_result < 0 && errno != EINTR) {
+                    return YETTY_ERR(yetty_ycore_void, "dcs_flush_outbuf: poll failed");
+                }
+                if (poll_result == 0) {
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "dcs_flush_outbuf: write stalled (peer not draining)");
+                }
+                continue;
+            }
+#endif
+            return YETTY_ERR(yetty_ycore_void, "dcs_flush_outbuf: write failed");
+        }
+        off += (size_t)written;
+    }
     return YETTY_OK_VOID();
 }
 
@@ -219,6 +273,7 @@ static struct yetty_ycore_void_result dcs_destroy(struct yetty_yclass_transport 
     }
     yetty_ycore_buffer_destroy(&t->inbuf);
     yetty_ycore_buffer_destroy(&t->outbuf);
+    yetty_ycore_buffer_destroy(&t->emit_buf);
     /* fds are caller-owned. */
     free(t);
     return YETTY_OK_VOID();

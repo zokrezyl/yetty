@@ -65,6 +65,11 @@ struct ymgui_figure_state {
     uint32_t id;
     ImGuiContext *ctx;
     bool atlas_uploaded;
+    /* CREATE_CHILD reached the host. False when the create-emit failed
+     * (attach not up yet at CreateFigure time) — every content emit
+     * retries it first, since the host silently skips uploads addressed
+     * to a child id it never minted. */
+    bool child_created;
     /* Latest pixel size announced by the server (DisplaySize). 0 until
      * the first RESIZE confirms placement. */
     float w_pixels;
@@ -130,13 +135,9 @@ static struct ymgui_impl_state g_state = {
     {},
     1u,
     0u,
-    /* Server-side dedup cache (REPEAT / CMD_DIFF rehydration) hasn't been
-     * ported to the figure-tree path yet. Until it is, the frontend MUST
-     * emit SLOT_FULL every frame — otherwise the second frame's REPEAT
-     * slot reaches a server that has no prior bytes to copy from, the
-     * measure returns zero geometry, the figure render bails, and the
-     * pane background erases the previous frame's pixels. */
-    0u,
+    /* Wire dedup on by default — the server-side rehydration cache
+     * (REPEAT / CMD_DIFF) lives in the ymgui figure's set_frame path. */
+    YETTY_YMGUI_OPT_DEDUP_CMDLIST | YETTY_YMGUI_OPT_DEDUP_CMD,
     8.0f,
     16.0f,
 };
@@ -213,8 +214,7 @@ static bool ensure_attached(void)
 /* CREATE_CHILD with kind=YMGUI and no init payload, as a typed one-way RPC
  * call on the root container proxy. The host uses `rect` as the figure's
  * absolute target rect. */
-static bool emit_admin_create_child_ymgui(uint32_t child_id,
-                                          float x0, float y0, float x1, float y1)
+static bool emit_admin_create_child_ymgui(uint32_t child_id, float x0, float y0, float x1, float y1)
 {
     if (!g_state.container && !ensure_attached()) {
         return false;
@@ -236,8 +236,7 @@ static bool emit_admin_create_child_ymgui(uint32_t child_id,
 }
 
 /* SET_CHILD_RECT — update an existing figure's rect. */
-static bool emit_admin_set_child_rect(uint32_t child_id,
-                                      float x0, float y0, float x1, float y1)
+static bool emit_admin_set_child_rect(uint32_t child_id, float x0, float y0, float x1, float y1)
 {
     if (!g_state.container && !ensure_attached()) {
         return false;
@@ -258,8 +257,7 @@ static bool emit_admin_delete_child(uint32_t child_id)
     if (!g_state.container && !ensure_attached()) {
         return false;
     }
-    struct yetty_ycore_void_result result =
-        yetty_yfigure_delete_child(g_state.container, child_id);
+    struct yetty_ycore_void_result result = yetty_yfigure_delete_child(g_state.container, child_id);
     if (YETTY_IS_ERR(result)) {
         discard_error(result);
         return false;
@@ -271,11 +269,13 @@ static bool emit_admin_delete_child(uint32_t child_id)
  * ws_ypixel (full pane pixel area) AND ws_col / ws_row (cell counts);
  * we prefer the pixel area when non-zero. Returns false if the ioctl
  * fails — out_fd not a tty, headless test, … */
-static bool query_pane_winsize(uint32_t *cols, uint32_t *rows,
-                               uint32_t *pixel_w, uint32_t *pixel_h)
+static bool query_pane_winsize(uint32_t *cols, uint32_t *rows, uint32_t *pixel_w, uint32_t *pixel_h)
 {
 #ifdef _WIN32
-    (void)cols; (void)rows; (void)pixel_w; (void)pixel_h;
+    (void)cols;
+    (void)rows;
+    (void)pixel_w;
+    (void)pixel_h;
     return false;
 #else
     struct winsize ws = {};
@@ -300,24 +300,21 @@ static bool query_pane_winsize(uint32_t *cols, uint32_t *rows,
  * to the right/bottom edge" — resolved against TIOCGWINSZ: pixel area
  * first (yetty sets ws_xpixel/ws_ypixel after the terminal grid is
  * laid out), cells × default cell size as fallback. */
-static void figure_tree_rect_for_figure(const ymgui_figure_state *c,
-                                      float *x0, float *y0,
-                                      float *x1, float *y1)
+static void figure_tree_rect_for_figure(const ymgui_figure_state *c, float *x0, float *y0,
+                                        float *x1, float *y1)
 {
     *x0 = (float)c->col * g_state.cell_w_px;
     *y0 = (float)c->row * g_state.cell_h_px;
 
     uint32_t pane_cols = 0, pane_rows = 0;
     uint32_t pane_px_w = 0, pane_px_h = 0;
-    bool have_pane = (c->w_cells == 0 || c->h_cells == 0)
-                     && query_pane_winsize(&pane_cols, &pane_rows,
-                                           &pane_px_w, &pane_px_h);
+    bool have_pane = (c->w_cells == 0 || c->h_cells == 0) &&
+                     query_pane_winsize(&pane_cols, &pane_rows, &pane_px_w, &pane_px_h);
 
     float w_px, h_px;
     if (c->w_pixels > 0.0f) {
         w_px = c->w_pixels;
-    } else if (c->w_cells == 0 && have_pane && pane_px_w > 0
-               && pane_px_w > (uint32_t)(*x0)) {
+    } else if (c->w_cells == 0 && have_pane && pane_px_w > 0 && pane_px_w > (uint32_t)(*x0)) {
         w_px = (float)pane_px_w - *x0;
     } else if (c->w_cells == 0 && have_pane && pane_cols > (uint32_t)c->col) {
         w_px = (float)(pane_cols - (uint32_t)c->col) * g_state.cell_w_px;
@@ -327,8 +324,7 @@ static void figure_tree_rect_for_figure(const ymgui_figure_state *c,
 
     if (c->h_pixels > 0.0f) {
         h_px = c->h_pixels;
-    } else if (c->h_cells == 0 && have_pane && pane_px_h > 0
-               && pane_px_h > (uint32_t)(*y0)) {
+    } else if (c->h_cells == 0 && have_pane && pane_px_h > 0 && pane_px_h > (uint32_t)(*y0)) {
         h_px = (float)pane_px_h - *y0;
     } else if (c->h_cells == 0 && have_pane && pane_rows > (uint32_t)c->row) {
         h_px = (float)(pane_rows - (uint32_t)c->row) * g_state.cell_h_px;
@@ -338,6 +334,30 @@ static void figure_tree_rect_for_figure(const ymgui_figure_state *c,
 
     *x1 = *x0 + w_px;
     *y1 = *y0 + h_px;
+}
+
+/* CREATE_CHILD may fail transiently (the attach isn't up yet when the app
+ * calls CreateFigure at startup — common when the producer launches with
+ * the host terminal). Every content-emit path funnels through here to
+ * re-issue it, because the host silently skips atlas/frame uploads for a
+ * child id it never minted. On a late create the server-side figure is
+ * brand new — re-seed the atlas and drop the wire-dedup caches so the
+ * next frame ships in full. */
+static bool ensure_child_created(ymgui_figure_state *c)
+{
+    if (c->child_created) {
+        return true;
+    }
+    float x0, y0, x1, y1;
+    figure_tree_rect_for_figure(c, &x0, &y0, &x1, &y1);
+    if (!emit_admin_create_child_ymgui(c->id, x0, y0, x1, y1)) {
+        return false;
+    }
+    c->child_created = true;
+    c->atlas_uploaded = false;
+    c->prev_cl_hashes.clear();
+    c->prev_cmd_hashes.clear();
+    return true;
 }
 
 /*===========================================================================
@@ -393,6 +413,34 @@ bool yetty_ymgui_ImGui_ImplYetty_Init(void)
         }
     }
 
+#ifndef _WIN32
+    /* Drop the tty out of canonical/echo mode BEFORE the attach handshake.
+     * The host's replies (translate_class tables, GET_ROOT) arrive on this
+     * tty; in cooked mode the line discipline ECHOES those envelopes straight
+     * back into the host terminal as visible garbage text, holds them in the
+     * canonical line buffer (a base64 envelope has no newline) so the
+     * handshake read stalls, and ISIG turns any 0x03 payload byte into a
+     * SIGINT. The fd stays BLOCKING here — the handshake reads
+     * synchronously; PlatformInit() flips it to non-blocking afterwards. */
+    if (isatty(g_state.in_fd) && !g_state.raw_mode_active) {
+        if (tcgetattr(g_state.in_fd, &g_state.saved_termios) == 0) {
+            struct termios handshake = g_state.saved_termios;
+            handshake.c_iflag &=
+                ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+            handshake.c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN | ISIG);
+            handshake.c_cflag &= ~(CSIZE | PARENB);
+            handshake.c_cflag |= CS8;
+            handshake.c_cc[VMIN] = 1;
+            handshake.c_cc[VTIME] = 0;
+            if (tcsetattr(g_state.in_fd, TCSANOW, &handshake) == 0) {
+                /* saved_termios now holds the ORIGINAL cooked state;
+                 * PlatformInit must not overwrite it. */
+                g_state.raw_mode_active = 1;
+            }
+        }
+    }
+#endif
+
     /* Attach to the host's root container now, while in_fd is still in
      * blocking mode — the attach handshake (GET_ROOT) reads the host's
      * reply synchronously. PlatformInit() runs after Init() and switches
@@ -447,7 +495,7 @@ void yetty_ymgui_ImGui_ImplYetty_Clear(bool keep_visible)
  *=========================================================================*/
 
 uint32_t yetty_ymgui_ImGui_ImplYetty_CreateFigure(uint32_t figure_id, int col, int row,
-                                                uint32_t w_cells, uint32_t h_cells)
+                                                  uint32_t w_cells, uint32_t h_cells)
 {
     if (figure_id == YMGUI_FIGURE_ID_NONE) {
         figure_id = g_state.next_auto_figure_id++;
@@ -493,13 +541,13 @@ uint32_t yetty_ymgui_ImGui_ImplYetty_CreateFigure(uint32_t figure_id, int col, i
      * real" gate clears immediately. */
     float x0, y0, x1, y1;
     figure_tree_rect_for_figure(c, &x0, &y0, &x1, &y1);
-    emit_admin_create_child_ymgui(figure_id, x0, y0, x1, y1);
+    c->child_created = emit_admin_create_child_ymgui(figure_id, x0, y0, x1, y1);
     yetty_ymgui_ImGui_ImplYetty_OnFigureResize(figure_id, x1 - x0, y1 - y0);
     return figure_id;
 }
 
 void yetty_ymgui_ImGui_ImplYetty_MoveFigure(uint32_t figure_id, int col, int row, uint32_t w_cells,
-                                          uint32_t h_cells)
+                                            uint32_t h_cells)
 {
     auto *c = find_figure(figure_id);
     if (!c) {
@@ -515,7 +563,9 @@ void yetty_ymgui_ImGui_ImplYetty_MoveFigure(uint32_t figure_id, int col, int row
     c->h_pixels = 0.0f;
     float x0, y0, x1, y1;
     figure_tree_rect_for_figure(c, &x0, &y0, &x1, &y1);
-    emit_admin_set_child_rect(figure_id, x0, y0, x1, y1);
+    if (ensure_child_created(c)) {
+        emit_admin_set_child_rect(figure_id, x0, y0, x1, y1);
+    }
     yetty_ymgui_ImGui_ImplYetty_OnFigureResize(figure_id, x1 - x0, y1 - y0);
 }
 
@@ -613,7 +663,7 @@ void yetty_ymgui_ImGui_ImplYetty_BeginFigureFrame(uint32_t figure_id)
         return;
     }
     ImGui::SetCurrentContext(c->ctx);
-    if (!c->atlas_uploaded) {
+    if (ensure_child_created(c) && !c->atlas_uploaded) {
         upload_figure_atlas(c);
     }
 }
@@ -648,12 +698,10 @@ static uint64_t hash_cmd_list(const ImDrawList *cl)
     h = fnv64_update(h, &c, sizeof(c));
     h = fnv64_update(h, &isize, sizeof(isize));
     if (cl->VtxBuffer.Size) {
-        h = fnv64_update(h, cl->VtxBuffer.Data,
-                         (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert));
+        h = fnv64_update(h, cl->VtxBuffer.Data, (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert));
     }
     if (cl->IdxBuffer.Size) {
-        h = fnv64_update(h, cl->IdxBuffer.Data,
-                         (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx));
+        h = fnv64_update(h, cl->IdxBuffer.Data, (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx));
     }
     for (int k = 0; k < cl->CmdBuffer.Size; k++) {
         const ImDrawCmd *dc = &cl->CmdBuffer[k];
@@ -706,8 +754,7 @@ static uint64_t hash_cmd(const ImDrawCmd *dc, const ImDrawList *cl, uint32_t vtx
                          (size_t)vtx_count * sizeof(ImDrawVert));
     }
     if (ec && cl->IdxBuffer.Size) {
-        h = fnv64_update(h, cl->IdxBuffer.Data + dc->IdxOffset,
-                         (size_t)ec * sizeof(ImDrawIdx));
+        h = fnv64_update(h, cl->IdxBuffer.Data + dc->IdxOffset, (size_t)ec * sizeof(ImDrawIdx));
     }
     return h;
 }
@@ -763,6 +810,15 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
     if (!g_state.container && !ensure_attached()) {
         return;
     }
+    /* The host drops uploads for children it never minted — make sure the
+     * CREATE_CHILD (and, transitively, the atlas) actually went out before
+     * shipping frame bytes at it. */
+    if (!ensure_child_created(c)) {
+        return;
+    }
+    if (!c->atlas_uploaded && !upload_figure_atlas(c)) {
+        return;
+    }
     /* Static-size sanity — we memcpy ImDrawVert straight onto the wire. */
     if (sizeof(ImDrawVert) != sizeof(struct yetty_ymgui_wire_vertex)) {
         return;
@@ -785,8 +841,7 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
         uint64_t h = hash_cmd_list(cl);
         new_cl_hashes[(size_t)n] = h;
 
-        if (stage1 && (size_t)n < c->prev_cl_hashes.size() &&
-            c->prev_cl_hashes[(size_t)n] == h) {
+        if (stage1 && (size_t)n < c->prev_cl_hashes.size() && c->prev_cl_hashes[(size_t)n] == h) {
             p.mode = SLOT_REPEAT;
             continue;
         }
@@ -958,8 +1013,7 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
                 wc.elem_count = dc->ElemCount;
                 append(&wc, sizeof(wc));
                 if (vc) {
-                    append(cl->VtxBuffer.Data + dc->VtxOffset,
-                           (size_t)vc * sizeof(ImDrawVert));
+                    append(cl->VtxBuffer.Data + dc->VtxOffset, (size_t)vc * sizeof(ImDrawVert));
                 }
                 if (dc->ElemCount) {
                     size_t nbytes = (size_t)dc->ElemCount * sizeof(ImDrawIdx);
@@ -1087,10 +1141,19 @@ bool yetty_ymgui_ImGui_ImplYetty_PlatformInit(void)
 #ifdef _WIN32
     return false;
 #else
-    if (!platform_set_raw_mode(g_state.in_fd, &g_state.saved_termios)) {
+    /* Init() already dropped the tty to no-echo/non-canonical for the attach
+     * handshake and stashed the ORIGINAL cooked termios in saved_termios.
+     * Save into a scratch here so that original survives for the restore at
+     * PlatformShutdown; only a first-time save (headless Init, no tty) may
+     * claim the slot. */
+    struct termios pre_raw_termios;
+    if (!platform_set_raw_mode(g_state.in_fd, &pre_raw_termios)) {
         return false;
     }
-    g_state.raw_mode_active = 1;
+    if (!g_state.raw_mode_active) {
+        g_state.saved_termios = pre_raw_termios;
+        g_state.raw_mode_active = 1;
+    }
 
     /* Stdout stays in default (blocking) mode so partial writes can never
      * happen — the kernel just blocks the writer until the receiver drains.
@@ -1147,7 +1210,7 @@ struct context_scope {
 } // namespace
 
 void yetty_ymgui_ImGui_ImplYetty_OnFigureMousePos(uint32_t figure_id, double x, double y,
-                                                uint32_t buttons_held)
+                                                  uint32_t buttons_held)
 {
     (void)buttons_held;
     auto *c = find_figure(figure_id);
@@ -1159,7 +1222,7 @@ void yetty_ymgui_ImGui_ImplYetty_OnFigureMousePos(uint32_t figure_id, double x, 
 }
 
 void yetty_ymgui_ImGui_ImplYetty_OnFigureMouseButton(uint32_t figure_id, int button, int pressed,
-                                                   double x, double y)
+                                                     double x, double y)
 {
     auto *c = find_figure(figure_id);
     if (!c) {
@@ -1173,7 +1236,8 @@ void yetty_ymgui_ImGui_ImplYetty_OnFigureMouseButton(uint32_t figure_id, int but
     }
 }
 
-void yetty_ymgui_ImGui_ImplYetty_OnFigureMouseWheel(uint32_t figure_id, double dy, double x, double y)
+void yetty_ymgui_ImGui_ImplYetty_OnFigureMouseWheel(uint32_t figure_id, double dy, double x,
+                                                    double y)
 {
     auto *c = find_figure(figure_id);
     if (!c) {
@@ -1387,7 +1451,7 @@ static ImGuiKey glfw_to_imgui_key(int key)
 }
 
 void yetty_ymgui_ImGui_ImplYetty_OnFigureKey(uint32_t figure_id, int kind, int key, int mods,
-                                           uint32_t codepoint)
+                                             uint32_t codepoint)
 {
     auto *c = find_figure(figure_id);
     if (!c) {
@@ -1429,8 +1493,7 @@ static void poll_on_osc(void *user, int osc_code, const uint8_t *args, size_t ar
         if (len < sizeof(struct yetty_client_input_mouse)) {
             return;
         }
-        const struct yetty_client_input_mouse *m =
-            (const struct yetty_client_input_mouse *)payload;
+        const struct yetty_client_input_mouse *m = (const struct yetty_client_input_mouse *)payload;
         if (m->magic != YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
             return;
         }
@@ -1439,8 +1502,8 @@ static void poll_on_osc(void *user, int osc_code, const uint8_t *args, size_t ar
             yetty_ymgui_ImGui_ImplYetty_OnFigureMousePos(m->figure_id, m->x, m->y, m->buttons_held);
             break;
         case YETTY_YMGUI_INPUT_MOUSE_BUTTON:
-            yetty_ymgui_ImGui_ImplYetty_OnFigureMouseButton(m->figure_id, m->button, m->pressed, m->x,
-                                                          m->y);
+            yetty_ymgui_ImGui_ImplYetty_OnFigureMouseButton(m->figure_id, m->button, m->pressed,
+                                                            m->x, m->y);
             break;
         case YETTY_YMGUI_INPUT_MOUSE_WHEEL:
             yetty_ymgui_ImGui_ImplYetty_OnFigureMouseWheel(m->figure_id, m->wheel_dy, m->x, m->y);
@@ -1464,8 +1527,7 @@ static void poll_on_osc(void *user, int osc_code, const uint8_t *args, size_t ar
         if (len < sizeof(struct yetty_client_input_focus)) {
             return;
         }
-        const struct yetty_client_input_focus *f =
-            (const struct yetty_client_input_focus *)payload;
+        const struct yetty_client_input_focus *f = (const struct yetty_client_input_focus *)payload;
         if (f->magic != YETTY_CLIENT_INPUT_FOCUS_MAGIC) {
             return;
         }
@@ -1476,13 +1538,12 @@ static void poll_on_osc(void *user, int osc_code, const uint8_t *args, size_t ar
         if (len < sizeof(struct yetty_client_input_key)) {
             return;
         }
-        const struct yetty_client_input_key *k =
-            (const struct yetty_client_input_key *)payload;
+        const struct yetty_client_input_key *k = (const struct yetty_client_input_key *)payload;
         if (k->magic != YETTY_CLIENT_INPUT_KEY_MAGIC) {
             return;
         }
         yetty_ymgui_ImGui_ImplYetty_OnFigureKey(k->figure_id, (int)k->kind, k->key, k->mods,
-                                              k->codepoint);
+                                                k->codepoint);
         break;
     }
     default:
@@ -1577,7 +1638,8 @@ static void loop_on_focus(void *u, uint32_t figure_id, int gained)
     (void)u;
     yetty_ymgui_ImGui_ImplYetty_OnFigureFocus(figure_id, gained);
 }
-static void loop_on_key(void *u, uint32_t figure_id, int kind, int key, int mods, uint32_t codepoint)
+static void loop_on_key(void *u, uint32_t figure_id, int kind, int key, int mods,
+                        uint32_t codepoint)
 {
     (void)u;
     yetty_ymgui_ImGui_ImplYetty_OnFigureKey(figure_id, kind, key, mods, codepoint);

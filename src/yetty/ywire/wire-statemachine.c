@@ -1913,28 +1913,29 @@ static struct yetty_ycore_void_result ensure_enc_scratch(struct yetty_ywire_wire
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ywire_wire_statemachine_start_write(
+/* Abandon the in-flight envelope after an encode failure so a long-lived SM
+ * stays usable for the next start_write. The LZ4F context may be mid-frame
+ * (undefined state after an error) — drop it; start_write lazily recreates
+ * it. Partial envelope bytes already appended to the caller's out_buf are
+ * the caller's to discard. */
+static void enc_abort(struct yetty_ywire_wire_statemachine *sm)
+{
+    if (sm->enc_ctx) {
+        LZ4F_freeCompressionContext(sm->enc_ctx);
+        sm->enc_ctx = NULL;
+    }
+    sm->enc_active = 0;
+    sm->enc_b64_carry_n = 0;
+    sm->enc_out_buf = NULL;
+}
+
+/* Body of start_write — every encoder-state mutation happens in here; the
+ * public wrapper aborts the envelope on any failure. */
+static struct yetty_ycore_void_result start_write_engage(
     struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
     int has_args, int compressed, const void *args, size_t args_len,
     struct yetty_ycore_buffer *out_buf)
 {
-    if (!sm) {
-        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
-    }
-    if (!out_buf) {
-        return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: out_buf is NULL");
-    }
-    if (sm->enc_active) {
-        return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: already active");
-    }
-    if (kind != YETTY_YWIRE_ENVELOPE_OSC && kind != YETTY_YWIRE_ENVELOPE_DCS) {
-        return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: unknown envelope kind");
-    }
-    if (!has_args && (args || args_len)) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "wire_sm: start_write: has_args=0 but args/args_len given");
-    }
-
     sm->enc_out_buf = out_buf;
     sm->enc_b64_carry_n = 0;
     sm->enc_compressed = compressed ? 1 : 0;
@@ -2010,21 +2011,39 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_start_write(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ywire_wire_statemachine_write(
-    struct yetty_ywire_wire_statemachine *sm, const void *src, size_t len)
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_start_write(
+    struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
+    int has_args, int compressed, const void *args, size_t args_len,
+    struct yetty_ycore_buffer *out_buf)
 {
     if (!sm) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
     }
-    if (!sm->enc_active) {
-        return YETTY_ERR(yetty_ycore_void, "wire_sm: write outside frame");
+    if (!out_buf) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: out_buf is NULL");
     }
-    if (len == 0) {
-        return YETTY_OK_VOID();
+    if (sm->enc_active) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: already active");
     }
-    if (!src) {
-        return YETTY_ERR(yetty_ycore_void, "wire_sm: write: src is NULL");
+    if (kind != YETTY_YWIRE_ENVELOPE_OSC && kind != YETTY_YWIRE_ENVELOPE_DCS) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: start_write: unknown envelope kind");
     }
+    if (!has_args && (args || args_len)) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "wire_sm: start_write: has_args=0 but args/args_len given");
+    }
+    struct yetty_ycore_void_result engage_res =
+        start_write_engage(sm, kind, code, has_args, compressed, args, args_len, out_buf);
+    if (YETTY_IS_ERR(engage_res)) {
+        enc_abort(sm);
+    }
+    return engage_res;
+}
+
+/* Body of write — the public wrapper aborts the envelope on any failure. */
+static struct yetty_ycore_void_result write_engage(struct yetty_ywire_wire_statemachine *sm,
+                                                   const void *src, size_t len)
+{
     if (!sm->enc_compressed) {
         return b64_encode_push(sm, (const uint8_t *)src, len);
     }
@@ -2044,6 +2063,28 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_write(
     return b64_encode_push(sm, sm->enc_scratch, out_n);
 }
 
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_write(
+    struct yetty_ywire_wire_statemachine *sm, const void *src, size_t len)
+{
+    if (!sm) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: sm is NULL");
+    }
+    if (!sm->enc_active) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: write outside frame");
+    }
+    if (len == 0) {
+        return YETTY_OK_VOID();
+    }
+    if (!src) {
+        return YETTY_ERR(yetty_ycore_void, "wire_sm: write: src is NULL");
+    }
+    struct yetty_ycore_void_result write_res = write_engage(sm, src, len);
+    if (YETTY_IS_ERR(write_res)) {
+        enc_abort(sm);
+    }
+    return write_res;
+}
+
 /* Append the envelope terminator. Plain: ESC \. Under tmux wrapping: the
  * envelope's own terminator ESC \ with its ESC doubled (ESC ESC \) followed
  * by the tmux wrapper's own terminator ESC \. */
@@ -2055,6 +2096,34 @@ static struct yetty_ycore_void_result write_terminator(struct yetty_ywire_wire_s
     return yetty_ycore_buffer_write(sm->enc_out_buf, "\033\\", 2);
 }
 
+/* Body of finish_write — the public wrapper aborts the envelope on any
+ * failure and closes it out on success. */
+static struct yetty_ycore_void_result finish_write_engage(struct yetty_ywire_wire_statemachine *sm)
+{
+    if (!sm->enc_compressed) {
+        struct yetty_ycore_void_result r = b64_encode_flush(sm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: finish_write: b64 flush");
+        return write_terminator(sm);
+    }
+    /* Compressed: flush LZ4F footer through b64, then ST. */
+    size_t bound = LZ4F_compressBound(0, NULL);
+    {
+        struct yetty_ycore_void_result r = ensure_enc_scratch(sm, bound);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: finish_write: scratch");
+    }
+    size_t end_n = LZ4F_compressEnd(sm->enc_ctx, sm->enc_scratch, sm->enc_scratch_cap, NULL);
+    if (LZ4F_isError(end_n)) {
+        return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(end_n));
+    }
+    if (end_n > 0) {
+        struct yetty_ycore_void_result r = b64_encode_push(sm, sm->enc_scratch, end_n);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: finish_write: lz4 footer");
+    }
+    struct yetty_ycore_void_result r = b64_encode_flush(sm);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "wire_sm: finish_write: b64 flush");
+    return write_terminator(sm);
+}
+
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_finish_write(
     struct yetty_ywire_wire_statemachine *sm)
 {
@@ -2064,53 +2133,18 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_finish_write(
     if (!sm->enc_active) {
         return YETTY_ERR(yetty_ycore_void, "wire_sm: finish_write: no active write");
     }
-    if (!sm->enc_compressed) {
-        struct yetty_ycore_void_result r = b64_encode_flush(sm);
-        if (YETTY_IS_ERR(r)) {
-            sm->enc_active = 0;
-            return r;
-        }
-        r = write_terminator(sm);
-        sm->enc_active = 0;
-        sm->enc_out_buf = NULL;
-        return r;
+    struct yetty_ycore_void_result finish_res = finish_write_engage(sm);
+    if (YETTY_IS_ERR(finish_res)) {
+        enc_abort(sm);
+        return finish_res;
     }
-    /* Compressed: flush LZ4F footer through b64, then ST. */
-    size_t bound = LZ4F_compressBound(0, NULL);
-    {
-        struct yetty_ycore_void_result r = ensure_enc_scratch(sm, bound);
-        if (YETTY_IS_ERR(r)) {
-            sm->enc_active = 0;
-            return r;
-        }
-    }
-    size_t end_n = LZ4F_compressEnd(sm->enc_ctx, sm->enc_scratch, sm->enc_scratch_cap, NULL);
-    if (LZ4F_isError(end_n)) {
-        sm->enc_active = 0;
-        return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(end_n));
-    }
-    struct yetty_ycore_void_result r = YETTY_OK_VOID();
-    if (end_n > 0) {
-        r = b64_encode_push(sm, sm->enc_scratch, end_n);
-        if (YETTY_IS_ERR(r)) {
-            goto out;
-        }
-    }
-    r = b64_encode_flush(sm);
-    if (YETTY_IS_ERR(r)) {
-        goto out;
-    }
-    r = write_terminator(sm);
-out:
-    /* Reset the LZ4F context so the next envelope on this SM starts
-     * clean; keep the context allocated for reuse. */
-    if (sm->enc_ctx) {
-        LZ4F_freeCompressionContext(sm->enc_ctx);
-        sm->enc_ctx = NULL;
-    }
+    /* LZ4F_compressEnd returned the context to its post-create state, so it
+     * is directly reusable — keep it (and the scratch) allocated so the next
+     * envelope on this SM skips the per-frame context churn. Destroy frees
+     * both. */
     sm->enc_active = 0;
     sm->enc_out_buf = NULL;
-    return r;
+    return finish_res;
 }
 
 /*===========================================================================
