@@ -1,0 +1,131 @@
+# Clip: a real PDF rendered inside terminal scrollback.
+#
+# ~20 second social/README clip. The hook is a single command — `ycat
+# report.pdf` — after which the PDF lives in the scrolling layer like any
+# other output: it zooms (Ctrl+scroll, vector-sharp) and scrolls with the
+# shell history. Ends on a typed end-card with the repo URL, then shuts
+# yetty down so a --record MP4 is finalized cleanly.
+#
+# WARNING: the last step is `shutdown` — it exits the yetty it runs
+# against. Only play this against a dedicated recording instance.
+#
+# Recording recipe (from the repo root):
+#
+#   mkdir -p tmp/clip-pdf
+#   cp demo/assets/ypdf/sample.pdf tmp/clip-pdf/report.pdf   # or a richer report
+#   ( cd tmp/clip-pdf && \
+#     PATH="$OLDPWD/build-desktop-ytrace-release/tools/ycat:$PATH" \
+#       "$OLDPWD/build-desktop-ytrace-release/yetty" \
+#         --record report-clip.mp4 --rpc-port=9999 -e bash \
+#         > yetty-record.log 2>&1 & )
+#   sleep 1
+#   uv run tools/yctl-client/yctl.py plays demo/assets/yctl/clips/pdf-in-scrollback.yaml
+#   # yetty exits at the end of the script; the MP4 is tmp/clip-pdf/report-clip.mp4
+#
+# The staging directory keeps the typed command a clean `ycat report.pdf`
+# (no build paths on screen) and keeps recording artifacts out of the tree.
+#
+# Geometry: assumes the default 1280x720 window. The Ctrl+scroll zoom
+# anchor is parked at the bottom-left (x=5, y=700) so content grows
+# up-and-right from the prompt area — same convention as readme-tour.yaml.
+# Bump y if recording a taller window.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 13        # human command-typing pace
+      speed-deviation: 0.25
+      avg-typo: 0.0        # keep runs deterministic; no simulated typos
+
+script:
+  # A couple of calm frames at the prompt, then the command starts —
+  # the first thing a viewer sees is the hook being typed.
+  - sleep: 0.4
+
+  - type: "ycat report.pdf"
+  - special-char: ENTER
+  - sleep: 2.8             # pdfio decodes; pages land inline in scrollback
+
+  # Zoom in: park the mouse at the anchor first — Ctrl+scroll zooms
+  # around the cursor position, so every tick must share the same (x, y).
+  - mouse-move: { x: 5, y: 700 }
+  - sleep: 0.2
+
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 1.4             # hold: vector-sharp glyphs at high zoom
+
+  # Zoom back out to the normal view.
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.6
+
+  # Narration line — faster than command-typing so it reads, not drags.
+  - type:
+      text: "# a real PDF, scrolling with your shell history"
+      avg-speed: 22
+  - special-char: ENTER
+  - sleep: 0.3
+
+  # Plain scroll (no Ctrl): the PDF moves with the text — it is
+  # scrollback content, not an overlay window.
+  - mouse-move: { x: 640, y: 360 }
+  - sleep: 0.2
+
+  - mouse-scroll: { x: 640, y: 360, dy: 1 }
+  - sleep: 0.12
+  - mouse-scroll: { x: 640, y: 360, dy: 1 }
+  - sleep: 0.12
+  - mouse-scroll: { x: 640, y: 360, dy: 1 }
+  - sleep: 0.12
+  - mouse-scroll: { x: 640, y: 360, dy: 1 }
+  - sleep: 0.12
+  - mouse-scroll: { x: 640, y: 360, dy: 1 }
+  - sleep: 1.0             # hold with the page mid-history
+
+  - mouse-scroll: { x: 640, y: 360, dy: -1 }
+  - sleep: 0.12
+  - mouse-scroll: { x: 640, y: 360, dy: -1 }
+  - sleep: 0.12
+  - mouse-scroll: { x: 640, y: 360, dy: -1 }
+  - sleep: 0.12
+  - mouse-scroll: { x: 640, y: 360, dy: -1 }
+  - sleep: 0.12
+  - mouse-scroll: { x: 640, y: 360, dy: -1 }
+  - sleep: 0.6
+
+  # End card: repo + site, held long enough to read, then clean exit so
+  # the MP4 finalizes.
+  - type:
+      text: "# github.com/zokrezyl/yetty | yetty.dev"
+      avg-speed: 22
+  - special-char: ENTER
+  - sleep: 2.5
+
+  - shutdown: ~
