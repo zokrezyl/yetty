@@ -1719,6 +1719,26 @@ struct yetty_ycore_void_result yetty_ygui_framework_clear(struct yetty_yclass_ob
 }
 
 YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_framework_forget_remote(struct yetty_yclass_object *obj)
+{
+    /* The host dropped every compositor figure this framework minted — a
+     * full-screen erase / reset on the pane (CSI 2J/3J or RIS: `clear`,
+     * Ctrl-L, a client-side screen clear) wipes the root container behind
+     * our back. Forget the remote bookkeeping so the next emit re-creates
+     * the chrome ygrid and every figure child from live widget state; the
+     * receiver reuses a still-existing id gracefully (reset_content fast
+     * path), so forgetting is safe even when nothing was actually wiped. */
+    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_framework_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res,
+                        "yetty_ygui_framework_forget_remote: from_obj");
+    struct yetty_ygui_framework *framework = framework_res.value;
+    framework->ygrid_created = 0;
+    framework->minted_figure_count = 0;
+    framework->dirty = 1;
+    return YETTY_OK_VOID();
+}
+
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_yclass_object *obj)
 {
     struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_framework_from(obj);

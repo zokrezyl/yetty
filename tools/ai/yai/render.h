@@ -22,6 +22,11 @@
 #define YAI_RENDERER_MENU_ROWS 5
 #define YAI_RENDERER_MENU_ROW_BYTES 192
 
+/* Top-of-screen overlay rows (text-mode message-search preview). Sized
+ * for a wide terminal row plus its styling escapes. */
+#define YAI_RENDERER_OVERLAY_MAX_ROWS 16
+#define YAI_RENDERER_OVERLAY_ROW_BYTES 512
+
 /* ANSI styling — yai owns its pane, so it styles its own output. */
 #define YAI_DIM "\033[2m"
 #define YAI_BOLD "\033[1m"
@@ -105,6 +110,17 @@ struct yai_renderer {
     char menu_rows[YAI_RENDERER_MENU_ROWS][YAI_RENDERER_MENU_ROW_BYTES];
     size_t menu_row_count;
 
+    /* Top-of-screen overlay — the text-mode message-search preview,
+     * painted over the top screen rows with absolute addressing (the
+     * cursor is saved/restored around it). Rows are prerendered by
+     * main.c like the menu rows. `overlay_rows_drawn` tracks what is on
+     * screen so a shrink erases its leftovers. The overlay is erased in
+     * zone_suspend and repainted in zone_draw — the zone's discipline —
+     * so history writes never scroll overlay pixels into scrollback. */
+    size_t overlay_row_count;
+    int overlay_rows_drawn;
+    char overlay_rows[YAI_RENDERER_OVERLAY_MAX_ROWS][YAI_RENDERER_OVERLAY_ROW_BYTES];
+
     /* Streamed-line assembly: deltas accumulate here; complete lines
      * are flushed into history, the remainder feeds the ticker row. */
     char *stream_buf;
@@ -165,6 +181,13 @@ struct yetty_ycore_void_result yai_renderer_activity_clear(struct yai_renderer *
 struct yetty_ycore_void_result yai_renderer_menu_set(struct yai_renderer *renderer,
                                                      const char *const *rows, size_t count);
 struct yetty_ycore_void_result yai_renderer_menu_clear(struct yai_renderer *renderer);
+
+/* Top-of-screen overlay (message-search preview). set paints the rows
+ * immediately (and erases a shrink's leftovers); clear erases the band.
+ * No-ops when stdout is not a tty. */
+struct yetty_ycore_void_result yai_renderer_overlay_set(struct yai_renderer *renderer,
+                                                        const char *const *rows, size_t count);
+struct yetty_ycore_void_result yai_renderer_overlay_clear(struct yai_renderer *renderer);
 
 /* Text-HUD status bar (non-yetty terminals). Set the left (activity),
  * centered (account quota), and right (model/usage) segments; redraws the

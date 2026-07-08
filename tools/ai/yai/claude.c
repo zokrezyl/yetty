@@ -664,7 +664,10 @@ static struct yetty_ycore_void_result claude_handle_event(struct yetty_yclass_ob
         const char *subtype = yyjson_get_str(yyjson_obj_get(event, "subtype"));
         if (subtype && strcmp(subtype, "init") == 0) {
             const char *session_id = yyjson_get_str(yyjson_obj_get(event, "session_id"));
-            if (session_id) {
+            /* A /btw side child's fresh session id is deliberately NOT
+             * adopted — the main conversation's id comes back at the
+             * turn boundary. */
+            if (session_id && !app->btw_turn) {
                 snprintf(app->session_id, sizeof(app->session_id), "%s", session_id);
             }
         } else if (subtype && strcmp(subtype, "thinking_tokens") == 0) {
@@ -771,10 +774,158 @@ static struct yetty_ycore_void_result claude_send_user_message(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
+/*---------------------------------------------------------------------------
+ * /btw side child — a one-shot `claude --print <question>` on a fresh
+ * session. The persistent main child is bound to the main session and the
+ * CLI refuses /btw itself in stream-json mode ("/btw isn't available in
+ * this environment"), so the side question gets its own short-lived
+ * process. Its stream-json events flow through the normal claude handler
+ * (the main child is idle for the duration — app->waiting gates submits);
+ * the result event ends the turn, which restores the main session id. No
+ * --permission-prompt-tool is passed, so the CLI denies tool use itself —
+ * matching the native /btw's no-tools semantics.
+ *---------------------------------------------------------------------------*/
+
+/* One line can be large (stream-json figures), but a child that never
+ * emits a newline must not grow the buffer without bound. */
+#define YAI_CLAUDE_BTW_OUT_MAX (256u * 1024u * 1024u)
+
+YETTY_EXTERNAL_CALLBACK
+static void claude_btw_exit_cb(uv_process_t *process, int64_t exit_status, int term_signal)
+{
+    struct yai_app *app = process->data;
+    (void)exit_status;
+    (void)term_signal;
+    app->btw_child_alive = 0;
+    uv_close((uv_handle_t *)&app->btw_process, yai_handle_closed_cb);
+    /* The result event normally already ended the turn; a crash or an
+     * interrupt kill without one must still unblock the UI and restore
+     * the main session id (yai_turn_finished handles both). */
+    if (app->waiting && app->btw_turn) {
+        yai_report_error(app, "btw stream finish", yai_renderer_finish_turn(&app->renderer));
+        yai_report_error(app, "btw boundary", yai_turn_finished(app));
+    }
+}
+
+YETTY_EXTERNAL_CALLBACK
+static void claude_btw_read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buffer)
+{
+    struct yai_app *app = stream->data;
+    if (nread < 0) {
+        free(buffer->base);
+        uv_read_stop(stream);
+        uv_close((uv_handle_t *)&app->btw_stdout_pipe, yai_handle_closed_cb);
+        return;
+    }
+    if (nread == 0) {
+        free(buffer->base);
+        return;
+    }
+    if ((size_t)nread > YAI_CLAUDE_BTW_OUT_MAX ||
+        app->btw_out_len > YAI_CLAUDE_BTW_OUT_MAX - (size_t)nread) {
+        free(buffer->base);
+        yai_report_error(app, "btw stdout",
+                         YETTY_ERR(yetty_ycore_void, "claude_btw_read_cb: line too large"));
+        return;
+    }
+    if (app->btw_out_len + (size_t)nread + 1 > app->btw_out_cap) {
+        size_t new_cap = app->btw_out_cap ? app->btw_out_cap : 64 * 1024;
+        while (new_cap < app->btw_out_len + (size_t)nread + 1) {
+            new_cap *= 2; /* bounded by YAI_CLAUDE_BTW_OUT_MAX above */
+        }
+        char *grown = realloc(app->btw_out_buf, new_cap);
+        if (!grown) {
+            free(buffer->base);
+            yai_report_error(app, "btw stdout",
+                             YETTY_ERR(yetty_ycore_void, "claude_btw_read_cb: realloc failed"));
+            return;
+        }
+        app->btw_out_buf = grown;
+        app->btw_out_cap = new_cap;
+    }
+    memcpy(app->btw_out_buf + app->btw_out_len, buffer->base, (size_t)nread);
+    app->btw_out_len += (size_t)nread;
+    free(buffer->base);
+
+    size_t line_start = 0;
+    for (size_t index = 0; index < app->btw_out_len; index++) {
+        if (app->btw_out_buf[index] != '\n') {
+            continue;
+        }
+        yai_report_error(
+            app, "btw child line",
+            yai_handle_child_line(app, app->btw_out_buf + line_start, index - line_start));
+        line_start = index + 1;
+    }
+    if (line_start > 0) {
+        memmove(app->btw_out_buf, app->btw_out_buf + line_start, app->btw_out_len - line_start);
+        app->btw_out_len -= line_start;
+    }
+}
+
+struct yetty_ycore_void_result yai_claude_btw_start(struct yai_app *app, const char *question)
+{
+    const char *model = app->config.claude.model;
+    const char *args[10];
+    int arg_count = 0;
+    args[arg_count++] = "claude";
+    args[arg_count++] = "--print";
+    args[arg_count++] = "--output-format";
+    args[arg_count++] = "stream-json";
+    args[arg_count++] = "--include-partial-messages";
+    args[arg_count++] = "--verbose";
+    if (model[0]) {
+        args[arg_count++] = "--model";
+        args[arg_count++] = model;
+    }
+    args[arg_count++] = question;
+    args[arg_count] = NULL;
+
+    if (uv_pipe_init(&app->loop, &app->btw_stdout_pipe, 0) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "yai_claude_btw_start: stdout uv_pipe_init failed");
+    }
+    app->btw_stdout_pipe.data = app;
+    app->btw_out_len = 0;
+
+    uv_stdio_container_t stdio[3];
+    stdio[0].flags = UV_IGNORE; /* the question travels in argv */
+    stdio[1].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
+    stdio[1].data.stream = (uv_stream_t *)&app->btw_stdout_pipe;
+    stdio[2].flags = UV_INHERIT_FD;
+    stdio[2].data.fd = app->child_stderr_fd;
+
+    uv_process_options_t options = {0};
+    options.exit_cb = claude_btw_exit_cb;
+    options.file = "claude";
+    options.args = (char **)args;
+    options.stdio_count = 3;
+    options.stdio = stdio;
+
+    app->btw_process.data = app;
+    if (uv_spawn(&app->loop, &app->btw_process, &options) != 0) {
+        uv_close((uv_handle_t *)&app->btw_stdout_pipe, yai_handle_closed_cb);
+        return YETTY_ERR(yetty_ycore_void,
+                         "yai_claude_btw_start: uv_spawn failed (claude not in PATH?)");
+    }
+    app->btw_child_alive = 1;
+    if (uv_read_start((uv_stream_t *)&app->btw_stdout_pipe, yai_child_stdout_alloc_cb,
+                      claude_btw_read_cb) != 0) {
+        uv_process_kill(&app->btw_process, SIGKILL);
+        return YETTY_ERR(yetty_ycore_void, "yai_claude_btw_start: uv_read_start failed");
+    }
+    return YETTY_OK_VOID();
+}
+
 YETTY_ANNOTATE("override@yai:claude:interrupt")
 static struct yetty_ycore_void_result claude_interrupt(struct yetty_yclass_object *obj,
                                                        struct yai_app *app)
 {
+    if (app->btw_child_alive) {
+        /* A /btw side child has no control channel — stop the specific
+         * process we spawned; its exit callback finishes the turn. */
+        uv_process_kill(&app->btw_process, SIGTERM);
+        return YETTY_OK_VOID();
+    }
     struct yetty_yai_claude_ptr_result claude_res = yetty_yai_claude_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, claude_res, "claude interrupt: data slice");
     struct yetty_yai_claude *claude = claude_res.value;

@@ -13,6 +13,7 @@
 #include <yetty/ygui/widgets/radio.h>
 #include <yetty/ygui/widgets/slider.h>
 #include <yetty/ygui/widgets/tabbar.h>
+#include <yetty/ygui/widgets/textarea.h>
 #include <yetty/ygui/widgets/vbox.h>
 #include <yetty/ygui/widgets/window.h>
 #include <yetty/yplatform/pty.h>
@@ -76,6 +77,15 @@
     ((uint32_t)(0xFF000000u | ((uint32_t)(blue) << 16) | ((uint32_t)(green) << 8) |                \
                 (uint32_t)(red)))
 #define YAI_HUD_BG_DARK_MINT YAI_HUD_RGBA(20, 42, 35) /* dark mint canvas */
+#define YAI_HUD_BG_LIFTED YAI_HUD_RGBA(20, 26, 31)    /* raised popup surface */
+
+/* Message-search window geometry: a wide window floating near the top
+ * of the pane, tall enough for the query, the match rows and a
+ * several-line full-text preview. */
+#define YAI_HUD_SEARCH_WIDTH_FRACTION 0.62f
+#define YAI_HUD_SEARCH_MIN_WIDTH 360.0f
+#define YAI_HUD_SEARCH_HEIGHT 380.0f
+#define YAI_HUD_SEARCH_MARGIN_TOP 24.0f
 
 /*---------------------------------------------------------------------------
  * Blocking stdout pty shim. The framework writes its compositor envelope
@@ -207,6 +217,15 @@ struct yai_hud {
     float config_drag_cursor_x;
     float config_drag_cursor_y;
 
+    /* Ctrl-R message-search window (visuals: message-search = yetty).
+     * Built lazily on the first search; hidden when the search closes.
+     * Display only — keyboard stays with the search loop in main.c. */
+    struct yetty_yclass_object *search_window;
+    struct yetty_yclass_object *search_query_label;
+    struct yetty_yclass_object *search_row_labels[YAI_HUD_SEARCH_MAX_ROWS];
+    struct yetty_yclass_object *search_text;
+    int search_visible;
+
     /* yai-side corner-resize drag state (the window widget on this
      * branch has no resize grip of its own; resize lives here). */
     int resizing;
@@ -247,6 +266,9 @@ static void terminal_pixels(float *width_px, float *height_px)
 static struct yetty_ycore_void_result window_rect(const struct yai_hud *hud, float *min_x,
                                                   float *min_y, float *width, float *height)
 {
+    if (!hud->window) {
+        return YETTY_ERR(yetty_ycore_void, "window_rect: no HUD window (framework-only mode)");
+    }
     struct yetty_ygui_layout_const_ptr_result layout_res =
         yetty_ygui_widget_layout_get(hud->window);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "window_rect: layout");
@@ -291,6 +313,14 @@ static struct yetty_yclass_object_ptr_result hud_add_label(struct yetty_yclass_o
     return YETTY_OK(yetty_yclass_object_ptr, label);
 }
 
+/* Whether the ygui HUD status window exists — false in framework-only
+ * mode (ygui message-search without a ygui HUD). Drives main's text
+ * status-bar and text config-TUI fallbacks. */
+int yai_hud_has_window(const struct yai_hud *hud)
+{
+    return hud && hud->window != NULL;
+}
+
 /* Reserved pixel height the docked HUD takes off the bottom of the
  * pane (0 when floating). yai turns this into reserved terminal rows. */
 float yai_hud_dock_height(const struct yai_hud *hud)
@@ -301,6 +331,8 @@ float yai_hud_dock_height(const struct yai_hud *hud)
     return hud->dock_height > 0.0f ? hud->dock_height : YAI_HUD_DOCK_HEIGHT;
 }
 
+static struct yetty_ycore_void_result hud_search_place(struct yai_hud *hud);
+
 /* Apply the current viewport: framework layout space + window
  * placement. Docked: a full-width bar pinned to the bottom edge.
  * Floating: top-right until the user has moved/resized it. */
@@ -309,6 +341,18 @@ static struct yetty_ycore_void_result hud_apply_viewport(struct yai_hud *hud)
     struct yetty_ycore_void_result viewport_res = yetty_ygui_framework_set_viewport(
         hud->framework, hud->viewport_width, hud->viewport_height);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, viewport_res, "hud_apply_viewport: set_viewport");
+
+    /* Keep the message-search window centered against the new size. */
+    if (hud->search_window) {
+        struct yetty_ycore_void_result search_res = hud_search_place(hud);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, search_res, "hud_apply_viewport: search place");
+    }
+    /* Framework-only mode (ygui message-search without a ygui HUD
+     * window): nothing to place beyond the viewport itself. */
+    if (!hud->window) {
+        yetty_ygui_framework_mark_dirty(hud->framework);
+        return yai_hud_flush(hud);
+    }
 
     if (hud->docked) {
         /* Full-width bar across the bottom edge; its height tracks the
@@ -359,8 +403,11 @@ static struct yetty_ycore_void_result hud_apply_viewport(struct yai_hud *hud)
 }
 
 /* Build the widget tree + initial geometry. Split out so create() can
- * tear the framework down on any failure without repeating cleanup. */
-static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
+ * tear the framework down on any failure without repeating cleanup.
+ * `want_hud_window` = build the HUD status window; without it only the
+ * root is set up (framework-only mode: the message-search window and
+ * the config dialog can still be hosted) and hud->window stays NULL. */
+static struct yetty_ycore_void_result hud_build(struct yai_hud *hud, int want_hud_window)
 {
     struct yetty_yclass_object_ptr_result root_res = hud_add(NULL, yetty_ygui_vbox_class_get());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, root_res, "hud_build: root vbox");
@@ -368,6 +415,16 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
     struct yetty_ycore_void_result set_root_res =
         yetty_ygui_framework_set_root(hud->framework, hud->root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, set_root_res, "hud_build: set_root");
+
+    /* TIOCGWINSZ estimate only — the host's resize envelope replaces it
+     * with the authoritative pixel size right after the mouse subscribe. */
+    terminal_pixels(&hud->viewport_width, &hud->viewport_height);
+
+    if (!want_hud_window) {
+        struct yetty_ycore_void_result place_res = hud_apply_viewport(hud);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, place_res, "hud_build: apply_viewport");
+        return yai_hud_flush(hud);
+    }
 
     struct yetty_yclass_object_ptr_result window_res =
         hud_add(hud->root, yetty_ygui_window_class_get());
@@ -383,9 +440,6 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
         YETTY_RETURN_IF_ERR(yetty_ycore_void, title_res, "hud_build: set_title");
     }
 
-    /* TIOCGWINSZ estimate only — the host's resize envelope replaces it
-     * with the authoritative pixel size right after the mouse subscribe. */
-    terminal_pixels(&hud->viewport_width, &hud->viewport_height);
     struct yetty_ycore_void_result size_res =
         yetty_ygui_widget_set_size(hud->window, YAI_HUD_WINDOW_WIDTH, YAI_HUD_WINDOW_HEIGHT);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, size_res, "hud_build: set_size");
@@ -413,17 +467,19 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
     return yai_hud_flush(hud);
 }
 
-struct yai_hud_ptr_result yai_hud_create(int hud_on, int hud_float)
+struct yai_hud_ptr_result yai_hud_create(int want_hud_window, int hud_float,
+                                         int want_search_window)
 {
-    if (!hud_on) {
-        return YETTY_OK(yai_hud_ptr, NULL); /* intentionally disabled (hud_on=false) */
+    if (!want_hud_window && !want_search_window) {
+        return YETTY_OK(yai_hud_ptr, NULL); /* no ygui surface wanted */
     }
     if (!isatty(STDOUT_FILENO)) {
         return YETTY_OK(yai_hud_ptr, NULL); /* no pane to float over */
     }
-    /* The ygui HUD is a compositor figure only yetty can render; on any
-     * other terminal it would emit garbage. There, yai falls back to the
-     * renderer's text status bar (render.c text_hud) instead. */
+    /* Every ygui surface here is a compositor figure only yetty can
+     * render; on any other terminal it would emit garbage. There, yai
+     * falls back to the text equivalents (render.c text_hud, the
+     * text-mode message search) regardless of the visuals config. */
     const char *term_program = getenv("TERM_PROGRAM");
     if (!term_program || strcmp(term_program, "yetty") != 0) {
         return YETTY_OK(yai_hud_ptr, NULL);
@@ -435,8 +491,8 @@ struct yai_hud_ptr_result yai_hud_create(int hud_on, int hud_float)
     }
     hud->pty.ops = hud_pty_ops();
     /* Docked bottom bar by default; --hud-float restores the old draggable
-     * top-right window. */
-    hud->docked = !hud_float;
+     * top-right window. Framework-only mode (no HUD window) never docks. */
+    hud->docked = want_hud_window && !hud_float;
 
     struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(framework_res)) {
@@ -457,7 +513,7 @@ struct yai_hud_ptr_result yai_hud_create(int hud_on, int hud_float)
         yetty_ycore_error_destroy(attach_res.error);
     }
 
-    struct yetty_ycore_void_result build_res = hud_build(hud);
+    struct yetty_ycore_void_result build_res = hud_build(hud, want_hud_window);
     if (YETTY_IS_ERR(build_res)) {
         /* Best-effort teardown on the failure path; the build error is
          * the one worth surfacing. */
@@ -536,6 +592,11 @@ struct yetty_ycore_void_result yai_hud_set_format(struct yai_hud *hud,
     if (!hud || !format) {
         return YETTY_ERR(yetty_ycore_void, "yai_hud_set_format: NULL arg");
     }
+    if (!hud->window) {
+        /* Framework-only mode: no HUD window to format. hud->format stays
+         * NULL, so yai_hud_render no-ops too. */
+        return YETTY_OK_VOID();
+    }
     hud->format = format;
     free(hud->span_labels);
     hud->span_labels = NULL;
@@ -591,6 +652,169 @@ struct yetty_ycore_void_result yai_hud_flush(struct yai_hud *hud)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "yai_hud_flush: emit");
     return YETTY_OK_VOID();
 }
+
+struct yetty_ycore_void_result yai_hud_forget_remote(struct yai_hud *hud)
+{
+    if (!hud) {
+        return YETTY_ERR(yetty_ycore_void, "yai_hud_forget_remote: NULL hud");
+    }
+    /* The host wiped its compositor figures (a full-screen erase: yai's own
+     * startup clear for the text bar, or `clear`/Ctrl-L in the interop
+     * shell). Forget the remote state and re-emit so our surfaces
+     * re-materialize; a figure that survived is reused host-side. */
+    struct yetty_ycore_void_result forget_res =
+        yetty_ygui_framework_forget_remote(hud->framework);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, forget_res, "yai_hud_forget_remote: forget");
+    return yai_hud_flush(hud);
+}
+
+/*---------------------------------------------------------------------------
+ * Message-search window — the Ctrl-R history-search UI in yetty mode.
+ * A floating window near the top of the pane: query, match rows (the
+ * selected one highlighted), and the full selected message in a textarea.
+ *---------------------------------------------------------------------------*/
+
+/* Size + center the search window against the current viewport. */
+static struct yetty_ycore_void_result hud_search_place(struct yai_hud *hud)
+{
+    float width = hud->viewport_width * YAI_HUD_SEARCH_WIDTH_FRACTION;
+    if (width < YAI_HUD_SEARCH_MIN_WIDTH) {
+        width = YAI_HUD_SEARCH_MIN_WIDTH;
+    }
+    if (width > hud->viewport_width) {
+        width = hud->viewport_width;
+    }
+    float height = YAI_HUD_SEARCH_HEIGHT;
+    if (height > hud->viewport_height - 2.0f * YAI_HUD_SEARCH_MARGIN_TOP &&
+        hud->viewport_height > 2.0f * YAI_HUD_SEARCH_MARGIN_TOP) {
+        height = hud->viewport_height - 2.0f * YAI_HUD_SEARCH_MARGIN_TOP;
+    }
+    struct yetty_ycore_void_result size_res =
+        yetty_ygui_widget_set_size(hud->search_window, width, height);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, size_res, "hud_search_place: size");
+    struct yetty_ycore_void_result position_res = yetty_ygui_widget_set_position(
+        hud->search_window, (hud->viewport_width - width) / 2.0f, YAI_HUD_SEARCH_MARGIN_TOP);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, position_res, "hud_search_place: position");
+    return YETTY_OK_VOID();
+}
+
+/* Build the window + its fixed widget pool once, hidden. */
+static struct yetty_ycore_void_result hud_search_build(struct yai_hud *hud)
+{
+    struct yetty_yclass_object_ptr_result window_res =
+        hud_add(hud->root, yetty_ygui_window_class_get());
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, window_res, "hud_search_build: window");
+    hud->search_window = window_res.value;
+    struct yetty_ycore_void_result title_res =
+        yetty_ygui_window_set_title(hud->search_window, "message search");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, title_res, "hud_search_build: title");
+    struct yetty_ycore_void_result bg_res =
+        yetty_ygui_widget_set_bg_color(hud->search_window, YAI_HUD_BG_LIFTED);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, bg_res, "hud_search_build: bg");
+
+    struct yetty_yclass_object_ptr_result body_res = yetty_ygui_window_body(hud->search_window);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "hud_search_build: body");
+    struct yetty_yclass_object *body = body_res.value;
+    if (!body) {
+        return YETTY_ERR(yetty_ycore_void, "hud_search_build: window has no body");
+    }
+
+    struct yetty_ycore_rgba accent = {.r = 107, .g = 168, .b = 146, .a = 255};
+    struct yetty_yclass_object_ptr_result query_res = hud_add_label(body, "", accent);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, query_res, "hud_search_build: query label");
+    hud->search_query_label = query_res.value;
+
+    struct yetty_ycore_rgba secondary = {.r = 159, .g = 167, .b = 168, .a = 255};
+    for (int row = 0; row < YAI_HUD_SEARCH_MAX_ROWS; row++) {
+        struct yetty_yclass_object_ptr_result row_res = hud_add_label(body, "", secondary);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, row_res, "hud_search_build: row label");
+        hud->search_row_labels[row] = row_res.value;
+    }
+
+    /* The full selected message; takes whatever height the rows leave. */
+    struct yetty_yclass_object_ptr_result text_res =
+        hud_add(body, yetty_ygui_textarea_class_get());
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "hud_search_build: textarea");
+    hud->search_text = text_res.value;
+    struct yetty_ycore_void_result grow_res =
+        yetty_ygui_widget_apply_css(hud->search_text, "flex-grow: 1");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grow_res, "hud_search_build: textarea css");
+
+    struct yetty_ycore_void_result place_res = hud_search_place(hud);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, place_res, "hud_search_build: place");
+    struct yetty_ycore_void_result hide_res = yetty_ygui_widget_set_visible(hud->search_window, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hide_res, "hud_search_build: hide");
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yai_hud_search_update(struct yai_hud *hud, const char *query,
+                                                     const char *const *rows, size_t row_count,
+                                                     size_t selected, const char *full_text)
+{
+    if (!hud) {
+        return YETTY_ERR(yetty_ycore_void, "yai_hud_search_update: NULL hud");
+    }
+    if (!hud->search_window) {
+        struct yetty_ycore_void_result build_res = hud_search_build(hud);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, build_res, "yai_hud_search_update: build");
+    }
+    if (row_count > YAI_HUD_SEARCH_MAX_ROWS) {
+        row_count = YAI_HUD_SEARCH_MAX_ROWS;
+    }
+    char query_line[320];
+    snprintf(query_line, sizeof(query_line), "search \xe2\x96\xb8 %s", query ? query : "");
+    struct yetty_ycore_void_result query_res =
+        yetty_ygui_label_set_text(hud->search_query_label, query_line);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, query_res, "yai_hud_search_update: query text");
+
+    struct yetty_ycore_rgba bright = {.r = 116, .g = 197, .b = 165, .a = 255};
+    struct yetty_ycore_rgba secondary = {.r = 159, .g = 167, .b = 168, .a = 255};
+    for (size_t row = 0; row < YAI_HUD_SEARCH_MAX_ROWS; row++) {
+        struct yetty_yclass_object *label = hud->search_row_labels[row];
+        int used = row < row_count;
+        struct yetty_ycore_void_result visible_res = yetty_ygui_widget_set_visible(label, used);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, visible_res, "yai_hud_search_update: row visible");
+        if (!used) {
+            continue;
+        }
+        struct yetty_ycore_void_result text_res = yetty_ygui_label_set_text(label, rows[row]);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "yai_hud_search_update: row text");
+        struct yetty_ycore_void_result color_res =
+            yetty_ygui_label_set_color(label, row == selected ? bright : secondary);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, color_res, "yai_hud_search_update: row color");
+    }
+
+    struct yetty_ycore_void_result full_res =
+        yetty_ygui_textarea_set_text(hud->search_text, full_text ? full_text : "");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, full_res, "yai_hud_search_update: full text");
+
+    struct yetty_ycore_void_result place_res = hud_search_place(hud);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, place_res, "yai_hud_search_update: place");
+    if (!hud->search_visible) {
+        struct yetty_ycore_void_result show_res =
+            yetty_ygui_widget_set_visible(hud->search_window, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, show_res, "yai_hud_search_update: show");
+        hud->search_visible = 1;
+    }
+    yetty_ygui_framework_mark_dirty(hud->framework);
+    return yai_hud_flush(hud);
+}
+
+struct yetty_ycore_void_result yai_hud_search_hide(struct yai_hud *hud)
+{
+    if (!hud) {
+        return YETTY_ERR(yetty_ycore_void, "yai_hud_search_hide: NULL hud");
+    }
+    if (!hud->search_window || !hud->search_visible) {
+        return YETTY_OK_VOID();
+    }
+    hud->search_visible = 0;
+    struct yetty_ycore_void_result hide_res = yetty_ygui_widget_set_visible(hud->search_window, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hide_res, "yai_hud_search_hide: hide");
+    yetty_ygui_framework_mark_dirty(hud->framework);
+    return yai_hud_flush(hud);
+}
+
 /*---------------------------------------------------------------------------
  * Config dialog — an EDITABLE floating panel, toggled by /config
  *---------------------------------------------------------------------------*/
@@ -1089,6 +1313,9 @@ struct yetty_ycore_void_result yai_hud_viewport_changed(struct yai_hud *hud)
 
 static struct yetty_ycore_int_result point_in_window(const struct yai_hud *hud, float x, float y)
 {
+    if (!hud->window) {
+        return YETTY_OK(yetty_ycore_int, 0); /* framework-only mode: no rect */
+    }
     float min_x = 0.0f;
     float min_y = 0.0f;
     float width = 0.0f;
@@ -1167,6 +1394,9 @@ static struct yetty_ycore_int_result point_in_config_titlebar(const struct yai_h
 
 static struct yetty_ycore_int_result point_in_grip(const struct yai_hud *hud, float x, float y)
 {
+    if (!hud->window) {
+        return YETTY_OK(yetty_ycore_int, 0); /* framework-only mode: no grip */
+    }
     float min_x = 0.0f;
     float min_y = 0.0f;
     float width = 0.0f;

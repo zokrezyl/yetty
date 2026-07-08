@@ -320,6 +320,18 @@ static const char *yai_effective_markdown_mode(struct yai_app *app)
     return strcmp(value, "text") == 0 ? "text" : "yetty";
 }
 
+/* Ctrl-R message-search UI backend for the active engine: "yetty" (ygui
+ * window over the pane) or "text" (menu rows + top-of-screen overlay).
+ * The yetty mode needs the ygui HUD framework; the search code falls
+ * back to text when there is none (non-yetty host, HUD disabled). */
+static const char *yai_effective_message_search_mode(struct yai_app *app)
+{
+    const char *override =
+        yai_engine_override_get(yai_active_engine_config(app), "message-search");
+    const char *value = (override && override[0]) ? override : app->config.message_search_mode;
+    return strcmp(value, "text") == 0 ? "text" : "yetty";
+}
+
 /* Store the HUD template as `count` verbatim pieces and recompute the
  * concatenated hud_format the renderer parses (pieces joined directly, no
  * separator). The pieces are kept so the YAML list round-trips on save. */
@@ -376,6 +388,7 @@ static void yai_config_defaults(struct yai_app *app)
     config->hud_float = 0;
     snprintf(config->hud_mode, sizeof(config->hud_mode), "yetty");
     snprintf(config->markdown_mode, sizeof(config->markdown_mode), "yetty");
+    snprintf(config->message_search_mode, sizeof(config->message_search_mode), "yetty");
     const char *const default_hud_parts[] = {YAI_DEFAULT_HUD_PART_0, YAI_DEFAULT_HUD_PART_1,
                                              YAI_DEFAULT_HUD_PART_2, YAI_DEFAULT_HUD_PART_3,
                                              YAI_DEFAULT_HUD_PART_4};
@@ -438,15 +451,42 @@ static int yai_config_set_global(struct yai_app *app, const char *key, const cha
     } else if (strcmp(key, "hud-float") == 0) {
         config->hud_float = yai_config_truthy(value);
     } else if (strcmp(key, "hud-mode") == 0) {
+        /* Legacy defaults: key; the saved shape is visuals: hud. */
         snprintf(config->hud_mode, sizeof(config->hud_mode), "%s",
                  strcmp(value, "text") == 0 ? "text" : "yetty");
     } else if (strcmp(key, "markdown-mode") == 0) {
+        /* Legacy defaults: key; the saved shape is visuals: markdown. */
         snprintf(config->markdown_mode, sizeof(config->markdown_mode), "%s",
+                 strcmp(value, "text") == 0 ? "text" : "yetty");
+    } else if (strcmp(key, "message-search") == 0) {
+        snprintf(config->message_search_mode, sizeof(config->message_search_mode), "%s",
                  strcmp(value, "text") == 0 ? "text" : "yetty");
     } else if (strcmp(key, "hud-format") == 0) {
         /* A scalar hud_format is a one-piece list. */
         const char *single[] = {value};
         yai_config_set_hud_parts(config, single, 1);
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
+/* Apply one key of the top-level `visuals:` section — the yetty/text
+ * rendering switches. Each maps onto the same config field its legacy
+ * `defaults:` spelling wrote (hud-mode / markdown-mode), so old files
+ * and new files land in one place. Returns 1 if the key was known. */
+static int yai_config_set_visual(struct yai_app *app, const char *key, const char *value)
+{
+    struct yai_config *config = &app->config;
+    if (strcmp(key, "hud") == 0) {
+        snprintf(config->hud_mode, sizeof(config->hud_mode), "%s",
+                 strcmp(value, "text") == 0 ? "text" : "yetty");
+    } else if (strcmp(key, "markdown") == 0) {
+        snprintf(config->markdown_mode, sizeof(config->markdown_mode), "%s",
+                 strcmp(value, "text") == 0 ? "text" : "yetty");
+    } else if (strcmp(key, "message-search") == 0) {
+        snprintf(config->message_search_mode, sizeof(config->message_search_mode), "%s",
+                 strcmp(value, "text") == 0 ? "text" : "yetty");
     } else {
         return 0;
     }
@@ -602,12 +642,18 @@ static void yai_config_load(struct yai_app *app)
     yaml_parser_set_input_file(&parser, file);
 
     /* Three-level layout: a top mapping holding `defaults:` (global scalar
-     * keys) and `backends:` (claude/codex/gemini sub-mappings). `depth` tracks
-     * mapping nesting (1 = top, 2 = inside defaults/backends, 3 = inside one
+     * keys), `visuals:` (yetty/text rendering switches) and `backends:`
+     * (claude/codex/gemini sub-mappings). `depth` tracks mapping nesting
+     * (1 = top, 2 = inside defaults/visuals/backends, 3 = inside one
      * backend); `section` selects where the scalars at depth 2/3 land. The one
      * sequence value is `hud_format:` (a list of pieces); it is collected
      * separately into hud_parts and concatenated at its SEQUENCE_END. */
-    enum { SECTION_NONE, SECTION_DEFAULTS, SECTION_BACKENDS } section = SECTION_NONE;
+    enum {
+        SECTION_NONE,
+        SECTION_DEFAULTS,
+        SECTION_VISUALS,
+        SECTION_BACKENDS
+    } section = SECTION_NONE;
     int depth = 0;
     int have_key = 0;
     char pending_key[64] = {0};
@@ -642,6 +688,8 @@ static void yai_config_load(struct yai_app *app)
             if (depth == 1 && have_key) {
                 if (strcmp(pending_key, "defaults") == 0) {
                     section = SECTION_DEFAULTS;
+                } else if (strcmp(pending_key, "visuals") == 0) {
+                    section = SECTION_VISUALS;
                 } else if (strcmp(pending_key, "backends") == 0) {
                     section = SECTION_BACKENDS;
                 } else {
@@ -711,6 +759,8 @@ static void yai_config_load(struct yai_app *app)
             } else {
                 if (depth == 2 && section == SECTION_DEFAULTS) {
                     yai_config_set_global(app, pending_key, text);
+                } else if (depth == 2 && section == SECTION_VISUALS) {
+                    yai_config_set_visual(app, pending_key, text);
                 } else if (depth == 3 && section == SECTION_BACKENDS && backend_cfg) {
                     yai_config_apply_engine_key(backend_cfg, pending_key, text);
                 }
@@ -906,7 +956,8 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
     /* Header comment first (libyaml's event API emits no comments), then the
      * emitter appends the mapping to the same stream. */
     fputs("# yai config — auto-written on startup, on config change, and on exit.\n"
-          "# Global keys under defaults:; per-backend settings under backends:.\n"
+          "# Global keys under defaults:; yetty/text rendering switches under\n"
+          "# visuals:; per-backend settings under backends:.\n"
           "# Any defaults: key may be set under a backend to override it there.\n"
           "#\n",
           file);
@@ -945,9 +996,15 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
                                   config->show_thinking ? "true" : "false") &&
              yai_config_emit_pair(&emitter, "hud-on", config->hud_on ? "true" : "false") &&
              yai_config_emit_pair(&emitter, "hud-float", config->hud_float ? "true" : "false") &&
-             yai_config_emit_pair(&emitter, "hud-mode", config->hud_mode) &&
-             yai_config_emit_pair(&emitter, "markdown-mode", config->markdown_mode) &&
              yai_config_emit_hud_format(&emitter, config) && yai_config_emit_map_end(&emitter) &&
+             /* visuals: { hud, markdown, message-search } — the yetty/text
+              * rendering switches (loaded by yai_config_set_visual; the old
+              * defaults: hud-mode / markdown-mode spellings still load). */
+             yai_config_emit_scalar(&emitter, "visuals") && yai_config_emit_map_start(&emitter) &&
+             yai_config_emit_pair(&emitter, "hud", config->hud_mode) &&
+             yai_config_emit_pair(&emitter, "markdown", config->markdown_mode) &&
+             yai_config_emit_pair(&emitter, "message-search", config->message_search_mode) &&
+             yai_config_emit_map_end(&emitter) &&
              /* backends: { claude: {…}, codex: {…}, gemini: {…} }. */
              yai_config_emit_scalar(&emitter, "backends") && yai_config_emit_map_start(&emitter) &&
              yai_config_emit_engine(&emitter, "claude", &config->claude) &&
@@ -1209,6 +1266,11 @@ static struct yetty_ycore_void_result resume_terminal_ownership(struct yai_app *
     resume = yetty_ycore_void_chain(resume, enter_raw_input(app));
     if (app->hud) {
         resume = yetty_ycore_void_chain(resume, subscribe_mouse(app));
+        /* The shell/editor that owned the screen may have cleared it
+         * (`clear`, Ctrl-L) — the host answered by dropping every
+         * compositor figure. Forget + re-emit so ours re-materialize;
+         * figures that survived are reused host-side. */
+        resume = yetty_ycore_void_chain(resume, yai_hud_forget_remote(app->hud));
     }
     /* Re-reserve the text-HUD bottom row on the restored screen; the
      * conversation is still on screen, so keep the prompt at the bottom. */
@@ -1892,6 +1954,372 @@ static struct yetty_ycore_void_result history_browse_move(struct yai_app *app, i
 }
 
 /*---------------------------------------------------------------------------
+ * Ctrl-R interactive history search — fzy-scored, rendered in the
+ * completion-menu rows. While active the search owns the keyboard
+ * (keyboard_input routes every byte to history_search_feed): printable
+ * bytes edit the query, Ctrl-R / arrows move the selection, Enter or Tab
+ * adopts the selected entry onto the input line (without submitting),
+ * and ESC / Ctrl-C / Ctrl-G cancels back to the stashed line.
+ *---------------------------------------------------------------------------*/
+
+/* Recompute the best-scored matches for the current query. Entries are
+ * walked newest first with stable insertion, so equal scores — e.g. the
+ * empty query, which matches everything — keep recency order. Entries
+ * longer than fzy's MATCH_MAX_LEN still qualify via has_match but score
+ * SCORE_MIN, ranking them last. */
+static void history_search_refilter(struct yai_app *app)
+{
+    score_t scores[YAI_MENU_ROWS];
+    app->history_search_match_count = 0;
+    for (int index = app->history_len - 1; index >= 0; index--) {
+        const char *entry = app->history[index];
+        if (app->history_search_query[0] && !has_match(app->history_search_query, entry)) {
+            continue;
+        }
+        score_t score =
+            app->history_search_query[0] ? match(app->history_search_query, entry) : 0;
+        size_t pos = app->history_search_match_count;
+        while (pos > 0 && scores[pos - 1] < score) {
+            pos--;
+        }
+        if (pos >= YAI_MENU_ROWS) {
+            continue;
+        }
+        if (app->history_search_match_count < YAI_MENU_ROWS) {
+            app->history_search_match_count++;
+        }
+        for (size_t shift = app->history_search_match_count - 1; shift > pos; shift--) {
+            scores[shift] = scores[shift - 1];
+            app->history_search_matches[shift] = app->history_search_matches[shift - 1];
+        }
+        scores[pos] = score;
+        app->history_search_matches[pos] = (size_t)index;
+    }
+    if (app->history_search_selected >= app->history_search_match_count) {
+        app->history_search_selected = 0;
+    }
+}
+
+/* Flatten one history entry onto a single display row: newlines become ⏎
+ * and the text truncates on a codepoint boundary — the first characters
+ * of the message, one row per match. */
+static void history_search_flatten_entry(const char *entry, char *out, size_t out_size)
+{
+    size_t used = 0;
+    for (const char *cursor = entry; *cursor && used + 4 < out_size; cursor++) {
+        if (*cursor == '\n') {
+            memcpy(out + used, "⏎", 3);
+            used += 3;
+        } else {
+            out[used++] = *cursor;
+        }
+    }
+    while (used > 0 && (out[used - 1] & 0xC0) == 0x80) {
+        used--; /* don't cut a codepoint in half */
+    }
+    out[used] = '\0';
+}
+
+/* The full text of the currently selected match, or NULL when the query
+ * matches nothing. */
+static const char *history_search_selected_text(const struct yai_app *app)
+{
+    if (app->history_search_match_count == 0) {
+        return NULL;
+    }
+    return app->history[app->history_search_matches[app->history_search_selected]];
+}
+
+/* Text mode's top-of-screen preview: a title row plus the selected
+ * message wrapped to the terminal width, truncated with a "+K more"
+ * tail when it outgrows its row budget (a third of the screen). */
+static struct yetty_ycore_void_result history_search_overlay_render(struct yai_app *app)
+{
+    struct winsize size = {0};
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) != 0 || size.ws_col == 0 || size.ws_row == 0) {
+        size.ws_col = 80;
+        size.ws_row = 24;
+    }
+    int columns = size.ws_col;
+    int budget = size.ws_row / 3;
+    if (budget > YAI_RENDERER_OVERLAY_MAX_ROWS - 1) {
+        budget = YAI_RENDERER_OVERLAY_MAX_ROWS - 1;
+    }
+    if (budget < 3) {
+        budget = 3;
+    }
+
+    char row_storage[YAI_RENDERER_OVERLAY_MAX_ROWS][YAI_RENDERER_OVERLAY_ROW_BYTES];
+    const char *row_pointers[YAI_RENDERER_OVERLAY_MAX_ROWS];
+    size_t row_count = 0;
+    snprintf(row_storage[row_count], sizeof(row_storage[0]),
+             YAI_HUD_BG "\033[2K" YAI_MINT_BRIGHT " message %zu/%zu " YAI_SECONDARY
+                        "· Ctrl-P/N select · Enter adopt · Esc cancel" YAI_FG_DEFAULT,
+             app->history_search_match_count == 0 ? 0 : app->history_search_selected + 1,
+             app->history_search_match_count);
+    row_pointers[row_count] = row_storage[row_count];
+    row_count++;
+
+    const char *full_text = history_search_selected_text(app);
+    const char *cursor = full_text ? full_text : "(no history match)";
+    int lines_left = 0;
+    while ((size_t)(row_count) < (size_t)budget + 1 && *cursor) {
+        /* One wrapped display row: up to `columns - 2` codepoints, hard
+         * break at a newline. */
+        const char *line_start = cursor;
+        int cells = 0;
+        while (*cursor && *cursor != '\n' && cells < columns - 2) {
+            cursor++;
+            while ((*cursor & 0xC0) == 0x80) {
+                cursor++;
+            }
+            cells++;
+        }
+        snprintf(row_storage[row_count], sizeof(row_storage[0]),
+                 YAI_HUD_BG "\033[2K" YAI_PRIMARY " %.*s" YAI_FG_DEFAULT,
+                 (int)(cursor - line_start), line_start);
+        row_pointers[row_count] = row_storage[row_count];
+        row_count++;
+        if (*cursor == '\n') {
+            cursor++;
+        }
+    }
+    for (const char *rest = cursor; *rest; rest++) {
+        if (*rest == '\n') {
+            lines_left++;
+        }
+    }
+    if (*cursor) {
+        /* Ran out of budget: turn the last row into the truncation tail. */
+        snprintf(row_storage[row_count - 1], sizeof(row_storage[0]),
+                 YAI_HUD_BG "\033[2K" YAI_MUTED " … (+%d more line%s)" YAI_FG_DEFAULT,
+                 lines_left + 1, lines_left ? "s" : "");
+    }
+    struct yetty_ycore_void_result set_res =
+        yai_renderer_overlay_set(&app->renderer, row_pointers, row_count);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_res, "history_search_overlay: set");
+    return YETTY_OK_VOID();
+}
+
+/* Text mode: mirror the query into the prompt line, the match rows into
+ * the completion menu, and the selected message into the top overlay. */
+static struct yetty_ycore_void_result history_search_render_text(struct yai_app *app)
+{
+    memcpy(app->stdin_buf, app->history_search_query, app->history_search_query_len);
+    app->stdin_len = app->history_search_query_len;
+    app->stdin_cursor = app->history_search_query_len;
+
+    char row_storage[YAI_MENU_ROWS][YAI_RENDERER_MENU_ROW_BYTES];
+    const char *row_pointers[YAI_MENU_ROWS];
+    size_t row_count = app->history_search_match_count;
+    for (size_t row = 0; row < row_count; row++) {
+        /* Headroom for the marker + color escapes around the text. */
+        char display[YAI_RENDERER_MENU_ROW_BYTES - 48];
+        history_search_flatten_entry(app->history[app->history_search_matches[row]], display,
+                                     sizeof(display));
+        if (row == app->history_search_selected) {
+            snprintf(row_storage[row], sizeof(row_storage[row]),
+                     YAI_MINT "▸ %s" YAI_RESET, display);
+        } else {
+            snprintf(row_storage[row], sizeof(row_storage[row]),
+                     "  " YAI_DIM "%s" YAI_RESET, display);
+        }
+        row_pointers[row] = row_storage[row];
+    }
+    if (row_count == 0) {
+        snprintf(row_storage[0], sizeof(row_storage[0]), "  " YAI_DIM "%s" YAI_RESET,
+                 "(no history match)");
+        row_pointers[0] = row_storage[0];
+        row_count = 1;
+    }
+    struct yetty_ycore_void_result set_res =
+        yai_renderer_menu_set(&app->renderer, row_pointers, row_count);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_res, "history_search_render: set rows");
+    struct yetty_ycore_void_result overlay_res = history_search_overlay_render(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, overlay_res, "history_search_render: overlay");
+    return YETTY_OK_VOID();
+}
+
+/* yetty mode: the whole search lives in a ygui window floating over the
+ * pane — the text console (prompt line, menu rows) is left alone. */
+static struct yetty_ycore_void_result history_search_render_ygui(struct yai_app *app)
+{
+    char row_storage[YAI_MENU_ROWS][YAI_RENDERER_MENU_ROW_BYTES];
+    const char *row_pointers[YAI_MENU_ROWS];
+    size_t row_count = app->history_search_match_count;
+    for (size_t row = 0; row < row_count; row++) {
+        history_search_flatten_entry(app->history[app->history_search_matches[row]],
+                                     row_storage[row], sizeof(row_storage[row]));
+        row_pointers[row] = row_storage[row];
+    }
+    const char *full_text = history_search_selected_text(app);
+    struct yetty_ycore_void_result update_res = yai_hud_search_update(
+        app->hud, app->history_search_query, row_pointers, row_count,
+        app->history_search_selected, full_text ? full_text : "(no history match)");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, update_res, "history_search_render: hud update");
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result history_search_render(struct yai_app *app)
+{
+    return app->history_search_ygui ? history_search_render_ygui(app)
+                                    : history_search_render_text(app);
+}
+
+/* Move the selection by `delta` rows, wrapping. */
+static struct yetty_ycore_void_result history_search_step(struct yai_app *app, int delta)
+{
+    if (app->history_search_match_count == 0) {
+        return YETTY_OK_VOID();
+    }
+    app->history_search_selected =
+        (app->history_search_selected +
+         (size_t)(delta + (int)app->history_search_match_count)) %
+        app->history_search_match_count;
+    return history_search_render(app);
+}
+
+/* Open the search: take over the keyboard with an empty query (which
+ * lists the newest entries). The UI backend is captured here: the ygui
+ * window (visuals: message-search = yetty, ygui framework present — the
+ * search stays out of the text console) or text (menu rows + overlay;
+ * the line under edit is stashed because the query borrows the prompt
+ * line). */
+static struct yetty_ycore_void_result history_search_begin(struct yai_app *app)
+{
+    if (app->history_len == 0 || !app->echo_input || !app->renderer.pin_enabled) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result close_res = menu_close(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, close_res, "history_search_begin: menu close");
+    app->history_search_ygui =
+        app->hud != NULL && strcmp(yai_effective_message_search_mode(app), "yetty") == 0;
+    memcpy(app->history_search_stash, app->stdin_buf, app->stdin_len);
+    app->history_search_stash_len = app->stdin_len;
+    app->history_search_active = 1;
+    app->history_search_query_len = 0;
+    app->history_search_query[0] = '\0';
+    app->history_search_selected = 0;
+    app->history_browse = -1;
+    snprintf(app->edit_status, sizeof(app->edit_status), "%s", "[search]");
+    history_search_refilter(app);
+    if (app->history_search_ygui) {
+        /* The prompt line is untouched in ygui mode — repaint it only so
+         * the [search] mode indicator shows. */
+        struct yetty_ycore_void_result redraw_res = yai_renderer_pin_redraw(&app->renderer);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, redraw_res, "history_search_begin: redraw");
+    }
+    return history_search_render(app);
+}
+
+/* Close the search. accept=1 adopts the selected match as the input
+ * line. accept=0 in text mode restores the line stashed when the search
+ * opened; in ygui mode the line was never touched. Accept with no match
+ * keeps the typed query as the line in text mode (it is already
+ * mirrored there) and keeps the original line in ygui mode. */
+static struct yetty_ycore_void_result history_search_end(struct yai_app *app, int accept)
+{
+    int was_ygui = app->history_search_ygui;
+    app->history_search_active = 0;
+    app->edit_status[0] = '\0';
+    if (accept && app->history_search_match_count > 0) {
+        const char *entry = history_search_selected_text(app);
+        history_load_entry(app, entry, strlen(entry));
+    } else if (!accept && !was_ygui) {
+        history_load_entry(app, app->history_search_stash, app->history_search_stash_len);
+    }
+    if (was_ygui) {
+        struct yetty_ycore_void_result hide_res = yai_hud_search_hide(app->hud);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, hide_res, "history_search_end: hide window");
+        struct yetty_ycore_void_result redraw_res = yai_renderer_pin_redraw(&app->renderer);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, redraw_res, "history_search_end: redraw");
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result overlay_res = yai_renderer_overlay_clear(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, overlay_res, "history_search_end: clear overlay");
+    /* menu_clear repaints the pinned zone, so the adopted/restored line
+     * shows up in the same stroke as the rows disappearing. */
+    struct yetty_ycore_void_result clear_res = yai_renderer_menu_clear(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, clear_res, "history_search_end: clear rows");
+    return YETTY_OK_VOID();
+}
+
+/* One keyboard byte while the search owns the keyboard. */
+static struct yetty_ycore_void_result history_search_feed(struct yai_app *app, unsigned char byte)
+{
+    char final_byte = 0;
+    int param = 0;
+    int status = editor_ops_csi(app, (char)byte, &final_byte, &param);
+    if (status == YAI_CSI_MID) {
+        return YETTY_OK_VOID();
+    }
+    if (status == YAI_CSI_COMPLETE) {
+        switch (final_byte) {
+        case 'A': /* up */
+            return history_search_step(app, -1);
+        case 'B': /* down */
+            return history_search_step(app, 1);
+        default: /* other CSI (left/right/home/…): ignored while searching */
+            return YETTY_OK_VOID();
+        }
+    }
+    if (status == YAI_CSI_META) {
+        /* Lone ESC then a byte: cancel; the trailing byte is swallowed
+         * (the usual single-line-editor ESC compromise). */
+        return history_search_end(app, /*accept=*/0);
+    }
+    switch (byte) {
+    case '\r':
+    case '\n':
+    case '\t': /* Enter / Tab: adopt the selection onto the line */
+        return history_search_end(app, /*accept=*/1);
+    case 0x12: /* Ctrl-R again: step to the next match */
+        return history_search_step(app, 1);
+    case 0x10: /* Ctrl-P: selection up */
+        return history_search_step(app, -1);
+    case 0x0E: /* Ctrl-N: selection down */
+        return history_search_step(app, 1);
+    case 0x03: /* Ctrl-C */
+    case 0x07: /* Ctrl-G — readline's search abort */
+        return history_search_end(app, /*accept=*/0);
+    case 0x15: /* Ctrl-U: clear the query */
+        app->history_search_query_len = 0;
+        app->history_search_query[0] = '\0';
+        app->history_search_selected = 0;
+        history_search_refilter(app);
+        return history_search_render(app);
+    case 0x7F:
+    case 0x08: { /* Backspace: drop the last query codepoint */
+        size_t len = app->history_search_query_len;
+        while (len > 0 && (app->history_search_query[len - 1] & 0xC0) == 0x80) {
+            len--;
+        }
+        if (len > 0) {
+            len--;
+        }
+        app->history_search_query_len = len;
+        app->history_search_query[len] = '\0';
+        app->history_search_selected = 0;
+        history_search_refilter(app);
+        return history_search_render(app);
+    }
+    default:
+        break;
+    }
+    if (byte < 0x20) {
+        return YETTY_OK_VOID(); /* other control bytes: ignored */
+    }
+    if (app->history_search_query_len + 1 < sizeof(app->history_search_query)) {
+        app->history_search_query[app->history_search_query_len++] = (char)byte;
+        app->history_search_query[app->history_search_query_len] = '\0';
+        app->history_search_selected = 0; /* an edited query re-ranks: jump to the best match */
+        history_search_refilter(app);
+        return history_search_render(app);
+    }
+    return YETTY_OK_VOID();
+}
+
+/*---------------------------------------------------------------------------
  * Shutdown / turn boundary
  *---------------------------------------------------------------------------*/
 
@@ -2019,6 +2447,11 @@ struct yetty_ycore_void_result yai_begin_shutdown(struct yai_app *app)
     uv_signal_stop(&app->sigterm_handle);
     uv_signal_stop(&app->sighup_handle);
     uv_signal_stop(&app->sigchld_handle);
+    if (app->btw_child_alive) {
+        /* A /btw side child must not outlive the session — the specific
+         * PID we spawned, killed directly (it has no stdin channel). */
+        uv_process_kill(&app->btw_process, SIGKILL);
+    }
     if (app->child_stdin_open) {
         app->child_stdin_open = 0;
         uv_close((uv_handle_t *)&app->child_stdin_pipe, yai_handle_closed_cb);
@@ -2042,6 +2475,14 @@ struct yetty_ycore_void_result yai_begin_shutdown(struct yai_app *app)
 struct yetty_ycore_void_result yai_turn_finished(struct yai_app *app)
 {
     app->waiting = 0;
+    if (app->btw_turn) {
+        /* The /btw side turn is over: put the main conversation's identity
+         * back BEFORE anything else — a queued message pumped below must
+         * go to the MAIN session, not the side thread. */
+        app->btw_turn = 0;
+        memcpy(app->session_id, app->btw_session_stash, sizeof(app->session_id));
+        app->resume_requested = app->btw_resume_stash;
+    }
     struct yetty_ycore_void_result clear_res = yai_renderer_activity_clear(&app->renderer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, clear_res, "yai_turn_finished: activity clear");
     if (app->turn_failed) {
@@ -2659,7 +3100,9 @@ struct yetty_ycore_void_result yai_refresh_hud_stats(struct yai_app *app)
 {
     struct yai_hud_var_values values;
     yai_hud_collect_values(app, &values);
-    if (app->hud) {
+    /* A framework-only hud (present just for the ygui message-search) has
+     * no status window — the text bar below is the active backend then. */
+    if (yai_hud_has_window(app->hud)) {
         struct yetty_ycore_void_result render_res = yai_hud_render(app->hud, &values);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, render_res, "yai_refresh_hud_stats: render");
         return yai_hud_flush(app->hud);
@@ -3446,7 +3889,10 @@ static struct yetty_ycore_void_result show_config(struct yai_app *app)
         yetty_yai_describe_config(app->engine, app, engine_rows, sizeof(engine_rows));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, describe_res, "show_config: engine rows");
 
-    if (app->hud) {
+    /* The ygui config dialog follows the HUD visual: only when the ygui HUD
+     * window exists. A framework-only hud (present just for the ygui
+     * message-search) keeps /config on the text TUI below. */
+    if (yai_hud_has_window(app->hud)) {
         /* Holds the engine's knob specs — several newline-separated lines
          * for an engine that exposes multiple knobs (claude: 3). */
         char knob_spec[512];
@@ -3797,6 +4243,80 @@ static struct yetty_ycore_void_result show_help(struct yai_app *app)
     return YETTY_OK_VOID();
 }
 
+/* /btw — side question in a FRESH conversation, main conversation
+ * untouched. session_id is cleared for the spawn and the main identity is
+ * restored at the turn boundary (yai_turn_finished); the side
+ * conversation's minted id is never adopted (the engines' handle_event
+ * guards on app->btw_turn). The answer streams into the scrollback like a
+ * normal turn, introduced by a "btw" marker line. Per-turn engines
+ * (codex, gemini) go through their normal send (which spawns fresh
+ * without a resume token); claude — whose persistent child is bound to
+ * the main session, and whose CLI refuses /btw itself in stream-json
+ * mode — runs a one-shot side child instead (yai_claude_btw_start). */
+static struct yetty_ycore_void_result btw_side_turn(struct yai_app *app, const char *question,
+                                                    size_t question_len)
+{
+    while (question_len > 0 && (question[0] == ' ' || question[0] == '\t')) {
+        question++;
+        question_len--;
+    }
+    if (question_len == 0) {
+        struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "btw_side_turn: suspend");
+        printf(YAI_MUTED "usage: /btw <question> — side question, main conversation "
+                         "untouched" YAI_RESET "\n");
+        struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+        flush_res = yetty_ycore_void_chain(flush_res, yai_renderer_zone_resume(&app->renderer));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "btw_side_turn: usage flush");
+        return YETTY_OK_VOID();
+    }
+    char *copy = strndup(question, question_len);
+    if (!copy) {
+        return YETTY_ERR(yetty_ycore_void, "btw_side_turn: strndup failed");
+    }
+    /* Stash the main conversation's identity; restored at the boundary. */
+    memcpy(app->btw_session_stash, app->session_id, sizeof(app->session_id));
+    app->btw_resume_stash = app->resume_requested;
+    app->btw_turn = 1;
+    app->session_id[0] = '\0';
+    app->resume_requested = 0;
+
+    struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "btw_side_turn: suspend");
+    printf(YAI_DIM "(btw ▸ side question in a fresh %s conversation)" YAI_RESET "\n",
+           app->engine_name);
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    flush_res = yetty_ycore_void_chain(flush_res, yai_renderer_zone_resume(&app->renderer));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "btw_side_turn: marker flush");
+
+    app->waiting = 1;
+    app->estimated_tokens = 0;
+    struct yetty_ycore_void_result activity_res = yai_set_activity(app, "typing-dots", "… thinking");
+    if (YETTY_IS_ERR(activity_res)) {
+        yai_report_error(app, "activity", activity_res);
+    }
+    struct yetty_ycore_void_result send_res;
+    if (strcmp(app->engine_name, "claude") == 0) {
+        send_res = yai_claude_btw_start(app, copy);
+    } else {
+        send_res = yetty_yai_send_user_message(app->engine, app, copy);
+    }
+    free(copy);
+    if (YETTY_IS_ERR(send_res)) {
+        /* Recoverable: put the main conversation's identity back NOW (no
+         * turn boundary will run) and let the user retry. */
+        app->btw_turn = 0;
+        memcpy(app->session_id, app->btw_session_stash, sizeof(app->session_id));
+        app->resume_requested = app->btw_resume_stash;
+        app->waiting = 0;
+        yai_report_error(app, "activity clear", yai_renderer_activity_clear(&app->renderer));
+        yai_report_error(app, "btw send", send_res);
+        struct yetty_ycore_void_result prompt_res = show_prompt(app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, prompt_res, "btw_side_turn: prompt after send");
+    }
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, const char *line,
                                                         size_t len)
 {
@@ -3977,6 +4497,14 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, prompt_res,
                                     "handle_input_line: prompt after title");
                 return YETTY_OK_VOID();
+            }
+            if (strcmp(command->name, "btw") == 0) {
+                /* Generic side question in a fresh conversation. While a
+                 * turn is in flight, fall through — the raw line queues
+                 * and replays at the turn boundary. */
+                if (!app->waiting) {
+                    return btw_side_turn(app, line + 1 + word_len, len - 1 - word_len);
+                }
             }
             if (strcmp(command->name, "shell") == 0) {
                 is_shell = 1;
@@ -4232,13 +4760,37 @@ static struct yetty_ycore_void_result editor_interrupt(struct yai_app *app)
     return YETTY_OK_VOID();
 }
 
-/* Ctrl-D on an empty line: quit. */
+/* Milliseconds on the monotonic clock, for arming short UI timeouts. */
+static long yai_monotonic_ms(void)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return now.tv_sec * 1000 + now.tv_nsec / 1000000;
+}
+
+/* Ctrl-D on an empty line: the first press only arms a confirmation
+ * window and tells the user; a second press while the window is open
+ * quits. Guards against a stray Ctrl-D tearing down the session. */
 static struct yetty_ycore_void_result editor_eof(struct yai_app *app)
 {
     struct yetty_ycore_void_result close_res = menu_close(app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, close_res, "editor_eof: menu close");
-    struct yetty_ycore_void_result shutdown_res = yai_begin_shutdown(app);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, shutdown_res, "editor_eof: shutdown");
+    long now_ms = yai_monotonic_ms();
+    if (app->eof_confirm_deadline_ms != 0 && now_ms <= app->eof_confirm_deadline_ms) {
+        app->eof_confirm_deadline_ms = 0;
+        struct yetty_ycore_void_result shutdown_res = yai_begin_shutdown(app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, shutdown_res, "editor_eof: shutdown");
+        return YETTY_OK_VOID();
+    }
+    app->eof_confirm_deadline_ms = now_ms + YAI_EOF_CONFIRM_WINDOW_MS;
+    struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "editor_eof: suspend");
+    printf("\n" YAI_MUTED "press Ctrl-D again within %d seconds to exit" YAI_RESET "\n",
+           YAI_EOF_CONFIRM_WINDOW_MS / 1000);
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "editor_eof: flush");
+    struct yetty_ycore_void_result resume_res = yai_renderer_zone_resume(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, resume_res, "editor_eof: resume");
     return YETTY_OK_VOID();
 }
 
@@ -4272,6 +4824,8 @@ static struct yetty_ycore_void_result apply_editor_action(struct yai_app *app, i
             return menu_update(app);
         }
         return YETTY_OK_VOID();
+    case YAI_EDIT_HISTORY_SEARCH:
+        return history_search_begin(app);
     default:
         return YETTY_OK_VOID();
     }
@@ -4449,6 +5003,20 @@ static struct yetty_ycore_void_result keyboard_input(struct yai_app *app, const 
     if (app->focus_gui && app->hud) {
         struct yetty_ycore_void_result feed_res = yai_hud_feed_keys(app->hud, bytes, len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, feed_res, "keyboard_input: gui keys");
+        return YETTY_OK_VOID();
+    }
+    /* An open Ctrl-R history search owns the keyboard byte-for-byte. When
+     * it closes mid-chunk (accept/cancel), the rest of the chunk belongs
+     * to the editor again. */
+    if (app->history_search_active) {
+        for (size_t index = 0; index < len; index++) {
+            struct yetty_ycore_void_result feed_res =
+                history_search_feed(app, (unsigned char)bytes[index]);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, feed_res, "keyboard_input: history search");
+            if (!app->history_search_active) {
+                return keyboard_input(app, bytes + index + 1, len - index - 1);
+            }
+        }
         return YETTY_OK_VOID();
     }
     /* "!" as the first character of an empty line hands the keyboard to
@@ -5406,11 +5974,18 @@ int main(int argc, char **argv)
      * echoes the ESC bytes back and the host renders "^[" garbage. */
     yai_report_error(app, "raw input", enter_raw_input(app));
 
-    /* The ygui HUD is built only when hud-on is true AND hud-mode selects it;
-     * "text" mode skips creation and falls through to the text status bar. */
+    /* The ygui HUD window is built only when hud-on is true AND visuals.hud
+     * selects it; "text" falls through to the text status bar. A ygui
+     * message-search (visuals.message-search = yetty) needs the same ygui
+     * framework even when the HUD itself is text/off, so it requests a
+     * framework-only hud object (no status window). Off the yetty host
+     * yai_hud_create returns NULL regardless and every visual degrades
+     * to its text form. */
     int want_ygui_hud =
         yai_effective_hud_on(app) && strcmp(yai_effective_hud_mode(app), "yetty") == 0;
-    struct yai_hud_ptr_result hud_res = yai_hud_create(want_ygui_hud, yai_effective_hud_float(app));
+    int want_ygui_search = strcmp(yai_effective_message_search_mode(app), "yetty") == 0;
+    struct yai_hud_ptr_result hud_res =
+        yai_hud_create(want_ygui_hud, yai_effective_hud_float(app), want_ygui_search);
     if (YETTY_IS_ERR(hud_res)) {
         yai_report_error(app, "hud create",
                          (struct yetty_ycore_void_result){.ok = 0, .error = hud_res.error});
@@ -5418,15 +5993,16 @@ int main(int argc, char **argv)
     } else {
         app->hud = hud_res.value;
     }
-    /* Whenever there is no ygui HUD window (yai_hud_create returned NULL —
-     * because hud-mode is "text", the host is not yetty, or creation failed),
-     * drive the renderer's text status bar instead. This is independent of the
-     * host: an explicit hud-mode "text" under yetty still wants the text bar,
-     * so it must NOT key off pin_shader_glyphs (host==yetty) — doing so wrongly
-     * suppressed the text bar whenever yai ran inside yetty. Skipped only when
-     * the HUD is disabled (hud_on=false) or stdout is not a tty (pin_enabled is
-     * false: no bottom row to pin). */
-    if (!app->hud && app->renderer.pin_enabled && yai_effective_hud_on(app)) {
+    /* Whenever there is no ygui HUD WINDOW (hud-mode "text", non-yetty host,
+     * creation failed, or a framework-only hud that exists just for the ygui
+     * message-search), drive the renderer's text status bar instead. This is
+     * independent of the host: an explicit hud-mode "text" under yetty still
+     * wants the text bar, so it must NOT key off pin_shader_glyphs
+     * (host==yetty) — doing so wrongly suppressed the text bar whenever yai
+     * ran inside yetty. Skipped only when the HUD is disabled (hud_on=false)
+     * or stdout is not a tty (pin_enabled is false: no bottom row to pin). */
+    if (!yai_hud_has_window(app->hud) && app->renderer.pin_enabled &&
+        yai_effective_hud_on(app)) {
         app->renderer.text_hud = 1;
     }
     /* Parse the configured HUD format (both backends read app->hud_format:
@@ -5516,6 +6092,13 @@ int main(int argc, char **argv)
      * bottom of the reserved region. In yetty mode reserve is a no-op and
      * the banner just prints into the conversation as before. */
     yai_report_error(app, "text hud", yai_renderer_text_hud_reserve(&app->renderer, 1));
+    /* That anchor-top reserve cleared the screen — a full-screen erase the
+     * host answers by dropping every compositor figure, including the ones
+     * a framework-only hud (ygui message-search over a text HUD) emitted at
+     * create. Forget + re-emit so they re-materialize. */
+    if (app->hud && app->renderer.text_hud) {
+        yai_report_error(app, "hud re-mint", yai_hud_forget_remote(app->hud));
+    }
     yai_report_error(app, "banner", print_banner(app));
     yai_report_error(app, "prompt", show_prompt(app));
 
@@ -5606,6 +6189,7 @@ int main(int argc, char **argv)
         free(app->history[history_index]);
     }
     free(app->child_out_buf);
+    free(app->btw_out_buf);
     free(app->pending_json);
     free(app->last_response);
     for (size_t deferred_index = 0; deferred_index < app->deferred_count; deferred_index++) {
