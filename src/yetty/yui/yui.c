@@ -2830,9 +2830,14 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
          * instead of the input falling through to terminal scrollback. */
         /* Pointer position → logical; wheel deltas (dx/dy) are notches,
          * not pixels, so they pass through unscaled. */
-        yetty_ycore_error_destroy_safe(yetty_ygui_framework_feed_mouse_scroll(
-            yui->engine, event->mouse_scroll.x / scale, event->mouse_scroll.y / scale,
-            event->mouse_scroll.dx, event->mouse_scroll.dy));
+        {
+            struct yetty_ycore_int_result scroll_res = yetty_ygui_framework_feed_mouse_scroll(
+                yui->engine, event->mouse_scroll.x / scale, event->mouse_scroll.y / scale,
+                event->mouse_scroll.dx, event->mouse_scroll.dy);
+            if (YETTY_IS_ERR(scroll_res)) {
+                yetty_ycore_error_destroy(scroll_res.error);
+            }
+        }
         return YETTY_OK(yetty_ycore_int, active ? 1 : 0);
     default:
         return YETTY_OK(yetty_ycore_int, 0);

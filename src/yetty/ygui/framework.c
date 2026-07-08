@@ -681,10 +681,50 @@ static int csi_decode_mods(const char *p, int len)
     return 0;
 }
 
+/* Forward decl — defined later in this file; dispatch_key routes unconsumed
+ * scroll keys through the same wheel path a scrollarea already handles. */
+struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_scroll(
+    struct yetty_yclass_object *obj, float x, float y, float dx, float dy);
+
 static void dispatch_key(struct yetty_ygui_framework *framework, uint32_t key, int mods)
 {
+    int consumed = 0;
     if (framework->key_cb) {
-        (void)framework->key_cb(framework->self_obj, key, mods, framework->key_userdata);
+        consumed = framework->key_cb(framework->self_obj, key, mods, framework->key_userdata);
+    }
+    /* Keyboard scrolling: when the app didn't claim the key, PageUp/PageDown/
+     * Up/Down scroll the scroll region the same way the wheel does — a
+     * scrollarea's on_scroll slides its content, and if there's nothing to
+     * scroll the key is simply inert. dy>0 = toward the top (on_scroll's
+     * convention); one notch per arrow, one viewport per page. The scroll is
+     * offered at the viewport centre, which lands inside the primary scroll
+     * region for the common full-area layout. */
+    if (!consumed) {
+        float dy = 0.0f;
+        switch (key) {
+        case YETTY_YGUI_KEY_ARROW_UP:
+            dy = 1.0f;
+            break;
+        case YETTY_YGUI_KEY_ARROW_DOWN:
+            dy = -1.0f;
+            break;
+        case YETTY_YGUI_KEY_PAGE_UP:
+            dy = framework->viewport_h / 48.0f;
+            break;
+        case YETTY_YGUI_KEY_PAGE_DOWN:
+            dy = -(framework->viewport_h / 48.0f);
+            break;
+        default:
+            break;
+        }
+        if (dy != 0.0f) {
+            struct yetty_ycore_int_result scroll_res = yetty_ygui_framework_feed_mouse_scroll(
+                framework->self_obj, framework->viewport_w * 0.5f, framework->viewport_h * 0.5f,
+                0.0f, dy);
+            if (YETTY_IS_ERR(scroll_res)) {
+                yetty_ycore_error_destroy(scroll_res.error);
+            }
+        }
     }
     framework->dirty = 1;
 }
@@ -1009,39 +1049,42 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_motion(
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
+/* Returns 1 if a widget consumed the scroll (a scrollarea / filepicker took
+ * it), 0 if it bubbled to the root unhandled. The in-terminal host uses the 0
+ * case to bounce the wheel back to terminal scrollback. */
+struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_scroll(
     struct yetty_yclass_object *obj, float x, float y, float dx, float dy)
 {
     struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_framework_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res,
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, framework_res,
                         "yetty_ygui_framework_feed_mouse_scroll: from_obj");
     struct yetty_ygui_framework *framework = framework_res.value;
     if (!framework->root) {
-        return YETTY_OK_VOID();
+        return YETTY_OK(yetty_ycore_int, 0);
     }
     /* Deliver to the widget under the pointer, bubbling up until one
      * consumes it (a scrollarea / filepicker). Mirrors the press path. */
     struct yetty_yclass_object_ptr_result hit_res = hit_test(framework->root, x, y);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, hit_res,
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res,
                         "yetty_ygui_framework_feed_mouse_scroll: hit_test");
     struct yetty_yclass_object *target = hit_res.value;
     while (target) {
         struct yetty_ycore_int_result r =
             yetty_ygui_widget_on_scroll((struct yetty_yclass_object *)target, x, y, dx, dy);
         if (YETTY_IS_ERR(r)) {
-            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_feed_mouse_scroll: on_scroll",
+            return YETTY_ERR(yetty_ycore_int, "yetty_ygui_framework_feed_mouse_scroll: on_scroll",
                              r);
         }
         if (r.value) {
             framework->dirty = 1;
-            return YETTY_OK_VOID();
+            return YETTY_OK(yetty_ycore_int, 1);
         }
         struct yetty_yclass_object_ptr_result parent_res = yetty_ygui_widget_parent(target);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, parent_res,
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, parent_res,
                             "yetty_ygui_framework_feed_mouse_scroll: parent");
         target = parent_res.value;
     }
-    return YETTY_OK_VOID();
+    return YETTY_OK(yetty_ycore_int, 0);
 }
 
 struct yetty_yclass_object *yetty_ygui_framework_root(struct yetty_yclass_object *obj)

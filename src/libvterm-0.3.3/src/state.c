@@ -844,6 +844,11 @@ static void set_dec_mode(VTermState *state, int num, int val)
     state->mode.card_move = val;
     break;
 
+  case 1502:
+    settermprop_bool(state, VTERM_PROP_CARDKEY, val);
+    state->mode.card_key = val;
+    break;
+
   default:
     DEBUG_LOG("libvterm: Unknown DEC mode %d\n", num);
     return;
@@ -925,6 +930,10 @@ static void request_dec_mode(VTermState *state, int num)
 
     case 1501:
       reply = state->mode.card_move;
+      break;
+
+    case 1502:
+      reply = state->mode.card_key;
       break;
 
     default:

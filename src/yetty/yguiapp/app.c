@@ -478,7 +478,7 @@ static struct yetty_ycore_int_result yguiapp_event(struct yetty_yevent_event_lis
         return YETTY_OK(yetty_ycore_int, 1);
     }
     case YETTY_YCORE_MOUSE_SCROLL: {
-        struct yetty_ycore_void_result fr = yetty_ygui_framework_feed_mouse_scroll(
+        struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_scroll(
             app->engine, ev->mouse_scroll.x, ev->mouse_scroll.y, ev->mouse_scroll.dx,
             ev->mouse_scroll.dy);
         if (YETTY_IS_ERR(fr)) {

@@ -117,11 +117,10 @@ struct yetty_ycore_void_result yetty_yfigure_set_content_size(struct yetty_yclas
  * to the terminal's current scroll position. `rolling_row_offset` is the
  * number of content rows the view has advanced since the figure was created
  * (content_root_row - creation_row); `cell_height` is the terminal cell
- * height in px. A ygrid-backed card overrides this to drive its rolling-row
- * shader offset — the same mechanism the text/ydraw content layer uses — so
- * the card slides with the surrounding text. Base default is a no-op: a
- * figure that draws nothing content-relative needs no anchoring beyond its
- * rect (which the container shifts). */
+ * height in px, so the pixel shift is offset*cell_height. A ygrid-backed card
+ * overrides this to slide its absolute-coord content by that many pixels so it
+ * tracks the surrounding text. Base default is a no-op: a figure that draws
+ * nothing content-relative needs no anchoring beyond its rect. */
 struct yetty_ycore_void_result yetty_yfigure_apply_scroll_anchor(struct yetty_yclass_object *obj,
                                                                  int32_t rolling_row_offset,
                                                                  float cell_height);

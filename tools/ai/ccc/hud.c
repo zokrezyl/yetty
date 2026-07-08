@@ -516,7 +516,7 @@ struct yetty_ycore_void_result ccc_hud_mouse_wheel(struct ccc_hud *hud, float x,
     if (!hud) {
         return YETTY_ERR(yetty_ycore_void, "ccc_hud_mouse_wheel: NULL hud");
     }
-    struct yetty_ycore_void_result scroll_res =
+    struct yetty_ycore_int_result scroll_res =
         yetty_ygui_framework_feed_mouse_scroll(hud->framework, x, y, 0.0f, delta_y);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, scroll_res, "ccc_hud_mouse_wheel: feed");
     return ccc_hud_flush(hud);

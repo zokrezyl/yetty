@@ -108,6 +108,7 @@ typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(
  * mouse-subscription callback so it can be registered directly. */
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int click_enabled,
                                                                         int move_enabled,
+                                                                        int key_enabled,
                                                                         void *userdata);
 
 /* The screen ring struct lives in scroll-tiers.h (shared with the tier
@@ -196,11 +197,12 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
     int alt_screen;
     int mouse_mode;
 
-    /* DEC ?1500 / ?1501 pixel-precise input-forwarding modes, surfaced to the
-     * integration layer through card_sub_fn so it can route mouse/resize events
-     * to the hosted client. */
+    /* DEC ?1500 / ?1501 / ?1502 pixel-precise input-forwarding modes, surfaced
+     * to the integration layer through card_sub_fn so it can route mouse /
+     * keyboard / resize events to the hosted client. */
     int card_click;
     int card_move;
+    int card_key;
 
     yetty_yvterm_grid_clear_hook_fn clear_hook_fn;
     void *clear_hook_userdata;
@@ -1015,17 +1017,21 @@ static int cb_settermprop(VTermProp prop, VTermValue *val, void *user)
         break;
     case VTERM_PROP_CARDCLICK:
     case VTERM_PROP_CARDMOVE:
+    case VTERM_PROP_CARDKEY:
         if (prop == VTERM_PROP_CARDCLICK) {
             grid->card_click = val->boolean ? 1 : 0;
-        } else {
+        } else if (prop == VTERM_PROP_CARDMOVE) {
             grid->card_move = val->boolean ? 1 : 0;
+        } else {
+            grid->card_key = val->boolean ? 1 : 0;
         }
-        /* Notify the integration layer with the current state of BOTH modes so
-         * it can start/stop forwarding mouse + resize to the hosted client. A
-         * libvterm callback can't propagate a Result — absorb at this boundary. */
+        /* Notify the integration layer with the current state of ALL input
+         * modes so it can start/stop forwarding mouse + keyboard + resize to
+         * the hosted client. A libvterm callback can't propagate a Result —
+         * absorb at this boundary. */
         if (grid->card_sub_fn) {
-            struct yetty_ycore_void_result sub_res =
-                grid->card_sub_fn(grid->card_click, grid->card_move, grid->card_sub_userdata);
+            struct yetty_ycore_void_result sub_res = grid->card_sub_fn(
+                grid->card_click, grid->card_move, grid->card_key, grid->card_sub_userdata);
             if (YETTY_IS_ERR(sub_res)) {
                 yetty_ycore_error_destroy(sub_res.error);
             }
