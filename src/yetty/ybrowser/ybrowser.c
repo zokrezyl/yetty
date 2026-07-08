@@ -213,21 +213,17 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_
         create_fail_cleanup(r);
         return YETTY_ERR(yetty_ylexbor_ptr, "html_document_create");
     }
-    if (lxb_style_init(r->document) != LXB_STATUS_OK) {
-        lxb_html_document_destroy(r->document);
-        create_fail_cleanup(r);
-        return YETTY_ERR(yetty_ylexbor_ptr, "lxb_style_init");
-    }
-
-    r->css_parser = lxb_css_parser_create();
-    if (r->css_parser == NULL || lxb_css_parser_init(r->css_parser, NULL) != LXB_STATUS_OK) {
-        if (r->css_parser) {
-            lxb_css_parser_destroy(r->css_parser, true);
-        }
-        lxb_html_document_destroy(r->document);
-        create_fail_cleanup(r);
-        return YETTY_ERR(yetty_ylexbor_ptr, "css_parser_init");
-    }
+    /* Deliberately NOT calling lxb_style_init(): ybrowser cascades through
+     * libcss, not lexbor. With the style subsystem enabled, lexbor eagerly
+     * built and applied its own full cascade (element_styles_attach) for every
+     * <style>/<link> during parsing and stylesheet attach — matching selectors
+     * against every element — which dominated load time on large pages
+     * (~60% on a news.google.com topic page) yet produced a result nothing
+     * reads: box-build uses libcss_select, getComputedStyle/el.style read the
+     * raw `style` attribute, querySelector uses its own selector engine, and
+     * <style> text stays a DOM text node fed to libcss by the load walk. Leaving
+     * the subsystem off also means <style>->stylesheet stays NULL, so
+     * node_remove_safe's guard always takes the crash-free removal path. */
 
     /* libcss bridge — fatal init failure leaves r->libcss NULL and
      * the box pass falls back to lexbor's serialized-cascade path
@@ -254,6 +250,7 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
     }
     box_vec_destroy(&r->boxes);
     arena_reset(r);
+    yetty_ylexbor_css_media_map_end(r); /* no-op unless a scan was interrupted */
     yetty_ylexbor_grid_classes_free(r);
     free(r->text_chunks);
     free(r->base_url);
@@ -714,6 +711,10 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
     /* Pre-scan for `:root { --x: y; }` etc. before lexbor parses,
 	 * so var() lookups see the latest definitions. */
     yetty_ylexbor_css_vars_scan(r, css, css_len);
+    /* Build the @media-active map once for this source so each per-declaration
+     * scanner below tests media context in O(log n) instead of re-walking the
+     * prefix (which is O(n^2) per sheet — the dominant cost on big pages). */
+    yetty_ylexbor_css_media_map_begin(r, css, css_len);
     /* Also note any grid content-column cap (minmax(0, Nrem)) — applied as
      * a max-width on display:grid containers since we don't lay out grid
      * tracks. */
@@ -724,29 +725,17 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
     yetty_ylexbor_css_scan_var_heights(r, css, css_len);
     yetty_ylexbor_css_scan_width_keywords(r, css, css_len);
     yetty_ylexbor_css_scan_line_clamps(r, css, css_len);
+    yetty_ylexbor_css_media_map_end(r);
 
-    /* Also push the same CSS through libcss so its cascade sees it —
-	 * the sheet URL anchors @import resolution. */
+    /* Push the CSS through libcss — this is the cascade box-build actually
+     * reads; the sheet URL anchors @import resolution. We deliberately do NOT
+     * also parse+attach a lexbor stylesheet (lxb_html_document_stylesheet_attach)
+     * here: lexbor's cascade is never read (see the lxb_style_init note in
+     * yetty_ylexbor_create) and applying it per element was the dominant load
+     * cost on large pages. */
     (void)yetty_ybrowser_libcss_add_sheet(r, css, css_len, CSS_ORIGIN_AUTHOR, sheet_url);
 
-    lxb_css_stylesheet_t *sheet = lxb_css_stylesheet_create(NULL);
-    if (sheet == NULL) {
-        free(expanded_css);
-        return YETTY_ERR(yetty_ycore_void, "stylesheet_create");
-    }
-    lxb_status_t s =
-        lxb_css_stylesheet_parse(sheet, r->css_parser, (const lxb_char_t *)css, css_len);
-    if (s != LXB_STATUS_OK) {
-        lxb_css_stylesheet_destroy(sheet, true);
-        free(expanded_css);
-        return YETTY_ERR(yetty_ycore_void, "stylesheet_parse");
-    }
-    s = lxb_html_document_stylesheet_attach(r->document, sheet);
     free(expanded_css);
-    if (s != LXB_STATUS_OK) {
-        lxb_css_stylesheet_destroy(sheet, true);
-        return YETTY_ERR(yetty_ycore_void, "stylesheet_attach");
-    }
     return YETTY_OK_VOID();
 }
 

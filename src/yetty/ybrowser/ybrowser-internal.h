@@ -743,6 +743,13 @@ struct yetty_ylexbor {
      * advance (~0.602) so per-segment link/bold/italic styling lines up. */
     float glyph_advance_ratio;
 
+    /* Precomputed @media-active map for the stylesheet source currently
+     * being scanned. Built once by css_media_map_begin() at the top of
+     * add_css_from and cleared by css_media_map_end() after the scanners
+     * run, so the per-declaration scanners consult it in O(log n) instead
+     * of each re-walking the source prefix (which was O(n^2) per sheet). */
+    struct media_inactive_map *css_media_map;
+
     /* Layout output. Re-allocated on every load_html / set_viewport. */
     struct yetty_ylexbor_box_vec boxes;
     int content_height;
@@ -959,6 +966,15 @@ float yetty_ylexbor_glyph_advance_ratio(const struct yetty_ylexbor *r);
  * in :root / html / * rules and store the name→value mapping. When
  * reading an attribute value, call resolve_vars to substitute.
  * ===========================================================================*/
+
+/* Build (begin) / tear down (end) the per-source @media-active map on
+ * `r->css_media_map`. begin() does one linear pass over `css_source`,
+ * recording the byte ranges inside non-matching @media blocks for the
+ * current viewport; the scanners then test a position in O(log n) via
+ * grid_media_active_at instead of re-walking the prefix each time. end()
+ * frees it. `css_source` must stay alive between the two calls. */
+void yetty_ylexbor_css_media_map_begin(struct yetty_ylexbor *r, const char *css_source, size_t len);
+void yetty_ylexbor_css_media_map_end(struct yetty_ylexbor *r);
 
 /* Scan `css_source` for custom-property declarations rooted at :root /
  * html / *  and merge them into r->customs. Idempotent — later defs

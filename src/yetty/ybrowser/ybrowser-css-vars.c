@@ -1354,21 +1354,88 @@ static bool grid_media_condition_matches(const char *cond, size_t n, float viewp
     return ok;
 }
 
-/* True if byte offset `pos` in `src` is reached through only matching `@media`
- * blocks (or none). A grid template nested in a non-matching media query must
- * not be registered. Forward single pass tracking brace nesting and, for each
- * open media block, whether its condition matches the viewport. */
-static bool grid_media_active_at(const char *src, size_t len, size_t pos, float viewport_w)
+/* Precomputed @media-active map for one stylesheet source.
+ *
+ * The grid/flex/var side-table scanners each walk the source once and, for
+ * every candidate declaration, must know whether that byte offset sits inside
+ * a non-matching @media block. Answering that by re-scanning the prefix per
+ * declaration is O(n^2) per sheet and was the single largest CPU cost of
+ * loading a big page (news.google.com's inline styles). Instead we do ONE
+ * linear pass, recording the [start, end) byte ranges that fall inside
+ * non-matching @media blocks for the current viewport. A position is
+ * media-active iff it lies in none of those ranges (binary search). Ranges are
+ * emitted in increasing start order and never overlap — a non-matching block
+ * absorbs everything nested inside it — so the search is a predecessor lookup.
+ * Each range starts at the block's `@media` keyword so a needle matched inside
+ * a non-matching media's condition text (e.g. "width" in "min-width:2000px")
+ * is treated inactive, exactly as the old prefix walk did. */
+struct media_inactive_range {
+    size_t start;
+    size_t end;
+};
+
+struct media_inactive_map {
+    const char *src; /* identity guard: the source this was built for */
+    size_t len;
+    float viewport_w;
+    struct media_inactive_range *ranges;
+    size_t count;
+    size_t cap;
+};
+
+static void media_inactive_map_push(struct media_inactive_map *map, size_t start, size_t end)
+{
+    if (end <= start) {
+        return;
+    }
+    if (map->count == map->cap) {
+        size_t new_cap = map->cap ? map->cap * 2 : 8;
+        struct media_inactive_range *grown = realloc(map->ranges, new_cap * sizeof(*grown));
+        if (grown == NULL) {
+            return; /* drop the range; membership then conservatively allows it */
+        }
+        map->ranges = grown;
+        map->cap = new_cap;
+    }
+    map->ranges[map->count].start = start;
+    map->ranges[map->count].end = end;
+    map->count++;
+}
+
+static bool media_inactive_map_contains(const struct media_inactive_map *map, size_t pos)
+{
+    /* Predecessor search: the last range whose start <= pos. */
+    size_t lo = 0;
+    size_t hi = map->count;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (map->ranges[mid].start <= pos) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo == 0) {
+        return false;
+    }
+    return pos < map->ranges[lo - 1].end;
+}
+
+static void media_inactive_map_build(struct media_inactive_map *map, const char *src, size_t len,
+                                     float viewport_w)
 {
     enum { MEDIA_STACK_MAX = 16 };
     bool media_match[MEDIA_STACK_MAX];
     int media_open_brace_depth[MEDIA_STACK_MAX];
     int media_depth = 0;
     int brace_depth = 0;
+    int inactive_depth = 0;
+    size_t region_start = 0;
 
     size_t i = 0;
-    while (i < pos && i < len) {
+    while (i < len) {
         if (src[i] == '@' && i + 6 <= len && strncmp(src + i, "@media", 6) == 0) {
+            size_t media_at = i;
             size_t cond_start = i + 6;
             size_t cursor = cond_start;
             while (cursor < len && src[cursor] != '{') {
@@ -1381,6 +1448,12 @@ static bool grid_media_active_at(const char *src, size_t len, size_t pos, float 
                     media_match[media_depth] = matches;
                     media_open_brace_depth[media_depth] = brace_depth;
                     media_depth++;
+                    if (!matches) {
+                        if (inactive_depth == 0) {
+                            region_start = media_at; /* cover the condition text too */
+                        }
+                        inactive_depth++;
+                    }
                 }
                 brace_depth++; /* the media block's own `{` */
                 i = cursor + 1;
@@ -1393,16 +1466,70 @@ static bool grid_media_active_at(const char *src, size_t len, size_t pos, float 
             brace_depth--;
             if (media_depth > 0 && brace_depth == media_open_brace_depth[media_depth - 1]) {
                 media_depth--;
+                if (!media_match[media_depth]) {
+                    inactive_depth--;
+                    if (inactive_depth == 0) {
+                        media_inactive_map_push(map, region_start, i);
+                    }
+                }
             }
         }
         i++;
     }
-    for (int m = 0; m < media_depth; m++) {
-        if (!media_match[m]) {
-            return false;
-        }
+    /* Unterminated inactive region (malformed CSS): close at end of source. */
+    if (inactive_depth > 0) {
+        media_inactive_map_push(map, region_start, len);
     }
-    return true;
+    map->src = src;
+    map->len = len;
+    map->viewport_w = viewport_w;
+}
+
+void yetty_ylexbor_css_media_map_begin(struct yetty_ylexbor *r, const char *css_source, size_t len)
+{
+    if (r == NULL) {
+        return;
+    }
+    yetty_ylexbor_css_media_map_end(r); /* defensive: drop any prior map */
+    if (css_source == NULL || len == 0) {
+        return;
+    }
+    struct media_inactive_map *map = calloc(1, sizeof(*map));
+    if (map == NULL) {
+        return; /* scanners fall back to the per-query walk */
+    }
+    media_inactive_map_build(map, css_source, len, (float)r->viewport_w);
+    r->css_media_map = map;
+}
+
+void yetty_ylexbor_css_media_map_end(struct yetty_ylexbor *r)
+{
+    if (r == NULL || r->css_media_map == NULL) {
+        return;
+    }
+    free(r->css_media_map->ranges);
+    free(r->css_media_map);
+    r->css_media_map = NULL;
+}
+
+/* True if byte offset `pos` in `src` is reached through only matching `@media`
+ * blocks (or none). A grid template nested in a non-matching media query must
+ * not be registered. Consults the map precomputed for this source (built once
+ * in add_css_from) for an O(log n) test; if no map is cached for this exact
+ * source it builds a throwaway one for this single query. */
+static bool grid_media_active_at(struct yetty_ylexbor *r, const char *src, size_t len, size_t pos)
+{
+    const struct media_inactive_map *map = r->css_media_map;
+    if (map != NULL && map->src == src && map->len == len &&
+        map->viewport_w == (float)r->viewport_w) {
+        return !media_inactive_map_contains(map, pos);
+    }
+
+    struct media_inactive_map scratch = {0};
+    media_inactive_map_build(&scratch, src, len, (float)r->viewport_w);
+    bool inactive = media_inactive_map_contains(&scratch, pos);
+    free(scratch.ranges);
+    return !inactive;
 }
 
 static int grid_selector_alternative_classes(const char *src, size_t alt_start, size_t alt_end,
@@ -1424,7 +1551,7 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
         /* Skip templates inside a non-matching @media block (e.g. Tailwind's
          * `xl:` utilities behind `@media (min-width:1280px)` at a narrower
          * viewport). */
-        if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
+        if (!grid_media_active_at(r, src, len, i)) {
             continue;
         }
         /* Find the enclosing rule's `{` (scan back) and its selector. */
@@ -1762,7 +1889,7 @@ void yetty_ylexbor_css_scan_var_heights(struct yetty_ylexbor *r, const char *src
         if (!has_var) {
             continue;
         }
-        if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
+        if (!grid_media_active_at(r, src, len, i)) {
             continue;
         }
         /* Selector: everything between the previous '}' (or block start)
@@ -1871,7 +1998,7 @@ void yetty_ylexbor_css_scan_width_keywords(struct yetty_ylexbor *r, const char *
         } else {
             continue;
         }
-        if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
+        if (!grid_media_active_at(r, src, len, i)) {
             continue;
         }
         size_t brace = i;
@@ -1952,7 +2079,7 @@ void yetty_ylexbor_css_scan_line_clamps(struct yetty_ylexbor *r, const char *src
         if (digits == 0 || lines <= 0 || lines > 255) {
             continue;
         }
-        if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
+        if (!grid_media_active_at(r, src, len, i)) {
             continue;
         }
         size_t brace = i;
@@ -2473,7 +2600,7 @@ void yetty_ylexbor_css_scan_grid_spans(struct yetty_ylexbor *r, const char *src,
         } else {
             continue;
         }
-        if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
+        if (!grid_media_active_at(r, src, len, i)) {
             continue;
         }
         size_t val_start = i + nlen;
@@ -2671,7 +2798,7 @@ void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *src, 
         if (!is_flex) {
             continue;
         }
-        if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
+        if (!grid_media_active_at(r, src, len, i)) {
             continue;
         }
         /* Gap from the same block. */

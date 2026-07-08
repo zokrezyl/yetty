@@ -1855,6 +1855,21 @@ static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_i
         return 0;
     }
     (*budget)--;
+    /* A bare text node can be a cell in its own right — most importantly a
+     * direct text child of a flex container becomes an anonymous flex item
+     * (`<div style=display:flex><svg/>More headlines</div>`). Its content
+     * width is its OWN text advance, not its children (a text node has none),
+     * so the child-summing loop below would return 0 and the flex item would
+     * collapse to the 1px slack, wrapping the label one fragment per line
+     * (the Google News "More headlines & perspectives" header). Measure the
+     * text directly. */
+    if (r->boxes.data[cell_idx].kind == YL_BOX_INLINE_TEXT) {
+        const struct yetty_ylexbor_box *text_cell = &r->boxes.data[cell_idx];
+        float adv = text_cell->glyph_advance > 0.0f ? text_cell->glyph_advance
+                                                     : yetty_ylexbor_glyph_advance_ratio(r);
+        return yetty_ylexbor_naive_text_width(text_cell->text, text_cell->text_len,
+                                              text_cell->font_size, adv);
+    }
     float sum = 0;
     float max_line = 0;
     /* A flex ROW lays its children side-by-side: its max-content is the
