@@ -417,6 +417,106 @@ out_parser:
     return rc;
 }
 
+/* Does ONE element match the selector list? Real engine matching
+ * (combinators, attribute selectors incl. ~=, pseudo-classes) via
+ * lxb_selectors_match_node. Returns 1 match / 0 no / -1 parse error. */
+YETTY_EXTERNAL_CALLBACK
+static lxb_status_t element_match_found_cb(lxb_dom_node_t *node, lxb_css_selector_specificity_t sp,
+                                           void *ctx)
+{
+    (void)node;
+    (void)sp;
+    *(int *)ctx = 1;
+    return LXB_STATUS_STOP;
+}
+
+static int element_matches_selector(lxb_dom_node_t *node, const char *sel_text, size_t sel_len)
+{
+    int matched = 0;
+    int rc = -1;
+    lxb_css_parser_t *parser = lxb_css_parser_create();
+    if (parser == NULL) {
+        return -1;
+    }
+    if (lxb_css_parser_init(parser, NULL) != LXB_STATUS_OK) {
+        goto out_parser;
+    }
+    lxb_selectors_t *sel = lxb_selectors_create();
+    if (sel == NULL) {
+        goto out_parser;
+    }
+    if (lxb_selectors_init(sel) != LXB_STATUS_OK) {
+        goto out_sel;
+    }
+    lxb_css_selector_list_t *list =
+        lxb_css_selectors_parse(parser, (const lxb_char_t *)sel_text, sel_len);
+    if (list == NULL) {
+        goto out_sel;
+    }
+    lxb_status_t s = lxb_selectors_match_node(sel, node, list, element_match_found_cb, &matched);
+    lxb_css_selector_list_destroy_memory(list);
+    if (s == LXB_STATUS_OK || s == LXB_STATUS_STOP) {
+        rc = matched;
+    }
+out_sel:
+    lxb_selectors_destroy(sel, true);
+out_parser:
+    lxb_css_parser_destroy(parser, true);
+    return rc;
+}
+
+/* Element.matches(selector) — spec behavior, engine-backed. */
+static JSValue js_el_matches(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1) {
+        return JS_FALSE;
+    }
+    lxb_dom_node_t *node = unwrap_node(ctx, this_val);
+    if (!node || node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+        return JS_FALSE;
+    }
+    size_t slen;
+    const char *sel = JS_ToCStringLen(ctx, &slen, argv[0]);
+    if (!sel) {
+        return JS_FALSE;
+    }
+    int matched = element_matches_selector(node, sel, slen);
+    JS_FreeCString(ctx, sel);
+    return matched == 1 ? JS_TRUE : JS_FALSE;
+}
+
+/* Element.closest(selector) — walk ANCESTORS (inclusive) for the first
+ * match. The old binding aliased this to querySelector, which searches
+ * DESCENDANTS — that broke Catalyst's `el.closest(tag) === controller`
+ * target scoping and with it every `data-target` lookup on github. */
+static JSValue js_el_closest(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    if (argc < 1) {
+        return JS_NULL;
+    }
+    lxb_dom_node_t *node = unwrap_node(ctx, this_val);
+    if (!node) {
+        return JS_NULL;
+    }
+    size_t slen;
+    const char *sel = JS_ToCStringLen(ctx, &slen, argv[0]);
+    if (!sel) {
+        return JS_NULL;
+    }
+    JSValue result = JS_NULL;
+    for (lxb_dom_node_t *walk = node; walk != NULL; walk = walk->parent) {
+        if (walk->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        if (element_matches_selector(walk, sel, slen) == 1) {
+            result = wrap_element(ctx, lxb_dom_interface_element(walk));
+            break;
+        }
+    }
+    JS_FreeCString(ctx, sel);
+    return result;
+}
+
 /* ===========================================================================
  * Element methods — getAttribute / setAttribute / removeAttribute /
  * hasAttribute / appendChild / removeChild / textContent / innerHTML /
@@ -3547,12 +3647,12 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CFUNC_DEF("before", 1, js_el_before),
         JS_CFUNC_DEF("after", 1, js_el_after),
         JS_CFUNC_DEF("remove", 0, js_el_removeChild),
-        JS_CFUNC_DEF("closest", 1, js_el_querySelector),
+        JS_CFUNC_DEF("closest", 1, js_el_closest),
         /* Predicates / accessors that need a typed return. We give them
     	 * a tiny dedicated stub each below so they don't masquerade as
     	 * mutators. */
         JS_CFUNC_DEF("contains", 1, js_el_contains_stub),
-        JS_CFUNC_DEF("matches", 1, js_el_matches_stub),
+        JS_CFUNC_DEF("matches", 1, js_el_matches),
         JS_CFUNC_DEF("hasChildNodes", 0, js_el_hasChildNodes_stub),
         JS_CFUNC_DEF("hasAttributes", 0, js_el_hasAttributes_stub),
         JS_CFUNC_DEF("getAttributeNames", 0, js_el_getAttributeNames_stub),

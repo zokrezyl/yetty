@@ -227,7 +227,11 @@ static void test_flex_grow_ratios(void)
                                "</div>"
                                "</body></html>";
     /* viewport 1000 → body content 984. The flex container fills 984.
-     * Items have basis auto (0) and grow 1/2/1 → widths 246 / 492 / 246. */
+     * Items have basis AUTO — per the spec that is their content size
+	 * (the ~9px label), not zero; grow then distributes the LEFTOVER
+	 * 1:2:1. Content ≈ 9.1px each → leftover ≈ 956.6, shares ≈ 239.15 /
+	 * 478.3 / 239.15 → widths ≈ 248.45 / 487.10 / 248.45. (`flex: 1`
+	 * shorthand — explicit 0 basis — would give the pure quarters.) */
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info a = {0}, b = {0}, c = {0};
@@ -240,13 +244,13 @@ static void test_flex_grow_ratios(void)
         return;
     }
 
-    ASSERT_NEAR("flex-grow 1:2:1 → a.w", a.w, 246.0f);
-    ASSERT_NEAR("flex-grow 1:2:1 → b.w", b.w, 492.0f);
-    ASSERT_NEAR("flex-grow 1:2:1 → c.w", c.w, 246.0f);
+    ASSERT_NEAR("flex-grow 1:2:1 → a.w", a.w, 248.45f);
+    ASSERT_NEAR("flex-grow 1:2:1 → b.w", b.w, 487.10f);
+    ASSERT_NEAR("flex-grow 1:2:1 → c.w", c.w, 248.45f);
     /* Cumulative x positions. */
     ASSERT_NEAR("flex item a.x", a.x, 8.0f);
-    ASSERT_NEAR("flex item b.x", b.x, 8.0f + 246.0f);
-    ASSERT_NEAR("flex item c.x", c.x, 8.0f + 246.0f + 492.0f);
+    ASSERT_NEAR("flex item b.x", b.x, 8.0f + 248.45f);
+    ASSERT_NEAR("flex item c.x", c.x, 8.0f + 248.45f + 487.10f);
 
     yetty_ylexbor_destroy(yl);
 }

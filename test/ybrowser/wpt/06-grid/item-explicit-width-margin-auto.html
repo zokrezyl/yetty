@@ -1,0 +1,13 @@
+<!doctype html><meta charset=utf-8><title>grid item with explicit width + margin:auto centres in its track</title>
+<style>
+  body{margin:0}
+  .grid{display:grid;grid-template-columns:1fr;width:400px}
+  /* The single track is 400px wide. The item has an explicit 200px width
+     centred by auto margins — justify-self:stretch is overridden, so it is
+     200px at x=100, not stretched to fill the 400px track (this is the
+     gnews article-column idiom: width:840px; margin:0 auto in a wide grid). */
+  .item{width:200px;margin:0 auto}
+</style>
+<div class="grid">
+  <div class="item" data-test="centered" data-expect="100,0,200,*">x</div>
+</div>

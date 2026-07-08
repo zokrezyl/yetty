@@ -1137,6 +1137,18 @@ css_computed_style *yetty_ybrowser_libcss_select(struct yetty_ylexbor *r, lxb_do
     }
     struct yetty_ybrowser_libcss *lc = r->libcss;
 
+    /* Refresh the media context from the LIVE viewport before every
+	 * selection. lc->media was seeded once at init; a later set_viewport()
+	 * (window resize, or the host laying the embed out at its real width
+	 * after the engine was created at the 1024 default) never touched it,
+	 * so @media(min-width/max-width) evaluated against the stale init width
+	 * — a responsive page's mobile/desktop rules resolved for the wrong
+	 * breakpoint regardless of the actual render width. Keep it current. */
+    lc->media.width = float_to_fixed((float)r->viewport_w);
+    lc->media.height = float_to_fixed((float)r->viewport_h);
+    lc->unit_ctx.viewport_width = lc->media.width;
+    lc->unit_ctx.viewport_height = lc->media.height;
+
     /* Build inline-style sheet on demand. We could cache one per
      * element, but inline styles change rarely and select-time is
      * dominated by selector matching anyway. */
@@ -1873,6 +1885,14 @@ int yetty_ybrowser_libcss_position(const css_computed_style *style)
         return CSS_POSITION_STATIC;
     }
     return css_computed_position(style);
+}
+
+int yetty_ybrowser_libcss_visibility(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_VISIBILITY_VISIBLE;
+    }
+    return (int)css_computed_visibility(style);
 }
 
 int yetty_ybrowser_libcss_inset(struct yetty_ylexbor *r, const css_computed_style *style, int side,

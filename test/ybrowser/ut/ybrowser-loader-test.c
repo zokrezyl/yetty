@@ -19,6 +19,14 @@
 
 int main(void)
 {
+    /* Isolate the DISK cache tier: without this, an entry persisted by a
+	 * previous run serves the FIRST fetch from disk and the hit count
+	 * (and network expectations) drift run-over-run. */
+    char disk_dir[] = "/tmp/ybrowser-loader-test-XXXXXX";
+    if (mkdtemp(disk_dir)) {
+        setenv("XDG_CACHE_HOME", disk_dir, 1);
+    }
+
     /* Route the load profiler to a file so the cache-hit line is
 	 * observable. Must happen before any fetch. */
     setenv("YBROWSER_PROFILE", "1", 1);

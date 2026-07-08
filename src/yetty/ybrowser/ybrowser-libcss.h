@@ -181,6 +181,9 @@ int yetty_ybrowser_libcss_clear(const css_computed_style *style);
  * ABSOLUTE / FIXED / STICKY). Default is CSS_POSITION_STATIC. */
 int yetty_ybrowser_libcss_position(const css_computed_style *style);
 
+/* CSS_VISIBILITY_* value; VISIBLE when style is NULL. */
+int yetty_ybrowser_libcss_visibility(const css_computed_style *style);
+
 /* Inset (top/right/bottom/left). `side`: 0=top,1=right,2=bottom,3=left.
  * Returns 0 when the side is `auto`/unset, 1 when it is a resolved length
  * (px written to *out_value; may be negative), or 2 when it is a percentage

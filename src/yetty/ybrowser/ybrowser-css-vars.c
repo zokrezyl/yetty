@@ -10,18 +10,21 @@
  * Strategy:
  *   1. Every time a stylesheet source string is added (load_html's
  *      external <link> + <style> walker), scan for declarations of the
- *      form `--name: value;` whose enclosing rule looks like a global
- *      target (:root / html / body / *). Store name→value.
- *   2. When the box-build reads a value (color, currently), pipe it
- *      through resolve_vars() first. We substitute every var(--name)
- *      occurrence with its stored value, recursively (with a depth
- *      limit to break cycles).
+ *      form `--name: value;`. Global targets (:root / html / body / *)
+ *      go into the customs table with their selector specificity so a
+ *      later, more-specific definition wins; the supplementary-cascade
+ *      side tables (grid templates, flex gaps, var-driven heights, grid
+ *      placement) store their own selector so lookups are matched with
+ *      the lexbor selector engine and gated on @media.
+ *   2. When the box-build reads a value, pipe it through
+ *      resolve_vars_for_element() first: var(--name) is resolved by
+ *      walking the element and its ancestors for inline `--name` defs
+ *      before falling back to the specificity-ranked global table,
+ *      recursively (with a depth limit to break cycles).
  *
- * Skips:
- *   - Per-element custom properties (rare on real sites; would need a
- *     per-element table indexed by lxb pointer). The :root path covers
- *     the >95% case.
- *   - Whitespace-trim / case-fold inside calc() — pass-through.
+ * Not modeled:
+ *   - Full computed-value-time semantics inside calc() — whitespace-trim
+ *     / case-fold are pass-through.
  */
 
 #include "ybrowser-internal.h"
@@ -1083,8 +1086,11 @@ static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *o
 
 /* Parse a full grid-template-columns value into tracks. Expands repeat(). */
 static int grid_parse_tracks_ex(const char *v, size_t n, struct yl_grid_track *out, int maxn,
-                                int allow_named)
+                                int allow_named, int *out_repeat_auto)
 {
+    if (out_repeat_auto) {
+        *out_repeat_auto = 0;
+    }
     /* Strip a trailing `!important` (Tailwind emits `…repeat(5,minmax(0,1fr))
 	 * !important` for its grid utilities). The `!` cannot legitimately appear
 	 * inside a track list, so cutting at the first `!` drops the priority
@@ -1126,6 +1132,8 @@ static int grid_parse_tracks_ex(const char *v, size_t n, struct yl_grid_track *o
         if (i + 7 <= n && strncmp(v + i, "repeat(", 7) == 0) {
             i += 7;
             int rep = atoi(v + i);
+            int repeat_auto = strncmp(v + i, "auto-fit", 8) == 0 ||
+                              strncmp(v + i, "auto-fill", 9) == 0;
             while (i < n && v[i] != ',') {
                 i++;
             }
@@ -1149,7 +1157,14 @@ static int grid_parse_tracks_ex(const char *v, size_t n, struct yl_grid_track *o
                 i++;
             }
             struct yl_grid_track t = {0};
-            if (rep > 0 && grid_parse_one_track(v + xstart, i - xstart, &t)) {
+            if (repeat_auto && out_repeat_auto && count == 0 &&
+                grid_parse_one_track(v + xstart, i - xstart, &t)) {
+                /* auto-fit/auto-fill: the track count depends on the
+				 * content — hand the single track spec up and let the
+				 * consumer replicate per child. */
+                out[count++] = t;
+                *out_repeat_auto = 1;
+            } else if (rep > 0 && grid_parse_one_track(v + xstart, i - xstart, &t)) {
                 for (int k = 0; k < rep && count < maxn; k++) {
                     out[count++] = t;
                 }
@@ -1188,7 +1203,7 @@ static int grid_parse_tracks_ex(const char *v, size_t n, struct yl_grid_track *o
  * by the generic class/inline grid detection). */
 static int grid_parse_tracks(const char *v, size_t n, struct yl_grid_track *out, int maxn)
 {
-    return grid_parse_tracks_ex(v, n, out, maxn, /*allow_named=*/0);
+    return grid_parse_tracks_ex(v, n, out, maxn, /*allow_named=*/0, NULL);
 }
 
 /* Resolve a grid line name to its line index within a grid-template-columns
@@ -1433,12 +1448,13 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
             val_end++;
         }
         struct yl_grid_track tracks[YL_GRID_MAX_TRACKS];
-        int ntracks =
-            grid_parse_tracks(src + val_start, val_end - val_start, tracks, YL_GRID_MAX_TRACKS);
+        int repeat_auto = 0;
+        int ntracks = grid_parse_tracks_ex(src + val_start, val_end - val_start, tracks,
+                                           YL_GRID_MAX_TRACKS, /*allow_named=*/0, &repeat_auto);
         /* `grid-template-columns: inherit` (subgrid idiom): register an
          * inherit entry — box-build copies the parent's tracks. */
         int inherit_template = 0;
-        if (ntracks < 2) {
+        if (ntracks < 2 && !repeat_auto) {
             size_t v = val_start;
             while (v < val_end && (src[v] == ' ' || src[v] == '\t')) {
                 v++;
@@ -1544,6 +1560,7 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
             memcpy(entry->tracks, tracks, sizeof(tracks));
             entry->ntracks = (uint8_t)ntracks;
             entry->inherit_template = (uint8_t)inherit_template;
+            entry->repeat_auto = (uint8_t)repeat_auto;
             entry->col_gap = col_gap > 0.0f ? col_gap : 0.0f;
             entry->row_gap = row_gap > 0.0f ? row_gap : 0.0f;
             entry->selector = supp_selector_capture(src, alt_start, alt_end);
@@ -1645,7 +1662,7 @@ int yetty_ylexbor_grid_parse_inline_named(const char *style, size_t len, struct 
             value_end++;
         }
         int ntracks = grid_parse_tracks_ex(style + value_start, value_end - value_start, out, maxn,
-                                           /*allow_named=*/1);
+                                           /*allow_named=*/1, NULL);
         if (out_value) {
             *out_value = style + value_start;
         }
@@ -1694,6 +1711,302 @@ float yetty_ylexbor_css_inline_gap(const char *style, size_t len)
     return g;
 }
 
+void yetty_ylexbor_css_scan_var_heights(struct yetty_ylexbor *r, const char *src, size_t len)
+{
+    if (r == NULL || src == NULL || len < 16) {
+        return;
+    }
+    static const char needle[] = "height";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen < len; i++) {
+        if (memcmp(src + i, needle, nlen) != 0) {
+            continue;
+        }
+        /* Property boundary: reject min-height / max-height / line-height
+		 * (the char before must not be alnum or '-'). */
+        if (i > 0 && (src[i - 1] == '-' || isalnum((unsigned char)src[i - 1]))) {
+            continue;
+        }
+        size_t p = i + nlen;
+        while (p < len && (src[p] == ' ' || src[p] == '\t')) {
+            p++;
+        }
+        if (p >= len || src[p] != ':') {
+            continue;
+        }
+        p++;
+        while (p < len && (src[p] == ' ' || src[p] == '\t')) {
+            p++;
+        }
+        size_t val_start = p;
+        size_t val_end = p;
+        int paren_depth = 0;
+        while (val_end < len && (paren_depth > 0 || (src[val_end] != ';' && src[val_end] != '}'))) {
+            if (src[val_end] == '(') {
+                paren_depth++;
+            } else if (src[val_end] == ')') {
+                paren_depth--;
+            }
+            val_end++;
+        }
+        if (val_end <= val_start || val_end - val_start > 512) {
+            continue;
+        }
+        int has_var = 0;
+        for (size_t k = val_start; k + 4 <= val_end; k++) {
+            if (memcmp(src + k, "var(", 4) == 0) {
+                has_var = 1;
+                break;
+            }
+        }
+        if (!has_var) {
+            continue;
+        }
+        if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
+            continue;
+        }
+        /* Selector: everything between the previous '}' (or block start)
+		 * and this rule's '{'. */
+        size_t brace = i;
+        while (brace > 0 && src[brace] != '{') {
+            brace--;
+        }
+        if (src[brace] != '{') {
+            continue;
+        }
+        size_t sel_end = brace;
+        size_t sel_start = brace;
+        while (sel_start > 0 && src[sel_start - 1] != '}' && src[sel_start - 1] != '{' &&
+               src[sel_start - 1] != ';') {
+            sel_start--;
+        }
+        char *selector = sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        if (!selector) {
+            continue;
+        }
+        if (r->var_height_count == r->var_height_cap) {
+            int cap = r->var_height_cap ? r->var_height_cap * 2 : 8;
+            struct yl_var_height_rule *grown =
+                realloc(r->var_height_rules, (size_t)cap * sizeof(*grown));
+            if (!grown) {
+                free(selector);
+                return;
+            }
+            r->var_height_rules = grown;
+            r->var_height_cap = cap;
+        }
+        struct yl_var_height_rule *rule = &r->var_height_rules[r->var_height_count];
+        memset(rule, 0, sizeof(*rule));
+        rule->selector = selector;
+        rule->raw_value = malloc(val_end - val_start + 1);
+        if (!rule->raw_value) {
+            free(rule->selector);
+            memset(rule, 0, sizeof(*rule));
+            continue;
+        }
+        memcpy(rule->raw_value, src + val_start, val_end - val_start);
+        rule->raw_value[val_end - val_start] = '\0';
+        r->var_height_count++;
+    }
+}
+
+int yetty_ylexbor_var_height_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                    float font_size, float *out_px)
+{
+    if (r == NULL || element == NULL || r->var_height_count == 0) {
+        return 0;
+    }
+    (void)font_size;
+    /* Last matching rule wins — capture preserved cascade order. */
+    for (int e = r->var_height_count; e-- > 0;) {
+        struct yl_var_height_rule *rule = &r->var_height_rules[e];
+        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
+                                          &rule->selector_state, element);
+        if (verdict <= 0) {
+            continue;
+        }
+        char *resolved = yetty_ylexbor_css_vars_resolve_for_element(
+            r, element, rule->raw_value, strlen(rule->raw_value));
+        const char *value = resolved ? resolved : rule->raw_value;
+        char *unit_end = NULL;
+        float px = strtof(value, &unit_end);
+        int definite = unit_end && unit_end != value && strncmp(unit_end, "px", 2) == 0 &&
+                       px >= 0.0f;
+        free(resolved);
+        if (definite) {
+            *out_px = px;
+            return 1;
+        }
+        return 0; /* winning rule didn't resolve to a definite px — keep libcss's value */
+    }
+    return 0;
+}
+
+void yetty_ylexbor_css_scan_width_keywords(struct yetty_ylexbor *r, const char *src, size_t len)
+{
+    if (r == NULL || src == NULL || len < 16) {
+        return;
+    }
+    static const char needle[] = "width:";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen < len; i++) {
+        if (memcmp(src + i, needle, nlen) != 0) {
+            continue;
+        }
+        /* Reject min-width / max-width — property must start here. */
+        if (i > 0 && (src[i - 1] == '-' || isalnum((unsigned char)src[i - 1]))) {
+            continue;
+        }
+        size_t p = i + nlen;
+        while (p < len && (src[p] == ' ' || src[p] == '\t')) {
+            p++;
+        }
+        uint8_t keyword = 0;
+        if (p + 11 <= len && strncmp(src + p, "max-content", 11) == 0) {
+            keyword = 1;
+        } else if (p + 11 <= len && strncmp(src + p, "min-content", 11) == 0) {
+            keyword = 2;
+        } else if (p + 11 <= len && strncmp(src + p, "fit-content", 11) == 0) {
+            keyword = 3;
+        } else {
+            continue;
+        }
+        if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
+            continue;
+        }
+        size_t brace = i;
+        while (brace > 0 && src[brace] != '{') {
+            brace--;
+        }
+        if (src[brace] != '{') {
+            continue;
+        }
+        size_t sel_end = brace;
+        size_t sel_start = brace;
+        while (sel_start > 0 && src[sel_start - 1] != '}' && src[sel_start - 1] != '{' &&
+               src[sel_start - 1] != ';') {
+            sel_start--;
+        }
+        char *selector = sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        if (!selector) {
+            continue;
+        }
+        if (r->width_keyword_count == r->width_keyword_cap) {
+            int cap = r->width_keyword_cap ? r->width_keyword_cap * 2 : 8;
+            struct yl_width_keyword_rule *grown =
+                realloc(r->width_keyword_rules, (size_t)cap * sizeof(*grown));
+            if (!grown) {
+                free(selector);
+                return;
+            }
+            r->width_keyword_rules = grown;
+            r->width_keyword_cap = cap;
+        }
+        struct yl_width_keyword_rule *rule = &r->width_keyword_rules[r->width_keyword_count];
+        memset(rule, 0, sizeof(*rule));
+        rule->selector = selector;
+        rule->keyword = keyword;
+        r->width_keyword_count++;
+    }
+}
+
+int yetty_ylexbor_width_keyword_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element)
+{
+    if (r == NULL || element == NULL || r->width_keyword_count == 0) {
+        return 0;
+    }
+    for (int e = r->width_keyword_count; e-- > 0;) {
+        struct yl_width_keyword_rule *rule = &r->width_keyword_rules[e];
+        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
+                                          &rule->selector_state, element);
+        if (verdict > 0) {
+            return rule->keyword;
+        }
+    }
+    return 0;
+}
+
+void yetty_ylexbor_css_scan_line_clamps(struct yetty_ylexbor *r, const char *src, size_t len)
+{
+    if (r == NULL || src == NULL || len < 20) {
+        return;
+    }
+    static const char needle[] = "-webkit-line-clamp:";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen < len; i++) {
+        if (memcmp(src + i, needle, nlen) != 0) {
+            continue;
+        }
+        size_t p = i + nlen;
+        while (p < len && (src[p] == ' ' || src[p] == '\t')) {
+            p++;
+        }
+        /* Only a positive integer line count clamps; `none` (and any
+		 * non-digit) leaves the element unclamped. */
+        int lines = 0;
+        size_t digits = 0;
+        while (p + digits < len && isdigit((unsigned char)src[p + digits])) {
+            lines = lines * 10 + (src[p + digits] - '0');
+            digits++;
+        }
+        if (digits == 0 || lines <= 0 || lines > 255) {
+            continue;
+        }
+        if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
+            continue;
+        }
+        size_t brace = i;
+        while (brace > 0 && src[brace] != '{') {
+            brace--;
+        }
+        if (src[brace] != '{') {
+            continue;
+        }
+        size_t sel_end = brace;
+        size_t sel_start = brace;
+        while (sel_start > 0 && src[sel_start - 1] != '}' && src[sel_start - 1] != '{' &&
+               src[sel_start - 1] != ';') {
+            sel_start--;
+        }
+        char *selector = sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        if (!selector) {
+            continue;
+        }
+        if (r->line_clamp_count == r->line_clamp_cap) {
+            int cap = r->line_clamp_cap ? r->line_clamp_cap * 2 : 8;
+            struct yl_line_clamp_rule *grown =
+                realloc(r->line_clamp_rules, (size_t)cap * sizeof(*grown));
+            if (!grown) {
+                free(selector);
+                return;
+            }
+            r->line_clamp_rules = grown;
+            r->line_clamp_cap = cap;
+        }
+        struct yl_line_clamp_rule *rule = &r->line_clamp_rules[r->line_clamp_count];
+        memset(rule, 0, sizeof(*rule));
+        rule->selector = selector;
+        rule->lines = (uint8_t)lines;
+        r->line_clamp_count++;
+    }
+}
+
+int yetty_ylexbor_line_clamp_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element)
+{
+    if (r == NULL || element == NULL || r->line_clamp_count == 0) {
+        return 0;
+    }
+    for (int e = r->line_clamp_count; e-- > 0;) {
+        struct yl_line_clamp_rule *rule = &r->line_clamp_rules[e];
+        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
+                                          &rule->selector_state, element);
+        if (verdict > 0) {
+            return rule->lines;
+        }
+    }
+    return 0;
+}
+
 void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
 {
     if (r == NULL) {
@@ -1713,6 +2026,37 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
     r->grid_classes = NULL;
     r->grid_class_count = 0;
     r->grid_class_cap = 0;
+    for (int e = 0; e < r->var_height_count; e++) {
+        free(r->var_height_rules[e].selector);
+        free(r->var_height_rules[e].raw_value);
+        if (r->var_height_rules[e].compiled_selector) {
+            lxb_css_selector_list_destroy_memory(r->var_height_rules[e].compiled_selector);
+        }
+    }
+    free(r->var_height_rules);
+    r->var_height_rules = NULL;
+    r->var_height_count = 0;
+    r->var_height_cap = 0;
+    for (int e = 0; e < r->width_keyword_count; e++) {
+        free(r->width_keyword_rules[e].selector);
+        if (r->width_keyword_rules[e].compiled_selector) {
+            lxb_css_selector_list_destroy_memory(r->width_keyword_rules[e].compiled_selector);
+        }
+    }
+    free(r->width_keyword_rules);
+    r->width_keyword_rules = NULL;
+    r->width_keyword_count = 0;
+    r->width_keyword_cap = 0;
+    for (int e = 0; e < r->line_clamp_count; e++) {
+        free(r->line_clamp_rules[e].selector);
+        if (r->line_clamp_rules[e].compiled_selector) {
+            lxb_css_selector_list_destroy_memory(r->line_clamp_rules[e].compiled_selector);
+        }
+    }
+    free(r->line_clamp_rules);
+    r->line_clamp_rules = NULL;
+    r->line_clamp_count = 0;
+    r->line_clamp_cap = 0;
     for (int e = 0; e < r->grid_span_class_count; e++) {
         free(r->grid_span_classes[e].cls);
         for (int k = 0; k < r->grid_span_classes[e].context_count; k++) {
@@ -2105,10 +2449,13 @@ void yetty_ylexbor_css_scan_grid_spans(struct yetty_ylexbor *r, const char *src,
     }
     static const char column_needle[] = "grid-column:";
     static const char row_needle[] = "grid-row:";
+    static const char area_needle[] = "grid-area:";
     const size_t column_nlen = sizeof(column_needle) - 1;
     const size_t row_nlen = sizeof(row_needle) - 1;
+    const size_t area_nlen = sizeof(area_needle) - 1;
     for (size_t i = 0; i + row_nlen < len; i++) {
         int axis;
+        int is_area = 0;
         size_t nlen;
         if (i + column_nlen < len && memcmp(src + i, column_needle, column_nlen) == 0) {
             axis = 0;
@@ -2116,6 +2463,13 @@ void yetty_ylexbor_css_scan_grid_spans(struct yetty_ylexbor *r, const char *src,
         } else if (memcmp(src + i, row_needle, row_nlen) == 0) {
             axis = 1;
             nlen = row_nlen;
+        } else if (i + area_nlen < len && memcmp(src + i, area_needle, area_nlen) == 0) {
+            /* `grid-area: <row> / <column>` (the 2-part form CSS modules
+			 * emit — `grid-area:1/2`, `grid-area:span 2/1`): equivalent
+			 * to grid-row + grid-column. Registered as BOTH axes below. */
+            axis = 1; /* the part before the first '/' is the row */
+            is_area = 1;
+            nlen = area_nlen;
         } else {
             continue;
         }
@@ -2127,6 +2481,21 @@ void yetty_ylexbor_css_scan_grid_spans(struct yetty_ylexbor *r, const char *src,
         while (val_end < len && src[val_end] != ';' && src[val_end] != '}') {
             val_end++;
         }
+        size_t area_col_start = 0, area_col_end = 0;
+        if (is_area) {
+            /* Split at the first '/'. Named areas (no slash) are not
+			 * modelled — skip them. */
+            size_t slash = val_start;
+            while (slash < val_end && src[slash] != '/') {
+                slash++;
+            }
+            if (slash >= val_end) {
+                continue;
+            }
+            area_col_start = slash + 1;
+            area_col_end = val_end;
+            val_end = slash;
+        }
         int start = 0;
         int span = 0;
         if (!yetty_ylexbor_grid_parse_placement(src, val_start, val_end, &start, &span)) {
@@ -2134,6 +2503,15 @@ void yetty_ylexbor_css_scan_grid_spans(struct yetty_ylexbor *r, const char *src,
         }
         if (span > YL_GRID_MAX_TRACKS || start > 255) {
             continue;
+        }
+        int col_start = 0;
+        int col_span = 0;
+        if (is_area) {
+            if (!yetty_ylexbor_grid_parse_placement(src, area_col_start, area_col_end, &col_start,
+                                                    &col_span) ||
+                col_span > YL_GRID_MAX_TRACKS || col_start > 255) {
+                continue;
+            }
         }
         /* Enclosing rule's selector list. Comma alternatives and
          * descendant/child chains are accepted: each alternative is keyed
@@ -2159,6 +2537,11 @@ void yetty_ylexbor_css_scan_grid_spans(struct yetty_ylexbor *r, const char *src,
                 alt_end++;
             }
             grid_span_scan_alternative(r, src, alt_start, alt_end, axis, start, span);
+            if (is_area) {
+                /* Column half of the grid-area shorthand. */
+                grid_span_scan_alternative(r, src, alt_start, alt_end, /*axis=*/0, col_start,
+                                           col_span);
+            }
             alt_start = alt_end + 1;
         }
     }

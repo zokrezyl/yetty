@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
 
 #if YETTY_HAVE_LIBPNG
 #include <png.h>
@@ -1483,6 +1484,14 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
     ydebug("paint total boxes=%u", r->boxes.size);
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        if (b->vis_hidden) {
+            /* visibility:hidden|collapse — the box keeps its laid-out
+			 * space (siblings are already placed around it) but paints
+			 * no background, border, or glyphs. A visibility:visible
+			 * descendant is a separate box with its own cleared flag,
+			 * so it still paints. */
+            continue;
+        }
         /* A box with h=0 but a visible border is normal — that's
 		 * how `<hr>` renders (border-top: 1px on a content-less
 		 * block). Don't skip it; the border paint below produces
@@ -1640,11 +1649,103 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                     .half_height = b->h * 0.5f,
                     .corner_radius = 0,
                 };
-                (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, 0xc0c0c0ffu, 0, 0,
+                /* Drawable fills are ABGR (0xAABBGGRR) — this neutral grey
+				 * was long written as RGBA and rendered PINK. */
+                (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, 0xffc0c0c0u, 0, 0,
                                                                 &box);
                 ydebug("paint image (placeholder) i=%u xy=%.0f,%.0f wh=%.0fx%.0f", i, b->x, b->y,
                        b->w, b->h);
                 break;
+            }
+
+            /* Ship pixels at DISPLAY resolution when the source is much
+			 * larger than its layout box. Full-res payloads ballooned a
+			 * page's drawable list past the 16 MiB RPC body cap (a 2000px
+			 * hero in a 400px card is 25x the bytes), freezing the in-yetty
+			 * client on its first frame; a box-filter downscale is also
+			 * what the GPU sampling would show anyway. The result caches
+			 * on the entry per display size. */
+            const uint32_t *ship_pixels = cached->pixels;
+            int ship_w = cached->w;
+            int ship_h = cached->h;
+            {
+                int target_w = (int)(b->w > 0 ? b->w : (float)cached->w);
+                int target_h = (int)(b->h > 0 ? b->h : (float)cached->h);
+                if (target_w > cached->w) {
+                    target_w = cached->w;
+                }
+                if (target_h > cached->h) {
+                    target_h = cached->h;
+                }
+                /* Wire-size ceiling: even at layout size, one hero
+				 * screenshot is megabytes of RGBA; half a megapixel is
+				 * indistinguishable on a terminal cell grid and keeps a
+				 * whole page's envelope under the RPC cap. */
+                if (target_w > 0 && target_h > 0 &&
+                    (long)target_w * (long)target_h > 262144l) {
+                    double shrink =
+                        sqrt(262144.0 / ((double)target_w * (double)target_h));
+                    target_w = (int)((double)target_w * shrink);
+                    target_h = (int)((double)target_h * shrink);
+                    if (target_w < 1) {
+                        target_w = 1;
+                    }
+                    if (target_h < 1) {
+                        target_h = 1;
+                    }
+                }
+                if (target_w > 0 && target_h > 0 &&
+                    (cached->w >= target_w * 2 ||
+                     (cached->w > target_w && cached->h > target_h))) {
+                    if (cached->scaled_pixels &&
+                        (cached->scaled_w != target_w || cached->scaled_h != target_h)) {
+                        free(cached->scaled_pixels);
+                        cached->scaled_pixels = NULL;
+                    }
+                    if (!cached->scaled_pixels) {
+                        uint32_t *scaled =
+                            malloc((size_t)target_w * (size_t)target_h * sizeof(uint32_t));
+                        if (scaled) {
+                            for (int out_y = 0; out_y < target_h; out_y++) {
+                                int src_y0 = out_y * cached->h / target_h;
+                                int src_y1 = (out_y + 1) * cached->h / target_h;
+                                if (src_y1 <= src_y0) {
+                                    src_y1 = src_y0 + 1;
+                                }
+                                for (int out_x = 0; out_x < target_w; out_x++) {
+                                    int src_x0 = out_x * cached->w / target_w;
+                                    int src_x1 = (out_x + 1) * cached->w / target_w;
+                                    if (src_x1 <= src_x0) {
+                                        src_x1 = src_x0 + 1;
+                                    }
+                                    uint32_t acc_r = 0, acc_g = 0, acc_b = 0, acc_a = 0, n = 0;
+                                    for (int sy = src_y0; sy < src_y1; sy++) {
+                                        const uint32_t *row = cached->pixels + (size_t)sy * cached->w;
+                                        for (int sx = src_x0; sx < src_x1; sx++) {
+                                            uint32_t px = row[sx];
+                                            acc_r += px & 0xffu;
+                                            acc_g += (px >> 8) & 0xffu;
+                                            acc_b += (px >> 16) & 0xffu;
+                                            acc_a += (px >> 24) & 0xffu;
+                                            n++;
+                                        }
+                                    }
+                                    scaled[(size_t)out_y * target_w + out_x] =
+                                        (acc_r / n) | ((acc_g / n) << 8) | ((acc_b / n) << 16) |
+                                        ((acc_a / n) << 24);
+                                }
+                            }
+                            cached->scaled_pixels = scaled;
+                            cached->scaled_w = target_w;
+                            cached->scaled_h = target_h;
+                        }
+                    }
+                    if (cached->scaled_pixels) {
+                        ship_pixels = cached->scaled_pixels;
+                        ship_w = cached->scaled_w;
+                        ship_h = cached->scaled_h;
+                    }
+                }
             }
 
             /* Build a yimage prim sized to the box's allocated
@@ -1656,12 +1757,12 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                 .bounds_y = b->y,
                 .bounds_w = b->w > 0 ? b->w : (float)cached->w,
                 .bounds_h = b->h > 0 ? b->h : (float)cached->h,
-                .image_w = (uint32_t)cached->w,
-                .image_h = (uint32_t)cached->h,
+                .image_w = (uint32_t)ship_w,
+                .image_h = (uint32_t)ship_h,
             };
             struct yetty_yimage_buffers bufs = {
-                .pixels = cached->pixels,
-                .pixels_len = (size_t)cached->w * (size_t)cached->h,
+                .pixels = ship_pixels,
+                .pixels_len = (size_t)ship_w * (size_t)ship_h,
             };
             size_t need = yetty_yimage_uniforms_serialized_size(&u, &bufs);
             uint8_t *prim = malloc(need);
@@ -1770,7 +1871,14 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 
     /* Publish the scene rectangle. Use viewport_w as a floor for X so
 	 * a page with no full-width background still produces a sensible
-	 * scene width matching the requested viewport. */
+	 * scene width matching the requested viewport — and as a CEILING:
+	 * a single overflowing prim (an unclipped carousel track, a nowrap
+	 * marquee row — patterns real pages hide with overflow:hidden we
+	 * don't model) would otherwise widen the scene past the viewport
+	 * and the embed compresses the WHOLE page to fit, shrinking every
+	 * glyph (github hydrated at 1640px painted a 3774px scene → 43%
+	 * zoom soup). Cropping at the viewport edge is what overflow-x
+	 * hidden shows. Height stays unclamped — vertical scroll is real. */
     float min_w = (float)r->viewport_w;
     if (scene_max_x < min_w) {
         scene_max_x = min_w;

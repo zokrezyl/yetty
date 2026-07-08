@@ -96,6 +96,11 @@ def main():
     fixtures_dir = os.path.join(HERE, "fixtures")
     names = sorted(os.listdir(fixtures_dir)) if os.path.isdir(fixtures_dir) \
         else []
+    if not filters:
+        # Dot-prefixed fixtures are local diagnostics (live-site captures
+        # under iteration) — excluded from the full/ctest sweep, reachable
+        # by naming them explicitly.
+        names = [n for n in names if not n.startswith(".")]
     passed = failed = 0
     for name in names:
         directory = os.path.join(fixtures_dir, name)

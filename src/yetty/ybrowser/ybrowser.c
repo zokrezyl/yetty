@@ -269,6 +269,7 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
     for (int i = 0; i < r->img_cache_count; i++) {
         free(r->img_cache[i].url);
         free(r->img_cache[i].pixels);
+        free(r->img_cache[i].scaled_pixels);
         yetty_ydraw_drawable_list_destroy(r->img_cache[i].svg_scene);
     }
     free(r->img_cache);
@@ -661,7 +662,7 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     /* Run inline + external <script> blocks — UNLESS defer-scripts mode is on,
 	 * in which case the host paints the initial HTML/CSS first and calls
 	 * yetty_ylexbor_run_deferred_scripts() afterward (progressive rendering). */
-    if (!r->defer_scripts) {
+    if (!r->defer_scripts && getenv("YBROWSER_NO_JS") == NULL) {
         (void)yetty_ylexbor_js_run_inline_scripts(r);
     }
     yetty_ylexbor_prof("  run scripts    %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
@@ -720,6 +721,9 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
     yetty_ylexbor_css_scan_grid_templates(r, css, css_len);
     yetty_ylexbor_css_scan_grid_spans(r, css, css_len);
     yetty_ylexbor_css_scan_flex_gaps(r, css, css_len);
+    yetty_ylexbor_css_scan_var_heights(r, css, css_len);
+    yetty_ylexbor_css_scan_width_keywords(r, css, css_len);
+    yetty_ylexbor_css_scan_line_clamps(r, css, css_len);
 
     /* Also push the same CSS through libcss so its cascade sees it —
 	 * the sheet URL anchors @import resolution. */
@@ -821,7 +825,9 @@ struct yetty_ycore_void_result yetty_ylexbor_run_deferred_scripts(struct yetty_y
     /* Run the <script> blocks load_html skipped, then rebuild the box tree +
 	 * layout from the (now script-mutated) DOM so the next paint shows the
 	 * scripted result. */
-    (void)yetty_ylexbor_js_run_inline_scripts(r);
+    if (getenv("YBROWSER_NO_JS") == NULL) {
+        (void)yetty_ylexbor_js_run_inline_scripts(r);
+    }
     return yetty_ylexbor_relayout(r);
 }
 
@@ -1178,6 +1184,9 @@ char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
         if (b->element == NULL) {
             continue;
+        }
+        if (b->vis_hidden) {
+            continue; /* hidden boxes are hit-transparent */
         }
         if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h) {
             target = b->element;

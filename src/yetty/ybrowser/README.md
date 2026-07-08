@@ -31,8 +31,8 @@ cascade libcss handles better.
 | `ybrowser.c`           | Document lifecycle: create/destroy, load HTML, drive CSS load, kick off box-build/layout/paint |
 | `ybrowser-libcss.c/.h` | **The divergence** — libcss integration: stylesheet load, selection context, computed-style lookup feeding the box walk |
 | `ybrowser-box.c`       | DOM walk → flat box vector, reading computed style from libcss |
-| `ybrowser-layout.c`    | Box vector → laid-out coordinates (block flow, inline wrap, flex-row even split) |
-| `ybrowser-paint.c`     | Box vector → ydraw primitives (ysdf rects, text spans, `<img>` images) |
+| `ybrowser-layout.c`    | Box vector → laid-out coordinates (block flow, inline wrap, spec flex sizing + wrap/reverse/order, grid track sizing + placement, absolute/fixed positioning) |
+| `ybrowser-paint.c`     | Box vector → ydraw primitives (ysdf rects, text spans, `<img>` raster + data-URI images, inline/replaced SVG via ysvg) |
 | `ybrowser-css-vars.c`  | CSS custom-property scanner + `var(--foo[, fallback])` resolver |
 | `ybrowser-js.c`        | QuickJS lifecycle, `<script>` walker, microtask drain |
 | `ybrowser-js-dom.c`    | DOM API for the JS runtime (Element/Document, querySelector, events, …) |
@@ -48,7 +48,33 @@ cascade libcss handles better.
 
 ## Scope
 
-Like `ylexbor`, this is **not** a full browser — no real font shaping, no
-float/grid/position, no SVG raster — but enough to render mainstream static
-documents with text, color, backgrounds, padding, borders, images, and a
-JavaScript runtime that boots simple SPA shells.
+Like `ylexbor`, this is **not** a full browser, but the layout and resource
+surface is well past "static documents". What works:
+
+- **Layout** — block flow and inline wrap; flexbox with spec flex base sizes,
+  the freeze/redistribute shrink loop, per-line wrapping, `wrap-reverse` /
+  `row-reverse` / `column-reverse`, `order` and `align-self`; CSS Grid with
+  track sizing, span placement, growable implicit rows and default item
+  stretch; `position: absolute`/`fixed` with static-position and
+  containing-block resolution; left/right floats.
+- **CSS** — the libcss cascade plus a `var()` resolver that honours
+  element-local and ancestor inline definitions and global-rule specificity;
+  `@import` is fetched and applied. Some properties libcss in this tree does
+  not expand (grid templates/placement, flex gaps, a few var-driven metrics)
+  are supplied by selector-matched, `@media`-gated side tables rather than the
+  native cascade — see #482 for the conformance caveats.
+- **Content** — text, color, backgrounds, padding, borders, raster and
+  data-URI images, and inline/replaced/`<img>` **SVG** rendered as ydraw
+  vectors through `ysvg` (viewBox, `preserveAspectRatio`, `currentColor`).
+- **Networking** — a single loader owns the curl-multi scheduler, a
+  memory+disk HTTP cache (Cache-Control/Age/Expires, ETag/`304` revalidation,
+  `Vary`, request coalescing), per-resource-type request headers, cookies, and
+  generation-based cancellation on navigation. JS `fetch()`/XHR run async off
+  the worker pool with method/headers/body.
+- **JavaScript** — QuickJS-NG with timers, microtasks, a DOM API, and enough
+  of the web platform to boot mainstream SPA shells.
+
+Still missing: real font shaping (metrics are approximated, which is the main
+source of anchor-suite wrap drift); full CSS Grid conformance (intrinsic track
+sizing, dense flow, named lines) and `display: flow-root`; and `<canvas>`
+rendering — `getContext` returns null, tracked under the canvas epic #463.

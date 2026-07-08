@@ -202,6 +202,10 @@ struct yl_style_state {
 	                  * under this style never soft-wrap */
     struct yetty_ylexbor_color fg;
     int text_align; /* inherited; 0=left, 1=center, 2=right, 3=justify */
+    bool vis_hidden; /* visibility:hidden|collapse — inherited, so the
+	                  * anonymous inline-text boxes flush_inline emits under
+	                  * a hidden subtree pick it up and paint nothing. A
+	                  * visibility:visible descendant re-shows via the cascade. */
     /* Deepest inline ancestor element on the recursion stack — used to
 	 * stamp YL_BOX_INLINE_TEXT boxes with a hit-target for
 	 * dispatch_click. NULL when text is directly inside a block. */
@@ -634,6 +638,7 @@ static void style_to_box(struct yetty_ylexbor_box *b, const struct yl_style_stat
     b->font_italic = s->font_italic;
     b->glyph_advance = s->glyph_advance;
     b->fg = s->fg;
+    b->vis_hidden = s->vis_hidden;
 }
 
 /* Crude search for a `key: value` declaration inside a `style="..."`
@@ -1290,6 +1295,18 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     if (yetty_ybrowser_libcss_height(r, cs, s.font_size, pct_basis, &px)) {
                         b->css_height = px;
                     }
+                    b->width_keyword = (uint8_t)yetty_ylexbor_width_keyword_lookup(r, el);
+                    b->line_clamp = (uint8_t)yetty_ylexbor_line_clamp_lookup(r, el);
+                    /* Stylesheet `height: var(...)` re-resolved against
+				 * element-scoped custom properties — the sheet-level
+				 * substitution only saw the global table. */
+                    {
+                        float var_height_px = 0.0f;
+                        if (yetty_ylexbor_var_height_lookup(r, el, s.font_size,
+                                                            &var_height_px)) {
+                            b->css_height = var_height_px;
+                        }
+                    }
                     /* Form controls are replaced-like: with no author
 					 * width/height they still render at an intrinsic size
 					 * (Chrome's text input is ~170x22 at the default font).
@@ -1499,7 +1516,33 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 						 * (repeat(12,…)) rely on — those safely stay block. */
                         {
                             const struct yl_grid_class *gt = yetty_ylexbor_grid_class_lookup(r, el);
-                            if (gt && gt->ntracks >= 1 && gt->ntracks <= YL_GRID_MAX_TRACKS) {
+                            if (gt && gt->repeat_auto && gt->ntracks == 1) {
+                                /* repeat(auto-fit|auto-fill, <track>) — the
+								 * column count follows the content: one track
+								 * per element child (`grid-auto-flow: column`
+								 * menu strips; a max-content track sizes each
+								 * column to its item). */
+                                int element_children = 0;
+                                for (lxb_dom_node_t *scan =
+                                         lxb_dom_interface_node(el)->first_child;
+                                     scan != NULL; scan = scan->next) {
+                                    if (scan->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+                                        element_children++;
+                                    }
+                                }
+                                if (element_children > YL_GRID_MAX_TRACKS) {
+                                    element_children = YL_GRID_MAX_TRACKS;
+                                }
+                                if (element_children >= 1) {
+                                    b->layout_mode = YL_LAYOUT_GRID;
+                                    for (int track = 0; track < element_children; track++) {
+                                        b->grid_tracks[track] = gt->tracks[0];
+                                    }
+                                    b->grid_ntracks = (uint8_t)element_children;
+                                    b->grid_col_gap = gt->col_gap;
+                                    b->grid_row_gap = gt->row_gap;
+                                }
+                            } else if (gt && gt->ntracks >= 1 && gt->ntracks <= YL_GRID_MAX_TRACKS) {
                                 b->layout_mode = YL_LAYOUT_GRID;
                                 memcpy(b->grid_tracks, gt->tracks, sizeof(b->grid_tracks));
                                 b->grid_ntracks = gt->ntracks;
@@ -1631,8 +1674,12 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         /* Encoding convention shared with css_width:
 						 * 0 = auto / not set, > 0 = absolute px,
 						 * < 0 = percent ratio (-N/100). The flex
-						 * solver dispatches on the sign. */
-                        b->flex_basis_px = fb_auto ? 0.0f : fb_px;
+						 * solver dispatches on the sign. An EXPLICIT
+						 * zero basis (`flex:1` = `1 1 0%`) must stay
+						 * distinguishable from auto — encode it as an
+						 * invisible epsilon so the solver's auto
+						 * branches (content sizing) never claim it. */
+                        b->flex_basis_px = fb_auto ? 0.0f : (fb_px == 0.0f ? 0.0001f : fb_px);
                     } else {
                         b->flex_basis_px = 0.0f;
                     }
@@ -1646,7 +1693,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         if (parse_inline_flex(istyle, istyle ? istylen : 0, s.font_size, &sh_grow,
                                               &sh_basis, &sh_basis_auto)) {
                             b->flex_grow = sh_grow;
-                            b->flex_basis_px = sh_basis_auto ? 0.0f : sh_basis;
+                            b->flex_basis_px =
+                                sh_basis_auto ? 0.0f : (sh_basis == 0.0f ? 0.0001f : sh_basis);
                         }
                     }
                     /* Inline `flex-wrap` (no libcss bridge). `wrap` /
@@ -1779,6 +1827,12 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 					 * subtree) by the insets after normal-flow placement;
 					 * ABSOLUTE/FIXED pull it out of flow and place it against
 					 * a containing block. STICKY collapses to RELATIVE. */
+                    {
+                        int visibility = yetty_ybrowser_libcss_visibility(cs);
+                        s.vis_hidden = visibility == CSS_VISIBILITY_HIDDEN ||
+                                       visibility == CSS_VISIBILITY_COLLAPSE;
+                        b->vis_hidden = s.vis_hidden;
+                    }
                     int pos = yetty_ybrowser_libcss_position(cs);
                     if (pos == CSS_POSITION_RELATIVE || pos == CSS_POSITION_STICKY) {
                         b->position = YL_POS_RELATIVE;
@@ -2390,6 +2444,11 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 					 * clearing is the block path's job. */
                     if (yetty_ybrowser_libcss_white_space(inl_cs) == CSS_WHITE_SPACE_NOWRAP) {
                         s.nowrap = true;
+                    }
+                    {
+                        int inl_vis = yetty_ybrowser_libcss_visibility(inl_cs);
+                        s.vis_hidden = inl_vis == CSS_VISIBILITY_HIDDEN ||
+                                       inl_vis == CSS_VISIBILITY_COLLAPSE;
                     }
                     yetty_ybrowser_libcss_release(inl_cs);
                 }
