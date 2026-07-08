@@ -478,6 +478,14 @@ struct yetty_ylexbor_box {
     float tf_tx, tf_ty;
     bool tf_tx_pct, tf_ty_pct;
 
+    /* Effective CSS `opacity` in [0,1]: the box's own opacity multiplied by
+	 * every ancestor's (opacity is a group effect that is NOT inherited, so
+	 * it is folded down the subtree at box-build). A near-zero value means
+	 * the box and its subtree paint nothing — how JS carousels/tab-panels
+	 * hide the inactive slide (Google News weather widget) without pulling it
+	 * out of flow. 1.0 = fully opaque (the default). */
+    float opacity;
+
     /* Text alignment for the block's inline children. Values:
 	 *   0 = left (default), 1 = center, 2 = right, 3 = justify. */
     int text_align;

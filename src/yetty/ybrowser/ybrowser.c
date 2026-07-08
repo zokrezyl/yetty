@@ -1174,8 +1174,8 @@ char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)
         if (b->element == NULL) {
             continue;
         }
-        if (b->vis_hidden) {
-            continue; /* hidden boxes are hit-transparent */
+        if (b->vis_hidden || b->opacity < 0.02f) {
+            continue; /* hidden / fully-transparent boxes are hit-transparent */
         }
         if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h) {
             target = b->element;

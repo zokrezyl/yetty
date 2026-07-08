@@ -739,7 +739,14 @@ static float flex_item_min_content_walk(const struct yetty_ylexbor *r, uint32_t 
             child_box->float_side != 0) {
             continue;
         }
-        float child_min = flex_item_min_content_walk(r, child, budget);
+        /* A definite width pins the box: its min-content equals that width
+		 * (padding included), so a fixed-width descendant sets a hard floor
+		 * its flex ancestor must not shrink below — the gnews weather
+		 * widget's width:180px tile. Percentages stay content-based. */
+        float child_min = child_box->css_width > 0.0f
+                              ? child_box->css_width + child_box->padding_left +
+                                    child_box->padding_right
+                              : flex_item_min_content_walk(r, child, budget);
         sum += child_min + child_box->margin_left + child_box->margin_right;
         if (child_min > widest) {
             widest = child_min;
@@ -1917,7 +1924,16 @@ static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_i
             }
             in_flow_items++;
         } else if (c->kind == YL_BOX_BLOCK) {
-            float nested = measure_cell_content_width(r, cidx, budget);
+            /* A definite width makes min- and max-content BOTH equal to that
+			 * width — the box clamps its contents — so a fixed-width child
+			 * contributes its own width, not a recursive content measure.
+			 * Without this a `width:180px` forecast tile measured as its
+			 * (near-empty) text, its flex parent shrank below 180, and the
+			 * tile overflowed the column (the Google News weather widget).
+			 * A percentage (css_width < 0) resolves against an indefinite
+			 * intrinsic container as auto, so keep measuring its content. */
+            float nested = c->css_width > 0.0f ? c->css_width
+                                               : measure_cell_content_width(r, cidx, budget);
             if (row_flex) {
                 /* Flex items sit side-by-side — they add horizontally,
 				 * padding and margins included (a gnews nav chip's

@@ -206,6 +206,11 @@ struct yl_style_state {
 	                  * anonymous inline-text boxes flush_inline emits under
 	                  * a hidden subtree pick it up and paint nothing. A
 	                  * visibility:visible descendant re-shows via the cascade. */
+    float opacity;   /* effective opacity [0,1] = ancestors' × own. Threaded by
+	                  * value so a child inherits the folded-down product; each
+	                  * element multiplies its own on top. Copied to every box
+	                  * (incl. anonymous inline text) so a near-zero subtree
+	                  * paints nothing. */
     /* Deepest inline ancestor element on the recursion stack — used to
 	 * stamp YL_BOX_INLINE_TEXT boxes with a hit-target for
 	 * dispatch_click. NULL when text is directly inside a block. */
@@ -599,6 +604,7 @@ static struct yetty_ycore_void_result box_alloc(struct yetty_ylexbor *r, uint32_
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "box_alloc: reserve");
     struct yetty_ylexbor_box *b = &r->boxes.data[r->boxes.size];
     memset(b, 0, sizeof(*b));
+    b->opacity = 1.0f; /* opaque by default; style_to_box/element cascade override */
     *out_idx = r->boxes.size++;
     return YETTY_OK_VOID();
 }
@@ -639,6 +645,7 @@ static void style_to_box(struct yetty_ylexbor_box *b, const struct yl_style_stat
     b->glyph_advance = s->glyph_advance;
     b->fg = s->fg;
     b->vis_hidden = s->vis_hidden;
+    b->opacity = s->opacity;
 }
 
 /* Crude search for a `key: value` declaration inside a `style="..."`
@@ -1833,6 +1840,10 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                        visibility == CSS_VISIBILITY_COLLAPSE;
                         b->vis_hidden = s.vis_hidden;
                     }
+                    /* Opacity folds down the subtree (group effect, not
+					 * inherited): effective = ancestors' × own. */
+                    s.opacity = s.opacity * yetty_ybrowser_libcss_opacity(cs);
+                    b->opacity = s.opacity;
                     int pos = yetty_ybrowser_libcss_position(cs);
                     if (pos == CSS_POSITION_RELATIVE || pos == CSS_POSITION_STICKY) {
                         b->position = YL_POS_RELATIVE;
@@ -2523,6 +2534,7 @@ struct yetty_ycore_void_result yetty_ylexbor_box_build(struct yetty_ylexbor *r)
         .overline = false,
         .fg = root->fg,
         .text_align = 0,
+        .opacity = 1.0f,
         .link_element = NULL,
     };
 

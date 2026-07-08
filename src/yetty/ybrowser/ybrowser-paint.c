@@ -1484,6 +1484,16 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
     ydebug("paint total boxes=%u", r->boxes.size);
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        if (b->opacity < 0.02f) {
+            /* Effectively transparent (opacity:0, folded down the subtree at
+			 * box-build) — the box keeps its laid-out space but paints
+			 * nothing. This is how JS carousels / tab-panels hide the
+			 * inactive slide in place; painting it produced the Google News
+			 * weather-widget overlap (the hidden warning panel drawn on top
+			 * of the visible forecast). We do not alpha-composite, so any
+			 * partially-transparent box (>= 0.02) still paints fully. */
+            continue;
+        }
         if (b->vis_hidden) {
             /* visibility:hidden|collapse — the box keeps its laid-out
 			 * space (siblings are already placed around it) but paints

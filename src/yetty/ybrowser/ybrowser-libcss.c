@@ -1895,6 +1895,25 @@ int yetty_ybrowser_libcss_visibility(const css_computed_style *style)
     return (int)css_computed_visibility(style);
 }
 
+float yetty_ybrowser_libcss_opacity(const css_computed_style *style)
+{
+    if (!style) {
+        return 1.0f;
+    }
+    css_fixed opacity = 0;
+    if (css_computed_opacity(style, &opacity) != CSS_OPACITY_SET) {
+        return 1.0f;
+    }
+    float value = fixed_to_float(opacity);
+    if (value < 0.0f) {
+        return 0.0f;
+    }
+    if (value > 1.0f) {
+        return 1.0f;
+    }
+    return value;
+}
+
 int yetty_ybrowser_libcss_inset(struct yetty_ylexbor *r, const css_computed_style *style, int side,
                                 float font_size, float pct_basis, float *out_value)
 {
