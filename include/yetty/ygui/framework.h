@@ -70,22 +70,15 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_button(
     struct yetty_yclass_object *obj, float x, float y, int button, int pressed, int mods);
 struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_motion(
     struct yetty_yclass_object *obj, float x, float y);
-<<<<<<< HEAD
 struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_scroll(
-=======
-struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
->>>>>>> e81d1c2d (ygui text widget selection)
     struct yetty_yclass_object *obj, float x, float y, float dx, float dy);
 struct yetty_ycore_void_result yetty_ygui_framework_set_root(struct yetty_yclass_object *obj,
                                                              struct yetty_yclass_object *root);
 struct uint32_result yetty_ygui_framework_alloc_id(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_framework_free_id(struct yetty_yclass_object *obj,
                                                             uint32_t id);
-<<<<<<< HEAD
-=======
 struct yetty_ycore_void_result yetty_ygui_framework_ship_figure_delta(
     struct yetty_yclass_object *obj, uint32_t figure_id, const uint8_t *body, uint32_t body_len);
->>>>>>> e81d1c2d (ygui text widget selection)
 struct yetty_ycore_void_result yetty_ygui_framework_clear(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_framework_forget_remote(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_yclass_object *obj);
