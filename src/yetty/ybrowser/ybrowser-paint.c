@@ -1482,6 +1482,19 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
     }
 
     ydebug("paint total boxes=%u", r->boxes.size);
+    if (getenv("WIDGETDBG")) {
+        for (uint32_t di = 0; di < r->boxes.size; di++) {
+            struct yetty_ylexbor_box *d = &r->boxes.data[di];
+            if (d->x >= 1200.0f && d->x <= 1540.0f && d->y >= 130.0f && d->y <= 300.0f) {
+                fprintf(stderr,
+                        "WDG idx=%u fc=%u ns=%u cc=%u x=%.0f y=%.0f w=%.0f h=%.0f lm=%d pos=%d "
+                        "gc=%u gr=%u gcs=%u op=%.2f mt=%.0f ml=%.0f kind=%d\n",
+                        di, d->first_child, d->next_sibling, d->child_count, d->x, d->y, d->w, d->h,
+                        d->layout_mode, d->position, d->grid_col_start, d->grid_row_start,
+                        d->grid_col_span, d->opacity, d->margin_top, d->margin_left, d->kind);
+            }
+        }
+    }
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
         if (b->opacity < 0.02f) {
