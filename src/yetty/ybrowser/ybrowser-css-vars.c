@@ -2134,6 +2134,292 @@ int yetty_ylexbor_line_clamp_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *
     return 0;
 }
 
+/* Evaluate ONE translate component — the text of a single argument (between
+ * '(' and ',' or ',' and ')'). Handles a bare length (px / rem / em / unitless
+ * = px) or a percentage, and a `calc(...)` sum of such length terms (the units
+ * modern grid/carousel CSS mixes, e.g. `calc(11.25rem + 28px)`). Returns true
+ * and sets *out (px, or the raw number when *is_pct); a `var()` or otherwise
+ * unparseable component returns false so the caller drops the axis. */
+static bool eval_translate_component(const char *s, const char *end, float rem_px, float *out,
+                                     bool *is_pct)
+{
+    *out = 0.0f;
+    *is_pct = false;
+    while (s < end && (*s == ' ' || *s == '\t')) {
+        s++;
+    }
+    bool is_calc = (size_t)(end - s) >= 5 && strncasecmp(s, "calc(", 5) == 0;
+    if (is_calc) {
+        s += 5;
+        const char *calc_end = end;
+        while (calc_end > s && *(calc_end - 1) != ')') {
+            calc_end--;
+        }
+        if (calc_end > s) {
+            calc_end--; /* drop the closing ')' */
+        }
+        end = calc_end;
+    }
+    float sum = 0.0f;
+    int sign = 1;
+    bool any = false;
+    while (s < end) {
+        while (s < end && (*s == ' ' || *s == '\t')) {
+            s++;
+        }
+        if (s >= end) {
+            break;
+        }
+        if (*s == '+') {
+            sign = 1;
+            s++;
+            continue;
+        }
+        if (*s == '-') {
+            sign = -1;
+            s++;
+            continue;
+        }
+        if (*s == '*' || *s == '/') {
+            /* Scalar multiply/divide — unsupported; bail rather than guess. */
+            return false;
+        }
+        if (!(*s == '.' || (*s >= '0' && *s <= '9'))) {
+            return false; /* var(), keyword, or garbage */
+        }
+        char buf[32];
+        int n = 0;
+        while (s < end && n < 31 && (*s == '.' || (*s >= '0' && *s <= '9'))) {
+            buf[n++] = *s++;
+        }
+        buf[n] = '\0';
+        float value = (float)atof(buf);
+        if (s < end && *s == '%') {
+            /* Percent only makes sense as a standalone component, not a calc
+			 * term (which resolves to a length). Treat a bare `N%` here. */
+            if (is_calc || any) {
+                return false;
+            }
+            *out = sign * value;
+            *is_pct = true;
+            return true;
+        }
+        float factor = 1.0f;
+        if ((size_t)(end - s) >= 3 && strncasecmp(s, "rem", 3) == 0) {
+            factor = rem_px;
+            s += 3;
+        } else if ((size_t)(end - s) >= 2 && strncasecmp(s, "em", 2) == 0) {
+            factor = rem_px;
+            s += 2;
+        } else if ((size_t)(end - s) >= 2 && strncasecmp(s, "px", 2) == 0) {
+            factor = 1.0f;
+            s += 2;
+        }
+        /* unitless → px (0 is the common `translateX(0)`) */
+        sum += (float)sign * value * factor;
+        sign = 1;
+        any = true;
+    }
+    if (!any) {
+        return false;
+    }
+    *out = sum;
+    return true;
+}
+
+/* Parse the translate component of a `transform` value [value, value+len).
+ * Handles translate(x[,y]) / translateX(x) / translateY(y); translateZ /
+ * translate3d and non-translate functions (scale/rotate/matrix) are ignored.
+ * Returns true if a translate with at least one usable axis was found. */
+static bool parse_translate_value(const char *value, size_t len, float rem_px, float *tx, float *ty,
+                                  bool *tx_pct, bool *ty_pct)
+{
+    *tx = 0.0f;
+    *ty = 0.0f;
+    *tx_pct = false;
+    *ty_pct = false;
+    static const char needle[] = "translate";
+    const size_t needle_len = sizeof(needle) - 1;
+    for (size_t i = 0; i + needle_len < len; i++) {
+        if (strncasecmp(value + i, needle, needle_len) != 0) {
+            continue;
+        }
+        size_t j = i + needle_len;
+        int axis = 0; /* 0 = both, 1 = X, 2 = Y */
+        if (j < len && (value[j] == 'x' || value[j] == 'X')) {
+            axis = 1;
+            j++;
+        } else if (j < len && (value[j] == 'y' || value[j] == 'Y')) {
+            axis = 2;
+            j++;
+        } else if (j < len && (value[j] == 'z' || value[j] == 'Z' || value[j] == '3')) {
+            continue; /* translateZ / translate3d — no 2D layout effect modelled */
+        }
+        if (j >= len || value[j] != '(') {
+            continue;
+        }
+        j++;
+        const char *open = value + j;
+        const char *vend = value + len;
+        const char *close = memchr(open, ')', (size_t)(vend - open));
+        if (!close) {
+            return false;
+        }
+        /* A nested calc() has its own ')' — extend to the function's true close
+		 * by balancing parentheses from `open`. */
+        int depth = 1;
+        const char *scan = open;
+        while (scan < vend && depth > 0) {
+            if (*scan == '(') {
+                depth++;
+            } else if (*scan == ')') {
+                depth--;
+                if (depth == 0) {
+                    break;
+                }
+            }
+            scan++;
+        }
+        if (depth != 0) {
+            return false;
+        }
+        close = scan;
+        const char *comma = axis == 0 ? memchr(open, ',', (size_t)(close - open)) : NULL;
+        const char *first_end = comma ? comma : close;
+        float value1 = 0.0f;
+        bool pct1 = false;
+        bool ok1 = eval_translate_component(open, first_end, rem_px, &value1, &pct1);
+        if (axis == 1) {
+            if (!ok1) {
+                continue;
+            }
+            *tx = value1;
+            *tx_pct = pct1;
+            return true;
+        }
+        if (axis == 2) {
+            if (!ok1) {
+                continue;
+            }
+            *ty = value1;
+            *ty_pct = pct1;
+            return true;
+        }
+        /* translate(x, y) — y defaults to 0 when absent */
+        if (!ok1) {
+            continue;
+        }
+        *tx = value1;
+        *tx_pct = pct1;
+        if (comma) {
+            float value2 = 0.0f;
+            bool pct2 = false;
+            if (eval_translate_component(comma + 1, close, rem_px, &value2, &pct2)) {
+                *ty = value2;
+                *ty_pct = pct2;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+void yetty_ylexbor_css_scan_transforms(struct yetty_ylexbor *r, const char *src, size_t len)
+{
+    if (r == NULL || src == NULL || len < 20) {
+        return;
+    }
+    float rem_px = r->default_font_size > 0.0f ? r->default_font_size : 16.0f;
+    static const char needle[] = "transform:";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen < len; i++) {
+        if (memcmp(src + i, needle, nlen) != 0) {
+            continue;
+        }
+        /* Skip `-webkit-transform:`/`text-transform:` etc. — require the
+		 * property to start at a rule boundary (after '{', ';', or space). */
+        if (i > 0) {
+            char prev = src[i - 1];
+            if (prev != '{' && prev != ';' && prev != ' ' && prev != '\t' && prev != '\n') {
+                continue;
+            }
+        }
+        size_t vstart = i + nlen;
+        size_t vend = vstart;
+        while (vend < len && src[vend] != ';' && src[vend] != '}') {
+            vend++;
+        }
+        float tx = 0.0f, ty = 0.0f;
+        bool tx_pct = false, ty_pct = false;
+        if (!parse_translate_value(src + vstart, vend - vstart, rem_px, &tx, &ty, &tx_pct, &ty_pct)) {
+            continue;
+        }
+        if (tx == 0.0f && ty == 0.0f && !tx_pct && !ty_pct) {
+            continue; /* translateX(0) etc. — nothing to shift */
+        }
+        if (!grid_media_active_at(r, src, len, i)) {
+            continue;
+        }
+        size_t brace = i;
+        while (brace > 0 && src[brace] != '{') {
+            brace--;
+        }
+        if (src[brace] != '{') {
+            continue;
+        }
+        size_t sel_end = brace;
+        size_t sel_start = brace;
+        while (sel_start > 0 && src[sel_start - 1] != '}' && src[sel_start - 1] != '{' &&
+               src[sel_start - 1] != ';') {
+            sel_start--;
+        }
+        char *selector = sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        if (!selector) {
+            continue;
+        }
+        if (r->transform_count == r->transform_cap) {
+            int cap = r->transform_cap ? r->transform_cap * 2 : 8;
+            struct yl_transform_rule *grown =
+                realloc(r->transform_rules, (size_t)cap * sizeof(*grown));
+            if (!grown) {
+                free(selector);
+                return;
+            }
+            r->transform_rules = grown;
+            r->transform_cap = cap;
+        }
+        struct yl_transform_rule *rule = &r->transform_rules[r->transform_count];
+        memset(rule, 0, sizeof(*rule));
+        rule->selector = selector;
+        rule->tx = tx;
+        rule->ty = ty;
+        rule->tx_pct = tx_pct;
+        rule->ty_pct = ty_pct;
+        r->transform_count++;
+    }
+}
+
+int yetty_ylexbor_transform_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element, float *out_tx,
+                                   float *out_ty, bool *out_tx_pct, bool *out_ty_pct)
+{
+    if (r == NULL || element == NULL || r->transform_count == 0) {
+        return 0;
+    }
+    for (int e = r->transform_count; e-- > 0;) {
+        struct yl_transform_rule *rule = &r->transform_rules[e];
+        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
+                                          &rule->selector_state, element);
+        if (verdict > 0) {
+            *out_tx = rule->tx;
+            *out_ty = rule->ty;
+            *out_tx_pct = rule->tx_pct;
+            *out_ty_pct = rule->ty_pct;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
 {
     if (r == NULL) {
@@ -2184,6 +2470,16 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
     r->line_clamp_rules = NULL;
     r->line_clamp_count = 0;
     r->line_clamp_cap = 0;
+    for (int e = 0; e < r->transform_count; e++) {
+        free(r->transform_rules[e].selector);
+        if (r->transform_rules[e].compiled_selector) {
+            lxb_css_selector_list_destroy_memory(r->transform_rules[e].compiled_selector);
+        }
+    }
+    free(r->transform_rules);
+    r->transform_rules = NULL;
+    r->transform_count = 0;
+    r->transform_cap = 0;
     for (int e = 0; e < r->grid_span_class_count; e++) {
         free(r->grid_span_classes[e].cls);
         for (int k = 0; k < r->grid_span_classes[e].context_count; k++) {

@@ -424,6 +424,74 @@ static void test_cmd_zero_clears(void)
     destroy_grid(g);
 }
 
+/* Test 8: the ybrowser #507 pattern — a full body mixing bare (group-less)
+ * prims with per-image CMD_GROUPs, then a DELTA body that re-opens just one
+ * image group WITHOUT a leading CMD_ZERO. The re-opened image's prim is
+ * replaced; the other image group AND the bare root prims are untouched. This
+ * is exactly what a landed streaming image ships. */
+static void test_browser_image_delta_pattern(void)
+{
+    fprintf(stderr, "\n[test_browser_image_delta_pattern]\n");
+    g_tests++;
+    struct yetty_ygrid_grid *g = make_headless_grid(200, 200);
+
+    /* Full page: a bare background box at root, then two image groups. */
+    struct yetty_ydraw_drawable_list *full = make_buf();
+    add_box(full, 0, 0, 200, 200, 0xff202020); /* page background — root scope */
+    struct yetty_ydraw_id_result img1 = yetty_ydraw_drawable_list_begin_group(full, 101u);
+    add_box(full, 10, 10, 40, 40, 0xffaaaaaa); /* image 1 placeholder */
+    yetty_ydraw_drawable_list_end_group(full, img1.value);
+    struct yetty_ydraw_id_result img2 = yetty_ydraw_drawable_list_begin_group(full, 102u);
+    add_box(full, 60, 10, 40, 40, 0xffbbbbbb); /* image 2 placeholder */
+    yetty_ydraw_drawable_list_end_group(full, img2.value);
+    feed_grid(g, full);
+    yetty_ydraw_drawable_list_destroy(full);
+
+    /* Delta: image 1 landed — re-emit ONLY its group, no CMD_ZERO. */
+    struct yetty_ydraw_drawable_list *delta = make_buf();
+    struct yetty_ydraw_id_result img1b = yetty_ydraw_drawable_list_begin_group(delta, 101u);
+    add_box(delta, 10, 10, 40, 40, 0xff00ff00); /* image 1 loaded pixels */
+    yetty_ydraw_drawable_list_end_group(delta, img1b.value);
+    feed_grid(g, delta);
+    yetty_ydraw_drawable_list_destroy(delta);
+
+    char *dump = dump_grid(g);
+    /* Live prims: bg (root) + image2 + reloaded image1 = 3; image1's old
+     * placeholder is tombstoned (4 total). Both image entities and the root
+     * bg survive; only image1's prim was swapped. */
+    int ok = 1;
+    if (strstr(dump, "prim_count: 3\nprim_count_with_tombstones: 4\n") == NULL) {
+        ok = 0;
+    }
+    /* Root still owns its 1 bare prim (the background). */
+    if (strstr(dump, "  - slot: 0\n"
+                     "    external_id: 0\n"
+                     "    parent_slot: ~\n"
+                     "    prim_count: 1\n") == NULL) {
+        ok = 0;
+    }
+    /* image1 (id 101) replaced → still exactly 1 live prim. */
+    if (strstr(dump, "    external_id: 101\n"
+                     "    parent_slot: 0\n"
+                     "    prim_count: 1\n") == NULL) {
+        ok = 0;
+    }
+    /* image2 (id 102) untouched → still 1 live prim. */
+    if (strstr(dump, "    external_id: 102\n"
+                     "    parent_slot: 0\n"
+                     "    prim_count: 1\n") == NULL) {
+        ok = 0;
+    }
+    if (ok) {
+        fprintf(stderr, "ok   browser_image_delta_pattern\n");
+    } else {
+        fprintf(stderr, "FAIL browser_image_delta_pattern\n--- got ---\n%s", dump);
+        g_failures++;
+    }
+    free(dump);
+    destroy_grid(g);
+}
+
 int main(void)
 {
     test_empty_grid();
@@ -433,6 +501,7 @@ int main(void)
     test_reopen_cmd_group_replaces_prims();
     test_cmd_delete_drops_entity();
     test_cmd_zero_clears();
+    test_browser_image_delta_pattern();
 
     fprintf(stderr, "\nygrid wire test: %d tests, %d failure%s\n", g_tests, g_failures,
             g_failures == 1 ? "" : "s");

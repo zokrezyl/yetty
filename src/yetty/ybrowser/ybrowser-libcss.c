@@ -1914,6 +1914,20 @@ float yetty_ybrowser_libcss_opacity(const css_computed_style *style)
     return value;
 }
 
+bool yetty_ybrowser_libcss_clips_overflow(const css_computed_style *style)
+{
+    if (!style) {
+        return false;
+    }
+    /* Any non-`visible` overflow on either axis establishes a clip: hidden,
+	 * clip, scroll and auto all confine descendants to the padding box. We do
+	 * not scroll, so scroll/auto are treated as a static clip too. */
+    uint8_t overflow_x = css_computed_overflow_x(style);
+    uint8_t overflow_y = css_computed_overflow_y(style);
+    return (overflow_x != CSS_OVERFLOW_VISIBLE && overflow_x != CSS_OVERFLOW_INHERIT) ||
+           (overflow_y != CSS_OVERFLOW_VISIBLE && overflow_y != CSS_OVERFLOW_INHERIT);
+}
+
 int yetty_ybrowser_libcss_inset(struct yetty_ylexbor *r, const css_computed_style *style, int side,
                                 float font_size, float pct_basis, float *out_value)
 {

@@ -615,6 +615,7 @@ static struct yetty_ycore_void_result box_alloc(struct yetty_ylexbor *r, uint32_
 static void link_child(struct yetty_ylexbor *r, uint32_t parent_idx, uint32_t cidx)
 {
     struct yetty_ylexbor_box *p = &r->boxes.data[parent_idx];
+    r->boxes.data[cidx].parent = parent_idx;
     if (p->child_count == 0) {
         p->first_child = cidx;
     } else {
@@ -625,6 +626,37 @@ static void link_child(struct yetty_ylexbor *r, uint32_t parent_idx, uint32_t ci
         r->boxes.data[t].next_sibling = cidx;
     }
     p->child_count++;
+}
+
+bool yetty_ylexbor_box_clipped_out(const struct yetty_ylexbor *r, uint32_t idx)
+{
+    if (r == NULL || idx >= r->boxes.size) {
+        return false;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[idx];
+    /* Walk owning ancestors up to the root (index 0). A box is dropped when it
+	 * lies wholly beyond the padding box of an overflow-clipping ancestor — how
+	 * a carousel/tab-panel hides the slide it has translated off its viewport
+	 * (Google News weather widget: the forecast is pushed +208px past a 165px
+	 * overflow:hidden strip). We have no per-pixel scissor, so a box merely
+	 * straddling the edge is kept, not partially clipped. Parent indices are
+	 * strictly smaller (tree-order allocation), so the walk always terminates. */
+    uint32_t cur = b->parent;
+    while (true) {
+        const struct yetty_ylexbor_box *anc = &r->boxes.data[cur];
+        if (cur != idx && anc->clip_overflow && anc->w > 0.0f && anc->h > 0.0f) {
+            const float slack = 0.5f;
+            if (b->x >= anc->x + anc->w - slack || b->x + b->w <= anc->x + slack ||
+                b->y >= anc->y + anc->h - slack || b->y + b->h <= anc->y + slack) {
+                return true;
+            }
+        }
+        if (cur == 0) {
+            break;
+        }
+        cur = anc->parent;
+    }
+    return false;
 }
 
 static void style_to_box(struct yetty_ylexbor_box *b, const struct yl_style_state *s)
@@ -1844,6 +1876,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 					 * inherited): effective = ancestors' × own. */
                     s.opacity = s.opacity * yetty_ybrowser_libcss_opacity(cs);
                     b->opacity = s.opacity;
+                    b->clip_overflow = yetty_ybrowser_libcss_clips_overflow(cs);
                     int pos = yetty_ybrowser_libcss_position(cs);
                     if (pos == CSS_POSITION_RELATIVE || pos == CSS_POSITION_STICKY) {
                         b->position = YL_POS_RELATIVE;
@@ -1880,6 +1913,22 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         bool txp = false, typ = false;
                         if (parse_transform_translate((const char *)istyle, istylen, &txv, &tyv,
                                                       &txp, &typ)) {
+                            b->has_transform = true;
+                            b->tf_tx = txv;
+                            b->tf_ty = tyv;
+                            b->tf_tx_pct = txp;
+                            b->tf_ty_pct = typ;
+                        }
+                    }
+                    /* Class-based `transform: translate(...)` — libcss drops the
+					 * property, so a JS carousel that slides its inactive panel
+					 * off an overflow-clipped viewport via a stylesheet rule
+					 * (Google News weather widget) would otherwise render every
+					 * panel stacked. The inline offset above wins when present. */
+                    if (!b->has_transform) {
+                        float txv = 0.0f, tyv = 0.0f;
+                        bool txp = false, typ = false;
+                        if (yetty_ylexbor_transform_lookup(r, el, &txv, &tyv, &txp, &typ)) {
                             b->has_transform = true;
                             b->tf_tx = txv;
                             b->tf_ty = tyv;

@@ -108,6 +108,21 @@ struct yl_line_clamp_rule {
     uint8_t lines; /* clamp line count, 1..255 */
 };
 
+/* A class-based `transform: translate*(...)` declaration. libcss drops the
+ * whole `transform` property, so JS-driven carousels/tab-panels that push the
+ * inactive slide off an overflow-clipped viewport (Google News weather widget:
+ * `transform: translateX(calc(11.25rem + 28px))`) render stacked. This side
+ * table re-applies the translate at box-build. Only the translate component is
+ * modelled (scale/rotate/matrix are ignored); percent offsets keep the raw
+ * number with the matching *_pct flag, resolved against the box's own size. */
+struct yl_transform_rule {
+    char *selector;          /* owned */
+    void *compiled_selector; /* owned */
+    uint8_t selector_state;
+    float tx, ty;
+    bool tx_pct, ty_pct;
+};
+
 /* A stylesheet `height: var(...)` declaration that may depend on
  * ELEMENT-scoPED custom properties (style="--Spacer-size:114px" on the
  * element or an ancestor). Sheet-level var() substitution runs once
@@ -202,6 +217,24 @@ struct yl_flex_gap_class {
     char *selector;          /* owned */
     void *compiled_selector; /* lxb_css_selector_list_t*; owned */
     uint8_t selector_state;
+};
+
+/* Maps a DOM element to a stable ydraw primitive-GROUP id, so paint can wrap
+ * that element's prims in a CMD_GROUP the receiver (ygrid) can replace in
+ * place. The id is assigned monotonically on first request and never reused
+ * within the engine's life, so a re-layout that renumbers box indices does
+ * NOT reassign an element's group — matching the yjungle producer model. The
+ * table is keyed by the borrowed element pointer (never dereferenced) and is
+ * cleared on document replace, when the old parse's element pointers die. */
+struct yl_group_id_entry {
+    const void *element; /* lxb element pointer — key only, never deref'd */
+    uint32_t gid;
+    /* FNV-1a of this group's page-coord prim payload as of the last time it
+	 * was emitted (full render or delta). The incremental path repaints a
+	 * candidate image group at offset 0, hashes it, and only ships a delta
+	 * when the hash differs — so an unchanged image never re-ships. */
+    uint64_t content_hash;
+    int content_hash_valid;
 };
 
 /* Which engine decision produced a box's used width/height — stamped by
@@ -452,6 +485,12 @@ struct yetty_ylexbor_box {
     uint8_t float_side;
     uint8_t clear_side;
 
+    /* `overflow-x`/`overflow-y` resolve to a clip (hidden/clip/scroll/auto) on
+	 * at least one axis — descendants are clipped to this box's padding box.
+	 * How a collapsed carousel slide (Google News weather widget) hides its
+	 * out-of-flow content instead of spilling it over the active slide. */
+    bool clip_overflow;
+
     /* CSS `position` (YL_POS_*). STATIC is normal flow. RELATIVE lays
 		 * out in flow then shifts visually by the insets. ABSOLUTE / FIXED
 		 * are removed from flow and placed against a containing block using
@@ -554,6 +593,12 @@ struct yetty_ylexbor_box {
     uint32_t first_child;
     uint32_t next_sibling;
     uint32_t child_count;
+    /* Index of the box that owns this one (set by link_child). 0 for the root
+	 * and for any unlinked box; since boxes are allocated in tree order the
+	 * root is always index 0, so a `parent == 0` on a non-root box means the
+	 * root — the paint/hit clip walk stops when it reaches index 0. Used to
+	 * find overflow-clipping ancestors from the flat paint loop. */
+    uint32_t parent;
 };
 
 /* Flat vector of boxes. Root is index 0. */
@@ -720,6 +765,9 @@ struct yetty_ylexbor {
     struct yl_line_clamp_rule *line_clamp_rules;
     int line_clamp_count, line_clamp_cap;
 
+    struct yl_transform_rule *transform_rules;
+    int transform_count, transform_cap;
+
     struct yl_grid_class *grid_classes;
     int grid_class_count;
     int grid_class_cap;
@@ -788,6 +836,25 @@ struct yetty_ylexbor {
 	 * yetty_ylexbor_svg_inline_entry). */
     struct yetty_ylexbor_svg_inline_entry *svg_inline_cache;
     int svg_inline_count, svg_inline_cap;
+
+    /* Element→group-id table (see struct yl_group_id_entry). Paint uses it to
+	 * give each <img> box a stable CMD_GROUP id so a landed image ships as a
+	 * per-group delta instead of a full-page reship. `next_group_id` is a
+	 * monotonic counter (0 is reserved for the receiver's root entity); it is
+	 * NOT reset on document replace so an id is never reused, while the map
+	 * itself is cleared because the old element pointers die with the parse. */
+    struct yl_group_id_entry *group_ids;
+    int group_id_count, group_id_cap;
+    uint32_t next_group_id;
+
+    /* Incremental-render gate. `last_layout_hash` is an FNV-1a over every
+	 * box's (kind, x, y, w, h) as of the last FULL render; `have_full_render`
+	 * is set once a full render has established the page's groups on the
+	 * receiver. The image-delta path only fires when a fresh relayout
+	 * reproduces the same layout hash — i.e. images landed but nothing
+	 * shifted — otherwise it defers to a full render. */
+    uint64_t last_layout_hash;
+    int have_full_render;
 
     /* Async image fetching. When `img_pool` is set, yetty_ylexbor_start_image_fetch
 	 * submits each pending <img> to the worker pool (parallel fetch+decode on
@@ -914,6 +981,15 @@ void yetty_ylexbor_svg_parse_preserve_aspect(const char *bytes, size_t len, floa
  * document replace (the element keys die with the old parse) and from the
  * engine teardown. Defined in ybrowser-paint.c. */
 void yetty_ylexbor_svg_inline_cache_clear(struct yetty_ylexbor *r);
+
+/* Return the stable ydraw primitive-GROUP id for `element`, assigning a fresh
+ * monotonic id on first request (see struct yl_group_id_entry). `element` must
+ * be non-NULL. Defined in ybrowser-paint.c. */
+uint32_t yetty_ylexbor_group_id_for(struct yetty_ylexbor *r, const void *element);
+
+/* Free the element→group-id map. Called on document replace and engine
+ * teardown. Leaves next_group_id untouched so ids are never reused. */
+void yetty_ylexbor_group_ids_clear(struct yetty_ylexbor *r);
 
 /* Defined in ylexbor-paint.c so the fetch/decode plumbing lives next
  * to the prim-emission code. Box-build calls this eagerly to learn
@@ -1056,6 +1132,21 @@ void yetty_ylexbor_css_scan_line_clamps(struct yetty_ylexbor *r, const char *css
 
 /* Last matching line-clamp rule for `element`: 0 = none, else the line cap. */
 int yetty_ylexbor_line_clamp_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element);
+
+/* True if box `idx` lies entirely outside an overflow-clipping ancestor's
+ * padding box (so it must not paint / hit-test). */
+bool yetty_ylexbor_box_clipped_out(const struct yetty_ylexbor *r, uint32_t idx);
+
+/* Scan for class-based `transform: translate*(...)` and record
+ * (selector, tx, ty, pct flags). Complements the inline-transform parse. */
+void yetty_ylexbor_css_scan_transforms(struct yetty_ylexbor *r, const char *css_source,
+                                       size_t css_source_len);
+
+/* Last matching class-based transform for `element`. Returns 1 and fills the
+ * outputs on a match, 0 otherwise. Percent offsets come back as the raw
+ * number with the *_pct flag set. */
+int yetty_ylexbor_transform_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element, float *out_tx,
+                                   float *out_ty, bool *out_tx_pct, bool *out_ty_pct);
 
 void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *css_source,
                                       size_t css_len);

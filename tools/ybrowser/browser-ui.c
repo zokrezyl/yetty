@@ -228,6 +228,13 @@ struct app {
     int img_dirty;
     double img_last_render_ms;
 
+    /* Set by the image-fetch paths instead of `needs_render` when only
+	 * streamed images have landed. render_active tries to ship per-image
+	 * CMD_GROUP deltas (O(changed) bytes) to the page figure rather than
+	 * repainting + reshipping the whole page; it falls back to a full render
+	 * if the relayout shifted anything. */
+    int img_delta_pending;
+
     /* Shared network loader — one per app so the page prefetch, every
 	 * tab's engine, and the image workers all reuse the same connection
 	 * pool / TLS sessions / Alt-Svc cache. Owned; destroyed after every
@@ -1464,7 +1471,7 @@ static int pump_active(struct app *a)
             if (a->img_dirty) {
                 double now = yetty_ylexbor_prof_now_ms();
                 if (now - a->img_last_render_ms >= IMG_RENDER_DEBOUNCE_MS) {
-                    t->needs_render = 1;
+                    a->img_delta_pending = 1;
                     a->pending_render = 1;
                     a->img_dirty = 0;
                     a->img_last_render_ms = now;
@@ -1485,7 +1492,7 @@ static int pump_active(struct app *a)
              * one blocking round-trip for one. */
             images_fetched = yetty_ylexbor_fetch_pending_images(t->engine, 4);
             if (images_fetched > 0) {
-                t->needs_render = 1;
+                a->img_delta_pending = 1;
                 a->pending_render = 1;
                 wait_ms = 0;
             }
@@ -1943,6 +1950,71 @@ static void render_image(struct app *a, struct tab *t)
 
 /* Render the active tab's content into the shared content widget. Swaps the
  * visible widget (page embed vs image) to match the content kind. */
+/* Attempt an incremental image-group ship: repaint only the image groups
+ * whose pixels landed since the last full render and ship them straight to the
+ * page figure (no CMD_ZERO, no full-page repaint/reship). Returns 1 if the
+ * page was updated this way; 0 if a full render is needed (layout shifted, no
+ * baseline yet, or missing handles) — the caller then falls back to
+ * render_doc. */
+static int try_image_delta(struct app *a, struct tab *t)
+{
+    if (t->kind != CK_HTML || !t->engine || t->rendered_w <= 0.0f) {
+        return 0;
+    }
+    /* The delta lands directly on the page figure, so it must carry the same
+	 * content offset the embed applies on a full render: the page widget's
+	 * top-left (its buffer scene origin is 0,0). */
+    struct yetty_ycore_rectangle_result page_rect_res = yetty_ygui_widget_rect(a->page);
+    if (YETTY_IS_ERR(page_rect_res)) {
+        yetty_ycore_error_destroy(page_rect_res.error);
+        return 0;
+    }
+    float dx = page_rect_res.value.min.x;
+    float dy = page_rect_res.value.min.y;
+
+    struct yetty_ydraw_drawable_list_result delta_res =
+        yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    if (YETTY_IS_ERR(delta_res)) {
+        yetty_ycore_error_destroy(delta_res.error);
+        return 0;
+    }
+    struct yetty_ydraw_drawable_list *delta = delta_res.value;
+
+    struct yetty_ylexbor_incremental_result inc =
+        yetty_ylexbor_paint_image_deltas(t->engine, delta, dx, dy);
+    if (!inc.is_delta) {
+        yetty_ydraw_drawable_list_destroy(delta);
+        return 0; /* layout changed / no baseline — caller does a full render */
+    }
+
+    if (inc.changed_groups > 0) {
+        struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(a->scroll);
+        const uint8_t *body = yetty_ydraw_drawable_list_data(delta);
+        size_t body_len = yetty_ydraw_drawable_list_size(delta);
+        if (!YETTY_IS_ERR(id_res) && id_res.value != 0 && body && body_len > 0) {
+            struct yetty_ycore_void_result ship = yetty_ygui_framework_ship_figure_delta(
+                a->fw, id_res.value, body, (uint32_t)body_len);
+            if (YETTY_IS_ERR(ship)) {
+                yetty_ycore_error_destroy(ship.error);
+            } else {
+                yetty_ylexbor_prof("  image delta  fig=%u groups=%d bytes=%zu", id_res.value,
+                                   inc.changed_groups, body_len);
+            }
+        }
+        if (YETTY_IS_ERR(id_res)) {
+            yetty_ycore_error_destroy(id_res.error);
+        }
+        /* Nudge the loop so the standalone GPU window presents the updated
+		 * figure; the in-yetty host redraws on receiving the body. */
+        if (a->event_loop && a->event_loop->ops->request_render) {
+            a->event_loop->ops->request_render(a->event_loop);
+        }
+    }
+
+    yetty_ydraw_drawable_list_destroy(delta);
+    return 1;
+}
+
 static void render_active(struct app *a)
 {
     struct tab *t = &a->tabs[a->active];
@@ -1955,9 +2027,22 @@ static void render_active(struct app *a)
     }
     if (want_image) {
         render_image(a, t);
-    } else {
-        render_doc(a, t);
+        a->img_delta_pending = 0;
+        return;
     }
+    /* Fast path: only streamed images changed since the last full render. Ship
+	 * per-image group deltas instead of a whole-page repaint + reship. If the
+	 * relayout shifted anything (or there's no baseline yet) fall through to a
+	 * full render. */
+    if (a->img_delta_pending && !t->needs_render) {
+        if (try_image_delta(a, t)) {
+            a->img_delta_pending = 0;
+            return;
+        }
+        t->needs_render = 1; /* delta bailed — force render_doc to repaint */
+    }
+    a->img_delta_pending = 0;
+    render_doc(a, t);
 }
 
 /* Create the first tab and load `initial_url` (or the start page). */

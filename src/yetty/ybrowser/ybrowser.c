@@ -271,6 +271,7 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
     }
     free(r->img_cache);
     yetty_ylexbor_svg_inline_cache_clear(r);
+    yetty_ylexbor_group_ids_clear(r);
     if (r->supp_selector_matcher) {
         lxb_selectors_destroy((lxb_selectors_t *)r->supp_selector_matcher, true);
         r->supp_selector_matcher = NULL;
@@ -607,6 +608,9 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     /* Inline-<svg> scenes are keyed by element pointers that die with the
 	 * old parse — drop them before the new document takes over. */
     yetty_ylexbor_svg_inline_cache_clear(r);
+    /* Same for the element→group-id map (keyed by the same dying pointers).
+	 * next_group_id keeps climbing so a new document never reuses an old id. */
+    yetty_ylexbor_group_ids_clear(r);
     r->css_sheets_loaded = 0;
     r->css_sheets_failed = 0;
     r->css_sheets_inline = 0;
@@ -725,6 +729,7 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
     yetty_ylexbor_css_scan_var_heights(r, css, css_len);
     yetty_ylexbor_css_scan_width_keywords(r, css, css_len);
     yetty_ylexbor_css_scan_line_clamps(r, css, css_len);
+    yetty_ylexbor_css_scan_transforms(r, css, css_len);
     yetty_ylexbor_css_media_map_end(r);
 
     /* Push the CSS through libcss — this is the cascade box-build actually
@@ -1174,8 +1179,8 @@ char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)
         if (b->element == NULL) {
             continue;
         }
-        if (b->vis_hidden || b->opacity < 0.02f) {
-            continue; /* hidden / fully-transparent boxes are hit-transparent */
+        if (b->vis_hidden || b->opacity < 0.02f || yetty_ylexbor_box_clipped_out(r, i)) {
+            continue; /* hidden / transparent / clipped boxes are hit-transparent */
         }
         if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h) {
             target = b->element;
