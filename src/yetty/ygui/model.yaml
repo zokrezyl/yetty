@@ -2667,7 +2667,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/framework.c
     name: yetty_ygui_framework_feed_mouse_scroll
-    return_type: struct yetty_ycore_void_result
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"

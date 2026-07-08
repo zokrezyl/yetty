@@ -113,6 +113,17 @@ struct yetty_ycore_void_result yetty_yfigure_set_scroll(struct yetty_yclass_obje
  * viewport). Base default rejects. Scrollable kinds override it. */
 struct yetty_ycore_void_result yetty_yfigure_set_content_size(struct yetty_yclass_object *obj,
                                                               float content_w, float content_h);
+/* apply_scroll_anchor: re-anchor a scroll-anchored figure's rendered content
+ * to the terminal's current scroll position. `rolling_row_offset` is the
+ * number of content rows the view has advanced since the figure was created
+ * (content_root_row - creation_row); `cell_height` is the terminal cell
+ * height in px, so the pixel shift is offset*cell_height. A ygrid-backed card
+ * overrides this to slide its absolute-coord content by that many pixels so it
+ * tracks the surrounding text. Base default is a no-op: a figure that draws
+ * nothing content-relative needs no anchoring beyond its rect. */
+struct yetty_ycore_void_result yetty_yfigure_apply_scroll_anchor(struct yetty_yclass_object *obj,
+                                                                 int32_t rolling_row_offset,
+                                                                 float cell_height);
 
 typedef struct yetty_ycore_void_result (*yetty_yfigure_destroy_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_render_fn)(struct yetty_yclass_object *,
@@ -129,6 +140,8 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_set_scroll_fn)(struct yet
                                                                       float, float);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_content_size_fn)(
     struct yetty_yclass_object *, float, float);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_apply_scroll_anchor_fn)(
+    struct yetty_yclass_object *, int32_t, float);
 
 struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_yclass_ctx *ctx);
 

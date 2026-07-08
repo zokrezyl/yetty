@@ -176,13 +176,18 @@ struct yetty_yterminal_terminal {
      * Lazily allocated on the first read; freed in destroy. */
     char *pty_read_buf;
 
-    /* Pixel-precise mouse forwarding (DEC ?1500/?1501).
+    /* Pixel-precise mouse forwarding (DEC ?1500/?1501) plus keyboard
+   * forwarding (DEC ?1502).
    * The text-layer's libvterm settermprop hook flips these and reports
    * via terminal_mouse_sub_callback, which also emits
    * YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE with the current pixel size on
-   * the rising edge so the client can lay out. */
+   * the rising edge so the client can lay out. When key_subscribed is set the
+   * hosted app owns the keyboard: the terminal stops interpreting scroll keys
+   * (PageUp/PageDown/Up/Down) for its own scrollback and hands them to the
+   * app like any full-screen program. */
     int mouse_click_subscribed;
     int mouse_move_subscribed;
+    int key_subscribed;
     int mouse_buttons_held; /* OR of (1 << button) for currently-down buttons */
 
     /* Long-lived yface for emitting input events to the inferior over the
@@ -1541,13 +1546,15 @@ static struct yetty_ycore_void_result terminal_ydraw_process_input(
  * TIOCGWINSZ carries no pixels, so this OSC is the client's only size cue
  * (without it a ygui client renders at its 800x600 default). */
 static struct yetty_ycore_void_result terminal_mouse_sub_callback(int click_enabled,
-                                                                  int move_enabled, void *userdata)
+                                                                  int move_enabled, int key_enabled,
+                                                                  void *userdata)
 {
     struct yetty_yterminal_terminal *terminal = userdata;
     int was_subscribed = terminal->mouse_click_subscribed || terminal->mouse_move_subscribed;
     terminal->mouse_click_subscribed = click_enabled;
     terminal->mouse_move_subscribed = move_enabled;
-    ydebug("terminal: mouse_sub click=%d move=%d", click_enabled, move_enabled);
+    terminal->key_subscribed = key_enabled;
+    ydebug("terminal: mouse_sub click=%d move=%d key=%d", click_enabled, move_enabled, key_enabled);
 
     if (!was_subscribed && (click_enabled || move_enabled) && terminal->applied_w > 0.0f &&
         terminal->applied_h > 0.0f) {
@@ -1810,6 +1817,28 @@ static struct yetty_ycore_void_result terminal_render_frame(
     (void)force_redraw;
     if (!terminal->root_container_obj) {
         return YETTY_ERR(yetty_ycore_void, "terminal_render_frame: no root container to render");
+    }
+    /* Publish the current scroll position to the figure container so inline
+     * cards (ygui/ymgui/…) re-anchor and slide with the surrounding text. The
+     * top visible content row is the scrollback view_top when active, else the
+     * live anchor; cards offset from the row they were created at. */
+    {
+        int view_active = 0;
+        uint64_t view_top = 0;
+        struct yetty_ycore_void_result view_res =
+            yetty_yvterm_vterm_get_view(terminal->grid, &view_active, &view_top);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, view_res, "terminal_render_frame: get_view");
+        uint64_t content_root_row = view_top;
+        if (!view_active) {
+            struct yetty_ycore_uint64_result live_res = terminal_live_anchor(terminal);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, live_res, "terminal_render_frame: live anchor");
+            content_root_row = live_res.value;
+        }
+        struct pixel_size_result cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "terminal_render_frame: cell size");
+        struct yetty_ycore_void_result ctx_res = yetty_yfigure_container_set_scroll_context(
+            terminal->root_container_obj, content_root_row, (float)cell_res.value.height);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ctx_res, "terminal_render_frame: scroll context");
     }
     {
         struct yetty_yfigure_figure_ptr_result rf_res =
@@ -2881,9 +2910,13 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * so PageUp/Down keep working while in scrollback view —
          * otherwise PageDown would exit scrollback instead of
          * scrolling forward inside it. terminal_scrollback_apply
-         * takes positive lines = older content (up). */
-        if (event->key.key == 266 /* GLFW_KEY_PAGE_UP */ ||
-            event->key.key == 267 /* GLFW_KEY_PAGE_DOWN */) {
+         * takes positive lines = older content (up).
+         *
+         * Suppressed when a hosted app subscribed for keyboard (DEC ?1502):
+         * that app owns these keys and scrolls its own content with them,
+         * exactly like a full-screen program owns PageUp/PageDown. */
+        if (!terminal->key_subscribed && (event->key.key == 266 /* GLFW_KEY_PAGE_UP */ ||
+                                          event->key.key == 267 /* GLFW_KEY_PAGE_DOWN */)) {
             int page = (int)terminal->rows;
             if (page < 1) {
                 page = 1;
@@ -2892,6 +2925,21 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 terminal_scrollback_apply(terminal, event->key.key == 266 ? +page : -page);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, sr,
                                 "terminal_view_on_event: scrollback_apply failed");
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        /* Up / Down nudge the scrollback view one line at a time, but ONLY once
+         * already in scrollback (entered via wheel-up or PageUp). At the live
+         * prompt the arrows belong to the shell (command history) / focused
+         * app, so they are left to fall through there. Matches less/tmux copy
+         * mode. Handled before the any-key-exits rule so they keep scrolling
+         * instead of dropping back to live. */
+        if (!terminal->key_subscribed && terminal_scrollback_is_active(terminal) &&
+            (event->key.key == 265 /* GLFW_KEY_UP */ ||
+             event->key.key == 264 /* GLFW_KEY_DOWN */)) {
+            struct yetty_ycore_void_result sr =
+                terminal_scrollback_apply(terminal, event->key.key == 265 ? +1 : -1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, sr,
+                                "terminal_view_on_event: scrollback line nudge failed");
             return YETTY_OK(yetty_ycore_int, 1);
         }
         /* In scrollback view, Enter exits and is consumed (matches tmux copy
@@ -2913,11 +2961,13 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
-        /* Terminal-wide keyboard fan-out — opt-in via TERM_INPUT_SUB. Fires
-         * If a ymgui figure has focus, route the keystroke to it as an
-         * OSC envelope and DO NOT also feed libvterm — otherwise the
-         * shell would see the keystroke alongside the figure. */
-        {
+        /* Structured keyboard fan-out to a click-focused ymgui figure (opt-in
+         * via TERM_INPUT_SUB): route the keystroke to it as an OSC envelope and
+         * DO NOT also feed libvterm. Skipped when the app subscribed for
+         * keyboard via DEC ?1502 — such an app consumes keystrokes from its
+         * own PTY (libvterm on_key below), the same channel a full-screen
+         * program reads, so forwarding a structured copy here would double it. */
+        if (!terminal->key_subscribed) {
             struct yetty_ycore_int_result ckr = terminal_emit_figure_key(
                 terminal, YETTY_YMGUI_INPUT_KEY_DOWN, event->key.key, event->key.mods, 0);
             if (YETTY_IS_ERR(ckr)) {

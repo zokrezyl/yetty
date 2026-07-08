@@ -397,7 +397,7 @@ static struct yetty_ycore_void_result handle_event(struct yetty_yrich_app *app,
         return refit_and_push(app);
     }
     case YETTY_YCORE_MOUSE_SCROLL: {
-        struct yetty_ycore_void_result scroll_res = yetty_ygui_framework_feed_mouse_scroll(
+        struct yetty_ycore_int_result scroll_res = yetty_ygui_framework_feed_mouse_scroll(
             app->ygui, ev->mouse_scroll.x, ev->mouse_scroll.y, ev->mouse_scroll.dx,
             ev->mouse_scroll.dy);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scroll_res, "yrich: scroll");

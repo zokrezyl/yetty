@@ -4006,7 +4006,7 @@ static struct yetty_ycore_int_result standalone_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     case YETTY_YCORE_MOUSE_SCROLL: {
         /* Positions are scaled like the others; the wheel deltas are not. */
-        struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_scroll(
+        struct yetty_ycore_int_result r = yetty_ygui_framework_feed_mouse_scroll(
             app->engine, ev->mouse_scroll.x / scale, ev->mouse_scroll.y / scale,
             ev->mouse_scroll.dx, ev->mouse_scroll.dy);
         if (YETTY_IS_ERR(r)) {

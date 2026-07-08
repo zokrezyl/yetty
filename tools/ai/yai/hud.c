@@ -467,8 +467,7 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud, int want_hu
     return yai_hud_flush(hud);
 }
 
-struct yai_hud_ptr_result yai_hud_create(int want_hud_window, int hud_float,
-                                         int want_search_window)
+struct yai_hud_ptr_result yai_hud_create(int want_hud_window, int hud_float, int want_search_window)
 {
     if (!want_hud_window && !want_search_window) {
         return YETTY_OK(yai_hud_ptr, NULL); /* no ygui surface wanted */
@@ -662,8 +661,7 @@ struct yetty_ycore_void_result yai_hud_forget_remote(struct yai_hud *hud)
      * startup clear for the text bar, or `clear`/Ctrl-L in the interop
      * shell). Forget the remote state and re-emit so our surfaces
      * re-materialize; a figure that survived is reused host-side. */
-    struct yetty_ycore_void_result forget_res =
-        yetty_ygui_framework_forget_remote(hud->framework);
+    struct yetty_ycore_void_result forget_res = yetty_ygui_framework_forget_remote(hud->framework);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, forget_res, "yai_hud_forget_remote: forget");
     return yai_hud_flush(hud);
 }
@@ -732,8 +730,7 @@ static struct yetty_ycore_void_result hud_search_build(struct yai_hud *hud)
     }
 
     /* The full selected message; takes whatever height the rows leave. */
-    struct yetty_yclass_object_ptr_result text_res =
-        hud_add(body, yetty_ygui_textarea_class_get());
+    struct yetty_yclass_object_ptr_result text_res = hud_add(body, yetty_ygui_textarea_class_get());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "hud_search_build: textarea");
     hud->search_text = text_res.value;
     struct yetty_ycore_void_result grow_res =
@@ -1553,7 +1550,7 @@ struct yetty_ycore_void_result yai_hud_mouse_wheel(struct yai_hud *hud, float x,
     if (!hud) {
         return YETTY_ERR(yetty_ycore_void, "yai_hud_mouse_wheel: NULL hud");
     }
-    struct yetty_ycore_void_result scroll_res =
+    struct yetty_ycore_int_result scroll_res =
         yetty_ygui_framework_feed_mouse_scroll(hud->framework, x, y, 0.0f, delta_y);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, scroll_res, "yai_hud_mouse_wheel: feed");
     return yai_hud_flush(hud);

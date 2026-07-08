@@ -248,6 +248,15 @@ static inline void err_ok(struct yetty_ycore_void_result r)
     }
 }
 
+/* Same tolerated-error swallow for int-returning calls (e.g. the consumed flag
+ * from feed_mouse_scroll, which the browser ignores). */
+static inline void err_ok_int(struct yetty_ycore_int_result r)
+{
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
+}
+
 static int pt_in_rect(struct yetty_ycore_rectangle r, float x, float y)
 {
     return x >= r.min.x && x < r.max.x && y >= r.min.y && y < r.max.y;
@@ -1536,7 +1545,8 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
             }
             yetty_ygui_framework_mark_dirty(a->fw);
         } else if (m->kind == YETTY_YMGUI_INPUT_MOUSE_WHEEL) {
-            err_ok(yetty_ygui_framework_feed_mouse_scroll(a->fw, m->x, m->y, 0.0f, m->wheel_dy));
+            err_ok_int(
+                yetty_ygui_framework_feed_mouse_scroll(a->fw, m->x, m->y, 0.0f, m->wheel_dy));
         }
         return;
     }
@@ -2077,9 +2087,8 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 	 * origin never freezes input handling. a.event_loop stays NULL — the
 	 * client-specific paths (render pacing, the DCS size guard) key on
 	 * it. */
-    struct client_pipe_loop pipe_loop = {.base.ops = client_pipe_loop_ops(),
-                                         .read_fd = -1,
-                                         .write_fd = -1};
+    struct client_pipe_loop pipe_loop = {
+        .base.ops = client_pipe_loop_ops(), .read_fd = -1, .write_fd = -1};
     {
         int pipe_fds[2];
         if (getenv("YBROWSER_SYNC_NAV") != NULL) {
@@ -2088,8 +2097,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
         } else if (pipe(pipe_fds) == 0) {
             pipe_loop.read_fd = pipe_fds[0];
             pipe_loop.write_fd = pipe_fds[1];
-            fcntl(pipe_loop.read_fd, F_SETFL,
-                  fcntl(pipe_loop.read_fd, F_GETFL, 0) | O_NONBLOCK);
+            fcntl(pipe_loop.read_fd, F_SETFL, fcntl(pipe_loop.read_fd, F_GETFL, 0) | O_NONBLOCK);
             struct yetty_yplatform_yworkpool_ptr_result pool_res =
                 yetty_yplatform_yworkpool_create(&pipe_loop.base, "ybrowser-client", 8);
             if (YETTY_IS_OK(pool_res)) {
@@ -2540,9 +2548,9 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         sa_request_render(s);
         return YETTY_OK(yetty_ycore_int, 1);
     case YETTY_YCORE_MOUSE_SCROLL:
-        err_ok(yetty_ygui_framework_feed_mouse_scroll(s->app.fw, ev->mouse_scroll.x,
-                                                      ev->mouse_scroll.y, ev->mouse_scroll.dx,
-                                                      ev->mouse_scroll.dy));
+        err_ok_int(yetty_ygui_framework_feed_mouse_scroll(s->app.fw, ev->mouse_scroll.x,
+                                                          ev->mouse_scroll.y, ev->mouse_scroll.dx,
+                                                          ev->mouse_scroll.dy));
         sa_request_render(s);
         return YETTY_OK(yetty_ycore_int, 1);
     case YETTY_YCORE_MOUSE_MOVE:

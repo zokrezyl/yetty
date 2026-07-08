@@ -122,6 +122,7 @@ struct VTermState
     unsigned int report_focus:1;
     unsigned int card_click:1;    // DEC mode 1500 - card click events
     unsigned int card_move:1;     // DEC mode 1501 - card move events
+    unsigned int card_key:1;      // DEC mode 1502 - card keyboard events
   } mode;
 
   VTermEncodingInstance encoding[4], encoding_utf8;

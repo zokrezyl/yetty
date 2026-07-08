@@ -52,6 +52,7 @@ typedef struct yetty_ycore_void_result (*yetty_yterminal_cursor_fn)(
  * fires this whenever either changes. */
 typedef struct yetty_ycore_void_result (*yetty_yterminal_mouse_sub_fn)(int click_enabled,
                                                                        int move_enabled,
+                                                                       int key_enabled,
                                                                        void *userdata);
 
 /* Terminal-wide input subscription callback — fired when a layer

@@ -127,6 +127,7 @@ struct yetty_ycore_void_result yetty_yguiapp_build_root_body(struct yetty_yclass
 #include <yetty/ymgui/wire.h>
 #include <yetty/ywire/channel.h>
 #include <yetty/ywire/connection.h>
+#include <yetty/ywire/wire-statemachine.h>
 
 #include <signal.h>
 #include <unistd.h>
@@ -184,6 +185,37 @@ static void yguiapp_client_raw_sink(void *user, const uint8_t *bytes, size_t n)
     }
 }
 
+/* Bounce a pointer event the ygui app did not consume back to the host
+ * terminal, so it applies its default handling (wheel → scrollback, and the
+ * inline cards then track the scroll). Mirrors the ccc/yai reinject path, but
+ * routed through the ywire RAW channel: yguiapp multiplexes over ywire rather
+ * than writing raw stdout, so the reinject DCS envelope goes down RAW (the same
+ * channel the ?1500h mouse-enable sequence uses) to reach the terminal's OSC
+ * parser. */
+static struct yetty_ycore_void_result yguiapp_client_reinject_mouse(
+    struct yetty_yguiapp_client *cs, const struct yetty_client_input_mouse *msg)
+{
+    struct yetty_ywire_channel *raw =
+        yetty_ywire_connection_channel(cs->conn, YETTY_YWIRE_CHANNEL_RAW);
+    if (!raw) {
+        return YETTY_ERR(yetty_ycore_void, "yguiapp reinject: no raw channel");
+    }
+    struct yetty_ycore_buffer_result buf_res = yetty_ycore_buffer_create(64);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, buf_res, "yguiapp reinject: buffer create");
+    struct yetty_ycore_buffer buf = buf_res.value;
+    struct yetty_ycore_void_result emit_res =
+        yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CLIENT_INPUT_REINJECT,
+                         /*has_args=*/1, /*compressed=*/0, NULL, 0, msg, sizeof(*msg), &buf);
+    if (YETTY_IS_ERR(emit_res)) {
+        yetty_ycore_buffer_destroy(&buf);
+        return YETTY_ERR(yetty_ycore_void, "yguiapp reinject: emit", emit_res);
+    }
+    struct yetty_ycore_size_result write_res = yetty_ywire_channel_write(raw, buf.data, buf.size);
+    yetty_ycore_buffer_destroy(&buf);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, write_res, "yguiapp reinject: channel write");
+    return yetty_ywire_channel_flush(raw);
+}
+
 /* Input channel sink — yetty forwards pointer events as client-input OSC codes
  * carrying a yetty_client_input_mouse; dispatch to ygui's framework_feed_mouse_*. */
 static void yguiapp_client_input_sink(void *user, int wire_code, const uint8_t *args,
@@ -220,6 +252,24 @@ static void yguiapp_client_input_sink(void *user, int wire_code, const uint8_t *
         }
         break;
     }
+    case YETTY_YMGUI_INPUT_MOUSE_WHEEL: {
+        /* Offer the wheel to ygui first (a scrollarea under the cursor takes
+         * it); if nothing consumes it, bounce it back so the terminal scrolls
+         * its scrollback and the inline cards track the scroll. */
+        struct yetty_ycore_int_result consumed =
+            yetty_ygui_framework_feed_mouse_scroll(cs->engine, msg->x, msg->y, 0.0f, msg->wheel_dy);
+        if (YETTY_IS_ERR(consumed)) {
+            yetty_ycore_error_destroy(consumed.error);
+            break;
+        }
+        if (!consumed.value) {
+            struct yetty_ycore_void_result reinject_res = yguiapp_client_reinject_mouse(cs, msg);
+            if (YETTY_IS_ERR(reinject_res)) {
+                yetty_ycore_error_destroy(reinject_res.error);
+            }
+        }
+        break;
+    }
     default:
         break;
     }
@@ -241,8 +291,11 @@ static void yguiapp_client_resize_cb(void *user, int width_px, int height_px, in
     }
 }
 
-/* Tell the hosting yetty to forward mouse events to our stdin (DEC private modes
- * 1500 button / 1501 move). */
+/* Tell the hosting yetty to forward input to our stdin: DEC private modes
+ * 1500 (mouse button) / 1501 (mouse move) / 1502 (keyboard). Subscribing for
+ * keyboard makes yetty stop interpreting scroll keys (PageUp/PageDown/Up/Down)
+ * for its own scrollback and deliver them to us instead, so our widgets (e.g.
+ * a scrollarea) scroll on the keyboard the same way they do on the wheel. */
 static struct yetty_ycore_void_result yguiapp_client_enable_mouse_forwarding(
     struct yetty_yguiapp_client *cs)
 {
@@ -251,10 +304,34 @@ static struct yetty_ycore_void_result yguiapp_client_enable_mouse_forwarding(
     if (!raw) {
         return YETTY_ERR(yetty_ycore_void, "yguiapp client: no raw channel");
     }
-    static const char enable[] = "\033[?1500h\033[?1501h";
+    static const char enable[] = "\033[?1500h\033[?1501h\033[?1502h";
     struct yetty_ycore_size_result wr = yetty_ywire_channel_write(raw, enable, sizeof(enable) - 1);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "yguiapp client: enable mouse write");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "yguiapp client: enable input write");
     return yetty_ywire_channel_flush(raw);
+}
+
+/* Restore the host terminal's input modes (DEC ?1500/?1501/?1502) on graceful
+ * exit — the way a full-screen program leaves the terminal as it found it, so
+ * the shell's own wheel/keyboard scrollback works again. Best-effort: the uv
+ * loop has already stopped by the time this runs, so pump the bytes out
+ * synchronously before the connection is torn down. */
+static struct yetty_ycore_void_result yguiapp_client_disable_mouse_forwarding(
+    struct yetty_yguiapp_client *cs)
+{
+    struct yetty_ywire_channel *raw =
+        yetty_ywire_connection_channel(cs->conn, YETTY_YWIRE_CHANNEL_RAW);
+    if (!raw) {
+        return YETTY_OK_VOID();
+    }
+    static const char disable[] = "\033[?1500l\033[?1501l\033[?1502l";
+    struct yetty_ycore_size_result wr =
+        yetty_ywire_channel_write(raw, disable, sizeof(disable) - 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "yguiapp client: disable input write");
+    struct yetty_ycore_void_result fr = yetty_ywire_channel_flush(raw);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "yguiapp client: disable input flush");
+    struct yetty_ycore_size_result pr = yetty_ywire_connection_pump_writable(cs->conn);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "yguiapp client: disable input pump");
+    return YETTY_OK_VOID();
 }
 
 static void yguiapp_client_out_poll_cb(uv_poll_t *handle, int status, int events);
@@ -559,6 +636,16 @@ struct yetty_ycore_void_result yetty_yguiapp_run_terminal(struct yetty_yclass_ob
     }
 
     uv_run(&cs.loop, UV_RUN_DEFAULT);
+
+    /* Normal loop exit (the app asked to quit): restore the host terminal's
+     * input modes so scrollback keys/wheel belong to the shell again. Only on
+     * this path — the early goto-fail cases never subscribed. */
+    {
+        struct yetty_ycore_void_result dr = yguiapp_client_disable_mouse_forwarding(&cs);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
+    }
 
 fail:
     /* Stop + close only the uv handles that were initialized, then drain their

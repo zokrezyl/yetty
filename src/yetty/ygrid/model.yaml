@@ -74,6 +74,10 @@ classes:
         type: float
         get: false
         set: false
+      - name: scroll_anchor_y
+        type: float
+        get: false
+        set: false
       - name: insert_rolling_row
         type: uint32_t
         get: false
@@ -333,6 +337,9 @@ classes:
       - slot: set_content_size
         slot_domain: yfigure
         impl: yetty_ygrid_grid_set_content_size_impl
+      - slot: apply_scroll_anchor
+        slot_domain: yfigure
+        impl: yetty_ygrid_grid_apply_scroll_anchor_impl
     doc: null
 types:
   - name: yetty_yclass_object_ptr_result

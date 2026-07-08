@@ -840,6 +840,26 @@ classes:
         slot_domain: yguiapp
         impl: build
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 43_tree_showcase
+    domain: demoygui
+    accessor: yetty_demoygui_43_tree_showcase_class_get
+    type: regular
+    source_file: demo/ygui/43_tree_showcase/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_43_tree_showcase
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result
@@ -951,6 +971,9 @@ local_types:
   yetty_demoygui_41_yshadertoy_ptr_result: demo/ygui/41_yshadertoy/main.c
   yetty_demoygui_42_window_chrome: demo/ygui/42_window_chrome/main.c
   yetty_demoygui_42_window_chrome_ptr_result: demo/ygui/42_window_chrome/main.c
+  demo_state: demo/ygui/43_tree_showcase/main.c
+  yetty_demoygui_43_tree_showcase: demo/ygui/43_tree_showcase/main.c
+  yetty_demoygui_43_tree_showcase_ptr_result: demo/ygui/43_tree_showcase/main.c
 local_typedefs:
   __int128_t:
     source_file: demo/ygui/00_simple/main.c

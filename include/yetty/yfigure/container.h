@@ -160,6 +160,8 @@ struct yetty_ycore_void_result yetty_yfigure_container_set_rect(struct yetty_ycl
                                                                 struct yetty_ycore_rectangle rect);
 struct yetty_ycore_void_result yetty_yfigure_container_set_viewport_offset(
     struct yetty_yclass_object *obj, float offset_x, float offset_y);
+struct yetty_ycore_void_result yetty_yfigure_container_set_scroll_context(
+    struct yetty_yclass_object *obj, uint64_t content_root_row, float cell_height);
 struct yetty_yfigure_figure_ptr_result yetty_yfigure_container_as_figure(
     struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yfigure_container_add_child(struct yetty_yclass_object *obj,

@@ -112,6 +112,14 @@ struct child_entry {
      * NOT part of the producer-managed figure set a client means to drop.
      * Container destroy still frees it; only clear_all spares it. */
     int protected_from_clear;
+    /* Scroll anchoring. A producer card (created via CREATE_CHILD) is anchored
+     * to the content row it was minted at, so it tracks terminal scrolling; the
+     * container re-anchors it each render. Host-structural figures (content
+     * grid, chrome) are seated via add_child and stay unanchored. */
+    int scroll_anchored;
+    /* Absolute content-row index the figure's top was created at (the
+     * container's content_root_row at mint time). Valid when scroll_anchored. */
+    uint64_t creation_row;
     UT_hash_handle hh;
 };
 
@@ -138,6 +146,14 @@ struct YETTY_ANNOTATE("class@yfigure:container") YETTY_ANNOTATE("parent@yfigure:
      * pixel space. Set via yetty_yfigure_container_set_viewport_offset. */
     float viewport_offset_x;
     float viewport_offset_y;
+    /* Terminal scroll context, refreshed each frame via
+     * yetty_yfigure_container_set_scroll_context. content_root_row is the
+     * absolute content-row index currently at the top of the pane; cell_height
+     * is the text cell height in px. Scroll-anchored children are re-anchored
+     * against these so an inline card tracks terminal scrolling. cell_height 0
+     * = no scroll context (host never set it) → anchoring is inert. */
+    uint64_t content_root_row;
+    float cell_height;
 };
 
 /* Result wrapper for the container handle. Declared here (not pulled from
@@ -433,6 +449,18 @@ static struct yetty_ycore_void_result container_render(struct yetty_yclass_objec
         if (yetty_yfigure_figure_hidden_get((struct yetty_yclass_object *)(c)-1).value) {
             continue;
         }
+        /* Re-anchor a scroll-tracking card to the current top content row so it
+         * slides with the surrounding text. The figure's own apply_scroll_anchor
+         * (a ygrid card drives its rolling-row shader offset; other kinds no-op)
+         * consumes the row delta since creation. */
+        if (container->cell_height > 0.0f && e->scroll_anchored) {
+            int32_t rolling_row_offset =
+                (int32_t)((int64_t)container->content_root_row - (int64_t)e->creation_row);
+            struct yetty_ycore_void_result anchor_r = yetty_yfigure_apply_scroll_anchor(
+                (struct yetty_yclass_object *)(c)-1, rolling_row_offset, container->cell_height);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, anchor_r,
+                                "yfigure container_render: apply_scroll_anchor");
+        }
         ydebug("yfigure container_render: child id=%u z=%d rect=(%.0f,%.0f)-(%.0f,%.0f)", e->id,
                yetty_yfigure_figure_z_get((struct yetty_yclass_object *)(c)-1).value,
                yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(c)-1).value.min.x,
@@ -616,6 +644,18 @@ static struct yetty_ycore_void_result container_do_create_child(
         HASH_FIND_INT(container->children, &child_id, fresh);
         if (fresh) {
             fresh->kind = kind_key;
+        }
+    }
+    /* A freshly minted producer card anchors to the current top content row so
+     * it tracks terminal scrolling. Host-structural figures (content grid, tab
+     * chrome) are seated via add_child, not this producer path, so they stay
+     * unanchored. */
+    {
+        struct child_entry *entry;
+        HASH_FIND_INT(container->children, &child_id, entry);
+        if (entry) {
+            entry->scroll_anchored = 1;
+            entry->creation_row = container->content_root_row;
         }
     }
     if (init_len > 0) {
@@ -1001,6 +1041,18 @@ struct yetty_ycore_void_result yetty_yfigure_container_set_viewport_offset(
 }
 
 YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yfigure_container_set_scroll_context(
+    struct yetty_yclass_object *obj, uint64_t content_root_row, float cell_height)
+{
+    struct yetty_yfigure_container_ptr_result container_r = yetty_yfigure_container_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, container_r,
+                        "yfigure_container_set_scroll_context: from_obj");
+    container_r.value->content_root_row = content_root_row;
+    container_r.value->cell_height = cell_height;
+    return YETTY_OK_VOID();
+}
+
+YETTY_ANNOTATE("expose")
 struct yetty_yfigure_figure_ptr_result yetty_yfigure_container_as_figure(
     struct yetty_yclass_object *obj)
 {
@@ -1173,6 +1225,13 @@ struct hit_visitor_state {
      * report pane-local coords for absolute-coords figures. */
     float viewport_offset_x;
     float viewport_offset_y;
+    /* Terminal scroll context (see the container fields of the same name),
+     * used to undo a scroll-anchored card's render shift so the reported
+     * local coords match where its content is actually drawn. `container` is
+     * borrowed for the per-child anchor lookup by id. */
+    uint64_t content_root_row;
+    float cell_height;
+    struct yetty_yfigure_container *container;
     struct yetty_yfigure_hit hit;
 };
 
@@ -1210,6 +1269,19 @@ static int hit_visit(uint32_t id, struct yetty_yfigure_figure *child, void *user
          * is identical to the local path for it. */
         st->hit.local_x = st->x - st->viewport_offset_x;
         st->hit.local_y = st->y - st->viewport_offset_y;
+        /* Undo a scroll-anchored card's render shift: its content is drawn
+         * offset by (creation_row - content_root_row)*cell_height, so subtract
+         * that to map the cursor back to the content the producer laid out. */
+        if (st->cell_height > 0.0f && st->container) {
+            struct child_entry *entry = NULL;
+            HASH_FIND_INT(st->container->children, &id, entry);
+            if (entry && entry->scroll_anchored) {
+                float render_offset_y =
+                    (float)((int64_t)entry->creation_row - (int64_t)st->content_root_row) *
+                    st->cell_height;
+                st->hit.local_y -= render_offset_y;
+            }
+        }
     } else {
         /* Local-coords producer figure (yplot/yimage/…): content drawn from
          * the figure's own origin; re-origin the cursor to its rect. */
@@ -1232,6 +1304,9 @@ struct yetty_yfigure_hit_result yetty_yfigure_container_hit_test(struct yetty_yc
                                    .y = y,
                                    .viewport_offset_x = container->viewport_offset_x,
                                    .viewport_offset_y = container->viewport_offset_y,
+                                   .content_root_row = container->content_root_row,
+                                   .cell_height = container->cell_height,
+                                   .container = container,
                                    .hit = {0, 0, 0}};
     yetty_yfigure_container_for_each(container, hit_visit, &st);
     return YETTY_OK(yetty_yfigure_hit, st.hit);
