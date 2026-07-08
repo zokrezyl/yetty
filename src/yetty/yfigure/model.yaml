@@ -325,6 +325,29 @@ methods:
     local: true
     oneway: false
     return_payload_type: null
+  - slot: apply_scroll_anchor
+    domain: yfigure
+    owning_class: figure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rolling_row_offset
+        type: int32_t
+      - name: cell_height
+        type: float
+    doc: "/* apply_scroll_anchor: re-anchor a scroll-anchored figure's rendered content
+ * to the terminal's current scroll position. `rolling_row_offset` is the
+ * number of content rows the view has advanced since the figure was created
+ * (content_root_row - creation_row); `cell_height` is the terminal cell
+ * height in px. A ygrid-backed card overrides this to drive its rolling-row
+ * shader offset — the same mechanism the text/ydraw content layer uses — so
+ * the card slides with the surrounding text. Base default is a no-op: a
+ * figure that draws nothing content-relative needs no anchoring beyond its
+ * rect (which the container shifts). */"
+    local: true
+    oneway: false
+    return_payload_type: null
 classes:
   - name: container
     domain: yfigure
@@ -362,6 +385,14 @@ classes:
         get: false
         set: false
       - name: viewport_offset_y
+        type: float
+        get: false
+        set: false
+      - name: content_root_row
+        type: uint64_t
+        get: false
+        set: false
+      - name: cell_height
         type: float
         get: false
         set: false
@@ -472,6 +503,9 @@ classes:
       - slot: set_content_size
         slot_domain: yfigure
         impl: yetty_yfigure_figure_default_set_content_size
+      - slot: apply_scroll_anchor
+        slot_domain: yfigure
+        impl: yetty_yfigure_figure_default_apply_scroll_anchor
     doc: "/* ---- figure base data slice (PRIVATE) -----------------------------------
  * The yclass data slice for the figure base class — the first slice in every
  * figure object (right after the yclass object header). The layout is not
@@ -577,6 +611,17 @@ exposed:
       - name: offset_x
         type: float
       - name: offset_y
+        type: float
+    doc: null
+  - source_file: src/yetty/yfigure/container.c
+    name: yetty_yfigure_container_set_scroll_context
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: content_root_row
+        type: uint64_t
+      - name: cell_height
         type: float
     doc: null
   - source_file: src/yetty/yfigure/container.c

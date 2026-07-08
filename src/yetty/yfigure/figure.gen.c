@@ -28,6 +28,9 @@ struct yetty_ycore_void_result yetty_yfigure_set_scroll(struct yetty_yclass_obje
                                                         float scroll_x, float scroll_y);
 struct yetty_ycore_void_result yetty_yfigure_set_content_size(struct yetty_yclass_object *obj,
                                                               float content_w, float content_h);
+struct yetty_ycore_void_result yetty_yfigure_apply_scroll_anchor(struct yetty_yclass_object *obj,
+                                                                 int32_t rolling_row_offset,
+                                                                 float cell_height);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_render_fn)(struct yetty_yclass_object *,
                                                                   struct yetty_ydraw_target *);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_destroy_fn)(struct yetty_yclass_object *);
@@ -43,6 +46,8 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_set_scroll_fn)(struct yet
                                                                       float, float);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_content_size_fn)(
     struct yetty_yclass_object *, float, float);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_apply_scroll_anchor_fn)(
+    struct yetty_yclass_object *, int32_t, float);
 
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_render_fn yetty_yfigure_figure_yetty_yfigure_render_check =
@@ -68,6 +73,10 @@ static yetty_yfigure_set_scroll_fn yetty_yfigure_figure_yetty_yfigure_set_scroll
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_content_size_fn yetty_yfigure_figure_yetty_yfigure_set_content_size_check =
     yetty_yfigure_figure_default_set_content_size;
+YETTY_MAYBE_UNUSED
+static yetty_yfigure_apply_scroll_anchor_fn
+    yetty_yfigure_figure_yetty_yfigure_apply_scroll_anchor_check =
+        yetty_yfigure_figure_default_apply_scroll_anchor;
 
 struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)
 {
@@ -101,6 +110,9 @@ struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)
         {"yetty_yfigure", "set_content_size",
          (yetty_yclass_method_id_t)yetty_yfigure_set_content_size,
          (yetty_yclass_impl_t)yetty_yfigure_figure_default_set_content_size},
+        {"yetty_yfigure", "apply_scroll_anchor",
+         (yetty_yclass_method_id_t)yetty_yfigure_apply_scroll_anchor,
+         (yetty_yclass_impl_t)yetty_yfigure_figure_default_apply_scroll_anchor},
     };
     struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]), NULL, NULL, 0);
@@ -468,6 +480,37 @@ struct yetty_ycore_void_result yetty_yfigure_set_content_size(struct yetty_yclas
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yfigure_set_content_size: dispatch_lookup failed");
     return ((yetty_yfigure_set_content_size_fn)dispatch_impl_r.value)(obj, content_w, content_h);
+}
+
+struct yetty_ycore_void_result yetty_yfigure_apply_scroll_anchor(struct yetty_yclass_object *obj,
+                                                                 int32_t rolling_row_offset,
+                                                                 float cell_height)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_yfigure", (yetty_yclass_method_id_t)yetty_yfigure_apply_scroll_anchor);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_yfigure_apply_scroll_anchor: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_apply_scroll_anchor: NULL object");
+    }
+
+    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                        "yetty_yfigure_apply_scroll_anchor: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                        "yetty_yfigure_apply_scroll_anchor: dispatch_lookup failed");
+    return ((yetty_yfigure_apply_scroll_anchor_fn)dispatch_impl_r.value)(obj, rolling_row_offset,
+                                                                         cell_height);
 }
 
 struct yetty_ycore_void_result yetty_yfigure_constructor(struct yetty_yclass_object *obj);

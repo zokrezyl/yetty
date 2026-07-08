@@ -55,6 +55,7 @@ struct yetty_ycore_void_result yetty_demoygui_38_ynodes_register(void);
 struct yetty_ycore_void_result yetty_demoygui_40_ymaze_register(void);
 struct yetty_ycore_void_result yetty_demoygui_41_yshadertoy_register(void);
 struct yetty_ycore_void_result yetty_demoygui_42_window_chrome_register(void);
+struct yetty_ycore_void_result yetty_demoygui_43_tree_showcase_register(void);
 struct yetty_ycore_void_result yetty_demoygui_register(void);
 
 /* ---- demoygui: explicit yclass-RPC hook registration ------------- */
@@ -360,6 +361,13 @@ struct yetty_ycore_void_result yetty_demoygui_register(void)
         struct yetty_ycore_void_result sub_r = yetty_demoygui_42_window_chrome_register();
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_r,
                             "yetty_demoygui_register: submodule demoygui_42_window_chrome");
+    }
+    {
+        /* Submodule aggregator is always compiled into the same
+         * library, so this strong call is always resolved. */
+        struct yetty_ycore_void_result sub_r = yetty_demoygui_43_tree_showcase_register();
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_r,
+                            "yetty_demoygui_register: submodule demoygui_43_tree_showcase");
     }
     registered = true;
     return YETTY_OK_VOID();

@@ -1811,6 +1811,28 @@ static struct yetty_ycore_void_result terminal_render_frame(
     if (!terminal->root_container_obj) {
         return YETTY_ERR(yetty_ycore_void, "terminal_render_frame: no root container to render");
     }
+    /* Publish the current scroll position to the figure container so inline
+     * cards (ygui/ymgui/…) re-anchor and slide with the surrounding text. The
+     * top visible content row is the scrollback view_top when active, else the
+     * live anchor; cards offset from the row they were created at. */
+    {
+        int view_active = 0;
+        uint64_t view_top = 0;
+        struct yetty_ycore_void_result view_res =
+            yetty_yvterm_vterm_get_view(terminal->grid, &view_active, &view_top);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, view_res, "terminal_render_frame: get_view");
+        uint64_t content_root_row = view_top;
+        if (!view_active) {
+            struct yetty_ycore_uint64_result live_res = terminal_live_anchor(terminal);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, live_res, "terminal_render_frame: live anchor");
+            content_root_row = live_res.value;
+        }
+        struct pixel_size_result cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "terminal_render_frame: cell size");
+        struct yetty_ycore_void_result ctx_res = yetty_yfigure_container_set_scroll_context(
+            terminal->root_container_obj, content_root_row, (float)cell_res.value.height);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ctx_res, "terminal_render_frame: scroll context");
+    }
     {
         struct yetty_yfigure_figure_ptr_result rf_res =
             yetty_yfigure_container_as_figure(terminal->root_container_obj);
@@ -2892,6 +2914,21 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 terminal_scrollback_apply(terminal, event->key.key == 266 ? +page : -page);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, sr,
                                 "terminal_view_on_event: scrollback_apply failed");
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        /* Up / Down nudge the scrollback view one line at a time, but ONLY once
+         * already in scrollback (entered via wheel-up or PageUp). At the live
+         * prompt the arrows belong to the shell (command history) / focused
+         * app, so they are left to fall through there. Matches less/tmux copy
+         * mode. Handled before the any-key-exits rule so they keep scrolling
+         * instead of dropping back to live. */
+        if (terminal_scrollback_is_active(terminal) &&
+            (event->key.key == 265 /* GLFW_KEY_UP */ ||
+             event->key.key == 264 /* GLFW_KEY_DOWN */)) {
+            struct yetty_ycore_void_result sr =
+                terminal_scrollback_apply(terminal, event->key.key == 265 ? +1 : -1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, sr,
+                                "terminal_view_on_event: scrollback line nudge failed");
             return YETTY_OK(yetty_ycore_int, 1);
         }
         /* In scrollback view, Enter exits and is consumed (matches tmux copy

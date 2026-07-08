@@ -153,6 +153,25 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_set_content_s
     return YETTY_ERR(yetty_ycore_void, "yfigure: set_content_size not implemented by this figure");
 }
 
+/* apply_scroll_anchor: re-anchor a scroll-anchored figure's rendered content
+ * to the terminal's current scroll position. `rolling_row_offset` is the
+ * number of content rows the view has advanced since the figure was created
+ * (content_root_row - creation_row); `cell_height` is the terminal cell
+ * height in px, so the pixel shift is offset*cell_height. A ygrid-backed card
+ * overrides this to slide its absolute-coord content by that many pixels so it
+ * tracks the surrounding text. Base default is a no-op: a figure that draws
+ * nothing content-relative needs no anchoring beyond its rect. */
+YETTY_ANNOTATE("virtual@yfigure:figure:apply_scroll_anchor")
+YETTY_ANNOTATE("local@yfigure:apply_scroll_anchor")
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_apply_scroll_anchor(
+    struct yetty_yclass_object *obj, int32_t rolling_row_offset, float cell_height)
+{
+    (void)obj;
+    (void)rolling_row_offset;
+    (void)cell_height;
+    return YETTY_OK_VOID();
+}
+
 /* ---- figure base data slice (PRIVATE) -----------------------------------
  * The yclass data slice for the figure base class — the first slice in every
  * figure object (right after the yclass object header). The layout is not

@@ -211,6 +211,12 @@ struct YETTY_ANNOTATE("class@ygrid:grid") YETTY_ANNOTATE("parent@yfigure:figure"
      * here; the per-figure scissor clips. 0 = top-left. */
     float scroll_x;
     float scroll_y;
+    /* Terminal-scroll anchor offset in px, added on top of scroll_y in the
+     * cell-zoom offset each frame (see yetty_ygrid_grid_apply_scroll_anchor_impl).
+     * Lets an absolute-coord card slide with the surrounding terminal text
+     * without disturbing the grid's own cell_size/bucketing (which the rolling
+     * mechanism cannot do for a non-terminal cell geometry). 0 = not anchored. */
+    float scroll_anchor_y;
     /* Rolling-row scroll state (used when the grid backs scrolling content,
      * e.g. the terminal's ydraw layer; 0 for static compositor grids).
      * `insert_rolling_row` is stamped onto each prim added (its creation row);
@@ -2029,7 +2035,9 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     g->rs.uniforms[U_VIEW_SIZE].vec2[0] = g->absolute_coords ? cw : w;
     g->rs.uniforms[U_VIEW_SIZE].vec2[1] = g->absolute_coords ? ch : h;
     g->rs.uniforms[U_CZ_OFF].vec2[0] = g->scroll_x;
-    g->rs.uniforms[U_CZ_OFF].vec2[1] = g->scroll_y;
+    /* scroll_anchor_y slides absolute-coord cards with terminal scrolling; it
+     * adds to the app scroll here, so it never disturbs cell_size/bucketing. */
+    g->rs.uniforms[U_CZ_OFF].vec2[1] = g->scroll_y + g->scroll_anchor_y;
     g->rs.uniforms[U_PRIM_COUNT].u32 = g->prim_count;
     /* Shared animation clock — same value across every shader this frame. */
     if (g->runtime) {
@@ -3515,6 +3523,31 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_set_content_size_impl(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_r, "ygrid: from_obj");
     struct yetty_ygrid_grid *grid = grid_r.value;
     yetty_ygrid_set_content_size(grid, content_w, content_h);
+    return yetty_yfigure_figure_dirty_set(obj, 1);
+}
+
+/* Track terminal scroll: slide the card's absolute-coord content with the
+ * surrounding text by offsetting the cell-zoom sampling origin. The shift is
+ * (content_root_row - creation_row) rows in px, applied as a cz_off delta that
+ * runs before cell lookup — so, unlike the rolling-row path, it does not touch
+ * cell_size/bucketing and works for a card whose cell geometry differs from the
+ * text grid. Only absolute-coord grids anchor this way; a local grid draws
+ * relative to its own rect, which the container moves directly. */
+YETTY_ANNOTATE("override@ygrid:grid:yfigure:apply_scroll_anchor")
+static struct yetty_ycore_void_result yetty_ygrid_grid_apply_scroll_anchor_impl(
+    struct yetty_yclass_object *obj, int32_t rolling_row_offset, float cell_height)
+{
+    struct yetty_ygrid_grid_ptr_result grid_r = ygrid_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_r, "ygrid: from_obj");
+    struct yetty_ygrid_grid *grid = grid_r.value;
+    if (!grid->absolute_coords) {
+        return YETTY_OK_VOID();
+    }
+    float anchor_y = (float)rolling_row_offset * cell_height;
+    if (grid->scroll_anchor_y == anchor_y) {
+        return YETTY_OK_VOID();
+    }
+    grid->scroll_anchor_y = anchor_y;
     return yetty_yfigure_figure_dirty_set(obj, 1);
 }
 

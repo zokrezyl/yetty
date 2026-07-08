@@ -48,6 +48,10 @@ static yetty_yfigure_set_scroll_fn yetty_ygrid_grid_yetty_yfigure_set_scroll_che
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_content_size_fn yetty_ygrid_grid_yetty_yfigure_set_content_size_check =
     yetty_ygrid_grid_set_content_size_impl;
+YETTY_MAYBE_UNUSED
+static yetty_yfigure_apply_scroll_anchor_fn
+    yetty_ygrid_grid_yetty_yfigure_apply_scroll_anchor_check =
+        yetty_ygrid_grid_apply_scroll_anchor_impl;
 
 struct yetty_yclass_ptr_result yetty_ygrid_grid_class_get(void)
 {
@@ -85,6 +89,9 @@ struct yetty_yclass_ptr_result yetty_ygrid_grid_class_get(void)
         {"yetty_yfigure", "set_content_size",
          (yetty_yclass_method_id_t)yetty_yfigure_set_content_size,
          (yetty_yclass_impl_t)yetty_ygrid_grid_set_content_size_impl},
+        {"yetty_yfigure", "apply_scroll_anchor",
+         (yetty_yclass_method_id_t)yetty_yfigure_apply_scroll_anchor,
+         (yetty_yclass_impl_t)yetty_ygrid_grid_apply_scroll_anchor_impl},
     };
     struct yetty_yclass_ptr_result parent_class_r = yetty_yfigure_figure_class_get();
     if (YETTY_IS_ERR(parent_class_r)) {
