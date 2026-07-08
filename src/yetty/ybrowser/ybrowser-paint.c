@@ -392,8 +392,8 @@ static int img_cache_entry_fill_svg(struct yetty_ylexbor *r,
     yetty_ylexbor_svg_parse_preserve_aspect(bytes, len, &entry->svg_par_align_x,
                                             &entry->svg_par_align_y, &entry->svg_par_mode);
     if (!yetty_ylexbor_svg_scene_render(r, bytes, len, 0.0f, &entry->svg_scene, &entry->svg_min_x,
-                                        &entry->svg_min_y, &entry->svg_w, &entry->svg_h,
-                                        NULL, NULL)) {
+                                        &entry->svg_min_y, &entry->svg_w, &entry->svg_h, NULL,
+                                        NULL)) {
         entry->failed = 1;
         return 1;
     }
@@ -1269,8 +1269,7 @@ uint32_t yetty_ylexbor_group_id_for(struct yetty_ylexbor *r, const void *element
     }
     if (r->group_id_count == r->group_id_cap) {
         int new_cap = r->group_id_cap ? r->group_id_cap * 2 : 16;
-        struct yl_group_id_entry *grown =
-            realloc(r->group_ids, (size_t)new_cap * sizeof(*grown));
+        struct yl_group_id_entry *grown = realloc(r->group_ids, (size_t)new_cap * sizeof(*grown));
         if (!grown) {
             return 0; /* out of memory — caller emits the box ungrouped */
         }
@@ -1426,9 +1425,8 @@ static struct yetty_ylexbor_svg_inline_entry *svg_inline_scene_get(struct yetty_
         yetty_ylexbor_svg_parse_preserve_aspect(sink.data, sink.len, &entry->par_align_x,
                                                 &entry->par_align_y, &entry->par_mode);
         (void)yetty_ylexbor_svg_scene_render(r, sink.data, sink.len, inherited_font_px,
-                                             &entry->scene, &entry->min_x, &entry->min_y,
-                                             &entry->w, &entry->h, &entry->links,
-                                             &entry->link_count);
+                                             &entry->scene, &entry->min_x, &entry->min_y, &entry->w,
+                                             &entry->h, &entry->links, &entry->link_count);
     }
     free(sink.data);
     return entry;
@@ -2107,8 +2105,8 @@ struct yetty_ylexbor_incremental_result yetty_ylexbor_paint_image_deltas(
         emit_image_box_prims(r, b, scratch, &scratch_z, i, 0.0f, 0.0f);
         const uint8_t *scratch_bytes = yetty_ydraw_drawable_list_data(scratch);
         size_t scratch_len = yetty_ydraw_drawable_list_size(scratch);
-        uint64_t hash = ylexbor_fnv1a64(scratch_bytes ? scratch_bytes : (const uint8_t *)"",
-                                        scratch_len);
+        uint64_t hash =
+            ylexbor_fnv1a64(scratch_bytes ? scratch_bytes : (const uint8_t *)"", scratch_len);
         if (entry->content_hash_valid && hash == entry->content_hash) {
             continue; /* this image is unchanged — nothing to ship */
         }

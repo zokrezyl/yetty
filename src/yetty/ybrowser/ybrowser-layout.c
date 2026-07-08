@@ -746,8 +746,7 @@ static float flex_item_min_content_walk(const struct yetty_ylexbor *r, uint32_t 
     float sum = 0.0f;
     float widest = 0.0f;
     int in_flow = 0;
-    for (uint32_t child = box->first_child; child != 0;
-         child = r->boxes.data[child].next_sibling) {
+    for (uint32_t child = box->first_child; child != 0; child = r->boxes.data[child].next_sibling) {
         const struct yetty_ylexbor_box *child_box = &r->boxes.data[child];
         if (child_box->position == YL_POS_ABSOLUTE || child_box->position == YL_POS_FIXED ||
             child_box->float_side != 0) {
@@ -757,18 +756,18 @@ static float flex_item_min_content_walk(const struct yetty_ylexbor *r, uint32_t 
 		 * (padding included), so a fixed-width descendant sets a hard floor
 		 * its flex ancestor must not shrink below — the gnews weather
 		 * widget's width:180px tile. Percentages stay content-based. */
-        float child_min = child_box->css_width > 0.0f
-                              ? child_box->css_width + child_box->padding_left +
-                                    child_box->padding_right
-                              : flex_item_min_content_walk(r, child, budget);
+        float child_min =
+            child_box->css_width > 0.0f
+                ? child_box->css_width + child_box->padding_left + child_box->padding_right
+                : flex_item_min_content_walk(r, child, budget);
         sum += child_min + child_box->margin_left + child_box->margin_right;
         if (child_min > widest) {
             widest = child_min;
         }
         in_flow++;
     }
-    float own = row_nowrap ? sum + (in_flow > 1 ? (float)(in_flow - 1) * box->grid_col_gap : 0.0f)
-                           : widest;
+    float own =
+        row_nowrap ? sum + (in_flow > 1 ? (float)(in_flow - 1) * box->grid_col_gap : 0.0f) : widest;
     return own + box->padding_left + box->padding_right;
 }
 
@@ -797,8 +796,7 @@ static float flex_item_first_ascent(const struct yetty_ylexbor *r, uint32_t idx,
     if (box->kind == YL_BOX_INLINE_TEXT) {
         return box->font_size > 0.0f ? box->font_size * 0.8f : 12.8f;
     }
-    for (uint32_t child = box->first_child; child != 0;
-         child = r->boxes.data[child].next_sibling) {
+    for (uint32_t child = box->first_child; child != 0; child = r->boxes.data[child].next_sibling) {
         const struct yetty_ylexbor_box *child_box = &r->boxes.data[child];
         if (child_box->kind == YL_BOX_INLINE_TEXT) {
             return child_box->font_size > 0.0f ? child_box->font_size * 0.8f : 12.8f;
@@ -1459,8 +1457,7 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
         uint32_t auto_margin_count = 0;
         for (uint32_t i = 0; i < n_children; i++) {
             const struct yetty_ylexbor_box *c = &r->boxes.data[children[i]];
-            auto_margin_count +=
-                (c->margin_left_auto ? 1u : 0u) + (c->margin_right_auto ? 1u : 0u);
+            auto_margin_count += (c->margin_left_auto ? 1u : 0u) + (c->margin_right_auto ? 1u : 0u);
         }
         if (auto_margin_count > 0) {
             float share = leftover / (float)auto_margin_count;
@@ -1532,8 +1529,8 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                 c->width_source = YL_SRC_IMG_INTRINSIC;
             } else if (!stretches && c->css_width == 0.0f) {
                 int measure_budget = YL_CELL_MEASURE_BUDGET;
-                float fit = measure_cell_content_width(r, cidx, &measure_budget) +
-                            c->padding_left + c->padding_right + 1.0f;
+                float fit = measure_cell_content_width(r, cidx, &measure_budget) + c->padding_left +
+                            c->padding_right + 1.0f;
                 float avail_cross = content_width - margin_cross_total[i];
                 c->w = fit < avail_cross ? fit : avail_cross;
                 c->width_source = YL_SRC_CONTENT;
@@ -1669,8 +1666,7 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                             margin_cross_start[i];
             } else if (item_align == CSS_ALIGN_ITEMS_BASELINE && !column_dir) {
                 float ascent = flex_item_first_ascent(r, cidx, natural_h[i]);
-                cross_pos =
-                    cross_origin + (max_baseline_ascent - ascent) + margin_cross_start[i];
+                cross_pos = cross_origin + (max_baseline_ascent - ascent) + margin_cross_start[i];
             }
         }
         if (column_dir) {
@@ -1887,7 +1883,7 @@ static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_i
     if (r->boxes.data[cell_idx].kind == YL_BOX_INLINE_TEXT) {
         const struct yetty_ylexbor_box *text_cell = &r->boxes.data[cell_idx];
         float adv = text_cell->glyph_advance > 0.0f ? text_cell->glyph_advance
-                                                     : yetty_ylexbor_glyph_advance_ratio(r);
+                                                    : yetty_ylexbor_glyph_advance_ratio(r);
         return yetty_ylexbor_naive_text_width(text_cell->text, text_cell->text_len,
                                               text_cell->font_size, adv);
     }
@@ -1921,8 +1917,7 @@ static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_i
 		 * size — and a dropdown's ABSOLUTE panel subtree is often huge
 		 * enough to exhaust the recursion budget, zeroing the whole
 		 * measurement (github's nav collapsed to width 0 through it). */
-        if (c->position == YL_POS_ABSOLUTE || c->position == YL_POS_FIXED ||
-            c->float_side != 0) {
+        if (c->position == YL_POS_ABSOLUTE || c->position == YL_POS_FIXED || c->float_side != 0) {
             continue;
         }
         if (c->kind == YL_BOX_INLINE_TEXT) {
@@ -1946,8 +1941,8 @@ static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_i
 			 * tile overflowed the column (the Google News weather widget).
 			 * A percentage (css_width < 0) resolves against an indefinite
 			 * intrinsic container as auto, so keep measuring its content. */
-            float nested = c->css_width > 0.0f ? c->css_width
-                                               : measure_cell_content_width(r, cidx, budget);
+            float nested =
+                c->css_width > 0.0f ? c->css_width : measure_cell_content_width(r, cidx, budget);
             if (row_flex) {
                 /* Flex items sit side-by-side — they add horizontally,
 				 * padding and margins included (a gnews nav chip's
@@ -3084,8 +3079,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                 c->x = item_x;
                 c->y = row_y;
                 c->w = item_w;
-                c->width_source = explicit_w > 0.0f && explicit_w < cell_w ? YL_SRC_CSS
-                                                                           : YL_SRC_GRID_TRACKS;
+                c->width_source =
+                    explicit_w > 0.0f && explicit_w < cell_w ? YL_SRC_CSS : YL_SRC_GRID_TRACKS;
                 struct float_result block_res = layout_block(r, cidx, item_x, row_y, item_w);
                 if (YETTY_IS_ERR(block_res)) {
                     free(items);

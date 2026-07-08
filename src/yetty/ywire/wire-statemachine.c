@@ -1931,10 +1931,11 @@ static void enc_abort(struct yetty_ywire_wire_statemachine *sm)
 
 /* Body of start_write — every encoder-state mutation happens in here; the
  * public wrapper aborts the envelope on any failure. */
-static struct yetty_ycore_void_result start_write_engage(
-    struct yetty_ywire_wire_statemachine *sm, enum yetty_ywire_envelope_kind kind, int code,
-    int has_args, int compressed, const void *args, size_t args_len,
-    struct yetty_ycore_buffer *out_buf)
+static struct yetty_ycore_void_result start_write_engage(struct yetty_ywire_wire_statemachine *sm,
+                                                         enum yetty_ywire_envelope_kind kind,
+                                                         int code, int has_args, int compressed,
+                                                         const void *args, size_t args_len,
+                                                         struct yetty_ycore_buffer *out_buf)
 {
     sm->enc_out_buf = out_buf;
     sm->enc_b64_carry_n = 0;

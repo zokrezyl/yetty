@@ -1132,8 +1132,8 @@ static int grid_parse_tracks_ex(const char *v, size_t n, struct yl_grid_track *o
         if (i + 7 <= n && strncmp(v + i, "repeat(", 7) == 0) {
             i += 7;
             int rep = atoi(v + i);
-            int repeat_auto = strncmp(v + i, "auto-fit", 8) == 0 ||
-                              strncmp(v + i, "auto-fill", 9) == 0;
+            int repeat_auto =
+                strncmp(v + i, "auto-fit", 8) == 0 || strncmp(v + i, "auto-fill", 9) == 0;
             while (i < n && v[i] != ',') {
                 i++;
             }
@@ -1907,7 +1907,8 @@ void yetty_ylexbor_css_scan_var_heights(struct yetty_ylexbor *r, const char *src
                src[sel_start - 1] != ';') {
             sel_start--;
         }
-        char *selector = sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        char *selector =
+            sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
         if (!selector) {
             continue;
         }
@@ -1952,13 +1953,13 @@ int yetty_ylexbor_var_height_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *
         if (verdict <= 0) {
             continue;
         }
-        char *resolved = yetty_ylexbor_css_vars_resolve_for_element(
-            r, element, rule->raw_value, strlen(rule->raw_value));
+        char *resolved = yetty_ylexbor_css_vars_resolve_for_element(r, element, rule->raw_value,
+                                                                    strlen(rule->raw_value));
         const char *value = resolved ? resolved : rule->raw_value;
         char *unit_end = NULL;
         float px = strtof(value, &unit_end);
-        int definite = unit_end && unit_end != value && strncmp(unit_end, "px", 2) == 0 &&
-                       px >= 0.0f;
+        int definite =
+            unit_end && unit_end != value && strncmp(unit_end, "px", 2) == 0 && px >= 0.0f;
         free(resolved);
         if (definite) {
             *out_px = px;
@@ -2014,7 +2015,8 @@ void yetty_ylexbor_css_scan_width_keywords(struct yetty_ylexbor *r, const char *
                src[sel_start - 1] != ';') {
             sel_start--;
         }
-        char *selector = sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        char *selector =
+            sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
         if (!selector) {
             continue;
         }
@@ -2095,7 +2097,8 @@ void yetty_ylexbor_css_scan_line_clamps(struct yetty_ylexbor *r, const char *src
                src[sel_start - 1] != ';') {
             sel_start--;
         }
-        char *selector = sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        char *selector =
+            sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
         if (!selector) {
             continue;
         }
@@ -2351,7 +2354,8 @@ void yetty_ylexbor_css_scan_transforms(struct yetty_ylexbor *r, const char *src,
         }
         float tx = 0.0f, ty = 0.0f;
         bool tx_pct = false, ty_pct = false;
-        if (!parse_translate_value(src + vstart, vend - vstart, rem_px, &tx, &ty, &tx_pct, &ty_pct)) {
+        if (!parse_translate_value(src + vstart, vend - vstart, rem_px, &tx, &ty, &tx_pct,
+                                   &ty_pct)) {
             continue;
         }
         if (tx == 0.0f && ty == 0.0f && !tx_pct && !ty_pct) {
@@ -2373,7 +2377,8 @@ void yetty_ylexbor_css_scan_transforms(struct yetty_ylexbor *r, const char *src,
                src[sel_start - 1] != ';') {
             sel_start--;
         }
-        char *selector = sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        char *selector =
+            sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
         if (!selector) {
             continue;
         }
@@ -2399,8 +2404,8 @@ void yetty_ylexbor_css_scan_transforms(struct yetty_ylexbor *r, const char *src,
     }
 }
 
-int yetty_ylexbor_transform_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element, float *out_tx,
-                                   float *out_ty, bool *out_tx_pct, bool *out_ty_pct)
+int yetty_ylexbor_transform_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                   float *out_tx, float *out_ty, bool *out_tx_pct, bool *out_ty_pct)
 {
     if (r == NULL || element == NULL || r->transform_count == 0) {
         return 0;

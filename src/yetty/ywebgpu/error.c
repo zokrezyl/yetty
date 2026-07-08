@@ -104,9 +104,8 @@ static void error_scope_pop_callback(WGPUPopErrorScopeStatus status, WGPUErrorTy
     capture->completed = 1;
     if (status == WGPUPopErrorScopeStatus_Success && type != WGPUErrorType_NoError) {
         capture->has_error = 1;
-        size_t len = message.length < sizeof(capture->message) - 1
-                         ? message.length
-                         : sizeof(capture->message) - 1;
+        size_t len = message.length < sizeof(capture->message) - 1 ? message.length
+                                                                   : sizeof(capture->message) - 1;
         if (message.data && len > 0) {
             memcpy(capture->message, message.data, len);
         }

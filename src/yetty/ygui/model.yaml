@@ -1601,9 +1601,7 @@ classes:
     parent:
       domain: ygui
       name: primitive_widget
-    mixins:
-      - domain: ygui
-        name: clickable
+    mixins: []
     data: struct yetty_ygui_textinput
     data_fields:
       - name: text
@@ -1630,7 +1628,24 @@ classes:
         type: size_t
         get: false
         set: false
+      - name: sel_anchor
+        type: size_t
+        get: false
+        set: false
+      - name: dragging
+        type: int
+        get: false
+        set: false
     ops:
+      - slot: widget_on_press
+        slot_domain: ygui
+        impl: textinput_on_press
+      - slot: widget_on_motion
+        slot_domain: ygui
+        impl: textinput_on_motion
+      - slot: widget_on_release
+        slot_domain: ygui
+        impl: textinput_on_release
       - slot: constructor
         slot_domain: ygui
         impl: textinput_constructor
@@ -2703,6 +2718,19 @@ exposed:
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: id
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui/framework.c
+    name: yetty_ygui_framework_ship_figure_delta
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: figure_id
+        type: uint32_t
+      - name: body
+        type: "const uint8_t *"
+      - name: body_len
         type: uint32_t
     doc: null
   - source_file: src/yetty/ygui/framework.c
@@ -3926,6 +3954,21 @@ exposed:
         type: "const char *"
     doc: null
   - source_file: src/yetty/ygui/widgets/textinput.c
+    name: yetty_ygui_textinput_get_selection
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+    doc: "/* Selected substring as a fresh NUL-terminated heap string (caller frees), or
+ * NULL when nothing is selected. */"
+  - source_file: src/yetty/ygui/widgets/textinput.c
+    name: yetty_ygui_textinput_select_all
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Select the whole field (Ctrl-A / context-menu \"Select All\"). */"
+  - source_file: src/yetty/ygui/widgets/textinput.c
     name: yetty_ygui_textinput_get_text
     return_type: struct yetty_ycore_const_char_ptr_result
     args:
@@ -4654,6 +4697,18 @@ types:
         fields:
           - name: value
             type: "const struct yetty_yclass *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "char *"
           - name: error
             type: struct yetty_ycore_error
   - name: yetty_ycore_const_char_ptr_result

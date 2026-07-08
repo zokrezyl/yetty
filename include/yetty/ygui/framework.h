@@ -70,27 +70,25 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_button(
     struct yetty_yclass_object *obj, float x, float y, int button, int pressed, int mods);
 struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_motion(
     struct yetty_yclass_object *obj, float x, float y);
+<<<<<<< HEAD
 struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_scroll(
+=======
+struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
+>>>>>>> e81d1c2d (ygui text widget selection)
     struct yetty_yclass_object *obj, float x, float y, float dx, float dy);
 struct yetty_ycore_void_result yetty_ygui_framework_set_root(struct yetty_yclass_object *obj,
                                                              struct yetty_yclass_object *root);
 struct uint32_result yetty_ygui_framework_alloc_id(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_framework_free_id(struct yetty_yclass_object *obj,
                                                             uint32_t id);
+<<<<<<< HEAD
+=======
+struct yetty_ycore_void_result yetty_ygui_framework_ship_figure_delta(
+    struct yetty_yclass_object *obj, uint32_t figure_id, const uint8_t *body, uint32_t body_len);
+>>>>>>> e81d1c2d (ygui text widget selection)
 struct yetty_ycore_void_result yetty_ygui_framework_clear(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_framework_forget_remote(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_yclass_object *obj);
-
-/* Ship an incremental (delta) body straight to an already-minted figure,
- * bypassing the full walk_emit_body rebuild. `body` is a raw ydraw command
- * stream — typically just the changed CMD_GROUP(id){…} / CMD_DELETE(id)
- * records, WITHOUT a leading CMD_ZERO — that the receiver merges in place
- * (untouched entities preserved). The framework stays the sole owner of the
- * container handle; the caller (e.g. ybrowser streaming one landed image)
- * addresses the target figure by its widget id and must NOT also mark that
- * figure dirty, or the next emit would redundantly reship its whole body. */
-struct yetty_ycore_void_result yetty_ygui_framework_ship_figure_delta(
-    struct yetty_yclass_object *obj, uint32_t figure_id, const uint8_t *body, uint32_t body_len);
 
 #ifdef __cplusplus
 }

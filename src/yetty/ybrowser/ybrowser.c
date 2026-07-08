@@ -1212,8 +1212,7 @@ char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)
                 ydebug("link_at: svg scene point %.1f,%.1f", scene_x, scene_y);
                 for (size_t li = entry->link_count; li-- > 0;) {
                     const struct yetty_ysvg_link_region *region = &entry->links[li];
-                    if (!region->href || region->href[0] == '#' ||
-                        region->min_x > region->max_x) {
+                    if (!region->href || region->href[0] == '#' || region->min_x > region->max_x) {
                         continue; /* fragment link or empty region */
                     }
                     if (scene_x >= region->min_x && scene_x <= region->max_x &&

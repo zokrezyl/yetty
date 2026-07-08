@@ -156,6 +156,8 @@ types:
         type: int
       - name: img_last_render_ms
         type: double
+      - name: img_delta_pending
+        type: int
       - name: loader
         type: "struct yetty_ybrowser_loader *"
   - name: cache_entry

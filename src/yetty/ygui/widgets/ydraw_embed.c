@@ -161,8 +161,7 @@ static struct yetty_ycore_void_result embed_emit_range(struct yetty_ydraw_drawab
         if (type == YETTY_YDRAW_CMD_ZERO) {
             /* 2-word FAM record [type=0 | payload_size]. Skip it. */
             if (remaining < 2 * sizeof(uint32_t)) {
-                return YETTY_ERR(yetty_ycore_void,
-                                 "ydraw_embed paint: truncated CMD_ZERO header");
+                return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: truncated CMD_ZERO header");
             }
             size_t s = 2 * sizeof(uint32_t) + ((const uint32_t *)p)[1];
             if (s > remaining) {

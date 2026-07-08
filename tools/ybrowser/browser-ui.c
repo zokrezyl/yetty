@@ -1299,6 +1299,9 @@ static struct yetty_ycore_void_result on_tab_changed(struct yetty_yclass_object 
 static void focus_address(struct app *a)
 {
     err_ok(yetty_ygui_textinput_set_focus(a->address, 1));
+    /* Select the whole URL on focus, like every desktop browser — the next
+     * keystroke replaces it, or the user can copy it straight away. */
+    err_ok(yetty_ygui_textinput_select_all(a->address));
     a->address_focused = 1;
     yetty_ygui_framework_mark_dirty(a->fw);
 }

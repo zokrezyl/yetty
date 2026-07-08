@@ -1249,20 +1249,21 @@ struct yetty_ycore_void_result yetty_ygui_emit_figure_body(struct yetty_ygui_emi
     return yetty_yfigure_apply_child_body(ctx->framework->container_obj, figure_id, body);
 }
 
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_framework_ship_figure_delta(
     struct yetty_yclass_object *obj, uint32_t figure_id, const uint8_t *body, uint32_t body_len)
 {
     struct yetty_ygui_framework *framework = framework_data(obj);
     if (!framework) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_ship_figure_delta: NULL framework");
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_ygui_framework_ship_figure_delta: NULL framework");
     }
     if (figure_id == 0) {
         return YETTY_ERR(yetty_ycore_void,
                          "yetty_ygui_framework_ship_figure_delta: figure_id is 0");
     }
     if (!framework->container_obj) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "yetty_ygui_framework_ship_figure_delta: no container");
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_ship_figure_delta: no container");
     }
     if (body_len == 0) {
         return YETTY_OK_VOID();

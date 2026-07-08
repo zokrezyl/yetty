@@ -22,7 +22,6 @@ struct yetty_ygui_textinput_ptr_result yetty_ygui_textinput_from(struct yetty_yc
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfont/font.h>
-#include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ysdf/funcs.gen.h>
 
@@ -34,15 +33,24 @@ struct yetty_ygui_textinput_ptr_result yetty_ygui_textinput_from(struct yetty_yc
 #define COLOR_BORDER_FOCUS 0xFF92A86Bu
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_PLACEHOLDER 0xFFA8A79Fu
+/* Selection band — a muted slate-blue that reads under the near-white text
+ * (no alpha compositing, so it must be a solid mid-tone). Colours here are
+ * packed 0xAABBGGRR (see COLOR_BORDER_FOCUS == brand mint #6BA892). */
+#define COLOR_SELECTION 0xFF7A6033u
 
 struct YETTY_ANNOTATE("class@ygui:textinput") YETTY_ANNOTATE("parent@ygui:primitive_widget")
-    YETTY_ANNOTATE("uses@ygui:clickable") yetty_ygui_textinput {
+    yetty_ygui_textinput {
     char *text;
     size_t text_len;
     size_t cap;
     char *placeholder;
     int focused;
     size_t cursor; /* caret byte offset into text (0..text_len) */
+    /* Selection is the byte range [min(sel_anchor,cursor), max(...)). When
+     * sel_anchor == cursor there is no selection (just the caret). A drag or a
+     * shifted caret move grows it from the anchor; a plain click collapses it. */
+    size_t sel_anchor;
+    int dragging; /* left button held after a press inside the field */
 };
 
 /* Font metrics used for caret placement + click-to-position. TEXTINPUT_CHAR_W
@@ -125,29 +133,107 @@ static size_t textinput_index_at_x(struct yetty_yfont_font *font,
     return (size_t)idx;
 }
 
-static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_object *yclass_obj,
-                                                     void *userdata)
+/* Selection bounds as a half-open byte range [lo, hi). */
+static size_t sel_lo(const struct yetty_ygui_textinput *d)
+{
+    return d->sel_anchor < d->cursor ? d->sel_anchor : d->cursor;
+}
+static size_t sel_hi(const struct yetty_ygui_textinput *d)
+{
+    return d->sel_anchor < d->cursor ? d->cursor : d->sel_anchor;
+}
+static int has_selection(const struct yetty_ygui_textinput *d)
+{
+    return d->sel_anchor != d->cursor;
+}
+
+/* Delete the current selection (if any), leaving the caret at its start and no
+ * selection. Returns 1 if text changed. */
+static int delete_selection(struct yetty_ygui_textinput *d)
+{
+    if (!has_selection(d)) {
+        return 0;
+    }
+    size_t lo = sel_lo(d), hi = sel_hi(d);
+    memmove(d->text + lo, d->text + hi, d->text_len - hi);
+    d->text_len -= (hi - lo);
+    d->text[d->text_len] = '\0';
+    d->cursor = lo;
+    d->sel_anchor = lo;
+    return 1;
+}
+
+/* Byte index under a widget-relative x pixel (accounts for the text padding). */
+static size_t textinput_index_at_press(struct yetty_yclass_object *obj,
+                                       struct yetty_ygui_textinput *d, float px)
+{
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    if (YETTY_IS_ERR(rect_res)) {
+        yetty_ycore_error_destroy(rect_res.error);
+        return d->cursor;
+    }
+    float rel = px - (rect_res.value.min.x + TEXTINPUT_TEXT_PAD);
+    return textinput_index_at_x(textinput_font(obj), d, rel);
+}
+
+/* Mouse handling is done with the widget's own press/motion/release virtuals
+ * rather than the clickable+draggable mixins: those two mixins BOTH override
+ * widget_on_press/on_release, so using them together makes the drag lose its
+ * press capture and selection never starts. Owning the three virtuals here
+ * gives a clean press→drag→release selection gesture and the button code (so a
+ * right-click can raise a context menu). */
+YETTY_ANNOTATE("override@ygui:textinput:widget_on_press")
+static struct yetty_ycore_int_result textinput_on_press(struct yetty_yclass_object *yclass_obj,
+                                                        float x, float y, int button)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    (void)userdata;
+    (void)y;
     struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "on_click_focus: data_get");
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "textinput_on_press: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
     d->focused = 1;
-    /* Place the caret at the clicked character. */
-    float px = 0.0f, py = 0.0f;
-    {
-        struct yetty_ycore_void_result pp_r = yetty_ygui_clickable_press_pos(obj, &px, &py);
-        if (YETTY_IS_ERR(pp_r)) {
-            yetty_ycore_error_destroy(pp_r.error);
-        }
+    if (button == 0) { /* left — place caret and begin a (possibly empty) selection */
+        d->cursor = textinput_index_at_press(obj, d, x);
+        d->sel_anchor = d->cursor;
+        d->dragging = 1;
     }
-    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "on_click_focus: rect");
-    struct yetty_ycore_rectangle r = rect_res.value;
-    float rel = px - (r.min.x + TEXTINPUT_TEXT_PAD);
-    d->cursor = textinput_index_at_x(textinput_font(obj), d, rel);
-    return yetty_ygui_widget_set_dirty(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, dr, "textinput_on_press: dirty");
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+YETTY_ANNOTATE("override@ygui:textinput:widget_on_motion")
+static struct yetty_ycore_int_result textinput_on_motion(struct yetty_yclass_object *yclass_obj,
+                                                         float x, float y)
+{
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    (void)y;
+    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "textinput_on_motion: data_get");
+    struct yetty_ygui_textinput *d = d_dr.value;
+    if (!d->dragging) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    /* Extend the selection: the anchor stays put, the caret tracks the cursor. */
+    d->cursor = textinput_index_at_press(obj, d, x);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, dr, "textinput_on_motion: dirty");
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+YETTY_ANNOTATE("override@ygui:textinput:widget_on_release")
+static struct yetty_ycore_int_result textinput_on_release(struct yetty_yclass_object *yclass_obj,
+                                                          float x, float y, int button)
+{
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    (void)x;
+    (void)y;
+    (void)button;
+    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "textinput_on_release: data_get");
+    struct yetty_ygui_textinput *d = d_dr.value;
+    d->dragging = 0;
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 YETTY_ANNOTATE("override@ygui:textinput:constructor")
@@ -167,7 +253,9 @@ static struct yetty_ycore_void_result textinput_constructor(struct yetty_yclass_
     d->placeholder = NULL;
     d->focused = 0;
     d->cursor = 0;
-    return yetty_ygui_clickable_on_click_set(obj, on_click_focus, NULL);
+    d->sel_anchor = 0;
+    d->dragging = 0;
+    return YETTY_OK_VOID();
 }
 
 YETTY_ANNOTATE("override@ygui:textinput:destructor")
@@ -250,6 +338,27 @@ static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_object
                        COLOR_BG, 3.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "textinput_paint: bg");
     }
+    /* Selection highlight — a filled rounded band behind the selected glyphs,
+     * painted before the text so the glyphs read on top. Measured against the
+     * real font so it lines up with the drawn characters. */
+    if (d->focused && has_selection(d) && d->text && d->text[0]) {
+        struct yetty_yfont_font *font = textinput_font(obj);
+        float x0 = textinput_prefix_width(font, d, sel_lo(d));
+        float x1 = textinput_prefix_width(font, d, sel_hi(d));
+        float sx = r.min.x + TEXTINPUT_TEXT_PAD + x0;
+        float sw = x1 - x0;
+        if (sw > 0.0f) {
+            struct yetty_ysdf_box geom = {
+                .center_x = sx + sw * 0.5f,
+                .center_y = r.min.y + h * 0.5f,
+                .half_width = sw * 0.5f,
+                .half_height = (h - 8.0f) * 0.5f,
+            };
+            rr = yetty_ydraw_drawable_list_add_cmd_add_box(ctx->ygrid_drawable_list, 0u, 0u,
+                                                           COLOR_SELECTION, 0u, 0.0f, &geom);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "textinput_paint: selection");
+        }
+    }
     const char *text = (d->text && d->text[0]) ? d->text : d->placeholder;
     uint32_t color = (d->text && d->text[0]) ? COLOR_TEXT : COLOR_PLACEHOLDER;
     if (text && text[0]) {
@@ -318,6 +427,50 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_yclass
     }
     d->text_len = n;
     d->cursor = n; /* caret to end on programmatic set */
+    d->sel_anchor = n;
+    return yetty_ygui_widget_set_dirty(obj);
+}
+
+/* Selected substring as a fresh NUL-terminated heap string (caller frees), or
+ * NULL when nothing is selected. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_char_ptr_result yetty_ygui_textinput_get_selection(
+    const struct yetty_yclass_object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_char_ptr, "textinput_get_selection: NULL obj");
+    }
+    struct yetty_ygui_textinput_ptr_result d_dr =
+        yetty_ygui_textinput_from((struct yetty_yclass_object *)obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, d_dr, "textinput_get_selection: data_get");
+    struct yetty_ygui_textinput *d = d_dr.value;
+    if (!has_selection(d) || !d->text) {
+        return YETTY_OK(yetty_ycore_char_ptr, NULL);
+    }
+    size_t lo = sel_lo(d), hi = sel_hi(d);
+    size_t len = hi - lo;
+    char *out = malloc(len + 1);
+    if (!out) {
+        return YETTY_ERR(yetty_ycore_char_ptr, "textinput_get_selection: malloc");
+    }
+    memcpy(out, d->text + lo, len);
+    out[len] = '\0';
+    return YETTY_OK(yetty_ycore_char_ptr, out);
+}
+
+/* Select the whole field (Ctrl-A / context-menu "Select All"). */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_textinput_select_all(struct yetty_yclass_object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "textinput_select_all: NULL obj");
+    }
+    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "textinput_select_all: data_get");
+    struct yetty_ygui_textinput *d = d_dr.value;
+    d->sel_anchor = 0;
+    d->cursor = d->text_len;
+    d->focused = 1;
     return yetty_ygui_widget_set_dirty(obj);
 }
 
@@ -392,12 +545,17 @@ struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_yclas
     if (d->cursor > d->text_len) {
         d->cursor = d->text_len;
     }
+    if (d->sel_anchor > d->text_len) {
+        d->sel_anchor = d->text_len;
+    }
     int changed = 0;
     int consumed = 1;
     switch (key) {
     case 0x08:
-    case 0x7F: /* backspace — delete the char before the caret */
-        if (d->cursor > 0) {
+    case 0x7F: /* backspace — delete the selection, else the char before caret */
+        if (delete_selection(d)) {
+            changed = 1;
+        } else if (d->cursor > 0) {
             memmove(d->text + d->cursor - 1, d->text + d->cursor, d->text_len - d->cursor);
             d->cursor--;
             d->text_len--;
@@ -405,8 +563,10 @@ struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_yclas
             changed = 1;
         }
         break;
-    case YETTY_YGUI_KEY_DELETE: /* delete the char at the caret */
-        if (d->cursor < d->text_len) {
+    case YETTY_YGUI_KEY_DELETE: /* delete the selection, else the char at caret */
+        if (delete_selection(d)) {
+            changed = 1;
+        } else if (d->cursor < d->text_len) {
             memmove(d->text + d->cursor, d->text + d->cursor + 1, d->text_len - d->cursor - 1);
             d->text_len--;
             d->text[d->text_len] = '\0';
@@ -414,31 +574,43 @@ struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_yclas
         }
         break;
     case YETTY_YGUI_KEY_ARROW_LEFT:
-        if (d->cursor > 0) {
+        /* Collapse a selection to its left edge; otherwise step the caret. */
+        if (has_selection(d)) {
+            d->cursor = sel_lo(d);
+            changed = 1;
+        } else if (d->cursor > 0) {
             d->cursor--;
             changed = 1;
         }
+        d->sel_anchor = d->cursor;
         break;
     case YETTY_YGUI_KEY_ARROW_RIGHT:
-        if (d->cursor < d->text_len) {
+        if (has_selection(d)) {
+            d->cursor = sel_hi(d);
+            changed = 1;
+        } else if (d->cursor < d->text_len) {
             d->cursor++;
             changed = 1;
         }
+        d->sel_anchor = d->cursor;
         break;
     case YETTY_YGUI_KEY_HOME:
-        if (d->cursor != 0) {
+        if (d->cursor != 0 || has_selection(d)) {
             d->cursor = 0;
             changed = 1;
         }
+        d->sel_anchor = d->cursor;
         break;
     case YETTY_YGUI_KEY_END:
-        if (d->cursor != d->text_len) {
+        if (d->cursor != d->text_len || has_selection(d)) {
             d->cursor = d->text_len;
             changed = 1;
         }
+        d->sel_anchor = d->cursor;
         break;
     default:
-        if (key >= 32 && key < 127) { /* insert printable at the caret */
+        if (key >= 32 && key < 127) { /* insert printable — replacing any selection */
+            delete_selection(d);
             if (!ensure_cap(d, d->text_len + 2)) {
                 return YETTY_OK(yetty_ycore_int, 1);
             }
@@ -447,6 +619,7 @@ struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_yclas
             d->cursor++;
             d->text_len++;
             d->text[d->text_len] = '\0';
+            d->sel_anchor = d->cursor;
             changed = 1;
         } else {
             consumed = 0;

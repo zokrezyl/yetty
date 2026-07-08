@@ -201,7 +201,7 @@ struct yl_style_state {
     bool nowrap;         /* `white-space: nowrap` (inherited) — text runs
 	                  * under this style never soft-wrap */
     struct yetty_ylexbor_color fg;
-    int text_align; /* inherited; 0=left, 1=center, 2=right, 3=justify */
+    int text_align;  /* inherited; 0=left, 1=center, 2=right, 3=justify */
     bool vis_hidden; /* visibility:hidden|collapse — inherited, so the
 	                  * anonymous inline-text boxes flush_inline emits under
 	                  * a hidden subtree pick it up and paint nothing. A
@@ -1341,8 +1341,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 				 * substitution only saw the global table. */
                     {
                         float var_height_px = 0.0f;
-                        if (yetty_ylexbor_var_height_lookup(r, el, s.font_size,
-                                                            &var_height_px)) {
+                        if (yetty_ylexbor_var_height_lookup(r, el, s.font_size, &var_height_px)) {
                             b->css_height = var_height_px;
                         }
                     }
@@ -1562,8 +1561,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 								 * menu strips; a max-content track sizes each
 								 * column to its item). */
                                 int element_children = 0;
-                                for (lxb_dom_node_t *scan =
-                                         lxb_dom_interface_node(el)->first_child;
+                                for (lxb_dom_node_t *scan = lxb_dom_interface_node(el)->first_child;
                                      scan != NULL; scan = scan->next) {
                                     if (scan->type == LXB_DOM_NODE_TYPE_ELEMENT) {
                                         element_children++;
@@ -1581,7 +1579,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                     b->grid_col_gap = gt->col_gap;
                                     b->grid_row_gap = gt->row_gap;
                                 }
-                            } else if (gt && gt->ntracks >= 1 && gt->ntracks <= YL_GRID_MAX_TRACKS) {
+                            } else if (gt && gt->ntracks >= 1 &&
+                                       gt->ntracks <= YL_GRID_MAX_TRACKS) {
                                 b->layout_mode = YL_LAYOUT_GRID;
                                 memcpy(b->grid_tracks, gt->tracks, sizeof(b->grid_tracks));
                                 b->grid_ntracks = gt->ntracks;
@@ -2507,8 +2506,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     }
                     {
                         int inl_vis = yetty_ybrowser_libcss_visibility(inl_cs);
-                        s.vis_hidden = inl_vis == CSS_VISIBILITY_HIDDEN ||
-                                       inl_vis == CSS_VISIBILITY_COLLAPSE;
+                        s.vis_hidden =
+                            inl_vis == CSS_VISIBILITY_HIDDEN || inl_vis == CSS_VISIBILITY_COLLAPSE;
                     }
                     yetty_ybrowser_libcss_release(inl_cs);
                 }

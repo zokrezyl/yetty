@@ -647,8 +647,7 @@ static void test_rpc_lane_sequential_flush_reuse(struct ytest *test)
             frame[i] = (uint8_t)(round * 13u + i * 3u);
         }
         struct yetty_ywire_channel *sender = (round % 2 == 0) ? a_rpc : a_dynamic;
-        struct yetty_ywire_channel *reader =
-            (round % 2 == 0) ? b_rpc : accept.channel;
+        struct yetty_ywire_channel *reader = (round % 2 == 0) ? b_rpc : accept.channel;
         struct yetty_ycore_size_result write_res =
             yetty_ywire_channel_write(sender, frame, frame_len);
         YTEST_REQUIRE_OK(test, write_res);

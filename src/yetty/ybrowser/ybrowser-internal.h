@@ -397,7 +397,7 @@ struct yetty_ylexbor_box {
 	 * layout. */
     uint8_t width_source;
     uint8_t height_source;
-    float css_height; /* explicit height — placeholder for tables/img */
+    float css_height;   /* explicit height — placeholder for tables/img */
     uint8_t line_clamp; /* -webkit-line-clamp cap (0 = none), from side table */
 
     /* Flex item properties (only meaningful when this box is the
@@ -1145,8 +1145,9 @@ void yetty_ylexbor_css_scan_transforms(struct yetty_ylexbor *r, const char *css_
 /* Last matching class-based transform for `element`. Returns 1 and fills the
  * outputs on a match, 0 otherwise. Percent offsets come back as the raw
  * number with the *_pct flag set. */
-int yetty_ylexbor_transform_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element, float *out_tx,
-                                   float *out_ty, bool *out_tx_pct, bool *out_ty_pct);
+int yetty_ylexbor_transform_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                   float *out_tx, float *out_ty, bool *out_tx_pct,
+                                   bool *out_ty_pct);
 
 void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *css_source,
                                       size_t css_len);

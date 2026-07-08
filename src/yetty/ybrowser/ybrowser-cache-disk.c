@@ -311,23 +311,23 @@ void yetty_ybrowser_disk_cache_store(struct yetty_ybrowser_disk_cache *cache, co
         pthread_mutex_unlock(&cache->mutex);
         return;
     }
-    int header_ok =
-        fprintf(file,
-                DISK_CACHE_MAGIC "\n"
-                                 "kind %d\n"
-                                 "status %ld\n"
-                                 "expires %lld\n"
-                                 "stored %lld\n"
-                                 "etag %s\n"
-                                 "lastmod %s\n"
-                                 "ctype %s\n"
-                                 "effurl %s\n"
-                                 "url %s\n"
-                                 "body %zu\n",
-                kind, meta->status, (long long)meta->expires_at, (long long)meta->stored_at,
-                meta->etag[0] ? meta->etag : "-", meta->last_modified[0] ? meta->last_modified : "-",
-                meta->content_type[0] ? meta->content_type : "-",
-                meta->effective_url[0] ? meta->effective_url : "-", url, body_len) > 0;
+    int header_ok = fprintf(file,
+                            DISK_CACHE_MAGIC "\n"
+                                             "kind %d\n"
+                                             "status %ld\n"
+                                             "expires %lld\n"
+                                             "stored %lld\n"
+                                             "etag %s\n"
+                                             "lastmod %s\n"
+                                             "ctype %s\n"
+                                             "effurl %s\n"
+                                             "url %s\n"
+                                             "body %zu\n",
+                            kind, meta->status, (long long)meta->expires_at,
+                            (long long)meta->stored_at, meta->etag[0] ? meta->etag : "-",
+                            meta->last_modified[0] ? meta->last_modified : "-",
+                            meta->content_type[0] ? meta->content_type : "-",
+                            meta->effective_url[0] ? meta->effective_url : "-", url, body_len) > 0;
     int body_ok = header_ok && fwrite(body, 1, body_len, file) == body_len;
     int close_ok = fclose(file) == 0;
     if (body_ok && close_ok) {
