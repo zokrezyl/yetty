@@ -79,6 +79,10 @@ struct yetty_ycore_void_result yai_command_table_init(struct yai_command_table *
     YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: usage");
     res = table_add(table, "title", "set this session's title (shown in the HUD)", "<title>", 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: title");
+    res = table_add(table, "btw",
+                    "side question — answered without touching the main conversation",
+                    "<question>", 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: btw");
     qsort(table->items, table->count, sizeof(table->items[0]), command_compare);
     return YETTY_OK_VOID();
 }

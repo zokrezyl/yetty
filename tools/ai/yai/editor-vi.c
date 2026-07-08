@@ -19,10 +19,12 @@
  *   p P               paste the register after / before the cursor
  *   u                 undo the last change (repeat to walk back)
  *   Enter             submit;  Ctrl-C interrupt;  Ctrl-D (empty) quit
+ *   Ctrl-R            fuzzy history search (fzy; no redo here, so the
+ *                     readline-ish binding wins in both sub-modes)
  *
  * INSERT: printable → insert, Backspace, Ctrl-W (delete word before
  *   cursor), Enter (submit), Tab (menu), ESC → NORMAL, Ctrl-C / Ctrl-D
- *   as in NORMAL.
+ *   / Ctrl-R as in NORMAL.
  */
 #include "app.h"
 #include "editor-ops.h"
@@ -272,6 +274,8 @@ static int vi_normal_cmd(struct yai_app *app, struct yetty_yai_vi *vi, char byte
         return YAI_EDIT_INTERRUPT;
     case 0x04: /* Ctrl-D */
         return app->stdin_len == 0 ? YAI_EDIT_EOF : YAI_EDIT_NONE;
+    case 0x12: /* Ctrl-R: fuzzy history search */
+        return YAI_EDIT_HISTORY_SEARCH;
     default:
         return YAI_EDIT_NONE; /* unknown command / repeat counts: ignored */
     }
@@ -303,6 +307,8 @@ static int vi_insert(struct yai_app *app, struct yetty_yai_vi *vi, char byte)
         return YAI_EDIT_INTERRUPT;
     case 0x04:
         return app->stdin_len == 0 ? YAI_EDIT_EOF : YAI_EDIT_NONE;
+    case 0x12: /* Ctrl-R: fuzzy history search */
+        return YAI_EDIT_HISTORY_SEARCH;
     default:
         break;
     }

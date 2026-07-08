@@ -309,6 +309,12 @@ static struct yetty_ycore_void_result codex_handle_event(struct yetty_yclass_obj
              * loudly rather than store a corrupted token. */
             return YETTY_ERR(yetty_ycore_void, "codex handle_event: thread id too long");
         }
+        if (thread_id && app->btw_turn) {
+            /* /btw side turn: the fresh thread is deliberately NOT
+             * adopted — the main conversation's id comes back at the
+             * turn boundary (yai_turn_finished). */
+            return YETTY_OK_VOID();
+        }
         if (thread_id && strcmp(thread_id, app->session_id) != 0) {
             snprintf(app->session_id, sizeof(app->session_id), "%s", thread_id);
             struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);

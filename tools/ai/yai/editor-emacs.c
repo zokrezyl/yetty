@@ -12,6 +12,7 @@
  *   Ctrl-U                kill whole line
  *   Ctrl-W               kill word before cursor
  *   Ctrl-Y                yank the kill ring
+ *   Ctrl-R                fuzzy history search (fzy)
  *   Ctrl-_ / Ctrl-/       undo the last change (repeat to walk back)
  *   Ctrl-C                interrupt / quit
  *   Tab                   accept the completion menu selection
@@ -152,6 +153,8 @@ static int emacs_plain(struct yai_app *app, char byte)
                                app->stdin_cursor);
     case 0x19: /* Ctrl-Y: yank */
         return editor_cmd_yank(app);
+    case 0x12: /* Ctrl-R: fuzzy history search */
+        return YAI_EDIT_HISTORY_SEARCH;
     case 0x1F: /* Ctrl-_ / Ctrl-/ : undo the last command */
         return editor_cmd_undo(app);
     case 0x03: /* Ctrl-C */

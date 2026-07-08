@@ -2713,6 +2713,13 @@ exposed:
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/ygui/framework.c
+    name: yetty_ygui_framework_forget_remote
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui/framework.c
     name: yetty_ygui_framework_emit
     return_type: struct yetty_ycore_void_result
     args:

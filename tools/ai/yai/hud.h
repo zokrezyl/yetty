@@ -33,10 +33,18 @@
 struct yai_hud;
 YETTY_YRESULT_DECLARE(yai_hud_ptr, struct yai_hud *);
 
-/* Create the window. OK with a NULL value when the HUD is intentionally
- * unavailable (hud_on=false, stdout not a tty); an error Result on a
- * real init failure. */
-struct yai_hud_ptr_result yai_hud_create(int hud_on, int hud_float);
+/* Create the ygui surface host. `want_hud_window` builds the HUD status
+ * window; `want_search_window` asks for the framework even without it
+ * (visuals: message-search = yetty with a text HUD) — the hud object
+ * then exists in framework-only mode and yai_hud_has_window() is false.
+ * OK with a NULL value when no ygui surface is wanted or possible
+ * (both flags off, stdout not a tty, host not yetty — the text
+ * fallbacks take over); an error Result on a real init failure. */
+struct yai_hud_ptr_result yai_hud_create(int want_hud_window, int hud_float,
+                                         int want_search_window);
+
+/* Whether the HUD status window exists (vs framework-only mode). */
+int yai_hud_has_window(const struct yai_hud *hud);
 
 /* Build the HUD body from a parsed format. Lays the window body out as one
  * row per format row, each row split into left/center/right alignment cells,
@@ -54,6 +62,11 @@ struct yetty_ycore_void_result yai_hud_render(struct yai_hud *hud,
 /* Emit a frame if anything changed. Flushes stdout first so the
  * envelope serializes after pending text (single-writer discipline). */
 struct yetty_ycore_void_result yai_hud_flush(struct yai_hud *hud);
+
+/* The host wiped its compositor figures (full-screen erase — yai's own
+ * startup clear for the text bar, or `clear` in the interop shell):
+ * forget the remote state and re-emit so our surfaces re-materialize. */
+struct yetty_ycore_void_result yai_hud_forget_remote(struct yai_hud *hud);
 
 /* Pixels the docked HUD reserves at the bottom of the pane (0 when the
  * HUD is floating or NULL). yai converts this to reserved terminal
@@ -130,6 +143,27 @@ struct yetty_ycore_void_result yai_hud_toggle_config(struct yai_hud *hud,
  * a radio click only selects, never unselects the rest). */
 struct yetty_ycore_void_result yai_hud_config_poll(struct yai_hud *hud,
                                                    struct yai_hud_config_values *out);
+
+/*---------------------------------------------------------------------------
+ * Message-search window — the Ctrl-R history-search UI in yetty mode
+ * (visuals: message-search = yetty). A floating ygui window near the top
+ * of the pane: the live query, the best-scored match rows (the selected
+ * one highlighted), and the full text of the selected message. Display
+ * only — the keyboard stays with yai's search loop in main.c; the rows
+ * are PLAIN text (no ANSI escapes), colors are applied here.
+ *---------------------------------------------------------------------------*/
+
+#define YAI_HUD_SEARCH_MAX_ROWS 8
+
+/* Show (building lazily on first use) and fill the search window.
+ * `selected` indexes rows; `full_text` is the selected message (NULL or
+ * "" for none). Emits a frame. */
+struct yetty_ycore_void_result yai_hud_search_update(struct yai_hud *hud, const char *query,
+                                                     const char *const *rows, size_t row_count,
+                                                     size_t selected, const char *full_text);
+
+/* Hide the search window (the search closed). Emits a frame. */
+struct yetty_ycore_void_result yai_hud_search_hide(struct yai_hud *hud);
 
 /* Authoritative pane pixel size from the host's resize envelope (the
  * tty winsize often carries no pixel fields). Re-places the window

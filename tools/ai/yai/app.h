@@ -39,8 +39,13 @@
 /* Completion menu rows under the prompt while typing a /command. */
 #define YAI_MENU_ROWS YAI_RENDERER_MENU_ROWS
 #define YAI_HISTORY_MAX 100
+/* Max byte length of the Ctrl-R history-search query. */
+#define YAI_HISTORY_SEARCH_QUERY_MAX 256
 /* Max line-editor undo depth (vi `u`); oldest steps drop past this. */
 #define YAI_UNDO_MAX 256
+/* Ctrl-D quit confirmation: how long (ms) the second Ctrl-D stays valid
+ * after the first one arms the confirmation. */
+#define YAI_EOF_CONFIRM_WINDOW_MS 3000
 
 /* The default HUD format (config key `hud_format`). A tmux-style template over
  * the values the HUD shows — see hud-format.h for the grammar. Three rows:
@@ -170,6 +175,13 @@ struct yai_config {
      * effect on the yetty host (the figure envelope can't display elsewhere)
      * and falls back to text off-host or if ycat fails. */
     char markdown_mode[8];
+    /* Ctrl-R message-search UI backend, the third visuals switch: "yetty" =
+     * a ygui window (query + matches + full-message preview) floating over
+     * the pane, keeping the search out of the text console; "text" = menu
+     * rows under the prompt + a text preview overlay at the top of the
+     * screen. "yetty" needs the ygui HUD framework (yetty host, HUD on)
+     * and falls back to text otherwise. */
+    char message_search_mode[8];
     char hud_format[1024]; /* global HUD template = the parts concatenated */
     /* The HUD template authored as a sequence of pieces (YAML list); the app
      * concatenates them into hud_format. Kept verbatim so the list round-trips
@@ -352,6 +364,24 @@ struct yai_app {
      * --session-id); codex mints it server-side (empty until
      * thread.started); gemini has no resume token yet. */
     char session_id[128];
+    /* /btw side turn: the question runs in a FRESH conversation —
+     * session_id is cleared for the spawn and the main conversation's
+     * identity, stashed here, is restored at the turn boundary. While
+     * btw_turn is set the engine must not adopt the side conversation's
+     * minted id. */
+    int btw_turn;
+    char btw_session_stash[128];
+    int btw_resume_stash;
+    /* claude /btw one-shot side child: a separate `claude --print`
+     * process with its own stdout pipe and line buffer; its stream-json
+     * events flow through the normal claude handler while the persistent
+     * main child sits idle (app->waiting gates new submits). */
+    uv_process_t btw_process;
+    uv_pipe_t btw_stdout_pipe;
+    int btw_child_alive;
+    char *btw_out_buf;
+    size_t btw_out_len;
+    size_t btw_out_cap;
 
     /* The engine object (yai:claude, yai:codex or yai:gemini) and its
      * display name. Dispatch goes through the generated yetty_yai_*
@@ -463,6 +493,10 @@ struct yai_app {
     int in_paste;                 /* processing a multi-line paste burst: Enter
                                    * inserts a newline instead of submitting, so a
                                    * paste becomes one message, not one per line */
+    /* Ctrl-D quit confirmation: monotonic-clock deadline (ms) until which a
+     * second Ctrl-D exits. 0 = no confirmation pending. Armed by the first
+     * Ctrl-D on an empty line; stale once the deadline passes. */
+    long eof_confirm_deadline_ms;
 
     /* input history (submitted lines, newest last; up/down browses) */
     char *history[YAI_HISTORY_MAX];
@@ -470,6 +504,24 @@ struct yai_app {
     int history_browse; /* -1 = not browsing; else index into history */
     char history_stash[8192];
     size_t history_stash_len;
+
+    /* Ctrl-R interactive history search (vendored fzy scoring). While
+     * active the search owns the keyboard: typed bytes edit the query
+     * (mirrored into stdin_buf so the pinned prompt shows it) and the
+     * completion-menu rows show the best-scored entries. The line under
+     * edit when the search opened is stashed here and restored on
+     * cancel. `matches` holds history indices, best score first. */
+    int history_search_active;
+    int history_search_ygui; /* captured at open: 1 = ygui window UI (the
+                              * search stays out of the text console),
+                              * 0 = menu rows + top-of-screen overlay */
+    char history_search_query[YAI_HISTORY_SEARCH_QUERY_MAX];
+    size_t history_search_query_len;
+    char history_search_stash[8192];
+    size_t history_search_stash_len;
+    size_t history_search_matches[YAI_MENU_ROWS];
+    size_t history_search_match_count;
+    size_t history_search_selected;
 
     /* messages typed while a turn was in flight */
     char *queue[YAI_QUEUE_MAX];
@@ -691,6 +743,13 @@ void yai_handle_closed_cb(uv_handle_t *handle);
  * turn rather than leaking a live process. Defined in turn-engine.c. */
 struct yetty_ycore_void_result yai_turn_engine_spawn(struct yai_app *app, const char *file,
                                                      const char *const *args);
+
+/* /btw for claude: run the side question as a one-shot `claude --print`
+ * child on a fresh session (the persistent main child is bound to the
+ * main session, and the CLI refuses /btw itself in stream-json mode).
+ * The child's stream-json events flow through the normal claude
+ * handler; the result event ends the turn. Defined in claude.c. */
+struct yetty_ycore_void_result yai_claude_btw_start(struct yai_app *app, const char *question);
 
 /* Arm the SIGKILL backstop timer against the current child (used after
  * an interrupt SIGINT, and at shutdown). Defined in main.c. */

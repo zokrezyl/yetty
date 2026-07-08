@@ -448,6 +448,39 @@ struct yetty_ycore_void_result yai_renderer_text_hud_release(struct yai_renderer
     return yai_renderer_zone_suspend(renderer);
 }
 
+/* Paint the overlay rows over the top screen rows (absolute addressing,
+ * cursor saved/restored), erasing leftovers when the row count shrank.
+ * The caller flushes. */
+static void overlay_paint(struct yai_renderer *renderer)
+{
+    if (renderer->overlay_row_count == 0 && renderer->overlay_rows_drawn == 0) {
+        return;
+    }
+    fputs("\0337", stdout);
+    for (size_t row = 0; row < renderer->overlay_row_count; row++) {
+        printf("\033[%zu;1H%s\033[0m", row + 1, renderer->overlay_rows[row]);
+    }
+    for (int row = (int)renderer->overlay_row_count; row < renderer->overlay_rows_drawn; row++) {
+        printf("\033[%d;1H\033[2K", row + 1);
+    }
+    fputs("\0338", stdout);
+    renderer->overlay_rows_drawn = (int)renderer->overlay_row_count;
+}
+
+/* Erase whatever overlay rows are on screen. The caller flushes. */
+static void overlay_erase(struct yai_renderer *renderer)
+{
+    if (renderer->overlay_rows_drawn == 0) {
+        return;
+    }
+    fputs("\0337", stdout);
+    for (int row = 0; row < renderer->overlay_rows_drawn; row++) {
+        printf("\033[%d;1H\033[2K", row + 1);
+    }
+    fputs("\0338", stdout);
+    renderer->overlay_rows_drawn = 0;
+}
+
 static struct yetty_ycore_void_result zone_draw(struct yai_renderer *renderer)
 {
     if (!renderer->pin_enabled || !renderer->pin_active || renderer->zone_visible) {
@@ -486,6 +519,8 @@ static struct yetty_ycore_void_result zone_draw(struct yai_renderer *renderer)
     }
     printf("\033[%dG", prompt_cursor_col);
     renderer->zone_visible = 1;
+    /* The overlay was erased with the zone (zone_suspend) — repaint it. */
+    overlay_paint(renderer);
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "zone_draw: flush");
     return YETTY_OK_VOID();
@@ -493,7 +528,15 @@ static struct yetty_ycore_void_result zone_draw(struct yai_renderer *renderer)
 
 struct yetty_ycore_void_result yai_renderer_zone_suspend(struct yai_renderer *renderer)
 {
+    /* The overlay must vanish before any scrolling write, zone or not —
+     * otherwise its rows scroll into the terminal's scrollback. */
+    int overlay_was_drawn = renderer->overlay_rows_drawn > 0;
+    overlay_erase(renderer);
     if (!renderer->zone_visible) {
+        if (overlay_was_drawn) {
+            struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "zone_suspend: flush overlay");
+        }
         return YETTY_OK_VOID();
     }
     /* The cursor sits on its prompt row. Erase it, then everything below it
@@ -664,6 +707,37 @@ struct yetty_ycore_void_result yai_renderer_menu_clear(struct yai_renderer *rend
     renderer->menu_row_count = 0;
     struct yetty_ycore_void_result redraw_res = yai_renderer_pin_redraw(renderer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, redraw_res, "menu_clear: redraw");
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yai_renderer_overlay_set(struct yai_renderer *renderer,
+                                                        const char *const *rows, size_t count)
+{
+    if (!renderer->pin_enabled) {
+        return YETTY_OK_VOID();
+    }
+    if (count > YAI_RENDERER_OVERLAY_MAX_ROWS) {
+        count = YAI_RENDERER_OVERLAY_MAX_ROWS;
+    }
+    for (size_t row = 0; row < count; row++) {
+        snprintf(renderer->overlay_rows[row], sizeof(renderer->overlay_rows[row]), "%s", rows[row]);
+    }
+    renderer->overlay_row_count = count;
+    overlay_paint(renderer);
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "overlay_set: flush");
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yai_renderer_overlay_clear(struct yai_renderer *renderer)
+{
+    renderer->overlay_row_count = 0;
+    if (renderer->overlay_rows_drawn == 0) {
+        return YETTY_OK_VOID();
+    }
+    overlay_erase(renderer);
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "overlay_clear: flush");
     return YETTY_OK_VOID();
 }
 

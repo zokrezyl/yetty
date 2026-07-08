@@ -28,7 +28,8 @@
 #define YAI_EDIT_INTERRUPT 5 /* Ctrl-C */
 #define YAI_EDIT_NAV_PREV 6  /* up: menu-up or history-prev */
 #define YAI_EDIT_NAV_NEXT 7  /* down: menu-down or history-next */
-#define YAI_EDIT_COMPLETE 8  /* Tab: accept menu selection */
+#define YAI_EDIT_COMPLETE 8       /* Tab: accept menu selection */
+#define YAI_EDIT_HISTORY_SEARCH 9 /* Ctrl-R: fzy history search */
 
 /* ESC/CSI decoder status (see editor_ops_csi). */
 #define YAI_CSI_MID 0      /* byte consumed mid-sequence; emit NONE */
