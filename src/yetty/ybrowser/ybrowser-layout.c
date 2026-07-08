@@ -110,9 +110,9 @@ static size_t seg_index_at(const struct yetty_ylexbor_inline_seg *segs, size_t s
  * writes into r->boxes.data[reuse_idx] instead of allocating; this lets
  * the first emitted fragment land in the source INLINE_TEXT box that
  * `flush_inline` already created (preserving DOM-child linkage). */
-static struct uint32_result emit_fragment(struct yetty_ylexbor *r, uint32_t reuse_idx, float x,
-                                          float y, float w, float h, float font_size,
-                                          const char *text, size_t text_len,
+static struct uint32_result emit_fragment(struct yetty_ylexbor *r, uint32_t reuse_idx,
+                                          uint32_t src_idx, float x, float y, float w, float h,
+                                          float font_size, const char *text, size_t text_len,
                                           const struct yetty_ylexbor_inline_seg *seg,
                                           float word_spacing)
 {
@@ -128,6 +128,17 @@ static struct uint32_result emit_fragment(struct yetty_ylexbor *r, uint32_t reus
 		 * through the deepest inline ancestor too. */
         target->kind = YL_BOX_INLINE_TEXT;
     } else {
+        /* A fragment is a visual slice of the source inline box, so it must
+         * carry that box's paint-gating fields: opacity (the paint pass drops
+         * boxes below ~0.02 alpha), visibility, and parent (box_clipped_out
+         * walks the parent chain for overflow clipping). A freshly memset box
+         * reads opacity 0 and gets skipped entirely — that dropped every inline
+         * fragment after the first, so a paragraph with a link rendered only the
+         * text before the link. Snapshot the source fields before the reserve,
+         * which may realloc the vector out from under us. */
+        float src_opacity = r->boxes.data[src_idx].opacity;
+        bool src_vis_hidden = r->boxes.data[src_idx].vis_hidden;
+        uint32_t src_parent = r->boxes.data[src_idx].parent;
         struct yetty_ycore_void_result rr =
             _yetty_ylexbor_box_vec_reserve(&r->boxes, r->boxes.size + 1);
         YETTY_RETURN_IF_ERR(uint32, rr, "emit_fragment: reserve");
@@ -135,6 +146,9 @@ static struct uint32_result emit_fragment(struct yetty_ylexbor *r, uint32_t reus
         target = &r->boxes.data[fidx];
         memset(target, 0, sizeof(*target));
         target->kind = YL_BOX_INLINE_TEXT;
+        target->opacity = src_opacity;
+        target->vis_hidden = src_vis_hidden;
+        target->parent = src_parent;
     }
     target->text = text;
     target->text_len = text_len;
@@ -495,7 +509,7 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
             }
             uint32_t reuse = first_fragment_emitted ? 0 : idx;
             struct uint32_result emit_res =
-                emit_fragment(r, reuse, frag_x, y, frag_w + frag_extra, line_height, font_size,
+                emit_fragment(r, reuse, idx, frag_x, y, frag_w + frag_extra, line_height, font_size,
                               text + s0, s1 - s0, &segs[si], justify_word_spacing);
             YETTY_RETURN_IF_ERR(float, emit_res, "wrap_inline_box: emit_fragment");
             first_fragment_emitted = 1;

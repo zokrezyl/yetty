@@ -328,9 +328,39 @@ static void test_no_decoration_for_plain_text(void)
     yetty_ylexbor_destroy(yl);
 }
 
+/* A paragraph split into styled inline fragments (text, then a link, then
+ * trailing text) must paint EVERY fragment. Regression guard: the wrap step
+ * allocates a fresh box per fragment after the first and memsets it — if it
+ * fails to carry the source box's opacity, those boxes read opacity 0 and the
+ * paint pass's transparency skip drops them, so a `<p>text <a>link</a> more`
+ * rendered only "text " with the link and everything after it missing. */
+static void test_multi_fragment_paragraph_all_emitted(void)
+{
+    fprintf(stderr, "[test_multi_fragment_paragraph_all_emitted]\n");
+    static const char html[] = "<html><body style='margin:0'>"
+                               "<p>alpha one two <a href='#'>LINKWORD</a> three four five.</p>"
+                               "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    struct prim prims[2048];
+    int n = paint_and_collect(yl, prims, 2048);
+
+    int text_prims = 0;
+    for (int i = 0; i < n; i++) {
+        if (prims[i].type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
+            text_prims++;
+        }
+    }
+    /* Three styled runs: before the link, the link, after the link. */
+    ASSERT_TRUE("all three inline fragments emit a text primitive", text_prims == 3);
+
+    yetty_ylexbor_destroy(yl);
+}
+
 int main(void)
 {
     test_image_bounds_match_box();
+    test_multi_fragment_paragraph_all_emitted();
     /* Bands are fractions of FONT_SIZE (16): overline near the cap line,
      * line-through through the middle, underline below the baseline. */
     run_decoration_test("test_overline_emits_decoration", "overline", 0.0f, 5.0f);
