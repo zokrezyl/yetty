@@ -2187,16 +2187,28 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
         float sx, sy;
         if (g->absolute_coords) {
             float coord_scale = g->content_scale > 0.0f ? g->content_scale : 1.0f;
-            sx = inst->bounds.min.x * coord_scale;
-            sy = inst->bounds.min.y * coord_scale;
-            /* Absolute (ygui chrome) bounds are LOGICAL — the producer paints
-             * at bounds*content_scale to fill its physical footprint (the
-             * origin sx/sy above is already scaled). */
+            /* The figure's on-screen position lives ENTIRELY in its wire
+             * bounds_x/y: the composite render op scales those by
+             * inst->content_scale and adds them to the anchor (sx, sy)
+             * passed here. inst->bounds is the aabb of that same wire
+             * record, so inst->bounds.min == the wire origin — anchoring at
+             * it would add the figure origin a SECOND time and paint the
+             * image twice as far down/right as its laid-out box (harmless
+             * for a figure near the top-left, catastrophic for one in a
+             * lower row). For an absolute grid the producer's bounds are
+             * already full target-local coordinates, so the anchor is the
+             * target origin and the render op supplies the position. */
+            sx = 0.0f;
+            sy = 0.0f;
             inst->content_scale = coord_scale;
         } else {
-            sx = base_rect.min.x + inst->bounds.min.x;
-            sy = base_rect.min.y + inst->bounds.min.y;
-            /* Local (scrolling-layer) bounds are already framebuffer pixels. */
+            /* Local (scrolling-layer) grid: the figure block is anchored at
+             * the pane rect and the wire bounds carry the intra-block
+             * offset, added by the render op. Framebuffer-pixel coords, so
+             * content_scale stays 1. As above, the anchor must NOT include
+             * inst->bounds.min — the render op adds the wire origin itself. */
+            sx = base_rect.min.x;
+            sy = base_rect.min.y;
             inst->content_scale = 1.0f;
         }
         /* Go through the generic wrapper (not inst->render directly) so the
@@ -3347,6 +3359,22 @@ struct yetty_ycore_void_result yetty_ygrid_clear_local(struct yetty_ygrid_grid *
     }
     grid->bytes_len = 0;
     grid->prim_count = 0;
+    /* Composite figures (yimage/yplot/…) are minted per record into
+     * figure_instances[] and own GPU resources (atlas texture, bind group).
+     * Clearing the byte/prim buffers without also destroying them orphans
+     * those figures: they keep rendering at their old positions on top of
+     * the freshly re-ingested content, and a partial-then-full re-emit of a
+     * page (a browser tab painting once before its images decode, then
+     * again after) leaves the first pass's figures stacked under the second
+     * pass's — the second pass's records then bind against the wrong atlas
+     * slot. Destroy them here, exactly as reset_content does. */
+    for (uint32_t i = 0; i < grid->figure_instance_count; i++) {
+        if (grid->figure_instances[i]) {
+            yetty_ydraw_composite_destroy(grid->figure_instances[i]);
+            grid->figure_instances[i] = NULL;
+        }
+    }
+    grid->figure_instance_count = 0;
     cells_clear(grid);
     grid->staging_dirty = 1;
     {

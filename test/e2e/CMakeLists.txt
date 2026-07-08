@@ -26,6 +26,18 @@ if(Python3_Interpreter_FOUND)
         TIMEOUT          180
         SKIP_RETURN_CODE 77)
 
+    # Headful ybrowser image-position guard: renders images.html interactive,
+    # screenshots, and asserts the images land in their laid-out strips (guards
+    # the figure-anchor double-count that pushed interactive images ~2x down).
+    # Self-skips headless.
+    add_test(NAME e2e_ybrowser_image_position
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ybrowser-image-position.py)
+    set_tests_properties(e2e_ybrowser_image_position PROPERTIES
+        ENVIRONMENT      "YETTY=${CMAKE_BINARY_DIR}/yetty;YBROWSER=${CMAKE_BINARY_DIR}/tools/ybrowser/ybrowser;YCTL=${YETTY_ROOT}/tools/yctl-client/yctl.py"
+        LABELS           "e2e;render;display;slow"
+        TIMEOUT          180
+        SKIP_RETURN_CODE 77)
+
     # Generated Python connection facade against the real libyetty_ffi.so
     # (#439): dynamic channels, flow control, chunking, asyncio driver.
     # Headless; self-skips when the FFI PIC build tree is absent.

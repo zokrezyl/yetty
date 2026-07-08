@@ -1,0 +1,20 @@
+<!doctype html><meta charset=utf-8><title>-webkit-line-clamp caps the box to N text lines</title>
+<style>
+  body{margin:0}
+  .clamp{
+    width:120px;
+    font-size:16px;
+    line-height:20px;
+    display:-webkit-box;
+    -webkit-box-orient:vertical;
+    -webkit-line-clamp:2;
+    overflow:hidden;
+  }
+</style>
+<!-- The text is long enough to wrap to 4+ lines at 120px; the clamp
+     caps the box height to 2 lines * 20px line-height = 40px. Without
+     the cap the box would grow to the full untruncated text height. -->
+<div class="clamp" data-test="clamped" data-expect="0,0,120,40">
+  This is a fairly long title that will certainly wrap across several
+  lines inside a narrow one hundred and twenty pixel column.
+</div>

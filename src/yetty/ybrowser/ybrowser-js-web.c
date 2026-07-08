@@ -335,6 +335,12 @@ struct yetty_ybrowser_loader {
 	 * string when no cache dir could be derived. */
     char altsvc_path[1024];
 
+    /* Disk tier — persists cache entries across restarts. The memory
+	 * LRU below stays authoritative within a session; disk hits are
+	 * promoted into it and flow through the same freshness /
+	 * revalidation branches. */
+    struct yetty_ybrowser_disk_cache disk_cache;
+
     /* Resource cache — shared by every engine on this loader, touched
 	 * from the loop thread and the image/fetch workers alike. */
     pthread_mutex_t cache_mutex;
@@ -515,15 +521,20 @@ static void loader_cache_evict(struct yetty_ybrowser_loader *loader)
     }
 }
 
-/* Only plain GETs of subresources are cacheable — API responses (XHR)
- * and document navigations are not. */
+/* Plain GETs of documents and subresources are cacheable per HTTP
+ * caching semantics (our DOCUMENT requests also run without the cookie
+ * engine, so they carry no credentialed variance; Cookie-varying
+ * responses are rejected by the Vary guard regardless). API traffic
+ * (XHR/fetch bodies, non-GET methods) stays uncached — fetch()'s own
+ * cache modes are not modelled. */
 static int loader_cache_kind_ok(const struct yetty_ybrowser_request *request)
 {
     if (request->body ||
         (request->method && *request->method && strcasecmp(request->method, "GET") != 0)) {
         return 0;
     }
-    return request->kind == YETTY_YBROWSER_REQUEST_STYLE ||
+    return request->kind == YETTY_YBROWSER_REQUEST_DOCUMENT ||
+           request->kind == YETTY_YBROWSER_REQUEST_STYLE ||
            request->kind == YETTY_YBROWSER_REQUEST_SCRIPT ||
            request->kind == YETTY_YBROWSER_REQUEST_IMAGE;
 }
@@ -579,9 +590,11 @@ static const char *cache_control_token(const char *cache_control, const char *na
     return NULL;
 }
 
-/* Freshness policy from the response headers. This is a PRIVATE (per-user,
- * in-process) cache, so `private` is storable and `s-maxage` is a
- * shared-cache directive we deliberately ignore. `must-revalidate` needs
+/* Freshness policy from the response headers. This is a PRIVATE (per-user)
+ * cache, so `private` is storable and `s-maxage` is a shared-cache
+ * directive we deliberately ignore. Freshness precedence: max-age (minus
+ * Age), Expires relative to Date, the Last-Modified heuristic (a tenth of
+ * the resource's age, one-day cap), then the session default. `must-revalidate` needs
  * no special casing: a stale entry is only ever served through a
  * successful conditional revalidation, never as-is.
  *
@@ -592,7 +605,7 @@ static const char *cache_control_token(const char *cache_control, const char *na
  *    1  fresh for *out_ttl_seconds */
 static int loader_cache_ttl(const char *cache_control, const char *age_header,
                             const char *expires_header, const char *date_header,
-                            long *out_ttl_seconds)
+                            const char *last_modified_header, long *out_ttl_seconds)
 {
     long ttl_seconds = LOADER_CACHE_DEFAULT_TTL_SECONDS;
     int have_explicit_freshness = 0;
@@ -625,6 +638,21 @@ static int loader_cache_ttl(const char *cache_control, const char *age_header,
             }
             ttl_seconds = (long)difftime(expires_at, origin_now);
             have_explicit_freshness = 1;
+        }
+    }
+    if (!have_explicit_freshness && last_modified_header && *last_modified_header) {
+        /* Heuristic freshness: no explicit lifetime, but a Last-Modified —
+		 * use a tenth of the resource's age, capped at a day. */
+        time_t last_modified_at = curl_getdate(last_modified_header, NULL);
+        if (last_modified_at != (time_t)-1) {
+            long resource_age = (long)difftime(time(NULL), last_modified_at);
+            if (resource_age > 0) {
+                ttl_seconds = resource_age / 10;
+                if (ttl_seconds > 24l * 3600l) {
+                    ttl_seconds = 24l * 3600l;
+                }
+                have_explicit_freshness = 1;
+            }
         }
     }
     if (have_explicit_freshness && age_header && *age_header) {
@@ -669,6 +697,55 @@ static int loader_cache_vary_ok(const char *vary)
     return 1;
 }
 
+/* Insert a disk-tier entry into the memory LRU. Caller holds cache_mutex
+ * and has verified the key is absent. Returns the new index, or -1. */
+static int loader_cache_promote_locked(struct yetty_ybrowser_loader *loader, const char *url,
+                                       enum yetty_ybrowser_request_kind kind, const char *body,
+                                       size_t body_len,
+                                       const struct yetty_ybrowser_disk_cache_meta *meta)
+{
+    if (loader->cache_count == loader->cache_cap) {
+        int new_cap = loader->cache_cap ? loader->cache_cap * 2 : 32;
+        struct loader_cache_entry *entries =
+            realloc(loader->cache_entries, (size_t)new_cap * sizeof(*entries));
+        if (!entries) {
+            return -1;
+        }
+        loader->cache_entries = entries;
+        loader->cache_cap = new_cap;
+    }
+    struct loader_cache_entry *entry = &loader->cache_entries[loader->cache_count];
+    memset(entry, 0, sizeof(*entry));
+    entry->url = strdup(url);
+    entry->bytes = malloc(body_len + 1);
+    if (!entry->url || !entry->bytes) {
+        loader_cache_entry_free(entry);
+        memset(entry, 0, sizeof(*entry));
+        return -1;
+    }
+    memcpy(entry->bytes, body, body_len);
+    entry->bytes[body_len] = '\0';
+    entry->bytes_len = body_len;
+    entry->kind = kind;
+    entry->status = meta->status;
+    entry->content_type = meta->content_type[0] ? strdup(meta->content_type) : NULL;
+    entry->effective_url = meta->effective_url[0] ? strdup(meta->effective_url) : NULL;
+    entry->etag = meta->etag[0] ? strdup(meta->etag) : NULL;
+    entry->last_modified = meta->last_modified[0] ? strdup(meta->last_modified) : NULL;
+    entry->expires_at = meta->expires_at;
+    entry->last_used_tick = ++loader->cache_tick;
+    entry->charge = body_len;
+    int idx = loader->cache_count;
+    loader->cache_count++;
+    loader->cache_charge += entry->charge;
+    loader_cache_evict(loader);
+    /* Eviction may have moved or dropped the new entry — re-resolve. */
+    return idx < loader->cache_count && loader->cache_entries[idx].url &&
+                   strcmp(loader->cache_entries[idx].url, url) == 0
+               ? idx
+               : loader_cache_find(loader, url, kind);
+}
+
 /* Fresh-hit lookup: fills `response` with copies and returns 1, or returns
  * 0 on miss/stale. A stale entry that carries validators is KEPT and its
  * validators snapshot into *revalidation — the caller refetches
@@ -687,6 +764,29 @@ static int loader_cache_lookup(struct yetty_ybrowser_loader *loader,
     int hit = 0;
     pthread_mutex_lock(&loader->cache_mutex);
     int idx = loader_cache_find(loader, request->url, request->kind);
+    if (idx < 0) {
+        /* Disk tier: promote a persisted entry — fresh OR merely
+		 * revalidatable — into the memory LRU, then let the shared
+		 * branch below decide (serve, go conditional, or drop). The
+		 * mutex is released around the file IO; a racing promotion of
+		 * the same URL resolves by re-running the find. */
+        pthread_mutex_unlock(&loader->cache_mutex);
+        struct yetty_ybrowser_disk_cache_meta disk_meta;
+        char *disk_body = NULL;
+        size_t disk_body_len = 0;
+        int disk_hit = yetty_ybrowser_disk_cache_load(&loader->disk_cache, request->url,
+                                                      (int)request->kind, &disk_meta, &disk_body,
+                                                      &disk_body_len);
+        pthread_mutex_lock(&loader->cache_mutex);
+        if (disk_hit) {
+            idx = loader_cache_find(loader, request->url, request->kind);
+            if (idx < 0 && disk_body_len <= LOADER_CACHE_BUDGET / 4) {
+                idx = loader_cache_promote_locked(loader, request->url, request->kind, disk_body,
+                                                  disk_body_len, &disk_meta);
+            }
+            free(disk_body);
+        }
+    }
     if (idx >= 0) {
         struct loader_cache_entry *entry = &loader->cache_entries[idx];
         if (entry->expires_at <= time(NULL)) {
@@ -731,10 +831,13 @@ static int loader_cache_serve_revalidated(struct yetty_ybrowser_loader *loader,
     }
     long ttl_seconds = LOADER_CACHE_DEFAULT_TTL_SECONDS;
     if (loader_cache_ttl(transfer->cache_control, transfer->age_header, transfer->expires_header,
-                         transfer->date_header, &ttl_seconds) <= 0) {
+                         transfer->date_header, transfer->last_modified, &ttl_seconds) <= 0) {
         ttl_seconds = 0; /* stays revalidate-on-every-use */
     }
     int served = 0;
+    struct yetty_ybrowser_disk_cache_meta disk_meta = {0};
+    char *disk_body = NULL;
+    size_t disk_body_len = 0;
     pthread_mutex_lock(&loader->cache_mutex);
     int idx = loader_cache_find(loader, request->url, request->kind);
     if (idx >= 0) {
@@ -742,8 +845,41 @@ static int loader_cache_serve_revalidated(struct yetty_ybrowser_loader *loader,
         entry->expires_at = time(NULL) + ttl_seconds;
         entry->last_used_tick = ++loader->cache_tick;
         served = loader_cache_entry_to_response(entry, response);
+        if (served) {
+            /* Snapshot for the disk refresh outside the lock — a 304
+			 * must extend the persisted entry's freshness too, or every
+			 * cold start repeats the conditional round-trip. */
+            disk_meta.status = entry->status;
+            disk_meta.expires_at = entry->expires_at;
+            disk_meta.stored_at = time(NULL);
+            if (entry->etag) {
+                snprintf(disk_meta.etag, sizeof(disk_meta.etag), "%s", entry->etag);
+            }
+            if (entry->last_modified) {
+                snprintf(disk_meta.last_modified, sizeof(disk_meta.last_modified), "%s",
+                         entry->last_modified);
+            }
+            if (entry->content_type) {
+                snprintf(disk_meta.content_type, sizeof(disk_meta.content_type), "%s",
+                         entry->content_type);
+            }
+            if (entry->effective_url) {
+                snprintf(disk_meta.effective_url, sizeof(disk_meta.effective_url), "%s",
+                         entry->effective_url);
+            }
+            disk_body = malloc(entry->bytes_len);
+            if (disk_body) {
+                memcpy(disk_body, entry->bytes, entry->bytes_len);
+                disk_body_len = entry->bytes_len;
+            }
+        }
     }
     pthread_mutex_unlock(&loader->cache_mutex);
+    if (disk_body) {
+        yetty_ybrowser_disk_cache_store(&loader->disk_cache, request->url, (int)request->kind,
+                                        &disk_meta, disk_body, disk_body_len);
+        free(disk_body);
+    }
     return served;
 }
 
@@ -761,7 +897,7 @@ static void loader_cache_store(struct yetty_ybrowser_loader *loader,
     long ttl_seconds = LOADER_CACHE_DEFAULT_TTL_SECONDS;
     int freshness = loader_cache_ttl(transfer->cache_control, transfer->age_header,
                                      transfer->expires_header, transfer->date_header,
-                                     &ttl_seconds);
+                                     transfer->last_modified, &ttl_seconds);
     if (freshness < 0) {
         return; /* no-store */
     }
@@ -822,6 +958,30 @@ static void loader_cache_store(struct yetty_ybrowser_loader *loader,
     loader->cache_charge += entry->charge;
     loader_cache_evict(loader);
     pthread_mutex_unlock(&loader->cache_mutex);
+
+    /* Persist. Same policy decisions as the memory tier (this runs after
+	 * the no-store / Vary / size gates above); the disk entry carries the
+	 * absolute expiry so a cold start resumes with identical freshness or
+	 * revalidation behavior. */
+    {
+        struct yetty_ybrowser_disk_cache_meta disk_meta = {0};
+        disk_meta.status = response->status;
+        disk_meta.expires_at = time(NULL) + (freshness > 0 ? ttl_seconds : 0);
+        disk_meta.stored_at = time(NULL);
+        snprintf(disk_meta.etag, sizeof(disk_meta.etag), "%s", transfer->etag);
+        snprintf(disk_meta.last_modified, sizeof(disk_meta.last_modified), "%s",
+                 transfer->last_modified);
+        if (response->content_type) {
+            snprintf(disk_meta.content_type, sizeof(disk_meta.content_type), "%s",
+                     response->content_type);
+        }
+        if (response->effective_url) {
+            snprintf(disk_meta.effective_url, sizeof(disk_meta.effective_url), "%s",
+                     response->effective_url);
+        }
+        yetty_ybrowser_disk_cache_store(&loader->disk_cache, request->url, (int)request->kind,
+                                        &disk_meta, response->body, response->body_len);
+    }
 }
 
 /* Publish decoded pixels onto an existing cache entry so the NEXT
@@ -920,6 +1080,17 @@ struct yetty_ybrowser_loader_ptr_result yetty_ybrowser_loader_create(void)
         }
     }
 #endif
+    /* Disk cache tier — best-effort: a failure here (no writable cache
+	 * dir, mutex init) degrades to memory-only caching, never breaks
+	 * fetching. */
+    {
+        struct yetty_ycore_void_result disk_res =
+            yetty_ybrowser_disk_cache_init(&loader->disk_cache);
+        if (YETTY_IS_ERR(disk_res)) {
+            yetty_ycore_error_destroy(disk_res.error);
+        }
+    }
+
     /* Central scheduler thread — every transfer this loader runs goes
 	 * through this ONE multi: same-origin requests multiplex on shared
 	 * H2 connections, per-host and total connection counts are bounded
@@ -975,6 +1146,7 @@ struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrows
     free(loader->cache_entries);
     pthread_mutex_destroy(&loader->cache_mutex);
     pthread_mutex_destroy(&loader->inflight_mutex);
+    yetty_ybrowser_disk_cache_shutdown(&loader->disk_cache);
     pthread_cond_destroy(&loader->inflight_cond);
     free(loader);
     return res;

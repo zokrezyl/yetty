@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <pthread.h>
+#include <time.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ysvg/ysvg.h>
 #include <yetty/ybrowser/ybrowser.h>
@@ -80,6 +82,45 @@ enum { YL_GRID_SPAN_CONTEXT_MAX = 4 };
  * (`.cls{display:grid;grid-template-columns:…;column-gap:…}`,
  * `.card.wide{grid-template-columns:1fr 16px auto}`). Looked up by class
  * (+ ancestor context) at box-build for grid containers. */
+/* A stylesheet `width: max-content|min-content|fit-content` declaration.
+ * libcss 0.9 drops intrinsic-sizing keywords as invalid, so the cascade
+ * never sees them; this side table re-applies the keyword at box-build
+ * (github's NavDropdown panels: position:absolute + width:max-content —
+ * without it the inset fallback pinned them to the tiny container). */
+struct yl_width_keyword_rule {
+    char *selector;          /* owned */
+    void *compiled_selector; /* owned */
+    uint8_t selector_state;
+    uint8_t keyword; /* 1 = max-content, 2 = min-content, 3 = fit-content */
+};
+
+/* A stylesheet `-webkit-line-clamp: N` declaration. Non-standard, so
+ * libcss drops it; this side table re-applies the line cap at layout.
+ * The clamp-to-N-lines idiom (display:-webkit-box; -webkit-box-orient:
+ * vertical; -webkit-line-clamp:N; overflow:hidden) truncates multi-line
+ * text to N lines — every news-card title/snippet uses it. Without the
+ * cap the card grows to the full untruncated title height and every
+ * card below it drifts down. */
+struct yl_line_clamp_rule {
+    char *selector;          /* owned */
+    void *compiled_selector; /* owned */
+    uint8_t selector_state;
+    uint8_t lines; /* clamp line count, 1..255 */
+};
+
+/* A stylesheet `height: var(...)` declaration that may depend on
+ * ELEMENT-scoPED custom properties (style="--Spacer-size:114px" on the
+ * element or an ancestor). Sheet-level var() substitution runs once
+ * against the GLOBAL table, so these are re-resolved per matching
+ * element at box-build (github's .lp-Spacer vertical-rhythm pattern:
+ * five media buckets of nested var() fallbacks, values set inline). */
+struct yl_var_height_rule {
+    char *selector;          /* owned */
+    void *compiled_selector; /* lxb_css_selector_list_t*; owned */
+    uint8_t selector_state;  /* 0 uncompiled, 1 compiled, 2 failed */
+    char *raw_value;         /* owned; the declaration value as written */
+};
+
 struct yl_grid_class {
     char *cls;                               /* target class — owned; freed on document replace */
     char *context[YL_GRID_SPAN_CONTEXT_MAX]; /* owned */
@@ -90,6 +131,10 @@ struct yl_grid_class {
 	 * `.Oc0wGc{display:inherit;grid-template-columns:inherit}`): ntracks
 	 * is 0 here — box-build copies the tracks from the parent box. */
     uint8_t inherit_template;
+    /* `repeat(auto-fit|auto-fill, <track>)`: tracks[0] holds the repeated
+	 * track; box-build replicates it once per element child (with
+	 * `grid-auto-flow: column` semantics — one implicit row). */
+    uint8_t repeat_auto;
     float col_gap;
     float row_gap;
     /* Full selector alternative as written. Compiled lazily through the
@@ -320,6 +365,7 @@ struct yetty_ylexbor_box {
     uint8_t width_source;
     uint8_t height_source;
     float css_height; /* explicit height — placeholder for tables/img */
+    uint8_t line_clamp; /* -webkit-line-clamp cap (0 = none), from side table */
 
     /* Flex item properties (only meaningful when this box is the
 	 * child of a flex container). flex_basis_px < 0 = auto; >= 0 =
@@ -331,6 +377,13 @@ struct yetty_ylexbor_box {
 		 * >0 = shrink weight when items overflow the main axis. */
     float flex_shrink;
     float flex_basis_px;
+    /* Intrinsic width keyword from the side table (yl_width_keyword_rule
+	 * values); 0 = none. Layout sizes the box from its content measure. */
+    uint8_t width_keyword;
+    /* visibility:hidden|collapse — box keeps its layout space, paints
+	 * nothing, and is transparent to hit-testing. Computed per element
+	 * (inheritance + visibility:visible re-show fall out of the cascade). */
+    uint8_t vis_hidden;
 
     /* Flex-container `flex-wrap`. 0 = nowrap (default, single line);
 	 * 1 = wrap (items overflowing the main axis move to the next flex
@@ -424,6 +477,14 @@ struct yetty_ylexbor_box {
     bool has_transform;
     float tf_tx, tf_ty;
     bool tf_tx_pct, tf_ty_pct;
+
+    /* Effective CSS `opacity` in [0,1]: the box's own opacity multiplied by
+	 * every ancestor's (opacity is a group effect that is NOT inherited, so
+	 * it is folded down the subtree at box-build). A near-zero value means
+	 * the box and its subtree paint nothing — how JS carousels/tab-panels
+	 * hide the inactive slide (Google News weather widget) without pulling it
+	 * out of flow. 1.0 = fully opaque (the default). */
+    float opacity;
 
     /* Text alignment for the block's inline children. Values:
 	 *   0 = left (default), 1 = center, 2 = right, 3 = justify. */
@@ -647,6 +708,18 @@ struct yetty_ylexbor {
     /* Class-scoped grid templates parsed from author CSS (see
      * yetty_ylexbor_css_scan_grid_templates). Looked up at box-build for
      * grid containers; the array + each `cls` are freed on document replace. */
+    /* Element-var-dependent height rules (see yl_var_height_rule). */
+    struct yl_var_height_rule *var_height_rules;
+    int var_height_count, var_height_cap;
+
+    /* Intrinsic width keywords (see yl_width_keyword_rule). */
+    struct yl_width_keyword_rule *width_keyword_rules;
+    int width_keyword_count, width_keyword_cap;
+
+    /* -webkit-line-clamp line caps (see yl_line_clamp_rule). */
+    struct yl_line_clamp_rule *line_clamp_rules;
+    int line_clamp_count, line_clamp_cap;
+
     struct yl_grid_class *grid_classes;
     int grid_class_count;
     int grid_class_cap;
@@ -677,6 +750,13 @@ struct yetty_ylexbor {
      * renders with a monospace MSDF font and sets this to that font's real
      * advance (~0.602) so per-segment link/bold/italic styling lines up. */
     float glyph_advance_ratio;
+
+    /* Precomputed @media-active map for the stylesheet source currently
+     * being scanned. Built once by css_media_map_begin() at the top of
+     * add_css_from and cleared by css_media_map_end() after the scanners
+     * run, so the per-declaration scanners consult it in O(log n) instead
+     * of each re-walking the source prefix (which was O(n^2) per sheet). */
+    struct media_inactive_map *css_media_map;
 
     /* Layout output. Re-allocated on every load_html / set_viewport. */
     struct yetty_ylexbor_box_vec boxes;
@@ -744,6 +824,13 @@ struct yetty_ylexbor_img_cache_entry {
     /* Root preserveAspectRatio — see yetty_ylexbor_svg_inline_entry. */
     float svg_par_align_x, svg_par_align_y;
     uint8_t svg_par_mode;
+    /* Display-size downscale of `pixels`, produced at paint when the
+	 * source is much larger than its layout box. Shipping full-res
+	 * pixels ballooned page envelopes past the 16 MiB RPC body cap —
+	 * every styled repaint got dropped and the client froze on the
+	 * first unstyled frame. Keyed by the box size that produced it. */
+    uint32_t *scaled_pixels; /* owned; NULL until first needed */
+    int scaled_w, scaled_h;
 };
 
 /* Inline <svg> elements have no URL — their rendered scenes cache per
@@ -772,6 +859,38 @@ int yetty_ylexbor_svg_scene_render(struct yetty_ylexbor *r, const char *bytes, s
                                    float *out_min_y, float *out_w, float *out_h,
                                    struct yetty_ysvg_link_region **out_links,
                                    size_t *out_link_count);
+
+/* ===========================================================================
+ * Disk tier of the loader's HTTP cache (RFC 9111 private cache). The
+ * loader decides freshness / revalidation / Vary; this layer persists
+ * entries across restarts. Implemented in ybrowser-cache-disk.c.
+ * ===========================================================================*/
+
+struct yetty_ybrowser_disk_cache {
+    char dir[1024]; /* empty + enabled==0 → memory-only operation */
+    int enabled;
+    pthread_mutex_t mutex;
+};
+
+struct yetty_ybrowser_disk_cache_meta {
+    long status;
+    time_t expires_at; /* absolute; in the past = stale-but-revalidatable */
+    time_t stored_at;
+    char etag[256];
+    char last_modified[128];
+    char content_type[160];
+    char effective_url[1024];
+};
+
+struct yetty_ycore_void_result yetty_ybrowser_disk_cache_init(
+    struct yetty_ybrowser_disk_cache *cache);
+void yetty_ybrowser_disk_cache_shutdown(struct yetty_ybrowser_disk_cache *cache);
+int yetty_ybrowser_disk_cache_load(struct yetty_ybrowser_disk_cache *cache, const char *url,
+                                   int kind, struct yetty_ybrowser_disk_cache_meta *meta,
+                                   char **out_body, size_t *out_body_len);
+void yetty_ybrowser_disk_cache_store(struct yetty_ybrowser_disk_cache *cache, const char *url,
+                                     int kind, const struct yetty_ybrowser_disk_cache_meta *meta,
+                                     const char *body, size_t body_len);
 
 /* The transform svg_scene_merge applies (scene → page px), exposed so the
  * click hit-test can invert it. Defined in ybrowser-paint.c. */
@@ -856,6 +975,15 @@ float yetty_ylexbor_glyph_advance_ratio(const struct yetty_ylexbor *r);
  * reading an attribute value, call resolve_vars to substitute.
  * ===========================================================================*/
 
+/* Build (begin) / tear down (end) the per-source @media-active map on
+ * `r->css_media_map`. begin() does one linear pass over `css_source`,
+ * recording the byte ranges inside non-matching @media blocks for the
+ * current viewport; the scanners then test a position in O(log n) via
+ * grid_media_active_at instead of re-walking the prefix each time. end()
+ * frees it. `css_source` must stay alive between the two calls. */
+void yetty_ylexbor_css_media_map_begin(struct yetty_ylexbor *r, const char *css_source, size_t len);
+void yetty_ylexbor_css_media_map_end(struct yetty_ylexbor *r);
+
 /* Scan `css_source` for custom-property declarations rooted at :root /
  * html / *  and merge them into r->customs. Idempotent — later defs
  * overwrite earlier (closest to spec for our purposes). */
@@ -902,6 +1030,33 @@ int yetty_ylexbor_grid_parse_placement(const char *src, size_t val_start, size_t
                                        int *out_start, int *out_span);
 
 /* Scan author CSS for `gap`/`column-gap` on display:flex rules. */
+/* Scan for `height: var(...)` declarations and record (selector, raw
+ * value) so box-build can re-resolve them against element-scoped custom
+ * properties. Media-gated rules are captured only when active; capture
+ * order preserves the cascade (last matching rule wins at lookup). */
+void yetty_ylexbor_css_scan_var_heights(struct yetty_ylexbor *r, const char *css_source,
+                                        size_t css_source_len);
+
+/* Last matching var-height rule for `element`, resolved element-scoped
+ * into pixels. Returns 1 and sets *out_px on a definite result. */
+int yetty_ylexbor_var_height_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                    float font_size, float *out_px);
+
+/* Scan for intrinsic width keywords and record (selector, keyword). */
+void yetty_ylexbor_css_scan_width_keywords(struct yetty_ylexbor *r, const char *css_source,
+                                           size_t css_source_len);
+
+/* Last matching width-keyword rule for `element`: 0 = none, else the
+ * yl_width_keyword_rule keyword value. */
+int yetty_ylexbor_width_keyword_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element);
+
+/* Scan for `-webkit-line-clamp: N` and record (selector, line count). */
+void yetty_ylexbor_css_scan_line_clamps(struct yetty_ylexbor *r, const char *css_source,
+                                        size_t css_source_len);
+
+/* Last matching line-clamp rule for `element`: 0 = none, else the line cap. */
+int yetty_ylexbor_line_clamp_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element);
+
 void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *css_source,
                                       size_t css_len);
 

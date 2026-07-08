@@ -18,7 +18,7 @@
  * rpc_server_run are sized from this — they are BSS (demand-paged), and the
  * production receiver is the DCS server, which reads the body straight from
  * the wire statemachine rather than into a fixed buffer. */
-#define BUF_MAX (16u * 1024u * 1024u)
+#define BUF_MAX (64u * 1024u * 1024u)
 /* GET_CLASS responses are small (a class's method name->id table), and the
  * translate_class parser reads them into a STACK buffer — so this must stay
  * modest regardless of BUF_MAX, or raising BUF_MAX overflows the stack. */

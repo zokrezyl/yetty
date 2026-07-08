@@ -1877,13 +1877,14 @@ static void render_doc(struct app *a, struct tab *t)
     t->dl_size = dl_sz;
 
     /* In-yetty the page ships as one figure-body RPC, and the wire caps
-	 * bodies at 16 MiB (#437) — worse, ONE oversized body aborts the whole
-	 * widget emit walk, silently freezing every other widget (reload/stop
-	 * icon, hover washes, tab titles). Keep the previous page frame instead
-	 * of shipping an oversized one: the page stays at its last good state
+	 * bodies at 64 MiB (#437; raised from 16 once images started shipping
+	 * at display resolution) — ONE oversized body aborts the whole widget
+	 * emit walk, silently freezing every other widget (reload/stop icon,
+	 * hover washes, tab titles). Keep the previous page frame instead of
+	 * shipping an oversized one: the page stays at its last good state
 	 * while the chrome keeps updating. Standalone (own GPU window, no RPC)
 	 * has no such cap. */
-    if (a->event_loop == NULL && dl_sz > 15u * 1024u * 1024u) {
+    if (a->event_loop == NULL && dl_sz > 60u * 1024u * 1024u) {
         yetty_ylexbor_prof("render_doc: draw list %zu bytes exceeds the wire cap — frame kept",
                            dl_sz);
         yetty_ydraw_drawable_list_destroy(dl);
