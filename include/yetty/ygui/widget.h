@@ -35,15 +35,32 @@ enum yetty_ygui_flex_align {
     YETTY_YGUI_ALIGN_END = 2,
     YETTY_YGUI_ALIGN_STRETCH = 3,
 };
+enum yetty_ygui_flex_align_self {
+    YETTY_YGUI_ALIGN_SELF_AUTO = 0,
+    YETTY_YGUI_ALIGN_SELF_START = 1,
+    YETTY_YGUI_ALIGN_SELF_CENTER = 2,
+    YETTY_YGUI_ALIGN_SELF_END = 3,
+    YETTY_YGUI_ALIGN_SELF_STRETCH = 4,
+};
+enum yetty_ygui_flex_wrap {
+    YETTY_YGUI_WRAP_NOWRAP = 0,
+    YETTY_YGUI_WRAP_WRAP = 1,
+};
 struct yetty_ygui_layout {
     enum yetty_ygui_flex_direction direction;
     enum yetty_ygui_flex_justify justify;
     enum yetty_ygui_flex_align align;
+    enum yetty_ygui_flex_align_self align_self;
+    enum yetty_ygui_flex_wrap wrap;
     float gap;
     float padding_top;
     float padding_right;
     float padding_bottom;
     float padding_left;
+    float margin_top;
+    float margin_right;
+    float margin_bottom;
+    float margin_left;
     float width;
     float height;
     float flex_grow;
@@ -158,12 +175,71 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_bg_color(struct yetty_yclas
 struct yetty_ycore_uint32_result yetty_ygui_widget_bg(const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_yclass_object *obj,
                                                            const char *css);
+/*
+ * Generic "call the parent's implementation of this slot" helpers.
+ *
+ * ABI CONTRACT: read before adding a new caller. These two generic helpers
+ * cast the resolved parent impl to a function pointer that takes only:
+ *
+ *     (struct yetty_yclass_object *)
+ *
+ * They are therefore valid only for slots whose implementation signature is
+ * exactly that. In the current ygui widget slot set, that means constructor
+ * and destructor for super_void.
+ *
+ * They must not be used for slots that carry extra parameters. In particular,
+ * these widget slots have wider signatures:
+ *
+ *     widget_on_press(obj, float x, float y, int button)
+ *     widget_on_release(obj, float x, float y, int button)
+ *     widget_on_motion(obj, float x, float y)
+ *     widget_on_scroll(obj, float x, float y, float dx, float dy)
+ *     widget_paint(obj, struct yetty_ygui_emit_ctx *)
+ *     widget_emit_container(obj, struct yetty_ygui_emit_ctx *)
+ *     widget_emit_body(obj, struct yetty_ygui_emit_ctx *)
+ *
+ * Routing one of those through super_void/super_int casts away the extra
+ * arguments and calls with the wrong ABI (undefined behavior). If a subclass
+ * needs to chain to a parent implementation for a wider slot, add a typed
+ * per-slot super helper with the matching signature rather than widening
+ * these generic helpers.
+ *
+ * This contract is ENFORCED at runtime, not merely documented: super_void
+ * rejects any method_id other than constructor/destructor, and super_int —
+ * for which no valid (obj)-only int virtual exists and which has no callers —
+ * rejects unconditionally. Both return a Result error rather than performing
+ * the unsafe cast, so misuse fails loudly at the call site.
+ */
 struct yetty_ycore_void_result yetty_ygui_super_void(struct yetty_yclass_object *obj,
                                                      const struct yetty_yclass *self_class,
                                                      yetty_yclass_method_id_t method_id);
 struct yetty_ycore_int_result yetty_ygui_super_int(struct yetty_yclass_object *obj,
                                                    const struct yetty_yclass *self_class,
                                                    yetty_yclass_method_id_t method_id);
+struct yetty_ycore_int_result yetty_ygui_super_on_press(struct yetty_yclass_object *obj,
+                                                        const struct yetty_yclass *self_class,
+                                                        float x, float y, int button);
+struct yetty_ycore_int_result yetty_ygui_super_on_release(struct yetty_yclass_object *obj,
+                                                          const struct yetty_yclass *self_class,
+                                                          float x, float y, int button);
+struct yetty_ycore_int_result yetty_ygui_super_on_motion(struct yetty_yclass_object *obj,
+                                                         const struct yetty_yclass *self_class,
+                                                         float x, float y);
+struct yetty_ycore_int_result yetty_ygui_super_on_scroll(struct yetty_yclass_object *obj,
+                                                         const struct yetty_yclass *self_class,
+                                                         float x, float y, float dx, float dy);
+struct yetty_ycore_int_result yetty_ygui_mixin_on_press(struct yetty_yclass_object *obj,
+                                                        const struct yetty_yclass *mixin_class,
+                                                        float x, float y, int button);
+struct yetty_ycore_int_result yetty_ygui_mixin_on_release(struct yetty_yclass_object *obj,
+                                                          const struct yetty_yclass *mixin_class,
+                                                          float x, float y, int button);
+struct yetty_ycore_int_result yetty_ygui_mixin_on_motion(struct yetty_yclass_object *obj,
+                                                         const struct yetty_yclass *mixin_class,
+                                                         float x, float y);
+struct yetty_ycore_int_result yetty_ygui_mixin_on_scroll(struct yetty_yclass_object *obj,
+                                                         const struct yetty_yclass *mixin_class,
+                                                         float x, float y, float dx, float dy);
 const struct yetty_yclass *yetty_ygui_class_expect(struct yetty_yclass_ptr_result class_result,
                                                    const char *name);
 struct yetty_yclass_object_ptr_result yetty_ygui_widget_parent(struct yetty_yclass_object *obj);

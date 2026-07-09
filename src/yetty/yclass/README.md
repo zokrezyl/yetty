@@ -91,6 +91,18 @@ boundaries. Registration and lookup are uthash-backed (O(1) on hit); the server
 side installs lazy "accessor lookups" so it can resolve classes it has never
 touched.
 
+**Mixin dispatch is flat, not compositional.** At registration the dispatch
+table is filled in the order **parent → mixins (declaration order) → leaf
+ops**, and each stage *overwrites* any slot the previous stage set. So a mixin
+provides a data slice plus **default** slot implementations: a mixin slot
+replaces the parent's, a later mixin replaces an earlier one, and the leaf's own
+op replaces whatever a mixin left. There is **no automatic chaining** — a mixin
+cannot wrap the slot it shadows, and a leaf override does not implicitly run the
+mixin's version. `super` walks only the **parent** chain, never the mixin list,
+so "call the mixin part" is not expressible through it; if two behaviors must
+genuinely compose, invoke them explicitly. Model a mixin as a default-behavior
+provider, not a trait that layers onto what is already there.
+
 ### Local vs remote — the same call
 
 A method slot takes the object first — there is no `ctx` argument:

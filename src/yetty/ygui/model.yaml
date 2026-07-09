@@ -2983,7 +2983,41 @@ exposed:
         type: "const struct yetty_yclass *"
       - name: method_id
         type: yetty_yclass_method_id_t
-    doc: null
+    doc: "/*
+ * Generic \"call the parent's implementation of this slot\" helpers.
+ *
+ * ABI CONTRACT: read before adding a new caller. These two generic helpers
+ * cast the resolved parent impl to a function pointer that takes only:
+ *
+ *     (struct yetty_yclass_object *)
+ *
+ * They are therefore valid only for slots whose implementation signature is
+ * exactly that. In the current ygui widget slot set, that means constructor
+ * and destructor for super_void.
+ *
+ * They must not be used for slots that carry extra parameters. In particular,
+ * these widget slots have wider signatures:
+ *
+ *     widget_on_press(obj, float x, float y, int button)
+ *     widget_on_release(obj, float x, float y, int button)
+ *     widget_on_motion(obj, float x, float y)
+ *     widget_on_scroll(obj, float x, float y, float dx, float dy)
+ *     widget_paint(obj, struct yetty_ygui_emit_ctx *)
+ *     widget_emit_container(obj, struct yetty_ygui_emit_ctx *)
+ *     widget_emit_body(obj, struct yetty_ygui_emit_ctx *)
+ *
+ * Routing one of those through super_void/super_int casts away the extra
+ * arguments and calls with the wrong ABI (undefined behavior). If a subclass
+ * needs to chain to a parent implementation for a wider slot, add a typed
+ * per-slot super helper with the matching signature rather than widening
+ * these generic helpers.
+ *
+ * This contract is ENFORCED at runtime, not merely documented: super_void
+ * rejects any method_id other than constructor/destructor, and super_int —
+ * for which no valid (obj)-only int virtual exists and which has no callers —
+ * rejects unconditionally. Both return a Result error rather than performing
+ * the unsafe cast, so misuse fails loudly at the call site.
+ */"
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_super_int
     return_type: struct yetty_ycore_int_result
@@ -2994,6 +3028,126 @@ exposed:
         type: "const struct yetty_yclass *"
       - name: method_id
         type: yetty_yclass_method_id_t
+    doc: null
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_super_on_press
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: self_class
+        type: "const struct yetty_yclass *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_super_on_release
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: self_class
+        type: "const struct yetty_yclass *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_super_on_motion
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: self_class
+        type: "const struct yetty_yclass *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_super_on_scroll
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: self_class
+        type: "const struct yetty_yclass *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: dx
+        type: float
+      - name: dy
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_mixin_on_press
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: mixin_class
+        type: "const struct yetty_yclass *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_mixin_on_release
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: mixin_class
+        type: "const struct yetty_yclass *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_mixin_on_motion
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: mixin_class
+        type: "const struct yetty_yclass *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_mixin_on_scroll
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: mixin_class
+        type: "const struct yetty_yclass *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: dx
+        type: float
+      - name: dy
+        type: float
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_class_expect
@@ -4865,6 +5019,19 @@ types:
         value: 2
       - name: YETTY_YGUI_ALIGN_STRETCH
         value: 3
+  - name: yetty_ygui_flex_align_self
+    kind: enum
+    values:
+      - name: YETTY_YGUI_ALIGN_SELF_AUTO
+        value: 0
+      - name: YETTY_YGUI_ALIGN_SELF_START
+        value: 1
+      - name: YETTY_YGUI_ALIGN_SELF_CENTER
+        value: 2
+      - name: YETTY_YGUI_ALIGN_SELF_END
+        value: 3
+      - name: YETTY_YGUI_ALIGN_SELF_STRETCH
+        value: 4
   - name: yetty_ygui_flex_direction
     kind: enum
     values:
@@ -4883,6 +5050,13 @@ types:
         value: 2
       - name: YETTY_YGUI_JUSTIFY_SPACE_BETWEEN
         value: 3
+  - name: yetty_ygui_flex_wrap
+    kind: enum
+    values:
+      - name: YETTY_YGUI_WRAP_NOWRAP
+        value: 0
+      - name: YETTY_YGUI_WRAP_WRAP
+        value: 1
   - name: yetty_ygui_input_state
     kind: struct
     fields:
@@ -4901,6 +5075,10 @@ types:
         type: enum yetty_ygui_flex_justify
       - name: align
         type: enum yetty_ygui_flex_align
+      - name: align_self
+        type: enum yetty_ygui_flex_align_self
+      - name: wrap
+        type: enum yetty_ygui_flex_wrap
       - name: gap
         type: float
       - name: padding_top
@@ -4910,6 +5088,14 @@ types:
       - name: padding_bottom
         type: float
       - name: padding_left
+        type: float
+      - name: margin_top
+        type: float
+      - name: margin_right
+        type: float
+      - name: margin_bottom
+        type: float
+      - name: margin_left
         type: float
       - name: width
         type: float
@@ -4982,6 +5168,8 @@ local_types:
   yetty_ygui_flex_direction: src/yetty/ygui/widget.c
   yetty_ygui_flex_justify: src/yetty/ygui/widget.c
   yetty_ygui_flex_align: src/yetty/ygui/widget.c
+  yetty_ygui_flex_align_self: src/yetty/ygui/widget.c
+  yetty_ygui_flex_wrap: src/yetty/ygui/widget.c
   yetty_ygui_layout: src/yetty/ygui/widget.c
   yetty_ygui_widget: src/yetty/ygui/widget.c
   yetty_ygui_widget_ptr_result: src/yetty/ygui/widget.c
