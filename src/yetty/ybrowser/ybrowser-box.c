@@ -1928,6 +1928,13 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                 }
                             }
                         }
+                        /* z-index only applies to positioned boxes; drives the
+						 * stacking-order paint pass. */
+                        int32_t zi = 0;
+                        if (yetty_ybrowser_libcss_z_index(cs, &zi)) {
+                            b->z_index = zi;
+                            b->z_index_set = 1;
+                        }
                     }
 
                     /* `transform: translate(...)` from the inline style.

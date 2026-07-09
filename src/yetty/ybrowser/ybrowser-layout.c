@@ -2915,7 +2915,9 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         } else if (self->grid_tracks[c].is_auto) {
             fixed_sum += auto_w[c];
         } else if (self->grid_tracks[c].is_pct) {
-            fixed_sum += self->grid_tracks[c].value * 0.01f * content_width;
+            float track_w = self->grid_tracks[c].value * 0.01f * content_width +
+                            self->grid_tracks[c].offset;
+            fixed_sum += track_w > 0.0f ? track_w : 0.0f;
         } else {
             fixed_sum += self->grid_tracks[c].value;
         }
@@ -2935,7 +2937,11 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         } else if (self->grid_tracks[c].is_auto) {
             col_w[c] = auto_w[c];
         } else if (self->grid_tracks[c].is_pct) {
-            col_w[c] = self->grid_tracks[c].value * 0.01f * content_width;
+            col_w[c] = self->grid_tracks[c].value * 0.01f * content_width +
+                       self->grid_tracks[c].offset;
+            if (col_w[c] < 0.0f) {
+                col_w[c] = 0.0f;
+            }
         } else {
             col_w[c] = self->grid_tracks[c].value;
         }

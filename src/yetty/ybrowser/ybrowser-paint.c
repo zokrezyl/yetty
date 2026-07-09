@@ -1612,6 +1612,174 @@ static void emit_image_box_prims(struct yetty_ylexbor *r, struct yetty_ylexbor_b
            cached->w, cached->h);
 }
 
+/* ---------------------------------------------------------------------------
+ * CSS stacking-context paint order (CSS 2.1 Appendix E / CSS2§9.9).
+ *
+ * There is no depth buffer — occlusion is painter's order (draw sequence). A
+ * flat DOM-order paint cannot make an overlay (dialog/modal/dropdown/fixed
+ * header) cover in-flow content that comes LATER in the DOM, nor honour
+ * z-index. We compute a COMPOSITE stacking key per box and sort by it, so the
+ * whole nesting of stacking contexts is respected — not just a single scalar
+ * level (which cannot express nested contexts, e.g. a z-index:100 child of a
+ * z-index:auto wrapper escaping to outrank a z-index:50 sibling, while a
+ * z-index:100 child of a z-index:5 wrapper stays contained below a z-index:50
+ * sibling).
+ *
+ * A box's key is the sequence of (level, DOM-index) pairs along the chain of
+ * stacking contexts it participates in, from the root context down to its own
+ * participation. Sorting all boxes lexicographically by this key reproduces
+ * Appendix E, and because it is a total sort every box is placed exactly once
+ * (no emit-once bugs). `level` within a context: negative explicit z-index
+ * (phase 2, ordered by z) < 0 = non-positioned normal flow (phases 3-5) <
+ * 1 = positioned with z-index auto or 0 (phase 6) < 1+z = positive z-index
+ * (phase 7). The root box (index 0) has the empty key, so the propagated
+ * canvas background paints first (phase 1), before any negative-z descendant.
+ *
+ * `stacking_parent` — the context a box directly participates in:
+ *   - A POSITIONED box (any position != static) escapes every z-index:auto
+ *     ancestor (auto does NOT create a stacking context) up to the nearest
+ *     ancestor that DOES create one (the root, or a positioned box with an
+ *     explicit z-index).
+ *   - A NON-positioned box is captured by the nearest ancestor that creates a
+ *     stacking context OR is a z-index:auto positioned element (whose atomic
+ *     unit it paints within).
+ * A bare `position:relative` with no z-index does not create a context and, as
+ * a non-positioned-for-escape... it IS positioned, so it escapes auto ancestors
+ * like any positioned box but contributes level 1 — matching CSS (relative +
+ * auto paints in phase 6 of its nearest real context).
+ * -------------------------------------------------------------------------*/
+
+enum { STACK_KEY_MAX = 24 }; /* max stacking-context nesting depth tracked */
+
+static int stack_creates_context(const struct yetty_ylexbor_box *b, uint32_t idx)
+{
+    return idx == 0 || (b->position != YL_POS_STATIC && b->z_index_set);
+}
+
+/* Level of `b` within its stacking context (see the phase mapping above). */
+static int64_t stack_level(const struct yetty_ylexbor_box *b)
+{
+    if (b->position == YL_POS_STATIC) {
+        return 0; /* normal flow, phases 3-5 */
+    }
+    if (b->z_index_set) {
+        if (b->z_index < 0) {
+            return b->z_index; /* phase 2, below normal flow */
+        }
+        if (b->z_index == 0) {
+            return 1; /* phase 6 */
+        }
+        return 1 + (int64_t)b->z_index; /* phase 7 */
+    }
+    return 1; /* positioned, z-index auto → phase 6 */
+}
+
+/* Index of the stacking context `idx` directly participates in (see above).
+ * Returns 0 (the root) as the ultimate fallback. */
+static uint32_t stack_parent_of(const struct yetty_ylexbor *r, uint32_t idx)
+{
+    if (idx == 0) {
+        return 0;
+    }
+    int positioned = r->boxes.data[idx].position != YL_POS_STATIC;
+    uint32_t cur = r->boxes.data[idx].parent;
+    for (;;) {
+        const struct yetty_ylexbor_box *a = &r->boxes.data[cur];
+        int creates = stack_creates_context(a, cur);
+        if (creates) {
+            return cur;
+        }
+        if (!positioned && a->position != YL_POS_STATIC) {
+            /* non-positioned box captured by a z-index:auto positioned unit */
+            return cur;
+        }
+        if (cur == 0) {
+            return 0;
+        }
+        uint32_t parent = a->parent;
+        if (parent == cur) {
+            return 0; /* defensive */
+        }
+        cur = parent;
+    }
+}
+
+/* Build the composite stacking key for `idx`: `key` receives interleaved
+ * (level, DOM-index) pairs top-down; *out_pairs is the pair count. */
+static void stack_build_key(const struct yetty_ylexbor *r, uint32_t idx,
+                            int64_t key[STACK_KEY_MAX * 2], int *out_pairs)
+{
+    uint32_t chain[STACK_KEY_MAX];
+    int n = 0;
+    uint32_t cur = idx;
+    while (n < STACK_KEY_MAX && cur != 0) {
+        chain[n++] = cur; /* root (0) contributes nothing — the empty key */
+        cur = stack_parent_of(r, cur);
+    }
+    for (int k = 0; k < n; k++) {
+        uint32_t box = chain[n - 1 - k]; /* top-most first */
+        key[2 * k] = stack_level(&r->boxes.data[box]);
+        key[2 * k + 1] = (int64_t)box; /* DOM-index tiebreak */
+    }
+    *out_pairs = n;
+}
+
+/* Lexicographic compare of two composite keys; a proper prefix sorts first. */
+static int stack_key_cmp(const int64_t *ka, int na, const int64_t *kb, int nb)
+{
+    int shared = na < nb ? na : nb;
+    for (int k = 0; k < shared; k++) {
+        if (ka[2 * k] != kb[2 * k]) {
+            return ka[2 * k] < kb[2 * k] ? -1 : 1; /* level */
+        }
+        if (ka[2 * k + 1] != kb[2 * k + 1]) {
+            return ka[2 * k + 1] < kb[2 * k + 1] ? -1 : 1; /* DOM tiebreak */
+        }
+    }
+    if (na != nb) {
+        return na < nb ? -1 : 1; /* shorter (ancestor context) paints first */
+    }
+    return 0;
+}
+
+struct paint_slot {
+    uint32_t index;
+    int pairs;
+    int64_t key[STACK_KEY_MAX * 2];
+};
+
+static int paint_slot_cmp(const void *pa, const void *pb)
+{
+    const struct paint_slot *a = pa;
+    const struct paint_slot *b = pb;
+    int order = stack_key_cmp(a->key, a->pairs, b->key, b->pairs);
+    if (order != 0) {
+        return order;
+    }
+    return a->index < b->index ? -1 : (a->index > b->index ? 1 : 0);
+}
+
+/* Paint/stacking order of boxes `a` vs `b`: <0 if `a` paints before (below)
+ * `b`, >0 if after (above), 0 if same. Shared by the paint pass and hit-testing
+ * so a click targets the box actually painted on top. */
+int yetty_ylexbor_paint_order_cmp(const struct yetty_ylexbor *r, uint32_t a, uint32_t b)
+{
+    if (r == NULL || a >= r->boxes.size || b >= r->boxes.size || a == b) {
+        return 0;
+    }
+    int64_t key_a[STACK_KEY_MAX * 2];
+    int64_t key_b[STACK_KEY_MAX * 2];
+    int pairs_a = 0;
+    int pairs_b = 0;
+    stack_build_key(r, a, key_a, &pairs_a);
+    stack_build_key(r, b, key_b, &pairs_b);
+    int order = stack_key_cmp(key_a, pairs_a, key_b, pairs_b);
+    if (order != 0) {
+        return order;
+    }
+    return a < b ? -1 : 1;
+}
+
 struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                                                    struct yetty_ydraw_drawable_list *buf)
 {
@@ -1757,7 +1925,26 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
     }
 
     ydebug("paint total boxes=%u", r->boxes.size);
-    for (uint32_t i = 0; i < r->boxes.size; i++) {
+
+    /* Compute the stacking-order paint sequence: each box gets a composite
+	 * stacking key, then a sort reproduces CSS painting order (canvas → negative
+	 * z → normal flow → positioned by z, nesting-aware). A NULL slots allocation
+	 * (OOM) falls back to plain DOM order — still renders, just without stacking
+	 * order. */
+    struct paint_slot *paint_order = NULL;
+    if (r->boxes.size > 0) {
+        paint_order = malloc((size_t)r->boxes.size * sizeof(*paint_order));
+        if (paint_order) {
+            for (uint32_t i = 0; i < r->boxes.size; i++) {
+                paint_order[i].index = i;
+                stack_build_key(r, i, paint_order[i].key, &paint_order[i].pairs);
+            }
+            qsort(paint_order, r->boxes.size, sizeof(*paint_order), paint_slot_cmp);
+        }
+    }
+
+    for (uint32_t order = 0; order < r->boxes.size; order++) {
+        uint32_t i = paint_order ? paint_order[order].index : order;
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
         if (yetty_ylexbor_box_clipped_out(r, i)) {
             /* Wholly outside an overflow:hidden ancestor — clipped away. */
@@ -2025,6 +2212,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
         }
         }
     }
+    free(paint_order);
 
     /* Publish the scene rectangle. Use viewport_w as a floor for X so
 	 * a page with no full-width background still produces a sensible

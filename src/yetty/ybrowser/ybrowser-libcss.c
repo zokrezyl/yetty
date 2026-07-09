@@ -1925,6 +1925,27 @@ int yetty_ybrowser_libcss_visibility(const css_computed_style *style)
     return (int)css_computed_visibility(style);
 }
 
+/* z-index for a positioned box. Returns 1 and writes the integer value when
+ * an explicit z-index is set; returns 0 for `auto` (the default). Only
+ * meaningful on positioned elements — the paint pass gates the read on that. */
+int yetty_ybrowser_libcss_z_index(const css_computed_style *style, int32_t *out_z)
+{
+    if (!style) {
+        return 0;
+    }
+    css_fixed z = 0;
+    uint8_t kind = css_computed_z_index(style, &z);
+    if (kind != CSS_Z_INDEX_SET) {
+        return 0; /* auto */
+    }
+    if (out_z) {
+        /* z-index is a whole number stored in fixed-point; the float round-trip
+		 * is exact for the small integers pages use. */
+        *out_z = (int32_t)fixed_to_float(z);
+    }
+    return 1;
+}
+
 float yetty_ybrowser_libcss_opacity(const css_computed_style *style)
 {
     if (!style) {

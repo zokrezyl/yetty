@@ -3853,13 +3853,24 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
     /* Hit-test: find deepest box whose rect contains (x,y) AND has
 	 * an associated element. */
     lxb_dom_element_t *target = NULL;
+    uint32_t best_index = 0;
+    bool have_hit = false;
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
         if (b->element == NULL) {
             continue;
         }
+        if (b->vis_hidden || b->opacity < 0.02f || yetty_ylexbor_box_clipped_out(r, i)) {
+            continue; /* hidden / transparent / clipped boxes are hit-transparent */
+        }
         if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h) {
-            target = b->element;
+            /* Topmost in paint/stacking order wins, so a click lands on an
+			 * overlay painted above content earlier in the box vector. */
+            if (!have_hit || yetty_ylexbor_paint_order_cmp(r, best_index, i) < 0) {
+                best_index = i;
+                target = b->element;
+                have_hit = true;
+            }
         }
     }
     if (target == NULL) {

@@ -1128,15 +1128,27 @@ char *yetty_ylexbor_ancestor_attr_at(struct yetty_ylexbor *r, float x, float y, 
         return NULL;
     }
     size_t name_len = strlen(name);
-    /* Deepest box containing (x, y) — same scan as link_at. */
+    /* Topmost box containing (x, y) in paint/stacking order — same ranking as
+	 * link_at, so URL/attribute extraction on a click resolves against the
+	 * element actually painted on top (an overlay), not one earlier in the box
+	 * vector but behind it. */
     lxb_dom_element_t *target = NULL;
+    uint32_t best_index = 0;
+    bool have_hit = false;
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
         if (b->element == NULL) {
             continue;
         }
+        if (b->vis_hidden || b->opacity < 0.02f || yetty_ylexbor_box_clipped_out(r, i)) {
+            continue; /* hidden / transparent / clipped boxes are hit-transparent */
+        }
         if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h) {
-            target = b->element;
+            if (!have_hit || yetty_ylexbor_paint_order_cmp(r, best_index, i) < 0) {
+                best_index = i;
+                target = b->element;
+                have_hit = true;
+            }
         }
     }
     if (target == NULL) {
@@ -1177,6 +1189,8 @@ char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)
      * page's on-screen offset first. */
     lxb_dom_element_t *target = NULL;
     const struct yetty_ylexbor_box *target_box = NULL;
+    uint32_t best_index = 0;
+    bool have_hit = false;
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
         if (b->element == NULL) {
@@ -1186,8 +1200,15 @@ char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)
             continue; /* hidden / transparent / clipped boxes are hit-transparent */
         }
         if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h) {
-            target = b->element;
-            target_box = b;
+            /* Topmost in paint order wins — an overlay (dialog/dropdown) that
+			 * paints over content earlier in the box vector must also capture
+			 * the click, else the click falls through to what's behind it. */
+            if (!have_hit || yetty_ylexbor_paint_order_cmp(r, best_index, i) < 0) {
+                best_index = i;
+                target = b->element;
+                target_box = b;
+                have_hit = true;
+            }
         }
     }
     if (target == NULL) {

@@ -2111,15 +2111,27 @@ static void grid_cls_copy_unescape(const char *s, size_t n, char *buf, size_t bu
     buf[write] = '\0';
 }
 
+/* `calc(<pct> ± <len>)` two-term parser, defined further down and reused here
+ * so a calc() track size resolves like the width path does. */
+static bool calc_parse_pct_offset(const char *arg, const char *arg_end, float *out_pct,
+                                  float *out_offset, uint8_t *out_unit, int8_t *out_sign);
+
 /* Parse one track spec (already isolated): `<n>fr`, `<n>px`/`<n>`,
- * `minmax(a,b)` (uses b), `auto`/`min-content`/`max-content` (≈ 1fr). */
+ * `minmax(a,b)` (uses b), `auto`/`min-content`/`max-content` (≈ 1fr),
+ * `calc(<pct> ± <len>)` (percentage track with a px offset). */
 static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *out)
 {
-    while (n > 0 && (*s == ' ' || *s == '\t')) {
+    /* Trim ALL surrounding whitespace, not just spaces/tabs. Track specs come
+	 * out of the value verbatim, and real sheets pretty-print multi-line calc
+	 * track lists (guardian: `repeat(4, calc(\n\t(25%) -\n\t\t15px\n))`); the
+	 * repeat() splitter hands us the calc with trailing newlines/tabs, so a
+	 * space-only trim leaves `s[n-1]` as '\n' and every closing-paren / unit
+	 * check below fails, collapsing the grid to block flow. */
+    while (n > 0 && isspace((unsigned char)*s)) {
         s++;
         n--;
     }
-    while (n > 0 && (s[n - 1] == ' ' || s[n - 1] == '\t')) {
+    while (n > 0 && isspace((unsigned char)s[n - 1])) {
         n--;
     }
     if (n == 0) {
@@ -2137,6 +2149,49 @@ static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *o
         }
         return grid_parse_one_track(b, bn, out);
     }
+    if (n >= 6 && strncasecmp(s, "calc(", 5) == 0 && s[n - 1] == ')') {
+        /* `calc(<pct> ± <len>)` track size. nytimes carousel:
+		 * `repeat(15, calc(20% - 26.6px))`; guardian carousel:
+		 * `repeat(4, calc((25%) - 15px))` — note the redundant parens around
+		 * the percentage and the embedded newlines/tabs. Copy the inner
+		 * expression dropping only parentheses (whitespace is preserved — the
+		 * two-term parser requires it around the operator) so a grouped simple
+		 * term like `(25%)` normalises to `25%`. Resolve to a percentage track
+		 * plus a px offset applied at layout time — the same shape the width
+		 * path already models. Any other calc() form (division, ≥3 terms,
+		 * `<len> - <pct>`) fails the two-term parser and falls through to the
+		 * strict validator below, which rejects it (grid → block flow). */
+        char inner[96];
+        size_t write = 0;
+        bool overflow = false;
+        for (size_t read = 5; read + 1 < n; read++) {
+            if (s[read] == '(' || s[read] == ')') {
+                continue;
+            }
+            if (write + 1 >= sizeof(inner)) {
+                overflow = true;
+                break;
+            }
+            inner[write++] = s[read];
+        }
+        if (!overflow) {
+            float pct = 0.0f, mag = 0.0f;
+            uint8_t unit = 0;
+            int8_t sign = 1;
+            if (calc_parse_pct_offset(inner, inner + write, &pct, &mag, &unit, &sign)) {
+                float px = mag;
+                if (unit == 1 || unit == 2) { /* rem / em → px (16px base) */
+                    px *= 16.0f;
+                }
+                out->is_fr = 0;
+                out->is_auto = 0;
+                out->is_pct = 1;
+                out->value = pct;
+                out->offset = (float)sign * px;
+                return 1;
+            }
+        }
+    }
     if (n >= 2 && s[n - 1] == 'r' && s[n - 2] == 'f') {
         char buf[32];
         grid_tok_copy(s, n - 2, buf, sizeof(buf));
@@ -2146,7 +2201,14 @@ static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *o
         return 1;
     }
     if ((n == 4 && strncmp(s, "auto", 4) == 0) ||
-        (n >= 11 && (strstr(s, "min-content") != NULL || strstr(s, "max-content") != NULL))) {
+        (n >= 11 && (css_find_substr(s, n, "min-content", 11) != NULL ||
+                     css_find_substr(s, n, "max-content", 11) != NULL))) {
+        /* Bounded search: `s` is a slice of the larger value buffer, NOT
+		 * null-terminated. A raw strstr() overreads past `n` and can match a
+		 * `min-/max-content` that lives later in the sheet, wrongly typing an
+		 * unrelated calc() track as `auto` (guardian: a `calc((100%/2) - 36px
+		 * + 5px)` carousel track registered 4 auto columns, blocking the real
+		 * `calc(25% - 15px)` rule via the dedupe check → 1364px images). */
         out->is_fr = 0;
         out->is_auto = 1; /* sized to the column's max-content at layout time */
         out->value = 0.0f;

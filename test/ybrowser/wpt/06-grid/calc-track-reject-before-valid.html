@@ -1,0 +1,19 @@
+<!doctype html><meta charset=utf-8><title>grid: unsupported calc track must not block a later valid one</title>
+<style>body{margin:0}
+/* First rule for .g uses an unsupported calc form (division + 3 terms). It
+   must be REJECTED — not silently accepted as an `auto` track. A prior bug
+   classified it `auto` because the track-token substring search overran its
+   length and matched a `min-content` living later in the sheet; that bogus
+   registration then blocked the real rule below via the same-class dedupe,
+   collapsing guardian's carousel images to full width. */
+.g{display:grid;width:400px}
+.g{grid-template-columns:repeat(2,calc((100% / 2) - 8px + 4px));}
+.g{grid-template-columns:repeat(2,calc(50% - 10px));}
+/* A later, unrelated rule that contains the bytes the overrun used to hit. */
+.tail{grid-template-columns:min-content}
+</style>
+<!-- Valid rule wins: each track = 50% * 400 - 10 = 190px, no gap. -->
+<div class="g">
+  <div data-test="c1" data-expect="0,*,190,*">a</div>
+  <div data-test="c2" data-expect="190,*,190,*">b</div>
+</div>

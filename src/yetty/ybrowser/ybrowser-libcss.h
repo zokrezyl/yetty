@@ -181,6 +181,9 @@ int yetty_ybrowser_libcss_clear(const css_computed_style *style);
  * ABSOLUTE / FIXED / STICKY). Default is CSS_POSITION_STATIC. */
 int yetty_ybrowser_libcss_position(const css_computed_style *style);
 
+/* z-index: returns 1 and writes *out_z when explicitly set, 0 for `auto`. */
+int yetty_ybrowser_libcss_z_index(const css_computed_style *style, int32_t *out_z);
+
 /* CSS_VISIBILITY_* value; VISIBLE when style is NULL. */
 int yetty_ybrowser_libcss_visibility(const css_computed_style *style);
 

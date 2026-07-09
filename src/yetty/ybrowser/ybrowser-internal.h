@@ -66,6 +66,10 @@ struct yl_grid_track {
 		              * resolved to px at layout time. */
     uint8_t is_auto; /* `auto` / min-content / max-content — sized to the
 		              * max-content of the items placed in this column. */
+    float offset;    /* px added AFTER the percentage resolves — the length term
+		              * of `calc(<pct> ± <len>)` track sizes (already sign-applied
+		              * and unit-normalised to px). 0 for every non-calc track.
+		              * Only consulted when is_pct is set. */
 };
 
 /* 16 covers the 12-column grids real design systems use (github's Primer
@@ -582,6 +586,14 @@ struct yetty_ylexbor_box {
     float pos_top, pos_right, pos_bottom, pos_left;
     uint8_t pos_set_mask;
     uint8_t pos_pct_mask;
+
+    /* CSS `z-index`. Only meaningful on a positioned box. `z_index_set` = 0
+	 * means `auto` (paints with the z=0 group, above normal flow). A set,
+	 * negative z-index paints BELOW normal flow. Drives the stacking-order
+	 * paint pass so overlays (dialogs, modals, dropdowns, fixed headers) paint
+	 * on top of in-flow content regardless of DOM order. */
+    int32_t z_index;
+    uint8_t z_index_set;
 
     /* CSS `transform: translate()` — a visual shift that moves the box and
 		 * its whole subtree without affecting flow (siblings ignore it). Only
@@ -1256,6 +1268,12 @@ int yetty_ylexbor_line_clamp_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *
 /* True if box `idx` lies entirely outside an overflow-clipping ancestor's
  * padding box (so it must not paint / hit-test). */
 bool yetty_ylexbor_box_clipped_out(const struct yetty_ylexbor *r, uint32_t idx);
+
+/* Paint/stacking order of boxes `a` vs `b`: <0 if `a` paints before (below)
+ * `b`, >0 if after (above), 0 if same. Reproduces CSS stacking order (nesting-
+ * aware). Shared by the paint pass and hit-testing so a click targets the box
+ * actually painted on top. */
+int yetty_ylexbor_paint_order_cmp(const struct yetty_ylexbor *r, uint32_t a, uint32_t b);
 
 /* Scan for class-based `transform: translate*(...)` and record
  * (selector, tx, ty, pct flags). Complements the inline-transform parse. */
