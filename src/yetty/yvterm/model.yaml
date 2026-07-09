@@ -226,6 +226,10 @@ classes:
         type: "struct yetty_yclass_object *"
         get: false
         set: false
+      - name: owns_grid
+        type: int
+        get: false
+        set: false
       - name: grid_size
         type: struct yetty_ycore_grid_size
         get: false
@@ -1011,6 +1015,29 @@ exposed:
  * cell_size starts at a placeholder until the renderer build-out resolves exact
  * metrics from the active font; the terminal overwrites it on the first resize.
  * `context` is accepted now for that future font setup. */"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_figure_create_over_grid
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: grid_obj
+        type: "struct yetty_yclass_object *"
+      - name: context
+        type: "const struct yetty_context *"
+      - name: request_render_fn
+        type: yetty_yterminal_request_render_fn
+      - name: request_render_userdata
+        type: "void *"
+      - name: mouse_sub_fn
+        type: yetty_yterminal_mouse_sub_fn
+      - name: mouse_sub_userdata
+        type: "void *"
+    doc: "/* Build the content figure over a grid the caller already owns (an ymux_pane
+ * holds the yvterm:grid — \"the truth\"). Unlike figure_create this figure does
+ * NOT mint or dispose the grid (owns_grid = 0) and does NOT install the grid's
+ * pty-write / card-sub hooks — the pane (pty-write) and the terminal (card-sub)
+ * own those. It only adopts the model, wires the render/mouse hooks, and builds
+ * the GPU renderer over it. Used by the legacy renderer path; a headless server
+ * holds the same grid with no vterm at all. */"
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_as_figure
     return_type: struct yetty_yfigure_figure_ptr_result

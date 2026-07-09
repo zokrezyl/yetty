@@ -116,6 +116,7 @@ target_compile_definitions(yetty PRIVATE
     YETTY_USE_DIRECTWRITE=1
     YETTY_USE_CONPTY=1
     YETTY_HAS_VNC=1
+    YETTY_HAS_YMUX=1
     NOMINMAX
     WIN32_LEAN_AND_MEAN
 )

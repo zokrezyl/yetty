@@ -150,8 +150,13 @@ struct yetty_ydraw_target;
 struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("include@yetty/yterminal/terminal.h")
     YETTY_ANNOTATE("parent@yfigure:figure") yetty_yvterm_vterm {
     /* The terminal model lives in a separate class@yvterm:grid object; this
-     * figure composes it and renders it. Owned: disposed in the destroy slot. */
+     * figure composes it and renders it. Ownership depends on how the figure was
+     * built: yetty_yvterm_vterm_figure_create mints its own grid and owns it
+     * (owns_grid = 1, disposed in the destroy slot); the ymux path
+     * yetty_yvterm_vterm_figure_create_over_grid adopts a grid the caller (an
+     * ymux_pane) owns (owns_grid = 0, never disposed here). */
     struct yetty_yclass_object *grid_obj;
+    int owns_grid;
 
     /* Cell + grid metrics mirrored for the terminal's mouse→cell mapping, PTY
      * resize, and the figure rect. The terminal sets these via resize. */
@@ -1430,10 +1435,15 @@ static struct yetty_ycore_void_result vterm_destroy_slot(struct yetty_yclass_obj
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "vterm_destroy: from_obj");
     vterm_gpu_destroy(vterm_res.value);
+    /* Dispose the model only if this figure owns it. The ymux path adopts a grid
+     * owned by an ymux_pane (owns_grid = 0), which disposes it itself. */
     if (vterm_res.value->grid_obj) {
-        struct yetty_ycore_void_result gd = yetty_yvterm_grid_dispose(vterm_res.value->grid_obj);
-        if (YETTY_IS_ERR(gd)) {
-            yetty_ycore_error_destroy(gd.error);
+        if (vterm_res.value->owns_grid) {
+            struct yetty_ycore_void_result gd =
+                yetty_yvterm_grid_dispose(vterm_res.value->grid_obj);
+            if (YETTY_IS_ERR(gd)) {
+                yetty_ycore_error_destroy(gd.error);
+            }
         }
         vterm_res.value->grid_obj = NULL;
     }
@@ -1521,6 +1531,7 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
         return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: grid_make", grid_res);
     }
     vterm->grid_obj = grid_res.value;
+    vterm->owns_grid = 1; /* this figure minted the grid; it disposes it */
     /* Warm/cold tier budgets (0 keeps the built-in warm default / unlimited
      * spill file). Best-effort — the grid runs on defaults without them. */
     if (config) {
@@ -1634,6 +1645,110 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
             return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: z_set", z_res);
         }
         return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: dirty_set", dirty_res);
+    }
+
+    return YETTY_OK(yetty_yclass_object_ptr, obj);
+}
+
+/* Build the content figure over a grid the caller already owns (an ymux_pane
+ * holds the yvterm:grid — "the truth"). Unlike figure_create this figure does
+ * NOT mint or dispose the grid (owns_grid = 0) and does NOT install the grid's
+ * pty-write / card-sub hooks — the pane (pty-write) and the terminal (card-sub)
+ * own those. It only adopts the model, wires the render/mouse hooks, and builds
+ * the GPU renderer over it. Used by the legacy renderer path; a headless server
+ * holds the same grid with no vterm at all. */
+YETTY_ANNOTATE("expose")
+struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create_over_grid(
+    struct yetty_yclass_object *grid_obj, const struct yetty_context *context,
+    yetty_yterminal_request_render_fn request_render_fn, void *request_render_userdata,
+    yetty_yterminal_mouse_sub_fn mouse_sub_fn, void *mouse_sub_userdata)
+{
+    if (!grid_obj) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create_over_grid: NULL grid");
+    }
+
+    uint32_t cols = 0, rows = 0, base = 0;
+    struct yetty_ycore_void_result dims_res = yetty_yvterm_grid_dims(grid_obj, &cols, &rows, &base);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, dims_res,
+                        "yvterm vterm_create_over_grid: grid_dims");
+    if (cols == 0 || rows == 0) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create_over_grid: invalid grid size");
+    }
+
+    struct yetty_yclass_ptr_result class_res = yetty_yvterm_vterm_class_get();
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, class_res, "yvterm vterm_create_over_grid: class");
+
+    struct yetty_yclass_object_ptr_result object_res = yetty_yclass_object_alloc(class_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, object_res,
+                        "yvterm vterm_create_over_grid: object_alloc");
+    struct yetty_yclass_object *obj = object_res.value;
+
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    if (YETTY_IS_ERR(vterm_res)) {
+        struct yetty_ycore_void_result free_res = yetty_yclass_object_free(obj);
+        if (YETTY_IS_ERR(free_res)) {
+            yetty_ycore_error_destroy(free_res.error);
+        }
+        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create_over_grid: from_obj",
+                         vterm_res);
+    }
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
+
+    /* Adopt the caller-owned grid; the pane/terminal already wired its hooks. */
+    vterm->grid_obj = grid_obj;
+    vterm->owns_grid = 0;
+    vterm->grid_size = (struct yetty_ycore_grid_size){.cols = cols, .rows = rows};
+    vterm->cell_size = (struct yetty_ycore_pixel_size){.width = 9.0f, .height = 18.0f};
+    vterm->request_render_fn = request_render_fn;
+    vterm->request_render_userdata = request_render_userdata;
+    vterm->mouse_sub_fn = mouse_sub_fn;
+    vterm->mouse_sub_userdata = mouse_sub_userdata;
+    vterm->visual_zoom_scale = 1.0f;
+
+    /* Best-effort GPU build (see figure_create). On any error below, free the
+     * vterm object but never dispose the borrowed grid — the pane owns it. */
+    struct yetty_ycore_void_result gpu_init_res = vterm_gpu_init(vterm, context);
+    if (YETTY_IS_ERR(gpu_init_res)) {
+        vterm_gpu_destroy(vterm);
+        vterm->grid_obj = NULL;
+        struct yetty_ycore_void_result free_res = yetty_yclass_object_free(obj);
+        if (YETTY_IS_ERR(free_res)) {
+            yetty_ycore_error_destroy(free_res.error);
+        }
+        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create_over_grid: gpu_init",
+                         gpu_init_res);
+    }
+
+    struct yetty_ycore_rectangle rect = {
+        .min = {.x = 0.0f, .y = 0.0f},
+        .max = {.x = (float)cols * vterm->cell_size.width,
+                .y = (float)rows * vterm->cell_size.height},
+    };
+    struct yetty_ycore_void_result rect_res = yetty_yfigure_figure_rect_set(obj, rect);
+    struct yetty_ycore_void_result z_res = YETTY_OK_VOID();
+    struct yetty_ycore_void_result dirty_res = YETTY_OK_VOID();
+    if (YETTY_IS_OK(rect_res)) {
+        z_res = yetty_yfigure_figure_z_set(obj, YETTY_YVTERM_VTERM_Z);
+    }
+    if (YETTY_IS_OK(z_res)) {
+        dirty_res = yetty_yfigure_figure_dirty_set(obj, 1);
+    }
+    if (YETTY_IS_ERR(rect_res) || YETTY_IS_ERR(z_res) || YETTY_IS_ERR(dirty_res)) {
+        vterm_gpu_destroy(vterm);
+        vterm->grid_obj = NULL;
+        struct yetty_ycore_void_result free_res = yetty_yclass_object_free(obj);
+        if (YETTY_IS_ERR(free_res)) {
+            yetty_ycore_error_destroy(free_res.error);
+        }
+        if (YETTY_IS_ERR(rect_res)) {
+            return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create_over_grid: rect_set",
+                             rect_res);
+        }
+        if (YETTY_IS_ERR(z_res)) {
+            return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create_over_grid: z_set", z_res);
+        }
+        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create_over_grid: dirty_set",
+                         dirty_res);
     }
 
     return YETTY_OK(yetty_yclass_object_ptr, obj);

@@ -17,6 +17,8 @@ target_include_directories(yetty_yterminal PUBLIC
 target_include_directories(yetty_yterminal PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yterminal
+    # The GPU-free pane model (PTY + wire SM + bare grid) the coordinator owns.
+    yetty_ymux
     # The text-grid figure the coordinator drives. PUBLIC so consumers (yui)
     # see yvterm's headers/symbols transitively.
     yetty_yvterm

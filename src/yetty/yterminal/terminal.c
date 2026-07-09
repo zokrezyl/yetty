@@ -52,6 +52,8 @@
 #include <yetty/yvideo/yvideo-gen.h>
 #endif
 #include <yetty/yterminal/terminal.h>
+#include <yetty/ymux/pane.h>
+#include <yetty/yvterm/grid.h>
 #include <yetty/yvterm/vterm.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
@@ -98,10 +100,10 @@ static const struct yetty_yui_view_ops terminal_view_ops = {
     .on_event = terminal_view_on_event,
 };
 
-/* Terminal context - contains yetty context plus terminal-owned objects */
+/* Terminal context - the shared yetty context. The PTY lives on the pane now
+ * (the model owner), reached via yetty_ymux_pane_pty(). */
 struct yetty_yterminal_terminal_context {
     struct yetty_context yetty_context;
-    struct yetty_platform_pty *pty;
 };
 
 struct yetty_yterminal_terminal {
@@ -129,18 +131,16 @@ struct yetty_yterminal_terminal {
      * (block vs hollow), and we'll forward FocusIn/FocusOut CSI to the
      * PTY once focus reporting (DECSET 1004) is wired through. */
     int focused;
-    yetty_yevent_pipe_id pty_pipe_id;
-    int shutting_down;
-    struct yetty_ywire_wire_statemachine *sm;
 
-    /* yclass-RPC DCS server state attached to `sm`. The SM borrows it
+    /* The GPU-free model owner: PTY + wire statemachine + bare yvterm:grid +
+     * emit yface + host-side channel connection. terminal.c is the legacy
+     * renderer/view wrapped around it. Reached for sm/pty/grid via the
+     * yetty_ymux_pane_* accessors. Owned; destroyed last. */
+    struct yetty_ymux_pane *pane;
+
+    /* yclass-RPC DCS server state attached to the pane's SM. The SM borrows it
      * (handler userdata); we own it and free it after the SM is gone. */
     struct yetty_yclass_rpc_dcs_server *dcs_rpc_server;
-
-    /* Host-side connection layer attached to `sm` (acceptor of dynamic ywire
-     * channels opened by in-pane clients). Same borrow contract as the RPC
-     * server: destroyed only after the SM is gone. */
-    struct yetty_ywire_connection *channel_host;
 
     /* Distinct userdata for the content-inset wire handler. The SM dedups
      * handler coroutines by userdata pointer (one coro per pointer, running
@@ -172,10 +172,6 @@ struct yetty_yterminal_terminal {
      * own coroutine rather than sharing. */
     struct yetty_yterminal_terminal *effect_handler_self[3];
 
-    /* Reusable read buffer handed back from terminal_pty_pipe_alloc.
-     * Lazily allocated on the first read; freed in destroy. */
-    char *pty_read_buf;
-
     /* Pixel-precise mouse forwarding (DEC ?1500/?1501).
    * The text-layer's libvterm settermprop hook flips these and reports
    * via terminal_mouse_sub_callback, which also emits
@@ -184,10 +180,6 @@ struct yetty_yterminal_terminal {
     int mouse_click_subscribed;
     int mouse_move_subscribed;
     int mouse_buttons_held; /* OR of (1 << button) for currently-down buttons */
-
-    /* Long-lived yface for emitting input events to the inferior over the
-   * PTY. Reused across every emit; out_buf is cleared after each write. */
-    struct yetty_yface *emit_yface;
 
     /* tmux-style scrollback view. Mouse wheel enters scrollback and shifts
    * the absolute viewport top (grid-owned view state). Enter exits back to
@@ -283,194 +275,79 @@ static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterminal_t
 static struct yetty_ycore_void_result terminal_render_frame(
     struct yetty_yterminal_terminal *terminal, struct yetty_ydraw_target *target, int force_redraw);
 
-/* PTY pipe alloc callback — provides buffer for uv_pipe_t reads.
- * One reusable per-terminal buffer, lazily allocated. 64KB matches
- * libuv's default suggested_size on Linux/macOS and is plenty for one
- * PTY chunk; the read callback drains it before the next call. */
-#define YETTY_YTERMINAL_PTY_READ_BUF_SIZE (64 * 1024)
-
-/* libuv-shaped buffer-alloc callback: signature dictated by yetty_pipe_alloc_cb
- * which is dispatched from the libuv read path. Cannot return a Result. */
-YETTY_EXTERNAL_CALLBACK
-static void terminal_pty_pipe_alloc(void *ctx, size_t suggested_size, char **buf, size_t *buflen)
+/* Post-feed hook the pane invokes after PTY bytes drive the model (the pane
+ * owns the PTY read path now). Request a render frame if the content grid or a
+ * root-container figure went dirty this feed. */
+static struct yetty_ycore_void_result terminal_pane_notify(void *userdata)
 {
-    (void)suggested_size;
-    struct yetty_yterminal_terminal *terminal = ctx;
-    if (!terminal->pty_read_buf) {
-        terminal->pty_read_buf = malloc(YETTY_YTERMINAL_PTY_READ_BUF_SIZE);
-        if (!terminal->pty_read_buf) {
-            *buf = NULL;
-            *buflen = 0;
-            return;
+    struct yetty_yterminal_terminal *terminal = userdata;
+
+    /* Ask the content grid whether anything went dirty this feed. Its own figure
+     * dirty bit is never set — the real dirty bits live on the text grid + ydraw
+     * canvas it owns, which is_dirty aggregates. */
+    if (terminal->grid) {
+        struct yetty_ycore_int_result grid_dirty_res = yetty_yvterm_vterm_is_dirty(terminal->grid);
+        int grid_dirty = 0;
+        if (YETTY_IS_OK(grid_dirty_res)) {
+            grid_dirty = grid_dirty_res.value;
+        } else {
+            yetty_ycore_error_destroy(grid_dirty_res.error);
+        }
+        if (grid_dirty) {
+            terminal->context.yetty_context.event_loop->ops->request_render(
+                terminal->context.yetty_context.event_loop);
         }
     }
-    *buf = terminal->pty_read_buf;
-    *buflen = YETTY_YTERMINAL_PTY_READ_BUF_SIZE;
-}
-
-/* libuv-shaped pipe-read callback. Errors from feed/process have no
- * Result to propagate to — absorb them at this boundary by logging the
- * full chain and destroying it. */
-YETTY_EXTERNAL_CALLBACK
-static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
-{
-    struct yetty_yterminal_terminal *terminal = ctx;
-
-    if (nread > 0) {
-        /* Dump first/last bytes as hex+ascii to see what ConPTY sent */
-        char hex[512] = {0};
-        char asc[256] = {0};
-        size_t dump_n = nread > 80 ? 80 : (size_t)nread;
-        size_t hoff = 0, aoff = 0;
-        for (size_t i = 0; i < dump_n; i++) {
-            unsigned char c = (unsigned char)buf[i];
-            if (hoff + 4 < sizeof(hex)) {
-                hoff += (size_t)snprintf(hex + hoff, sizeof(hex) - hoff, "%02x ", c);
-            }
-            if (aoff + 2 < sizeof(asc)) {
-                asc[aoff++] = (c >= 0x20 && c < 0x7f) ? (char)c : '.';
-            }
+    /* Root-container path: yclass-RPC figure mutations (create_child,
+     * apply_child_body, …) applied during this feed mark the container dirty.
+     * The grid dirty check above only covers libvterm-side mutations, so without
+     * this a figure-only frame lands silently and the screen stays stale until
+     * something else triggers a render. */
+    if (terminal->root_container_obj) {
+        struct yetty_yfigure_figure_ptr_result rf_res =
+            yetty_yfigure_container_as_figure(terminal->root_container_obj);
+        if (YETTY_IS_ERR(rf_res)) {
+            yetty_ycore_error_destroy(rf_res.error);
+        } else if (rf_res.value && yetty_yfigure_figure_dirty_get(
+                                       (struct yetty_yclass_object *)(rf_res.value) - 1)
+                                       .value) {
+            terminal->context.yetty_context.event_loop->ops->request_render(
+                terminal->context.yetty_context.event_loop);
         }
-        ydebug("terminal_pty_pipe_read: nread=%ld dump=[%s] ascii=[%s]", nread, hex, asc);
-        /* feed() now resumes the SM coro itself — no separate process()
-         * call needed. The SM scanner runs as far as it can, then yields
-         * back when it needs more bytes (or surfaces a fatal error). */
-        struct yetty_ycore_void_result fr =
-            yetty_ywire_wire_statemachine_feed(terminal->sm, buf, (size_t)nread);
-        if (YETTY_IS_ERR(fr)) {
-            /* libuv-callback boundary: no Result to propagate. Surface
-             * the chain as a ynotify card; the loop keeps running. Build
-             * via YETTY_ERR so this frame gets file/line/func. */
-            struct yetty_ycore_void_result wrap = YETTY_ERR(
-                yetty_ycore_void, "terminal_pty_pipe_read: wire_statemachine_feed failed", fr);
-            struct yetty_yevent_event_loop *loop = terminal->context.yetty_context.event_loop;
-            loop->ops->post_fatal_error(loop, wrap.error);
-            return;
-        }
-        {
-            /* Ask the content grid whether anything went dirty this feed. Its
-             * own figure dirty bit is never set — the real dirty bits live on
-             * the text grid + ydraw canvas it owns, which is_dirty aggregates. */
-            struct yetty_ycore_int_result grid_dirty_res =
-                yetty_yvterm_vterm_is_dirty(terminal->grid);
-            int grid_dirty = 0;
-            if (YETTY_IS_OK(grid_dirty_res)) {
-                grid_dirty = grid_dirty_res.value;
-            } else {
-                yetty_ycore_error_destroy(grid_dirty_res.error);
-            }
-            ydebug("terminal_pty_pipe_read: after feed grid=%p dirty=%d", (void *)terminal->grid,
-                   grid_dirty);
-            if (grid_dirty) {
-                terminal->context.yetty_context.event_loop->ops->request_render(
-                    terminal->context.yetty_context.event_loop);
-            }
-            /* Rich content lives on yvterm's own line ring now, so it scrolls
-             * with the text automatically — no separate rolling-row origin to
-             * keep in sync. */
-        }
-        /* Root-container path: yclass-RPC figure mutations (create_child,
-         * apply_child_body, …) applied during this feed mark the container
-         * dirty here. The text-layer dirty check above only covers
-         * libvterm-side mutations, so without this a figure-only frame lands
-         * silently and the screen stays stale until something else triggers
-         * a render. */
-        if (terminal->root_container_obj) {
-            /* External-callback boundary (this fn is YETTY_EXTERNAL_CALLBACK):
-             * the obj→figure downcast cannot propagate, so absorb here. */
-            struct yetty_yfigure_figure_ptr_result rf_res =
-                yetty_yfigure_container_as_figure(terminal->root_container_obj);
-            if (YETTY_IS_ERR(rf_res)) {
-                yetty_ycore_error_destroy(rf_res.error);
-            } else if (rf_res.value && yetty_yfigure_figure_dirty_get(
-                                           (struct yetty_yclass_object *)(rf_res.value) - 1)
-                                           .value) {
-                terminal->context.yetty_context.event_loop->ops->request_render(
-                    terminal->context.yetty_context.event_loop);
-            }
-        }
-    } else if (nread < 0 && !terminal->shutting_down) {
-        /* Negative read: the child shell exited (UV_EOF after Ctrl-D /
-     * `exit`) — OR a tty hangup the CLIENT side provoked while the shell
-     * is perfectly alive: a pty master reads EIO after session-leader
-     * games or a SIGKILLed foreground group (a `timeout`-killed client,
-     * Ctrl-C at the wrong moment). Closing the pane — and with it,
-     * potentially the whole app — is only correct when the child is
-     * verifiably gone; otherwise keep the terminal (its output may stall
-     * until the next feed, but the session survives).
-     *
-     * Post CLOSE with this terminal's view id through the platform input
-     * pipe; the yetty event handler resolves the hosting pane and closes
-     * just that pane (or the workspace when it was the pane's only tab —
-     * and only when it is also the last workspace does this escalate to a
-     * full SHUTDOWN).
-     *
-     * The shutting_down guard avoids re-posting if teardown already
-     * started (e.g. fork_pty_stop closed the master while we were tearing
-     * down for another reason). Setting it here also stops this terminal's
-     * render path from doing further GPU work while the close event is in
-     * flight. */
-        struct yetty_platform_pty *pty = terminal->context.pty;
-        int child_alive = 0;
-        if (pty && pty->ops->child_alive) {
-            /* A dying child closes its pty fds a hair BEFORE it becomes
-             * waitable (exit_files precedes exit_notify), so the read error
-             * can outrun the zombie transition. Re-poll briefly: a normal
-             * exit resolves within microseconds; only a child that stays
-             * alive through all rechecks is a genuine transient hangup.
-             * Without this, Ctrl-C'ing the shell could leave the pane open
-             * forever (the errored stream never delivers a second EOF). */
-            for (int attempt = 0; attempt < 64; ++attempt) {
-                child_alive = pty->ops->child_alive(pty) == 1;
-                if (!child_alive) {
-                    break;
-                }
-            }
-        }
-        if (child_alive) {
-            ywarn("terminal_pty_pipe_read: PTY read error (nread=%ld) with the child still "
-                  "alive — transient tty hangup, keeping the terminal open",
-                  nread);
-            return;
-        }
-        ydebug("terminal_pty_pipe_read: PTY EOF (nread=%ld), posting CLOSE for view %llu", nread,
-               (unsigned long long)terminal->view.id);
-        terminal->shutting_down = 1;
-        struct yetty_ycore_xthread_event_pipe *pipe =
-            terminal->context.yetty_context.runtime->platform_input_pipe;
-        if (pipe && pipe->ops && pipe->ops->write) {
-            struct yetty_yui_event ev = {.type = YETTY_YCORE_CLOSE};
-            ev.close.object_id = terminal->view.id;
-            pipe->ops->write(pipe, &ev, sizeof(ev));
-        }
-    } else {
-        ydebug("terminal_pty_pipe_read: skipped (nread=%ld)", nread);
     }
+    return YETTY_OK_VOID();
 }
 
-/* Direct PTY write — shared by the layer callback (text-layer keypress
- * forwarding) and the direct emitter path (mouse-OSC, paste). The PTY ops
- * table is populated by the backend at creation time; absence of `write`
- * is a build/configuration bug, not a runtime condition to silence. */
+/* Child-exit hook the pane invokes when the inferior is confirmed gone (PTY EOF
+ * that outlived the child-alive re-poll). Post CLOSE with this terminal's view
+ * id through the platform input pipe; the yetty event handler resolves the
+ * hosting pane and closes just that pane (or the workspace when it was the
+ * pane's only tab — and only when it is also the last workspace does this
+ * escalate to a full SHUTDOWN). The pane has already set its shutting-down flag,
+ * which stops this terminal's render path from doing further GPU work while the
+ * close event is in flight. */
+static struct yetty_ycore_void_result terminal_pane_child_exit(void *userdata)
+{
+    struct yetty_yterminal_terminal *terminal = userdata;
+    ydebug("terminal: PTY EOF, posting CLOSE for view %llu",
+           (unsigned long long)terminal->view.id);
+    struct yetty_ycore_xthread_event_pipe *pipe =
+        terminal->context.yetty_context.runtime->platform_input_pipe;
+    if (pipe && pipe->ops && pipe->ops->write) {
+        struct yetty_yui_event ev = {.type = YETTY_YCORE_CLOSE};
+        ev.close.object_id = terminal->view.id;
+        pipe->ops->write(pipe, &ev, sizeof(ev));
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Direct PTY write — shared by the direct emitter path (mouse-OSC, paste). The
+ * PTY lives on the pane; this is a thin adapter so the emit/paste helpers keep
+ * reading naturally. */
 static struct yetty_ycore_size_result terminal_pty_write_raw(
     struct yetty_yterminal_terminal *terminal, const char *data, size_t len)
 {
-    if (!terminal->context.pty->ops->write) {
-        return YETTY_ERR(yetty_ycore_size, "terminal_pty_write_raw: PTY backend has no `write` op");
-    }
-    return terminal->context.pty->ops->write(terminal->context.pty, data, len);
-}
-
-/* yetty_yterminal_pty_write_fn impl — adapts the Result-returning PTY op
- * (size_result) to the typedef (void_result). */
-static struct yetty_ycore_void_result terminal_pty_write_callback(const char *data, size_t len,
-                                                                  void *userdata)
-{
-    struct yetty_yterminal_terminal *terminal = userdata;
-    struct yetty_ycore_size_result r = terminal_pty_write_raw(terminal, data, len);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_pty_write_callback: pty_write_raw failed");
-    ydebug("terminal_pty_write_callback: wrote %zu bytes to PTY", len);
-    return YETTY_OK_VOID();
+    return yetty_ymux_pane_write(terminal->pane, data, len);
 }
 
 /* Content-layer clear hook (full-screen erase / reset): wipe every positioned
@@ -549,34 +426,35 @@ static struct yetty_ycore_void_result terminal_yface_emit(struct yetty_yterminal
                                                           int osc_code, const void *payload,
                                                           size_t len)
 {
+    struct yetty_yface *emit_yface = yetty_ymux_pane_emit_yface(terminal->pane);
     struct yetty_ycore_void_result sr =
-        yetty_yface_start_write(terminal->emit_yface, YETTY_YWIRE_ENVELOPE_OSC, osc_code,
+        yetty_yface_start_write(emit_yface, YETTY_YWIRE_ENVELOPE_OSC, osc_code,
                                 /*compressed=*/0, /*args=*/NULL, /*args_len=*/0);
     if (YETTY_IS_ERR(sr)) {
-        struct yetty_ycore_buffer *out_buf = yetty_yface_out_buf(terminal->emit_yface);
+        struct yetty_ycore_buffer *out_buf = yetty_yface_out_buf(emit_yface);
         if (out_buf) {
             yetty_ycore_buffer_clear(out_buf);
         }
         return YETTY_ERR(yetty_ycore_void, "terminal_yface_emit: yface_start_write failed", sr);
     }
-    struct yetty_ycore_void_result wr = yetty_yface_write(terminal->emit_yface, payload, len);
+    struct yetty_ycore_void_result wr = yetty_yface_write(emit_yface, payload, len);
     if (YETTY_IS_ERR(wr)) {
-        struct yetty_ycore_buffer *out_buf = yetty_yface_out_buf(terminal->emit_yface);
+        struct yetty_ycore_buffer *out_buf = yetty_yface_out_buf(emit_yface);
         if (out_buf) {
             yetty_ycore_buffer_clear(out_buf);
         }
         return YETTY_ERR(yetty_ycore_void, "terminal_yface_emit: yface_write failed", wr);
     }
-    struct yetty_ycore_void_result fr = yetty_yface_finish_write(terminal->emit_yface);
+    struct yetty_ycore_void_result fr = yetty_yface_finish_write(emit_yface);
     if (YETTY_IS_ERR(fr)) {
-        struct yetty_ycore_buffer *out_buf = yetty_yface_out_buf(terminal->emit_yface);
+        struct yetty_ycore_buffer *out_buf = yetty_yface_out_buf(emit_yface);
         if (out_buf) {
             yetty_ycore_buffer_clear(out_buf);
         }
         return YETTY_ERR(yetty_ycore_void, "terminal_yface_emit: yface_finish_write failed", fr);
     }
 
-    struct yetty_ycore_buffer *out = yetty_yface_out_buf(terminal->emit_yface);
+    struct yetty_ycore_buffer *out = yetty_yface_out_buf(emit_yface);
     if (out && out->size) {
         /* Loop until every byte is on the PTY. The backend's write op
          * is non-looping — one write(2) per call — so a short write
@@ -1776,7 +1654,7 @@ static struct yetty_ycore_int_result terminal_event_handler(
 static struct yetty_ycore_void_result terminal_render_frame(
     struct yetty_yterminal_terminal *terminal, struct yetty_ydraw_target *target, int force_redraw)
 {
-    if (terminal->shutting_down) {
+    if (yetty_ymux_pane_is_shutting_down(terminal->pane)) {
         ydebug("terminal_render_frame: shutting down, skipping render");
         return YETTY_OK_VOID();
     }
@@ -1836,7 +1714,8 @@ static struct yetty_ycore_void_result terminal_render_frame(
  * dispatches to registered layers. */
 static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterminal_terminal *terminal)
 {
-    struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_process(terminal->sm);
+    struct yetty_ycore_void_result r =
+        yetty_ywire_wire_statemachine_process(yetty_ymux_pane_sm(terminal->pane));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_read_pty: wire_statemachine_process failed");
     /* Same as the async pipe-read path: the content grid aggregates its
      * sub-renderers' dirty bits via is_dirty; its own figure dirty is never
@@ -1897,67 +1776,23 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     /* Set up listener for PTY poll events */
     terminal->listener.handler = terminal_event_handler;
 
-    /* PTY factory is required — every supported platform installs one at
-     * startup. A missing factory means yetty_context was constructed wrong. */
-    struct yetty_yplatform_pty_factory *pty_factory = yetty_context->pty_factory;
-    if (!pty_factory || !pty_factory->ops || !pty_factory->ops->create_pty) {
-        free(terminal);
-        return YETTY_ERR(
-            yetty_yterminal_terminal,
-            "terminal_create: yetty_context.pty_factory is NULL or has no create_pty op");
-    }
+    /* The GPU-free model owner: PTY (via the context's pty_factory) + wire
+     * statemachine + bare yvterm:grid ("the truth") + emit yface + host-side
+     * ywire channel connection. It registers the PTY pipe, wires the grid's
+     * pty-write hook to itself, and binds the grid as the statemachine's default
+     * sink — all GPU-free. The terminal is the legacy renderer/view over it. */
+    struct yetty_ymux_pane_ptr_result pane_res = yetty_ymux_pane_create(grid_size, yetty_context);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, pane_res,
+                        "terminal_create: ymux_pane create failed");
+    terminal->pane = pane_res.value;
+    ydebug("terminal_create: ymux_pane created");
 
-    /* Create PTY */
-    struct yetty_yplatform_pty_ptr_result pty_res =
-        pty_factory->ops->create_pty(pty_factory, terminal->context.yetty_context.event_loop);
-    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, pty_res,
-                        "terminal_create: pty_factory create_pty failed");
-    terminal->context.pty = pty_res.value;
-    ydebug("terminal_create: PTY created at %p", (void *)terminal->context.pty);
-
-    /* Create wire state machine — owns the PTY pointer, the decode stack,
-     * and the per-OSC-code layer registry. */
-    struct yetty_ywire_wire_statemachine_ptr_result sm_res =
-        yetty_ywire_wire_statemachine_create(terminal->context.pty);
-    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, sm_res,
-                        "terminal_create: wire_statemachine_create failed");
-    terminal->sm = sm_res.value;
-    ydebug("terminal_create: wire state machine created");
-
-    /* Long-lived yface for emit_*. One per terminal — out_buf is cleared
-     * after every send so it stays at the steady-state high-water mark
-     * rather than growing per-event. */
-    struct yetty_yface_ptr_result yr = yetty_yface_create();
-    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, yr,
-                        "terminal_create: emit_yface yetty_yface_create failed");
-    terminal->emit_yface = yr.value;
-
-    /* Register PTY pipe with the event loop for async-delivery backends.
-     * Sync-read backends (e.g. memory-pty) legitimately return NULL here;
-     * the SM pulls bytes itself via pty->ops->read on each process(). */
-    struct yetty_platform_pty_pipe_source *pipe_source =
-        terminal->context.pty->ops->pipe_source(terminal->context.pty);
-    if (pipe_source) {
-        struct yetty_yevent_pipe_id_result pipe_res =
-            terminal->context.yetty_context.event_loop->ops->register_pty_pipe(
-                terminal->context.yetty_context.event_loop, pipe_source, terminal_pty_pipe_alloc,
-                terminal_pty_pipe_read, terminal);
-        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, pipe_res,
-                            "terminal_create: event_loop register_pty_pipe failed");
-        terminal->pty_pipe_id = pipe_res.value;
-        ydebug("terminal_create: PTY pipe registered");
-    }
-
-    /* Create the content grid — the yvterm:grid figure for this pane. It owns
-     * the libvterm text grid and the ydraw rich-content canvas, drives both
-     * render passes, and routes all the text<->ydraw plumbing (scroll, cursor,
-     * alt-screen, clear, selection, view-top) internally. The
-     * mouse-subscription callback still targets the terminal because it mutates
-     * terminal-side state (focused figure, outbound resize OSC). It is seated as
+    /* The renderer figure for this pane: a yvterm:vterm that ADOPTS (does not
+     * own) the pane's grid and builds the GPU text renderer over it. Seated as
      * the lowest-z child of the root container further below. */
-    struct yetty_yclass_object_ptr_result grid_res = yetty_yvterm_vterm_figure_create(
-        cols, rows, yetty_context, terminal_pty_write_callback, terminal,
-        terminal_request_render_callback, terminal, terminal_mouse_sub_callback, terminal);
+    struct yetty_yclass_object_ptr_result grid_res = yetty_yvterm_vterm_figure_create_over_grid(
+        yetty_ymux_pane_grid(terminal->pane), yetty_context, terminal_request_render_callback,
+        terminal, terminal_mouse_sub_callback, terminal);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, grid_res,
                         "terminal_create: grid figure create failed");
     terminal->grid = grid_res.value;
@@ -1967,24 +1802,30 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     struct yetty_ycore_pixel_size content_cell = content_cell_res.value;
     ydebug("terminal_create: content grid figure created");
 
-    /* Register the grid's wire handlers: text grid as the default
-     * (raw-passthrough) sink, ydraw canvas for the YDRAW OSC codes. */
-    struct yetty_ycore_void_result rr =
-        yetty_yvterm_vterm_register_wire(terminal->grid, terminal->sm);
-    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: grid register_wire failed");
-    ydebug("terminal_create: content grid wire handlers registered");
+    /* Route DEC ?1500/?1501 (CARDCLICK/CARDMOVE) mouse-subscription changes from
+     * the model to the terminal — it mutates terminal-side state (focused figure,
+     * outbound resize OSC). figure_create_over_grid does not wire the grid hooks
+     * (the pane owns pty-write; the terminal owns this policy hook), so install it
+     * here on the pane's grid. */
+    struct yetty_ycore_void_result card_sub_res = yetty_yvterm_grid_set_card_sub(
+        yetty_ymux_pane_grid(terminal->pane),
+        (yetty_yvterm_grid_card_sub_fn)terminal_mouse_sub_callback, terminal);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, card_sub_res,
+                        "terminal_create: grid set_card_sub failed");
 
-    /* Push the real cell+pixel dims down to the PTY before any child process
-     * can read TIOCGWINSZ. The PTY's create_pty path forks at 80x24 with
-     * ws_xpixel/ws_ypixel=0; without this catch-up, every client that needs
-     * the pane pixel area (ymgui demo, GPU clients) sees zero and guesses. */
-    if (terminal->context.pty->ops->resize) {
-        struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
-            terminal->context.pty, cols, rows, cols * (uint32_t)content_cell.width,
-            rows * (uint32_t)content_cell.height);
-        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, pr,
-                            "terminal_create: initial pty resize with pixel dims failed");
-    }
+    /* Now that the renderer + (below) the container exist, let the pane drive
+     * frame requests after each feed and pane-close on PTY EOF. Both hooks are
+     * guarded against a not-yet-built container. */
+    yetty_ymux_pane_set_notify(terminal->pane, terminal_pane_notify, terminal);
+    yetty_ymux_pane_set_child_exit(terminal->pane, terminal_pane_child_exit, terminal);
+
+    /* Push the real cell+pixel dims down to the PTY before any child process can
+     * read TIOCGWINSZ. The PTY forks at 80x24 with ws_xpixel/ws_ypixel=0; without
+     * this catch-up, every client that needs the pane pixel area sees zero. */
+    struct yetty_ycore_void_result initial_resize_res =
+        yetty_ymux_pane_resize_pty(terminal->pane, grid_size, content_cell);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, initial_resize_res,
+                        "terminal_create: initial pty resize with pixel dims failed");
 
     /* Shader-glyph is a figure owned by the content grid's text layer; it
      * renders it as a pass inside the grid's render. Not handled here. */
@@ -2255,10 +2096,12 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
 
     /* Client-input reinject — pane-wide subscribers bounce unconsumed
      * mouse events back here for default handling (wheel → scrollback).
-     * Same DCS transport as every client→server yface emit. */
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_DCS,
-                                                YETTY_OSC_CS_CLIENT_INPUT_REINJECT, /*has_args=*/1,
-                                                terminal_reinject_process_input, terminal);
+     * Same DCS transport as every client→server yface emit. The model-side wire
+     * handlers register on the pane's statemachine. */
+    struct yetty_ywire_wire_statemachine *sm = yetty_ymux_pane_sm(terminal->pane);
+    struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
+        sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CLIENT_INPUT_REINJECT, /*has_args=*/1,
+        terminal_reinject_process_input, terminal);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
                         "terminal_create: register client-input reinject");
     ydebug("terminal_create: client-input reinject registered for DCS %d",
@@ -2272,7 +2115,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * otherwise key off the bare-terminal pointer). */
     terminal->inset_handler_self = terminal;
     rr = yetty_ywire_wire_statemachine_register(
-        terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CONTENT_INSET, /*has_args=*/1,
+        sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CONTENT_INSET, /*has_args=*/1,
         terminal_content_inset_process_input, &terminal->inset_handler_self);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register content inset");
     ydebug("terminal_create: content inset registered for DCS %d", YETTY_OSC_CS_CONTENT_INSET);
@@ -2281,7 +2124,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * surface on an explicit (edge-anchored) rect inside the pane. */
     terminal->content_rect_handler_self = terminal;
     rr = yetty_ywire_wire_statemachine_register(
-        terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CONTENT_RECT, /*has_args=*/1,
+        sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CONTENT_RECT, /*has_args=*/1,
         terminal_content_rect_process_input, &terminal->content_rect_handler_self);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register content rect");
     ydebug("terminal_create: content rect registered for DCS %d", YETTY_OSC_CS_CONTENT_RECT);
@@ -2296,7 +2139,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
                                    YETTY_DCS_YDRAW_OVERLAY};
         for (size_t i = 0; i < sizeof(ydraw_codes) / sizeof(ydraw_codes[0]); ++i) {
             rr = yetty_ywire_wire_statemachine_register(
-                terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, ydraw_codes[i], /*has_args=*/1,
+                sm, YETTY_YWIRE_ENVELOPE_DCS, ydraw_codes[i], /*has_args=*/1,
                 terminal_ydraw_process_input, &terminal->ydraw_handler_self);
             YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
                                 "terminal_create: register ydraw handler");
@@ -2312,7 +2155,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         for (size_t i = 0; i < 3; ++i) {
             terminal->effect_handler_self[i] = terminal;
             rr = yetty_ywire_wire_statemachine_register(
-                terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, effect_codes[i], /*has_args=*/0,
+                sm, YETTY_YWIRE_ENVELOPE_OSC, effect_codes[i], /*has_args=*/0,
                 terminal_effect_process_input, &terminal->effect_handler_self[i]);
             YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
                                 "terminal_create: register effect handler");
@@ -2355,30 +2198,20 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * The server agrees on a fixed setting for simplicity; switch to a
      * per-envelope sniff if asymmetric compression turns out to matter. */
     {
-        struct yetty_yclass_rpc_dcs_server_ptr_result dr =
-            yetty_yclass_rpc_dcs_server_attach(terminal->sm, YETTY_DCS_YCLASS_RPC, /*compressed=*/0,
-                                               terminal_dcs_emit_response, terminal);
+        struct yetty_yclass_rpc_dcs_server_ptr_result dr = yetty_yclass_rpc_dcs_server_attach(
+            sm, YETTY_DCS_YCLASS_RPC, /*compressed=*/0, terminal_dcs_emit_response, terminal);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, dr,
                             "terminal_create: dcs_server_attach for YCLASS_RPC");
         terminal->dcs_rpc_server = dr.value;
     }
     ydebug("terminal_create: yclass-rpc DCS handler registered (code=%d)", YETTY_DCS_YCLASS_RPC);
 
-    /* Host-side connection layer — the acceptor of dynamic ywire channels
-     * (DCS YETTY_DCS_YWIRE_CHANNEL) opened by in-pane clients. Rides the same
-     * statemachine and the same PTY-master writer as the RPC server. With no
-     * accept callback registered every OPEN is answered with CLOSE, so a
-     * client probing for a host service gets a deterministic rejection
-     * instead of a credit-starved hang; in-terminal services claim channels
-     * via yetty_yterminal_terminal_channel_host() + set_accept_cb. */
-    {
-        struct yetty_ywire_connection_ptr_result hr = yetty_ywire_connection_attach(
-            terminal->sm, terminal_dcs_emit_response, terminal, /*compressed=*/0);
-        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr,
-                            "terminal_create: connection_attach for YWIRE_CHANNEL");
-        terminal->channel_host = hr.value;
-    }
-    ydebug("terminal_create: ywire channel host registered (code=%d)", YETTY_DCS_YWIRE_CHANNEL);
+    /* The host-side connection layer — the acceptor of dynamic ywire channels
+     * (DCS YETTY_DCS_YWIRE_CHANNEL) opened by in-pane clients — is created and
+     * owned by the pane (it rides the pane's statemachine + PTY-master writer).
+     * In-terminal services claim channels via
+     * yetty_yterminal_terminal_channel_host() (which returns the pane's) +
+     * set_accept_cb. With no accept callback every OPEN is answered with CLOSE. */
 
     /* Designate the root container as this server's root object so remote
      * producers (subprocess figure tools) can obtain a proxy to it via
@@ -2475,13 +2308,14 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
         terminal->compositor_font = NULL;
     }
 
-    /* Destroy wire state machine BEFORE the PTY — the SM holds a
-     * non-owning pointer to the PTY and must not outlive it. */
-    ydebug("terminal_destroy: destroying wire state machine");
+    /* Tear down the model owner — it destroys the wire statemachine (before the
+     * PTY it borrows), the host-side channel connection, the grid model, the
+     * PTY, the emit yface, and the read buffer, in the right order. */
+    ydebug("terminal_destroy: destroying ymux_pane");
     {
-        struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_destroy(terminal->sm);
+        struct yetty_ycore_void_result r = yetty_ymux_pane_destroy(terminal->pane);
         if (YETTY_IS_ERR(r)) {
-            yerror("terminal_destroy: wire_statemachine_destroy failed: %s", r.error.msg);
+            yerror("terminal_destroy: ymux_pane destroy failed: %s", r.error.msg);
             if (!have_err) {
                 first_err = r;
                 have_err = true;
@@ -2489,49 +2323,15 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
                 yetty_ycore_error_destroy(r.error);
             }
         }
+        terminal->pane = NULL;
     }
 
-    /* The DCS RPC server state was borrowed by the SM's handler — only
-     * safe to free now that the SM is destroyed. */
+    /* The DCS RPC server state was borrowed by the pane's SM handler — only safe
+     * to free now that the pane (and its SM) is destroyed. */
     yetty_yclass_rpc_dcs_server_destroy(terminal->dcs_rpc_server);
     terminal->dcs_rpc_server = NULL;
 
-    /* Same borrow contract for the channel host (attach-mode connection —
-     * it does not own the SM, so destroying it here only frees channels). */
-    {
-        struct yetty_ycore_void_result r = yetty_ywire_connection_destroy(terminal->channel_host);
-        if (YETTY_IS_ERR(r)) {
-            yerror("terminal_destroy: channel host destroy failed: %s", r.error.msg);
-            if (!have_err) {
-                first_err = r;
-                have_err = true;
-            } else {
-                yetty_ycore_error_destroy(r.error);
-            }
-        }
-        terminal->channel_host = NULL;
-    }
-
-    if (terminal->context.pty && terminal->context.pty->ops &&
-        terminal->context.pty->ops->destroy) {
-        ydebug("terminal_destroy: destroying pty");
-        struct yetty_ycore_void_result r =
-            terminal->context.pty->ops->destroy(terminal->context.pty);
-        if (YETTY_IS_ERR(r)) {
-            yerror("terminal_destroy: pty destroy failed: %s", r.error.msg);
-            if (!have_err) {
-                first_err = r;
-                have_err = true;
-            } else {
-                yetty_ycore_error_destroy(r.error);
-            }
-        }
-    }
-
     /* event_loop is owned by yetty, not terminal — do not destroy. */
-
-    yetty_yface_destroy(terminal->emit_yface);
-    free(terminal->pty_read_buf);
 
     ydebug("terminal_destroy: freeing terminal struct");
     free(terminal);
@@ -2569,11 +2369,9 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
      * default → 212x60 after pane layout) never reaches the inferior
      * and clients that need the actual pane pixel area get a stale
      * answer for the lifetime of the process. */
-    if (terminal->context.pty && terminal->context.pty->ops && terminal->context.pty->ops->resize) {
-        struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
-            terminal->context.pty, grid_size.cols, grid_size.rows,
-            grid_size.cols * (uint32_t)cell_size.width,
-            grid_size.rows * (uint32_t)cell_size.height);
+    {
+        struct yetty_ycore_void_result pr =
+            yetty_ymux_pane_resize_pty(terminal->pane, grid_size, cell_size);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, pr,
                             "yetty_yterminal_terminal_resize_grid: pty resize failed");
     }
@@ -2778,13 +2576,13 @@ struct yetty_yterminal_terminal *yetty_yterminal_terminal_from_view(struct yetty
 struct yetty_ywire_wire_statemachine *yetty_yterminal_terminal_wire_sm(
     struct yetty_yterminal_terminal *terminal)
 {
-    return terminal ? terminal->sm : NULL;
+    return terminal ? yetty_ymux_pane_sm(terminal->pane) : NULL;
 }
 
 struct yetty_ywire_connection *yetty_yterminal_terminal_channel_host(
     struct yetty_yterminal_terminal *terminal)
 {
-    return terminal ? terminal->channel_host : NULL;
+    return terminal ? yetty_ymux_pane_channel_host(terminal->pane) : NULL;
 }
 
 static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_view *view)
@@ -3058,10 +2856,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 new_cell);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, rgr,
                                 "terminal_view_on_event: terminal_resize_grid (zoom) failed");
-            if (terminal->context.pty->ops->resize) {
-                struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
-                    terminal->context.pty, new_cols, new_rows, new_cols * (uint32_t)new_cell.width,
-                    new_rows * (uint32_t)new_cell.height);
+            {
+                struct yetty_ycore_void_result pr = yetty_ymux_pane_resize_pty(
+                    terminal->pane,
+                    (struct yetty_ycore_grid_size){.cols = new_cols, .rows = new_rows}, new_cell);
                 YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
                                     "terminal_view_on_event: pty resize (zoom) failed");
             }
@@ -3090,7 +2888,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
 
     case YETTY_YCORE_SHUTDOWN:
         ydebug("terminal: SHUTDOWN received");
-        terminal->shutting_down = 1;
+        yetty_ymux_pane_set_shutting_down(terminal->pane, 1);
         return YETTY_OK(yetty_ycore_int, 1);
 
     case YETTY_YCORE_SET_FOCUS:

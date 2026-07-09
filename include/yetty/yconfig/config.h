@@ -126,6 +126,22 @@ struct yetty_yconfig_config {
 #define YETTY_YCONFIG_KEY_RPC_HOST "rpc/host"
 #define YETTY_YCONFIG_KEY_RPC_PORT "rpc/port"
 #define YETTY_YCONFIG_KEY_RPC_SOCKET_PATH "rpc/socket-path"
+/* ymux: run as the headless, GPU-less terminal server. Value = session name
+ * ("" / "default" when the flag is given bare). Presence of this key is what
+ * flips the platform bootstrap into the windowless server path. */
+#define YETTY_YCONFIG_KEY_YMUX_SERVER "ymux/server"
+/* ymux: TCP control port the headless server binds (msgpack-RPC). */
+#define YETTY_YCONFIG_KEY_YMUX_PORT "ymux/port"
+/* ymux: address the headless server binds. Default 127.0.0.1 (local only); set
+ * to 0.0.0.0 to accept remote clients. */
+#define YETTY_YCONFIG_KEY_YMUX_BIND "ymux/bind"
+/* ymux: attach this (windowed) yetty to a running server as a client. Value =
+ * "HOST:PORT" (bare "" / missing PORT → 127.0.0.1:9998). The terminal's PTY is
+ * bridged to the server pane instead of forking a local shell. */
+#define YETTY_YCONFIG_KEY_YMUX_ATTACH "ymux/attach"
+/* ymux: tmux-style auto mode — connect to the local server or spawn a detached
+ * one, then attach. Set by --ymux. Value "true" when enabled. */
+#define YETTY_YCONFIG_KEY_YMUX_AUTO "ymux/auto"
 #define YETTY_YCONFIG_KEY_TEMU "temu"
 #define YETTY_YCONFIG_KEY_QEMU "qemu"
 #define YETTY_YCONFIG_KEY_SSH "ssh/enabled"

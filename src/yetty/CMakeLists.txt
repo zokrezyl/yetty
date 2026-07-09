@@ -90,9 +90,11 @@ set(YETTY_YCORE_SOURCES "")
 # Wire-format state machine (OSC framer + decode stack)
 add_subdirectory(ywire)
 
-# Term subsystem: yvterm (text-grid figure) + yterminal (coordinator).
-# yvterm first — yterminal links it.
+# Term subsystem: yvterm (text-grid figure) + ymux (GPU-free pane model) +
+# yterminal (coordinator). yvterm first — ymux and yterminal link it; ymux
+# before yterminal — yterminal links it.
 add_subdirectory(yvterm)
+add_subdirectory(ymux)
 add_subdirectory(yterminal)
 
 set(YETTY_SOURCES ${YETTY_SOURCES} PARENT_SCOPE)

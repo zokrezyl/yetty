@@ -1193,6 +1193,11 @@ enum {
     OPT_YVNC_H264_SCREEN_CONTENT,
     OPT_RECORD,
     OPT_RPC_HOST,
+    OPT_YMUX_SERVER,
+    OPT_YMUX_PORT,
+    OPT_YMUX_BIND,
+    OPT_YMUX_ATTACH,
+    OPT_YMUX,
     OPT_TEMU,
     OPT_QEMU,
     OPT_SSH,
@@ -1235,6 +1240,11 @@ static struct yetty_yplatform_option long_options[] = {
     {"record", required_argument, 0, OPT_RECORD},
     {"rpc-host", required_argument, 0, OPT_RPC_HOST},
     {"rpc-port", required_argument, 0, 'r'},
+    {"ymux", no_argument, 0, OPT_YMUX},
+    {"ymux-server", optional_argument, 0, OPT_YMUX_SERVER},
+    {"ymux-port", required_argument, 0, OPT_YMUX_PORT},
+    {"ymux-bind", required_argument, 0, OPT_YMUX_BIND},
+    {"ymux-attach", optional_argument, 0, OPT_YMUX_ATTACH},
     {"temu", no_argument, 0, OPT_TEMU},
     {"qemu", no_argument, 0, OPT_QEMU},
     {"ssh", optional_argument, 0, OPT_SSH},
@@ -1293,6 +1303,13 @@ static void print_usage(FILE *out, const char *prog)
             "      --record=FILE                  Record session to MP4 (forces H.264 encoding)\n");
     fprintf(out, "      --rpc-host=HOST                RPC server host\n");
     fprintf(out, "  -r, --rpc-port=PORT                RPC server port\n");
+    fprintf(out, "      --ymux-server[=NAME]           Run headless GPU-less ymux server\n");
+    fprintf(out, "      --ymux-port=PORT               ymux server control port (default: 9998)\n");
+    fprintf(out, "      --ymux-bind=ADDR               ymux server bind address (default: "
+                 "127.0.0.1; 0.0.0.0 = remote)\n");
+    fprintf(out,
+            "      --ymux                         tmux-style: auto-spawn/attach a ymux server\n");
+    fprintf(out, "      --ymux-attach[=HOST:PORT]      Attach this window to a ymux server\n");
     fprintf(out, "      --temu                         Run in-process TinyEMU RISC-V VM\n");
     fprintf(out, "      --qemu                         Run external QEMU RISC-V VM (via telnet)\n");
     fprintf(out, "      --ssh [USER@HOST[:PORT]]       Connect to SSH remote shell\n");
@@ -1455,6 +1472,27 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             break;
         case 'r':
             set_config(impl, YETTY_YCONFIG_KEY_RPC_PORT, yetty_yplatform_optarg);
+            break;
+        case OPT_YMUX_SERVER:
+            /* Bare --ymux-server → the "default" session; --ymux-server=NAME
+             * names it. Presence of the key flips the bootstrap headless. */
+            set_config(impl, YETTY_YCONFIG_KEY_YMUX_SERVER,
+                       yetty_yplatform_optarg ? yetty_yplatform_optarg : "default");
+            break;
+        case OPT_YMUX_PORT:
+            set_config(impl, YETTY_YCONFIG_KEY_YMUX_PORT, yetty_yplatform_optarg);
+            break;
+        case OPT_YMUX_BIND:
+            set_config(impl, YETTY_YCONFIG_KEY_YMUX_BIND, yetty_yplatform_optarg);
+            break;
+        case OPT_YMUX_ATTACH:
+            /* Bare --ymux-attach → local default server; --ymux-attach=HOST:PORT
+             * targets a specific one. */
+            set_config(impl, YETTY_YCONFIG_KEY_YMUX_ATTACH,
+                       yetty_yplatform_optarg ? yetty_yplatform_optarg : "127.0.0.1:9998");
+            break;
+        case OPT_YMUX:
+            set_config(impl, YETTY_YCONFIG_KEY_YMUX_AUTO, "true");
             break;
         case OPT_TEMU:
             claim_session_mode(&session_mode, "temu");

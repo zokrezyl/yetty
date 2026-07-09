@@ -12,10 +12,14 @@
  */
 
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <yetty/ycore/result.h>
 #include <yetty/yclass/class.h>
 #include <yetty/yapp/app.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
@@ -24,6 +28,10 @@
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/ytrace/ytrace.h>
+#if defined(YETTY_HAS_YMUX)
+#include <yetty/ymux/bootstrap.h>
+#include <yetty/ymux/client-pty.h>
+#endif
 
 struct YETTY_ANNOTATE("class@yetty:app") YETTY_ANNOTATE("parent@yapp:app") yetty_yetty_app {
     char reserved;
@@ -69,8 +77,67 @@ static struct yetty_ycore_void_result yetty_app_run(struct yetty_yclass_object *
         return YETTY_ERR(yetty_ycore_void, "yetty:app: platform state not populated");
     }
 
-    struct yetty_yplatform_pty_factory_ptr_result pty_res =
-        yetty_yplatform_pty_factory_create(config, NULL);
+    struct yetty_yplatform_pty_factory_ptr_result pty_res;
+#if defined(YETTY_HAS_YMUX)
+    /* Client mode: the terminal's PTY bridges to a remote ymux server pane
+     * instead of a local forked shell. Everything else (window, GPU, renderer)
+     * is the normal windowed path.
+     *
+     *   --ymux-attach[=HOST:PORT] → attach to an explicit server (no spawn).
+     *   --ymux                    → tmux-style: connect to the local server or
+     *                               spawn a detached one, then attach.
+     *
+     * On any client-setup failure we fall back to a local shell so a plain
+     * yetty always comes up. */
+    const char *ymux_attach = config->ops->get_string(config, YETTY_YCONFIG_KEY_YMUX_ATTACH, NULL);
+    const char *ymux_auto = config->ops->get_string(config, YETTY_YCONFIG_KEY_YMUX_AUTO, NULL);
+    char ymux_host[256] = "127.0.0.1";
+    int ymux_port = 9998;
+    int ymux_client = 0;
+
+    if (ymux_attach) {
+        const char *colon = strrchr(ymux_attach, ':');
+        if (colon && colon != ymux_attach) {
+            size_t host_len = (size_t)(colon - ymux_attach);
+            if (host_len >= sizeof(ymux_host)) {
+                host_len = sizeof(ymux_host) - 1;
+            }
+            memcpy(ymux_host, ymux_attach, host_len);
+            ymux_host[host_len] = '\0';
+            ymux_port = atoi(colon + 1);
+            if (ymux_port <= 0) {
+                ymux_port = 9998;
+            }
+        } else if (ymux_attach[0] != '\0') {
+            snprintf(ymux_host, sizeof(ymux_host), "%s", ymux_attach);
+        }
+        yinfo("yetty:app: ymux client mode, attaching to %s:%d", ymux_host, ymux_port);
+        ymux_client = 1;
+    } else if (ymux_auto) {
+        const char *port_str = config->ops->get_string(config, YETTY_YCONFIG_KEY_YMUX_PORT, NULL);
+        if (port_str) {
+            int parsed = atoi(port_str);
+            if (parsed > 0) {
+                ymux_port = parsed;
+            }
+        }
+        if (yetty_ymux_ensure_server(ymux_host, ymux_port)) {
+            yinfo("yetty:app: ymux auto mode, attaching to %s:%d", ymux_host, ymux_port);
+            ymux_client = 1;
+        } else {
+            ywarn("yetty:app: ymux auto mode could not reach/spawn a server — "
+                  "falling back to a local shell");
+        }
+    }
+
+    if (ymux_client) {
+        pty_res = yetty_ymux_client_pty_factory_create(ymux_host, ymux_port, /*pane=*/0);
+    } else {
+        pty_res = yetty_yplatform_pty_factory_create(config, NULL);
+    }
+#else
+    pty_res = yetty_yplatform_pty_factory_create(config, NULL);
+#endif
     if (!YETTY_IS_OK(pty_res)) {
         return YETTY_ERR(yetty_ycore_void, "yetty:app: pty_factory_create failed", pty_res);
     }

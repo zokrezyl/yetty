@@ -49,6 +49,9 @@
 #include <yetty/yplatform/ywindow-chrome/window-chrome.h>
 #include <yetty/yplatform/ywindow-chrome/glfw.h>
 #include <yetty/ytrace/ytrace.h>
+#if defined(YETTY_HAS_YMUX)
+#include <yetty/ymux/server.h>
+#endif
 
 /* Native X11 handles — only on Linux when yrender was built with X11-tile
  * support. Safe to call only when the runtime platform actually is X11; under
@@ -215,6 +218,18 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
     struct yetty_yconfig_result config_res = yetty_yconfig_create(argc, argv);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, config_res, "glfw_platform: failed to create config");
     struct yetty_yconfig_config *config = config_res.value;
+
+#if defined(YETTY_HAS_YMUX)
+    /* ymux server mode (--ymux-server): the headless, GPU-less terminal
+     * server. Branch BEFORE any display-server or WebGPU work — this process
+     * never opens a window or a WebGPU instance. Runs its own event loop and
+     * returns when the loop stops; the app object is unused. */
+    if (config->ops->get_string(config, YETTY_YCONFIG_KEY_YMUX_SERVER, NULL)) {
+        struct yetty_ycore_void_result server_res = yetty_ymux_server_run(config);
+        config->ops->destroy(config);
+        return server_res;
+    }
+#endif
 
     /* Headless (--yvnc-headless): VNC server runs without a window, so there is
      * no display server to talk to and glfwInit must not be called. */
