@@ -171,6 +171,33 @@ struct yetty_ycore_void_result yetty_ylexbor_set_viewport(struct yetty_ylexbor *
 struct yetty_ycore_void_result yetty_ylexbor_render(struct yetty_ylexbor *r,
                                                     struct yetty_ydraw_drawable_list *buf);
 
+/* Outcome of an incremental (image-delta) repaint attempt — see
+ * yetty_ylexbor_paint_image_deltas. */
+struct yetty_ylexbor_incremental_result {
+    /* 1 = `buf` holds only the changed image groups (CMD_GROUP records, NO
+     *     leading CMD_ZERO). Ship it straight to the existing page figure so
+     *     the receiver replaces just those entities; the rest of the page is
+     *     untouched.
+     * 0 = the relayout shifted page geometry (or no full render has run yet),
+     *     so a delta would be wrong. `buf` is left empty; the caller must run
+     *     its normal full render_doc path instead. */
+    int is_delta;
+    /* When is_delta: how many image groups were re-emitted into `buf`. 0 means
+     * layout was stable but no image content actually changed — nothing to
+     * ship. */
+    int changed_groups;
+};
+
+/* Incremental repaint for streamed images. Relayouts, then — if the layout is
+ * byte-for-byte the same as the last full render (images landed but nothing
+ * moved) — appends a CMD_GROUP(id){…} for each image whose pixels changed
+ * since it was last emitted, translated by (offset_x, offset_y) so the delta
+ * lands at the same screen coords the full render produced (pass the page
+ * embed's content offset). If the layout changed, returns is_delta = 0 and
+ * writes nothing; the caller falls back to a full render. Caller owns `buf`. */
+struct yetty_ylexbor_incremental_result yetty_ylexbor_paint_image_deltas(
+    struct yetty_ylexbor *r, struct yetty_ydraw_drawable_list *buf, float offset_x, float offset_y);
+
 /* Total content height after layout, in px. Useful for scrollbars. */
 int yetty_ylexbor_content_height(const struct yetty_ylexbor *r);
 

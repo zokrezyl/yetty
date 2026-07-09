@@ -1,0 +1,17 @@
+<!doctype html><meta charset=utf-8>
+<title>calc(percentage - length) width keeps flex columns tiling</title>
+<!-- libcss 0.9.x can't parse calc() and drops the declaration, so
+     `width:calc(33.33% - 16px)` cards collapse to content width and stack.
+     ybrowser resolves calc(<pct> ± <len>) precisely at layout, so each column
+     is 33.33% of 800 - 16 = 250.6px (the exact Chrome value), packed flush
+     (no justify-content here): 0, 250.6, 501.3. -->
+<style>
+  body { margin: 0 }
+  .row { display: flex; flex-wrap: wrap; width: 800px }
+  .row > div { width: calc(33.33% - 16px); height: 40px }
+</style>
+<div class="row">
+  <div data-test="a" data-expect="0,*,250,*">1</div>
+  <div data-test="b" data-expect="250,*,250,*">2</div>
+  <div data-test="c" data-expect="501,*,250,*">3</div>
+</div>

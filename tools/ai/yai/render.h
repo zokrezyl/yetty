@@ -94,16 +94,16 @@ struct yai_renderer {
      * and no glyph is ever left animating in history (a visible shader
      * glyph pins the host's animation timer).
      */
-    int pin_enabled;         /* stdout is a tty — the zone may be drawn */
-    int pin_shader_glyphs;   /* host is yetty: PUA-B glyphs animate */
-    int pin_active;          /* prompt pinned (off during shutdown/shell) */
-    int zone_visible;        /* the zone is on screen right now */
-    int zone_rows_above;     /* ticker rows drawn above the prompt */
-    int zone_rows_below;     /* menu / HUD rows drawn below the prompt */
-    int zone_prompt_rows;    /* visual rows the wrapped prompt occupies (>=1) */
+    int pin_enabled;            /* stdout is a tty — the zone may be drawn */
+    int pin_shader_glyphs;      /* host is yetty: PUA-B glyphs animate */
+    int pin_active;             /* prompt pinned (off during shutdown/shell) */
+    int zone_visible;           /* the zone is on screen right now */
+    int zone_rows_above;        /* ticker rows drawn above the prompt */
+    int zone_rows_below;        /* menu / HUD rows drawn below the prompt */
+    int zone_prompt_rows;       /* visual rows the wrapped prompt occupies (>=1) */
     int zone_prompt_cursor_row; /* 0-based prompt row the editor cursor sits on */
-    char activity_glyph[8];  /* UTF-8 glyph; "" while idle */
-    const char *edit_buffer; /* the line editor's buffer (borrowed) */
+    char activity_glyph[8];     /* UTF-8 glyph; "" while idle */
+    const char *edit_buffer;    /* the line editor's buffer (borrowed) */
     const size_t *edit_length;
     const size_t *edit_cursor;   /* byte offset of the editor cursor */
     const char *edit_status_ptr; /* borrowed mode indicator ("[N]"/""); may be NULL */

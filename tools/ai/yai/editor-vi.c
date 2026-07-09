@@ -238,8 +238,7 @@ static int vi_normal_cmd(struct yai_app *app, struct yetty_yai_vi *vi, char byte
         app->stdin_cursor = editor_ops_line_first_nonblank(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
     case 'D': /* kill to end of the current line */
-        return editor_cmd_kill(app, app->stdin_cursor,
-                               editor_ops_line_end(app, app->stdin_cursor));
+        return editor_cmd_kill(app, app->stdin_cursor, editor_ops_line_end(app, app->stdin_cursor));
     case 'C': { /* change to end of the current line */
         int action =
             editor_cmd_kill(app, app->stdin_cursor, editor_ops_line_end(app, app->stdin_cursor));

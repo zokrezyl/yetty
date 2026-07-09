@@ -1261,8 +1261,7 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
                 }
                 memcpy(href_copy, href->value, href->value_len);
                 href_copy[href->value_len] = '\0';
-                struct yetty_ysvg_link_region *region =
-                    &paint_ctx->links[paint_ctx->link_count];
+                struct yetty_ysvg_link_region *region = &paint_ctx->links[paint_ctx->link_count];
                 region->href = href_copy;
                 region->min_x = INFINITY;
                 region->min_y = INFINITY;

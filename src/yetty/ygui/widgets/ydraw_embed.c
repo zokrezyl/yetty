@@ -134,6 +134,144 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
     }
 }
 
+/* Walk `len` bytes of a source ydraw stream at `p`, translating every leaf
+ * primitive's position by (dx, dy) and appending it to `dst`. CMD_GROUP
+ * records are RE-FRAMED into `dst` — a fresh begin_group/end_group around the
+ * recursively-translated body — so the group scope (and its stable entity id)
+ * survives the embed instead of being flattened away; this is what lets the
+ * hosting ygrid replace one element's prims in place. The other addressable
+ * cmd records (DELETE, UPDATE, GROUP_REF) carry no translatable coordinates
+ * and are copied through verbatim.
+ *
+ * These cmd type words share the 0x8XXXXXXX range with composite prim
+ * type_ids (yimage = 0x80000004, …), so — exactly like the drawable iterator
+ * — each cmd is matched by its exact constant BEFORE the generic prim_size /
+ * translate path, which would otherwise misread the id word as a payload
+ * size. CMD_ZERO is dropped: embedding inlines content, it never owns the
+ * hosting canvas. */
+static struct yetty_ycore_void_result embed_emit_range(struct yetty_ydraw_drawable_list *dst,
+                                                       const uint8_t *p, size_t len, float dx,
+                                                       float dy, uint8_t *stack, size_t stack_sz,
+                                                       uint8_t **heap, size_t *heap_cap)
+{
+    size_t remaining = len;
+    while (remaining >= sizeof(uint32_t)) {
+        uint32_t type = ((const uint32_t *)p)[0];
+
+        if (type == YETTY_YDRAW_CMD_ZERO) {
+            /* 2-word FAM record [type=0 | payload_size]. Skip it. */
+            if (remaining < 2 * sizeof(uint32_t)) {
+                return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: truncated CMD_ZERO header");
+            }
+            size_t s = 2 * sizeof(uint32_t) + ((const uint32_t *)p)[1];
+            if (s > remaining) {
+                return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: CMD_ZERO overruns buffer");
+            }
+            p += s;
+            remaining -= s;
+            continue;
+        }
+
+        if (type == YETTY_YDRAW_CMD_GROUP) {
+            /* [type | id | payload_size | body]. Re-open the group in dst and
+             * recurse so the body's prims get the same (dx, dy) translation as
+             * bare prims. */
+            if (remaining < 3 * sizeof(uint32_t)) {
+                return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: truncated CMD_GROUP header");
+            }
+            uint32_t gid = ((const uint32_t *)p)[1];
+            uint32_t payload = ((const uint32_t *)p)[2];
+            size_t s = 3 * sizeof(uint32_t) + payload;
+            if (s > remaining) {
+                return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: CMD_GROUP overruns buffer");
+            }
+            struct yetty_ydraw_id_result marker = yetty_ydraw_drawable_list_begin_group(dst, gid);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, marker, "ydraw_embed paint: begin_group");
+            struct yetty_ycore_void_result body_res = embed_emit_range(
+                dst, p + 3 * sizeof(uint32_t), payload, dx, dy, stack, stack_sz, heap, heap_cap);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "ydraw_embed paint: group body");
+            struct yetty_ycore_void_result end_res =
+                yetty_ydraw_drawable_list_end_group(dst, marker.value);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, end_res, "ydraw_embed paint: end_group");
+            p += s;
+            remaining -= s;
+            continue;
+        }
+
+        if (type == YETTY_YDRAW_CMD_DELETE) {
+            if (remaining < 3 * sizeof(uint32_t)) {
+                return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: truncated CMD_DELETE");
+            }
+            struct yetty_ycore_void_result del_res =
+                yetty_ydraw_drawable_list_add_cmd_delete(dst, ((const uint32_t *)p)[1]);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, del_res, "ydraw_embed paint: CMD_DELETE");
+            p += 3 * sizeof(uint32_t);
+            remaining -= 3 * sizeof(uint32_t);
+            continue;
+        }
+
+        if (type == YETTY_YDRAW_CMD_GROUP_REF) {
+            /* kind=REF — exactly 2 words [type | target_id], no body. */
+            if (remaining < 2 * sizeof(uint32_t)) {
+                return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: truncated CMD_GROUP_REF");
+            }
+            struct yetty_ycore_void_result ref_res =
+                yetty_ydraw_drawable_list_add_cmd_group_ref(dst, ((const uint32_t *)p)[1]);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, ref_res, "ydraw_embed paint: CMD_GROUP_REF");
+            p += 2 * sizeof(uint32_t);
+            remaining -= 2 * sizeof(uint32_t);
+            continue;
+        }
+
+        if (type == YETTY_YDRAW_CMD_UPDATE) {
+            /* [type | id | payload_size | payload] — opaque bytes, copy as-is. */
+            if (remaining < 3 * sizeof(uint32_t)) {
+                return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: truncated CMD_UPDATE");
+            }
+            size_t s = 3 * sizeof(uint32_t) + ((const uint32_t *)p)[2];
+            if (s > remaining) {
+                return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: CMD_UPDATE overruns buffer");
+            }
+            struct yetty_ydraw_id_result cp = yetty_ydraw_drawable_list_add_prim(dst, p, s);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, cp, "ydraw_embed paint: CMD_UPDATE copy");
+            p += s;
+            remaining -= s;
+            continue;
+        }
+
+        /* Leaf primitive (SDF / TEXT / FONT / composite). Copy into scratch,
+         * translate by the widget offset, append. */
+        size_t s = prim_size((const uint32_t *)p, remaining);
+        if (s == 0 || s > remaining) {
+            return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: malformed primitive stream "
+                                               "(unknown type or size overruns buffer)");
+        }
+        uint8_t *work = stack;
+        if (s > stack_sz) {
+            if (s > *heap_cap) {
+                uint8_t *grown = realloc(*heap, s);
+                if (!grown) {
+                    return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: oom");
+                }
+                *heap = grown;
+                *heap_cap = s;
+            }
+            work = *heap;
+        }
+        memcpy(work, p, s);
+        translate_prim((uint32_t *)work, s, dx, dy);
+        struct yetty_ydraw_id_result ar = yetty_ydraw_drawable_list_add_prim(dst, work, s);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "ydraw_embed paint: add_prim");
+        p += s;
+        remaining -= s;
+    }
+    if (remaining != 0) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "ydraw_embed paint: trailing bytes shorter than a primitive header");
+    }
+    return YETTY_OK_VOID();
+}
+
 YETTY_ANNOTATE("override@ygui:ydraw_embed:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
@@ -166,56 +304,10 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     uint8_t stack[4096];
     uint8_t *heap = NULL;
     size_t heap_cap = 0;
-    const uint8_t *p = src;
-    size_t remaining = src_size;
-    while (remaining >= sizeof(uint32_t)) {
-        size_t s = prim_size((const uint32_t *)p, remaining);
-        if (s == 0 || s > remaining) {
-            free(heap);
-            return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: malformed primitive stream "
-                                               "(unknown type or size overruns buffer)");
-        }
-        /* A CMD_ZERO (clear-canvas) embedded in a hosted buffer would wipe
-         * the parent ygrid and any sibling widgets already painted into it.
-         * Embedding inlines content; it never owns the canvas. Skip it.
-         * (ydiagram's renderer prepends one for its standalone-pane use;
-         * other producers carry none, so this is a no-op for them.) */
-        if (((const uint32_t *)p)[0] == YETTY_YDRAW_CMD_ZERO) {
-            p += s;
-            remaining -= s;
-            continue;
-        }
-        uint8_t *work = stack;
-        if (s > sizeof(stack)) {
-            if (s > heap_cap) {
-                uint8_t *g = realloc(heap, s);
-                if (!g) {
-                    free(heap);
-                    return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: oom");
-                }
-                heap = g;
-                heap_cap = s;
-            }
-            work = heap;
-        }
-        memcpy(work, p, s);
-        translate_prim((uint32_t *)work, s, dx, dy);
-        struct yetty_ydraw_id_result ar =
-            yetty_ydraw_drawable_list_add_prim(ctx->ygrid_drawable_list, work, s);
-        if (YETTY_IS_ERR(ar)) {
-            free(heap);
-            return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: add_prim", ar);
-        }
-        p += s;
-        remaining -= s;
-    }
-    if (remaining != 0) {
-        free(heap);
-        return YETTY_ERR(yetty_ycore_void,
-                         "ydraw_embed paint: trailing bytes shorter than a primitive header");
-    }
+    struct yetty_ycore_void_result walk = embed_emit_range(
+        ctx->ygrid_drawable_list, src, src_size, dx, dy, stack, sizeof(stack), &heap, &heap_cap);
     free(heap);
-    return YETTY_OK_VOID();
+    return walk;
 }
 
 YETTY_ANNOTATE("expose")

@@ -61,8 +61,9 @@ static struct yetty_ywire_wire_statemachine *make_receiver_args(struct ytest *te
     struct yetty_ywire_wire_statemachine_ptr_result sm_res =
         yetty_ywire_wire_statemachine_create(NULL);
     YTEST_REQUIRE_OK(test, sm_res);
-    struct yetty_ycore_void_result reg = yetty_ywire_wire_statemachine_set_envelope_default_buffered(
-        sm_res.value, has_args, on_envelope, capture);
+    struct yetty_ycore_void_result reg =
+        yetty_ywire_wire_statemachine_set_envelope_default_buffered(sm_res.value, has_args,
+                                                                    on_envelope, capture);
     YTEST_REQUIRE_OK(test, reg);
     return sm_res.value;
 }
@@ -76,8 +77,8 @@ static struct yetty_ywire_wire_statemachine *make_receiver(struct ytest *test,
 static void feed_all(struct ytest *test, struct yetty_ywire_wire_statemachine *receiver,
                      const struct yetty_ycore_buffer *envelope)
 {
-    struct yetty_ycore_void_result fed = yetty_ywire_wire_statemachine_feed(
-        receiver, (const char *)envelope->data, envelope->size);
+    struct yetty_ycore_void_result fed =
+        yetty_ywire_wire_statemachine_feed(receiver, (const char *)envelope->data, envelope->size);
     YTEST_REQUIRE_OK(test, fed);
     struct yetty_ycore_void_result processed = yetty_ywire_wire_statemachine_process(receiver);
     YTEST_REQUIRE_OK(test, processed);
@@ -266,8 +267,8 @@ static void test_encode_decode_interleaved_on_one_sm(struct ytest *test)
         capture.expect = inbound_body;
         capture.expect_len = sizeof(inbound_body);
         struct yetty_ycore_buffer outbound = {0};
-        emit_streamed(test, shared, 600001, /*compressed=*/1, outbound_body,
-                      sizeof(outbound_body), &outbound);
+        emit_streamed(test, shared, 600001, /*compressed=*/1, outbound_body, sizeof(outbound_body),
+                      &outbound);
 
         /* …then the second inbound half completes and must decode intact. */
         fed = yetty_ywire_wire_statemachine_feed(shared, (const char *)inbound.data + half,
@@ -414,8 +415,8 @@ static void test_yface_streaming_reuse(struct ytest *test)
         fill_body(body, body_len, round);
         int compressed = (int)(round % 2);
 
-        struct yetty_ycore_void_result res = yetty_yface_start_write(
-            yface, YETTY_YWIRE_ENVELOPE_DCS, 600001, compressed, "meta", 4);
+        struct yetty_ycore_void_result res =
+            yetty_yface_start_write(yface, YETTY_YWIRE_ENVELOPE_DCS, 600001, compressed, "meta", 4);
         YTEST_REQUIRE_OK(test, res);
         res = yetty_yface_write(yface, body, body_len);
         YTEST_REQUIRE_OK(test, res);

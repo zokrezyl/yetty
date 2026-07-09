@@ -201,7 +201,7 @@ struct yl_style_state {
     bool nowrap;         /* `white-space: nowrap` (inherited) — text runs
 	                  * under this style never soft-wrap */
     struct yetty_ylexbor_color fg;
-    int text_align; /* inherited; 0=left, 1=center, 2=right, 3=justify */
+    int text_align;  /* inherited; 0=left, 1=center, 2=right, 3=justify */
     bool vis_hidden; /* visibility:hidden|collapse — inherited, so the
 	                  * anonymous inline-text boxes flush_inline emits under
 	                  * a hidden subtree pick it up and paint nothing. A
@@ -615,6 +615,7 @@ static struct yetty_ycore_void_result box_alloc(struct yetty_ylexbor *r, uint32_
 static void link_child(struct yetty_ylexbor *r, uint32_t parent_idx, uint32_t cidx)
 {
     struct yetty_ylexbor_box *p = &r->boxes.data[parent_idx];
+    r->boxes.data[cidx].parent = parent_idx;
     if (p->child_count == 0) {
         p->first_child = cidx;
     } else {
@@ -625,6 +626,37 @@ static void link_child(struct yetty_ylexbor *r, uint32_t parent_idx, uint32_t ci
         r->boxes.data[t].next_sibling = cidx;
     }
     p->child_count++;
+}
+
+bool yetty_ylexbor_box_clipped_out(const struct yetty_ylexbor *r, uint32_t idx)
+{
+    if (r == NULL || idx >= r->boxes.size) {
+        return false;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[idx];
+    /* Walk owning ancestors up to the root (index 0). A box is dropped when it
+	 * lies wholly beyond the padding box of an overflow-clipping ancestor — how
+	 * a carousel/tab-panel hides the slide it has translated off its viewport
+	 * (Google News weather widget: the forecast is pushed +208px past a 165px
+	 * overflow:hidden strip). We have no per-pixel scissor, so a box merely
+	 * straddling the edge is kept, not partially clipped. Parent indices are
+	 * strictly smaller (tree-order allocation), so the walk always terminates. */
+    uint32_t cur = b->parent;
+    while (true) {
+        const struct yetty_ylexbor_box *anc = &r->boxes.data[cur];
+        if (cur != idx && anc->clip_overflow && anc->w > 0.0f && anc->h > 0.0f) {
+            const float slack = 0.5f;
+            if (b->x >= anc->x + anc->w - slack || b->x + b->w <= anc->x + slack ||
+                b->y >= anc->y + anc->h - slack || b->y + b->h <= anc->y + slack) {
+                return true;
+            }
+        }
+        if (cur == 0) {
+            break;
+        }
+        cur = anc->parent;
+    }
+    return false;
 }
 
 static void style_to_box(struct yetty_ylexbor_box *b, const struct yl_style_state *s)
@@ -1053,6 +1085,11 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 }
             }
         }
+        /* A `display:none` rule libcss dropped for its L4 selector (`:is()`,
+		 * `:has()`, `:where()`) — hide the subtree the page meant to hide. */
+        if (yetty_ylexbor_display_none_lookup(r, el)) {
+            continue;
+        }
 
         /* effective_disp: start from the tag-default, override with
 		 * libcss when it returns a usable value. The libcss UA-default
@@ -1299,18 +1336,39 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     if (yetty_ybrowser_libcss_width(r, cs, s.font_size, pct_basis, &px)) {
                         b->css_width = px;
                     }
+                    /* Precise calc(<pct> ± <len>) width: libcss dropped it (or
+                     * the coarse `calc→%` pre-pass approximated it). Record the
+                     * terms; resolve_pct_metrics finalizes the exact px against
+                     * the containing block so grid columns land on the Chrome
+                     * pixel. */
+                    {
+                        float calc_pct = 0.0f;
+                        float calc_off = 0.0f;
+                        if (yetty_ylexbor_calc_length_lookup(r, el, 0, s.font_size, &calc_pct,
+                                                             &calc_off)) {
+                            b->calc_width_pct = calc_pct;
+                            b->calc_width_offset = calc_off;
+                            b->calc_width_set = 1;
+                        }
+                    }
                     if (yetty_ybrowser_libcss_height(r, cs, s.font_size, pct_basis, &px)) {
                         b->css_height = px;
+                        b->css_height_set = 1;
                     }
                     b->width_keyword = (uint8_t)yetty_ylexbor_width_keyword_lookup(r, el);
                     b->line_clamp = (uint8_t)yetty_ylexbor_line_clamp_lookup(r, el);
+                    /* aspect-ratio / `::after{padding-bottom:%}` frame height —
+                     * libcss drops both; resolve height = width * ratio at
+                     * layout so image frames don't inflate to intrinsic size. */
+                    if (!b->css_height_set) {
+                        b->aspect_ratio = yetty_ylexbor_aspect_ratio_lookup(r, el);
+                    }
                     /* Stylesheet `height: var(...)` re-resolved against
 				 * element-scoped custom properties — the sheet-level
 				 * substitution only saw the global table. */
                     {
                         float var_height_px = 0.0f;
-                        if (yetty_ylexbor_var_height_lookup(r, el, s.font_size,
-                                                            &var_height_px)) {
+                        if (yetty_ylexbor_var_height_lookup(r, el, s.font_size, &var_height_px)) {
                             b->css_height = var_height_px;
                         }
                     }
@@ -1530,8 +1588,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 								 * menu strips; a max-content track sizes each
 								 * column to its item). */
                                 int element_children = 0;
-                                for (lxb_dom_node_t *scan =
-                                         lxb_dom_interface_node(el)->first_child;
+                                for (lxb_dom_node_t *scan = lxb_dom_interface_node(el)->first_child;
                                      scan != NULL; scan = scan->next) {
                                     if (scan->type == LXB_DOM_NODE_TYPE_ELEMENT) {
                                         element_children++;
@@ -1549,7 +1606,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                     b->grid_col_gap = gt->col_gap;
                                     b->grid_row_gap = gt->row_gap;
                                 }
-                            } else if (gt && gt->ntracks >= 1 && gt->ntracks <= YL_GRID_MAX_TRACKS) {
+                            } else if (gt && gt->ntracks >= 1 &&
+                                       gt->ntracks <= YL_GRID_MAX_TRACKS) {
                                 b->layout_mode = YL_LAYOUT_GRID;
                                 memcpy(b->grid_tracks, gt->tracks, sizeof(b->grid_tracks));
                                 b->grid_ntracks = gt->ntracks;
@@ -1844,6 +1902,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 					 * inherited): effective = ancestors' × own. */
                     s.opacity = s.opacity * yetty_ybrowser_libcss_opacity(cs);
                     b->opacity = s.opacity;
+                    b->clip_overflow = yetty_ybrowser_libcss_clips_overflow(cs);
                     int pos = yetty_ybrowser_libcss_position(cs);
                     if (pos == CSS_POSITION_RELATIVE || pos == CSS_POSITION_STICKY) {
                         b->position = YL_POS_RELATIVE;
@@ -1880,6 +1939,22 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         bool txp = false, typ = false;
                         if (parse_transform_translate((const char *)istyle, istylen, &txv, &tyv,
                                                       &txp, &typ)) {
+                            b->has_transform = true;
+                            b->tf_tx = txv;
+                            b->tf_ty = tyv;
+                            b->tf_tx_pct = txp;
+                            b->tf_ty_pct = typ;
+                        }
+                    }
+                    /* Class-based `transform: translate(...)` — libcss drops the
+					 * property, so a JS carousel that slides its inactive panel
+					 * off an overflow-clipped viewport via a stylesheet rule
+					 * (Google News weather widget) would otherwise render every
+					 * panel stacked. The inline offset above wins when present. */
+                    if (!b->has_transform) {
+                        float txv = 0.0f, tyv = 0.0f;
+                        bool txp = false, typ = false;
+                        if (yetty_ylexbor_transform_lookup(r, el, &txv, &tyv, &txp, &typ)) {
                             b->has_transform = true;
                             b->tf_tx = txv;
                             b->tf_ty = tyv;
@@ -2183,9 +2258,16 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             px > 0.0f) {
                             css_img_w = px;
                         }
-                        if (yetty_ybrowser_libcss_height(r, img_cs, s.font_size, basis, &px) &&
-                            px > 0.0f) {
-                            css_img_h = px;
+                        if (yetty_ybrowser_libcss_height(r, img_cs, s.font_size, basis, &px)) {
+                            if (px > 0.0f) {
+                                css_img_h = px;
+                            } else if (px < 0.0f) {
+                                /* Percentage height (e.g. 100%) — no containing
+								 * block yet; record the fraction and bind it at
+								 * layout against the nearest definite-height
+								 * ancestor (aspect frame). */
+                                ib->img_pct_h = -px;
+                            }
                         }
                         /* float on a replaced inline element pulls it out of
 					 * the inline flow into the block float path — the
@@ -2458,8 +2540,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     }
                     {
                         int inl_vis = yetty_ybrowser_libcss_visibility(inl_cs);
-                        s.vis_hidden = inl_vis == CSS_VISIBILITY_HIDDEN ||
-                                       inl_vis == CSS_VISIBILITY_COLLAPSE;
+                        s.vis_hidden =
+                            inl_vis == CSS_VISIBILITY_HIDDEN || inl_vis == CSS_VISIBILITY_COLLAPSE;
                     }
                     yetty_ybrowser_libcss_release(inl_cs);
                 }

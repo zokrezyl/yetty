@@ -20,14 +20,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define YAI_EDIT_NONE 0      /* byte consumed, nothing to do */
-#define YAI_EDIT_CHANGED 1   /* text changed: history reset + repaint + menu */
-#define YAI_EDIT_MOVED 2     /* cursor moved only: repaint */
-#define YAI_EDIT_SUBMIT 3    /* Enter */
-#define YAI_EDIT_EOF 4       /* Ctrl-D on an empty line */
-#define YAI_EDIT_INTERRUPT 5 /* Ctrl-C */
-#define YAI_EDIT_NAV_PREV 6  /* up: menu-up or history-prev */
-#define YAI_EDIT_NAV_NEXT 7  /* down: menu-down or history-next */
+#define YAI_EDIT_NONE 0           /* byte consumed, nothing to do */
+#define YAI_EDIT_CHANGED 1        /* text changed: history reset + repaint + menu */
+#define YAI_EDIT_MOVED 2          /* cursor moved only: repaint */
+#define YAI_EDIT_SUBMIT 3         /* Enter */
+#define YAI_EDIT_EOF 4            /* Ctrl-D on an empty line */
+#define YAI_EDIT_INTERRUPT 5      /* Ctrl-C */
+#define YAI_EDIT_NAV_PREV 6       /* up: menu-up or history-prev */
+#define YAI_EDIT_NAV_NEXT 7       /* down: menu-down or history-next */
 #define YAI_EDIT_COMPLETE 8       /* Tab: accept menu selection */
 #define YAI_EDIT_HISTORY_SEARCH 9 /* Ctrl-R: fzy history search */
 
@@ -147,8 +147,8 @@ static inline size_t editor_ops_column_span(const struct yai_app *app, size_t fr
 }
 
 /* Advance `columns` codepoints from `from`, stopping at `limit`. */
-static inline size_t editor_ops_advance_columns(const struct yai_app *app, size_t from, size_t limit,
-                                                size_t columns)
+static inline size_t editor_ops_advance_columns(const struct yai_app *app, size_t from,
+                                                size_t limit, size_t columns)
 {
     while (columns > 0 && from < limit) {
         from = editor_ops_next_char(app, from);

@@ -1,0 +1,28 @@
+<!doctype html><meta charset=utf-8>
+<title>display:none through an :is() selector hides the element (libcss drops the rule)</title>
+<!-- libcss 0.9.x has no :is()/:where()/:has() support and drops the whole rule,
+     so an element the page means to hide with `X :is(.a, .b){display:none}`
+     renders anyway. CNN's lead-plus-headlines secondary cards hide their media
+     wrapper via `.item:not(:first-child) :is(...__item-media-wrapper, ...)
+     {display:none}`; without this the phantom 16:9 thumbnails add ~200px of
+     blank height per card. ybrowser matches these dropped display:none rules
+     with lexbor's native selector engine (which does support the L4 pseudos)
+     and hides the subtree at box build. Here the second item's .media is
+     hidden, so item 2 is only its 20px caption tall and sits directly under
+     item 1 (100px = 80 media + 20 caption). -->
+<style>
+  body { margin: 0 }
+  .wrap { width: 300px }
+  .item { width: 300px }
+  .item:not(:first-child) :is(.media) { display: none }
+  .media { height: 80px; background: #ccc }
+  .cap { height: 20px }
+</style>
+<div class="wrap">
+  <div class="item" data-test="i1" data-expect="0,0,300,100">
+    <div class="media">x</div><div class="cap">t1</div>
+  </div>
+  <div class="item" data-test="i2" data-expect="0,100,300,20">
+    <div class="media">x</div><div class="cap">t2</div>
+  </div>
+</div>

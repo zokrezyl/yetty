@@ -240,18 +240,17 @@ struct yetty_ysvg_render_result yetty_ysvg_render(const char *content, size_t co
         }
     }
 
-    struct yetty_ysvg_paint_ctx ctx = {.buf = buf,
-                                       .default_font_size = params.font_size,
-                                       .line_spacing = params.line_spacing,
-                                       .scene_min_x = 0.0f,
-                                       .scene_min_y = 0.0f,
-                                       .scene_max_x = scene_w,
-                                       .scene_max_y = scene_h,
-                                       .user_to_pixel_scale = scale,
-                                       .image_resolver = config ? config->image_resolver
-                                                                : (struct yetty_ysvg_image_resolver){0},
-                                       .collect_link_regions =
-                                           config ? config->collect_link_regions : 0};
+    struct yetty_ysvg_paint_ctx ctx = {
+        .buf = buf,
+        .default_font_size = params.font_size,
+        .line_spacing = params.line_spacing,
+        .scene_min_x = 0.0f,
+        .scene_min_y = 0.0f,
+        .scene_max_x = scene_w,
+        .scene_max_y = scene_h,
+        .user_to_pixel_scale = scale,
+        .image_resolver = config ? config->image_resolver : (struct yetty_ysvg_image_resolver){0},
+        .collect_link_regions = config ? config->collect_link_regions : 0};
     /* root_ctm = scale(scale) · translate(-vx, -vy)  — maps (x, y) in
      * SVG user space to (scale·(x-vx), scale·(y-vy)) in pixels. */
     ctx.root_ctm.a = scale;

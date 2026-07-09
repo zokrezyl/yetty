@@ -117,8 +117,9 @@ struct yetty_ycore_void_result yetty_ywire_channel_flush(struct yetty_ywire_chan
         channel->connection->compressed, NULL, 0, channel->outbuf.data, channel->outbuf.size);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, build, "ywire_channel_flush: frame");
 
-    struct yetty_ycore_void_result emit = channel_emit(
-        channel->connection, channel->connection->emit_buf.data, channel->connection->emit_buf.size);
+    struct yetty_ycore_void_result emit =
+        channel_emit(channel->connection, channel->connection->emit_buf.data,
+                     channel->connection->emit_buf.size);
     yetty_ycore_buffer_clear(&channel->outbuf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emit, "ywire_channel_flush: emit");
     return YETTY_OK_VOID();

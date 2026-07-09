@@ -77,6 +77,8 @@ struct yetty_ycore_void_result yetty_ygui_framework_set_root(struct yetty_yclass
 struct uint32_result yetty_ygui_framework_alloc_id(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_framework_free_id(struct yetty_yclass_object *obj,
                                                             uint32_t id);
+struct yetty_ycore_void_result yetty_ygui_framework_ship_figure_delta(
+    struct yetty_yclass_object *obj, uint32_t figure_id, const uint8_t *body, uint32_t body_len);
 struct yetty_ycore_void_result yetty_ygui_framework_clear(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_framework_forget_remote(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_yclass_object *obj);

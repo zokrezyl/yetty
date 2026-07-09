@@ -392,8 +392,8 @@ static int img_cache_entry_fill_svg(struct yetty_ylexbor *r,
     yetty_ylexbor_svg_parse_preserve_aspect(bytes, len, &entry->svg_par_align_x,
                                             &entry->svg_par_align_y, &entry->svg_par_mode);
     if (!yetty_ylexbor_svg_scene_render(r, bytes, len, 0.0f, &entry->svg_scene, &entry->svg_min_x,
-                                        &entry->svg_min_y, &entry->svg_w, &entry->svg_h,
-                                        NULL, NULL)) {
+                                        &entry->svg_min_y, &entry->svg_w, &entry->svg_h, NULL,
+                                        NULL)) {
         entry->failed = 1;
         return 1;
     }
@@ -1257,6 +1257,102 @@ void yetty_ylexbor_svg_inline_cache_clear(struct yetty_ylexbor *r)
     r->svg_inline_cap = 0;
 }
 
+uint32_t yetty_ylexbor_group_id_for(struct yetty_ylexbor *r, const void *element)
+{
+    if (!r || !element) {
+        return 0;
+    }
+    for (int i = 0; i < r->group_id_count; i++) {
+        if (r->group_ids[i].element == element) {
+            return r->group_ids[i].gid;
+        }
+    }
+    if (r->group_id_count == r->group_id_cap) {
+        int new_cap = r->group_id_cap ? r->group_id_cap * 2 : 16;
+        struct yl_group_id_entry *grown = realloc(r->group_ids, (size_t)new_cap * sizeof(*grown));
+        if (!grown) {
+            return 0; /* out of memory — caller emits the box ungrouped */
+        }
+        r->group_ids = grown;
+        r->group_id_cap = new_cap;
+    }
+    /* 0 is reserved for the receiver's root entity — start ids at 1. */
+    if (r->next_group_id == 0) {
+        r->next_group_id = 1;
+    }
+    uint32_t gid = r->next_group_id++;
+    r->group_ids[r->group_id_count].element = element;
+    r->group_ids[r->group_id_count].gid = gid;
+    r->group_ids[r->group_id_count].content_hash = 0;
+    r->group_ids[r->group_id_count].content_hash_valid = 0;
+    r->group_id_count++;
+    return gid;
+}
+
+void yetty_ylexbor_group_ids_clear(struct yetty_ylexbor *r)
+{
+    if (!r) {
+        return;
+    }
+    free(r->group_ids);
+    r->group_ids = NULL;
+    r->group_id_count = 0;
+    r->group_id_cap = 0;
+    r->have_full_render = 0;
+    r->last_layout_hash = 0;
+    /* next_group_id is intentionally left climbing — ids are never reused. */
+}
+
+/* 64-bit FNV-1a — used to fingerprint a group's prim bytes and the whole
+ * page's box geometry so the incremental path can tell what actually changed
+ * without a byte-for-byte compare. */
+static uint64_t ylexbor_fnv1a64(const void *data, size_t len)
+{
+    const uint8_t *p = data;
+    uint64_t hash = 1469598103934665603ULL;
+    for (size_t i = 0; i < len; i++) {
+        hash ^= p[i];
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+/* Find the mutable group-id entry for `element`, or NULL if none has been
+ * assigned yet (element boxes get their id lazily in the paint loop). */
+static struct yl_group_id_entry *ylexbor_group_entry(struct yetty_ylexbor *r, const void *element)
+{
+    if (!r || !element) {
+        return NULL;
+    }
+    for (int i = 0; i < r->group_id_count; i++) {
+        if (r->group_ids[i].element == element) {
+            return &r->group_ids[i];
+        }
+    }
+    return NULL;
+}
+
+/* FNV-1a over every box's (kind, x, y, w, h). Two renders with an identical
+ * hash laid out to identical geometry — the invariant that makes shipping
+ * only image-pixel deltas safe (nothing else moved). */
+static uint64_t ylexbor_layout_hash(const struct yetty_ylexbor *r)
+{
+    uint64_t hash = 1469598103934665603ULL;
+    for (uint32_t i = 0; i < r->boxes.size; i++) {
+        const struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        struct {
+            int32_t kind;
+            float x, y, w, h;
+        } key = {(int32_t)b->kind, b->x, b->y, b->w, b->h};
+        const uint8_t *p = (const uint8_t *)&key;
+        for (size_t k = 0; k < sizeof(key); k++) {
+            hash ^= p[k];
+            hash *= 1099511628211ULL;
+        }
+    }
+    return hash;
+}
+
 /* Rendered scene for an inline <svg> element, cached per element (one
  * ysvg parse+render per element per document — repaints just re-merge).
  * Returns the cache entry (scene NULL when serialization/render failed)
@@ -1329,12 +1425,191 @@ static struct yetty_ylexbor_svg_inline_entry *svg_inline_scene_get(struct yetty_
         yetty_ylexbor_svg_parse_preserve_aspect(sink.data, sink.len, &entry->par_align_x,
                                                 &entry->par_align_y, &entry->par_mode);
         (void)yetty_ylexbor_svg_scene_render(r, sink.data, sink.len, inherited_font_px,
-                                             &entry->scene, &entry->min_x, &entry->min_y,
-                                             &entry->w, &entry->h, &entry->links,
-                                             &entry->link_count);
+                                             &entry->scene, &entry->min_x, &entry->min_y, &entry->w,
+                                             &entry->h, &entry->links, &entry->link_count);
     }
     free(sink.data);
     return entry;
+}
+
+/* Emit the drawable prims for one YL_BOX_INLINE_IMAGE box into `buf`,
+ * advancing `*z`. `ox`/`oy` translate every emitted coordinate: the full
+ * paint passes (0, 0) (the embed adds the widget offset later), while the
+ * incremental image-delta path passes the embed's (dx, dy) so a delta shipped
+ * straight to the ygrid figure lands at the SAME coords the full render did.
+ * Factored out of the paint loop so both paths emit byte-identical prims
+ * inside a CMD_GROUP. `i` is a box index used only for debug logging. Handles
+ * the three <img> shapes: inline/linked <svg> (vector merge), grey
+ * placeholder (not yet loaded / failed), and a raster yimage prim. */
+static void emit_image_box_prims(struct yetty_ylexbor *r, struct yetty_ylexbor_box *b,
+                                 struct yetty_ydraw_drawable_list *buf, uint32_t *z, uint32_t i,
+                                 float ox, float oy)
+{
+    const float px = b->x + ox;
+    const float py = b->y + oy;
+    /* Inline <svg>: serialize the element subtree, render it through ysvg
+     * once (per-element cache), and merge the vector scene at the box rect. */
+    if (b->element != NULL && b->element->node.local_name == LXB_TAG_SVG) {
+        uint32_t inherited_rgba = ((uint32_t)b->fg.r << 24) | ((uint32_t)b->fg.g << 16) |
+                                  ((uint32_t)b->fg.b << 8) | (uint32_t)b->fg.a;
+        struct yetty_ylexbor_svg_inline_entry *inline_svg =
+            svg_inline_scene_get(r, b->element, inherited_rgba, b->font_size);
+        if (inline_svg && inline_svg->scene) {
+            svg_scene_merge(buf, inline_svg->scene, inline_svg->min_x, inline_svg->min_y,
+                            inline_svg->w, inline_svg->h, px, py, b->w, b->h,
+                            inline_svg->par_align_x, inline_svg->par_align_y, inline_svg->par_mode,
+                            z);
+        }
+        return;
+    }
+    char *url = yetty_ylexbor_img_pick_url(r, b->element);
+    struct yetty_ylexbor_img_cache_entry *cached = NULL;
+    if (url) {
+        cached = yetty_ylexbor_img_cache_get_or_load(r, url);
+    }
+    free(url);
+
+    /* Vector image — merge the rendered scene, keep it vector. */
+    if (cached && cached->svg_scene) {
+        svg_scene_merge(buf, cached->svg_scene, cached->svg_min_x, cached->svg_min_y, cached->svg_w,
+                        cached->svg_h, px, py, b->w, b->h, cached->svg_par_align_x,
+                        cached->svg_par_align_y, cached->svg_par_mode, z);
+        return;
+    }
+
+    if (!cached || cached->failed || !cached->pixels) {
+        /* Fetch/decode failed (or no src) — fall back to the grey placeholder
+         * so at least the page geometry is preserved. */
+        struct yetty_ysdf_box box = {
+            .center_x = px + b->w * 0.5f,
+            .center_y = py + b->h * 0.5f,
+            .half_width = b->w * 0.5f,
+            .half_height = b->h * 0.5f,
+            .corner_radius = 0,
+        };
+        /* Drawable fills are ABGR (0xAABBGGRR) — this neutral grey was long
+         * written as RGBA and rendered PINK. */
+        (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, (*z)++, 0xffc0c0c0u, 0, 0, &box);
+        ydebug("paint image (placeholder) i=%u xy=%.0f,%.0f wh=%.0fx%.0f", i, b->x, b->y, b->w,
+               b->h);
+        return;
+    }
+
+    /* Ship pixels at DISPLAY resolution when the source is much larger than
+     * its layout box. Full-res payloads ballooned a page's drawable list past
+     * the 16 MiB RPC body cap (a 2000px hero in a 400px card is 25x the
+     * bytes), freezing the in-yetty client on its first frame; a box-filter
+     * downscale is also what the GPU sampling would show anyway. The result
+     * caches on the entry per display size. */
+    const uint32_t *ship_pixels = cached->pixels;
+    int ship_w = cached->w;
+    int ship_h = cached->h;
+    {
+        int target_w = (int)(b->w > 0 ? b->w : (float)cached->w);
+        int target_h = (int)(b->h > 0 ? b->h : (float)cached->h);
+        if (target_w > cached->w) {
+            target_w = cached->w;
+        }
+        if (target_h > cached->h) {
+            target_h = cached->h;
+        }
+        /* Wire-size ceiling: even at layout size, one hero screenshot is
+         * megabytes of RGBA; half a megapixel is indistinguishable on a
+         * terminal cell grid and keeps a whole page's envelope under the RPC
+         * cap. */
+        if (target_w > 0 && target_h > 0 && (long)target_w * (long)target_h > 262144l) {
+            double shrink = sqrt(262144.0 / ((double)target_w * (double)target_h));
+            target_w = (int)((double)target_w * shrink);
+            target_h = (int)((double)target_h * shrink);
+            if (target_w < 1) {
+                target_w = 1;
+            }
+            if (target_h < 1) {
+                target_h = 1;
+            }
+        }
+        if (target_w > 0 && target_h > 0 &&
+            (cached->w >= target_w * 2 || (cached->w > target_w && cached->h > target_h))) {
+            if (cached->scaled_pixels &&
+                (cached->scaled_w != target_w || cached->scaled_h != target_h)) {
+                free(cached->scaled_pixels);
+                cached->scaled_pixels = NULL;
+            }
+            if (!cached->scaled_pixels) {
+                uint32_t *scaled = malloc((size_t)target_w * (size_t)target_h * sizeof(uint32_t));
+                if (scaled) {
+                    for (int out_y = 0; out_y < target_h; out_y++) {
+                        int src_y0 = out_y * cached->h / target_h;
+                        int src_y1 = (out_y + 1) * cached->h / target_h;
+                        if (src_y1 <= src_y0) {
+                            src_y1 = src_y0 + 1;
+                        }
+                        for (int out_x = 0; out_x < target_w; out_x++) {
+                            int src_x0 = out_x * cached->w / target_w;
+                            int src_x1 = (out_x + 1) * cached->w / target_w;
+                            if (src_x1 <= src_x0) {
+                                src_x1 = src_x0 + 1;
+                            }
+                            uint32_t acc_r = 0, acc_g = 0, acc_b = 0, acc_a = 0, n = 0;
+                            for (int sy = src_y0; sy < src_y1; sy++) {
+                                const uint32_t *row = cached->pixels + (size_t)sy * cached->w;
+                                for (int sx = src_x0; sx < src_x1; sx++) {
+                                    uint32_t px = row[sx];
+                                    acc_r += px & 0xffu;
+                                    acc_g += (px >> 8) & 0xffu;
+                                    acc_b += (px >> 16) & 0xffu;
+                                    acc_a += (px >> 24) & 0xffu;
+                                    n++;
+                                }
+                            }
+                            scaled[(size_t)out_y * target_w + out_x] =
+                                (acc_r / n) | ((acc_g / n) << 8) | ((acc_b / n) << 16) |
+                                ((acc_a / n) << 24);
+                        }
+                    }
+                    cached->scaled_pixels = scaled;
+                    cached->scaled_w = target_w;
+                    cached->scaled_h = target_h;
+                }
+            }
+            if (cached->scaled_pixels) {
+                ship_pixels = cached->scaled_pixels;
+                ship_w = cached->scaled_w;
+                ship_h = cached->scaled_h;
+            }
+        }
+    }
+
+    /* Build a yimage prim sized to the box's allocated geometry — the decoded
+     * pixels carry the source dimensions, the bounds carry where to draw. The
+     * GPU does the resampling at sample time. */
+    struct yetty_yimage_uniforms u = {
+        .bounds_x = px,
+        .bounds_y = py,
+        .bounds_w = b->w > 0 ? b->w : (float)cached->w,
+        .bounds_h = b->h > 0 ? b->h : (float)cached->h,
+        .image_w = (uint32_t)ship_w,
+        .image_h = (uint32_t)ship_h,
+    };
+    struct yetty_yimage_buffers bufs = {
+        .pixels = ship_pixels,
+        .pixels_len = (size_t)ship_w * (size_t)ship_h,
+    };
+    size_t need = yetty_yimage_uniforms_serialized_size(&u, &bufs);
+    uint8_t *prim = malloc(need);
+    if (!prim) {
+        return;
+    }
+    struct yetty_ycore_size_result ser = yetty_yimage_uniforms_serialize(&u, &bufs, prim, need);
+    if (YETTY_IS_ERR(ser)) {
+        free(prim);
+        return;
+    }
+    (void)yetty_ydraw_drawable_list_add_prim(buf, prim, need);
+    free(prim);
+    (*z)++;
+    ydebug("paint image i=%u xy=%.0f,%.0f wh=%.0fx%.0f src=%dx%d", i, b->x, b->y, b->w, b->h,
+           cached->w, cached->h);
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
@@ -1482,21 +1757,12 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
     }
 
     ydebug("paint total boxes=%u", r->boxes.size);
-    if (getenv("WIDGETDBG")) {
-        for (uint32_t di = 0; di < r->boxes.size; di++) {
-            struct yetty_ylexbor_box *d = &r->boxes.data[di];
-            if (d->x >= 1200.0f && d->x <= 1540.0f && d->y >= 130.0f && d->y <= 300.0f) {
-                fprintf(stderr,
-                        "WDG idx=%u fc=%u ns=%u cc=%u x=%.0f y=%.0f w=%.0f h=%.0f lm=%d pos=%d "
-                        "gc=%u gr=%u gcs=%u op=%.2f mt=%.0f ml=%.0f kind=%d\n",
-                        di, d->first_child, d->next_sibling, d->child_count, d->x, d->y, d->w, d->h,
-                        d->layout_mode, d->position, d->grid_col_start, d->grid_row_start,
-                        d->grid_col_span, d->opacity, d->margin_top, d->margin_left, d->kind);
-            }
-        }
-    }
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        if (yetty_ylexbor_box_clipped_out(r, i)) {
+            /* Wholly outside an overflow:hidden ancestor — clipped away. */
+            continue;
+        }
         if (b->opacity < 0.02f) {
             /* Effectively transparent (opacity:0, folded down the subtree at
 			 * box-build) — the box keeps its laid-out space but paints
@@ -1629,180 +1895,48 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
         }
 
         case YL_BOX_INLINE_IMAGE: {
-            /* Inline <svg>: serialize the element subtree, render it
-			 * through ysvg once (per-element cache), and merge the vector
-			 * scene into the page output at the box rect. */
-            if (b->element != NULL && b->element->node.local_name == LXB_TAG_SVG) {
-                uint32_t inherited_rgba = ((uint32_t)b->fg.r << 24) | ((uint32_t)b->fg.g << 16) |
-                                          ((uint32_t)b->fg.b << 8) | (uint32_t)b->fg.a;
-                struct yetty_ylexbor_svg_inline_entry *inline_svg =
-                    svg_inline_scene_get(r, b->element, inherited_rgba, b->font_size);
-                if (inline_svg && inline_svg->scene) {
-                    svg_scene_merge(buf, inline_svg->scene, inline_svg->min_x, inline_svg->min_y,
-                                    inline_svg->w, inline_svg->h, b->x, b->y, b->w, b->h,
-                                    inline_svg->par_align_x, inline_svg->par_align_y,
-                                    inline_svg->par_mode, &z);
+            /* Wrap this image's prims in a stable CMD_GROUP so a landed image
+			 * can later ship as a per-group delta (surgical replace on the
+			 * ygrid receiver) instead of a full-page reship. Anonymous image
+			 * boxes (no element) fall back to bare prims at the root entity —
+			 * same bytes as before. The group's inner prims keep absolute page
+			 * coords, so cell-append order matches the flat path: pixel-
+			 * identical on a full render. */
+            uint32_t image_gid = yetty_ylexbor_group_id_for(r, b->element);
+            uint32_t group_marker = 0;
+            bool grouped = false;
+            if (image_gid != 0) {
+                struct yetty_ydraw_id_result gm =
+                    yetty_ydraw_drawable_list_begin_group(buf, image_gid);
+                if (YETTY_IS_ERR(gm)) {
+                    yetty_ycore_error_destroy(gm.error);
+                } else {
+                    group_marker = gm.value;
+                    grouped = true;
                 }
-                break;
             }
-            char *url = yetty_ylexbor_img_pick_url(r, b->element);
-            struct yetty_ylexbor_img_cache_entry *cached = NULL;
-            if (url) {
-                cached = yetty_ylexbor_img_cache_get_or_load(r, url);
-            }
-            free(url);
-
-            /* Vector image — merge the rendered scene, keep it vector. */
-            if (cached && cached->svg_scene) {
-                svg_scene_merge(buf, cached->svg_scene, cached->svg_min_x, cached->svg_min_y,
-                                cached->svg_w, cached->svg_h, b->x, b->y, b->w, b->h,
-                                cached->svg_par_align_x, cached->svg_par_align_y,
-                                cached->svg_par_mode, &z);
-                break;
-            }
-
-            if (!cached || cached->failed || !cached->pixels) {
-                /* Fetch/decode failed (or no src) — fall back
-				 * to the grey placeholder so at least the
-				 * page geometry is preserved. */
-                struct yetty_ysdf_box box = {
-                    .center_x = b->x + b->w * 0.5f,
-                    .center_y = b->y + b->h * 0.5f,
-                    .half_width = b->w * 0.5f,
-                    .half_height = b->h * 0.5f,
-                    .corner_radius = 0,
-                };
-                /* Drawable fills are ABGR (0xAABBGGRR) — this neutral grey
-				 * was long written as RGBA and rendered PINK. */
-                (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, 0xffc0c0c0u, 0, 0,
-                                                                &box);
-                ydebug("paint image (placeholder) i=%u xy=%.0f,%.0f wh=%.0fx%.0f", i, b->x, b->y,
-                       b->w, b->h);
-                break;
-            }
-
-            /* Ship pixels at DISPLAY resolution when the source is much
-			 * larger than its layout box. Full-res payloads ballooned a
-			 * page's drawable list past the 16 MiB RPC body cap (a 2000px
-			 * hero in a 400px card is 25x the bytes), freezing the in-yetty
-			 * client on its first frame; a box-filter downscale is also
-			 * what the GPU sampling would show anyway. The result caches
-			 * on the entry per display size. */
-            const uint32_t *ship_pixels = cached->pixels;
-            int ship_w = cached->w;
-            int ship_h = cached->h;
-            {
-                int target_w = (int)(b->w > 0 ? b->w : (float)cached->w);
-                int target_h = (int)(b->h > 0 ? b->h : (float)cached->h);
-                if (target_w > cached->w) {
-                    target_w = cached->w;
-                }
-                if (target_h > cached->h) {
-                    target_h = cached->h;
-                }
-                /* Wire-size ceiling: even at layout size, one hero
-				 * screenshot is megabytes of RGBA; half a megapixel is
-				 * indistinguishable on a terminal cell grid and keeps a
-				 * whole page's envelope under the RPC cap. */
-                if (target_w > 0 && target_h > 0 &&
-                    (long)target_w * (long)target_h > 262144l) {
-                    double shrink =
-                        sqrt(262144.0 / ((double)target_w * (double)target_h));
-                    target_w = (int)((double)target_w * shrink);
-                    target_h = (int)((double)target_h * shrink);
-                    if (target_w < 1) {
-                        target_w = 1;
-                    }
-                    if (target_h < 1) {
-                        target_h = 1;
-                    }
-                }
-                if (target_w > 0 && target_h > 0 &&
-                    (cached->w >= target_w * 2 ||
-                     (cached->w > target_w && cached->h > target_h))) {
-                    if (cached->scaled_pixels &&
-                        (cached->scaled_w != target_w || cached->scaled_h != target_h)) {
-                        free(cached->scaled_pixels);
-                        cached->scaled_pixels = NULL;
-                    }
-                    if (!cached->scaled_pixels) {
-                        uint32_t *scaled =
-                            malloc((size_t)target_w * (size_t)target_h * sizeof(uint32_t));
-                        if (scaled) {
-                            for (int out_y = 0; out_y < target_h; out_y++) {
-                                int src_y0 = out_y * cached->h / target_h;
-                                int src_y1 = (out_y + 1) * cached->h / target_h;
-                                if (src_y1 <= src_y0) {
-                                    src_y1 = src_y0 + 1;
-                                }
-                                for (int out_x = 0; out_x < target_w; out_x++) {
-                                    int src_x0 = out_x * cached->w / target_w;
-                                    int src_x1 = (out_x + 1) * cached->w / target_w;
-                                    if (src_x1 <= src_x0) {
-                                        src_x1 = src_x0 + 1;
-                                    }
-                                    uint32_t acc_r = 0, acc_g = 0, acc_b = 0, acc_a = 0, n = 0;
-                                    for (int sy = src_y0; sy < src_y1; sy++) {
-                                        const uint32_t *row = cached->pixels + (size_t)sy * cached->w;
-                                        for (int sx = src_x0; sx < src_x1; sx++) {
-                                            uint32_t px = row[sx];
-                                            acc_r += px & 0xffu;
-                                            acc_g += (px >> 8) & 0xffu;
-                                            acc_b += (px >> 16) & 0xffu;
-                                            acc_a += (px >> 24) & 0xffu;
-                                            n++;
-                                        }
-                                    }
-                                    scaled[(size_t)out_y * target_w + out_x] =
-                                        (acc_r / n) | ((acc_g / n) << 8) | ((acc_b / n) << 16) |
-                                        ((acc_a / n) << 24);
-                                }
-                            }
-                            cached->scaled_pixels = scaled;
-                            cached->scaled_w = target_w;
-                            cached->scaled_h = target_h;
-                        }
-                    }
-                    if (cached->scaled_pixels) {
-                        ship_pixels = cached->scaled_pixels;
-                        ship_w = cached->scaled_w;
-                        ship_h = cached->scaled_h;
+            emit_image_box_prims(r, b, buf, &z, i, 0.0f, 0.0f);
+            if (grouped) {
+                struct yetty_ycore_void_result ge =
+                    yetty_ydraw_drawable_list_end_group(buf, group_marker);
+                if (YETTY_IS_ERR(ge)) {
+                    yetty_ycore_error_destroy(ge.error);
+                } else {
+                    /* Fingerprint the group's just-emitted page-coord payload
+					 * (everything after the 12-byte CMD_GROUP header) so a
+					 * later incremental pass can tell whether this image's
+					 * pixels changed without re-shipping it. */
+                    const uint8_t *bytes = yetty_ydraw_drawable_list_data(buf);
+                    size_t total = yetty_ydraw_drawable_list_size(buf);
+                    struct yl_group_id_entry *entry = ylexbor_group_entry(r, b->element);
+                    if (entry && bytes && total >= (size_t)group_marker + 12u) {
+                        size_t payload_off = (size_t)group_marker + 12u;
+                        entry->content_hash =
+                            ylexbor_fnv1a64(bytes + payload_off, total - payload_off);
+                        entry->content_hash_valid = 1;
                     }
                 }
             }
-
-            /* Build a yimage prim sized to the box's allocated
-			 * geometry — the decoded pixels carry the source
-			 * dimensions, the bounds carry where to draw. The
-			 * GPU does the resampling at sample time. */
-            struct yetty_yimage_uniforms u = {
-                .bounds_x = b->x,
-                .bounds_y = b->y,
-                .bounds_w = b->w > 0 ? b->w : (float)cached->w,
-                .bounds_h = b->h > 0 ? b->h : (float)cached->h,
-                .image_w = (uint32_t)ship_w,
-                .image_h = (uint32_t)ship_h,
-            };
-            struct yetty_yimage_buffers bufs = {
-                .pixels = ship_pixels,
-                .pixels_len = (size_t)ship_w * (size_t)ship_h,
-            };
-            size_t need = yetty_yimage_uniforms_serialized_size(&u, &bufs);
-            uint8_t *prim = malloc(need);
-            if (!prim) {
-                break;
-            }
-            struct yetty_ycore_size_result ser =
-                yetty_yimage_uniforms_serialize(&u, &bufs, prim, need);
-            if (YETTY_IS_ERR(ser)) {
-                free(prim);
-                break;
-            }
-            (void)yetty_ydraw_drawable_list_add_prim(buf, prim, need);
-            free(prim);
-            z++;
-            ydebug("paint image i=%u xy=%.0f,%.0f wh=%.0fx%.0f src=%dx%d", i, b->x, b->y, b->w,
-                   b->h, cached->w, cached->h);
             break;
         }
 
@@ -1909,5 +2043,93 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
     yetty_ydraw_drawable_list_set_scene_bounds(buf, 0.0f, 0.0f, scene_max_x, scene_max_y);
     ydebug("paint scene bounds = (0,0)-(%.0f,%.0f)", scene_max_x, scene_max_y);
 
+    /* This full paint established every group on the receiver at the current
+     * geometry; snapshot the layout fingerprint so the incremental path can
+     * detect a later relayout that shifted content (and defer to a full
+     * render) versus one where only image pixels landed. */
+    r->last_layout_hash = ylexbor_layout_hash(r);
+    r->have_full_render = 1;
+
     return YETTY_OK_VOID();
+}
+
+struct yetty_ylexbor_incremental_result yetty_ylexbor_paint_image_deltas(
+    struct yetty_ylexbor *r, struct yetty_ydraw_drawable_list *buf, float offset_x, float offset_y)
+{
+    struct yetty_ylexbor_incremental_result out = {0, 0};
+    if (!r || !buf || !r->have_full_render) {
+        return out; /* no baseline on the receiver — caller does a full render */
+    }
+
+    struct yetty_ycore_void_result relayout_res = yetty_ylexbor_relayout(r);
+    if (YETTY_IS_ERR(relayout_res)) {
+        yetty_ycore_error_destroy(relayout_res.error);
+        return out; /* relayout failed — fall back to a full render */
+    }
+
+    /* The delta is only sound if the page laid out to exactly the same
+     * geometry as the last full render: images landed but nothing shifted.
+     * Any layout change means unshipped non-image content moved, so bail. */
+    if (ylexbor_layout_hash(r) != r->last_layout_hash) {
+        return out;
+    }
+    out.is_delta = 1;
+
+    struct yetty_ydraw_drawable_list_result scratch_res =
+        yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    if (YETTY_IS_ERR(scratch_res)) {
+        yetty_ycore_error_destroy(scratch_res.error);
+        out.is_delta = 0;
+        return out;
+    }
+    struct yetty_ydraw_drawable_list *scratch = scratch_res.value;
+
+    for (uint32_t i = 0; i < r->boxes.size; i++) {
+        struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        if (b->kind != YL_BOX_INLINE_IMAGE || b->element == NULL) {
+            continue;
+        }
+        struct yl_group_id_entry *entry = ylexbor_group_entry(r, b->element);
+        if (!entry) {
+            /* An image the last full render never grouped (e.g. script added
+             * it). It has no receiver entity to replace, so a delta can't
+             * carry it — do a full render to establish it. */
+            out.is_delta = 0;
+            break;
+        }
+
+        /* Fingerprint the current page-coord prims (offset 0), matching the
+         * hash domain the full render stored. */
+        yetty_ydraw_drawable_list_clear(scratch);
+        uint32_t scratch_z = 0;
+        emit_image_box_prims(r, b, scratch, &scratch_z, i, 0.0f, 0.0f);
+        const uint8_t *scratch_bytes = yetty_ydraw_drawable_list_data(scratch);
+        size_t scratch_len = yetty_ydraw_drawable_list_size(scratch);
+        uint64_t hash =
+            ylexbor_fnv1a64(scratch_bytes ? scratch_bytes : (const uint8_t *)"", scratch_len);
+        if (entry->content_hash_valid && hash == entry->content_hash) {
+            continue; /* this image is unchanged — nothing to ship */
+        }
+
+        /* Changed: re-emit its group at the embed's offset so the delta lands
+         * where the full render placed it, and refresh the fingerprint. */
+        struct yetty_ydraw_id_result gm = yetty_ydraw_drawable_list_begin_group(buf, entry->gid);
+        if (YETTY_IS_ERR(gm)) {
+            yetty_ycore_error_destroy(gm.error);
+            continue;
+        }
+        uint32_t delta_z = 0;
+        emit_image_box_prims(r, b, buf, &delta_z, i, offset_x, offset_y);
+        struct yetty_ycore_void_result ge = yetty_ydraw_drawable_list_end_group(buf, gm.value);
+        if (YETTY_IS_ERR(ge)) {
+            yetty_ycore_error_destroy(ge.error);
+            continue;
+        }
+        entry->content_hash = hash;
+        entry->content_hash_valid = 1;
+        out.changed_groups++;
+    }
+
+    yetty_ydraw_drawable_list_destroy(scratch);
+    return out;
 }

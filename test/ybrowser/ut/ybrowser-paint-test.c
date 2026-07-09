@@ -22,6 +22,7 @@
 
 #include <yetty/ybrowser/ybrowser.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/drawable-list-registry.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
@@ -99,6 +100,43 @@ static struct yetty_ylexbor *load(const char *html, int viewport_w, int viewport
     return yl;
 }
 
+/* Walk every primitive in `buf`, collecting (type, bounds) into `out`.
+ * Descends into CMD_GROUP records — since #507 the paint pass wraps each
+ * <img> box's prims in a stable CMD_GROUP so a landed image can ship as a
+ * per-group delta; the flat iterator strides OVER a group's body, so grouped
+ * prims are only reached by re-iterating the body (a bare prim stream) as its
+ * own sub-list. Ungrouped and grouped prims are collected identically. */
+static void collect_buf(struct yetty_ydraw_drawable_list *buf,
+                        struct yetty_ydraw_drawable_list_registry *reg, struct prim *out, int max,
+                        int *count)
+{
+    struct yetty_ydraw_drawable_iter_result it = yetty_ydraw_drawable_list_drawable_first(buf, reg);
+    while (!YETTY_IS_ERR(it)) {
+        const struct yetty_ydraw_drawable_list_entry *fw = &it.value.fw;
+        if (fw->data && fw->data[0] == YETTY_YDRAW_CMD_GROUP) {
+            uint32_t payload = fw->data[2];
+            const uint8_t *body = (const uint8_t *)(fw->data + 3);
+            struct yetty_ydraw_drawable_list_result sub =
+                yetty_ydraw_drawable_list_create_from_bytes(body, payload);
+            if (!YETTY_IS_ERR(sub)) {
+                collect_buf(sub.value, reg, out, max, count);
+                yetty_ydraw_drawable_list_destroy(sub.value);
+            }
+        } else if (fw->data && fw->ops && fw->ops->aabb && *count < max) {
+            struct rectangle_result ab = fw->ops->aabb(fw->data);
+            if (!YETTY_IS_ERR(ab)) {
+                out[*count].type = fw->data[0];
+                out[*count].x0 = ab.value.min.x;
+                out[*count].y0 = ab.value.min.y;
+                out[*count].x1 = ab.value.max.x;
+                out[*count].y1 = ab.value.max.y;
+                (*count)++;
+            }
+        }
+        it = yetty_ydraw_drawable_list_drawable_next(buf, reg, &it.value);
+    }
+}
+
 /* Paint the laid-out document into a fresh drawable list and walk every
  * primitive, collecting (type, bounds) into `out`. Returns the count
  * (capped at max). */
@@ -126,22 +164,7 @@ static int paint_and_collect(struct yetty_ylexbor *yl, struct prim *out, int max
     struct yetty_ydraw_drawable_list_registry *reg = reg_res.value;
 
     int count = 0;
-    struct yetty_ydraw_drawable_iter_result it = yetty_ydraw_drawable_list_drawable_first(buf, reg);
-    while (!YETTY_IS_ERR(it)) {
-        const struct yetty_ydraw_drawable_list_entry *fw = &it.value.fw;
-        if (fw->data && fw->ops && fw->ops->aabb && count < max) {
-            struct rectangle_result ab = fw->ops->aabb(fw->data);
-            if (!YETTY_IS_ERR(ab)) {
-                out[count].type = fw->data[0];
-                out[count].x0 = ab.value.min.x;
-                out[count].y0 = ab.value.min.y;
-                out[count].x1 = ab.value.max.x;
-                out[count].y1 = ab.value.max.y;
-                count++;
-            }
-        }
-        it = yetty_ydraw_drawable_list_drawable_next(buf, reg, &it.value);
-    }
+    collect_buf(buf, reg, out, max, &count);
 
     yetty_ydraw_drawable_list_registry_destroy(reg);
     yetty_ydraw_drawable_list_destroy(buf);
@@ -305,9 +328,39 @@ static void test_no_decoration_for_plain_text(void)
     yetty_ylexbor_destroy(yl);
 }
 
+/* A paragraph split into styled inline fragments (text, then a link, then
+ * trailing text) must paint EVERY fragment. Regression guard: the wrap step
+ * allocates a fresh box per fragment after the first and memsets it — if it
+ * fails to carry the source box's opacity, those boxes read opacity 0 and the
+ * paint pass's transparency skip drops them, so a `<p>text <a>link</a> more`
+ * rendered only "text " with the link and everything after it missing. */
+static void test_multi_fragment_paragraph_all_emitted(void)
+{
+    fprintf(stderr, "[test_multi_fragment_paragraph_all_emitted]\n");
+    static const char html[] = "<html><body style='margin:0'>"
+                               "<p>alpha one two <a href='#'>LINKWORD</a> three four five.</p>"
+                               "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    struct prim prims[2048];
+    int n = paint_and_collect(yl, prims, 2048);
+
+    int text_prims = 0;
+    for (int i = 0; i < n; i++) {
+        if (prims[i].type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
+            text_prims++;
+        }
+    }
+    /* Three styled runs: before the link, the link, after the link. */
+    ASSERT_TRUE("all three inline fragments emit a text primitive", text_prims == 3);
+
+    yetty_ylexbor_destroy(yl);
+}
+
 int main(void)
 {
     test_image_bounds_match_box();
+    test_multi_fragment_paragraph_all_emitted();
     /* Bands are fractions of FONT_SIZE (16): overline near the cap line,
      * line-through through the middle, underline below the baseline. */
     run_decoration_test("test_overline_emits_decoration", "overline", 0.0f, 5.0f);

@@ -774,9 +774,9 @@ static int loader_cache_lookup(struct yetty_ybrowser_loader *loader,
         struct yetty_ybrowser_disk_cache_meta disk_meta;
         char *disk_body = NULL;
         size_t disk_body_len = 0;
-        int disk_hit = yetty_ybrowser_disk_cache_load(&loader->disk_cache, request->url,
-                                                      (int)request->kind, &disk_meta, &disk_body,
-                                                      &disk_body_len);
+        int disk_hit =
+            yetty_ybrowser_disk_cache_load(&loader->disk_cache, request->url, (int)request->kind,
+                                           &disk_meta, &disk_body, &disk_body_len);
         pthread_mutex_lock(&loader->cache_mutex);
         if (disk_hit) {
             idx = loader_cache_find(loader, request->url, request->kind);
@@ -895,9 +895,9 @@ static void loader_cache_store(struct yetty_ybrowser_loader *loader,
         return;
     }
     long ttl_seconds = LOADER_CACHE_DEFAULT_TTL_SECONDS;
-    int freshness = loader_cache_ttl(transfer->cache_control, transfer->age_header,
-                                     transfer->expires_header, transfer->date_header,
-                                     transfer->last_modified, &ttl_seconds);
+    int freshness =
+        loader_cache_ttl(transfer->cache_control, transfer->age_header, transfer->expires_header,
+                         transfer->date_header, transfer->last_modified, &ttl_seconds);
     if (freshness < 0) {
         return; /* no-store */
     }

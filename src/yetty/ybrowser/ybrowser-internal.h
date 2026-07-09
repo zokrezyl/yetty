@@ -94,6 +94,50 @@ struct yl_width_keyword_rule {
     uint8_t keyword; /* 1 = max-content, 2 = min-content, 3 = fit-content */
 };
 
+/* A stylesheet `width|min-width|max-width: calc(<pct> ± <len>)` declaration.
+ * libcss 0.9 can't parse calc() and drops the declaration, so percentage grid
+ * columns (`width:calc(33.33% - 16px)`) lose their width and stack. This side
+ * table captures the calc terms and resolves them PRECISELY at box-build —
+ * `pct/100 * containing-block-width ± length` — so the column lands on the exact
+ * Chrome pixel instead of the coarse `calc → %` textual approximation. */
+struct yl_calc_length_rule {
+    char *selector;          /* owned */
+    void *compiled_selector; /* owned */
+    uint8_t selector_state;
+    uint8_t prop;        /* 0 = width, 1 = min-width, 2 = max-width */
+    uint8_t offset_unit; /* 0 = px, 1 = rem, 2 = em */
+    int8_t sign;         /* +1 or -1 applied to the length term */
+    float pct;           /* percentage numerator (e.g. 33.33) */
+    float offset;        /* length-term magnitude in offset_unit */
+};
+
+/* An aspect-ratio height source libcss can't parse: either the modern
+ * `aspect-ratio: W / H` property, or the classic pre-`aspect-ratio` idiom of a
+ * `::after { padding-bottom: P% }` pseudo on a `height:0` container (an image
+ * frame). Both make an element's height a fixed multiple of its width. libcss
+ * drops both, so an image inside falls back to its intrinsic height and blows
+ * the frame up ~3x (CNN's card thumbnails). `ratio` is height/width. */
+struct yl_aspect_rule {
+    char *selector;          /* owned — the ELEMENT selector (pseudo stripped) */
+    void *compiled_selector; /* owned */
+    uint8_t selector_state;
+    float ratio; /* height / width */
+};
+
+/* A `display: none` declaration whose selector uses a Selectors-Level-4
+ * construct libcss 0.9.2 cannot parse (`:is()`, `:where()`, `:has()`) — libcss
+ * drops the whole rule, so an element the page means to hide renders anyway.
+ * CNN's lead-plus-headlines secondary cards hide their media wrapper via
+ * `.item:not(:first-child) :is(...__item-media-wrapper, ...){display:none}`;
+ * without this the phantom 16:9 thumbnails add ~1000px of blank card height.
+ * The selector is matched with lexbor's native engine (which does support the
+ * L4 pseudos), so no de-sugaring / variant explosion is needed. */
+struct yl_display_none_rule {
+    char *selector;          /* owned — one comma-alternative of the rule */
+    void *compiled_selector; /* owned */
+    uint8_t selector_state;
+};
+
 /* A stylesheet `-webkit-line-clamp: N` declaration. Non-standard, so
  * libcss drops it; this side table re-applies the line cap at layout.
  * The clamp-to-N-lines idiom (display:-webkit-box; -webkit-box-orient:
@@ -106,6 +150,21 @@ struct yl_line_clamp_rule {
     void *compiled_selector; /* owned */
     uint8_t selector_state;
     uint8_t lines; /* clamp line count, 1..255 */
+};
+
+/* A class-based `transform: translate*(...)` declaration. libcss drops the
+ * whole `transform` property, so JS-driven carousels/tab-panels that push the
+ * inactive slide off an overflow-clipped viewport (Google News weather widget:
+ * `transform: translateX(calc(11.25rem + 28px))`) render stacked. This side
+ * table re-applies the translate at box-build. Only the translate component is
+ * modelled (scale/rotate/matrix are ignored); percent offsets keep the raw
+ * number with the matching *_pct flag, resolved against the box's own size. */
+struct yl_transform_rule {
+    char *selector;          /* owned */
+    void *compiled_selector; /* owned */
+    uint8_t selector_state;
+    float tx, ty;
+    bool tx_pct, ty_pct;
 };
 
 /* A stylesheet `height: var(...)` declaration that may depend on
@@ -202,6 +261,24 @@ struct yl_flex_gap_class {
     char *selector;          /* owned */
     void *compiled_selector; /* lxb_css_selector_list_t*; owned */
     uint8_t selector_state;
+};
+
+/* Maps a DOM element to a stable ydraw primitive-GROUP id, so paint can wrap
+ * that element's prims in a CMD_GROUP the receiver (ygrid) can replace in
+ * place. The id is assigned monotonically on first request and never reused
+ * within the engine's life, so a re-layout that renumbers box indices does
+ * NOT reassign an element's group — matching the yjungle producer model. The
+ * table is keyed by the borrowed element pointer (never dereferenced) and is
+ * cleared on document replace, when the old parse's element pointers die. */
+struct yl_group_id_entry {
+    const void *element; /* lxb element pointer — key only, never deref'd */
+    uint32_t gid;
+    /* FNV-1a of this group's page-coord prim payload as of the last time it
+	 * was emitted (full render or delta). The incremental path repaints a
+	 * candidate image group at offset 0, hashes it, and only ships a delta
+	 * when the hash differs — so an unchanged image never re-ships. */
+    uint64_t content_hash;
+    int content_hash_valid;
 };
 
 /* Which engine decision produced a box's used width/height — stamped by
@@ -349,6 +426,15 @@ struct yetty_ylexbor_box {
 	 * to width when set. */
     float css_width, css_max_width, css_min_width;
 
+    /* Deferred precise calc(<pct> ± <len>) width. css_width's negative-ratio
+	 * convention can carry a percentage OR a fixed px, but not both, so a
+	 * calc that mixes them is stored here and finalized in resolve_pct_metrics
+	 * as calc_width_pct/100 * cb_width + calc_width_offset once the containing
+	 * block width is known. calc_width_set gates it (0 = none). */
+    float calc_width_pct;
+    float calc_width_offset;
+    uint8_t calc_width_set;
+
     /* Promoted inline-level box (inline-block / inline-flex widget with
 	 * no surrounding text run): block layout sizes it to its content
 	 * (max-content, capped at the available width) instead of the full
@@ -364,7 +450,30 @@ struct yetty_ylexbor_box {
 	 * layout. */
     uint8_t width_source;
     uint8_t height_source;
-    float css_height; /* explicit height — placeholder for tables/img */
+    float css_height;   /* explicit height — placeholder for tables/img */
+    /* Height was explicitly specified in CSS (including `height:0`), as opposed
+	 * to auto. Distinguishes a real `height:0` — which with a percentage
+	 * padding-bottom is the aspect-ratio-box idiom (`height:0;padding-bottom:
+	 * 56.25%`) whose box height is padding-only and must NOT grow to fit an
+	 * overflowing image — from the "unset" default that css_height==0 also
+	 * represents. */
+    uint8_t css_height_set;
+    /* Aspect-ratio height/width from the side table (0 = none). When the box
+	 * has no explicit height, layout sets height = width * aspect_ratio (the
+	 * `aspect-ratio` property or a `::after{padding-bottom:%}` image frame). */
+    float aspect_ratio;
+    /* Replaced element (image) sized `height: <pct>` (e.g. 100%). At box-build
+	 * there is no containing-block height, so the image falls back to its
+	 * intrinsic/attr size; layout binds it to the nearest ancestor with a
+	 * definite height (an aspect frame, an explicit height) so a portrait image
+	 * inside a 16:9 frame fills the frame instead of overflowing to ~3x. Stored
+	 * as the fraction (1.0 = 100%); 0 = not a percentage height. */
+    float img_pct_h;
+    /* Set once layout has pinned this image's height to a definite frame (see
+	 * img_pct_h). object-fit:cover fills the frame in BOTH axes, so the flex
+	 * responsive-downscale (which preserves aspect ratio) must cap the width
+	 * without re-scaling the pinned height. */
+    uint8_t img_frame_filled;
     uint8_t line_clamp; /* -webkit-line-clamp cap (0 = none), from side table */
 
     /* Flex item properties (only meaningful when this box is the
@@ -451,6 +560,12 @@ struct yetty_ylexbor_box {
 	 * layout time; subsequent in-flow content flows around them. */
     uint8_t float_side;
     uint8_t clear_side;
+
+    /* `overflow-x`/`overflow-y` resolve to a clip (hidden/clip/scroll/auto) on
+	 * at least one axis — descendants are clipped to this box's padding box.
+	 * How a collapsed carousel slide (Google News weather widget) hides its
+	 * out-of-flow content instead of spilling it over the active slide. */
+    bool clip_overflow;
 
     /* CSS `position` (YL_POS_*). STATIC is normal flow. RELATIVE lays
 		 * out in flow then shifts visually by the insets. ABSOLUTE / FIXED
@@ -554,6 +669,12 @@ struct yetty_ylexbor_box {
     uint32_t first_child;
     uint32_t next_sibling;
     uint32_t child_count;
+    /* Index of the box that owns this one (set by link_child). 0 for the root
+	 * and for any unlinked box; since boxes are allocated in tree order the
+	 * root is always index 0, so a `parent == 0` on a non-root box means the
+	 * root — the paint/hit clip walk stops when it reaches index 0. Used to
+	 * find overflow-clipping ancestors from the flat paint loop. */
+    uint32_t parent;
 };
 
 /* Flat vector of boxes. Root is index 0. */
@@ -716,9 +837,25 @@ struct yetty_ylexbor {
     struct yl_width_keyword_rule *width_keyword_rules;
     int width_keyword_count, width_keyword_cap;
 
+    /* Precise calc(<pct> ± <len>) widths (see yl_calc_length_rule). */
+    struct yl_calc_length_rule *calc_length_rules;
+    int calc_length_count, calc_length_cap;
+
+    /* Aspect-ratio height sources (see yl_aspect_rule). */
+    struct yl_aspect_rule *aspect_rules;
+    int aspect_count, aspect_cap;
+
+    /* `display:none` rules libcss dropped for L4 selectors (see
+	 * yl_display_none_rule). */
+    struct yl_display_none_rule *display_none_rules;
+    int display_none_count, display_none_cap;
+
     /* -webkit-line-clamp line caps (see yl_line_clamp_rule). */
     struct yl_line_clamp_rule *line_clamp_rules;
     int line_clamp_count, line_clamp_cap;
+
+    struct yl_transform_rule *transform_rules;
+    int transform_count, transform_cap;
 
     struct yl_grid_class *grid_classes;
     int grid_class_count;
@@ -788,6 +925,25 @@ struct yetty_ylexbor {
 	 * yetty_ylexbor_svg_inline_entry). */
     struct yetty_ylexbor_svg_inline_entry *svg_inline_cache;
     int svg_inline_count, svg_inline_cap;
+
+    /* Element→group-id table (see struct yl_group_id_entry). Paint uses it to
+	 * give each <img> box a stable CMD_GROUP id so a landed image ships as a
+	 * per-group delta instead of a full-page reship. `next_group_id` is a
+	 * monotonic counter (0 is reserved for the receiver's root entity); it is
+	 * NOT reset on document replace so an id is never reused, while the map
+	 * itself is cleared because the old element pointers die with the parse. */
+    struct yl_group_id_entry *group_ids;
+    int group_id_count, group_id_cap;
+    uint32_t next_group_id;
+
+    /* Incremental-render gate. `last_layout_hash` is an FNV-1a over every
+	 * box's (kind, x, y, w, h) as of the last FULL render; `have_full_render`
+	 * is set once a full render has established the page's groups on the
+	 * receiver. The image-delta path only fires when a fresh relayout
+	 * reproduces the same layout hash — i.e. images landed but nothing
+	 * shifted — otherwise it defers to a full render. */
+    uint64_t last_layout_hash;
+    int have_full_render;
 
     /* Async image fetching. When `img_pool` is set, yetty_ylexbor_start_image_fetch
 	 * submits each pending <img> to the worker pool (parallel fetch+decode on
@@ -914,6 +1070,15 @@ void yetty_ylexbor_svg_parse_preserve_aspect(const char *bytes, size_t len, floa
  * document replace (the element keys die with the old parse) and from the
  * engine teardown. Defined in ybrowser-paint.c. */
 void yetty_ylexbor_svg_inline_cache_clear(struct yetty_ylexbor *r);
+
+/* Return the stable ydraw primitive-GROUP id for `element`, assigning a fresh
+ * monotonic id on first request (see struct yl_group_id_entry). `element` must
+ * be non-NULL. Defined in ybrowser-paint.c. */
+uint32_t yetty_ylexbor_group_id_for(struct yetty_ylexbor *r, const void *element);
+
+/* Free the element→group-id map. Called on document replace and engine
+ * teardown. Leaves next_group_id untouched so ids are never reused. */
+void yetty_ylexbor_group_ids_clear(struct yetty_ylexbor *r);
 
 /* Defined in ylexbor-paint.c so the fetch/decode plumbing lives next
  * to the prim-emission code. Box-build calls this eagerly to learn
@@ -1050,12 +1215,59 @@ void yetty_ylexbor_css_scan_width_keywords(struct yetty_ylexbor *r, const char *
  * yl_width_keyword_rule keyword value. */
 int yetty_ylexbor_width_keyword_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element);
 
+/* Scan for `width|min-width|max-width: calc(<pct> ± <len>)` and record the
+ * terms per selector (see yl_calc_length_rule). */
+void yetty_ylexbor_css_scan_calc_lengths(struct yetty_ylexbor *r, const char *css_source,
+                                         size_t css_source_len);
+
+/* Last matching calc-length rule for `element` on `prop` (0 = width,
+ * 1 = min-width, 2 = max-width). Returns 1 and sets *out_pct (percentage
+ * numerator, e.g. 33.33) and *out_offset_px (sign-folded length term in px)
+ * on a match; layout finalizes pct/100 * cb_width + offset. Else 0. */
+int yetty_ylexbor_calc_length_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                     uint8_t prop, float font_size, float *out_pct,
+                                     float *out_offset_px);
+
+/* Scan for aspect-ratio height sources — `aspect-ratio:W/H` and the
+ * `SEL::after{padding-bottom:P%}` frame idiom — and record (selector, ratio). */
+void yetty_ylexbor_css_scan_aspect_ratios(struct yetty_ylexbor *r, const char *css_source,
+                                          size_t css_source_len);
+
+/* Last matching aspect-ratio rule for `element`: returns its height/width ratio,
+ * or 0 if none. Layout sets height = width * ratio when height is auto. */
+float yetty_ylexbor_aspect_ratio_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element);
+
+/* Scan for `display:none` rules whose selector uses an L4 pseudo libcss drops
+ * (`:is()`, `:where()`, `:has()`) and record each selector alternative. */
+void yetty_ylexbor_css_scan_display_none(struct yetty_ylexbor *r, const char *css_source,
+                                         size_t css_source_len);
+
+/* 1 if `element` matches a scanned L4 `display:none` rule (should be hidden),
+ * else 0. */
+int yetty_ylexbor_display_none_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element);
+
 /* Scan for `-webkit-line-clamp: N` and record (selector, line count). */
 void yetty_ylexbor_css_scan_line_clamps(struct yetty_ylexbor *r, const char *css_source,
                                         size_t css_source_len);
 
 /* Last matching line-clamp rule for `element`: 0 = none, else the line cap. */
 int yetty_ylexbor_line_clamp_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element);
+
+/* True if box `idx` lies entirely outside an overflow-clipping ancestor's
+ * padding box (so it must not paint / hit-test). */
+bool yetty_ylexbor_box_clipped_out(const struct yetty_ylexbor *r, uint32_t idx);
+
+/* Scan for class-based `transform: translate*(...)` and record
+ * (selector, tx, ty, pct flags). Complements the inline-transform parse. */
+void yetty_ylexbor_css_scan_transforms(struct yetty_ylexbor *r, const char *css_source,
+                                       size_t css_source_len);
+
+/* Last matching class-based transform for `element`. Returns 1 and fills the
+ * outputs on a match, 0 otherwise. Percent offsets come back as the raw
+ * number with the *_pct flag set. */
+int yetty_ylexbor_transform_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                   float *out_tx, float *out_ty, bool *out_tx_pct,
+                                   bool *out_ty_pct);
 
 void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *css_source,
                                       size_t css_len);
@@ -1119,6 +1331,27 @@ const struct yl_grid_class *yetty_ylexbor_grid_class_lookup(struct yetty_ylexbor
  * a freshly malloc'd NUL-terminated string the caller must free.
  * Returns a copy of the input on no-vars / OOM. */
 char *yetty_ylexbor_css_vars_resolve(struct yetty_ylexbor *r, const char *value, size_t len);
+
+/* Rewrite CSS Media Queries Level 4 range-syntax features — `(width>=960px)`,
+ * `(width<=1023px)`, `(400px<=width<=700px)`, … — into the classic
+ * `(min-width:960px)` / `(max-width:1023px)` forms that libcss 0.9.x parses.
+ * Returns a freshly malloc'd string when a rewrite happened, else NULL (the
+ * caller keeps the original buffer). */
+char *yetty_ybrowser_css_rewrite_media_ranges(const char *css, size_t len);
+
+/* De-sugar Selectors Level 4 pseudos that libcss 0.9.x rejects (dropping the
+ * whole rule) into equivalent Level 3 selector lists: a compound `:not(.a.b)`
+ * (De Morgan) or list `:not(.a, .b)` (chained nots), and `:is(.a, .b)` /
+ * `:where(.a, .b)` (branch substitution). Returns a freshly malloc'd string
+ * when a rewrite happened, else NULL (caller keeps the original buffer). */
+char *yetty_ybrowser_css_desugar_selectors(const char *css, size_t len);
+
+/* Rewrite `calc(<percentage> ± <length>)` to just `<percentage>`. libcss 0.9.x
+ * cannot parse calc() and drops the declaration, collapsing percentage-based
+ * flex/grid columns (`width:calc(33.33% - 16px)`) into single-column stacks.
+ * Keeping the percentage preserves the column count. Returns a freshly malloc'd
+ * string when a rewrite happened, else NULL (caller keeps the original). */
+char *yetty_ybrowser_css_simplify_calc(const char *css, size_t len);
 
 /* Drop the customs table — called from destroy. */
 void yetty_ylexbor_css_vars_destroy(struct yetty_ylexbor *r);

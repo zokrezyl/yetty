@@ -436,9 +436,8 @@ static struct yetty_ycore_size_result emit_one(struct yetty_ywire_connection *co
         /* Owned mode: queue only (the transport copies) — pump_outbound
          * drains the transport once per pump, after the fair round has been
          * assembled. */
-        ship_res = connection->reactor.ops->queue(connection->reactor.userdata,
-                                                  connection->emit_buf.data,
-                                                  connection->emit_buf.size);
+        ship_res = connection->reactor.ops->queue(
+            connection->reactor.userdata, connection->emit_buf.data, connection->emit_buf.size);
     }
     YETTY_RETURN_IF_ERR(yetty_ycore_size, ship_res, "ywire emit_one: ship");
 
@@ -622,8 +621,8 @@ struct yetty_ycore_void_result yetty_ywire_connection_destroy(
             if (YETTY_IS_ERR(result)) {
                 yetty_ycore_error_destroy(emit_sm_res.error);
             } else {
-                result = YETTY_ERR(yetty_ycore_void, "ywire_connection_destroy: emit sm",
-                                   emit_sm_res);
+                result =
+                    YETTY_ERR(yetty_ycore_void, "ywire_connection_destroy: emit sm", emit_sm_res);
             }
         }
     }

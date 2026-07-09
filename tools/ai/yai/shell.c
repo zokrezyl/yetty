@@ -141,8 +141,8 @@ static struct yetty_ycore_void_result shell_write_shims(struct yai_app *app, con
     if (yai_transcript_dir(transcripts, sizeof(transcripts)) != 0) {
         return YETTY_ERR(yetty_ycore_void, "shell shim: transcript dir too long");
     }
-    int written = snprintf(shim_dir, shim_dir_size, "%s/shell-shim-%s", transcripts,
-                           app->transcript_tag);
+    int written =
+        snprintf(shim_dir, shim_dir_size, "%s/shell-shim-%s", transcripts, app->transcript_tag);
     if (written < 0 || (size_t)written >= shim_dir_size) {
         return YETTY_ERR(yetty_ycore_void, "shell shim: path too long");
     }
@@ -158,24 +158,23 @@ static struct yetty_ycore_void_result shell_write_shims(struct yai_app *app, con
          * and the hooks are lost — then "!" simply never returns focus
          * automatically (Ctrl-] still does). */
         snprintf(path, sizeof(path), "%s/.zshenv", shim_dir);
-        struct yetty_ycore_void_result env_res = shell_write_file(
-            path, "yai_zdot=${YAI_ORIG_ZDOTDIR:-$HOME}\n"
-                  "[[ -f $yai_zdot/.zshenv ]] && source $yai_zdot/.zshenv\n"
-                  "unset yai_zdot\n");
+        struct yetty_ycore_void_result env_res =
+            shell_write_file(path, "yai_zdot=${YAI_ORIG_ZDOTDIR:-$HOME}\n"
+                                   "[[ -f $yai_zdot/.zshenv ]] && source $yai_zdot/.zshenv\n"
+                                   "unset yai_zdot\n");
         YETTY_RETURN_IF_ERR(yetty_ycore_void, env_res, "shell shim: .zshenv");
         snprintf(path, sizeof(path), "%s/.zshrc", shim_dir);
         char zshrc[512];
-        int zwritten = snprintf(
-            zshrc, sizeof(zshrc),
-            "yai_zdot=${YAI_ORIG_ZDOTDIR:-$HOME}\n"
-            "[[ -f $yai_zdot/.zshrc ]] && source $yai_zdot/.zshrc\n"
-            "unset yai_zdot\n"
-            "yai_hook_preexec() { printf '\\033]7771;%s;preexec\\007'; }\n"
-            "yai_hook_precmd() { printf '\\033]7771;%s;precmd\\007'; }\n"
-            "autoload -Uz add-zsh-hook\n"
-            "add-zsh-hook preexec yai_hook_preexec\n"
-            "add-zsh-hook precmd yai_hook_precmd\n",
-            nonce, nonce);
+        int zwritten = snprintf(zshrc, sizeof(zshrc),
+                                "yai_zdot=${YAI_ORIG_ZDOTDIR:-$HOME}\n"
+                                "[[ -f $yai_zdot/.zshrc ]] && source $yai_zdot/.zshrc\n"
+                                "unset yai_zdot\n"
+                                "yai_hook_preexec() { printf '\\033]7771;%s;preexec\\007'; }\n"
+                                "yai_hook_precmd() { printf '\\033]7771;%s;precmd\\007'; }\n"
+                                "autoload -Uz add-zsh-hook\n"
+                                "add-zsh-hook preexec yai_hook_preexec\n"
+                                "add-zsh-hook precmd yai_hook_precmd\n",
+                                nonce, nonce);
         if (zwritten < 0 || (size_t)zwritten >= sizeof(zshrc)) {
             return YETTY_ERR(yetty_ycore_void, "shell shim: .zshrc content too long");
         }
@@ -188,16 +187,16 @@ static struct yetty_ycore_void_result shell_write_shims(struct yai_app *app, con
      * needs the PROMPT_COMMAND marker. */
     snprintf(path, sizeof(path), "%s/bashrc", shim_dir);
     char bashrc[512];
-    int bwritten = snprintf(
-        bashrc, sizeof(bashrc),
-        "[[ -f ~/.bashrc ]] && source ~/.bashrc\n"
-        "yai_hook_precmd() { printf '\\033]7771;%s;precmd\\007'; }\n"
-        "PROMPT_COMMAND=\"yai_hook_precmd${PROMPT_COMMAND:+;$PROMPT_COMMAND}\"\n"
-        "if ((BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 4)));"
-        " then\n"
-        "  PS0='\\e]7771;%s;preexec\\a'\"${PS0}\"\n"
-        "fi\n",
-        nonce, nonce);
+    int bwritten =
+        snprintf(bashrc, sizeof(bashrc),
+                 "[[ -f ~/.bashrc ]] && source ~/.bashrc\n"
+                 "yai_hook_precmd() { printf '\\033]7771;%s;precmd\\007'; }\n"
+                 "PROMPT_COMMAND=\"yai_hook_precmd${PROMPT_COMMAND:+;$PROMPT_COMMAND}\"\n"
+                 "if ((BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 4)));"
+                 " then\n"
+                 "  PS0='\\e]7771;%s;preexec\\a'\"${PS0}\"\n"
+                 "fi\n",
+                 nonce, nonce);
     if (bwritten < 0 || (size_t)bwritten >= sizeof(bashrc)) {
         return YETTY_ERR(yetty_ycore_void, "shell shim: bashrc content too long");
     }
@@ -261,8 +260,7 @@ static struct yetty_ycore_void_result shell_route_bytes(struct yai_app *app, con
 }
 
 /* One recognized marker. `payload` is the text after "7771;". */
-static struct yetty_ycore_void_result shell_handle_marker(struct yai_app *app,
-                                                          const char *payload)
+static struct yetty_ycore_void_result shell_handle_marker(struct yai_app *app, const char *payload)
 {
     if (strcmp(payload, "precmd") == 0) {
         if (!app->shell_saw_first_prompt) {
@@ -332,8 +330,7 @@ static struct yetty_ycore_void_result shell_filter_output(struct yai_app *app, c
              * "7771;…" sequences are consumed; everything else (titles,
              * OSC 133, …) is released verbatim. */
             int terminated = (byte == 0x07);
-            int overlong =
-                app->shell_filter_hold_len + 1 >= sizeof(app->shell_filter_hold) - 1;
+            int overlong = app->shell_filter_hold_len + 1 >= sizeof(app->shell_filter_hold) - 1;
             app->shell_filter_hold[app->shell_filter_hold_len++] = byte;
             if (byte == '\\' && app->shell_filter_hold_len >= 2 &&
                 app->shell_filter_hold[app->shell_filter_hold_len - 2] == 0x1b) {
@@ -424,8 +421,7 @@ static void shell_poll_cb(uv_poll_t *poll_handle, int status, int events)
     for (;;) {
         ssize_t nread = read(app->shell_master_fd, chunk, sizeof(chunk));
         if (nread > 0) {
-            yai_report_error(app, "shell output",
-                             shell_filter_output(app, chunk, (size_t)nread));
+            yai_report_error(app, "shell output", shell_filter_output(app, chunk, (size_t)nread));
             continue;
         }
         if (nread < 0 && errno == EINTR) {
@@ -556,8 +552,7 @@ struct yetty_ycore_void_result yai_shell_focus_begin(struct yai_app *app)
         return YETTY_OK_VOID(); /* refused — app->shell_focus stays 0 */
     }
     if (app->shell_pid == 0) {
-        if (app->shell_poll_initialized &&
-            !uv_is_closing((uv_handle_t *)&app->shell_poll)) {
+        if (app->shell_poll_initialized && !uv_is_closing((uv_handle_t *)&app->shell_poll)) {
             /* Previous instance still winding down — one loop tick away. */
             return YETTY_ERR(yetty_ycore_void, "shell focus: shell restarting, retry");
         }
@@ -584,8 +579,7 @@ struct yetty_ycore_void_result yai_shell_focus_begin(struct yai_app *app)
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yai_shell_forward(struct yai_app *app, const char *bytes,
-                                                 size_t len)
+struct yetty_ycore_void_result yai_shell_forward(struct yai_app *app, const char *bytes, size_t len)
 {
     if (app->shell_master_fd < 0) {
         return YETTY_ERR(yetty_ycore_void, "shell forward: shell not running");

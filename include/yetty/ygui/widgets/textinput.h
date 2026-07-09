@@ -39,6 +39,12 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 
 struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_yclass_object *obj,
                                                              const char *text);
+/* Selected substring as a fresh NUL-terminated heap string (caller frees), or
+ * NULL when nothing is selected. */
+struct yetty_ycore_char_ptr_result yetty_ygui_textinput_get_selection(
+    const struct yetty_yclass_object *obj);
+/* Select the whole field (Ctrl-A / context-menu "Select All"). */
+struct yetty_ycore_void_result yetty_ygui_textinput_select_all(struct yetty_yclass_object *obj);
 struct yetty_ycore_const_char_ptr_result yetty_ygui_textinput_get_text(
     const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_textinput_set_placeholder(struct yetty_yclass_object *obj,

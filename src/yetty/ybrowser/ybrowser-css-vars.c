@@ -960,6 +960,1135 @@ char *yetty_ylexbor_css_vars_resolve(struct yetty_ylexbor *r, const char *value,
 }
 
 /* ===========================================================================
+ * CSS Media Queries Level 4 range-syntax rewriting.
+ *
+ * libcss 0.9.x understands only the classic `(min-width: N)` / `(max-width: N)`
+ * media features, not the range syntax `(width >= N)`, `(width <= N)`, `(width
+ * > N)`, `(width < N)`, nor the double-ended `(A <= width <= B)`. A whole
+ * `@media (width>=960px){...}` block whose prelude libcss cannot parse is
+ * dropped, so every rule inside is lost. On a modern site that gates its
+ * desktop layout behind range-syntax breakpoints (CNN, Tailwind, …) the
+ * desktop layout then never applies — multi-column zones collapse into a
+ * full-width vertical stack. We rewrite the range forms into the classic
+ * min-/max- forms textually before the sheet reaches libcss.
+ *
+ * Only media/container preludes (the text after `@media`/`@container` up to the
+ * next `{`) are rewritten, so `>`/`<`/`=` bytes inside declaration values or
+ * selectors are left untouched. Comments and strings are copied verbatim.
+ * ========================================================================== */
+
+struct css_text_out {
+    char *buf;
+    size_t len;
+    size_t cap;
+    bool oom;
+};
+
+static void css_text_append(struct css_text_out *out, const char *src, size_t n)
+{
+    if (out->oom) {
+        return;
+    }
+    if (out->len + n + 1 > out->cap) {
+        size_t ncap = out->cap ? out->cap * 2 : 512;
+        while (ncap < out->len + n + 1) {
+            ncap *= 2;
+        }
+        char *nb = realloc(out->buf, ncap);
+        if (!nb) {
+            out->oom = true;
+            return;
+        }
+        out->buf = nb;
+        out->cap = ncap;
+    }
+    memcpy(out->buf + out->len, src, n);
+    out->len += n;
+    out->buf[out->len] = '\0';
+}
+
+static void css_text_append_str(struct css_text_out *out, const char *s)
+{
+    css_text_append(out, s, strlen(s));
+}
+
+/* A range-capable @media feature (the layout-relevant ones libcss offers a
+ * classic min-/max- variant for). */
+static bool media_range_feature(const char *s, size_t n)
+{
+    static const char *const feats[] = {"width", "height", "device-width",
+                                        "device-height"};
+    for (size_t i = 0; i < sizeof(feats) / sizeof(feats[0]); i++) {
+        if (strlen(feats[i]) == n && strncasecmp(s, feats[i], n) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+enum media_range_op {
+    MEDIA_OP_NONE,
+    MEDIA_OP_GE,
+    MEDIA_OP_LE,
+    MEDIA_OP_GT,
+    MEDIA_OP_LT,
+    MEDIA_OP_EQ
+};
+
+/* Read a comparison operator at *p (>= <= < > =); advances *p past it. */
+static enum media_range_op media_read_op(const char **p, const char *end)
+{
+    const char *s = *p;
+    if (s >= end) {
+        return MEDIA_OP_NONE;
+    }
+    if (*s == '>') {
+        if (s + 1 < end && s[1] == '=') {
+            *p = s + 2;
+            return MEDIA_OP_GE;
+        }
+        *p = s + 1;
+        return MEDIA_OP_GT;
+    }
+    if (*s == '<') {
+        if (s + 1 < end && s[1] == '=') {
+            *p = s + 2;
+            return MEDIA_OP_LE;
+        }
+        *p = s + 1;
+        return MEDIA_OP_LT;
+    }
+    if (*s == '=') {
+        *p = s + 1;
+        return MEDIA_OP_EQ;
+    }
+    return MEDIA_OP_NONE;
+}
+
+static enum media_range_op media_flip_op(enum media_range_op op)
+{
+    switch (op) {
+    case MEDIA_OP_GE:
+        return MEDIA_OP_LE;
+    case MEDIA_OP_LE:
+        return MEDIA_OP_GE;
+    case MEDIA_OP_GT:
+        return MEDIA_OP_LT;
+    case MEDIA_OP_LT:
+        return MEDIA_OP_GT;
+    default:
+        return op;
+    }
+}
+
+/* Emit `min-<feature>:<value>` / `max-<feature>:<value>` / `<feature>:<value>`
+ * (no surrounding parens) for one `feature op value` constraint. */
+static void media_emit_constraint(struct css_text_out *out, const char *feature,
+                                  size_t feature_len, enum media_range_op op,
+                                  const char *value, size_t value_len)
+{
+    if (op == MEDIA_OP_GE || op == MEDIA_OP_GT) {
+        css_text_append_str(out, "min-");
+    } else if (op == MEDIA_OP_LE || op == MEDIA_OP_LT) {
+        css_text_append_str(out, "max-");
+    }
+    css_text_append(out, feature, feature_len);
+    css_text_append_str(out, ":");
+    css_text_append(out, value, value_len);
+}
+
+static bool media_token_is_value(const char *s, size_t n)
+{
+    return n > 0 && (s[0] == '.' || s[0] == '+' || s[0] == '-'
+                     || (s[0] >= '0' && s[0] <= '9'));
+}
+
+/* Try to rewrite one parenthesised media group `(inner)` [inner, inner+n) into
+ * the classic form, appending the replacement (WITH parens) to `out`. Returns
+ * true if it recognised and rewrote a range feature; false if the caller
+ * should emit the group unchanged. */
+static bool media_rewrite_group(struct css_text_out *out, const char *inner,
+                                size_t n)
+{
+    const char *p = inner;
+    const char *end = inner + n;
+#define MEDIA_SKIP_WS()                                                         \
+    while (p < end && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r'))    \
+    p++
+#define MEDIA_READ_TOKEN(tok, tok_len)                                          \
+    do {                                                                        \
+        (tok) = p;                                                              \
+        while (p < end && *p != '<' && *p != '>' && *p != '=' && *p != ' '      \
+               && *p != '\t' && *p != '\n' && *p != '\r')                       \
+            p++;                                                                 \
+        (tok_len) = (size_t)(p - (tok));                                        \
+    } while (0)
+
+    const char *tok1;
+    size_t tok1_len;
+    MEDIA_SKIP_WS();
+    MEDIA_READ_TOKEN(tok1, tok1_len);
+    if (tok1_len == 0) {
+        return false;
+    }
+    MEDIA_SKIP_WS();
+    enum media_range_op op1 = media_read_op(&p, end);
+    if (op1 == MEDIA_OP_NONE) {
+        return false;
+    }
+    MEDIA_SKIP_WS();
+    const char *tok2;
+    size_t tok2_len;
+    MEDIA_READ_TOKEN(tok2, tok2_len);
+    if (tok2_len == 0) {
+        return false;
+    }
+    MEDIA_SKIP_WS();
+    enum media_range_op op2 = media_read_op(&p, end);
+
+    if (op2 == MEDIA_OP_NONE) {
+        /* Single-sided: `feature op value` or `value op feature`. */
+        if (media_range_feature(tok1, tok1_len) && media_token_is_value(tok2, tok2_len)) {
+            css_text_append_str(out, "(");
+            media_emit_constraint(out, tok1, tok1_len, op1, tok2, tok2_len);
+            css_text_append_str(out, ")");
+            return true;
+        }
+        if (media_token_is_value(tok1, tok1_len) && media_range_feature(tok2, tok2_len)) {
+            css_text_append_str(out, "(");
+            media_emit_constraint(out, tok2, tok2_len, media_flip_op(op1), tok1,
+                                  tok1_len);
+            css_text_append_str(out, ")");
+            return true;
+        }
+        return false;
+    }
+
+    /* Double-ended: `value op1 feature op2 value`. */
+    MEDIA_SKIP_WS();
+    const char *tok3;
+    size_t tok3_len;
+    MEDIA_READ_TOKEN(tok3, tok3_len);
+    if (tok3_len == 0 || !media_range_feature(tok2, tok2_len)
+        || !media_token_is_value(tok1, tok1_len)
+        || !media_token_is_value(tok3, tok3_len)) {
+        return false;
+    }
+    css_text_append_str(out, "(");
+    media_emit_constraint(out, tok2, tok2_len, media_flip_op(op1), tok1, tok1_len);
+    css_text_append_str(out, ") and (");
+    media_emit_constraint(out, tok2, tok2_len, op2, tok3, tok3_len);
+    css_text_append_str(out, ")");
+    return true;
+#undef MEDIA_SKIP_WS
+#undef MEDIA_READ_TOKEN
+}
+
+/* Case-insensitive match of at-keyword `name` at `s` (already past the '@'). */
+static bool media_at_keyword(const char *s, const char *end, const char *name)
+{
+    size_t n = strlen(name);
+    return (size_t)(end - s) >= n && strncasecmp(s, name, n) == 0;
+}
+
+/* Rewrite MQ4 range-syntax media features to classic min-/max- forms. Returns a
+ * freshly allocated string when any rewrite happened, else NULL (caller keeps
+ * the original buffer). */
+char *yetty_ybrowser_css_rewrite_media_ranges(const char *css, size_t len)
+{
+    if (css == NULL || len == 0) {
+        return NULL;
+    }
+    struct css_text_out out = {0};
+    bool changed = false;
+    const char *p = css;
+    const char *end = css + len;
+    bool in_prelude = false;
+
+    while (p < end) {
+        /* Copy comments verbatim — never interpret their contents. */
+        if (p + 1 < end && p[0] == '/' && p[1] == '*') {
+            const char *close = p + 2;
+            while (close + 1 < end && !(close[0] == '*' && close[1] == '/')) {
+                close++;
+            }
+            close = (close + 1 < end) ? close + 2 : end;
+            css_text_append(&out, p, (size_t)(close - p));
+            p = close;
+            continue;
+        }
+        /* Copy strings verbatim. */
+        if (*p == '"' || *p == '\'') {
+            char quote = *p;
+            const char *q = p + 1;
+            while (q < end && *q != quote) {
+                if (*q == '\\' && q + 1 < end) {
+                    q++;
+                }
+                q++;
+            }
+            q = (q < end) ? q + 1 : end;
+            css_text_append(&out, p, (size_t)(q - p));
+            p = q;
+            continue;
+        }
+        if (*p == '@' && !in_prelude) {
+            const char *kw = p + 1;
+            if (media_at_keyword(kw, end, "media")
+                || media_at_keyword(kw, end, "container")) {
+                in_prelude = true;
+            }
+            css_text_append(&out, p, 1);
+            p++;
+            continue;
+        }
+        if (in_prelude) {
+            if (*p == '{' || *p == ';') {
+                in_prelude = false;
+                css_text_append(&out, p, 1);
+                p++;
+                continue;
+            }
+            if (*p == '(') {
+                const char *close = memchr(p + 1, ')', (size_t)(end - (p + 1)));
+                if (close) {
+                    if (media_rewrite_group(&out, p + 1, (size_t)(close - (p + 1)))) {
+                        changed = true;
+                    } else {
+                        css_text_append(&out, p, (size_t)(close - p) + 1);
+                    }
+                    p = close + 1;
+                    continue;
+                }
+            }
+        }
+        css_text_append(&out, p, 1);
+        p++;
+    }
+
+    if (out.oom || !changed) {
+        free(out.buf);
+        return NULL;
+    }
+    return out.buf;
+}
+
+/* ===========================================================================
+ * Selectors Level 4 `:not()` / `:is()` / `:where()` de-sugaring.
+ *
+ * libcss 0.9.x accepts only Level 3 `:not(<simple>)` — a single simple
+ * selector — and does not understand `:is()` / `:where()` at all. It drops the
+ * WHOLE rule when it meets any of these, so a site's entire desktop rule set
+ * (modern CMS/utility/Tailwind CSS leans on all three) can vanish. We de-sugar
+ * into equivalent Level 3 selector lists before libcss parses:
+ *   `X:not(.a, .b) Y`  ->  `X:not(.a):not(.b) Y`           (list = AND of nots)
+ *   `X:not(.a.b) Y`    ->  `X:not(.a) Y, X:not(.b) Y`      (compound, De Morgan)
+ *   `X:is(.a, .b) Y`   ->  `X.a Y, X.b Y`                  (branch substitution)
+ *   `:where(.a, .b) Y` ->  `.a Y, .b Y`                    (same; drops :where's
+ *                                                           0-specificity — an
+ *                                                           applied rule beats a
+ *                                                           dropped one)
+ * Multiple expanding spans in one selector cross-multiply; the expansion is
+ * capped and falls back to leaving the selector untouched when it would blow
+ * up or an argument is too complex (a combinator inside the pseudo), so libcss
+ * simply drops that one rule as it does today.
+ * ========================================================================== */
+
+#define NOT_MAX_VARIANTS 24
+#define NOT_MAX_SPANS 6
+#define NOT_MAX_PARTS 6
+#define SPAN_MAX_OPTIONS 16
+
+/* Is `c` a selector combinator or whitespace (a complex-selector boundary)? */
+static bool sel_is_combinator(char c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '>' || c == '+'
+           || c == '~';
+}
+
+/* Advance past one simple selector token starting at `p` (`.cls`, `#id`,
+ * `[attr…]`, `:pseudo`/`::pseudo` incl. functional `:x(…)`, or a type/`*`).
+ * Returns the end pointer, or NULL if `p` is not a simple-token start. */
+static const char *sel_skip_simple(const char *p, const char *end)
+{
+    if (p >= end) {
+        return NULL;
+    }
+    if (*p == '[') {
+        int depth = 1;
+        p++;
+        while (p < end && depth > 0) {
+            if (*p == '"' || *p == '\'') {
+                char q = *p++;
+                while (p < end && *p != q) {
+                    if (*p == '\\' && p + 1 < end) {
+                        p++;
+                    }
+                    p++;
+                }
+                if (p < end) {
+                    p++;
+                }
+                continue;
+            }
+            if (*p == '[') {
+                depth++;
+            } else if (*p == ']') {
+                depth--;
+            }
+            p++;
+        }
+        return p;
+    }
+    if (*p == '.' || *p == '#') {
+        p++;
+    } else if (*p == ':') {
+        p++;
+        if (p < end && *p == ':') {
+            p++;
+        }
+    } else if (*p == '*' || isalpha((unsigned char)*p)) {
+        /* type / universal — consumed by the ident loop below */
+    } else {
+        return NULL;
+    }
+    while (p < end && (isalnum((unsigned char)*p) || *p == '-' || *p == '_' || *p == '*'
+                       || (*p == '\\' && p + 1 < end))) {
+        p += (*p == '\\') ? 2 : 1;
+    }
+    /* Functional pseudo argument, e.g. :nth-child(2n+1) — kept as one token. */
+    if (p < end && *p == '(') {
+        int depth = 1;
+        p++;
+        while (p < end && depth > 0) {
+            if (*p == '(') {
+                depth++;
+            } else if (*p == ')') {
+                depth--;
+            }
+            p++;
+        }
+    }
+    return p;
+}
+
+/* Split a compound-selector argument [s,e) (no top-level comma, no combinator)
+ * into its simple parts. Returns the count (>=1), or -1 on an unparseable
+ * token / too many parts. */
+static int not_split_parts(const char *s, const char *e, const char **parts,
+                           size_t *part_lens)
+{
+    int count = 0;
+    const char *p = s;
+    while (p < e) {
+        const char *next = sel_skip_simple(p, e);
+        if (next == NULL || next == p) {
+            return -1;
+        }
+        if (count >= NOT_MAX_PARTS) {
+            return -1;
+        }
+        parts[count] = p;
+        part_lens[count] = (size_t)(next - p);
+        count++;
+        p = next;
+    }
+    return count == 0 ? -1 : count;
+}
+
+/* Does [s,e) contain a top-level combinator or comma (i.e. it is a complex
+ * selector / list rather than one compound)? Brackets shield their contents. */
+static bool not_arg_is_complex(const char *s, const char *e, bool *has_comma)
+{
+    *has_comma = false;
+    for (const char *p = s; p < e;) {
+        if (*p == '[') {
+            const char *skip = sel_skip_simple(p, e);
+            p = (skip && skip > p) ? skip : p + 1;
+            continue;
+        }
+        if (*p == ',') {
+            *has_comma = true;
+        } else if (sel_is_combinator(*p)) {
+            /* Trailing/leading whitespace is not a real combinator; only flag
+             * a combinator that sits between two tokens. */
+            const char *q = p;
+            while (q < e && sel_is_combinator(*q)) {
+                if (*q == '>' || *q == '+' || *q == '~') {
+                    return true;
+                }
+                q++;
+            }
+            if (q < e && p > s) {
+                return true; /* whitespace descendant combinator */
+            }
+            p = q;
+            continue;
+        }
+        p++;
+    }
+    return false;
+}
+
+/* One `:not(...)` span's expansion: a set of replacement strings. A single
+ * string means AND-only (no multiply); multiple strings mean OR (multiply). */
+struct not_span_options {
+    char *options[SPAN_MAX_OPTIONS];
+    int count;
+};
+
+static void not_span_options_free(struct not_span_options *opt)
+{
+    for (int i = 0; i < opt->count; i++) {
+        free(opt->options[i]);
+    }
+    opt->count = 0;
+}
+
+/* Build the replacement options for one `:not(arg)` [arg,arg_end). Returns true
+ * on success (options filled), false if this argument is unsupported and the
+ * caller should abandon the whole selector. */
+static bool not_build_options(const char *arg, const char *arg_end,
+                              struct not_span_options *opt)
+{
+    opt->count = 0;
+    /* trim */
+    while (arg < arg_end && isspace((unsigned char)*arg)) {
+        arg++;
+    }
+    while (arg_end > arg && isspace((unsigned char)*(arg_end - 1))) {
+        arg_end--;
+    }
+    if (arg >= arg_end) {
+        return false;
+    }
+    bool has_comma = false;
+    bool complex = not_arg_is_complex(arg, arg_end, &has_comma);
+
+    if (has_comma) {
+        /* Selector list: AND of one `:not()` per item. Each item must be a
+         * single simple selector (a compound item would need a further OR
+         * split; bail to keep this bounded). */
+        struct css_text_out chain = {0};
+        const char *item = arg;
+        while (item < arg_end) {
+            const char *comma = memchr(item, ',', (size_t)(arg_end - item));
+            const char *item_end = comma ? comma : arg_end;
+            const char *ts = item;
+            const char *te = item_end;
+            while (ts < te && isspace((unsigned char)*ts)) {
+                ts++;
+            }
+            while (te > ts && isspace((unsigned char)*(te - 1))) {
+                te--;
+            }
+            const char *simple_end = sel_skip_simple(ts, te);
+            if (ts >= te || simple_end != te) {
+                free(chain.buf);
+                return false;
+            }
+            css_text_append_str(&chain, ":not(");
+            css_text_append(&chain, ts, (size_t)(te - ts));
+            css_text_append_str(&chain, ")");
+            item = comma ? comma + 1 : arg_end;
+        }
+        if (chain.oom || chain.buf == NULL) {
+            free(chain.buf);
+            return false;
+        }
+        opt->options[0] = chain.buf;
+        opt->count = 1;
+        return true;
+    }
+
+    if (complex) {
+        return false; /* combinator inside :not() — unsupported, drop rule */
+    }
+
+    const char *parts[NOT_MAX_PARTS];
+    size_t part_lens[NOT_MAX_PARTS];
+    int nparts = not_split_parts(arg, arg_end, parts, part_lens);
+    if (nparts < 0) {
+        return false;
+    }
+    if (nparts == 1) {
+        /* Already Level 3 — keep verbatim (one option, no multiply). */
+        struct css_text_out one = {0};
+        css_text_append_str(&one, ":not(");
+        css_text_append(&one, arg, (size_t)(arg_end - arg));
+        css_text_append_str(&one, ")");
+        if (one.oom) {
+            free(one.buf);
+            return false;
+        }
+        opt->options[0] = one.buf;
+        opt->count = 1;
+        return true;
+    }
+    /* Compound: OR over each part (De Morgan). */
+    for (int i = 0; i < nparts; i++) {
+        struct css_text_out one = {0};
+        css_text_append_str(&one, ":not(");
+        css_text_append(&one, parts[i], part_lens[i]);
+        css_text_append_str(&one, ")");
+        if (one.oom) {
+            free(one.buf);
+            not_span_options_free(opt);
+            return false;
+        }
+        opt->options[i] = one.buf;
+    }
+    opt->count = nparts;
+    return true;
+}
+
+/* Build the replacement options for one `:is(arg)` / `:where(arg)` [arg,
+ * arg_end): each top-level comma branch becomes one option (the pseudo is
+ * eliminated, the branch substituted at its position, so the variants OR
+ * together). Every branch must be a single compound with no combinator — a
+ * complex branch (`:is(.a .b)`) would change the selector structure, so we bail
+ * and let libcss drop the rule. Returns true on success. */
+static bool is_where_build_options(const char *arg, const char *arg_end,
+                                   struct not_span_options *opt)
+{
+    opt->count = 0;
+    const char *branch = arg;
+    while (branch < arg_end) {
+        const char *comma = memchr(branch, ',', (size_t)(arg_end - branch));
+        const char *branch_end = comma ? comma : arg_end;
+        const char *ts = branch;
+        const char *te = branch_end;
+        while (ts < te && isspace((unsigned char)*ts)) {
+            ts++;
+        }
+        while (te > ts && isspace((unsigned char)*(te - 1))) {
+            te--;
+        }
+        bool has_comma = false;
+        const char *parts[NOT_MAX_PARTS];
+        size_t part_lens[NOT_MAX_PARTS];
+        if (ts >= te || opt->count >= SPAN_MAX_OPTIONS
+            || not_arg_is_complex(ts, te, &has_comma)
+            || not_split_parts(ts, te, parts, part_lens) < 0) {
+            not_span_options_free(opt);
+            return false;
+        }
+        struct css_text_out one = {0};
+        css_text_append(&one, ts, (size_t)(te - ts));
+        if (one.oom || one.buf == NULL) {
+            free(one.buf);
+            not_span_options_free(opt);
+            return false;
+        }
+        opt->options[opt->count++] = one.buf;
+        branch = comma ? comma + 1 : arg_end;
+    }
+    return opt->count > 0;
+}
+
+/* Expand one complex selector [sel,sel_end) into `out` as a comma-joined
+ * Level 3 list. Returns true if anything was rewritten (De Morgan multiply or
+ * list de-sugar). On failure/no-op it appends the selector verbatim and
+ * returns false. */
+static bool not_expand_selector(struct css_text_out *out, const char *sel,
+                                const char *sel_end)
+{
+    /* Segment the selector into literal chunks and `:not(...)` spans. */
+    const char *lits[NOT_MAX_SPANS + 1];
+    size_t lit_lens[NOT_MAX_SPANS + 1];
+    struct not_span_options spans[NOT_MAX_SPANS];
+    int nspans = 0;
+    const char *p = sel;
+    const char *lit_start = sel;
+    bool any_multiply = false;
+    bool any_change = false;
+
+    while (p < sel_end) {
+        if (*p == '[') {
+            const char *skip = sel_skip_simple(p, sel_end);
+            p = (skip && skip > p) ? skip : p + 1;
+            continue;
+        }
+        int pseudo_len = 0; /* length of ":not(" / ":is(" / ":where(" incl. '(' */
+        bool is_not = false;
+        if (*p == ':') {
+            if ((size_t)(sel_end - p) >= 5 && strncasecmp(p, ":not(", 5) == 0) {
+                pseudo_len = 5;
+                is_not = true;
+            } else if ((size_t)(sel_end - p) >= 7 && strncasecmp(p, ":where(", 7) == 0) {
+                pseudo_len = 7;
+            } else if ((size_t)(sel_end - p) >= 4 && strncasecmp(p, ":is(", 4) == 0) {
+                pseudo_len = 4;
+            }
+        }
+        if (pseudo_len > 0) {
+            const char *arg = p + pseudo_len;
+            int depth = 1;
+            const char *q = arg;
+            while (q < sel_end && depth > 0) {
+                if (*q == '(') {
+                    depth++;
+                } else if (*q == ')') {
+                    depth--;
+                    if (depth == 0) {
+                        break;
+                    }
+                }
+                q++;
+            }
+            if (depth != 0) {
+                break; /* unbalanced — bail to verbatim */
+            }
+            if (nspans >= NOT_MAX_SPANS) {
+                break;
+            }
+            struct not_span_options opt = {0};
+            bool built = is_not ? not_build_options(arg, q, &opt)
+                                : is_where_build_options(arg, q, &opt);
+            if (!built) {
+                /* Unsupported argument — abandon expansion for this selector. */
+                for (int i = 0; i < nspans; i++) {
+                    not_span_options_free(&spans[i]);
+                }
+                css_text_append(out, sel, (size_t)(sel_end - sel));
+                return false;
+            }
+            lits[nspans] = lit_start;
+            lit_lens[nspans] = (size_t)(p - lit_start);
+            spans[nspans] = opt;
+            if (opt.count > 1) {
+                any_multiply = true;
+            }
+            /* A single-option span still changed if it differs textually from
+             * the source (list de-sugar); detect by comparing lengths. */
+            if (opt.count == 1
+                && (strlen(opt.options[0]) != (size_t)(q + 1 - p)
+                    || memcmp(opt.options[0], p, strlen(opt.options[0])) != 0)) {
+                any_change = true;
+            }
+            nspans++;
+            p = q + 1;
+            lit_start = p;
+            continue;
+        }
+        p++;
+    }
+
+    if (nspans == 0 || (!any_multiply && !any_change)) {
+        for (int i = 0; i < nspans; i++) {
+            not_span_options_free(&spans[i]);
+        }
+        css_text_append(out, sel, (size_t)(sel_end - sel));
+        return false;
+    }
+    lits[nspans] = lit_start;
+    lit_lens[nspans] = (size_t)(sel_end - lit_start);
+
+    /* Count total variants = product of option counts; bound it. */
+    long total = 1;
+    for (int i = 0; i < nspans; i++) {
+        total *= spans[i].count;
+        if (total > NOT_MAX_VARIANTS) {
+            break;
+        }
+    }
+    if (total > NOT_MAX_VARIANTS) {
+        for (int i = 0; i < nspans; i++) {
+            not_span_options_free(&spans[i]);
+        }
+        css_text_append(out, sel, (size_t)(sel_end - sel));
+        return false;
+    }
+
+    /* Emit the cross product as a comma-joined list. */
+    int idx[NOT_MAX_SPANS] = {0};
+    for (long v = 0; v < total; v++) {
+        if (v > 0) {
+            css_text_append_str(out, ",");
+        }
+        for (int i = 0; i < nspans; i++) {
+            css_text_append(out, lits[i], lit_lens[i]);
+            css_text_append_str(out, spans[i].options[idx[i]]);
+        }
+        css_text_append(out, lits[nspans], lit_lens[nspans]);
+        /* increment mixed-radix counter */
+        for (int i = nspans - 1; i >= 0; i--) {
+            if (++idx[i] < spans[i].count) {
+                break;
+            }
+            idx[i] = 0;
+        }
+    }
+    for (int i = 0; i < nspans; i++) {
+        not_span_options_free(&spans[i]);
+    }
+    return true;
+}
+
+/* Rewrite a full selector-list [list,list_end): split on top-level commas,
+ * expand each complex selector, rejoin. Appends to `out`; returns true if any
+ * selector was rewritten. */
+static bool not_rewrite_selector_list(struct css_text_out *out, const char *list,
+                                      const char *list_end)
+{
+    bool changed = false;
+    const char *p = list;
+    const char *seg_start = list;
+    bool first = true;
+    while (p <= list_end) {
+        if (p == list_end || *p == ',') {
+            if (!first) {
+                css_text_append_str(out, ",");
+            }
+            first = false;
+            if (not_expand_selector(out, seg_start, p)) {
+                changed = true;
+            }
+            seg_start = p + 1;
+            if (p == list_end) {
+                break;
+            }
+            p++;
+            continue;
+        }
+        if (*p == '[') {
+            const char *skip = sel_skip_simple(p, list_end);
+            p = (skip && skip > p) ? skip : p + 1;
+            continue;
+        }
+        if (*p == '(') {
+            int depth = 1;
+            p++;
+            while (p < list_end && depth > 0) {
+                if (*p == '(') {
+                    depth++;
+                } else if (*p == ')') {
+                    depth--;
+                }
+                p++;
+            }
+            continue;
+        }
+        p++;
+    }
+    return changed;
+}
+
+/* Length-bounded substring search (portable stand-in for memmem, which needs
+ * _GNU_SOURCE). Returns a pointer into `hay` or NULL. */
+static const char *css_find_substr(const char *hay, size_t n, const char *needle,
+                                   size_t needle_len)
+{
+    if (needle_len == 0 || n < needle_len) {
+        return NULL;
+    }
+    for (size_t i = 0; i + needle_len <= n; i++) {
+        if (memcmp(hay + i, needle, needle_len) == 0) {
+            return hay + i;
+        }
+    }
+    return NULL;
+}
+
+/* True if [s,n) contains any of the de-sugarable pseudos. */
+static bool css_has_desugar_pseudo(const char *s, size_t n)
+{
+    return css_find_substr(s, n, ":not(", 5) != NULL
+           || css_find_substr(s, n, ":is(", 4) != NULL
+           || css_find_substr(s, n, ":where(", 7) != NULL;
+}
+
+/* De-sugar Level 4 `:not()` compound/list and `:is()` / `:where()` selectors
+ * across the sheet. Returns a freshly malloc'd string when a rewrite happened,
+ * else NULL. */
+char *yetty_ybrowser_css_desugar_selectors(const char *css, size_t len)
+{
+    if (css == NULL || len == 0 || !css_has_desugar_pseudo(css, len)) {
+        return NULL;
+    }
+    struct css_text_out out = {0};
+    bool changed = false;
+    const char *p = css;
+    const char *end = css + len;
+    const char *prelude_start = css; /* text since last {, }, or ; */
+
+    while (p < end) {
+        if (p + 1 < end && p[0] == '/' && p[1] == '*') {
+            const char *close = p + 2;
+            while (close + 1 < end && !(close[0] == '*' && close[1] == '/')) {
+                close++;
+            }
+            p = (close + 1 < end) ? close + 2 : end;
+            continue;
+        }
+        if (*p == '"' || *p == '\'') {
+            char quote = *p;
+            p++;
+            while (p < end && *p != quote) {
+                if (*p == '\\' && p + 1 < end) {
+                    p++;
+                }
+                p++;
+            }
+            if (p < end) {
+                p++;
+            }
+            continue;
+        }
+        if (*p == '{') {
+            /* Flush the prelude: an at-rule stays verbatim; a selector list is
+             * de-sugared. */
+            const char *ps = prelude_start;
+            while (ps < p && isspace((unsigned char)*ps)) {
+                ps++;
+            }
+            if (ps < p && *ps != '@'
+                && css_has_desugar_pseudo(prelude_start, (size_t)(p - prelude_start))) {
+                if (not_rewrite_selector_list(&out, prelude_start, p)) {
+                    changed = true;
+                }
+            } else {
+                css_text_append(&out, prelude_start, (size_t)(p - prelude_start));
+            }
+            css_text_append(&out, p, 1);
+            p++;
+            prelude_start = p;
+            continue;
+        }
+        if (*p == '}' || *p == ';') {
+            css_text_append(&out, prelude_start, (size_t)(p - prelude_start) + 1);
+            p++;
+            prelude_start = p;
+            continue;
+        }
+        p++;
+    }
+    if (prelude_start < end) {
+        css_text_append(&out, prelude_start, (size_t)(end - prelude_start));
+    }
+
+    if (out.oom || !changed) {
+        free(out.buf);
+        return NULL;
+    }
+    return out.buf;
+}
+
+/* ===========================================================================
+ * `calc(<percentage> ± <length>)` simplification.
+ *
+ * libcss 0.9.x cannot parse `calc()` and drops the whole declaration. The
+ * dominant real-world use in width/flex-basis is the "N-up grid gutter" idiom
+ * — `width: calc(33.33% - 16px)` for a 3-column flex row, `calc(50% - 12px)`
+ * for 2-up, etc. When the width vanishes each card falls back to its content
+ * width, so multi-column card zones collapse into single-column stacks (CNN's
+ * homepage went ~7x too tall — screens of blank space). We approximate by
+ * dropping the ±length gutter term and keeping just the percentage: the columns
+ * are a few px wider than Chrome (the gutter is lost) but the track count — the
+ * thing that actually determines the page shape — is preserved, and because the
+ * percentages sum to <=100% the row still fits without wrapping. Only the exact
+ * two-term `<pct> ± <len>` / `<len> ± <pct>` form is touched; anything more
+ * complex is left verbatim (libcss drops it, as before). Runs after var()
+ * resolution, so `calc(100% - var(--x))` is already `calc(100% - 40px)` here.
+ * ========================================================================== */
+
+/* A CSS token ending in '%'. */
+static bool calc_token_is_percent(const char *s, const char *e)
+{
+    return e > s && e[-1] == '%';
+}
+
+/* A CSS length token (number + alpha unit) or a unitless zero. */
+static bool calc_token_is_length(const char *s, const char *e)
+{
+    if (e <= s) {
+        return false;
+    }
+    if (isalpha((unsigned char)e[-1])) {
+        return true; /* ends in px/rem/em/vw/... */
+    }
+    /* unitless zero (`0`) is a valid length */
+    for (const char *p = s; p < e; p++) {
+        if (*p != '0' && *p != '.' && *p != '+' && *p != '-') {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* Read one calc term (a leading sign, digits/dot, then a unit or '%') starting
+ * at `p`. Returns the end pointer, or NULL if `p` is not a term start. */
+static const char *calc_read_term(const char *p, const char *end)
+{
+    const char *start = p;
+    if (p < end && (*p == '+' || *p == '-')) {
+        p++;
+    }
+    const char *digits = p;
+    while (p < end && (isdigit((unsigned char)*p) || *p == '.')) {
+        p++;
+    }
+    if (p == digits) {
+        return NULL; /* no number */
+    }
+    if (p < end && *p == '%') {
+        return p + 1;
+    }
+    while (p < end && isalpha((unsigned char)*p)) {
+        p++;
+    }
+    return p > start ? p : NULL;
+}
+
+/* If [arg,arg_end) is exactly `<pct> ± <len>` or `<len> ± <pct>`, point
+ * pct_start and pct_len at the percentage token and return true. */
+static bool calc_two_term_percent(const char *arg, const char *arg_end,
+                                  const char **pct_start, size_t *pct_len)
+{
+    const char *p = arg;
+    while (p < arg_end && isspace((unsigned char)*p)) {
+        p++;
+    }
+    const char *t1s = p;
+    const char *t1e = calc_read_term(p, arg_end);
+    if (t1e == NULL) {
+        return false;
+    }
+    p = t1e;
+    if (p >= arg_end || !isspace((unsigned char)*p)) {
+        return false; /* spec requires whitespace around the +/- operator */
+    }
+    while (p < arg_end && isspace((unsigned char)*p)) {
+        p++;
+    }
+    if (p >= arg_end || (*p != '+' && *p != '-')) {
+        return false;
+    }
+    p++;
+    if (p >= arg_end || !isspace((unsigned char)*p)) {
+        return false;
+    }
+    while (p < arg_end && isspace((unsigned char)*p)) {
+        p++;
+    }
+    const char *t2s = p;
+    const char *t2e = calc_read_term(p, arg_end);
+    if (t2e == NULL) {
+        return false;
+    }
+    p = t2e;
+    while (p < arg_end && isspace((unsigned char)*p)) {
+        p++;
+    }
+    if (p != arg_end) {
+        return false; /* trailing tokens — more than two terms */
+    }
+    bool p1 = calc_token_is_percent(t1s, t1e);
+    bool p2 = calc_token_is_percent(t2s, t2e);
+    const char *cand = NULL;
+    size_t cand_len = 0;
+    if (p1 && calc_token_is_length(t2s, t2e)) {
+        cand = t1s;
+        cand_len = (size_t)(t1e - t1s);
+    } else if (p2 && calc_token_is_length(t1s, t1e)) {
+        cand = t2s;
+        cand_len = (size_t)(t2e - t2s);
+    } else {
+        return false;
+    }
+    /* Only the multi-column grid case (`33.33% - 16px`, `50% - 12px`, …) where
+     * the percentage is the structural column fraction and the ±length is a
+     * small gutter. At >=100% the length is a real inset (`100% - 16px` padding
+     * compensation, sidebar subtraction) and dropping it shifts layout — leave
+     * those verbatim (libcss drops them, unchanged from before). */
+    double pct_value = strtod(cand, NULL);
+    if (pct_value <= 0.0 || pct_value >= 100.0) {
+        return false;
+    }
+    *pct_start = cand;
+    *pct_len = cand_len;
+    return true;
+}
+
+/* Replace `calc(<pct> ± <len>)` with `<pct>` across the sheet so libcss keeps
+ * the (approximate) percentage instead of dropping the declaration. Returns a
+ * freshly malloc'd string when a rewrite happened, else NULL. */
+char *yetty_ybrowser_css_simplify_calc(const char *css, size_t len)
+{
+    if (css == NULL || len == 0 || css_find_substr(css, len, "calc(", 5) == NULL) {
+        return NULL;
+    }
+    struct css_text_out out = {0};
+    bool changed = false;
+    const char *p = css;
+    const char *end = css + len;
+    while (p < end) {
+        if (p + 1 < end && p[0] == '/' && p[1] == '*') {
+            const char *close = p + 2;
+            while (close + 1 < end && !(close[0] == '*' && close[1] == '/')) {
+                close++;
+            }
+            const char *next = (close + 1 < end) ? close + 2 : end;
+            css_text_append(&out, p, (size_t)(next - p));
+            p = next;
+            continue;
+        }
+        if (*p == '"' || *p == '\'') {
+            char quote = *p;
+            const char *s = p;
+            p++;
+            while (p < end && *p != quote) {
+                if (*p == '\\' && p + 1 < end) {
+                    p++;
+                }
+                p++;
+            }
+            if (p < end) {
+                p++;
+            }
+            css_text_append(&out, s, (size_t)(p - s));
+            continue;
+        }
+        if ((*p == 'c' || *p == 'C') && (size_t)(end - p) >= 5
+            && strncasecmp(p, "calc(", 5) == 0) {
+            const char *arg = p + 5;
+            int depth = 1;
+            const char *q = arg;
+            while (q < end && depth > 0) {
+                if (*q == '(') {
+                    depth++;
+                } else if (*q == ')') {
+                    depth--;
+                    if (depth == 0) {
+                        break;
+                    }
+                }
+                q++;
+            }
+            const char *pct = NULL;
+            size_t pct_len = 0;
+            if (depth == 0 && calc_two_term_percent(arg, q, &pct, &pct_len)) {
+                css_text_append(&out, pct, pct_len);
+                changed = true;
+                p = q + 1;
+                continue;
+            }
+            /* Leave verbatim (unbalanced or not the two-term form). */
+            css_text_append(&out, p, 5);
+            p = arg;
+            continue;
+        }
+        css_text_append(&out, p, 1);
+        p++;
+    }
+    if (out.oom || !changed) {
+        free(out.buf);
+        return NULL;
+    }
+    return out.buf;
+}
+
+/* ===========================================================================
  * Class-scoped CSS Grid template scanning.
  *
  * libcss parses none of `grid-template-columns` / `gap` / `grid-column`, so we
@@ -1132,8 +2261,8 @@ static int grid_parse_tracks_ex(const char *v, size_t n, struct yl_grid_track *o
         if (i + 7 <= n && strncmp(v + i, "repeat(", 7) == 0) {
             i += 7;
             int rep = atoi(v + i);
-            int repeat_auto = strncmp(v + i, "auto-fit", 8) == 0 ||
-                              strncmp(v + i, "auto-fill", 9) == 0;
+            int repeat_auto =
+                strncmp(v + i, "auto-fit", 8) == 0 || strncmp(v + i, "auto-fill", 9) == 0;
             while (i < n && v[i] != ',') {
                 i++;
             }
@@ -1574,10 +2703,25 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
         while (val_end < len && src[val_end] != ';' && src[val_end] != '}') {
             val_end++;
         }
+        /* Resolve custom properties in the track list — modern design systems
+         * (Tailwind's arbitrary `grid-cols-[var(--x)_minmax(0,var(--y))]`) size
+         * tracks from :root/global tokens. Without this the track list fails to
+         * parse and the grid silently collapses to a single column. */
+        const char *val_ptr = src + val_start;
+        size_t val_len = val_end - val_start;
+        char *grid_resolved = NULL;
+        if (css_find_substr(val_ptr, val_len, "var(", 4) != NULL) {
+            grid_resolved = yetty_ylexbor_css_vars_resolve(r, val_ptr, val_len);
+            if (grid_resolved != NULL) {
+                val_ptr = grid_resolved;
+                val_len = strlen(grid_resolved);
+            }
+        }
         struct yl_grid_track tracks[YL_GRID_MAX_TRACKS];
         int repeat_auto = 0;
-        int ntracks = grid_parse_tracks_ex(src + val_start, val_end - val_start, tracks,
-                                           YL_GRID_MAX_TRACKS, /*allow_named=*/0, &repeat_auto);
+        int ntracks = grid_parse_tracks_ex(val_ptr, val_len, tracks, YL_GRID_MAX_TRACKS,
+                                           /*allow_named=*/0, &repeat_auto);
+        free(grid_resolved);
         /* `grid-template-columns: inherit` (subgrid idiom): register an
          * inherit entry — box-build copies the parent's tracks. */
         int inherit_template = 0;
@@ -1907,7 +3051,8 @@ void yetty_ylexbor_css_scan_var_heights(struct yetty_ylexbor *r, const char *src
                src[sel_start - 1] != ';') {
             sel_start--;
         }
-        char *selector = sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        char *selector =
+            sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
         if (!selector) {
             continue;
         }
@@ -1952,13 +3097,13 @@ int yetty_ylexbor_var_height_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *
         if (verdict <= 0) {
             continue;
         }
-        char *resolved = yetty_ylexbor_css_vars_resolve_for_element(
-            r, element, rule->raw_value, strlen(rule->raw_value));
+        char *resolved = yetty_ylexbor_css_vars_resolve_for_element(r, element, rule->raw_value,
+                                                                    strlen(rule->raw_value));
         const char *value = resolved ? resolved : rule->raw_value;
         char *unit_end = NULL;
         float px = strtof(value, &unit_end);
-        int definite = unit_end && unit_end != value && strncmp(unit_end, "px", 2) == 0 &&
-                       px >= 0.0f;
+        int definite =
+            unit_end && unit_end != value && strncmp(unit_end, "px", 2) == 0 && px >= 0.0f;
         free(resolved);
         if (definite) {
             *out_px = px;
@@ -2014,7 +3159,8 @@ void yetty_ylexbor_css_scan_width_keywords(struct yetty_ylexbor *r, const char *
                src[sel_start - 1] != ';') {
             sel_start--;
         }
-        char *selector = sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        char *selector =
+            sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
         if (!selector) {
             continue;
         }
@@ -2048,6 +3194,555 @@ int yetty_ylexbor_width_keyword_lookup(struct yetty_ylexbor *r, lxb_dom_element_
                                           &rule->selector_state, element);
         if (verdict > 0) {
             return rule->keyword;
+        }
+    }
+    return 0;
+}
+
+/* Parse a calc() arg [arg,arg_end) of the form `<pct> ± <len>` or
+ * `<len> + <pct>` into a percentage numerator, a length magnitude + unit
+ * (0=px, 1=rem, 2=em), and the sign applied to the length term. Returns true
+ * on the recognised two-term form. */
+static bool calc_parse_pct_offset(const char *arg, const char *arg_end, float *out_pct,
+                                  float *out_offset, uint8_t *out_unit, int8_t *out_sign)
+{
+    const char *p = arg;
+    while (p < arg_end && isspace((unsigned char)*p)) {
+        p++;
+    }
+    const char *t1s = p;
+    const char *t1e = calc_read_term(p, arg_end);
+    if (t1e == NULL) {
+        return false;
+    }
+    p = t1e;
+    if (p >= arg_end || !isspace((unsigned char)*p)) {
+        return false;
+    }
+    while (p < arg_end && isspace((unsigned char)*p)) {
+        p++;
+    }
+    if (p >= arg_end || (*p != '+' && *p != '-')) {
+        return false;
+    }
+    char op = *p;
+    p++;
+    if (p >= arg_end || !isspace((unsigned char)*p)) {
+        return false;
+    }
+    while (p < arg_end && isspace((unsigned char)*p)) {
+        p++;
+    }
+    const char *t2s = p;
+    const char *t2e = calc_read_term(p, arg_end);
+    if (t2e == NULL) {
+        return false;
+    }
+    p = t2e;
+    while (p < arg_end && isspace((unsigned char)*p)) {
+        p++;
+    }
+    if (p != arg_end) {
+        return false; /* more than two terms */
+    }
+    const char *pct_tok;
+    const char *len_tok;
+    const char *len_end;
+    int8_t sign;
+    if (calc_token_is_percent(t1s, t1e) && calc_token_is_length(t2s, t2e)) {
+        pct_tok = t1s;
+        len_tok = t2s;
+        len_end = t2e;
+        sign = (op == '-') ? -1 : 1;
+    } else if (calc_token_is_percent(t2s, t2e) && calc_token_is_length(t1s, t1e) && op == '+') {
+        pct_tok = t2s;
+        len_tok = t1s;
+        len_end = t1e;
+        sign = 1;
+    } else {
+        return false; /* `<len> - <pct>` and other shapes are not pct±len */
+    }
+    *out_pct = strtof(pct_tok, NULL);
+    /* Length magnitude + unit. */
+    char *num_end = NULL;
+    float mag = strtof(len_tok, &num_end);
+    if (num_end == NULL) {
+        return false;
+    }
+    uint8_t unit = 0; /* px */
+    if (num_end < len_end) {
+        size_t ulen = (size_t)(len_end - num_end);
+        if (ulen == 3 && strncasecmp(num_end, "rem", 3) == 0) {
+            unit = 1;
+        } else if (ulen == 2 && strncasecmp(num_end, "em", 2) == 0) {
+            unit = 2;
+        } else if (ulen == 2 && strncasecmp(num_end, "px", 2) == 0) {
+            unit = 0;
+        } else {
+            return false; /* vw/vh/ch/… not modelled */
+        }
+    }
+    *out_offset = mag;
+    *out_unit = unit;
+    *out_sign = sign;
+    return true;
+}
+
+void yetty_ylexbor_css_scan_calc_lengths(struct yetty_ylexbor *r, const char *src, size_t len)
+{
+    if (r == NULL || src == NULL || len < 12) {
+        return;
+    }
+    static const char needle[] = "width:";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen < len; i++) {
+        if (memcmp(src + i, needle, nlen) != 0) {
+            continue;
+        }
+        /* Classify width / min-width / max-width; reject other `*-width`. */
+        uint8_t prop = 0;
+        if (i >= 4 && strncasecmp(src + i - 4, "min-", 4) == 0) {
+            prop = 1;
+        } else if (i >= 4 && strncasecmp(src + i - 4, "max-", 4) == 0) {
+            prop = 2;
+        } else if (i > 0 && (src[i - 1] == '-' || isalnum((unsigned char)src[i - 1]))) {
+            continue; /* border-width, some identifier, … */
+        }
+        size_t p = i + nlen;
+        while (p < len && (src[p] == ' ' || src[p] == '\t')) {
+            p++;
+        }
+        if (p + 5 > len || strncasecmp(src + p, "calc(", 5) != 0) {
+            continue;
+        }
+        const char *arg = src + p + 5;
+        const char *scan_end = src + len;
+        int depth = 1;
+        const char *q = arg;
+        while (q < scan_end && depth > 0) {
+            if (*q == '(') {
+                depth++;
+            } else if (*q == ')') {
+                depth--;
+                if (depth == 0) {
+                    break;
+                }
+            }
+            q++;
+        }
+        float pct = 0.0f;
+        float offset = 0.0f;
+        uint8_t unit = 0;
+        int8_t sign = 1;
+        if (depth != 0 || !calc_parse_pct_offset(arg, q, &pct, &offset, &unit, &sign)) {
+            continue;
+        }
+        /* Only the multi-column grid case (pct < 100). At >=100% the length is
+         * a real inset (`calc(100% - 16px)` padding compensation, sidebar
+         * subtraction) whose exact resolution is riskier than leaving it to the
+         * `calc → %` floor — and CNN's card grids are all < 100%. */
+        if (pct >= 100.0f || pct <= 0.0f) {
+            continue;
+        }
+        if (!grid_media_active_at(r, src, len, i)) {
+            continue;
+        }
+        size_t brace = i;
+        while (brace > 0 && src[brace] != '{') {
+            brace--;
+        }
+        if (src[brace] != '{') {
+            continue;
+        }
+        size_t sel_end = brace;
+        size_t sel_start = brace;
+        while (sel_start > 0 && src[sel_start - 1] != '}' && src[sel_start - 1] != '{' &&
+               src[sel_start - 1] != ';') {
+            sel_start--;
+        }
+        char *selector =
+            sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        if (!selector) {
+            continue;
+        }
+        if (r->calc_length_count == r->calc_length_cap) {
+            int cap = r->calc_length_cap ? r->calc_length_cap * 2 : 8;
+            struct yl_calc_length_rule *grown =
+                realloc(r->calc_length_rules, (size_t)cap * sizeof(*grown));
+            if (!grown) {
+                free(selector);
+                return;
+            }
+            r->calc_length_rules = grown;
+            r->calc_length_cap = cap;
+        }
+        struct yl_calc_length_rule *rule = &r->calc_length_rules[r->calc_length_count];
+        memset(rule, 0, sizeof(*rule));
+        rule->selector = selector;
+        rule->prop = prop;
+        rule->pct = pct;
+        rule->offset = offset;
+        rule->offset_unit = unit;
+        rule->sign = sign;
+        r->calc_length_count++;
+    }
+}
+
+int yetty_ylexbor_calc_length_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                     uint8_t prop, float font_size, float *out_pct,
+                                     float *out_offset_px)
+{
+    if (r == NULL || element == NULL || r->calc_length_count == 0) {
+        return 0;
+    }
+    /* Last matching rule wins — capture preserved cascade order. The final
+     * `pct/100 * cb_width + offset` is deferred to layout (resolve_pct_metrics)
+     * because the containing-block width isn't known at box-build. */
+    for (int e = r->calc_length_count; e-- > 0;) {
+        struct yl_calc_length_rule *rule = &r->calc_length_rules[e];
+        if (rule->prop != prop) {
+            continue;
+        }
+        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
+                                          &rule->selector_state, element);
+        if (verdict <= 0) {
+            continue;
+        }
+        float offset_px = rule->offset;
+        if (rule->offset_unit == 1) {
+            offset_px *= 16.0f; /* rem — root font size */
+        } else if (rule->offset_unit == 2) {
+            offset_px *= font_size; /* em */
+        }
+        *out_pct = rule->pct;
+        *out_offset_px = (float)rule->sign * offset_px;
+        return 1;
+    }
+    return 0;
+}
+
+/* Record one aspect-ratio rule (selector already stripped of any ::after /
+ * ::before pseudo). ratio is height/width. */
+static void aspect_rule_add(struct yetty_ylexbor *r, char *selector, float ratio)
+{
+    if (selector == NULL) {
+        return;
+    }
+    if (ratio <= 0.0f || ratio > 100.0f) {
+        free(selector);
+        return;
+    }
+    if (r->aspect_count == r->aspect_cap) {
+        int cap = r->aspect_cap ? r->aspect_cap * 2 : 8;
+        struct yl_aspect_rule *grown = realloc(r->aspect_rules, (size_t)cap * sizeof(*grown));
+        if (!grown) {
+            free(selector);
+            return;
+        }
+        r->aspect_rules = grown;
+        r->aspect_cap = cap;
+    }
+    struct yl_aspect_rule *rule = &r->aspect_rules[r->aspect_count];
+    memset(rule, 0, sizeof(*rule));
+    rule->selector = selector;
+    rule->ratio = ratio;
+    r->aspect_count++;
+}
+
+/* Strip a trailing ::after / ::before pseudo-element off one selector branch
+ * [start,end), returning the byte range that binds to the real element. */
+static void aspect_strip_pseudo(const char *src, size_t start, size_t *end_inout)
+{
+    size_t branch_end = *end_inout;
+    while (branch_end > start && (src[branch_end - 1] == ' ' || src[branch_end - 1] == '\t' ||
+                                  src[branch_end - 1] == '\n' || src[branch_end - 1] == '\r')) {
+        branch_end--;
+    }
+    static const char *const pseudos[] = {"::after", "::before", ":after", ":before"};
+    for (int pseudo_index = 0; pseudo_index < 4; pseudo_index++) {
+        size_t plen = strlen(pseudos[pseudo_index]);
+        if (branch_end - start >= plen &&
+            strncasecmp(src + branch_end - plen, pseudos[pseudo_index], plen) == 0) {
+            branch_end -= plen;
+            break;
+        }
+    }
+    *end_inout = branch_end;
+}
+
+/* Emit one aspect rule per branch of the (possibly comma-separated) selector
+ * list enclosing byte `decl_pos`. Each branch has its trailing pseudo-element
+ * dropped so the ratio binds to the real element. Commas inside a functional
+ * pseudo — `:is(.a, .b)` — are not treated as list separators. */
+static void aspect_emit_rules(struct yetty_ylexbor *r, const char *src, size_t len,
+                              size_t decl_pos, float ratio)
+{
+    (void)len;
+    size_t brace = decl_pos;
+    while (brace > 0 && src[brace] != '{') {
+        brace--;
+    }
+    if (src[brace] != '{') {
+        return;
+    }
+    size_t list_start = brace;
+    while (list_start > 0 && src[list_start - 1] != '}' && src[list_start - 1] != '{' &&
+           src[list_start - 1] != ';') {
+        list_start--;
+    }
+    size_t branch_start = list_start;
+    int paren_depth = 0;
+    for (size_t scan = list_start; scan <= brace; scan++) {
+        char ch = (scan < brace) ? src[scan] : ',';
+        if (ch == '(') {
+            paren_depth++;
+        } else if (ch == ')') {
+            if (paren_depth > 0) {
+                paren_depth--;
+            }
+        } else if (ch == ',' && paren_depth == 0) {
+            size_t bs = branch_start;
+            while (bs < scan && (src[bs] == ' ' || src[bs] == '\t' || src[bs] == '\n' ||
+                                 src[bs] == '\r')) {
+                bs++;
+            }
+            size_t be = scan;
+            aspect_strip_pseudo(src, bs, &be);
+            if (bs < be) {
+                aspect_rule_add(r, supp_selector_capture(src, bs, be), ratio);
+            }
+            branch_start = scan + 1;
+        }
+    }
+}
+
+void yetty_ylexbor_css_scan_aspect_ratios(struct yetty_ylexbor *r, const char *src, size_t len)
+{
+    if (r == NULL || src == NULL || len < 12) {
+        return;
+    }
+    /* Modern `aspect-ratio: W / H` (ratio = H / W). */
+    static const char ar_needle[] = "aspect-ratio:";
+    const size_t ar_len = sizeof(ar_needle) - 1;
+    for (size_t i = 0; i + ar_len < len; i++) {
+        if (memcmp(src + i, ar_needle, ar_len) != 0 ||
+            (i > 0 && (isalnum((unsigned char)src[i - 1]) || src[i - 1] == '-'))) {
+            continue;
+        }
+        const char *value = src + i + ar_len;
+        char *after = NULL;
+        float w = strtof(value, &after);
+        if (after == NULL || after == value || w <= 0.0f) {
+            continue;
+        }
+        while (*after == ' ' || *after == '\t') {
+            after++;
+        }
+        float h = w; /* `aspect-ratio: N` means N/1 → single value, ratio 1/N */
+        float ratio;
+        if (*after == '/') {
+            after++;
+            while (*after == ' ' || *after == '\t') {
+                after++;
+            }
+            h = strtof(after, NULL);
+            if (h <= 0.0f) {
+                continue;
+            }
+            ratio = h / w; /* height per unit width */
+        } else {
+            ratio = 1.0f / w;
+        }
+        if (!grid_media_active_at(r, src, len, i)) {
+            continue;
+        }
+        aspect_emit_rules(r, src, len, i, ratio);
+    }
+    /* Classic `SEL::after { padding-bottom: P% }` frame — the pseudo's
+     * percentage padding sets the element's height as a fraction of its width. */
+    static const char pb_needle[] = "padding-bottom:";
+    const size_t pb_len = sizeof(pb_needle) - 1;
+    for (size_t i = 0; i + pb_len < len; i++) {
+        if (memcmp(src + i, pb_needle, pb_len) != 0) {
+            continue;
+        }
+        const char *value = src + i + pb_len;
+        while (*value == ' ' || *value == '\t') {
+            value++;
+        }
+        char *after = NULL;
+        float pct = strtof(value, &after);
+        if (after == NULL || after == value || pct <= 0.0f || *after != '%') {
+            continue;
+        }
+        /* Only when the enclosing selector is a ::after / ::before pseudo — a
+         * plain element's percentage padding-bottom is handled by the normal
+         * pct-padding path, not as an aspect frame. */
+        size_t brace = i;
+        while (brace > 0 && src[brace] != '{') {
+            brace--;
+        }
+        if (src[brace] != '{') {
+            continue;
+        }
+        size_t sel_start = brace;
+        while (sel_start > 0 && src[sel_start - 1] != '}' && src[sel_start - 1] != '{' &&
+               src[sel_start - 1] != ';') {
+            sel_start--;
+        }
+        bool is_pseudo = false;
+        for (size_t scan = sel_start; scan + 1 < brace; scan++) {
+            if (src[scan] == ':' &&
+                (strncasecmp(src + scan, ":after", 6) == 0 ||
+                 strncasecmp(src + scan, "::after", 7) == 0 ||
+                 strncasecmp(src + scan, ":before", 7) == 0 ||
+                 strncasecmp(src + scan, "::before", 8) == 0)) {
+                is_pseudo = true;
+                break;
+            }
+        }
+        if (!is_pseudo || !grid_media_active_at(r, src, len, i)) {
+            continue;
+        }
+        /* A real aspect frame generates a box — its `::after` block sets
+         * `content:`. Decorative pseudos (gradients, rules) also use
+         * padding-bottom but aren't frames; requiring `content:` in the same
+         * block keeps us from forcing an aspect ratio onto arbitrary elements. */
+        size_t block_end = brace + 1;
+        int block_depth = 1;
+        while (block_end < len && block_depth > 0) {
+            if (src[block_end] == '{') {
+                block_depth++;
+            } else if (src[block_end] == '}') {
+                block_depth--;
+            }
+            block_end++;
+        }
+        if (css_find_substr(src + brace, block_end - brace, "content:", 8) == NULL) {
+            continue;
+        }
+        aspect_emit_rules(r, src, len, i, pct / 100.0f);
+    }
+}
+
+float yetty_ylexbor_aspect_ratio_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element)
+{
+    if (r == NULL || element == NULL || r->aspect_count == 0) {
+        return 0.0f;
+    }
+    for (int e = r->aspect_count; e-- > 0;) {
+        struct yl_aspect_rule *rule = &r->aspect_rules[e];
+        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
+                                          &rule->selector_state, element);
+        if (verdict > 0) {
+            return rule->ratio;
+        }
+    }
+    return 0.0f;
+}
+
+static void display_none_rule_add(struct yetty_ylexbor *r, char *selector)
+{
+    if (selector == NULL) {
+        return;
+    }
+    if (r->display_none_count == r->display_none_cap) {
+        int cap = r->display_none_cap ? r->display_none_cap * 2 : 8;
+        struct yl_display_none_rule *grown =
+            realloc(r->display_none_rules, (size_t)cap * sizeof(*grown));
+        if (!grown) {
+            free(selector);
+            return;
+        }
+        r->display_none_rules = grown;
+        r->display_none_cap = cap;
+    }
+    struct yl_display_none_rule *rule = &r->display_none_rules[r->display_none_count];
+    memset(rule, 0, sizeof(*rule));
+    rule->selector = selector;
+    r->display_none_count++;
+}
+
+void yetty_ylexbor_css_scan_display_none(struct yetty_ylexbor *r, const char *src, size_t len)
+{
+    if (r == NULL || src == NULL || len < 16) {
+        return;
+    }
+    static const char needle[] = "display:";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen + 4 < len; i++) {
+        if (memcmp(src + i, needle, nlen) != 0 ||
+            (i > 0 && (isalnum((unsigned char)src[i - 1]) || src[i - 1] == '-'))) {
+            continue;
+        }
+        size_t value = i + nlen;
+        while (value < len && (src[value] == ' ' || src[value] == '\t')) {
+            value++;
+        }
+        if (value + 4 > len || strncasecmp(src + value, "none", 4) != 0) {
+            continue;
+        }
+        char after = (value + 4 < len) ? src[value + 4] : ';';
+        if (isalnum((unsigned char)after) || after == '-') {
+            continue;
+        }
+        size_t brace = i;
+        while (brace > 0 && src[brace] != '{') {
+            brace--;
+        }
+        if (src[brace] != '{') {
+            continue;
+        }
+        size_t list_start = brace;
+        while (list_start > 0 && src[list_start - 1] != '}' && src[list_start - 1] != '{' &&
+               src[list_start - 1] != ';') {
+            list_start--;
+        }
+        /* Only rules libcss dropped: those with an L4 pseudo (`:is()`,
+		 * `:where()`, `:has()`). This keeps the side table from re-hiding
+		 * elements libcss already reasons about with plain selectors — where
+		 * its cascade (specificity, later-rule wins) would be more accurate. */
+        size_t sel_span = brace - list_start;
+        if (css_find_substr(src + list_start, sel_span, ":is(", 4) == NULL &&
+            css_find_substr(src + list_start, sel_span, ":where(", 7) == NULL &&
+            css_find_substr(src + list_start, sel_span, ":has(", 5) == NULL) {
+            continue;
+        }
+        if (!grid_media_active_at(r, src, len, i)) {
+            continue;
+        }
+        /* Split the selector list on top-level commas (commas inside a
+		 * functional pseudo — `:is(.a, .b)` — are not separators). Each branch
+		 * is matched with lexbor's native engine, which handles the L4 pseudos. */
+        size_t branch_start = list_start;
+        int paren_depth = 0;
+        for (size_t scan = list_start; scan <= brace; scan++) {
+            char ch = (scan < brace) ? src[scan] : ',';
+            if (ch == '(') {
+                paren_depth++;
+            } else if (ch == ')') {
+                if (paren_depth > 0) {
+                    paren_depth--;
+                }
+            } else if (ch == ',' && paren_depth == 0) {
+                display_none_rule_add(r, supp_selector_capture(src, branch_start, scan));
+                branch_start = scan + 1;
+            }
+        }
+    }
+}
+
+int yetty_ylexbor_display_none_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element)
+{
+    if (r == NULL || element == NULL || r->display_none_count == 0) {
+        return 0;
+    }
+    for (int e = 0; e < r->display_none_count; e++) {
+        struct yl_display_none_rule *rule = &r->display_none_rules[e];
+        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
+                                          &rule->selector_state, element);
+        if (verdict > 0) {
+            return 1;
         }
     }
     return 0;
@@ -2095,7 +3790,8 @@ void yetty_ylexbor_css_scan_line_clamps(struct yetty_ylexbor *r, const char *src
                src[sel_start - 1] != ';') {
             sel_start--;
         }
-        char *selector = sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        char *selector =
+            sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
         if (!selector) {
             continue;
         }
@@ -2129,6 +3825,294 @@ int yetty_ylexbor_line_clamp_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *
                                           &rule->selector_state, element);
         if (verdict > 0) {
             return rule->lines;
+        }
+    }
+    return 0;
+}
+
+/* Evaluate ONE translate component — the text of a single argument (between
+ * '(' and ',' or ',' and ')'). Handles a bare length (px / rem / em / unitless
+ * = px) or a percentage, and a `calc(...)` sum of such length terms (the units
+ * modern grid/carousel CSS mixes, e.g. `calc(11.25rem + 28px)`). Returns true
+ * and sets *out (px, or the raw number when *is_pct); a `var()` or otherwise
+ * unparseable component returns false so the caller drops the axis. */
+static bool eval_translate_component(const char *s, const char *end, float rem_px, float *out,
+                                     bool *is_pct)
+{
+    *out = 0.0f;
+    *is_pct = false;
+    while (s < end && (*s == ' ' || *s == '\t')) {
+        s++;
+    }
+    bool is_calc = (size_t)(end - s) >= 5 && strncasecmp(s, "calc(", 5) == 0;
+    if (is_calc) {
+        s += 5;
+        const char *calc_end = end;
+        while (calc_end > s && *(calc_end - 1) != ')') {
+            calc_end--;
+        }
+        if (calc_end > s) {
+            calc_end--; /* drop the closing ')' */
+        }
+        end = calc_end;
+    }
+    float sum = 0.0f;
+    int sign = 1;
+    bool any = false;
+    while (s < end) {
+        while (s < end && (*s == ' ' || *s == '\t')) {
+            s++;
+        }
+        if (s >= end) {
+            break;
+        }
+        if (*s == '+') {
+            sign = 1;
+            s++;
+            continue;
+        }
+        if (*s == '-') {
+            sign = -1;
+            s++;
+            continue;
+        }
+        if (*s == '*' || *s == '/') {
+            /* Scalar multiply/divide — unsupported; bail rather than guess. */
+            return false;
+        }
+        if (!(*s == '.' || (*s >= '0' && *s <= '9'))) {
+            return false; /* var(), keyword, or garbage */
+        }
+        char buf[32];
+        int n = 0;
+        while (s < end && n < 31 && (*s == '.' || (*s >= '0' && *s <= '9'))) {
+            buf[n++] = *s++;
+        }
+        buf[n] = '\0';
+        float value = (float)atof(buf);
+        if (s < end && *s == '%') {
+            /* Percent only makes sense as a standalone component, not a calc
+			 * term (which resolves to a length). Treat a bare `N%` here. */
+            if (is_calc || any) {
+                return false;
+            }
+            *out = sign * value;
+            *is_pct = true;
+            return true;
+        }
+        float factor = 1.0f;
+        if ((size_t)(end - s) >= 3 && strncasecmp(s, "rem", 3) == 0) {
+            factor = rem_px;
+            s += 3;
+        } else if ((size_t)(end - s) >= 2 && strncasecmp(s, "em", 2) == 0) {
+            factor = rem_px;
+            s += 2;
+        } else if ((size_t)(end - s) >= 2 && strncasecmp(s, "px", 2) == 0) {
+            factor = 1.0f;
+            s += 2;
+        }
+        /* unitless → px (0 is the common `translateX(0)`) */
+        sum += (float)sign * value * factor;
+        sign = 1;
+        any = true;
+    }
+    if (!any) {
+        return false;
+    }
+    *out = sum;
+    return true;
+}
+
+/* Parse the translate component of a `transform` value [value, value+len).
+ * Handles translate(x[,y]) / translateX(x) / translateY(y); translateZ /
+ * translate3d and non-translate functions (scale/rotate/matrix) are ignored.
+ * Returns true if a translate with at least one usable axis was found. */
+static bool parse_translate_value(const char *value, size_t len, float rem_px, float *tx, float *ty,
+                                  bool *tx_pct, bool *ty_pct)
+{
+    *tx = 0.0f;
+    *ty = 0.0f;
+    *tx_pct = false;
+    *ty_pct = false;
+    static const char needle[] = "translate";
+    const size_t needle_len = sizeof(needle) - 1;
+    for (size_t i = 0; i + needle_len < len; i++) {
+        if (strncasecmp(value + i, needle, needle_len) != 0) {
+            continue;
+        }
+        size_t j = i + needle_len;
+        int axis = 0; /* 0 = both, 1 = X, 2 = Y */
+        if (j < len && (value[j] == 'x' || value[j] == 'X')) {
+            axis = 1;
+            j++;
+        } else if (j < len && (value[j] == 'y' || value[j] == 'Y')) {
+            axis = 2;
+            j++;
+        } else if (j < len && (value[j] == 'z' || value[j] == 'Z' || value[j] == '3')) {
+            continue; /* translateZ / translate3d — no 2D layout effect modelled */
+        }
+        if (j >= len || value[j] != '(') {
+            continue;
+        }
+        j++;
+        const char *open = value + j;
+        const char *vend = value + len;
+        const char *close = memchr(open, ')', (size_t)(vend - open));
+        if (!close) {
+            return false;
+        }
+        /* A nested calc() has its own ')' — extend to the function's true close
+		 * by balancing parentheses from `open`. */
+        int depth = 1;
+        const char *scan = open;
+        while (scan < vend && depth > 0) {
+            if (*scan == '(') {
+                depth++;
+            } else if (*scan == ')') {
+                depth--;
+                if (depth == 0) {
+                    break;
+                }
+            }
+            scan++;
+        }
+        if (depth != 0) {
+            return false;
+        }
+        close = scan;
+        const char *comma = axis == 0 ? memchr(open, ',', (size_t)(close - open)) : NULL;
+        const char *first_end = comma ? comma : close;
+        float value1 = 0.0f;
+        bool pct1 = false;
+        bool ok1 = eval_translate_component(open, first_end, rem_px, &value1, &pct1);
+        if (axis == 1) {
+            if (!ok1) {
+                continue;
+            }
+            *tx = value1;
+            *tx_pct = pct1;
+            return true;
+        }
+        if (axis == 2) {
+            if (!ok1) {
+                continue;
+            }
+            *ty = value1;
+            *ty_pct = pct1;
+            return true;
+        }
+        /* translate(x, y) — y defaults to 0 when absent */
+        if (!ok1) {
+            continue;
+        }
+        *tx = value1;
+        *tx_pct = pct1;
+        if (comma) {
+            float value2 = 0.0f;
+            bool pct2 = false;
+            if (eval_translate_component(comma + 1, close, rem_px, &value2, &pct2)) {
+                *ty = value2;
+                *ty_pct = pct2;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+void yetty_ylexbor_css_scan_transforms(struct yetty_ylexbor *r, const char *src, size_t len)
+{
+    if (r == NULL || src == NULL || len < 20) {
+        return;
+    }
+    float rem_px = r->default_font_size > 0.0f ? r->default_font_size : 16.0f;
+    static const char needle[] = "transform:";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen < len; i++) {
+        if (memcmp(src + i, needle, nlen) != 0) {
+            continue;
+        }
+        /* Skip `-webkit-transform:`/`text-transform:` etc. — require the
+		 * property to start at a rule boundary (after '{', ';', or space). */
+        if (i > 0) {
+            char prev = src[i - 1];
+            if (prev != '{' && prev != ';' && prev != ' ' && prev != '\t' && prev != '\n') {
+                continue;
+            }
+        }
+        size_t vstart = i + nlen;
+        size_t vend = vstart;
+        while (vend < len && src[vend] != ';' && src[vend] != '}') {
+            vend++;
+        }
+        float tx = 0.0f, ty = 0.0f;
+        bool tx_pct = false, ty_pct = false;
+        if (!parse_translate_value(src + vstart, vend - vstart, rem_px, &tx, &ty, &tx_pct,
+                                   &ty_pct)) {
+            continue;
+        }
+        if (tx == 0.0f && ty == 0.0f && !tx_pct && !ty_pct) {
+            continue; /* translateX(0) etc. — nothing to shift */
+        }
+        if (!grid_media_active_at(r, src, len, i)) {
+            continue;
+        }
+        size_t brace = i;
+        while (brace > 0 && src[brace] != '{') {
+            brace--;
+        }
+        if (src[brace] != '{') {
+            continue;
+        }
+        size_t sel_end = brace;
+        size_t sel_start = brace;
+        while (sel_start > 0 && src[sel_start - 1] != '}' && src[sel_start - 1] != '{' &&
+               src[sel_start - 1] != ';') {
+            sel_start--;
+        }
+        char *selector =
+            sel_start < sel_end ? supp_selector_capture(src, sel_start, sel_end) : NULL;
+        if (!selector) {
+            continue;
+        }
+        if (r->transform_count == r->transform_cap) {
+            int cap = r->transform_cap ? r->transform_cap * 2 : 8;
+            struct yl_transform_rule *grown =
+                realloc(r->transform_rules, (size_t)cap * sizeof(*grown));
+            if (!grown) {
+                free(selector);
+                return;
+            }
+            r->transform_rules = grown;
+            r->transform_cap = cap;
+        }
+        struct yl_transform_rule *rule = &r->transform_rules[r->transform_count];
+        memset(rule, 0, sizeof(*rule));
+        rule->selector = selector;
+        rule->tx = tx;
+        rule->ty = ty;
+        rule->tx_pct = tx_pct;
+        rule->ty_pct = ty_pct;
+        r->transform_count++;
+    }
+}
+
+int yetty_ylexbor_transform_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                   float *out_tx, float *out_ty, bool *out_tx_pct, bool *out_ty_pct)
+{
+    if (r == NULL || element == NULL || r->transform_count == 0) {
+        return 0;
+    }
+    for (int e = r->transform_count; e-- > 0;) {
+        struct yl_transform_rule *rule = &r->transform_rules[e];
+        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
+                                          &rule->selector_state, element);
+        if (verdict > 0) {
+            *out_tx = rule->tx;
+            *out_ty = rule->ty;
+            *out_tx_pct = rule->tx_pct;
+            *out_ty_pct = rule->ty_pct;
+            return 1;
         }
     }
     return 0;
@@ -2174,6 +4158,36 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
     r->width_keyword_rules = NULL;
     r->width_keyword_count = 0;
     r->width_keyword_cap = 0;
+    for (int e = 0; e < r->calc_length_count; e++) {
+        free(r->calc_length_rules[e].selector);
+        if (r->calc_length_rules[e].compiled_selector) {
+            lxb_css_selector_list_destroy_memory(r->calc_length_rules[e].compiled_selector);
+        }
+    }
+    free(r->calc_length_rules);
+    r->calc_length_rules = NULL;
+    r->calc_length_count = 0;
+    r->calc_length_cap = 0;
+    for (int e = 0; e < r->aspect_count; e++) {
+        free(r->aspect_rules[e].selector);
+        if (r->aspect_rules[e].compiled_selector) {
+            lxb_css_selector_list_destroy_memory(r->aspect_rules[e].compiled_selector);
+        }
+    }
+    free(r->aspect_rules);
+    r->aspect_rules = NULL;
+    r->aspect_count = 0;
+    r->aspect_cap = 0;
+    for (int e = 0; e < r->display_none_count; e++) {
+        free(r->display_none_rules[e].selector);
+        if (r->display_none_rules[e].compiled_selector) {
+            lxb_css_selector_list_destroy_memory(r->display_none_rules[e].compiled_selector);
+        }
+    }
+    free(r->display_none_rules);
+    r->display_none_rules = NULL;
+    r->display_none_count = 0;
+    r->display_none_cap = 0;
     for (int e = 0; e < r->line_clamp_count; e++) {
         free(r->line_clamp_rules[e].selector);
         if (r->line_clamp_rules[e].compiled_selector) {
@@ -2184,6 +4198,16 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
     r->line_clamp_rules = NULL;
     r->line_clamp_count = 0;
     r->line_clamp_cap = 0;
+    for (int e = 0; e < r->transform_count; e++) {
+        free(r->transform_rules[e].selector);
+        if (r->transform_rules[e].compiled_selector) {
+            lxb_css_selector_list_destroy_memory(r->transform_rules[e].compiled_selector);
+        }
+    }
+    free(r->transform_rules);
+    r->transform_rules = NULL;
+    r->transform_count = 0;
+    r->transform_cap = 0;
     for (int e = 0; e < r->grid_span_class_count; e++) {
         free(r->grid_span_classes[e].cls);
         for (int k = 0; k < r->grid_span_classes[e].context_count; k++) {

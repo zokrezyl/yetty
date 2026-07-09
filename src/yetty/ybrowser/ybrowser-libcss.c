@@ -972,6 +972,33 @@ int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, si
     const char *eff = resolved ? resolved : css;
     size_t eff_len = resolved ? strlen(resolved) : len;
 
+    /* libcss 0.9.x has no Media Queries Level 4 range syntax — rewrite
+     * `@media (width>=960px)` etc. to classic min-/max-width so those blocks
+     * (often a site's entire desktop layout) are not dropped. */
+    char *mq_rewritten = yetty_ybrowser_css_rewrite_media_ranges(eff, eff_len);
+    if (mq_rewritten) {
+        eff = mq_rewritten;
+        eff_len = strlen(mq_rewritten);
+    }
+
+    /* libcss 0.9.x rejects Selectors Level 4 `:not()` compound/list args and
+     * `:is()` / `:where()` entirely, dropping the whole rule — de-sugar them
+     * into Level 3 selector lists. */
+    char *not_rewritten = yetty_ybrowser_css_desugar_selectors(eff, eff_len);
+    if (not_rewritten) {
+        eff = not_rewritten;
+        eff_len = strlen(not_rewritten);
+    }
+
+    /* libcss 0.9.x can't parse calc() and drops the declaration — collapsing
+     * `width:calc(33.33% - 16px)` grid/flex columns into single-column stacks.
+     * Approximate by keeping just the percentage. */
+    char *calc_rewritten = yetty_ybrowser_css_simplify_calc(eff, eff_len);
+    if (calc_rewritten) {
+        eff = calc_rewritten;
+        eff_len = strlen(calc_rewritten);
+    }
+
     err = css_stylesheet_append_data(sheet, (const uint8_t *)eff, eff_len);
     /* CSS_NEEDDATA is normal — parser is asking for more bytes. We
      * close the stream below with data_done. */
@@ -979,6 +1006,9 @@ int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, si
         ydebug("libcss append_data -> %d", (int)err);
     }
     err = css_stylesheet_data_done(sheet);
+    free(calc_rewritten);
+    free(not_rewritten);
+    free(mq_rewritten);
     free(resolved);
     if (err != CSS_OK && err != CSS_IMPORTS_PENDING) {
         ydebug("libcss data_done -> %d (len=%zu)", (int)err, len);
@@ -1912,6 +1942,20 @@ float yetty_ybrowser_libcss_opacity(const css_computed_style *style)
         return 1.0f;
     }
     return value;
+}
+
+bool yetty_ybrowser_libcss_clips_overflow(const css_computed_style *style)
+{
+    if (!style) {
+        return false;
+    }
+    /* Any non-`visible` overflow on either axis establishes a clip: hidden,
+	 * clip, scroll and auto all confine descendants to the padding box. We do
+	 * not scroll, so scroll/auto are treated as a static clip too. */
+    uint8_t overflow_x = css_computed_overflow_x(style);
+    uint8_t overflow_y = css_computed_overflow_y(style);
+    return (overflow_x != CSS_OVERFLOW_VISIBLE && overflow_x != CSS_OVERFLOW_INHERIT) ||
+           (overflow_y != CSS_OVERFLOW_VISIBLE && overflow_y != CSS_OVERFLOW_INHERIT);
 }
 
 int yetty_ybrowser_libcss_inset(struct yetty_ylexbor *r, const css_computed_style *style, int side,

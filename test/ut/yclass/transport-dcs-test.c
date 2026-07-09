@@ -70,8 +70,7 @@ static int fixture_up(struct ytest *test, struct fixture *fixture, int compresse
     YTEST_REQUIRE(test, pipe(fixture->request_pipe) == 0);
     YTEST_REQUIRE(test, pipe(fixture->reply_pipe) == 0);
     /* Non-blocking host-side read end so the drain loop can poll. */
-    YTEST_REQUIRE(test,
-                  fcntl(fixture->request_pipe[0], F_SETFL, O_NONBLOCK) == 0);
+    YTEST_REQUIRE(test, fcntl(fixture->request_pipe[0], F_SETFL, O_NONBLOCK) == 0);
 
     struct yetty_yclass_transport_ptr_result transport_res = yetty_yclass_transport_dcs_create(
         fixture->reply_pipe[0], fixture->request_pipe[1], TEST_DCS_CODE, compressed);
@@ -154,8 +153,7 @@ static void run_sequential_flush(struct ytest *test, int compressed)
 
         fixture.capture.expect = body;
         fixture.capture.expect_len = body_len;
-        struct yetty_ycore_void_result flush_res =
-            fixture.transport->ops->flush(fixture.transport);
+        struct yetty_ycore_void_result flush_res = fixture.transport->ops->flush(fixture.transport);
         YTEST_REQUIRE_OK(test, flush_res);
 
         drain_requests(test, &fixture, (int)round + 1);
@@ -222,8 +220,8 @@ static void test_duplex_shared_sm(struct ytest *test)
         YTEST_REQUIRE_OK(test, emit_res);
         size_t off = 0;
         while (off < reply_envelope.size) {
-            ptrdiff_t written = write(fixture.reply_pipe[1], reply_envelope.data + off,
-                                      reply_envelope.size - off);
+            ptrdiff_t written =
+                write(fixture.reply_pipe[1], reply_envelope.data + off, reply_envelope.size - off);
             YTEST_REQUIRE(test, written > 0);
             off += (size_t)written;
         }

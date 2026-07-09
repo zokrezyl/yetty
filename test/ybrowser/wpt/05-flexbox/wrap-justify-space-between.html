@@ -1,0 +1,16 @@
+<!doctype html><meta charset=utf-8>
+<title>flex-wrap + justify-content: space-between distributes each line</title>
+<!-- The wrapped-flex path used to hand a line's leftover only to flex-grow
+     items, so fixed-width columns under `space-between` packed flush-left and
+     lost the inter-column gaps. Each line must spread. Rendered at 800px:
+     3 x 240px = 720, 80px free over 2 gaps = 40px each → x 0, 280, 560. -->
+<style>
+  body { margin: 0 }
+  .row { display: flex; flex-wrap: wrap; justify-content: space-between; width: 800px }
+  .row > div { width: 240px; height: 30px }
+</style>
+<div class="row">
+  <div data-test="a" data-expect="0,*,240,*">1</div>
+  <div data-test="b" data-expect="280,*,240,*">2</div>
+  <div data-test="c" data-expect="560,*,240,*">3</div>
+</div>

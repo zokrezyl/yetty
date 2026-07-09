@@ -307,8 +307,8 @@ static int zone_draw_prompt(struct yai_renderer *renderer, int columns)
     int total_rows = 0;
     int cursor_row = 0;
     int cursor_col = 0;
-    total_rows = prompt_walk(renderer, prefix_columns, columns, /*draw=*/0, 0, 0, &cursor_row,
-                             &cursor_col);
+    total_rows =
+        prompt_walk(renderer, prefix_columns, columns, /*draw=*/0, 0, 0, &cursor_row, &cursor_col);
 
     /* The menu / HUD rows are drawn below the prompt (after this call), so
      * count them from their sources rather than the not-yet-set zone_rows_below. */
@@ -511,9 +511,8 @@ static struct yetty_ycore_void_result zone_draw(struct yai_renderer *renderer)
     }
     /* Park the cursor on its prompt row: walk up from the bottom-most zone row
      * past the menu/HUD rows and any prompt rows below the cursor's row. */
-    int rows_below_cursor =
-        (renderer->zone_prompt_rows - 1 - renderer->zone_prompt_cursor_row) +
-        renderer->zone_rows_below;
+    int rows_below_cursor = (renderer->zone_prompt_rows - 1 - renderer->zone_prompt_cursor_row) +
+                            renderer->zone_rows_below;
     if (rows_below_cursor > 0) {
         printf("\033[%dA", rows_below_cursor);
     }
@@ -543,9 +542,8 @@ struct yetty_ycore_void_result yai_renderer_zone_suspend(struct yai_renderer *re
      * (the rest of the prompt rows, the menu rows, the HUD), then everything
      * above it (the earlier prompt rows, the ticker); end at the top zone row,
      * column 0. */
-    int rows_below_cursor =
-        (renderer->zone_prompt_rows - 1 - renderer->zone_prompt_cursor_row) +
-        renderer->zone_rows_below;
+    int rows_below_cursor = (renderer->zone_prompt_rows - 1 - renderer->zone_prompt_cursor_row) +
+                            renderer->zone_rows_below;
     int rows_above_cursor = renderer->zone_rows_above + renderer->zone_prompt_cursor_row;
     fputs("\r\033[2K", stdout);
     for (int row = 0; row < rows_below_cursor; row++) {

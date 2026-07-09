@@ -326,8 +326,7 @@ static const char *yai_effective_markdown_mode(struct yai_app *app)
  * back to text when there is none (non-yetty host, HUD disabled). */
 static const char *yai_effective_message_search_mode(struct yai_app *app)
 {
-    const char *override =
-        yai_engine_override_get(yai_active_engine_config(app), "message-search");
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "message-search");
     const char *value = (override && override[0]) ? override : app->config.message_search_mode;
     return strcmp(value, "text") == 0 ? "text" : "yetty";
 }
@@ -1924,8 +1923,7 @@ static struct yetty_ycore_void_result history_browse_move(struct yai_app *app, i
         }
         app->history_browse = start;
     } else {
-        int next =
-            history_find_match(app, app->history_browse + delta, delta, app->history_stash);
+        int next = history_find_match(app, app->history_browse + delta, delta, app->history_stash);
         if (delta < 0) {
             if (next < 0) {
                 return YETTY_OK_VOID(); /* already at the oldest match */
@@ -1976,8 +1974,7 @@ static void history_search_refilter(struct yai_app *app)
         if (app->history_search_query[0] && !has_match(app->history_search_query, entry)) {
             continue;
         }
-        score_t score =
-            app->history_search_query[0] ? match(app->history_search_query, entry) : 0;
+        score_t score = app->history_search_query[0] ? match(app->history_search_query, entry) : 0;
         size_t pos = app->history_search_match_count;
         while (pos > 0 && scores[pos - 1] < score) {
             pos--;
@@ -2118,11 +2115,11 @@ static struct yetty_ycore_void_result history_search_render_text(struct yai_app 
         history_search_flatten_entry(app->history[app->history_search_matches[row]], display,
                                      sizeof(display));
         if (row == app->history_search_selected) {
-            snprintf(row_storage[row], sizeof(row_storage[row]),
-                     YAI_MINT "▸ %s" YAI_RESET, display);
+            snprintf(row_storage[row], sizeof(row_storage[row]), YAI_MINT "▸ %s" YAI_RESET,
+                     display);
         } else {
-            snprintf(row_storage[row], sizeof(row_storage[row]),
-                     "  " YAI_DIM "%s" YAI_RESET, display);
+            snprintf(row_storage[row], sizeof(row_storage[row]), "  " YAI_DIM "%s" YAI_RESET,
+                     display);
         }
         row_pointers[row] = row_storage[row];
     }
@@ -2154,8 +2151,8 @@ static struct yetty_ycore_void_result history_search_render_ygui(struct yai_app 
     }
     const char *full_text = history_search_selected_text(app);
     struct yetty_ycore_void_result update_res = yai_hud_search_update(
-        app->hud, app->history_search_query, row_pointers, row_count,
-        app->history_search_selected, full_text ? full_text : "(no history match)");
+        app->hud, app->history_search_query, row_pointers, row_count, app->history_search_selected,
+        full_text ? full_text : "(no history match)");
     YETTY_RETURN_IF_ERR(yetty_ycore_void, update_res, "history_search_render: hud update");
     return YETTY_OK_VOID();
 }
@@ -2173,8 +2170,7 @@ static struct yetty_ycore_void_result history_search_step(struct yai_app *app, i
         return YETTY_OK_VOID();
     }
     app->history_search_selected =
-        (app->history_search_selected +
-         (size_t)(delta + (int)app->history_search_match_count)) %
+        (app->history_search_selected + (size_t)(delta + (int)app->history_search_match_count)) %
         app->history_search_match_count;
     return history_search_render(app);
 }
@@ -2713,8 +2709,7 @@ static void build_model_knob(struct yai_app *app, int knob_index, int tab,
         snprintf(app->config_knobs[knob_index].options[option],
                  sizeof(app->config_knobs[knob_index].options[option]), "%s",
                  choices[option].value[0] ? choices[option].value : "default");
-        if (choices[option].value[0] && current[0] &&
-            strcmp(choices[option].value, current) == 0) {
+        if (choices[option].value[0] && current[0] && strcmp(choices[option].value, current) == 0) {
             selected = option;
         }
         out->options[option] = app->config_knobs[knob_index].options[option];
@@ -2865,8 +2860,7 @@ static void yai_quota_format_summary(const struct yai_quota *quota, char *out, s
     char week_part[48] = "";
     if (quota->session_pct >= 0) {
         char reset_5h[24] = "";
-        yai_format_reset_time(quota->session_reset, /*include_date=*/0, reset_5h,
-                              sizeof(reset_5h));
+        yai_format_reset_time(quota->session_reset, /*include_date=*/0, reset_5h, sizeof(reset_5h));
         snprintf(session_part, sizeof(session_part), "%d%% (%s)", quota->session_pct, reset_5h);
     }
     if (quota->week_pct >= 0) {
@@ -2918,14 +2912,13 @@ static void yai_quota_format_status(const struct yai_quota *quota, const char *h
     char session_line[64];
     char week_line[64];
     if (quota->session_pct >= 0) {
-        snprintf(session_line, sizeof(session_line), "%d%% used  (resets %s)",
-                 quota->session_pct, reset_5h);
+        snprintf(session_line, sizeof(session_line), "%d%% used  (resets %s)", quota->session_pct,
+                 reset_5h);
     } else {
         snprintf(session_line, sizeof(session_line), "resets %s", reset_5h);
     }
     if (quota->week_pct >= 0) {
-        snprintf(week_line, sizeof(week_line), "%d%% used  (resets %s)", quota->week_pct,
-                 reset_7d);
+        snprintf(week_line, sizeof(week_line), "%d%% used  (resets %s)", quota->week_pct, reset_7d);
     } else {
         snprintf(week_line, sizeof(week_line), "resets %s", reset_7d);
     }
@@ -3362,7 +3355,8 @@ static struct yetty_ycore_void_result config_tui_open(struct yai_app *app)
 static struct yetty_ycore_void_result model_picker_apply(struct yai_app *app, const char *value)
 {
     yai_config_set(app, "model", value);
-    struct yetty_ycore_void_result push_res = yetty_yai_apply_config(app->engine, app, "model", value);
+    struct yetty_ycore_void_result push_res =
+        yetty_yai_apply_config(app->engine, app, "model", value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, push_res, "model_picker_apply: live push");
     yai_report_error(app, "config save", yai_config_save(app));
     struct yetty_ycore_void_result stats_res = yai_refresh_hud_stats(app);
@@ -3681,15 +3675,15 @@ static int agents_load(struct yai_app *app)
         yyjson_val *entry;
         yyjson_arr_iter iter;
         yyjson_arr_iter_init(root, &iter);
-        while ((entry = yyjson_arr_iter_next(&iter)) != NULL && app->agents_count < YAI_AGENTS_MAX) {
+        while ((entry = yyjson_arr_iter_next(&iter)) != NULL &&
+               app->agents_count < YAI_AGENTS_MAX) {
             struct yai_agent_entry *agent = &app->agents[app->agents_count];
             const char *session_id = yyjson_get_str(yyjson_obj_get(entry, "sessionId"));
             snprintf(agent->session_id, sizeof(agent->session_id), "%s",
                      session_id ? session_id : "");
             const char *name = yyjson_get_str(yyjson_obj_get(entry, "name"));
             const char *id = yyjson_get_str(yyjson_obj_get(entry, "id"));
-            snprintf(agent->name, sizeof(agent->name), "%s",
-                     name ? name : (id ? id : "(session)"));
+            snprintf(agent->name, sizeof(agent->name), "%s", name ? name : (id ? id : "(session)"));
             const char *state = yyjson_get_str(yyjson_obj_get(entry, "state"));
             snprintf(agent->state, sizeof(agent->state), "%s", state ? state : "");
             const char *kind = yyjson_get_str(yyjson_obj_get(entry, "kind"));
@@ -3758,8 +3752,8 @@ static struct yetty_ycore_void_result agents_picker_close(struct yai_app *app, i
         }
         if (agent->session_id[0]) {
             printf("  " YAI_DIM "session: %s" YAI_RESET "\n", agent->session_id);
-            printf("  " YAI_DIM "resume : " YAI_RESET YAI_MINT "yai --engine %s --resume %s" YAI_RESET
-                   "\n",
+            printf("  " YAI_DIM "resume : " YAI_RESET YAI_MINT
+                   "yai --engine %s --resume %s" YAI_RESET "\n",
                    app->engine_name, agent->session_id);
         }
     }
@@ -4144,8 +4138,7 @@ static struct yetty_ycore_void_result show_usage(struct yai_app *app)
 static void help_print_command(const struct yai_command *command)
 {
     char name_and_hint[96];
-    snprintf(name_and_hint, sizeof(name_and_hint), "/%s %s", command->name,
-             command->argument_hint);
+    snprintf(name_and_hint, sizeof(name_and_hint), "/%s %s", command->name, command->argument_hint);
     size_t display_width = 0;
     for (const char *byte = name_and_hint; *byte; byte++) {
         display_width += ((*byte & 0xC0) != 0x80);
@@ -4165,11 +4158,9 @@ static struct yetty_ycore_void_result show_help(struct yai_app *app)
 
     printf("\n" YAI_MINT "input" YAI_RESET "\n");
     if (app->enter_submits) {
-        printf("  " YAI_DIM "Enter sends the message; Alt+Enter inserts a newline" YAI_RESET
-               "\n");
+        printf("  " YAI_DIM "Enter sends the message; Alt+Enter inserts a newline" YAI_RESET "\n");
     } else {
-        printf("  " YAI_DIM "Alt+Enter sends the message; Enter inserts a newline" YAI_RESET
-               "\n");
+        printf("  " YAI_DIM "Alt+Enter sends the message; Enter inserts a newline" YAI_RESET "\n");
     }
     printf("  " YAI_DIM "edit mode: %s (change via /config or --edit-mode)" YAI_RESET "\n",
            app->editor_mode_name);
@@ -4291,7 +4282,8 @@ static struct yetty_ycore_void_result btw_side_turn(struct yai_app *app, const c
 
     app->waiting = 1;
     app->estimated_tokens = 0;
-    struct yetty_ycore_void_result activity_res = yai_set_activity(app, "typing-dots", "… thinking");
+    struct yetty_ycore_void_result activity_res =
+        yai_set_activity(app, "typing-dots", "… thinking");
     if (YETTY_IS_ERR(activity_res)) {
         yai_report_error(app, "activity", activity_res);
     }
@@ -4527,8 +4519,7 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
             return YETTY_OK_VOID();
         }
         if (len > 1) {
-            struct yetty_ycore_void_result forward_res =
-                yai_shell_forward(app, line + 1, len - 1);
+            struct yetty_ycore_void_result forward_res = yai_shell_forward(app, line + 1, len - 1);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, forward_res, "handle_input_line: ! forward");
             struct yetty_ycore_void_result enter_res = yai_shell_forward(app, "\n", 1);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, enter_res, "handle_input_line: ! enter");
@@ -4984,8 +4975,7 @@ static struct yetty_ycore_void_result keyboard_input(struct yai_app *app, const 
             }
         }
         if (escape_at > 0) {
-            struct yetty_ycore_void_result forward_res =
-                yai_shell_forward(app, bytes, escape_at);
+            struct yetty_ycore_void_result forward_res = yai_shell_forward(app, bytes, escape_at);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, forward_res, "keyboard_input: shell forward");
         }
         if (escape_at == len) {
@@ -6001,8 +5991,7 @@ int main(int argc, char **argv)
      * (host==yetty) — doing so wrongly suppressed the text bar whenever yai
      * ran inside yetty. Skipped only when the HUD is disabled (hud_on=false)
      * or stdout is not a tty (pin_enabled is false: no bottom row to pin). */
-    if (!yai_hud_has_window(app->hud) && app->renderer.pin_enabled &&
-        yai_effective_hud_on(app)) {
+    if (!yai_hud_has_window(app->hud) && app->renderer.pin_enabled && yai_effective_hud_on(app)) {
         app->renderer.text_hud = 1;
     }
     /* Parse the configured HUD format (both backends read app->hud_format:

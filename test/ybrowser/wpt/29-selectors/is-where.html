@@ -1,0 +1,17 @@
+<!doctype html><meta charset=utf-8>
+<title>Selectors Level 4 :is() / :where() matching-lists</title>
+<!-- libcss 0.9.x supports neither :is() nor :where(); ybrowser de-sugars each
+     comma branch into a separate Level 3 selector before the cascade. Must not
+     over-match: a branch that applies to no element leaves defaults intact. -->
+<style>
+  body { margin: 0 }
+  .base { width: 100px; height: 20px }
+  :is(.a, .b) .base { width: 250px }          /* .a/.b ancestors widen */
+  .wrap :where(.c, .d) .base { height: 60px } /* .c/.d ancestors heighten */
+  :is(.e.f) .base { width: 300px }            /* compound branch: needs BOTH */
+</style>
+<div class="a"><div data-test="a" data-expect="*,*,250,20" class="base">is .a → 250</div></div>
+<div class="wrap"><div class="c"><div data-test="b" data-expect="*,*,100,60" class="base">where .c → tall</div></div></div>
+<div class="g"><div data-test="c" data-expect="*,*,100,20" class="base">no match → default</div></div>
+<div class="e f"><div data-test="d" data-expect="*,*,300,20" class="base">compound e.f → 300</div></div>
+<div class="e"><div data-test="e" data-expect="*,*,100,20" class="base">only .e → no compound match</div></div>

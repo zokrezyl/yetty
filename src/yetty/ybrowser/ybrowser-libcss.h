@@ -187,6 +187,11 @@ int yetty_ybrowser_libcss_visibility(const css_computed_style *style);
 /* Computed `opacity` in [0,1]; 1.0 when unset or style is NULL. */
 float yetty_ybrowser_libcss_opacity(const css_computed_style *style);
 
+/* True when `overflow-x` or `overflow-y` is anything other than `visible`
+ * (hidden/clip/scroll/auto) — the box clips its descendants to its padding
+ * box. */
+bool yetty_ybrowser_libcss_clips_overflow(const css_computed_style *style);
+
 /* Inset (top/right/bottom/left). `side`: 0=top,1=right,2=bottom,3=left.
  * Returns 0 when the side is `auto`/unset, 1 when it is a resolved length
  * (px written to *out_value; may be negative), or 2 when it is a percentage
