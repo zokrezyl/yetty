@@ -444,6 +444,19 @@ static struct yetty_ycore_void_result dispatch_slice_grow(struct dispatch_slice 
     return YETTY_OK_VOID();
 }
 
+/*
+ * Copy every slot `src` implements into `cls`'s dispatch table, overwriting
+ * on collision. This is a flat vtable copy, not a compositional merge.
+ *
+ * Registration applies dispatch in this order:
+ *
+ *     parent -> mixins (in declaration order) -> leaf ops
+ *
+ * Each stage overwrites the previous one for any slot it implements. A mixin
+ * therefore provides a data slice plus default slot implementations; it does
+ * not automatically wrap or chain behavior from the parent, from earlier
+ * mixins, or from the leaf.
+ */
 static struct yetty_ycore_void_result class_inherit_dispatch(struct yetty_yclass *cls,
                                                              const struct yetty_yclass *src)
 {

@@ -14,7 +14,9 @@
  * Pure event/state logic — no GPU/display/network.
  */
 
+#include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/mixins/draggable.h>
+#include <yetty/ygui/widgets/panel.h>
 #include <yetty/ygui/widgets/radio.h>
 #include <yetty/ygui/widgets/scrollarea.h>
 #include <yetty/ygui/widgets/selectable.h>
@@ -214,6 +216,86 @@ static void test_tabbar_model(struct ytest *test)
     yetty_ygui_widget_destroy(tb);
 }
 
+/*---------------------------------------------------------------------------
+ * Mixin/parent/leaf slot-collision order + the typed super/mixin chaining
+ * helpers. selectable `uses@ygui:clickable` and does NOT override on_press, so
+ * dispatch resolves its on_press to the clickable mixin's impl — which overrode
+ * the base widget's no-op default (registration order is parent -> mixins ->
+ * leaf, each overwriting). clickable's on_press sets the observable `pressed`
+ * flag and consumes; its on_release clears pressed and fires the on_click that
+ * toggles selectable's `selected`.
+ *-------------------------------------------------------------------------*/
+static int sel_selected(struct ytest *test, struct yetty_yclass_object *w)
+{
+    struct yetty_ycore_int_result r = yetty_ygui_selectable_is_selected(w);
+    YTEST_REQUIRE_OK(test, r);
+    return r.value;
+}
+static int clickable_pressed(struct ytest *test, struct yetty_yclass_object *w)
+{
+    struct yetty_ycore_int_result r = yetty_ygui_clickable_is_pressed(w);
+    YTEST_REQUIRE_OK(test, r);
+    return r.value;
+}
+
+static void test_slot_precedence(struct ytest *test)
+{
+    struct yetty_yclass_object *sel = make(test, yetty_ygui_selectable_class_get());
+
+    /* PARENT level: super walks selectable's parent chain to the base widget,
+     * whose on_press is the no-op default — returns 0 and never touches the
+     * clickable slice. */
+    struct yetty_ycore_int_result parent_press =
+        yetty_ygui_super_on_press(sel, yetty_ygui_selectable_class_get().value, 1.0f, 1.0f, 0);
+    YTEST_REQUIRE_OK(test, parent_press);
+    YTEST_CHECK_EQ_INT(test, parent_press.value, 0);
+    YTEST_CHECK_EQ_INT(test, clickable_pressed(test, sel), 0);
+
+    /* DISPATCH level: with no leaf override, the on_press selectable actually
+     * runs is the clickable mixin's (mixin beat the parent default). So a normal
+     * press consumes AND sets the clickable pressed flag — proving the mixin
+     * slot, not the parent's 0, is installed. */
+    struct yetty_ycore_int_result disp = yetty_ygui_widget_on_press(sel, 1.0f, 1.0f, 0);
+    YTEST_REQUIRE_OK(test, disp);
+    YTEST_CHECK_EQ_INT(test, disp.value, 1);
+    YTEST_CHECK_EQ_INT(test, clickable_pressed(test, sel), 1);
+
+    yetty_ygui_widget_destroy(sel);
+}
+
+static void test_mixin_dispatch_helper(struct ytest *test)
+{
+    struct yetty_yclass_object *sel = make(test, yetty_ygui_selectable_class_get());
+    YTEST_CHECK_EQ_INT(test, sel_selected(test, sel), 0);
+    YTEST_CHECK_EQ_INT(test, clickable_pressed(test, sel), 0);
+
+    /* Invoke the clickable mixin's press EXPLICITLY via the typed mixin helper —
+     * the "run the mixin's part" path a leaf override would use. It dispatches
+     * to clickable's on_press: consumes and sets pressed. */
+    struct yetty_ycore_int_result mp =
+        yetty_ygui_mixin_on_press(sel, yetty_ygui_clickable_mixin_get().value, 2.0f, 2.0f, 0);
+    YTEST_REQUIRE_OK(test, mp);
+    YTEST_CHECK_EQ_INT(test, mp.value, 1);
+    YTEST_CHECK_EQ_INT(test, clickable_pressed(test, sel), 1);
+
+    /* Release through the mixin helper clears pressed and fires on_click, which
+     * toggles selected. */
+    struct yetty_ycore_int_result mr =
+        yetty_ygui_mixin_on_release(sel, yetty_ygui_clickable_mixin_get().value, 2.0f, 2.0f, 0);
+    YTEST_REQUIRE_OK(test, mr);
+    YTEST_CHECK_EQ_INT(test, clickable_pressed(test, sel), 0);
+    YTEST_CHECK_EQ_INT(test, sel_selected(test, sel), 1);
+
+    /* A class that does not implement the slot resolves to no impl → the helper
+     * no-ops (returns 0) rather than faulting. */
+    struct yetty_ycore_int_result none =
+        yetty_ygui_mixin_on_press(sel, yetty_ygui_panel_class_get().value, 2.0f, 2.0f, 0);
+    YTEST_REQUIRE_OK(test, none);
+    YTEST_CHECK_EQ_INT(test, none.value, 0);
+
+    yetty_ygui_widget_destroy(sel);
+}
+
 int main(void)
 {
     struct ytest test = ytest_begin("ygui_behavior");
@@ -221,6 +303,8 @@ int main(void)
     YTEST_RUN(&test, test_draggable_sequence);
     YTEST_RUN(&test, test_radio_click_selects);
     YTEST_RUN(&test, test_selectable_click_toggles);
+    YTEST_RUN(&test, test_slot_precedence);
+    YTEST_RUN(&test, test_mixin_dispatch_helper);
     YTEST_RUN(&test, test_tabbar_model);
     return ytest_end(&test);
 }

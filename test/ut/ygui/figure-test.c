@@ -185,6 +185,48 @@ static int child_present(struct ytest *test, struct yetty_yclass_object *contain
     return child_res.value != NULL;
 }
 
+static struct yetty_ycore_void_result count_click(struct yetty_yclass_object *obj, void *userdata)
+{
+    (void)obj;
+    (*(int *)userdata)++;
+    return YETTY_OK_VOID();
+}
+
+static void make_headless_framework(struct ytest *test,
+                                    struct yetty_yfigure_registry **out_registry,
+                                    struct yetty_yclass_object **out_container,
+                                    struct yetty_yclass_object **out_engine,
+                                    struct yetty_yclass_object **out_root)
+{
+    struct yetty_yfigure_registry *registry = make_registry(test);
+    struct yetty_yclass_ctx yclass_ctx = {0};
+    struct yetty_yclass_object_ptr_result cont_res = yetty_yfigure_container_create(&yclass_ctx);
+    YTEST_REQUIRE_OK(test, cont_res);
+    struct yetty_yclass_object *container = cont_res.value;
+    struct yetty_ycore_rectangle container_rect = {{0, 0}, {800, 600}};
+    yetty_yfigure_container_set_registry(container, registry);
+    yetty_yfigure_container_set_rect(container, container_rect);
+
+    struct yetty_yclass_object_ptr_result er = yetty_ygui_framework_create(NULL);
+    YTEST_REQUIRE_OK(test, er);
+    struct yetty_yclass_object *engine = er.value;
+    struct yetty_ycore_void_result set_container_res =
+        yetty_ygui_framework_set_container_obj(engine, container);
+    YTEST_REQUIRE_OK(test, set_container_res);
+
+    struct yetty_yclass_object_ptr_result rr =
+        yetty_ygui_widget_new(yetty_ygui_panel_class_get().value);
+    YTEST_REQUIRE_OK(test, rr);
+    struct yetty_yclass_object *root = rr.value;
+    struct yetty_ycore_void_result set_root_res = yetty_ygui_framework_set_root(engine, root);
+    YTEST_REQUIRE_OK(test, set_root_res);
+
+    *out_registry = registry;
+    *out_container = container;
+    *out_engine = engine;
+    *out_root = root;
+}
+
 /* Minimal valid 2x2 24-bit BMP. stb_image (used by yetty_yimage_render)
  * decodes this into RGBA8, so the emit path produces a real drawable_list —
  * handcrafted inline so the headless test needs no on-disk asset. */
@@ -259,6 +301,117 @@ static struct yetty_yclass_object *make_engine_with_yimage(
     *out_container = container;
     *out_img = img;
     return engine;
+}
+
+static void test_layout_set_marks_framework_dirty(struct ytest *test)
+{
+    struct yetty_yfigure_registry *registry = NULL;
+    struct yetty_yclass_object *container = NULL;
+    struct yetty_yclass_object *engine = NULL;
+    struct yetty_yclass_object *root = NULL;
+    make_headless_framework(test, &registry, &container, &engine, &root);
+
+    struct yetty_ycore_void_result emit_res = yetty_ygui_framework_emit(engine);
+    YTEST_REQUIRE_OK(test, emit_res);
+    YTEST_CHECK_EQ_INT(test, yetty_ygui_framework_is_dirty(engine), 0);
+
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(root);
+    YTEST_REQUIRE_OK(test, layout_res);
+    struct yetty_ygui_layout layout = *layout_res.value;
+    layout.gap = 7.0f;
+    struct yetty_ycore_void_result set_res = yetty_ygui_widget_layout_set(root, &layout);
+    YTEST_REQUIRE_OK(test, set_res);
+
+    YTEST_CHECK_EQ_INT(test, yetty_ygui_framework_is_dirty(engine), 1);
+
+    yetty_ygui_framework_destroy(engine);
+    yetty_yfigure_destroy(container);
+    yetty_yfigure_registry_destroy(registry);
+}
+
+/* A scrollarea child positioned outside the scrollarea's viewport rect is not
+ * clickable; the same child moved inside the viewport is. This locks the input
+ * side of scrollarea clipping, which hit_test already enforces structurally:
+ * the recursive rect check prunes the scrollarea subtree whenever the pointer
+ * is outside the scrollarea's own rect, so an off-viewport child is never
+ * reached (see hit_test in framework.c). It is a regression guard for that
+ * containment, not for any separate scissor-propagation code. */
+static void test_scrollarea_children_clipped_by_viewport(struct ytest *test)
+{
+    struct yetty_yfigure_registry *registry = NULL;
+    struct yetty_yclass_object *container = NULL;
+    struct yetty_yclass_object *engine = NULL;
+    struct yetty_yclass_object *root = NULL;
+    make_headless_framework(test, &registry, &container, &engine, &root);
+
+    struct yetty_yclass_object_ptr_result sr =
+        yetty_ygui_widget_add(root, yetty_ygui_scrollarea_class_get().value);
+    YTEST_REQUIRE_OK(test, sr);
+    struct yetty_yclass_object *scroll = sr.value;
+    struct yetty_ygui_layout_const_ptr_result scroll_layout_res =
+        yetty_ygui_widget_layout_get(scroll);
+    YTEST_REQUIRE_OK(test, scroll_layout_res);
+    struct yetty_ygui_layout scroll_layout = *scroll_layout_res.value;
+    scroll_layout.width = 100.0f;
+    scroll_layout.height = 100.0f;
+    struct yetty_ycore_void_result scroll_set_res =
+        yetty_ygui_widget_layout_set(scroll, &scroll_layout);
+    YTEST_REQUIRE_OK(test, scroll_set_res);
+
+    struct yetty_yclass_object_ptr_result br =
+        yetty_ygui_widget_add(scroll, yetty_ygui_button_class_get().value);
+    YTEST_REQUIRE_OK(test, br);
+    struct yetty_yclass_object *button = br.value;
+    int clicks = 0;
+    struct yetty_ycore_void_result cb_res =
+        yetty_ygui_clickable_on_click_set(button, count_click, &clicks);
+    YTEST_REQUIRE_OK(test, cb_res);
+
+    struct yetty_ygui_layout_const_ptr_result button_layout_res =
+        yetty_ygui_widget_layout_get(button);
+    YTEST_REQUIRE_OK(test, button_layout_res);
+    struct yetty_ygui_layout button_layout = *button_layout_res.value;
+    button_layout.absolute = 1;
+    button_layout.pos_x = 0.0f;
+    button_layout.pos_y = 150.0f;
+    button_layout.width = 50.0f;
+    button_layout.height = 20.0f;
+    struct yetty_ycore_void_result button_set_res =
+        yetty_ygui_widget_layout_set(button, &button_layout);
+    YTEST_REQUIRE_OK(test, button_set_res);
+
+    struct yetty_ycore_void_result emit1 = yetty_ygui_framework_emit(engine);
+    YTEST_REQUIRE_OK(test, emit1);
+
+    struct yetty_ycore_int_result press_out =
+        yetty_ygui_framework_feed_mouse_button(engine, 10.0f, 160.0f, 0, 1, 0);
+    YTEST_REQUIRE_OK(test, press_out);
+    YTEST_CHECK_EQ_INT(test, press_out.value, 0);
+    struct yetty_ycore_int_result release_out =
+        yetty_ygui_framework_feed_mouse_button(engine, 10.0f, 160.0f, 0, 0, 0);
+    YTEST_REQUIRE_OK(test, release_out);
+    YTEST_CHECK_EQ_INT(test, release_out.value, 0);
+    YTEST_CHECK_EQ_INT(test, clicks, 0);
+
+    button_layout.pos_y = 10.0f;
+    button_set_res = yetty_ygui_widget_layout_set(button, &button_layout);
+    YTEST_REQUIRE_OK(test, button_set_res);
+    struct yetty_ycore_void_result emit2 = yetty_ygui_framework_emit(engine);
+    YTEST_REQUIRE_OK(test, emit2);
+
+    struct yetty_ycore_int_result press_in =
+        yetty_ygui_framework_feed_mouse_button(engine, 10.0f, 20.0f, 0, 1, 0);
+    YTEST_REQUIRE_OK(test, press_in);
+    YTEST_CHECK_EQ_INT(test, press_in.value, 1);
+    struct yetty_ycore_int_result release_in =
+        yetty_ygui_framework_feed_mouse_button(engine, 10.0f, 20.0f, 0, 0, 0);
+    YTEST_REQUIRE_OK(test, release_in);
+    YTEST_CHECK_EQ_INT(test, release_in.value, 1);
+    YTEST_CHECK_EQ_INT(test, clicks, 1);
+
+    yetty_ygui_framework_destroy(engine);
+    yetty_yfigure_destroy(container);
+    yetty_yfigure_registry_destroy(registry);
 }
 
 static void test_yimage_emit(struct ytest *test)
@@ -438,6 +591,8 @@ static void test_yimage_emit_rejects_malformed(struct ytest *test)
 int main(void)
 {
     struct ytest test = ytest_begin("ygui_figure");
+    YTEST_RUN(&test, test_layout_set_marks_framework_dirty);
+    YTEST_RUN(&test, test_scrollarea_children_clipped_by_viewport);
     YTEST_RUN(&test, test_yimage_emit);
     YTEST_RUN(&test, test_incremental_figure_skip);
     YTEST_RUN(&test, test_yimage_emit_rejects_malformed);

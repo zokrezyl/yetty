@@ -335,12 +335,281 @@ static void test_widget_paint_emits_real_prims(struct ytest *test)
     yetty_ygui_widget_destroy(panel);
 }
 
+/* Shrinking with a min clamp must REDISTRIBUTE the deficit a frozen child can't
+ * absorb to its still-flexible siblings, not strand it (the pre-fix behavior
+ * left independent per-child clamps that overflowed the container). */
+static void test_flex_shrink_min_clamp_redistributes(struct ytest *test)
+{
+    struct yetty_yclass_object_ptr_result r =
+        yetty_ygui_widget_new(yetty_ygui_hbox_class_get().value);
+    YTEST_REQUIRE_OK(test, r);
+    struct yetty_yclass_object *root = r.value;
+
+    struct yetty_yclass_object_ptr_result ra =
+        yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
+    YTEST_REQUIRE_OK(test, ra);
+    struct yetty_yclass_object_ptr_result rb =
+        yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
+    YTEST_REQUIRE_OK(test, rb);
+
+    struct yetty_ygui_layout_const_ptr_result la_res = yetty_ygui_widget_layout_get(ra.value);
+    YTEST_REQUIRE_OK(test, la_res);
+    struct yetty_ygui_layout la = *la_res.value;
+    la.width = 80.0f;
+    la.height = 20.0f;
+    la.flex_shrink = 1.0f;
+    la.min_width = 60.0f; /* A cannot shrink below 60 */
+    yetty_ygui_widget_layout_set(ra.value, &la);
+
+    struct yetty_ygui_layout_const_ptr_result lb_res = yetty_ygui_widget_layout_get(rb.value);
+    YTEST_REQUIRE_OK(test, lb_res);
+    struct yetty_ygui_layout lb = *lb_res.value;
+    lb.width = 80.0f;
+    lb.height = 20.0f;
+    lb.flex_shrink = 1.0f;
+    yetty_ygui_widget_layout_set(rb.value, &lb);
+
+    struct yetty_ygui_layout_const_ptr_result lp_res = yetty_ygui_widget_layout_get(root);
+    YTEST_REQUIRE_OK(test, lp_res);
+    struct yetty_ygui_layout lp = *lp_res.value;
+    lp.direction = YETTY_YGUI_FLEX_ROW;
+    lp.gap = 0.0f;
+    lp.padding_left = lp.padding_right = lp.padding_top = lp.padding_bottom = 0.0f;
+    yetty_ygui_widget_layout_set(root, &lp);
+
+    /* 100 wide, total base 160 → 60 overflow. A floors at 60 and freezes; B
+     * absorbs the whole 40 remaining (60 + 40 = 100 fits exactly). */
+    struct yetty_ycore_void_result lr = yetty_ygui_layout_compute(root, rect(0, 0, 100, 50));
+    YTEST_REQUIRE_OK(test, lr);
+
+    struct yetty_ycore_rectangle_result ar = yetty_ygui_widget_rect(ra.value);
+    YTEST_REQUIRE_OK(test, ar);
+    struct yetty_ycore_rectangle_result br = yetty_ygui_widget_rect(rb.value);
+    YTEST_REQUIRE_OK(test, br);
+    YTEST_CHECK_NEAR(test, ar.value.max.x - ar.value.min.x, 60.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, br.value.max.x - br.value.min.x, 40.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, br.value.min.x, 60.0f, LAYOUT_TOL);
+
+    yetty_ygui_widget_destroy(root);
+}
+
+/* An absolutely-positioned child is placed at (pos_x, pos_y) in the content box
+ * at its own size and takes no part in flex flow — its in-flow siblings lay out
+ * as if it were not there. */
+static void test_absolute_positioning(struct ytest *test)
+{
+    struct yetty_yclass_object_ptr_result r =
+        yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
+    YTEST_REQUIRE_OK(test, r);
+    struct yetty_yclass_object *root = r.value;
+
+    struct yetty_yclass_object_ptr_result rabs =
+        yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
+    YTEST_REQUIRE_OK(test, rabs);
+    struct yetty_yclass_object_ptr_result rflow =
+        yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
+    YTEST_REQUIRE_OK(test, rflow);
+
+    struct yetty_ygui_layout_const_ptr_result labs_res = yetty_ygui_widget_layout_get(rabs.value);
+    YTEST_REQUIRE_OK(test, labs_res);
+    struct yetty_ygui_layout labs = *labs_res.value;
+    labs.absolute = 1;
+    labs.pos_x = 10.0f;
+    labs.pos_y = 20.0f;
+    labs.width = 30.0f;
+    labs.height = 40.0f;
+    yetty_ygui_widget_layout_set(rabs.value, &labs);
+
+    struct yetty_ygui_layout_const_ptr_result lflow_res = yetty_ygui_widget_layout_get(rflow.value);
+    YTEST_REQUIRE_OK(test, lflow_res);
+    struct yetty_ygui_layout lflow = *lflow_res.value;
+    lflow.width = 50.0f;
+    lflow.height = 25.0f;
+    yetty_ygui_widget_layout_set(rflow.value, &lflow);
+
+    struct yetty_ygui_layout_const_ptr_result lp_res = yetty_ygui_widget_layout_get(root);
+    YTEST_REQUIRE_OK(test, lp_res);
+    struct yetty_ygui_layout lp = *lp_res.value;
+    lp.padding_left = lp.padding_right = lp.padding_top = lp.padding_bottom = 0.0f;
+    yetty_ygui_widget_layout_set(root, &lp);
+
+    struct yetty_ycore_void_result lr = yetty_ygui_layout_compute(root, rect(0, 0, 200, 200));
+    YTEST_REQUIRE_OK(test, lr);
+
+    struct yetty_ycore_rectangle_result ar = yetty_ygui_widget_rect(rabs.value);
+    YTEST_REQUIRE_OK(test, ar);
+    YTEST_CHECK_NEAR(test, ar.value.min.x, 10.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, ar.value.min.y, 20.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, ar.value.max.x - ar.value.min.x, 30.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, ar.value.max.y - ar.value.min.y, 40.0f, LAYOUT_TOL);
+
+    /* The in-flow child starts at the content top (y == 0), unaffected by the
+     * absolute sibling that precedes it in the child list. */
+    struct yetty_ycore_rectangle_result fr = yetty_ygui_widget_rect(rflow.value);
+    YTEST_REQUIRE_OK(test, fr);
+    YTEST_CHECK_NEAR(test, fr.value.min.y, 0.0f, LAYOUT_TOL);
+
+    yetty_ygui_widget_destroy(root);
+}
+
+/* A child that is BOTH absolute and hidden must be folded away entirely: the
+ * layout pass must not place it (no new rect) and must not recurse into it.
+ * Regression guard for the pass that once checked `absolute` before `hidden`
+ * and so re-placed hidden absolute overlays. We seed a sentinel rect, mark the
+ * child absolute+hidden with a pos that WOULD move it, run layout, and assert
+ * the rect is untouched. */
+static void test_hidden_absolute_not_placed(struct ytest *test)
+{
+    struct yetty_yclass_object_ptr_result r =
+        yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
+    YTEST_REQUIRE_OK(test, r);
+    struct yetty_yclass_object *root = r.value;
+
+    struct yetty_yclass_object_ptr_result rhidden =
+        yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
+    YTEST_REQUIRE_OK(test, rhidden);
+
+    /* Seed a distinctive sentinel rect the layout must leave alone. */
+    struct yetty_ycore_rectangle sentinel = rect(3, 7, 33, 47);
+    yetty_ygui_widget_set_rect(rhidden.value, sentinel);
+
+    struct yetty_ygui_layout_const_ptr_result lh_res = yetty_ygui_widget_layout_get(rhidden.value);
+    YTEST_REQUIRE_OK(test, lh_res);
+    struct yetty_ygui_layout lh = *lh_res.value;
+    lh.absolute = 1;
+    lh.hidden = 1;
+    /* A pos/size that differs from the sentinel — if the pass placed it, the
+     * rect would become (100,120)-(150,180) and the asserts below would fail. */
+    lh.pos_x = 100.0f;
+    lh.pos_y = 120.0f;
+    lh.width = 50.0f;
+    lh.height = 60.0f;
+    yetty_ygui_widget_layout_set(rhidden.value, &lh);
+
+    struct yetty_ycore_void_result lr = yetty_ygui_layout_compute(root, rect(0, 0, 200, 200));
+    YTEST_REQUIRE_OK(test, lr);
+
+    struct yetty_ycore_rectangle_result hr = yetty_ygui_widget_rect(rhidden.value);
+    YTEST_REQUIRE_OK(test, hr);
+    /* Rect is exactly the sentinel: layout neither placed nor recursed. */
+    YTEST_CHECK_NEAR(test, hr.value.min.x, sentinel.min.x, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, hr.value.min.y, sentinel.min.y, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, hr.value.max.x, sentinel.max.x, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, hr.value.max.y, sentinel.max.y, LAYOUT_TOL);
+
+    yetty_ygui_widget_destroy(root);
+}
+
+/* wrap == WRAP breaks children onto a new line when they overflow the main
+ * axis; the wrapped child advances on the cross axis by the previous line's
+ * height. */
+static void test_flex_wrap(struct ytest *test)
+{
+    struct yetty_yclass_object_ptr_result r =
+        yetty_ygui_widget_new(yetty_ygui_hbox_class_get().value);
+    YTEST_REQUIRE_OK(test, r);
+    struct yetty_yclass_object *root = r.value;
+
+    struct yetty_yclass_object *kids[3];
+    for (int i = 0; i < 3; ++i) {
+        struct yetty_yclass_object_ptr_result kr =
+            yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
+        YTEST_REQUIRE_OK(test, kr);
+        kids[i] = kr.value;
+        struct yetty_ygui_layout_const_ptr_result kl_res = yetty_ygui_widget_layout_get(kids[i]);
+        YTEST_REQUIRE_OK(test, kl_res);
+        struct yetty_ygui_layout kl = *kl_res.value;
+        kl.width = 40.0f;
+        kl.height = 20.0f;
+        yetty_ygui_widget_layout_set(kids[i], &kl);
+    }
+
+    struct yetty_ygui_layout_const_ptr_result lp_res = yetty_ygui_widget_layout_get(root);
+    YTEST_REQUIRE_OK(test, lp_res);
+    struct yetty_ygui_layout lp = *lp_res.value;
+    lp.direction = YETTY_YGUI_FLEX_ROW;
+    lp.gap = 0.0f;
+    lp.wrap = YETTY_YGUI_WRAP_WRAP;
+    lp.padding_left = lp.padding_right = lp.padding_top = lp.padding_bottom = 0.0f;
+    yetty_ygui_widget_layout_set(root, &lp);
+
+    /* 100 wide: 40+40 fit on line 1, the third (120 total) wraps to line 2. */
+    struct yetty_ycore_void_result lr = yetty_ygui_layout_compute(root, rect(0, 0, 100, 100));
+    YTEST_REQUIRE_OK(test, lr);
+
+    struct yetty_ycore_rectangle_result r0 = yetty_ygui_widget_rect(kids[0]);
+    struct yetty_ycore_rectangle_result r1 = yetty_ygui_widget_rect(kids[1]);
+    struct yetty_ycore_rectangle_result r2 = yetty_ygui_widget_rect(kids[2]);
+    YTEST_REQUIRE_OK(test, r0);
+    YTEST_REQUIRE_OK(test, r1);
+    YTEST_REQUIRE_OK(test, r2);
+    /* Line 1: kids 0 and 1 at y == 0, side by side. */
+    YTEST_CHECK_NEAR(test, r0.value.min.y, 0.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, r1.value.min.y, 0.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, r1.value.min.x, 40.0f, LAYOUT_TOL);
+    /* Line 2: kid 2 wrapped down one line (height 20) and back to x == 0. */
+    YTEST_CHECK_NEAR(test, r2.value.min.x, 0.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, r2.value.min.y, 20.0f, LAYOUT_TOL);
+
+    yetty_ygui_widget_destroy(root);
+}
+
+/* align-self overrides the parent's cross alignment for one child, and a
+ * per-side margin offsets the child's box on both axes. */
+static void test_align_self_and_margin(struct ytest *test)
+{
+    struct yetty_yclass_object_ptr_result r =
+        yetty_ygui_widget_new(yetty_ygui_hbox_class_get().value);
+    YTEST_REQUIRE_OK(test, r);
+    struct yetty_yclass_object *root = r.value;
+
+    struct yetty_yclass_object_ptr_result ka =
+        yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
+    YTEST_REQUIRE_OK(test, ka);
+
+    struct yetty_ygui_layout_const_ptr_result la_res = yetty_ygui_widget_layout_get(ka.value);
+    YTEST_REQUIRE_OK(test, la_res);
+    struct yetty_ygui_layout la = *la_res.value;
+    la.width = 40.0f;
+    la.height = 30.0f;
+    la.align_self = YETTY_YGUI_ALIGN_SELF_END; /* bottom in a row */
+    la.margin_left = 15.0f;                    /* main-axis lead offset */
+    yetty_ygui_widget_layout_set(ka.value, &la);
+
+    struct yetty_ygui_layout_const_ptr_result lp_res = yetty_ygui_widget_layout_get(root);
+    YTEST_REQUIRE_OK(test, lp_res);
+    struct yetty_ygui_layout lp = *lp_res.value;
+    lp.direction = YETTY_YGUI_FLEX_ROW;
+    lp.align = YETTY_YGUI_ALIGN_START; /* parent default the child overrides */
+    lp.gap = 0.0f;
+    lp.padding_left = lp.padding_right = lp.padding_top = lp.padding_bottom = 0.0f;
+    yetty_ygui_widget_layout_set(root, &lp);
+
+    struct yetty_ycore_void_result lr = yetty_ygui_layout_compute(root, rect(0, 0, 200, 100));
+    YTEST_REQUIRE_OK(test, lr);
+
+    struct yetty_ycore_rectangle_result ar = yetty_ygui_widget_rect(ka.value);
+    YTEST_REQUIRE_OK(test, ar);
+    /* margin_left pushes the main-axis start to x == 15. */
+    YTEST_CHECK_NEAR(test, ar.value.min.x, 15.0f, LAYOUT_TOL);
+    /* align-self END puts the 30-tall box at the bottom of the 100 cross:
+     * y == 100 - 30 == 70 (not 0, which the parent's START would give). */
+    YTEST_CHECK_NEAR(test, ar.value.min.y, 70.0f, LAYOUT_TOL);
+
+    yetty_ygui_widget_destroy(root);
+}
+
 int main(void)
 {
     struct ytest test = ytest_begin("ygui_layout");
     YTEST_RUN(&test, test_hbox_two_children);
     YTEST_RUN(&test, test_vbox_flex_grow);
     YTEST_RUN(&test, test_padding);
+    YTEST_RUN(&test, test_flex_shrink_min_clamp_redistributes);
+    YTEST_RUN(&test, test_absolute_positioning);
+    YTEST_RUN(&test, test_hidden_absolute_not_placed);
+    YTEST_RUN(&test, test_flex_wrap);
+    YTEST_RUN(&test, test_align_self_and_margin);
     YTEST_RUN(&test, test_clickable_state_machine);
     YTEST_RUN(&test, test_widget_paint_emits_real_prims);
     return ytest_end(&test);

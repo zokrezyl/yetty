@@ -1,34 +1,36 @@
 /*
  * ygui-layout.c — flex layout pass for the new toolkit.
  *
- * Algorithm summary:
+ * This is a compact but genuinely CSS-flexbox-shaped engine (not the earlier
+ * "single-line only" reduction). Per container it:
  *
- *   For each container:
- *     1. Compute its content box (rect minus padding).
- *     2. Walk in-flow children:
- *        - "main size" = layout.width (row) or layout.height (column)
- *          clamped to [min, max]. Unset (-1.0f) treated as 0 baseline,
- *          flex_grow >0 then distributes free space.
- *        - "cross size" = layout.height (row) or layout.width (column),
- *          clamped. Unset means "auto" — uses parent cross-content for
- *          align=stretch, else 0 baseline.
- *     3. Sum children base sizes + gaps; free_space = content_main - sum.
- *        Distribute free_space proportionally to flex_grow / flex_shrink.
- *     4. Position children main-axis according to justify_content.
- *     5. Position children cross-axis according to align (parent default)
- *        / align (per-child override is not yet supported in this port —
- *        per-child align lives in a follow-up).
- *     6. Recurse into each child.
+ *   1. Computes the content box (rect minus padding).
+ *   2. Resolves each in-flow child's flex base + cross size, its per-side
+ *      margins, and its align-self.
+ *   3. Breaks children into lines: one line for wrap == NOWRAP, or as many as
+ *      needed for wrap == WRAP (a child that would overflow the main axis
+ *      starts a new line).
+ *   4. Per line, resolves flexible main sizes with the CSS "resolve flexible
+ *      lengths" freeze loop — grow distributes spare space by flex_grow,
+ *      shrink removes overflow weighted by flex_shrink * flex_basis, and a
+ *      child that hits its min/max is frozen and the remaining space is
+ *      redistributed to its still-flexible siblings.
+ *   5. Positions each line's children on the main axis by justify_content and
+ *      on the cross axis by align-self (falling back to the parent's align),
+ *      honouring margins and the container's scroll offset.
+ *   6. Stacks lines on the cross axis (wrap), then recurses into each child.
  *
- * Restricted feature set (current port):
- *   - No wrap (single-line flex).
- *   - No absolute positioning (every child is in-flow).
- *   - No percent sizing (px only).
- *   - No baseline alignment.
- *   - No margins on widgets (use padding on the parent + gap instead).
+ * Supported: flex-direction (row/column), justify (start/center/end/
+ * space-between), align + per-child align-self (start/center/end/stretch),
+ * flex-grow, flex-shrink (basis-weighted), min/max with redistribution,
+ * per-side margins, gap, wrap, absolute positioning (a child with
+ * layout.absolute is placed at pos_x/pos_y in the content box and skips flex),
+ * and an intrinsic content-measure pass that sizes non-grow containers from
+ * their children.
  *
- * These are intentional simplifications — the new toolkit will grow
- * each feature back in as widgets need them.
+ * Still intentionally out of scope: percent sizing (px only), baseline
+ * alignment, align-content (wrap lines pack toward the cross start), and
+ * writing-mode/RTL (main/cross leading = top/left).
  */
 
 #include "internal.h"
@@ -65,8 +67,9 @@ static struct yetty_ycore_void_result layout_node(struct yetty_yclass_object *no
  * sensible preferred main-axis size when its own width/height is unset
  * (-1). A leaf (no in-flow children) measures 0 on an unset axis; a
  * container measures padding + the sum of its visible in-flow children's
- * sizes along its own direction (+ gaps), and the max child size on the
- * cross axis. Recurses so nested vbox/tree_node stacks size bottom-up.
+ * sizes along its own direction (+ gaps + the children's main-axis margins),
+ * and the max child size (+ cross margins) on the cross axis. Recurses so
+ * nested vbox/tree_node stacks size bottom-up.
  *
  * Authored sizes (>= 0) always win; only unset axes are derived. */
 static struct yetty_ycore_void_result measure_size(struct yetty_yclass_object *node, float *out_w,
@@ -97,8 +100,10 @@ static struct yetty_ycore_void_result measure_size(struct yetty_yclass_object *n
                 float cw = 0.0f, ch = 0.0f;
                 struct yetty_ycore_void_result m_res = measure_size(c, &cw, &ch);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, m_res, "measure_size: child measure");
-                float cmain = row ? cw : ch;
-                float ccross = row ? ch : cw;
+                float margin_w = cl->margin_left + cl->margin_right;
+                float margin_h = cl->margin_top + cl->margin_bottom;
+                float cmain = (row ? cw + margin_w : ch + margin_h);
+                float ccross = (row ? ch + margin_h : cw + margin_w);
                 main_sum += cmain;
                 if (ccross > cross_max) {
                     cross_max = ccross;
@@ -132,100 +137,320 @@ static struct yetty_ycore_void_result measure_size(struct yetty_yclass_object *n
     return YETTY_OK_VOID();
 }
 
-/* Resolve a child's preferred main-axis size + cross-axis size into the
- * given container, before flex grow/shrink distribution. */
-struct child_axes {
-    float main_pref;
-    float cross_pref;
+/* One in-flow child resolved into the parent's main/cross frame. Margins and
+ * align-self are pre-projected onto the main/cross axes so the placement code
+ * is direction-agnostic. `main_size`/`cross_size` are filled by the sizing
+ * pass. */
+struct flex_item {
+    struct yetty_yclass_object *child;
+    float base_main;
     float main_min;
     float main_max;
+    float cross_base; /* authored cross size, 0 = auto */
     float cross_min;
     float cross_max;
     float grow;
     float shrink;
+    float margin_main_lead;
+    float margin_main_trail;
+    float margin_cross_lead;
+    float margin_cross_trail;
+    enum yetty_ygui_flex_align_self align_self;
+    float main_size;
+    float cross_size;
 };
 
-YETTY_YRESULT_DECLARE(child_axes, struct child_axes);
+YETTY_YRESULT_DECLARE(flex_item, struct flex_item);
 
-static struct child_axes_result resolve_child_axes(const struct yetty_ygui_layout *parent_layout,
-                                                   struct yetty_yclass_object *child)
+static struct flex_item_result resolve_flex_item(const struct yetty_ygui_layout *parent_layout,
+                                                 struct yetty_yclass_object *child)
 {
     struct yetty_ygui_layout_const_ptr_result child_layout_res =
         yetty_ygui_widget_layout_get(child);
-    YETTY_RETURN_IF_ERR(child_axes, child_layout_res, "resolve_child_axes: layout_get");
-    const struct yetty_ygui_layout *child_layout = child_layout_res.value;
-    struct child_axes a;
+    YETTY_RETURN_IF_ERR(flex_item, child_layout_res, "resolve_flex_item: layout_get");
+    const struct yetty_ygui_layout *cl = child_layout_res.value;
+    struct flex_item item = {0};
+    item.child = child;
     int row = direction_is_row(parent_layout);
-    float authored_main = row ? child_layout->width : child_layout->height;
+    float authored_main = row ? cl->width : cl->height;
     if (row) {
-        a.main_pref = child_layout->width >= 0.0f ? child_layout->width : 0.0f;
-        a.cross_pref = child_layout->height >= 0.0f ? child_layout->height : 0.0f;
-        a.main_min = child_layout->min_width;
-        a.main_max = child_layout->max_width;
-        a.cross_min = child_layout->min_height;
-        a.cross_max = child_layout->max_height;
+        item.base_main = cl->width >= 0.0f ? cl->width : 0.0f;
+        item.cross_base = cl->height >= 0.0f ? cl->height : 0.0f;
+        item.main_min = cl->min_width;
+        item.main_max = cl->max_width;
+        item.cross_min = cl->min_height;
+        item.cross_max = cl->max_height;
+        item.margin_main_lead = cl->margin_left;
+        item.margin_main_trail = cl->margin_right;
+        item.margin_cross_lead = cl->margin_top;
+        item.margin_cross_trail = cl->margin_bottom;
     } else {
-        a.main_pref = child_layout->height >= 0.0f ? child_layout->height : 0.0f;
-        a.cross_pref = child_layout->width >= 0.0f ? child_layout->width : 0.0f;
-        a.main_min = child_layout->min_height;
-        a.main_max = child_layout->max_height;
-        a.cross_min = child_layout->min_width;
-        a.cross_max = child_layout->max_width;
+        item.base_main = cl->height >= 0.0f ? cl->height : 0.0f;
+        item.cross_base = cl->width >= 0.0f ? cl->width : 0.0f;
+        item.main_min = cl->min_height;
+        item.main_max = cl->max_height;
+        item.cross_min = cl->min_width;
+        item.cross_max = cl->max_width;
+        item.margin_main_lead = cl->margin_top;
+        item.margin_main_trail = cl->margin_bottom;
+        item.margin_cross_lead = cl->margin_left;
+        item.margin_cross_trail = cl->margin_right;
     }
-    a.grow = child_layout->flex_grow;
-    a.shrink = child_layout->flex_shrink;
+    item.grow = cl->flex_grow;
+    item.shrink = cl->flex_shrink;
+    item.align_self = cl->align_self;
     /* When the child doesn't author its main size and won't grow to fill,
      * derive an intrinsic content size so nested containers (tree_node,
-     * vbox-of-rows) stack instead of collapsing to a zero rect. Grow
-     * children keep a 0 base — they expand to fill regardless. Childless
-     * leaves measure 0 (unless they carry padding, e.g. a tree_node whose
-     * header lives in padding_top), so this is safe for plain widgets. */
-    if (authored_main < 0.0f && a.grow <= 0.0f) {
+     * vbox-of-rows) stack instead of collapsing to a zero rect. Grow children
+     * keep a 0 base — they expand to fill regardless. */
+    if (authored_main < 0.0f && item.grow <= 0.0f) {
         float mw = 0.0f, mh = 0.0f;
         struct yetty_ycore_void_result m_res = measure_size(child, &mw, &mh);
-        YETTY_RETURN_IF_ERR(child_axes, m_res, "resolve_child_axes: measure_size");
-        a.main_pref = row ? mw : mh;
+        YETTY_RETURN_IF_ERR(flex_item, m_res, "resolve_flex_item: measure_size");
+        item.base_main = row ? mw : mh;
     }
-    a.main_pref = clamp_size(a.main_pref, a.main_min, a.main_max);
-    return YETTY_OK(child_axes, a);
+    item.base_main = clamp_size(item.base_main, item.main_min, item.main_max);
+    return YETTY_OK(flex_item, item);
 }
 
-/* Count visible in-flow children + sum their preferred main sizes +
- * flex factors. */
-struct flex_summary {
-    int child_count;
-    float sum_main_pref;
-    float sum_grow;
-    float sum_shrink;
-};
-
-YETTY_YRESULT_DECLARE(flex_summary, struct flex_summary);
-
-static struct flex_summary_result summarize_children(struct yetty_yclass_object *parent,
-                                                     const struct yetty_ygui_layout *parent_layout)
+/* CSS "resolve flexible lengths" for one line: fill each item's `main_size`,
+ * distributing `content_main` minus the line's margins and gaps by flex_grow
+ * (spare space) or flex_shrink * flex_basis (overflow). A child clamped to its
+ * min/max is frozen and its surplus/deficit flows to the still-flexible
+ * siblings on the next pass, so min/max no longer silently strand space. */
+static void resolve_line_main(struct flex_item *items, int start, int count, float content_main,
+                              float gap)
 {
-    struct flex_summary s = {0};
-    struct yetty_yclass_object_ptr_result child_res = yetty_ygui_widget_first_child(parent);
-    YETTY_RETURN_IF_ERR(flex_summary, child_res, "summarize_children: first_child");
-    for (struct yetty_yclass_object *c = child_res.value; c;) {
-        struct yetty_ygui_layout_const_ptr_result child_layout_res =
-            yetty_ygui_widget_layout_get(c);
-        YETTY_RETURN_IF_ERR(flex_summary, child_layout_res, "summarize_children: layout_get");
-        const struct yetty_ygui_layout *cl = child_layout_res.value;
-        /* Hidden subtrees and absolutely-positioned children skip flex. */
-        if (!cl->hidden && !cl->absolute) {
-            struct child_axes_result axes_res = resolve_child_axes(parent_layout, c);
-            YETTY_RETURN_IF_ERR(flex_summary, axes_res, "summarize_children: resolve_child_axes");
-            s.child_count++;
-            s.sum_main_pref += axes_res.value.main_pref;
-            s.sum_grow += axes_res.value.grow;
-            s.sum_shrink += axes_res.value.shrink;
-        }
-        struct yetty_yclass_object_ptr_result next_res = yetty_ygui_widget_next_sibling(c);
-        YETTY_RETURN_IF_ERR(flex_summary, next_res, "summarize_children: next_sibling");
-        c = next_res.value;
+    if (count <= 0) {
+        return;
     }
-    return YETTY_OK(flex_summary, s);
+    float sum_base = 0.0f;
+    float sum_margin = 0.0f;
+    for (int i = 0; i < count; ++i) {
+        struct flex_item *it = &items[start + i];
+        sum_base += it->base_main;
+        sum_margin += it->margin_main_lead + it->margin_main_trail;
+        it->main_size = it->base_main; /* frozen items keep this */
+    }
+    float total_gap = count > 1 ? gap * (float)(count - 1) : 0.0f;
+    float space = content_main - sum_margin - total_gap;
+    int growing = (space - sum_base) >= 0.0f;
+
+    /* frozen[] lives in main_size once frozen; track with a parallel flag via
+     * a small heap array only when needed. count is tiny (siblings), so a
+     * stack VLA-free bounded loop over a calloc'd flag array is simplest. */
+    int *frozen = calloc((size_t)count, sizeof(*frozen));
+    if (!frozen) {
+        /* Out of memory on a per-line flag array: fall back to unflexed base
+         * sizes (already stored in main_size) rather than fail the layout. */
+        return;
+    }
+    for (int i = 0; i < count; ++i) {
+        struct flex_item *it = &items[start + i];
+        float factor = growing ? it->grow : it->shrink;
+        if (factor <= 0.0f) {
+            frozen[i] = 1;
+            it->main_size = clamp_size(it->base_main, it->main_min, it->main_max);
+        }
+    }
+    for (int pass = 0; pass < count; ++pass) {
+        float used = 0.0f;
+        float sum_factor = 0.0f;
+        for (int i = 0; i < count; ++i) {
+            struct flex_item *it = &items[start + i];
+            if (frozen[i]) {
+                used += it->main_size;
+            } else {
+                used += it->base_main;
+                sum_factor += growing ? it->grow : it->shrink * it->base_main;
+            }
+        }
+        if (sum_factor <= 0.0f) {
+            break;
+        }
+        float free_main = space - used;
+        int newly_frozen = 0;
+        for (int i = 0; i < count; ++i) {
+            struct flex_item *it = &items[start + i];
+            if (frozen[i]) {
+                continue;
+            }
+            float weight = growing ? it->grow : it->shrink * it->base_main;
+            float target = it->base_main + free_main * (weight / sum_factor);
+            float clamped = clamp_size(target, it->main_min, it->main_max);
+            it->main_size = clamped;
+            if (clamped != target) {
+                frozen[i] = 1;
+                newly_frozen = 1;
+            }
+        }
+        if (!newly_frozen) {
+            break;
+        }
+    }
+    free(frozen);
+}
+
+/* Cross size of an item within a line of extent `line_cross`, honouring
+ * align-self (falling back to the parent align) and the item's cross margins.
+ * Only an auto (unauthored) cross size stretches. */
+static float item_cross_size(const struct flex_item *it, enum yetty_ygui_flex_align parent_align,
+                             float line_cross)
+{
+    enum yetty_ygui_flex_align eff = parent_align;
+    switch (it->align_self) {
+    case YETTY_YGUI_ALIGN_SELF_START:
+        eff = YETTY_YGUI_ALIGN_START;
+        break;
+    case YETTY_YGUI_ALIGN_SELF_CENTER:
+        eff = YETTY_YGUI_ALIGN_CENTER;
+        break;
+    case YETTY_YGUI_ALIGN_SELF_END:
+        eff = YETTY_YGUI_ALIGN_END;
+        break;
+    case YETTY_YGUI_ALIGN_SELF_STRETCH:
+        eff = YETTY_YGUI_ALIGN_STRETCH;
+        break;
+    case YETTY_YGUI_ALIGN_SELF_AUTO:
+    default:
+        break;
+    }
+    float cross;
+    if (eff == YETTY_YGUI_ALIGN_STRETCH && it->cross_base == 0.0f) {
+        cross = line_cross - it->margin_cross_lead - it->margin_cross_trail;
+    } else {
+        cross = it->cross_base;
+    }
+    return clamp_size(cross, it->cross_min, it->cross_max);
+}
+
+/* Cross-axis offset of an item's border box inside a line of extent
+ * `line_cross` starting at `line_start` (already inside the content box). */
+static float item_cross_offset(const struct flex_item *it, enum yetty_ygui_flex_align parent_align,
+                               float line_start, float line_cross, float cross_size)
+{
+    enum yetty_ygui_flex_align eff = parent_align;
+    switch (it->align_self) {
+    case YETTY_YGUI_ALIGN_SELF_START:
+        eff = YETTY_YGUI_ALIGN_START;
+        break;
+    case YETTY_YGUI_ALIGN_SELF_CENTER:
+        eff = YETTY_YGUI_ALIGN_CENTER;
+        break;
+    case YETTY_YGUI_ALIGN_SELF_END:
+        eff = YETTY_YGUI_ALIGN_END;
+        break;
+    case YETTY_YGUI_ALIGN_SELF_STRETCH:
+        eff = YETTY_YGUI_ALIGN_STRETCH;
+        break;
+    case YETTY_YGUI_ALIGN_SELF_AUTO:
+    default:
+        break;
+    }
+    switch (eff) {
+    case YETTY_YGUI_ALIGN_CENTER:
+        /* Center the border box within the margin box: consume the leading
+         * margin, then split the remaining cross space. Reduces to the plain
+         * midpoint when both cross margins are 0. */
+        return line_start + it->margin_cross_lead +
+               (line_cross - it->margin_cross_lead - cross_size - it->margin_cross_trail) * 0.5f;
+    case YETTY_YGUI_ALIGN_END:
+        return line_start + line_cross - cross_size - it->margin_cross_trail;
+    case YETTY_YGUI_ALIGN_STRETCH:
+    case YETTY_YGUI_ALIGN_START:
+    default:
+        return line_start + it->margin_cross_lead;
+    }
+}
+
+/* Place one resolved line's children. `line_cross_start` is the cross-axis
+ * origin of the line inside the content box; `line_cross` its extent. Recurses
+ * into each child. */
+static struct yetty_ycore_void_result place_line(struct flex_item *items, int start, int count,
+                                                 const struct yetty_ygui_layout *pl,
+                                                 float content_min_x, float content_min_y,
+                                                 float content_main, float gap, float scroll,
+                                                 float line_cross_start, float line_cross)
+{
+    int row = direction_is_row(pl);
+    float sum_main = 0.0f;
+    float sum_margin = 0.0f;
+    for (int i = 0; i < count; ++i) {
+        sum_main += items[start + i].main_size;
+        sum_margin += items[start + i].margin_main_lead + items[start + i].margin_main_trail;
+    }
+    float total_gap = count > 1 ? gap * (float)(count - 1) : 0.0f;
+    float leftover = content_main - sum_main - sum_margin - total_gap;
+
+    float main_offset = 0.0f;
+    float gap_between = gap;
+    if (leftover > 0.0f) {
+        switch (pl->justify) {
+        case YETTY_YGUI_JUSTIFY_CENTER:
+            main_offset = leftover * 0.5f;
+            break;
+        case YETTY_YGUI_JUSTIFY_END:
+            main_offset = leftover;
+            break;
+        case YETTY_YGUI_JUSTIFY_SPACE_BETWEEN:
+            if (count > 1) {
+                gap_between += leftover / (float)(count - 1);
+            }
+            break;
+        case YETTY_YGUI_JUSTIFY_START:
+        default:
+            break;
+        }
+    }
+
+    float cursor_main = main_offset - scroll;
+    for (int i = 0; i < count; ++i) {
+        struct flex_item *it = &items[start + i];
+        float cross_size = item_cross_size(it, pl->align, line_cross);
+        float cross_off =
+            item_cross_offset(it, pl->align, line_cross_start, line_cross, cross_size);
+        cursor_main += it->margin_main_lead;
+
+        struct yetty_ycore_rectangle crect;
+        if (row) {
+            crect.min.x = content_min_x + cursor_main;
+            crect.min.y = content_min_y + cross_off;
+            crect.max.x = crect.min.x + it->main_size;
+            crect.max.y = crect.min.y + cross_size;
+        } else {
+            crect.min.x = content_min_x + cross_off;
+            crect.min.y = content_min_y + cursor_main;
+            crect.max.x = crect.min.x + cross_size;
+            crect.max.y = crect.min.y + it->main_size;
+        }
+        struct yetty_ycore_void_result r = layout_node(it->child, crect);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "place_line: child");
+
+        cursor_main += it->main_size + it->margin_main_trail + gap_between;
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Resolve, cross-size and place one wrap line [start, start+count), returning
+ * the line's cross extent so the caller can advance to the next line. */
+static struct yetty_ycore_void_result flush_wrap_line(struct flex_item *items, int start, int count,
+                                                      const struct yetty_ygui_layout *pl,
+                                                      float content_min_x, float content_min_y,
+                                                      float content_main, float scroll,
+                                                      float cross_cursor, float *out_line_cross)
+{
+    resolve_line_main(items, start, count, content_main, pl->gap);
+    float line_cross = 0.0f;
+    for (int k = start; k < start + count; ++k) {
+        float ch = item_cross_size(&items[k], pl->align, 0.0f) + items[k].margin_cross_lead +
+                   items[k].margin_cross_trail;
+        if (ch > line_cross) {
+            line_cross = ch;
+        }
+    }
+    *out_line_cross = line_cross;
+    return place_line(items, start, count, pl, content_min_x, content_min_y, content_main, pl->gap,
+                      scroll, cross_cursor, line_cross);
 }
 
 static struct yetty_ycore_void_result layout_node(struct yetty_yclass_object *node,
@@ -262,65 +487,35 @@ static struct yetty_ycore_void_result layout_node(struct yetty_yclass_object *no
 
     float content_w = content_max_x - content_min_x;
     float content_h = content_max_y - content_min_y;
-    float content_main = direction_is_row(pl) ? content_w : content_h;
-    float content_cross = direction_is_row(pl) ? content_h : content_w;
+    int row = direction_is_row(pl);
+    float content_main = row ? content_w : content_h;
+    float content_cross = row ? content_h : content_w;
 
-    struct flex_summary_result sum_res = summarize_children(node, pl);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, sum_res, "layout_node: summarize_children");
-    struct flex_summary sum = sum_res.value;
-    /* Total gap consumed between flex children (zero when no flex children
-     * exist). Absolute children still need to be placed, so this function
-     * cannot early-return on `child_count == 0`. */
-    float total_gap = sum.child_count > 1 ? pl->gap * (float)(sum.child_count - 1) : 0.0f;
-    float consumed = sum.sum_main_pref + total_gap;
-    float free_space = content_main - consumed;
+    struct yetty_ycore_float_result scroll_res = yetty_ygui_widget_scroll_main_get(node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scroll_res, "layout_node: scroll_main_get");
+    float scroll = scroll_res.value;
 
-    /* Distribute free_space via grow if positive, shrink if negative. */
-    float grow_unit = 0.0f, shrink_unit = 0.0f;
-    if (free_space > 0.0f && sum.sum_grow > 0.0f) {
-        grow_unit = free_space / sum.sum_grow;
-    } else if (free_space < 0.0f && sum.sum_shrink > 0.0f) {
-        shrink_unit = free_space / sum.sum_shrink;
-    }
-
-    /* Two-pass: first compute sizes, then place using justify. The size
-     * arrays are allocated for the actual flex-child count; absolute
-     * children are sized inline above and skipped here. */
-    float total_main = 0.0f;
-    int idx = 0;
-    float *main_sizes = NULL;
-    float *cross_sizes = NULL;
-    if (sum.child_count > 0) {
-        main_sizes = calloc((size_t)sum.child_count, sizeof(*main_sizes));
-        cross_sizes = calloc((size_t)sum.child_count, sizeof(*cross_sizes));
-        if (!main_sizes || !cross_sizes) {
-            free(main_sizes);
-            free(cross_sizes);
-            return YETTY_ERR(yetty_ycore_void, "layout_node: alloc sizes");
-        }
-    }
-
+    /* Count children so the item array is sized once; also place absolute
+     * children (they skip flex bookkeeping entirely). */
+    int child_total = 0;
     struct yetty_ycore_void_result loop_r = YETTY_OK_VOID();
     {
         struct yetty_yclass_object_ptr_result iter_res = yetty_ygui_widget_first_child(node);
-        if (YETTY_IS_ERR(iter_res)) {
-            loop_r = YETTY_ERR(yetty_ycore_void, "layout_node: first_child", iter_res);
-            goto cleanup;
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, iter_res, "layout_node: count first_child");
         for (struct yetty_yclass_object *c = iter_res.value; c;) {
             struct yetty_ygui_layout_const_ptr_result child_layout_res =
                 yetty_ygui_widget_layout_get(c);
-            if (YETTY_IS_ERR(child_layout_res)) {
-                loop_r =
-                    YETTY_ERR(yetty_ycore_void, "layout_node: child layout_get", child_layout_res);
-                goto cleanup;
-            }
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, child_layout_res,
+                                "layout_node: count layout_get");
             const struct yetty_ygui_layout *cl = child_layout_res.value;
+            /* Order matters: a hidden child is skipped entirely — no rect, no
+             * recurse — even when it is also absolute, so a folded-away
+             * positioned overlay keeps its stale geometry and never lays out
+             * its subtree. (Checking absolute first would place hidden+absolute
+             * children, the regression this order avoids.) */
             if (cl->hidden) {
-                /* folded away — no rect, no recurse */
+                /* folded away */
             } else if (cl->absolute) {
-                /* Place absolute children directly at (pos_x, pos_y) inside
-                 * parent content box. Skip flex bookkeeping. */
                 struct yetty_ycore_rectangle crect;
                 float aw = cl->width >= 0.0f ? cl->width : 0.0f;
                 float ah = cl->height >= 0.0f ? cl->height : 0.0f;
@@ -328,161 +523,109 @@ static struct yetty_ycore_void_result layout_node(struct yetty_yclass_object *no
                 crect.min.y = content_min_y + cl->pos_y;
                 crect.max.x = crect.min.x + aw;
                 crect.max.y = crect.min.y + ah;
-                loop_r = layout_node(c, crect);
-                if (YETTY_IS_ERR(loop_r)) {
-                    goto cleanup;
-                }
+                struct yetty_ycore_void_result r = layout_node(c, crect);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "layout_node: absolute child");
             } else {
-                struct child_axes_result axes_res = resolve_child_axes(pl, c);
-                if (YETTY_IS_ERR(axes_res)) {
-                    loop_r =
-                        YETTY_ERR(yetty_ycore_void, "layout_node: resolve_child_axes", axes_res);
-                    goto cleanup;
-                }
-                struct child_axes a = axes_res.value;
-                float ms = a.main_pref;
-                if (grow_unit > 0.0f) {
-                    ms += a.grow * grow_unit;
-                } else if (shrink_unit < 0.0f) {
-                    ms += a.shrink * shrink_unit;
-                }
-                ms = clamp_size(ms, a.main_min, a.main_max);
-                if (ms < 0.0f) {
-                    ms = 0.0f;
-                }
-
-                /* Cross size — start from preferred. If align=stretch and the
-                 * preferred is 0 (auto), use content_cross. Then clamp. */
-                float cs = a.cross_pref;
-                if (cs == 0.0f && pl->align == YETTY_YGUI_ALIGN_STRETCH) {
-                    cs = content_cross;
-                }
-                cs = clamp_size(cs, a.cross_min, a.cross_max);
-
-                main_sizes[idx] = ms;
-                cross_sizes[idx] = cs;
-                total_main += ms;
-                idx++;
+                child_total++;
             }
             struct yetty_yclass_object_ptr_result next_res = yetty_ygui_widget_next_sibling(c);
-            if (YETTY_IS_ERR(next_res)) {
-                loop_r = YETTY_ERR(yetty_ycore_void, "layout_node: next_sibling", next_res);
-                goto cleanup;
-            }
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, next_res, "layout_node: count next_sibling");
             c = next_res.value;
         }
     }
-
-    int placed_count = idx;
-    float total_with_gaps = total_main + total_gap;
-
-    /* Justify on the main axis. */
-    float main_offset = 0.0f;
-    float gap_between = pl->gap;
-    if (free_space > 0.0f && grow_unit == 0.0f) {
-        /* No grow children consumed the free space — distribute via
-         * justify-content. */
-        switch (pl->justify) {
-        case YETTY_YGUI_JUSTIFY_CENTER:
-            main_offset = (content_main - total_with_gaps) * 0.5f;
-            break;
-        case YETTY_YGUI_JUSTIFY_END:
-            main_offset = content_main - total_with_gaps;
-            break;
-        case YETTY_YGUI_JUSTIFY_SPACE_BETWEEN:
-            if (placed_count > 1) {
-                gap_between += (content_main - total_with_gaps) / (float)(placed_count - 1);
-            }
-            break;
-        case YETTY_YGUI_JUSTIFY_START:
-        default:
-            break;
-        }
+    if (child_total == 0) {
+        return YETTY_OK_VOID();
     }
 
-    /* Place children. A scrolling container carries a main-axis scroll
-     * offset; subtract it so its in-flow children slide toward the
-     * content-box origin. 0 for non-scrolling nodes. */
-    idx = 0;
-    struct yetty_ycore_float_result scroll_res = yetty_ygui_widget_scroll_main_get(node);
-    if (YETTY_IS_ERR(scroll_res)) {
-        loop_r = YETTY_ERR(yetty_ycore_void, "layout_node: scroll_main_get", scroll_res);
-        goto cleanup;
+    struct flex_item *items = calloc((size_t)child_total, sizeof(*items));
+    if (!items) {
+        return YETTY_ERR(yetty_ycore_void, "layout_node: alloc items");
     }
-    float cursor_main = main_offset - scroll_res.value;
+
+    int item_count = 0;
     {
         struct yetty_yclass_object_ptr_result iter_res = yetty_ygui_widget_first_child(node);
         if (YETTY_IS_ERR(iter_res)) {
-            loop_r = YETTY_ERR(yetty_ycore_void, "layout_node: place first_child", iter_res);
+            loop_r = YETTY_ERR(yetty_ycore_void, "layout_node: resolve first_child", iter_res);
             goto cleanup;
         }
-        for (struct yetty_yclass_object *c = iter_res.value; c && idx < placed_count;) {
+        for (struct yetty_yclass_object *c = iter_res.value; c && item_count < child_total;) {
             struct yetty_ygui_layout_const_ptr_result child_layout_res =
                 yetty_ygui_widget_layout_get(c);
             if (YETTY_IS_ERR(child_layout_res)) {
-                loop_r = YETTY_ERR(yetty_ycore_void, "layout_node: place child layout_get",
+                loop_r = YETTY_ERR(yetty_ycore_void, "layout_node: resolve layout_get",
                                    child_layout_res);
                 goto cleanup;
             }
             const struct yetty_ygui_layout *cl = child_layout_res.value;
-            /* Hidden children were skipped in the sizing pass (no idx
-             * consumed); absolute children were already placed above. */
             if (!cl->hidden && !cl->absolute) {
-                float ms = main_sizes[idx];
-                float cs = cross_sizes[idx];
-
-                /* Cross-axis offset depending on parent align. */
-                float cross_offset = 0.0f;
-                switch (pl->align) {
-                case YETTY_YGUI_ALIGN_CENTER:
-                    cross_offset = (content_cross - cs) * 0.5f;
-                    break;
-                case YETTY_YGUI_ALIGN_END:
-                    cross_offset = content_cross - cs;
-                    break;
-                case YETTY_YGUI_ALIGN_STRETCH:
-                    /* cs already = content_cross (computed above). */
-                    cross_offset = 0.0f;
-                    break;
-                case YETTY_YGUI_ALIGN_START:
-                default:
-                    cross_offset = 0.0f;
-                    break;
-                }
-
-                struct yetty_ycore_rectangle crect;
-                if (direction_is_row(pl)) {
-                    crect.min.x = content_min_x + cursor_main;
-                    crect.min.y = content_min_y + cross_offset;
-                    crect.max.x = crect.min.x + ms;
-                    crect.max.y = crect.min.y + cs;
-                } else {
-                    crect.min.x = content_min_x + cross_offset;
-                    crect.min.y = content_min_y + cursor_main;
-                    crect.max.x = crect.min.x + cs;
-                    crect.max.y = crect.min.y + ms;
-                }
-
-                loop_r = layout_node(c, crect);
-                if (YETTY_IS_ERR(loop_r)) {
+                struct flex_item_result item_res = resolve_flex_item(pl, c);
+                if (YETTY_IS_ERR(item_res)) {
+                    loop_r =
+                        YETTY_ERR(yetty_ycore_void, "layout_node: resolve_flex_item", item_res);
                     goto cleanup;
                 }
-
-                cursor_main += ms + gap_between;
-                idx++;
+                items[item_count++] = item_res.value;
             }
             struct yetty_yclass_object_ptr_result next_res = yetty_ygui_widget_next_sibling(c);
             if (YETTY_IS_ERR(next_res)) {
-                loop_r = YETTY_ERR(yetty_ycore_void, "layout_node: place next_sibling", next_res);
+                loop_r = YETTY_ERR(yetty_ycore_void, "layout_node: resolve next_sibling", next_res);
                 goto cleanup;
             }
             c = next_res.value;
         }
     }
 
+    /* Break into lines. NOWRAP is a single line of all items. WRAP starts a new
+     * line whenever the next item's base + its margins (+ a gap) would overflow
+     * the main axis; a single over-large item still occupies its own line. */
+    float cross_cursor = 0.0f;
+    if (pl->wrap == YETTY_YGUI_WRAP_NOWRAP) {
+        resolve_line_main(items, 0, item_count, content_main, pl->gap);
+        loop_r = place_line(items, 0, item_count, pl, content_min_x, content_min_y, content_main,
+                            pl->gap, scroll, 0.0f, content_cross);
+        if (YETTY_IS_ERR(loop_r)) {
+            goto cleanup;
+        }
+    } else {
+        int line_start = 0;
+        float line_main = 0.0f;
+        int on_line = 0;
+        for (int i = 0; i < item_count; ++i) {
+            float need =
+                items[i].base_main + items[i].margin_main_lead + items[i].margin_main_trail;
+            float with_gap = need + (on_line > 0 ? pl->gap : 0.0f);
+            /* A child that would overflow the current line (and isn't the only
+             * one on it) flushes the line first, then starts the next one. */
+            if (on_line > 0 && line_main + with_gap > content_main) {
+                float line_cross = 0.0f;
+                loop_r =
+                    flush_wrap_line(items, line_start, i - line_start, pl, content_min_x,
+                                    content_min_y, content_main, scroll, cross_cursor, &line_cross);
+                if (YETTY_IS_ERR(loop_r)) {
+                    goto cleanup;
+                }
+                cross_cursor += line_cross + pl->gap;
+                line_start = i;
+                line_main = 0.0f;
+                on_line = 0;
+            }
+            line_main += need + (on_line > 0 ? pl->gap : 0.0f);
+            on_line++;
+        }
+        if (on_line > 0) {
+            float line_cross = 0.0f;
+            loop_r =
+                flush_wrap_line(items, line_start, item_count - line_start, pl, content_min_x,
+                                content_min_y, content_main, scroll, cross_cursor, &line_cross);
+            if (YETTY_IS_ERR(loop_r)) {
+                goto cleanup;
+            }
+        }
+    }
+
 cleanup:
-    free(main_sizes);
-    free(cross_sizes);
+    free(items);
     if (YETTY_IS_ERR(loop_r)) {
         return YETTY_ERR(yetty_ycore_void, "layout_node: child", loop_r);
     }

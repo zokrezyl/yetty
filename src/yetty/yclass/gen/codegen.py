@@ -766,6 +766,16 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     # definition seen across the parsed TUs, keyed by tag.
     record_reg: dict = {}
     enum_reg: dict = {}
+    # Authoritative struct/enum bodies harvested from the module .c that DEFINES
+    # each type (has a body, decl_file == the .c). `_collect_type_decls` fills
+    # record_reg/enum_reg last-write-wins across every parsed TU, so a sibling
+    # source that #includes the (possibly stale) generated header would clobber
+    # the freshly-edited definition — freezing the reproduced type at its
+    # pre-edit shape and making the generated header impossible to update. These
+    # are re-applied over record_reg/enum_reg after all TUs parse so the owning
+    # .c always wins, regardless of parse order or header staleness.
+    authoritative_records: dict = {}
+    authoritative_enums: dict = {}
     # Tag -> the module .c that DEFINES it (has a body). Only types authored
     # in the module's own sources are safe to reproduce as a full definition
     # in a generated header; types from #include'd third-party/ycore headers
@@ -857,10 +867,17 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             # `expose` annotation.
             if decl_file == str(path) and decl.get("name"):
                 if kind in ("RecordDecl", "EnumDecl"):
-                    has_body = (bool(_record_field_list(decl)) if kind == "RecordDecl"
-                                else bool(_enum_values(decl)))
+                    record_body = _record_field_list(decl) if kind == "RecordDecl" else None
+                    enum_body = _enum_values(decl) if kind == "EnumDecl" else None
+                    has_body = bool(record_body) if kind == "RecordDecl" else bool(enum_body)
                     if has_body:
                         local_type_files.setdefault(decl["name"], str(path))
+                        # This .c owns the type — record its own body so it can
+                        # be re-asserted over any stale header copy after parse.
+                        if kind == "RecordDecl":
+                            authoritative_records[decl["name"]] = record_body
+                        else:
+                            authoritative_enums[decl["name"]] = enum_body
                 elif kind == "TypedefDecl":
                     local_typedefs.setdefault(
                         decl["name"],
@@ -1208,6 +1225,13 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     # `exposed: []` out of every other module's model.yaml.
     if exposed:
         model["exposed"] = exposed
+    # Re-assert every type authored in this module's own .c over whatever a
+    # sibling TU last wrote into the registries via an #include of the (possibly
+    # stale) generated header. Without this, editing a reproduced struct/enum
+    # never propagates: the pre-edit shape pulled in through the header wins by
+    # parse order and the generated header can't converge on the new definition.
+    record_reg.update(authoritative_records)
+    enum_reg.update(authoritative_enums)
     # Concrete layouts for by-value struct/enum types referenced by the
     # module's signatures (Result family, POD structs, enums) — transitively
     # resolved so the FFI generator is fully model-driven.

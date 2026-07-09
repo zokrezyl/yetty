@@ -49,15 +49,40 @@ enum yetty_ygui_flex_align {
     YETTY_YGUI_ALIGN_STRETCH,
 };
 
+/* Per-child cross-axis alignment override. AUTO (the zero default, so a
+ * zero-initialized or defaulted layout inherits) means "use the parent's
+ * align"; the rest mirror yetty_ygui_flex_align. */
+enum yetty_ygui_flex_align_self {
+    YETTY_YGUI_ALIGN_SELF_AUTO = 0,
+    YETTY_YGUI_ALIGN_SELF_START,
+    YETTY_YGUI_ALIGN_SELF_CENTER,
+    YETTY_YGUI_ALIGN_SELF_END,
+    YETTY_YGUI_ALIGN_SELF_STRETCH,
+};
+
+/* Single-line vs multi-line flow. NOWRAP (the zero default) keeps the
+ * original single-line algorithm; WRAP breaks children onto new lines when
+ * they overflow the container's main axis. */
+enum yetty_ygui_flex_wrap {
+    YETTY_YGUI_WRAP_NOWRAP = 0,
+    YETTY_YGUI_WRAP_WRAP,
+};
+
 struct yetty_ygui_layout {
     enum yetty_ygui_flex_direction direction;
     enum yetty_ygui_flex_justify justify;
     enum yetty_ygui_flex_align align;
+    enum yetty_ygui_flex_align_self align_self;
+    enum yetty_ygui_flex_wrap wrap;
     float gap;
     float padding_top;
     float padding_right;
     float padding_bottom;
     float padding_left;
+    float margin_top;
+    float margin_right;
+    float margin_bottom;
+    float margin_left;
     float width;
     float height;
     float flex_grow;
@@ -155,6 +180,20 @@ YETTY_YRESULT_DECLARE(yetty_ygui_layout_const_ptr, const struct yetty_ygui_layou
  * them here. */
 struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_object *obj);
+
+/* The pointer-event slot stubs (generated in the appended widget.gen.c). The
+ * typed super/mixin helpers below need their addresses as the slot method ids
+ * and their exact signatures for the dispatch cast; widget.c can't include its
+ * own widget.h, so forward-declare them here (identical to the generated
+ * declarations). */
+struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_object *obj, float x,
+                                                         float y, int button);
+struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_object *obj, float x,
+                                                           float y, int button);
+struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_object *obj, float x,
+                                                          float y);
+struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_object *obj, float x,
+                                                          float y, float dx, float dy);
 
 /* Defined lower in this file (the widget tree/lifecycle block), but the
  * geometry setters above it mark the widget dirty — forward-declare. */
@@ -310,7 +349,13 @@ struct yetty_ygui_layout yetty_ygui_layout_default(void)
     l.direction = YETTY_YGUI_FLEX_ROW;
     l.justify = YETTY_YGUI_JUSTIFY_START;
     l.align = YETTY_YGUI_ALIGN_START;
+    l.align_self = YETTY_YGUI_ALIGN_SELF_AUTO;
+    l.wrap = YETTY_YGUI_WRAP_NOWRAP;
     l.gap = 0;
+    l.margin_top = 0;
+    l.margin_right = 0;
+    l.margin_bottom = 0;
+    l.margin_left = 0;
     l.width = -1.0f;
     l.height = -1.0f;
     l.flex_grow = 0;
@@ -400,9 +445,31 @@ struct yetty_ycore_void_result yetty_ygui_widget_layout_set(struct yetty_yclass_
     struct yetty_ygui_widget_ptr_result wd_dr = yetty_ygui_widget_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_dr, "yetty_ygui_widget_layout_set: data_get");
     struct yetty_ygui_widget *wd = wd_dr.value;
+    /* No-op when the layout is byte-identical, so a caller re-pushing an
+     * unchanged layout in a hot path does not force an avoidable emit. The
+     * byte compare is a valid equality test only while the struct stays
+     * padding-free; the assert enforces that (every field is a 4-byte
+     * enum/float/int, so the member sizes sum to sizeof the struct). A future
+     * field reorder or a smaller field that introduces padding — which would
+     * make byte equality diverge from value equality — breaks the build here
+     * instead of silently weakening the guard, prompting a switch to a
+     * field-by-field compare. */
+    _Static_assert(
+        sizeof *layout ==
+            sizeof(enum yetty_ygui_flex_direction) + sizeof(enum yetty_ygui_flex_justify) +
+                sizeof(enum yetty_ygui_flex_align) + sizeof(enum yetty_ygui_flex_align_self) +
+                sizeof(enum yetty_ygui_flex_wrap) + 19 * sizeof(float) + 2 * sizeof(int),
+        "struct yetty_ygui_layout must stay padding-free for the layout_set() "
+        "memcmp no-op guard; add the new field here or compare fields semantically");
+    if (memcmp(&wd->layout, layout, sizeof *layout) == 0) {
+        return YETTY_OK_VOID();
+    }
     wd->layout = *layout;
-    wd->dirty = 1;
-    return YETTY_OK_VOID();
+    /* Route through set_dirty (not a bare wd->dirty = 1) so the owning
+     * framework is also marked dirty and the next frame re-emits. Mirrors
+     * set_visible above — a public setter that mutates layout must trigger
+     * a repaint on its own; callers should not have to mark dirty by hand. */
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 YETTY_ANNOTATE("expose")
@@ -732,6 +799,41 @@ struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_yclass_o
  * reached through the checked yetty_ygui_widget_from downcast).
  *=========================================================================*/
 
+/*
+ * Generic "call the parent's implementation of this slot" helpers.
+ *
+ * ABI CONTRACT: read before adding a new caller. These two generic helpers
+ * cast the resolved parent impl to a function pointer that takes only:
+ *
+ *     (struct yetty_yclass_object *)
+ *
+ * They are therefore valid only for slots whose implementation signature is
+ * exactly that. In the current ygui widget slot set, that means constructor
+ * and destructor for super_void.
+ *
+ * They must not be used for slots that carry extra parameters. In particular,
+ * these widget slots have wider signatures:
+ *
+ *     widget_on_press(obj, float x, float y, int button)
+ *     widget_on_release(obj, float x, float y, int button)
+ *     widget_on_motion(obj, float x, float y)
+ *     widget_on_scroll(obj, float x, float y, float dx, float dy)
+ *     widget_paint(obj, struct yetty_ygui_emit_ctx *)
+ *     widget_emit_container(obj, struct yetty_ygui_emit_ctx *)
+ *     widget_emit_body(obj, struct yetty_ygui_emit_ctx *)
+ *
+ * Routing one of those through super_void/super_int casts away the extra
+ * arguments and calls with the wrong ABI (undefined behavior). If a subclass
+ * needs to chain to a parent implementation for a wider slot, add a typed
+ * per-slot super helper with the matching signature rather than widening
+ * these generic helpers.
+ *
+ * This contract is ENFORCED at runtime, not merely documented: super_void
+ * rejects any method_id other than constructor/destructor, and super_int —
+ * for which no valid (obj)-only int virtual exists and which has no callers —
+ * rejects unconditionally. Both return a Result error rather than performing
+ * the unsafe cast, so misuse fails loudly at the call site.
+ */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_super_void(struct yetty_yclass_object *obj,
                                                      const struct yetty_yclass *self_class,
@@ -739,6 +841,17 @@ struct yetty_ycore_void_result yetty_ygui_super_void(struct yetty_yclass_object 
 {
     if (!obj || !self_class || !method_id) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_super_void: NULL arg");
+    }
+    /* Enforce, don't just document, the ABI contract above: the (obj)-only
+     * cast is safe only for the parameterless void virtuals — constructor and
+     * destructor. Reject any other slot loudly instead of calling a wider one
+     * (on_press / paint / emit_container / …) with the wrong ABI. A wider slot
+     * must get a typed per-slot super helper. */
+    if (method_id != (yetty_yclass_method_id_t)yetty_ygui_constructor &&
+        method_id != (yetty_yclass_method_id_t)yetty_ygui_destructor) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_ygui_super_void: generic super is only valid for "
+                         "constructor/destructor; a parameter-carrying slot needs a typed helper");
     }
     struct yetty_yclass_method_slot_result slot_result = yetty_ygui_method_slot_get(method_id);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_result, "yetty_ygui_super_void: slot lookup");
@@ -762,24 +875,211 @@ struct yetty_ycore_int_result yetty_ygui_super_int(struct yetty_yclass_object *o
                                                    const struct yetty_yclass *self_class,
                                                    yetty_yclass_method_id_t method_id)
 {
-    if (!obj || !self_class || !method_id) {
-        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_super_int: NULL arg");
-    }
+    (void)obj;
+    (void)self_class;
+    (void)method_id;
+    /* Every int widget virtual is a pointer-event handler (on_press /
+     * on_release / on_motion / on_scroll) that carries x/y/button/… args, so
+     * the (obj)-only cast this helper would use is ABI-unsafe for all of them,
+     * and there is no (obj)-only int virtual it could serve. It has no callers.
+     * Reject unconditionally rather than expose an unsafe dispatch path; add a
+     * typed per-slot super if a genuine (obj)-only int virtual ever appears. */
+    return YETTY_ERR(yetty_ycore_int,
+                     "yetty_ygui_super_int: no (obj)-only int virtual exists; a pointer-event "
+                     "slot needs a typed per-slot super helper");
+}
+
+/*===========================================================================
+ * Typed per-slot chaining for the pointer-event virtuals (on_press /
+ * on_release / on_motion / on_scroll). Unlike the generic super_void/super_int
+ * these carry the slot's real signature, so a leaf override can safely call:
+ *
+ *   - the PARENT's implementation via yetty_ygui_super_on_<slot>() — walks the
+ *     parent chain (yetty_yclass_parent), exactly like super_void but ABI-safe
+ *     for the extra x/y/button/… arguments; and
+ *   - a specific MIXIN's implementation via yetty_ygui_mixin_on_<slot>() —
+ *     looks the slot up directly on the named mixin class. Because dispatch is
+ *     a flat overwrite (a leaf override replaces a mixin's slot; see the yclass
+ *     README), this is how a widget that both `uses@` a behavior mixin AND
+ *     overrides the slot itself runs the mixin's part explicitly — the missing
+ *     composition path that a flat vtable cannot provide automatically.
+ *
+ * A slot the target class doesn't implement resolves to NULL and no-ops
+ * (returns 0 = not-consumed), matching the historic "un-overridden slot
+ * silently does nothing" contract.
+ *
+ * yetty_ygui_mixin_on_* is a DIRECT slot lookup on the class you pass — it does
+ * not verify that class is actually a mixin the object `uses@`. Passing an
+ * unrelated class simply dispatches that class's slot impl (or no-ops if it has
+ * none); the intent is that callers pass a mixin their own class composes.
+ *=========================================================================*/
+
+static struct yetty_yclass_impl_t_result ygui_super_impl(const struct yetty_yclass *self_class,
+                                                         yetty_yclass_method_id_t method_id)
+{
     struct yetty_yclass_method_slot_result slot_result = yetty_ygui_method_slot_get(method_id);
-    YETTY_RETURN_IF_ERR(yetty_ycore_int, slot_result, "yetty_ygui_super_int: slot lookup");
-    yetty_yclass_method_slot slot = slot_result.value;
-    if (slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
-        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_super_int: slot lookup failed");
+    YETTY_RETURN_IF_ERR(yetty_yclass_impl_t, slot_result, "ygui_super_impl: slot lookup");
+    if (slot_result.value == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        return YETTY_OK(yetty_yclass_impl_t, NULL);
+    }
+    return yetty_ygui_dispatch_lookup_super(self_class, slot_result.value);
+}
+
+static struct yetty_yclass_impl_t_result ygui_mixin_impl(const struct yetty_yclass *mixin_class,
+                                                         yetty_yclass_method_id_t method_id)
+{
+    struct yetty_yclass_method_slot_result slot_result = yetty_ygui_method_slot_get(method_id);
+    YETTY_RETURN_IF_ERR(yetty_yclass_impl_t, slot_result, "ygui_mixin_impl: slot lookup");
+    if (slot_result.value == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        return YETTY_OK(yetty_yclass_impl_t, NULL);
+    }
+    return yetty_ygui_dispatch_lookup(mixin_class, slot_result.value);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ygui_super_on_press(struct yetty_yclass_object *obj,
+                                                        const struct yetty_yclass *self_class,
+                                                        float x, float y, int button)
+{
+    if (!obj || !self_class) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_super_on_press: NULL arg");
     }
     struct yetty_yclass_impl_t_result impl_result =
-        yetty_ygui_dispatch_lookup_super(self_class, slot);
-    YETTY_RETURN_IF_ERR(yetty_ycore_int, impl_result, "yetty_ygui_super_int: dispatch lookup");
-    yetty_yclass_impl_t impl = impl_result.value;
-    if (!impl) {
+        ygui_super_impl(self_class, (yetty_yclass_method_id_t)yetty_ygui_widget_on_press);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, impl_result, "yetty_ygui_super_on_press: resolve");
+    if (!impl_result.value) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    typedef struct yetty_ycore_int_result (*fn_t)(struct yetty_yclass_object *);
-    return ((fn_t)impl)((struct yetty_yclass_object *)obj);
+    typedef struct yetty_ycore_int_result (*fn_t)(struct yetty_yclass_object *, float, float, int);
+    return ((fn_t)impl_result.value)(obj, x, y, button);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ygui_super_on_release(struct yetty_yclass_object *obj,
+                                                          const struct yetty_yclass *self_class,
+                                                          float x, float y, int button)
+{
+    if (!obj || !self_class) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_super_on_release: NULL arg");
+    }
+    struct yetty_yclass_impl_t_result impl_result =
+        ygui_super_impl(self_class, (yetty_yclass_method_id_t)yetty_ygui_widget_on_release);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, impl_result, "yetty_ygui_super_on_release: resolve");
+    if (!impl_result.value) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    typedef struct yetty_ycore_int_result (*fn_t)(struct yetty_yclass_object *, float, float, int);
+    return ((fn_t)impl_result.value)(obj, x, y, button);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ygui_super_on_motion(struct yetty_yclass_object *obj,
+                                                         const struct yetty_yclass *self_class,
+                                                         float x, float y)
+{
+    if (!obj || !self_class) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_super_on_motion: NULL arg");
+    }
+    struct yetty_yclass_impl_t_result impl_result =
+        ygui_super_impl(self_class, (yetty_yclass_method_id_t)yetty_ygui_widget_on_motion);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, impl_result, "yetty_ygui_super_on_motion: resolve");
+    if (!impl_result.value) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    typedef struct yetty_ycore_int_result (*fn_t)(struct yetty_yclass_object *, float, float);
+    return ((fn_t)impl_result.value)(obj, x, y);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ygui_super_on_scroll(struct yetty_yclass_object *obj,
+                                                         const struct yetty_yclass *self_class,
+                                                         float x, float y, float dx, float dy)
+{
+    if (!obj || !self_class) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_super_on_scroll: NULL arg");
+    }
+    struct yetty_yclass_impl_t_result impl_result =
+        ygui_super_impl(self_class, (yetty_yclass_method_id_t)yetty_ygui_widget_on_scroll);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, impl_result, "yetty_ygui_super_on_scroll: resolve");
+    if (!impl_result.value) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    typedef struct yetty_ycore_int_result (*fn_t)(struct yetty_yclass_object *, float, float, float,
+                                                  float);
+    return ((fn_t)impl_result.value)(obj, x, y, dx, dy);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ygui_mixin_on_press(struct yetty_yclass_object *obj,
+                                                        const struct yetty_yclass *mixin_class,
+                                                        float x, float y, int button)
+{
+    if (!obj || !mixin_class) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_mixin_on_press: NULL arg");
+    }
+    struct yetty_yclass_impl_t_result impl_result =
+        ygui_mixin_impl(mixin_class, (yetty_yclass_method_id_t)yetty_ygui_widget_on_press);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, impl_result, "yetty_ygui_mixin_on_press: resolve");
+    if (!impl_result.value) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    typedef struct yetty_ycore_int_result (*fn_t)(struct yetty_yclass_object *, float, float, int);
+    return ((fn_t)impl_result.value)(obj, x, y, button);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ygui_mixin_on_release(struct yetty_yclass_object *obj,
+                                                          const struct yetty_yclass *mixin_class,
+                                                          float x, float y, int button)
+{
+    if (!obj || !mixin_class) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_mixin_on_release: NULL arg");
+    }
+    struct yetty_yclass_impl_t_result impl_result =
+        ygui_mixin_impl(mixin_class, (yetty_yclass_method_id_t)yetty_ygui_widget_on_release);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, impl_result, "yetty_ygui_mixin_on_release: resolve");
+    if (!impl_result.value) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    typedef struct yetty_ycore_int_result (*fn_t)(struct yetty_yclass_object *, float, float, int);
+    return ((fn_t)impl_result.value)(obj, x, y, button);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ygui_mixin_on_motion(struct yetty_yclass_object *obj,
+                                                         const struct yetty_yclass *mixin_class,
+                                                         float x, float y)
+{
+    if (!obj || !mixin_class) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_mixin_on_motion: NULL arg");
+    }
+    struct yetty_yclass_impl_t_result impl_result =
+        ygui_mixin_impl(mixin_class, (yetty_yclass_method_id_t)yetty_ygui_widget_on_motion);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, impl_result, "yetty_ygui_mixin_on_motion: resolve");
+    if (!impl_result.value) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    typedef struct yetty_ycore_int_result (*fn_t)(struct yetty_yclass_object *, float, float);
+    return ((fn_t)impl_result.value)(obj, x, y);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ygui_mixin_on_scroll(struct yetty_yclass_object *obj,
+                                                         const struct yetty_yclass *mixin_class,
+                                                         float x, float y, float dx, float dy)
+{
+    if (!obj || !mixin_class) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_mixin_on_scroll: NULL arg");
+    }
+    struct yetty_yclass_impl_t_result impl_result =
+        ygui_mixin_impl(mixin_class, (yetty_yclass_method_id_t)yetty_ygui_widget_on_scroll);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, impl_result, "yetty_ygui_mixin_on_scroll: resolve");
+    if (!impl_result.value) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    typedef struct yetty_ycore_int_result (*fn_t)(struct yetty_yclass_object *, float, float, float,
+                                                  float);
+    return ((fn_t)impl_result.value)(obj, x, y, dx, dy);
 }
 
 YETTY_ANNOTATE("expose")

@@ -849,7 +849,19 @@ static int rect_contains(struct yetty_ycore_rectangle r, float x, float y)
 
 /* Returns the deepest descendant of `node` whose rect contains (x, y),
  * or NULL if no descendant matches. Children later in sibling order
- * win over earlier ones (paint order — last-drawn is on top). */
+ * win over earlier ones (paint order — last-drawn is on top).
+ *
+ * Figure/scrollarea clipping is already enforced here WITHOUT a separate
+ * scissor parameter: the recursion prunes the whole subtree the moment the
+ * point falls outside a node's rect, so reaching a descendant requires the
+ * point to lie inside EVERY ancestor's rect. The emit walk's fig_clip is the
+ * intersection of the figure ancestors' rects (a subset of all ancestors),
+ * so it can only be looser than the per-ancestor test applied here. A point
+ * this walk accepts is therefore always inside fig_clip — a scrollarea child
+ * scrolled out of the viewport has its rect moved outside the scrollarea's
+ * rect (the layout pass bakes scroll_main into child rects) and is rejected
+ * at the scrollarea node. No off-viewport child is ever hittable; threading
+ * an explicit clip rect through here would be dead code. */
 static struct yetty_yclass_object_ptr_result hit_test(struct yetty_yclass_object *node, float x,
                                                       float y)
 {
