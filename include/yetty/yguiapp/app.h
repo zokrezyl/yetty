@@ -53,6 +53,11 @@ struct yetty_yclass_object_ptr_result yetty_yguiapp_app_create(struct yetty_ycla
 
 struct yetty_ycore_void_result yetty_yguiapp_register(void);
 
+/* Stop the app's event loop — the clean-quit path for app subclasses that
+ * install their own key handler (e.g. an Esc-to-quit demo) and so bypass the
+ * default 'q'/Ctrl-C quit above. A no-op when no loop is present (headless). */
+struct yetty_ycore_void_result yetty_yguiapp_app_quit(struct yetty_yclass_object *obj);
+
 #ifdef __cplusplus
 }
 #endif

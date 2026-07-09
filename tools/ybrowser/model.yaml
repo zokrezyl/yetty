@@ -148,6 +148,8 @@ types:
         type: float
       - name: event_loop
         type: "struct yetty_yevent_event_loop *"
+      - name: clipboard
+        type: "struct yetty_yclass_object *"
       - name: img_pool
         type: "struct yetty_yplatform_yworkpool *"
       - name: render_count

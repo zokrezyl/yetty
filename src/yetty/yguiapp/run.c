@@ -24,13 +24,19 @@
 
 #include "yetty/yguiapp/run.h"
 
+#include "input-encode.h"
+
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/terminal-detect.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yclass/class.h>
+#include <yetty/yfont/font.h>
+#include <yetty/yfont/msdf-font.h>
+#include <yetty/ygui/framework-defs.h>
 #include <yetty/ygui/framework.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ygui/widget.h>
+#include <yetty/yplatform/paths.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <stdio.h>
@@ -157,6 +163,13 @@ struct yetty_yguiapp_client {
     struct yetty_yclass_transport_pty *transport; /* sole STDIN/STDOUT owner */
     struct yetty_ywire_connection *conn;          /* multiplexed link */
     struct yetty_yclass_object *engine;           /* ygui framework */
+    /* Measurement font handed to the framework so widgets (textinput caret /
+     * click hit-test) place carets against the SAME glyph advances the host
+     * yetty renders the figure text with (font_id 0 = the shared default mono
+     * font). Owned here — borrowed by the framework — destroyed after the
+     * framework in teardown. NULL when the font could not be loaded, in which
+     * case widgets fall back to the fixed per-char advance. */
+    struct yetty_yfont_font *measure_font;
     int running;
 };
 
@@ -216,14 +229,77 @@ static struct yetty_ycore_void_result yguiapp_client_reinject_mouse(
     return yetty_ywire_channel_flush(raw);
 }
 
+/* Structured keyboard from the host: once a figure is click-focused, yetty
+ * stops writing keystrokes to our PTY and instead forwards them as
+ * YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY envelopes (the keyboard twin of the
+ * forwarded-mouse path). Translate each to the byte sequence ygui's input
+ * decoder expects — CHAR → the UTF-8 text (Ctrl+letter folded to its control
+ * byte, matching the standalone host); DOWN → the navigation/editing CSI;
+ * UP → nothing — and feed it in. Without this, keyboard silently dies the
+ * moment the user clicks into the field. */
+static void yguiapp_client_feed_figure_key(struct yetty_yguiapp_client *cs,
+                                           const struct yetty_client_input_key *key_msg)
+{
+    char buf[8];
+    size_t len = 0;
+    const char *bytes = NULL;
+    switch (key_msg->kind) {
+    case YETTY_YMGUI_INPUT_KEY_CHAR: {
+        uint32_t codepoint = key_msg->codepoint;
+        if ((key_msg->mods & 0x0002 /* CTRL */) &&
+            ((codepoint >= 'a' && codepoint <= 'z') || (codepoint >= 'A' && codepoint <= 'Z'))) {
+            buf[0] = (char)(codepoint & 0x1F);
+            len = 1;
+            bytes = buf;
+        } else if (codepoint >= 1 && codepoint <= 26) {
+            /* An already-folded control byte (Ctrl-A..Ctrl-Z). Widgets act on
+             * these directly — Ctrl-A select-all, Ctrl-C/V/X clipboard. */
+            buf[0] = (char)codepoint;
+            len = 1;
+            bytes = buf;
+        } else if (codepoint >= 32) {
+            len = yguiapp_utf8_encode(codepoint, buf);
+            bytes = buf;
+        }
+        break;
+    }
+    case YETTY_YMGUI_INPUT_KEY_DOWN:
+        bytes = yguiapp_encode_key((uint32_t)key_msg->key, key_msg->mods, buf, sizeof(buf), &len);
+        break;
+    case YETTY_YMGUI_INPUT_KEY_UP:
+    default:
+        return;
+    }
+    if (bytes && len > 0) {
+        struct yetty_ycore_void_result fr = yetty_ygui_framework_feed_input(cs->engine, bytes, len);
+        if (YETTY_IS_ERR(fr)) {
+            yetty_ycore_error_destroy(fr.error);
+        }
+    }
+}
+
 /* Input channel sink — yetty forwards pointer events as client-input OSC codes
- * carrying a yetty_client_input_mouse; dispatch to ygui's framework_feed_mouse_*. */
+ * carrying a yetty_client_input_mouse, and (once a figure is focused) keyboard
+ * events carrying a yetty_client_input_key; dispatch to ygui's framework. */
 static void yguiapp_client_input_sink(void *user, int wire_code, const uint8_t *args,
                                       size_t args_len, const uint8_t *payload, size_t payload_len)
 {
     (void)args;
     (void)args_len;
     struct yetty_yguiapp_client *cs = (struct yetty_yguiapp_client *)user;
+    if (wire_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY ||
+        wire_code == YETTY_OSC_SC_CLIENT_INPUT_KEY) {
+        if (payload_len < sizeof(struct yetty_client_input_key)) {
+            return;
+        }
+        const struct yetty_client_input_key *key_msg =
+            (const struct yetty_client_input_key *)payload;
+        if (key_msg->magic != YETTY_CLIENT_INPUT_KEY_MAGIC) {
+            return;
+        }
+        yguiapp_client_feed_figure_key(cs, key_msg);
+        return;
+    }
     if (wire_code != YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE &&
         wire_code != YETTY_OSC_SC_CLIENT_INPUT_MOUSE) {
         return;
@@ -426,6 +502,43 @@ static void yguiapp_client_close_cb(uv_handle_t *h)
     (void)h;
 }
 
+/* Load a measurement-only copy of the shared default mono font. The host yetty
+ * renders this client's figure text (font_id 0) with that same font, so
+ * measuring against it makes the textinput caret and click hit-test land on the
+ * exact glyph boundaries the host draws. Rendering happens in the host, so this
+ * copy needs no GPU — msdf measure_text reads advances straight from the cdb.
+ * Best-effort: returns NULL on any failure and the widgets fall back to the
+ * fixed per-char advance. Caller owns the returned font. */
+static struct yetty_yfont_font *yguiapp_client_measure_font_create(void)
+{
+    struct yetty_yplatform_paths_ptr_result paths_res = yetty_yplatform_paths_create();
+    if (YETTY_IS_ERR(paths_res)) {
+        yetty_ycore_error_destroy(paths_res.error);
+        return NULL;
+    }
+    char cdb_path[768];
+    char shader_path[768];
+    snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb",
+             paths_res.value->fonts_dir_buf, "DejaVuSansMNerdFontMono");
+    snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl",
+             paths_res.value->shaders_dir_buf);
+    struct yetty_font_font_result font_res =
+        yetty_yfont_msdf_font_create(cdb_path, shader_path, "yguiapp_measure");
+    struct yetty_ycore_void_result paths_destroy = yetty_yplatform_paths_destroy(paths_res.value);
+    if (YETTY_IS_ERR(paths_destroy)) {
+        yetty_ycore_error_destroy(paths_destroy.error);
+    }
+    if (YETTY_IS_ERR(font_res)) {
+        yetty_ycore_error_destroy(font_res.error);
+        return NULL;
+    }
+    struct yetty_ycore_void_result load = font_res.value->ops->load_basic_latin(font_res.value);
+    if (YETTY_IS_ERR(load)) {
+        yetty_ycore_error_destroy(load.error);
+    }
+    return font_res.value;
+}
+
 struct yetty_ycore_void_result yetty_yguiapp_run_terminal(struct yetty_yclass_object *app)
 {
     /* Cleanup state up front so every error path can `goto fail` and the single
@@ -485,6 +598,13 @@ struct yetty_ycore_void_result yetty_yguiapp_run_terminal(struct yetty_yclass_ob
     }
     cs.engine = fr.value;
     yetty_ygui_framework_set_key_cb(cs.engine, yguiapp_client_on_key, &cs);
+
+    /* Wire the measurement font so widget carets / hit-tests match the host's
+     * rendered glyph advances (see yguiapp_client_measure_font_create). */
+    cs.measure_font = yguiapp_client_measure_font_create();
+    if (cs.measure_font) {
+        yetty_ygui_framework_set_font(cs.engine, cs.measure_font);
+    }
 
     /* Bind the framework's figure output to the connection's rpc channel: the RPC
      * requests ride a yetty_ywire_channel transport adapter. The get_root
@@ -684,6 +804,11 @@ fail:
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }
+    }
+    /* Framework is gone (it only borrowed the font); now release it. */
+    if (cs.measure_font) {
+        cs.measure_font->ops->destroy(cs.measure_font);
+        cs.measure_font = NULL;
     }
     if (cs.transport) {
         /* The framework teardown queued its figure clears through the

@@ -860,6 +860,42 @@ classes:
         slot_domain: yguiapp
         impl: build
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 44_textinput
+    domain: demoygui
+    accessor: yetty_demoygui_44_textinput_class_get
+    type: regular
+    source_file: demo/ygui/44_textinput/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_44_textinput
+    data_fields:
+      - name: input
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: value_label
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: sel_label
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: clip_label
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: clipboard
+        type: "char[512]"
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: holds the edit box, the live labels, and a copy buffer. */"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result
@@ -974,6 +1010,8 @@ local_types:
   demo_state: demo/ygui/43_tree_showcase/main.c
   yetty_demoygui_43_tree_showcase: demo/ygui/43_tree_showcase/main.c
   yetty_demoygui_43_tree_showcase_ptr_result: demo/ygui/43_tree_showcase/main.c
+  yetty_demoygui_44_textinput: demo/ygui/44_textinput/main.c
+  yetty_demoygui_44_textinput_ptr_result: demo/ygui/44_textinput/main.c
 local_typedefs:
   __int128_t:
     source_file: demo/ygui/00_simple/main.c

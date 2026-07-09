@@ -13,24 +13,23 @@
  * class .c. A cross-platform class is a plain strong ref, defined in
  * the same library and pulled in when register() is. Submodule
  * registers are chained as strong externs (always co-linked). */
-struct yetty_yclass_ptr_result yetty_demoygui_43_tree_showcase_class_get(void);
-struct yetty_ycore_void_result yetty_demoygui_43_tree_showcase_register(void);
+struct yetty_yclass_ptr_result yetty_demoygui_44_textinput_class_get(void);
+struct yetty_ycore_void_result yetty_demoygui_44_textinput_register(void);
 
-/* ---- demoygui_43_tree_showcase: class name -> accessor (lazy) ---------------------- */
+/* ---- demoygui_44_textinput: class name -> accessor (lazy) ---------------------- */
 
-static struct yetty_yclass_ptr_result yetty_demoygui_43_tree_showcase_accessor_lookup(
-    const char *name)
+static struct yetty_yclass_ptr_result yetty_demoygui_44_textinput_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "yetty_demoygui_43_tree_showcase") == 0) {
-        return yetty_demoygui_43_tree_showcase_class_get();
+    if (strcmp(name, "yetty_demoygui_44_textinput") == 0) {
+        return yetty_demoygui_44_textinput_class_get();
     }
     /* "Not mine": OK with NULL value -- yetty_yclass_by_name walks to next hook. */
     return YETTY_OK(yetty_yclass_ptr, NULL);
 }
 
-/* ---- demoygui_43_tree_showcase: explicit yclass-RPC hook registration ------------- */
+/* ---- demoygui_44_textinput: explicit yclass-RPC hook registration ------------- */
 
-struct yetty_ycore_void_result yetty_demoygui_43_tree_showcase_register(void)
+struct yetty_ycore_void_result yetty_demoygui_44_textinput_register(void)
 {
     static bool registered = false;
     if (registered) {
@@ -38,9 +37,9 @@ struct yetty_ycore_void_result yetty_demoygui_43_tree_showcase_register(void)
     }
 
     struct yetty_ycore_void_result add_accessor_r =
-        yetty_yclass_add_accessor_lookup(yetty_demoygui_43_tree_showcase_accessor_lookup);
+        yetty_yclass_add_accessor_lookup(yetty_demoygui_44_textinput_accessor_lookup);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, add_accessor_r,
-                        "yetty_demoygui_43_tree_showcase_register: add_accessor_lookup");
+                        "yetty_demoygui_44_textinput_register: add_accessor_lookup");
     registered = true;
     return YETTY_OK_VOID();
 }

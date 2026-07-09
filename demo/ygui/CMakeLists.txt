@@ -203,6 +203,8 @@ demo_ygui_add(35-collapsing-header 35_collapsing_header_open)
 demo_ygui_add(37-scrollarea 37_scrollarea)
 demo_ygui_add(38-ynodes 38_ynodes)
 demo_ygui_add(43-tree-showcase 43_tree_showcase)
+# Single-line edit box (textinput) in isolation — type/select/edit/clipboard.
+demo_ygui_add(44-textinput 44_textinput)
 
 # Window-chrome POC: standalone window gains drag/resize/maximize via ychrome
 # (now enabled by default in the shared yguiapp host).

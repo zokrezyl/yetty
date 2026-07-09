@@ -46,6 +46,7 @@
 #include <yetty/yimage/yimage.h>
 #include <yetty/ysvg/ysvg.h>
 #include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/yclipboard/clipboard.h>
 #include <yetty/yplatform/yworkpool.h>
 #include <yetty/yterminal/client-input.h>
 #include <yetty/yterminal/dcs-codes.h>
@@ -211,6 +212,12 @@ struct app {
     /* Standalone (own-window) mode only — set so the quit shortcut can stop
 	 * the GPU event loop. NULL in the in-yetty client loop. */
     struct yetty_yevent_event_loop *event_loop;
+
+    /* Borrowed platform clipboard (yplatform:clipboard yclass object) for the
+	 * address bar's copy/cut/paste. Set from the yframework in standalone mode;
+	 * NULL in the in-yetty client loop (which has no direct clipboard), where
+	 * the clipboard chords simply do nothing. */
+    struct yetty_yclass_object *clipboard;
 
     /* Worker pool for parallel async image fetch+decode (standalone only). The
 	 * engine submits each <img> to it; completions post back to the loop and
@@ -1306,10 +1313,58 @@ static void focus_address(struct app *a)
     yetty_ygui_framework_mark_dirty(a->fw);
 }
 
+/* Copy the address bar's current selection to the clipboard; when `cut`, drop
+ * the selection from the field afterwards. No-op when nothing is selected or no
+ * clipboard is available (in-yetty client mode). */
+static void address_copy(struct app *a, int cut)
+{
+    if (!a->clipboard) {
+        return;
+    }
+    struct yetty_ycore_char_ptr_result sel_res = yetty_ygui_textinput_get_selection(a->address);
+    if (YETTY_IS_ERR(sel_res)) {
+        yetty_ycore_error_destroy(sel_res.error);
+        return;
+    }
+    char *selection = sel_res.value;
+    if (!selection) {
+        return; /* no selection */
+    }
+    struct yetty_ycore_void_result set_res =
+        yetty_yplatform_clipboard_set_text(a->clipboard, selection, strlen(selection));
+    if (YETTY_IS_ERR(set_res)) {
+        yetty_ycore_error_destroy(set_res.error);
+    }
+    free(selection);
+    if (cut) {
+        err_ok(yetty_ygui_textinput_insert_text(a->address, "")); /* delete the selection */
+        yetty_ygui_framework_mark_dirty(a->fw);
+    }
+}
+
 static int key_cb(struct yetty_yclass_object *fw, uint32_t key, int mods, void *ud)
 {
     struct app *a = ud;
-    (void)mods;
+    /* Clipboard chords belong to the address bar while it holds focus, and must
+     * be handled before the global quit/nav shortcuts — otherwise Ctrl-C would
+     * quit the browser instead of copying the URL. */
+    if (a->address_focused) {
+        switch (key) {
+        case 0x03: /* Ctrl-C — copy */
+            address_copy(a, 0);
+            return 1;
+        case 0x18: /* Ctrl-X — cut */
+            address_copy(a, 1);
+            return 1;
+        case 0x16: /* Ctrl-V — paste (async; text arrives as a PASTE event) */
+            if (a->clipboard) {
+                err_ok(yetty_yplatform_clipboard_request_paste(a->clipboard));
+            }
+            return 1;
+        default:
+            break;
+        }
+    }
     if (key == 0x03 || key == 0x04 || key == 0x11) { /* Ctrl-C / Ctrl-D / Ctrl-Q */
         a->running = 0;
         if (a->event_loop && a->event_loop->ops->stop) {
@@ -1346,7 +1401,7 @@ static int key_cb(struct yetty_yclass_object *fw, uint32_t key, int mods, void *
             return 1;
         }
         struct yetty_ycore_int_result handle_result =
-            yetty_ygui_textinput_handle_key(a->address, key);
+            yetty_ygui_textinput_handle_key(a->address, key, mods);
         if (YETTY_IS_ERR(handle_result)) {
             yetty_ycore_error_print(stderr, "ybrowser: textinput handle_key", handle_result.error);
             yetty_ycore_error_destroy(handle_result.error);
@@ -2452,7 +2507,7 @@ static void *sa_prefetch_main(void *arg)
 }
 
 static size_t utf8_encode(uint32_t cp, char *out);
-static const char *encode_special_key(uint32_t key, char *scratch, size_t scratch_n,
+static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
                                       size_t *out_len);
 
 static void sa_request_render(struct yetty_ybrowser_app *s)
@@ -2572,6 +2627,20 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         yetty_ygui_framework_mark_dirty(s->app.fw);
         sa_request_render(s);
         return YETTY_OK(yetty_ycore_int, 1);
+    case YETTY_YCORE_PASTE: {
+        /* Async clipboard paste response (from a Ctrl-V request) — payload is a
+		 * malloc'd string we own. Drop it into the address bar when focused. */
+        char *paste_text = ev->payload;
+        if (paste_text) {
+            if (s->app.address_focused) {
+                err_ok(yetty_ygui_textinput_insert_text(s->app.address, paste_text));
+                yetty_ygui_framework_mark_dirty(s->app.fw);
+            }
+            free(paste_text);
+        }
+        sa_request_render(s);
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
     case YETTY_YCORE_CHAR: {
         /* Layout-correct text input: the platform already mapped the
 		 * physical key through the OS keyboard layout. Ctrl+<letter>
@@ -2596,7 +2665,8 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         /* Navigation / editing keys only — printable text comes via CHAR. */
         char scratch[8];
         size_t n = 0;
-        const char *bytes = encode_special_key(ev->key.key, scratch, sizeof(scratch), &n);
+        const char *bytes =
+            encode_special_key(ev->key.key, ev->key.mods, scratch, sizeof(scratch), &n);
         if (bytes && n > 0) {
             err_ok(yetty_ygui_framework_feed_input(s->app.fw, bytes, n));
         }
@@ -2689,9 +2759,25 @@ static size_t utf8_encode(uint32_t cp, char *out)
 
 /* GLFW navigation/editing keycode → terminal byte sequence. Printable text
  * is NOT handled here — it arrives layout-translated via YETTY_YCORE_CHAR. */
-static const char *encode_special_key(uint32_t key, char *scratch, size_t scratch_n,
+static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
                                       size_t *out_len)
 {
+    /* xterm modifier parameter for CSI sequences: 1 + bitset(shift=1, alt=2,
+     * ctrl=4). mod_param == 0 means "no modifier" → emit the bare sequence so
+     * unmodified keys look exactly as before. The ygui input decoder reads this
+     * back out (see csi_decode_mods) and hands it to the widget as mods, which
+     * is what makes Shift+Arrow extend the selection. */
+    int mod_bits = 0;
+    if (glfw_mods & 0x0001) { /* GLFW_MOD_SHIFT */
+        mod_bits |= 1;
+    }
+    if (glfw_mods & 0x0004) { /* GLFW_MOD_ALT */
+        mod_bits |= 2;
+    }
+    if (glfw_mods & 0x0002) { /* GLFW_MOD_CONTROL */
+        mod_bits |= 4;
+    }
+    int mod_param = mod_bits ? mod_bits + 1 : 0;
     switch (key) {
     case 256:
         scratch[0] = 0x1B;
@@ -2710,27 +2796,34 @@ static const char *encode_special_key(uint32_t key, char *scratch, size_t scratc
         scratch[0] = 0x7F;
         *out_len = 1;
         return scratch; /* Backspace */
-    case 261:
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[3~");
-        return scratch; /* Del */
-    case 263:
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[D");
-        return scratch; /* ← */
-    case 262:
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[C");
-        return scratch; /* → */
-    case 265:
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[A");
-        return scratch; /* ↑ */
-    case 264:
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[B");
-        return scratch; /* ↓ */
-    case 268:
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[H");
-        return scratch; /* Home */
-    case 269:
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[F");
-        return scratch; /* End */
+    case 261:           /* Del */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[3;%d~", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[3~");
+        return scratch;
+    case 263: /* ← */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dD", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[D");
+        return scratch;
+    case 262: /* → */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dC", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[C");
+        return scratch;
+    case 265: /* ↑ */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dA", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[A");
+        return scratch;
+    case 264: /* ↓ */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dB", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[B");
+        return scratch;
+    case 268: /* Home */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dH", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[H");
+        return scratch;
+    case 269: /* End */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dF", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[F");
+        return scratch;
     default:
         *out_len = 0;
         return NULL;
@@ -2914,6 +3007,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
             yetty_ygui_framework_set_container_obj(s->app.fw, s->root_container);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "ybrowser standalone: set_container_obj");
         s->app.event_loop = s->yframework->event_loop;
+        s->app.clipboard = s->yframework->clipboard; /* borrowed; may be NULL */
         /* Worker pool for parallel image fetch+decode (8 concurrent). Created
          * on the loop thread; destroyed before the tabs/engines at teardown. */
         {

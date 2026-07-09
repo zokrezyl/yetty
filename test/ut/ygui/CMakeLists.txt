@@ -50,3 +50,14 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract
     TIMEOUT 30)
+
+# Single-line textinput edit box: caret editing, keyboard + mouse selection,
+# select-all, word motion, double-click word selection, and the insert_text
+# paste/cut primitive. platform_time backs the double-click clock.
+yetty_add_c_test(
+    NAME    ygui_textinput
+    SOURCES textinput-test.c
+    LIBS    yetty_ygui yetty_ycore yetty_ydraw_core
+    SHIMS   trace platform_thread platform_term platform_time
+    LABELS  contract
+    TIMEOUT 30)

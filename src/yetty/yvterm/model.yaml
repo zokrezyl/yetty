@@ -153,6 +153,10 @@ classes:
         type: int
         get: false
         set: false
+      - name: card_key
+        type: int
+        get: false
+        set: false
       - name: clear_hook_fn
         type: yetty_yvterm_grid_clear_hook_fn
         get: false
@@ -1771,7 +1775,7 @@ local_typedefs:
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);"
   yetty_yvterm_grid_card_sub_fn:
     source_file: src/yetty/yvterm/grid.c
-    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, void *);"
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, int, void *);"
   yetty_yvterm_clear_hook_fn:
     source_file: src/yetty/yvterm/vterm.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *);"

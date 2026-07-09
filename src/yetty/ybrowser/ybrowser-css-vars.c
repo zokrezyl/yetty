@@ -1016,8 +1016,7 @@ static void css_text_append_str(struct css_text_out *out, const char *s)
  * classic min-/max- variant for). */
 static bool media_range_feature(const char *s, size_t n)
 {
-    static const char *const feats[] = {"width", "height", "device-width",
-                                        "device-height"};
+    static const char *const feats[] = {"width", "height", "device-width", "device-height"};
     for (size_t i = 0; i < sizeof(feats) / sizeof(feats[0]); i++) {
         if (strlen(feats[i]) == n && strncasecmp(s, feats[i], n) == 0) {
             return true;
@@ -1083,9 +1082,8 @@ static enum media_range_op media_flip_op(enum media_range_op op)
 
 /* Emit `min-<feature>:<value>` / `max-<feature>:<value>` / `<feature>:<value>`
  * (no surrounding parens) for one `feature op value` constraint. */
-static void media_emit_constraint(struct css_text_out *out, const char *feature,
-                                  size_t feature_len, enum media_range_op op,
-                                  const char *value, size_t value_len)
+static void media_emit_constraint(struct css_text_out *out, const char *feature, size_t feature_len,
+                                  enum media_range_op op, const char *value, size_t value_len)
 {
     if (op == MEDIA_OP_GE || op == MEDIA_OP_GT) {
         css_text_append_str(out, "min-");
@@ -1099,29 +1097,27 @@ static void media_emit_constraint(struct css_text_out *out, const char *feature,
 
 static bool media_token_is_value(const char *s, size_t n)
 {
-    return n > 0 && (s[0] == '.' || s[0] == '+' || s[0] == '-'
-                     || (s[0] >= '0' && s[0] <= '9'));
+    return n > 0 && (s[0] == '.' || s[0] == '+' || s[0] == '-' || (s[0] >= '0' && s[0] <= '9'));
 }
 
 /* Try to rewrite one parenthesised media group `(inner)` [inner, inner+n) into
  * the classic form, appending the replacement (WITH parens) to `out`. Returns
  * true if it recognised and rewrote a range feature; false if the caller
  * should emit the group unchanged. */
-static bool media_rewrite_group(struct css_text_out *out, const char *inner,
-                                size_t n)
+static bool media_rewrite_group(struct css_text_out *out, const char *inner, size_t n)
 {
     const char *p = inner;
     const char *end = inner + n;
-#define MEDIA_SKIP_WS()                                                         \
-    while (p < end && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r'))    \
+#define MEDIA_SKIP_WS()                                                                            \
+    while (p < end && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r'))                       \
     p++
-#define MEDIA_READ_TOKEN(tok, tok_len)                                          \
-    do {                                                                        \
-        (tok) = p;                                                              \
-        while (p < end && *p != '<' && *p != '>' && *p != '=' && *p != ' '      \
-               && *p != '\t' && *p != '\n' && *p != '\r')                       \
-            p++;                                                                 \
-        (tok_len) = (size_t)(p - (tok));                                        \
+#define MEDIA_READ_TOKEN(tok, tok_len)                                                             \
+    do {                                                                                           \
+        (tok) = p;                                                                                 \
+        while (p < end && *p != '<' && *p != '>' && *p != '=' && *p != ' ' && *p != '\t' &&        \
+               *p != '\n' && *p != '\r')                                                           \
+            p++;                                                                                   \
+        (tok_len) = (size_t)(p - (tok));                                                           \
     } while (0)
 
     const char *tok1;
@@ -1156,8 +1152,7 @@ static bool media_rewrite_group(struct css_text_out *out, const char *inner,
         }
         if (media_token_is_value(tok1, tok1_len) && media_range_feature(tok2, tok2_len)) {
             css_text_append_str(out, "(");
-            media_emit_constraint(out, tok2, tok2_len, media_flip_op(op1), tok1,
-                                  tok1_len);
+            media_emit_constraint(out, tok2, tok2_len, media_flip_op(op1), tok1, tok1_len);
             css_text_append_str(out, ")");
             return true;
         }
@@ -1169,9 +1164,8 @@ static bool media_rewrite_group(struct css_text_out *out, const char *inner,
     const char *tok3;
     size_t tok3_len;
     MEDIA_READ_TOKEN(tok3, tok3_len);
-    if (tok3_len == 0 || !media_range_feature(tok2, tok2_len)
-        || !media_token_is_value(tok1, tok1_len)
-        || !media_token_is_value(tok3, tok3_len)) {
+    if (tok3_len == 0 || !media_range_feature(tok2, tok2_len) ||
+        !media_token_is_value(tok1, tok1_len) || !media_token_is_value(tok3, tok3_len)) {
         return false;
     }
     css_text_append_str(out, "(");
@@ -1234,8 +1228,7 @@ char *yetty_ybrowser_css_rewrite_media_ranges(const char *css, size_t len)
         }
         if (*p == '@' && !in_prelude) {
             const char *kw = p + 1;
-            if (media_at_keyword(kw, end, "media")
-                || media_at_keyword(kw, end, "container")) {
+            if (media_at_keyword(kw, end, "media") || media_at_keyword(kw, end, "container")) {
                 in_prelude = true;
             }
             css_text_append(&out, p, 1);
@@ -1302,8 +1295,7 @@ char *yetty_ybrowser_css_rewrite_media_ranges(const char *css, size_t len)
 /* Is `c` a selector combinator or whitespace (a complex-selector boundary)? */
 static bool sel_is_combinator(char c)
 {
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '>' || c == '+'
-           || c == '~';
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '>' || c == '+' || c == '~';
 }
 
 /* Advance past one simple selector token starting at `p` (`.cls`, `#id`,
@@ -1352,8 +1344,8 @@ static const char *sel_skip_simple(const char *p, const char *end)
     } else {
         return NULL;
     }
-    while (p < end && (isalnum((unsigned char)*p) || *p == '-' || *p == '_' || *p == '*'
-                       || (*p == '\\' && p + 1 < end))) {
+    while (p < end && (isalnum((unsigned char)*p) || *p == '-' || *p == '_' || *p == '*' ||
+                       (*p == '\\' && p + 1 < end))) {
         p += (*p == '\\') ? 2 : 1;
     }
     /* Functional pseudo argument, e.g. :nth-child(2n+1) — kept as one token. */
@@ -1375,8 +1367,7 @@ static const char *sel_skip_simple(const char *p, const char *end)
 /* Split a compound-selector argument [s,e) (no top-level comma, no combinator)
  * into its simple parts. Returns the count (>=1), or -1 on an unparseable
  * token / too many parts. */
-static int not_split_parts(const char *s, const char *e, const char **parts,
-                           size_t *part_lens)
+static int not_split_parts(const char *s, const char *e, const char **parts, size_t *part_lens)
 {
     int count = 0;
     const char *p = s;
@@ -1448,8 +1439,7 @@ static void not_span_options_free(struct not_span_options *opt)
 /* Build the replacement options for one `:not(arg)` [arg,arg_end). Returns true
  * on success (options filled), false if this argument is unsupported and the
  * caller should abandon the whole selector. */
-static bool not_build_options(const char *arg, const char *arg_end,
-                              struct not_span_options *opt)
+static bool not_build_options(const char *arg, const char *arg_end, struct not_span_options *opt)
 {
     opt->count = 0;
     /* trim */
@@ -1567,9 +1557,8 @@ static bool is_where_build_options(const char *arg, const char *arg_end,
         bool has_comma = false;
         const char *parts[NOT_MAX_PARTS];
         size_t part_lens[NOT_MAX_PARTS];
-        if (ts >= te || opt->count >= SPAN_MAX_OPTIONS
-            || not_arg_is_complex(ts, te, &has_comma)
-            || not_split_parts(ts, te, parts, part_lens) < 0) {
+        if (ts >= te || opt->count >= SPAN_MAX_OPTIONS || not_arg_is_complex(ts, te, &has_comma) ||
+            not_split_parts(ts, te, parts, part_lens) < 0) {
             not_span_options_free(opt);
             return false;
         }
@@ -1590,8 +1579,7 @@ static bool is_where_build_options(const char *arg, const char *arg_end,
  * Level 3 list. Returns true if anything was rewritten (De Morgan multiply or
  * list de-sugar). On failure/no-op it appends the selector verbatim and
  * returns false. */
-static bool not_expand_selector(struct css_text_out *out, const char *sel,
-                                const char *sel_end)
+static bool not_expand_selector(struct css_text_out *out, const char *sel, const char *sel_end)
 {
     /* Segment the selector into literal chunks and `:not(...)` spans. */
     const char *lits[NOT_MAX_SPANS + 1];
@@ -1643,8 +1631,8 @@ static bool not_expand_selector(struct css_text_out *out, const char *sel,
                 break;
             }
             struct not_span_options opt = {0};
-            bool built = is_not ? not_build_options(arg, q, &opt)
-                                : is_where_build_options(arg, q, &opt);
+            bool built =
+                is_not ? not_build_options(arg, q, &opt) : is_where_build_options(arg, q, &opt);
             if (!built) {
                 /* Unsupported argument — abandon expansion for this selector. */
                 for (int i = 0; i < nspans; i++) {
@@ -1661,9 +1649,8 @@ static bool not_expand_selector(struct css_text_out *out, const char *sel,
             }
             /* A single-option span still changed if it differs textually from
              * the source (list de-sugar); detect by comparing lengths. */
-            if (opt.count == 1
-                && (strlen(opt.options[0]) != (size_t)(q + 1 - p)
-                    || memcmp(opt.options[0], p, strlen(opt.options[0])) != 0)) {
+            if (opt.count == 1 && (strlen(opt.options[0]) != (size_t)(q + 1 - p) ||
+                                   memcmp(opt.options[0], p, strlen(opt.options[0])) != 0)) {
                 any_change = true;
             }
             nspans++;
@@ -1776,8 +1763,7 @@ static bool not_rewrite_selector_list(struct css_text_out *out, const char *list
 
 /* Length-bounded substring search (portable stand-in for memmem, which needs
  * _GNU_SOURCE). Returns a pointer into `hay` or NULL. */
-static const char *css_find_substr(const char *hay, size_t n, const char *needle,
-                                   size_t needle_len)
+static const char *css_find_substr(const char *hay, size_t n, const char *needle, size_t needle_len)
 {
     if (needle_len == 0 || n < needle_len) {
         return NULL;
@@ -1793,9 +1779,8 @@ static const char *css_find_substr(const char *hay, size_t n, const char *needle
 /* True if [s,n) contains any of the de-sugarable pseudos. */
 static bool css_has_desugar_pseudo(const char *s, size_t n)
 {
-    return css_find_substr(s, n, ":not(", 5) != NULL
-           || css_find_substr(s, n, ":is(", 4) != NULL
-           || css_find_substr(s, n, ":where(", 7) != NULL;
+    return css_find_substr(s, n, ":not(", 5) != NULL || css_find_substr(s, n, ":is(", 4) != NULL ||
+           css_find_substr(s, n, ":where(", 7) != NULL;
 }
 
 /* De-sugar Level 4 `:not()` compound/list and `:is()` / `:where()` selectors
@@ -1842,8 +1827,8 @@ char *yetty_ybrowser_css_desugar_selectors(const char *css, size_t len)
             while (ps < p && isspace((unsigned char)*ps)) {
                 ps++;
             }
-            if (ps < p && *ps != '@'
-                && css_has_desugar_pseudo(prelude_start, (size_t)(p - prelude_start))) {
+            if (ps < p && *ps != '@' &&
+                css_has_desugar_pseudo(prelude_start, (size_t)(p - prelude_start))) {
                 if (not_rewrite_selector_list(&out, prelude_start, p)) {
                     changed = true;
                 }
@@ -1942,8 +1927,8 @@ static const char *calc_read_term(const char *p, const char *end)
 
 /* If [arg,arg_end) is exactly `<pct> ± <len>` or `<len> ± <pct>`, point
  * pct_start and pct_len at the percentage token and return true. */
-static bool calc_two_term_percent(const char *arg, const char *arg_end,
-                                  const char **pct_start, size_t *pct_len)
+static bool calc_two_term_percent(const char *arg, const char *arg_end, const char **pct_start,
+                                  size_t *pct_len)
 {
     const char *p = arg;
     while (p < arg_end && isspace((unsigned char)*p)) {
@@ -2049,8 +2034,7 @@ char *yetty_ybrowser_css_simplify_calc(const char *css, size_t len)
             css_text_append(&out, s, (size_t)(p - s));
             continue;
         }
-        if ((*p == 'c' || *p == 'C') && (size_t)(end - p) >= 5
-            && strncasecmp(p, "calc(", 5) == 0) {
+        if ((*p == 'c' || *p == 'C') && (size_t)(end - p) >= 5 && strncasecmp(p, "calc(", 5) == 0) {
             const char *arg = p + 5;
             int depth = 1;
             const char *q = arg;
@@ -3474,8 +3458,8 @@ static void aspect_strip_pseudo(const char *src, size_t start, size_t *end_inout
  * list enclosing byte `decl_pos`. Each branch has its trailing pseudo-element
  * dropped so the ratio binds to the real element. Commas inside a functional
  * pseudo — `:is(.a, .b)` — are not treated as list separators. */
-static void aspect_emit_rules(struct yetty_ylexbor *r, const char *src, size_t len,
-                              size_t decl_pos, float ratio)
+static void aspect_emit_rules(struct yetty_ylexbor *r, const char *src, size_t len, size_t decl_pos,
+                              float ratio)
 {
     (void)len;
     size_t brace = decl_pos;
@@ -3502,8 +3486,8 @@ static void aspect_emit_rules(struct yetty_ylexbor *r, const char *src, size_t l
             }
         } else if (ch == ',' && paren_depth == 0) {
             size_t bs = branch_start;
-            while (bs < scan && (src[bs] == ' ' || src[bs] == '\t' || src[bs] == '\n' ||
-                                 src[bs] == '\r')) {
+            while (bs < scan &&
+                   (src[bs] == ' ' || src[bs] == '\t' || src[bs] == '\n' || src[bs] == '\r')) {
                 bs++;
             }
             size_t be = scan;
@@ -3592,11 +3576,10 @@ void yetty_ylexbor_css_scan_aspect_ratios(struct yetty_ylexbor *r, const char *s
         }
         bool is_pseudo = false;
         for (size_t scan = sel_start; scan + 1 < brace; scan++) {
-            if (src[scan] == ':' &&
-                (strncasecmp(src + scan, ":after", 6) == 0 ||
-                 strncasecmp(src + scan, "::after", 7) == 0 ||
-                 strncasecmp(src + scan, ":before", 7) == 0 ||
-                 strncasecmp(src + scan, "::before", 8) == 0)) {
+            if (src[scan] == ':' && (strncasecmp(src + scan, ":after", 6) == 0 ||
+                                     strncasecmp(src + scan, "::after", 7) == 0 ||
+                                     strncasecmp(src + scan, ":before", 7) == 0 ||
+                                     strncasecmp(src + scan, "::before", 8) == 0)) {
                 is_pseudo = true;
                 break;
             }
