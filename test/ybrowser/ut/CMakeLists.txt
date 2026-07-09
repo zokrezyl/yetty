@@ -144,4 +144,16 @@ if(Python3_Interpreter_FOUND)
         LABELS           "golden;browser"
         TIMEOUT          90
         SKIP_RETURN_CODE 77)
+
+    # Iframe rendering test: asserts a nested browsing context's document
+    # (srcdoc, so offline) is composited into the iframe box — its text reaches
+    # the parent's paint stream. Also covers one level of iframe nesting. This
+    # is compositing, not geometry, so the WPT/anchor suites cannot see it.
+    add_test(NAME ybrowser_iframe_render
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../render/iframe-render.py)
+    set_tests_properties(ybrowser_iframe_render PROPERTIES
+        ENVIRONMENT      "YBROWSER=$<TARGET_FILE:ybrowser>"
+        LABELS           "golden;browser"
+        TIMEOUT          90
+        SKIP_RETURN_CODE 77)
 endif()

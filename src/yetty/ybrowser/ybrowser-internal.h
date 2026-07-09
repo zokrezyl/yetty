@@ -687,6 +687,13 @@ struct yetty_ylexbor_box {
 	 * root — the paint/hit clip walk stops when it reaches index 0. Used to
 	 * find overflow-clipping ancestors from the flat paint loop. */
     uint32_t parent;
+
+    /* When this box is an <iframe> whose src resolved to a document, points at
+	 * the child engine that rendered it (a nested browsing context). Paint
+	 * composites the child's drawables into this box's content area. Borrowed —
+	 * the child is OWNED by the engine's iframe_children list and destroyed on
+	 * document replace / engine destroy. NULL for every non-iframe box. */
+    struct yetty_ylexbor *iframe_doc;
 };
 
 /* Flat vector of boxes. Root is index 0. */
@@ -975,6 +982,15 @@ struct yetty_ylexbor {
     int img_jobs_in_flight;
     int destroy_pending;
     _Atomic uint64_t fetch_generation;
+
+    /* Nested browsing contexts. Each <iframe> with a fetchable src gets a child
+	 * engine that renders its document; paint composites the child's drawables
+	 * into the iframe box. OWNED — destroyed on document replace and at engine
+	 * destroy. `iframe_depth` guards against unbounded nesting (an iframe whose
+	 * document iframes onward); the top-level document is 0. */
+    struct yetty_ylexbor **iframe_children;
+    int iframe_child_count, iframe_child_cap;
+    int iframe_depth;
 };
 
 struct yetty_ylexbor_img_cache_entry {

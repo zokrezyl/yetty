@@ -1,0 +1,9 @@
+<!doctype html><meta charset=utf-8><title>iframe: width="100%" fills the viewport, not 100px</title>
+<style>body{margin:0}</style>
+<!-- width="100%" is a percentage presentation-hint attribute, NOT 100px.
+     atoi("100%") is 100, which used to collapse the frame to a 100px column —
+     the DataDome captcha iframe on reuters.com rendered every word as a
+     stack of 2-4 char fragments because of it. The replaced box must resolve
+     the percentage against the parent content box (800px viewport here). -->
+<iframe data-test="f1" data-expect="0,0,800,200" width="100%" height="200"
+        srcdoc="<body>hi</body>"></iframe>

@@ -816,10 +816,11 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
 #endif
         /* Embedded content we don't render — hide outright so the walker
          * doesn't surface their text content (MathML etc.) as garbage at
-         * the top of the page. <svg> is NOT hidden: the box builder gives
-         * it a replaced box (subtree never walked) so icon/logo layout
-         * reserves the right space. */
-        "math, audio, video, object, embed, iframe, canvas { display: none; }\n"
+         * the top of the page. <svg> and <iframe> are NOT hidden: the box
+         * builder gives each a replaced box (subtree never walked) so the
+         * layout reserves the right space — the iframe box then renders its
+         * src document as a nested browsing context. */
+        "math, audio, video, object, embed, canvas { display: none; }\n"
         "span, a, strong, b, em, i, cite, code, small, sub, sup, mark, ins, del,"
         " s, u, kbd, samp, var, time, q, abbr, dfn { display: inline; }\n"
         "br { display: inline; }\n"

@@ -2078,6 +2078,29 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                     (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, bc, 0, 0, &bx);
                 }
             }
+            /* Nested browsing context: composite the iframe's child document
+			 * into this box's content area. The child renders in its own
+			 * coordinate space (origin 0,0); translate its boxes to the iframe
+			 * content origin, paint into the SAME buffer — which composites in
+			 * insertion order, so the child lands on top of the iframe box's own
+			 * background just emitted above — then restore the child's local
+			 * coordinates (paint can run again on the next frame). Tall child
+			 * content may overflow the frame for now; iframe clipping is a
+			 * follow-up. */
+            if (b->iframe_doc != NULL && b->iframe_doc->boxes.size > 0) {
+                struct yetty_ylexbor *child = b->iframe_doc;
+                float off_x = b->x + b->border_left + b->padding_left;
+                float off_y = b->y + b->border_top + b->padding_top;
+                for (uint32_t child_i = 0; child_i < child->boxes.size; child_i++) {
+                    child->boxes.data[child_i].x += off_x;
+                    child->boxes.data[child_i].y += off_y;
+                }
+                (void)yetty_ylexbor_paint(child, buf);
+                for (uint32_t child_i = 0; child_i < child->boxes.size; child_i++) {
+                    child->boxes.data[child_i].x -= off_x;
+                    child->boxes.data[child_i].y -= off_y;
+                }
+            }
             break;
         }
 
