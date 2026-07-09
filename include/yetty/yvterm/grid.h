@@ -22,7 +22,7 @@ struct yetty_ydraw_composite;
 struct yetty_yvterm_grid;
 struct yetty_ywire_wire_statemachine;
 
-typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, void *);
+typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, int, void *);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(
     const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);

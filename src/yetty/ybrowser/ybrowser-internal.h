@@ -450,7 +450,7 @@ struct yetty_ylexbor_box {
 	 * layout. */
     uint8_t width_source;
     uint8_t height_source;
-    float css_height;   /* explicit height — placeholder for tables/img */
+    float css_height; /* explicit height — placeholder for tables/img */
     /* Height was explicitly specified in CSS (including `height:0`), as opposed
 	 * to auto. Distinguishes a real `height:0` — which with a percentage
 	 * padding-bottom is the aspect-ratio-box idiom (`height:0;padding-bottom:

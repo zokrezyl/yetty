@@ -87,6 +87,13 @@ static struct yetty_ycore_void_result glfw_window_open(struct yetty_yclass_objec
     if (!window) {
         return YETTY_ERR(yetty_ycore_void, glfw_open_reason());
     }
+    /* Explicitly grab keyboard focus. The window is undecorated (borderless),
+     * and some window managers do not give a borderless top-level input focus
+     * on map — so the app would render but receive no key events until the user
+     * alt-tabbed to it. A pointer click alone does not always transfer focus for
+     * such a window either. Requesting it here makes keyboard input work as soon
+     * as the window appears, regardless of WM focus policy. */
+    glfwFocusWindow(window);
     data.value->handle = window;
     return YETTY_OK_VOID();
 }

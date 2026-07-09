@@ -12,21 +12,21 @@
 #include <string.h> /* memcpy/strcmp/strlen */
 
 YETTY_MAYBE_UNUSED
-static yetty_yguiapp_build_fn yetty_demoygui_43_tree_showcase_yetty_yguiapp_build_check = build;
+static yetty_yguiapp_build_fn yetty_demoygui_44_textinput_yetty_yguiapp_build_check = build;
 
-struct yetty_yclass_ptr_result yetty_demoygui_43_tree_showcase_class_get(void)
+struct yetty_yclass_ptr_result yetty_demoygui_44_textinput_class_get(void)
 {
     static const struct yetty_yclass *cls = NULL;
     if (cls) {
         return YETTY_OK(yetty_yclass_ptr, cls);
     }
-    ydebug("registering class=yetty_demoygui_43_tree_showcase");
+    ydebug("registering class=yetty_demoygui_44_textinput");
 
     static const struct yetty_yclass_descriptor desc = {
-        .name = "yetty_demoygui_43_tree_showcase",
+        .name = "yetty_demoygui_44_textinput",
         .type = YETTY_YCLASS_TYPE_REGULAR,
-        .data_size = sizeof(struct yetty_demoygui_43_tree_showcase),
-        .data_align = _Alignof(struct yetty_demoygui_43_tree_showcase),
+        .data_size = sizeof(struct yetty_demoygui_44_textinput),
+        .data_align = _Alignof(struct yetty_demoygui_44_textinput),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_yguiapp", "build", (yetty_yclass_method_id_t)yetty_yguiapp_build,
@@ -34,73 +34,73 @@ struct yetty_yclass_ptr_result yetty_demoygui_43_tree_showcase_class_get(void)
     };
     struct yetty_yclass_ptr_result parent_class_r = yetty_yguiapp_app_class_get();
     if (YETTY_IS_ERR(parent_class_r)) {
-        yerror("yetty_demoygui_43_tree_showcase_class_get: parent accessor failed: %s",
+        yerror("yetty_demoygui_44_textinput_class_get: parent accessor failed: %s",
                parent_class_r.error.msg);
         return YETTY_ERR(yetty_yclass_ptr,
-                         "yetty_demoygui_43_tree_showcase_class_get: parent accessor failed",
+                         "yetty_demoygui_44_textinput_class_get: parent accessor failed",
                          parent_class_r);
     }
     struct yetty_yclass_ptr_result register_class_r = yetty_yclass_register(
         &desc, ops, sizeof(ops) / sizeof(ops[0]), parent_class_r.value, NULL, 0);
     if (YETTY_IS_ERR(register_class_r)) {
-        yerror("yetty_demoygui_43_tree_showcase_class_get: class_register failed: %s",
+        yerror("yetty_demoygui_44_textinput_class_get: class_register failed: %s",
                register_class_r.error.msg);
         return YETTY_ERR(yetty_yclass_ptr,
-                         "yetty_demoygui_43_tree_showcase_class_get: class_register failed",
+                         "yetty_demoygui_44_textinput_class_get: class_register failed",
                          register_class_r);
     }
     cls = register_class_r.value;
     return register_class_r;
 }
 
-struct yetty_demoygui_43_tree_showcase_ptr_result yetty_demoygui_43_tree_showcase_from(
+struct yetty_demoygui_44_textinput_ptr_result yetty_demoygui_44_textinput_from(
     struct yetty_yclass_object *obj)
 {
-    struct yetty_yclass_ptr_result class_r = yetty_demoygui_43_tree_showcase_class_get();
+    struct yetty_yclass_ptr_result class_r = yetty_demoygui_44_textinput_class_get();
     if (YETTY_IS_ERR(class_r)) {
-        return YETTY_ERR(yetty_demoygui_43_tree_showcase_ptr,
-                         "yetty_demoygui_43_tree_showcase_from: class accessor", class_r);
+        return YETTY_ERR(yetty_demoygui_44_textinput_ptr,
+                         "yetty_demoygui_44_textinput_from: class accessor", class_r);
     }
     struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
     if (YETTY_IS_ERR(slice_r)) {
-        return YETTY_ERR(yetty_demoygui_43_tree_showcase_ptr,
-                         "yetty_demoygui_43_tree_showcase_from: object_data", slice_r);
+        return YETTY_ERR(yetty_demoygui_44_textinput_ptr,
+                         "yetty_demoygui_44_textinput_from: object_data", slice_r);
     }
-    return YETTY_OK(yetty_demoygui_43_tree_showcase_ptr,
-                    (struct yetty_demoygui_43_tree_showcase *)slice_r.value);
+    return YETTY_OK(yetty_demoygui_44_textinput_ptr,
+                    (struct yetty_demoygui_44_textinput *)slice_r.value);
 }
 
-struct yetty_yclass_object_ptr_result yetty_demoygui_43_tree_showcase_to(
-    struct yetty_demoygui_43_tree_showcase *data)
+struct yetty_yclass_object_ptr_result yetty_demoygui_44_textinput_to(
+    struct yetty_demoygui_44_textinput *data)
 {
     if (!data) {
         return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
-    struct yetty_yclass_ptr_result class_r = yetty_demoygui_43_tree_showcase_class_get();
+    struct yetty_yclass_ptr_result class_r = yetty_demoygui_44_textinput_class_get();
     YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, class_r,
-                        "yetty_demoygui_43_tree_showcase_to: class accessor");
+                        "yetty_demoygui_44_textinput_to: class accessor");
     struct yetty_ycore_size_result offset_r =
         yetty_yclass_object_data_offset(class_r.value, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, offset_r,
-                        "yetty_demoygui_43_tree_showcase_to: data offset");
+                        "yetty_demoygui_44_textinput_to: data offset");
     return YETTY_OK(yetty_yclass_object_ptr,
                     (struct yetty_yclass_object *)((char *)data - offset_r.value));
 }
 
-struct yetty_yclass_object_ptr_result yetty_demoygui_43_tree_showcase_create(
+struct yetty_yclass_object_ptr_result yetty_demoygui_44_textinput_create(
     struct yetty_yclass_ctx *ctx);
-struct yetty_yclass_object_ptr_result yetty_demoygui_43_tree_showcase_create(
+struct yetty_yclass_object_ptr_result yetty_demoygui_44_textinput_create(
     struct yetty_yclass_ctx *ctx)
 {
-    ydebug("class=yetty_demoygui_43_tree_showcase");
+    ydebug("class=yetty_demoygui_44_textinput");
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    struct yetty_yclass_ptr_result class_accessor_r = yetty_demoygui_43_tree_showcase_class_get();
+    struct yetty_yclass_ptr_result class_accessor_r = yetty_demoygui_44_textinput_class_get();
     if (YETTY_IS_ERR(class_accessor_r)) {
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_demoygui_43_tree_showcase_create: class accessor failed",
+                         "yetty_demoygui_44_textinput_create: class accessor failed",
                          class_accessor_r);
     }
     const struct yetty_yclass *klass = class_accessor_r.value;
@@ -118,31 +118,29 @@ struct yetty_yclass_object_ptr_result yetty_demoygui_43_tree_showcase_create(
      * resolve ids on demand), but log so a malformed GET_CLASS
      * response isn't silently swallowed. */
     {
-        struct yetty_ycore_void_result translate_class_r = yetty_yclass_rpc_session_translate_class(
-            ctx->session, "yetty_demoygui_43_tree_showcase");
+        struct yetty_ycore_void_result translate_class_r =
+            yetty_yclass_rpc_session_translate_class(ctx->session, "yetty_demoygui_44_textinput");
         if (YETTY_IS_ERR(translate_class_r)) {
             yetty_ycore_error_print(stderr,
-                                    "yetty_demoygui_43_tree_showcase_create: translate_class "
-                                    "(degraded — will lazy-resolve)",
+                                    "yetty_demoygui_44_textinput_create: translate_class (degraded "
+                                    "— will lazy-resolve)",
                                     translate_class_r.error);
             yetty_ycore_error_destroy(translate_class_r.error);
         }
     }
 
     uint64_t handle = 0;
-    const char *class_name = "yetty_demoygui_43_tree_showcase";
+    const char *class_name = "yetty_demoygui_44_textinput";
     struct yetty_ycore_size_result create_call_r =
         yetty_yclass_rpc_call(ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, class_name,
                               strlen(class_name), &handle, sizeof(handle));
     if (YETTY_IS_ERR(create_call_r)) {
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_demoygui_43_tree_showcase_create: CREATE call failed",
-                         create_call_r);
+                         "yetty_demoygui_44_textinput_create: CREATE call failed", create_call_r);
     }
     if (create_call_r.value != sizeof(handle) || !handle) {
-        return YETTY_ERR(
-            yetty_yclass_object_ptr,
-            "yetty_demoygui_43_tree_showcase_create: CREATE returned no/invalid handle");
+        return YETTY_ERR(yetty_yclass_object_ptr,
+                         "yetty_demoygui_44_textinput_create: CREATE returned no/invalid handle");
     }
 
     /* Proxy: aligned (header + uint64_t) layout. Allocating raw bytes
@@ -155,7 +153,7 @@ struct yetty_yclass_object_ptr_result yetty_demoygui_43_tree_showcase_create(
     struct yetty_yclass_proxy *proxy = calloc(1, sizeof(*proxy));
     if (!proxy) {
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_demoygui_43_tree_showcase_create: calloc(proxy) failed");
+                         "yetty_demoygui_44_textinput_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
     /* Link the session onto the proxy so its methods marshal over it — they

@@ -62,6 +62,8 @@
 
 #include "yetty/yguiapp/run.h"
 
+#include "input-encode.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -154,15 +156,55 @@ static struct yetty_ycore_int_result yguiapp_frame_tick(
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-/* GLFW-style keycode → terminal byte sequence. Same map the runner used. */
-static const char *yguiapp_encode_key(uint32_t key, char *scratch, size_t scratch_n,
-                                      size_t *out_len)
+/* Encode a Unicode codepoint to UTF-8; returns the byte count (1..4, 0 if out
+ * of range). Shared with the terminal/client host — see input-encode.h. */
+size_t yguiapp_utf8_encode(uint32_t codepoint, char *out)
 {
-    if (key >= 32 && key < 127) {
-        scratch[0] = (char)key;
-        *out_len = 1;
-        return scratch;
+    if (codepoint < 0x80) {
+        out[0] = (char)codepoint;
+        return 1;
     }
+    if (codepoint < 0x800) {
+        out[0] = (char)(0xC0 | (codepoint >> 6));
+        out[1] = (char)(0x80 | (codepoint & 0x3F));
+        return 2;
+    }
+    if (codepoint < 0x10000) {
+        out[0] = (char)(0xE0 | (codepoint >> 12));
+        out[1] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (codepoint & 0x3F));
+        return 3;
+    }
+    if (codepoint <= 0x10FFFF) {
+        out[0] = (char)(0xF0 | (codepoint >> 18));
+        out[1] = (char)(0x80 | ((codepoint >> 12) & 0x3F));
+        out[2] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+        out[3] = (char)(0x80 | (codepoint & 0x3F));
+        return 4;
+    }
+    return 0;
+}
+
+/* GLFW-style special-keycode → terminal byte sequence, carrying the xterm
+ * modifier parameter (1 + shift|alt<<1|ctrl<<2) so Shift/Ctrl reach widgets —
+ * that is what lets Shift+Arrow extend a textinput selection and Ctrl+Arrow
+ * jump by word. Printable text is NOT encoded here: it arrives via
+ * YETTY_YCORE_CHAR already mapped through the OS keyboard layout (correct case
+ * and symbols), which the CHAR handler feeds. */
+const char *yguiapp_encode_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
+                               size_t *out_len)
+{
+    int mod_bits = 0;
+    if (glfw_mods & 0x0001) { /* GLFW_MOD_SHIFT */
+        mod_bits |= 1;
+    }
+    if (glfw_mods & 0x0004) { /* GLFW_MOD_ALT */
+        mod_bits |= 2;
+    }
+    if (glfw_mods & 0x0002) { /* GLFW_MOD_CONTROL */
+        mod_bits |= 4;
+    }
+    int mod_param = mod_bits ? mod_bits + 1 : 0;
     switch (key) {
     case 256:
         scratch[0] = 0x1B;
@@ -176,17 +218,33 @@ static const char *yguiapp_encode_key(uint32_t key, char *scratch, size_t scratc
         scratch[0] = 0x7F;
         *out_len = 1;
         return scratch; /* Backspace */
-    case 263:
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[D");
+    case 261:           /* Delete */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[3;%d~", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[3~");
         return scratch;
-    case 262:
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[C");
+    case 263: /* ← */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dD", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[D");
         return scratch;
-    case 265:
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[A");
+    case 262: /* → */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dC", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[C");
         return scratch;
-    case 264:
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[B");
+    case 265: /* ↑ */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dA", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[A");
+        return scratch;
+    case 264: /* ↓ */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dB", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[B");
+        return scratch;
+    case 268: /* Home */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dH", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[H");
+        return scratch;
+    case 269: /* End */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dF", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[F");
         return scratch;
     default:
         *out_len = 0;
@@ -208,6 +266,21 @@ static int yguiapp_on_key(struct yetty_yclass_object *engine, uint32_t key, int 
         return 1;
     }
     return 0;
+}
+
+/* Stop the app's event loop — the clean-quit path for app subclasses that
+ * install their own key handler (e.g. an Esc-to-quit demo) and so bypass the
+ * default 'q'/Ctrl-C quit above. A no-op when no loop is present (headless). */
+[[clang::annotate("expose")]]
+struct yetty_ycore_void_result yetty_yguiapp_app_quit(struct yetty_yclass_object *obj)
+{
+    struct yetty_yguiapp_app_ptr_result app_res = yetty_yguiapp_app_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "yguiapp_app_quit: from");
+    struct yetty_yguiapp_app *app = app_res.value;
+    if (app->yframework && app->yframework->event_loop && app->yframework->event_loop->ops->stop) {
+        return app->yframework->event_loop->ops->stop(app->yframework->event_loop);
+    }
+    return YETTY_OK_VOID();
 }
 
 /* Re-paint the chrome caption: ask ychrome to render its titlebar+buttons into
@@ -415,10 +488,39 @@ static struct yetty_ycore_int_result yguiapp_event(struct yetty_yevent_event_lis
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
+    case YETTY_YCORE_CHAR: {
+        /* Printable text + Ctrl+<letter> chords: the platform already mapped the
+         * physical key through the OS keyboard layout (correct case + symbols).
+         * Ctrl+<letter> arrives with the CONTROL mod set — fold it to its
+         * control byte (Ctrl-A → 0x01, …) so shortcuts reach widgets; otherwise
+         * UTF-8 encode the codepoint. Special/navigation keys come via KEY_DOWN. */
+        char buf[8];
+        size_t n = 0;
+        uint32_t codepoint = ev->chr.codepoint;
+        if ((ev->chr.mods & 0x0002 /* GLFW_MOD_CONTROL */) &&
+            ((codepoint >= 'a' && codepoint <= 'z') || (codepoint >= 'A' && codepoint <= 'Z'))) {
+            buf[0] = (char)(codepoint & 0x1F);
+            n = 1;
+        } else if (codepoint >= 32) {
+            n = yguiapp_utf8_encode(codepoint, buf);
+        }
+        if (n > 0) {
+            struct yetty_ycore_void_result fr =
+                yetty_ygui_framework_feed_input(app->engine, buf, n);
+            if (YETTY_IS_ERR(fr)) {
+                yetty_ycore_error_destroy(fr.error);
+            }
+            if (loop && loop->ops->request_render) {
+                loop->ops->request_render(loop);
+            }
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
     case YETTY_YCORE_KEY_DOWN: {
         char scratch[8];
         size_t n = 0;
-        const char *bytes = yguiapp_encode_key(ev->key.key, scratch, sizeof(scratch), &n);
+        const char *bytes =
+            yguiapp_encode_key(ev->key.key, ev->key.mods, scratch, sizeof(scratch), &n);
         if (bytes && n > 0) {
             struct yetty_ycore_void_result fr =
                 yetty_ygui_framework_feed_input(app->engine, bytes, n);
@@ -652,6 +754,11 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
         if (YETTY_IS_ERR(vr)) {
             yetty_ycore_error_destroy(vr.error);
         }
+        /* Hand the framework the SAME font the ygrid figure renders text with
+         * (font_id 0), so widget carets and click hit-tests measure against real
+         * glyph advances instead of the fixed per-char fallback. Borrowed — the
+         * app owns app->font and destroys it in teardown. */
+        yetty_ygui_framework_set_font(app->engine, app->font);
     }
 
     /* Two-level styled root: outer vbox owns the viewport, inner body panel

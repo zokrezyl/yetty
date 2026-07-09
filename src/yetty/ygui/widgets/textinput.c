@@ -23,8 +23,10 @@ struct yetty_ygui_textinput_ptr_result yetty_ygui_textinput_from(struct yetty_yc
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfont/font.h>
 #include <yetty/ygui/primitive-widget.h>
+#include <yetty/yplatform/time.h>
 #include <yetty/ysdf/funcs.gen.h>
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -51,6 +53,17 @@ struct YETTY_ANNOTATE("class@ygui:textinput") YETTY_ANNOTATE("parent@ygui:primit
      * shifted caret move grows it from the anchor; a plain click collapses it. */
     size_t sel_anchor;
     int dragging; /* left button held after a press inside the field */
+    /* Multi-click word/all selection (modern edit-box gesture). A double-click
+     * selects the word under the cursor and arms word_drag so the drag then
+     * grows the selection a whole word at a time; a triple-click selects all.
+     * last_press_* + click_count classify a press as single/double/triple by
+     * time + position, exactly like a desktop widget toolkit. */
+    int word_drag;         /* dragging after a double-click: extend by words */
+    size_t word_anchor_lo; /* the double-clicked word's fixed bounds, kept as */
+    size_t word_anchor_hi; /* the pivot while the drag extends left or right  */
+    double last_press_time;
+    size_t last_press_index;
+    int click_count; /* 1 = caret, 2 = word, 3 = all (then wraps) */
 };
 
 /* Font metrics used for caret placement + click-to-position. TEXTINPUT_CHAR_W
@@ -60,6 +73,11 @@ struct YETTY_ANNOTATE("class@ygui:textinput") YETTY_ANNOTATE("parent@ygui:primit
 #define TEXTINPUT_FONT_SIZE 14.0f
 #define TEXTINPUT_TEXT_PAD 10.0f
 #define TEXTINPUT_CHAR_W (TEXTINPUT_FONT_SIZE * 0.55f)
+
+/* Two left presses on the same caret slot within this window count as a
+ * double- (then triple-) click, the way desktop widget toolkits classify a
+ * multi-click. */
+#define TEXTINPUT_MULTICLICK_SEC 0.4
 
 /* The framework's measurement font (the same font the shared ygrid renders text
  * with), or NULL when none is wired — then the callers fall back to CHAR_W. */
@@ -105,32 +123,22 @@ static size_t textinput_index_at_x(struct yetty_yfont_font *font,
     if (rel <= 0.0f || !d->text || d->text_len == 0) {
         return 0;
     }
-    if (font && font->ops && font->ops->get_advance) {
-        float acc = 0.0f;
-        for (size_t i = 0; i < d->text_len; i++) {
-            struct float_result ar = font->ops->get_advance(
-                font, (uint32_t)(unsigned char)d->text[i], TEXTINPUT_FONT_SIZE);
-            float adv = TEXTINPUT_CHAR_W;
-            if (YETTY_IS_OK(ar)) {
-                adv = ar.value;
-            } else {
-                yetty_ycore_error_destroy(ar.error);
-            }
-            if (rel < acc + adv * 0.5f) {
-                return i;
-            }
-            acc += adv;
+    /* Walk caret slots using the SAME width metric the caret and the text are
+     * drawn with (textinput_prefix_width → measure_text). A click then lands
+     * exactly where the caret would be painted, including the slot AFTER the
+     * last glyph. Summing per-glyph get_advance instead can drift from the
+     * rendered run, which left the last reachable caret a glyph short of the end
+     * (you could never click past the second-to-last character). prefix_width
+     * carries its own fixed-advance fallback when no measurement font is wired. */
+    float prev = 0.0f;
+    for (size_t i = 1; i <= d->text_len; i++) {
+        float width = textinput_prefix_width(font, d, i);
+        if (rel < (prev + width) * 0.5f) {
+            return i - 1;
         }
-        return d->text_len;
+        prev = width;
     }
-    long idx = (long)((rel / TEXTINPUT_CHAR_W) + 0.5f);
-    if (idx < 0) {
-        idx = 0;
-    }
-    if ((size_t)idx > d->text_len) {
-        idx = (long)d->text_len;
-    }
-    return (size_t)idx;
+    return d->text_len;
 }
 
 /* Selection bounds as a half-open byte range [lo, hi). */
@@ -163,6 +171,69 @@ static int delete_selection(struct yetty_ygui_textinput *d)
     return 1;
 }
 
+/* Word-motion boundaries (Ctrl+Left/Right, Ctrl+Backspace/Delete). A "word"
+ * is a maximal run of alphanumeric bytes; everything else (spaces, '/', '.',
+ * ':', …) separates — which matches how a URL bar is expected to jump. Field
+ * text is ASCII, so byte == codepoint here. */
+static int is_word_char(char ch)
+{
+    return isalnum((unsigned char)ch) != 0;
+}
+
+/* First offset of the word at/left of `pos`: skip separators left, then the
+ * word's bytes left. */
+static size_t word_left(const struct yetty_ygui_textinput *d, size_t pos)
+{
+    while (pos > 0 && !is_word_char(d->text[pos - 1])) {
+        pos--;
+    }
+    while (pos > 0 && is_word_char(d->text[pos - 1])) {
+        pos--;
+    }
+    return pos;
+}
+
+/* Offset just past the word at/right of `pos`: skip separators right, then the
+ * word's bytes right. */
+static size_t word_right(const struct yetty_ygui_textinput *d, size_t pos)
+{
+    while (pos < d->text_len && !is_word_char(d->text[pos])) {
+        pos++;
+    }
+    while (pos < d->text_len && is_word_char(d->text[pos])) {
+        pos++;
+    }
+    return pos;
+}
+
+/* Half-open bounds [start, end) of the contiguous run under byte index `pos`:
+ * the whole word when `pos` is on a word char, or the whole separator run when
+ * it is on whitespace/punctuation. This is what a double-click selects, and the
+ * unit a word-granular drag snaps each end to. */
+static void word_bounds_at(const struct yetty_ygui_textinput *d, size_t pos, size_t *start_out,
+                           size_t *end_out)
+{
+    if (d->text_len == 0) {
+        *start_out = 0;
+        *end_out = 0;
+        return;
+    }
+    if (pos >= d->text_len) {
+        pos = d->text_len - 1;
+    }
+    int word = is_word_char(d->text[pos]);
+    size_t start = pos;
+    while (start > 0 && is_word_char(d->text[start - 1]) == word) {
+        start--;
+    }
+    size_t end = pos + 1;
+    while (end < d->text_len && is_word_char(d->text[end]) == word) {
+        end++;
+    }
+    *start_out = start;
+    *end_out = end;
+}
+
 /* Byte index under a widget-relative x pixel (accounts for the text padding). */
 static size_t textinput_index_at_press(struct yetty_yclass_object *obj,
                                        struct yetty_ygui_textinput *d, float px)
@@ -192,10 +263,39 @@ static struct yetty_ycore_int_result textinput_on_press(struct yetty_yclass_obje
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "textinput_on_press: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
     d->focused = 1;
-    if (button == 0) { /* left — place caret and begin a (possibly empty) selection */
-        d->cursor = textinput_index_at_press(obj, d, x);
-        d->sel_anchor = d->cursor;
-        d->dragging = 1;
+    if (button == 0) { /* left button */
+        size_t idx = textinput_index_at_press(obj, d, x);
+        double now = yetty_yplatform_ytime_monotonic_sec();
+        int multi =
+            (now - d->last_press_time) <= TEXTINPUT_MULTICLICK_SEC && idx == d->last_press_index;
+        d->click_count = multi ? (d->click_count >= 3 ? 1 : d->click_count + 1) : 1;
+        d->last_press_time = now;
+        d->last_press_index = idx;
+
+        if (d->click_count == 2) {
+            /* double-click: select the whole word under the cursor and arm the
+             * word-granular drag pivoted on that word. */
+            size_t lo, hi;
+            word_bounds_at(d, idx, &lo, &hi);
+            d->sel_anchor = lo;
+            d->cursor = hi;
+            d->word_anchor_lo = lo;
+            d->word_anchor_hi = hi;
+            d->word_drag = 1;
+            d->dragging = 1;
+        } else if (d->click_count == 3) {
+            /* triple-click: select all (single-line stand-in for select-line). */
+            d->sel_anchor = 0;
+            d->cursor = d->text_len;
+            d->word_drag = 0;
+            d->dragging = 0;
+        } else {
+            /* single click: place the caret and begin a char-granular drag. */
+            d->cursor = idx;
+            d->sel_anchor = idx;
+            d->word_drag = 0;
+            d->dragging = 1;
+        }
     }
     struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dr, "textinput_on_press: dirty");
@@ -214,8 +314,31 @@ static struct yetty_ycore_int_result textinput_on_motion(struct yetty_yclass_obj
     if (!d->dragging) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    /* Extend the selection: the anchor stays put, the caret tracks the cursor. */
-    d->cursor = textinput_index_at_press(obj, d, x);
+    size_t idx = textinput_index_at_press(obj, d, x);
+    if (d->word_drag) {
+        /* Grow the selection a whole word at a time, pivoted on the word the
+         * double-click landed on: dragging left snaps the caret to the start of
+         * the word under the cursor (anchor pinned to the pivot's right edge);
+         * dragging right snaps to the end of that word (anchor at the left
+         * edge); staying within the pivot keeps just that word selected. */
+        if (idx < d->word_anchor_lo) {
+            size_t lo, hi;
+            word_bounds_at(d, idx, &lo, &hi);
+            d->sel_anchor = d->word_anchor_hi;
+            d->cursor = lo;
+        } else if (idx > d->word_anchor_hi) {
+            size_t lo, hi;
+            word_bounds_at(d, idx, &lo, &hi);
+            d->sel_anchor = d->word_anchor_lo;
+            d->cursor = hi;
+        } else {
+            d->sel_anchor = d->word_anchor_lo;
+            d->cursor = d->word_anchor_hi;
+        }
+    } else {
+        /* Char-granular: the anchor stays put, the caret tracks the cursor. */
+        d->cursor = idx;
+    }
     struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dr, "textinput_on_motion: dirty");
     return YETTY_OK(yetty_ycore_int, 1);
@@ -428,6 +551,11 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_yclass
     d->text_len = n;
     d->cursor = n; /* caret to end on programmatic set */
     d->sel_anchor = n;
+    /* Programmatic text change is a fresh context: the next click must not be
+     * mistaken for the second half of a multi-click on the old content. */
+    d->click_count = 0;
+    d->last_press_time = 0.0;
+    d->word_drag = 0;
     return yetty_ygui_widget_set_dirty(obj);
 }
 
@@ -471,6 +599,44 @@ struct yetty_ycore_void_result yetty_ygui_textinput_select_all(struct yetty_ycla
     d->sel_anchor = 0;
     d->cursor = d->text_len;
     d->focused = 1;
+    return yetty_ygui_widget_set_dirty(obj);
+}
+
+/* Replace the current selection (if any) with `text`, leaving the caret after
+ * the inserted run and no selection. Powers paste (insert clipboard text) and
+ * cut/delete-selection (pass "" to just drop the selection). Only printable
+ * ASCII 0x20..0x7e is taken — the field is single-line ASCII, so newlines /
+ * control bytes from a multi-line clipboard paste are dropped, not inserted. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_textinput_insert_text(struct yetty_yclass_object *obj,
+                                                                const char *text)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "textinput_insert_text: NULL obj");
+    }
+    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_textinput_insert_text: data_get");
+    struct yetty_ygui_textinput *d = d_dr.value;
+    delete_selection(d);
+    if (text) {
+        for (const char *p = text; *p; ++p) {
+            char ch = *p;
+            if ((unsigned char)ch < 0x20 || (unsigned char)ch >= 0x7f) {
+                continue;
+            }
+            if (!ensure_cap(d, d->text_len + 2)) {
+                return YETTY_ERR(yetty_ycore_void, "textinput_insert_text: realloc");
+            }
+            memmove(d->text + d->cursor + 1, d->text + d->cursor, d->text_len - d->cursor);
+            d->text[d->cursor] = ch;
+            d->cursor++;
+            d->text_len++;
+        }
+    }
+    if (d->text) {
+        d->text[d->text_len] = '\0';
+    }
+    d->sel_anchor = d->cursor;
     return yetty_ygui_widget_set_dirty(obj);
 }
 
@@ -527,9 +693,27 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_focus(struct yetty_yclas
     return yetty_ygui_widget_set_dirty(obj);
 }
 
+/* A caret move to `target`. When `extend` (Shift held) the anchor stays put so
+ * the selection grows/shrinks; otherwise the selection collapses to the caret.
+ * Returns 1 if the caret or the selection actually changed (drives repaint). */
+static int move_caret(struct yetty_ygui_textinput *d, size_t target, int extend)
+{
+    int changed = target != d->cursor || (!extend && has_selection(d));
+    d->cursor = target;
+    if (!extend) {
+        d->sel_anchor = target;
+    }
+    return changed;
+}
+
+/* `mods` is the YETTY_YGUI_MOD_* bitset for this key (Shift/Ctrl/Alt).
+ * Clipboard chords (copy/cut/paste) are the app's concern — they need a
+ * clipboard the widget has no handle to — so they arrive already consumed and
+ * never reach here; Ctrl-A (select all) needs no external state, so it is
+ * handled locally. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_yclass_object *obj,
-                                                              uint32_t key)
+                                                              uint32_t key, int mods)
 {
     if (!obj) {
         return YETTY_OK(yetty_ycore_int, 0);
@@ -548,65 +732,88 @@ struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_yclas
     if (d->sel_anchor > d->text_len) {
         d->sel_anchor = d->text_len;
     }
+    const int shift = (mods & YETTY_YGUI_MOD_SHIFT) != 0;
+    const int ctrl = (mods & YETTY_YGUI_MOD_CTRL) != 0;
     int changed = 0;
     int consumed = 1;
     switch (key) {
     case 0x08:
-    case 0x7F: /* backspace — delete the selection, else the char before caret */
+    case 0x7F: /* backspace — selection, else word (Ctrl), else the char before caret */
         if (delete_selection(d)) {
+            changed = 1;
+        } else if (ctrl && d->cursor > 0) {
+            size_t start = word_left(d, d->cursor);
+            memmove(d->text + start, d->text + d->cursor, d->text_len - d->cursor);
+            d->text_len -= d->cursor - start;
+            d->cursor = start;
+            d->text[d->text_len] = '\0';
+            d->sel_anchor = d->cursor;
             changed = 1;
         } else if (d->cursor > 0) {
             memmove(d->text + d->cursor - 1, d->text + d->cursor, d->text_len - d->cursor);
             d->cursor--;
             d->text_len--;
             d->text[d->text_len] = '\0';
+            d->sel_anchor = d->cursor;
             changed = 1;
         }
         break;
-    case YETTY_YGUI_KEY_DELETE: /* delete the selection, else the char at caret */
+    case YETTY_YGUI_KEY_DELETE: /* selection, else word (Ctrl), else the char at caret */
         if (delete_selection(d)) {
+            changed = 1;
+        } else if (ctrl && d->cursor < d->text_len) {
+            size_t end = word_right(d, d->cursor);
+            memmove(d->text + d->cursor, d->text + end, d->text_len - end);
+            d->text_len -= end - d->cursor;
+            d->text[d->text_len] = '\0';
+            d->sel_anchor = d->cursor;
             changed = 1;
         } else if (d->cursor < d->text_len) {
             memmove(d->text + d->cursor, d->text + d->cursor + 1, d->text_len - d->cursor - 1);
             d->text_len--;
             d->text[d->text_len] = '\0';
+            d->sel_anchor = d->cursor;
             changed = 1;
         }
         break;
-    case YETTY_YGUI_KEY_ARROW_LEFT:
-        /* Collapse a selection to its left edge; otherwise step the caret. */
-        if (has_selection(d)) {
-            d->cursor = sel_lo(d);
-            changed = 1;
-        } else if (d->cursor > 0) {
-            d->cursor--;
-            changed = 1;
+    case YETTY_YGUI_KEY_ARROW_LEFT: {
+        /* Ctrl → word jump; plain arrow over a selection collapses to its left
+         * edge; otherwise step one. Shift keeps the anchor to grow a selection. */
+        size_t target;
+        if (ctrl) {
+            target = word_left(d, d->cursor);
+        } else if (!shift && has_selection(d)) {
+            target = sel_lo(d);
+        } else {
+            target = d->cursor > 0 ? d->cursor - 1 : 0;
         }
-        d->sel_anchor = d->cursor;
+        changed = move_caret(d, target, shift);
         break;
-    case YETTY_YGUI_KEY_ARROW_RIGHT:
-        if (has_selection(d)) {
-            d->cursor = sel_hi(d);
-            changed = 1;
-        } else if (d->cursor < d->text_len) {
-            d->cursor++;
-            changed = 1;
+    }
+    case YETTY_YGUI_KEY_ARROW_RIGHT: {
+        size_t target;
+        if (ctrl) {
+            target = word_right(d, d->cursor);
+        } else if (!shift && has_selection(d)) {
+            target = sel_hi(d);
+        } else {
+            target = d->cursor < d->text_len ? d->cursor + 1 : d->text_len;
         }
-        d->sel_anchor = d->cursor;
+        changed = move_caret(d, target, shift);
         break;
+    }
     case YETTY_YGUI_KEY_HOME:
-        if (d->cursor != 0 || has_selection(d)) {
-            d->cursor = 0;
-            changed = 1;
-        }
-        d->sel_anchor = d->cursor;
+        changed = move_caret(d, 0, shift);
         break;
     case YETTY_YGUI_KEY_END:
-        if (d->cursor != d->text_len || has_selection(d)) {
+        changed = move_caret(d, d->text_len, shift);
+        break;
+    case 0x01: /* Ctrl-A — select all */
+        if (d->text_len > 0 && (d->sel_anchor != 0 || d->cursor != d->text_len)) {
+            d->sel_anchor = 0;
             d->cursor = d->text_len;
             changed = 1;
         }
-        d->sel_anchor = d->cursor;
         break;
     default:
         if (key >= 32 && key < 127) { /* insert printable — replacing any selection */

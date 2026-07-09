@@ -2302,9 +2302,9 @@ static void resolve_pct_metrics(struct yetty_ylexbor_box *b, float cb_width)
 	 * inside can't inflate them to its intrinsic (~3x) height. Only when height
 	 * is otherwise auto. */
     if (b->aspect_ratio > 0.0f && !b->css_height_set) {
-        float own_width = b->css_width > 0.0f    ? b->css_width
-                          : b->css_width < 0.0f  ? -b->css_width * cb_width
-                                                 : cb_width;
+        float own_width = b->css_width > 0.0f   ? b->css_width
+                          : b->css_width < 0.0f ? -b->css_width * cb_width
+                                                : cb_width;
         float h = own_width * b->aspect_ratio;
         if (h > 0.0f) {
             b->css_height = h;
@@ -3240,8 +3240,7 @@ static void resolve_image_fill_heights(struct yetty_ylexbor *r, uint32_t idx)
         if (child->kind != YL_BOX_INLINE_IMAGE || child->img_pct_h <= 0.0f) {
             continue;
         }
-        for (uint32_t ancestor = idx; ancestor != 0;
-             ancestor = r->boxes.data[ancestor].parent) {
+        for (uint32_t ancestor = idx; ancestor != 0; ancestor = r->boxes.data[ancestor].parent) {
             struct yetty_ylexbor_box *anc = &r->boxes.data[ancestor];
             if (anc->css_height_set && anc->css_height > 0.0f) {
                 float filled = child->img_pct_h * anc->css_height;

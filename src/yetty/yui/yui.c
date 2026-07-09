@@ -2606,7 +2606,7 @@ static struct yetty_ycore_int_result yui_feed_key_to_focused(struct yetty_yui *y
             if (!in) {
                 continue;
             }
-            struct yetty_ycore_int_result handled = yetty_ygui_textinput_handle_key(in, key);
+            struct yetty_ycore_int_result handled = yetty_ygui_textinput_handle_key(in, key, 0);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, handled, "yui_feed_key_to_focused: handle_key");
             if (handled.value) {
                 if (yui->engine) {

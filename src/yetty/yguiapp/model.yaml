@@ -109,6 +109,16 @@ classes:
  * Class data slice. The host owns the whole environment; the per-instance
  * pointers below are created in run() and torn down at the end of run().
  *=========================================================================*/"
+exposed:
+  - source_file: src/yetty/yguiapp/app.c
+    name: yetty_yguiapp_app_quit
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Stop the app's event loop — the clean-quit path for app subclasses that
+ * install their own key handler (e.g. an Esc-to-quit demo) and so bypass the
+ * default 'q'/Ctrl-C quit above. A no-op when no loop is present (headless). */"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result
