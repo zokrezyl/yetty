@@ -1,0 +1,19 @@
+<!doctype html><meta charset=utf-8>
+<title>Media Queries Level 4 range syntax (width&gt;=N) is honoured</title>
+<!-- libcss 0.9.x parses only classic (min-width:N)/(max-width:N); ybrowser
+     rewrites the range forms before the cascade. Rendered at 800px wide. -->
+<style>
+  body { margin: 0 }
+  .a { width: 100px; height: 20px }
+  @media (width >= 500px) { .a { width: 250px } }   /* matches at 800 */
+  .b { width: 100px; height: 20px }
+  @media (width <= 400px) { .b { width: 250px } }   /* no match at 800 */
+  .c { width: 100px; height: 20px }
+  @media (600px <= width <= 900px) { .c { width: 250px } }  /* matches at 800 */
+  .d { width: 100px; height: 20px }
+  @media screen and (width > 900px) { .d { width: 250px } } /* no match at 800 */
+</style>
+<div data-test="a" data-expect="*,*,250,*" class="a">min</div>
+<div data-test="b" data-expect="*,*,100,*" class="b">max-no</div>
+<div data-test="c" data-expect="*,*,250,*" class="c">range</div>
+<div data-test="d" data-expect="*,*,100,*" class="d">gt-no</div>

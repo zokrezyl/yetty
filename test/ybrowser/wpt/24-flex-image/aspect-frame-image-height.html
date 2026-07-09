@@ -1,0 +1,21 @@
+<!doctype html><meta charset=utf-8>
+<title>An image in a padding-bottom aspect frame fills the frame height, not its intrinsic size</title>
+<!-- The classic aspect-ratio-frame idiom: a container whose ::after pseudo has
+     `content:""; padding-bottom:P%` makes the container height a fixed fraction
+     of its width; the image inside (height:100%) then fills that frame. libcss
+     0.9.x parses neither the pseudo padding-bottom frame nor object-fit, so the
+     frame stays height-less and a portrait image (misleading 1080x1920 attrs)
+     falls back to its intrinsic aspect and overflows to ~3x. CNN's card
+     thumbnails are built exactly this way. ybrowser scans the ::after frame
+     into an aspect side table (height = width * P/100) and resolves the image's
+     height:100% against that definite frame. Frame width 400, padding-bottom
+     50% -> frame + image height 200 (not 400 * 1920/1080 = 711). -->
+<style>
+  body { margin: 0 }
+  .frame { width: 400px; display: flex; position: relative }
+  .frame::after { content: ""; padding-bottom: 50%; display: block }
+  .frame img { width: 100%; height: 100%; object-fit: cover }
+</style>
+<div class="frame">
+  <img data-test="img" data-expect="0,0,*,200" width="1080" height="1920" src="x.png">
+</div>

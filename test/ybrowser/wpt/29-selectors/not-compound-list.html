@@ -1,0 +1,21 @@
+<!doctype html><meta charset=utf-8>
+<title>Selectors Level 4 :not() compound / list arguments</title>
+<!-- libcss 0.9.x rejects :not(.a.b) and :not(.a, .b), dropping the whole rule.
+     ybrowser de-sugars them to Level 3 (De Morgan for compounds, chained nots
+     for lists) before the cascade. Correctness matters: a compound :not must
+     only exclude elements that match ALL parts. -->
+<style>
+  body { margin: 0 }
+  .base { width: 100px; height: 20px }
+  /* compound: widen everything that is NOT (both .x AND .y) */
+  div:not(.x.y) { width: 250px }
+  /* list: narrow back anything that is neither .keep nor .safe */
+  .row div:not(.keep, .safe) { height: 40px }
+</style>
+<div data-test="a" data-expect="*,*,250,20" class="base">plain: matches compound, not list-row</div>
+<div data-test="b" data-expect="*,*,100,20" class="base x y">has x AND y: compound excludes → 100</div>
+<div data-test="c" data-expect="*,*,250,20" class="base x">has only x: compound still matches → 250</div>
+<div class="row">
+  <div data-test="d" data-expect="*,*,250,40" class="base">row plain: list matches → tall</div>
+  <div data-test="e" data-expect="*,*,250,20" class="base keep">row .keep: list excludes → short</div>
+</div>

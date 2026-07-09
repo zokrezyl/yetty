@@ -1085,6 +1085,11 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 }
             }
         }
+        /* A `display:none` rule libcss dropped for its L4 selector (`:is()`,
+		 * `:has()`, `:where()`) — hide the subtree the page meant to hide. */
+        if (yetty_ylexbor_display_none_lookup(r, el)) {
+            continue;
+        }
 
         /* effective_disp: start from the tag-default, override with
 		 * libcss when it returns a usable value. The libcss UA-default
@@ -1331,11 +1336,33 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     if (yetty_ybrowser_libcss_width(r, cs, s.font_size, pct_basis, &px)) {
                         b->css_width = px;
                     }
+                    /* Precise calc(<pct> ± <len>) width: libcss dropped it (or
+                     * the coarse `calc→%` pre-pass approximated it). Record the
+                     * terms; resolve_pct_metrics finalizes the exact px against
+                     * the containing block so grid columns land on the Chrome
+                     * pixel. */
+                    {
+                        float calc_pct = 0.0f;
+                        float calc_off = 0.0f;
+                        if (yetty_ylexbor_calc_length_lookup(r, el, 0, s.font_size, &calc_pct,
+                                                             &calc_off)) {
+                            b->calc_width_pct = calc_pct;
+                            b->calc_width_offset = calc_off;
+                            b->calc_width_set = 1;
+                        }
+                    }
                     if (yetty_ybrowser_libcss_height(r, cs, s.font_size, pct_basis, &px)) {
                         b->css_height = px;
+                        b->css_height_set = 1;
                     }
                     b->width_keyword = (uint8_t)yetty_ylexbor_width_keyword_lookup(r, el);
                     b->line_clamp = (uint8_t)yetty_ylexbor_line_clamp_lookup(r, el);
+                    /* aspect-ratio / `::after{padding-bottom:%}` frame height —
+                     * libcss drops both; resolve height = width * ratio at
+                     * layout so image frames don't inflate to intrinsic size. */
+                    if (!b->css_height_set) {
+                        b->aspect_ratio = yetty_ylexbor_aspect_ratio_lookup(r, el);
+                    }
                     /* Stylesheet `height: var(...)` re-resolved against
 				 * element-scoped custom properties — the sheet-level
 				 * substitution only saw the global table. */
@@ -2231,9 +2258,16 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             px > 0.0f) {
                             css_img_w = px;
                         }
-                        if (yetty_ybrowser_libcss_height(r, img_cs, s.font_size, basis, &px) &&
-                            px > 0.0f) {
-                            css_img_h = px;
+                        if (yetty_ybrowser_libcss_height(r, img_cs, s.font_size, basis, &px)) {
+                            if (px > 0.0f) {
+                                css_img_h = px;
+                            } else if (px < 0.0f) {
+                                /* Percentage height (e.g. 100%) — no containing
+								 * block yet; record the fraction and bind it at
+								 * layout against the nearest definite-height
+								 * ancestor (aspect frame). */
+                                ib->img_pct_h = -px;
+                            }
                         }
                         /* float on a replaced inline element pulls it out of
 					 * the inline flow into the block float path — the

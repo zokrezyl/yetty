@@ -1,0 +1,17 @@
+<!doctype html><meta charset=utf-8>
+<title>grid-template-columns resolves custom properties</title>
+<!-- libcss parses no grid-template-columns; ybrowser scans it itself. Modern
+     design systems (Tailwind arbitrary grids) size tracks from :root tokens —
+     the scanner must resolve var() before parsing or the grid collapses to one
+     column. Rendered at 800px. -->
+<style>
+  body { margin: 0 }
+  :root { --c1: 60px; --c2: 120px }
+  .g { display: grid; grid-template-columns: var(--c1) var(--c2) 1fr }
+  .i { height: 30px }
+</style>
+<div class="g">
+  <div data-test="a" data-expect="0,*,60,*" class="i">a</div>
+  <div data-test="b" data-expect="60,*,120,*" class="i">b</div>
+  <div data-test="c" data-expect="180,*,*,*" class="i">c</div>
+</div>

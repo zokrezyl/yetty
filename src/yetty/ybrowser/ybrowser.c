@@ -728,6 +728,9 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
     yetty_ylexbor_css_scan_flex_gaps(r, css, css_len);
     yetty_ylexbor_css_scan_var_heights(r, css, css_len);
     yetty_ylexbor_css_scan_width_keywords(r, css, css_len);
+    yetty_ylexbor_css_scan_calc_lengths(r, css, css_len);
+    yetty_ylexbor_css_scan_aspect_ratios(r, css, css_len);
+    yetty_ylexbor_css_scan_display_none(r, css, css_len);
     yetty_ylexbor_css_scan_line_clamps(r, css, css_len);
     yetty_ylexbor_css_scan_transforms(r, css, css_len);
     yetty_ylexbor_css_media_map_end(r);
