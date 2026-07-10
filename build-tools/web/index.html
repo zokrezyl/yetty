@@ -378,21 +378,44 @@
         </div>
     </div>
 
-    <!-- ================= Emulator tab ================= -->
+    <!-- ================= Engines tab =================
+         The page-shared session engines. Each one is loaded at most ONCE
+         per page; every terminal instance of that kind attaches as its
+         own session. Starting an engine here is independent of any
+         terminal. -->
     <div id="emulator-panel" class="tab-panel">
-        <h1><span class="accent">yemu</span> — TinyEMU RISC-V emulator</h1>
-        <div id="emu-desc">Boots Alpine Linux on RISC-V entirely inside your
-            browser (wasm-interpreted CPU — no server involved). The rootfs is
-            a large download (~250&nbsp;MB compressed) and the first boot takes
-            a while; the log below streams every step. Starting the emulator
-            here is independent of any terminal: terminals attach to it from
-            the Terminals tab via the <strong>TinyEMU VM</strong> session type.</div>
-        <div id="emu-controls">
-            <button id="emu-start" type="button">Start emulator</button>
-            <span id="emu-state">stopped</span>
-            <span id="emu-attached">attached terminals: none</span>
+        <div class="engine-section">
+            <h1><span class="accent">yemu</span> — TinyEMU RISC-V emulator</h1>
+            <div class="engine-desc">Boots Alpine Linux on RISC-V entirely inside
+                your browser (wasm-interpreted CPU — no server involved). The
+                rootfs is a large download (~250&nbsp;MB compressed, cached after
+                the first visit) and the first boot takes a while; the log below
+                streams every step. Terminals attach from the Terminals tab via
+                the <strong>TinyEMU VM</strong> session type — each gets its own
+                telnet login on the one VM.</div>
+            <div class="engine-controls">
+                <button id="engine-start-temu" class="engine-start" type="button">Start emulator</button>
+                <span id="engine-state-temu" class="engine-state">stopped</span>
+                <span id="engine-attached-temu" class="engine-attached">attached terminals: none</span>
+            </div>
+            <div id="engine-log-temu" class="engine-log"><div class="line empty">(emulator not started — boot log will stream here)</div></div>
         </div>
-        <div id="emu-log"><div class="line empty">(emulator not started — boot log will stream here)</div></div>
+        <div class="engine-section">
+            <h1><span class="accent">yos</span> — FreeBSD wasm userspace</h1>
+            <div class="engine-desc">Runs zsh, nvim, tmux and coreutils as
+                wasm32 binaries on the yos process engine — no server, no VM,
+                no kernel (~40&nbsp;MB of tools on first start). yos is an
+                OS-like engine with real multi-process support: it loads once
+                per page, and every terminal attached from the Terminals tab
+                via the <strong>yos</strong> session type gets its own fresh
+                zsh session on the same engine.</div>
+            <div class="engine-controls">
+                <button id="engine-start-yos" class="engine-start" type="button">Start yos</button>
+                <span id="engine-state-yos" class="engine-state">stopped</span>
+                <span id="engine-attached-yos" class="engine-attached">attached terminals: none</span>
+            </div>
+            <div id="engine-log-yos" class="engine-log"><div class="line empty">(yos not started — boot log will stream here)</div></div>
+        </div>
     </div>
 
     <!-- ============ Stage 1: session-type menu ============ -->
@@ -403,15 +426,17 @@
             <button class="mode-option" type="button" data-mode="temu">
                 <span class="mode-name">TinyEMU VM</span>
                 <span class="mode-desc">Alpine Linux on RISC-V via the shared
-                    emulator (Emulator tab). No server needed — large download,
+                    emulator (Engines tab). No server needed — large download,
                     slow boot. Open several — each terminal gets its own login
                     on the same VM.</span>
             </button>
             <button class="mode-option" type="button" data-mode="yos">
                 <span class="mode-name">yos — FreeBSD wasm userspace</span>
                 <span class="mode-desc">zsh, nvim, tmux, coreutils as wasm32 binaries
-                    on the yos engine — fully in your browser. No server, no VM,
-                    no kernel; much smaller download than the TinyEMU rootfs.</span>
+                    on the shared yos engine (Engines tab) — fully in your browser.
+                    No server, no VM, no kernel; much smaller download than the
+                    TinyEMU rootfs. Open several — each terminal gets its own
+                    fresh zsh on the same engine.</span>
             </button>
             <button class="mode-option" type="button" data-mode="websocket">
                 <span class="mode-name">WebSocket shell</span>
@@ -541,12 +566,12 @@
             } catch (ignored) {}
         }
 
-        // ---- Emulator boot log ----------------------------------------------
-        // Receives the 'yetty-status' messages the VM iframe posts during
-        // download / decode / kernel boot. `tag` requests an in-place
-        // update (download progress) instead of a fresh row per event.
-        const emuLog = (function () {
-            const log = document.getElementById('emu-log');
+        // ---- Engine boot log panes --------------------------------------------
+        // Receives the 'yetty-status' messages an engine iframe posts during
+        // download / decode / boot. `tag` requests an in-place update
+        // (download progress) instead of a fresh row per event.
+        function makeLogPane(elementId) {
+            const log = document.getElementById(elementId);
             const MAX_LINES = 2000;
             const tagged = Object.create(null);
             let cleared = false;
@@ -591,62 +616,102 @@
                 log.scrollTop = log.scrollHeight;
             }
             return { append: append, update: update };
-        })();
+        }
 
-        // ---- Emulator lifecycle ----------------------------------------------
-        // The shell owns the single TinyEMU VM iframe. It is started from
-        // the Emulator tab (or automatically when a TinyEMU terminal
-        // attaches) and keeps running independently of any terminal.
-        const VM_PTY_ID = 1;
-        let vmIframe = null;
-        let vmReady = false;
-        let vmBootTimer = null;
+        // ---- Shared engines (shell-owned) --------------------------------------
+        // One engine iframe per kind, loaded at most ONCE per page. Both
+        // engines are multi-session: every attached terminal gets its own
+        // session (telnet login on the VM, fresh zsh on yos) — sessions are
+        // multiplexed over one iframe, kept apart by the clientSid rewrite
+        // below. An engine starts from its Engines-tab button or
+        // automatically on the first terminal attach, and keeps running
+        // independently of any terminal.
+        const ENGINE_PTY_ID = 1;
+        const engines = {
+            temu: {
+                key: 'temu',
+                page: 'tinyemu-iframe.html',
+                displayName: 'TinyEMU VM',
+                startingText: 'starting — downloading kernel + rootfs, booting…',
+                readyText: 'ready — VM booted, telnetd up',
+                // 10 minutes is ridiculous but the rootfs is ~250 MB
+                // brotli'd over potentially-slow links + the brotli decode
+                // itself takes seconds. Better an eventual success than a
+                // spurious timeout.
+                bootTimeoutMs: 10 * 60 * 1000,
+                iframe: null,
+                ready: false,
+                bootTimer: null,
+                instances: [],
+                log: makeLogPane('engine-log-temu')
+            },
+            yos: {
+                key: 'yos',
+                page: 'yos-iframe.html',
+                displayName: 'yos engine',
+                startingText: 'starting — downloading engine + wasm tools…',
+                readyText: 'ready — userspace up, zsh live',
+                bootTimeoutMs: 5 * 60 * 1000,
+                iframe: null,
+                ready: false,
+                bootTimer: null,
+                instances: [],
+                log: makeLogPane('engine-log-yos')
+            }
+        };
 
-        function setEmuState(text, cssClass) {
-            const state = document.getElementById('emu-state');
+        function setEngineState(engine, text, cssClass) {
+            const state = document.getElementById('engine-state-' + engine.key);
             state.textContent = text;
-            state.className = cssClass || '';
+            state.className = 'engine-state' + (cssClass ? ' ' + cssClass : '');
         }
 
-        function setEmuAttachedLabel(text) {
-            document.getElementById('emu-attached').textContent =
-                'attached terminals: ' + text;
+        function updateEngineAttachedLabel(engine) {
+            document.getElementById('engine-attached-' + engine.key).textContent =
+                'attached terminals: ' + (engine.instances.length
+                    ? engine.instances.map(function (instance) {
+                          return '#' + instance.id;
+                      }).join(', ')
+                    : 'none');
         }
 
-        function startEmulator() {
-            if (vmIframe) return;
+        function startEngine(engine) {
+            if (engine.iframe) return;
             requestPersistentStorage();
-            setEmuState('starting — downloading kernel + rootfs, booting…');
-            document.getElementById('emu-start').disabled = true;
-            emuLog.append('starting TinyEMU VM iframe (pty ' + VM_PTY_ID + ')…', 'phase');
+            setEngineState(engine, engine.startingText);
+            document.getElementById('engine-start-' + engine.key).disabled = true;
+            engine.log.append('starting ' + engine.page +
+                              ' (pty ' + ENGINE_PTY_ID + ')…', 'phase');
             const iframe = document.createElement('iframe');
-            iframe.id = 'yetty-vm-pty-' + VM_PTY_ID;
+            iframe.id = 'yetty-engine-' + engine.key;
             /* Off-screen rather than display:none. Chrome heavily
              * throttles timers in display:none iframes (sometimes down
              * to ~1 Hz), which keeps the wasm-interpreter VM inside from
-             * booting in any reasonable time. Pinning it at
-             * left:-99999px keeps it visible to the scheduler (no
-             * throttling) but invisible to the user. */
+             * booting in any reasonable time — and the yos engine needs
+             * live timers just the same. Pinning it at left:-99999px
+             * keeps it visible to the scheduler (no throttling) but
+             * invisible to the user. */
             iframe.style.cssText =
                 'position:absolute; left:-99999px; top:-99999px;' +
                 ' width:1px; height:1px; border:0;' +
                 ' visibility:hidden; pointer-events:none;';
-            iframe.src = 'tinyemu-iframe.html?ptyId=' + VM_PTY_ID +
+            iframe.src = engine.page + '?ptyId=' + ENGINE_PTY_ID +
                          '&cols=80&rows=24';
             document.body.appendChild(iframe);
-            vmIframe = iframe;
-            // 10 minutes is ridiculous but the rootfs is ~250 MB brotli'd
-            // over potentially-slow links + the brotli decode itself takes
-            // seconds. Better an eventual success than a spurious timeout.
-            vmBootTimer = setTimeout(function () {
-                if (vmReady) return;
-                setEmuState('error — VM never signaled ready (10 min)', 'err');
-                emuLog.append('VM never signaled ready within 10 minutes', 'err');
-            }, 10 * 60 * 1000);
+            engine.iframe = iframe;
+            engine.bootTimer = setTimeout(function () {
+                if (engine.ready) return;
+                setEngineState(engine, 'error — never signaled ready', 'err');
+                engine.log.append(engine.displayName +
+                    ' never signaled ready within ' +
+                    (engine.bootTimeoutMs / 60000) + ' minutes', 'err');
+            }, engine.bootTimeoutMs);
         }
 
-        document.getElementById('emu-start')
-            .addEventListener('click', startEmulator);
+        document.getElementById('engine-start-temu')
+            .addEventListener('click', function () { startEngine(engines.temu); });
+        document.getElementById('engine-start-yos')
+            .addEventListener('click', function () { startEngine(engines.yos); });
 
         // ---- Terminal instances ----------------------------------------------
         // Each instance is its own iframe running its own wasm module
@@ -658,15 +723,16 @@
                 name: 'TinyEMU VM',
                 desc: 'Alpine Linux on RISC-V via the shared emulator. The ' +
                       'emulator is started automatically if it is not ' +
-                      'running yet; its boot log streams on the Emulator tab.',
+                      'running yet; its boot log streams on the Engines tab.',
                 needsUrl: false,
                 hint: 'Deep link: <code>?mode=temu</code>'
             },
             yos: {
                 name: 'yos',
                 desc: 'zsh, nvim, tmux, coreutils as wasm32 binaries on the ' +
-                      'yos engine — fully in your browser, no server, no VM. ' +
-                      'The engine boots inside this terminal instance.',
+                      'shared yos engine — fully in your browser, no server, ' +
+                      'no VM. The engine loads once per page; every terminal ' +
+                      'gets its own fresh zsh session on it.',
                 needsUrl: false,
                 hint: 'Deep link: <code>?mode=yos</code>'
             },
@@ -725,27 +791,40 @@
 
         const instances = [];
         let nextInstanceId = 1;
-        // Terminal instances attached to the shared VM, in attach order.
-        // All of them receive vm-ready and the hvc0 console stream (the
-        // console is one shared device — every attached terminal mirrors
-        // it); their telnet sessions are kept apart by the clientSid
-        // rewrite below, so each instance gets its own guest login.
-        const temuInstances = [];
 
         // ---- Session-id translation ------------------------------------
         // Every yetty wasm module allocates its telnet-session clientSids
         // from a process-local counter starting at 1 (iframe-transport.c),
-        // so two terminal instances WILL both claim clientSid 1 — and the
-        // VM iframe has one flat clientSid namespace. The shell therefore
-        // owns the wire ids: VM-bound session messages get their clientSid
-        // rewritten to a globally unique wire id, VM-originated ones are
-        // translated back and routed to the owning instance only.
+        // so two terminal instances WILL both claim clientSid 1 — and each
+        // engine iframe has one flat clientSid namespace. The shell
+        // therefore owns the wire ids: engine-bound session messages get
+        // their clientSid rewritten to a globally unique wire id,
+        // engine-originated ones are translated back and routed to the
+        // owning instance only. One counter serves both engines — ids
+        // only need to be unique within an engine, and globally unique
+        // trivially satisfies that.
         let nextWireSessionId = 1;
         const sessionRoutes = Object.create(null); // wireSid → {instance, localSid}
 
+        function engineFromSource(sourceWindow) {
+            const keys = Object.keys(engines);
+            for (let i = 0; i < keys.length; i++) {
+                const engine = engines[keys[i]];
+                if (engine.iframe &&
+                    engine.iframe.contentWindow === sourceWindow) {
+                    return engine;
+                }
+            }
+            return null;
+        }
+
+        function engineForInstance(instance) {
+            return engines[instance.config.mode] || null;
+        }
+
         function instanceEndpointLabel(config) {
             if (config.mode === 'temu') return 'shared emulator';
-            if (config.mode === 'yos') return 'in-browser userspace';
+            if (config.mode === 'yos') return 'shared yos engine';
             if (config.mode === 'ygreeter') return '';
             if (config.mode === 'relay') {
                 return (config.wsUrl || '') +
@@ -755,14 +834,6 @@
                 return (config.sshUser || 'root') + ' @ ' + (config.wsUrl || '');
             }
             return config.wsUrl || '';
-        }
-
-        function updateAttachedLabel() {
-            setEmuAttachedLabel(temuInstances.length
-                ? temuInstances.map(function (instance) {
-                      return '#' + instance.id;
-                  }).join(', ')
-                : 'none');
         }
 
         function openInstance(config) {
@@ -829,24 +900,28 @@
         function closeInstance(instance) {
             const index = instances.indexOf(instance);
             if (index !== -1) instances.splice(index, 1);
-            const temuIndex = temuInstances.indexOf(instance);
-            if (temuIndex !== -1) {
-                temuInstances.splice(temuIndex, 1);
-                // Tear down this instance's guest telnet sessions so the
-                // in-VM telnetd doesn't accumulate half-open logins.
-                Object.keys(instance.wireSidByLocal).forEach(function (localSid) {
-                    const wireSid = instance.wireSidByLocal[localSid];
-                    delete sessionRoutes[wireSid];
-                    if (vmIframe && vmIframe.contentWindow) {
-                        vmIframe.contentWindow.postMessage({
-                            type: 'session-close',
-                            clientSid: wireSid
-                        }, '*');
-                    }
-                });
-                updateAttachedLabel();
-                emuLog.append('terminal #' + instance.id +
-                    ' detached (emulator keeps running)', 'dim');
+            const engine = engineForInstance(instance);
+            if (engine) {
+                const attachedIndex = engine.instances.indexOf(instance);
+                if (attachedIndex !== -1) {
+                    engine.instances.splice(attachedIndex, 1);
+                    // Tear down this instance's guest sessions so the
+                    // engine doesn't accumulate half-open logins/shells.
+                    Object.keys(instance.wireSidByLocal).forEach(function (localSid) {
+                        const wireSid = instance.wireSidByLocal[localSid];
+                        delete sessionRoutes[wireSid];
+                        if (engine.iframe && engine.iframe.contentWindow) {
+                            engine.iframe.contentWindow.postMessage({
+                                type: 'session-close',
+                                clientSid: wireSid
+                            }, '*');
+                        }
+                    });
+                    updateEngineAttachedLabel(engine);
+                    engine.log.append('terminal #' + instance.id +
+                        ' detached (' + engine.displayName +
+                        ' keeps running)', 'dim');
+                }
             }
             instance.panel.remove();
         }
@@ -872,19 +947,21 @@
         // ---- Message router ---------------------------------------------------
         // Traffic shapes (all same-origin):
         //   terminal iframe → shell : yetty-instance-hello   (wants its config)
-        //   terminal iframe → shell : yetty-temu-attach      (route VM ↔ me)
+        //   terminal iframe → shell : yetty-engine-attach    (route engine ↔ me;
+        //                             `engine` field names temu or yos)
         //   terminal proxy  → shell : term-input / term-resize / session-open
         //                             / session-tx / session-close / yetty-ready
-        //                             (VM-bound; tagged with yettyInstanceId,
+        //                             (engine-bound; tagged with yettyInstanceId,
         //                             session clientSids rewritten to wire ids,
-        //                             then forwarded into the VM iframe)
-        //   VM iframe       → shell : yetty-status            (→ Emulator tab log)
-        //                             vm-ready / term-output   (→ all attached
-        //                             terminals — one shared console device)
+        //                             then forwarded into that instance's engine)
+        //   engine iframe   → shell : yetty-status            (→ its Engines-tab log)
+        //                             vm-ready / term-output   (→ all terminals
+        //                             attached to that engine — one shared
+        //                             console device per engine)
         //                             session-opened / session-rx /
         //                             session-closed           (→ the owning
         //                             terminal only, clientSid translated back)
-        const VM_BOUND_TYPES = {
+        const ENGINE_BOUND_TYPES = {
             'term-input': true,
             'term-resize': true,
             'session-open': true,
@@ -903,14 +980,15 @@
             const data = event.data;
             if (!data || !data.type) return;
 
-            // Messages originating from the VM iframe.
-            if (vmIframe && event.source === vmIframe.contentWindow) {
+            // Messages originating from an engine iframe.
+            const sourceEngine = engineFromSource(event.source);
+            if (sourceEngine) {
                 if (data.type === 'yetty-status') {
                     if (typeof data.text !== 'string') return;
                     if (data.tag) {
-                        emuLog.update(data.tag, data.text, data.level);
+                        sourceEngine.log.update(data.tag, data.text, data.level);
                     } else {
-                        emuLog.append(data.text, data.level);
+                        sourceEngine.log.append(data.text, data.level);
                     }
                     return;
                 }
@@ -930,29 +1008,30 @@
                     return;
                 }
                 if (data.type === 'vm-ready') {
-                    vmReady = true;
-                    clearTimeout(vmBootTimer);
-                    setEmuState('ready — VM booted, telnetd up', 'ready');
-                    emuLog.append('VM is ready', 'ok');
+                    sourceEngine.ready = true;
+                    clearTimeout(sourceEngine.bootTimer);
+                    setEngineState(sourceEngine, sourceEngine.readyText, 'ready');
+                    sourceEngine.log.append(
+                        sourceEngine.displayName + ' is ready', 'ok');
                 }
-                // vm-ready and term-output (the hvc0 console stream) go to
-                // every attached terminal — the console is one shared
-                // device, all of them mirror it.
-                temuInstances.forEach(function (instance) {
+                // vm-ready and term-output (the console stream) go to every
+                // terminal attached to THIS engine — the console is one
+                // shared device per engine, all of them mirror it.
+                sourceEngine.instances.forEach(function (instance) {
                     postToInstance(instance, data);
                 });
                 return;
             }
 
-            // VM-bound messages relayed up from a terminal's proxy frame.
-            if (VM_BOUND_TYPES[data.type]) {
-                if (!vmIframe || !vmIframe.contentWindow) return;
+            // Engine-bound messages relayed up from a terminal's proxy frame.
+            if (ENGINE_BOUND_TYPES[data.type]) {
                 const payload = Object.assign({}, data);
-                const instance = instanceFromId(payload.yettyInstanceId) ||
-                                 temuInstances[0] || null;
+                const instance = instanceFromId(payload.yettyInstanceId);
                 delete payload.yettyInstanceId;
+                if (!instance) return;
+                const engine = engineForInstance(instance);
+                if (!engine || !engine.iframe || !engine.iframe.contentWindow) return;
                 if (payload.type === 'session-open') {
-                    if (!instance) return;
                     const wireSid = nextWireSessionId++;
                     sessionRoutes[wireSid] = {
                         instance: instance,
@@ -962,7 +1041,6 @@
                     payload.clientSid = wireSid;
                 } else if (payload.type === 'session-tx' ||
                            payload.type === 'session-close') {
-                    if (!instance) return;
                     const wireSid = instance.wireSidByLocal[payload.clientSid];
                     if (wireSid === undefined) return;
                     if (payload.type === 'session-close') {
@@ -971,7 +1049,7 @@
                     }
                     payload.clientSid = wireSid;
                 }
-                vmIframe.contentWindow.postMessage(payload, '*');
+                engine.iframe.contentWindow.postMessage(payload, '*');
                 return;
             }
 
@@ -985,19 +1063,21 @@
                 }, '*');
                 return;
             }
-            if (data.type === 'yetty-temu-attach') {
+            if (data.type === 'yetty-engine-attach') {
                 const instance = instanceFromSource(event.source);
                 if (!instance) return;
-                if (temuInstances.indexOf(instance) === -1) {
-                    temuInstances.push(instance);
+                const engine = engines[data.engine] || engineForInstance(instance);
+                if (!engine) return;
+                if (engine.instances.indexOf(instance) === -1) {
+                    engine.instances.push(instance);
                 }
-                updateAttachedLabel();
-                emuLog.append('terminal #' + instance.id + ' attached', 'dim');
-                if (!vmIframe) startEmulator();
-                if (vmReady) {
+                updateEngineAttachedLabel(engine);
+                engine.log.append('terminal #' + instance.id + ' attached', 'dim');
+                if (!engine.iframe) startEngine(engine);
+                if (engine.ready) {
                     postToInstance(instance, {
                         type: 'vm-ready',
-                        ptyId: VM_PTY_ID
+                        ptyId: ENGINE_PTY_ID
                     });
                 }
                 return;
@@ -1037,22 +1117,22 @@
                 document.getElementById('config-hint').innerHTML =
                     modeInfo.hint || '';
 
-                if (mode === 'temu') {
-                    note.textContent = (vmReady
-                        ? 'The emulator is running — this terminal attaches to it.'
-                        : (vmIframe
-                            ? 'The emulator is booting — the terminal attaches once it is ready.'
-                            : 'The emulator is not running yet — it will be started ' +
-                              'automatically. You can also start and watch it on the ' +
-                              'Emulator tab.')) +
-                        ' Several terminals can share the VM; each gets its own ' +
-                        'telnet login session.';
-                    note.classList.add('visible');
-                } else if (mode === 'yos') {
-                    note.textContent = 'Each yos terminal boots its own engine ' +
-                        'inside the instance (a few seconds; ~40 MB of wasm ' +
-                        'tools on first start). Splits and tabs within the ' +
-                        'terminal each get a fresh zsh.';
+                if (mode === 'temu' || mode === 'yos') {
+                    const engine = engines[mode];
+                    const engineName = mode === 'temu' ? 'emulator' : 'yos engine';
+                    note.textContent = (engine.ready
+                        ? 'The ' + engineName + ' is running — this terminal attaches to it.'
+                        : (engine.iframe
+                            ? 'The ' + engineName + ' is booting — the terminal ' +
+                              'attaches once it is ready.'
+                            : 'The ' + engineName + ' is not running yet — it will ' +
+                              'be started automatically. You can also start and ' +
+                              'watch it on the Engines tab.')) +
+                        (mode === 'temu'
+                            ? ' Several terminals can share the VM; each gets its ' +
+                              'own telnet login session.'
+                            : ' Several terminals share the one engine; each gets ' +
+                              'its own fresh zsh session.');
                     note.classList.add('visible');
                 } else {
                     note.classList.remove('visible');

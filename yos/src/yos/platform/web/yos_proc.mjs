@@ -309,7 +309,7 @@ function buildLibc(state, env_vars, io, mgr, proc) {
   const closeFd = (fd) => { const e = proc.pio.fds.get(fd); if (e) { proc.pio.fds.delete(fd); derefOfd(e.ofd); return 0; } if (proc.pio.dirs.delete(fd)) return 0; setErrno(9); return -1; };
   const bufReadable = (b) => b.total > 0 || b.writeClosed;
   const ofdReadable = (ofd) => {
-    if (ofd.kind === "char") return (ofd.dev === "in" && proc.interactive) ? mgr.tty.inbuf.length > 0 : true;
+    if (ofd.kind === "char") return (ofd.dev === "in" && proc.interactive) ? (proc.tty || mgr.tty).inbuf.length > 0 : true;
     if (ofd.kind === "file") return true;
     if (ofd.kind === "pipe") return ofd.end === "r" && bufReadable(ofd.pipe);
     if (ofd.kind === "sock") return bufReadable(ofd.rx);
@@ -374,7 +374,7 @@ function buildLibc(state, env_vars, io, mgr, proc) {
     // client via SCM_RIGHTS as a dev:"in" char). So display writes to any
     // terminal char — "err" → stderr, everything else → stdout. Only
     // /dev/null swallows them. A cooked interactive tty post-processes via OPOST.
-    if (ofd.kind === "char") { if (ofd.dev === "null") return bytes.length; const text = dec.decode(bytes); io.onOutput(ofd.dev === "err" ? 2 : 1, (proc.interactive && mgr.tty) ? ttyOpost(mgr.tty.oflag | 0, text) : text); return bytes.length; }
+    if (ofd.kind === "char") { if (ofd.dev === "null") return bytes.length; const text = dec.decode(bytes); const tty = proc.tty || mgr.tty; const emit = (tty && tty.onOutput) || io.onOutput; emit(ofd.dev === "err" ? 2 : 1, (proc.interactive && tty) ? ttyOpost(tty.oflag | 0, text) : text); return bytes.length; }
     if (ofd.kind === "file") { const node = ofd.node; const at = ofd.append ? node.data.length : ofd.off; const merged = new Uint8Array(Math.max(node.data.length, at + bytes.length)); merged.set(node.data); merged.set(bytes, at); node.data = merged; ofd.off = at + bytes.length; return bytes.length; }
     if (ofd.kind === "pipe") return (ofd.end === "w" && !ofd.pipe.readClosed) ? (bufPush(ofd.pipe, bytes), bytes.length) : -32;
     if (ofd.kind === "sock") {
@@ -461,7 +461,7 @@ function buildLibc(state, env_vars, io, mgr, proc) {
   // fork, and the page resumes it on each keystroke (Manager.pump). No
   // special build — the binary is fully asyncify-instrumented.
   const isTtyIn = (fd) => { const e = fdEntry(fd); return !!(proc.interactive && e && e.ofd.kind === "char" && e.ofd.dev === "in"); };
-  const ttyServe = (buf, n) => { const tty = mgr.tty; let got = 0; while (got < n && tty.inbuf.length) u8()[buf + got++] = tty.inbuf.shift(); return got; };
+  const ttyServe = (buf, n) => { const tty = proc.tty || mgr.tty; let got = 0; while (got < n && tty.inbuf.length) u8()[buf + got++] = tty.inbuf.shift(); return got; };
   // Suspend the process via asyncify. `ready` is a predicate the scheduler
   // polls to know when to resume this process (data arrived, child exited,
   // key typed). `kind` is for diagnostics. Mirrors the fork unwind path.
@@ -1075,7 +1075,7 @@ function buildLibc(state, env_vars, io, mgr, proc) {
         const isTty = ofd.kind === "char" && ofd.dev === "in";
         const blockable = isTty || (ofd.kind === "pipe" && ofd.end === "r") || ofd.kind === "sock";
         if (blockable) {
-          const ready = isTty ? () => mgr.tty.inbuf.length > 0
+          const ready = isTty ? () => (proc.tty || mgr.tty).inbuf.length > 0
             : ofd.kind === "pipe" ? () => ofd.pipe.total > 0 || ofd.pipe.writeClosed
               : () => ofd.rx.total > 0 || ofd.rx.writeClosed;
           if (resuming()) {
@@ -1406,8 +1406,8 @@ function buildLibc(state, env_vars, io, mgr, proc) {
     // shared outer terminal (mgr.tty).
     // c_oflag@4 (OPOST|ONLCR) is tracked too: it drives the output discipline
     // (ttyOpost in ofdWrite). Default cooked: OPOST|ONLCR set.
-    tcgetattr: (fd, tp) => { const e = fdEntry(fd); const t = (e && e.ofd && e.ofd.pty) ? e.ofd.pty.termios : mgr.tty; if (tp) { u8().fill(0, tp, tp + 44); view().setUint32(tp + 4, (t && t.oflag != null ? t.oflag : (OPOST | ONLCR)), true); view().setUint32(tp + 12, (t ? t.lflag : (0x8 | 0x2 | 0x100 | 0x80 | 0x400)), true); } return 0; },
-    tcsetattr: (fd, action, tp) => { if (!tp) return 0; const e = fdEntry(fd); const oflag = view().getUint32(tp + 4, true); const lflag = view().getUint32(tp + 12, true); const t = (e && e.ofd && e.ofd.pty) ? e.ofd.pty.termios : mgr.tty; if (t) { t.lflag = lflag; t.oflag = oflag; } return 0; },
+    tcgetattr: (fd, tp) => { const e = fdEntry(fd); const t = (e && e.ofd && e.ofd.pty) ? e.ofd.pty.termios : (proc.tty || mgr.tty); if (tp) { u8().fill(0, tp, tp + 44); view().setUint32(tp + 4, (t && t.oflag != null ? t.oflag : (OPOST | ONLCR)), true); view().setUint32(tp + 12, (t ? t.lflag : (0x8 | 0x2 | 0x100 | 0x80 | 0x400)), true); } return 0; },
+    tcsetattr: (fd, action, tp) => { if (!tp) return 0; const e = fdEntry(fd); const oflag = view().getUint32(tp + 4, true); const lflag = view().getUint32(tp + 12, true); const t = (e && e.ofd && e.ofd.pty) ? e.ofd.pty.termios : (proc.tty || mgr.tty); if (t) { t.lflag = lflag; t.oflag = oflag; } return 0; },
     cfmakeraw: (tp) => { if (tp) { view().setUint32(tp + 4, view().getUint32(tp + 4, true) & ~OPOST, true); view().setUint32(tp + 12, view().getUint32(tp + 12, true) & ~(0x8 | 0x100 | 0x80 | 0x400), true); } return 0; },
     cfsetispeed: () => 0, cfsetospeed: () => 0, cfgetispeed: () => 0, cfgetospeed: () => 0, tcflush: () => 0, tcdrain: () => 0, tcflow: () => 0, tcsendbreak: () => 0,
     tcgetpgrp: () => proc.pgid, tcsetpgrp: () => 0, tcgetsid: () => proc.sid,
@@ -1438,7 +1438,7 @@ function buildLibc(state, env_vars, io, mgr, proc) {
         // record (so a forkpty child's TIOCGWINSZ on the slave sees the size
         // the master set — nvim resizes its :terminal via the master), else
         // the real terminal.
-        const e = fdEntry(fd); const ws = (e && e.ofd && e.ofd.winsize) || (e && e.ofd && e.ofd.pty && e.ofd.pty.winsize); const t = ws || mgr.tty || { rows: 24, cols: 80 };
+        const e = fdEntry(fd); const ws = (e && e.ofd && e.ofd.winsize) || (e && e.ofd && e.ofd.pty && e.ofd.pty.winsize); const t = ws || proc.tty || mgr.tty || { rows: 24, cols: 80 };
         if (arg) { view().setUint16(arg, t.rows, true); view().setUint16(arg + 2, t.cols, true); view().setUint16(arg + 4, 0, true); view().setUint16(arg + 6, 0, true); }
         return 0;
       }
@@ -2044,7 +2044,9 @@ export class Manager {
     this.turnStart = 0;
     this.hist = null; // set to {} to record a syscall histogram for diagnosis
     this.runQueue = [];      // scheduler: processes ready to run (interactive)
-    this.tty = null;         // shared terminal (set by runInteractive)
+    this.tty = null;         // batch-mode fallback terminal; interactive
+                             // sessions each carry their own proc.tty,
+                             // inherited down the fork tree
     this.interactive = false;
     this.unixSockets = new Map(); // bound path -> listening socket ofd
     // Fully LOGICAL virtual clock (ms): NOT wall-clock. Time advances only when
@@ -2394,6 +2396,9 @@ export class Manager {
     child.pgid = parent.pgid; child.sid = parent.sid;
     child.sigHandlers = parent.sigHandlers ? { ...parent.sigHandlers } : undefined; child.sigMask = parent.sigMask ? [...parent.sigMask] : undefined;
     child.interactive = parent.interactive;
+    // The controlling terminal is inherited: a session's whole process tree
+    // reads/writes/echoes on that session's tty, never a sibling session's.
+    child.tty = parent.tty;
     // forkpty: the child's rewound bridge needs the pty fd stash too (the
     // parent clears only its own copy on its rewind).
     child.forkPtyPending = parent.forkPtyPending;
@@ -2528,6 +2533,7 @@ export class Manager {
     child.pio = clonePio(parent.pio);
     child.pgid = parent.pgid; child.sid = parent.sid;
     child.sigHandlers = parent.sigHandlers ? { ...parent.sigHandlers } : undefined; child.sigMask = parent.sigMask ? [...parent.sigMask] : undefined;
+    child.tty = parent.tty;
     // Rewind the child to the fork callsite; it returns 0 there.
     child.forkReturn = 0;
     child.pendingRewind = true;
@@ -2590,43 +2596,53 @@ export function runProgram(mod, argv, onOutput, onUnimpl, opts = {}) {
   return { exitCode: typeof root.exitCode === "number" ? root.exitCode : 0, error: root.error, procs: mgr.procs.length };
 }
 
-// Run a guest as a LONG-LIVED INTERACTIVE process: stdin is a terminal, and
-// read()/poll() on it block (asyncify-suspend) until the page feeds a
-// keystroke. Returns a controller; the guest keeps its memory, fds, cwd,
-// env and shell state across keystrokes (a real session, not per-command).
+// ---- Interactive engine: ONE process tree, many terminal sessions ------
+// A single Manager (one pid namespace, one vfs, one scheduler, one virtual
+// clock) hosts any number of long-lived interactive SESSIONS. Each session
+// is a root process (e.g. a fresh zsh) with its OWN tty — line discipline,
+// window size, output sink — inherited by everything it forks, so a
+// session's output/echo/SIGWINCH never leak to a sibling session. Process
+// state is engine-global: ps/top enumerate every session's processes and
+// kill() reaches across sessions, exactly like logins on one machine.
 //
-//   opts.onOutput(fd, text)   terminal bytes from the guest
-//   opts.onExit(code, err)    the process ended
-//   opts.tools                name -> compiled module, for exec/fork
-//   opts.env, cols, rows
-export function runInteractive(mod, argv, opts = {}) {
-  const onOut = opts.onOutput || (() => {});
-  const mgr = new Manager({ onOutput: onOut, onUnimpl: opts.onUnimpl || (() => {}) }, opts.tools || new Map());
+//   opts.tools               name -> compiled module, for exec/fork
+//   opts.mounts              [{at, entries}] read-only trees (mounted once)
+//   opts.onOutput(fd, text)  fallback sink for tty-less processes
+//   opts.onUnimpl, opts.debug, opts.trace
+//
+// engine.startSession(mod, argv, {cols, rows, env, onOutput, onExit})
+//   -> controller { write, writeBytes, resize, running, dispose, proc, mgr }
+export function createInteractiveEngine(opts = {}) {
+  const mgr = new Manager({ onOutput: opts.onOutput || (() => {}), onUnimpl: opts.onUnimpl || (() => {}) }, opts.tools || new Map());
   mgr.interactive = true;
   mgr.debug = !!opts.debug;
   if (opts.trace) mgr.trace = [];
   for (const m of opts.mounts || []) mgr.mountFiles(m.at, m.entries);
-  // Shared terminal line discipline (one tty for the whole session, used by
-  // every process). lflag defaults to a cooked terminal
-  // (ECHO|ECHOE|ICANON|ISIG|IEXTEN); the guest's editor clears bits via
-  // tcsetattr to take over echo/editing.
-  // oflag 0x3 = OPOST|ONLCR (cooked output: bare LF -> CRLF) until an app sets raw.
-  mgr.tty = { inbuf: [], lineBuf: [], lflag: 0x8 | 0x2 | 0x100 | 0x80 | 0x400, oflag: 0x3, cols: opts.cols || 80, rows: opts.rows || 24 };
-  const root = mgr.spawn(mod, argv, 0, opts.env);
-  root.interactive = true;
-  root.onExit = opts.onExit || (() => {});
+
+  const sessions = [];
+  const liveSessions = () => sessions.filter((session) => !session.root.exited);
+
   // Drive the scheduler: run every runnable process until all are idle
-  // (blocked) or done, then yield to the page. Re-entered on each keystroke.
-  //
+  // (blocked) or done, then yield to the page. Re-entered on each keystroke
+  // of ANY session — the scheduler itself is engine-wide.
   const runSched = () => {
     try { mgr.schedule(); }
-    catch (e) { if (!root.exited) { root.exited = true; root.onExit(e && e.runaway ? 137 : 139, e && e.message); } }
-    if (root.exited) { stopSettle(); stopTick(); if (root.onExit && !root._notified) root._notified = true; }
+    catch (e) {
+      // A scheduler-level failure (runaway abort, trap outside a process
+      // turn) is fatal for the shared engine — every live session learns
+      // its root died.
+      for (const session of sessions) {
+        if (session.root.exited) continue;
+        session.root.exited = true;
+        session.root.onExit(e && e.runaway ? 137 : 139, e && e.message);
+      }
+    }
+    if (!liveSessions().length) { stopSettle(); stopTick(); }
     else armTick();
   };
   // An async-booting process (module past Chrome's sync-instantiation limit)
   // became runnable — re-enter the scheduler exactly like a keystroke does.
-  mgr.onAsyncBoot = () => { if (!root.exited) runSched(); };
+  mgr.onAsyncBoot = () => { if (liveSessions().length) runSched(); };
 
   // DEADLINE TICK — real-time pacing for periodic guest timers while IDLE.
   // The virtual clock is frozen between events, so a full-screen tool that
@@ -2642,7 +2658,7 @@ export function runInteractive(mod, argv, opts = {}) {
   const stopTick = () => { if (tickTimer) { clearTimeout(tickTimer); tickTimer = null; } };
   const armTick = () => {
     stopTick();
-    if (root.exited) return;
+    if (!liveSessions().length) return;
     const deadline = mgr.nearestDeadline();
     if (!isFinite(deadline)) return;
     const delay = Math.min(Math.max(deadline - mgr.now(), 200), 60_000);
@@ -2651,7 +2667,7 @@ export function runInteractive(mod, argv, opts = {}) {
   };
   const onTick = () => {
     tickTimer = null;
-    if (root.exited) return;
+    if (!liveSessions().length) return;
     const wall = Date.now();
     const gap = wall - lastWall;
     lastWall = wall;
@@ -2677,13 +2693,15 @@ export function runInteractive(mod, argv, opts = {}) {
   // and detach / new-pane / … silently stop working. It does NOT re-arm: a
   // continuously-ticking clock is what corrupts tmux's render, so the clock goes
   // back to frozen until the next keystroke. (Timers are unref'd so they never
-  // keep a node test process alive past its own exit.)
+  // keep a node test process alive past its own exit.) The clock is
+  // engine-global, so a burst in one session freezes it for all — the same
+  // determinism argument applies unchanged.
   const SETTLE_MS = 600;
   let lastWall = Date.now(), settleTimer = null;
   const stopSettle = () => { if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; } };
   const onSettle = () => {
     settleTimer = null;
-    if (root.exited) return;
+    if (!liveSessions().length) return;
     const wall = Date.now();
     const gap = wall - lastWall;
     lastWall = wall;
@@ -2691,7 +2709,7 @@ export function runInteractive(mod, argv, opts = {}) {
     runSched();
   };
   const armSettle = () => {
-    if (root.exited) return;
+    if (!liveSessions().length) return;
     lastWall = Date.now();
     stopSettle();
     // Typing burst: the deadline tick must not fire (a clock advance between
@@ -2701,55 +2719,118 @@ export function runInteractive(mod, argv, opts = {}) {
     settleTimer = setTimeout(onSettle, SETTLE_MS);
     if (settleTimer && settleTimer.unref) settleTimer.unref();
   };
-  mgr.wake(root);
-  Promise.resolve().then(runSched); // start after the controller is returned
 
   const ECHO = 0x8, ICANON = 0x100;
-  // Feed one input byte through the shared tty line discipline, then run the
-  // scheduler so whichever process is waiting on the terminal wakes up.
-  const feed = (code) => {
-    if (root.exited) return;
-    const tty = mgr.tty;
-    const echo = !!(tty.lflag & ECHO);
-    const canon = !!(tty.lflag & ICANON);
-    // ICRNL belongs to the COOKED input discipline: terminals send CR
-    // for Enter and canonical mode maps it to NL. A raw-mode app gets
-    // the real 0x0d — fzy binds its accept key to '\r' and a blanket
-    // translation made Enter a no-op in its picker.
-    if (code === 13 && canon) code = 10;
-    if (!canon) { // raw: the guest's editor echoes + edits
-      tty.inbuf.push(code);
-      if (echo) onOut(1, code === 10 ? "\r\n" : String.fromCharCode(code));
-      runSched();
-      return;
+
+  // End a session: kill its root and every descendant (the session's whole
+  // process tree), leaving sibling sessions untouched.
+  const killTree = (rootPid) => {
+    const doomed = new Set([rootPid]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const p of mgr.procs) if (!doomed.has(p.pid) && doomed.has(p.ppid)) { doomed.add(p.pid); grew = true; }
     }
-    if (code === 127 || code === 8) { if (tty.lineBuf.length) { tty.lineBuf.pop(); if (echo) onOut(1, "\b \b"); } return; }
-    if (code === 21) { while (tty.lineBuf.length) { tty.lineBuf.pop(); if (echo) onOut(1, "\b \b"); } return; } // ^U kill line
-    if (code === 10) { tty.lineBuf.push(10); if (echo) onOut(1, "\r\n"); for (const b of tty.lineBuf) tty.inbuf.push(b); tty.lineBuf = []; runSched(); return; }
-    if (code === 3 || code === 4) { tty.inbuf.push(code); runSched(); return; } // ^C/^D pass through
-    tty.lineBuf.push(code);
-    if (echo) onOut(1, code < 32 ? "^" + String.fromCharCode(code + 64) : String.fromCharCode(code));
+    for (const p of mgr.procs) {
+      if (!doomed.has(p.pid) || p.exited) continue;
+      p.exited = true; p.sched = "zombie"; p.signal = 9; p.exitCode = 137;
+      mgr.onProcExit(p);
+    }
   };
 
-  return {
-    write(str) { for (let i = 0; i < str.length; i++) feed(str.charCodeAt(i) & 0xff); armSettle(); },
-    writeBytes(bytes) { for (const b of bytes) feed(b & 0xff); armSettle(); },
-    resize(cols, rows) {
-      if (mgr.tty.cols === cols && mgr.tty.rows === rows) return;
-      mgr.tty.cols = cols; mgr.tty.rows = rows;
-      // Deliver SIGWINCH (FreeBSD = 28) to every live interactive process that
-      // installed a handler — that's how a full-screen app (tmux, an editor)
-      // learns the terminal resized and re-reads TIOCGWINSZ. Then run the
-      // scheduler so the resize is processed now.
-      for (const p of mgr.procs) { if (!p.exited && p.interactive && p.sigHandlers && p.sigHandlers[28] > 1) { (p.pendingSignals = p.pendingSignals || []).push(28); mgr.wake(p); } }
-      runSched();
-      armSettle();
-    },
-    running: () => !root.exited,
-    dispose: () => { stopSettle(); stopTick(); },
-    proc: root,
-    mgr,
-  };
+  function startSession(mod, argv, sessionOpts = {}) {
+    // Per-session terminal: line discipline state, size, and the output
+    // sink. lflag defaults to a cooked terminal (ECHO|ECHOE|ICANON|ISIG|
+    // IEXTEN); the guest's editor clears bits via tcsetattr to take over
+    // echo/editing. oflag 0x3 = OPOST|ONLCR until an app sets raw.
+    const tty = {
+      inbuf: [], lineBuf: [],
+      lflag: 0x8 | 0x2 | 0x100 | 0x80 | 0x400,
+      oflag: 0x3,
+      cols: sessionOpts.cols || 80, rows: sessionOpts.rows || 24,
+      onOutput: sessionOpts.onOutput || (() => {}),
+    };
+    const root = mgr.spawn(mod, argv, 0, sessionOpts.env);
+    root.interactive = true;
+    root.tty = tty;
+    root.onExit = sessionOpts.onExit || (() => {});
+    const session = { root, tty };
+    sessions.push(session);
+
+    // Feed one input byte through THIS session's tty line discipline, then
+    // run the (shared) scheduler so whichever process is waiting on this
+    // terminal wakes up.
+    const feed = (code) => {
+      if (root.exited) return;
+      const echo = !!(tty.lflag & ECHO);
+      const canon = !!(tty.lflag & ICANON);
+      // ICRNL belongs to the COOKED input discipline: terminals send CR
+      // for Enter and canonical mode maps it to NL. A raw-mode app gets
+      // the real 0x0d — fzy binds its accept key to '\r' and a blanket
+      // translation made Enter a no-op in its picker.
+      if (code === 13 && canon) code = 10;
+      if (!canon) { // raw: the guest's editor echoes + edits
+        tty.inbuf.push(code);
+        if (echo) tty.onOutput(1, code === 10 ? "\r\n" : String.fromCharCode(code));
+        runSched();
+        return;
+      }
+      if (code === 127 || code === 8) { if (tty.lineBuf.length) { tty.lineBuf.pop(); if (echo) tty.onOutput(1, "\b \b"); } return; }
+      if (code === 21) { while (tty.lineBuf.length) { tty.lineBuf.pop(); if (echo) tty.onOutput(1, "\b \b"); } return; } // ^U kill line
+      if (code === 10) { tty.lineBuf.push(10); if (echo) tty.onOutput(1, "\r\n"); for (const b of tty.lineBuf) tty.inbuf.push(b); tty.lineBuf = []; runSched(); return; }
+      if (code === 3 || code === 4) { tty.inbuf.push(code); runSched(); return; } // ^C/^D pass through
+      tty.lineBuf.push(code);
+      if (echo) tty.onOutput(1, code < 32 ? "^" + String.fromCharCode(code + 64) : String.fromCharCode(code));
+    };
+
+    mgr.wake(root);
+    Promise.resolve().then(runSched); // start after the controller is returned
+
+    return {
+      write(str) { for (let i = 0; i < str.length; i++) feed(str.charCodeAt(i) & 0xff); armSettle(); },
+      writeBytes(bytes) { for (const b of bytes) feed(b & 0xff); armSettle(); },
+      resize(cols, rows) {
+        if (tty.cols === cols && tty.rows === rows) return;
+        tty.cols = cols; tty.rows = rows;
+        // Deliver SIGWINCH (FreeBSD = 28) to every live process ON THIS
+        // SESSION'S TTY that installed a handler — that's how a full-screen
+        // app (tmux, an editor) learns the terminal resized and re-reads
+        // TIOCGWINSZ. Sibling sessions keep their own sizes.
+        for (const p of mgr.procs) { if (!p.exited && p.tty === tty && p.sigHandlers && p.sigHandlers[28] > 1) { (p.pendingSignals = p.pendingSignals || []).push(28); mgr.wake(p); } }
+        runSched();
+        armSettle();
+      },
+      running: () => !root.exited,
+      dispose: () => { killTree(root.pid); if (!liveSessions().length) { stopSettle(); stopTick(); } },
+      proc: root,
+      mgr,
+    };
+  }
+
+  return { mgr, startSession };
+}
+
+// Run a guest as a LONG-LIVED INTERACTIVE process: stdin is a terminal, and
+// read()/poll() on it block (asyncify-suspend) until the page feeds a
+// keystroke. Returns a controller; the guest keeps its memory, fds, cwd,
+// env and shell state across keystrokes (a real session, not per-command).
+// Single-session convenience wrapper over createInteractiveEngine() — for
+// multiple shells on ONE process tree, create the engine once and call
+// startSession per terminal.
+//
+//   opts.onOutput(fd, text)   terminal bytes from the guest
+//   opts.onExit(code, err)    the process ended
+//   opts.tools                name -> compiled module, for exec/fork
+//   opts.env, cols, rows
+export function runInteractive(mod, argv, opts = {}) {
+  const engine = createInteractiveEngine({
+    tools: opts.tools, mounts: opts.mounts, onOutput: opts.onOutput,
+    onUnimpl: opts.onUnimpl, debug: opts.debug, trace: opts.trace,
+  });
+  return engine.startSession(mod, argv, {
+    cols: opts.cols, rows: opts.rows, env: opts.env,
+    onOutput: opts.onOutput, onExit: opts.onExit,
+  });
 }
 
 export { loadLiblua };

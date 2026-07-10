@@ -840,50 +840,40 @@
             const header = document.getElementById('yetty-status-header');
             if (config.mode === 'temu' || config.mode === 'yos') {
                 const PTY_ID = 1;
-                if (config.mode === 'yos') {
-                    // The yos engine is light (~40 MB of wasm tools,
-                    // seconds to boot), so every instance hosts its own
-                    // iframe — embedded or standalone; no shared-engine
-                    // relay like the TinyEMU VM.
+                const engineName = config.mode === 'yos'
+                    ? 'yos engine' : 'TinyEMU emulator';
+                if (embedded) {
+                    // Shared engine owned by the shell page — loaded once
+                    // per page; each terminal attaches as its own session
+                    // (telnet login on the VM, fresh zsh on yos). Put the
+                    // proxy frame in place FIRST (so the wasm glue finds
+                    // it instead of spawning a nested engine), then ask
+                    // the shell to route engine traffic here and to start
+                    // the engine if it isn't running yet.
                     if (header) {
-                        header.textContent = 'Booting the yos FreeBSD-wasm ' +
-                            'userspace (zsh, nvim, tmux as wasm32 binaries) ' +
-                            'in your browser. The log below streams the tool ' +
-                            'downloads; this overlay collapses once the ' +
-                            'terminal is running.';
-                    }
-                    window.yettyStatus.append(
-                        'spawning yos iframe (pty ' + PTY_ID + ')…', 'phase');
-                    spawnVMIframe(PTY_ID, 80, 24, 'yos-iframe.html');
-                    window.yettyStatus.append(
-                        'waiting for the yos userspace to be ready ' +
-                        '(tool download + boot)…');
-                } else if (embedded) {
-                    // Shared emulator owned by the shell page. Attach:
-                    // put the proxy frame in place FIRST (so the wasm
-                    // glue finds it instead of spawning a nested VM),
-                    // then ask the shell to route VM traffic here and
-                    // to start the emulator if it isn't running yet.
-                    if (header) {
-                        header.textContent = 'Attaching to the shared TinyEMU ' +
-                            'emulator. Its download/boot log streams on the ' +
-                            'Emulator tab of the main page; this overlay ' +
-                            'collapses once the terminal is running.';
+                        header.textContent = 'Attaching to the shared ' +
+                            engineName + '. Its download/boot log streams ' +
+                            'on the Engines tab of the main page; this ' +
+                            'overlay collapses once the terminal is running.';
                     }
                     createVmProxy(PTY_ID, config.instanceId || 0);
-                    window.yettyStatus.append(
-                        'attaching to shared emulator (pty ' + PTY_ID + ')…', 'phase');
-                    window.parent.postMessage({ type: 'yetty-temu-attach' }, '*');
-                    window.yettyStatus.append(
-                        'waiting for the emulator to be ready — see the Emulator tab…');
+                    window.yettyStatus.append('attaching to shared ' +
+                        engineName + ' (pty ' + PTY_ID + ')…', 'phase');
+                    window.parent.postMessage({
+                        type: 'yetty-engine-attach',
+                        engine: config.mode
+                    }, '*');
+                    window.yettyStatus.append('waiting for the ' + engineName +
+                        ' to be ready — see the Engines tab…');
                 } else {
-                    // Self-contained: this page owns the VM iframe, the
-                    // whole boot log streams through this overlay.
+                    // Self-contained: this page owns the engine iframe,
+                    // the whole boot log streams through this overlay.
+                    window.yettyStatus.append('spawning ' + engineName +
+                        ' iframe (pty ' + PTY_ID + ')…', 'phase');
+                    spawnVMIframe(PTY_ID, 80, 24,
+                        config.mode === 'yos' ? 'yos-iframe.html' : undefined);
                     window.yettyStatus.append(
-                        'spawning VM iframe (pty ' + PTY_ID + ')…', 'phase');
-                    spawnVMIframe(PTY_ID, 80, 24);
-                    window.yettyStatus.append(
-                        'waiting for VM to be ready (kernel+rootfs download + boot)…');
+                        'waiting for the ' + engineName + ' to be ready…');
                 }
                 try {
                     // temu: 10 minutes is ridiculous but the rootfs is

@@ -66,23 +66,25 @@
         postStatus('rejection: ' + (event.reason && event.reason.stack || event.reason), 'err');
     });
 
-    // ---- Shared userspace assets (loaded once, used by every shell) --
-    let engine = null;       // { runInteractive }
-    let sharedTools = null;  // name -> compiled module (zsh aliased as sh)
-    let sharedMounts = [];   // /usr/share pack
+    // ---- Shared userspace (ONE engine = ONE process tree) -------------
+    // The engine (process table, pid namespace, vfs, scheduler, tools,
+    // /usr/share mount) is created once; every shell — the console zsh and
+    // each telnet session — is a session ON that engine. ps/top inside any
+    // shell therefore see every session's processes, and each session's
+    // tty (size, echo, output) stays its own.
+    let sharedEngine = null;  // { startSession }
+    let sharedTools = null;   // name -> compiled module (zsh aliased as sh)
+    let sharedMounts = [];    // /usr/share pack
     const SHELL_ENV = ['PATH=/bin:/usr/bin', 'HOME=/', 'TERM=xterm-256color',
                        'PWD=/', 'SHELL=/bin/sh', 'VIMRUNTIME=/usr/share/nvim/runtime'];
     const FALLBACK_TOOLS = ['zsh', 'pwd', 'id', 'hostname', 'echo', 'cat', 'ls',
                             'ps', 'date', 'true', 'false', 'tmux'];
 
     function startShell(cols, rows, onOutput, onExit) {
-        return engine.runInteractive(sharedTools.get('zsh'),
-                                     ['zsh', '-f', '+o', 'promptsp'], {
+        return sharedEngine.startSession(sharedTools.get('zsh'),
+                                         ['zsh', '-f', '+o', 'promptsp'], {
             onOutput: onOutput,
             onExit: onExit,
-            onUnimpl: () => {},
-            tools: sharedTools,
-            mounts: sharedMounts,
             env: SHELL_ENV,
             cols: cols,
             rows: rows,
@@ -325,10 +327,9 @@
     // ---- Boot the userspace ---------------------------------------------
     async function boot() {
         postStatus('loading yos engine modules…', 'phase');
-        const { runInteractive, loadLiblua } = await import('/engine/yos_proc.mjs');
+        const { createInteractiveEngine, loadLiblua } = await import('/engine/yos_proc.mjs');
         const { compileGuest } = await import('/engine/wasm_patch.mjs');
         const { parsePack } = await import('/engine/fs_mount.mjs');
-        engine = { runInteractive };
 
         // Tool set: dynamic listing of the umbrella bin dir, so the browser
         // session has exactly the desktop command set. exec is synchronous,
@@ -375,6 +376,14 @@
         } catch (_) {
             postStatus('fs/pack.bin unavailable - nvim will lack its runtime tree', 'err');
         }
+
+        // ONE engine for the whole page — one process tree shared by the
+        // console shell and every telnet session.
+        sharedEngine = createInteractiveEngine({
+            tools: sharedTools,
+            mounts: sharedMounts,
+            onUnimpl: () => {},
+        });
 
         // Console shell (hvc0 analogue) on the iframe-pty channel.
         postStatus('starting console zsh (' + initialCols + 'x' + initialRows + ')…', 'phase');
