@@ -7,7 +7,9 @@
 # image — the unified VM rootfs).
 #
 # Layout:
-#   version file:  build-tools/yemu/<NAME>/version
+#   version file:  build-tools/yemu/<NAME>/version  (or build-tools/yos/…
+#                  — the first existing wins; each asset family keeps its
+#                  pin next to its own tooling)
 #   tag:           <NAME>-<VER>          (no `lib-` prefix)
 #   tarball:       <NAME>-<VER>.tar.gz   (noarch — same artifact for every host)
 #   release URL:   ${URL_BASE}/<NAME>-<VER>/<NAME>-<VER>.tar.gz
@@ -40,8 +42,12 @@ file(MAKE_DIRECTORY "${YETTY_ASSET_OUTPUT_DIR}")
 function(yetty_asset_fetch NAME)
     set(_VER_FILE "${YETTY_ROOT}/build-tools/yemu/${NAME}/version")
     if(NOT EXISTS "${_VER_FILE}")
+        set(_VER_FILE "${YETTY_ROOT}/build-tools/yos/${NAME}/version")
+    endif()
+    if(NOT EXISTS "${_VER_FILE}")
         message(FATAL_ERROR
-            "yetty-asset-fetch(${NAME}): version file not found: ${_VER_FILE}")
+            "yetty-asset-fetch(${NAME}): version file not found under "
+            "build-tools/yemu/${NAME}/ or build-tools/yos/${NAME}/")
     endif()
     file(READ "${_VER_FILE}" _VER)
     string(STRIP "${_VER}" _VER)

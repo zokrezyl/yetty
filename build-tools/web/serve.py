@@ -173,44 +173,48 @@ class CORSRequestHandler(http.server.SimpleHTTPRequestHandler):
         global yos_pack_cache
         url = self.path.split('?', 1)[0]
 
-        if url.startswith('/engine/'):
-            relative = url[len('/engine/'):]
-            for engine_dir in YOS_ENGINE_DIRS:
-                target = safe_child(engine_dir, relative)
+        # Every yos route prefers the LIVE checkout (dev freshness) and
+        # falls back to the baked yos-web bundle the webasm build stages
+        # under <served-dir>/yos-web/ (that private prefix avoids the
+        # build dir's own tools/ output directory; a static deploy hosts
+        # the same content at the top level, so these routes never fire
+        # there). A miss in both worlds ends as a plain 404.
+        if url.startswith('/engine/') or url.startswith('/tools/') \
+                or url.startswith('/fs/'):
+            if url.startswith('/engine/'):
+                relative = url[len('/engine/'):]
+                for engine_dir in YOS_ENGINE_DIRS:
+                    target = safe_child(engine_dir, relative)
+                    if target and target.is_file():
+                        return self.send_dynamic_file(
+                            target, self.guess_type(str(target)))
+            elif url == '/tools/list.json' and YOS_RESULT_DIR:
+                names = sorted(entry.name for entry
+                               in (YOS_RESULT_DIR / 'libexec').iterdir()
+                               if entry.is_file())
+                return self.send_dynamic(json.dumps(names).encode(),
+                                         'application/json')
+            elif url.startswith('/tools/') and url.endswith('.wasm') \
+                    and YOS_RESULT_DIR:
+                tool_name = os.path.basename(url)[:-len('.wasm')]
+                target = safe_child(YOS_RESULT_DIR / 'libexec', tool_name)
                 if target and target.is_file():
-                    return self.send_dynamic_file(
-                        target, self.guess_type(str(target)))
-            return self.send_dynamic_error(
-                404 if YOS_ENGINE_DIRS else 503,
-                'yos engine file not found: ' + relative)
-
-        if url == '/tools/list.json':
-            if not YOS_RESULT_DIR:
-                return self.send_dynamic_error(
-                    503, 'yos result not found - run `nix build .#all` '
-                         'in the yos tree (or set YOS_RESULT)')
-            names = sorted(entry.name for entry
-                           in (YOS_RESULT_DIR / 'libexec').iterdir()
-                           if entry.is_file())
-            return self.send_dynamic(json.dumps(names).encode(),
-                                     'application/json')
-
-        if url.startswith('/tools/') and url.endswith('.wasm'):
-            if not YOS_RESULT_DIR:
-                return self.send_dynamic_error(503, 'yos result not found')
-            tool_name = os.path.basename(url)[:-len('.wasm')]
-            target = safe_child(YOS_RESULT_DIR / 'libexec', tool_name)
-            if not target or not target.is_file():
-                return self.send_dynamic_error(404, 'no such tool: ' + tool_name)
-            return self.send_dynamic(target.read_bytes(), 'application/wasm')
-
-        if url == '/fs/pack.bin':
-            if not YOS_RESULT_DIR:
-                return self.send_dynamic_error(503, 'yos result not found')
-            if yos_pack_cache is None:
-                yos_pack_cache = build_share_pack(YOS_RESULT_DIR / 'share')
-            return self.send_dynamic(yos_pack_cache,
-                                     'application/octet-stream')
+                    return self.send_dynamic(target.read_bytes(),
+                                             'application/wasm')
+            elif url == '/fs/pack.bin' and YOS_RESULT_DIR:
+                if yos_pack_cache is None:
+                    yos_pack_cache = build_share_pack(YOS_RESULT_DIR / 'share')
+                return self.send_dynamic(yos_pack_cache,
+                                         'application/octet-stream')
+            baked = safe_child(Path(self.directory) / 'yos-web',
+                               url.lstrip('/'))
+            if baked and baked.is_file():
+                return self.send_dynamic_file(
+                    baked, self.guess_type(str(baked)))
+            # Final fallback: plain static serving — a site-style
+            # directory (the Pages layout) hosts engine/tools/fs at the
+            # top level; anything truly absent 404s there.
+            return super().do_GET()
 
         return super().do_GET()
 

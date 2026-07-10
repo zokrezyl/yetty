@@ -96,6 +96,10 @@ terminal.html
 yetty.js
 yetty.wasm
 yetty.data
+yos-iframe.html        # yos session type (plus the three dirs below,
+engine/                # staged by cmake from the yos-web release asset)
+tools/
+fs/
 jslinux/
   alpine-x86_64.cfg    # Updated with your proxy URL
   kernel-x86_64.bin

@@ -392,6 +392,36 @@ add_custom_command(
     DEPENDS ${YETTY_ROOT}/build-tools/web/yos/yos-iframe.html
     COMMENT "Copy web/yos/yos-iframe.html → build dir"
 )
+
+# yos web bundle — engine modules + wasm tools + share pack, the static
+# files behind /engine/, /tools/ and /fs/pack.bin. First-party release
+# asset (tag yos-web-<ver>, pinned in build-tools/yos/yos-web/version;
+# build it with build-tools/yos/make-yos-web-bundle.py — same publish
+# flow as yetty-rootfs-riscv). Staged into the build dir at the exact
+# paths yos-iframe.html fetches, so a static deploy (GitHub Pages)
+# serves the yos session with no server logic. The dev serve.py prefers
+# a live yos checkout for these routes and falls through to these files
+# when none is present.
+# Staged under the PRIVATE yos-web/ prefix: the deploy-facing names
+# (tools/, engine/, fs/) collide with cmake's own output dirs at the
+# build-dir top level — tools/ holds the host tools (incbin_tool, …).
+# serve.py maps /engine|/tools|/fs onto yos-web/ for dev; the Pages
+# workflow copies yos-web/<sub> → site/<sub>, restoring the top-level
+# layout yos-iframe.html's absolute paths expect.
+include(${YETTY_ROOT}/build-tools/yetty/yetty-asset-fetch.cmake)
+yetty_asset_fetch(yos-web YETTY_YOS_WEB_DIR)
+file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/yos-web")
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/yos-web")
+foreach(_YOS_WEB_SUB engine tools fs)
+    if(NOT EXISTS "${YETTY_YOS_WEB_DIR}/${_YOS_WEB_SUB}")
+        message(FATAL_ERROR
+            "yos-web bundle is missing its ${_YOS_WEB_SUB}/ directory — "
+            "re-create it with build-tools/yos/make-yos-web-bundle.py")
+    endif()
+    file(COPY "${YETTY_YOS_WEB_DIR}/${_YOS_WEB_SUB}"
+         DESTINATION "${CMAKE_BINARY_DIR}/yos-web")
+endforeach()
+message(STATUS "webasm: staged yos-web bundle (yos-web/{engine,tools,fs})")
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/serve.py
     COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/serve.py ${CMAKE_BINARY_DIR}/serve.py
@@ -412,13 +442,25 @@ add_dependencies(yetty yetty_web_files)
 
 # Generate pre-computed demo script outputs
 if(YETTY_ENABLE_FEATURE_DEMO)
-    add_custom_target(generate-demo-outputs
+    # Stamp-guarded: the generator EXECUTES every demo script on the host
+    # (see generate-demo-outputs.cmake, including its app-driving skip
+    # rules), so it must run only when a script actually changed — a bare
+    # add_custom_target is always stale and re-ran the whole set on every
+    # build.
+    file(GLOB_RECURSE _DEMO_SCRIPT_DEPS "${YETTY_ROOT}/demo/scripts/*.sh")
+    add_custom_command(
+        OUTPUT ${CMAKE_BINARY_DIR}/demo-output/.stamp
         COMMAND ${CMAKE_COMMAND}
             -DYETTY_ROOT=${YETTY_ROOT}
             -DOUTPUT_DIR=${CMAKE_BINARY_DIR}
             -P ${YETTY_ROOT}/build-tools/yetty/generate-demo-outputs.cmake
+        COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/demo-output/.stamp
+        DEPENDS ${_DEMO_SCRIPT_DEPS}
+                ${YETTY_ROOT}/build-tools/yetty/generate-demo-outputs.cmake
         COMMENT "Generating demo script outputs..."
     )
+    add_custom_target(generate-demo-outputs
+        DEPENDS ${CMAKE_BINARY_DIR}/demo-output/.stamp)
     add_dependencies(yetty generate-demo-outputs)
 endif()
 
