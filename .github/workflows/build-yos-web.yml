@@ -1,0 +1,129 @@
+name: Build yos-web bundle
+
+# Builds the yos web bundle — the static files the yos session type needs
+# at runtime: the browser engine modules (+ liblua.wasm), the wasm32 tool
+# set from the in-tree yos userspace (nix build), and the guest /usr/share
+# pack. Packed by build-tools/yos/make-yos-web-bundle.py in the exact
+# layout yos-iframe.html fetches (engine/ tools/ fs/pack.bin).
+#
+# Runs exactly like build-yetty-rootfs-riscv.yml: driven by the parent
+# yetty pipeline (workflow_call) before the webasm build, uploading the
+# tarball as a workflow artifact the stage-yos-web action drops into the
+# webasm job's 3rdparty cache — and publishing the yos-web-<version>
+# release on yetty release tags.
+#
+# Version source of truth: the yetty-X.Y.Z tag (same resolution as the
+# rootfs — no version file).
+
+on:
+  workflow_dispatch: {}
+  workflow_call:
+    outputs:
+      version:
+        description: Resolved yetty version (X.Y.Z) the bundle tracks.
+        value: ${{ jobs.resolve.outputs.version }}
+      tag:
+        description: Asset tag form yos-web-<version>.
+        value: ${{ jobs.resolve.outputs.tag }}
+      artifact:
+        description: Workflow-artifact name carrying the bundle tarball.
+        value: ${{ jobs.resolve.outputs.tag }}
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag:     ${{ steps.read.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so `git describe` finds the latest yetty-* tag
+          # on branch pushes. Tag pushes carry just the tag commit but
+          # we use $GITHUB_REF directly in that case.
+          fetch-depth: 0
+      - id: read
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" == refs/tags/yetty-[0-9]*.[0-9]*.[0-9]* ]]; then
+            V="${GITHUB_REF#refs/tags/yetty-}"
+          else
+            TAG="$(git describe --tags --abbrev=0 \
+                       --match='yetty-[0-9]*.[0-9]*.[0-9]*' HEAD 2>/dev/null || true)"
+            if [ -z "$TAG" ]; then
+              echo "FATAL: cannot resolve version — no yetty-X.Y.Z tag reachable from HEAD" >&2
+              exit 1
+            fi
+            V="${TAG#yetty-}"
+          fi
+          [ -n "$V" ] || { echo "resolved version is empty" >&2; exit 1; }
+          echo "Resolved yos-web version: $V (from $GITHUB_REF)"
+          echo "version=$V"        >> "$GITHUB_OUTPUT"
+          echo "tag=yos-web-$V"    >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: resolve
+    runs-on: ubuntu-latest
+    # The first uncached run bootstraps the yos wasm toolchain via nix —
+    # give it room; later runs ride the nix binary caches.
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full clone: the yos flake evaluates from the git tree (a
+          # shallow clone confuses nix's git fetcher), and it keeps this
+          # job identical to a developer running `nix build` locally.
+          fetch-depth: 0
+
+      - uses: cachix/install-nix-action@v31
+
+      - name: Build yos userspace + sysroot (nix)
+        run: |
+          set -euo pipefail
+          # result/libexec (75 wasm tools) + result/share (guest /usr/share)
+          nix build ./yos#all --out-link yos/result
+          # FreeBSD-shaped wasm32 sysroot — liblua builds against it.
+          nix build ./yos#sysroot --out-link yos-sysroot
+
+      - name: Install wasm toolchain for liblua
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          # clang (wasm32 target) + lld (wasm-ld) — build-liblua.sh
+          sudo apt-get install -y clang lld
+
+      - name: Build liblua.wasm
+        run: |
+          set -euo pipefail
+          YOS_SYSROOT="$PWD/yos-sysroot" \
+              bash yos/src/yos/platform/web/lua/build-liblua.sh
+
+      - name: Pack yos-web bundle
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          # stdlib-only script — plain python3 is enough.
+          python3 build-tools/yos/make-yos-web-bundle.py \
+              --yos-root yos --version "$VERSION" --cache-dir out
+
+      - name: Upload tarball as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.resolve.outputs.tag }}
+          path: out/yos-web-*.tar.gz
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        # Publish a `yos-web-X.Y.Z` release whenever the trigger is a
+        # yetty release tag — same 1:1 version tracking as the rootfs.
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/yetty-')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/yos-web-*.tar.gz
+          fail_on_unmatched_files: true

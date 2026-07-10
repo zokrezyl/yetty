@@ -1,9 +1,6 @@
-#!/usr/bin/env -S uv run
-# /// script
-# requires-python = ">=3.10"
-# ///
+#!/usr/bin/env python3
 """Pack the yos web bundle — the static files the yos session type needs
-at runtime — from a yos checkout, in the exact layout yos-iframe.html
+at runtime — from the in-tree yos/, in the exact layout yos-iframe.html
 fetches and GitHub Pages serves:
 
   engine/               the browser engine modules (+ lua/liblua.wasm)
@@ -11,17 +8,21 @@ fetches and GitHub Pages serves:
   tools/<name>.wasm     the tool binaries (nix store symlinks followed)
   fs/pack.bin           the guest /usr/share tree as one YFS1 blob
 
-The tarball follows the first-party release-asset convention
-(yetty-asset-fetch.cmake): tag yos-web-<VER>, file yos-web-<VER>.tar.gz.
-The script drops the tarball into the local 3rdparty cache (so a build
-picks it up immediately, before the release exists) and prints the
-gh command that publishes it.
+The version tracks yetty itself (same scheme as yetty-rootfs-riscv):
+tag yos-web-<VER>, file yos-web-<VER>.tar.gz, where <VER> comes from the
+latest yetty-X.Y.Z tag. CI (build-yos-web.yml) builds and publishes it
+per release; this script serves local builds — it drops the tarball into
+the local 3rdparty cache, where the webasm configure picks it up.
+
+Prerequisites in the yos tree: `nix build .#all --out-link result` (the
+tool set + share tree) and, for nvim's Lua,
+src/yos/platform/web/lua/build-liblua.sh (needs the .#sysroot output).
 
 Usage:
   ./build-tools/yos/make-yos-web-bundle.py [--yos-root DIR] [--version X.Y.Z]
 
-Defaults: --yos-root probes <repo>/yos then ../yos (sibling checkout);
---version reads build-tools/yos/yos-web/version.
+Defaults: --yos-root probes <repo>/yos then ../yos; --version derives
+from `git describe --match 'yetty-*'`.
 """
 
 import argparse
@@ -78,14 +79,14 @@ def resolve_yos_roots(explicit):
                   [REPO_ROOT / "yos", REPO_ROOT.parent / "yos"])
     roots = [root for root in candidates if (root / "src").is_dir()]
     if not roots:
-        sys.exit("no yos checkout found (tried: " +
+        sys.exit("no yos tree found (tried: " +
                  ", ".join(str(c) for c in candidates) + ")")
     return roots
 
 
 def find_engine_file(roots, relative):
-    """Probe every root — liblua.wasm is an untracked build artifact that
-    may live only in a sibling checkout where build-liblua.sh was run."""
+    """Probe every root — liblua.wasm is a build artifact that may live
+    only where build-liblua.sh was run."""
     for root in roots:
         candidate = root / "src" / "yos" / "platform" / "web" / relative
         if candidate.is_file():
@@ -96,15 +97,24 @@ def find_engine_file(roots, relative):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--yos-root", default=None,
-                        help="yos checkout (default: <repo>/yos, ../yos)")
+                        help="yos tree (default: <repo>/yos, ../yos)")
     parser.add_argument("--version", default=None,
-                        help="bundle version (default: build-tools/yos/yos-web/version)")
+                        help="bundle version (default: latest yetty-X.Y.Z tag)")
     parser.add_argument("--cache-dir", default=None,
                         help="3rdparty cache (default: ~/.cache/yetty/3rdparty)")
     args = parser.parse_args()
 
-    version = args.version or \
-        (REPO_ROOT / "build-tools" / "yos" / "yos-web" / "version").read_text().strip()
+    version = args.version
+    if not version:
+        described = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "describe", "--tags", "--abbrev=0",
+             "--match", "yetty-[0-9]*.[0-9]*.[0-9]*", "HEAD"],
+            capture_output=True, text=True)
+        tag = described.stdout.strip()
+        if described.returncode != 0 or not tag:
+            sys.exit("cannot resolve version: no yetty-X.Y.Z tag reachable "
+                     "from HEAD — pass --version")
+        version = tag.removeprefix("yetty-")
     cache_dir = Path(args.cache_dir or
                      os.environ.get("YETTY_3RDPARTY_CACHE_DIR",
                                     Path.home() / ".cache" / "yetty" / "3rdparty"))
@@ -125,7 +135,7 @@ def main():
         for relative in ENGINE_FILES:
             source = find_engine_file(roots, relative)
             if not source:
-                sys.exit(f"engine file not found in any yos checkout: {relative}")
+                sys.exit(f"engine file not found in any yos tree: {relative}")
             destination = engine_dir / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(source.read_bytes())
@@ -159,10 +169,8 @@ def main():
 
     print()
     print("Staged in the local 3rdparty cache — builds pick it up now.")
-    print("Publish it with:")
-    print(f"  gh release create yos-web-{version} --repo zokrezyl/yetty \\")
-    print(f"      --title 'yos web bundle {version}' --notes 'yos web bundle' \\")
-    print(f"      {tarball}")
+    print("CI (build-yos-web.yml) publishes the yos-web-<ver> release on "
+          "yetty release tags; no manual upload needed.")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,38 @@
+name: Stage yos-web artifact
+description: |
+  Download the yos-web bundle tarball produced by the `build-yos-web`
+  reusable workflow into the cmake-side 3rdparty cache so the webasm
+  build finds it locally without hitting the GitHub release URL (which
+  may not be tagged yet, especially during branch CI).
+
+  Pass `artifact-name` from the calling workflow's
+  `needs.build-yos-web.outputs.tag`. Pass empty string to skip.
+
+inputs:
+  artifact-name:
+    description: Workflow-artifact name (e.g. `yos-web-0.2.55`). Empty to skip.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Download yos-web artifact
+      if: inputs.artifact-name != ''
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        # Land OUTSIDE the checked-out repo — a download into
+        # $GITHUB_WORKSPACE would leave an untracked dir that stamps the
+        # configure-time version "-dirty" (same reasoning as
+        # stage-rootfs-riscv).
+        path: ${{ runner.temp }}/yos-web-artifact
+
+    - name: Stage into 3rdparty cache
+      if: inputs.artifact-name != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/.cache/yetty/3rdparty"
+        cp -v "$RUNNER_TEMP/yos-web-artifact"/yos-web-*.tar.gz \
+            "$HOME/.cache/yetty/3rdparty/"
