@@ -134,6 +134,31 @@
             border: 0;
             background: #0f0f23;
         }
+        /* Drag grip along the bottom edge — resizes the panel, which
+         * resizes the iframe, whose ResizeObserver resizes the canvas
+         * and the terminal within. */
+        .term-panel-grip {
+            flex: 0 0 auto;
+            height: 9px;
+            cursor: ns-resize;
+            background: #141A1F;
+            border-top: 1px solid #364A47;
+            position: relative;
+            touch-action: none;
+        }
+        .term-panel-grip::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 3px;
+            width: 44px;
+            height: 3px;
+            margin-left: -22px;
+            border-radius: 2px;
+            background: #364A47;
+        }
+        .term-panel-grip:hover::after,
+        .term-panel-grip.dragging::after { background: #6BA892; }
         /* The hamburger row always sits below the last opened instance. */
         #menu-row {
             display: flex;
@@ -221,6 +246,41 @@
         .engine-log .line.err   { color: #f55; font-weight: bold; }
         .engine-log .line.dim   { color: #888; }
         .engine-log .line.empty { color: #556162; }
+        /* ---- Help tab ---- */
+        #help-panel {
+            overflow-y: auto;
+            padding: 20px 24px;
+        }
+        /* Prose panel — block flow, not the flex column of the others. */
+        #help-panel.active { display: block; }
+        .help-inner { max-width: 760px; }
+        .help-inner h1 {
+            font-size: 17px;
+            color: #E0E5E4;
+            margin-bottom: 6px;
+        }
+        .help-inner h1 .accent { color: #6BA892; }
+        .help-inner h2 {
+            font-size: 13px;
+            color: #74C5A5;
+            margin: 18px 0 6px 0;
+        }
+        .help-inner p, .help-inner li {
+            font-size: 12px;
+            color: #9FA7A8;
+            line-height: 1.7;
+        }
+        .help-inner ul { margin: 4px 0 4px 18px; }
+        .help-inner strong { color: #E0E5E4; font-weight: bold; }
+        .help-inner code, .help-inner kbd {
+            background: #1E262C;
+            border: 1px solid #364A47;
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: 11px;
+            color: #E0E5E4;
+        }
+
         /* ---- Modal dialogs (session menu + per-mode config) ---- */
         .modal {
             position: fixed;
@@ -366,6 +426,7 @@
     <div id="tabbar">
         <button class="tab active" type="button" data-tab="terminals">Terminals</button>
         <button class="tab" type="button" data-tab="emulator">Engines</button>
+        <button class="tab" type="button" data-tab="help">Help</button>
     </div>
 
     <!-- ================= Terminals tab ================= -->
@@ -415,6 +476,78 @@
                 <span id="engine-attached-yos" class="engine-attached">attached terminals: none</span>
             </div>
             <div id="engine-log-yos" class="engine-log"><div class="line empty">(yos not started — boot log will stream here)</div></div>
+        </div>
+    </div>
+
+    <!-- ================= Help tab ================= -->
+    <div id="help-panel" class="tab-panel">
+        <div class="help-inner">
+            <h1><span class="accent">yetty</span> — a WebGPU terminal, running in your browser</h1>
+            <p>This page runs the real yetty terminal compiled to WebAssembly.
+                Everything below happens in your browser — the only server
+                involvement is whatever a session type explicitly connects to.</p>
+
+            <h2>Terminals tab</h2>
+            <ul>
+                <li>Click the <strong>☰</strong> button to open a new terminal.
+                    Pick a session type, fill in the details, hit
+                    <strong>Start</strong>. The ☰ button always sits below the
+                    newest terminal; open as many as you like.</li>
+                <li>Each terminal panel: click into it to type, drag the
+                    <strong>grip bar at its bottom edge</strong> to resize
+                    (the terminal re-wraps live), close it with
+                    <strong>×</strong> in its header.</li>
+                <li>Inside yetty, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd>
+                    opens another tab of the same session kind.</li>
+                <li>The boot overlay on a starting terminal collapses on its
+                    own; the <strong>console</strong> pill (top right of the
+                    panel) brings it back.</li>
+            </ul>
+
+            <h2>Session types</h2>
+            <ul>
+                <li><strong>TinyEMU VM</strong> — Alpine Linux on an emulated
+                    RISC-V machine, fully in-browser. Each terminal gets its
+                    own telnet login on the shared VM.</li>
+                <li><strong>yos</strong> — a FreeBSD-flavoured wasm userspace
+                    (zsh, nvim, tmux, coreutils), fully in-browser. One
+                    process tree per page: every terminal gets a fresh zsh on
+                    the same system — <code>ps aux</code> in one shell sees
+                    them all.</li>
+                <li><strong>WebSocket shell</strong> — a raw PTY served by
+                    <code>websocket-pty-server.py</code> on a host you run.</li>
+                <li><strong>Telnet</strong> / <strong>SSH</strong> — connect
+                    through a WebSocket↔TCP bridge
+                    (<code>telnet-websocket.sh</code>); SSH crypto runs in the
+                    browser, the bridge only relays encrypted bytes.</li>
+                <li><strong>ygreeter</strong> — the ygui feature showcase
+                    (plots, images, diagrams, shaders), no shell.</li>
+                <li><strong>lwIP relay</strong> — experimental in-browser
+                    TCP/IP stack; telnets to a real host:port through an L2
+                    relay.</li>
+            </ul>
+
+            <h2>Engines tab</h2>
+            <p>The TinyEMU VM and the yos userspace are page-shared
+                <strong>engines</strong>: loaded at most once, attached to by
+                any number of terminals, running independently of all of them.
+                Start one manually to watch its boot log, or just open a
+                terminal of that type — the engine starts automatically.</p>
+
+            <h2>Deep links</h2>
+            <p>Every session type can be opened straight from the URL:
+                <code>?mode=yos</code>, <code>?mode=temu</code>,
+                <code>?mode=websocket&amp;url=ws://host:8090</code>,
+                <code>?mode=telnet&amp;url=ws://host:8024</code>,
+                <code>?mode=ssh&amp;user=you</code>,
+                <code>?mode=ygreeter</code>.</p>
+
+            <h2>Downloads and caching</h2>
+            <p>The first visit downloads the terminal, its assets and — if
+                used — the VM rootfs or the yos tools. All of it is cached in
+                the browser in final, decoded form: later visits and
+                additional terminals load from disk and only re-download
+                files that actually changed in a release.</p>
         </div>
     </div>
 
@@ -530,16 +663,21 @@
 
         // ---- Page tabs -----------------------------------------------------
         (function () {
+            const PANEL_IDS = {
+                terminals: 'terminals-panel',
+                emulator: 'emulator-panel',
+                help: 'help-panel'
+            };
             const tabs = Array.from(document.querySelectorAll('#tabbar .tab'));
             tabs.forEach(function (tab) {
                 tab.addEventListener('click', function () {
                     tabs.forEach(function (other) {
                         other.classList.toggle('active', other === tab);
                     });
-                    document.getElementById('terminals-panel').classList
-                        .toggle('active', tab.dataset.tab === 'terminals');
-                    document.getElementById('emulator-panel').classList
-                        .toggle('active', tab.dataset.tab === 'emulator');
+                    Object.keys(PANEL_IDS).forEach(function (name) {
+                        document.getElementById(PANEL_IDS[name]).classList
+                            .toggle('active', tab.dataset.tab === name);
+                    });
                 });
             });
         })();
@@ -664,6 +802,34 @@
             const state = document.getElementById('engine-state-' + engine.key);
             state.textContent = text;
             state.className = 'engine-state' + (cssClass ? ' ' + cssClass : '');
+        }
+
+        // Vertical drag-resize for an instance panel. Pointer capture keeps
+        // every move event on the grip for the whole drag — without it the
+        // pointer strays over the iframe, which eats the events and the
+        // drag sticks. The panel height drives the iframe, whose
+        // ResizeObserver (terminal.html) resizes the canvas and the
+        // terminal — NAWS/SIGWINCH take it from there.
+        function makePanelResizable(panel, grip) {
+            const MIN_HEIGHT = 180;
+            let dragStartY = 0;
+            let dragStartHeight = 0;
+            grip.addEventListener('pointerdown', function (event) {
+                dragStartY = event.clientY;
+                dragStartHeight = panel.getBoundingClientRect().height;
+                grip.setPointerCapture(event.pointerId);
+                grip.classList.add('dragging');
+                event.preventDefault();
+            });
+            grip.addEventListener('pointermove', function (event) {
+                if (!grip.hasPointerCapture(event.pointerId)) return;
+                const height = Math.max(MIN_HEIGHT,
+                    dragStartHeight + (event.clientY - dragStartY));
+                panel.style.height = height + 'px';
+            });
+            grip.addEventListener('lostpointercapture', function () {
+                grip.classList.remove('dragging');
+            });
         }
 
         function updateEngineAttachedLabel(engine) {
@@ -873,8 +1039,14 @@
             iframe.src = config.mode === 'ygreeter'
                 ? 'ygreeter.html' : 'terminal.html';
 
+            const grip = document.createElement('div');
+            grip.className = 'term-panel-grip';
+            grip.title = 'Drag to resize this terminal';
+
             panel.appendChild(header);
             panel.appendChild(iframe);
+            panel.appendChild(grip);
+            makePanelResizable(panel, grip);
 
             // Keep the hamburger row below the newest instance.
             const terminalsPanel = document.getElementById('terminals-panel');
