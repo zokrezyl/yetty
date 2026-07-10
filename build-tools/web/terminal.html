@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>yetty terminal</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #0f0f23;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        canvas {
+            display: block;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #eee;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+        }
+        /* Boot console — append-only log of each preload step, the VM
+         * attach, and yetty startup phases. Overlay covers the whole
+         * instance viewport; closed via the − button or automatically
+         * once yetty is running. */
+        #yetty-status {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            /* Translucent so the user can see the canvas (and yetty
+             * booting up) through the boot log. */
+            background: rgba(0, 0, 0, 0.55);
+            color: #ddd;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 12px;
+            line-height: 1.45;
+            padding: 0;                      /* children own their padding */
+            z-index: 200;
+            pointer-events: auto;            /* let the user wheel-scroll the log */
+            display: flex;
+            flex-direction: column;
+        }
+        /* Fixed banner above the log: tells the user what's going on.
+         * Does NOT scroll with the log. */
+        #yetty-status-header {
+            flex: 0 0 auto;
+            padding: 12px 48px 10px 16px;    /* right padding clears − btn */
+            background: rgba(20, 24, 31, 0.65);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            color: #cfd4d3;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        #yetty-status-header .hint-key {
+            color: #6c6;
+            font-weight: bold;
+        }
+        #yetty-status-log {
+            overflow-y: auto;
+            flex: 1 1 auto;
+            min-height: 0;
+            padding: 12px 16px 16px 16px;
+        }
+        /* Custom scrollbar so dark-on-dark stays readable. */
+        #yetty-status-log::-webkit-scrollbar { width: 10px; }
+        #yetty-status-log::-webkit-scrollbar-track { background: #1a1a2e; }
+        #yetty-status-log::-webkit-scrollbar-thumb { background: #444; border-radius: 5px; }
+        #yetty-status-log::-webkit-scrollbar-thumb:hover { background: #666; }
+        #yetty-status .line { white-space: pre-wrap; word-break: break-all; }
+        #yetty-status .line.phase { color: #e94560; font-weight: bold; }
+        #yetty-status .line.ok    { color: #6c6; }
+        #yetty-status .line.err   { color: #f55; font-weight: bold; }
+        #yetty-status .line.dim   { color: #888; }
+        /* `!important` so the class beats the inline `display:flex`
+         * the JS sets on first append. */
+        #yetty-status.minimized { display: none !important; }
+        #yetty-status-minimize {
+            position: absolute;
+            top: 6px;
+            right: 10px;
+            width: 28px;
+            height: 28px;
+            line-height: 24px;
+            text-align: center;
+            color: #ddd;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid #444;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 18px;
+            font-family: inherit;
+            pointer-events: auto;
+            user-select: none;
+            z-index: 1;
+        }
+        #yetty-status-minimize:hover { background: #e94560; color: #fff; }
+        /* Pill-shaped restore button — visible only while the overlay
+         * is minimized. Clicking re-expands the overlay. */
+        #yetty-status-restore {
+            position: fixed;
+            top: 8px;
+            right: 8px;
+            display: none;
+            padding: 6px 12px;
+            color: #ddd;
+            background: rgba(20, 20, 31, 0.92);
+            border: 1px solid #444;
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            user-select: none;
+            z-index: 201;
+        }
+        #yetty-status-restore.visible { display: block; }
+        #yetty-status-restore:hover {
+            background: #e94560;
+            color: #fff;
+            border-color: #e94560;
+        }
+        #loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #333;
+            border-top-color: #e94560;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        #status {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 10px;
+        }
+        #fatal {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: min(560px, calc(100vw - 32px));
+            text-align: center;
+            color: #E0E5E4;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        #fatal code { color: #9FA7A8; }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="canvas" width="1024" height="768" tabindex="0"></canvas>
+        <!-- Boot console — populated by yettyStatus.append() from the
+             preload shim and the launch flow below. -->
+        <div id="yetty-status" style="display: none;"><button id="yetty-status-minimize" type="button" title="Minimize boot console">&minus;</button><div id="yetty-status-header">Starting a yetty session. Once you see <span class="hint-key">yetty terminal running</span> this overlay collapses on its own; click <strong>&minus;</strong> in the top-right corner to dismiss it earlier.</div><div id="yetty-status-log"></div></div>
+        <button id="yetty-status-restore" type="button"
+                title="Show boot console">&#9707; console</button>
+        <div id="loading" style="display: none;">
+            <div class="spinner"></div>
+            <div>Loading WebGPU...</div>
+            <div id="status"></div>
+        </div>
+        <div id="fatal"></div>
+    </div>
+
+    <script>
+        // ---- Boot status console -----------------------------------------
+        // window.yettyStatus.append(text, level?) appends a line to the
+        // overlay above the canvas. The preload shim in
+        // yetty-assets-preload.js reports through the same API.
+        (function () {
+            const overlay = document.getElementById('yetty-status');
+            // CRITICAL: lines append into #yetty-status-log (the
+            // overflow:auto child) — NOT into #yetty-status itself.
+            // The parent is a flex container; growing it doesn't
+            // scroll, it just stretches off-screen.
+            const log = document.getElementById('yetty-status-log');
+            const MAX_LINES = 2000;
+            let hideTimer = null;
+            // True once the user has minimized. Subsequent appends
+            // keep filling the (hidden) log so the restore pill shows
+            // complete scroll-back, but the overlay does NOT auto-pop
+            // back open on its own.
+            let userMinimized = false;
+            // Auto-minimize triggers. 'yetty terminal running' is
+            // appended by the preload shim once callMain succeeded —
+            // for every session mode that is the moment the boot
+            // console can get out of the way. The guest-TCP marker
+            // additionally fires for the self-contained VM path where
+            // the VM boot log streams through this same overlay.
+            const READY_MARKERS = [
+                'yetty terminal running',
+                'guest TCP established (first rx)',   /* temu */
+                'shell talking (first tx)'            /* yos */
+            ];
+            let autoMinimizeArmed = true;
+            function maybeAutoMinimize(text) {
+                if (!autoMinimizeArmed) return;
+                if (typeof text !== 'string') return;
+                let hit = false;
+                for (let i = 0; i < READY_MARKERS.length; i++) {
+                    if (text.indexOf(READY_MARKERS[i]) !== -1) { hit = true; break; }
+                }
+                if (!hit) return;
+                autoMinimizeArmed = false;
+                /* Small delay so the user actually sees the green
+                 * "running" line land in the log before the overlay
+                 * collapses. */
+                setTimeout(minimize, 600);
+            }
+            const restoreBtn = document.getElementById('yetty-status-restore');
+            // Tag → DOM line map so callers can update an existing line
+            // in place (e.g. download progress %) instead of appending
+            // a fresh row every event.
+            const tagged = Object.create(null);
+
+            function alsoLog(text) {
+                // Mirror to console so the headless test capture and
+                // dev-tools both see boot status, not just the overlay.
+                try { console.log('[yetty-status]', text); } catch (ignored) {}
+            }
+            function showIfNotDismissed() {
+                if (!overlay) return;
+                if (userMinimized) return;       /* keep filling, don't pop */
+                overlay.classList.remove('minimized');
+                overlay.style.display = 'flex';  /* matches the CSS rule */
+            }
+            function makeLine(text, level) {
+                const line = document.createElement('div');
+                line.className = 'line' + (level ? ' ' + level : '');
+                line.textContent = text;
+                return line;
+            }
+            function append(text, level) {
+                alsoLog(text);
+                if (!log) return;
+                showIfNotDismissed();
+                log.appendChild(makeLine(text, level));
+                while (log.childElementCount > MAX_LINES) {
+                    log.removeChild(log.firstChild);
+                }
+                log.scrollTop = log.scrollHeight;
+                maybeAutoMinimize(text);
+            }
+            // Append a tagged line on first call; on subsequent calls
+            // with the same tag, replace its text in place.
+            function update(tag, text, level) {
+                alsoLog(text);
+                if (!log) return;
+                showIfNotDismissed();
+                let line = tagged[tag];
+                if (!line || !line.parentNode) {
+                    line = makeLine(text, level);
+                    tagged[tag] = line;
+                    log.appendChild(line);
+                } else {
+                    line.textContent = text;
+                    if (level) line.className = 'line ' + level;
+                }
+                log.scrollTop = log.scrollHeight;
+                maybeAutoMinimize(text);
+            }
+            function minimize() {
+                userMinimized = true;
+                if (overlay) overlay.classList.add('minimized');
+                if (restoreBtn) restoreBtn.classList.add('visible');
+            }
+            function restore() {
+                userMinimized = false;
+                if (overlay) {
+                    overlay.classList.remove('minimized');
+                    overlay.style.display = 'flex';
+                }
+                if (restoreBtn) restoreBtn.classList.remove('visible');
+                if (log) log.scrollTop = log.scrollHeight;
+            }
+            function autoHide(ms) {
+                clearTimeout(hideTimer);
+                hideTimer = setTimeout(minimize, ms);
+            }
+
+            window.yettyStatus = {
+                append: append,
+                update: update,
+                minimize: minimize,
+                restore: restore,
+                /* Back-compat shim — old callers used hide(); now it
+                 * minimizes. The overlay never fully closes anymore. */
+                hide: minimize,
+                autoHide: autoHide
+            };
+
+            const minBtn = document.getElementById('yetty-status-minimize');
+            if (minBtn) {
+                minBtn.addEventListener('click', minimize);
+            }
+            if (restoreBtn) {
+                restoreBtn.addEventListener('click', restore);
+            }
+
+            // Iframe → status pump: a self-contained VM iframe (the
+            // standalone temu path spawns one as a child of this page)
+            // sends 'yetty-status' messages for its download / boot
+            // phases. `tag` lets it ask for in-place updates.
+            window.addEventListener('message', function (event) {
+                if (!event.data || event.data.type !== 'yetty-status') return;
+                if (typeof event.data.text !== 'string') return;
+                if (event.data.tag) {
+                    update(event.data.tag, event.data.text, event.data.level);
+                } else {
+                    append(event.data.text, event.data.level);
+                }
+            });
+        })();
+
+        function fatalError(html) {
+            const fatal = document.getElementById('fatal');
+            const loading = document.getElementById('loading');
+            if (loading) loading.style.display = 'none';
+            if (fatal) {
+                fatal.innerHTML = html;
+                fatal.style.display = 'block';
+            }
+        }
+
+        async function checkWebGPU() {
+            const status = document.getElementById('status');
+
+            if (!navigator.gpu) {
+                status.textContent = 'WebGPU not supported in this browser';
+                document.getElementById('loading').innerHTML = `
+                    <div style="color: #e94560;">WebGPU Not Supported</div>
+                    <div style="margin-top: 10px; font-size: 0.9em;">
+                        Try Chrome/Edge 113+ or Firefox Nightly with WebGPU enabled.
+                    </div>
+                `;
+                return false;
+            }
+
+            try {
+                status.textContent = 'Requesting WebGPU adapter...';
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) {
+                    status.textContent = 'No WebGPU adapter found';
+                    return false;
+                }
+
+                status.textContent = 'Requesting WebGPU device...';
+                const device = await adapter.requestDevice({
+                    requiredLimits: {
+                        maxStorageBuffersPerShaderStage: 8,
+                        maxTextureDimension2D: Math.min(16384, adapter.limits.maxTextureDimension2D),
+                    }
+                });
+                if (!device) {
+                    status.textContent = 'Failed to get WebGPU device';
+                    return false;
+                }
+
+                Module.preinitializedWebGPUDevice = device;
+                status.textContent = 'WebGPU initialized';
+                return true;
+            } catch (err) {
+                status.textContent = 'WebGPU error: ' + err.message;
+                return false;
+            }
+        }
+
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            const canvas = document.getElementById('canvas');
+            if (container && canvas) {
+                const rect = container.getBoundingClientRect();
+                const width = Math.floor(rect.width);
+                const height = Math.floor(rect.height);
+                if (width > 0 && height > 0 && (canvas.width !== width || canvas.height !== height)) {
+                    canvas.width = width;
+                    canvas.height = height;
+                    if (typeof Module !== 'undefined' && Module._yetty_handle_resize) {
+                        Module._yetty_handle_resize(width, height);
+                    }
+                }
+            }
+        }
+
+        // Parse URL parameters for configuration
+        function getUrlParams() {
+            const params = {};
+            const query = window.location.search.substring(1);
+            if (query) {
+                query.split('&').forEach(pair => {
+                    const [key, value] = pair.split('=');
+                    params[decodeURIComponent(key)] = decodeURIComponent(value || '');
+                });
+            }
+            return params;
+        }
+
+        const urlParams = getUrlParams();
+
+        // Trace logging — accept several aliases so the URL can use the
+        // same name as the env var the runtime reads.
+        //   ?trace=1 / ?ytrace=on / ?YTRACE_DEFAULT_ON=yes
+        // Accepted values (case-insensitive): 1, on, yes, true.
+        const traceFromUrl = (function () {
+            const value = (urlParams.trace ||
+                           urlParams.ytrace ||
+                           urlParams.YTRACE_DEFAULT_ON || '').toLowerCase();
+            return value === '1' || value === 'on' || value === 'yes' || value === 'true';
+        })();
+
+        // Whether this page runs inside the tabbed shell (index.html) or
+        // was opened directly. Embedded pages receive their session
+        // config over postMessage; standalone pages read query params
+        // and, for the VM mode, own their VM iframe themselves.
+        const embedded = (function () {
+            try { return window.parent && window.parent !== window; }
+            catch (ignored) { return true; }
+        })();
+
+        // Trace flag lives outside the config handshake so buildEnvVars
+        // can see the final value regardless of where config came from.
+        let traceOn = traceFromUrl;
+
+        function buildEnvVars() {
+            const env = {};
+            if (traceOn) {
+                env.YTRACE_DEFAULT_ON = 'yes';
+            }
+            return env;
+        }
+
+        var Module = {
+            canvas: document.getElementById('canvas'),
+            print: function(text) { console.log(text); },
+            printErr: function(text) { console.log(text); },
+            // preRun runs AFTER yetty.js loads but BEFORE main() executes
+            // This is where we inject environment variables into Emscripten's ENV
+            preRun: [function() {
+                const envVars = buildEnvVars();
+                /* JSON.stringify here on purpose — emscripten's print()
+                 * implementation in some configurations stringifies an
+                 * object argument as the literal "Object", which made
+                 * it impossible to verify whether YTRACE_DEFAULT_ON was
+                 * actually wired in from ?trace=1. */
+                console.log('[yetty] preRun: Setting ENV vars: ' +
+                            JSON.stringify(envVars));
+                // Emscripten's ENV is a global variable in yetty.js, not Module.ENV
+                Object.keys(envVars).forEach(key => {
+                    ENV[key] = envVars[key];
+                });
+            }],
+            onRuntimeInitialized: function() {
+                const status = document.getElementById('status');
+                const loading = document.getElementById('loading');
+                if (status) status.textContent = 'yetty ready!';
+                setTimeout(() => {
+                    if (loading) loading.style.display = 'none';
+                    const canvas = document.getElementById('canvas');
+                    if (canvas) {
+                        canvas.focus();
+                    }
+                }, 500);
+                resizeCanvas();
+                // Retry after yetty main loop starts and resize callback is registered
+                setTimeout(resizeCanvas, 1000);
+                setTimeout(resizeCanvas, 2000);
+            }
+        };
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // Use ResizeObserver to detect container size changes (tabbed
+        // shell resizing the instance panel, devtools open/close, …)
+        const container = document.getElementById('canvas-container');
+        if (container && typeof ResizeObserver !== 'undefined') {
+            const resizeObserver = new ResizeObserver(() => {
+                resizeCanvas();
+            });
+            resizeObserver.observe(container);
+        }
+
+        // Click on canvas to focus for keyboard input
+        document.getElementById('canvas').addEventListener('click', function() {
+            this.focus();
+        });
+
+        async function initYetty() {
+            const status = document.getElementById('status');
+            if (status) status.textContent = 'Loading yetty...';
+
+            try {
+                const script = document.createElement('script');
+                script.src = 'yetty.js';
+
+                await new Promise((resolve, reject) => {
+                    script.onload = resolve;
+                    script.onerror = () => reject(new Error('Failed to load yetty.js'));
+                    document.head.appendChild(script);
+                });
+
+                return true;
+            } catch (err) {
+                if (status) status.textContent = 'yetty error: ' + err.message;
+                return false;
+            }
+        }
+
+        // Wait for a {type:'vm-ready', ptyId} message to land on this
+        // window. Works for both VM ownership shapes: the standalone
+        // path's child VM iframe posts it straight to this window; in
+        // the embedded shape the shell forwards it here. Times out so
+        // we never deadlock the page.
+        function awaitVmReady(ptyId, timeoutMs) {
+            return new Promise(function (resolve, reject) {
+                let done = false;
+                const handler = function (event) {
+                    if (done) return;
+                    if (!event.data) return;
+                    if (event.data.type !== 'vm-ready') return;
+                    if (event.data.ptyId !== ptyId) return;
+                    done = true;
+                    window.removeEventListener('message', handler);
+                    resolve();
+                };
+                window.addEventListener('message', handler);
+                setTimeout(function () {
+                    if (done) return;
+                    done = true;
+                    window.removeEventListener('message', handler);
+                    reject(new Error('VM did not become ready within ' +
+                        (timeoutMs / 1000) + 's'));
+                }, timeoutMs);
+            });
+        }
+
+        // Local engine-iframe path: spawn the hidden engine iframe as a
+        // child of THIS page. Default page is tinyemu-iframe.html (the
+        // TinyEMU VM); yos mode passes yos-iframe.html, which speaks the
+        // exact same postMessage contract (term-* console channel +
+        // session-* telnet channel + vm-ready + yetty-status).
+        function spawnVMIframe(ptyId, cols, rows, iframePage) {
+            const id = 'yetty-vm-pty-' + ptyId;
+            let iframe = document.getElementById(id);
+            if (iframe) {
+                // Already there (e.g. soft re-launch) — don't blow it away.
+                return iframe;
+            }
+            iframe = document.createElement('iframe');
+            iframe.id = id;
+            /* Off-screen rather than display:none. Chrome heavily
+             * throttles timers in display:none iframes (sometimes
+             * down to ~1 Hz), which kept the wasm-interpreter VM
+             * inside from booting fast enough for telnetd to come
+             * up before the test capture window expired. Pinning
+             * it at left:-99999px keeps it visible to the
+             * scheduler (no throttling) but invisible to the
+             * user. width/height stay 1px so layout cost is nil.
+             * The yos engine needs live timers just the same. */
+            iframe.style.cssText =
+                'position:absolute; left:-99999px; top:-99999px;' +
+                ' width:1px; height:1px; border:0;' +
+                ' visibility:hidden; pointer-events:none;';
+            iframe.src = (iframePage || 'tinyemu-iframe.html') +
+                         '?ptyId=' + ptyId +
+                         '&cols=' + cols + '&rows=' + rows;
+            document.body.appendChild(iframe);
+            return iframe;
+        }
+
+        // Embedded VM path: the real VM iframe belongs to the shell
+        // (started from its Emulator tab), but the wasm glue in
+        // iframepty.c / iframe-transport.c looks up an element with id
+        // 'yetty-vm-pty-<id>' in THIS document and posts VM-bound
+        // messages (term-input / term-resize / session-open / session-tx
+        // / session-close / yetty-ready) into its contentWindow. Satisfy
+        // it with an empty same-origin frame whose window forwards
+        // everything up to the shell; the shell routes it on to the real
+        // VM and relays VM-originated messages (term-output / session-*)
+        // back into this window, where the glue's listeners live.
+        //
+        // Every forwarded message is tagged with this instance's id:
+        // telnet-session clientSids are allocated from a per-module
+        // counter (iframe-transport.c), so two terminal instances both
+        // claim clientSid 1 — the shell needs to know the sender to
+        // rewrite them into its shared wire-id namespace.
+        function createVmProxy(ptyId, instanceId) {
+            const id = 'yetty-vm-pty-' + ptyId;
+            let iframe = document.getElementById(id);
+            if (iframe) {
+                return iframe;
+            }
+            iframe = document.createElement('iframe');
+            iframe.id = id;
+            /* Nothing executes inside this frame, so display:none is
+             * fine here (no timers to throttle). */
+            iframe.style.cssText = 'display:none;';
+            document.body.appendChild(iframe);
+            // The initial about:blank document is same-origin — attach
+            // the forwarder directly on the child window; the handler
+            // closes over this page's window.parent (the shell).
+            iframe.contentWindow.addEventListener('message', function (event) {
+                if (!event.data || !event.data.type) return;
+                const payload = Object.assign({}, event.data,
+                                              { yettyInstanceId: instanceId });
+                window.parent.postMessage(payload, '*');
+            });
+            return iframe;
+        }
+
+        // ---- Transport / session-mode argv --------------------------------
+        // The flags travel to wasm main() via Module.arguments, which
+        // Module.callMain() (yetty-assets-preload.js) picks up.
+        const MODE_DEFAULT_URLS = {
+            websocket: 'ws://' + (location.hostname || '127.0.0.1') + ':8090',
+            telnet:    'ws://' + (location.hostname || '127.0.0.1') + ':8024',
+            ssh:       'ws://' + (location.hostname || '127.0.0.1') + ':8025',
+            relay:     'wss://relay.widgetry.org/',
+        };
+
+        function buildModuleArguments(config) {
+            const mode = config.mode;
+            const wsUrl = config.wsUrl;
+            if (mode === 'websocket') {
+                return wsUrl ? ['--websocket', wsUrl] : ['--websocket'];
+            }
+            if (mode === 'telnet') {
+                return wsUrl ? ['--telnet', '--websocket-url', wsUrl] : ['--telnet'];
+            }
+            if (mode === 'ssh') {
+                // The host part of USER@HOST is informational on webasm —
+                // the bridge owns the TCP endpoint; libssh2 in the
+                // browser terminates the crypto.
+                const args = ['--ssh', (config.sshUser || 'root') + '@websocket',
+                              '--ssh-password', config.sshPassword || ''];
+                if (wsUrl) args.push('--websocket-url', wsUrl);
+                return args;
+            }
+            if (mode === 'relay') {
+                // Bring up the in-browser lwIP netstack against the relay
+                // (wsUrl) and telnet to the target host:port over it —
+                // yetty's own TCP stack dials out through the relay's NAT,
+                // no per-host bridge. relayTarget is "host:port".
+                const args = ['--net-relay', wsUrl];
+                if (config.relayTarget) args.push('--telnet', config.relayTarget);
+                return args;
+            }
+            if (mode === 'yos') {
+                // Same pty factory path as temu: iframe-pty console +
+                // telnet sessions over the iframe transport. The yos
+                // iframe implements the same postMessage contract as the
+                // TinyEMU iframe, so no C-side flag exists for it.
+                return ['--temu'];
+            }
+            return ['--temu'];
+        }
+
+        // ---- Session config ------------------------------------------------
+        // Embedded instances get their config from the shell over
+        // postMessage (keeps ssh passwords out of iframe URLs). Query
+        // params still win when present, so terminal.html?mode=… deep
+        // links keep working standalone too.
+        const KNOWN_MODES = ['temu', 'yos', 'websocket', 'telnet', 'ssh', 'relay'];
+
+        function configFromUrlParams() {
+            let mode = (urlParams.mode || '').toLowerCase();
+            // ?relay=URL is shorthand for the relay mode with that URL.
+            if (!mode && urlParams.relay) { mode = 'relay'; }
+            if (KNOWN_MODES.indexOf(mode) === -1) return null;
+            return {
+                mode: mode,
+                wsUrl: urlParams.url || urlParams.wsurl || urlParams.relay || '',
+                sshUser: urlParams.user || '',
+                sshPassword: urlParams.password || '',
+                relayTarget: urlParams.target || '',
+                trace: traceFromUrl
+            };
+        }
+
+        function configFromShell(timeoutMs) {
+            return new Promise(function (resolve, reject) {
+                let done = false;
+                const handler = function (event) {
+                    if (done) return;
+                    if (!event.data) return;
+                    if (event.data.type !== 'yetty-instance-config') return;
+                    done = true;
+                    window.removeEventListener('message', handler);
+                    resolve(event.data.config || {});
+                };
+                window.addEventListener('message', handler);
+                window.parent.postMessage({ type: 'yetty-instance-hello' }, '*');
+                setTimeout(function () {
+                    if (done) return;
+                    done = true;
+                    window.removeEventListener('message', handler);
+                    reject(new Error('no session config received from the shell page'));
+                }, timeoutMs);
+            });
+        }
+
+        async function resolveConfig() {
+            const fromUrl = configFromUrlParams();
+            if (fromUrl) return fromUrl;
+            if (embedded) {
+                return configFromShell(15000);
+            }
+            throw new Error('no-mode');
+        }
+
+        async function launchYetty(config) {
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+
+            resizeCanvas();
+            window.yettyStatus.append('session mode: ' + config.mode +
+                (config.wsUrl ? ' (' + config.wsUrl + ')' : ''), 'phase');
+            window.yettyStatus.append('checking WebGPU…');
+            const hasWebGPU = await checkWebGPU();
+            if (!hasWebGPU) {
+                window.yettyStatus.append('WebGPU not available — aborting', 'err');
+                return;
+            }
+            window.yettyStatus.append('WebGPU ready', 'ok');
+
+            Module.arguments = buildModuleArguments(config);
+            // Don't echo the password into the visible boot log.
+            window.yettyStatus.append('yetty args: ' +
+                Module.arguments.map(function (arg, index) {
+                    return Module.arguments[index - 1] === '--ssh-password'
+                        ? '***' : arg;
+                }).join(' '), 'dim');
+
+            const header = document.getElementById('yetty-status-header');
+            if (config.mode === 'temu' || config.mode === 'yos') {
+                const PTY_ID = 1;
+                if (config.mode === 'yos') {
+                    // The yos engine is light (~40 MB of wasm tools,
+                    // seconds to boot), so every instance hosts its own
+                    // iframe — embedded or standalone; no shared-engine
+                    // relay like the TinyEMU VM.
+                    if (header) {
+                        header.textContent = 'Booting the yos FreeBSD-wasm ' +
+                            'userspace (zsh, nvim, tmux as wasm32 binaries) ' +
+                            'in your browser. The log below streams the tool ' +
+                            'downloads; this overlay collapses once the ' +
+                            'terminal is running.';
+                    }
+                    window.yettyStatus.append(
+                        'spawning yos iframe (pty ' + PTY_ID + ')…', 'phase');
+                    spawnVMIframe(PTY_ID, 80, 24, 'yos-iframe.html');
+                    window.yettyStatus.append(
+                        'waiting for the yos userspace to be ready ' +
+                        '(tool download + boot)…');
+                } else if (embedded) {
+                    // Shared emulator owned by the shell page. Attach:
+                    // put the proxy frame in place FIRST (so the wasm
+                    // glue finds it instead of spawning a nested VM),
+                    // then ask the shell to route VM traffic here and
+                    // to start the emulator if it isn't running yet.
+                    if (header) {
+                        header.textContent = 'Attaching to the shared TinyEMU ' +
+                            'emulator. Its download/boot log streams on the ' +
+                            'Emulator tab of the main page; this overlay ' +
+                            'collapses once the terminal is running.';
+                    }
+                    createVmProxy(PTY_ID, config.instanceId || 0);
+                    window.yettyStatus.append(
+                        'attaching to shared emulator (pty ' + PTY_ID + ')…', 'phase');
+                    window.parent.postMessage({ type: 'yetty-temu-attach' }, '*');
+                    window.yettyStatus.append(
+                        'waiting for the emulator to be ready — see the Emulator tab…');
+                } else {
+                    // Self-contained: this page owns the VM iframe, the
+                    // whole boot log streams through this overlay.
+                    window.yettyStatus.append(
+                        'spawning VM iframe (pty ' + PTY_ID + ')…', 'phase');
+                    spawnVMIframe(PTY_ID, 80, 24);
+                    window.yettyStatus.append(
+                        'waiting for VM to be ready (kernel+rootfs download + boot)…');
+                }
+                try {
+                    // temu: 10 minutes is ridiculous but the rootfs is
+                    // ~250 MB brotli'd over potentially-slow links +
+                    // the brotli decode itself takes seconds. Better an
+                    // eventual success than a spurious timeout. yos is
+                    // ~40 MB of tools — 5 minutes is plenty.
+                    await awaitVmReady(PTY_ID,
+                        (config.mode === 'yos' ? 5 : 10) * 60 * 1000);
+                } catch (err) {
+                    window.yettyStatus.append(
+                        'VM never signaled ready: ' + err.message, 'err');
+                    return;
+                }
+                window.yettyStatus.append('VM is ready', 'ok');
+            } else {
+                // No VM phase — retitle the boot console header (its
+                // default text narrates a generic session start).
+                if (header) {
+                    header.textContent = 'Connecting over WebSocket (' +
+                        (config.wsUrl || 'default endpoint') + '). Click − in the ' +
+                        'top-right corner to minimize this log.';
+                }
+            }
+
+            window.yettyStatus.append('loading yetty.js…');
+            await initYetty();
+        }
+
+        async function init() {
+            resizeCanvas();
+            let config;
+            try {
+                config = await resolveConfig();
+            } catch (err) {
+                if (err && err.message === 'no-mode') {
+                    fatalError('No session mode given. Open <code>index.html</code> ' +
+                        'for the session menu, or pass one directly: ' +
+                        '<code>terminal.html?mode=temu</code>, ' +
+                        '<code>?mode=websocket&amp;url=ws://host:8090</code>, ' +
+                        '<code>?mode=telnet&amp;url=ws://host:8024</code>, ' +
+                        '<code>?mode=ssh&amp;user=you</code>, ' +
+                        '<code>?mode=relay&amp;url=wss://host/</code>.');
+                } else {
+                    fatalError('Failed to obtain session config: ' +
+                        (err && err.message || err));
+                }
+                return;
+            }
+            if (config.trace) traceOn = true;
+            if (!config.wsUrl && MODE_DEFAULT_URLS[config.mode]) {
+                config.wsUrl = MODE_DEFAULT_URLS[config.mode];
+            }
+            await launchYetty(config);
+        }
+
+        init();
+    </script>
+</body>
+</html>

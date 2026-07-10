@@ -91,7 +91,12 @@ target_link_options(tinyemu_vm PRIVATE
 #
 # manifest.json schema mirrors yetty-assets:
 #   { "version": "<stamp>",
-#     "entries": [ { "url": "X.br", "dest": "/yetty-vm/yemu/X", "brotli": true }, ... ] }
+#     "entries": [ { "url": "X.br", "dest": "/yetty-vm/yemu/X", "brotli": true,
+#                    "sha256": "<hash of the staged file>" }, ... ] }
+#
+# The per-entry sha256 is the browser-side cache key (Cache Storage API
+# in tinyemu-iframe.html) — the ~150 MB rootfs only re-downloads when
+# its bytes actually change, not on every emulator start or deploy.
 if(NOT TINYEMU_KERNEL_PATH OR NOT TINYEMU_OPENSBI_PATH)
     message(FATAL_ERROR
         "tinyemu-iframe: missing kernel/opensbi paths — shared.cmake "
@@ -144,22 +149,26 @@ configure_file("${YETTY_ROOT}/assets/yemu/temu/yetty-temu-extended.cfg"
 if(_ROOTFS_BR)
     configure_file("${_ROOTFS_BR}"
         "${YETTY_TINYEMU_ASSETS_DIR}/yetty-rootfs-riscv.img.br" COPYONLY)
+    file(SHA256 "${YETTY_TINYEMU_ASSETS_DIR}/yetty-rootfs-riscv.img.br" _ROOTFS_SHA)
     set(_ROOTFS_MANIFEST_ENTRY
-        "    { \"url\": \"yetty-rootfs-riscv.img.br\",   \"dest\": \"/yetty-vm/yemu/yetty-rootfs-riscv.img\",   \"brotli\": true  },\n")
+        "    { \"url\": \"yetty-rootfs-riscv.img.br\",   \"dest\": \"/yetty-vm/yemu/yetty-rootfs-riscv.img\",   \"brotli\": true,  \"sha256\": \"${_ROOTFS_SHA}\" },\n")
 else()
     set(_ROOTFS_MANIFEST_ENTRY "")
 endif()
 
 # Manifest. dest paths match BRIDGE_CFG_PATH ("/yetty-vm/...") in
 # tinyemu-bridge.c and the cfg's $YETTY_DATA_DIR expansion.
+file(SHA256 "${YETTY_TINYEMU_ASSETS_DIR}/kernel-riscv64.bin.br" _KERNEL_SHA)
+file(SHA256 "${YETTY_TINYEMU_ASSETS_DIR}/opensbi-fw_jump.elf.br" _OPENSBI_SHA)
+file(SHA256 "${YETTY_TINYEMU_ASSETS_DIR}/yetty-temu-extended.cfg" _TEMU_CFG_SHA)
 string(TIMESTAMP _BUILD_STAMP "%Y%m%d%H%M%S")
 file(WRITE "${YETTY_TINYEMU_ASSETS_DIR}/manifest.json"
 "{
   \"version\": \"${_BUILD_STAMP}\",
   \"entries\": [
-    { \"url\": \"kernel-riscv64.bin.br\",       \"dest\": \"/yetty-vm/yemu/kernel-riscv64.bin\",       \"brotli\": true  },
-    { \"url\": \"opensbi-fw_jump.elf.br\",      \"dest\": \"/yetty-vm/yemu/opensbi-fw_jump.elf\",      \"brotli\": true  },
-${_ROOTFS_MANIFEST_ENTRY}    { \"url\": \"yetty-temu-extended.cfg\",     \"dest\": \"/yetty-vm/yetty-temu-extended.cfg\",       \"brotli\": false }
+    { \"url\": \"kernel-riscv64.bin.br\",       \"dest\": \"/yetty-vm/yemu/kernel-riscv64.bin\",       \"brotli\": true,  \"sha256\": \"${_KERNEL_SHA}\" },
+    { \"url\": \"opensbi-fw_jump.elf.br\",      \"dest\": \"/yetty-vm/yemu/opensbi-fw_jump.elf\",      \"brotli\": true,  \"sha256\": \"${_OPENSBI_SHA}\" },
+${_ROOTFS_MANIFEST_ENTRY}    { \"url\": \"yetty-temu-extended.cfg\",     \"dest\": \"/yetty-vm/yetty-temu-extended.cfg\",       \"brotli\": false, \"sha256\": \"${_TEMU_CFG_SHA}\" }
   ]
 }
 ")

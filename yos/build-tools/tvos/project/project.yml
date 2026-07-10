@@ -1,0 +1,39 @@
+# project.yml — xcodegen recipe for a tvOS stub whose sole purpose is to
+# get a development provisioning profile downloaded into
+# ~/Library/Developer/Xcode/UserData/Provisioning Profiles/ under
+# bundle id `local.yos.tvos`. build-tools/tvos/deploy.sh then splices
+# that profile into the real yos.app and signs it.
+#
+# Generated project (xcodegen generate) → yos-tvos.xcodeproj.
+# Real codesign + install happens in deploy.sh, not here.
+#
+# Team is R2XJ745TS6 (Personal Team / free provisioning) — same one
+# the yetty sibling project uses. Override with TEAM_ID env var if
+# you have a paid Apple Developer Program team.
+
+name: yos-tvos
+options:
+  bundleIdPrefix: local.yos
+  developmentLanguage: en
+  deploymentTarget:
+    tvOS: "16.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: R2XJ745TS6
+    CODE_SIGN_STYLE: Automatic
+    PRODUCT_BUNDLE_IDENTIFIER: local.yos.tvos
+    TARGETED_DEVICE_FAMILY: "3"
+    TVOS_DEPLOYMENT_TARGET: "16.0"
+    SUPPORTED_PLATFORMS: "appletvos appletvsimulator"
+    SDKROOT: appletvos
+    INFOPLIST_FILE: yos-tvos/Info.plist
+    INFOPLIST_KEY_CFBundleDisplayName: yos
+targets:
+  yos:
+    type: application
+    platform: tvOS
+    sources:
+      - yos-tvos/stub.m
+    settings:
+      base:
+        PRODUCT_NAME: yos

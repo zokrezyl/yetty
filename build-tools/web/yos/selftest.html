@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>yos iframe selftest</title>
+    <style>
+        body { background: #0B1014; color: #E0E5E4; font: 12px monospace; }
+        #verdict { font-size: 16px; font-weight: bold; padding: 8px 0; }
+        #log { white-space: pre-wrap; word-break: break-all; color: #9FA7A8; }
+    </style>
+</head>
+<body>
+<!--
+  Headless proof of the yos-iframe protocol, standing in for yetty.
+  Exercises BOTH channels:
+
+  1. console (iframe-pty):   yetty-ready handshake, term-input rountrip.
+  2. session (iframe-transport + telnet-pty): session-open, telnetd
+     greeting, NAWS subnegotiation (100x30), binary roundtrip - the
+     command echoes $COLUMNS so the pass proves the NAWS resize landed
+     as SIGWINCH in the session's zsh.
+
+    google-chrome-stable --headless=new --disable-gpu \
+        --virtual-time-budget=120000 --dump-dom \
+        http://127.0.0.1:8100/selftest.html | grep 'SELFTEST'
+-->
+<div id="verdict">SELFTEST RUNNING</div>
+<div id="log"></div>
+<script>
+    const PTY_ID = 1;
+    const SESSION_SID = 7;
+    const CONSOLE_COMMAND = "echo yos-roundtrip-$((6*7))\r";
+    const CONSOLE_EXPECT = "yos-roundtrip-42";
+    const SESSION_COMMAND = "echo yos-session-$COLUMNS\r";
+    const SESSION_EXPECT = "yos-session-100";
+    const IAC = 255, DONT = 254, DO = 253, WONT = 252, WILL = 251, SB = 250, SE = 240;
+    const OPT_NAWS = 31;
+
+    const verdictEl = document.getElementById('verdict');
+    const logEl = document.getElementById('log');
+    const decoder = new TextDecoder();
+    const encoder = new TextEncoder();
+    let consoleCollected = "";
+    let sessionCollected = "";
+    let consolePass = false;
+    let sessionPass = false;
+    let sessionGreeted = false;
+    let finished = false;
+
+    function logLine(text) {
+        logEl.textContent += text + "\n";
+        try { console.log('[selftest]', text); } catch (_) {}
+    }
+    function maybeFinish() {
+        if (consolePass && sessionPass) finish(true);
+    }
+    function finish(pass, reason) {
+        if (finished) return;
+        finished = true;
+        verdictEl.textContent = pass ? 'SELFTEST PASS'
+            : 'SELFTEST FAIL: ' + reason + ' (console=' + consolePass +
+              ' session=' + sessionPass + ')';
+        document.title = pass ? 'SELFTEST PASS' : 'SELFTEST FAIL';
+        logLine('console output tail: ' + JSON.stringify(consoleCollected.slice(-400)));
+        logLine('session output tail: ' + JSON.stringify(sessionCollected.slice(-400)));
+    }
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'yetty-vm-pty-' + PTY_ID;
+    iframe.style.cssText = 'width:1px;height:1px;border:0;visibility:hidden;';
+    iframe.src = 'yos-iframe.html?ptyId=' + PTY_ID + '&cols=80&rows=24';
+    document.body.appendChild(iframe);
+    const post = (message) => iframe.contentWindow.postMessage(message, '*');
+
+    window.addEventListener('message', (event) => {
+        const msg = event.data;
+        if (!msg) return;
+        if (msg.type === 'yetty-status') {
+            logLine(msg.text + (msg.level ? ' [' + msg.level + ']' : ''));
+            if (msg.level === 'err' && String(msg.text).indexOf('boot failed') !== -1) {
+                finish(false, 'engine boot failed');
+            }
+            return;
+        }
+        if (msg.type === 'vm-ready' && msg.ptyId === PTY_ID) {
+            logLine('>> vm-ready - attaching console (yetty-ready) + opening session');
+            post({ type: 'yetty-ready', ptyId: PTY_ID });
+            post({ type: 'session-open', clientSid: SESSION_SID, port: 23 });
+            setTimeout(() => {
+                logLine('>> console typing: ' + JSON.stringify(CONSOLE_COMMAND));
+                post({ type: 'term-input', ptyId: PTY_ID, data: CONSOLE_COMMAND });
+            }, 2000);
+            return;
+        }
+        if (msg.type === 'session-opened') {
+            logLine('>> session-opened clientSid=' + msg.clientSid + ' ok=' + msg.ok);
+            if (!msg.ok) finish(false, 'session-open refused');
+            return;
+        }
+        if (msg.type === 'session-rx' && msg.clientSid === SESSION_SID) {
+            const bytes = msg.data instanceof Uint8Array ? msg.data : new Uint8Array(msg.data);
+            // First rx is the telnetd greeting - answer like telnet-pty.c:
+            // WILL NAWS + the NAWS subnegotiation (100x30), then the command.
+            if (!sessionGreeted && bytes.length >= 3 && bytes[0] === IAC) {
+                sessionGreeted = true;
+                logLine('>> greeting received (' + Array.from(bytes).join(',') +
+                        ') - sending WILL NAWS + NAWS 100x30 + command');
+                post({ type: 'session-tx', clientSid: SESSION_SID,
+                       data: new Uint8Array([IAC, WILL, OPT_NAWS,
+                                             IAC, SB, OPT_NAWS, 0, 100, 0, 30, IAC, SE,
+                                             IAC, DO, 1, IAC, DO, 3]) });
+                setTimeout(() => {
+                    post({ type: 'session-tx', clientSid: SESSION_SID,
+                           data: encoder.encode(SESSION_COMMAND) });
+                }, 1500);
+                return;
+            }
+            sessionCollected += decoder.decode(bytes);
+            if (!sessionPass && sessionCollected.indexOf(SESSION_EXPECT) !== -1) {
+                sessionPass = true;
+                logLine('== session roundtrip OK (NAWS-sized $COLUMNS came back) ==');
+                maybeFinish();
+            }
+            return;
+        }
+        if (msg.type === 'term-output' && msg.ptyId === PTY_ID) {
+            consoleCollected += msg.data;
+            if (!consolePass && consoleCollected.indexOf(CONSOLE_EXPECT) !== -1) {
+                consolePass = true;
+                logLine('== console roundtrip OK ==');
+                maybeFinish();
+            }
+        }
+    });
+
+    setTimeout(() => finish(false, 'timeout'), 110000);
+</script>
+</body>
+</html>

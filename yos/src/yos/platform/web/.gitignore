@@ -1,0 +1,3 @@
+*.wasm
+lua/.build/
+lua/**/*.o

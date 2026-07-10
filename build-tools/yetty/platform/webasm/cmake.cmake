@@ -343,7 +343,9 @@ add_custom_command(TARGET yetty PRE_LINK
 # fix this we ALSO declare a phony target with output-file dependencies
 # so ninja re-runs the copies whenever any source HTML/JS changes.
 set(_WEB_COPY_FILES
+    ${CMAKE_BINARY_DIR}/terminal.html
     ${CMAKE_BINARY_DIR}/tinyemu-iframe.html
+    ${CMAKE_BINARY_DIR}/yos-iframe.html
     ${CMAKE_BINARY_DIR}/serve.py
     ${CMAKE_BINARY_DIR}/favicon.ico
     ${CMAKE_BINARY_DIR}/apple-touch-icon.jpg
@@ -371,10 +373,22 @@ set_property(DIRECTORY "${CMAKE_SOURCE_DIR}" APPEND PROPERTY
     CMAKE_CONFIGURE_DEPENDS
     "${YETTY_ROOT}/build-tools/web/index.html")
 add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/terminal.html
+    COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/terminal.html ${CMAKE_BINARY_DIR}/terminal.html
+    DEPENDS ${YETTY_ROOT}/build-tools/web/terminal.html
+    COMMENT "Copy web/terminal.html → build dir"
+)
+add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/tinyemu-iframe.html
     COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/tinyemu-iframe.html ${CMAKE_BINARY_DIR}/tinyemu-iframe.html
     DEPENDS ${YETTY_ROOT}/build-tools/web/tinyemu-iframe.html
     COMMENT "Copy web/tinyemu-iframe.html → build dir"
+)
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/yos-iframe.html
+    COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/yos/yos-iframe.html ${CMAKE_BINARY_DIR}/yos-iframe.html
+    DEPENDS ${YETTY_ROOT}/build-tools/web/yos/yos-iframe.html
+    COMMENT "Copy web/yos/yos-iframe.html → build dir"
 )
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/serve.py

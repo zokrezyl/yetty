@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><title>share probe</title>
+<script type="module">
+const mem = new WebAssembly.Memory({initial:1, maximum:2, shared:true});
+const ia = new Int32Array(mem.buffer);
+const w = new Worker(new URL("./share_probe_worker.mjs", import.meta.url), {type:"module"});
+w.onmessage = (e) => {
+  // give the store a moment to be visible (same SAB → immediate)
+  window.__probe = { pageSeesSharedHere: mem.buffer instanceof SharedArrayBuffer, workerSawShared: e.data.shared, valueAtZero: Atomics.load(ia,0) };
+};
+w.onerror = (e) => { window.__probe = { error: e.message }; };
+w.postMessage({memory: mem});
+</script>

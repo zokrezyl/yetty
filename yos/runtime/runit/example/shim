@@ -1,0 +1,15 @@
+#!/libexec/zsh -f
+# telnetd-login replacement.
+#
+# FreeBSD telnetd's `-p <prog>` option tells it to exec <prog> after
+# the PTY is set up, instead of /bin/login. It still passes the
+# original login-style argv (`-h host -p -- name` etc.) which a real
+# login understands but zsh doesn't. We don't have /bin/login (no
+# passwd file, no PAM, no utmp), so we don't WANT login at all —
+# this shim just discards the args and execs an interactive zsh.
+#
+# The PTY is already set up by telnetd (login_tty was called in the
+# child) so stdin/stdout/stderr are the PTY slave; zsh sees a real
+# terminal and runs in interactive mode. PATH was exported by ../run
+# so the wasm tools (ls, ps, cat, …) resolve.
+exec zsh -f

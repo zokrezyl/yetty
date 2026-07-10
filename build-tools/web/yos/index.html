@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>yetty × yos — wasm userspace in the browser</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%; height: 100%; overflow: hidden;
+            background: #0B1014;
+        }
+        body { display: flex; flex-direction: column; }
+        #topbar {
+            flex: 0 0 auto;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            padding: 4px 12px;
+            background: #141A1F;
+            border-bottom: 1px solid #364A47;
+            color: #9FA7A8;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 12px; line-height: 1.4;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        #topbar a { color: #6BA892; text-decoration: none; }
+        #topbar a:hover { color: #74C5A5; }
+        #topbar .sep { color: #364A47; }
+        #canvas-container { flex: 1 1 auto; min-height: 0; width: 100%; position: relative; }
+        canvas { display: block; }
+        #loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center; color: #E0E5E4;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+        }
+        #loading .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid #364A47; border-top-color: #6BA892;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #status { font-size: 0.9em; color: #556162; margin-top: 10px; }
+
+        /* Boot console — append-only log of tool downloads, engine boot
+         * and yetty startup. Full-viewport translucent overlay, closed
+         * via the − button (or auto-minimized once the shell is live). */
+        #yos-boot {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.55);
+            color: #E0E5E4;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 12px; line-height: 1.45;
+            z-index: 200;
+            display: flex; flex-direction: column;
+        }
+        #yos-boot.minimized { display: none !important; }
+        #yos-boot-header {
+            flex: 0 0 auto;
+            padding: 12px 48px 10px 16px;
+            background: rgba(20, 26, 31, 0.65);
+            border-bottom: 1px solid #364A47;
+            color: #9FA7A8; font-size: 12px; line-height: 1.5;
+        }
+        #yos-boot-header .hint-key { color: #6BA892; font-weight: bold; }
+        #yos-boot-log {
+            overflow-y: auto; flex: 1 1 auto; min-height: 0;
+            padding: 12px 16px 16px 16px;
+        }
+        #yos-boot-log::-webkit-scrollbar { width: 10px; }
+        #yos-boot-log::-webkit-scrollbar-track { background: #141A1F; }
+        #yos-boot-log::-webkit-scrollbar-thumb { background: #364A47; border-radius: 5px; }
+        #yos-boot .line { white-space: pre-wrap; word-break: break-all; }
+        #yos-boot .line.phase { color: #74C5A5; font-weight: bold; }
+        #yos-boot .line.ok    { color: #6BA892; }
+        #yos-boot .line.err   { color: #f55; font-weight: bold; }
+        #yos-boot .line.dim   { color: #556162; }
+        #yos-boot-minimize {
+            position: absolute; top: 6px; right: 10px;
+            width: 28px; height: 28px; line-height: 24px; text-align: center;
+            color: #E0E5E4; background: #1E262C;
+            border: 1px solid #364A47; border-radius: 4px;
+            cursor: pointer; font-size: 18px; font-family: inherit;
+            user-select: none; z-index: 1;
+        }
+        #yos-boot-minimize:hover { background: #6BA892; color: #0B1014; }
+        #yos-boot-restore {
+            position: fixed; top: 8px; right: 8px; display: none;
+            padding: 6px 12px;
+            color: #9FA7A8; background: rgba(20, 26, 31, 0.92);
+            border: 1px solid #364A47; border-radius: 14px;
+            cursor: pointer; font-size: 12px;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            user-select: none; z-index: 201;
+        }
+        #yos-boot-restore.visible { display: block; }
+        #yos-boot-restore:hover { color: #74C5A5; border-color: #6BA892; }
+    </style>
+</head>
+<body>
+    <div id="topbar">
+        <span style="color:#6BA892">yetty</span><span class="sep">×</span><span style="color:#74C5A5">yos</span>
+        <span class="sep">·</span>
+        <span>FreeBSD wasm32 userspace — zsh · nvim · tmux · coreutils — no server, no VM</span>
+        <span class="sep">·</span>
+        <a href="https://github.com/zokrezyl/yetty" target="_blank" rel="noopener">github.com/zokrezyl/yetty</a>
+    </div>
+    <div id="canvas-container">
+        <canvas id="canvas" width="1024" height="768" tabindex="0"></canvas>
+        <div id="yos-boot"><button id="yos-boot-minimize" type="button"
+                title="Minimize boot console">&minus;</button><div id="yos-boot-header">
+            Booting a FreeBSD wasm32 userspace on the yos engine, rendered by
+            yetty (WebGPU). The log below streams every step — tool downloads,
+            engine boot, yetty startup. Once you see
+            <span class="hint-key">[yos] zsh session live</span> the shell is
+            ready; this overlay minimizes itself, or click <strong>&minus;</strong>.
+        </div><div id="yos-boot-log"></div></div>
+        <button id="yos-boot-restore" type="button" title="Show boot console">&#9707; console</button>
+        <div id="loading" style="display: none;">
+            <div class="spinner"></div>
+            <div>Loading WebGPU…</div>
+            <div id="status"></div>
+        </div>
+    </div>
+
+    <script>
+        // ---- Boot console --------------------------------------------
+        // window.yettyStatus.append(text, level?) — same surface the
+        // main index.html exposes, so iframe 'yetty-status' messages
+        // and iframe-pty.c's EM_ASM status calls both land here.
+        (function () {
+            const overlay = document.getElementById('yos-boot');
+            const log = document.getElementById('yos-boot-log');
+            const restoreBtn = document.getElementById('yos-boot-restore');
+            const MAX_LINES = 2000;
+            const READY_MARKER = 'zsh session live';
+            let userMinimized = false;
+            let autoMinimizeArmed = true;
+            const tagged = Object.create(null);
+
+            function makeLine(text, level) {
+                const line = document.createElement('div');
+                line.className = 'line' + (level ? ' ' + level : '');
+                line.textContent = text;
+                return line;
+            }
+            function maybeAutoMinimize(text) {
+                if (!autoMinimizeArmed || typeof text !== 'string') return;
+                if (text.indexOf(READY_MARKER) === -1) return;
+                autoMinimizeArmed = false;
+                setTimeout(minimize, 600);
+            }
+            function append(text, level) {
+                try { console.log('[yos-status]', text); } catch (_) {}
+                log.appendChild(makeLine(text, level));
+                while (log.childElementCount > MAX_LINES) log.removeChild(log.firstChild);
+                log.scrollTop = log.scrollHeight;
+                maybeAutoMinimize(text);
+            }
+            function update(tag, text, level) {
+                try { console.log('[yos-status]', text); } catch (_) {}
+                let line = tagged[tag];
+                if (!line || !line.parentNode) {
+                    line = makeLine(text, level);
+                    tagged[tag] = line;
+                    log.appendChild(line);
+                } else {
+                    line.textContent = text;
+                    if (level) line.className = 'line ' + level;
+                }
+                log.scrollTop = log.scrollHeight;
+                maybeAutoMinimize(text);
+            }
+            function minimize() {
+                userMinimized = true;
+                overlay.classList.add('minimized');
+                restoreBtn.classList.add('visible');
+                document.getElementById('canvas').focus();
+            }
+            function restore() {
+                userMinimized = false;
+                overlay.classList.remove('minimized');
+                restoreBtn.classList.remove('visible');
+                log.scrollTop = log.scrollHeight;
+            }
+            window.yettyStatus = { append, update, minimize, restore,
+                                   hide: minimize, autoHide: () => {} };
+            document.getElementById('yos-boot-minimize').addEventListener('click', minimize);
+            restoreBtn.addEventListener('click', restore);
+
+            // Iframe → parent status pump.
+            window.addEventListener('message', (event) => {
+                const msg = event.data;
+                if (!msg || msg.type !== 'yetty-status') return;
+                if (typeof msg.text !== 'string') return;
+                if (msg.tag) update(msg.tag, msg.text, msg.level);
+                else append(msg.text, msg.level);
+            });
+        })();
+
+        // ---- URL params ------------------------------------------------
+        const urlParams = {};
+        window.location.search.substring(1).split('&').forEach((pair) => {
+            if (!pair) return;
+            const [key, value] = pair.split('=');
+            urlParams[decodeURIComponent(key)] = decodeURIComponent(value || '');
+        });
+        const traceOn = ['1', 'on', 'yes', 'true'].includes(
+            (urlParams.trace || urlParams.ytrace || urlParams.YTRACE_DEFAULT_ON || '').toLowerCase());
+
+        // ---- WebGPU ----------------------------------------------------
+        async function checkWebGPU() {
+            const status = document.getElementById('status');
+            if (!navigator.gpu) {
+                document.getElementById('loading').innerHTML =
+                    '<div style="color:#f55;">WebGPU Not Supported</div>' +
+                    '<div style="margin-top:10px;font-size:0.9em;">' +
+                    'Try Chrome/Edge 113+ or Firefox Nightly with WebGPU enabled.</div>';
+                return false;
+            }
+            try {
+                status.textContent = 'Requesting WebGPU adapter…';
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) { status.textContent = 'No WebGPU adapter found'; return false; }
+                status.textContent = 'Requesting WebGPU device…';
+                const device = await adapter.requestDevice({
+                    requiredLimits: {
+                        maxStorageBuffersPerShaderStage: 8,
+                        maxTextureDimension2D: Math.min(16384, adapter.limits.maxTextureDimension2D),
+                    }
+                });
+                if (!device) { status.textContent = 'Failed to get WebGPU device'; return false; }
+                Module.preinitializedWebGPUDevice = device;
+                status.textContent = 'WebGPU initialized';
+                return true;
+            } catch (err) {
+                status.textContent = 'WebGPU error: ' + err.message;
+                return false;
+            }
+        }
+
+        // ---- Canvas sizing ----------------------------------------------
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            const canvas = document.getElementById('canvas');
+            if (!container || !canvas) return;
+            const rect = container.getBoundingClientRect();
+            const width = Math.floor(rect.width);
+            const height = Math.floor(rect.height);
+            if (width > 0 && height > 0 && (canvas.width !== width || canvas.height !== height)) {
+                canvas.width = width;
+                canvas.height = height;
+                if (typeof Module !== 'undefined' && Module._yetty_handle_resize) {
+                    Module._yetty_handle_resize(width, height);
+                }
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+        if (typeof ResizeObserver !== 'undefined') {
+            new ResizeObserver(resizeCanvas).observe(document.getElementById('canvas-container'));
+        }
+        document.getElementById('canvas').addEventListener('click', function () { this.focus(); });
+
+        // ---- Emscripten module ------------------------------------------
+        var Module = {
+            canvas: document.getElementById('canvas'),
+            // --temu routes terminal 1 to the iframe-pty, which speaks the
+            // postMessage protocol our yos iframe implements.
+            arguments: ['--temu'],
+            print: (text) => console.log(text),
+            printErr: (text) => console.log(text),
+            preRun: [function () {
+                if (traceOn) ENV.YTRACE_DEFAULT_ON = 'yes';
+            }],
+            onRuntimeInitialized: function () {
+                const loading = document.getElementById('loading');
+                setTimeout(() => {
+                    if (loading) loading.style.display = 'none';
+                    document.getElementById('canvas').focus();
+                }, 500);
+                resizeCanvas();
+                setTimeout(resizeCanvas, 1000);
+                setTimeout(resizeCanvas, 2000);
+            }
+        };
+
+        // ---- yos iframe + launch ----------------------------------------
+        // Spawn the engine iframe FIRST (id must be yetty-vm-pty-<ptyId>,
+        // matching iframe-pty.c's getElementById); only load yetty.js once
+        // the engine posts vm-ready, so yetty never renders a dead
+        // terminal while 75 wasm tools stream in.
+        const PTY_ID = 1;
+
+        function spawnYosIframe(cols, rows) {
+            const id = 'yetty-vm-pty-' + PTY_ID;
+            let iframe = document.getElementById(id);
+            if (iframe) return iframe;
+            iframe = document.createElement('iframe');
+            iframe.id = id;
+            /* Off-screen rather than display:none — browsers throttle
+             * timers in display:none iframes; the engine's settle /
+             * deadline timers must keep firing. */
+            iframe.style.cssText =
+                'position:absolute; left:-99999px; top:-99999px;' +
+                ' width:1px; height:1px; border:0;' +
+                ' visibility:hidden; pointer-events:none;';
+            iframe.src = 'yos-iframe.html?ptyId=' + PTY_ID +
+                         '&cols=' + cols + '&rows=' + rows;
+            document.body.appendChild(iframe);
+            return iframe;
+        }
+
+        function awaitVmReady(timeoutMs) {
+            return new Promise((resolve, reject) => {
+                let done = false;
+                const handler = (event) => {
+                    if (done || !event.data) return;
+                    if (event.data.type !== 'vm-ready' || event.data.ptyId !== PTY_ID) return;
+                    done = true;
+                    window.removeEventListener('message', handler);
+                    resolve();
+                };
+                window.addEventListener('message', handler);
+                setTimeout(() => {
+                    if (done) return;
+                    done = true;
+                    window.removeEventListener('message', handler);
+                    reject(new Error('yos engine not ready within ' + (timeoutMs / 1000) + 's'));
+                }, timeoutMs);
+            });
+        }
+
+        async function init() {
+            resizeCanvas();
+            window.yettyStatus.append('spawning yos engine iframe (pty ' + PTY_ID + ')…', 'phase');
+            spawnYosIframe(80, 24);
+            window.yettyStatus.append('waiting for the yos userspace (tool downloads + boot)…');
+            try {
+                // Generous: 75 tools (nvim alone ~14 MB) + fs pack on a slow link.
+                await awaitVmReady(5 * 60 * 1000);
+            } catch (err) {
+                window.yettyStatus.append(err.message, 'err');
+                return;
+            }
+            window.yettyStatus.append('yos userspace is ready', 'ok');
+
+            document.getElementById('loading').style.display = 'block';
+            window.yettyStatus.append('checking WebGPU…');
+            if (!await checkWebGPU()) {
+                window.yettyStatus.append('WebGPU not available — aborting', 'err');
+                return;
+            }
+            window.yettyStatus.append('WebGPU ready', 'ok');
+            window.yettyStatus.append('loading yetty.js…');
+            const script = document.createElement('script');
+            script.src = 'yetty.js';
+            script.onerror = () => {
+                window.yettyStatus.append('failed to load yetty.js — is the webasm build ' +
+                                          'present? (make build-webasm-ytrace-release)', 'err');
+            };
+            document.head.appendChild(script);
+        }
+
+        init();
+    </script>
+</body>
+</html>

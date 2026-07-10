@@ -1,0 +1,35 @@
+# meson cross-file: x86_64 iPhone Simulator
+#
+# Targets x86_64-apple-ios16.0-simulator. Generated paths come from
+# Xcode (`xcrun --sdk iphonesimulator --show-sdk-path`); setup.sh
+# substitutes them on each invocation, so this file uses placeholders
+# of the form @SDK@ and @CLANG@. Do NOT meson-setup against this file
+# directly — go through build-tools/ios/setup.sh.
+#
+# host_machine.system stays 'darwin' because the iPhoneSimulator SDK
+# is libSystem-shaped and src/yos/meson.build's platform_sources picks
+# platform-darwin.c on that basis. The iOS-specific bits (deployment
+# target, sysroot) are encoded purely in c_args / c_link_args.
+
+[binaries]
+c       = '@CLANG@'
+cpp     = '@CLANG@'
+ar      = '@TOOLCHAIN_AR@'
+strip   = '@TOOLCHAIN_STRIP@'
+ranlib  = '@TOOLCHAIN_RANLIB@'
+pkgconfig = 'pkg-config'
+
+[built-in options]
+c_args      = ['-arch', 'x86_64', '-target', 'x86_64-apple-ios16.0-simulator', '-isysroot', '@SDK@', '-mios-simulator-version-min=16.0']
+c_link_args = ['-arch', 'x86_64', '-target', 'x86_64-apple-ios16.0-simulator', '-isysroot', '@SDK@', '-mios-simulator-version-min=16.0']
+cpp_args    = ['-arch', 'x86_64', '-target', 'x86_64-apple-ios16.0-simulator', '-isysroot', '@SDK@', '-mios-simulator-version-min=16.0']
+cpp_link_args = ['-arch', 'x86_64', '-target', 'x86_64-apple-ios16.0-simulator', '-isysroot', '@SDK@', '-mios-simulator-version-min=16.0']
+
+[host_machine]
+system     = 'darwin'
+cpu_family = 'x86_64'
+cpu        = 'x86_64'
+endian     = 'little'
+
+[properties]
+needs_exe_wrapper = false

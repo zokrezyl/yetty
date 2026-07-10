@@ -39,6 +39,22 @@ Module.noInitialRun = true;
 (function () {
     const ASSET_BASE   = 'yetty-assets/';
     const MANIFEST_URL = ASSET_BASE + 'manifest.json';
+    // Cache Storage bucket for the staged assets. Entries are keyed by
+    // url + the manifest's per-file sha256 (stamped at build time), so
+    // a deploy only invalidates the files whose bytes actually changed.
+    // Unlike the HTTP cache this ignores Cache-Control headers (the dev
+    // serve.py sends no-store) and survives across sessions.
+    //
+    // The stored bytes are the FINAL, brotli-DECODED payload — exactly
+    // what FS.writeFile gets. Warm starts skip both the download and
+    // the decode (the 4 MSDF CDBs alone are ~30 MB wire → ~160 MB
+    // decoded, seconds of CPU per terminal instance). The sha256 in
+    // the key still identifies the wire file; it is a version stamp,
+    // never compared against the stored bytes. The "-final" suffix
+    // retires the earlier bucket that held compressed bytes — reusing
+    // its name would misinterpret those as decoded output.
+    const ASSET_CACHE_NAME = 'yetty-assets-final';
+    const LEGACY_CACHE_NAMES = ['yetty-assets'];
 
     // Forward to the page's boot-status overlay (window.yettyStatus is
     // installed by index.html). Falls back to console.log when the
@@ -110,39 +126,108 @@ Module.noInitialRun = true;
         }
     }
 
-    async function loadOne(entry) {
+    // Cache Storage handle, or null when unavailable (non-secure
+    // context, ancient browser, storage error). Every cache failure
+    // degrades to a plain network fetch — caching is an optimization,
+    // never a requirement.
+    async function openAssetCache() {
+        if (typeof caches === 'undefined') return null;
+        try {
+            // Reclaim the space of retired bucket layouts first.
+            for (const legacyName of LEGACY_CACHE_NAMES) {
+                try { await caches.delete(legacyName); } catch (ignored) {}
+            }
+            return await caches.open(ASSET_CACHE_NAME);
+        } catch (ignored) { return null; }
+    }
+
+    function cacheKeyFor(entry) {
+        return ASSET_BASE + entry.url + '?v=' + (entry.sha256 || 'unversioned');
+    }
+
+    async function loadOne(assetCache, entry) {
         const url = ASSET_BASE + entry.url;
-        const resp = await fetch(url);
-        if (!resp.ok) {
-            throw new Error(`asset fetch failed: ${url} -> HTTP ${resp.status}`);
+        const cacheKey = cacheKeyFor(entry);
+        let bytes = null;
+        let fromCache = false;
+        if (assetCache) {
+            try {
+                const hit = await assetCache.match(cacheKey);
+                if (hit) {
+                    // Already the final decoded payload — straight to MEMFS.
+                    bytes = new Uint8Array(await hit.arrayBuffer());
+                    fromCache = true;
+                }
+            } catch (ignored) { /* fall through to network */ }
         }
-        const raw = await resp.arrayBuffer();
-        const bytes = entry.brotli ? brotliDecode(raw) : new Uint8Array(raw);
+        if (!bytes) {
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                throw new Error(`asset fetch failed: ${url} -> HTTP ${resp.status}`);
+            }
+            const raw = await resp.arrayBuffer();
+            bytes = entry.brotli ? brotliDecode(raw) : new Uint8Array(raw);
+            if (assetCache) {
+                // Best-effort store of the DECODED bytes; quota pressure
+                // just means the next visit downloads + decodes again.
+                // (new Response(view) copies, so `bytes` stays usable.)
+                try { await assetCache.put(cacheKey, new Response(bytes)); }
+                catch (ignored) {}
+            }
+        }
         mkdirsForFile(entry.dest);
         FS.writeFile(entry.dest, bytes);
-        status('  ' + entry.dest +
-               '  ' + fmtBytes(raw.byteLength) +
-               (entry.brotli ? ' → ' + fmtBytes(bytes.length) : ''),
+        status('  ' + entry.dest + '  ' + fmtBytes(bytes.length) +
+               (fromCache ? '  (cached, pre-decoded)' : ''),
                'dim');
+        return fromCache;
+    }
+
+    // Drop cache entries whose url?v= key is not in the current
+    // manifest — leftovers from previous releases. Without this every
+    // deploy would ADD a re-keyed copy of each changed file until the
+    // origin quota fills up.
+    async function pruneAssetCache(assetCache, entries) {
+        if (!assetCache) return;
+        try {
+            const valid = {};
+            entries.forEach(function (entry) {
+                valid[new URL(cacheKeyFor(entry), location.href).href] = true;
+            });
+            const keys = await assetCache.keys();
+            await Promise.all(keys.map(function (request) {
+                return valid[request.url] ? null : assetCache.delete(request);
+            }));
+        } catch (ignored) { /* pruning is best-effort */ }
     }
 
     async function preloadAll() {
         status('fetching asset manifest…');
-        const mr = await fetch(MANIFEST_URL);
+        // The manifest is the freshness root — always revalidate it.
+        const mr = await fetch(MANIFEST_URL, { cache: 'no-cache' });
         if (!mr.ok) {
             throw new Error(`manifest fetch failed: ${MANIFEST_URL} -> HTTP ${mr.status}`);
         }
         const manifest = await mr.json();
         const entries = manifest.entries || [];
-        status('manifest: ' + entries.length + ' files', 'phase');
+        const assetCache = await openAssetCache();
+        status('manifest: ' + entries.length + ' files' +
+               (assetCache ? '' : ' (Cache Storage unavailable)'), 'phase');
 
         // Concurrent fetches — browsers pipeline these and each file is
         // small (KB to a few MB). Sequential would multiply round-trip
         // latency by ~100 entries.
-        await Promise.all(entries.map(loadOne));
+        const cachedFlags = await Promise.all(entries.map(function (entry) {
+            return loadOne(assetCache, entry);
+        }));
+        const cachedCount = cachedFlags.filter(Boolean).length;
 
-        status('all assets installed in MEMFS (' + entries.length + ' files)', 'ok');
-        console.log('[yetty] preload: %d assets installed in MEMFS', entries.length);
+        await pruneAssetCache(assetCache, entries);
+
+        status('all assets installed in MEMFS (' + entries.length + ' files, ' +
+               cachedCount + ' from cache)', 'ok');
+        console.log('[yetty] preload: %d assets installed in MEMFS (%d cached)',
+                    entries.length, cachedCount);
     }
 
     const userInit = Module.onRuntimeInitialized;

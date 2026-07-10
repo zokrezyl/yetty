@@ -955,6 +955,9 @@ jobs:
       run: |
         mkdir -p site
         cp ${{ env.BUILD_DIR }}/index.html site/
+        # terminal.html — the per-instance terminal page the tabbed
+        # index.html shell embeds (one iframe = one wasm module).
+        cp ${{ env.BUILD_DIR }}/terminal.html site/
         cp ${{ env.BUILD_DIR }}/yetty.js site/
         cp ${{ env.BUILD_DIR }}/yetty.wasm site/
         cp ${{ env.BUILD_DIR }}/yetty.data site/

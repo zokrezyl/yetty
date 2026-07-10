@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# darwin lacks GNU sha256sum; emulate via shasum -a 256.
+exec /usr/bin/shasum -a 256 "$@"

@@ -627,7 +627,7 @@ build-webasm-yinfo-release: ## Build WebAssembly yinfo release (minimal logging)
 verify-webasm: ## Post-build verification that all webasm artifacts are present
 	@echo "=== Post-build webasm verification ==="
 	@FAIL=0; \
-	for f in yetty.js yetty.wasm yetty.data index.html serve.py; do \
+	for f in yetty.js yetty.wasm yetty.data index.html terminal.html yos-iframe.html serve.py; do \
 		if [ ! -e "$(BUILD_DIR)/$$f" ]; then \
 			echo "MISSING: $$f"; \
 			FAIL=1; \

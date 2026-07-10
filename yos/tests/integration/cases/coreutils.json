@@ -1,0 +1,51 @@
+[
+  {
+    "id": "echo-args",
+    "argv": ["echo", "hello", "world"],
+    "expect": { "exitCode": 0, "rawStdout": "hello world\n", "gridRow": { "row": 0, "equals": "hello world" } }
+  },
+  {
+    "id": "cat-stdin",
+    "argv": ["cat"],
+    "stdin": "line one\nline two\n",
+    "expect": { "exitCode": 0, "rawStdout": "line one\nline two\n", "gridContains": ["line one", "line two"] }
+  },
+  {
+    "id": "wc-counts",
+    "argv": ["wc"],
+    "stdin": "one\ntwo three\nfour\nfive six\nseven\n",
+    "expect": { "exitCode": 0, "gridContains": ["5", "7", "34"] }
+  },
+  {
+    "id": "grep-fixed-match",
+    "argv": ["grep", "apple"],
+    "stdin": "apple\nbanana\napple\n",
+    "expect": { "exitCode": 0, "rawStdout": "apple\napple\n", "gridContains": ["apple"] },
+    "knownNativeGap": "Native grep matches nothing (exit 1, empty) because of the rune-locale <_ctype.h> gap: isalpha/isspace/etc. return 0 for every byte, so grep's character classes never match. The browser engine matches via JS RegExp and is correct. Fix is the shared native rune-locale hole (tests/integration/freebsd-tools/test_grep.py), not the browser. Drop this flag once native ctype is fixed."
+  },
+  {
+    "id": "sed-substitute-global",
+    "argv": ["sed", "s/foo/BAR/g"],
+    "stdin": "foo bar foo\n",
+    "expect": { "exitCode": 0, "rawStdout": "BAR bar BAR\n", "gridContains": ["BAR bar BAR"] },
+    "knownNativeGap": "Native sed passes input through unchanged (no substitution) due to the same rune-locale <_ctype.h> gap that breaks its regex engine. The browser engine substitutes correctly via JS RegExp. Fix is the shared native rune-locale hole (tests/integration/freebsd-tools/test_sed.py), not the browser. Drop this flag once native ctype is fixed."
+  },
+  {
+    "id": "sort-lexicographic",
+    "argv": ["sort"],
+    "stdin": "banana\napple\ncherry\n",
+    "expect": { "exitCode": 0, "rawStdout": "apple\nbanana\ncherry\n" }
+  },
+  {
+    "id": "tr-to-upper",
+    "argv": ["tr", "a-z", "A-Z"],
+    "stdin": "hello\n",
+    "expect": { "exitCode": 0, "rawStdout": "HELLO\n", "gridRow": { "row": 0, "equals": "HELLO" } }
+  },
+  {
+    "id": "cut-field",
+    "argv": ["cut", "-d:", "-f2"],
+    "stdin": "a:b:c\nd:e:f\n",
+    "expect": { "exitCode": 0, "rawStdout": "b\ne\n" }
+  }
+]

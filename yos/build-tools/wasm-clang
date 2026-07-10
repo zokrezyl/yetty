@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Wrapper around clang for wasm32 cross-compilation.
+#
+# nix's clang-wrapper on darwin unconditionally injects `-arch x86_64`
+# and `-mmacos-version-min=...`; wasm-ld rejects `-arch`, killing
+# every wasm cross-link. This shim drops those darwin-only flags and
+# delegates to the *unwrapped* clang exposed by the dev shell as
+# $YOS_WASM_CLANG, falling back to whatever `clang` is on PATH so
+# the script also works on Linux hosts where no filtering is needed.
+set -e
+
+cc=${YOS_WASM_CLANG:-clang}
+
+filtered=()
+skip_next=0
+for a in "$@"; do
+  if [ "$skip_next" = 1 ]; then
+    skip_next=0
+    continue
+  fi
+  case "$a" in
+    -arch)
+      skip_next=1
+      continue
+      ;;
+    -mmacos-version-min=*|-mmacosx-version-min=*)
+      continue
+      ;;
+  esac
+  filtered+=("$a")
+done
+
+# Unwrapped clang needs an explicit resource-dir for freestanding
+# headers (stdarg.h, stddef.h, limits.h) — the shell sets
+# YOS_WASM_CLANG_RESOURCE_DIR to point at clang-wrapper's resource-root.
+# Also pin the resource include via -isystem so it survives `-nostdinc`
+# (which nvim's build.sh sets — clang's builtin include path is
+# considered "standard" and gets stripped by -nostdinc; an explicit
+# -isystem is preserved).
+extra=()
+if [ -n "${YOS_WASM_CLANG_RESOURCE_DIR:-}" ]; then
+  # -resource-dir gives clang the right path for builtins (suffices
+  # for non-`-nostdinc` builds). With `-nostdinc` (nvim's choice)
+  # use `-idirafter` so resource headers fall in *after* the user's
+  # sysroot — sysroot wins on overlapping headers (stddef.h, etc.,
+  # which the sysroot ships with the right wasm32 typedefs), and
+  # freestanding-only headers like stdarg.h still resolve from the
+  # resource dir.
+  extra=(
+    -resource-dir "$YOS_WASM_CLANG_RESOURCE_DIR"
+    -idirafter    "$YOS_WASM_CLANG_RESOURCE_DIR/include"
+  )
+fi
+
+exec "$cc" "${extra[@]}" "${filtered[@]}"

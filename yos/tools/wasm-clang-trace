@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# wasm-clang-trace — wraps build-tools/wasm-clang to ALSO scan each
+# compiled TU for libc CallExprs via tools/scan-libc-calls.py.
+#
+# Drop-in replacement for wasm-clang. Activated by setting WASM_CC to
+# this script (e.g. in tools/wasm-pkg.sh or build-recipe.nix when
+# YOS_TRACE_LIBC=1 is set). Output JSON per TU lands at:
+#
+#     $YOS_TRACE_LIBC_OUT/<basename-of-src>.<pid>.libccalls.json
+#
+# Default $YOS_TRACE_LIBC_OUT is tmp/libc-trace/$YOS_TRACE_LIBC_PKG/.
+# The .json files can then be ingested by tools/libc-coverage.py to
+# produce a per-package report joined against the bridge state.
+#
+# The trace pass runs ONLY when both:
+#   - YOS_TRACE_LIBC=1 is set
+#   - the invocation looks like a -c compile (input is .c/.cc/.cpp,
+#     and we can identify an output .o)
+# Otherwise this is just a transparent passthrough to wasm-clang.
+set -e
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+WASM_CLANG="$REPO_ROOT/build-tools/wasm-clang"
+
+# Run the real compile first so the .o exists even if the trace fails.
+"$WASM_CLANG" "$@"
+rc=$?
+
+if [ "${YOS_TRACE_LIBC:-0}" != "1" ]; then
+    exit "$rc"
+fi
+if [ "$rc" -ne 0 ]; then
+    # Compile failed — skip the scan, nothing meaningful to record.
+    exit "$rc"
+fi
+
+# Locate the .c source and reconstruct the clang flag set the trace
+# pass needs. Strategy: scan args; identify the input source (.c/.cc/
+# .cpp/.cxx); drop -c, -o, output path, MMD/MD/MP/MF deps; keep the
+# rest (target, sysroot, includes, defines, std, etc.).
+SRC=""
+KEEP=()
+SKIP_NEXT=0
+for a in "$@"; do
+    if [ "$SKIP_NEXT" = 1 ]; then SKIP_NEXT=0; continue; fi
+    case "$a" in
+        -c) ;;
+        -o) SKIP_NEXT=1 ;;
+        -MD|-MMD|-MP) ;;
+        -MF|-MT|-MQ) SKIP_NEXT=1 ;;
+        *.c|*.cc|*.cpp|*.cxx) SRC="$a"; KEEP+=("$a") ;;
+        *) KEEP+=("$a") ;;
+    esac
+done
+
+# Drop the source from KEEP (libclang gets it via --src), keep the flags.
+FLAGS=()
+for a in "${KEEP[@]}"; do
+    [ "$a" = "$SRC" ] && continue
+    FLAGS+=("$a")
+done
+
+if [ -z "$SRC" ]; then
+    # Linker or some other non-compile invocation — nothing to scan.
+    exit "$rc"
+fi
+
+OUT_DIR="${YOS_TRACE_LIBC_OUT:-$REPO_ROOT/tmp/libc-trace/${YOS_TRACE_LIBC_PKG:-_unscoped}}"
+mkdir -p "$OUT_DIR"
+# pid + basename keeps multi-process builds from clobbering each other.
+OUT_JSON="$OUT_DIR/$(basename "$SRC" | tr -c '[:alnum:].-' '_').$$.libccalls.json"
+
+# Run via `uv run python` so libclang resolves the way extract.py does
+# (uv ensures the project venv has the libclang shared lib on PATH).
+(cd "$REPO_ROOT" && uv run python tools/scan-libc-calls.py \
+    --src "$SRC" --out "$OUT_JSON" -- "${FLAGS[@]}") \
+    >/dev/null 2>>"$OUT_DIR/.scan-errors.log" || true
+
+exit "$rc"

@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>real threads in the browser — Web Workers + SharedArrayBuffer + Atomics</title>
+<style>
+  body { background: #0b1014; color: #e0e5e4; font: 14px/1.6 ui-monospace, monospace; padding: 2rem; }
+  h1 { color: #6ba892; font-size: 1rem; }
+  pre { background: #141a1f; border: 1px solid #364a47; padding: 1rem; white-space: pre-wrap; }
+  .ok { color: #74c5a5; } .err { color: #d08770; }
+</style>
+<h1>real threads in the browser</h1>
+<p>4 threads (real Web Workers) sharing one SharedArrayBuffer. No lock → races lose updates (true parallelism). Atomics mutex → exact total.</p>
+<pre id="out">running…</pre>
+<script type="module">
+  const out = document.getElementById("out");
+  const log = (t, cls) => { const s = document.createElement("span"); if (cls) s.className = cls; s.textContent = t; out.appendChild(s); };
+  out.textContent = "";
+
+  // The page main thread cannot Atomics.wait, so the work runs in a
+  // coordinator Worker which spawns the thread Workers.
+  const coord = new Worker(new URL("./threads_coordinator.mjs", import.meta.url), { type: "module" });
+  coord.onerror = (e) => { log(`\ncoordinator error: ${e.message} @ ${e.filename}:${e.lineno}\n`, "err"); window.__threads = { error: e.message }; };
+  coord.onmessage = (e) => {
+    if (e.data.error) { log(`\nworker error: ${e.data.error}\n`, "err"); window.__threads = { error: e.data.error }; return; }
+    if (e.data.out) { log(e.data.out); return; }
+    if (e.data.result) {
+      const r = e.data.result;
+      if (r.diag) { log(`\ndiag: workers started=${r.started}, err=${r.workerErr || "none"}\n`); window.__threads = r; return; }
+      const raced = r.racy < r.expected, exact = r.locked === r.expected;
+      log(`\nracy=${r.racy}  (lost ${r.expected - r.racy} updates)\nlocked=${r.locked}\nexpected=${r.expected}\n`);
+      log(raced ? "PASS real parallelism: racy lost updates\n" : "FAIL racy did not lose updates\n", raced ? "ok" : "err");
+      log(exact ? "PASS mutex correctness: locked exact\n" : "FAIL locked not exact\n", exact ? "ok" : "err");
+      window.__threads = { ...r, raced, exact };
+    }
+  };
+  coord.postMessage(location.search.includes("diag") ? "diag" : "go");
+</script>

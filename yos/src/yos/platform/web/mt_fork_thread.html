@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>yos mt fork+thread (issue #23)</title>
+<!--
+  Runs the fork-child thread-memory regression guest (fork_thread_demo.wasm)
+  through the REAL-thread engine in a real browser: mt_coordinator_browser runs
+  in a Worker (so Atomics.wait is allowed) and spawns nested pool Workers over
+  SharedArrayBuffer. Proves that a thread created by a fork() child runs against
+  the child's memory (prints t7), not the root's — in the actual browser target,
+  not just node. Served with COOP/COEP so SharedArrayBuffer is enabled.
+-->
+<pre id="log" style="font: 13px ui-monospace, monospace"></pre>
+<script type="module">
+  const log = (t) => { document.getElementById("log").textContent += t; };
+  const coord = new Worker(new URL("./mt_coordinator_browser.mjs", import.meta.url), { type: "module" });
+  let out = "";
+  coord.onerror = (e) => {
+    window.__mtForkThread = { error: (e.message || "worker error") + " @ " + (e.filename || "") + ":" + (e.lineno || "") };
+  };
+  coord.onmessage = (e) => {
+    const data = e.data || {};
+    if (data.out) { out += data.out; log(data.out); }
+    if (data.done) window.__mtForkThread = { out, exitCode: data.exitCode, error: data.error || null };
+  };
+  coord.postMessage({ wasmUrl: "./fork_thread_demo.wasm", argv: ["fork_thread_demo"] });
+</script>

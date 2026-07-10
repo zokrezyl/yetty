@@ -1,0 +1,157 @@
+# openssl.yaml — per-global cross-guest-isolation policy for the host
+# openssl (libcrypto + libssl) that yos links statically/dynamically
+# into the host binary and exposes to wasm guests as env.SSL_*,
+# env.EVP_*, env.RAND_*, env.ERR_* (impl/libc/openssl.c).
+#
+# Classification buckets mirror libc.yaml (see that file for full
+# semantics):
+#
+#   bridged_per_ctx  yos's bridge layer keeps a per-yos_exec_ctx slice
+#                    of the state. For openssl, this is the handle
+#                    TABLE in ctx->ssl_handles[] holding per-guest
+#                    SSL_CTX / SSL / EVP_MD_CTX / BIO pointers. Guest A's
+#                    handles are unreachable from guest B's table.
+#
+#   tls_safe         lives in TLS (per-host-thread). Under yos's
+#                    fork = pthread-per-guest model this gives per-guest
+#                    isolation automatically. openssl 1.1+ keeps
+#                    ERR_STATE (the error queue) per-thread; we rely
+#                    on this.
+#
+#   safe_immutable   set once at init, never mutated. The algorithm
+#                    registry (EVP_md5 / EVP_sha256 / ...) and the
+#                    SSL_METHOD pointers TLS_method / TLS_client_method
+#                    return are immortal singletons returned by the same
+#                    address every call — guests can share them
+#                    freely.
+#
+#   yos_owned        infrastructural global yos uses internally; guest
+#                    cannot observe it.
+#
+#   leaks            no per-ctx coverage yet AND the surface fns reading
+#                    /writing this global ARE in the bridge surface. Each
+#                    such entry must name (a) the per-ctx field that will
+#                    replace it, OR (b) the bridge fns to refuse until
+#                    coverage exists.
+#
+# Until extract_globals.py is pointed at the host libcrypto/libssl and
+# the inventory diffed against this file, the entries below cover the
+# globals that matter for the bridge surface yos_openssl_link exposes
+# today. Expand when the bridge surface grows.
+
+library: libcrypto.so + libssl.so
+
+classes:
+
+  # ── bridged_per_ctx ─────────────────────────────────────────────
+  # Per-guest opaque-pointer state held in ctx->ssl_handles[]. Every
+  # SSL_CTX / SSL / EVP_MD_CTX / etc. the guest creates lives in this
+  # table; the bridge resolves i32 handle -> host pointer per call.
+  # See impl/libc/openssl.c (yos_openssl_link, ssl_handles_*).
+  #
+  # The cross-guest isolation property is: handle ID 7 in guest A's
+  # table and handle ID 7 in guest B's table point at different host
+  # objects. Guest A cannot reach guest B's SSL_CTX via any bridge
+  # because the bridge always indexes via ctx->ssl_handles, and ctx
+  # is the per-guest yos_exec_ctx.
+  bridged_per_ctx:
+    - {name: "<per-ctx handle table>",  via: impl/libc/openssl.c,
+       note: "All SSL_CTX / SSL / EVP_MD_CTX / BIO objects passed to/from
+              the guest are i32 handles resolved through
+              ctx->ssl_handles[]. Per-guest by construction."}
+
+  # ── tls_safe ─────────────────────────────────────────────────────
+  # ERR_STATE lives in libcrypto's thread-local storage as of 1.1.0
+  # (CRYPTO_THREAD_local_*). Under yos's fork=pthread-per-guest model
+  # each guest runs on its own host pthread, so ERR_get_error() reads
+  # only that guest's queue. No bridging needed beyond passthrough.
+  tls_safe:
+    - {name: ERR_state,
+       note: "thread-local ERR_STATE, per-host-thread => per-guest"}
+    - {name: thread_local_inits,
+       note: "internal CRYPTO_THREAD_local_get/set arena"}
+
+  # ── safe_immutable ───────────────────────────────────────────────
+  # set-once-at-libcrypto-init, then read-only for the lifetime of the
+  # process. The algorithm registry entries (EVP_md5/EVP_sha256/...) are
+  # returned by const-pointer-yielding functions, NOT exposed as
+  # variables — listed here as "what the function-returned addresses
+  # point at" so the policy diff against the .so scan can validate
+  # they're indeed in .rodata.
+  safe_immutable:
+    - {name: OPENSSL_ia32cap_P,
+       note: "CPU feature detection bitmap, populated once by OPENSSL_cpuid_setup"}
+    - {name: openssl_strerror_table,
+       note: "static error-message table, never mutated"}
+    - {name: EVP_md5_method,
+       note: "static EVP_MD descriptor, returned by EVP_md5()"}
+    - {name: EVP_sha1_method,
+       note: "static EVP_MD descriptor, returned by EVP_sha1()"}
+    - {name: EVP_sha256_method,
+       note: "static EVP_MD descriptor, returned by EVP_sha256()"}
+    - {name: EVP_sha512_method,
+       note: "static EVP_MD descriptor, returned by EVP_sha512()"}
+    - {name: TLS_method_data,
+       note: "static SSL_METHOD descriptor, returned by TLS_method()"}
+    - {name: TLS_client_method_data,
+       note: "static SSL_METHOD descriptor, returned by TLS_client_method()"}
+    - {name: TLS_server_method_data,
+       note: "static SSL_METHOD descriptor, returned by TLS_server_method()"}
+
+  # ── yos_owned ────────────────────────────────────────────────────
+  # Infrastructural — RAND_DRBG state, default provider, etc. The host
+  # owns these; the guest cannot reach the storage. The guest's only
+  # observable interaction is RAND_bytes (output is per-call irreversible),
+  # OPENSSL_init_crypto/init_ssl (idempotent, init-once globally).
+  # Shared-across-guests is fine because the guest cannot exfiltrate
+  # other guests' inputs from the irreversible RNG state.
+  yos_owned:
+    - {name: rand_meth_default,
+       note: "default RAND_METHOD; guest cannot replace it from the bridge"}
+    - {name: rand_drbg_default,
+       note: "primary DRBG instance; reseeds from system entropy + own state"}
+    - {name: rand_drbg_public,    note: "per-thread DRBG (public), bridge passthrough is safe"}
+    - {name: rand_drbg_private,   note: "per-thread DRBG (private), same"}
+    - {name: default_provider,    note: "openssl 3 default provider — init-once"}
+    - {name: legacy_provider,     note: "openssl 3 legacy provider — init-on-demand, host-owned"}
+    - {name: fips_provider,       note: "openssl 3 fips provider — init-on-demand, host-owned"}
+    - {name: ossl_lib_ctx_default,
+       note: "process-wide OSSL_LIB_CTX; guest never names it (every bridge
+              passes NULL, which means 'default')"}
+
+  # ── leaks ────────────────────────────────────────────────────────
+  # KNOWN gaps to address. Each entry names the eventual per-ctx field
+  # (or the decision to refuse the surface). Empty for now because the
+  # initial bridge surface (yos_openssl_link in impl/libc/openssl.c) is
+  # intentionally scoped to functions whose only state lives in
+  # guest-created handles (bridged_per_ctx) or per-thread/immutable
+  # storage. As we add bridges for the next slices below, audit each
+  # for new shared state and add entries here.
+  leaks: []
+
+# ── deferred surfaces (audit before adding bridges) ────────────────
+#
+# These openssl API areas have shared state we haven't bridged yet.
+# Adding any of them = re-audit globals and either route through
+# per-ctx storage or refuse the API in the bridge surface.
+#
+#   ENGINE_*           legacy provider plug-ins; removed from 3.0
+#                      default surface. yos refuses to bridge.
+#   ENGINE_load_*      same.
+#   CRYPTO_set_locking_callback / id_callback
+#                      pre-1.1.0 lock callbacks; obsolete (libcrypto
+#                      now uses internal pthread mutexes).
+#   X509_STORE_set_*_cb
+#                      app-level verify callbacks. Bridging would need
+#                      a wasm-callable callback dispatch; future work.
+#   BIO_new_mem_buf,
+#   BIO_read,
+#   BIO_write          stream abstraction over wasm linear memory;
+#                      each BIO gets a slot in ctx->ssl_handles when
+#                      we add it.
+#   PEM_*              private-key parsing; needs file-IO / BIO bridge
+#                      to be useful.
+#   SSL_CTX_load_verify_locations
+#                      reads files from the host — yos must route
+#                      paths through its VFS so guests can't reach
+#                      host /etc/ssl/certs.

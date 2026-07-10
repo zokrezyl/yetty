@@ -1,0 +1,165 @@
+# python.yaml — per-global cross-guest-isolation policy for the host
+# libpython3.12 that yos optionally links into the host binary and
+# exposes to wasm guests as env.Py_* / env.PyXxx_* bridges
+# (impl/libc/libpython.c).
+#
+# This file is the libpython counterpart to openssl.yaml. Same five
+# buckets (see libc.yaml for full semantics). The interesting twist
+# for CPython is that PEP 684 (Python 3.12+) made subinterpreters
+# fully isolated: each Py_NewInterpreter() produces its own
+# PyInterpreterState carrying its own sys.modules / builtins / GIL /
+# import system / GC state. That's what makes Python a clean Tier-1
+# bridged library — the host-level globals are mostly init-once
+# tables + per-thread storage; the things that DO change at runtime
+# (module dict, exception state, locals) live on the per-guest
+# interpreter, reachable only through tstate->interp.
+#
+# Numbers below come from running
+#   uv run python build-tools/libbridge/extract_globals.py
+#       --so <host libpython3.12>
+#       --headers Python.h --cflags=-I<python include dir>
+# on darwin against python-3.12.8. The MachO scanner reports size=0
+# (llvm-nm -m doesn't carry size info); treat sizes as advisory and
+# rely on names + sections for classification.
+
+library: libpython3.12
+
+classes:
+
+  # ── bridged_per_ctx ─────────────────────────────────────────────
+  # Per-guest state held in yos_exec_ctx. The single slot is
+  # py_tstate — the PyThreadState * returned by Py_NewInterpreter()
+  # at first Py_Initialize bridge call. Subsequent bridges swap
+  # to that tstate before calling into host libpython, swap back
+  # after.
+  #
+  # That ONE slot transitively covers everything that lives on a
+  # subinterpreter — sys.modules dict, builtins, exception state,
+  # current frame, GIL (PEP 684), GC state, audit hooks. None of
+  # those need separate yos-side handling; PEP 684 already does it.
+  bridged_per_ctx:
+    - {name: "<per-ctx PyThreadState *>",  via: impl/libc/libpython.c,
+       note: "Py_NewInterpreter() per yos_exec_ctx. Each guest
+              swaps to its tstate around every Py_* call, so
+              sys.modules / builtins / GIL / exception state /
+              audit hooks / GC state are all per-guest by
+              construction. No additional shadow tables required."}
+
+  # ── tls_safe ─────────────────────────────────────────────────────
+  # Per-host-thread storage. Under yos's fork=pthread model that is
+  # per-guest automatically.
+  tls_safe:
+    - {name: _Py_tss_tstate,
+       note: "fast-path thread-local cache of current PyThreadState
+              (Py_tss_t)."}
+    - {name: _Py_tss_tstate$tlv$init,
+       note: "MachO TLV init record for _Py_tss_tstate."}
+    - {name: pkgcontext,
+       note: "Module-init re-entrancy guard inside Py_InitModule."}
+    - {name: pkgcontext$tlv$init,
+       note: "MachO TLV init record for pkgcontext."}
+
+  # ── safe_immutable ───────────────────────────────────────────────
+  # PyTypeObject instances + their slot/spec/members/methods tables.
+  # Set once during libpython init (or first use of the type), then
+  # read-only for the lifetime of the process. The reference count
+  # field is mutable, but that's harmless across guests (the type
+  # outlives every guest). 7000+ of these — listing by pattern.
+  safe_immutable:
+    - {name: "<all *_methods / *_members / *_getset / *_slots / *_spec / *_desc / *_fields tables>",
+       note: "PyTypeObject scaffolding emitted by the CPython source
+              for each builtin type. Init-once at module load,
+              read-only thereafter. Pattern-matched at scan time."}
+    - {name: "<PyExc_* exception type pointers>",
+       note: "PyExc_BaseException, PyExc_Exception, PyExc_TypeError,
+              ... — global PyTypeObject pointers, populated once by
+              _PyExc_Init. Refcount field is the only mutable part."}
+    - {name: "<*Type / *_Type — PyTypeObject objects>",
+       note: "PyType_Type, PyBaseObject_Type, PyLong_Type, PyDict_Type,
+              ... All in .data; identity comparisons across guests
+              are intentional (every guest's int IS PyLong_Type)."}
+    - {name: AvailabilityVersionCheck,
+       note: "Apple SDK helper (dispatch_once-style)."}
+    - {name: CompatibilityDispatchOnceCounter,
+       note: "Apple SDK dispatch_once counter."}
+    - {name: DispatchOnceCounter,
+       note: "Apple SDK dispatch_once counter."}
+
+  # ── immortal singletons ─────────────────────────────────────────
+  # In .data, mutable refcount, but semantically immortal — never
+  # destroyed, identity is intentional ABI (`x is None`). All guests
+  # see the same pointer for these and that's the correct behaviour.
+  # Listed here as a separate sub-bucket of safe_immutable for
+  # clarity; the scanner already special-cases the names.
+  immortal_singletons:
+    - {name: _Py_NoneStruct,
+       note: "the singleton None. Guests share by design."}
+    - {name: _Py_TrueStruct,        note: "singleton True."}
+    - {name: _Py_FalseStruct,       note: "singleton False."}
+    - {name: _Py_EllipsisObject,    note: "singleton Ellipsis (`...`)."}
+    - {name: _Py_NotImplementedStruct,
+       note: "singleton NotImplemented."}
+    - {name: _PyByteArray_empty_string,
+       note: "interned empty bytearray; immutable."}
+
+  # ── yos_owned ────────────────────────────────────────────────────
+  # Process-wide runtime state. The guest can never observe or
+  # mutate it directly through the bridge surface — every Py_* call
+  # operates on tstate->interp (the per-guest subinterpreter).
+  yos_owned:
+    - {name: _PyRuntime,
+       note: "the PyRuntimeState singleton. Holds the interpreter
+              list, the main interpreter, the type-cache, the GIL
+              control state, audit hooks. yos only touches this
+              once at Py_Initialize() bridge time. Subinterpreter
+              creation links each new tstate into _PyRuntime->
+              interpreters; that linking is host-owned."}
+    - {name: PyImport_FrozenModules,
+       note: "global frozen-module table — readable through
+              importlib._bootstrap, but const at this scope; never
+              mutated by guests."}
+    - {name: _PyOS_ReadlineTState,
+       note: "readline integration state; not bridged."}
+
+  # ── leaks ────────────────────────────────────────────────────────
+  # Known gaps. Empty so far — the bridge surface currently exposed
+  # (Py_Initialize / Py_Finalize / PyRun_SimpleString) is contained
+  # inside the subinterpreter swap pattern, and no guest can reach
+  # past tstate->interp through it. Add entries here as the bridge
+  # surface grows (PyObject_*, PyImport_*, PySys_* etc.) and we find
+  # functions that touch _PyRuntime directly.
+  leaks: []
+
+# ── deferred surfaces (audit before bridging) ──────────────────────
+#
+# Audit each of these for new shared state before adding bridges:
+#
+#   PySys_AddAuditHook / sys.audit
+#       Audit hooks live on _PyRuntime->audit_hooks (PEP 578). A
+#       hook registered by guest A would fire for guest B's events.
+#       If we bridge it, either route audit through per-subinterpreter
+#       hooks (3.13+ supports that) or refuse to bridge.
+#
+#   PyImport_FrozenModules (mutation)
+#       Some embedding paths rewrite PyImport_FrozenModules at init.
+#       Cross-guest mutation is observable. Bridge ImportFrozenModules
+#       as init-time-only or refuse runtime mutation.
+#
+#   PyEval_SetTrace / SetProfile
+#       Trace function lives on the calling tstate — already
+#       per-guest. Safe to bridge.
+#
+#   PyOS_setsig / PyOS_getsig
+#       Wraps host sigaction. yos owns the signal table; route
+#       through yos_sig.c rather than letting Python's signal module
+#       touch the host directly.
+#
+#   PyCapsule_New / PyCapsule_GetPointer
+#       Capsules hold raw void * pointers. A capsule made by guest A
+#       could be passed to guest B, breaking isolation. Either
+#       refuse cross-guest capsule sharing or stamp each capsule
+#       with the originating ctx id.
+#
+#   PyRun_File / PyRun_FileExFlags
+#       File handle args need yos VFS translation; otherwise a
+#       guest could pass host fd numbers that bypass yos's fd_map.

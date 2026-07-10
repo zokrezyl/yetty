@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>yos — multiple shells (a poor-man's multiplexer)</title>
+<link rel="stylesheet" href="./vendor/xterm.min.css" />
+<style>
+  html, body { height: 100%; margin: 0; background: #06090c; }
+  body { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; padding: 2px; box-sizing: border-box; }
+  .pane { background: #0b1014; border: 1px solid #1e262c; overflow: hidden; position: relative; }
+  .pane > .title { position: absolute; top: 0; right: 0; z-index: 2; font: 10px ui-monospace, monospace; color: #556162; padding: 1px 5px; background: #141a1f; border-bottom-left-radius: 4px; }
+  .pane > .term { position: absolute; inset: 16px 4px 4px 4px; }
+  .pane.focused { border-color: #6ba892; }
+</style>
+<div class="pane" id="p0"><span class="title">pane 0 — run a stress test here</span><div class="term"></div></div>
+<div class="pane" id="p1"><span class="title">pane 1 — watch with ps / ls here</span><div class="term"></div></div>
+<div class="pane" id="p2"><span class="title">pane 2</span><div class="term"></div></div>
+<div class="pane" id="p3"><span class="title">pane 3</span><div class="term"></div></div>
+<script src="./vendor/xterm.min.js"></script>
+<script type="module">
+  window.addEventListener("error", (e) => { window.__err = String(e.error?.stack || e.message); });
+  import { createShell, loadShared } from "./zsh_shell.mjs";
+  const shared = await loadShared();
+  const shells = [];
+  for (let i = 0; i < 4; i++) {
+    const pane = document.getElementById("p" + i);
+    const sh = await createShell(pane.querySelector(".term"), shared, "p" + i);
+    pane.addEventListener("mousedown", () => { document.querySelectorAll(".pane").forEach((p) => p.classList.remove("focused")); pane.classList.add("focused"); sh.term.focus(); });
+    shells.push(sh);
+  }
+  document.getElementById("p0").classList.add("focused");
+  shells[0].term.focus();
+  window.__multi = shells;
+</script>
