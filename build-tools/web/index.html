@@ -157,25 +157,32 @@
             border-color: #6BA892;
         }
         #menu-hint { color: #556162; font-size: 12px; }
-        /* ---- Emulator tab ---- */
-        #emulator-panel { padding: 16px; gap: 12px; }
-        #emulator-panel h1 {
+        /* ---- Engines tab (shared temu VM + yos engine) ---- */
+        #emulator-panel { padding: 16px; gap: 16px; overflow-y: auto; }
+        .engine-section {
+            flex: 1 1 0;
+            min-height: 240px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .engine-section h1 {
             font-size: 16px;
             color: #E0E5E4;
         }
-        #emulator-panel h1 .accent { color: #6BA892; }
-        #emu-desc {
+        .engine-section h1 .accent { color: #6BA892; }
+        .engine-desc {
             font-size: 12px;
             color: #9FA7A8;
             line-height: 1.6;
             max-width: 720px;
         }
-        #emu-controls {
+        .engine-controls {
             display: flex;
             align-items: center;
             gap: 14px;
         }
-        #emu-start {
+        .engine-start {
             background: #6BA892;
             border: none;
             border-radius: 6px;
@@ -186,15 +193,15 @@
             padding: 9px 18px;
             cursor: pointer;
         }
-        #emu-start:hover:not(:disabled) { background: #74C5A5; }
-        #emu-start:disabled { opacity: 0.45; cursor: not-allowed; }
-        #emu-state { font-size: 12px; color: #9FA7A8; }
-        #emu-state.ready { color: #6c6; }
-        #emu-state.err { color: #f55; }
-        #emu-attached { font-size: 12px; color: #556162; }
-        #emu-log {
+        .engine-start:hover:not(:disabled) { background: #74C5A5; }
+        .engine-start:disabled { opacity: 0.45; cursor: not-allowed; }
+        .engine-state { font-size: 12px; color: #9FA7A8; }
+        .engine-state.ready { color: #6c6; }
+        .engine-state.err { color: #f55; }
+        .engine-attached { font-size: 12px; color: #556162; }
+        .engine-log {
             flex: 1 1 auto;
-            min-height: 0;
+            min-height: 100px;
             overflow-y: auto;
             background: #141A1F;
             border: 1px solid #364A47;
@@ -204,16 +211,16 @@
             line-height: 1.45;
             color: #ddd;
         }
-        #emu-log::-webkit-scrollbar { width: 10px; }
-        #emu-log::-webkit-scrollbar-track { background: #1a1a2e; }
-        #emu-log::-webkit-scrollbar-thumb { background: #444; border-radius: 5px; }
-        #emu-log::-webkit-scrollbar-thumb:hover { background: #666; }
-        #emu-log .line { white-space: pre-wrap; word-break: break-all; }
-        #emu-log .line.phase { color: #e94560; font-weight: bold; }
-        #emu-log .line.ok    { color: #6c6; }
-        #emu-log .line.err   { color: #f55; font-weight: bold; }
-        #emu-log .line.dim   { color: #888; }
-        #emu-log .line.empty { color: #556162; }
+        .engine-log::-webkit-scrollbar { width: 10px; }
+        .engine-log::-webkit-scrollbar-track { background: #1a1a2e; }
+        .engine-log::-webkit-scrollbar-thumb { background: #444; border-radius: 5px; }
+        .engine-log::-webkit-scrollbar-thumb:hover { background: #666; }
+        .engine-log .line { white-space: pre-wrap; word-break: break-all; }
+        .engine-log .line.phase { color: #e94560; font-weight: bold; }
+        .engine-log .line.ok    { color: #6c6; }
+        .engine-log .line.err   { color: #f55; font-weight: bold; }
+        .engine-log .line.dim   { color: #888; }
+        .engine-log .line.empty { color: #556162; }
         /* ---- Modal dialogs (session menu + per-mode config) ---- */
         .modal {
             position: fixed;
@@ -358,7 +365,7 @@
 
     <div id="tabbar">
         <button class="tab active" type="button" data-tab="terminals">Terminals</button>
-        <button class="tab" type="button" data-tab="emulator">Emulator</button>
+        <button class="tab" type="button" data-tab="emulator">Engines</button>
     </div>
 
     <!-- ================= Terminals tab ================= -->
