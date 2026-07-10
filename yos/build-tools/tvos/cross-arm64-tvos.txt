@@ -1,0 +1,37 @@
+# meson cross-file: arm64 Apple TV (real device, AppleTVOS SDK).
+#
+# Cross-builds the yos host as a STATIC LIBRARY (libyos.a) — not an
+# executable. tvOS apps must enter through UIApplicationMain in the
+# bundle's main(), so build-tools/tvos/launcher.m provides the entry
+# point and links libyos.a. See build-tools/tvos/setup.sh.
+#
+# host_machine.system stays 'darwin' because the AppleTVOS SDK is
+# libSystem-shaped and src/yos/meson.build's platform_sources picks
+# platform-darwin.c on that basis. tvOS-specific bits ride in c_args.
+#
+# Placeholders @SDK@ / @CLANG@ / @TOOLCHAIN_*@ get substituted by
+# build-tools/tvos/setup.sh. Do NOT meson-setup against this template
+# directly — go through setup.sh.
+
+[binaries]
+c       = '@CLANG@'
+cpp     = '@CLANG@'
+ar      = '@TOOLCHAIN_AR@'
+strip   = '@TOOLCHAIN_STRIP@'
+ranlib  = '@TOOLCHAIN_RANLIB@'
+pkgconfig = 'pkg-config'
+
+[built-in options]
+c_args      = ['-arch', 'arm64', '-target', 'arm64-apple-tvos16.0', '-isysroot', '@SDK@', '-mtvos-version-min=16.0']
+c_link_args = ['-arch', 'arm64', '-target', 'arm64-apple-tvos16.0', '-isysroot', '@SDK@', '-mtvos-version-min=16.0']
+cpp_args    = ['-arch', 'arm64', '-target', 'arm64-apple-tvos16.0', '-isysroot', '@SDK@', '-mtvos-version-min=16.0']
+cpp_link_args = ['-arch', 'arm64', '-target', 'arm64-apple-tvos16.0', '-isysroot', '@SDK@', '-mtvos-version-min=16.0']
+
+[host_machine]
+system     = 'darwin'
+cpu_family = 'aarch64'
+cpu        = 'aarch64'
+endian     = 'little'
+
+[properties]
+needs_exe_wrapper = false

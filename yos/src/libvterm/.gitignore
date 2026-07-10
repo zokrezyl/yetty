@@ -1,0 +1,11 @@
+# Build artifacts from the libtool/autotools build.
+.libs/
+*.o
+*.lo
+*.la
+*.lai
+
+# Compiled tool binaries / libtool wrapper scripts under bin/.
+/bin/unterm
+/bin/vterm-dump
+/bin/vterm_grid

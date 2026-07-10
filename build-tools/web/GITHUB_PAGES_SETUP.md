@@ -92,6 +92,7 @@ iframe.contentWindow.postMessage({
 Minimum files needed:
 ```
 index.html
+terminal.html
 yetty.js
 yetty.wasm
 yetty.data

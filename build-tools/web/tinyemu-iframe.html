@@ -479,38 +479,126 @@
                 return out.buffer;
             }
 
-            async function loadOne(entry) {
+            // Cache Storage for the VM assets — the rootfs alone is
+            // ~150 MB on the wire, so re-downloading it on every
+            // emulator start is the single worst repeat-visit cost.
+            // Entries are keyed url?v=<sha256 from the manifest>, so a
+            // release only invalidates files whose bytes changed. The
+            // Cache API ignores Cache-Control headers (the dev serve.py
+            // sends no-store) and persists across sessions. Failures
+            // degrade to plain network fetches.
+            //
+            // The stored bytes are the FINAL, brotli-DECODED payload —
+            // warm starts skip both the download AND the decode. For
+            // the rootfs that decode is 153 MB → ~700 MB of pure CPU,
+            // the dominant repeat-start cost once the download is
+            // cached. The sha256 in the key still identifies the wire
+            // file; it is a version stamp, never compared against the
+            // stored bytes. The "-final" suffix retires the earlier
+            // bucket that held compressed bytes.
+            var VM_ASSET_CACHE_NAME = 'yetty-vm-assets-final';
+            var VM_LEGACY_CACHE_NAMES = ['yetty-vm-assets'];
+
+            async function openVMAssetCache() {
+                if (typeof caches === 'undefined') return null;
+                try {
+                    for (var i = 0; i < VM_LEGACY_CACHE_NAMES.length; i++) {
+                        try { await caches.delete(VM_LEGACY_CACHE_NAMES[i]); }
+                        catch (ignored) {}
+                    }
+                    return await caches.open(VM_ASSET_CACHE_NAME);
+                } catch (ignored) { return null; }
+            }
+
+            function cacheKeyFor(entry) {
+                return ASSET_BASE + entry.url + '?v=' +
+                       (entry.sha256 || 'unversioned');
+            }
+
+            async function loadOne(assetCache, entry) {
                 var url = ASSET_BASE + entry.url;
-                var label = 'fetching ' + entry.url;
-                var raw = await fetchWithProgress(url, 'dl-' + entry.url, label);
-                var bytes;
-                if (entry.brotli) {
-                    postStatus('decoding ' + entry.url + '…', null, 'dec-' + entry.url);
-                    bytes = brotliDecode(raw);
-                    postStatus('decoded ' + entry.url + ' → ' + fmtBytes(bytes.length),
-                               'ok', 'dec-' + entry.url);
-                } else {
-                    bytes = new Uint8Array(raw);
+                var cacheKey = cacheKeyFor(entry);
+                var bytes = null;
+                if (assetCache) {
+                    try {
+                        var hit = await assetCache.match(cacheKey);
+                        if (hit) {
+                            // Already the final decoded payload — no
+                            // download, no brotli pass.
+                            bytes = new Uint8Array(await hit.arrayBuffer());
+                            postStatus('loaded ' + entry.url + ' ' +
+                                       fmtBytes(bytes.length) +
+                                       ' (cached, pre-decoded)',
+                                       'ok', 'dl-' + entry.url);
+                        }
+                    } catch (ignored) { /* fall through to network */ }
+                }
+                if (!bytes) {
+                    var label = 'fetching ' + entry.url;
+                    var raw = await fetchWithProgress(url, 'dl-' + entry.url, label);
+                    if (entry.brotli) {
+                        postStatus('decoding ' + entry.url + '…', null,
+                                   'dec-' + entry.url);
+                        bytes = brotliDecode(raw);
+                        postStatus('decoded ' + entry.url + ' → ' +
+                                   fmtBytes(bytes.length),
+                                   'ok', 'dec-' + entry.url);
+                    } else {
+                        bytes = new Uint8Array(raw);
+                    }
+                    if (assetCache) {
+                        // Best-effort store of the DECODED bytes (a
+                        // Response built from a view copies them); quota
+                        // pressure just means the next start downloads
+                        // and decodes again.
+                        try { await assetCache.put(cacheKey, new Response(bytes)); }
+                        catch (ignored) {}
+                    }
                 }
                 mkdirsForFile(entry.dest);
                 FS.writeFile(entry.dest, bytes);
             }
 
+            // Drop cache entries whose url?v= key is no longer in the
+            // manifest (previous releases) so the origin quota doesn't
+            // accumulate one rootfs per version.
+            async function pruneVMAssetCache(assetCache, entries) {
+                if (!assetCache) return;
+                try {
+                    var valid = {};
+                    for (var i = 0; i < entries.length; i++) {
+                        valid[new URL(cacheKeyFor(entries[i]),
+                                      location.href).href] = true;
+                    }
+                    var keys = await assetCache.keys();
+                    await Promise.all(keys.map(function (request) {
+                        return valid[request.url]
+                            ? null : assetCache.delete(request);
+                    }));
+                } catch (ignored) { /* pruning is best-effort */ }
+            }
+
             async function preloadVMAssets() {
                 postStatus('fetching VM asset manifest…');
-                var mr = await fetch(ASSET_BASE + 'manifest.json');
+                // The manifest is the freshness root — always revalidate.
+                var mr = await fetch(ASSET_BASE + 'manifest.json',
+                                     { cache: 'no-cache' });
                 if (!mr.ok) {
                     throw new Error('manifest fetch failed: HTTP ' + mr.status);
                 }
                 var manifest = await mr.json();
                 var entries = manifest.entries || [];
-                postStatus('VM manifest: ' + entries.length + ' files', 'phase');
+                var assetCache = await openVMAssetCache();
+                postStatus('VM manifest: ' + entries.length + ' files' +
+                           (assetCache ? '' : ' (Cache Storage unavailable)'),
+                           'phase');
                 // Sequential — these are big, parallel fetches would
                 // multiply per-chunk progress display chaos, and the
                 // browser already saturates throughput on one stream.
                 for (var i = 0; i < entries.length; i++) {
-                    await loadOne(entries[i]);
+                    await loadOne(assetCache, entries[i]);
                 }
+                await pruneVMAssetCache(assetCache, entries);
                 postStatus('all VM assets installed in MEMFS', 'ok');
             }
 

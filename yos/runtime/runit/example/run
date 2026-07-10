@@ -1,0 +1,23 @@
+#!/libexec/zsh -f
+# example service: real telnet protocol via FreeBSD telnetd.
+#
+# Chain: runsv → this script → yos-tcpserver (listens) → per-connection
+#        fork → telnetd (inetd mode, stdin=socket) → PTY allocation →
+#        fork → ./shim → exec zsh.
+#
+# telnetd's `-p <prog>` replaces /bin/login (which we don't have).
+# The shim discards login-style args and exec's an interactive zsh.
+#
+# Result: `telnet HOST 12323` gets a proper telnet protocol session
+# with PTY, IAC option negotiation, terminal-type discovery, line
+# editing — all from FreeBSD's stock telnetd code, no hand-rolled
+# protocol.
+#
+# PATH is re-exported here because the runit → runsvdir → runsv →
+# script → tcpserver → telnetd → shim → zsh chain drops PATH on at
+# least one wasm-libc execvp hop. yos.sh exports YOS_LIBEXEC as the
+# umbrella's libexec absolute path; we point PATH at it so every
+# spawned tool resolves.
+export PATH=$YOS_LIBEXEC
+exec 2>&1
+exec yos-tcpserver 12323 telnetd -p ./shim

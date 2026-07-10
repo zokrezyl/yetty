@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>yos engine host</title>
+</head>
+<body>
+<!--
+  yos-iframe.html - the yos userspace behind yetty's iframe-pty and
+  iframe-transport, playing the role tinyemu-iframe.html plays for the
+  TinyEMU VM. The "machine" is the yos browser process engine
+  (yos_proc.mjs) running the universal FreeBSD-libc wasm32 userspace.
+
+  TWO channels, mirroring the VM setup:
+
+  1. Console channel (src/yetty/ypty/iframepty.c) - the hvc0 analogue:
+       parent -> iframe : { type:'term-input',  ptyId, data: <string> }
+       parent -> iframe : { type:'term-resize', ptyId, cols, rows }
+       parent -> iframe : { type:'yetty-ready', ptyId }
+       iframe -> parent : { type:'term-output', ptyId, data: <string> }
+     Output is buffered until 'yetty-ready' (the zsh prompt prints in
+     the gap between vm-ready and yetty attaching its listener).
+
+  2. Session channel (src/yetty/ytransport/iframe-transport.c) - what
+     yetty's VISIBLE terminals actually use. yetty wraps each session
+     in telnet-pty.c (RFC 854 + NAWS), so this page implements a tiny
+     telnetd: one fresh interactive zsh per session.
+       parent -> iframe : { type:'session-open',  clientSid, port }
+       parent -> iframe : { type:'session-tx',    clientSid, data: <Uint8Array> }
+       parent -> iframe : { type:'session-close', clientSid }
+       iframe -> parent : { type:'session-opened', clientSid, ok }
+       iframe -> parent : { type:'session-rx',     clientSid, data: <Uint8Array> }
+       iframe -> parent : { type:'session-closed', clientSid }
+     Greeting: IAC DO NAWS + IAC WILL ECHO + IAC WILL SGA. telnet-pty
+     answers WILL NAWS and ships the real cols/rows subnegotiation,
+     which becomes SIGWINCH in the session's zsh.
+
+  Plus { type:'vm-ready', ptyId } once the userspace is up (gates
+  yetty.js loading in the parent) and { type:'yetty-status', ... }
+  lines for the parent's boot overlay.
+-->
+<div id="status">yos engine host - drive me through the parent page</div>
+<script type="module">
+    const params = new URLSearchParams(window.location.search);
+    const ptyId = parseInt(params.get('ptyId') || '1', 10);
+    const initialCols = parseInt(params.get('cols') || '80', 10);
+    const initialRows = parseInt(params.get('rows') || '24', 10);
+    const encoder = new TextEncoder();
+
+    // ---- Status pump -> parent boot overlay --------------------------
+    function postStatus(text, level, tag) {
+        try { console.log('[yos-iframe]', text); } catch (_) {}
+        try {
+            window.parent.postMessage({
+                type: 'yetty-status',
+                text: '[yos] ' + text,
+                level: level,
+                tag: tag
+            }, '*');
+        } catch (_) { /* parent gone */ }
+    }
+    window.addEventListener('error', (event) => {
+        postStatus('page error: ' + (event.error && event.error.stack || event.message), 'err');
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+        postStatus('rejection: ' + (event.reason && event.reason.stack || event.reason), 'err');
+    });
+
+    // ---- Shared userspace (ONE engine = ONE process tree) -------------
+    // The engine (process table, pid namespace, vfs, scheduler, tools,
+    // /usr/share mount) is created once; every shell — the console zsh and
+    // each telnet session — is a session ON that engine. ps/top inside any
+    // shell therefore see every session's processes, and each session's
+    // tty (size, echo, output) stays its own.
+    let sharedEngine = null;  // { startSession }
+    let sharedTools = null;   // name -> compiled module (zsh aliased as sh)
+    let sharedMounts = [];    // /usr/share pack
+    const SHELL_ENV = ['PATH=/bin:/usr/bin', 'HOME=/', 'TERM=xterm-256color',
+                       'PWD=/', 'SHELL=/bin/sh', 'VIMRUNTIME=/usr/share/nvim/runtime'];
+    const FALLBACK_TOOLS = ['zsh', 'pwd', 'id', 'hostname', 'echo', 'cat', 'ls',
+                            'ps', 'date', 'true', 'false', 'tmux'];
+
+    function startShell(cols, rows, onOutput, onExit) {
+        return sharedEngine.startSession(sharedTools.get('zsh'),
+                                         ['zsh', '-f', '+o', 'promptsp'], {
+            onOutput: onOutput,
+            onExit: onExit,
+            env: SHELL_ENV,
+            cols: cols,
+            rows: rows,
+        });
+    }
+
+    // ---- Console channel (iframe-pty / hvc0 analogue) -----------------
+    const OUTPUT_BUFFER_LIMIT = 512 * 1024;
+    let consoleShell = null;
+    let outputBuffer = [];
+    let outputBuffered = 0;
+    let yettyAttached = false;
+    let pendingInput = [];
+    let pendingResize = null;
+
+    function postConsoleOutput(text) {
+        if (!text) return;
+        if (!yettyAttached) {
+            outputBuffer.push(text);
+            outputBuffered += text.length;
+            while (outputBuffered > OUTPUT_BUFFER_LIMIT && outputBuffer.length > 1) {
+                outputBuffered -= outputBuffer.shift().length;
+            }
+            return;
+        }
+        try {
+            window.parent.postMessage({ type: 'term-output', ptyId: ptyId, data: text }, '*');
+        } catch (_) {}
+    }
+
+    // ---- Session channel (telnetd analogue) ---------------------------
+    // yetty's telnet-pty.c is the client. One fresh zsh per session.
+    const IAC = 255, DONT = 254, DO = 253, WONT = 252, WILL = 251, SB = 250, SE = 240;
+    const OPT_ECHO = 1, OPT_SGA = 3, OPT_NAWS = 31;
+    const sessions = new Map();   // clientSid -> session state
+    let pendingSessionOpens = []; // opens that arrived before assets were ready
+    let assetsReady = false;
+    let firstSessionDataSeen = false;
+
+    function postSession(message) {
+        try { window.parent.postMessage(message, '*'); } catch (_) {}
+    }
+
+    function sessionSendBytes(session, bytes) {
+        // Escape 0xFF as IAC IAC for the telnet stream.
+        let escaped = 0;
+        for (const byte of bytes) if (byte === IAC) escaped++;
+        let out = bytes;
+        if (escaped) {
+            out = new Uint8Array(bytes.length + escaped);
+            let write = 0;
+            for (const byte of bytes) {
+                out[write++] = byte;
+                if (byte === IAC) out[write++] = IAC;
+            }
+        }
+        postSession({ type: 'session-rx', clientSid: session.clientSid, data: out });
+    }
+
+    function sessionSendRaw(session, byteList) {
+        postSession({ type: 'session-rx', clientSid: session.clientSid,
+                      data: new Uint8Array(byteList) });
+    }
+
+    function openSession(clientSid, port) {
+        if (sessions.has(clientSid)) {
+            postStatus('session-open for existing clientSid=' + clientSid + ' - ignoring', 'err');
+            return;
+        }
+        const session = {
+            clientSid: clientSid,
+            port: port,
+            shell: null,
+            closed: false,
+            // telnet parser state
+            state: 'data',
+            subneg: [],
+        };
+        sessions.set(clientSid, session);
+        session.shell = startShell(initialCols, initialRows,
+            (fd, text) => {
+                if (session.closed) return;
+                if (!firstSessionDataSeen) {
+                    firstSessionDataSeen = true;
+                    postStatus('session ' + clientSid + ' shell talking (first tx)', 'ok');
+                }
+                sessionSendBytes(session, encoder.encode(text));
+            },
+            (code) => {
+                postStatus('session ' + clientSid + ' zsh exited (' + code + ')');
+                closeSession(clientSid, true);
+            });
+        // Ack FIRST (the parent drops session-rx until 'connected'),
+        // then the telnetd greeting: DO NAWS (telnet-pty answers with
+        // the real terminal size), WILL ECHO + WILL SGA (suppress any
+        // client-side echo - zsh's line editor echoes).
+        postSession({ type: 'session-opened', clientSid: clientSid, ok: true });
+        sessionSendRaw(session, [IAC, DO, OPT_NAWS,
+                                 IAC, WILL, OPT_ECHO,
+                                 IAC, WILL, OPT_SGA]);
+        postStatus('session ' + clientSid + ' open - fresh zsh on port ' + port, 'ok');
+    }
+
+    function closeSession(clientSid, notifyParent) {
+        const session = sessions.get(clientSid);
+        if (!session) return;
+        session.closed = true;
+        if (session.shell) { try { session.shell.dispose(); } catch (_) {} }
+        sessions.delete(clientSid);
+        if (notifyParent) {
+            postSession({ type: 'session-closed', clientSid: clientSid });
+        }
+    }
+
+    function handleSubneg(session) {
+        const sub = session.subneg;
+        // NAWS: opt, width-hi, width-lo, height-hi, height-lo
+        if (sub.length >= 5 && sub[0] === OPT_NAWS) {
+            const cols = (sub[1] << 8) | sub[2];
+            const rows = (sub[3] << 8) | sub[4];
+            if (cols > 0 && rows > 0 && session.shell) {
+                session.shell.resize(cols, rows);
+            }
+        }
+        session.subneg = [];
+    }
+
+    // Feed one telnet-stream byte through the per-session state machine.
+    // Data bytes go to zsh; negotiation gets minimal loop-free replies.
+    function sessionFeedByte(session, byte) {
+        switch (session.state) {
+        case 'data':
+            if (byte === IAC) { session.state = 'iac'; return; }
+            session.shell.writeBytes([byte]);
+            return;
+        case 'iac':
+            if (byte === IAC) { session.shell.writeBytes([IAC]); session.state = 'data'; return; }
+            if (byte === WILL || byte === WONT || byte === DO || byte === DONT) {
+                session.state = { 251: 'will', 252: 'wont', 253: 'do', 254: 'dont' }[byte];
+                return;
+            }
+            if (byte === SB) { session.state = 'sb'; session.subneg = []; return; }
+            session.state = 'data'; // NOP / GA / unknown single-byte command
+            return;
+        case 'will':
+            // WILL NAWS answers our DO NAWS - no reply (loop avoidance).
+            if (byte !== OPT_NAWS) sessionSendRaw(session, [IAC, DONT, byte]);
+            session.state = 'data';
+            return;
+        case 'wont':
+            session.state = 'data';
+            return;
+        case 'do':
+            // DO ECHO / DO SGA answer our WILLs - no reply. Refuse the rest.
+            if (byte !== OPT_ECHO && byte !== OPT_SGA) {
+                sessionSendRaw(session, [IAC, WONT, byte]);
+            }
+            session.state = 'data';
+            return;
+        case 'dont':
+            session.state = 'data';
+            return;
+        case 'sb':
+            if (byte === IAC) { session.state = 'sb-iac'; return; }
+            if (session.subneg.length < 64) session.subneg.push(byte);
+            return;
+        case 'sb-iac':
+            if (byte === SE) { handleSubneg(session); session.state = 'data'; return; }
+            if (session.subneg.length < 64) session.subneg.push(byte);
+            session.state = 'sb';
+            return;
+        }
+    }
+
+    function sessionFeed(session, bytes) {
+        for (const byte of bytes) sessionFeedByte(session, byte);
+    }
+
+    function toBytes(data) {
+        if (data instanceof Uint8Array) return data;
+        if (data && data.buffer) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+        if (data instanceof ArrayBuffer) return new Uint8Array(data);
+        if (data && data.length !== undefined) return new Uint8Array(data);
+        return null;
+    }
+
+    // ---- Message pump --------------------------------------------------
+    window.addEventListener('message', (event) => {
+        const msg = event.data;
+        if (!msg) return;
+        if (msg.type === 'yetty-ready') {
+            yettyAttached = true;
+            postStatus('yetty attached - flushing ' + outputBuffer.length +
+                       ' buffered console chunks', 'ok');
+            const chunks = outputBuffer;
+            outputBuffer = [];
+            outputBuffered = 0;
+            for (const chunk of chunks) {
+                try {
+                    window.parent.postMessage({ type: 'term-output', ptyId: ptyId, data: chunk }, '*');
+                } catch (_) {}
+            }
+            return;
+        }
+        if (msg.type === 'session-open') {
+            if (!assetsReady) {
+                postStatus('session-open clientSid=' + msg.clientSid + ' queued (still booting)');
+                pendingSessionOpens.push({ clientSid: msg.clientSid, port: msg.port });
+            } else {
+                openSession(msg.clientSid, msg.port);
+            }
+            return;
+        }
+        if (msg.type === 'session-tx') {
+            const session = sessions.get(msg.clientSid);
+            const bytes = toBytes(msg.data);
+            if (session && !session.closed && bytes && bytes.length) {
+                sessionFeed(session, bytes);
+            }
+            return;
+        }
+        if (msg.type === 'session-close') {
+            closeSession(msg.clientSid, false);
+            return;
+        }
+        if (msg.ptyId !== ptyId) return;
+        if (msg.type === 'term-input') {
+            if (typeof msg.data !== 'string' || msg.data.length === 0) return;
+            if (consoleShell) consoleShell.writeBytes(encoder.encode(msg.data));
+            else pendingInput.push(msg.data);
+            return;
+        }
+        if (msg.type === 'term-resize') {
+            const size = { cols: msg.cols | 0, rows: msg.rows | 0 };
+            if (consoleShell) consoleShell.resize(size.cols, size.rows);
+            else pendingResize = size;
+        }
+    });
+
+    // ---- Boot the userspace ---------------------------------------------
+    async function boot() {
+        postStatus('loading yos engine modules…', 'phase');
+        const { createInteractiveEngine, loadLiblua } = await import('/engine/yos_proc.mjs');
+        const { compileGuest } = await import('/engine/wasm_patch.mjs');
+        const { parsePack } = await import('/engine/fs_mount.mjs');
+
+        // Tool set: dynamic listing of the umbrella bin dir, so the browser
+        // session has exactly the desktop command set. exec is synchronous,
+        // so everything compiles up front (nvim is ~14 MB).
+        let toolNames;
+        try {
+            toolNames = await (await fetch('/tools/list.json')).json();
+        } catch (_) {
+            toolNames = FALLBACK_TOOLS;
+            postStatus('tools/list.json unavailable - using fallback tool list', 'err');
+        }
+        postStatus('fetching + compiling ' + toolNames.length + ' wasm tools…', 'phase');
+        const tools = new Map();
+        let loadedCount = 0;
+        let failedCount = 0;
+        await Promise.all(toolNames.map(async (name) => {
+            try {
+                const bytes = await (await fetch('/tools/' + name + '.wasm')).arrayBuffer();
+                tools.set(name, await compileGuest(bytes));
+            } catch (_) {
+                failedCount++;
+            }
+            loadedCount++;
+            postStatus('tools ' + loadedCount + '/' + toolNames.length +
+                       (failedCount ? ' (' + failedCount + ' failed)' : ''),
+                       undefined, 'tools-progress');
+        }));
+        if (!tools.get('zsh')) {
+            postStatus('zsh.wasm missing from the tool set - cannot start shells', 'err');
+            return;
+        }
+        tools.set('sh', tools.get('zsh'));
+        sharedTools = tools;
+
+        postStatus('loading liblua.wasm (nvim Lua C API)…');
+        await loadLiblua().catch(() => {
+            postStatus('liblua unavailable - nvim will lack Lua', 'err');
+        });
+
+        postStatus('mounting /usr/share (nvim runtime, zsh functions)…');
+        try {
+            const pack = await (await fetch('/fs/pack.bin')).arrayBuffer();
+            sharedMounts = [{ at: '/usr/share', entries: parsePack(pack) }];
+        } catch (_) {
+            postStatus('fs/pack.bin unavailable - nvim will lack its runtime tree', 'err');
+        }
+
+        // ONE engine for the whole page — one process tree shared by the
+        // console shell and every telnet session.
+        sharedEngine = createInteractiveEngine({
+            tools: sharedTools,
+            mounts: sharedMounts,
+            onUnimpl: () => {},
+        });
+
+        // Console shell (hvc0 analogue) on the iframe-pty channel.
+        postStatus('starting console zsh (' + initialCols + 'x' + initialRows + ')…', 'phase');
+        consoleShell = startShell(initialCols, initialRows,
+            (fd, text) => postConsoleOutput(text),
+            (code) => {
+                postStatus('console zsh exited with code ' + code, 'err');
+                postConsoleOutput('\r\n[yos console session ended - exit ' + code + ']\r\n');
+            });
+        for (const data of pendingInput) consoleShell.writeBytes(encoder.encode(data));
+        pendingInput = [];
+        if (pendingResize) {
+            consoleShell.resize(pendingResize.cols, pendingResize.rows);
+            pendingResize = null;
+        }
+
+        assetsReady = true;
+        // Serve terminal sessions that knocked while we were booting.
+        const queued = pendingSessionOpens;
+        pendingSessionOpens = [];
+        for (const open of queued) openSession(open.clientSid, open.port);
+
+        postStatus('zsh session live', 'ok');
+        try {
+            window.parent.postMessage({ type: 'vm-ready', ptyId: ptyId }, '*');
+        } catch (_) {}
+    }
+
+    boot().catch((error) => {
+        postStatus('boot failed: ' + (error && error.stack || error), 'err');
+        document.getElementById('status').textContent =
+            'yos boot failed: ' + (error && error.message || error);
+    });
+</script>
+</body>
+</html>

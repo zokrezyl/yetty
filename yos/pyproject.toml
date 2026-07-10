@@ -1,0 +1,14 @@
+[project]
+name = "yos"
+version = "0.1.0"
+description = "Linux/POSIX userspace runtime for wasm3 — public BSL-licensed face"
+requires-python = ">=3.11"
+dependencies = [
+  "pyyaml>=6.0",       # build-tools/*/*.py read/write yaml
+  "clang>=18",         # libclang Python bindings for the api-extract tool
+  "libclang>=18",      # ships the libclang.{dylib,so} the bindings dlopen
+]
+
+# No build-system — yos isn't a Python package, this file is only used
+# by `uv sync` (or `pip install -r`) to materialise .venv with the
+# helper-script dependencies.

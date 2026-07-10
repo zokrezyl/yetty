@@ -1,0 +1,76 @@
+# yos meson options.
+#
+# Set on the meson command line, e.g.:
+#   meson setup build-linux -Dfreebsd_version=14.2
+
+option('freebsd_version',
+  type        : 'string',
+  value       : '14.4',
+  description : 'FreeBSD source release tag to fetch for guest sysroot extraction. Available as of 2026-04: 13.5, 14.3, 14.4, 15.0.',
+)
+
+option('freebsd_src_url',
+  type        : 'string',
+  value       : 'https://download.freebsd.org/releases/amd64/@VERSION@-RELEASE/src.txz',
+  description : 'URL template for the FreeBSD src.txz tarball (@VERSION@ is substituted with freebsd_version).',
+)
+
+option('freebsd_src_sha256',
+  type        : 'string',
+  value       : '1b337069331dbf0791dc43129900377da256ba1ec0ef94e0d3f6e6232de84fe2',
+  description : 'sha256 of the src.txz tarball. Empty = unverified first-fetch (the helper will print the observed sha256 for you to pin).',
+)
+
+# ── feature switches ──────────────────────────────────────────────────
+#
+# These cut optional host-side dependencies out of the build. Used by
+# constrained targets (iPhoneSimulator SDK has no libpython3.12 and no
+# system msgpack-c) so the yos binary still links.
+
+option('with_yctl',
+  type        : 'feature',
+  value       : 'auto',
+  description : 'yctl introspection daemon (msgpack-RPC over AF_UNIX). Requires msgpack-c. Disable to drop the dep entirely; --yctl-socket then errors out at parse time.',
+)
+
+option('with_libpython',
+  type        : 'feature',
+  value       : 'auto',
+  description : 'libpython3-embed bridges (env.Py_Initialize / Py_Finalize / PyRun_SimpleString). Disable to drop the dep; guests calling Py_* get unresolved-import traps at load time.',
+)
+
+option('with_openssl',
+  type        : 'feature',
+  value       : 'auto',
+  description : 'openssl host bridges (env.SSL_*, env.EVP_*, env.RAND_*, env.ERR_*). Requires host libssl + libcrypto. Disable to drop the dep; guests calling these get unresolved-import traps at load time.',
+)
+
+option('with_liblua',
+  type        : 'feature',
+  value       : 'auto',
+  description : 'liblua-5.1 host bridges (env.lua_*, env.luaL_*). Requires host liblua-5.1 (pkg-config: lua-5.1 / lua5.1 / lua). Disable to drop the dep; guests calling lua_* get unresolved-import traps at load time.',
+)
+
+option('with_libarchive',
+  type        : 'feature',
+  value       : 'auto',
+  description : 'libarchive host bridges (env.archive_*) for tar/cpio/unzip-class guests. Requires host libarchive (libarchive.so / .dylib). Disable to drop the dep; guests calling archive_* get unresolved-import traps at load time.',
+)
+
+option('ios_unblock',
+  type        : 'boolean',
+  value       : false,
+  description : 'When building against the iPhoneSimulator SDK, work around the six libc symbols (system, drem, gamma, finite, significand, clock_settime) that Apple marks `unavailable` on iOS but ships in libSystem at runtime. Resolves them via dlsym on first call.',
+)
+
+option('tvos_unblock',
+  type        : 'boolean',
+  value       : false,
+  description : 'When building against the AppleTVOS SDK, work around the libc symbols Apple marks `unavailable` on tvOS (the iOS set plus daemon and execvP). Resolves them via dlsym on first call. See build-tools/tvos/tvos-unblock.{h,c}.',
+)
+
+option('build_static_lib',
+  type        : 'boolean',
+  value       : false,
+  description : 'Also build yos as a static library (libyos.a) with main() renamed to yos_main(). Used by app-bundle targets (tvOS / iOS) where the bundle launcher supplies its own main() and UIApplicationMain.',
+)

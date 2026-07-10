@@ -1,0 +1,1019 @@
+# src/yos/codegen/hooks.yaml — per-libc-function routing rules.
+#
+# Default for any libc function NOT listed here is `passthrough`:
+# bridge.py emits a wasm3 raw-function wrapper (m3w_<name>) that
+# pops args, translates wasm pointers, and calls the host libc
+# function directly. That covers the bulk of the surface (string
+# ops, math, scalar I/O, etc.) for free.
+#
+# Categories below name the EXCEPTIONS — functions that need
+# something other than a plain host-libc call. The key in each
+# bucket is the exact libc-function name (matches the wasm import
+# name on `env.<name>`).
+#
+# Routing destinations:
+#   custom_vfs       -> yos_<name>(ctx, ...)  defined in src/yos/impl/io/io.c
+#   custom_proc      -> yos_<name>(ctx, ...)              src/yos/impl/proc.c
+#   custom_pthread   -> yos_<name>(ctx, ...)              src/yos/impl/pthread.c
+#   custom_mem       -> yos_<name>(ctx, ...)              src/yos/impl/mem.c
+#   custom_alloc     -> yos_<name>(ctx, ...)              src/yos/impl/alloc.c
+#                      (mimalloc-over-wasm-linear-memory)
+#   custom_sig       -> yos_<name>(ctx, ...)              src/yos/impl/sig.c
+#   struct_convert   passthrough + wasm32<->host struct conversion
+#                    around named in-/out-parameters
+#   variadic         bridge.py emits NOTHING; m3w_<name> is hand-
+#                    written in src/yos/impl/vararg.c (printf family)
+#   stub             m3w_<name> body returns -ENOSYS at runtime
+#                    (Linux-only or unportable functions)
+#   runtime_owned    bridge.py emits NOTHING; main.c binds the wasm
+#                    import directly (e.g. `setjmp`, `longjmp`,
+#                    `__yos_argc`, …)
+#
+# Naming rule: the symbol bridge.py routes to is ALWAYS `yos_<name>`
+# (no `_proc_`, `_vfs_`, `_mem_` infix). One file per area in
+# src/yos/impl/ groups them by category, but the function name itself
+# is bare `yos_fork`, `yos_open`, `yos_brk`, etc.
+
+# ─── Process / thread / exec / wait / signal-by-pid ───────────────────
+custom_proc:
+  # impl/posix.c
+  - getuid
+  - geteuid
+  - getgid
+  - getegid
+  - issetugid
+  - raise
+  - killpg
+  # sysconf — host darwin returns LONG_MAX for unbounded limits (e.g.
+  # _SC_OPEN_MAX = 9223372036854775807). The auto-bridge truncates
+  # the host `long` to wasm32 `long` (32-bit) and the guest sees -1,
+  # which it can't distinguish from a real error. impl/libc/posix.c
+  # yos_sysconf clamps to INT32_MAX and routes errno through
+  # yos_errno_neg.
+  - sysconf
+  # impl/posix.c — socket-side bridges that need wfd→hfd translation.
+  # The auto-bridge passes the wasm fd straight through to host
+  # bind/listen/etc. which then sees an unrelated fd or EBADF.
+  - bind
+  - listen
+  - connect
+  - accept
+  - send
+  - recv
+  - sendto
+  - recvfrom
+  # impl/posix.c — msghdr is pointer-heavy (msg_name/msg_iov/msg_control
+  # are guest offsets) and the auto-bridge both passes the wasm fd raw
+  # AND casts the guest msghdr as a host one. Hand bridge translates the
+  # fd, the iovec array, and SCM_RIGHTS fds (imsg/tmux pass fds this way).
+  - sendmsg
+  - recvmsg
+  # impl/posix.c — glob_t is pointer-heavy and the errfunc arg is a guest
+  # function index; the auto-bridge made host glob call ctx->memory+0 as
+  # the errfunc (crash) and filled gl_pathv with host pointers. Hand
+  # bridge forces errfunc NULL and copies matches into guest memory.
+  - glob
+  - globfree
+  - shutdown
+  - getpeername
+  # impl/posix.c — fd_set bitmap is indexed by raw fd number; auto-
+  # bridge passes wasm fds straight through, host select then looks
+  # at the wrong fds and never blocks (busy-spin in telnetd's PTY/
+  # socket proxy loop). Hand bridge translates wasm fds ↔ host fds
+  # on both sides of the host select call.
+  - select
+  # impl/posix.c — fd-taking, also need wfd→hfd translation.
+  - posix_fadvise
+  - posix_fallocate
+  # impl/posix.c — FreeBSD-only, mapped to host pathconf so ls's
+  # ACL probe returns sensible values instead of ENOSYS (which
+  # makes ls warn "Invalid argument" for every entry).
+  - lpathconf
+  # impl/posix.c — output through wasm pointer to double array.
+  - getloadavg
+  # impl/posix.c — page-align addr/len before host call.
+  - posix_madvise
+  # impl/posix.c — wasm-side timeval[2] widen-to-host before host call.
+  # struct_convert handles single timeval but not 2-elem array form.
+  - utimes
+  - futimes
+  - lutimes
+  # impl/posix.c — host fd-translating, returns wasm offset to caller's
+  # buf. Auto-bridge stubs because of `char *` return alias.
+  - if_indextoname
+  # impl/posix.c — Linux extension to accept(2). Translates FreeBSD
+  # SOCK_CLOEXEC/SOCK_NONBLOCK and allocates a wasm fd.
+  - accept4
+  # impl/posix.c — uname's backend on FreeBSD (uname() is inline in
+  # <sys/utsname.h>). Returns FreeBSD wasm32 face fields.
+  - __xuname
+  # fstatat moved BACK to struct_convert; AT_* flag translation
+  # to be added there (or via auto-bridge enhancement) instead of
+  # hand-bridging — that change broke nvim-edit-session.
+  # impl/posix.c — gid_t is u32 both sides; just copy through.
+  - getgroups
+  # impl/posix.c — multibyte-width accessor; yos's wasm side has no
+  # multibyte locale support, so always 1.
+  - ___mb_cur_max
+  # impl/posix.c — FreeBSD-internal stdio buffer-spill; routes through
+  # yos_fputc (which uses fd_map for the stream handles).
+  - __swbuf
+  # impl/posix.c — host fstatfs + FreeBSD-shape struct (2344 bytes).
+  - fstatfs
+  # impl/regex.c — handle-table indirection; see header comment there.
+  - regcomp
+  - regexec
+  - regfree
+  - regerror
+  # impl/posix.c — variadic no-op (no observable process title in wasm).
+  - setproctitle
+  # impl/posix.c — scandir(3) comparators. const struct dirent ** →
+  # reach through twice for d_name, call strcoll / strverscmp.
+  - alphasort
+  - versionsort
+  # impl/pwd.c — static protocol table covering tcp/udp/icmp/ip.
+  - getprotobyname
+  - getprotobynumber
+  # impl/posix.c — DNS / sockaddr conversion. Builds a wasm-side
+  # linked list of addrinfo blocks via yos_malloc (same pattern as
+  # getpwuid), translates FreeBSD↔host sockaddr layout (sin_len byte).
+  - getaddrinfo
+  - freeaddrinfo
+  - getnameinfo
+  # impl/env.c — env table backed by wasm linear memory.
+  - getenv
+  - setenv
+  - unsetenv
+  - putenv
+  - clearenv
+  # impl/random.c — proper EFAULT on NULL + arc4random direct via
+  # getentropy (sidestep glibc's atfork-confused arc4random state).
+  - getentropy
+  - arc4random
+  - arc4random_buf
+  - arc4random_uniform
+  # impl/pwd.c — struct passwd / group are pointer-heavy; the auto-
+  # bridge can't translate host pointers to wasm offsets, and these
+  # used to be stubbed with -ENOSYS — that's what made ssh print
+  # "No user exists for uid 1000" before exec.
+  - getpwuid
+  - getpwuid_r
+  - getpwnam
+  - getpwnam_r
+  - getpwent
+  - setpwent
+  - endpwent
+  - getgrgid
+  - getgrgid_r
+  - getgrnam
+  - getgrnam_r
+  - getgrent
+  - setgrent
+  - endgrent
+  - getlogin
+  - getlogin_r
+  # FreeBSD libutil helpers ls(1) calls per entry to render the
+  # owner/group columns. Glibc has no equivalent; without these the
+  # codegen ENOSYS stub returns NULL, which ls treats as fatal OOM.
+  - user_from_uid
+  - group_from_gid
+  # impl/posix.c — FreeBSD libc helper that renders mode bits as the
+  # 11-char "drwxr-xr-x " column ls -l prints. Pure / stateless; no
+  # glibc equivalent. Without it ls -l silently drops the mode column.
+  - strmode
+  # impl/posix.c — secure-zero of caller-supplied memory that the
+  # compiler is forbidden to elide. The host-API extractor misses it
+  # on darwin (declaration sits behind a feature-test that doesn't
+  # match our extractor's predefines), so without a hook it would
+  # silently route to the ENOSYS-style void stub and leak key
+  # material in ssh / sshd / ssh-keygen.
+  - explicit_bzero
+  # impl/posix.c — services-DB lookup. Codegen leaves these as
+  # "complex arg/return types" stubs (return 0) because struct servent
+  # carries host char* pointers the auto-bridge can't marshal. ssh's
+  # "Port ssh" / "-p ssh" parsing calls getservbyname; without a real
+  # bridge the symbol resolves to NULL and ssh falls back to its
+  # compiled 22 with no diagnostic.
+  - getservbyname
+  - getservbyport
+  # impl/posix.c — readpassphrase(3) is OpenBSD libc; not in glibc and
+  # invisible to the darwin host-API extractor, so codegen leaves it
+  # unresolved and ssh / ssh-add / sshd trap on `unresolved import
+  # env.readpassphrase` the first time a key passphrase is needed
+  # (e.g. when the local known_hosts is incomplete and ssh prompts
+  # to confirm the host key). Hand-bridge opens /dev/tty, turns off
+  # echo, reads the line, restores termios.
+  - readpassphrase
+  # impl/libc/iconv.c — the iconv trio needs hand bridges: iconv()'s
+  # char** in/out args carry guest OFFSETS behind the outer pointer (a
+  # passthrough made host iconv dereference a wasm offset as a host
+  # address — SIGSEGV in glibc the moment nvim's :terminal converted
+  # its first typed byte), and iconv_open()'s host iconv_t return
+  # cannot fit the guest's 32 bits (handle table instead).
+  - iconv
+  - iconv_open
+  - iconv_close
+  # impl/posix.c — timingsafe_bcmp(3) / timingsafe_memcmp(3) are
+  # OpenBSD constant-time comparison primitives. glibc has neither;
+  # darwin libSystem has bcmp but not memcmp. Codegen stubs both with
+  # ENOSYS / return -1 on Linux, which makes ssh's MAC verifier think
+  # every received packet's tag mismatches — visible as
+  # "ssh_dispatch_run_fatal: ... message authentication code incorrect"
+  # the moment encryption starts, and as ssh-keygen "missing header"
+  # on every sig file. Real impls in impl/posix.c run a constant-time
+  # loop in linear memory.
+  - timingsafe_bcmp
+  - timingsafe_memcmp
+  # impl/pty.c — pseudo-terminal allocation chain telnetd needs to
+  # set up a session. Codegen leaves these as ENOSYS stubs which
+  # makes telnetd write "All network ports in use" and exit.
+  - posix_openpt
+  - grantpt
+  - unlockpt
+  - ptsname
+  - ptsname_r
+  # impl/fifo.c — userspace FIFO registry. tvOS / iOS sandboxes
+  # reject host mkfifo(2) with EPERM, which breaks runit's runsv
+  # at startup. yos_mkfifo creates a placeholder file + a host
+  # pipe(2) pair under that path; yos_open returns a dup of the
+  # matching pipe end. See impl/fifo.c.
+  - mkfifo
+  - mkfifoat
+  # stat/lstat/fstatat — overlay S_IFIFO on registry-matched paths
+  # so runsv and friends see our placeholder file as a real FIFO.
+  - stat
+  - lstat
+  - fstatat
+  # impl/mbwc.c — host scratch mbstate_t per call. FreeBSD's
+  # mbstate_t is 128 bytes (union with __mbstate8[128]); glibc's is
+  # 8 bytes — passing the guest pointer straight through trips
+  # glibc's __mbsinit assertion and aborts the process.
+  - mbrtowc
+  - mbsinit
+  - mbsrtowcs
+  - mbtowc
+  - mblen
+  - wcrtomb
+  - wctomb
+  # impl/io/file.c — wide-char stdio. The auto-bridge casts the guest
+  # stream handle (1/2/3) straight to a host FILE* and SIGSEGVs; these
+  # decode/encode UTF-8 one code point at a time over the fd_map byte
+  # primitives instead (tr reads its input via fgetwc/getwc).
+  - fgetwc
+  - getwc
+  - getwchar
+  - fputwc
+  - putwc
+  - putwchar
+  # impl/pwd.c — same static-buffer pattern for the time-string
+  # family. Returns wasm offset to a per-ctx slot containing the
+  # struct tm / time string.
+  - gmtime
+  - localtime
+  - ctime
+  - ctime_r
+  - asctime
+  - asctime_r
+  # impl/pwd.c — string-returning helpers, all need wasm-side
+  # static-buffer pattern (auto-bridge can't translate const char *
+  # returns to wasm offsets).
+  - strerror
+  - gai_strerror
+  - hstrerror
+  - strsignal
+  # impl/pwd.c — more static-buffer string returners. Same pattern.
+  # Most were getting auto-stubbed because bridge.py can't translate
+  # `const char *` returns to wasm offsets. Each gets its own slot.
+  - ttyname
+  - ttyname_r
+  - ctermid
+  - dirname
+  - getwd
+  - tempnam
+  - mktemp
+  - l64a
+  - nl_langinfo
+  - setlocale
+  - getusershell
+  - setusershell
+  - endusershell
+  - tmpnam
+  # impl/pwd.c — strftime needs cv_tm_w2h to widen wasm tm to host tm
+  # before formatting. Auto-bridge can't see the in-pointer's struct
+  # converter requirement.
+  - strftime
+  # impl/pwd.c — pointer-into-input return convention (the result
+  # is a wasm offset into one of the input buffers).
+  - strtok
+  - strtok_r
+  - strsep
+  - strptime
+  # impl/pwd.c — opens a temp file and registers the FILE* in the
+  # wasm-side handle table (impl/file.c).
+  - tmpfile
+  # impl/posix.c — FreeBSD libc only; glibc has no fmtcheck.
+  - fmtcheck
+  - fork
+  - vfork
+  - execve
+  - execv
+  - execvp
+  - execvpe
+  - exit
+  - _exit
+  - _Exit
+  - getpid
+  - getppid
+  - getpgid
+  - getpgrp
+  - getsid
+  - setpgid
+  - setsid
+  - gettid
+  - kill
+  - killpg
+  - tkill
+  - tgkill
+  - raise
+  - waitpid
+  - wait
+  - wait3
+  - wait4
+  - waitid
+
+# ─── pthread ──────────────────────────────────────────────────────────
+# pthread_* are bound to wasm imports by `yos_pthread_host_link()` in
+# src/yos/impl/pthread.c (the L1 host wrappers). bridge.py must NOT
+# emit anything for these names — the host runtime owns them. We
+# changed `yos_pthread_host_link` itself to bind under the bare names
+# (env.pthread_create, env.pthread_mutex_lock, …) instead of the
+# prefixed `env.yos_pthread_*` names yos-private's musl shim used.
+runtime_owned_pthread: &runtime_owned_pthread
+  - pthread_create
+  - pthread_join
+  - pthread_detach
+  - pthread_self
+  - pthread_equal
+  - pthread_exit
+  - pthread_cancel
+  - pthread_kill
+  - pthread_mutex_init
+  - pthread_mutex_destroy
+  - pthread_mutex_lock
+  - pthread_mutex_trylock
+  - pthread_mutex_unlock
+  - pthread_cond_init
+  - pthread_cond_destroy
+  - pthread_cond_wait
+  - pthread_cond_timedwait
+  - pthread_cond_signal
+  - pthread_cond_broadcast
+  - pthread_rwlock_init
+  - pthread_rwlock_destroy
+  - pthread_rwlock_rdlock
+  - pthread_rwlock_wrlock
+  - pthread_rwlock_unlock
+  - pthread_rwlock_tryrdlock
+  - pthread_rwlock_trywrlock
+  - pthread_key_create
+  - pthread_key_delete
+  - pthread_setspecific
+  - pthread_getspecific
+  - pthread_once
+  - pthread_attr_init
+  - pthread_attr_destroy
+  - pthread_attr_setdetachstate
+  - pthread_attr_getdetachstate
+  - pthread_attr_setstacksize
+  - pthread_attr_getstacksize
+  - pthread_attr_setstackaddr
+  - pthread_attr_getstackaddr
+  # pthread_spin_* — darwin libSystem has no pthread_spin family at all,
+  # so a tier-1 host-libc passthrough won't link there. yos provides them
+  # via C11 atomics on the wasm cell directly (impl/pthread.c) — same
+  # impl works on Linux + darwin.
+  - pthread_spin_init
+  - pthread_spin_destroy
+  - pthread_spin_lock
+  - pthread_spin_trylock
+  - pthread_spin_unlock
+
+# ─── VFS (fd virtualisation, cwd-relative paths) ──────────────────────
+custom_vfs:
+  - socketpair  # impl/posix.c
+  # closefrom(lowfd) / close_range(lowfd, hifd, flags) — POSIX "close
+  # every fd >= lowfd". glibc 2.34+ exposes both as host libc symbols,
+  # so the auto-classifier sees them on Linux and emits a passthrough
+  # that calls the host versions with the WASM fd numbers — wiping out
+  # host fds 3/4/5 where yos_fd_table_init parks the stdin/stdout/stderr
+  # dups. ssh -v on Linux exited silently from EBADF on every stderr
+  # write. Hand bridges in impl/io/io.c walk ctx->fd_map[a0..] and call
+  # yos_fd_close, so the host stdio dups stay intact.
+  - closefrom
+  - close_range
+  # termios family — FreeBSD struct termios is 44 B with c_cc[20] and a
+  # different control-char index assignment (VINTR=8 vs Linux 0).
+  # Linux glibc termios is 60 B with c_line + c_cc[32]. The auto-bridge
+  # passes the wasm pointer straight to host glibc which reads/writes
+  # the wrong fields and returns ENOTTY — leaving the pty in cooked
+  # mode so Ctrl-C is not delivered to nvim. impl/posix.c does the
+  # bit-by-bit translation. See yos_tcsetattr/yos_tcgetattr.
+  - tcsetattr
+  - tcgetattr
+  - cfmakeraw
+  - cfsetispeed
+  - cfsetospeed
+  - cfgetispeed
+  - cfgetospeed
+  - fstat   # see struct_convert comment
+  # getsockname: needs fd_map translation AND the wasm guest's
+  # FreeBSD sockaddr layout (sa_len + sa_family bytes at offsets 0,1)
+  # vs the host's Linux layout (sa_family uint16 at offset 0).
+  # libuv's uv_guess_handle reads ss_family at offset 1 (FreeBSD)
+  # and gets the high byte of Linux's ss_family — 0 instead of
+  # AF_UNIX, so it can't recognise the spawn pipe and asserts.
+  - getsockname
+  # getsockopt: same fd-not-translated bug + SOL_SOCKET / SO_TYPE etc.
+  # have completely different numeric values on FreeBSD (0xffff/0x1008)
+  # vs Linux (1/3). Pass-through breaks uv_guess_handle's SO_TYPE
+  # query, so libuv can't recognise socketpair-backed UV_NAMED_PIPEs.
+  - getsockopt
+  - setsockopt
+  # socket: needs to allocate a wasm fd slot for the returned host fd
+  # (auto-bridge returns the host fd straight to wasm, breaking later
+  # close/read/write fd-map lookups) and translate the FreeBSD SOCK_*
+  # type flags (SOCK_CLOEXEC=0x10000000) to Linux equivalents.
+  - socket
+  # realpath: auto-bridge stubs to NULL because it returns char* and the
+  # generator's RET_IS_DST table doesn't know it aliases the SECOND arg.
+  # FreeBSD-base realpath(1) calls realpath(path, buf) with non-NULL buf;
+  # the stubbed bridge returns NULL with errno=0, making realpath(1)
+  # warn `yos-tool: <path>: errno=0` for every interactive shell-prompt
+  # invocation. Hand-written body in impl/posix.c calls host realpath on
+  # buf and returns the buf's wasm offset.
+  - realpath
+  # mkdtemp: auto-bridge stubs to NULL ("complex arg/return types").
+  # nvim's swap-file machinery uses it to create a unique per-session
+  # subdir under /tmp/nvim.<uid>/; without it, nvim can't allocate
+  # any swap-file name and falls into "E326: Too many swap files
+  # found" + E303 on every run. impl/posix.c calls host mkdtemp
+  # in-place on the wasm template, returns the original wasm offset.
+  - mkdtemp
+  - mkstemp
+  - mkostemp
+  - mkostemps
+  # FILE* family — impl/file.c. Guest sees small-int handles into a
+  # host FILE* table; passing those to host libc as FILE* would
+  # segfault since our handles aren't real FILE struct addresses.
+  - fopen
+  - freopen
+  - fdopen
+  - fclose
+  - fread
+  - fwrite
+  - fread_unlocked
+  - fwrite_unlocked
+  - fgetc
+  - getc
+  - getc_unlocked
+  - fputc
+  - putc
+  - putc_unlocked
+  - ungetc
+  - fgets
+  - fputs
+  - fflush
+  - feof
+  - ferror
+  - clearerr
+  - fileno
+  - fseek
+  - fseeko
+  - ftell
+  - ftello
+  - rewind
+  - setbuf
+  - setvbuf
+  - setbuffer
+  - setlinebuf
+  - getline
+  - getdelim
+  - open
+  - openat
+  - creat
+  - close
+  - read
+  - pread
+  - readv
+  - preadv
+  - write
+  - pwrite
+  - writev
+  - pwritev
+  - lseek
+  - dup
+  - dup2
+  - dup3
+  - pipe
+  - pipe2
+  - fcntl
+  - ioctl
+  - access
+  - faccessat
+  - chdir
+  - fchdir
+  - getcwd
+  - mkdir
+  - mkdirat
+  - rmdir
+  - unlink
+  - unlinkat
+  - link
+  - linkat
+  - symlink
+  - symlinkat
+  - readlink
+  - readlinkat
+  - rename
+  - renameat
+  - chmod
+  - fchmod
+  - fchmodat
+  - chown
+  - fchown
+  - fchownat
+  - lchown
+  - umask
+  - truncate
+  - ftruncate
+  - fsync
+  - fdatasync
+  - sync
+  - isatty
+  # opendir(3) family — auto-bridge can't handle the opaque DIR* pointer.
+  # impl/dir.c keeps a host-side DIR* slot table indexed by a small int
+  # the wasm guest treats as `DIR *`, and lays out FreeBSD-i386
+  # struct dirent into a per-DIR scratch in linear memory.
+  - opendir
+  - fdopendir
+  - readdir
+  - closedir
+  - dirfd
+  - rewinddir
+  # copy_file_range: keep cp(1) on the portable read/write fallback.
+  - copy_file_range
+  # poll(2): the auto-bridge can't render it (nfds is unsigned int on
+  # FreeBSD/wasm32 and unsigned long on host x86_64 — a kind_mismatch
+  # delta), so it landed in `needs_policy` and shipped as nothing. zsh's
+  # ZLE calls poll() from getbyte() to wait for the next key — without
+  # this bridge, every interactive zsh session traps with `env.poll
+  # unresolved` the moment you press an arrow key (or any key zsh's
+  # multi-byte sequence reader peeks ahead for). Hand-written in
+  # impl/io/io.c: translate per-pollfd fd through fd_map, leave events/
+  # revents unchanged (POLL* bit values match between FreeBSD and Linux).
+  - poll
+  # ppoll(2): codegen labels it Linux-only and stubs it ENOSYS on
+  # darwin/BSD. ssh's dispatch_run loop calls ppoll(pfds, nfds, NULL,
+  # NULL) for every server read after the handshake — the stub returns
+  # -1/ENOSYS and ssh prints "ssh_dispatch_run_fatal: Connection lost"
+  # immediately after MSG_NEWKEYS. impl/io/dir.c::yos_ppoll converts
+  # the timespec timeout to milliseconds and forwards to yos_poll;
+  # the sigmask argument is ignored (ssh passes NULL).
+  - ppoll
+
+# ─── Memory ───────────────────────────────────────────────────────────
+custom_mem:
+  - brk
+  - sbrk
+  - mmap
+  - mmap2
+  - munmap
+  - mprotect
+  - mremap
+  - madvise
+  - mlock
+  - munlock
+  - mlockall
+  - munlockall
+
+# ─── Allocator (mimalloc over wasm linear memory) ─────────────────────
+# Bridges route to yos_<name>(ctx, ...) in src/yos/impl/alloc.c. mimalloc
+# manages an arena carved out of the guest's wasm linear memory; bodies
+# convert host pointers ↔ wasm offsets at the boundary.
+custom_alloc:
+  - malloc
+  - free
+  - calloc
+  - realloc
+  - reallocarray
+  - posix_memalign
+  - aligned_alloc
+  - memalign
+  - valloc
+  - malloc_usable_size
+
+# ─── Signal handling ──────────────────────────────────────────────────
+custom_sig:
+  - sigaction
+  - sigprocmask
+  # impl/sig.c — same layout as sigprocmask (16B FreeBSD ↔ 128B host
+  # sigset_t, FreeBSD SIG_BLOCK=1/UNBLOCK=2/SETMASK=3 → host 0/1/2),
+  # but operates on the calling pthread's mask instead of the process
+  # mask. Used by zsh's job-control + nvim's libuv.
+  - pthread_sigmask
+  - sigpending
+  - sigsuspend
+  - sigaltstack
+  - sigwait
+  - sigwaitinfo
+  - sigtimedwait
+  - signal
+  # Pure userspace bitmap ops on the FreeBSD-shape 16-byte sigset_t.
+  # No host call; we manipulate the wasm-side bytes directly.
+  - sigemptyset
+  - sigfillset
+  - sigaddset
+  - sigdelset
+  - sigismember
+
+# ─── Stat / time / rusage struct conversion ───────────────────────────
+# Each entry is name -> { which params need conversion, type-name }.
+# The bridge body wraps the host call with wasm32_to_host / host_to_-
+# wasm32 calls around the named arguments. Output parameters are
+# zeroed before the call and copied out only on success. The struct
+# names refer to converters emitted into struct_convert.{c,h} by our
+# generate_struct_convert.py.
+struct_convert:
+  # stat / lstat / fstatat moved to custom_vfs (impl/fifo.c) — they
+  # need a FIFO-registry st_mode overlay after the host stat() call,
+  # then run cv_stat_h2w themselves to convert the result. Listing
+  # them HERE in addition would make codegen emit a duplicate body.
+  # fstat: hand-bridged in impl/posix.c (fd translation through fd_map).
+  # struct timespec
+  clock_gettime:  {out: tp,      type: timespec}
+  clock_getres:   {out: res,     type: timespec}
+  nanosleep:      {in:  rqtp,    out: rmtp, type: timespec}
+  # struct timeval
+  gettimeofday:   {out: tv,      type: timeval}
+  # struct rusage / rlimit
+  getrusage:      {out: usage,   type: rusage}
+  getrlimit:      {out: rlim,    type: rlimit}
+  setrlimit:      {in:  rlim,    type: rlimit}
+  # struct tm — auto-bridge wrote 56 host bytes into 44-byte wasm slot
+  # and tripped the stack canary on nvim startup.
+  localtime_r:    {out: result,  type: tm}
+  gmtime_r:       {out: result,  type: tm}
+
+# The Tier-2 sidecar (libc-pure.wasm, a second wasm3 instance hosting
+# pure FreeBSD libc sources) has been REMOVED. Every libc function is
+# now resolved as a single yos host bridge — either auto-passthrough
+# to host libc (the default for stateless fns like `abs`, `strlcpy`,
+# `strlen`, `memcpy`) or a hand-written `yos_<name>` in src/yos/impl/.
+# There is no second wasm runtime; one uniform `env.<name>` surface.
+
+# ─── Variadic — codegen skips emission; bodies hand-written ───────────
+variadic:
+  - printf
+  - fprintf
+  - sprintf
+  - snprintf
+  - dprintf
+  - vprintf
+  - vfprintf
+  - vsprintf
+  - vsnprintf
+  - vdprintf
+  - asprintf
+  - vasprintf
+  - scanf
+  - fscanf
+  - sscanf
+  - vscanf
+  - vfscanf
+  - vsscanf
+  - syslog
+  - vsyslog
+  - execl
+  - execlp
+  - execle
+
+# ─── Stub: -ENOSYS at runtime ─────────────────────────────────────────
+# Linux-only or otherwise non-portable. Listed explicitly so they
+# don't accidentally fall through to passthrough and call host glibc
+# directly on a non-Linux build.
+stub:
+  - process_vm_readv
+  - process_vm_writev
+  # cget* — FreeBSD libc termcap-style database lookup. Auto-bridge
+  # generates `(char **)(ctx->memory + a)` for the `char **db_array`
+  # argument and passes that straight to host cgetent. Host libc then
+  # dereferences entries that hold wasm offsets, not host pointers,
+  # and segfaults inside _platform_strlen. Stubbing returns -1
+  # (entry not found), which makes telnetd / login / similar callers
+  # fall back to defaults. Real fix is a hand-written bridge that
+  # translates the inner array; until then this keeps the host alive.
+  - cgetent
+  - cgetcap
+  - cgetfirst
+  - cgetnext
+  - cgetstr
+  - cgetustr
+  - cgetnum
+  - cgetmatch
+  - cgetclose
+  - cgetset
+  - epoll_create
+  - epoll_create1
+  - epoll_ctl
+  - epoll_wait
+  - epoll_pwait
+  # kqueue family — moved to runtime_owned (impl/kqueue.c).
+  - inotify_init
+  - inotify_init1
+  - inotify_add_watch
+  - inotify_rm_watch
+  - splice
+  - tee
+  - vmsplice
+  # FreeBSD sigset_t is 16 bytes (__uint32_t[4]) but Linux sigset_t is
+  # 128 bytes (unsigned long[16]). Auto-passthrough corrupts memory.
+  # impl/signal.c binds layout-aware impls via yos_signal_link.
+  # sigprocmask + sigpending + pthread_sigmask are in custom_sig (impl/sig.c).
+  # sigemptyset/sigfillset/sigaddset/sigdelset/sigismember moved to
+  # custom_sig (impl/sig.c) — pure userspace bitmap ops on the
+  # FreeBSD-shape 16-byte sigset_t.
+  # sysctl + sysctlbyname moved to runtime_owned (impl/sysctl.c).
+  # setproctitle moved to custom_proc (impl/posix.c) — variadic, no-op.
+  # FreeBSD-internal helpers (rarely called in user code).
+  - charsettype
+  - getbytefromcharset
+  - tocharset
+  - tree2cset
+  # ___runetype / ___tolower / ___toupper unstubbed — analyse-report
+  # classifies them as compatible/mechanical (pure int → int with the
+  # same signature on darwin), codegen auto-emits a real passthrough.
+  # __srget still needs human-curated bridge (needs_policy: FILE*
+  # internals).
+  - __srget
+  # __swbuf moved to custom_proc (impl/posix.c) — wraps yos_fputc.
+  # __xuname (uname's backend) moved to custom_proc (impl/posix.c).
+  # Linux-only that nvim/libuv reaches for; safe to stub.
+  - sched_getcpu
+  # copy_file_range moved to custom_vfs — cp(1) probes it first and
+  # falls back to read/write only on EINVAL, so the generic
+  # -ENOSYS stub leaves cp emitting "Remote address changed" and
+  # producing a zero-byte destination. impl/io/io.c returns -EINVAL
+  # to keep cp on the portable fallback path until a real bridge
+  # to host copy_file_range / sendfile lands.
+  - recvmmsg
+  - sendmmsg
+  # accept4 moved to custom_proc (impl/posix.c).
+  # __cxa_atexit moved to runtime_owned (impl/callback.c).
+  - __stack_chk_fail
+  # FreeBSD vs Linux signature mismatches — auto-bridge can't render
+  # them safely. Stub for now; once we have per-platform bridge bodies
+  # we can implement them properly.
+  - swapon
+  - swapoff
+  - mount
+  - umount
+  - umount2
+  - ptrace
+  - sendfile
+  - setpgrp           # Linux: setpgrp(); FreeBSD: setpgrp(pid, pgid)
+  # socketpair handled in impl/posix.c (custom_vfs).
+  # if_indextoname / futimes / lutimes / utimes / accept4 moved to
+  # custom_proc (impl/posix.c).
+  # Locale-aware ctype family — glibc macros expand to (locale)->__ctype_b
+  # but bridge.py passes the locale_t arg as void*, which can't dereference
+  # the struct member. Stub until bridge.py learns to cast wasm pointers
+  # to the proper host opaque type per parameter.
+  - isalnum_l
+  - isalpha_l
+  - isblank_l
+  - iscntrl_l
+  - isdigit_l
+  - isgraph_l
+  - islower_l
+  - isprint_l
+  - ispunct_l
+  - isspace_l
+  - isupper_l
+  - isxdigit_l
+  - iswalnum_l
+  - iswalpha_l
+  - iswblank_l
+  - iswcntrl_l
+  - iswctype_l
+  - iswdigit_l
+  - iswgraph_l
+  - iswlower_l
+  - iswprint_l
+  - iswpunct_l
+  - iswspace_l
+  - iswupper_l
+  - iswxdigit_l
+  - tolower_l
+  - toupper_l
+  - towlower_l
+  - towupper_l
+  # towctrans unstubbed — compatible signature on darwin, codegen
+  # auto-passthrough. towctrans_l still stubbed (locale_t is a host
+  # opaque pointer the bridge would have to translate).
+  - towctrans_l
+  # Wide-char variadic-like fns. Take va_list as a regular arg, but
+  # bridge.py mis-renders the wrapper-vs-body arg count for them.
+  - vfwprintf
+  - vfwscanf
+  - vswprintf
+  - vswscanf
+  - vwprintf
+  - vwscanf
+  # regexec / regcomp / regfree / regerror moved to custom_proc — the
+  # impl in impl/regex.c uses a host-side regex_t handle table so the
+  # opaque regex_t doesn't expose host layout to the wasm guest. The
+  # auto-bridge for regcomp was casting the wasm offset straight to
+  # `struct re_pattern_buffer *`, writing host pointers into wasm
+  # memory; regexec then could not safely read it back.
+  # tmpnam moved to custom_proc (impl/pwd.c).
+  - pthread_getcpuclockid
+  - pthread_getschedparam
+  - pthread_setschedparam
+  # setlinebuf moved to custom_vfs (impl/file.c).
+  # Subsystem entries we don't have yet — stubbed to keep the build
+  # green while we land them one at a time. Each move from `stub` to
+  # `custom_<area>` requires the matching yos_<name>(ctx, ...) entry
+  # in the corresponding src/yos/impl/<area>.c.
+  # NOTE: many basic POSIX fns that were stubbed here actually pass
+  # through to host libc cleanly — they were over-stubbed in an
+  # earlier sweep. Removed: dup, fchdir, fsync, fdatasync, sync,
+  # isatty, umask, pread, pwrite, getuid, geteuid, getgid, getegid,
+  # sbrk, raise, killpg. Those are now auto-passthrough bridges.
+  # fread/fwrite stay stubbed (need FILE* table).
+  # FILE* family routed to impl/file.c — moved to custom_vfs below.
+  # alphasort/versionsort moved to custom_proc (impl/posix.c). They
+  # are scandir comparators that take const struct dirent **; we
+  # reach through twice to find the d_name field and call strcoll /
+  # strverscmp directly.
+  # localtime/gmtime/ctime/asctime/strptime moved to custom_proc
+  # (impl/pwd.c) — same wasm-side static-buffer pattern as getpwuid.
+  # strftime moved to custom_proc (impl/pwd.c) — needs cv_tm_w2h.
+  # struct passwd/group families: moved to custom_proc (impl/pwd.c)
+  # so getpwuid actually returns a non-NULL entry. The user's ssh
+  # bug was "No user exists for uid 1000" caused by these being
+  # stubbed here.
+  # struct hostent / addrinfo / etc.
+  - gethostbyname
+  - gethostbyname_r
+  - gethostbyaddr
+  # getaddrinfo / freeaddrinfo / getnameinfo moved to custom_proc
+  # (impl/posix.c) — same wasm-side linked-list-of-allocated-blocks
+  # pattern as getpwuid: builds the result inside the wasm linear
+  # memory so the guest can dereference the addrinfo's `ai_next` /
+  # `ai_addr` / `ai_canonname` pointers as wasm offsets.
+  - getifaddrs
+  - freeifaddrs
+  # getprotobyname / getprotobynumber moved to custom_proc (impl/pwd.c).
+  # struct utsname differs between FreeBSD/Linux. uname() is an inline
+  # shim around __xuname which is bridged in impl/posix.c.
+  # Note: sigsuspend used to be listed here as a stub. zsh's "fork+wait
+  # for child" pattern is `block(SIGCHLD); sigsuspend(empty); waitpid()`
+  # — with a stub, sigsuspend returns ENOSYS without blocking and zsh
+  # busy-loops forever, hanging on every external command. The custom
+  # body in impl/sig.c polls the proc table for child state changes,
+  # then returns -1/EINTR so zsh's loop falls through to waitpid.
+  # signal/sigpending/sigaltstack/sigwait/sigwaitinfo/sigtimedwait
+  # are routed via custom_sig — impl/sig.c provides the impls.
+  # Leaving them in stub: would emit colliding yos_<name> bodies in
+  # the auto-bridge and break the link.
+  - sigreturn
+  - sigstack
+  # execv / execvp / execvpe — implemented in impl/proc.c (custom_proc).
+  # socketpair, dup, fchdir, fsync, fdatasync, sync, isatty, umask,
+  # pread, pwrite, raise, killpg, getuid, geteuid, getgid, getegid,
+  # sbrk — implemented in impl/posix.c (custom_vfs / custom_proc /
+  # custom_mem / custom_sig per hooks.yaml).
+  # alarm / sleep / ualarm — fully portable; auto-passthrough works.
+  # revoke + wait unstubbed — both classified compatible by analyse,
+  # darwin/iOS/tvOS export them with the same signature, codegen
+  # auto-passthrough Just Works. zsh's wait(2) round-trip now uses
+  # the host call rather than ENOSYS-trapping out of the shell loop.
+  # Note: wait3 was previously stubbed here. zsh's `wait_for_processes`
+  # calls wait3 (configure detected HAVE_WAIT3) and treats anything
+  # that isn't 0 / -1+ECHILD as a hard error → "wait failed:" warnings
+  # on every fork+wait. Now routed through custom_proc to a thin
+  # wrapper around yos_waitpid in impl/proc.c.
+
+# ─── Runtime-owned: the host yos binary binds these directly ──────────
+# (setjmp/longjmp via asyncify, the obsolete __yos_argc helpers, plus
+# the entire pthread family — those are bound by yos_pthread_host_link
+# from src/yos/impl/pthread.c).
+runtime_owned:
+  - setjmp
+  - _setjmp
+  - sigsetjmp
+  - longjmp
+  - _longjmp
+  - siglongjmp
+  - __yos_argc
+  - __yos_argv_setup
+  - __yos_envc
+  - __yos_envp_setup
+  - syscall  # the *libc fn* by this name; we intentionally do not export it
+  # strto* family — host writes 8-byte endptr through 4-byte wasm slot,
+  # smashing the stack. impl/strto.c does proper wasm-offset writeback.
+  - strtol
+  - strtoll
+  - strtoul
+  - strtoull
+  - strtoimax
+  - strtoumax
+  - strtoq
+  - strtouq
+  - strtod
+  - strtof
+  # qsort/bsearch/scandir take fn-pointer args; bridge.py can't
+  # translate a wasm function-table index into a host fn pointer.
+  # impl/callback.c implements them with m3_Call on the wasm fn.
+  # atexit family — registered as no-op (we exit via host).
+  - qsort
+  - bsearch
+  - scandir
+  # mergesort/heapsort: BSD-only (glibc lacks them, so they land in
+  # guest_only and would otherwise ENOSYS-stub). Same (base, nmemb,
+  # size, cmp) fn-pointer contract as qsort — impl/callback.c serves
+  # both with the same in-place sort. Without this tr's cset sort gets
+  # a -1 stub, never sorts, and walks off the end (SIGSEGV).
+  - mergesort
+  - heapsort
+  - atexit
+  - __cxa_atexit
+  - at_quick_exit
+  # sysctl + sysctlbyname — FreeBSD-specific, impl/sysctl.c handles
+  # KERN_PROC_PATHNAME (used by uv_exepath) and stubs others to ENOSYS.
+  - sysctl
+  - sysctlbyname
+  # kqueue family — impl/kqueue.c translates to host epoll on Linux.
+  - kqueue
+  - kqueue1
+  - kqueuex
+  - kevent
+  # FreeBSD's `int *__error(void)` — the `errno` macro accessor. main.c
+  # binds it to a trampoline that returns the per-ctx errno_off slot.
+  - __error
+  # FreeBSD's __assert(func, file, line, expr) — the `assert` macro
+  # backend. main.c binds it to a trampoline that prints + aborts so we
+  # see which assertion fired.
+  - __assert
+  # abort — main.c binds a trampoline that prints the wasm backtrace
+  # before aborting so we see WHERE the abort came from.
+  - abort
+  # ── pthread family (bound by yos_pthread_host_link) ────────────────
+  - pthread_create
+  - pthread_join
+  - pthread_detach
+  - pthread_self
+  - pthread_equal
+  - pthread_exit
+  - pthread_cancel
+  - pthread_kill
+  - pthread_mutex_init
+  - pthread_mutex_destroy
+  - pthread_mutex_lock
+  - pthread_mutex_trylock
+  - pthread_mutex_unlock
+  - pthread_cond_init
+  - pthread_cond_destroy
+  - pthread_cond_wait
+  - pthread_cond_timedwait
+  - pthread_cond_signal
+  - pthread_cond_broadcast
+  - pthread_rwlock_init
+  - pthread_rwlock_destroy
+  - pthread_rwlock_rdlock
+  - pthread_rwlock_wrlock
+  - pthread_rwlock_unlock
+  - pthread_rwlock_tryrdlock
+  - pthread_rwlock_trywrlock
+  - pthread_key_create
+  - pthread_key_delete
+  - pthread_setspecific
+  - pthread_getspecific
+  - pthread_once
+  - pthread_attr_init
+  - pthread_attr_destroy
+  - pthread_attr_setdetachstate
+  - pthread_attr_getdetachstate
+  - pthread_attr_setstacksize
+  - pthread_attr_getstacksize
+  - pthread_attr_setstackaddr
+  - pthread_attr_getstackaddr
+
+  # ── Per-ctx libc-globals isolation (impl/libc_globals_link.c). ──
+  # These functions touch host libc globals that the policy file
+  # (build-tools/libbridge/policies/libc.yaml) lists as `leaks`.
+  # Routing them runtime_owned makes bridge.py emit NOTHING; main.c
+  # binds env.<name> to a hand-written per-ctx implementation
+  # (impl/getopt.c, impl/tz.c) that never touches the host global.
+  - getopt
+  - tzset

@@ -16,7 +16,8 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background: #0f0f23;
+            background: #0B1014;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
         }
         body {
             display: flex;
@@ -32,7 +33,6 @@
             background: #141A1F;
             border-bottom: 1px solid #364A47;
             color: #9FA7A8;
-            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
             font-size: 12px;
             line-height: 1.4;
             white-space: nowrap;
@@ -45,141 +45,244 @@
         }
         #topbar a:hover { color: #74C5A5; }
         #topbar .sep { color: #364A47; }
-        #canvas-container {
+        /* ---- Page tabs (plain HTML, not yetty's yui tabs) ---- */
+        #tabbar {
+            flex: 0 0 auto;
+            display: flex;
+            gap: 2px;
+            padding: 6px 10px 0 10px;
+            background: #0B1014;
+            border-bottom: 1px solid #364A47;
+        }
+        .tab {
+            background: #1E262C;
+            border: 1px solid #364A47;
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            color: #9FA7A8;
+            font-family: inherit;
+            font-size: 13px;
+            padding: 7px 18px;
+            cursor: pointer;
+        }
+        .tab:hover { color: #E0E5E4; }
+        .tab.active {
+            background: #0B1014;
+            color: #E0E5E4;
+            border-bottom: 1px solid #0B1014;
+            margin-bottom: -1px;
+            box-shadow: inset 0 2px 0 #6BA892;
+        }
+        .tab-panel {
+            display: none;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+        .tab-panel.active { display: flex; flex-direction: column; }
+        /* ---- Terminals tab ---- */
+        #terminals-panel { overflow-y: auto; padding: 12px; }
+        .term-panel {
+            display: flex;
+            flex-direction: column;
+            height: 60vh;
+            min-height: 320px;
+            margin-bottom: 12px;
+            border: 1px solid #364A47;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #141A1F;
+            flex: 0 0 auto;
+        }
+        .term-panel-header {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 5px 10px;
+            background: #141A1F;
+            border-bottom: 1px solid #364A47;
+            font-size: 12px;
+        }
+        .term-panel-title { color: #E0E5E4; font-weight: bold; }
+        .term-panel-endpoint {
+            color: #556162;
+            flex: 1 1 auto;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .term-panel-close {
+            background: none;
+            border: 1px solid #364A47;
+            border-radius: 4px;
+            color: #9FA7A8;
+            font-family: inherit;
+            font-size: 13px;
+            width: 24px;
+            height: 24px;
+            line-height: 20px;
+            cursor: pointer;
+        }
+        .term-panel-close:hover {
+            color: #E0E5E4;
+            border-color: #6BA892;
+        }
+        .term-panel iframe {
             flex: 1 1 auto;
             min-height: 0;
             width: 100%;
+            border: 0;
+            background: #0f0f23;
+        }
+        /* Drag grip along the bottom edge — resizes the panel, which
+         * resizes the iframe, whose ResizeObserver resizes the canvas
+         * and the terminal within. */
+        .term-panel-grip {
+            flex: 0 0 auto;
+            height: 9px;
+            cursor: ns-resize;
+            background: #141A1F;
+            border-top: 1px solid #364A47;
             position: relative;
+            touch-action: none;
         }
-        canvas {
-            display: block;
-        }
-        #loading {
+        .term-panel-grip::after {
+            content: '';
             position: absolute;
-            top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            color: #eee;
-            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            top: 3px;
+            width: 44px;
+            height: 3px;
+            margin-left: -22px;
+            border-radius: 2px;
+            background: #364A47;
         }
-        /* Boot console — append-only log of each preload step, the VM
-         * download, kernel boot mirror, and yetty startup phases.
-         * Full-viewport overlay so the user can see and scroll
-         * through everything (the tinyemu rootfs alone is 700 MB
-         * raw / 153 MB on the wire, plus full kernel dmesg, plus
-         * userspace boot traces). Closed manually via the × button
-         * once the user is ready to interact with the terminal. */
-        #yetty-status {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            /* Translucent so the user can see the canvas (and yetty
-             * booting up) through the boot log. */
-            background: rgba(0, 0, 0, 0.55);
-            color: #ddd;
-            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-            font-size: 12px;
-            line-height: 1.45;
-            padding: 0;                      /* children own their padding */
-            z-index: 200;
-            pointer-events: auto;            /* let the user wheel-scroll the log */
-            /* Header (fixed) on top, log (scrollable) below — laid out
-             * as a flex column. The minimize button is absolute-
-             * positioned in the top-right of the whole overlay so the
-             * single click collapses the entire window (header + log). */
+        .term-panel-grip:hover::after,
+        .term-panel-grip.dragging::after { background: #6BA892; }
+        /* The hamburger row always sits below the last opened instance. */
+        #menu-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 0 0 auto;
+        }
+        #menu-button {
+            width: 42px;
+            height: 42px;
+            background: #1E262C;
+            border: 1px solid #364A47;
+            border-radius: 8px;
+            color: #6BA892;
+            font-size: 20px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        #menu-button:hover {
+            color: #74C5A5;
+            border-color: #6BA892;
+        }
+        #menu-hint { color: #556162; font-size: 12px; }
+        /* ---- Engines tab (shared temu VM + yos engine) ---- */
+        #emulator-panel { padding: 16px; gap: 16px; overflow-y: auto; }
+        .engine-section {
+            flex: 1 1 0;
+            min-height: 240px;
             display: flex;
             flex-direction: column;
+            gap: 10px;
         }
-        /* Fixed banner above the log: tells the user what's going on
-         * and which line (in green) means it's safe to minimize. Does
-         * NOT scroll with the log. */
-        #yetty-status-header {
-            flex: 0 0 auto;
-            padding: 12px 48px 10px 16px;    /* right padding clears − btn */
-            background: rgba(20, 24, 31, 0.65);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-            color: #cfd4d3;
+        .engine-section h1 {
+            font-size: 16px;
+            color: #E0E5E4;
+        }
+        .engine-section h1 .accent { color: #6BA892; }
+        .engine-desc {
             font-size: 12px;
-            line-height: 1.5;
+            color: #9FA7A8;
+            line-height: 1.6;
+            max-width: 720px;
         }
-        #yetty-status-header .hint-key {
-            color: #6c6;
-            font-weight: bold;
+        .engine-controls {
+            display: flex;
+            align-items: center;
+            gap: 14px;
         }
-        #yetty-status-log {
-            overflow-y: auto;
-            flex: 1 1 auto;
-            min-height: 0;
-            padding: 12px 16px 16px 16px;
-        }
-        /* Custom scrollbar so dark-on-dark stays readable. */
-        #yetty-status-log::-webkit-scrollbar { width: 10px; }
-        #yetty-status-log::-webkit-scrollbar-track { background: #1a1a2e; }
-        #yetty-status-log::-webkit-scrollbar-thumb { background: #444; border-radius: 5px; }
-        #yetty-status-log::-webkit-scrollbar-thumb:hover { background: #666; }
-        #yetty-status .line { white-space: pre-wrap; word-break: break-all; }
-        #yetty-status .line.phase { color: #e94560; font-weight: bold; }
-        #yetty-status .line.ok    { color: #6c6; }
-        #yetty-status .line.err   { color: #f55; font-weight: bold; }
-        #yetty-status .line.dim   { color: #888; }
-        /* `!important` so the class beats the inline `display:flex`
-         * the JS sets on first append. */
-        #yetty-status.minimized { display: none !important; }
-        /* Minimize button — sits in the top-right corner of the
-         * full-screen overlay. Hides the overlay (without losing it)
-         * and reveals the restore pill below; the log keeps growing
-         * in the background so re-opening shows full scroll-back. */
-        #yetty-status-minimize {
-            position: absolute;
-            top: 6px;
-            right: 10px;
-            width: 28px;
-            height: 28px;
-            line-height: 24px;
-            text-align: center;
-            color: #ddd;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid #444;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 18px;
+        .engine-start {
+            background: #6BA892;
+            border: none;
+            border-radius: 6px;
+            color: #0B1014;
             font-family: inherit;
-            pointer-events: auto;
-            user-select: none;
-            z-index: 1;
-        }
-        #yetty-status-minimize:hover { background: #e94560; color: #fff; }
-        /* Pill-shaped restore button — visible only while the overlay
-         * is minimized. Clicking re-expands the overlay. */
-        #yetty-status-restore {
-            position: fixed;
-            top: 8px;
-            right: 8px;
-            display: none;
-            padding: 6px 12px;
-            color: #ddd;
-            background: rgba(20, 20, 31, 0.92);
-            border: 1px solid #444;
-            border-radius: 14px;
+            font-size: 13px;
+            font-weight: bold;
+            padding: 9px 18px;
             cursor: pointer;
+        }
+        .engine-start:hover:not(:disabled) { background: #74C5A5; }
+        .engine-start:disabled { opacity: 0.45; cursor: not-allowed; }
+        .engine-state { font-size: 12px; color: #9FA7A8; }
+        .engine-state.ready { color: #6c6; }
+        .engine-state.err { color: #f55; }
+        .engine-attached { font-size: 12px; color: #556162; }
+        .engine-log {
+            flex: 1 1 auto;
+            min-height: 100px;
+            overflow-y: auto;
+            background: #141A1F;
+            border: 1px solid #364A47;
+            border-radius: 8px;
+            padding: 10px 12px;
             font-size: 12px;
-            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-            user-select: none;
-            z-index: 201;
+            line-height: 1.45;
+            color: #ddd;
         }
-        #yetty-status-restore.visible { display: block; }
-        #yetty-status-restore:hover {
-            background: #e94560;
-            color: #fff;
-            border-color: #e94560;
+        .engine-log::-webkit-scrollbar { width: 10px; }
+        .engine-log::-webkit-scrollbar-track { background: #1a1a2e; }
+        .engine-log::-webkit-scrollbar-thumb { background: #444; border-radius: 5px; }
+        .engine-log::-webkit-scrollbar-thumb:hover { background: #666; }
+        .engine-log .line { white-space: pre-wrap; word-break: break-all; }
+        .engine-log .line.phase { color: #e94560; font-weight: bold; }
+        .engine-log .line.ok    { color: #6c6; }
+        .engine-log .line.err   { color: #f55; font-weight: bold; }
+        .engine-log .line.dim   { color: #888; }
+        .engine-log .line.empty { color: #556162; }
+        /* ---- Help tab ---- */
+        #help-panel {
+            overflow-y: auto;
+            padding: 20px 24px;
         }
-        /* Transport picker — shown before anything heavy loads unless
-         * the URL pins a mode (?mode=temu|websocket|telnet). Colors
-         * follow the brand palette (BRAND_BG ladder + mint accent). */
-        #yetty-mode-dialog {
+        /* Prose panel — block flow, not the flex column of the others. */
+        #help-panel.active { display: block; }
+        .help-inner { max-width: 760px; }
+        .help-inner h1 {
+            font-size: 17px;
+            color: #E0E5E4;
+            margin-bottom: 6px;
+        }
+        .help-inner h1 .accent { color: #6BA892; }
+        .help-inner h2 {
+            font-size: 13px;
+            color: #74C5A5;
+            margin: 18px 0 6px 0;
+        }
+        .help-inner p, .help-inner li {
+            font-size: 12px;
+            color: #9FA7A8;
+            line-height: 1.7;
+        }
+        .help-inner ul { margin: 4px 0 4px 18px; }
+        .help-inner strong { color: #E0E5E4; font-weight: bold; }
+        .help-inner code, .help-inner kbd {
+            background: #1E262C;
+            border: 1px solid #364A47;
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: 11px;
+            color: #E0E5E4;
+        }
+
+        /* ---- Modal dialogs (session menu + per-mode config) ---- */
+        .modal {
             position: fixed;
             top: 0;
             left: 0;
@@ -190,28 +293,30 @@
             justify-content: center;
             background: rgba(11, 16, 20, 0.85);
             z-index: 300;
-            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
         }
-        #yetty-mode-dialog.visible { display: flex; }
-        #yetty-mode-box {
+        .modal.visible { display: flex; }
+        .modal-box {
             width: min(560px, calc(100vw - 32px));
+            max-height: calc(100vh - 32px);
+            overflow-y: auto;
             background: #141A1F;
             border: 1px solid #364A47;
             border-radius: 8px;
             padding: 20px 22px;
             color: #E0E5E4;
         }
-        #yetty-mode-box h1 {
+        .modal-box h1 {
             font-size: 16px;
             font-weight: bold;
             margin-bottom: 4px;
             color: #E0E5E4;
         }
-        #yetty-mode-box h1 .accent { color: #6BA892; }
-        #yetty-mode-box .subtitle {
+        .modal-box h1 .accent { color: #6BA892; }
+        .modal-box .subtitle {
             font-size: 12px;
             color: #9FA7A8;
             margin-bottom: 14px;
+            line-height: 1.5;
         }
         .mode-option {
             display: block;
@@ -228,10 +333,6 @@
             font-size: 13px;
         }
         .mode-option:hover:not(:disabled) { border-color: #6BA892; }
-        .mode-option.selected {
-            border-color: #6BA892;
-            outline: 1px solid #6BA892;
-        }
         .mode-option:disabled {
             cursor: not-allowed;
             opacity: 0.45;
@@ -243,18 +344,18 @@
             font-size: 11px;
             color: #9FA7A8;
         }
-        #yetty-mode-url-row, .ssh-row {
+        .config-row {
             display: none;
             margin: 4px 0 12px 0;
         }
-        #yetty-mode-url-row.visible, .ssh-row.visible { display: block; }
-        #yetty-mode-url-row label, .ssh-row label {
+        .config-row.visible { display: block; }
+        .config-row label {
             display: block;
             font-size: 11px;
             color: #9FA7A8;
             margin-bottom: 4px;
         }
-        #yetty-mode-url, .ssh-row input {
+        .config-row input {
             width: 100%;
             background: #0B1014;
             border: 1px solid #364A47;
@@ -264,13 +365,24 @@
             font-size: 13px;
             padding: 7px 9px;
         }
-        #yetty-mode-url:focus, .ssh-row input:focus {
+        .config-row input:focus {
             outline: 1px solid #6BA892;
             border-color: #6BA892;
         }
-        #yetty-mode-start {
-            display: block;
-            width: 100%;
+        #config-note {
+            display: none;
+            font-size: 12px;
+            color: #9FA7A8;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+        #config-note.visible { display: block; }
+        .dialog-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        #config-start {
+            flex: 1 1 auto;
             background: #6BA892;
             border: none;
             border-radius: 6px;
@@ -281,31 +393,27 @@
             padding: 10px;
             cursor: pointer;
         }
-        #yetty-mode-start:hover { background: #74C5A5; }
-        #yetty-mode-hint {
+        #config-start:hover { background: #74C5A5; }
+        .dialog-cancel {
+            flex: 0 0 auto;
+            background: #1E262C;
+            border: 1px solid #364A47;
+            border-radius: 6px;
+            color: #9FA7A8;
+            font-family: inherit;
+            font-size: 13px;
+            padding: 10px 16px;
+            cursor: pointer;
+        }
+        .dialog-cancel:hover { color: #E0E5E4; border-color: #6BA892; }
+        #menu-cancel { width: 100%; margin-top: 4px; }
+        #config-hint {
             margin-top: 10px;
             font-size: 11px;
             color: #556162;
             line-height: 1.5;
         }
-        #yetty-mode-hint code { color: #9FA7A8; }
-        #loading .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid #333;
-            border-top-color: #e94560;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        #status {
-            font-size: 0.9em;
-            color: #666;
-            margin-top: 10px;
-        }
+        #config-hint code { color: #9FA7A8; }
     </style>
 </head>
 <body>
@@ -314,301 +422,220 @@
         <span class="sep">·</span>
         <a href="https://github.com/zokrezyl/yetty/releases/tag/@YETTY_RELEASE_TAG@" target="_blank" rel="noopener">@YETTY_RELEASE_TAG@</a>
     </div>
-    <div id="canvas-container">
-        <canvas id="canvas" width="1024" height="768" tabindex="0"></canvas>
-        <!-- Boot console — populated by yettyStatus.append() from
-             preload, iframe, and the launchYetty flow. Two children:
-             a fixed header (explanatory text) and a scrollable log.
-             Both live inside #yetty-status so the minimize button
-             collapses them together as one window. -->
-        <div id="yetty-status" style="display: none;"><button id="yetty-status-minimize" type="button" title="Minimize boot console">&minus;</button><div id="yetty-status-header">Booting Alpine Linux on RISC-V inside your browser. The log below streams every step — kernel download, decode, boot, telnetd startup. Once you see <span class="hint-key">[vm] session 1 guest TCP established (first rx)</span> the connection is live; click <strong>&minus;</strong> in the top-right corner to minimize this overlay and start using yetty.</div><div id="yetty-status-log"></div></div>
-        <button id="yetty-status-restore" type="button"
-                title="Show boot console">&#9707; console</button>
-        <!-- Transport picker. Hidden when ?mode= pins the choice. -->
-        <div id="yetty-mode-dialog">
-            <div id="yetty-mode-box">
-                <h1><span class="accent">yetty</span> — choose a session</h1>
-                <div class="subtitle">How should this terminal connect?</div>
-                <button class="mode-option selected" type="button" data-mode="temu">
-                    <span class="mode-name">TinyEMU VM</span>
-                    <span class="mode-desc">Alpine Linux on RISC-V, fully in your browser.
-                        No server needed — large download, slow boot.</span>
-                </button>
-                <button class="mode-option" type="button" data-mode="websocket">
-                    <span class="mode-name">WebSocket shell</span>
-                    <span class="mode-desc">Raw PTY over WebSocket. Run
-                        tools/websocket-pty-server/websocket-pty-server.py on the host.</span>
-                </button>
-                <button class="mode-option" type="button" data-mode="telnet">
-                    <span class="mode-name">Telnet</span>
-                    <span class="mode-desc">Telnet over a WebSocket bridge. Run
-                        tools/telnet-websocket.sh in front of a telnetd.</span>
-                </button>
-                <button class="mode-option" type="button" data-mode="ssh">
-                    <span class="mode-name">SSH</span>
-                    <span class="mode-desc">Real SSH, crypto in the browser. The bridge only
-                        relays encrypted bytes: tools/telnet-websocket.sh HOST:22 8025</span>
-                </button>
-                <button class="mode-option" type="button" data-mode="ygreeter">
-                    <span class="mode-name">ygreeter — feature showcase</span>
-                    <span class="mode-desc">The ygui showcase app (plots, images, diagrams,
-                        shadertoys, …) rendered straight to the canvas — no terminal, no shell.
-                        Loads as its own wasm module.</span>
-                </button>
-                <button class="mode-option" type="button" data-mode="relay">
-                    <span class="mode-name">In-browser networking (lwIP relay)</span>
-                    <span class="mode-desc">Experimental. Runs a real TCP/IP stack (lwIP) in
-                        the browser over an L2 relay — DHCP + DNS, the basis for reaching any
-                        host with no per-host bridge. For now: gets a DHCP lease (watch the
-                        boot log). SSH-over-relay is the next step.</span>
-                </button>
-                <div id="yetty-mode-url-row">
-                    <label for="yetty-mode-url">WebSocket URL</label>
-                    <input type="text" id="yetty-mode-url" spellcheck="false">
-                </div>
-                <div id="yetty-relay-target-row" class="ssh-row">
-                    <label for="yetty-relay-target">Connect to (host:port) — telnet over the relay</label>
-                    <input type="text" id="yetty-relay-target" spellcheck="false"
-                           value="telehack.com:23">
-                </div>
-                <div id="yetty-ssh-user-row" class="ssh-row">
-                    <label for="yetty-ssh-user">SSH username</label>
-                    <input type="text" id="yetty-ssh-user" spellcheck="false"
-                           autocomplete="username">
-                </div>
-                <div id="yetty-ssh-password-row" class="ssh-row">
-                    <label for="yetty-ssh-password">SSH password</label>
-                    <input type="password" id="yetty-ssh-password"
-                           autocomplete="current-password">
-                </div>
-                <button id="yetty-mode-start" type="button">Start</button>
-                <div id="yetty-mode-hint">Skip this dialog with
-                    <code>?mode=temu</code>,
-                    <code>?mode=websocket&amp;url=ws://host:8090</code>,
-                    <code>?mode=telnet&amp;url=ws://host:8024</code>,
-                    <code>?mode=ssh&amp;user=you</code> or
-                    <code>?mode=relay&amp;url=wss://host/</code>.</div>
-            </div>
+
+    <div id="tabbar">
+        <button class="tab active" type="button" data-tab="terminals">Terminals</button>
+        <button class="tab" type="button" data-tab="emulator">Engines</button>
+        <button class="tab" type="button" data-tab="help">Help</button>
+    </div>
+
+    <!-- ================= Terminals tab ================= -->
+    <div id="terminals-panel" class="tab-panel active">
+        <!-- Instance panels are inserted before #menu-row, so the
+             hamburger button always sits below the newest instance. -->
+        <div id="menu-row">
+            <button id="menu-button" type="button" title="New terminal session">&#9776;</button>
+            <span id="menu-hint">new terminal session</span>
         </div>
-        <div id="loading" style="display: none;">
-            <div class="spinner"></div>
-            <div>Loading WebGPU...</div>
-            <div id="status"></div>
+    </div>
+
+    <!-- ================= Engines tab =================
+         The page-shared session engines. Each one is loaded at most ONCE
+         per page; every terminal instance of that kind attaches as its
+         own session. Starting an engine here is independent of any
+         terminal. -->
+    <div id="emulator-panel" class="tab-panel">
+        <div class="engine-section">
+            <h1><span class="accent">yemu</span> — TinyEMU RISC-V emulator</h1>
+            <div class="engine-desc">Boots Alpine Linux on RISC-V entirely inside
+                your browser (wasm-interpreted CPU — no server involved). The
+                rootfs is a large download (~250&nbsp;MB compressed, cached after
+                the first visit) and the first boot takes a while; the log below
+                streams every step. Terminals attach from the Terminals tab via
+                the <strong>TinyEMU VM</strong> session type — each gets its own
+                telnet login on the one VM.</div>
+            <div class="engine-controls">
+                <button id="engine-start-temu" class="engine-start" type="button">Start emulator</button>
+                <span id="engine-state-temu" class="engine-state">stopped</span>
+                <span id="engine-attached-temu" class="engine-attached">attached terminals: none</span>
+            </div>
+            <div id="engine-log-temu" class="engine-log"><div class="line empty">(emulator not started — boot log will stream here)</div></div>
+        </div>
+        <div class="engine-section">
+            <h1><span class="accent">yos</span> — FreeBSD wasm userspace</h1>
+            <div class="engine-desc">Runs zsh, nvim, tmux and coreutils as
+                wasm32 binaries on the yos process engine — no server, no VM,
+                no kernel (~40&nbsp;MB of tools on first start). yos is an
+                OS-like engine with real multi-process support: it loads once
+                per page, and every terminal attached from the Terminals tab
+                via the <strong>yos</strong> session type gets its own fresh
+                zsh session on the same engine.</div>
+            <div class="engine-controls">
+                <button id="engine-start-yos" class="engine-start" type="button">Start yos</button>
+                <span id="engine-state-yos" class="engine-state">stopped</span>
+                <span id="engine-attached-yos" class="engine-attached">attached terminals: none</span>
+            </div>
+            <div id="engine-log-yos" class="engine-log"><div class="line empty">(yos not started — boot log will stream here)</div></div>
+        </div>
+    </div>
+
+    <!-- ================= Help tab ================= -->
+    <div id="help-panel" class="tab-panel">
+        <div class="help-inner">
+            <h1><span class="accent">yetty</span> — a WebGPU terminal, running in your browser</h1>
+            <p>This page runs the real yetty terminal compiled to WebAssembly.
+                Everything below happens in your browser — the only server
+                involvement is whatever a session type explicitly connects to.</p>
+
+            <h2>Terminals tab</h2>
+            <ul>
+                <li>Click the <strong>☰</strong> button to open a new terminal.
+                    Pick a session type, fill in the details, hit
+                    <strong>Start</strong>. The ☰ button always sits below the
+                    newest terminal; open as many as you like.</li>
+                <li>Each terminal panel: click into it to type, drag the
+                    <strong>grip bar at its bottom edge</strong> to resize
+                    (the terminal re-wraps live), close it with
+                    <strong>×</strong> in its header.</li>
+                <li>Inside yetty, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd>
+                    opens another tab of the same session kind.</li>
+                <li>The boot overlay on a starting terminal collapses on its
+                    own; the <strong>console</strong> pill (top right of the
+                    panel) brings it back.</li>
+            </ul>
+
+            <h2>Session types</h2>
+            <ul>
+                <li><strong>TinyEMU VM</strong> — Alpine Linux on an emulated
+                    RISC-V machine, fully in-browser. Each terminal gets its
+                    own telnet login on the shared VM.</li>
+                <li><strong>yos</strong> — a FreeBSD-flavoured wasm userspace
+                    (zsh, nvim, tmux, coreutils), fully in-browser. One
+                    process tree per page: every terminal gets a fresh zsh on
+                    the same system — <code>ps aux</code> in one shell sees
+                    them all.</li>
+                <li><strong>WebSocket shell</strong> — a raw PTY served by
+                    <code>websocket-pty-server.py</code> on a host you run.</li>
+                <li><strong>Telnet</strong> / <strong>SSH</strong> — connect
+                    through a WebSocket↔TCP bridge
+                    (<code>telnet-websocket.sh</code>); SSH crypto runs in the
+                    browser, the bridge only relays encrypted bytes.</li>
+                <li><strong>ygreeter</strong> — the ygui feature showcase
+                    (plots, images, diagrams, shaders), no shell.</li>
+                <li><strong>lwIP relay</strong> — experimental in-browser
+                    TCP/IP stack; telnets to a real host:port through an L2
+                    relay.</li>
+            </ul>
+
+            <h2>Engines tab</h2>
+            <p>The TinyEMU VM and the yos userspace are page-shared
+                <strong>engines</strong>: loaded at most once, attached to by
+                any number of terminals, running independently of all of them.
+                Start one manually to watch its boot log, or just open a
+                terminal of that type — the engine starts automatically.</p>
+
+            <h2>Deep links</h2>
+            <p>Every session type can be opened straight from the URL:
+                <code>?mode=yos</code>, <code>?mode=temu</code>,
+                <code>?mode=websocket&amp;url=ws://host:8090</code>,
+                <code>?mode=telnet&amp;url=ws://host:8024</code>,
+                <code>?mode=ssh&amp;user=you</code>,
+                <code>?mode=ygreeter</code>.</p>
+
+            <h2>Downloads and caching</h2>
+            <p>The first visit downloads the terminal, its assets and — if
+                used — the VM rootfs or the yos tools. All of it is cached in
+                the browser in final, decoded form: later visits and
+                additional terminals load from disk and only re-download
+                files that actually changed in a release.</p>
+        </div>
+    </div>
+
+    <!-- ============ Stage 1: session-type menu ============ -->
+    <div id="menu-dialog" class="modal">
+        <div class="modal-box">
+            <h1><span class="accent">yetty</span> — new session</h1>
+            <div class="subtitle">How should this terminal connect?</div>
+            <button class="mode-option" type="button" data-mode="temu">
+                <span class="mode-name">TinyEMU VM</span>
+                <span class="mode-desc">Alpine Linux on RISC-V via the shared
+                    emulator (Engines tab). No server needed — large download,
+                    slow boot. Open several — each terminal gets its own login
+                    on the same VM.</span>
+            </button>
+            <button class="mode-option" type="button" data-mode="yos">
+                <span class="mode-name">yos — FreeBSD wasm userspace</span>
+                <span class="mode-desc">zsh, nvim, tmux, coreutils as wasm32 binaries
+                    on the shared yos engine (Engines tab) — fully in your browser.
+                    No server, no VM, no kernel; much smaller download than the
+                    TinyEMU rootfs. Open several — each terminal gets its own
+                    fresh zsh on the same engine.</span>
+            </button>
+            <button class="mode-option" type="button" data-mode="websocket">
+                <span class="mode-name">WebSocket shell</span>
+                <span class="mode-desc">Raw PTY over WebSocket. Run
+                    tools/websocket-pty-server/websocket-pty-server.py on the host.</span>
+            </button>
+            <button class="mode-option" type="button" data-mode="telnet">
+                <span class="mode-name">Telnet</span>
+                <span class="mode-desc">Telnet over a WebSocket bridge. Run
+                    tools/telnet-websocket.sh in front of a telnetd.</span>
+            </button>
+            <button class="mode-option" type="button" data-mode="ssh">
+                <span class="mode-name">SSH</span>
+                <span class="mode-desc">Real SSH, crypto in the browser. The bridge only
+                    relays encrypted bytes: tools/telnet-websocket.sh HOST:22 8025</span>
+            </button>
+            <button class="mode-option" type="button" data-mode="ygreeter">
+                <span class="mode-name">ygreeter — feature showcase</span>
+                <span class="mode-desc">The ygui showcase app (plots, images, diagrams,
+                    shadertoys, …) rendered straight to the canvas — no terminal, no shell.
+                    Loads as its own wasm module.</span>
+            </button>
+            <button class="mode-option" type="button" data-mode="relay">
+                <span class="mode-name">In-browser networking (lwIP relay)</span>
+                <span class="mode-desc">Experimental. Runs a real TCP/IP stack (lwIP) in
+                    the browser over an L2 relay — DHCP + DNS, the basis for reaching any
+                    host with no per-host bridge. Telnets to the target over the relay.</span>
+            </button>
+            <button id="menu-cancel" class="dialog-cancel" type="button">Cancel</button>
+        </div>
+    </div>
+
+    <!-- ============ Stage 2: per-mode config dialog ============ -->
+    <div id="config-dialog" class="modal">
+        <div class="modal-box">
+            <h1 id="config-title">session</h1>
+            <div class="subtitle" id="config-desc"></div>
+            <div id="config-note"></div>
+            <div id="config-url-row" class="config-row">
+                <label for="config-url" id="config-url-label">WebSocket URL</label>
+                <input type="text" id="config-url" spellcheck="false">
+            </div>
+            <div id="config-relay-target-row" class="config-row">
+                <label for="config-relay-target">Connect to (host:port) — telnet over the relay</label>
+                <input type="text" id="config-relay-target" spellcheck="false"
+                       value="telehack.com:23">
+            </div>
+            <div id="config-ssh-user-row" class="config-row">
+                <label for="config-ssh-user">SSH username</label>
+                <input type="text" id="config-ssh-user" spellcheck="false"
+                       autocomplete="username">
+            </div>
+            <div id="config-ssh-password-row" class="config-row">
+                <label for="config-ssh-password">SSH password</label>
+                <input type="password" id="config-ssh-password"
+                       autocomplete="current-password">
+            </div>
+            <div class="dialog-buttons">
+                <button id="config-start" type="button">Start</button>
+                <button id="config-cancel" class="dialog-cancel" type="button">Back</button>
+            </div>
+            <div id="config-hint"></div>
         </div>
     </div>
 
     <script>
-        // ---- Boot status console -----------------------------------------
-        // window.yettyStatus.append(text, level?) appends a line to the
-        // overlay above the canvas. Forwarded `yetty-status` postMessages
-        // from the tinyemu iframe also land here, so the user sees a
-        // single unified boot log (downloads → decode → VM → terminal).
-        (function () {
-            const el  = document.getElementById('yetty-status');
-            // CRITICAL: lines append into #yetty-status-log (the
-            // overflow:auto child) — NOT into #yetty-status itself.
-            // The parent is a flex container; growing it doesn't
-            // scroll, it just stretches off-screen. The log child
-            // is the actual scrollable region.
-            const log = document.getElementById('yetty-status-log');
-            const MAX_LINES = 2000;          /* generous cap so the
-                                                user can scroll back
-                                                through full kernel
-                                                boot + alpine init. */
-            let hideTimer = null;
-            // True once the user has minimized. Subsequent appends
-            // keep filling the (hidden) log so when they click the
-            // restore pill they see complete scroll-back, but the
-            // overlay does NOT auto-pop back open on its own.
-            let userMinimized = false;
-            // Auto-minimize trigger. The VM iframe announces a real
-            // guest TCP rx with `session N guest TCP established
-            // (first rx)` — that's the moment yetty is actually
-            // talking to the running VM and the boot console can get
-            // out of the way. Fire once; if the user later restores
-            // it manually we respect that.
-            const READY_MARKER = 'guest TCP established (first rx)';
-            let autoMinimizeArmed = true;
-            function maybeAutoMinimize(text) {
-                if (!autoMinimizeArmed) return;
-                if (typeof text !== 'string') return;
-                if (text.indexOf(READY_MARKER) === -1) return;
-                autoMinimizeArmed = false;
-                /* Small delay so the user actually sees the green
-                 * "connected" line land in the log before the
-                 * overlay collapses. */
-                setTimeout(minimize, 600);
-            }
-            const restoreBtn = document.getElementById('yetty-status-restore');
-            // Tag → DOM line map so callers can update an existing line
-            // in place (e.g. download progress %) instead of appending
-            // a fresh row every event.
-            const tagged = Object.create(null);
-
-            function alsoLog(text) {
-                // Mirror to console so the headless test capture and
-                // dev-tools both see boot status, not just the overlay.
-                try { console.log('[yetty-status]', text); } catch (_) {}
-            }
-            function showIfNotDismissed() {
-                if (!el) return;
-                if (userMinimized) return;       /* keep filling, don't pop */
-                el.classList.remove('minimized');
-                el.style.display = 'flex';   /* matches the CSS rule */
-            }
-            function makeLine(text, level) {
-                const line = document.createElement('div');
-                line.className = 'line' + (level ? ' ' + level : '');
-                line.textContent = text;
-                return line;
-            }
-            function append(text, level) {
-                alsoLog(text);
-                if (!log) return;
-                showIfNotDismissed();
-                log.appendChild(makeLine(text, level));
-                while (log.childElementCount > MAX_LINES) {
-                    log.removeChild(log.firstChild);
-                }
-                log.scrollTop = log.scrollHeight;
-                maybeAutoMinimize(text);
-            }
-            // Append a tagged line on first call; on subsequent calls
-            // with the same tag, replace its text in place. Keeps the
-            // 707 MB rootfs download to a single updating row instead
-            // of hundreds of progress lines.
-            function update(tag, text, level) {
-                alsoLog(text);
-                if (!log) return;
-                showIfNotDismissed();
-                let line = tagged[tag];
-                if (!line || !line.parentNode) {
-                    line = makeLine(text, level);
-                    tagged[tag] = line;
-                    log.appendChild(line);
-                } else {
-                    line.textContent = text;
-                    if (level) line.className = 'line ' + level;
-                }
-                log.scrollTop = log.scrollHeight;
-                maybeAutoMinimize(text);
-            }
-            function minimize() {
-                userMinimized = true;
-                if (el) el.classList.add('minimized');
-                if (restoreBtn) restoreBtn.classList.add('visible');
-            }
-            function restore() {
-                userMinimized = false;
-                if (el) {
-                    el.classList.remove('minimized');
-                    el.style.display = 'flex';
-                }
-                if (restoreBtn) restoreBtn.classList.remove('visible');
-                if (log) log.scrollTop = log.scrollHeight;
-            }
-            function autoHide(ms) {
-                clearTimeout(hideTimer);
-                hideTimer = setTimeout(minimize, ms);
-            }
-
-            window.yettyStatus = {
-                append: append,
-                update: update,
-                minimize: minimize,
-                restore: restore,
-                /* Back-compat shim — old callers used hide(); now it
-                 * minimizes. The overlay never fully closes anymore. */
-                hide: minimize,
-                autoHide: autoHide
-            };
-
-            // Top-right minimize button collapses the overlay; the
-            // restore pill (top-right, only visible when minimized)
-            // brings it back. Log content keeps appending while
-            // minimized, so re-opening shows full scroll-back.
-            const minBtn = document.getElementById('yetty-status-minimize');
-            if (minBtn) {
-                minBtn.addEventListener('click', minimize);
-            }
-            if (restoreBtn) {
-                restoreBtn.addEventListener('click', restore);
-            }
-
-            // Iframe → parent status pump (tinyemu-iframe.html sends these
-            // for VM download / boot phases). `tag` lets the iframe ask
-            // for in-place updates (download progress).
-            window.addEventListener('message', function (e) {
-                if (!e.data || e.data.type !== 'yetty-status') return;
-                if (typeof e.data.text !== 'string') return;
-                if (e.data.tag) {
-                    update(e.data.tag, e.data.text, e.data.level);
-                } else {
-                    append(e.data.text, e.data.level);
-                }
-            });
-        })();
-
-        async function checkWebGPU() {
-            const status = document.getElementById('status');
-
-            if (!navigator.gpu) {
-                status.textContent = 'WebGPU not supported in this browser';
-                document.getElementById('loading').innerHTML = `
-                    <div style="color: #e94560;">WebGPU Not Supported</div>
-                    <div style="margin-top: 10px; font-size: 0.9em;">
-                        Try Chrome/Edge 113+ or Firefox Nightly with WebGPU enabled.
-                    </div>
-                `;
-                return false;
-            }
-
-            try {
-                status.textContent = 'Requesting WebGPU adapter...';
-                const adapter = await navigator.gpu.requestAdapter();
-                if (!adapter) {
-                    status.textContent = 'No WebGPU adapter found';
-                    return false;
-                }
-
-                status.textContent = 'Requesting WebGPU device...';
-                const device = await adapter.requestDevice({
-                    requiredLimits: {
-                        maxStorageBuffersPerShaderStage: 8,
-                        maxTextureDimension2D: Math.min(16384, adapter.limits.maxTextureDimension2D),
-                    }
-                });
-                if (!device) {
-                    status.textContent = 'Failed to get WebGPU device';
-                    return false;
-                }
-
-                Module.preinitializedWebGPUDevice = device;
-                status.textContent = 'WebGPU initialized';
-                return true;
-            } catch (err) {
-                status.textContent = 'WebGPU error: ' + err.message;
-                return false;
-            }
-        }
-
-        function resizeCanvas() {
-            const container = document.getElementById('canvas-container');
-            const canvas = document.getElementById('canvas');
-            if (container && canvas) {
-                const rect = container.getBoundingClientRect();
-                const width = Math.floor(rect.width);
-                const height = Math.floor(rect.height);
-                if (width > 0 && height > 0 && (canvas.width !== width || canvas.height !== height)) {
-                    canvas.width = width;
-                    canvas.height = height;
-                    if (typeof Module !== 'undefined' && Module._yetty_handle_resize) {
-                        Module._yetty_handle_resize(width, height);
-                    }
-                }
-            }
-        }
-
         // Parse URL parameters for configuration
         function getUrlParams() {
             const params = {};
@@ -627,167 +654,300 @@
         // Trace logging — accept several aliases so the URL can use the
         // same name as the env var the runtime reads.
         //   ?trace=1 / ?ytrace=on / ?YTRACE_DEFAULT_ON=yes
-        // Accepted values (case-insensitive): 1, on, yes, true.
         const traceOn = (function () {
-            const v = (urlParams.trace ||
-                       urlParams.ytrace ||
-                       urlParams.YTRACE_DEFAULT_ON || '').toLowerCase();
-            return v === '1' || v === 'on' || v === 'yes' || v === 'true';
+            const value = (urlParams.trace ||
+                           urlParams.ytrace ||
+                           urlParams.YTRACE_DEFAULT_ON || '').toLowerCase();
+            return value === '1' || value === 'on' || value === 'yes' || value === 'true';
         })();
 
-        // Build environment variables passed into Emscripten's ENV before
-        // main() runs. The mode/transport picker now lives inside yetty
-        // itself — this page only forwards the optional trace flag.
-        function buildEnvVars() {
-            const env = {};
-            if (traceOn) {
-                env.YTRACE_DEFAULT_ON = 'yes';
-            }
-            return env;
+        // ---- Page tabs -----------------------------------------------------
+        (function () {
+            const PANEL_IDS = {
+                terminals: 'terminals-panel',
+                emulator: 'emulator-panel',
+                help: 'help-panel'
+            };
+            const tabs = Array.from(document.querySelectorAll('#tabbar .tab'));
+            tabs.forEach(function (tab) {
+                tab.addEventListener('click', function () {
+                    tabs.forEach(function (other) {
+                        other.classList.toggle('active', other === tab);
+                    });
+                    Object.keys(PANEL_IDS).forEach(function (name) {
+                        document.getElementById(PANEL_IDS[name]).classList
+                            .toggle('active', tab.dataset.tab === name);
+                    });
+                });
+            });
+        })();
+
+        function selectTab(name) {
+            const tab = document.querySelector('#tabbar .tab[data-tab="' + name + '"]');
+            if (tab) tab.click();
         }
 
-        var Module = {
-            canvas: document.getElementById('canvas'),
-            print: function(text) { console.log(text); },
-            printErr: function(text) { console.log(text); },
-            // preRun runs AFTER yetty.js loads but BEFORE main() executes
-            // This is where we inject environment variables into Emscripten's ENV
-            preRun: [function() {
-                const envVars = buildEnvVars();
-                /* JSON.stringify here on purpose — emscripten's print()
-                 * implementation in some configurations stringifies an
-                 * object argument as the literal "Object", which made
-                 * it impossible to verify whether YTRACE_DEFAULT_ON was
-                 * actually wired in from ?trace=1. */
-                console.log('[yetty] preRun: Setting ENV vars: ' +
-                            JSON.stringify(envVars));
-                // Emscripten's ENV is a global variable in yetty.js, not Module.ENV
-                Object.keys(envVars).forEach(key => {
-                    ENV[key] = envVars[key];
-                });
-            }],
-            onRuntimeInitialized: function() {
-                const status = document.getElementById('status');
-                const loading = document.getElementById('loading');
-                if (status) status.textContent = 'yetty ready!';
-                setTimeout(() => {
-                    if (loading) loading.style.display = 'none';
-                    const canvas = document.getElementById('canvas');
-                    if (canvas) {
-                        canvas.focus();
-                    }
-                }, 500);
-                resizeCanvas();
-                // Retry after yetty main loop starts and resize callback is registered
-                setTimeout(resizeCanvas, 1000);
-                setTimeout(resizeCanvas, 2000);
+        // Ask the browser to exempt this origin's storage from eviction —
+        // the asset caches (yetty-assets + the ~150 MB VM rootfs, Cache
+        // Storage API) are what make repeat visits fast. Best-effort: the
+        // grant is heuristic (Chrome) or a prompt (Firefox), and denial
+        // just means the cache MAY be evicted under disk pressure. Called
+        // from user-gesture handlers, which maximizes the grant odds.
+        let storagePersistRequested = false;
+        function requestPersistentStorage() {
+            if (storagePersistRequested) return;
+            storagePersistRequested = true;
+            try {
+                if (navigator.storage && navigator.storage.persist) {
+                    navigator.storage.persist().catch(function () {});
+                }
+            } catch (ignored) {}
+        }
+
+        // ---- Engine boot log panes --------------------------------------------
+        // Receives the 'yetty-status' messages an engine iframe posts during
+        // download / decode / boot. `tag` requests an in-place update
+        // (download progress) instead of a fresh row per event.
+        function makeLogPane(elementId) {
+            const log = document.getElementById(elementId);
+            const MAX_LINES = 2000;
+            const tagged = Object.create(null);
+            let cleared = false;
+
+            function alsoLog(text) {
+                // Mirror to console so headless test captures see the
+                // boot phases without scraping the DOM.
+                try { console.log('[yetty-status]', text); } catch (ignored) {}
+            }
+            function clearPlaceholder() {
+                if (cleared) return;
+                cleared = true;
+                log.textContent = '';
+            }
+            function makeLine(text, level) {
+                const line = document.createElement('div');
+                line.className = 'line' + (level ? ' ' + level : '');
+                line.textContent = text;
+                return line;
+            }
+            function append(text, level) {
+                alsoLog(text);
+                clearPlaceholder();
+                log.appendChild(makeLine(text, level));
+                while (log.childElementCount > MAX_LINES) {
+                    log.removeChild(log.firstChild);
+                }
+                log.scrollTop = log.scrollHeight;
+            }
+            function update(tag, text, level) {
+                alsoLog(text);
+                clearPlaceholder();
+                let line = tagged[tag];
+                if (!line || !line.parentNode) {
+                    line = makeLine(text, level);
+                    tagged[tag] = line;
+                    log.appendChild(line);
+                } else {
+                    line.textContent = text;
+                    if (level) line.className = 'line ' + level;
+                }
+                log.scrollTop = log.scrollHeight;
+            }
+            return { append: append, update: update };
+        }
+
+        // ---- Shared engines (shell-owned) --------------------------------------
+        // One engine iframe per kind, loaded at most ONCE per page. Both
+        // engines are multi-session: every attached terminal gets its own
+        // session (telnet login on the VM, fresh zsh on yos) — sessions are
+        // multiplexed over one iframe, kept apart by the clientSid rewrite
+        // below. An engine starts from its Engines-tab button or
+        // automatically on the first terminal attach, and keeps running
+        // independently of any terminal.
+        const ENGINE_PTY_ID = 1;
+        const engines = {
+            temu: {
+                key: 'temu',
+                page: 'tinyemu-iframe.html',
+                displayName: 'TinyEMU VM',
+                startingText: 'starting — downloading kernel + rootfs, booting…',
+                readyText: 'ready — VM booted, telnetd up',
+                // 10 minutes is ridiculous but the rootfs is ~250 MB
+                // brotli'd over potentially-slow links + the brotli decode
+                // itself takes seconds. Better an eventual success than a
+                // spurious timeout.
+                bootTimeoutMs: 10 * 60 * 1000,
+                iframe: null,
+                ready: false,
+                bootTimer: null,
+                instances: [],
+                log: makeLogPane('engine-log-temu')
+            },
+            yos: {
+                key: 'yos',
+                page: 'yos-iframe.html',
+                displayName: 'yos engine',
+                startingText: 'starting — downloading engine + wasm tools…',
+                readyText: 'ready — userspace up, zsh live',
+                bootTimeoutMs: 5 * 60 * 1000,
+                iframe: null,
+                ready: false,
+                bootTimer: null,
+                instances: [],
+                log: makeLogPane('engine-log-yos')
             }
         };
 
-        window.addEventListener('resize', resizeCanvas);
+        function setEngineState(engine, text, cssClass) {
+            const state = document.getElementById('engine-state-' + engine.key);
+            state.textContent = text;
+            state.className = 'engine-state' + (cssClass ? ' ' + cssClass : '');
+        }
 
-        // Use ResizeObserver to detect container size changes (e.g., devtools open/close)
-        const container = document.getElementById('canvas-container');
-        if (container && typeof ResizeObserver !== 'undefined') {
-            const resizeObserver = new ResizeObserver(() => {
-                resizeCanvas();
+        // Vertical drag-resize for an instance panel. Pointer capture keeps
+        // every move event on the grip for the whole drag — without it the
+        // pointer strays over the iframe, which eats the events and the
+        // drag sticks. The panel height drives the iframe, whose
+        // ResizeObserver (terminal.html) resizes the canvas and the
+        // terminal — NAWS/SIGWINCH take it from there.
+        function makePanelResizable(panel, grip) {
+            const MIN_HEIGHT = 180;
+            let dragStartY = 0;
+            let dragStartHeight = 0;
+            grip.addEventListener('pointerdown', function (event) {
+                dragStartY = event.clientY;
+                dragStartHeight = panel.getBoundingClientRect().height;
+                grip.setPointerCapture(event.pointerId);
+                grip.classList.add('dragging');
+                event.preventDefault();
             });
-            resizeObserver.observe(container);
-        }
-
-        // Click on canvas to focus for keyboard input
-        document.getElementById('canvas').addEventListener('click', function() {
-            this.focus();
-        });
-
-        async function initYetty() {
-            const status = document.getElementById('status');
-            if (status) status.textContent = 'Loading yetty...';
-
-            try {
-                const script = document.createElement('script');
-                script.src = 'yetty.js';
-
-                await new Promise((resolve, reject) => {
-                    script.onload = resolve;
-                    script.onerror = () => reject(new Error('Failed to load yetty.js'));
-                    document.head.appendChild(script);
-                });
-
-                return true;
-            } catch (err) {
-                if (status) status.textContent = 'yetty error: ' + err.message;
-                return false;
-            }
-        }
-
-        // Wait for the VM iframe to post {type:'vm-ready', ptyId} before
-        // resolving. Times out so we never deadlock the page.
-        function awaitVmReady(ptyId, timeoutMs) {
-            return new Promise(function (resolve, reject) {
-                let done = false;
-                const handler = function (e) {
-                    if (done) return;
-                    if (!e.data) return;
-                    if (e.data.type !== 'vm-ready') return;
-                    if (e.data.ptyId !== ptyId) return;
-                    done = true;
-                    window.removeEventListener('message', handler);
-                    resolve();
-                };
-                window.addEventListener('message', handler);
-                setTimeout(function () {
-                    if (done) return;
-                    done = true;
-                    window.removeEventListener('message', handler);
-                    reject(new Error('VM did not become ready within ' +
-                        (timeoutMs / 1000) + 's'));
-                }, timeoutMs);
+            grip.addEventListener('pointermove', function (event) {
+                if (!grip.hasPointerCapture(event.pointerId)) return;
+                const height = Math.max(MIN_HEIGHT,
+                    dragStartHeight + (event.clientY - dragStartY));
+                panel.style.height = height + 'px';
+            });
+            grip.addEventListener('lostpointercapture', function () {
+                grip.classList.remove('dragging');
             });
         }
 
-        // Spawn the hidden VM iframe. Returns the element. The iframe's
-        // own pre-js (in tinyemu-iframe.html) takes over from there:
-        // fetches tinyemu-assets/, decompresses with brotli linked into
-        // tinyemu.wasm, FS.writeFile into /yetty-vm/, calls
-        // _tinyemu_bridge_start, then posts 'vm-ready'.
-        function spawnVMIframe(ptyId, cols, rows) {
-            const id = 'yetty-vm-pty-' + ptyId;
-            let iframe = document.getElementById(id);
-            if (iframe) {
-                // Already there (e.g. soft re-launch) — don't blow it away.
-                return iframe;
-            }
-            iframe = document.createElement('iframe');
-            iframe.id = id;
+        function updateEngineAttachedLabel(engine) {
+            document.getElementById('engine-attached-' + engine.key).textContent =
+                'attached terminals: ' + (engine.instances.length
+                    ? engine.instances.map(function (instance) {
+                          return '#' + instance.id;
+                      }).join(', ')
+                    : 'none');
+        }
+
+        function startEngine(engine) {
+            if (engine.iframe) return;
+            requestPersistentStorage();
+            setEngineState(engine, engine.startingText);
+            document.getElementById('engine-start-' + engine.key).disabled = true;
+            engine.log.append('starting ' + engine.page +
+                              ' (pty ' + ENGINE_PTY_ID + ')…', 'phase');
+            const iframe = document.createElement('iframe');
+            iframe.id = 'yetty-engine-' + engine.key;
             /* Off-screen rather than display:none. Chrome heavily
-             * throttles timers in display:none iframes (sometimes
-             * down to ~1 Hz), which kept the wasm-interpreter VM
-             * inside from booting fast enough for telnetd to come
-             * up before the test capture window expired. Pinning
-             * it at left:-99999px keeps it visible to the
-             * scheduler (no throttling) but invisible to the
-             * user. width/height stay 1px so layout cost is nil. */
+             * throttles timers in display:none iframes (sometimes down
+             * to ~1 Hz), which keeps the wasm-interpreter VM inside from
+             * booting in any reasonable time — and the yos engine needs
+             * live timers just the same. Pinning it at left:-99999px
+             * keeps it visible to the scheduler (no throttling) but
+             * invisible to the user. */
             iframe.style.cssText =
                 'position:absolute; left:-99999px; top:-99999px;' +
                 ' width:1px; height:1px; border:0;' +
                 ' visibility:hidden; pointer-events:none;';
-            iframe.src = 'tinyemu-iframe.html?ptyId=' + ptyId +
-                         '&cols=' + cols + '&rows=' + rows;
+            iframe.src = engine.page + '?ptyId=' + ENGINE_PTY_ID +
+                         '&cols=80&rows=24';
             document.body.appendChild(iframe);
-            return iframe;
+            engine.iframe = iframe;
+            engine.bootTimer = setTimeout(function () {
+                if (engine.ready) return;
+                setEngineState(engine, 'error — never signaled ready', 'err');
+                engine.log.append(engine.displayName +
+                    ' never signaled ready within ' +
+                    (engine.bootTimeoutMs / 60000) + ' minutes', 'err');
+            }, engine.bootTimeoutMs);
         }
 
-        // ---- Transport / session-mode selection --------------------------
-        // Three working modes:
-        //   temu      → --temu              (in-browser TinyEMU VM, default)
-        //   websocket → --websocket URL     (raw PTY over WebSocket;
-        //                                    tools/websocket-pty-server/)
-        //   telnet    → --telnet --websocket-url URL
-        //                                   (telnet over a ws↔TCP bridge;
-        //                                    tools/telnet-websocket.sh)
-        // The flags travel to wasm main() via Module.arguments, which
-        // Module.callMain() (yetty-assets-preload.js) picks up.
+        document.getElementById('engine-start-temu')
+            .addEventListener('click', function () { startEngine(engines.temu); });
+        document.getElementById('engine-start-yos')
+            .addEventListener('click', function () { startEngine(engines.yos); });
+
+        // ---- Terminal instances ----------------------------------------------
+        // Each instance is its own iframe running its own wasm module
+        // (terminal.html, or ygreeter.html for the showcase). Panels stack
+        // vertically; the hamburger row is kept as the last child so the
+        // menu button always sits below the newest instance.
+        const MODES = {
+            temu: {
+                name: 'TinyEMU VM',
+                desc: 'Alpine Linux on RISC-V via the shared emulator. The ' +
+                      'emulator is started automatically if it is not ' +
+                      'running yet; its boot log streams on the Engines tab.',
+                needsUrl: false,
+                hint: 'Deep link: <code>?mode=temu</code>'
+            },
+            yos: {
+                name: 'yos',
+                desc: 'zsh, nvim, tmux, coreutils as wasm32 binaries on the ' +
+                      'shared yos engine — fully in your browser, no server, ' +
+                      'no VM. The engine loads once per page; every terminal ' +
+                      'gets its own fresh zsh session on it.',
+                needsUrl: false,
+                hint: 'Deep link: <code>?mode=yos</code>'
+            },
+            websocket: {
+                name: 'WebSocket shell',
+                desc: 'Raw PTY over WebSocket. Run ' +
+                      'tools/websocket-pty-server/websocket-pty-server.py on the host.',
+                needsUrl: true,
+                urlLabel: 'WebSocket URL',
+                hint: 'Deep link: <code>?mode=websocket&amp;url=ws://host:8090</code>'
+            },
+            telnet: {
+                name: 'Telnet',
+                desc: 'Telnet over a WebSocket bridge. Run ' +
+                      'tools/telnet-websocket.sh in front of a telnetd.',
+                needsUrl: true,
+                urlLabel: 'WebSocket URL',
+                hint: 'Deep link: <code>?mode=telnet&amp;url=ws://host:8024</code>'
+            },
+            ssh: {
+                name: 'SSH',
+                desc: 'Real SSH, crypto in the browser. The bridge only relays ' +
+                      'encrypted bytes: tools/telnet-websocket.sh HOST:22 8025',
+                needsUrl: true,
+                urlLabel: 'WebSocket URL',
+                needsSsh: true,
+                hint: 'Deep link: <code>?mode=ssh&amp;user=you</code> ' +
+                      '(the dialog keeps the password out of the URL/history)'
+            },
+            relay: {
+                name: 'lwIP relay',
+                desc: 'Experimental. Runs a real TCP/IP stack (lwIP) in the ' +
+                      'browser over an L2 relay — DHCP + DNS — and telnets to ' +
+                      'the target host:port through it.',
+                needsUrl: true,
+                urlLabel: 'Relay URL',
+                needsRelayTarget: true,
+                hint: 'Deep link: <code>?mode=relay&amp;url=wss://host/&amp;target=host:23</code>'
+            },
+            ygreeter: {
+                name: 'ygreeter',
+                desc: 'The ygui feature showcase (plots, images, diagrams, ' +
+                      'shadertoys, …) rendered straight to the canvas — no ' +
+                      'terminal, no shell. Loads as its own wasm module.',
+                needsUrl: false,
+                hint: 'Deep link: <code>?mode=ygreeter</code>'
+            }
+        };
+
         const MODE_DEFAULT_URLS = {
             websocket: 'ws://' + (location.hostname || '127.0.0.1') + ':8090',
             telnet:    'ws://' + (location.hostname || '127.0.0.1') + ':8024',
@@ -795,204 +955,463 @@
             relay:     'wss://relay.widgetry.org/',
         };
 
-        function buildModuleArguments(mode, wsUrl, sshUser, sshPassword, relayTarget) {
-            if (mode === 'websocket') {
-                return wsUrl ? ['--websocket', wsUrl] : ['--websocket'];
+        const instances = [];
+        let nextInstanceId = 1;
+
+        // ---- Session-id translation ------------------------------------
+        // Every yetty wasm module allocates its telnet-session clientSids
+        // from a process-local counter starting at 1 (iframe-transport.c),
+        // so two terminal instances WILL both claim clientSid 1 — and each
+        // engine iframe has one flat clientSid namespace. The shell
+        // therefore owns the wire ids: engine-bound session messages get
+        // their clientSid rewritten to a globally unique wire id,
+        // engine-originated ones are translated back and routed to the
+        // owning instance only. One counter serves both engines — ids
+        // only need to be unique within an engine, and globally unique
+        // trivially satisfies that.
+        let nextWireSessionId = 1;
+        const sessionRoutes = Object.create(null); // wireSid → {instance, localSid}
+
+        function engineFromSource(sourceWindow) {
+            const keys = Object.keys(engines);
+            for (let i = 0; i < keys.length; i++) {
+                const engine = engines[keys[i]];
+                if (engine.iframe &&
+                    engine.iframe.contentWindow === sourceWindow) {
+                    return engine;
+                }
             }
-            if (mode === 'telnet') {
-                return wsUrl ? ['--telnet', '--websocket-url', wsUrl] : ['--telnet'];
-            }
-            if (mode === 'ssh') {
-                // The host part of USER@HOST is informational on webasm —
-                // the bridge owns the TCP endpoint; libssh2 in the
-                // browser terminates the crypto.
-                const args = ['--ssh', (sshUser || 'root') + '@websocket',
-                              '--ssh-password', sshPassword || ''];
-                if (wsUrl) args.push('--websocket-url', wsUrl);
-                return args;
-            }
-            if (mode === 'relay') {
-                // Bring up the in-browser lwIP netstack against the relay
-                // (wsUrl) and telnet to the target host:port over it —
-                // yetty's own TCP stack dials out through the relay's NAT,
-                // no per-host bridge. relayTarget is "host:port".
-                const args = ['--net-relay', wsUrl];
-                if (relayTarget) args.push('--telnet', relayTarget);
-                return args;
-            }
-            return ['--temu'];
+            return null;
         }
 
-        // Show the picker and resolve {mode, wsUrl, sshUser, sshPassword}
-        // on Start.
-        function askSessionMode() {
-            return new Promise(function (resolve) {
-                const dialog = document.getElementById('yetty-mode-dialog');
-                const urlRow = document.getElementById('yetty-mode-url-row');
-                const urlInput = document.getElementById('yetty-mode-url');
-                const sshUserRow = document.getElementById('yetty-ssh-user-row');
-                const sshUserInput = document.getElementById('yetty-ssh-user');
-                const sshPasswordRow = document.getElementById('yetty-ssh-password-row');
-                const sshPasswordInput = document.getElementById('yetty-ssh-password');
-                const relayTargetRow = document.getElementById('yetty-relay-target-row');
-                const relayTargetInput = document.getElementById('yetty-relay-target');
-                const startBtn = document.getElementById('yetty-mode-start');
-                const options = Array.from(
-                    document.querySelectorAll('.mode-option:not(:disabled)'));
-                let selected = 'temu';
-                const urlLabel = urlRow.querySelector('label');
+        function engineForInstance(instance) {
+            return engines[instance.config.mode] || null;
+        }
 
-                function select(mode) {
-                    selected = mode;
-                    options.forEach(function (option) {
-                        option.classList.toggle('selected',
-                                                option.dataset.mode === mode);
-                    });
-                    const needsUrl = mode === 'websocket' || mode === 'telnet' ||
-                                     mode === 'ssh' || mode === 'relay';
-                    const needsSsh = mode === 'ssh';
-                    const isRelay = mode === 'relay';
-                    urlRow.classList.toggle('visible', needsUrl);
-                    sshUserRow.classList.toggle('visible', needsSsh);
-                    sshPasswordRow.classList.toggle('visible', needsSsh);
-                    relayTargetRow.classList.toggle('visible', isRelay);
-                    if (urlLabel) {
-                        urlLabel.textContent = isRelay ? 'Relay URL' : 'WebSocket URL';
-                    }
-                    if (needsUrl) {
-                        urlInput.value = MODE_DEFAULT_URLS[mode] || '';
-                        (needsSsh ? sshUserInput : urlInput).focus();
-                    }
-                }
-                options.forEach(function (option) {
-                    option.addEventListener('click', function () {
-                        select(option.dataset.mode);
-                    });
-                });
-                function start() {
-                    const needsUrl = selected === 'websocket' || selected === 'telnet' ||
-                                     selected === 'ssh' || selected === 'relay';
-                    if (selected === 'ssh' && !sshUserInput.value.trim()) {
-                        sshUserInput.focus();
-                        return;
-                    }
-                    dialog.classList.remove('visible');
-                    resolve({
-                        mode: selected,
-                        wsUrl: needsUrl ? urlInput.value.trim() : '',
-                        sshUser: sshUserInput.value.trim(),
-                        sshPassword: sshPasswordInput.value,
-                        relayTarget: relayTargetInput.value.trim()
-                    });
-                }
-                startBtn.addEventListener('click', start);
-                [urlInput, sshUserInput, sshPasswordInput].forEach(function (input) {
-                    input.addEventListener('keydown', function (event) {
-                        if (event.key === 'Enter') start();
-                    });
-                });
-                dialog.classList.add('visible');
+        function instanceEndpointLabel(config) {
+            if (config.mode === 'temu') return 'shared emulator';
+            if (config.mode === 'yos') return 'shared yos engine';
+            if (config.mode === 'ygreeter') return '';
+            if (config.mode === 'relay') {
+                return (config.wsUrl || '') +
+                       (config.relayTarget ? ' → ' + config.relayTarget : '');
+            }
+            if (config.mode === 'ssh') {
+                return (config.sshUser || 'root') + ' @ ' + (config.wsUrl || '');
+            }
+            return config.wsUrl || '';
+        }
+
+        function openInstance(config) {
+            requestPersistentStorage();
+            const instanceId = nextInstanceId++;
+            // The terminal tags its VM-bound relay messages with this id
+            // (see createVmProxy in terminal.html).
+            config.instanceId = instanceId;
+            const modeInfo = MODES[config.mode];
+
+            const panel = document.createElement('div');
+            panel.className = 'term-panel';
+
+            const header = document.createElement('div');
+            header.className = 'term-panel-header';
+            const title = document.createElement('span');
+            title.className = 'term-panel-title';
+            title.textContent = '#' + instanceId + ' · ' +
+                (modeInfo ? modeInfo.name : config.mode);
+            const endpoint = document.createElement('span');
+            endpoint.className = 'term-panel-endpoint';
+            endpoint.textContent = instanceEndpointLabel(config);
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'term-panel-close';
+            closeBtn.type = 'button';
+            closeBtn.title = 'Close this terminal';
+            closeBtn.textContent = '×';
+            header.appendChild(title);
+            header.appendChild(endpoint);
+            header.appendChild(closeBtn);
+
+            const iframe = document.createElement('iframe');
+            // ygreeter is its own wasm module with no terminal — its page
+            // needs no session config. Everything else loads terminal.html
+            // bare and receives the config over postMessage (keeps ssh
+            // passwords out of iframe URLs).
+            iframe.src = config.mode === 'ygreeter'
+                ? 'ygreeter.html' : 'terminal.html';
+
+            const grip = document.createElement('div');
+            grip.className = 'term-panel-grip';
+            grip.title = 'Drag to resize this terminal';
+
+            panel.appendChild(header);
+            panel.appendChild(iframe);
+            panel.appendChild(grip);
+            makePanelResizable(panel, grip);
+
+            // Keep the hamburger row below the newest instance.
+            const terminalsPanel = document.getElementById('terminals-panel');
+            terminalsPanel.insertBefore(panel,
+                document.getElementById('menu-row'));
+            panel.scrollIntoView({ block: 'nearest' });
+
+            const instance = {
+                id: instanceId,
+                config: config,
+                panel: panel,
+                iframe: iframe,
+                // localSid (this instance's counter) → wire sid on the VM
+                wireSidByLocal: Object.create(null)
+            };
+            instances.push(instance);
+            closeBtn.addEventListener('click', function () {
+                closeInstance(instance);
             });
+            return instance;
         }
 
-        async function launchYetty(mode, wsUrl, sshUser, sshPassword, relayTarget) {
-            const loading = document.getElementById('loading');
-            loading.style.display = 'block';
-
-            resizeCanvas();
-            window.yettyStatus.append('session mode: ' + mode +
-                (wsUrl ? ' (' + wsUrl + ')' : ''), 'phase');
-            window.yettyStatus.append('checking WebGPU…');
-            const hasWebGPU = await checkWebGPU();
-            if (!hasWebGPU) {
-                window.yettyStatus.append('WebGPU not available — aborting', 'err');
-                return;
+        function closeInstance(instance) {
+            const index = instances.indexOf(instance);
+            if (index !== -1) instances.splice(index, 1);
+            const engine = engineForInstance(instance);
+            if (engine) {
+                const attachedIndex = engine.instances.indexOf(instance);
+                if (attachedIndex !== -1) {
+                    engine.instances.splice(attachedIndex, 1);
+                    // Tear down this instance's guest sessions so the
+                    // engine doesn't accumulate half-open logins/shells.
+                    Object.keys(instance.wireSidByLocal).forEach(function (localSid) {
+                        const wireSid = instance.wireSidByLocal[localSid];
+                        delete sessionRoutes[wireSid];
+                        if (engine.iframe && engine.iframe.contentWindow) {
+                            engine.iframe.contentWindow.postMessage({
+                                type: 'session-close',
+                                clientSid: wireSid
+                            }, '*');
+                        }
+                    });
+                    updateEngineAttachedLabel(engine);
+                    engine.log.append('terminal #' + instance.id +
+                        ' detached (' + engine.displayName +
+                        ' keeps running)', 'dim');
+                }
             }
-            window.yettyStatus.append('WebGPU ready', 'ok');
+            instance.panel.remove();
+        }
 
-            Module.arguments = buildModuleArguments(mode, wsUrl, sshUser, sshPassword, relayTarget);
-            // Don't echo the password into the visible boot log.
-            window.yettyStatus.append('yetty args: ' +
-                Module.arguments.map(function (arg, index) {
-                    return Module.arguments[index - 1] === '--ssh-password'
-                        ? '***' : arg;
-                }).join(' '), 'dim');
+        function instanceFromSource(sourceWindow) {
+            for (let i = 0; i < instances.length; i++) {
+                if (instances[i].iframe.contentWindow === sourceWindow) {
+                    return instances[i];
+                }
+            }
+            return null;
+        }
 
-            if (mode === 'temu') {
-                // Bring the VM iframe up FIRST and only start yetty once the
-                // VM signals ready. Avoids yetty rendering an empty terminal
-                // for 30+ seconds while the rootfs streams down.
-                const PTY_ID = 1;
-                window.yettyStatus.append(
-                    'spawning VM iframe (pty ' + PTY_ID + ')…', 'phase');
-                spawnVMIframe(PTY_ID, 80, 24);
-                window.yettyStatus.append(
-                    'waiting for VM to be ready (kernel+rootfs download + boot)…');
-                try {
-                    // 10 minutes is ridiculous but the rootfs is ~250 MB
-                    // brotli'd over potentially-slow links + the brotli
-                    // decode itself takes seconds. Better an eventual
-                    // success than a spurious timeout.
-                    await awaitVmReady(PTY_ID, 10 * 60 * 1000);
-                } catch (e) {
-                    window.yettyStatus.append(
-                        'VM never signaled ready: ' + e.message, 'err');
+        function instanceFromId(instanceId) {
+            for (let i = 0; i < instances.length; i++) {
+                if (instances[i].id === instanceId) {
+                    return instances[i];
+                }
+            }
+            return null;
+        }
+
+        // ---- Message router ---------------------------------------------------
+        // Traffic shapes (all same-origin):
+        //   terminal iframe → shell : yetty-instance-hello   (wants its config)
+        //   terminal iframe → shell : yetty-engine-attach    (route engine ↔ me;
+        //                             `engine` field names temu or yos)
+        //   terminal proxy  → shell : term-input / term-resize / session-open
+        //                             / session-tx / session-close / yetty-ready
+        //                             (engine-bound; tagged with yettyInstanceId,
+        //                             session clientSids rewritten to wire ids,
+        //                             then forwarded into that instance's engine)
+        //   engine iframe   → shell : yetty-status            (→ its Engines-tab log)
+        //                             vm-ready / term-output   (→ all terminals
+        //                             attached to that engine — one shared
+        //                             console device per engine)
+        //                             session-opened / session-rx /
+        //                             session-closed           (→ the owning
+        //                             terminal only, clientSid translated back)
+        const ENGINE_BOUND_TYPES = {
+            'term-input': true,
+            'term-resize': true,
+            'session-open': true,
+            'session-tx': true,
+            'session-close': true,
+            'yetty-ready': true
+        };
+
+        function postToInstance(instance, payload) {
+            if (instance.iframe.contentWindow) {
+                instance.iframe.contentWindow.postMessage(payload, '*');
+            }
+        }
+
+        window.addEventListener('message', function (event) {
+            const data = event.data;
+            if (!data || !data.type) return;
+
+            // Messages originating from an engine iframe.
+            const sourceEngine = engineFromSource(event.source);
+            if (sourceEngine) {
+                if (data.type === 'yetty-status') {
+                    if (typeof data.text !== 'string') return;
+                    if (data.tag) {
+                        sourceEngine.log.update(data.tag, data.text, data.level);
+                    } else {
+                        sourceEngine.log.append(data.text, data.level);
+                    }
                     return;
                 }
-                window.yettyStatus.append('VM is ready', 'ok');
-            } else {
-                // No VM download/boot phase — retitle the boot console
-                // header (its default text narrates the TinyEMU boot).
-                const header = document.getElementById('yetty-status-header');
-                if (header) {
-                    header.textContent = 'Connecting over WebSocket (' +
-                        (wsUrl || 'default endpoint') + '). Click − in the ' +
-                        'top-right corner to minimize this log.';
+                if (data.type === 'session-opened' ||
+                    data.type === 'session-rx' ||
+                    data.type === 'session-closed') {
+                    const route = sessionRoutes[data.clientSid];
+                    if (!route) return;
+                    postToInstance(route.instance, Object.assign({}, data, {
+                        clientSid: route.localSid
+                    }));
+                    if (data.type === 'session-closed' ||
+                        (data.type === 'session-opened' && data.ok === false)) {
+                        delete route.instance.wireSidByLocal[route.localSid];
+                        delete sessionRoutes[data.clientSid];
+                    }
+                    return;
                 }
-            }
-
-            window.yettyStatus.append('loading yetty.js…');
-            await initYetty();
-        }
-
-        async function init() {
-            resizeCanvas();
-            // ?mode= pins the choice and skips the dialog; ?url= (alias
-            // ?wsurl=) overrides the endpoint for websocket/telnet/ssh.
-            // ssh additionally reads ?user= and ?password= (the latter
-            // mainly for automated testing — prefer the dialog, which
-            // keeps the password out of the URL/history).
-            const KNOWN_MODES = ['temu', 'websocket', 'telnet', 'ssh', 'relay', 'ygreeter'];
-            let mode = (urlParams.mode || '').toLowerCase();
-            // ?relay=URL is shorthand for the relay mode with that URL.
-            if (!mode && urlParams.relay) { mode = 'relay'; }
-            let wsUrl = urlParams.url || urlParams.wsurl || urlParams.relay || '';
-            let sshUser = urlParams.user || '';
-            let sshPassword = urlParams.password || '';
-            let relayTarget = urlParams.target || '';
-            const dialogNeeded = KNOWN_MODES.indexOf(mode) === -1 ||
-                                 (mode === 'ssh' && !sshUser) ||
-                                 (mode === 'relay' && !relayTarget);
-            if (dialogNeeded) {
-                const choice = await askSessionMode();
-                mode = choice.mode;
-                wsUrl = choice.wsUrl;
-                sshUser = choice.sshUser;
-                sshPassword = choice.sshPassword;
-                relayTarget = choice.relayTarget;
-            } else if (!wsUrl && MODE_DEFAULT_URLS[mode]) {
-                wsUrl = MODE_DEFAULT_URLS[mode];
-            }
-            // ygreeter is a separate wasm module with no terminal — hand
-            // off to its own page rather than launching a yetty session.
-            if (mode === 'ygreeter') {
-                window.location.href = 'ygreeter.html' + window.location.search;
+                if (data.type === 'vm-ready') {
+                    sourceEngine.ready = true;
+                    clearTimeout(sourceEngine.bootTimer);
+                    setEngineState(sourceEngine, sourceEngine.readyText, 'ready');
+                    sourceEngine.log.append(
+                        sourceEngine.displayName + ' is ready', 'ok');
+                }
+                // vm-ready and term-output (the console stream) go to every
+                // terminal attached to THIS engine — the console is one
+                // shared device per engine, all of them mirror it.
+                sourceEngine.instances.forEach(function (instance) {
+                    postToInstance(instance, data);
+                });
                 return;
             }
-            await launchYetty(mode, wsUrl, sshUser, sshPassword, relayTarget);
-        }
 
-        init();
+            // Engine-bound messages relayed up from a terminal's proxy frame.
+            if (ENGINE_BOUND_TYPES[data.type]) {
+                const payload = Object.assign({}, data);
+                const instance = instanceFromId(payload.yettyInstanceId);
+                delete payload.yettyInstanceId;
+                if (!instance) return;
+                const engine = engineForInstance(instance);
+                if (!engine || !engine.iframe || !engine.iframe.contentWindow) return;
+                if (payload.type === 'session-open') {
+                    const wireSid = nextWireSessionId++;
+                    sessionRoutes[wireSid] = {
+                        instance: instance,
+                        localSid: payload.clientSid
+                    };
+                    instance.wireSidByLocal[payload.clientSid] = wireSid;
+                    payload.clientSid = wireSid;
+                } else if (payload.type === 'session-tx' ||
+                           payload.type === 'session-close') {
+                    const wireSid = instance.wireSidByLocal[payload.clientSid];
+                    if (wireSid === undefined) return;
+                    if (payload.type === 'session-close') {
+                        delete instance.wireSidByLocal[payload.clientSid];
+                        delete sessionRoutes[wireSid];
+                    }
+                    payload.clientSid = wireSid;
+                }
+                engine.iframe.contentWindow.postMessage(payload, '*');
+                return;
+            }
+
+            // Terminal instance control messages.
+            if (data.type === 'yetty-instance-hello') {
+                const instance = instanceFromSource(event.source);
+                if (!instance) return;
+                instance.iframe.contentWindow.postMessage({
+                    type: 'yetty-instance-config',
+                    config: instance.config
+                }, '*');
+                return;
+            }
+            if (data.type === 'yetty-engine-attach') {
+                const instance = instanceFromSource(event.source);
+                if (!instance) return;
+                const engine = engines[data.engine] || engineForInstance(instance);
+                if (!engine) return;
+                if (engine.instances.indexOf(instance) === -1) {
+                    engine.instances.push(instance);
+                }
+                updateEngineAttachedLabel(engine);
+                engine.log.append('terminal #' + instance.id + ' attached', 'dim');
+                if (!engine.iframe) startEngine(engine);
+                if (engine.ready) {
+                    postToInstance(instance, {
+                        type: 'vm-ready',
+                        ptyId: ENGINE_PTY_ID
+                    });
+                }
+                return;
+            }
+        });
+
+        // ---- Session menu (stage 1) + config dialog (stage 2) ------------------
+        const sessionDialogs = (function () {
+            const menuDialog = document.getElementById('menu-dialog');
+            const configDialog = document.getElementById('config-dialog');
+            const urlRow = document.getElementById('config-url-row');
+            const urlLabel = document.getElementById('config-url-label');
+            const urlInput = document.getElementById('config-url');
+            const relayTargetRow = document.getElementById('config-relay-target-row');
+            const relayTargetInput = document.getElementById('config-relay-target');
+            const sshUserRow = document.getElementById('config-ssh-user-row');
+            const sshUserInput = document.getElementById('config-ssh-user');
+            const sshPasswordRow = document.getElementById('config-ssh-password-row');
+            const sshPasswordInput = document.getElementById('config-ssh-password');
+            const note = document.getElementById('config-note');
+            let configMode = null;
+
+            function openMenu() {
+                menuDialog.classList.add('visible');
+            }
+            function closeMenu() {
+                menuDialog.classList.remove('visible');
+            }
+
+            function openConfig(mode, presets) {
+                configMode = mode;
+                const modeInfo = MODES[mode];
+                document.getElementById('config-title').textContent =
+                    modeInfo.name;
+                document.getElementById('config-desc').textContent =
+                    modeInfo.desc;
+                document.getElementById('config-hint').innerHTML =
+                    modeInfo.hint || '';
+
+                if (mode === 'temu' || mode === 'yos') {
+                    const engine = engines[mode];
+                    const engineName = mode === 'temu' ? 'emulator' : 'yos engine';
+                    note.textContent = (engine.ready
+                        ? 'The ' + engineName + ' is running — this terminal attaches to it.'
+                        : (engine.iframe
+                            ? 'The ' + engineName + ' is booting — the terminal ' +
+                              'attaches once it is ready.'
+                            : 'The ' + engineName + ' is not running yet — it will ' +
+                              'be started automatically. You can also start and ' +
+                              'watch it on the Engines tab.')) +
+                        (mode === 'temu'
+                            ? ' Several terminals can share the VM; each gets its ' +
+                              'own telnet login session.'
+                            : ' Several terminals share the one engine; each gets ' +
+                              'its own fresh zsh session.');
+                    note.classList.add('visible');
+                } else {
+                    note.classList.remove('visible');
+                }
+
+                urlRow.classList.toggle('visible', !!modeInfo.needsUrl);
+                if (modeInfo.needsUrl) {
+                    urlLabel.textContent = modeInfo.urlLabel;
+                    urlInput.value = (presets && presets.wsUrl) ||
+                                     MODE_DEFAULT_URLS[mode] || '';
+                }
+                sshUserRow.classList.toggle('visible', !!modeInfo.needsSsh);
+                sshPasswordRow.classList.toggle('visible', !!modeInfo.needsSsh);
+                if (modeInfo.needsSsh && presets && presets.sshUser) {
+                    sshUserInput.value = presets.sshUser;
+                }
+                relayTargetRow.classList.toggle('visible',
+                                                !!modeInfo.needsRelayTarget);
+                if (modeInfo.needsRelayTarget && presets && presets.relayTarget) {
+                    relayTargetInput.value = presets.relayTarget;
+                }
+
+                configDialog.classList.add('visible');
+                if (modeInfo.needsSsh) {
+                    sshUserInput.focus();
+                } else if (modeInfo.needsUrl) {
+                    urlInput.focus();
+                }
+            }
+            function closeConfig() {
+                configDialog.classList.remove('visible');
+                sshPasswordInput.value = '';
+            }
+
+            function startFromConfig() {
+                const modeInfo = MODES[configMode];
+                if (modeInfo.needsSsh && !sshUserInput.value.trim()) {
+                    sshUserInput.focus();
+                    return;
+                }
+                const config = {
+                    mode: configMode,
+                    wsUrl: modeInfo.needsUrl ? urlInput.value.trim() : '',
+                    sshUser: sshUserInput.value.trim(),
+                    sshPassword: sshPasswordInput.value,
+                    relayTarget: relayTargetInput.value.trim(),
+                    trace: traceOn
+                };
+                closeConfig();
+                openInstance(config);
+            }
+
+            document.getElementById('menu-button')
+                .addEventListener('click', openMenu);
+            document.getElementById('menu-cancel')
+                .addEventListener('click', closeMenu);
+            menuDialog.querySelectorAll('.mode-option').forEach(function (option) {
+                option.addEventListener('click', function () {
+                    closeMenu();
+                    openConfig(option.dataset.mode, null);
+                });
+            });
+            document.getElementById('config-start')
+                .addEventListener('click', startFromConfig);
+            document.getElementById('config-cancel')
+                .addEventListener('click', function () {
+                    closeConfig();
+                    openMenu();
+                });
+            [urlInput, relayTargetInput, sshUserInput, sshPasswordInput]
+                .forEach(function (input) {
+                    input.addEventListener('keydown', function (event) {
+                        if (event.key === 'Enter') startFromConfig();
+                    });
+                });
+
+            // openConfig is exposed for the deep-link path below.
+            return { openConfig: openConfig };
+        })();
+
+        // ---- Deep links ---------------------------------------------------------
+        // ?mode= opens the matching instance straight away (the old
+        // single-instance page pinned the transport the same way); ?url=
+        // (alias ?wsurl=), ?user=, ?password=, ?target= fill the config.
+        // Incomplete configs (ssh without user, relay without target) fall
+        // back to the prefilled config dialog instead of guessing.
+        (function () {
+            let mode = (urlParams.mode || '').toLowerCase();
+            if (!mode && urlParams.relay) { mode = 'relay'; }
+            if (!MODES[mode]) return;
+            const config = {
+                mode: mode,
+                wsUrl: urlParams.url || urlParams.wsurl || urlParams.relay ||
+                       MODE_DEFAULT_URLS[mode] || '',
+                sshUser: urlParams.user || '',
+                sshPassword: urlParams.password || '',
+                relayTarget: urlParams.target || '',
+                trace: traceOn
+            };
+            const incomplete = (mode === 'ssh' && !config.sshUser) ||
+                               (mode === 'relay' && !config.relayTarget);
+            if (incomplete) {
+                sessionDialogs.openConfig(mode, config);
+                return;
+            }
+            openInstance(config);
+        })();
     </script>
 </body>
 </html>

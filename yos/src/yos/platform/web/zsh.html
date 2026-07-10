@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>real zsh.wasm in the browser</title>
+<link rel="stylesheet" href="./vendor/xterm.min.css" />
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1014; }
+  #term { width: 100vw; height: 100vh; }
+</style>
+<div id="term"></div>
+<script src="./vendor/xterm.min.js"></script>
+<script src="./vendor/addon-fit.min.js"></script>
+<script>
+  // Make ANY error visible on screen — if the module fails to load (e.g. a
+  // wasm fetch/compile fails in your browser), the keyboard handler never
+  // attaches and input silently dies. This banner surfaces that.
+  function showErr(msg) {
+    window.__err = String(msg);
+    let b = document.getElementById("errbar");
+    if (!b) { b = document.createElement("div"); b.id = "errbar"; b.style.cssText = "position:fixed;bottom:0;left:0;right:0;z-index:99999;font:12px ui-monospace,monospace;color:#fff;background:#a00;padding:6px 10px;white-space:pre-wrap;max-height:40vh;overflow:auto"; document.body.appendChild(b); }
+    b.textContent = "PAGE ERROR: " + window.__err;
+  }
+  window.addEventListener("error", (e) => showErr(e.error?.stack || e.message));
+  window.addEventListener("unhandledrejection", (e) => showErr(e.reason?.stack || e.reason));
+</script>
+<script type="module" src="./zsh_main.mjs"></script>

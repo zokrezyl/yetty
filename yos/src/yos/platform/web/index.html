@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>yos web proof — guest wasm + wasm bridge, shared memory</title>
+<style>
+  body { background: #0b1014; color: #e0e5e4; font: 14px/1.5 ui-monospace, monospace; padding: 2rem; }
+  h1 { color: #6ba892; font-size: 1rem; }
+  pre { background: #141a1f; border: 1px solid #364a47; padding: 1rem; white-space: pre-wrap; }
+  .ok { color: #74c5a5; }
+  .err { color: #d08770; }
+</style>
+<h1>yos web proof</h1>
+<p>guest wasm (native engine) &rarr; wasm bridge &rarr; shared linear memory &rarr; one host effect</p>
+<pre id="out"></pre>
+<script type="module">
+  // Same wiring as run.mjs, in a browser. Single-threaded, non-shared
+  // memory, so no COOP/COEP needed here — those come in only when guest
+  // threads (Workers + SharedArrayBuffer) are turned on.
+  const out = document.getElementById("out");
+  const log = (text, cls) => {
+    const span = document.createElement("span");
+    if (cls) span.className = cls;
+    span.textContent = text;
+    out.appendChild(span);
+  };
+
+  const PAGES = 256; // 16 MiB — covers the bridge's high --global-base
+  const memory = new WebAssembly.Memory({ initial: PAGES, maximum: PAGES });
+  const decoder = new TextDecoder();
+  let captured = "";
+
+  // The single irreducible host effect: push bytes at the terminal.
+  function host_write_bytes(fd, buf, count) {
+    const text = decoder.decode(new Uint8Array(memory.buffer, buf, count));
+    captured += text;
+    log(text);
+    return count;
+  }
+
+  try {
+    const [bridgeMod, guestMod] = await Promise.all([
+      WebAssembly.compileStreaming(fetch("./bridge.wasm")),
+      WebAssembly.compileStreaming(fetch("./guest.wasm")),
+    ]);
+
+    const bridge = await WebAssembly.instantiate(bridgeMod, {
+      env: { memory },
+      host: { write_bytes: host_write_bytes },
+    });
+    const guest = await WebAssembly.instantiate(guestMod, {
+      env: { memory, write: bridge.exports.write, strlen: bridge.exports.strlen },
+    });
+
+    guest.exports._start();
+
+    const expected = "hello from guest, served by a wasm bridge\n";
+    log(captured === expected
+      ? "\nPASS: guest → wasm bridge → shared memory → host sink\n"
+      : `\nFAIL: got ${JSON.stringify(captured)}\n`,
+      captured === expected ? "ok" : "err");
+  } catch (error) {
+    log(`\nERROR: ${error}\n`, "err");
+  }
+</script>

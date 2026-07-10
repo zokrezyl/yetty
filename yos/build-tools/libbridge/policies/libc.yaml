@@ -1,0 +1,296 @@
+# libc.yaml — per-global cross-guest-isolation policy for glibc 2.40.
+#
+# Each entry of the inventory at /tmp/globals-libc.yaml is classified
+# into one of five buckets:
+#
+#   bridged_per_ctx  yos's bridge layer keeps a per-yos_exec_ctx copy
+#                    and the bridge writes to/reads from that copy
+#                    instead of host libc's global. The host global may
+#                    still be touched by yos-internal code, but never
+#                    on behalf of the guest. Field name + impl file in
+#                    `via:` for the audit trail.
+#
+#   tls_safe         glibc stores this in .tdata / .tbss → per-host-
+#                    thread. yos's fork = pthread-per-guest model
+#                    means each guest gets its own copy automatically.
+#                    Cross-check: the scan should report
+#                    hazard==threadlocal; mismatch is a bug.
+#
+#   safe_immutable   in .rodata, OR in .data but never written after
+#                    libc init. Sharing is harmless (read-only data).
+#
+#   yos_owned        infrastructural global that yos *itself* uses
+#                    behind the bridge surface — the guest can never
+#                    observe or mutate it. e.g. __pthread_keys backs
+#                    host pthread, which yos calls from impl/pthread.c
+#                    to implement its own L1 pthread emulation; the
+#                    wasm-side pthread API is bridged separately.
+#
+#   leaks            no per-ctx coverage yet, AND functions reading/
+#                    writing this global ARE in the bridge surface.
+#                    Each entry has a `bridge:` field naming the
+#                    eventual per-ctx field, and the `unbridge:` field
+#                    naming the libc fns we'll refuse to bridge in the
+#                    meantime (so the leak is at least loud).
+#
+# The extractor's --policy mode diffs this against the .so scan and
+# refuses to call a release "clean" until leaks_unpolicied is empty.
+
+library: libc.so.6
+
+classes:
+
+  # ── bridged_per_ctx ─────────────────────────────────────────────
+  # yos already has per-ctx coverage for these.
+  bridged_per_ctx:
+    - {name: environ,         via: impl/env.c,  note: per-ctx env vector replaces host}
+    - {name: __environ,       via: impl/env.c,  note: alias of environ}
+    - {name: _environ,        via: impl/env.c,  note: legacy alias of environ}
+    - {name: stdin,           via: impl/file.c, note: stream handle 1 → per-ctx fd_map}
+    - {name: stdout,          via: impl/file.c, note: stream handle 2 → per-ctx fd_map}
+    - {name: stderr,          via: impl/file.c, note: stream handle 3 → per-ctx fd_map}
+    - {name: _IO_2_1_stdin_,  via: impl/file.c, note: guest never touches host FILE struct}
+    - {name: _IO_2_1_stdout_, via: impl/file.c, note: same; routed by fp==1/2/3 shim}
+    - {name: _IO_2_1_stderr_, via: impl/file.c, note: same}
+    - {name: _IO_list_all,    via: impl/file.c, note: yos owns its own FILE chain}
+
+  # ── tls_safe ─────────────────────────────────────────────────────
+  # glibc puts these in .tdata/.tbss; per-host-thread automatically.
+  tls_safe:
+    - {name: errno,                  note: POSIX-required thread-local}
+    - {name: __h_errno,              note: thread-local hostent error}
+    - {name: __resp,                 note: thread-local resolver state pointer}
+    - {name: __libc_dlerror_result,  note: thread-local dlerror message}
+
+  # ── safe_immutable ───────────────────────────────────────────────
+  # .rodata or initialized-once-at-libc-startup and never mutated.
+  # All _thread_db_* are debug-info constants for gdb's thread debugging.
+  safe_immutable:
+    # error/signal name tables — read-only string arrays
+    - {name: sys_errlist,        note: error message strings, never written}
+    - {name: _sys_errlist,       note: alias of sys_errlist}
+    - {name: sys_siglist,        note: signal name strings}
+    - {name: _sys_siglist,       note: alias of sys_siglist}
+    - {name: sys_sigabbrev,      note: short signal name strings}
+    - {name: h_errlist,          note: hostent error strings}
+    - {name: sys_nerr,           note: error count, const}
+    - {name: _sys_nerr,          note: alias}
+    - {name: h_nerr,             note: hostent error count, const}
+    # IO vtables — function-pointer tables, never patched at runtime
+    - {name: _IO_file_jumps,     note: stdio vtable, const-after-init}
+    - {name: _IO_wfile_jumps,    note: wide stdio vtable, const-after-init}
+    # ctype lookup tables — set once by setlocale("C"), wasm guests use
+    # bundled yos_libc_init.c tables instead
+    - {name: __ctype_b,          note: ctype lookup, immutable after locale init}
+    - {name: __ctype_tolower,    note: ctype lookup, immutable}
+    - {name: __ctype_toupper,    note: ctype lookup, immutable}
+    - {name: __ctype32_b,        note: wide ctype lookup, immutable}
+    - {name: __ctype32_tolower,  note: wide ctype lookup, immutable}
+    - {name: __ctype32_toupper,  note: wide ctype lookup, immutable}
+    # IPv6 anycast/loopback addresses
+    - {name: in6addr_any,        note: const IPv6 zero-address}
+    - {name: in6addr_loopback,   note: const IPv6 ::1}
+    # internal const strings
+    - {name: _itoa_lower_digits, note: digit string for itoa()}
+    - {name: _nl_default_dirname,note: default gettext catalog dir}
+    - {name: __nptl_version,     note: pthread version string}
+    - {name: _libc_intl_domainname, note: libc i18n domain}
+    - {name: __fpu_control,      note: FPU control register default, set once}
+    # process-name fields — set ONCE by glibc startup; wasm guests
+    # don't change them at runtime in any code path we care about
+    - {name: __progname,             note: process basename, set once at libc init}
+    - {name: __progname_full,        note: process full name, set once}
+    - {name: program_invocation_name,       note: alias, set once}
+    - {name: program_invocation_short_name, note: alias, set once}
+    # All _thread_db_* — read-only debug-info constants gdb uses
+    - {name: _thread_db_pthread_tid,                  note: gdb thread-debug constant}
+    - {name: _thread_db_pthread_list,                 note: gdb thread-debug constant}
+    - {name: _thread_db_pthread_nextevent,            note: gdb constant}
+    - {name: _thread_db_pthread_specific,             note: gdb constant}
+    - {name: _thread_db_pthread_eventbuf,             note: gdb constant}
+    - {name: _thread_db_pthread_eventbuf_eventmask,   note: gdb constant}
+    - {name: _thread_db_pthread_eventbuf_eventmask_event_bits, note: gdb constant}
+    - {name: _thread_db_pthread_cancelhandling,       note: gdb constant}
+    - {name: _thread_db_pthread_dtvp,                 note: gdb constant}
+    - {name: _thread_db_pthread_report_events,        note: gdb constant}
+    - {name: _thread_db_pthread_schedparam_sched_priority, note: gdb constant}
+    - {name: _thread_db_pthread_schedpolicy,          note: gdb constant}
+    - {name: _thread_db_pthread_start_routine,        note: gdb constant}
+    - {name: _thread_db_pthread_key_data_data,        note: gdb constant}
+    - {name: _thread_db_pthread_key_data_level2_data, note: gdb constant}
+    - {name: _thread_db_pthread_key_data_seq,         note: gdb constant}
+    - {name: _thread_db_pthread_key_struct_destr,     note: gdb constant}
+    - {name: _thread_db_pthread_key_struct_seq,       note: gdb constant}
+    - {name: _thread_db_link_map_l_tls_modid,         note: gdb constant}
+    - {name: _thread_db_link_map_l_tls_offset,        note: gdb constant}
+    - {name: _thread_db_list_t_next,                  note: gdb constant}
+    - {name: _thread_db_list_t_prev,                  note: gdb constant}
+    - {name: _thread_db_dtv_dtv,                      note: gdb constant}
+    - {name: _thread_db_dtv_t_pointer_val,            note: gdb constant}
+    - {name: _thread_db_dtv_t_counter,                note: gdb constant}
+    - {name: _thread_db_dtv_slotinfo_gen,             note: gdb constant}
+    - {name: _thread_db_dtv_slotinfo_list_next,       note: gdb constant}
+    - {name: _thread_db_dtv_slotinfo_list_slotinfo,   note: gdb constant}
+    - {name: _thread_db_dtv_slotinfo_list_len,        note: gdb constant}
+    - {name: _thread_db_dtv_slotinfo_map,             note: gdb constant}
+    - {name: _thread_db_td_eventbuf_t_eventnum,       note: gdb constant}
+    - {name: _thread_db_td_eventbuf_t_eventdata,      note: gdb constant}
+    - {name: _thread_db_td_thr_events_t_event_bits,   note: gdb constant}
+    - {name: _thread_db_rtld_global__dl_stack_used,   note: gdb constant}
+    - {name: _thread_db_rtld_global__dl_stack_user,   note: gdb constant}
+    - {name: _thread_db_rtld_global__dl_tls_dtv_slotinfo_list, note: gdb constant}
+    - {name: _thread_db_sizeof_pthread,               note: gdb sizeof-constant}
+    - {name: _thread_db_sizeof_pthread_key_data,      note: gdb sizeof-constant}
+    - {name: _thread_db_sizeof_pthread_key_data_level2, note: gdb sizeof-constant}
+    - {name: _thread_db_sizeof_pthread_key_struct,    note: gdb sizeof-constant}
+    - {name: _thread_db_sizeof_dtv_slotinfo,          note: gdb sizeof-constant}
+    - {name: _thread_db_sizeof_dtv_slotinfo_list,     note: gdb sizeof-constant}
+    - {name: _thread_db_sizeof_list_t,                note: gdb sizeof-constant}
+    - {name: _thread_db_sizeof_td_eventbuf_t,         note: gdb sizeof-constant}
+    - {name: _thread_db_sizeof_td_thr_events_t,       note: gdb sizeof-constant}
+    - {name: _thread_db_const_thread_area,            note: gdb constant}
+    - {name: _thread_db___pthread_keys,               note: gdb constant — describes __pthread_keys layout}
+    - {name: _thread_db___nptl_last_event,            note: gdb constant}
+    - {name: _thread_db___nptl_nthreads,              note: gdb constant}
+    - {name: _thread_db___nptl_rtld_global,           note: gdb constant}
+
+  # ── yos_owned ────────────────────────────────────────────────────
+  # Infrastructural — yos itself uses these from impl/*.c; never
+  # exposed to wasm guests. The host global lives, but wasm bridge
+  # surface doesn't touch it.
+  yos_owned:
+    # pthread machinery — yos's L1 pthread emulation (impl/pthread.c)
+    # creates host pthreads and owns the host pthread runtime state.
+    - {name: __pthread_keys,      note: host pthread key table, used by impl/pthread.c}
+    - {name: __nptl_nthreads,     note: host nptl thread count, internal to glibc}
+    - {name: __nptl_rtld_global,  note: nptl rtld coordination, internal}
+    - {name: __nptl_last_event,   note: nptl event hook, internal}
+    - {name: __nptl_threads_events, note: nptl event hook, internal}
+    - {name: __libc_single_threaded, note: glibc fast-path optimisation flag}
+    # malloc/sbrk — yos's wasm guests get their own allocator inside
+    # wasm linear memory; host malloc is only used by yos itself for
+    # bookkeeping. The hooks are runtime-mutable but no bridge writes them.
+    - {name: __malloc_hook,       note: glibc malloc hook (removed in 2.34+; harmless residue)}
+    - {name: __realloc_hook,      note: glibc realloc hook (removed)}
+    - {name: __free_hook,         note: glibc free hook (removed)}
+    - {name: __memalign_hook,     note: glibc memalign hook (removed)}
+    - {name: __malloc_initialize_hook, note: glibc init hook (removed)}
+    - {name: __morecore,          note: sbrk callback, yos doesn't expose sbrk}
+    - {name: __after_morecore_hook, note: sbrk callback hook, internal}
+    - {name: __curbrk,            note: sbrk current break, internal to host glibc}
+    - {name: mallwatch,           note: mtrace watch pointer, glibc internal}
+    # abort/__libc_abort scratch
+    - {name: __abort_msg,         note: scratch for abort() diagnostic, internal}
+
+  # ── leaks ────────────────────────────────────────────────────────
+  # KNOWN cross-guest leaks. Each entry names the per-ctx field that
+  # WILL be added and the bridge fns to be refused or rewritten.
+  leaks:
+
+    # getopt — global parser state. Multi-guest concurrent getopt
+    # = corruption. Fix: add ctx->getopt_state {optind,optarg,optopt,
+    # opterr}; bridge env.getopt saves/restores host globals around
+    # the call, treating ctx as authoritative.
+    - {name: optind,  bridge: ctx->getopt_state.optind,  unbridge: [getopt, getopt_long, getopt_long_only]}
+    - {name: optarg,  bridge: ctx->getopt_state.optarg,  unbridge: [getopt, getopt_long, getopt_long_only]}
+    - {name: optopt,  bridge: ctx->getopt_state.optopt,  unbridge: [getopt, getopt_long, getopt_long_only]}
+    - {name: opterr,  bridge: ctx->getopt_state.opterr,  unbridge: [getopt, getopt_long, getopt_long_only]}
+
+    # DNS resolver — `_res` LOOKS shared (in .bss, 568 B per the ELF
+    # scan), but on glibc 2.34+ user code never touches that storage
+    # directly: <resolv.h>'s `_res` macro expands to `(*__res_state())`,
+    # and __res_state() returns a per-thread pointer (__resp TLS slot).
+    # So even though the symbol is mutable globally, every reader hits
+    # the per-host-thread copy, which under yos's fork=pthread-per-guest
+    # model IS per-guest isolation.
+    # The legacy symbol is left in .bss only for the handful of ancient
+    # programs that do `extern struct __res_state _res; _res.x = y;`
+    # without including resolv.h — yos has no such consumer.
+    # Bridge gethostbyname/etc. with the normal passthrough; they pick
+    # up the per-thread state via the macro form.
+    - {name: _res,        bridge: per-thread-via-__res_state-accessor,
+       note: glibc 2.34+ macro hides _res storage behind __res_state(),
+       unbridge: []}    # empty — don't refuse, let normal bridge work
+    - {name: _res_hconf,  bridge: follows-_res,
+       note: hosts.conf parse state, parsed once per resolver init,
+       unbridge: []}
+
+    # Timezone — set by tzset(); read by localtime/mktime/etc.
+    # Fix: per-ctx TZ env var (already covered by per-ctx environ);
+    # bridge env.tzset calls host tzset() but reads the result into
+    # ctx->tz_{tzname,timezone,daylight} immediately, then bridges
+    # for localtime/etc. swap host globals from ctx around the call.
+    # Alternative: prefer the *_r reentrant variants where available.
+    - {name: tzname,     bridge: ctx->tz_state.tzname,    unbridge: [tzset]}
+    - {name: __tzname,   bridge: ctx->tz_state.tzname,    note: alias}
+    - {name: timezone,   bridge: ctx->tz_state.timezone,  unbridge: [tzset]}
+    - {name: __timezone, bridge: ctx->tz_state.timezone,  note: alias}
+    - {name: daylight,   bridge: ctx->tz_state.daylight,  unbridge: [tzset]}
+    - {name: __daylight, bridge: ctx->tz_state.daylight,  note: alias}
+
+    # NOTE: signgam — historically a global written by lgamma(). Not
+    # present in glibc 2.40's libc.so symbol export (moved to libm or
+    # the modern lgamma path uses lgamma_r internally). Re-evaluate
+    # if a future libc scan shows it again.
+
+    # getdate — yos refuses to bridge entirely (deprecated; strptime
+    # is the modern replacement and stateless).
+    - {name: getdate_err, bridge: <NONE — refuse>,
+       unbridge: [getdate, getdate_r]}
+
+    # POSIX regex compile-time options — only matters if guest sets
+    # REG_NOSUB/REG_EXTENDED globally. yos has its own impl/regex.c
+    # with per-handle regex state, so re_syntax_options is unused.
+    # Mark these refused at the legacy entry points; modern regex.h
+    # uses regcomp/regexec which take explicit handles.
+    - {name: re_syntax_options, bridge: <ignored — yos uses impl/regex.c>,
+       unbridge: [re_set_syntax]}
+    - {name: re_max_failures,   bridge: <ignored>,
+       unbridge: [re_match_2]}
+    - {name: loc1,              bridge: <ignored>, unbridge: [re_match]}
+    - {name: loc2,              bridge: <ignored>, unbridge: [re_match]}
+    - {name: locs,              bridge: <ignored>, unbridge: [re_match]}
+
+    # obstack memory allocator — global error handlers. yos refuses
+    # to bridge obstack entirely (almost no wasm guest uses it).
+    - {name: _obstack,                      bridge: <NONE>, unbridge: [obstack_init, obstack_begin]}
+    - {name: obstack_alloc_failed_handler,  bridge: <NONE>, unbridge: [obstack_init, obstack_begin]}
+    - {name: obstack_exit_failure,          bridge: <NONE>, unbridge: [obstack_init, obstack_begin]}
+
+    # argp option parser — global program meta + error sink. yos
+    # refuses to bridge argp (callers should use getopt instead).
+    - {name: argp_program_bug_address,    bridge: <NONE>, unbridge: [argp_parse]}
+    - {name: argp_program_version,        bridge: <NONE>, unbridge: [argp_parse]}
+    - {name: argp_program_version_hook,   bridge: <NONE>, unbridge: [argp_parse]}
+    - {name: argp_err_exit_status,        bridge: <NONE>, unbridge: [argp_parse]}
+
+    # error.h — error_*. yos refuses; programs should write to stderr
+    # explicitly.
+    - {name: error_message_count,   bridge: <NONE>, unbridge: [error, error_at_line]}
+    - {name: error_one_per_line,    bridge: <NONE>, unbridge: [error, error_at_line]}
+    - {name: error_print_progname,  bridge: <NONE>, unbridge: [error, error_at_line]}
+
+    # Sun-RPC family — entirely deprecated; yos refuses every RPC fn.
+    - {name: svc_fdset,                 bridge: <NONE>, unbridge: [svc_register, svc_run, svc_getreq]}
+    - {name: svc_pollfd,                bridge: <NONE>, unbridge: [svc_register, svc_run]}
+    - {name: svc_max_pollfd,            bridge: <NONE>, unbridge: [svc_register, svc_run]}
+    - {name: rpc_createerr,             bridge: <NONE>, unbridge: [clnt_create, clnt_tli_create]}
+    - {name: _null_auth,                bridge: <NONE>, unbridge: [authnone_create]}
+    - {name: svcauthdes_stats,          bridge: <NONE>, unbridge: [_svcauth_des]}
+    - {name: __key_decryptsession_pk_LOCAL, bridge: <NONE>, unbridge: [key_decryptsession_pk]}
+    - {name: __key_encryptsession_pk_LOCAL, bridge: <NONE>, unbridge: [key_encryptsession_pk]}
+    - {name: __key_gendes_LOCAL,            bridge: <NONE>, unbridge: [key_gendes]}
+
+    # rcmd/rexec — deprecated remote-shell helpers, never bridged.
+    - {name: __rcmd_errstr,         bridge: <NONE>, unbridge: [rcmd, rexec]}
+    - {name: __check_rhosts_file,   bridge: <NONE>, unbridge: [ruserok]}
+    - {name: rexecoptions,          bridge: <NONE>, unbridge: [rexec]}
+
+    # gettext / locale — _nl_msg_cat_cntr changes on every setlocale().
+    # Two guests with different LOCALES collide. Fix: bridge env.setlocale
+    # to a per-ctx slot; refuse the bind_textdomain/dgettext fns until
+    # we bridge them ourselves.
+    - {name: _nl_msg_cat_cntr,    bridge: ctx->locale_state.msg_cat_cntr,
+       unbridge: [bind_textdomain_codeset, dgettext, gettext, ngettext]}
+    - {name: _nl_domain_bindings, bridge: ctx->locale_state.domain_bindings,
+       unbridge: [bindtextdomain]}

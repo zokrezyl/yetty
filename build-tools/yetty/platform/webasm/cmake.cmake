@@ -137,9 +137,14 @@ target_link_options(yetty PRIVATE
 )
 
 if(YETTY_ENABLE_FEATURE_DEMO)
+    # Package straight from the repo trees. NEVER package
+    # ${CMAKE_BINARY_DIR}/src — that directory doubles as cmake's
+    # compile-output tree, so the packager ships every .a/.o it finds
+    # there (~280 MB of build artifacts ended up in yetty.data that
+    # way, turning a ~46 MB package into 325 MB).
     target_link_options(yetty PRIVATE
-        "--preload-file=${CMAKE_BINARY_DIR}/demo@/demo"
-        "--preload-file=${CMAKE_BINARY_DIR}/src@/src"
+        "--preload-file=${YETTY_ROOT}/demo@/demo"
+        "--preload-file=${YETTY_ROOT}/src@/src"
     )
 endif()
 
@@ -312,14 +317,11 @@ set_property(DIRECTORY "${CMAKE_SOURCE_DIR}" APPEND PROPERTY
 # + ygreeter.html for the picker's showcase option.
 add_dependencies(yetty ygreeter)
 
-# Copy demo and source tree to build directory for preloading
-if(YETTY_ENABLE_FEATURE_DEMO)
-    add_custom_command(TARGET yetty PRE_LINK
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${YETTY_ROOT}/demo ${CMAKE_BINARY_DIR}/demo
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${YETTY_ROOT}/src ${CMAKE_BINARY_DIR}/src
-        COMMENT "Copying demo and source tree to build directory"
-    )
-endif()
+# (The demo/src trees used to be copy_directory'd into the build dir
+# for preloading. The packager now reads ${YETTY_ROOT} directly — and
+# the copy actively harmed: it splattered source files through
+# ${CMAKE_BINARY_DIR}/src, cmake's own compile-output tree, which the
+# packager then shipped wholesale, .a/.o files included.)
 
 # msdf-fonts CDBs and the yemu kernel/opensbi/img bundle are no longer
 # staged into the preload — they're embedded into yetty.wasm via
@@ -343,7 +345,9 @@ add_custom_command(TARGET yetty PRE_LINK
 # fix this we ALSO declare a phony target with output-file dependencies
 # so ninja re-runs the copies whenever any source HTML/JS changes.
 set(_WEB_COPY_FILES
+    ${CMAKE_BINARY_DIR}/terminal.html
     ${CMAKE_BINARY_DIR}/tinyemu-iframe.html
+    ${CMAKE_BINARY_DIR}/yos-iframe.html
     ${CMAKE_BINARY_DIR}/serve.py
     ${CMAKE_BINARY_DIR}/favicon.ico
     ${CMAKE_BINARY_DIR}/apple-touch-icon.jpg
@@ -371,10 +375,22 @@ set_property(DIRECTORY "${CMAKE_SOURCE_DIR}" APPEND PROPERTY
     CMAKE_CONFIGURE_DEPENDS
     "${YETTY_ROOT}/build-tools/web/index.html")
 add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/terminal.html
+    COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/terminal.html ${CMAKE_BINARY_DIR}/terminal.html
+    DEPENDS ${YETTY_ROOT}/build-tools/web/terminal.html
+    COMMENT "Copy web/terminal.html → build dir"
+)
+add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/tinyemu-iframe.html
     COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/tinyemu-iframe.html ${CMAKE_BINARY_DIR}/tinyemu-iframe.html
     DEPENDS ${YETTY_ROOT}/build-tools/web/tinyemu-iframe.html
     COMMENT "Copy web/tinyemu-iframe.html → build dir"
+)
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/yos-iframe.html
+    COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/yos/yos-iframe.html ${CMAKE_BINARY_DIR}/yos-iframe.html
+    DEPENDS ${YETTY_ROOT}/build-tools/web/yos/yos-iframe.html
+    COMMENT "Copy web/yos/yos-iframe.html → build dir"
 )
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/serve.py

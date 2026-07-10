@@ -1,0 +1,156 @@
+# lua.yaml — per-global cross-guest-isolation policy for the host
+# liblua-5.1.5 that yos optionally links into the host binary and
+# exposes to wasm guests as env.lua_* / env.luaL_* / env.luaopen_*
+# bridges.
+#
+# Lua is the simplest possible Tier-1 embedding case. Numbers (from
+# extract_globals.py against host liblua-5.1.5.dylib):
+#
+#   shared:              1   (dyld bookkeeping; not real Lua state)
+#   shared_const:       33   (function tables, opcode names, sentinels)
+#   threadlocal:         0
+#   immortal_singleton:  0
+#   total:              34
+#
+# That's it. ZERO mutable file-scope globals. Why: Lua was designed
+# from the ground up for embedding. There is no implicit "current
+# Lua context" anywhere in the API — every function takes
+# `lua_State *L` explicitly. All mutable state lives inside the
+# opaque lua_State struct.
+#
+# Per-guest isolation:
+#   bridge surface: env.luaL_newstate() in the init bridge
+#   storage:         one `void *lua_state` slot in yos_exec_ctx
+#   per-call:        every bridge resolves the L argument through
+#                    the guest's own slot — no host swap needed
+#   teardown:        env.lua_close at exec_ctx free
+#
+# No subinterpreter dance (unlike Python), no Py_NewInterpreter swap
+# around every call. Just pass through L.
+#
+# Surface size: 125 functions across lua.h + lauxlib.h + lualib.h
+# (33% the size of Python's surface). Almost all take
+# `lua_State *L` + primitives (int / double / const char * / size_t)
+# — no opaque-pointer graph to handle-table the way PyObject* /
+# SSL_CTX needed. Trivial.
+#
+# This file is the libpython / openssl counterpart. Same five
+# buckets (see libc.yaml for full semantics).
+
+library: liblua-5.1.5
+
+classes:
+
+  # ── bridged_per_ctx ─────────────────────────────────────────────
+  # The single per-guest slot: ctx->lua_state holds the lua_State *
+  # returned by luaL_newstate() at first env.luaL_newstate bridge
+  # call. Every subsequent bridge takes an L argument from the
+  # guest and passes through to host liblua — no global to swap.
+  bridged_per_ctx:
+    - {name: "<per-ctx lua_State *>",  via: impl/libc/liblua.c,
+       note: "luaL_newstate() per yos_exec_ctx. By design, lua_State
+              is the ONLY container of mutable Lua state — globals,
+              registry, string interns, GC state, coroutines, all
+              live inside it. Guests cannot reach into other
+              guests' lua_State by any C-API surface."}
+
+  # ── tls_safe ─────────────────────────────────────────────────────
+  # None. liblua uses zero TLS storage.
+  tls_safe: []
+
+  # ── safe_immutable ───────────────────────────────────────────────
+  # Const tables + sentinels. Set at libliblua image-load time,
+  # never mutated. Cross-guest sharing is correct by construction.
+  safe_immutable:
+    # Library function tables — luaL_Reg arrays consumed by
+    # luaL_register() to populate library tables in each lua_State.
+    # The arrays themselves are const; the populated tables live
+    # inside each lua_State.
+    - {name: base_funcs,     note: "basic library (assert, print, ipairs, ...)"}
+    - {name: co_funcs,       note: "coroutine library"}
+    - {name: dblib,          note: "debug library"}
+    - {name: flib,           note: "file methods (FILE*-backed)"}
+    - {name: iolib,          note: "io library"}
+    - {name: ll_funcs,       note: "package loader functions"}
+    - {name: mathlib,        note: "math library"}
+    - {name: pk_funcs,       note: "package library"}
+    - {name: strlib,         note: "string library"}
+    - {name: syslib,         note: "os library"}
+    - {name: tab_funcs,      note: "table library"}
+    # Opcode + type metadata tables
+    - {name: luaP_opnames,   note: "bytecode opcode names (debug)"}
+    - {name: luaP_opmodes,   note: "bytecode opcode mode flags"}
+    - {name: luaT_typenames, note: "Lua type names: nil/boolean/.../userdata"}
+    - {name: luaT_init.luaT_eventname, note: "metamethod names: __index/__newindex/..."}
+    - {name: luaX_tokens,    note: "lexer token table"}
+    # Sentinels
+    - {name: luaO_nilobject_, note: "sentinel TValue for nil; address-comparable"}
+    - {name: dummynode_,      note: "shared empty hash node for empty tables"}
+    - {name: sentinel_,       note: "package loader sentinel"}
+    # Version string + misc constants
+    - {name: lua_ident,                  note: "version-banner string"}
+    - {name: KEY_HOOK,                   note: "registry key for debug hooks"}
+    - {name: priority,                   note: "GC/scheduling priorities"}
+    - {name: luaO_log2.log_2,            note: "static log2 table"}
+    # File-mode / setvbuf option tables (string-to-int lookup arrays)
+    - {name: f_seek.mode,                note: "fseek modes"}
+    - {name: f_seek.modenames,           note: "fseek mode names"}
+    - {name: f_setvbuf.mode,             note: "setvbuf modes"}
+    - {name: f_setvbuf.modenames,        note: "setvbuf mode names"}
+    # collectgarbage option enumeration
+    - {name: luaB_collectgarbage.opts,    note: "collectgarbage option ids"}
+    - {name: luaB_collectgarbage.optsnum, note: "collectgarbage option count"}
+    # setlocale / stat
+    - {name: os_setlocale.cat,            note: "setlocale category ids"}
+    - {name: os_setlocale.catnames,       note: "setlocale category names"}
+    - {name: statnames,                   note: "io.type return values"}
+    # debug hook names
+    - {name: hookf.hooknames.rel,         note: "debug hook event names"}
+
+  # ── yos_owned ────────────────────────────────────────────────────
+  # None. Lua has no infrastructural globals yos needs to manage
+  # itself (unlike libpython's _PyRuntime).
+  yos_owned: []
+
+  # ── leaks ────────────────────────────────────────────────────────
+  # None. Every Lua API call routes through L (the lua_State *) and
+  # L is per-guest. There is no path by which the bridge surface
+  # exposes cross-guest mutable state.
+  leaks: []
+
+# ── notes on the wasm-side surface ────────────────────────────────
+#
+# What WAS in the wasm32 lua build (nixpkgs/pkgs/lua) is the SAME
+# 125-function API, compiled to wasm32 inside nvim.wasm. Today nvim
+# does double interpretation: lua bytecode interpreted by Lua-
+# compiled-to-wasm32 interpreted by wasm3.
+#
+# The fast-path replacement: leave nvim's wasm-side liblua headers
+# in place, drop the wasm32 liblua.a from nvim's link line (same
+# move as openssh / openssl), let wasm-ld emit env.lua_* imports,
+# yos resolves them to host liblua. The wasm guest's
+# luaL_newstate() then materialises a HOST lua_State (lives in host
+# memory the guest never sees), and every L the guest holds is a
+# i32 handle into ctx->lua_state — well, just the one slot since a
+# guest only ever has one main state plus a few coroutines.
+#
+# Note on coroutines: lua_newthread() creates a SECONDARY lua_State
+# that SHARES the main state's globals + registry but has its own
+# stack. Multiple lua_State*'s per guest. Same handle table pattern
+# as openssl's SSL handle table — coroutine lua_State*'s sit
+# alongside the main state in ctx->lua_handles[].
+#
+# Surface notes:
+#   - lua_pushcfunction / lua_pushclosure take a C function pointer.
+#     The wasm guest's "C function" is a wasm function reference.
+#     Bridge must arrange for host liblua to call back into wasm
+#     when that C function is invoked. That's the one place this
+#     isn't trivial — needs a trampoline that stashes a (ctx, wasm_fn)
+#     pair on the lua state and invokes it.
+#   - lua_dump / lua_load + chunk readers: callback shape, same
+#     trampoline mechanism.
+#   - lua_atpanic: callback, treat as refuse-to-bridge (the guest's
+#     panic = it's the wasm guest's problem; let it bubble up).
+#   - lua_State* used as a key in registry / metatable: guests need
+#     stable handle ids that don't change across calls. The handle
+#     table already provides that.

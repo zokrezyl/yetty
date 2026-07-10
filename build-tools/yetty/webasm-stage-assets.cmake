@@ -22,7 +22,13 @@
 #
 # manifest.json schema:
 #   { "version": "<build-stamp>",
-#     "entries": [ { "url": "data/...", "dest": "/data/...", "brotli": true|false }, ... ] }
+#     "entries": [ { "url": "data/...", "dest": "/data/...", "brotli": true|false,
+#                    "sha256": "<hash of the staged file>" }, ... ] }
+#
+# The per-entry sha256 is the browser-side cache key (Cache Storage API in
+# yetty-assets-preload.js): a rebuild that leaves a file byte-identical
+# keeps its cache entry valid, so repeat visits only re-download what
+# actually changed.
 
 if(NOT EMSCRIPTEN)
     return()
@@ -39,6 +45,7 @@ set(YETTY_WEBASM_ASSETS_DIR "${CMAKE_BINARY_DIR}/yetty-assets" CACHE INTERNAL ""
 set(_MANIFEST_URLS "")
 set(_MANIFEST_DESTS "")
 set(_MANIFEST_BROTLI "")
+set(_MANIFEST_HASHES "")
 
 # Helper: stage a single source file.
 #   _stage_one(<src> <dest_subdir> <dest_filename> <compress>)
@@ -83,12 +90,17 @@ function(_stage_one SRC DEST_SUBDIR DEST_FILENAME COMPRESS RUNTIME_ROOT)
             endif()
         endif()
         set(_URL "${DEST_SUBDIR}/${DEST_FILENAME}.br")
+        set(_STAGED "${_OUT_DIR}/${DEST_FILENAME}.br")
         set(_BR_FLAG "true")
     else()
         configure_file("${SRC}" "${_OUT_DIR}/${DEST_FILENAME}" COPYONLY)
         set(_URL "${DEST_SUBDIR}/${DEST_FILENAME}")
+        set(_STAGED "${_OUT_DIR}/${DEST_FILENAME}")
         set(_BR_FLAG "false")
     endif()
+
+    # Content hash of the staged (wire) file — the browser cache key.
+    file(SHA256 "${_STAGED}" _HASH)
 
     set(_DEST_PATH "${RUNTIME_ROOT}/${DEST_SUBDIR}/${DEST_FILENAME}")
     # Strip the leading "data/" or "config/" from the dest when it's
@@ -99,9 +111,11 @@ function(_stage_one SRC DEST_SUBDIR DEST_FILENAME COMPRESS RUNTIME_ROOT)
     list(APPEND _MANIFEST_URLS "${_URL}")
     list(APPEND _MANIFEST_DESTS "${_DEST_PATH}")
     list(APPEND _MANIFEST_BROTLI "${_BR_FLAG}")
+    list(APPEND _MANIFEST_HASHES "${_HASH}")
     set(_MANIFEST_URLS  "${_MANIFEST_URLS}"  PARENT_SCOPE)
     set(_MANIFEST_DESTS "${_MANIFEST_DESTS}" PARENT_SCOPE)
     set(_MANIFEST_BROTLI "${_MANIFEST_BROTLI}" PARENT_SCOPE)
+    set(_MANIFEST_HASHES "${_MANIFEST_HASHES}" PARENT_SCOPE)
 endfunction()
 
 # Helper: glob a directory, stage every match.
@@ -120,6 +134,7 @@ function(_stage_glob SRC_GLOB DEST_SUBDIR COMPRESS RUNTIME_ROOT)
         set(_MANIFEST_URLS  "${_MANIFEST_URLS}"  PARENT_SCOPE)
         set(_MANIFEST_DESTS "${_MANIFEST_DESTS}" PARENT_SCOPE)
         set(_MANIFEST_BROTLI "${_MANIFEST_BROTLI}" PARENT_SCOPE)
+        set(_MANIFEST_HASHES "${_MANIFEST_HASHES}" PARENT_SCOPE)
     endforeach()
 endfunction()
 
@@ -136,6 +151,7 @@ function(yetty_stage_webasm_assets)
     set(_MANIFEST_URLS "")
     set(_MANIFEST_DESTS "")
     set(_MANIFEST_BROTLI "")
+    set(_MANIFEST_HASHES "")
 
     # Shaders — same set as yetty_embed_assets (shared.cmake lines 413-446).
     foreach(_SHADER
@@ -240,13 +256,14 @@ function(yetty_stage_webasm_assets)
         list(GET _MANIFEST_URLS  ${_I} _URL)
         list(GET _MANIFEST_DESTS ${_I} _DEST)
         list(GET _MANIFEST_BROTLI ${_I} _BR)
+        list(GET _MANIFEST_HASHES ${_I} _HASH)
         if(_I LESS _LAST)
             set(_COMMA ",")
         else()
             set(_COMMA "")
         endif()
         string(APPEND _JSON
-            "    { \"url\": \"${_URL}\", \"dest\": \"${_DEST}\", \"brotli\": ${_BR} }${_COMMA}\n")
+            "    { \"url\": \"${_URL}\", \"dest\": \"${_DEST}\", \"brotli\": ${_BR}, \"sha256\": \"${_HASH}\" }${_COMMA}\n")
         math(EXPR _I "${_I} + 1")
     endwhile()
     string(APPEND _JSON "  ]\n}\n")

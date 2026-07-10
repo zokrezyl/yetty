@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>yos web — interactive terminal (guest wasm + wasm bridge)</title>
+<link rel="stylesheet" crossorigin="anonymous"
+      href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
+<style>
+  body { background: #0b1014; margin: 0; padding: 1rem; }
+  #term { height: calc(100vh - 2rem); }
+</style>
+<div id="term"></div>
+<!-- crossorigin so the load satisfies COEP (jsdelivr sends ACAO:* + CORP).
+     The guest still runs if this is blocked/offline — see the guard below. -->
+<script crossorigin="anonymous"
+        src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script type="module">
+  // A real terminal you can type into, driven through the wasm bridge.
+  //   keystroke → guest.feed_byte (wasm) → guest writes via env.write
+  //   → bridge.write (wasm, shared memory) → host.write_bytes (the one
+  //   JS edge) → term.write.
+  // Same model as run.mjs; the guest is the interactive shell stand-in.
+  // xterm is the presentation layer. If it failed to load (offline /
+  // blocked), the guest+bridge still run headlessly — the terminal just
+  // isn't painted. The wasm path does not depend on it.
+  let term = null;
+  if (typeof Terminal === "function") {
+    term = new Terminal({
+      fontFamily: "ui-monospace, monospace",
+      fontSize: 14,
+      theme: { background: "#0b1014", foreground: "#e0e5e4", cursor: "#74c5a5" },
+      convertEol: false,
+      cursorBlink: true,
+    });
+    term.open(document.getElementById("term"));
+    term.focus();
+  } else {
+    document.getElementById("term").textContent = "(xterm.js failed to load; guest still running — see window.__yos)";
+  }
+
+  const PAGES = 256;
+  const memory = new WebAssembly.Memory({ initial: PAGES, maximum: PAGES });
+  const decoder = new TextDecoder();
+
+  let captured = "";
+  // The single host effect: bytes the guest wrote land on the terminal.
+  function host_write_bytes(fd, buf, count) {
+    const text = decoder.decode(new Uint8Array(memory.buffer, buf, count));
+    captured += text;
+    if (term) term.write(text);
+    return count;
+  }
+
+  const [bridgeMod, shellMod] = await Promise.all([
+    WebAssembly.compileStreaming(fetch("./bridge.wasm")),
+    WebAssembly.compileStreaming(fetch("./shell_demo.wasm")),
+  ]);
+  const bridge = await WebAssembly.instantiate(bridgeMod, {
+    env: { memory },
+    host: { write_bytes: host_write_bytes },
+  });
+  const shell = await WebAssembly.instantiate(shellMod, {
+    env: { memory, write: bridge.exports.write },
+  });
+
+  shell.exports.shell_start();
+
+  // Every byte the user types is pushed into the guest.
+  if (term) term.onData((data) => {
+    for (let i = 0; i < data.length; i++) shell.exports.feed_byte(data.charCodeAt(i));
+  });
+
+  // Headless test hook (harmless in normal use): lets an automated
+  // driver feed keystrokes and read back what the guest emitted.
+  window.__yos = {
+    feed: (text) => { for (const ch of text) shell.exports.feed_byte(ch.charCodeAt(0)); },
+    captured: () => captured,
+    stripped: () => captured.replace(/\x1b\[[0-9;]*[A-Za-z]/g, ""),
+  };
+</script>
