@@ -1,0 +1,59 @@
+# Clip: AI/tool output renders a Mermaid diagram inline.
+#
+# Short branding clip for the issue #2 candidate: an agent/tool produces a
+# Mermaid diagram and Yetty keeps the rendered diagram in terminal scrollback.
+# The wrapper stages agent-mermaid-inline.mmd so the typed command stays clean.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 14
+      speed-deviation: 0.25
+      avg-typo: 0.0
+
+script:
+  - sleep: 0.4
+
+  - type:
+      text: "# agent output can draw a real diagram in scrollback"
+      avg-speed: 22
+  - special-char: ENTER
+  - sleep: 0.3
+
+  - type: "ycat -c mermaid agent-plan.mmd"
+  - special-char: ENTER
+  - sleep: 2.0
+
+  - mouse-move: { x: 5, y: 130 }
+  - sleep: 0.2
+  - mouse-scroll: { x: 5, y: 130, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 130, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 130, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 130, dy: 1, mods: 2 }
+  - sleep: 1.3
+
+  - mouse-scroll: { x: 5, y: 130, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 130, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 130, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 130, dy: -1, mods: 2 }
+  - sleep: 0.5
+
+  - type:
+      text: "# Mermaid, charts, PDFs, images: all in the terminal history"
+      avg-speed: 22
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type:
+      text: "# github.com/zokrezyl/yetty | yetty.dev"
+      avg-speed: 22
+  - special-char: ENTER
+  - sleep: 2.0
+
+  - shutdown: ~

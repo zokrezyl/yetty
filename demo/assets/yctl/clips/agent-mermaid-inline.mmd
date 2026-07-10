@@ -1,0 +1,16 @@
+flowchart LR
+    prompt[AI agent prompt] --> inspect[Inspect repo]
+    inspect --> plan[Draft architecture]
+    plan --> diagram[Render Mermaid inline]
+    diagram --> review[Review in scrollback]
+    review --> patch[Patch code]
+    patch --> test[Run tests]
+    test --> ship[Share result]
+
+    classDef input fill:#20242b,stroke:#6ee7b7,color:#f8fafc
+    classDef work fill:#273449,stroke:#60a5fa,color:#f8fafc
+    classDef output fill:#3a2f10,stroke:#f59e0b,color:#f8fafc
+
+    class prompt input
+    class inspect,plan,review,patch,test work
+    class diagram,ship output

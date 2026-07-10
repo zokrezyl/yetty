@@ -1,0 +1,66 @@
+# Clip: a CLI emits logs and a GPU plot into the same scrollback.
+#
+# Shows a concrete developer workflow: ordinary build/test text, then a plot
+# emitted by the CLI, then more text. This targets the branding issue's
+# "Python/CLI emits a plot that scrolls with logs" candidate.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 14
+      speed-deviation: 0.25
+      avg-typo: 0.0
+
+script:
+  - sleep: 0.4
+
+  - type: "./plot-with-logs.sh"
+  - special-char: ENTER
+  - sleep: 2.4
+
+  - mouse-move: { x: 840, y: 460 }
+  - sleep: 0.2
+  - mouse-scroll: { x: 840, y: 460, dy: 3 }
+  - sleep: 0.08
+  - mouse-scroll: { x: 840, y: 460, dy: 3 }
+  - sleep: 0.08
+  - mouse-scroll: { x: 840, y: 460, dy: 3 }
+  - sleep: 1.1
+
+  - mouse-move: { x: 5, y: 150 }
+  - sleep: 0.2
+  - mouse-scroll: { x: 5, y: 150, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 150, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 150, dy: 1, mods: 2 }
+  - sleep: 1.2
+
+  - mouse-scroll: { x: 5, y: 150, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 150, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 150, dy: -1, mods: 2 }
+  - sleep: 0.4
+
+  - mouse-move: { x: 840, y: 460 }
+  - mouse-scroll: { x: 840, y: 460, dy: -5 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -5 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -5 }
+  - sleep: 0.5
+
+  - type:
+      text: "# plots do not open a browser; they live with the logs"
+      avg-speed: 22
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type:
+      text: "# github.com/zokrezyl/yetty | yetty.dev"
+      avg-speed: 22
+  - special-char: ENTER
+  - sleep: 2.0
+
+  - shutdown: ~
