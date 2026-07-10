@@ -123,6 +123,14 @@ static struct yetty_ylexbor *runtime_ylex(JSContext *ctx)
     return state ? state->r : NULL;
 }
 
+/* Public (module-internal) wrapper: recover the owning engine from a context.
+ * Used by the console.* capture in ybrowser-js.c, which has no view of the
+ * static js_dom_state layout. */
+struct yetty_ylexbor *yetty_ylexbor_js_engine_from_ctx(struct JSContext *ctx)
+{
+    return runtime_ylex((JSContext *)ctx);
+}
+
 /* Mutator helper. Always paired with a DOM modification. */
 /* Detach `node` from its parent, guarding a lexbor crash: the removing
  * steps for a <style> element pass style->stylesheet straight into

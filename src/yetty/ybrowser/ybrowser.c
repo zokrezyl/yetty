@@ -238,6 +238,149 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_
     return YETTY_OK(yetty_ylexbor_ptr, r);
 }
 
+/* ===========================================================================
+ * DevTools DOM inspector — pre-order walk producing display-ready labels.
+ * ===========================================================================*/
+
+static int dom_is_blank(const lxb_char_t *p, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        if (p[i] != ' ' && p[i] != '\t' && p[i] != '\n' && p[i] != '\r' && p[i] != '\f') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* A node appears in the inspector if it is an element, or a text node with any
+ * non-whitespace content (blank inter-tag whitespace is noise). */
+static int dom_node_shown(lxb_dom_node_t *node)
+{
+    if (node->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+        return 1;
+    }
+    if (node->type == LXB_DOM_NODE_TYPE_TEXT) {
+        lxb_dom_text_t *text = lxb_dom_interface_text(node);
+        return !dom_is_blank(text->char_data.data.data, text->char_data.data.length);
+    }
+    return 0;
+}
+
+static int dom_node_has_shown_child(lxb_dom_node_t *node)
+{
+    for (lxb_dom_node_t *child = node->first_child; child; child = child->next) {
+        if (dom_node_shown(child)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Append a plain NUL-terminated string, honoring the buffer cap. */
+static void dom_label_puts(char *buf, size_t cap, size_t *off, const char *s)
+{
+    while (*s && *off < cap - 1) {
+        buf[(*off)++] = *s++;
+    }
+    buf[*off] = '\0';
+}
+
+/* Append a raw byte range, collapsing every whitespace run to a single space
+ * (and dropping leading whitespace) so a multi-line text node reads on one row. */
+static void dom_label_put_collapsed(char *buf, size_t cap, size_t *off, const lxb_char_t *s,
+                                    size_t n)
+{
+    int in_space = 0;
+    for (size_t i = 0; i < n && *off < cap - 1; i++) {
+        char c = (char)s[i];
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f') {
+            if (in_space || *off == 0) {
+                continue;
+            }
+            c = ' ';
+            in_space = 1;
+        } else {
+            in_space = 0;
+        }
+        buf[(*off)++] = c;
+    }
+    buf[*off] = '\0';
+}
+
+/* Fill a display label for a shown node. Elements become `<tag id=".." class="..">`;
+ * text nodes become a quoted, whitespace-collapsed snippet. */
+static void dom_format_label(lxb_dom_node_t *node, char *buf, size_t cap)
+{
+    size_t off = 0;
+    buf[0] = '\0';
+    if (node->type == LXB_DOM_NODE_TYPE_TEXT) {
+        lxb_dom_text_t *text = lxb_dom_interface_text(node);
+        dom_label_puts(buf, cap, &off, "\"");
+        dom_label_put_collapsed(buf, cap, &off, text->char_data.data.data,
+                                text->char_data.data.length);
+        dom_label_puts(buf, cap, &off, "\"");
+        return;
+    }
+    lxb_dom_element_t *element = lxb_dom_interface_element(node);
+    size_t name_len = 0;
+    const lxb_char_t *name = lxb_dom_element_local_name(element, &name_len);
+    dom_label_puts(buf, cap, &off, "<");
+    if (name) {
+        dom_label_put_collapsed(buf, cap, &off, name, name_len);
+    }
+    size_t id_len = 0;
+    const lxb_char_t *id =
+        lxb_dom_element_get_attribute(element, (const lxb_char_t *)"id", 2, &id_len);
+    if (id && id_len > 0) {
+        dom_label_puts(buf, cap, &off, " id=\"");
+        dom_label_put_collapsed(buf, cap, &off, id, id_len);
+        dom_label_puts(buf, cap, &off, "\"");
+    }
+    size_t class_len = 0;
+    const lxb_char_t *class_value =
+        lxb_dom_element_get_attribute(element, (const lxb_char_t *)"class", 5, &class_len);
+    if (class_value && class_len > 0) {
+        dom_label_puts(buf, cap, &off, " class=\"");
+        dom_label_put_collapsed(buf, cap, &off, class_value, class_len);
+        dom_label_puts(buf, cap, &off, "\"");
+    }
+    dom_label_puts(buf, cap, &off, ">");
+}
+
+struct dom_walk_state {
+    yetty_ylexbor_dom_visit_fn visit;
+    void *user;
+    int stop;
+};
+
+static void dom_walk_rec(lxb_dom_node_t *node, int depth, struct dom_walk_state *state)
+{
+    if (state->stop || !dom_node_shown(node)) {
+        return;
+    }
+    char label[192];
+    dom_format_label(node, label, sizeof(label));
+    if (state->visit(state->user, depth, dom_node_has_shown_child(node), label)) {
+        state->stop = 1;
+        return;
+    }
+    for (lxb_dom_node_t *child = node->first_child; child && !state->stop; child = child->next) {
+        dom_walk_rec(child, depth + 1, state);
+    }
+}
+
+void yetty_ylexbor_dom_walk(struct yetty_ylexbor *r, yetty_ylexbor_dom_visit_fn visit, void *user)
+{
+    if (!r || !r->document || !visit) {
+        return;
+    }
+    struct dom_walk_state state = {visit, user, 0};
+    lxb_dom_node_t *root = lxb_dom_interface_node(r->document);
+    for (lxb_dom_node_t *child = root->first_child; child && !state.stop; child = child->next) {
+        dom_walk_rec(child, 0, &state);
+    }
+}
+
 /* The real teardown. Split out so the public destroy can DEFER it until any
  * in-flight async image-fetch jobs drain — their done() callback runs on the
  * loop thread and must never touch a freed engine. */
@@ -281,6 +424,8 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
         r->supp_selector_matcher = NULL;
     }
     yetty_ylexbor_css_vars_destroy(r);
+    yetty_ylexbor_console_clear(r); /* frees each retained line's text */
+    free(r->console_ring);
     free(r);
     return YETTY_OK_VOID();
 }

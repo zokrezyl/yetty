@@ -290,6 +290,78 @@ void yetty_ylexbor_set_defer_scripts(struct yetty_ylexbor *r, int on);
  * was off. After it returns the host should repaint. */
 struct yetty_ycore_void_result yetty_ylexbor_run_deferred_scripts(struct yetty_ylexbor *r);
 
+/* ===========================================================================
+ * DevTools JavaScript console.
+ *
+ * The engine records every page console.{log,info,debug,warn,error} call and
+ * every REPL evaluation into a bounded ring buffer. A host UI (the standalone
+ * ybrowser DevTools panel) reads it back to render a live console, and feeds
+ * typed expressions to yetty_ylexbor_eval_js() to evaluate them in the page's
+ * own JS context (same globals, DOM and state the page's scripts see).
+ * ===========================================================================*/
+
+/* Severity / origin of a console line. LOG..ERROR mirror the console.* levels;
+ * INPUT is a REPL expression the user typed; RESULT is its evaluated value. */
+enum yetty_ylexbor_console_level {
+    YETTY_YLEXBOR_CONSOLE_LOG = 0,
+    YETTY_YLEXBOR_CONSOLE_INFO,
+    YETTY_YLEXBOR_CONSOLE_DEBUG,
+    YETTY_YLEXBOR_CONSOLE_WARN,
+    YETTY_YLEXBOR_CONSOLE_ERROR,
+    YETTY_YLEXBOR_CONSOLE_INPUT,
+    YETTY_YLEXBOR_CONSOLE_RESULT,
+};
+
+/* Borrowed view of one console line. `text` is owned by the engine and stays
+ * valid until the next clear / engine destroy — copy it if you need to keep it. */
+struct yetty_ylexbor_console_view {
+    int level; /* enum yetty_ylexbor_console_level */
+    const char *text;
+};
+
+/* Monotonic count of console lines ever recorded (never decreases, survives a
+ * clear). A UI polls this to notice new output without rescanning the ring. */
+uint64_t yetty_ylexbor_console_total(const struct yetty_ylexbor *r);
+
+/* Number of console lines currently retained (0..YETTY_YLEXBOR_CONSOLE_CAP). */
+int yetty_ylexbor_console_count(const struct yetty_ylexbor *r);
+
+/* Fetch a retained console line. `index` is 0 = oldest retained .. count-1 =
+ * newest. Out-of-range returns {LOG, NULL}. */
+struct yetty_ylexbor_console_view yetty_ylexbor_console_at(const struct yetty_ylexbor *r,
+                                                           int index);
+
+/* Drop all retained console lines (the "clear console" action). Leaves
+ * console_total unchanged so the monotonic counter stays honest. */
+void yetty_ylexbor_console_clear(struct yetty_ylexbor *r);
+
+/* Evaluate `src` as top-level JavaScript in the page's context (initialising
+ * the JS runtime if the page had no scripts). The typed source is recorded as
+ * an INPUT line and the outcome as a RESULT (or ERROR) line, so a console UI
+ * only has to re-read the ring. Also returns the displayed value as a freshly
+ * allocated string (caller frees). Errors are reported as a value string, not
+ * a Result error; the Result errors only for a NULL argument or OOM. When
+ * QuickJS is compiled out this returns a short "JavaScript is not available"
+ * string. */
+struct yetty_ycore_char_ptr_result yetty_ylexbor_eval_js(struct yetty_ylexbor *r, const char *src);
+
+/* ---------------------------------------------------------------------------
+ * DOM inspector — walk the parsed document tree for the DevTools Elements view.
+ * ------------------------------------------------------------------------- */
+
+/* Called once per shown DOM node during a walk, in document (pre-order) order.
+ * `depth` is 0 for the <html> root; a node's children are reported at depth+1
+ * (contiguous — every reported node's parent was reported at depth-1).
+ * `has_children` is 1 if the node has any child worth showing (so a UI knows to
+ * make it an expandable branch). `label` is a display-ready string: elements as
+ * `<div id="x" class="y">`, text nodes as a quoted, whitespace-collapsed
+ * snippet. Return non-zero to stop the walk early (e.g. after a node cap). */
+typedef int (*yetty_ylexbor_dom_visit_fn)(void *user, int depth, int has_children,
+                                          const char *label);
+
+/* Visit every shown node of the parsed document. No-op if nothing is parsed. */
+void yetty_ylexbor_dom_walk(struct yetty_ylexbor *r, yetty_ylexbor_dom_visit_fn visit, void *user);
+
 /* Fetch + decode at most ONE <img> whose URL isn't cached yet (the first
  * in document order), blocking only for that single image. Returns 1 if it
  * loaded one (the host should re-render to show it and call again for the

@@ -61,6 +61,22 @@
 #define BR_BG 0xFF14100Bu        /* #0B1014 */
 #define BR_BG_LIFTED 0xFF1F1A14u /* #141A1F */
 #define BR_TOOLBAR 0xFF1F1A14u   /* #141A1F — lifted, so the address field reads as sunken */
+#define BR_BORDER 0xFF474A36u    /* #364A47 */
+#define BR_BG_ROW 0xFF2C261Eu    /* #1E262C — active DevTools tab */
+
+/* DevTools console text colors, packed 0xAABBGGRR to match the ydraw text
+ * pipeline (see pack_rgba in ybrowser-paint.c). The level colors reuse the
+ * brand palette; warn/error are functional severity colors the brand set does
+ * not define (a console must read amber for warnings and red for errors). */
+#define CONSOLE_TEXT 0xFFE4E5E0u    /* #E0E5E4 brand text-primary — log/info */
+#define CONSOLE_MUTED 0xFF626155u   /* #556162 brand text-muted — debug */
+#define CONSOLE_WARN 0xFF4DA3E5u    /* #E5A34D amber */
+#define CONSOLE_ERROR 0xFF4D57E5u   /* #E5574D red */
+#define CONSOLE_INPUT 0xFFA8A79Fu   /* #9FA7A8 brand text-secondary — typed input */
+#define CONSOLE_ACCENT 0xFF92A86Bu  /* #6BA892 brand accent — prompt/marker glyphs */
+#define CONSOLE_RESULT 0xFFA5C574u  /* #74C5A5 brand accent-bright — eval result */
+#define CONSOLE_FONT_SIZE 13.0f
+#define DEVTOOLS_HEIGHT 300.0f
 
 #define MAX_TABS 24
 
@@ -206,6 +222,26 @@ struct app {
     int pending_render;
     int running;
 
+    /* DevTools: a bottom-docked panel with a live JavaScript console. Built
+     * once in build_ui, collapsed to zero height until toggled with F12. The
+     * `console_log` rich widget is redrawn from the active engine's console
+     * ring; `console_input` is the REPL prompt. `console_seen_total` tracks
+     * how many console lines we last rendered so pump_active can notice new
+     * page output. */
+    struct yetty_yclass_object *devtools;      /* vbox panel (child of root) */
+    struct yetty_yclass_object *tab_console;   /* button — "Console" tab */
+    struct yetty_yclass_object *tab_elements;  /* button — "Elements" tab */
+    struct yetty_yclass_object *console_pane;  /* vbox — console log + prompt */
+    struct yetty_yclass_object *console_log;   /* rich — color-coded log */
+    struct yetty_yclass_object *console_input; /* textinput — REPL prompt */
+    struct yetty_yclass_object *elements_pane; /* vbox — DOM tree scroller */
+    struct yetty_yclass_object *tree_box;      /* vbox — tree_nodes attach here */
+    int devtools_open;
+    int devtools_tab; /* 0 = console, 1 = elements */
+    int console_focused;
+    int console_dirty;
+    uint64_t console_seen_total;
+
     float viewport_w, viewport_h;
     float font_size;
 
@@ -330,6 +366,16 @@ static void reload(struct app *a);
 static void sync_active_ui(struct app *a);
 static void render_active(struct app *a);
 static int build_ui(struct app *a);
+static void dt_layout(struct yetty_yclass_object *w, float height, float flex_grow, float pad_x,
+                      float pad_y);
+static void dt_set_hidden(struct yetty_yclass_object *w, int hidden);
+static struct yetty_yclass_object *dt_add_label(struct yetty_yclass_object *parent, const char *text,
+                                                struct yetty_ycore_rgba color, float font_size);
+static void toggle_devtools(struct app *a);
+static void switch_devtools_tab(struct app *a, int tab);
+static void dom_tree_rebuild(struct app *a);
+static void console_submit(struct app *a);
+static void console_refresh(struct app *a);
 
 /* ===========================================================================
  * History stacks.
@@ -1194,6 +1240,7 @@ static void switch_tab(struct app *a, int idx)
     t->needs_render = 1;
     t->rendered_w = 0.0f;
     sync_active_ui(a);
+    a->console_dirty = 1; /* console shows the newly-active tab's engine */
     a->pending_render = 1;
     yetty_ygui_framework_mark_dirty(a->fw);
 }
@@ -1262,6 +1309,24 @@ static struct yetty_ycore_void_result on_fwd_click(struct yetty_yclass_object *o
 {
     (void)o;
     go_forward((struct app *)ud);
+    return YETTY_OK_VOID();
+}
+static struct yetty_ycore_void_result on_devtools_click(struct yetty_yclass_object *o, void *ud)
+{
+    (void)o;
+    toggle_devtools((struct app *)ud);
+    return YETTY_OK_VOID();
+}
+static struct yetty_ycore_void_result on_tab_console_click(struct yetty_yclass_object *o, void *ud)
+{
+    (void)o;
+    switch_devtools_tab((struct app *)ud, 0);
+    return YETTY_OK_VOID();
+}
+static struct yetty_ycore_void_result on_tab_elements_click(struct yetty_yclass_object *o, void *ud)
+{
+    (void)o;
+    switch_devtools_tab((struct app *)ud, 1);
     return YETTY_OK_VOID();
 }
 static struct yetty_ycore_void_result on_reload_click(struct yetty_yclass_object *o, void *ud)
@@ -1345,6 +1410,10 @@ static void address_copy(struct app *a, int cut)
 static int key_cb(struct yetty_yclass_object *fw, uint32_t key, int mods, void *ud)
 {
     struct app *a = ud;
+    if (key == YETTY_YGUI_KEY_F12) { /* F12 → toggle DevTools (Chrome-style) */
+        toggle_devtools(a);
+        return 1;
+    }
     /* Clipboard chords belong to the address bar while it holds focus, and must
      * be handled before the global quit/nav shortcuts — otherwise Ctrl-C would
      * quit the browser instead of copying the URL. */
@@ -1413,6 +1482,27 @@ static int key_cb(struct yetty_yclass_object *fw, uint32_t key, int mods, void *
         }
         return consumed;
     }
+    if (a->console_focused) {
+        if (key == 0x1B) { /* Esc → close DevTools */
+            toggle_devtools(a);
+            return 1;
+        }
+        if (key == '\r' || key == '\n') {
+            console_submit(a);
+            return 1;
+        }
+        struct yetty_ycore_int_result handle_result =
+            yetty_ygui_textinput_handle_key(a->console_input, key, mods);
+        if (YETTY_IS_ERR(handle_result)) {
+            yetty_ycore_error_destroy(handle_result.error);
+            return 0;
+        }
+        int consumed = handle_result.value;
+        if (consumed) {
+            yetty_ygui_framework_mark_dirty(fw);
+        }
+        return consumed;
+    }
     return 0;
 }
 
@@ -1434,6 +1524,24 @@ static void page_click(struct app *a, float x, float y)
     int in_addr = pt_in_rect(address_rect_res.value, x, y);
     err_ok(yetty_ygui_textinput_set_focus(a->address, in_addr ? 1 : 0));
     a->address_focused = in_addr;
+
+    /* When DevTools is open, a click inside the REPL input takes keyboard
+     * focus; a click anywhere else (address bar / page) releases it. */
+    if (a->devtools_open && a->console_input) {
+        struct yetty_ycore_rectangle_result console_rect_res =
+            yetty_ygui_widget_rect(a->console_input);
+        if (YETTY_IS_OK(console_rect_res)) {
+            int in_console = pt_in_rect(console_rect_res.value, x, y);
+            err_ok(yetty_ygui_textinput_set_focus(a->console_input, in_console ? 1 : 0));
+            a->console_focused = in_console;
+            if (in_console) {
+                a->address_focused = 0;
+                err_ok(yetty_ygui_textinput_set_focus(a->address, 0));
+            }
+        } else {
+            yetty_ycore_error_destroy(console_rect_res.error);
+        }
+    }
 
     struct yetty_ycore_rectangle_result page_rect_res = yetty_ygui_widget_rect(a->page);
     if (YETTY_IS_ERR(page_rect_res)) {
@@ -1468,6 +1576,292 @@ static void page_click(struct app *a, float x, float y)
     }
 }
 
+/* Remove and destroy every child of a container (used to rebuild the DOM tree
+ * on demand — widget_destroy detaches the child from its parent). */
+static void dt_clear_children(struct yetty_yclass_object *parent)
+{
+    for (;;) {
+        struct yetty_yclass_object_ptr_result first_res = yetty_ygui_widget_first_child(parent);
+        if (YETTY_IS_ERR(first_res)) {
+            yetty_ycore_error_destroy(first_res.error);
+            return;
+        }
+        if (!first_res.value) {
+            return;
+        }
+        err_ok(yetty_ygui_widget_destroy(first_res.value));
+    }
+}
+
+/* Cap on how many DOM nodes the Elements tree materialises — one widget per
+ * node, so an unbounded page (thousands of nodes) would be slow to build and
+ * lay out. Beyond this the tree is truncated with a note. */
+#define DOM_TREE_MAX_NODES 3000
+#define DOM_TREE_MAX_DEPTH 64
+
+/* Per-rebuild state threaded through the DOM walk: a stack mapping tree depth to
+ * the widget new nodes at that depth attach under, plus the deeper branch nodes
+ * to collapse once their children exist (folding is a no-op before then). */
+struct dom_tree_builder {
+    struct yetty_yclass_object *parent_at_depth[DOM_TREE_MAX_DEPTH];
+    struct yetty_yclass_object *to_collapse[DOM_TREE_MAX_NODES];
+    int collapse_count;
+    int count;
+};
+
+/* yetty_ylexbor_dom_visit_fn: create a tree_node (branch) or label (leaf) for
+ * one DOM node under the correct parent. Text nodes are muted, elements accent. */
+static int dom_tree_visit(void *user, int depth, int has_children, const char *label)
+{
+    struct dom_tree_builder *builder = user;
+    if (builder->count >= DOM_TREE_MAX_NODES) {
+        return 1; /* stop the walk */
+    }
+    if (depth < 0 || depth + 1 >= DOM_TREE_MAX_DEPTH) {
+        return 0; /* too deep to nest — skip this node, keep walking */
+    }
+    struct yetty_yclass_object *parent = builder->parent_at_depth[depth];
+    if (!parent) {
+        return 0;
+    }
+    builder->count++;
+    if (has_children) {
+        struct yetty_yclass_object_ptr_result node_res =
+            yetty_ygui_widget_add(parent, yetty_ygui_tree_node_class_get().value);
+        if (YETTY_IS_ERR(node_res)) {
+            yetty_ycore_error_destroy(node_res.error);
+            return 0;
+        }
+        err_ok(yetty_ygui_tree_node_set_label(node_res.value, label));
+        /* Tree nodes are created open (the ctor default) so their children can
+         * be attached; deeper nodes (below html → head/body) are folded in a
+         * second pass after the subtree exists — see dom_tree_rebuild. */
+        if (depth >= 2 && builder->collapse_count < DOM_TREE_MAX_NODES) {
+            builder->to_collapse[builder->collapse_count++] = node_res.value;
+        }
+        builder->parent_at_depth[depth + 1] = node_res.value;
+    } else {
+        struct yetty_ycore_rgba color = label[0] == '"'
+                                            ? (struct yetty_ycore_rgba){159, 167, 168, 255} /* text */
+                                            : (struct yetty_ycore_rgba){116, 197, 165, 255}; /* elem */
+        struct yetty_yclass_object *leaf = dt_add_label(parent, label, color, CONSOLE_FONT_SIZE);
+        if (leaf) {
+            /* Explicit row height: labels report no intrinsic height to the flex
+             * layout, so without it leaf rows would stack at the same y. The
+             * left pad aligns leaf text under a branch's label (past its chevron). */
+            dt_layout(leaf, 20.0f, 0.0f, 20.0f, 0.0f);
+        }
+    }
+    return 0;
+}
+
+/* Rebuild the Elements tree from the active tab's parsed DOM. */
+static void dom_tree_rebuild(struct app *a)
+{
+    if (!a->tree_box) {
+        return;
+    }
+    dt_clear_children(a->tree_box);
+    struct yetty_ycore_rgba muted = {85, 97, 98, 255};
+    struct tab *t = &a->tabs[a->active];
+    if (!t->engine) {
+        struct yetty_yclass_object *note =
+            dt_add_label(a->tree_box, "(no HTML document for this tab)", muted, CONSOLE_FONT_SIZE);
+        if (note) {
+            dt_layout(note, 20.0f, 0.0f, 6.0f, 0.0f);
+        }
+        return;
+    }
+    struct dom_tree_builder builder = {0};
+    builder.parent_at_depth[0] = a->tree_box;
+    yetty_ylexbor_dom_walk(t->engine, dom_tree_visit, &builder);
+    /* Fold the deeper branches now that their children exist. */
+    for (int i = 0; i < builder.collapse_count; i++) {
+        err_ok(yetty_ygui_tree_node_set_open(builder.to_collapse[i], 0));
+    }
+    const char *note_text = NULL;
+    if (builder.count == 0) {
+        note_text = "(empty document)";
+    } else if (builder.count >= DOM_TREE_MAX_NODES) {
+        note_text = "… tree truncated (too many nodes)";
+    }
+    if (note_text) {
+        struct yetty_yclass_object *note =
+            dt_add_label(a->tree_box, note_text, muted, CONSOLE_FONT_SIZE);
+        if (note) {
+            dt_layout(note, 20.0f, 0.0f, 6.0f, 0.0f);
+        }
+    }
+}
+
+/* Switch the DevTools panel between the Console (0) and Elements (1) tabs:
+ * swap which pane is in the flow, recolor the tab buttons, move focus, and
+ * (for Elements) rebuild the DOM tree from the current document. */
+static void switch_devtools_tab(struct app *a, int tab)
+{
+    a->devtools_tab = tab;
+    int elements = (tab == 1);
+    dt_set_hidden(a->console_pane, elements);
+    dt_set_hidden(a->elements_pane, !elements);
+    err_ok(yetty_ygui_widget_set_bg_color(a->tab_console, elements ? BR_BG_LIFTED : BR_BG_ROW));
+    err_ok(yetty_ygui_widget_set_bg_color(a->tab_elements, elements ? BR_BG_ROW : BR_BG_LIFTED));
+    if (elements) {
+        a->console_focused = 0;
+        err_ok(yetty_ygui_textinput_set_focus(a->console_input, 0));
+        dom_tree_rebuild(a);
+    } else {
+        a->console_focused = 1;
+        err_ok(yetty_ygui_textinput_set_focus(a->console_input, 1));
+        a->console_dirty = 1;
+    }
+    a->pending_render = 1;
+    yetty_ygui_framework_mark_dirty(a->fw);
+}
+
+/* Reveal or hide the DevTools panel. Opening docks it at DEVTOOLS_HEIGHT and
+ * restores the active tab (focusing the REPL prompt on the Console tab);
+ * closing collapses it and returns focus to the page. */
+static void toggle_devtools(struct app *a)
+{
+    a->devtools_open = !a->devtools_open;
+    err_ok(yetty_ygui_widget_set_visible(a->devtools, a->devtools_open));
+    dt_layout(a->devtools, a->devtools_open ? DEVTOOLS_HEIGHT : 0.0f, 0.0f, 0.0f, 0.0f);
+    if (a->devtools_open) {
+        a->address_focused = 0;
+        err_ok(yetty_ygui_textinput_set_focus(a->address, 0));
+        switch_devtools_tab(a, a->devtools_tab);
+    } else {
+        a->console_focused = 0;
+        err_ok(yetty_ygui_textinput_set_focus(a->console_input, 0));
+    }
+    a->pending_render = 1;
+    yetty_ygui_framework_mark_dirty(a->fw);
+}
+
+/* Append one console entry as rich lines, splitting embedded newlines (e.g.
+ * exception stacks) into separate rows since the rich widget draws each span
+ * on a single line. The accent marker prefixes only the first row. */
+static void console_add_wrapped(struct app *a, const char *marker, const char *text, uint32_t color)
+{
+    const char *segment = text;
+    int first_segment = 1;
+    while (segment) {
+        const char *newline = strchr(segment, '\n');
+        size_t segment_len = newline ? (size_t)(newline - segment) : strlen(segment);
+        char line[1024];
+        size_t copy_len = segment_len < sizeof(line) - 1 ? segment_len : sizeof(line) - 1;
+        memcpy(line, segment, copy_len);
+        line[copy_len] = '\0';
+        err_ok(yetty_ygui_rich_add_line(a->console_log));
+        if (first_segment && marker && marker[0]) {
+            err_ok(
+                yetty_ygui_rich_add_span(a->console_log, marker, CONSOLE_FONT_SIZE, CONSOLE_ACCENT));
+        }
+        err_ok(yetty_ygui_rich_add_span(a->console_log, line, CONSOLE_FONT_SIZE, color));
+        first_segment = 0;
+        segment = newline ? newline + 1 : NULL;
+    }
+}
+
+/* Rebuild the console log from the active engine's ring. The rich widget paints
+ * top-down and clips at its bottom edge, so we feed only the newest lines that
+ * fit — the latest line lands just above the prompt, terminal-style. Must run
+ * after layout_compute so the log widget's height is known. */
+static void console_refresh(struct app *a)
+{
+    if (!a->console_log) {
+        return;
+    }
+    err_ok(yetty_ygui_rich_clear(a->console_log));
+    a->console_dirty = 0;
+
+    struct tab *t = &a->tabs[a->active];
+    struct yetty_ylexbor *engine = t->engine;
+    a->console_seen_total = engine ? yetty_ylexbor_console_total(engine) : 0;
+    if (!engine) {
+        return;
+    }
+    int count = yetty_ylexbor_console_count(engine);
+    if (count == 0) {
+        return;
+    }
+    /* Lines that fit: rich advances rows by font_size * 1.25. */
+    int fit = count;
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(a->console_log);
+    if (YETTY_IS_OK(rect_res)) {
+        float height = rect_res.value.max.y - rect_res.value.min.y;
+        int rows = (int)(height / (CONSOLE_FONT_SIZE * 1.25f));
+        if (rows < 1) {
+            rows = 1;
+        }
+        if (rows < fit) {
+            fit = rows;
+        }
+    }
+    for (int i = count - fit; i < count; i++) {
+        struct yetty_ylexbor_console_view entry = yetty_ylexbor_console_at(engine, i);
+        if (!entry.text) {
+            continue;
+        }
+        uint32_t color = CONSOLE_TEXT;
+        const char *marker = "";
+        switch (entry.level) {
+        case YETTY_YLEXBOR_CONSOLE_WARN:
+            color = CONSOLE_WARN;
+            break;
+        case YETTY_YLEXBOR_CONSOLE_ERROR:
+            color = CONSOLE_ERROR;
+            break;
+        case YETTY_YLEXBOR_CONSOLE_DEBUG:
+            color = CONSOLE_MUTED;
+            break;
+        case YETTY_YLEXBOR_CONSOLE_INPUT:
+            color = CONSOLE_INPUT;
+            marker = "\xe2\x80\xba "; /* › */
+            break;
+        case YETTY_YLEXBOR_CONSOLE_RESULT:
+            color = CONSOLE_RESULT;
+            marker = "\xe2\x80\xb9 "; /* ‹ */
+            break;
+        default:
+            break;
+        }
+        console_add_wrapped(a, marker, entry.text, color);
+    }
+}
+
+/* Evaluate the REPL input against the active tab's engine, echo + result land
+ * in the console ring, then clear the prompt. */
+static void console_submit(struct app *a)
+{
+    struct tab *t = &a->tabs[a->active];
+    struct yetty_ycore_const_char_ptr_result txt_res =
+        yetty_ygui_textinput_get_text(a->console_input);
+    const char *src = NULL;
+    if (YETTY_IS_OK(txt_res)) {
+        src = txt_res.value;
+    } else {
+        yetty_ycore_error_destroy(txt_res.error);
+    }
+    if (src && src[0] && t->engine) {
+        struct yetty_ycore_char_ptr_result eval_res = yetty_ylexbor_eval_js(t->engine, src);
+        if (YETTY_IS_OK(eval_res)) {
+            free(eval_res.value);
+        } else {
+            yetty_ycore_error_destroy(eval_res.error);
+        }
+        /* The expression may have mutated the DOM (document.body.style…, etc.)
+         * — repaint the page too, not just the console. */
+        if (yetty_ylexbor_dom_dirty(t->engine)) {
+            t->needs_render = 1;
+        }
+    }
+    err_ok(yetty_ygui_textinput_set_text(a->console_input, ""));
+    a->console_dirty = 1;
+    a->pending_render = 1;
+    yetty_ygui_framework_mark_dirty(a->fw);
+}
+
 /* Lay out the tree against the current viewport and (re)render the active
  * tab's page into the embed when needed. Idempotent / cheap when nothing
  * changed. */
@@ -1476,6 +1870,12 @@ static void render_pass(struct app *a)
     double t_render = yetty_ylexbor_prof_now_ms();
     struct yetty_ycore_rectangle root_rect = {{0.0f, 0.0f}, {a->viewport_w, a->viewport_h}};
     err_ok(yetty_ygui_layout_compute(a->root, root_rect));
+    if (a->devtools_open && a->console_dirty) {
+        /* Rebuild the console after layout so the log widget height is known,
+         * then re-run layout so the fresh rich content is placed this frame. */
+        console_refresh(a);
+        err_ok(yetty_ygui_layout_compute(a->root, root_rect));
+    }
     render_active(a);
     a->pending_render = 0;
     /* Each render relayouts the page and re-ships the WHOLE drawable list to
@@ -1512,6 +1912,12 @@ static int pump_active(struct app *a)
         }
         if (yetty_ylexbor_dom_dirty(t->engine)) {
             t->needs_render = 1;
+            a->pending_render = 1;
+        }
+        /* New page console.* output while DevTools is open → refresh the log. */
+        if (a->devtools_open &&
+            yetty_ylexbor_console_total(t->engine) != a->console_seen_total) {
+            a->console_dirty = 1;
             a->pending_render = 1;
         }
         if (a->img_pool) {
@@ -1678,6 +2084,188 @@ static struct yetty_yclass_object *add_nav_button(struct yetty_yclass_object *pa
     return r.value;
 }
 
+/* Apply the common layout knobs for a DevTools widget in one shot (the raw
+ * layout_get / mutate / layout_set dance is otherwise repeated per widget).
+ * A negative height leaves the current height untouched. */
+static void dt_layout(struct yetty_yclass_object *w, float height, float flex_grow, float pad_x,
+                      float pad_y)
+{
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(w);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        return;
+    }
+    struct yetty_ygui_layout l = *layout_res.value;
+    if (height >= 0.0f) {
+        l.height = height;
+    }
+    l.flex_grow = flex_grow;
+    l.padding_left = pad_x;
+    l.padding_right = pad_x;
+    l.padding_top = pad_y;
+    l.padding_bottom = pad_y;
+    err_ok(yetty_ygui_widget_layout_set(w, &l));
+}
+
+/* Pin a fixed width on a widget (flex_grow 0). ygui labels don't report an
+ * intrinsic content width to the flex layout, so a non-growing label collapses
+ * to zero width and overlaps its neighbour unless its width is set explicitly. */
+static void dt_set_width(struct yetty_yclass_object *w, float width)
+{
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(w);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        return;
+    }
+    struct yetty_ygui_layout l = *layout_res.value;
+    l.width = width;
+    l.flex_grow = 0.0f;
+    err_ok(yetty_ygui_widget_layout_set(w, &l));
+}
+
+/* Add a label child with text, color and font size set in one call. Returns
+ * the widget, or NULL on failure (tolerated — a missing label just doesn't
+ * paint). */
+static struct yetty_yclass_object *dt_add_label(struct yetty_yclass_object *parent,
+                                                const char *text, struct yetty_ycore_rgba color,
+                                                float font_size)
+{
+    struct yetty_yclass_object_ptr_result lr =
+        yetty_ygui_widget_add(parent, yetty_ygui_label_class_get().value);
+    if (YETTY_IS_ERR(lr)) {
+        yetty_ycore_error_destroy(lr.error);
+        return NULL;
+    }
+    err_ok(yetty_ygui_label_set_text(lr.value, text));
+    err_ok(yetty_ygui_label_set_color(lr.value, color));
+    err_ok(yetty_ygui_label_set_font_size(lr.value, font_size));
+    return lr.value;
+}
+
+/* Build the bottom-docked DevTools panel: a header strip, the color-coded
+ * console log, and the REPL prompt. Created collapsed (zero height, hidden);
+ * toggle_devtools() reveals it. */
+/* Toggle a widget in/out of the flex flow (hidden takes no space and paints
+ * nothing) — used to swap the Console and Elements panes. */
+static void dt_set_hidden(struct yetty_yclass_object *w, int hidden)
+{
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(w);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        return;
+    }
+    struct yetty_ygui_layout l = *layout_res.value;
+    l.hidden = hidden ? 1 : 0;
+    err_ok(yetty_ygui_widget_layout_set(w, &l));
+    err_ok(yetty_ygui_widget_set_visible(w, hidden ? 0 : 1));
+}
+
+static int build_devtools(struct app *a)
+{
+    struct yetty_yclass_object_ptr_result dr =
+        yetty_ygui_widget_add(a->root, yetty_ygui_vbox_class_get().value);
+    if (YETTY_IS_ERR(dr)) {
+        yetty_ycore_error_destroy(dr.error);
+        return -1;
+    }
+    a->devtools = dr.value;
+    err_ok(yetty_ygui_widget_set_bg_color(a->devtools, BR_BG));
+    dt_layout(a->devtools, 0.0f, 0.0f, 0.0f, 0.0f);
+    err_ok(yetty_ygui_widget_set_visible(a->devtools, 0));
+
+    /* Header strip: the Console / Elements tab buttons + an F12 hint. */
+    struct yetty_yclass_object_ptr_result hr =
+        yetty_ygui_widget_add(a->devtools, yetty_ygui_hbox_class_get().value);
+    if (YETTY_IS_ERR(hr)) {
+        yetty_ycore_error_destroy(hr.error);
+        return -1;
+    }
+    err_ok(yetty_ygui_widget_set_bg_color(hr.value, BR_BG_LIFTED));
+    dt_layout(hr.value, 26.0f, 0.0f, 6.0f, 2.0f);
+    a->tab_console = add_nav_button(hr.value, "Console", 86.0f, on_tab_console_click, a);
+    a->tab_elements = add_nav_button(hr.value, "Elements", 90.0f, on_tab_elements_click, a);
+    struct yetty_yclass_object *hint = dt_add_label(
+        hr.value, "F12 to close", (struct yetty_ycore_rgba){85, 97, 98, 255}, CONSOLE_FONT_SIZE);
+    if (hint) {
+        dt_layout(hint, -1.0f, 1.0f, 10.0f, 0.0f);
+    }
+
+    /* ---- Console pane: color-coded log + REPL prompt. ---- */
+    struct yetty_yclass_object_ptr_result cpr =
+        yetty_ygui_widget_add(a->devtools, yetty_ygui_vbox_class_get().value);
+    if (YETTY_IS_ERR(cpr)) {
+        yetty_ycore_error_destroy(cpr.error);
+        return -1;
+    }
+    a->console_pane = cpr.value;
+    dt_layout(a->console_pane, -1.0f, 1.0f, 0.0f, 0.0f);
+
+    struct yetty_yclass_object_ptr_result lr =
+        yetty_ygui_widget_add(a->console_pane, yetty_ygui_rich_class_get().value);
+    if (YETTY_IS_ERR(lr)) {
+        yetty_ycore_error_destroy(lr.error);
+        return -1;
+    }
+    a->console_log = lr.value;
+    dt_layout(a->console_log, -1.0f, 1.0f, 8.0f, 4.0f);
+
+    struct yetty_yclass_object_ptr_result ir =
+        yetty_ygui_widget_add(a->console_pane, yetty_ygui_hbox_class_get().value);
+    if (YETTY_IS_ERR(ir)) {
+        yetty_ycore_error_destroy(ir.error);
+        return -1;
+    }
+    err_ok(yetty_ygui_widget_set_bg_color(ir.value, BR_BG_LIFTED));
+    dt_layout(ir.value, 30.0f, 0.0f, 8.0f, 3.0f);
+    struct yetty_yclass_object *chevron = dt_add_label(
+        ir.value, "›", (struct yetty_ycore_rgba){107, 168, 146, 255}, CONSOLE_FONT_SIZE + 2.0f);
+    if (chevron) {
+        dt_set_width(chevron, 14.0f);
+    }
+    struct yetty_yclass_object_ptr_result tir =
+        yetty_ygui_widget_add(ir.value, yetty_ygui_textinput_class_get().value);
+    if (YETTY_IS_ERR(tir)) {
+        yetty_ycore_error_destroy(tir.error);
+        return -1;
+    }
+    a->console_input = tir.value;
+    err_ok(yetty_ygui_textinput_set_placeholder(a->console_input, "Evaluate JavaScript"));
+    dt_layout(a->console_input, -1.0f, 1.0f, 0.0f, 0.0f);
+
+    /* ---- Elements pane: a scrollable DOM tree (built on demand). ---- */
+    struct yetty_yclass_object_ptr_result epr =
+        yetty_ygui_widget_add(a->devtools, yetty_ygui_vbox_class_get().value);
+    if (YETTY_IS_ERR(epr)) {
+        yetty_ycore_error_destroy(epr.error);
+        return -1;
+    }
+    a->elements_pane = epr.value;
+    dt_layout(a->elements_pane, -1.0f, 1.0f, 0.0f, 0.0f);
+
+    struct yetty_yclass_object_ptr_result esr =
+        yetty_ygui_widget_add(a->elements_pane, yetty_ygui_scrollarea_class_get().value);
+    if (YETTY_IS_ERR(esr)) {
+        yetty_ycore_error_destroy(esr.error);
+        return -1;
+    }
+    dt_layout(esr.value, -1.0f, 1.0f, 4.0f, 4.0f);
+
+    struct yetty_yclass_object_ptr_result tbr =
+        yetty_ygui_widget_add(esr.value, yetty_ygui_vbox_class_get().value);
+    if (YETTY_IS_ERR(tbr)) {
+        yetty_ycore_error_destroy(tbr.error);
+        return -1;
+    }
+    a->tree_box = tbr.value;
+
+    /* Start on the Console tab: Elements pane hidden, tab buttons colored. */
+    dt_set_hidden(a->elements_pane, 1);
+    err_ok(yetty_ygui_widget_set_bg_color(a->tab_console, BR_BG_ROW));
+    err_ok(yetty_ygui_widget_set_bg_color(a->tab_elements, BR_BG_LIFTED));
+    a->devtools_tab = 0;
+    return 0;
+}
+
 static int build_ui(struct app *a)
 {
     struct yetty_yclass_object_ptr_result rr =
@@ -1813,6 +2401,12 @@ static int build_ui(struct app *a)
         err_ok(yetty_ygui_widget_layout_set(a->address, &l));
     }
 
+    /* DevTools toggle button, at the right end of the toolbar. The label reads
+     * as a code marker; clicking it (or F12) opens the JavaScript console. This
+     * is the discoverable, mouse-driven way in — F12 relies on the host
+     * terminal forwarding the key, which not every host does. */
+    add_nav_button(toolbar, "</>", 44.0f, on_devtools_click, a);
+
     /* Scrollable page area. */
     struct yetty_yclass_object_ptr_result sr =
         yetty_ygui_widget_add(a->root, yetty_ygui_scrollarea_class_get().value);
@@ -1854,6 +2448,10 @@ static int build_ui(struct app *a)
     a->image = ir.value;
     err_ok(yetty_ygui_widget_set_visible(a->image, 0));
     a->showing_image = 0;
+
+    if (build_devtools(a) != 0) {
+        return -1;
+    }
     return 0;
 }
 
@@ -2823,6 +3421,9 @@ static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch
     case 269: /* End */
         *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dF", mod_param)
                              : (size_t)snprintf(scratch, scratch_n, "\x1b[F");
+        return scratch;
+    case 301: /* F12 (GLFW_KEY_F12) → DevTools toggle. xterm CSI 24~. */
+        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[24~");
         return scratch;
     default:
         *out_len = 0;

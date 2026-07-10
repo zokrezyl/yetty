@@ -89,6 +89,7 @@ void yetty_ygui_framework_set_key_cb(struct yetty_yclass_object *obj, yetty_ygui
 #define YETTY_YGUI_KEY_PAGE_DOWN 0x107
 #define YETTY_YGUI_KEY_INSERT 0x108
 #define YETTY_YGUI_KEY_DELETE 0x109
+#define YETTY_YGUI_KEY_F12 0x10A
 
 #define YETTY_YGUI_MOD_SHIFT 0x01
 #define YETTY_YGUI_MOD_ALT 0x02
