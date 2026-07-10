@@ -129,4 +129,31 @@ if(Python3_Interpreter_FOUND)
         LABELS           "golden;browser;anchors"
         TIMEOUT          120
         SKIP_RETURN_CODE 77)
+
+    # Paint-order (CSS stacking) test: pins the composite stacking-key painter
+    # against the cases a single scalar level cannot get right at once —
+    # early-in-DOM overlay over later content, root canvas vs negative-z,
+    # z-index-child ESCAPING an auto-z wrapper above a lower-z sibling, and
+    # a sibling CONTAINED above an explicit-z wrapper's higher-z child.
+    # Painter's order only (no depth buffer), so this is paint-order, not
+    # geometry — the WPT/anchor suites cannot see it. Offline, headless.
+    add_test(NAME ybrowser_stacking_order
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../render/stacking-order.py)
+    set_tests_properties(ybrowser_stacking_order PROPERTIES
+        ENVIRONMENT      "YBROWSER=$<TARGET_FILE:ybrowser>"
+        LABELS           "golden;browser"
+        TIMEOUT          90
+        SKIP_RETURN_CODE 77)
+
+    # Iframe rendering test: asserts a nested browsing context's document
+    # (srcdoc, so offline) is composited into the iframe box — its text reaches
+    # the parent's paint stream. Also covers one level of iframe nesting. This
+    # is compositing, not geometry, so the WPT/anchor suites cannot see it.
+    add_test(NAME ybrowser_iframe_render
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../render/iframe-render.py)
+    set_tests_properties(ybrowser_iframe_render PROPERTIES
+        ENVIRONMENT      "YBROWSER=$<TARGET_FILE:ybrowser>"
+        LABELS           "golden;browser"
+        TIMEOUT          90
+        SKIP_RETURN_CODE 77)
 endif()

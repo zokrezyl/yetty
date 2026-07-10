@@ -782,26 +782,38 @@ static void feed_byte(struct yetty_ygui_framework *framework, struct yetty_ygui_
             case 'F':
                 key = YETTY_YGUI_KEY_END;
                 break;
-            case '~':
-                if (st->params_len > 0) {
-                    switch (st->params[0]) {
-                    case '5':
-                        key = YETTY_YGUI_KEY_PAGE_UP;
-                        break;
-                    case '6':
-                        key = YETTY_YGUI_KEY_PAGE_DOWN;
-                        break;
-                    case '2':
-                        key = YETTY_YGUI_KEY_INSERT;
-                        break;
-                    case '3':
-                        key = YETTY_YGUI_KEY_DELETE;
-                        break;
-                    default:
-                        break;
-                    }
+            case '~': {
+                /* The parameter is the key id, with an optional ";<mods>"
+                 * suffix (decoded separately by csi_decode_mods). Parse the
+                 * whole leading integer so multi-digit ids aren't truncated to
+                 * their first digit — e.g. F12 arrives as CSI 24~, which the
+                 * old single-char switch misread as Insert (CSI 2~). */
+                int id = 0;
+                for (int i = 0; i < st->params_len && st->params[i] >= '0' && st->params[i] <= '9';
+                     ++i) {
+                    id = id * 10 + (st->params[i] - '0');
+                }
+                switch (id) {
+                case 2:
+                    key = YETTY_YGUI_KEY_INSERT;
+                    break;
+                case 3:
+                    key = YETTY_YGUI_KEY_DELETE;
+                    break;
+                case 5:
+                    key = YETTY_YGUI_KEY_PAGE_UP;
+                    break;
+                case 6:
+                    key = YETTY_YGUI_KEY_PAGE_DOWN;
+                    break;
+                case 24:
+                    key = YETTY_YGUI_KEY_F12;
+                    break;
+                default:
+                    break;
                 }
                 break;
+            }
             default:
                 break;
             }

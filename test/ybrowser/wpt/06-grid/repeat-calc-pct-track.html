@@ -1,0 +1,12 @@
+<!doctype html><meta charset=utf-8><title>grid: repeat(N, calc(pct - len)) track size</title>
+<style>body{margin:0}</style>
+<!-- Each track = calc(20% - 20px) of the 500px container = 100 - 20 = 80px.
+     The nytimes carousel uses exactly this shape:
+     grid-template-columns: repeat(15, calc(20% - 26.6px)). Before the calc
+     track parser, calc() was rejected and the grid collapsed to block flow,
+     so every item (and its image) took the full container width. -->
+<div style="display:grid;grid-template-columns:repeat(3,calc(20% - 20px));width:500px">
+  <div data-test="c1" data-expect="0,*,80,*">a</div>
+  <div data-test="c2" data-expect="80,*,80,*">b</div>
+  <div data-test="c3" data-expect="160,*,80,*">c</div>
+</div>

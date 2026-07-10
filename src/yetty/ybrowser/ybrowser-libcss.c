@@ -816,10 +816,11 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
 #endif
         /* Embedded content we don't render — hide outright so the walker
          * doesn't surface their text content (MathML etc.) as garbage at
-         * the top of the page. <svg> is NOT hidden: the box builder gives
-         * it a replaced box (subtree never walked) so icon/logo layout
-         * reserves the right space. */
-        "math, audio, video, object, embed, iframe, canvas { display: none; }\n"
+         * the top of the page. <svg> and <iframe> are NOT hidden: the box
+         * builder gives each a replaced box (subtree never walked) so the
+         * layout reserves the right space — the iframe box then renders its
+         * src document as a nested browsing context. */
+        "math, audio, video, object, embed, canvas { display: none; }\n"
         "span, a, strong, b, em, i, cite, code, small, sub, sup, mark, ins, del,"
         " s, u, kbd, samp, var, time, q, abbr, dfn { display: inline; }\n"
         "br { display: inline; }\n"
@@ -1923,6 +1924,27 @@ int yetty_ybrowser_libcss_visibility(const css_computed_style *style)
         return CSS_VISIBILITY_VISIBLE;
     }
     return (int)css_computed_visibility(style);
+}
+
+/* z-index for a positioned box. Returns 1 and writes the integer value when
+ * an explicit z-index is set; returns 0 for `auto` (the default). Only
+ * meaningful on positioned elements — the paint pass gates the read on that. */
+int yetty_ybrowser_libcss_z_index(const css_computed_style *style, int32_t *out_z)
+{
+    if (!style) {
+        return 0;
+    }
+    css_fixed z = 0;
+    uint8_t kind = css_computed_z_index(style, &z);
+    if (kind != CSS_Z_INDEX_SET) {
+        return 0; /* auto */
+    }
+    if (out_z) {
+        /* z-index is a whole number stored in fixed-point; the float round-trip
+		 * is exact for the small integers pages use. */
+        *out_z = (int32_t)fixed_to_float(z);
+    }
+    return 1;
 }
 
 float yetty_ybrowser_libcss_opacity(const css_computed_style *style)

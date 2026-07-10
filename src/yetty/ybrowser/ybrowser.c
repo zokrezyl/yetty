@@ -22,6 +22,9 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ytrace/ytrace.h>
 
+/* Defined below (near load_html); used by the destroy path above it. */
+static void destroy_iframe_children(struct yetty_ylexbor *r);
+
 /* ===========================================================================
  * Box vector — small dynamic array.
  * ===========================================================================*/
@@ -235,6 +238,149 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_
     return YETTY_OK(yetty_ylexbor_ptr, r);
 }
 
+/* ===========================================================================
+ * DevTools DOM inspector — pre-order walk producing display-ready labels.
+ * ===========================================================================*/
+
+static int dom_is_blank(const lxb_char_t *p, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        if (p[i] != ' ' && p[i] != '\t' && p[i] != '\n' && p[i] != '\r' && p[i] != '\f') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* A node appears in the inspector if it is an element, or a text node with any
+ * non-whitespace content (blank inter-tag whitespace is noise). */
+static int dom_node_shown(lxb_dom_node_t *node)
+{
+    if (node->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+        return 1;
+    }
+    if (node->type == LXB_DOM_NODE_TYPE_TEXT) {
+        lxb_dom_text_t *text = lxb_dom_interface_text(node);
+        return !dom_is_blank(text->char_data.data.data, text->char_data.data.length);
+    }
+    return 0;
+}
+
+static int dom_node_has_shown_child(lxb_dom_node_t *node)
+{
+    for (lxb_dom_node_t *child = node->first_child; child; child = child->next) {
+        if (dom_node_shown(child)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Append a plain NUL-terminated string, honoring the buffer cap. */
+static void dom_label_puts(char *buf, size_t cap, size_t *off, const char *s)
+{
+    while (*s && *off < cap - 1) {
+        buf[(*off)++] = *s++;
+    }
+    buf[*off] = '\0';
+}
+
+/* Append a raw byte range, collapsing every whitespace run to a single space
+ * (and dropping leading whitespace) so a multi-line text node reads on one row. */
+static void dom_label_put_collapsed(char *buf, size_t cap, size_t *off, const lxb_char_t *s,
+                                    size_t n)
+{
+    int in_space = 0;
+    for (size_t i = 0; i < n && *off < cap - 1; i++) {
+        char c = (char)s[i];
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f') {
+            if (in_space || *off == 0) {
+                continue;
+            }
+            c = ' ';
+            in_space = 1;
+        } else {
+            in_space = 0;
+        }
+        buf[(*off)++] = c;
+    }
+    buf[*off] = '\0';
+}
+
+/* Fill a display label for a shown node. Elements become `<tag id=".." class="..">`;
+ * text nodes become a quoted, whitespace-collapsed snippet. */
+static void dom_format_label(lxb_dom_node_t *node, char *buf, size_t cap)
+{
+    size_t off = 0;
+    buf[0] = '\0';
+    if (node->type == LXB_DOM_NODE_TYPE_TEXT) {
+        lxb_dom_text_t *text = lxb_dom_interface_text(node);
+        dom_label_puts(buf, cap, &off, "\"");
+        dom_label_put_collapsed(buf, cap, &off, text->char_data.data.data,
+                                text->char_data.data.length);
+        dom_label_puts(buf, cap, &off, "\"");
+        return;
+    }
+    lxb_dom_element_t *element = lxb_dom_interface_element(node);
+    size_t name_len = 0;
+    const lxb_char_t *name = lxb_dom_element_local_name(element, &name_len);
+    dom_label_puts(buf, cap, &off, "<");
+    if (name) {
+        dom_label_put_collapsed(buf, cap, &off, name, name_len);
+    }
+    size_t id_len = 0;
+    const lxb_char_t *id =
+        lxb_dom_element_get_attribute(element, (const lxb_char_t *)"id", 2, &id_len);
+    if (id && id_len > 0) {
+        dom_label_puts(buf, cap, &off, " id=\"");
+        dom_label_put_collapsed(buf, cap, &off, id, id_len);
+        dom_label_puts(buf, cap, &off, "\"");
+    }
+    size_t class_len = 0;
+    const lxb_char_t *class_value =
+        lxb_dom_element_get_attribute(element, (const lxb_char_t *)"class", 5, &class_len);
+    if (class_value && class_len > 0) {
+        dom_label_puts(buf, cap, &off, " class=\"");
+        dom_label_put_collapsed(buf, cap, &off, class_value, class_len);
+        dom_label_puts(buf, cap, &off, "\"");
+    }
+    dom_label_puts(buf, cap, &off, ">");
+}
+
+struct dom_walk_state {
+    yetty_ylexbor_dom_visit_fn visit;
+    void *user;
+    int stop;
+};
+
+static void dom_walk_rec(lxb_dom_node_t *node, int depth, struct dom_walk_state *state)
+{
+    if (state->stop || !dom_node_shown(node)) {
+        return;
+    }
+    char label[192];
+    dom_format_label(node, label, sizeof(label));
+    if (state->visit(state->user, depth, dom_node_has_shown_child(node), label)) {
+        state->stop = 1;
+        return;
+    }
+    for (lxb_dom_node_t *child = node->first_child; child && !state->stop; child = child->next) {
+        dom_walk_rec(child, depth + 1, state);
+    }
+}
+
+void yetty_ylexbor_dom_walk(struct yetty_ylexbor *r, yetty_ylexbor_dom_visit_fn visit, void *user)
+{
+    if (!r || !r->document || !visit) {
+        return;
+    }
+    struct dom_walk_state state = {visit, user, 0};
+    lxb_dom_node_t *root = lxb_dom_interface_node(r->document);
+    for (lxb_dom_node_t *child = root->first_child; child && !state.stop; child = child->next) {
+        dom_walk_rec(child, 0, &state);
+    }
+}
+
 /* The real teardown. Split out so the public destroy can DEFER it until any
  * in-flight async image-fetch jobs drain — their done() callback runs on the
  * loop thread and must never touch a freed engine. */
@@ -248,6 +394,7 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
     if (r->document) {
         lxb_html_document_destroy(r->document);
     }
+    destroy_iframe_children(r);
     box_vec_destroy(&r->boxes);
     arena_reset(r);
     yetty_ylexbor_css_media_map_end(r); /* no-op unless a scan was interrupted */
@@ -277,6 +424,8 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
         r->supp_selector_matcher = NULL;
     }
     yetty_ylexbor_css_vars_destroy(r);
+    yetty_ylexbor_console_clear(r); /* frees each retained line's text */
+    free(r->console_ring);
     free(r);
     return YETTY_OK_VOID();
 }
@@ -577,6 +726,165 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
     return apply_res;
 }
 
+/* Nested browsing contexts have a hard depth cap so a document that iframes
+ * back into a chain (or itself) can't spin up engines without bound. */
+enum { YL_IFRAME_MAX_DEPTH = 3 };
+
+/* Tear down every child engine spun up for the previous document's iframes.
+ * Called before rebuilding them (each relayout) and at engine destroy. */
+static void destroy_iframe_children(struct yetty_ylexbor *r)
+{
+    for (int i = 0; i < r->iframe_child_count; i++) {
+        if (r->iframe_children[i] != NULL) {
+            (void)yetty_ylexbor_destroy(r->iframe_children[i]);
+        }
+    }
+    free(r->iframe_children);
+    r->iframe_children = NULL;
+    r->iframe_child_count = 0;
+    r->iframe_child_cap = 0;
+}
+
+/* Copy a (non-NUL-terminated) lexbor attribute value into a fresh C string. */
+static char *dup_attr(const lxb_char_t *value, size_t len)
+{
+    char *out = malloc(len + 1);
+    if (out != NULL) {
+        memcpy(out, value, len);
+        out[len] = '\0';
+    }
+    return out;
+}
+
+/* Post-layout pass: for every laid-out <iframe> box, fetch its src (or read its
+ * srcdoc), render that document in a child engine sized to the iframe's content
+ * box, and hang the child off the box so paint can composite it. Runs after
+ * layout so the iframe box dimensions (hence the child viewport) are known. */
+static struct yetty_ycore_void_result resolve_iframes(struct yetty_ylexbor *r)
+{
+    /* Drop the previous document's nested contexts before rebuilding. */
+    destroy_iframe_children(r);
+
+    if (r->iframe_depth >= YL_IFRAME_MAX_DEPTH || getenv("YBROWSER_NO_IFRAMES") != NULL) {
+        return YETTY_OK_VOID();
+    }
+
+    for (uint32_t i = 0; i < r->boxes.size; i++) {
+        struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        b->iframe_doc = NULL;
+        if (b->element == NULL || b->element->node.local_name != LXB_TAG_IFRAME) {
+            continue;
+        }
+        if (b->w <= 0.0f || b->h <= 0.0f) {
+            continue;
+        }
+
+        /* Source: inline `srcdoc` wins; otherwise fetch the resolved `src`. */
+        char *doc_html = NULL;
+        size_t doc_len = 0;
+        char *child_base = NULL;
+        size_t attr_len = 0;
+        const lxb_char_t *srcdoc =
+            lxb_dom_element_get_attribute(b->element, (const lxb_char_t *)"srcdoc", 6, &attr_len);
+        if (srcdoc != NULL && attr_len > 0) {
+            doc_html = dup_attr(srcdoc, attr_len);
+            doc_len = attr_len;
+            child_base = r->base_url ? strdup(r->base_url) : NULL;
+        } else {
+            const lxb_char_t *src =
+                lxb_dom_element_get_attribute(b->element, (const lxb_char_t *)"src", 3, &attr_len);
+            if (src == NULL || attr_len == 0) {
+                continue;
+            }
+            char *href = dup_attr(src, attr_len);
+            if (href == NULL) {
+                continue;
+            }
+            char *absolute = yetty_ylexbor_resolve_url(r, href);
+            free(href);
+            if (absolute == NULL) {
+                continue;
+            }
+            /* `about:`/`javascript:` iframes have no fetchable document. */
+            if (strncmp(absolute, "about:", 6) == 0 ||
+                strncmp(absolute, "javascript:", 11) == 0) {
+                free(absolute);
+                continue;
+            }
+            struct yetty_ybrowser_request request = {.url = absolute,
+                                                     .kind = YETTY_YBROWSER_REQUEST_DOCUMENT,
+                                                     .referer = r->base_url};
+            struct yetty_ybrowser_response response = {0};
+            struct yetty_ycore_void_result fetch_res =
+                yetty_ybrowser_fetch(r->loader, &request, &response);
+            if (YETTY_IS_ERR(fetch_res)) {
+                yetty_ycore_error_destroy(fetch_res.error);
+            } else if (response.status >= 200 && response.status < 300 && response.body != NULL) {
+                doc_html = dup_attr((const lxb_char_t *)response.body, response.body_len);
+                doc_len = response.body_len;
+                child_base = strdup(response.effective_url ? response.effective_url : absolute);
+            }
+            yetty_ybrowser_response_dispose(&response);
+            free(absolute);
+        }
+        if (doc_html == NULL) {
+            free(child_base);
+            continue;
+        }
+
+        int content_w = (int)(b->w - b->border_left - b->border_right - b->padding_left -
+                              b->padding_right);
+        if (content_w < 1) {
+            content_w = (int)b->w;
+        }
+        int content_h = (int)(b->h - b->border_top - b->border_bottom - b->padding_top -
+                              b->padding_bottom);
+        if (content_h < 1) {
+            content_h = (int)b->h;
+        }
+
+        struct yetty_ylexbor_config child_cfg = {.viewport_width = content_w,
+                                                 .viewport_height = content_h,
+                                                 .default_font_size = r->default_font_size,
+                                                 .loader = r->loader};
+        struct yetty_ylexbor_ptr_result create_res = yetty_ylexbor_create(&child_cfg);
+        if (YETTY_IS_ERR(create_res)) {
+            yetty_ycore_error_destroy(create_res.error);
+            free(doc_html);
+            free(child_base);
+            continue;
+        }
+        struct yetty_ylexbor *child = create_res.value;
+        child->iframe_depth = r->iframe_depth + 1;
+        child->glyph_advance_ratio = r->glyph_advance_ratio;
+        if (child_base != NULL) {
+            (void)yetty_ylexbor_set_base_url(child, child_base);
+        }
+        (void)yetty_ylexbor_load_html(child, doc_html, doc_len);
+        free(doc_html);
+        free(child_base);
+
+        if (r->iframe_child_count == r->iframe_child_cap) {
+            int cap = r->iframe_child_cap ? r->iframe_child_cap * 2 : 4;
+            struct yetty_ylexbor **grown =
+                realloc(r->iframe_children, (size_t)cap * sizeof(struct yetty_ylexbor *));
+            if (grown == NULL) {
+                (void)yetty_ylexbor_destroy(child);
+                continue;
+            }
+            r->iframe_children = grown;
+            r->iframe_child_cap = cap;
+        }
+        r->iframe_children[r->iframe_child_count++] = child;
+        /* box vector never moves during a child render (child touches only its
+         * own state), so `b` is still valid here. */
+        b->iframe_doc = child;
+        ydebug("iframe resolved: depth=%d content=%dx%d child_boxes=%u", child->iframe_depth,
+               content_w, content_h, child->boxes.size);
+    }
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, const char *html,
                                                        size_t html_len)
 {
@@ -688,6 +996,10 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
         return lr;
     }
     yetty_ylexbor_prof("  layout         %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
+
+    /* Render each <iframe>'s document into a child engine (nested browsing
+     * context) now that the iframe boxes are sized. */
+    (void)resolve_iframes(r);
     yetty_ylexbor_prof("load_html DONE");
 
     (void)box_vec_reserve; /* used by box-build */
@@ -804,7 +1116,12 @@ struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r)
     if (YETTY_IS_ERR(br)) {
         return br;
     }
-    return yetty_ylexbor_layout(r);
+    struct yetty_ycore_void_result lr = yetty_ylexbor_layout(r);
+    if (YETTY_IS_ERR(lr)) {
+        return lr;
+    }
+    (void)resolve_iframes(r);
+    return YETTY_OK_VOID();
 }
 
 void yetty_ylexbor_set_defer_scripts(struct yetty_ylexbor *r, int on)
@@ -1128,15 +1445,27 @@ char *yetty_ylexbor_ancestor_attr_at(struct yetty_ylexbor *r, float x, float y, 
         return NULL;
     }
     size_t name_len = strlen(name);
-    /* Deepest box containing (x, y) — same scan as link_at. */
+    /* Topmost box containing (x, y) in paint/stacking order — same ranking as
+	 * link_at, so URL/attribute extraction on a click resolves against the
+	 * element actually painted on top (an overlay), not one earlier in the box
+	 * vector but behind it. */
     lxb_dom_element_t *target = NULL;
+    uint32_t best_index = 0;
+    bool have_hit = false;
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
         if (b->element == NULL) {
             continue;
         }
+        if (b->vis_hidden || b->opacity < 0.02f || yetty_ylexbor_box_clipped_out(r, i)) {
+            continue; /* hidden / transparent / clipped boxes are hit-transparent */
+        }
         if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h) {
-            target = b->element;
+            if (!have_hit || yetty_ylexbor_paint_order_cmp(r, best_index, i) < 0) {
+                best_index = i;
+                target = b->element;
+                have_hit = true;
+            }
         }
     }
     if (target == NULL) {
@@ -1177,6 +1506,8 @@ char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)
      * page's on-screen offset first. */
     lxb_dom_element_t *target = NULL;
     const struct yetty_ylexbor_box *target_box = NULL;
+    uint32_t best_index = 0;
+    bool have_hit = false;
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
         if (b->element == NULL) {
@@ -1186,8 +1517,15 @@ char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)
             continue; /* hidden / transparent / clipped boxes are hit-transparent */
         }
         if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h) {
-            target = b->element;
-            target_box = b;
+            /* Topmost in paint order wins — an overlay (dialog/dropdown) that
+			 * paints over content earlier in the box vector must also capture
+			 * the click, else the click falls through to what's behind it. */
+            if (!have_hit || yetty_ylexbor_paint_order_cmp(r, best_index, i) < 0) {
+                best_index = i;
+                target = b->element;
+                target_box = b;
+                have_hit = true;
+            }
         }
     }
     if (target == NULL) {

@@ -66,6 +66,10 @@ struct yl_grid_track {
 		              * resolved to px at layout time. */
     uint8_t is_auto; /* `auto` / min-content / max-content — sized to the
 		              * max-content of the items placed in this column. */
+    float offset;    /* px added AFTER the percentage resolves — the length term
+		              * of `calc(<pct> ± <len>)` track sizes (already sign-applied
+		              * and unit-normalised to px). 0 for every non-calc track.
+		              * Only consulted when is_pct is set. */
 };
 
 /* 16 covers the 12-column grids real design systems use (github's Primer
@@ -583,6 +587,14 @@ struct yetty_ylexbor_box {
     uint8_t pos_set_mask;
     uint8_t pos_pct_mask;
 
+    /* CSS `z-index`. Only meaningful on a positioned box. `z_index_set` = 0
+	 * means `auto` (paints with the z=0 group, above normal flow). A set,
+	 * negative z-index paints BELOW normal flow. Drives the stacking-order
+	 * paint pass so overlays (dialogs, modals, dropdowns, fixed headers) paint
+	 * on top of in-flow content regardless of DOM order. */
+    int32_t z_index;
+    uint8_t z_index_set;
+
     /* CSS `transform: translate()` — a visual shift that moves the box and
 		 * its whole subtree without affecting flow (siblings ignore it). Only
 		 * the translate component is modelled; scale/rotate/matrix are not.
@@ -675,6 +687,13 @@ struct yetty_ylexbor_box {
 	 * root — the paint/hit clip walk stops when it reaches index 0. Used to
 	 * find overflow-clipping ancestors from the flat paint loop. */
     uint32_t parent;
+
+    /* When this box is an <iframe> whose src resolved to a document, points at
+	 * the child engine that rendered it (a nested browsing context). Paint
+	 * composites the child's drawables into this box's content area. Borrowed —
+	 * the child is OWNED by the engine's iframe_children list and destroyed on
+	 * document replace / engine destroy. NULL for every non-iframe box. */
+    struct yetty_ylexbor *iframe_doc;
 };
 
 /* Flat vector of boxes. Root is index 0. */
@@ -733,6 +752,18 @@ struct yetty_ylexbor_kv_store {
     int count, cap;
 };
 
+/* DevTools console ring. Every page console.* call and every REPL
+ * evaluation is recorded here so a UI (the standalone ybrowser DevTools
+ * panel) can display a live JavaScript console. Independent of QuickJS:
+ * the ring is plain storage; only the producers (console.* capture,
+ * eval) live behind the YETTY_HAVE_QUICKJS guard. */
+#define YETTY_YLEXBOR_CONSOLE_CAP 2000
+
+struct yetty_ylexbor_console_entry {
+    int level; /* enum yetty_ylexbor_console_level */
+    char *text; /* owned */
+};
+
 struct yetty_ylexbor {
     /* Network loader (share handle, Alt-Svc cache). Either borrowed from
 	 * the host via config (owns_loader = 0) or created privately at
@@ -780,6 +811,15 @@ struct yetty_ylexbor {
     struct JSRuntime *js_rt;
     struct JSContext *js_ctx;
     int js_error_count; /* uncaught exceptions encountered */
+
+    /* DevTools console ring (lazily allocated on first push, CAP slots).
+     * console_head is the next write slot; console_count is the number of
+     * valid entries (<= CAP); console_total is the monotonic lifetime count
+     * of pushes, which a UI compares against to detect newly-arrived lines. */
+    struct yetty_ylexbor_console_entry *console_ring;
+    int console_head;
+    int console_count;
+    uint64_t console_total;
 
     /* JS web-storage + document.cookie backing. Engine-owned so each
 	 * document/tab gets its own map — these were process-wide once and
@@ -963,6 +1003,15 @@ struct yetty_ylexbor {
     int img_jobs_in_flight;
     int destroy_pending;
     _Atomic uint64_t fetch_generation;
+
+    /* Nested browsing contexts. Each <iframe> with a fetchable src gets a child
+	 * engine that renders its document; paint composites the child's drawables
+	 * into the iframe box. OWNED — destroyed on document replace and at engine
+	 * destroy. `iframe_depth` guards against unbounded nesting (an iframe whose
+	 * document iframes onward); the top-level document is 0. */
+    struct yetty_ylexbor **iframe_children;
+    int iframe_child_count, iframe_child_cap;
+    int iframe_depth;
 };
 
 struct yetty_ylexbor_img_cache_entry {
@@ -1257,6 +1306,12 @@ int yetty_ylexbor_line_clamp_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *
  * padding box (so it must not paint / hit-test). */
 bool yetty_ylexbor_box_clipped_out(const struct yetty_ylexbor *r, uint32_t idx);
 
+/* Paint/stacking order of boxes `a` vs `b`: <0 if `a` paints before (below)
+ * `b`, >0 if after (above), 0 if same. Reproduces CSS stacking order (nesting-
+ * aware). Shared by the paint pass and hit-testing so a click targets the box
+ * actually painted on top. */
+int yetty_ylexbor_paint_order_cmp(const struct yetty_ylexbor *r, uint32_t a, uint32_t b);
+
 /* Scan for class-based `transform: translate*(...)` and record
  * (selector, tx, ty, pct flags). Complements the inline-transform parse. */
 void yetty_ylexbor_css_scan_transforms(struct yetty_ylexbor *r, const char *css_source,
@@ -1381,6 +1436,17 @@ struct yetty_ycore_void_result _yetty_ylexbor_box_vec_reserve(struct yetty_ylexb
 struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r);
 void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r);
 struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(struct yetty_ylexbor *r);
+
+/* Recover the owning engine from a QuickJS context. The engine pointer is
+ * stashed as the runtime opaque (js_dom_state.r) by the DOM install, so this
+ * works for any callback firing inside a page's JS. Returns NULL before the
+ * DOM bindings have been installed. Defined in ybrowser-js-dom.c. */
+struct yetty_ylexbor *yetty_ylexbor_js_engine_from_ctx(struct JSContext *ctx);
+
+/* Append one line to the DevTools console ring. `text` is copied. Safe to
+ * call with a NULL engine (no-op). Defined in ybrowser-js.c, always compiled
+ * regardless of YETTY_HAVE_QUICKJS. */
+void yetty_ylexbor_console_push(struct yetty_ylexbor *r, int level, const char *text);
 
 /* DOM-bindings install (called from js_init). */
 void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r);

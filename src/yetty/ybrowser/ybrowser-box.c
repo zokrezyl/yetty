@@ -135,9 +135,11 @@ static const struct yl_default_style *default_for(lxb_tag_id_t tag)
     case LXB_TAG_VIDEO:
     case LXB_TAG_OBJECT:
     case LXB_TAG_EMBED:
-    case LXB_TAG_IFRAME:
     case LXB_TAG_CANVAS:
         return &none;
+        /* <iframe> is NOT here: the DOM walk gives it a sized replaced block
+         * (default 300x150) and the post-layout iframe pass renders its src
+         * document into a child engine, composited at paint time. */
 
     case LXB_TAG_HTML:
     case LXB_TAG_BODY:
@@ -766,6 +768,51 @@ static bool flex_parse_len_px(const char *tok, size_t len, float font_size, floa
         return true;
     }
     return false;
+}
+
+/* Parse an HTML dimension presentation-hint attribute (the width=/height=
+ * values on <iframe>, <img>, <table>, ...). A bare number is CSS pixels,
+ * returned in *px_out (> 0). A trailing '%' is a percentage of the
+ * containing block, returned in *pct_ratio_out as a NEGATIVE ratio matching
+ * the css_width/css_height encoding (width="100%" -> -1.0, width="50%" ->
+ * -0.5) so block layout fills it against the parent content box. An
+ * unparseable or non-positive value leaves both outputs at 0 (unspecified).
+ * The percentage case is why atoi() is wrong here: atoi("100%") is 100,
+ * silently collapsing a full-width iframe to a 100px column. */
+static void parse_html_dimension_attr(const char *value, size_t len, float *px_out,
+                                      float *pct_ratio_out)
+{
+    *px_out = 0.0f;
+    *pct_ratio_out = 0.0f;
+    if (!value || len == 0) {
+        return;
+    }
+    size_t pos = 0;
+    while (pos < len && isspace((unsigned char)value[pos])) {
+        pos++;
+    }
+    char buf[32];
+    size_t written = 0;
+    while (pos < len && written + 1 < sizeof(buf) &&
+           (isdigit((unsigned char)value[pos]) || value[pos] == '.')) {
+        buf[written++] = value[pos++];
+    }
+    if (written == 0) {
+        return;
+    }
+    buf[written] = '\0';
+    float number = (float)atof(buf);
+    if (number <= 0.0f) {
+        return;
+    }
+    while (pos < len && isspace((unsigned char)value[pos])) {
+        pos++;
+    }
+    if (pos < len && value[pos] == '%') {
+        *pct_ratio_out = -(number / 100.0f);
+    } else {
+        *px_out = number;
+    }
 }
 
 /* Parse the inline `flex` shorthand (e.g. `flex:0 0 150px`, `flex:1`,
@@ -1928,6 +1975,13 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                 }
                             }
                         }
+                        /* z-index only applies to positioned boxes; drives the
+						 * stacking-order paint pass. */
+                        int32_t zi = 0;
+                        if (yetty_ybrowser_libcss_z_index(cs, &zi)) {
+                            b->z_index = zi;
+                            b->z_index_set = 1;
+                        }
                     }
 
                     /* `transform: translate(...)` from the inline style.
@@ -2333,6 +2387,82 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 }
 
                 link_child(r, parent_idx, iidx);
+                continue;
+            }
+            if (child->local_name == LXB_TAG_IFRAME) {
+                /* <iframe> is a replaced block: a box sized from its width/
+                 * height attrs or CSS (HTML default 300x150), whose src
+                 * document is fetched + rendered into a child engine by the
+                 * post-layout iframe pass and composited at paint time. Its DOM
+                 * subtree is empty (content lives in a separate document), so we
+                 * do not recurse into it. */
+                struct yetty_ycore_void_result flush_res =
+                    flush_inline(r, parent_style, parent_idx, inline_collect);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "walk: flush before iframe");
+                uint32_t iframe_idx;
+                struct yetty_ycore_void_result alloc_res = box_alloc(r, &iframe_idx);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, alloc_res, "walk: box_alloc iframe");
+                struct yetty_ylexbor_box *iframe_box = &r->boxes.data[iframe_idx];
+                iframe_box->kind = YL_BOX_BLOCK;
+                iframe_box->element = el;
+                iframe_box->fg = s.fg;
+                iframe_box->font_size = s.font_size;
+
+                /* Size the replaced box. Priority per axis: definite CSS length
+                 * > definite HTML attr px > HTML attr percentage (kept as a
+                 * negative ratio for block layout to fill against the parent) >
+                 * HTML replaced-element default. `width="100%"` is the common
+                 * full-frame idiom (e.g. the DataDome captcha iframe), so the
+                 * percentage MUST survive as -1.0 — collapsing it to 100px
+                 * crushes the frame into a narrow column. */
+                float definite_w = 0.0f, definite_h = 0.0f; /* px, >0 when known */
+                float pct_w = 0.0f, pct_h = 0.0f;           /* negative ratio, <0 for N% */
+                size_t iframe_alen = 0;
+                const lxb_char_t *iframe_aw =
+                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"width", 5, &iframe_alen);
+                if (iframe_aw && iframe_alen > 0) {
+                    parse_html_dimension_attr((const char *)iframe_aw, iframe_alen, &definite_w,
+                                              &pct_w);
+                }
+                const lxb_char_t *iframe_ah =
+                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"height", 6, &iframe_alen);
+                if (iframe_ah && iframe_alen > 0) {
+                    parse_html_dimension_attr((const char *)iframe_ah, iframe_alen, &definite_h,
+                                              &pct_h);
+                }
+                /* CSS width/height (definite lengths — e.g. `height:100vh`) win
+                 * over the attrs. */
+                {
+                    size_t iframe_istylen = 0;
+                    const lxb_char_t *iframe_istyle = lxb_dom_element_get_attribute(
+                        el, (const lxb_char_t *)"style", 5, &iframe_istylen);
+                    css_computed_style *iframe_cs = yetty_ybrowser_libcss_select(
+                        r, el, (const char *)iframe_istyle, iframe_istyle ? iframe_istylen : 0);
+                    iframe_box = &r->boxes.data[iframe_idx];
+                    if (iframe_cs) {
+                        float px = 0.0f;
+                        float basis = s.font_size * 16.0f;
+                        if (yetty_ybrowser_libcss_width(r, iframe_cs, s.font_size, basis, &px) &&
+                            px > 0.0f) {
+                            definite_w = px;
+                        }
+                        if (yetty_ybrowser_libcss_height(r, iframe_cs, s.font_size, basis, &px) &&
+                            px > 0.0f) {
+                            definite_h = px;
+                        }
+                    }
+                }
+                /* Definite px wins; else a percentage attr fills the parent
+                 * (block layout resolves css_width<0 against the content box,
+                 * and css_height<0 against a definite parent height or falls
+                 * back to auto); else the HTML replaced-element defaults. */
+                iframe_box->css_width =
+                    definite_w > 0.0f ? definite_w : (pct_w < 0.0f ? pct_w : 300.0f);
+                iframe_box->css_height =
+                    definite_h > 0.0f ? definite_h : (pct_h < 0.0f ? pct_h : 150.0f);
+                iframe_box->css_height_set = 1;
+
+                link_child(r, parent_idx, iframe_idx);
                 continue;
             }
             if (child->local_name == LXB_TAG_SVG) {

@@ -1,0 +1,8 @@
+<!doctype html><meta charset=utf-8><title>iframe: replaced box sized from width/height attrs</title>
+<style>body{margin:0}</style>
+<!-- <iframe> is a replaced element: its box takes the width/height attrs
+     (HTML default 300x150 when unset). Its src/srcdoc document renders into a
+     nested browsing context, composited at paint (not visible to this geometry
+     harness, which only sees the parent's boxes). -->
+<iframe data-test="f1" data-expect="0,0,400,200" width="400" height="200"
+        srcdoc="<body>hi</body>"></iframe>

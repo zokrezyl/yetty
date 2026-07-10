@@ -34,6 +34,74 @@
 #define YETTY_HAVE_QUICKJS 0
 #endif
 
+/* ===========================================================================
+ * DevTools console ring — plain storage, compiled regardless of QuickJS so the
+ * accessors resolve even in builds without a JS engine (they just stay empty).
+ * ===========================================================================*/
+
+void yetty_ylexbor_console_push(struct yetty_ylexbor *r, int level, const char *text)
+{
+    if (!r || !text) {
+        return;
+    }
+    if (!r->console_ring) {
+        r->console_ring = calloc(YETTY_YLEXBOR_CONSOLE_CAP, sizeof(*r->console_ring));
+        if (!r->console_ring) {
+            return;
+        }
+    }
+    struct yetty_ylexbor_console_entry *slot = &r->console_ring[r->console_head];
+    free(slot->text); /* overwrite the oldest line once the ring wraps */
+    slot->text = strdup(text);
+    if (!slot->text) {
+        return;
+    }
+    slot->level = level;
+    r->console_head = (r->console_head + 1) % YETTY_YLEXBOR_CONSOLE_CAP;
+    if (r->console_count < YETTY_YLEXBOR_CONSOLE_CAP) {
+        r->console_count++;
+    }
+    r->console_total++;
+}
+
+uint64_t yetty_ylexbor_console_total(const struct yetty_ylexbor *r)
+{
+    return r ? r->console_total : 0;
+}
+
+int yetty_ylexbor_console_count(const struct yetty_ylexbor *r)
+{
+    return r ? r->console_count : 0;
+}
+
+struct yetty_ylexbor_console_view yetty_ylexbor_console_at(const struct yetty_ylexbor *r, int index)
+{
+    struct yetty_ylexbor_console_view view = {YETTY_YLEXBOR_CONSOLE_LOG, NULL};
+    if (!r || !r->console_ring || index < 0 || index >= r->console_count) {
+        return view;
+    }
+    /* index 0 = oldest retained. The oldest slot sits `console_count` steps
+     * behind the write head; +CAP keeps the modulo non-negative (count <= CAP). */
+    int slot = (r->console_head - r->console_count + index + YETTY_YLEXBOR_CONSOLE_CAP) %
+               YETTY_YLEXBOR_CONSOLE_CAP;
+    view.level = r->console_ring[slot].level;
+    view.text = r->console_ring[slot].text;
+    return view;
+}
+
+void yetty_ylexbor_console_clear(struct yetty_ylexbor *r)
+{
+    if (!r || !r->console_ring) {
+        return;
+    }
+    for (int i = 0; i < YETTY_YLEXBOR_CONSOLE_CAP; i++) {
+        free(r->console_ring[i].text);
+        r->console_ring[i].text = NULL;
+    }
+    r->console_head = 0;
+    r->console_count = 0;
+}
+
 #if YETTY_HAVE_QUICKJS
 
 #include <quickjs.h>
@@ -95,6 +163,25 @@ static void console_print(JSContext *ctx, const char *level, int argc, JSValueCo
         }
     }
     buf[off] = '\0';
+    /* Record into the DevTools console ring so the UI can show page output.
+     * The engine is the runtime opaque, set once the DOM bindings install —
+     * always true by the time page scripts run console.*. */
+    {
+        struct yetty_ylexbor *engine = yetty_ylexbor_js_engine_from_ctx(ctx);
+        if (engine) {
+            int lvl = YETTY_YLEXBOR_CONSOLE_LOG;
+            if (strcmp(level, "error") == 0) {
+                lvl = YETTY_YLEXBOR_CONSOLE_ERROR;
+            } else if (strcmp(level, "warn") == 0) {
+                lvl = YETTY_YLEXBOR_CONSOLE_WARN;
+            } else if (strcmp(level, "info") == 0) {
+                lvl = YETTY_YLEXBOR_CONSOLE_INFO;
+            } else if (strcmp(level, "debug") == 0) {
+                lvl = YETTY_YLEXBOR_CONSOLE_DEBUG;
+            }
+            yetty_ylexbor_console_push(engine, lvl, buf);
+        }
+    }
     ydebug("[js:%s] %s", level, buf);
     /* Also mirror to stderr when YBROWSER_JS_CONSOLE is set — the ybrowser
      * tool enables this in its standalone (own-window) mode so page JS
@@ -607,6 +694,132 @@ struct yetty_ycore_void_result yetty_ylexbor_js_run_all_scripts(struct yetty_yle
     return YETTY_OK_VOID();
 }
 
+/* ===========================================================================
+ * DevTools REPL — evaluate a typed expression in the page's JS context.
+ * ===========================================================================*/
+
+/* Render a successful eval result the way a browser console does: undefined as
+ * "undefined", strings quoted, objects/arrays via JSON.stringify (falling back
+ * to toString), everything else via its default string form. Returns an owned
+ * string, or NULL on OOM. */
+static char *eval_stringify(JSContext *ctx, JSValueConst value)
+{
+    if (JS_IsUndefined(value)) {
+        return strdup("undefined");
+    }
+    if (JS_IsString(value)) {
+        const char *raw = JS_ToCString(ctx, value);
+        if (!raw) {
+            return NULL;
+        }
+        size_t len = strlen(raw);
+        char *out = malloc(len + 3);
+        if (out) {
+            out[0] = '"';
+            memcpy(out + 1, raw, len);
+            out[len + 1] = '"';
+            out[len + 2] = '\0';
+        }
+        JS_FreeCString(ctx, raw);
+        return out;
+    }
+    if (JS_IsObject(value) && !JS_IsFunction(ctx, value)) {
+        JSValue global = JS_GetGlobalObject(ctx);
+        JSValue json = JS_GetPropertyStr(ctx, global, "JSON");
+        JSValue stringify = JS_GetPropertyStr(ctx, json, "stringify");
+        char *out = NULL;
+        if (JS_IsFunction(ctx, stringify)) {
+            JSValueConst argv[1] = {value};
+            JSValue res = JS_Call(ctx, stringify, json, 1, argv);
+            if (!JS_IsException(res) && JS_IsString(res)) {
+                const char *raw = JS_ToCString(ctx, res);
+                if (raw) {
+                    out = strdup(raw);
+                    JS_FreeCString(ctx, raw);
+                }
+            }
+            JS_FreeValue(ctx, res);
+        }
+        JS_FreeValue(ctx, stringify);
+        JS_FreeValue(ctx, json);
+        JS_FreeValue(ctx, global);
+        if (out) {
+            return out; /* e.g. {"a":1} or [1,2,3] */
+        }
+        /* JSON.stringify returns undefined for cyclic/function-only objects —
+         * fall through to the plain string form. */
+    }
+    const char *raw = JS_ToCString(ctx, value);
+    if (!raw) {
+        return NULL;
+    }
+    char *out = strdup(raw);
+    JS_FreeCString(ctx, raw);
+    return out;
+}
+
+/* Pull the pending exception and format it as "Uncaught <message>", appending
+ * the first stack frame when present. Returns an owned string, or NULL on OOM. */
+static char *eval_format_exception(JSContext *ctx)
+{
+    JSValue exception = JS_GetException(ctx);
+    const char *message = JS_ToCString(ctx, exception);
+    JSValue stack = JS_GetPropertyStr(ctx, exception, "stack");
+    const char *stack_text = JS_IsString(stack) ? JS_ToCString(ctx, stack) : NULL;
+
+    size_t need = strlen("Uncaught ") + (message ? strlen(message) : 1) +
+                  (stack_text ? strlen(stack_text) + 1 : 0) + 1;
+    char *out = malloc(need);
+    if (out) {
+        int off = snprintf(out, need, "Uncaught %s", message ? message : "?");
+        if (stack_text && stack_text[0] && off >= 0 && (size_t)off < need) {
+            snprintf(out + off, need - (size_t)off, "\n%s", stack_text);
+        }
+    }
+    if (message) {
+        JS_FreeCString(ctx, message);
+    }
+    if (stack_text) {
+        JS_FreeCString(ctx, stack_text);
+    }
+    JS_FreeValue(ctx, stack);
+    JS_FreeValue(ctx, exception);
+    return out;
+}
+
+struct yetty_ycore_char_ptr_result yetty_ylexbor_eval_js(struct yetty_ylexbor *r, const char *src)
+{
+    if (!r || !src) {
+        return YETTY_ERR(yetty_ycore_char_ptr, "eval_js: NULL argument");
+    }
+    struct yetty_ycore_void_result init_res = yetty_ylexbor_js_init(r);
+    YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, init_res, "eval_js: JS init");
+
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    yetty_ylexbor_console_push(r, YETTY_YLEXBOR_CONSOLE_INPUT, src);
+
+    JSValue value = JS_Eval(ctx, src, strlen(src), "<console>", JS_EVAL_TYPE_GLOBAL);
+    int level = YETTY_YLEXBOR_CONSOLE_RESULT;
+    char *display = NULL;
+    if (JS_IsException(value)) {
+        level = YETTY_YLEXBOR_CONSOLE_ERROR;
+        display = eval_format_exception(ctx);
+        r->js_error_count++;
+    } else {
+        display = eval_stringify(ctx, value);
+    }
+    JS_FreeValue(ctx, value);
+    /* Timers / promise jobs the expression scheduled run now, so their console
+     * output lands before we hand control back to the UI. */
+    yetty_ylexbor_js_drain_jobs(r);
+
+    if (!display) {
+        return YETTY_ERR(yetty_ycore_char_ptr, "eval_js: out of memory formatting result");
+    }
+    yetty_ylexbor_console_push(r, level, display);
+    return YETTY_OK(yetty_ycore_char_ptr, display);
+}
+
 #else /* !YETTY_HAVE_QUICKJS — compile-out */
 
 struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r)
@@ -627,6 +840,20 @@ struct yetty_ycore_void_result yetty_ylexbor_js_run_all_scripts(struct yetty_yle
 {
     (void)r;
     return YETTY_OK_VOID();
+}
+struct yetty_ycore_char_ptr_result yetty_ylexbor_eval_js(struct yetty_ylexbor *r, const char *src)
+{
+    if (!r || !src) {
+        return YETTY_ERR(yetty_ycore_char_ptr, "eval_js: NULL argument");
+    }
+    yetty_ylexbor_console_push(r, YETTY_YLEXBOR_CONSOLE_INPUT, src);
+    const char *unavailable = "JavaScript is not available in this build";
+    yetty_ylexbor_console_push(r, YETTY_YLEXBOR_CONSOLE_ERROR, unavailable);
+    char *copy = strdup(unavailable);
+    if (!copy) {
+        return YETTY_ERR(yetty_ycore_char_ptr, "eval_js: out of memory");
+    }
+    return YETTY_OK(yetty_ycore_char_ptr, copy);
 }
 
 #endif /* YETTY_HAVE_QUICKJS */
