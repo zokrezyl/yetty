@@ -76,9 +76,10 @@ fn yplot_draw_axes(bg: vec3<f32>, plotUV: vec2<f32>,
         color = YPLOT_AXIS_COLOR;
     }
 
-    // X-axis at y=0
-    let yZero = (0.0 - yMin) / (yMax - yMin);
-    if (yZero >= 0.0 && yZero <= 1.0 && abs(plotUV.y - yZero) * bounds_h < halfPx) {
+    // X-axis at y=0. plotUV.y = 0 is the top (= yMax), so the row for data
+    // y=0 is measured from yMax down, matching the curve mapping.
+    let yZeroRow = (yMax - 0.0) / (yMax - yMin);
+    if (yZeroRow >= 0.0 && yZeroRow <= 1.0 && abs(plotUV.y - yZeroRow) * bounds_h < halfPx) {
         color = YPLOT_AXIS_COLOR;
     }
 
@@ -188,8 +189,10 @@ fn yplot_render(local_pos: vec2<f32>) -> vec4<f32> {
         for (var fi = 0u; fi < min(func_count, 8u); fi++) {
             let curve_color = yplot_unpack_color(yplot_get_colors(fi));
             let y = yfsvm_execute(bc_off, fi, dataX, dataY, yplot_get_time(), samplers);
-            let yNorm = (y - yMin) / yRange;
-            color = yplot_line_blend(color, plotUV.y, yNorm, lineWidth, curve_color);
+            // plotUV.y grows downward (0 = top = yMax), so a larger value maps
+            // to a row nearer the top — measure the value's row from yMax down.
+            let yRow = (yMax - y) / yRange;
+            color = yplot_line_blend(color, plotUV.y, yRow, lineWidth, curve_color);
         }
     }
 
@@ -221,8 +224,9 @@ fn yplot_render(local_pos: vec2<f32>) -> vec4<f32> {
                 let v2 = bitcast<f32>(storage_buffer[samples_off + nxt]);
                 let y  = mix(v1, v2, t_lerp);
 
-                let yNorm = (y - yMin) / yRange;
-                color = yplot_line_blend(color, plotUV.y, yNorm, lineWidth, curve_color);
+                // Larger value → row nearer the top (plotUV.y = 0 = yMax).
+                let yRow = (yMax - y) / yRange;
+                color = yplot_line_blend(color, plotUV.y, yRow, lineWidth, curve_color);
             }
 
             cursor = cursor + 1u + len;

@@ -55,9 +55,10 @@ find_package(Threads REQUIRED)
 # yetty_ymarkdown renders assistant answers to a ydraw drawable list in-process;
 # yai frames it as a YDRAW_BIN envelope itself (yface + ydraw-core come
 # transitively via yetty_ygui), so markdown no longer shells out to ycat.
+# yetty_yplot renders the /usage tokens-vs-time curve the same in-process way.
 target_link_libraries(yai PRIVATE yetty_ygui yetty_yclass yetty_yfont_shader_glyph
-                                  yetty_ymarkdown yyjson::yyjson uv_a Threads::Threads msgpack-c
-                                  yaml)
+                                  yetty_ymarkdown yetty_yplot yyjson::yyjson uv_a Threads::Threads
+                                  msgpack-c yaml)
 
 # proxy.c forwards the child's Anthropic traffic over HTTPS with libcurl to
 # capture live rate-limit/quota headers.

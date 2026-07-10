@@ -17,6 +17,8 @@ target_link_libraries(yetty_yplot_core PUBLIC
     yetty_ydraw_core
     yetty_yfsvm_core
     yetty_yface
+    yetty_ysdf
+    m
 )
 
 # yetty_yplot — GPU pipeline (concrete factory). Pulls Dawn / WebGPU.

@@ -13,6 +13,7 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymarkdown/ymarkdown.h>
+#include <yetty/yplot/yplot.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yterminal/dcs-codes.h>
 
@@ -1305,6 +1306,88 @@ static struct yetty_ycore_int_result render_markdown_buffer(struct yai_renderer 
     YETTY_RETURN_IF_ERR(yetty_ycore_int, write_res, "render_markdown_buffer: envelope write");
     if (fputc('\n', stdout) == EOF) {
         return YETTY_ERR(yetty_ycore_int, "render_markdown_buffer: trailing newline");
+    }
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+struct yetty_ycore_int_result yai_render_line_plot(struct yai_renderer *renderer,
+                                                   const float *samples, size_t count, float x_min,
+                                                   float x_max, float y_min, float y_max,
+                                                   const char *heading)
+{
+    /* The figure envelope only displays on the yetty host — off-host the
+     * caller keeps its plain-text usage output. */
+    if (!renderer->pin_shader_glyphs || !samples || count < 2) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+
+    /* Full pane width, a fixed ~14-row-tall figure. Relative positioning
+     * (bounds_x/y = 0): the terminal anchors it at the cursor grid line
+     * and reserves rows, so it scrolls with the conversation. */
+    struct yetty_yplot_render_config config = {
+        .bounds_w = (float)terminal_columns() * 8.0f,
+        .bounds_h = 14.0f * 16.0f,
+        .x_min = x_min,
+        .x_max = x_max,
+        .y_min = y_min,
+        .y_max = y_max,
+        .flags = YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS,
+    };
+    struct yetty_yplot_buffer_input buffer = {
+        .samples = samples,
+        .count = count,
+        .color = 0, /* palette default (mint) */
+    };
+    struct yetty_ydraw_drawable_list_result render_res =
+        yetty_yplot_render_with_buffers("", 0, &buffer, 1, &config);
+    if (YETTY_IS_ERR(render_res)) {
+        /* Best-effort: a render failure falls back to text-only. */
+        yetty_ycore_error_destroy(render_res.error);
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    struct yetty_ydraw_drawable_list *drawables = render_res.value;
+
+    const uint8_t *raw_bytes = NULL;
+    size_t raw_size = yetty_ydraw_drawable_list_serialize(drawables, &raw_bytes);
+    if (raw_size == 0 || !raw_bytes) {
+        yetty_ydraw_drawable_list_destroy(drawables);
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    struct yetty_yface_bin_meta meta = {
+        .magic = YETTY_YFACE_BIN_MAGIC,
+        .version = YETTY_YFACE_BIN_VERSION,
+        .compressed = YETTY_YFACE_COMP_LZ4F,
+        .compression_algo = 0,
+        .raw_size = raw_size,
+        .reserved = {0, 0},
+    };
+    struct yetty_ycore_buffer envelope = {0};
+    struct yetty_ycore_void_result emit_res = yetty_yface_emit(
+        YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw_bytes, raw_size, &envelope);
+    yetty_ydraw_drawable_list_destroy(drawables);
+    if (YETTY_IS_ERR(emit_res)) {
+        yetty_ycore_buffer_destroy(&envelope);
+        return YETTY_ERR(yetty_ycore_int, "yai_render_line_plot: yface_emit", emit_res);
+    }
+    if (envelope.size == 0) {
+        yetty_ycore_buffer_destroy(&envelope);
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+
+    if (heading && heading[0]) {
+        printf(YAI_DIM "  %s" YAI_RESET "\n", heading);
+    }
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    if (YETTY_IS_ERR(flush_res)) {
+        yetty_ycore_buffer_destroy(&envelope);
+        return YETTY_ERR(yetty_ycore_int, "yai_render_line_plot: pre-flush", flush_res);
+    }
+    struct yetty_ycore_void_result write_res =
+        write_all_to_terminal(STDOUT_FILENO, envelope.data, envelope.size);
+    yetty_ycore_buffer_destroy(&envelope);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, write_res, "yai_render_line_plot: envelope write");
+    if (fputc('\n', stdout) == EOF) {
+        return YETTY_ERR(yetty_ycore_int, "yai_render_line_plot: trailing newline");
     }
     return YETTY_OK(yetty_ycore_int, 1);
 }

@@ -4080,6 +4080,58 @@ static int verdict_is(const char *line, size_t len, const char *word)
     return index == len && word[index] == '\0';
 }
 
+/* Number of points sampled along the /usage plot's time axis. */
+#define YAI_USAGE_PLOT_GRID 96
+
+/* Draw the session's tokens-consumed-over-time curve below the /usage
+ * text (yetty mode only). The recorded samples are one-per-turn and thus
+ * irregularly spaced in time, but a data-buffer plot spreads its samples
+ * evenly across the x axis — so first project the per-turn cumulative
+ * totals onto a uniform time grid (a right-continuous step; the shader
+ * lerps between grid points). A no-op off the yetty host or before two
+ * turns have landed (a single point is not a curve). */
+static struct yetty_ycore_void_result usage_render_plot(struct yai_app *app)
+{
+    if (!app->renderer.pin_shader_glyphs || app->usage_sample_count < 2) {
+        return YETTY_OK_VOID();
+    }
+    const struct yai_usage_sample *samples = app->usage_samples;
+    size_t sample_count = app->usage_sample_count;
+    double span_seconds = samples[sample_count - 1].elapsed_seconds;
+    /* Cumulative totals are monotonic, so the last sample is the peak. */
+    uint64_t max_tokens = samples[sample_count - 1].total_tokens;
+    if (span_seconds <= 0.0 || max_tokens == 0) {
+        return YETTY_OK_VOID();
+    }
+
+    float grid[YAI_USAGE_PLOT_GRID];
+    size_t turn = 0;
+    for (int point = 0; point < YAI_USAGE_PLOT_GRID; point++) {
+        double time_at = span_seconds * (double)point / (double)(YAI_USAGE_PLOT_GRID - 1);
+        while (turn + 1 < sample_count && samples[turn + 1].elapsed_seconds <= time_at) {
+            turn++;
+        }
+        /* Grid points before the first turn's timestamp: nothing consumed. */
+        double value =
+            (samples[turn].elapsed_seconds <= time_at) ? (double)samples[turn].total_tokens : 0.0;
+        grid[point] = (float)value;
+    }
+
+    /* x in minutes for longer sessions, else seconds; y from 0 to the
+     * final total plus 8% headroom so the peak clears the top edge. */
+    int use_minutes = span_seconds >= 120.0;
+    float x_max = use_minutes ? (float)(span_seconds / 60.0) : (float)span_seconds;
+    float y_max = (float)max_tokens * 1.08f;
+    char heading[96];
+    snprintf(heading, sizeof(heading), "tokens consumed over time (x: %s, y: cumulative total)",
+             use_minutes ? "minutes" : "seconds");
+    struct yetty_ycore_int_result plot_res =
+        yai_render_line_plot(&app->renderer, grid, YAI_USAGE_PLOT_GRID, 0.0f, x_max, 0.0f, y_max,
+                             heading);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, plot_res, "usage plot: render");
+    return YETTY_OK_VOID();
+}
+
 /* Print this session's accumulated token usage and cost to the scrollback
  * (the `/usage` command). yai keeps these totals in app->usage, fed by the
  * engine's per-turn usage events; this is the on-demand breakdown the HUD's
@@ -4122,6 +4174,13 @@ static struct yetty_ycore_void_result show_usage(struct yai_app *app)
         printf("  " YAI_MUTED "(quota: not captured yet)" YAI_RESET "\n");
     }
     printf("\n");
+
+    /* In yetty mode, follow the text with a token-vs-time plot. */
+    struct yetty_ycore_void_result plot_res = usage_render_plot(app);
+    if (YETTY_IS_ERR(plot_res)) {
+        (void)yai_renderer_zone_resume(&app->renderer);
+        return YETTY_ERR(yetty_ycore_void, "show_usage: plot", plot_res);
+    }
 
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     flush_res = yetty_ycore_void_chain(flush_res, yai_renderer_zone_resume(&app->renderer));
@@ -4751,12 +4810,38 @@ static struct yetty_ycore_void_result editor_interrupt(struct yai_app *app)
     return YETTY_OK_VOID();
 }
 
-/* Milliseconds on the monotonic clock, for arming short UI timeouts. */
-static long yai_monotonic_ms(void)
+/* Milliseconds on the monotonic clock, for arming short UI timeouts and
+ * stamping the token time-series. */
+long yai_monotonic_ms(void)
 {
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     return now.tv_sec * 1000 + now.tv_nsec / 1000000;
+}
+
+/* Record the current cumulative (input + output) token total at
+ * seconds-since-session-start. Decimates the series in place when full,
+ * preserving the full time span at half resolution. */
+void yai_usage_record_sample(struct yai_app *app)
+{
+    if (app->usage_sample_count >= YAI_USAGE_SAMPLE_MAX) {
+        size_t kept = 0;
+        for (size_t i = 0; i < app->usage_sample_count; i += 2) {
+            app->usage_samples[kept++] = app->usage_samples[i];
+        }
+        app->usage_sample_count = kept;
+    }
+    long now_ms = yai_monotonic_ms();
+    double elapsed = app->session_start_ms ? (double)(now_ms - app->session_start_ms) / 1000.0 : 0.0;
+    if (elapsed < 0.0) {
+        elapsed = 0.0;
+    }
+    struct yai_usage_sample *sample = &app->usage_samples[app->usage_sample_count++];
+    sample->elapsed_seconds = elapsed;
+    /* "Consumed" = everything the model processed this session: fresh input
+     * and output plus the cache reads/writes (the bulk of the cost). */
+    sample->total_tokens = app->usage.input + app->usage.output + app->usage.cache_read +
+                           app->usage.cache_creation;
 }
 
 /* Ctrl-D on an empty line: the first press only arms a confirmation
@@ -5765,6 +5850,7 @@ int main(int argc, char **argv)
     if (!app) {
         return 1;
     }
+    app->session_start_ms = yai_monotonic_ms();
     yai_config_defaults(app);
     yai_config_load(app);
 
