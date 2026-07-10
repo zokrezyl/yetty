@@ -1,0 +1,98 @@
+# Clip: the grand tour - every Yetty rich-content feature in one scrollback.
+#
+# A single ~60s showcase. The scenario types one command (./grand-tour.sh),
+# which parades the whole feature surface (styled text, charts, plots,
+# diagrams, markdown, PDF, images, SVG, music, circuits, flame graph, 3D
+# mesh, live shader, vector/Lottie animation, video) into scrollback. When
+# the parade has settled at the prompt, the scenario zooms a figure (proving
+# it is real, still-crisp content) and scrolls back up through the whole
+# history (proving it is one continuous scrollback), then closes.
+#
+# WARNING: the last step is `shutdown` - it exits the yetty it runs
+# against. Only play this against a dedicated recording instance.
+#
+# One-shot recording (from the repo root):
+#
+#   ./demo/scripts/yctl/clips/grand-tour.sh
+#   # -> tmp/clips/grand-tour/grand-tour.mp4
+#
+# The wrapper stages grand-tour-body.sh as ./grand-tour.sh and exports
+# YETTY_REPO / YETTY_BUILD_DIR so the tour can find the tools and assets.
+# See demo/scripts/yctl/clips/_record-common.sh for the harness.
+#
+# Timing note: the big sleep after the command must exceed the body's own
+# runtime (it paces itself with sleeps). It is deliberately oversized -
+# overrun is just a few clean prompt frames before the closing flourish,
+# which is harmless; undersize would clip the last figure.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 14
+      speed-deviation: 0.25
+      avg-typo: 0.0
+
+script:
+  - sleep: 0.4
+
+  # Kick off the self-driving tour, then let the whole parade play out.
+  - type: "./grand-tour.sh"
+  - special-char: ENTER
+  - sleep: 52.0
+
+  # The tour has settled at the prompt with everything in scrollback above.
+  # Cruise UP through the whole history - every figure from the tour is
+  # still there in one continuous scrollback. Plain wheel scroll (no Ctrl:
+  # Ctrl+scroll visual zoom is intentionally not used here - it does not
+  # reliably engage right after the parade, and a no-op zoom is worse than
+  # none). The scroll-through alone is the scrollback proof.
+  - mouse-move: { x: 840, y: 460 }
+  - sleep: 0.3
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 1.5             # hold: a screen of rich figures, mid-history
+
+  # Drop back to the prompt for the end card.
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.6
+
+  - type:
+      text: "# one terminal. text and every figure, in the same scrollback."
+      avg-speed: 24
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type:
+      text: "# github.com/zokrezyl/yetty | yetty.dev"
+      avg-speed: 24
+  - special-char: ENTER
+  - sleep: 2.5
+
+  - shutdown: ~

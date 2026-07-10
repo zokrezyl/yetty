@@ -1,0 +1,52 @@
+# Clip: live shader figures render inside terminal scrollback.
+#
+# Targets the branding issue's "Shader/video/3D/markdown render inside the
+# terminal" candidate with the most deterministic asset: ycat shadertoy WGSL.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 14
+      speed-deviation: 0.25
+      avg-typo: 0.0
+
+script:
+  - sleep: 0.4
+
+  - type: "ycat -c shadertoy plasma.wgsl"
+  - special-char: ENTER
+  - sleep: 2.2
+
+  - type: "ycat -c shadertoy swirl.wgsl"
+  - special-char: ENTER
+  - sleep: 2.0
+
+  - mouse-move: { x: 840, y: 460 }
+  - sleep: 0.2
+  - mouse-scroll: { x: 840, y: 460, dy: 3 }
+  - sleep: 0.08
+  - mouse-scroll: { x: 840, y: 460, dy: 3 }
+  - sleep: 0.08
+  - mouse-scroll: { x: 840, y: 460, dy: 3 }
+  - sleep: 1.2
+
+  - mouse-scroll: { x: 840, y: 460, dy: -3 }
+  - sleep: 0.08
+  - mouse-scroll: { x: 840, y: 460, dy: -3 }
+  - sleep: 0.08
+  - mouse-scroll: { x: 840, y: 460, dy: -3 }
+  - sleep: 0.5
+
+  - type:
+      text: "# live GPU figures, not screenshots"
+      avg-speed: 22
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type:
+      text: "# github.com/zokrezyl/yetty | yetty.dev"
+      avg-speed: 22
+  - special-char: ENTER
+  - sleep: 2.0
+
+  - shutdown: ~

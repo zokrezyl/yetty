@@ -1,0 +1,52 @@
+# Clip: Markdown renders inline as rich terminal content.
+#
+# Short proof clip for copy-pasteable examples and README/website use: the same
+# shell surface can hold formatted docs, code blocks, and normal prompt text.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 14
+      speed-deviation: 0.25
+      avg-typo: 0.0
+
+script:
+  - sleep: 0.4
+
+  - type: "ycat overview.md"
+  - special-char: ENTER
+  - sleep: 2.0
+
+  - mouse-move: { x: 5, y: 130 }
+  - sleep: 0.2
+  - mouse-scroll: { x: 5, y: 130, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 130, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 130, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 130, dy: 1, mods: 2 }
+  - sleep: 1.2
+
+  - mouse-scroll: { x: 5, y: 130, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 130, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 130, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 130, dy: -1, mods: 2 }
+  - sleep: 0.5
+
+  - type:
+      text: "# docs, code, diagrams and data can share one scrollback"
+      avg-speed: 22
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type:
+      text: "# github.com/zokrezyl/yetty | yetty.dev"
+      avg-speed: 22
+  - special-char: ENTER
+  - sleep: 2.0
+
+  - shutdown: ~

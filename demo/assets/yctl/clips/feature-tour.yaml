@@ -1,0 +1,422 @@
+# Feature tour - every Yetty figure, in one unbroken scrollback.
+#
+# A yctl scenario: play it against a running yetty with
+#   uv run tools/yctl-client/yctl.py plays demo/assets/yctl/clips/feature-tour.yaml
+#
+# The screen is NEVER cleared - each feature is announced with a shell comment,
+# rendered, and left in the scrollback (a short scroll-up peek shows it is part
+# of the history), then Enter snaps back to the bottom for the next one.
+#
+# The typed commands use bare asset names (ycat report.pdf, ...); run yetty with
+# demo/assets/... on PATH / as the cwd so they resolve.
+#
+# WARNING: ends in `shutdown`, which exits yetty - only play it against a
+# dedicated instance.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 90
+      speed-deviation: 0.1
+      avg-typo: 0.0
+
+script:
+  - sleep: 0.6
+
+  - type: '# the wordmark - an image, rendered inline in the terminal'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ycat -w 150 wordmark.png'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# styled text - colours, styles and backgrounds, inline'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'yecho ''{color=#6BA892; style=bold: Yetty}   {color=#9FA7A8: terminal unchained}''; yecho ''{color=#FF6B6B: errors}   {color=#FFE66D: warnings}   {color=#4ECDC4: info}   {bg=#1E262C:  selected row }''; yecho ''{color=#6BA892: build passing}   {color=#FFE66D: tests green}   {color=#556162: deploy queued}   {color=#74C5A5: styled text, right in the terminal}'''
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# a column chart - drawn right in the scrollback'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ychart --width 1400 --height 760 revenue.chart'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# a music score - LilyPond, engraved live by ymusic'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ycat ode-to-joy.ly'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# live plots - math functions drawn as curves'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'yplot -w 1400 -H 760 ''load=0.5+0.3*sin(x)'' ''mem=0.6+0.2*sin(x/2)'' ''@load.color=#6BA892'' ''@mem.color=#FF6B6B'''
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# a sequence diagram - rendered inline'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ydiagram sequence-diagram.mmd'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# markdown - headings, lists and tables, rendered inline'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ycat -w 130 -c markdown overview.md'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# a PDF - the page rendered right in the terminal'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ycat report.pdf'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# a full-colour image - the yetty hero, rendered inline'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ycat -w 150 hero.png'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# an SVG - crisp vector art, rendered inline'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ycat -w 110 tiger.svg'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# a circuit schematic - rendered inline'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ycat 555-blinker.circuit'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# a flame graph - profiling data, visualised'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'yflame -w 1500 profile.folded'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# a 3D mesh - a glTF model rendered inline'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ymesh --once -w 1000 -H 840 Duck.glb'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# a shader - a WGSL shadertoy running live'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ycat -c shadertoy swirl.wgsl'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type: '# video - an H.264 clip playing inline'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'yvideo --no-loop --bounds-w=1400 testsrc.h264'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1
+  - sleep: 0.4
+  - mouse-move: { x: 12, y: 55 }
+  - sleep: 0.05
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - mouse-scroll: { x: 12, y: 55, dy: 1, mods: 0 }
+  - sleep: 0.03
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 0.08
+
+  - type:
+      text: "# text and every figure above, one scrollback - github.com/zokrezyl/yetty"
+      avg-speed: 70
+  - special-char: ENTER
+  - sleep: 1
+
+  - shutdown: ~
