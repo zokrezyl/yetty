@@ -1385,6 +1385,26 @@
             return { openConfig: openConfig };
         })();
 
+        // ---- yos availability gate ----------------------------------------------
+        // The yos session needs the engine/tools endpoints — served from a
+        // live yos checkout in dev, or from the baked yos-web bundle on a
+        // static deploy. Probe the cheap one; where both are absent, keep
+        // the menu entry visible but disabled so the deployment degrades
+        // honestly instead of failing at session boot.
+        (function () {
+            function disableYosOption() {
+                const option = document.querySelector(
+                    '#menu-dialog .mode-option[data-mode="yos"]');
+                if (!option) return;
+                option.disabled = true;
+                option.querySelector('.mode-name').textContent =
+                    'yos — not available on this deployment';
+            }
+            fetch('tools/list.json', { cache: 'no-store' })
+                .then(function (resp) { if (!resp.ok) disableYosOption(); })
+                .catch(disableYosOption);
+        })();
+
         // ---- Deep links ---------------------------------------------------------
         // ?mode= opens the matching instance straight away (the old
         // single-instance page pinned the transport the same way); ?url=

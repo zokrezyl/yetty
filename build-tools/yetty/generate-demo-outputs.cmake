@@ -15,7 +15,8 @@ set(SCRIPTS_DIR "${YETTY_ROOT}/demo/scripts")
 set(DEMO_OUTPUT_DIR "${OUTPUT_DIR}/demo-output")
 
 # Scripts to skip (aggregators, interactive, etc.)
-set(SKIP_SCRIPTS "all.sh" "demo.sh" "effects-demo.sh")
+set(SKIP_SCRIPTS "all.sh" "demo.sh" "effects-demo.sh"
+    "all-interactive.sh" "all-scrolling.sh")
 
 # Find all .sh files
 file(GLOB_RECURSE DEMO_SCRIPTS "${SCRIPTS_DIR}/*.sh")
@@ -24,6 +25,23 @@ foreach(SCRIPT ${DEMO_SCRIPTS})
     # Get relative path from scripts dir
     file(RELATIVE_PATH REL_PATH "${SCRIPTS_DIR}" "${SCRIPT}")
     get_filename_component(SCRIPT_FILENAME "${SCRIPT}" NAME)
+
+    # HARD RULE: a build step must never start applications or inject
+    # input into running ones. These subtrees do exactly that when run
+    # from bash — they are for humans driving a live yetty, not for
+    # output capture:
+    #   yctl/        injects keystrokes into whatever yetty listens on
+    #                127.0.0.1:9999 (a developer's live session!), and
+    #   yctl/clips/  launches dedicated desktop yetty instances to
+    #                record MP4 clips.
+    #   ybrowser/interactive/  drives a live browsing session.
+    # Underscore-prefixed files are sourced helper libraries, not demos.
+    if(REL_PATH MATCHES "^yctl/" OR
+       REL_PATH MATCHES "^ybrowser/interactive/" OR
+       SCRIPT_FILENAME MATCHES "^_")
+        message(STATUS "Skipping (drives/launches an app): ${REL_PATH}")
+        continue()
+    endif()
 
     # Skip aggregator scripts
     if(SCRIPT_FILENAME IN_LIST SKIP_SCRIPTS)
