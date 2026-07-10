@@ -96,6 +96,20 @@ struct yai_session_usage {
     int turns;
 };
 
+/* One point in the session's token time-series: the cumulative
+ * (input + output) token total captured at the monotonic moment a turn
+ * completed, expressed as seconds since session start. Feeds the /usage
+ * tokens-vs-time plot in yetty mode. */
+struct yai_usage_sample {
+    double elapsed_seconds;
+    uint64_t total_tokens;
+};
+
+/* Cap on retained samples. On overflow the series is decimated (every
+ * other sample dropped), halving resolution but keeping the full time
+ * span — a session never runs out of room. */
+#define YAI_USAGE_SAMPLE_MAX 512
+
 /* One in-flight can_use_tool permission request. The claude CLI blocks
  * the tool until yai answers with a control_response. The state lives
  * here because the line editor consumes the next typed y/n as the
@@ -308,6 +322,14 @@ struct yai_app {
     struct yai_renderer renderer;
     struct yai_session_usage usage;
     struct yai_config config;
+
+    /* Monotonic-clock ms at session start; the x-axis origin for the
+     * token time-series below. 0 until stamped at startup. */
+    long session_start_ms;
+    /* Token consumption over time — one sample per completed turn, drawn
+     * as an yplot by /usage in yetty mode. */
+    struct yai_usage_sample usage_samples[YAI_USAGE_SAMPLE_MAX];
+    size_t usage_sample_count;
 
     /* HUD format model (parsed once from config.hud_format). Owned here so
      * both render backends read one parse: the ygui HUD holds a pointer to
@@ -630,6 +652,16 @@ struct yai_engine_config *yai_active_engine_config(struct yai_app *app);
  * changes (each turn, on model/state/name changes). The legacy name is
  * kept; it now drives the whole format, not just the stats column. */
 struct yetty_ycore_void_result yai_refresh_hud_stats(struct yai_app *app);
+
+/* Milliseconds on the monotonic clock, for arming short UI timeouts and
+ * stamping the token time-series. */
+long yai_monotonic_ms(void);
+
+/* Append a point to the token time-series (called once per completed
+ * turn, after the session totals are updated): the current cumulative
+ * (input + output) at seconds-since-session-start. Decimates in place
+ * when the buffer is full. Best-effort; never fails. */
+void yai_usage_record_sample(struct yai_app *app);
 
 /* Engine-neutral turn boundary: render the failed state if the turn
  * failed, then pump the queue or re-prompt. */

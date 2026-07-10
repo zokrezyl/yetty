@@ -249,4 +249,17 @@ void yai_format_tokens(uint64_t count, char *out, size_t out_size);
  * buffered bytes on a busy PTY. */
 struct yetty_ycore_void_result yai_render_flush_stdout(void);
 
+/* Draw a single-curve line plot into the scrollback as an yplot figure:
+ * `samples` are `count` y-values spread evenly across [x_min, x_max]
+ * (their literal magnitudes mapped onto [y_min, y_max]). `heading` is a
+ * dim caption line printed above the figure. yetty host only — off-host
+ * (or on any render failure) the value is 0 and nothing is emitted, so
+ * the caller keeps its text-only output. Value 1 = a figure was drawn.
+ * The caller must have suspended the pinned zone first (like any other
+ * scrollback write). */
+struct yetty_ycore_int_result yai_render_line_plot(struct yai_renderer *renderer,
+                                                   const float *samples, size_t count, float x_min,
+                                                   float x_max, float y_min, float y_max,
+                                                   const char *heading);
+
 #endif /* YAI_RENDER_H */

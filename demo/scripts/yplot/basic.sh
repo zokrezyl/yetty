@@ -29,10 +29,11 @@ echo '$ yplot "sin(x)"'
 "$YPLOT" 'sin(x)'
 p
 
-# Multi-function with explicit names + per-plot color overrides.
+# Multi-function with explicit names + per-plot color overrides. The names
+# double as the legend labels, so pick descriptive ones.
 echo
-echo '$ yplot "f=sin(x); g=cos(x); @f.color=#FF6B6B; @g.color=#4ECDC4"'
-"$YPLOT" 'f=sin(x); g=cos(x); @f.color=#FF6B6B; @g.color=#4ECDC4'
+echo '$ yplot "sine=sin(x); cosine=cos(x); @sine.color=#FF6B6B; @cosine.color=#4ECDC4"'
+"$YPLOT" 'sine=sin(x); cosine=cos(x); @sine.color=#FF6B6B; @cosine.color=#4ECDC4'
 p
 
 # Custom dimensions and axis range.
@@ -52,13 +53,13 @@ p
 echo
 echo 'audio harmonics:'
 "$YPLOT" -w 520 -H 200 --xrange=0..6.28 --yrange=-1..1 \
-    'a=sin(x)' \
-    'b=sin(2*x)/2' \
-    'c=sin(3*x)/3' \
+    'first=sin(x)' \
+    'second=sin(2*x)/2' \
+    'third=sin(3*x)/3' \
     'sum=sin(x)+sin(2*x)/2+sin(3*x)/3' \
     '@sum.color=#FCBF49' \
-    '@a.color=#FF6B6B' \
-    '@b.color=#4ECDC4' \
-    '@c.color=#AA96DA'
+    '@first.color=#FF6B6B' \
+    '@second.color=#4ECDC4' \
+    '@third.color=#AA96DA'
 
 printf '\n=== done — holding open ===\n'

@@ -27,6 +27,9 @@ static struct yetty_ycore_void_result dispatch_usage(struct yai_app *app,
     app->usage.cost += usage->cost;
     app->usage.turns++;
 
+    /* Capture the token time-series point for the /usage plot. */
+    yai_usage_record_sample(app);
+
     char input_text[16];
     char output_text[16];
     char cached_text[16];
