@@ -54,8 +54,12 @@ inject_file() {
 # call would clobber the user's home-dir ownership and the user could
 # no longer create dotfiles / XDG dirs at runtime.
 #
-# Whitespace in paths is rejected up-front — debugfs's command parser
-# does not quote-handle reliably across versions.
+# Every path argument in the generated debugfs script is double-quoted
+# (the ss command parser honours "..."), so plain SPACES in names are
+# fine — the repo tree contains e.g. `wasm3 Release.xcscheme`. What
+# stays rejected up-front: tabs/newlines (they break the find -printf
+# field protocol below) and double quotes/backslashes (they break the
+# quoting itself). Nothing in a source tree legitimately uses those.
 inject_tree() {
     local img="$1" src="$2" dst="$3" uid="${4:-0}" gid="${5:-0}"
 
@@ -64,8 +68,10 @@ inject_tree() {
     # tolerates double slashes; debugfs's command parser is less forgiving.)
     dst="${dst%/}"
 
-    if ( cd "$src" && LC_ALL=C find . -mindepth 1 \( -name '* *' -o -name "*$(printf '\t')*" \) -print -quit ) | grep -q .; then
-        echo "inject_tree: $src contains paths with whitespace — unsupported" >&2
+    if ( cd "$src" && LC_ALL=C find . -mindepth 1 \
+            \( -name $'*\t*' -o -name $'*\n*' \
+               -o -name '*"*' -o -name '*\\*' \) -print -quit ) | grep -q .; then
+        echo "inject_tree: $src contains paths with tab/newline/quote/backslash — unsupported" >&2
         return 1
     fi
 
@@ -82,10 +88,10 @@ inject_tree() {
         for comp in $dst; do
             [ -z "$comp" ] && continue
             prefix="$prefix/$comp"
-            printf 'mkdir %s\n' "$prefix"
-            printf 'set_inode_field %s uid %d\n' "$prefix" "$uid"
-            printf 'set_inode_field %s gid %d\n' "$prefix" "$gid"
-            printf 'set_inode_field %s mode 040755\n' "$prefix"
+            printf 'mkdir "%s"\n' "$prefix"
+            printf 'set_inode_field "%s" uid %d\n' "$prefix" "$uid"
+            printf 'set_inode_field "%s" gid %d\n' "$prefix" "$gid"
+            printf 'set_inode_field "%s" mode 040755\n' "$prefix"
         done
         IFS="$oldifs"
 
@@ -94,8 +100,8 @@ inject_tree() {
             local imgp="$dst/$rel"
             case "$kind" in
                 d)
-                    printf 'mkdir %s\n' "$imgp"
-                    printf 'set_inode_field %s mode 0%o\n' "$imgp" "$((040000 + 8#$mode))"
+                    printf 'mkdir "%s"\n' "$imgp"
+                    printf 'set_inode_field "%s" mode 0%o\n' "$imgp" "$((040000 + 8#$mode))"
                     ;;
                 f)
                     # `unlink` before `write` so this works as an overlay
@@ -104,23 +110,23 @@ inject_tree() {
                     # flag. unlink on a missing path is harmless (prints
                     # a misleading "No free space in the directory"
                     # message, filtered below).
-                    printf 'unlink %s\n' "$imgp"
-                    printf 'write %s %s\n' "$src/$rel" "$imgp"
-                    printf 'set_inode_field %s mode 0%o\n' "$imgp" "$((0100000 + 8#$mode))"
+                    printf 'unlink "%s"\n' "$imgp"
+                    printf 'write "%s" "%s"\n' "$src/$rel" "$imgp"
+                    printf 'set_inode_field "%s" mode 0%o\n' "$imgp" "$((0100000 + 8#$mode))"
                     ;;
                 l)
                     local target
                     target="$(readlink -- "$src/$rel")"
-                    printf 'unlink %s\n' "$imgp"
-                    printf 'symlink %s %s\n' "$imgp" "$target"
+                    printf 'unlink "%s"\n' "$imgp"
+                    printf 'symlink "%s" "%s"\n' "$imgp" "$target"
                     ;;
                 *)
                     echo "inject_tree: unsupported entry type '$kind' at $rel" >&2
                     return 1
                     ;;
             esac
-            printf 'set_inode_field %s uid %d\n' "$imgp" "$uid"
-            printf 'set_inode_field %s gid %d\n' "$imgp" "$gid"
+            printf 'set_inode_field "%s" uid %d\n' "$imgp" "$uid"
+            printf 'set_inode_field "%s" gid %d\n' "$imgp" "$gid"
         done
     } > "$script"
 

@@ -123,6 +123,20 @@ jobs:
       contents: write
 
   # =============================================================================
+  # yos web bundle — engine modules + wasm tool set + /usr/share pack for
+  # the yos session type, built from the in-tree yos/ (nix). Same shape
+  # as build-rootfs-riscv: runs before the webasm build, hands the
+  # tarball over as a workflow artifact (stage-yos-web drops it into the
+  # webasm job's 3rdparty cache), publishes yos-web-<ver> on release tags.
+  # =============================================================================
+  build-yos-web:
+    needs: read-flags
+    if: needs.read-flags.outputs.web == 'true'
+    uses: ./.github/workflows/build-yos-web.yml
+    permissions:
+      contents: write
+
+  # =============================================================================
   # Desktop Build (Linux)
   # =============================================================================
   build-linux-ytrace-release:
@@ -888,8 +902,8 @@ jobs:
   # WebAssembly Build
   # =============================================================================
   build-webasm-ytrace-release:
-    needs: [read-flags, build-rootfs-riscv]
-    if: ${{ !cancelled() && needs.read-flags.outputs.web == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
+    needs: [read-flags, build-rootfs-riscv, build-yos-web]
+    if: ${{ !cancelled() && needs.read-flags.outputs.web == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') && needs.build-yos-web.result == 'success' }}
     runs-on: ubuntu-latest
 
     env:
@@ -902,6 +916,11 @@ jobs:
       uses: ./.github/actions/stage-rootfs-riscv
       with:
         artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
+
+    - name: Stage yos-web bundle
+      uses: ./.github/actions/stage-yos-web
+      with:
+        artifact-name: ${{ needs.build-yos-web.outputs.tag }}
 
     - name: Install build dependencies
       run: |

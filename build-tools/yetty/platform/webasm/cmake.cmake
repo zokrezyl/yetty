@@ -395,33 +395,78 @@ add_custom_command(
 
 # yos web bundle — engine modules + wasm tools + share pack, the static
 # files behind /engine/, /tools/ and /fs/pack.bin. First-party release
-# asset (tag yos-web-<ver>, pinned in build-tools/yos/yos-web/version;
-# build it with build-tools/yos/make-yos-web-bundle.py — same publish
-# flow as yetty-rootfs-riscv). Staged into the build dir at the exact
-# paths yos-iframe.html fetches, so a static deploy (GitHub Pages)
-# serves the yos session with no server logic. The dev serve.py prefers
-# a live yos checkout for these routes and falls through to these files
-# when none is present.
+# asset built by CI from the in-tree yos/ (build-yos-web.yml runs before
+# this build inside cmake-multi-platform.yml; the stage-yos-web action
+# pre-drops the workflow artifact into the 3rdparty cache). Version
+# tracks yetty itself — same tag-derived resolution as yetty-rootfs-riscv,
+# no version file. Locally: build-tools/yos/make-yos-web-bundle.py packs
+# the tarball straight into the cache from the in-tree yos.
+#
 # Staged under the PRIVATE yos-web/ prefix: the deploy-facing names
 # (tools/, engine/, fs/) collide with cmake's own output dirs at the
 # build-dir top level — tools/ holds the host tools (incbin_tool, …).
 # serve.py maps /engine|/tools|/fs onto yos-web/ for dev; the Pages
 # workflow copies yos-web/<sub> → site/<sub>, restoring the top-level
 # layout yos-iframe.html's absolute paths expect.
-include(${YETTY_ROOT}/build-tools/yetty/yetty-asset-fetch.cmake)
-yetty_asset_fetch(yos-web YETTY_YOS_WEB_DIR)
-file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/yos-web")
-file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/yos-web")
-foreach(_YOS_WEB_SUB engine tools fs)
-    if(NOT EXISTS "${YETTY_YOS_WEB_DIR}/${_YOS_WEB_SUB}")
-        message(FATAL_ERROR
-            "yos-web bundle is missing its ${_YOS_WEB_SUB}/ directory — "
-            "re-create it with build-tools/yos/make-yos-web-bundle.py")
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
+execute_process(
+    COMMAND git -C "${YETTY_ROOT}" describe --tags --abbrev=0
+            --match "yetty-[0-9]*.[0-9]*.[0-9]*" HEAD
+    OUTPUT_VARIABLE _YW_TAG OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _YW_GIT_RC
+    ERROR_QUIET)
+if(NOT _YW_GIT_RC EQUAL 0 OR NOT _YW_TAG)
+    message(FATAL_ERROR
+        "yos-web: cannot resolve version — no yetty-X.Y.Z tag reachable "
+        "from HEAD. Run `git fetch --tags`, or stage a locally-built "
+        "tarball into ${YETTY_3RDPARTY_CACHE_DIR} via "
+        "build-tools/yos/make-yos-web-bundle.py.")
+endif()
+string(REGEX REPLACE "^yetty-" "" _YW_VER "${_YW_TAG}")
+
+set(_YW_FILE   "yos-web-${_YW_VER}.tar.gz")
+set(_YW_URL    "${YETTY_3RDPARTY_URL_BASE}/yos-web-${_YW_VER}/${_YW_FILE}")
+set(_YW_CACHED "${YETTY_3RDPARTY_CACHE_DIR}/${_YW_FILE}")
+set(_YW_DEST   "${CMAKE_BINARY_DIR}/yos-web")
+set(_YW_STAMP  "${_YW_DEST}/.fetched-${_YW_VER}")
+
+if(NOT EXISTS "${_YW_STAMP}")
+    if(NOT EXISTS "${_YW_CACHED}")
+        # In CI the stage-yos-web composite action drops the workflow
+        # artifact here before configure runs, so this download only
+        # fires on local builds / external consumers.
+        message(STATUS "yos-web: downloading ${_YW_FILE}")
+        file(DOWNLOAD "${_YW_URL}" "${_YW_CACHED}"
+            SHOW_PROGRESS STATUS _YW_DL TLS_VERIFY ON)
+        list(GET _YW_DL 0 _YW_DL_CODE)
+        if(NOT _YW_DL_CODE EQUAL 0)
+            file(REMOVE "${_YW_CACHED}")
+            message(FATAL_ERROR
+                "yos-web: download failed for ${_YW_URL} (${_YW_DL}). "
+                "Resolved version: ${_YW_VER}. Either the release isn't "
+                "cut yet, or build the bundle locally: "
+                "./build-tools/yos/make-yos-web-bundle.py")
+        endif()
     endif()
-    file(COPY "${YETTY_YOS_WEB_DIR}/${_YOS_WEB_SUB}"
-         DESTINATION "${CMAKE_BINARY_DIR}/yos-web")
-endforeach()
-message(STATUS "webasm: staged yos-web bundle (yos-web/{engine,tools,fs})")
+    file(REMOVE_RECURSE "${_YW_DEST}")
+    file(MAKE_DIRECTORY "${_YW_DEST}")
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E tar xzf "${_YW_CACHED}"
+        WORKING_DIRECTORY "${_YW_DEST}"
+        RESULT_VARIABLE _YW_TAR)
+    if(NOT _YW_TAR EQUAL 0)
+        message(FATAL_ERROR "yos-web: failed to extract ${_YW_CACHED}")
+    endif()
+    foreach(_YW_SUB engine tools fs)
+        if(NOT EXISTS "${_YW_DEST}/${_YW_SUB}")
+            message(FATAL_ERROR
+                "yos-web bundle is missing its ${_YW_SUB}/ directory — "
+                "re-create it with build-tools/yos/make-yos-web-bundle.py")
+        endif()
+    endforeach()
+    file(WRITE "${_YW_STAMP}" "${_YW_VER}\n")
+endif()
+message(STATUS "webasm: staged yos-web ${_YW_VER} (yos-web/{engine,tools,fs})")
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/serve.py
     COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/serve.py ${CMAKE_BINARY_DIR}/serve.py
