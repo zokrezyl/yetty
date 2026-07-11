@@ -15,7 +15,7 @@ console.log('Build directory:', BUILD_DIR);
 process.chdir(BUILD_DIR);
 
 // Check files exist
-const requiredFiles = ['yetty.js', 'yetty.wasm', 'yetty.data'];
+const requiredFiles = ['yetty.js', 'yetty.wasm'];
 for (const f of requiredFiles) {
     if (!fs.existsSync(f)) {
         console.error(`ERROR: Missing ${f}`);

@@ -506,94 +506,15 @@
             this.focus();
         });
 
-        // ---- yetty.data package cache ---------------------------------
-        // The emscripten loader fetches yetty.data (the packaged /demo +
-        // /src FS payload) before main() can run — the single biggest
-        // download of a terminal instance, and every instance is its own
-        // module so it would otherwise re-download per instance. Prefetch
-        // it through Cache Storage and hand the bytes to the loader
-        // synchronously via Module.getPreloadedPackage (returning null
-        // there falls back to the loader's own network fetch).
-        //
-        // Version key: ETag / Last-Modified + Content-Length from a HEAD
-        // probe — a rebuild changes them, a reload doesn't. Stale keyed
-        // versions are pruned after a successful store.
-        const DATA_PACKAGE_URL = 'yetty.data';
-        const DATA_CACHE_NAME = 'yetty-data-package';
-
-        function fmtMegabytes(byteCount) {
-            return (byteCount / 1024 / 1024).toFixed(1) + 'M';
-        }
-
-        async function prefetchDataPackage() {
-            if (typeof caches === 'undefined') return null;
-            let cache = null;
-            try { cache = await caches.open(DATA_CACHE_NAME); }
-            catch (ignored) { return null; }
-
-            let version = 'unversioned';
-            try {
-                const head = await fetch(DATA_PACKAGE_URL,
-                                         { method: 'HEAD', cache: 'no-cache' });
-                if (head.ok) {
-                    version = (head.headers.get('ETag') ||
-                               head.headers.get('Last-Modified') || '') + ':' +
-                              (head.headers.get('Content-Length') || '');
-                }
-            } catch (ignored) { /* probe failure — try the cache anyway */ }
-            const cacheKey = DATA_PACKAGE_URL + '?v=' + encodeURIComponent(version);
-
-            try {
-                const hit = await cache.match(cacheKey);
-                if (hit) {
-                    const buffer = await hit.arrayBuffer();
-                    window.yettyStatus.append('yetty.data ' +
-                        fmtMegabytes(buffer.byteLength) + ' (cached)', 'ok');
-                    return buffer;
-                }
-            } catch (ignored) { /* fall through to network */ }
-
-            try {
-                const resp = await fetch(DATA_PACKAGE_URL);
-                if (!resp.ok) return null;
-                const buffer = await resp.arrayBuffer();
-                try {
-                    await cache.put(cacheKey, new Response(buffer));
-                    // Prune superseded versions so rebuilds don't stack up.
-                    const validUrl = new URL(cacheKey, location.href).href;
-                    const keys = await cache.keys();
-                    await Promise.all(keys.map(function (request) {
-                        return request.url === validUrl
-                            ? null : cache.delete(request);
-                    }));
-                } catch (ignored) { /* quota — next load downloads again */ }
-                window.yettyStatus.append('yetty.data ' +
-                    fmtMegabytes(buffer.byteLength) + ' downloaded', 'dim');
-                return buffer;
-            } catch (ignored) { return null; }
-        }
+        // The /demo and /src trees are served by yfs as demand-paged
+        // files (docs/yfs.md) — there is no yetty.data package to
+        // prefetch anymore; the old 40 MB emscripten payload is gone.
+        // Stale caches from that era are reclaimed here.
+        try { caches.delete('yetty-data-package'); } catch (ignored) {}
 
         async function initYetty() {
             const status = document.getElementById('status');
             if (status) status.textContent = 'Loading yetty...';
-
-            const dataPackage = await prefetchDataPackage();
-            if (dataPackage) {
-                Module.getPreloadedPackage =
-                    function (remotePackageName, remotePackageSize) {
-                        if (remotePackageSize &&
-                            dataPackage.byteLength !== remotePackageSize) {
-                            // Size disagrees with the loader's metadata —
-                            // stale copy; let the loader fetch its own.
-                            window.yettyStatus.append(
-                                'cached yetty.data is stale (' +
-                                dataPackage.byteLength + ' vs expected ' +
-                                remotePackageSize + ') — refetching', 'dim');
-                            return null;
-                        }
-                        return dataPackage;
-                    };
-            }
 
             try {
                 const script = document.createElement('script');

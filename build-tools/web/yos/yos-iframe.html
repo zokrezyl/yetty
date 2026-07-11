@@ -73,13 +73,14 @@
     // shell therefore see every session's processes, and each session's
     // tty (size, echo, output) stays its own.
     let sharedEngine = null;  // { startSession }
-    let sharedTools = null;   // name -> compiled module (zsh aliased as sh)
-    let sharedMounts = [];    // /usr/share pack
+    let sharedTools = null;   // name -> compiled module (boot shell only)
+    // TERM_PROGRAM=yetty: this session always runs inside yetty-web, and
+    // the client tools (ycat, yecho) key their rich-output emission off
+    // that variable (see include/yetty/ycore/terminal-detect.h). Without
+    // it they fall back to plain passthrough.
     const SHELL_ENV = ['PATH=/bin:/usr/bin', 'HOME=/', 'TERM=xterm-256color',
+                       'TERM_PROGRAM=yetty',
                        'PWD=/', 'SHELL=/bin/sh', 'VIMRUNTIME=/usr/share/nvim/runtime'];
-    const FALLBACK_TOOLS = ['zsh', 'pwd', 'id', 'hostname', 'echo', 'cat', 'ls',
-                            'ps', 'date', 'true', 'false', 'tmux'];
-
     function startShell(cols, rows, onOutput, onExit) {
         return sharedEngine.startSession(sharedTools.get('zsh'),
                                          ['zsh', '-f', '+o', 'promptsp'], {
@@ -329,39 +330,29 @@
         postStatus('loading yos engine modules…', 'phase');
         const { createInteractiveEngine, loadLiblua } = await import('/engine/yos_proc.mjs');
         const { compileGuest } = await import('/engine/wasm_patch.mjs');
-        const { parsePack } = await import('/engine/fs_mount.mjs');
+        const { openYfs } = await import('/engine/yfs_client.mjs');
 
-        // Tool set: dynamic listing of the umbrella bin dir, so the browser
-        // session has exactly the desktop command set. exec is synchronous,
-        // so everything compiles up front (nvim is ~14 MB).
-        let toolNames;
+        // yfs — the lazily-fetched web filesystem (docs/yfs.md). One
+        // metadata fetch materializes the whole guest tree; only the boot
+        // shell's body is fetched eagerly. Every other binary and file
+        // (the tool set, /usr/share, the demos) is demand-paged by the
+        // engine on first open/exec.
+        postStatus('loading yfs metadata…', 'phase');
+        let yfsClient;
         try {
-            toolNames = await (await fetch('/tools/list.json')).json();
-        } catch (_) {
-            toolNames = FALLBACK_TOOLS;
-            postStatus('tools/list.json unavailable - using fallback tool list', 'err');
-        }
-        postStatus('fetching + compiling ' + toolNames.length + ' wasm tools…', 'phase');
-        const tools = new Map();
-        let loadedCount = 0;
-        let failedCount = 0;
-        await Promise.all(toolNames.map(async (name) => {
-            try {
-                const bytes = await (await fetch('/tools/' + name + '.wasm')).arrayBuffer();
-                tools.set(name, await compileGuest(bytes));
-            } catch (_) {
-                failedCount++;
-            }
-            loadedCount++;
-            postStatus('tools ' + loadedCount + '/' + toolNames.length +
-                       (failedCount ? ' (' + failedCount + ' failed)' : ''),
-                       undefined, 'tools-progress');
-        }));
-        if (!tools.get('zsh')) {
-            postStatus('zsh.wasm missing from the tool set - cannot start shells', 'err');
+            yfsClient = await openYfs('/yfs');
+        } catch (e) {
+            postStatus('yfs unavailable (' + (e && e.message) + ') - cannot boot', 'err');
             return;
         }
-        tools.set('sh', tools.get('zsh'));
+        postStatus('yfs ' + yfsClient.version + ': fetching + compiling zsh…', 'phase');
+        const tools = new Map();
+        try {
+            tools.set('zsh', await compileGuest(await yfsClient.fetchBodyAtPath('bin/zsh')));
+        } catch (e) {
+            postStatus('zsh unavailable from yfs - cannot start shells', 'err');
+            return;
+        }
         sharedTools = tools;
 
         postStatus('loading liblua.wasm (nvim Lua C API)…');
@@ -369,19 +360,11 @@
             postStatus('liblua unavailable - nvim will lack Lua', 'err');
         });
 
-        postStatus('mounting /usr/share (nvim runtime, zsh functions)…');
-        try {
-            const pack = await (await fetch('/fs/pack.bin')).arrayBuffer();
-            sharedMounts = [{ at: '/usr/share', entries: parsePack(pack) }];
-        } catch (_) {
-            postStatus('fs/pack.bin unavailable - nvim will lack its runtime tree', 'err');
-        }
-
         // ONE engine for the whole page — one process tree shared by the
         // console shell and every telnet session.
         sharedEngine = createInteractiveEngine({
             tools: sharedTools,
-            mounts: sharedMounts,
+            yfs: { client: yfsClient, compile: compileGuest },
             onUnimpl: () => {},
         });
 

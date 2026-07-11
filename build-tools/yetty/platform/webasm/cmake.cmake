@@ -104,6 +104,11 @@ target_link_options(yetty PRIVATE
     --use-port=emdawnwebgpu
     -sASYNCIFY
     -sASYNCIFY_STACK_SIZE=65536
+    # yfs lazy assets (docs/yfs.md phase 2): the preload shim wraps the
+    # openat syscall import and suspends via Asyncify while a cold
+    # asset body is fetched. The import must be declared suspendable or
+    # the instrumented wasm won't unwind through it.
+    -sASYNCIFY_IMPORTS=__syscall_openat
     -sSTACK_SIZE=1048576
     -sWASM_BIGINT
     -sFILESYSTEM=1
@@ -136,17 +141,11 @@ target_link_options(yetty PRIVATE
     "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_iframe_pty_on_data','_yetty_brotli_decode','_yetty_ytransport_iframe_transport_on_opened','_yetty_ytransport_iframe_transport_on_rx','_yetty_ytransport_iframe_transport_on_closed']"
 )
 
-if(YETTY_ENABLE_FEATURE_DEMO)
-    # Package straight from the repo trees. NEVER package
-    # ${CMAKE_BINARY_DIR}/src — that directory doubles as cmake's
-    # compile-output tree, so the packager ships every .a/.o it finds
-    # there (~280 MB of build artifacts ended up in yetty.data that
-    # way, turning a ~46 MB package into 325 MB).
-    target_link_options(yetty PRIVATE
-        "--preload-file=${YETTY_ROOT}/demo@/demo"
-        "--preload-file=${YETTY_ROOT}/src@/src"
-    )
-endif()
+# The demo feature's /demo and /src trees ship through yfs (lazy,
+# demand-paged placeholders — see docs/yfs.md), NOT through an
+# emscripten --preload-file package: yetty.data was a 40 MB up-front
+# download of trees a session rarely touches. The subtrees are added
+# to the stage-yetty-yfs.py invocation below when the feature is on.
 
 target_compile_options(yetty PRIVATE --use-port=emdawnwebgpu -fexceptions)
 target_link_options(yetty PRIVATE -fexceptions)
@@ -457,7 +456,7 @@ if(NOT EXISTS "${_YW_STAMP}")
     if(NOT _YW_TAR EQUAL 0)
         message(FATAL_ERROR "yos-web: failed to extract ${_YW_CACHED}")
     endif()
-    foreach(_YW_SUB engine tools fs)
+    foreach(_YW_SUB engine yfs)
         if(NOT EXISTS "${_YW_DEST}/${_YW_SUB}")
             message(FATAL_ERROR
                 "yos-web bundle is missing its ${_YW_SUB}/ directory — "
@@ -466,7 +465,39 @@ if(NOT EXISTS "${_YW_STAMP}")
     endforeach()
     file(WRITE "${_YW_STAMP}" "${_YW_VER}\n")
 endif()
-message(STATUS "webasm: staged yos-web ${_YW_VER} (yos-web/{engine,tools,fs})")
+message(STATUS "webasm: staged yos-web ${_YW_VER} (yos-web/{engine,yfs})")
+
+# yfs phase 2 (docs/yfs.md): merge yetty's staged webasm asset set into
+# the yos-web yfs tree as the `yetty/` subtree + shared blob store. The
+# preload shim (yetty-assets-preload.js) then fetches only a small boot
+# set eagerly and demand-pages everything else through an Asyncify-
+# suspending openat interception. Runs every configure — it only copies
+# blobs that are missing, so re-runs are cheap.
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+# The demo feature's /demo and /src trees ride the same yfs tree as
+# always-lazy subtrees (they replaced the yetty.data preload package).
+set(_YFS_YETTY_TREES "")
+if(YETTY_ENABLE_FEATURE_DEMO)
+    list(APPEND _YFS_YETTY_TREES
+        --tree demo=${YETTY_ROOT}/demo
+        --tree src=${YETTY_ROOT}/src)
+endif()
+execute_process(
+    COMMAND ${Python3_EXECUTABLE}
+        ${YETTY_ROOT}/build-tools/yos/stage-yetty-yfs.py
+        --manifest ${YETTY_WEBASM_ASSETS_DIR}/manifest.json
+        --assets-dir ${YETTY_WEBASM_ASSETS_DIR}
+        --yfs-dir ${_YW_DEST}/yfs
+        --version ${_YW_VER}
+        ${_YFS_YETTY_TREES}
+    RESULT_VARIABLE _YFS_YETTY_RC
+    OUTPUT_VARIABLE _YFS_YETTY_OUT
+    ERROR_VARIABLE _YFS_YETTY_ERR
+)
+if(NOT _YFS_YETTY_RC EQUAL 0)
+    message(FATAL_ERROR "stage-yetty-yfs.py failed: ${_YFS_YETTY_ERR}")
+endif()
+message(STATUS "webasm: ${_YFS_YETTY_OUT}")
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/serve.py
     COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/serve.py ${CMAKE_BINARY_DIR}/serve.py

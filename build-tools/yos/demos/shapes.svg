@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240" viewBox="0 0 480 240">
+  <rect x="0" y="0" width="480" height="240" fill="#0B1014"/>
+  <rect x="12" y="12" width="456" height="216" fill="none" stroke="#364A47" stroke-width="2"/>
+
+  <!-- orbit rings -->
+  <circle cx="120" cy="120" r="72" fill="none" stroke="#364A47" stroke-width="2"/>
+  <circle cx="120" cy="120" r="48" fill="none" stroke="#5A8979" stroke-width="2"/>
+  <circle cx="120" cy="120" r="24" fill="#6BA892"/>
+  <circle cx="120" cy="48"  r="8"  fill="#74C5A5"/>
+  <circle cx="168" cy="120" r="6"  fill="#9FA7A8"/>
+  <circle cx="120" cy="192" r="5"  fill="#5A8979"/>
+
+  <!-- prompt chevron -->
+  <path d="M 232 84 L 268 120 L 232 156" fill="none"
+        stroke="#6BA892" stroke-width="10" stroke-linecap="round"
+        stroke-linejoin="round"/>
+  <rect x="284" y="146" width="44" height="10" fill="#74C5A5"/>
+
+  <!-- bar chart -->
+  <rect x="356" y="140" width="18" height="52" fill="#5A8979"/>
+  <rect x="380" y="112" width="18" height="80" fill="#6BA892"/>
+  <rect x="404" y="88"  width="18" height="104" fill="#74C5A5"/>
+  <rect x="428" y="124" width="18" height="68" fill="#9FA7A8"/>
+
+  <!-- baseline -->
+  <rect x="348" y="196" width="106" height="3" fill="#364A47"/>
+</svg>

@@ -54,7 +54,7 @@ cd "$BUILD_DIR"
 echo ""
 echo "=== 1. Checking output files ==="
 
-for f in yetty.js yetty.wasm yetty.data index.html serve.py; do
+for f in yetty.js yetty.wasm index.html serve.py; do
     if [ -f "$f" ]; then
         SIZE=$(ls -lh "$f" | awk '{print $5}')
         ok "$f exists ($SIZE)"
@@ -136,49 +136,8 @@ else
     error "Card shaders: only $CARD_SHADERS files (expected >5)"
 fi
 
-#----------------------------------------------
-# 5. Verify data file size matches JS metadata
-#----------------------------------------------
-echo ""
-echo "=== 5. Verifying data file integrity ==="
-
-EXPECTED_SIZE=$(grep -o 'remote_package_size:[0-9]*' yetty.js | head -1 | cut -d: -f2)
-ACTUAL_SIZE=$(stat -c%s yetty.data 2>/dev/null || stat -f%z yetty.data 2>/dev/null)
-
-if [ "$EXPECTED_SIZE" = "$ACTUAL_SIZE" ]; then
-    ok "Data file size matches: $ACTUAL_SIZE bytes"
-else
-    error "Data file size mismatch: expected $EXPECTED_SIZE, got $ACTUAL_SIZE"
-fi
-
-#----------------------------------------------
-# 6. Check packaged files in yetty.js metadata
-#----------------------------------------------
-echo ""
-echo "=== 6. Checking packaged files metadata ==="
-
-FILE_COUNT=$(grep -o 'filename:"[^"]*"' yetty.js | wc -l)
-if [ "$FILE_COUNT" -gt 50 ]; then
-    ok "Packaged files count: $FILE_COUNT"
-else
-    error "Packaged files count too low: $FILE_COUNT (expected >50)"
-fi
-
-# Check for fonts-cdb in package
-CDB_COUNT=$(grep -o 'filename:"/assets/fonts-cdb/[^"]*\.cdb"' yetty.js | wc -l)
-if [ "$CDB_COUNT" -eq 4 ]; then
-    ok "CDB files in package: $CDB_COUNT"
-else
-    error "CDB files in package: $CDB_COUNT (expected 4)"
-fi
-
-# Check for shaders in package
-SHADER_COUNT=$(grep -o 'filename:"/assets/shaders/[^"]*\.wgsl"' yetty.js | wc -l)
-if [ "$SHADER_COUNT" -gt 10 ]; then
-    ok "Shader files in package: $SHADER_COUNT"
-else
-    error "Shader files in package: $SHADER_COUNT (expected >10)"
-fi
+# Sections 5/6 (yetty.data package integrity) retired: /demo and /src
+# ship as lazy yfs subtrees now (docs/yfs.md) — no data package.
 
 #----------------------------------------------
 # 7. Check for zero-byte files in package
