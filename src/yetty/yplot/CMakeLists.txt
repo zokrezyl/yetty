@@ -18,8 +18,11 @@ target_link_libraries(yetty_yplot_core PUBLIC
     yetty_yfsvm_core
     yetty_yface
     yetty_ysdf
-    m
 )
+
+if(NOT WIN32)
+    target_link_libraries(yetty_yplot_core PUBLIC m)
+endif()
 
 # yetty_yplot — GPU pipeline (concrete factory). Pulls Dawn / WebGPU.
 # Built only when WebGPU is on; linked by the yetty server executable.
