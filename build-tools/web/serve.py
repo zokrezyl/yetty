@@ -173,14 +173,22 @@ class CORSRequestHandler(http.server.SimpleHTTPRequestHandler):
         global yos_pack_cache
         url = self.path.split('?', 1)[0]
 
-        # Every yos route prefers the LIVE checkout (dev freshness) and
-        # falls back to the baked yos-web bundle the webasm build stages
-        # under <served-dir>/yos-web/ (that private prefix avoids the
-        # build dir's own tools/ output directory; a static deploy hosts
-        # the same content at the top level, so these routes never fire
-        # there). A miss in both worlds ends as a plain 404.
+        # Every yos route prefers the BAKED yos-web bundle the webasm
+        # build stages under <served-dir>/yos-web/ — that bundle is
+        # byte-identical to what a static deploy (yetty.dev) serves, so
+        # serving a build dir mirrors production exactly. /yfs is the
+        # lazy web filesystem (docs/yfs.md) new bundles carry; /tools
+        # and /fs are the pre-yfs layout, kept so an old staged bundle
+        # still serves. The live-checkout routes below only fire when no
+        # bundle is staged, i.e. when serving a bare source checkout. A
+        # miss in both worlds ends as a plain 404.
         if url.startswith('/engine/') or url.startswith('/tools/') \
-                or url.startswith('/fs/'):
+                or url.startswith('/fs/') or url.startswith('/yfs/'):
+            baked = safe_child(Path(self.directory) / 'yos-web',
+                               url.lstrip('/'))
+            if baked and baked.is_file():
+                return self.send_dynamic_file(
+                    baked, self.guess_type(str(baked)))
             if url.startswith('/engine/'):
                 relative = url[len('/engine/'):]
                 for engine_dir in YOS_ENGINE_DIRS:
@@ -206,11 +214,6 @@ class CORSRequestHandler(http.server.SimpleHTTPRequestHandler):
                     yos_pack_cache = build_share_pack(YOS_RESULT_DIR / 'share')
                 return self.send_dynamic(yos_pack_cache,
                                          'application/octet-stream')
-            baked = safe_child(Path(self.directory) / 'yos-web',
-                               url.lstrip('/'))
-            if baked and baked.is_file():
-                return self.send_dynamic_file(
-                    baked, self.guess_type(str(baked)))
             # Final fallback: plain static serving — a site-style
             # directory (the Pages layout) hosts engine/tools/fs at the
             # top level; anything truly absent 404s there.

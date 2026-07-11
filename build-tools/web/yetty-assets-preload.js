@@ -1,64 +1,64 @@
-// yetty-assets-preload.js — emscripten --pre-js shim that pulls runtime
-// assets (shaders, fonts, MSDF CDBs, configs) from the server into MEMFS
-// before main() runs.
+// yetty-assets-preload.js — emscripten --pre-js shim that provides
+// yetty's runtime assets (shaders, fonts, MSDF CDBs, configs).
 //
-// Replaces the incbin embed pipeline on webasm. Without this, the only
-// way to ship assets was to bake every byte into yetty.wasm via a
-// 240 MB yetty_data_data.c — slow link, ~20 GB clang RAM. The new flow:
+// Two modes, picked at boot:
 //
-//   1. cmake stages files under build/yetty-assets/ (.br for compressible
-//      assets) and writes manifest.json describing where each one lives.
-//   2. This shim defers main() with Module.noInitialRun, fetches the
-//      manifest + each entry, decompresses brotli'd payloads via the
-//      brotli decoder LINKED INTO yetty.wasm
-//      (src/yetty/yplatform/webasm/brotli-glue.c, exported as
-//      _yetty_brotli_decode), then FS.writeFile()s into MEMFS at the
-//      same paths the C extract path used to produce.
-//   3. Once everything is in MEMFS, calls Module.callMain() — main()
-//      starts and finds all assets ready.
+// yfs mode (docs/yfs.md phase 2 — the deployed layout). The webasm
+// build stages the asset set as the `yetty/` subtree of the yfs static
+// filesystem (stage-yetty-yfs.py). This shim then:
+//   1. fetches yfs/current.json + yfs/<V>/yetty.yfs (metadata only);
+//   2. eagerly fetches the BOOT SET — every asset smaller than
+//      BOOT_EAGER_MAX (configs, WGSL shaders, small images) — in
+//      parallel into MEMFS;
+//   3. registers every remaining asset (MSDF CDBs, extra font weights,
+//      videos, logos) as a LAZY file: an empty placeholder in MEMFS
+//      plus an entry in the lazy map;
+//   4. wraps the wasm's __syscall_openat import (Module.instantiateWasm):
+//      opening a cold lazy asset suspends the whole runtime via
+//      Asyncify.handleSleep, fetches + decodes the body, writes it to
+//      MEMFS and resumes with the real fd. The import is declared in
+//      -sASYNCIFY_IMPORTS (platform/webasm/cmake.cmake) so the
+//      instrumented wasm can unwind through it. C code is unchanged —
+//      an fopen() of a cold asset simply takes one network round trip.
 //
-// Why not Module.preRun? preRun runs BEFORE __wasm_call_ctors /
-// initRuntime, so _malloc and _yetty_brotli_decode aren't usable yet
-// (emscripten asserts "native function `malloc` called before runtime
-// initialization"). Why not DecompressionStream('br')? Only landed in
-// Chrome 124 / FF 127 / Safari 18 — not yet ubiquitous, and it throws
-// hard when missing. Doing the brotli pass in our own linked decoder
-// works on every browser that runs wasm.
+// legacy mode (no yfs tree served — e.g. the showcase dev server):
+// fetch manifest.json and preload every asset before main(), exactly
+// the old behaviour.
 //
-// Manifest schema:
-//   { "version": "<stamp>",
-//     "entries": [ { "url": "data/...", "dest": "/data/...", "brotli": bool }, ... ] }
+// Brotli: asset bodies stay brotli'd on the wire (the 4 MSDF CDBs are
+// ~8 MB wire / ~40 MB decoded EACH). yfs listing entries carry z="br";
+// decode prefers DecompressionStream('br') (present in every browser
+// that has WebGPU, i.e. every browser that runs yetty) and falls back
+// to the brotli decoder linked into yetty.wasm
+// (src/yetty/yplatform/webasm/brotli-glue.c).
+//
+// Cache Storage: decoded bodies are cached keyed by the wire sha256 —
+// shared by both modes; warm starts skip download AND decode.
 
 // Block emscripten's automatic main() invocation. We trigger it manually
-// from onRuntimeInitialized once assets are in MEMFS. callMain must be
-// in EXPORTED_RUNTIME_METHODS — see build-tools/cmake/targets/webasm.cmake.
+// from onRuntimeInitialized once boot assets are in MEMFS. callMain must
+// be in EXPORTED_RUNTIME_METHODS — see platform/webasm/cmake.cmake.
 Module.noInitialRun = true;
 
-// Chain on top of any onRuntimeInitialized hook the page already set
-// (index.html sets one to hide the loading spinner).
 (function () {
     const ASSET_BASE   = 'yetty-assets/';
     const MANIFEST_URL = ASSET_BASE + 'manifest.json';
-    // Cache Storage bucket for the staged assets. Entries are keyed by
-    // url + the manifest's per-file sha256 (stamped at build time), so
-    // a deploy only invalidates the files whose bytes actually changed.
-    // Unlike the HTTP cache this ignores Cache-Control headers (the dev
-    // serve.py sends no-store) and survives across sessions.
-    //
-    // The stored bytes are the FINAL, brotli-DECODED payload — exactly
-    // what FS.writeFile gets. Warm starts skip both the download and
-    // the decode (the 4 MSDF CDBs alone are ~30 MB wire → ~160 MB
-    // decoded, seconds of CPU per terminal instance). The sha256 in
-    // the key still identifies the wire file; it is a version stamp,
-    // never compared against the stored bytes. The "-final" suffix
-    // retires the earlier bucket that held compressed bytes — reusing
-    // its name would misinterpret those as decoded output.
+    const YFS_ROOT     = 'yfs';
+    // The eager boot set: small files under these subtrees (configs,
+    // WGSL shaders, small images — what "first prompt painted" reads).
+    // Everything else is demand-paged, including ALL of /demo and /src
+    // (the trees that used to be the 40 MB yetty.data package) and the
+    // big font/media bodies.
+    const BOOT_EAGER_PREFIXES = ['config/', 'data/'];
+    const BOOT_EAGER_MAX = 256 * 1024;
     const ASSET_CACHE_NAME = 'yetty-assets-final';
     const LEGACY_CACHE_NAMES = ['yetty-assets'];
 
-    // Forward to the page's boot-status overlay (window.yettyStatus is
-    // installed by index.html). Falls back to console.log when the
-    // overlay isn't available (headless builds, embedded use).
+    // Lazy map: absolute MEMFS path -> { entry, rel, path, loaded }.
+    // Consulted by the wrapped __syscall_openat below.
+    const lazyAssets = new Map();
+    let yfsVersion = null;
+
     function status(text, level) {
         try {
             if (window.yettyStatus && window.yettyStatus.append) {
@@ -126,6 +126,21 @@ Module.noInitialRun = true;
         }
     }
 
+    // Brotli-decode `raw`. DecompressionStream first — it is async (safe
+    // while the wasm is Asyncify-suspended) and present in every
+    // WebGPU-capable browser; the linked wasm decoder is the fallback
+    // for the eager phase on exotic browsers.
+    async function decodeBrotli(raw) {
+        if (typeof DecompressionStream === 'function') {
+            try {
+                const stream = new Response(raw).body
+                    .pipeThrough(new DecompressionStream('br'));
+                return new Uint8Array(await new Response(stream).arrayBuffer());
+            } catch (_) { /* fall through to the linked decoder */ }
+        }
+        return brotliDecode(raw);
+    }
+
     // Cache Storage handle, or null when unavailable (non-secure
     // context, ancient browser, storage error). Every cache failure
     // degrades to a plain network fetch — caching is an optimization,
@@ -141,94 +156,212 @@ Module.noInitialRun = true;
         } catch (ignored) { return null; }
     }
 
-    function cacheKeyFor(entry) {
-        return ASSET_BASE + entry.url + '?v=' + (entry.sha256 || 'unversioned');
+    let assetCachePromise = null;
+    function assetCache() {
+        if (!assetCachePromise) assetCachePromise = openAssetCache();
+        return assetCachePromise;
     }
 
-    async function loadOne(assetCache, entry) {
-        const url = ASSET_BASE + entry.url;
-        const cacheKey = cacheKeyFor(entry);
-        let bytes = null;
-        let fromCache = false;
-        if (assetCache) {
+    // Fetch + decode one body, through the decoded-bytes cache. `key`
+    // must be unique per wire content (sha256-based).
+    async function fetchDecoded(url, key, isBrotli) {
+        const cache = await assetCache();
+        if (cache) {
             try {
-                const hit = await assetCache.match(cacheKey);
-                if (hit) {
-                    // Already the final decoded payload — straight to MEMFS.
-                    bytes = new Uint8Array(await hit.arrayBuffer());
-                    fromCache = true;
-                }
+                const hit = await cache.match(key);
+                if (hit) return { bytes: new Uint8Array(await hit.arrayBuffer()), cached: true };
             } catch (ignored) { /* fall through to network */ }
         }
-        if (!bytes) {
-            const resp = await fetch(url);
-            if (!resp.ok) {
-                throw new Error(`asset fetch failed: ${url} -> HTTP ${resp.status}`);
-            }
-            const raw = await resp.arrayBuffer();
-            bytes = entry.brotli ? brotliDecode(raw) : new Uint8Array(raw);
-            if (assetCache) {
-                // Best-effort store of the DECODED bytes; quota pressure
-                // just means the next visit downloads + decodes again.
-                // (new Response(view) copies, so `bytes` stays usable.)
-                try { await assetCache.put(cacheKey, new Response(bytes)); }
-                catch (ignored) {}
+        const resp = await fetch(url);
+        if (!resp.ok) {
+            throw new Error(`asset fetch failed: ${url} -> HTTP ${resp.status}`);
+        }
+        const raw = await resp.arrayBuffer();
+        const bytes = isBrotli ? await decodeBrotli(raw) : new Uint8Array(raw);
+        if (cache) {
+            // Best-effort store of the DECODED bytes; quota pressure
+            // just means the next visit downloads + decodes again.
+            // (new Response(view) copies, so `bytes` stays usable.)
+            try { await cache.put(key, new Response(bytes)); }
+            catch (ignored) {}
+        }
+        return { bytes, cached: false };
+    }
+
+    // ---- yfs mode -------------------------------------------------
+
+    function yfsBodyUrl(state) {
+        const entry = state.entry;
+        if (entry.b) return YFS_ROOT + '/blob/' + entry.h;
+        return YFS_ROOT + '/' + yfsVersion + '/yetty/' +
+            state.rel.split('/').map(encodeURIComponent).join('/');
+    }
+
+    async function yfsMaterialize(state) {
+        const { bytes } = await fetchDecoded(
+            yfsBodyUrl(state), 'yfs-body?v=' + state.entry.h,
+            state.entry.z === 'br');
+        mkdirsForFile(state.path);
+        FS.writeFile(state.path, bytes);
+        state.loaded = true;
+        console.log('[yetty] yfs: materialized %s (%s)', state.path,
+                    fmtBytes(bytes.length));
+    }
+
+    // Probe for the yetty yfs subtree. Returns the manifest dirs or
+    // null (→ legacy mode).
+    async function yfsProbe() {
+        try {
+            const current = await (await fetch(YFS_ROOT + '/current.json',
+                                               { cache: 'no-cache' })).json();
+            yfsVersion = current.version;
+            const resp = await fetch(YFS_ROOT + '/' + yfsVersion + '/yetty.yfs');
+            if (!resp.ok) return null;
+            return (await resp.json()).dirs;
+        } catch (_) { return null; }
+    }
+
+    async function preloadYfs(dirs) {
+        const eager = [];
+        let lazyCount = 0, lazyBytes = 0;
+        for (const dirPath of Object.keys(dirs)) {
+            for (const entry of dirs[dirPath]) {
+                if (entry.t !== 'f') continue;
+                const rel = dirPath ? dirPath + '/' + entry.n : entry.n;
+                const path = '/' + rel;
+                const state = { entry, rel, path, loaded: false };
+                const bootEligible = entry.s < BOOT_EAGER_MAX &&
+                    BOOT_EAGER_PREFIXES.some(function (prefix) {
+                        return rel.indexOf(prefix) === 0;
+                    });
+                if (bootEligible) {
+                    eager.push(state);
+                } else {
+                    lazyAssets.set(path, state);
+                    lazyCount++;
+                    lazyBytes += entry.s;
+                    // Placeholder: the file EXISTS (stat/access probes
+                    // succeed); the first open pulls the real bytes.
+                    mkdirsForFile(path);
+                    FS.writeFile(path, new Uint8Array(0));
+                }
             }
         }
+        status('yfs ' + yfsVersion + ': boot set ' + eager.length +
+               ' files, ' + lazyCount + ' lazy (' + fmtBytes(lazyBytes) +
+               ' wire deferred)', 'phase');
+        let cachedCount = 0;
+        await Promise.all(eager.map(async function (state) {
+            const { bytes, cached } = await fetchDecoded(
+                yfsBodyUrl(state), 'yfs-body?v=' + state.entry.h,
+                state.entry.z === 'br');
+            mkdirsForFile(state.path);
+            FS.writeFile(state.path, bytes);
+            state.loaded = true;
+            if (cached) cachedCount++;
+        }));
+        status('boot set installed (' + eager.length + ' files, ' +
+               cachedCount + ' from cache)', 'ok');
+    }
+
+    // ---- the openat interception (yfs lazy loads) ------------------
+    //
+    // Wraps the wasm's __syscall_openat import before instantiation.
+    // Cold lazy asset → Asyncify.handleSleep: the whole runtime
+    // suspends, the body is fetched + decoded + written to MEMFS, the
+    // original syscall runs on resume and returns a real fd. Everything
+    // else takes the original path untouched. The import is listed in
+    // -sASYNCIFY_IMPORTS so the instrumented wasm expects the unwind.
+    // Lexical normalization — C callers open assets through relative
+    // segments ("/data/fonts/../msdf-fonts/X.cdb") and the lazy map is
+    // keyed by clean absolute paths.
+    function normalizePath(raw) {
+        const stack = [];
+        for (const part of raw.split('/')) {
+            if (!part || part === '.') continue;
+            if (part === '..') stack.pop();
+            else stack.push(part);
+        }
+        return '/' + stack.join('/');
+    }
+    function lazyStateFor(pathPtr) {
+        return lazyAssets.get(normalizePath(Module.UTF8ToString(pathPtr)));
+    }
+
+    Module.instantiateWasm = function (imports, receiveInstance) {
+        const originalOpenat = imports.env.__syscall_openat;
+        imports.env.__syscall_openat = function (dirfd, pathPtr, flags, varargs) {
+            // Fast path: nothing suspended, target warm or not ours.
+            if (!Asyncify.currData) {
+                const state = lazyStateFor(pathPtr);
+                if (!state || state.loaded) {
+                    return originalOpenat(dirfd, pathPtr, flags, varargs);
+                }
+            }
+            // Cold asset — or the rewind of a previously suspended open
+            // (handleSleep then just returns the saved fd without
+            // re-running the callback).
+            return Asyncify.handleSleep(function (wakeUp) {
+                const state = lazyStateFor(pathPtr);
+                const finish = function () {
+                    wakeUp(originalOpenat(dirfd, pathPtr, flags, varargs));
+                };
+                if (!state || state.loaded) { finish(); return; }
+                yfsMaterialize(state).then(finish, function (err) {
+                    console.error('[yetty] yfs: lazy fetch failed:', state.path, err);
+                    state.loaded = true; // open the empty placeholder, no loop
+                    finish();
+                });
+            });
+        };
+        const wasmFile = (typeof Module.locateFile === 'function')
+            ? Module.locateFile('yetty.wasm', '') : 'yetty.wasm';
+        WebAssembly.instantiateStreaming(fetch(wasmFile), imports)
+            .then(function (result) { receiveInstance(result.instance, result.module); })
+            .catch(function () {
+                // Streaming needs application/wasm — fall back for dev
+                // servers with sloppy MIME tables.
+                fetch(wasmFile)
+                    .then(function (resp) { return resp.arrayBuffer(); })
+                    .then(function (bytes) { return WebAssembly.instantiate(bytes, imports); })
+                    .then(function (result) { receiveInstance(result.instance, result.module); })
+                    .catch(function (err) {
+                        console.error('[yetty] wasm instantiation failed:', err);
+                        status('wasm instantiation failed: ' + err, 'err');
+                    });
+            });
+        return {}; // async instantiation — emscripten accepts the empty stub
+    };
+
+    // ---- legacy mode (no yfs tree served) ---------------------------
+
+    async function legacyLoadOne(entry) {
+        const { bytes, cached } = await fetchDecoded(
+            ASSET_BASE + entry.url,
+            ASSET_BASE + entry.url + '?v=' + (entry.sha256 || 'unversioned'),
+            !!entry.brotli);
         mkdirsForFile(entry.dest);
         FS.writeFile(entry.dest, bytes);
         status('  ' + entry.dest + '  ' + fmtBytes(bytes.length) +
-               (fromCache ? '  (cached, pre-decoded)' : ''),
-               'dim');
-        return fromCache;
+               (cached ? '  (cached, pre-decoded)' : ''), 'dim');
+        return cached;
     }
 
-    // Drop cache entries whose url?v= key is not in the current
-    // manifest — leftovers from previous releases. Without this every
-    // deploy would ADD a re-keyed copy of each changed file until the
-    // origin quota fills up.
-    async function pruneAssetCache(assetCache, entries) {
-        if (!assetCache) return;
-        try {
-            const valid = {};
-            entries.forEach(function (entry) {
-                valid[new URL(cacheKeyFor(entry), location.href).href] = true;
-            });
-            const keys = await assetCache.keys();
-            await Promise.all(keys.map(function (request) {
-                return valid[request.url] ? null : assetCache.delete(request);
-            }));
-        } catch (ignored) { /* pruning is best-effort */ }
-    }
-
-    async function preloadAll() {
-        status('fetching asset manifest…');
-        // The manifest is the freshness root — always revalidate it.
+    async function preloadLegacy() {
+        status('yfs yetty tree not served — legacy full preload', 'phase');
         const mr = await fetch(MANIFEST_URL, { cache: 'no-cache' });
         if (!mr.ok) {
             throw new Error(`manifest fetch failed: ${MANIFEST_URL} -> HTTP ${mr.status}`);
         }
         const manifest = await mr.json();
         const entries = manifest.entries || [];
-        const assetCache = await openAssetCache();
-        status('manifest: ' + entries.length + ' files' +
-               (assetCache ? '' : ' (Cache Storage unavailable)'), 'phase');
-
-        // Concurrent fetches — browsers pipeline these and each file is
-        // small (KB to a few MB). Sequential would multiply round-trip
-        // latency by ~100 entries.
-        const cachedFlags = await Promise.all(entries.map(function (entry) {
-            return loadOne(assetCache, entry);
-        }));
-        const cachedCount = cachedFlags.filter(Boolean).length;
-
-        await pruneAssetCache(assetCache, entries);
-
+        status('manifest: ' + entries.length + ' files', 'phase');
+        const cachedFlags = await Promise.all(entries.map(legacyLoadOne));
         status('all assets installed in MEMFS (' + entries.length + ' files, ' +
-               cachedCount + ' from cache)', 'ok');
-        console.log('[yetty] preload: %d assets installed in MEMFS (%d cached)',
-                    entries.length, cachedCount);
+               cachedFlags.filter(Boolean).length + ' from cache)', 'ok');
     }
+
+    // ---- boot -------------------------------------------------------
 
     const userInit = Module.onRuntimeInitialized;
     Module.onRuntimeInitialized = function () {
@@ -238,8 +371,12 @@ Module.noInitialRun = true;
             try { userInit(); } catch (e) { console.error(e); }
         }
 
-        preloadAll().then(function () {
-            console.log('[yetty] preload complete; calling main()');
+        (async function () {
+            const dirs = await yfsProbe();
+            if (dirs) await preloadYfs(dirs);
+            else await preloadLegacy();
+        })().then(function () {
+            console.log('[yetty] asset preload complete; calling main()');
             status('starting yetty terminal…', 'phase');
             try {
                 // Pass Module.arguments explicitly: the generated
@@ -251,9 +388,6 @@ Module.noInitialRun = true;
                 Module.callMain(Module.arguments || []);
                 // Console stays visible — user wants to see the full
                 // boot log without it disappearing under the terminal.
-                // Manual dismiss path could be added later; for now
-                // the overlay sits on top of the canvas at 78% alpha
-                // and never auto-fades.
                 status('yetty terminal running', 'ok');
             } catch (e) {
                 console.error('[yetty] callMain threw:', e);

@@ -627,7 +627,7 @@ build-webasm-yinfo-release: ## Build WebAssembly yinfo release (minimal logging)
 verify-webasm: ## Post-build verification that all webasm artifacts are present
 	@echo "=== Post-build webasm verification ==="
 	@FAIL=0; \
-	for f in yetty.js yetty.wasm yetty.data index.html terminal.html yos-iframe.html yos-web/engine/yos_proc.mjs yos-web/tools/list.json yos-web/fs/pack.bin serve.py; do \
+	for f in yetty.js yetty.wasm index.html terminal.html yos-iframe.html yos-web/engine/yos_proc.mjs yos-web/engine/yfs_client.mjs yos-web/yfs/current.json serve.py; do \
 		if [ ! -e "$(BUILD_DIR)/$$f" ]; then \
 			echo "MISSING: $$f"; \
 			FAIL=1; \

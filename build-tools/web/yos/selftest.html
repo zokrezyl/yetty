@@ -19,10 +19,22 @@
      greeting, NAWS subnegotiation (100x30), binary roundtrip - the
      command echoes $COLUMNS so the pass proves the NAWS resize landed
      as SIGWINCH in the session's zsh.
+  3. rich output (skipped when the guest tools aren't in the tool set):
+     ycat renders a demo markdown file and yecho a glyph line; both must
+     emit the YDRAW_BIN DCS envelope (ESC P 600001 y ...) on the console
+     - proving the yetty client tools run as yos guests, see the demo
+     files on the VFS, and detect TERM_PROGRAM=yetty.
+
+    Run with REAL time + CDP console capture — the old
+    --virtual-time-budget trick breaks the yfs suspension path (the
+    virtual clock leaps during a mid-run fetch and the engine's
+    wall-clock pacing misfires):
 
     google-chrome-stable --headless=new --disable-gpu \
-        --virtual-time-budget=120000 --dump-dom \
-        http://127.0.0.1:8100/selftest.html | grep 'SELFTEST'
+        --remote-debugging-port=9223 --remote-allow-origins='*' \
+        http://127.0.0.1:8100/selftest.html &
+    uv run --with websocket-client \
+        python3 tools/capture-chrome-console.py 9223 85 | grep 'SELFTEST'
 -->
 <div id="verdict">SELFTEST RUNNING</div>
 <div id="log"></div>
@@ -33,6 +45,11 @@
     const CONSOLE_EXPECT = "yos-roundtrip-42";
     const SESSION_COMMAND = "echo yos-session-$COLUMNS\r";
     const SESSION_EXPECT = "yos-session-100";
+    // YDRAW_BIN DCS envelope marker (ESC P 600001 y). Two commands, two
+    // envelopes minimum - ycat may stream several per document.
+    const RICH_COMMAND = "ycat /usr/share/yetty/demos/sample.md; " +
+                         "yecho '@heart yos'\r";
+    const RICH_MARKER = "P600001y";
     const IAC = 255, DONT = 254, DO = 253, WONT = 252, WILL = 251, SB = 250, SE = 240;
     const OPT_NAWS = 31;
 
@@ -45,6 +62,8 @@
     let consolePass = false;
     let sessionPass = false;
     let sessionGreeted = false;
+    let richPass = false;     // set true up front when ycat isn't shipped
+    let richSent = false;
     let finished = false;
 
     function logLine(text) {
@@ -52,8 +71,28 @@
         try { console.log('[selftest]', text); } catch (_) {}
     }
     function maybeFinish() {
-        if (consolePass && sessionPass) finish(true);
+        if (consolePass && sessionPass && richPass) finish(true);
     }
+    function countMarkers(haystack) {
+        let count = 0;
+        for (let at = haystack.indexOf(RICH_MARKER); at !== -1;
+             at = haystack.indexOf(RICH_MARKER, at + RICH_MARKER.length)) {
+            count++;
+        }
+        return count;
+    }
+    // Gate the rich-output leg on the served yfs tree: a dev setup
+    // without build-yos-guest/ still gets a green console+session run.
+    fetch('/yfs/current.json').then((r) => r.json())
+        .then((current) => fetch('/yfs/' + current.version + '/guest.yfs'))
+        .then((r) => r.json())
+        .then((manifest) => {
+            const bin = manifest.dirs['bin'] || [];
+            if (!bin.some((entry) => entry.n === 'ycat')) {
+                richPass = true;
+                logLine('rich-output check SKIPPED (ycat not in yfs /bin)');
+            }
+        }).catch(() => { richPass = true; });
     function finish(pass, reason) {
         if (finished) return;
         finished = true;
@@ -128,6 +167,16 @@
             if (!consolePass && consoleCollected.indexOf(CONSOLE_EXPECT) !== -1) {
                 consolePass = true;
                 logLine('== console roundtrip OK ==');
+                if (!richPass && !richSent) {
+                    richSent = true;
+                    logLine('>> console typing: ' + JSON.stringify(RICH_COMMAND));
+                    post({ type: 'term-input', ptyId: PTY_ID, data: RICH_COMMAND });
+                }
+                maybeFinish();
+            }
+            if (!richPass && richSent && countMarkers(consoleCollected) >= 2) {
+                richPass = true;
+                logLine('== rich output OK (ycat + yecho DCS envelopes) ==');
                 maybeFinish();
             }
         }

@@ -209,7 +209,9 @@ function fillStat(state, off, node) {
   v.setUint32(off + 52, node.mtime || 0, true);              // st_atim.sec
   v.setUint32(off + 64, node.mtime || 0, true);              // st_mtim.sec
   v.setUint32(off + 76, node.mtime || 0, true);              // st_ctim.sec
-  const size = node.type === "file" ? node.data.length
+  // A yfs-backed file whose body has not been fetched yet reports the
+  // size the directory listing declared — stat() must never fetch.
+  const size = node.type === "file" ? (node.data ? node.data.length : (node.size || 0))
     : node.type === "symlink" ? enc.encode(node.target || "").length
     : (node.entries ? node.entries.length * 64 : 0);
   v.setUint32(off + 96, size, true);                          // st_size
@@ -1009,8 +1011,19 @@ function buildLibc(state, env_vars, io, mgr, proc) {
     wait4: (pid, statusPtr, opts) => doWait(pid, statusPtr, opts),
     access: (pathPtr) => { const raw = cstrBounded(pathPtr); if (raw === null) { setErrno(14); return -1; } if (raw === "") { setErrno(2); return -1; } const p = mgr.vfsPath(raw, proc.pio.cwd); return (mgr.tools.has(basename(raw)) || mgr.vfs[p]) ? 0 : (setErrno(2), -1); },
     execve: (pathPtr, argvPtr) => {
-      const name = basename(cstr(pathPtr));
-      if (!mgr.tools.has(name)) { if (state.errnoPtr) view().setUint32(state.errnoPtr, 2, true); return -1; }
+      const raw = cstr(pathPtr);
+      const name = basename(raw);
+      // Precompiled tools (the boot shell) resolve from the tool map;
+      // everything else resolves through the VFS — a yfs-backed binary
+      // is fetched + compiled on demand (docs/yfs.md).
+      let mod = mgr.tools.get(name) || null;
+      let execNode = null;
+      if (!mod) {
+        execNode = mgr.yfsExecNode(raw, proc.pio.cwd);
+        if (!execNode) { if (state.errnoPtr) view().setUint32(state.errnoPtr, 2, true); return -1; }
+        const hash = execNode.yfs && execNode.yfs.entry.h;
+        if (hash && mgr.moduleCache.has(hash)) mod = mgr.moduleCache.get(hash);
+      }
       const args = [];
       for (let p = argvPtr; ; p += 4) { const sp = view().getUint32(p, true); if (!sp) break; args.push(cstr(sp)); }
       const av = args.length ? args : [name];
@@ -1020,15 +1033,25 @@ function buildLibc(state, env_vars, io, mgr, proc) {
         // A module past Chrome's main-thread sync-instantiation size limit
         // (nvim) boots asynchronously instead — the process parks in
         // "booting" and the scheduler picks it up when the instance resolves.
-        try {
-          mgr.prepareExec(proc, mgr.tools.get(name), av);
-        } catch (err) {
-          if (!mgr.isSyncInstantiationLimit(err)) throw err;
-          mgr.prepareExecAsync(proc, mgr.tools.get(name), av);
+        // A cold yfs binary takes the same booting path: fetch, compile,
+        // swap in.
+        if (mod) {
+          try {
+            mgr.prepareExec(proc, mod, av);
+          } catch (err) {
+            if (!mgr.isSyncInstantiationLimit(err)) throw err;
+            mgr.prepareExecAsync(proc, mod, av);
+          }
+        } else {
+          mgr.prepareExecYfs(proc, execNode, av);
         }
         const e = new Error("exec"); e.isExec = true; throw e;
       }
-      const res = mgr.runChildProgram(mgr.tools.get(name), av, proc.pid);
+      if (!mod) {
+        mod = mgr.yfsModuleSync(execNode);
+        if (!mod) { if (state.errnoPtr) view().setUint32(state.errnoPtr, 2, true); return -1; }
+      }
+      const res = mgr.runChildProgram(mod, av, proc.pid);
       exitWith(res.exitCode);
     },
     execv: (pathPtr, argvPtr) => env.execve(pathPtr, argvPtr), execvp: (pathPtr, argvPtr) => env.execve(pathPtr, argvPtr),
@@ -1061,6 +1084,26 @@ function buildLibc(state, env_vars, io, mgr, proc) {
       let node = mgr.vfs[path];
       if (!node) { if (flags & 0x200) node = mgr.vfsCreateFile(path, createMode); else { setErrno(2); return -1; } }
       if (node.type === "dir") return ret(installFd(allocFd(), { kind: "dir", node, path, refs: 1 }, cloexec));
+      // yfs-backed node with a cold body: kick the fetch and suspend via
+      // the same asyncify block a tty read uses; the scheduler resumes
+      // this open when the bytes (or an error) arrive, and the rewound
+      // call proceeds synchronously below. The `node.yfs` condition is
+      // stable across unwind/rewind, so the resuming() branch pairs with
+      // exactly this open. O_TRUNC skips the fetch — the old bytes are
+      // dead anyway.
+      if (node.type === "file" && node.yfs) {
+        if (proc.interactive && resuming()) proc.inst.exports.asyncify_stop_rewind();
+        if (!node.data && !(flags & 0x400)) {
+          if (node.yfs.error) { setErrno(5); return -1; } // EIO
+          mgr.yfsStart(node);
+          if (!node.data) {
+            if (node.yfs.error) { setErrno(5); return -1; }
+            if (!proc.interactive) { setErrno(5); return -1; } // no scheduler to resume us
+            beginBlock("open", () => !!node.data || !!(node.yfs && node.yfs.error));
+            return -1;
+          }
+        }
+      }
       if (flags & 0x400) node.data = new Uint8Array(0); // O_TRUNC
       return ret(installFd(allocFd(), { kind: "file", node, off: (flags & 0x8) ? node.data.length : 0, append: !!(flags & 0x8), refs: 1 }, cloexec));
     },
@@ -2028,6 +2071,12 @@ export class Manager {
     this.io = io; this.tools = tools || new Map();
     this.nextPid = 1; this.procs = []; this.depth = 0;
     this.vfs = buildVfs([...this.tools.keys()]);
+    // yfs (docs/yfs.md): the lazily-fetched web filesystem. Set up by
+    // mountYfs(); moduleCache holds compiled wasm keyed by body hash so
+    // exec-on-demand compiles each distinct binary once.
+    this.yfsClient = null;
+    this.compileModule = null;
+    this.moduleCache = new Map();
     this.openFiles = new Map(); // fd -> { path, off }
     this.openDirs = new Map();  // handle -> { path, names, idx }
     this.nextFdNum = 5;
@@ -2144,6 +2193,160 @@ export class Manager {
     const name = path.slice(slash + 1);
     if (parent && parent.type === "dir" && !parent.entries.includes(name)) parent.entries.push(name);
     return node;
+  }
+
+  // ---- yfs: the lazily-fetched web filesystem (docs/yfs.md) ----
+  //
+  // Metadata is EAGER: mountYfs materializes every directory and file
+  // node from the client's aggregate manifest, so stat/readdir/access
+  // and PATH walks stay synchronous. Bodies are LAZY: a file node
+  // carries node.yfs and no data until the first open() (which
+  // suspends the process via the same asyncify block used for tty
+  // reads) or the first execve (which parks the process in the
+  // async-boot state). Writes never reach yfs — the in-memory VFS is
+  // the overlay, exactly as before.
+  mountYfs(client) {
+    this.yfsClient = client;
+    const dirs = client.dirs;
+    // Directory nodes first (parents before children — sort by depth).
+    const dirPaths = Object.keys(dirs).sort(
+      (a, b) => a.split("/").length - b.split("/").length);
+    const metaFor = (dirPath) => {
+      if (dirPath === "") return null;
+      const slash = dirPath.lastIndexOf("/");
+      const parentPath = slash === -1 ? "" : dirPath.slice(0, slash);
+      const name = slash === -1 ? dirPath : dirPath.slice(slash + 1);
+      return (dirs[parentPath] || []).find(
+        (entry) => entry.n === name && entry.t === "d");
+    };
+    for (const dirPath of dirPaths) {
+      const full = dirPath === "" ? "/" : "/" + dirPath;
+      const existing = this.vfs[full];
+      const meta = metaFor(dirPath);
+      if (existing && existing.type === "dir") {
+        if (meta && typeof meta.m === "number" && existing.mode === undefined) existing.mode = meta.m;
+        continue;
+      }
+      this.vfs[full] = {
+        type: "dir", entries: [],
+        mtime: (meta && meta.mt) || 0,
+        mode: meta && typeof meta.m === "number" ? meta.m : 0o755,
+        ino: (meta && meta.i) || this.nextIno++,
+      };
+      const slash = full.lastIndexOf("/");
+      const parent = this.vfs[slash === 0 ? "/" : full.slice(0, slash)];
+      const name = full.slice(slash + 1);
+      if (parent && parent.entries && !parent.entries.includes(name)) parent.entries.push(name);
+    }
+    // File nodes. The boot seed plants empty 0-byte placeholders under
+    // /bin (execute-bit stat probes) — a yfs node REPLACES those; any
+    // other pre-existing node wins (RAM overlay semantics).
+    const symlinks = [];
+    for (const dirPath of dirPaths) {
+      const base = dirPath === "" ? "" : "/" + dirPath;
+      const parentNode = this.vfs[base === "" ? "/" : base];
+      for (const entry of dirs[dirPath]) {
+        if (entry.t === "d") {
+          if (parentNode.entries && !parentNode.entries.includes(entry.n)) parentNode.entries.push(entry.n);
+          continue;
+        }
+        const full = base + "/" + entry.n;
+        if (entry.t === "l") { symlinks.push({ full, dirPath, entry, parentNode }); continue; }
+        const existing = this.vfs[full];
+        const placeholder = existing && existing.type === "file" &&
+          existing.data && existing.data.length === 0 && !existing.yfs;
+        if (existing && !placeholder) continue;
+        this.vfs[full] = {
+          type: "file",
+          ino: entry.i, mtime: entry.mt || 0,
+          mode: typeof entry.m === "number" ? entry.m : 0o644,
+          size: entry.s || 0,
+          yfs: { dir: dirPath, entry },
+        };
+        if (parentNode.entries && !parentNode.entries.includes(entry.n)) parentNode.entries.push(entry.n);
+      }
+    }
+    // Symlinks whose target resolves inside the mount alias the target
+    // node (hardlink semantics — shared body cache); see docs/yfs.md.
+    for (const { full, dirPath, entry, parentNode } of symlinks) {
+      const target = this.vfsPath(entry.tgt, dirPath === "" ? "/" : "/" + dirPath);
+      let node = this.vfs[target], hops = 0;
+      while (node && node.type === "symlink" && ++hops < 8) node = this.vfs[this.vfsPath(node.target, "/")];
+      if (!node || this.vfs[full]) continue;
+      this.vfs[full] = node;
+      if (parentNode.entries && !parentNode.entries.includes(entry.n)) parentNode.entries.push(entry.n);
+    }
+  }
+
+  // Kick the body fetch for a yfs-backed file node. Idempotent. In node
+  // (sync client) the body lands before this returns; in the browser
+  // completion wakes the scheduler through the async-boot hook, and the
+  // suspended open's ready() predicate sees node.data.
+  yfsStart(node) {
+    if (!node.yfs || node.data || node.yfs.error) return;
+    const client = this.yfsClient;
+    if (client.readBodySync) {
+      try { node.data = client.readBodySync(node.yfs.dir, node.yfs.entry); }
+      catch (err) { node.yfs.error = (err && err.message) || "yfs read failed"; }
+      return;
+    }
+    if (node.yfs.promise) return;
+    node.yfs.promise = client.fetchBody(node.yfs.dir, node.yfs.entry).then(
+      (bytes) => { node.data = bytes; },
+      (err) => { node.yfs.error = (err && err.message) || "yfs fetch failed"; },
+    ).finally(() => { if (this.onAsyncBoot) this.onAsyncBoot(); });
+  }
+
+  // Resolve an execve path to a runnable file node: the literal VFS
+  // path, then /bin/<basename> (mirrors the tool-map-by-basename
+  // convention). Mounted symlinks are already aliased to their target.
+  yfsExecNode(rawPath, cwd) {
+    const direct = this.vfs[this.vfsPath(rawPath, cwd)];
+    if (direct && direct.type === "file" && (direct.yfs || (direct.data && direct.data.length))) return direct;
+    const name = rawPath.replace(/^.*\//, "");
+    const inBin = this.vfs["/bin/" + name];
+    if (inBin && inBin.type === "file" && (inBin.yfs || (inBin.data && inBin.data.length))) return inBin;
+    return null;
+  }
+
+  // execve of a cold (or not-yet-compiled) yfs binary: park the process
+  // in the async-boot state, fetch + compile, swap the image in. The
+  // compiled module is cached by content hash — sh and zsh (symlink,
+  // same body) compile once.
+  prepareExecYfs(proc, node, argv) {
+    this.finishAsyncBoot(proc, async () => {
+      if (!node.data) {
+        this.yfsStart(node);
+        if (node.yfs && node.yfs.promise) await node.yfs.promise;
+      }
+      if (!node.data) throw new Error("exec: yfs fetch failed: " + ((node.yfs && node.yfs.error) || "?"));
+      const hash = node.yfs && node.yfs.entry.h;
+      let mod = hash ? this.moduleCache.get(hash) : null;
+      if (!mod) {
+        mod = this.compileModule ? await this.compileModule(node.data)
+          : await WebAssembly.compile(node.data);
+        if (hash) this.moduleCache.set(hash, mod);
+      }
+      const state = makeState();
+      const env = buildLibc(state, proc.pio.env, this.io, this, proc);
+      strictImportEnv(env, mod, { label: "exec", onCall: this.io.onUnimpl });
+      const inst = await WebAssembly.instantiate(mod, { env });
+      this.commitExec(proc, mod, argv, state, inst);
+    });
+  }
+
+  // Synchronous variant for the non-scheduler path (node test harnesses
+  // running a child program to completion): sync body + sync compile.
+  yfsModuleSync(node) {
+    if (!node.data) this.yfsStart(node);
+    if (!node.data) return null;
+    const hash = node.yfs && node.yfs.entry.h;
+    let mod = hash ? this.moduleCache.get(hash) : null;
+    if (!mod) {
+      mod = new WebAssembly.Module(node.data);
+      if (hash) this.moduleCache.set(hash, mod);
+    }
+    return mod;
   }
 
   spawn(mod, argv, ppid, env_vars) {
@@ -2618,6 +2821,14 @@ export function createInteractiveEngine(opts = {}) {
   mgr.debug = !!opts.debug;
   if (opts.trace) mgr.trace = [];
   for (const m of opts.mounts || []) mgr.mountFiles(m.at, m.entries);
+  // yfs — the lazily-fetched web filesystem (docs/yfs.md). `client`
+  // comes from yfs_client.mjs openYfs()/openYfsDir(); `compile` is the
+  // module compiler for exec-on-demand (the iframe passes compileGuest
+  // so lazily-executed tools get the same wasm patching as boot tools).
+  if (opts.yfs && opts.yfs.client) {
+    mgr.compileModule = opts.yfs.compile || null;
+    mgr.mountYfs(opts.yfs.client);
+  }
 
   const sessions = [];
   const liveSessions = () => sessions.filter((session) => !session.root.exited);

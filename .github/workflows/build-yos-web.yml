@@ -92,14 +92,23 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          # clang (wasm32 target) + lld (wasm-ld) — build-liblua.sh
-          sudo apt-get install -y clang lld
+          # clang (wasm32 target) + lld (wasm-ld) — build-liblua.sh.
+          # cmake + ninja — build-guest-tools.sh cross-builds freetype.
+          sudo apt-get install -y clang lld cmake ninja-build
 
       - name: Build liblua.wasm
         run: |
           set -euo pipefail
           YOS_SYSROOT="$PWD/yos-sysroot" \
               bash yos/src/yos/platform/web/lua/build-liblua.sh
+
+      - name: Build yetty guest tools (ycat, yecho)
+        # The yetty client tools compiled as yos wasm32 guests — sources
+        # live in the yetty tree, so they are built here rather than in
+        # the yos nix umbrella. Output: build-yos-guest/<name>.wasm.
+        run: |
+          set -euo pipefail
+          ./build-tools/yos/build-guest-tools.sh yecho ycat
 
       - name: Pack yos-web bundle
         env:
@@ -109,7 +118,8 @@ jobs:
           mkdir -p out
           # stdlib-only script — plain python3 is enough.
           python3 build-tools/yos/make-yos-web-bundle.py \
-              --yos-root yos --version "$VERSION" --cache-dir out
+              --yos-root yos --version "$VERSION" --cache-dir out \
+              --guest-tools-dir build-yos-guest
 
       - name: Upload tarball as workflow artifact
         uses: actions/upload-artifact@v4

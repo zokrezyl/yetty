@@ -619,7 +619,19 @@ d_m3Op  (CallIndirect)
         }
         else r = m3Err_trapTableElementIsNull;
     }
-    else r = m3Err_trapTableIndexOutOfRange;
+    else {
+        /* yos: same YOS_TRAP_VERBOSE aid as the type-mismatch branch —
+         * an out-of-range index is almost always a scribbled function
+         * pointer, and the raw value names the scribbler (ASCII bytes,
+         * heap pattern, …). */
+        if (getenv("YOS_TRAP_VERBOSE")) {
+            fprintf(stderr,
+                    "yos: indirect call table index out of range: "
+                    "tableIndex=%u (0x%08x) tableSize=%u\n",
+                    tableIndex, tableIndex, module->table0Size);
+        }
+        r = m3Err_trapTableIndexOutOfRange;
+    }
 
     if (UNLIKELY(r))
         newTrap (r);

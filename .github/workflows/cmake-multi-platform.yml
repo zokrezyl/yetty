@@ -979,7 +979,8 @@ jobs:
         cp ${{ env.BUILD_DIR }}/terminal.html site/
         cp ${{ env.BUILD_DIR }}/yetty.js site/
         cp ${{ env.BUILD_DIR }}/yetty.wasm site/
-        cp ${{ env.BUILD_DIR }}/yetty.data site/
+        # (no yetty.data — /demo and /src ship as lazy yfs subtrees,
+        # docs/yfs.md)
         # ygreeter — the ygui feature-showcase app, built alongside yetty
         # (build-tools/yetty/platform/webasm/cmake.cmake). It reuses the same
         # yetty-assets/ preload dir copied below, so only its own three files
@@ -995,15 +996,14 @@ jobs:
         cp -r ${{ env.BUILD_DIR }}/tinyemu-assets site/
         cp -r ${{ env.BUILD_DIR }}/yetty-assets site/
         # yos session type — the iframe host page plus the yos-web bundle
-        # (engine modules, wasm tools, /usr/share pack) that cmake staged
-        # from the yos-web-<ver> release asset under yos-web/ (a private
-        # prefix in the build dir; tools/ etc. collide with cmake output
-        # dirs there). The site restores the top-level layout that
-        # yos-iframe.html's absolute paths expect.
+        # (engine modules + the yfs lazy filesystem, docs/yfs.md) that
+        # cmake staged from the yos-web-<ver> release asset under
+        # yos-web/ (a private prefix in the build dir; the subdirs would
+        # collide with cmake output dirs there). The site restores the
+        # top-level layout that yos-iframe.html's absolute paths expect.
         cp ${{ env.BUILD_DIR }}/yos-iframe.html site/
         cp -r ${{ env.BUILD_DIR }}/yos-web/engine site/engine
-        cp -r ${{ env.BUILD_DIR }}/yos-web/tools site/tools
-        cp -r ${{ env.BUILD_DIR }}/yos-web/fs site/fs
+        cp -r ${{ env.BUILD_DIR }}/yos-web/yfs site/yfs
         # Installer bootstrap scripts — served at yetty.dev/install.sh and
         # yetty.dev/install.ps1. Each downloads the yinstall installer for the
         # visitor's platform from the latest GitHub release and runs it:

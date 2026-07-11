@@ -9,10 +9,10 @@ Serves, from one origin:
                            with a fallback to a sibling yos checkout so
                            untracked build artifacts (lua/liblua.wasm) are
                            found too
-  /tools/list.json      -> JSON array of every wasm tool in the yos umbrella
-  /tools/<name>.wasm    -> that tool's wasm binary (result/libexec/<name>)
-  /fs/pack.bin          -> the guest /usr/share tree as one YFS1 blob
-                           (nvim runtime, zsh functions)
+  /yfs/<path>           -> the lazy web filesystem (docs/yfs.md),
+                           generated on first request from the live
+                           nix umbrella + guest tools + demos — the
+                           same tree make-yos-web-bundle.py packs
 
 Directory resolution (override via environment):
   YETTY_WEBASM_BUILD  webasm build dir holding yetty.js/.wasm/.data
@@ -25,12 +25,12 @@ Usage:  ./serve.py [port] [bind-address]
 """
 
 import http.server
-import json
+import importlib.util
 import os
 import ssl
-import struct
 import subprocess
 import sys
+import tempfile
 import threading
 from pathlib import Path
 
@@ -93,31 +93,53 @@ YETTY_BUILD_DIR = resolve_yetty_build()
 YOS_RESULT_DIR = resolve_yos_result()
 ENGINE_DIRS = resolve_engine_dirs()
 
-pack_cache = None
+# yetty client tools (ycat, yecho) built as yos guests by
+# build-tools/yos/build-guest-tools.sh — placed into /bin alongside the
+# umbrella tool set, same as make-yos-web-bundle.py packs them.
+GUEST_TOOLS_DIR = Path(os.environ.get("YOS_GUEST_TOOLS",
+                                      REPO_ROOT / "build-yos-guest"))
+
+# /yfs is generated on first request from the live inputs — by the SAME
+# builder the bundle packer uses (imported from make-yos-web-bundle.py,
+# so dev serving and the deployed tarball cannot drift). The tree lands
+# in a temp dir and is served statically from there.
+YFS_DEV_VERSION = "dev"
+yfs_dev_dir = None
+yfs_dev_lock = threading.Lock()
 
 
-def build_share_pack(share_dir):
-    """Pack a directory tree into the YFS1 blob parsePack() reads:
-    magic(4) | u32le index-length | index JSON | blobs. Follows symlinks
-    (nix store trees are symlink-heavy). Index offsets are relative to
-    the end of the index."""
-    index = []
-    blobs = []
-    offset = 0
-    for dirpath, _dirnames, filenames in os.walk(share_dir, followlinks=True):
-        for filename in sorted(filenames):
-            full = Path(dirpath) / filename
-            try:
-                data = full.read_bytes()
-            except OSError:
-                continue
-            relative = full.relative_to(share_dir).as_posix()
-            index.append({"p": relative, "o": offset, "s": len(data)})
-            blobs.append(data)
-            offset += len(data)
-    index_bytes = json.dumps(index, separators=(",", ":")).encode()
-    return b"".join([PACK_MAGIC, struct.pack("<I", len(index_bytes)),
-                     index_bytes] + blobs)
+def load_bundle_module():
+    script = REPO_ROOT / "build-tools" / "yos" / "make-yos-web-bundle.py"
+    spec = importlib.util.spec_from_file_location("yos_web_bundle", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def ensure_yfs_tree():
+    """Generate the yfs tree once, lazily. Returns its root dir or None
+    when the yos result is missing."""
+    global yfs_dev_dir
+    with yfs_dev_lock:
+        if yfs_dev_dir:
+            return yfs_dev_dir
+        if not YOS_RESULT_DIR:
+            return None
+        bundle = load_bundle_module()
+        builder = bundle.YfsBuilder()
+        builder.add_tree("bin", YOS_RESULT_DIR / "libexec", force_mode=0o755)
+        builder.add_tree("usr/share", YOS_RESULT_DIR / "share")
+        for wasm in (sorted(GUEST_TOOLS_DIR.glob("*.wasm"))
+                     if GUEST_TOOLS_DIR.is_dir() else []):
+            builder.add_file(f"bin/{wasm.stem}", wasm, force_mode=0o755)
+        for name, source in bundle.demo_entries():
+            builder.add_file(f"usr/share/yetty/demos/{name}", source)
+        staging = Path(tempfile.mkdtemp(prefix="yos-yfs-dev-"))
+        files, blobs, total = builder.emit(staging, YFS_DEV_VERSION)
+        sys.stderr.write(f"[serve] yfs generated: {files} files "
+                         f"({total / 1e6:.1f} MB), {blobs} blobs\n")
+        yfs_dev_dir = staging / "yfs"
+        return yfs_dev_dir
 
 
 def safe_child(base_dir, relative):
@@ -163,13 +185,12 @@ class ShowcaseHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        global pack_cache
         url = self.path.split("?", 1)[0]
 
         if url == "/":
             return self.send_file(SHOWCASE_DIR / "index.html")
 
-        if (url in ("/yetty.js", "/yetty.wasm", "/yetty.data", "/favicon.ico")
+        if (url in ("/yetty.js", "/yetty.wasm", "/favicon.ico")
                 or url.startswith("/yetty-assets/")):
             if not YETTY_BUILD_DIR:
                 return self.fail(503, "webasm yetty build not found - run "
@@ -187,30 +208,15 @@ class ShowcaseHandler(http.server.BaseHTTPRequestHandler):
                     return self.send_file(target)
             return self.fail(404, "engine file not found: " + relative)
 
-        if url == "/tools/list.json":
-            if not YOS_RESULT_DIR:
+        if url.startswith("/yfs/"):
+            yfs_root = ensure_yfs_tree()
+            if not yfs_root:
                 return self.fail(503, "yos result not found - run "
                                       "`nix build .#all` in the yos tree")
-            names = sorted(entry.name for entry
-                           in (YOS_RESULT_DIR / "libexec").iterdir()
-                           if entry.is_file())
-            return self.send_body(json.dumps(names).encode(), "application/json")
-
-        if url.startswith("/tools/") and url.endswith(".wasm"):
-            if not YOS_RESULT_DIR:
-                return self.fail(503, "yos result not found")
-            tool_name = os.path.basename(url)[:-len(".wasm")]
-            target = safe_child(YOS_RESULT_DIR / "libexec", tool_name)
+            target = safe_child(yfs_root, url[len("/yfs/"):])
             if not target or not target.is_file():
-                return self.fail(404, "no such tool: " + tool_name)
-            return self.send_body(target.read_bytes(), "application/wasm")
-
-        if url == "/fs/pack.bin":
-            if not YOS_RESULT_DIR:
-                return self.fail(503, "yos result not found")
-            if pack_cache is None:
-                pack_cache = build_share_pack(YOS_RESULT_DIR / "share")
-            return self.send_body(pack_cache, "application/octet-stream")
+                return self.fail(404, "yfs: not found: " + url)
+            return self.send_file(target)
 
         # Anything else: a static file from the showcase directory
         # (selftest.html, future assets).
