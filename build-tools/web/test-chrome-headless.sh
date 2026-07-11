@@ -168,14 +168,13 @@ if [ "$REMOTE_MODE" -eq 0 ]; then
         BUILD_RESULT=1
     fi
 
-    # Check yetty.data contains demo
-    echo "Checking yetty.data..."
-    if [ -f "$YETTY_ROOT/$BUILD_DIR/yetty.data" ]; then
-        DATA_SIZE=$(stat -c%s "$YETTY_ROOT/$BUILD_DIR/yetty.data" 2>/dev/null || stat -f%z "$YETTY_ROOT/$BUILD_DIR/yetty.data")
-        DATA_MB=$((DATA_SIZE / 1024 / 1024))
-        echo -e "${GREEN}OK: yetty.data exists (${DATA_MB}MB)${NC}"
+    # /demo and /src ship as lazy yfs subtrees (docs/yfs.md) — check the
+    # yfs tree instead of the retired yetty.data preload package.
+    echo "Checking yfs tree..."
+    if [ -f "$YETTY_ROOT/$BUILD_DIR/yos-web/yfs/current.json" ]; then
+        echo -e "${GREEN}OK: yfs tree staged${NC}"
     else
-        echo -e "${RED}ERROR: yetty.data missing${NC}"
+        echo -e "${RED}ERROR: yos-web/yfs/current.json missing${NC}"
         BUILD_RESULT=1
     fi
 

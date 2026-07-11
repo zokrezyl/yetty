@@ -149,7 +149,8 @@ if [ -f yetty-webasm.zip ]; then
     check_file "$wasm_root" "index.html"    "index.html"
     check_file "$wasm_root" "yetty.js"      "yetty.js loader"
     check_file "$wasm_root" "yetty.wasm"    "yetty.wasm binary"
-    check_file "$wasm_root" "yetty.data"    "yetty.data (preloaded assets)"
+    # No yetty.data: /demo and /src ship as lazy yfs subtrees (docs/yfs.md).
+    check_file "$wasm_root" "yfs/current.json" "yfs version pointer"
 
     info "[WebAssembly] vfsync Alpine filesystem"
     check_dir  "$wasm_root" "vfsync"                          "vfsync directory"

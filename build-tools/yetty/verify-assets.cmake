@@ -93,16 +93,18 @@ check_file("${ASSETS_PREFIX}/shaders/msdf_gen.wgsl" "MSDF generation shader")
 if(TARGET_TYPE STREQUAL "webasm")
     message(STATUS "Checking WebAssembly assets...")
 
-    # WASM output files
+    # WASM output files. No yetty.data: the /demo and /src trees ship
+    # as lazy yfs subtrees (docs/yfs.md), not as an emscripten preload
+    # package.
     check_file("yetty.js" "Yetty JS loader")
     check_file("yetty.wasm" "Yetty WASM binary")
-    check_file("yetty.data" "Yetty preloaded data")
 
     # Web files
     check_file("index.html" "Web index page")
     check_file("serve.py" "Development server")
 
-    # Note: demo directory is preloaded from source into yetty.data, not copied to build dir
+    # The yfs tree (guest userspace + yetty assets + demo/src)
+    check_file("yos-web/yfs/current.json" "yfs version pointer")
 endif()
 
 #-----------------------------------------------------------------------------
