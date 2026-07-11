@@ -41,9 +41,10 @@ if(WIN32)
     # mimalloc's OS primitive layer on Windows.
     set_target_properties(mimalloc PROPERTIES
         INTERFACE_LINK_LIBRARIES "psapi;shell32;user32;advapi32;bcrypt")
-elseif(NOT APPLE AND NOT EMSCRIPTEN)
-    # pthread TLS destructors on Linux/Android (no-op on modern glibc
-    # where pthread lives in libc, still required for older/bionic).
+elseif(NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID)
+    # pthread TLS destructors on Linux (glibc). Not on Android: bionic
+    # has pthreads inside libc and the NDK ships no libpthread stub —
+    # an explicit -lpthread there is a hard link error.
     set_target_properties(mimalloc PROPERTIES
         INTERFACE_LINK_LIBRARIES "pthread")
 endif()
