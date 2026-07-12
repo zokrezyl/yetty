@@ -24,8 +24,9 @@
  * names, and /std:c11 mode hides the POSIX aliases (__STDC__ is 1, so the
  * UCRT suppresses its non-standard-name declarations). Map the names the
  * vendored file tokenizer uses (fileno/fdopen/lseek/read and the off_t it
- * casts to). _off_t comes from <corecrt.h>, already in scope via <stdio.h>. */
+ * casts to). */
 #include <io.h>
+#include <sys/types.h> /* _off_t */
 #define off_t _off_t
 #define fileno _fileno
 #define fdopen _fdopen
