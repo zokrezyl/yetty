@@ -16,6 +16,7 @@
 /* Hands the message to the hosting page. terminal.html installs
  * Module.onYettyFatal and opens its abort dialog; pages without the hook
  * fall back to a loud console line. Must never throw back into wasm. */
+// clang-format off
 EM_JS(void, yetty_yplatform_fatal_report_to_page, (const char *message_ptr), {
     var text = '';
     try {
@@ -24,7 +25,7 @@ EM_JS(void, yetty_yplatform_fatal_report_to_page, (const char *message_ptr), {
         text = 'yetty fatal error (message unavailable)';
     }
     try {
-        if (typeof Module != = 'undefined' &&typeof Module.onYettyFatal == = 'function') {
+        if (typeof Module !== 'undefined' && typeof Module.onYettyFatal === 'function') {
             Module.onYettyFatal(text);
             return;
         }
@@ -35,6 +36,7 @@ EM_JS(void, yetty_yplatform_fatal_report_to_page, (const char *message_ptr), {
     } catch (ignored) {
     }
 });
+// clang-format on
 
 void yetty_yplatform_fatal_report(const char *message)
 {
