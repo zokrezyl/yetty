@@ -760,7 +760,7 @@ struct yetty_ylexbor_kv_store {
 #define YETTY_YLEXBOR_CONSOLE_CAP 2000
 
 struct yetty_ylexbor_console_entry {
-    int level; /* enum yetty_ylexbor_console_level */
+    int level;  /* enum yetty_ylexbor_console_level */
     char *text; /* owned */
 };
 

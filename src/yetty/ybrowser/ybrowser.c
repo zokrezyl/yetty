@@ -806,14 +806,12 @@ static struct yetty_ycore_void_result resolve_iframes(struct yetty_ylexbor *r)
                 continue;
             }
             /* `about:`/`javascript:` iframes have no fetchable document. */
-            if (strncmp(absolute, "about:", 6) == 0 ||
-                strncmp(absolute, "javascript:", 11) == 0) {
+            if (strncmp(absolute, "about:", 6) == 0 || strncmp(absolute, "javascript:", 11) == 0) {
                 free(absolute);
                 continue;
             }
-            struct yetty_ybrowser_request request = {.url = absolute,
-                                                     .kind = YETTY_YBROWSER_REQUEST_DOCUMENT,
-                                                     .referer = r->base_url};
+            struct yetty_ybrowser_request request = {
+                .url = absolute, .kind = YETTY_YBROWSER_REQUEST_DOCUMENT, .referer = r->base_url};
             struct yetty_ybrowser_response response = {0};
             struct yetty_ycore_void_result fetch_res =
                 yetty_ybrowser_fetch(r->loader, &request, &response);
@@ -832,13 +830,13 @@ static struct yetty_ycore_void_result resolve_iframes(struct yetty_ylexbor *r)
             continue;
         }
 
-        int content_w = (int)(b->w - b->border_left - b->border_right - b->padding_left -
-                              b->padding_right);
+        int content_w =
+            (int)(b->w - b->border_left - b->border_right - b->padding_left - b->padding_right);
         if (content_w < 1) {
             content_w = (int)b->w;
         }
-        int content_h = (int)(b->h - b->border_top - b->border_bottom - b->padding_top -
-                              b->padding_bottom);
+        int content_h =
+            (int)(b->h - b->border_top - b->border_bottom - b->padding_top - b->padding_bottom);
         if (content_h < 1) {
             content_h = (int)b->h;
         }

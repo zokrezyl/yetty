@@ -136,8 +136,7 @@ static struct yetty_ycore_void_result webasm_platform_init(struct yetty_yclass_o
         WGPUInstanceFeatureName_TimedWaitAny,
     };
     WGPUInstanceDescriptor instance_desc = {0};
-    instance_desc.requiredFeatureCount =
-        sizeof(instance_features) / sizeof(instance_features[0]);
+    instance_desc.requiredFeatureCount = sizeof(instance_features) / sizeof(instance_features[0]);
     instance_desc.requiredFeatures = instance_features;
     WGPUInstance instance = wgpuCreateInstance(&instance_desc);
     if (!instance) {

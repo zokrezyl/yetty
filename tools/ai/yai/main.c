@@ -4125,9 +4125,8 @@ static struct yetty_ycore_void_result usage_render_plot(struct yai_app *app)
     char heading[96];
     snprintf(heading, sizeof(heading), "tokens consumed over time (x: %s, y: cumulative total)",
              use_minutes ? "minutes" : "seconds");
-    struct yetty_ycore_int_result plot_res =
-        yai_render_line_plot(&app->renderer, grid, YAI_USAGE_PLOT_GRID, 0.0f, x_max, 0.0f, y_max,
-                             heading);
+    struct yetty_ycore_int_result plot_res = yai_render_line_plot(
+        &app->renderer, grid, YAI_USAGE_PLOT_GRID, 0.0f, x_max, 0.0f, y_max, heading);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, plot_res, "usage plot: render");
     return YETTY_OK_VOID();
 }
@@ -4832,7 +4831,8 @@ void yai_usage_record_sample(struct yai_app *app)
         app->usage_sample_count = kept;
     }
     long now_ms = yai_monotonic_ms();
-    double elapsed = app->session_start_ms ? (double)(now_ms - app->session_start_ms) / 1000.0 : 0.0;
+    double elapsed =
+        app->session_start_ms ? (double)(now_ms - app->session_start_ms) / 1000.0 : 0.0;
     if (elapsed < 0.0) {
         elapsed = 0.0;
     }
@@ -4840,8 +4840,8 @@ void yai_usage_record_sample(struct yai_app *app)
     sample->elapsed_seconds = elapsed;
     /* "Consumed" = everything the model processed this session: fresh input
      * and output plus the cache reads/writes (the bulk of the cost). */
-    sample->total_tokens = app->usage.input + app->usage.output + app->usage.cache_read +
-                           app->usage.cache_creation;
+    sample->total_tokens =
+        app->usage.input + app->usage.output + app->usage.cache_read + app->usage.cache_creation;
 }
 
 /* Ctrl-D on an empty line: the first press only arms a confirmation

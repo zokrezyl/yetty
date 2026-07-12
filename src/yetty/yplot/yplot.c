@@ -370,9 +370,10 @@ static struct yetty_ycore_void_result yplot_add_label(struct yetty_ydraw_drawabl
  * plot rect (bounds_* already shrunk by the reserved margins) and the axis
  * ranges; `figure_max_x` is the pre-inset right edge, used to keep the last
  * x label from spilling past the figure. */
-static struct yetty_ycore_void_result yplot_emit_axis_labels(
-    struct yetty_ydraw_drawable_list *list, const struct yetty_yplot_uniforms *u,
-    const struct yplot_label_plan *plan, float figure_max_x)
+static struct yetty_ycore_void_result yplot_emit_axis_labels(struct yetty_ydraw_drawable_list *list,
+                                                             const struct yetty_yplot_uniforms *u,
+                                                             const struct yplot_label_plan *plan,
+                                                             float figure_max_x)
 {
     float plot_x = u->bounds_x;
     float plot_y = u->bounds_y;
@@ -460,10 +461,12 @@ static uint32_t yplot_color_swap_rb(uint32_t color)
  * outside the plot rect (the shader discards those fragments), so no draw-order
  * juggling against the plot is needed. `margin_left` is the x of the strip's
  * left edge (the inset plot's right edge). */
-static struct yetty_ycore_void_result yplot_emit_legend(
-    struct yetty_ydraw_drawable_list *list, const struct yetty_yplot_uniforms *u,
-    const struct yplot_label_plan *plan, float margin_left,
-    const struct yplot_legend_entry *entries, size_t count)
+static struct yetty_ycore_void_result yplot_emit_legend(struct yetty_ydraw_drawable_list *list,
+                                                        const struct yetty_yplot_uniforms *u,
+                                                        const struct yplot_label_plan *plan,
+                                                        float margin_left,
+                                                        const struct yplot_legend_entry *entries,
+                                                        size_t count)
 {
     float font_size = plan->font_size;
     float pad = font_size * 0.4f;
@@ -492,8 +495,8 @@ static struct yetty_ycore_void_result yplot_emit_legend(
         if (entries[i].name && entries[i].name[0]) {
             float text_x = swatch_x + swatch_width + gap;
             float baseline = row_center + font_size * 0.35f;
-            struct yetty_ycore_void_result text_res = yplot_add_label(
-                list, text_x, baseline, entries[i].name, font_size, 0xFFE4E5E0u);
+            struct yetty_ycore_void_result text_res =
+                yplot_add_label(list, text_x, baseline, entries[i].name, font_size, 0xFFE4E5E0u);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "yplot: legend name");
         }
     }
@@ -528,7 +531,8 @@ static struct yetty_ydraw_drawable_list_result yplot_emit_prim(
     if (plan.enabled && legend_entries && legend_count >= 2) {
         legend_margin = yplot_legend_margin(legend_entries, legend_count, plan.font_size);
         float plot_width_left = u.bounds_w - plan.left_margin - legend_margin;
-        if (legend_margin > 0.0f && legend_margin <= u.bounds_w * 0.4f && plot_width_left >= 20.0f) {
+        if (legend_margin > 0.0f && legend_margin <= u.bounds_w * 0.4f &&
+            plot_width_left >= 20.0f) {
             show_legend = true;
         } else {
             legend_margin = 0.0f;

@@ -2424,8 +2424,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     parse_html_dimension_attr((const char *)iframe_aw, iframe_alen, &definite_w,
                                               &pct_w);
                 }
-                const lxb_char_t *iframe_ah =
-                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"height", 6, &iframe_alen);
+                const lxb_char_t *iframe_ah = lxb_dom_element_get_attribute(
+                    el, (const lxb_char_t *)"height", 6, &iframe_alen);
                 if (iframe_ah && iframe_alen > 0) {
                     parse_html_dimension_attr((const char *)iframe_ah, iframe_alen, &definite_h,
                                               &pct_h);
