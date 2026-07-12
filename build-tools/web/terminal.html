@@ -166,6 +166,69 @@
             line-height: 1.6;
         }
         #fatal code { color: #9FA7A8; }
+        /* Abort help dialog — shown whenever a yetty session cannot start
+         * (no WebGPU, blocklisted adapter, device failure, wasm abort, …).
+         * Gives the user the exact chrome:// pages to open and what to look
+         * for. chrome:// URLs are rendered as copy fields, not links,
+         * because browsers refuse to navigate to them from page content. */
+        #fatal.abort-dialog {
+            max-width: min(600px, calc(100vw - 24px));
+            max-height: calc(100vh - 24px);
+            overflow-y: auto;
+            text-align: left;
+            background: #141A1F;
+            border: 1px solid #364A47;
+            border-radius: 10px;
+            padding: 20px 22px;
+            z-index: 1000;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+        }
+        .abort-title { color: #74C5A5; font-size: 15px; font-weight: bold; margin-bottom: 10px; }
+        .abort-cause { color: #9FA7A8; margin-bottom: 4px; }
+        .abort-section-label {
+            color: #6BA892;
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin: 16px 0 6px;
+            border-top: 1px solid #364A47;
+            padding-top: 12px;
+        }
+        .abort-step { color: #E0E5E4; margin-bottom: 8px; }
+        .abort-copy-field { display: flex; gap: 8px; align-items: stretch; margin: 6px 0; }
+        .abort-url {
+            flex: 1 1 auto;
+            min-width: 0;
+            background: #0B1014;
+            border: 1px solid #364A47;
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: #74C5A5;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: nowrap;
+            user-select: all;
+        }
+        .abort-copy {
+            flex: 0 0 auto;
+            background: #6BA892;
+            color: #0B1014;
+            border: 0;
+            border-radius: 6px;
+            padding: 0 14px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+        }
+        .abort-copy:hover { background: #74C5A5; }
+        .abort-copy.copied { background: #5A8979; color: #E0E5E4; }
+        .abort-hint { color: #556162; font-size: 12px; margin: 4px 0; }
+        .abort-hint code, .abort-step code, .abort-cause code { color: #9FA7A8; }
+        .abort-diag { margin-top: 16px; border-top: 1px solid #364A47; padding-top: 10px; font-size: 11px; }
+        .abort-diag-row { display: flex; gap: 8px; margin: 3px 0; }
+        .abort-diag-row > span { flex: 0 0 64px; color: #556162; }
+        .abort-diag-row > code { color: #9FA7A8; word-break: break-all; }
     </style>
 </head>
 <body>
@@ -344,29 +407,182 @@
             }
         }
 
+        // Best-effort GPU identification (WebGL unmasked strings) for the
+        // diagnostics block in the abort dialog. Never throws.
+        function gatherGpuInfo() {
+            const info = { renderer: '', vendor: '' };
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+                if (gl) {
+                    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+                    if (dbg) {
+                        info.renderer = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '';
+                        info.vendor = gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) || '';
+                    }
+                }
+            } catch (err) { /* diagnostics only */ }
+            return info;
+        }
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, function (ch) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;',
+                         '"': '&quot;', "'": '&#39;' }[ch];
+            });
+        }
+
+        // A chrome:// destination rendered as a copyable field. It is NOT a
+        // link: browsers block navigation to chrome:// from page content, so
+        // the user must paste it into the address bar.
+        function copyField(text) {
+            const safe = escapeHtml(text);
+            return '<div class="abort-copy-field">' +
+                   '<code class="abort-url">' + safe + '</code>' +
+                   '<button type="button" class="abort-copy" data-copy="' + safe +
+                   '">Copy</button></div>';
+        }
+
+        function copyToClipboard(text, button) {
+            function feedback() {
+                const original = button.textContent;
+                button.textContent = 'Copied!';
+                button.classList.add('copied');
+                setTimeout(function () {
+                    button.textContent = original;
+                    button.classList.remove('copied');
+                }, 1500);
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(feedback, function () {
+                    fallbackCopy(text, feedback);
+                });
+            } else {
+                fallbackCopy(text, feedback);
+            }
+        }
+
+        function fallbackCopy(text, feedback) {
+            try {
+                const area = document.createElement('textarea');
+                area.value = text;
+                area.style.position = 'fixed';
+                area.style.opacity = '0';
+                document.body.appendChild(area);
+                area.focus();
+                area.select();
+                document.execCommand('copy');
+                document.body.removeChild(area);
+                feedback();
+            } catch (err) { /* the field is user-selectable as a last resort */ }
+        }
+
+        // Central "yetty cannot start" dialog. Every abort path routes here so
+        // the user always sees where to look (chrome://flags, chrome://gpu)
+        // and what the specific failure was.
+        function showAbortDialog(options) {
+            const loading = document.getElementById('loading');
+            if (loading) loading.style.display = 'none';
+            // Collapse the translucent boot log so the dialog is unobstructed.
+            const overlay = document.getElementById('yetty-status');
+            if (overlay) overlay.style.display = 'none';
+
+            const gpu = options.gpuInfo || {};
+            const gpuRow = gpu.renderer
+                ? '<div class="abort-diag-row"><span>GPU</span><code>' +
+                  escapeHtml(gpu.renderer) + '</code></div>'
+                : '';
+
+            const fatal = document.getElementById('fatal');
+            fatal.classList.add('abort-dialog');
+            fatal.innerHTML =
+                '<div class="abort-title">' + escapeHtml(options.heading) + '</div>' +
+                '<div class="abort-cause">' + escapeHtml(options.cause) + '</div>' +
+
+                '<div class="abort-section-label">Try this first</div>' +
+                '<div class="abort-step">Enable unsafe / blocklisted WebGPU, then ' +
+                'relaunch the browser:</div>' +
+                copyField('chrome://flags/#enable-unsafe-webgpu') +
+                '<div class="abort-hint">Set it to <strong>Enabled</strong> and use ' +
+                '<strong>Relaunch</strong>. Browser <code>chrome://</code> pages cannot ' +
+                'be opened from a link — paste the copied text into the address bar.</div>' +
+
+                '<div class="abort-section-label">Investigate why</div>' +
+                '<div class="abort-step">Open the GPU report and read the ' +
+                '<strong>Graphics Feature Status</strong>:</div>' +
+                copyField('chrome://gpu') +
+                '<div class="abort-hint">Look at the <code>WebGPU</code> and ' +
+                '<code>Vulkan</code> lines. If Vulkan is <em>Disabled</em>, or the Dawn ' +
+                '<code>WebGPU Status</code> section says <em>Blocklisted</em>, your ' +
+                'GPU/driver is not on the browser\'s WebGPU allow-list — the flag above ' +
+                'overrides that. On desktop, a WebGPU-hooking extension can also break ' +
+                'it; try a Guest window or disable extensions.</div>' +
+
+                '<div class="abort-diag">' + gpuRow +
+                '<div class="abort-diag-row"><span>Reason</span><code>' +
+                escapeHtml(options.reason || '') + '</code></div>' +
+                '<div class="abort-diag-row"><span>Browser</span><code>' +
+                escapeHtml(navigator.userAgent) + '</code></div></div>';
+
+            fatal.style.display = 'block';
+            fatal.querySelectorAll('.abort-copy').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    copyToClipboard(button.getAttribute('data-copy'), button);
+                });
+            });
+        }
+
         async function checkWebGPU() {
             const status = document.getElementById('status');
 
             if (!navigator.gpu) {
-                status.textContent = 'WebGPU not supported in this browser';
-                document.getElementById('loading').innerHTML = `
-                    <div style="color: #e94560;">WebGPU Not Supported</div>
-                    <div style="margin-top: 10px; font-size: 0.9em;">
-                        Try Chrome/Edge 113+ or Firefox Nightly with WebGPU enabled.
-                    </div>
-                `;
+                status.textContent = 'WebGPU not available';
+                showAbortDialog({
+                    heading: 'WebGPU is not available in this browser',
+                    cause: 'This browser does not expose the WebGPU API ' +
+                           '(navigator.gpu is missing). yetty renders its terminal on ' +
+                           'the GPU and cannot start without it. Use Chrome/Edge 113+ ' +
+                           'or another WebGPU-capable browser.',
+                    reason: 'navigator.gpu is undefined',
+                    gpuInfo: gatherGpuInfo(),
+                });
+                return false;
+            }
+
+            // Ask for the default (core) adapter first. On Android and older
+            // GPUs the core backend (Vulkan) is often blocklisted while the
+            // GL/ES-backed compatibility adapter still works — fall back to it
+            // before giving up.
+            let adapter = null;
+            let usedCompatibility = false;
+            try {
+                status.textContent = 'Requesting WebGPU adapter…';
+                adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) {
+                    adapter = await navigator.gpu.requestAdapter({ featureLevel: 'compatibility' });
+                    usedCompatibility = !!adapter;
+                }
+            } catch (err) {
+                adapter = null;
+            }
+
+            if (!adapter) {
+                status.textContent = 'No WebGPU adapter available';
+                showAbortDialog({
+                    heading: 'No WebGPU adapter is available',
+                    cause: 'The browser supports WebGPU but did not provide a GPU ' +
+                           'adapter — neither the default nor the compatibility ' +
+                           'adapter. This almost always means the GPU/driver is ' +
+                           'blocklisted for WebGPU, or a browser extension is ' +
+                           'interfering with the WebGPU API.',
+                    reason: 'navigator.gpu.requestAdapter() returned null (core and compatibility)',
+                    gpuInfo: gatherGpuInfo(),
+                });
                 return false;
             }
 
             try {
-                status.textContent = 'Requesting WebGPU adapter...';
-                const adapter = await navigator.gpu.requestAdapter();
-                if (!adapter) {
-                    status.textContent = 'No WebGPU adapter found';
-                    return false;
-                }
-
-                status.textContent = 'Requesting WebGPU device...';
+                status.textContent = 'Requesting WebGPU device…';
                 const device = await adapter.requestDevice({
                     requiredLimits: {
                         maxStorageBuffersPerShaderStage: 8,
@@ -375,14 +591,35 @@
                 });
                 if (!device) {
                     status.textContent = 'Failed to get WebGPU device';
+                    showAbortDialog({
+                        heading: 'WebGPU device creation failed',
+                        cause: 'A GPU adapter was found but the browser refused to ' +
+                               'create a WebGPU device from it.',
+                        reason: 'adapter.requestDevice() returned null',
+                        gpuInfo: gatherGpuInfo(),
+                    });
                     return false;
                 }
 
                 Module.preinitializedWebGPUDevice = device;
-                status.textContent = 'WebGPU initialized';
+                status.textContent = usedCompatibility
+                    ? 'WebGPU initialized (compatibility mode)'
+                    : 'WebGPU initialized';
+                if (usedCompatibility && window.yettyStatus) {
+                    window.yettyStatus.append(
+                        'WebGPU core adapter unavailable — using compatibility mode', 'dim');
+                }
                 return true;
             } catch (err) {
-                status.textContent = 'WebGPU error: ' + err.message;
+                status.textContent = 'WebGPU error: ' + (err && err.message || err);
+                showAbortDialog({
+                    heading: 'WebGPU device creation failed',
+                    cause: 'A GPU adapter was found but creating a device from it ' +
+                           'threw an error. The GPU may not meet the limits yetty ' +
+                           'requests, or the driver is unstable.',
+                    reason: 'adapter.requestDevice() threw: ' + (err && err.message || err),
+                    gpuInfo: gatherGpuInfo(),
+                });
                 return false;
             }
         }
@@ -455,6 +692,18 @@
             canvas: document.getElementById('canvas'),
             print: function(text) { console.log(text); },
             printErr: function(text) { console.log(text); },
+            // Any fatal wasm-level abort routes to the same help dialog so the
+            // user is never left staring at a frozen canvas with no guidance.
+            onAbort: function(what) {
+                showAbortDialog({
+                    heading: 'yetty stopped unexpectedly',
+                    cause: 'The yetty engine aborted after starting. This is most ' +
+                           'often a GPU/WebGPU problem on this device. The pages below ' +
+                           'show what the browser thinks of your GPU.',
+                    reason: 'wasm abort: ' + (what || 'unknown'),
+                    gpuInfo: gatherGpuInfo(),
+                });
+            },
             // preRun runs AFTER yetty.js loads but BEFORE main() executes
             // This is where we inject environment variables into Emscripten's ENV
             preRun: [function() {

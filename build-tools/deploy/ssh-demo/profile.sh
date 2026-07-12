@@ -1,0 +1,45 @@
+# Shell dressing for the ephemeral yetty demo container.
+# Sourced from /etc/profile.d for the login shell.
+
+# yetty product paths (installed into /usr/local at image build time).
+export XDG_BIN_HOME=/usr/local/bin
+export XDG_DATA_HOME=/usr/local/share
+export XDG_CONFIG_HOME=/usr/local/etc/xdg
+export YETTY_DEMOS=/usr/local/share/yetty/demos
+
+# Tell the yetty tools they're inside a yetty terminal so they emit rich-content
+# envelopes (the browser-side yetty renders them) instead of raw fallbacks.
+export TERM_PROGRAM=yetty
+
+# Auto-logout idle sessions (seconds). Belt-and-braces with the outer
+# `timeout` in yetty-demo-session.sh.
+export TMOUT="${TMOUT:-1800}"
+
+# Nothing persists across sessions anyway.
+export HISTFILE=/dev/null
+
+# Convenience links in the (tmpfs, per-session) home so the MOTD's example
+# commands work verbatim.
+ln -sfn "${YETTY_DEMOS}" "${HOME}/demos" 2>/dev/null || true
+ln -sf /usr/local/share/yetty/logo-2.jpeg "${HOME}/yetty-logo.jpeg" 2>/dev/null || true
+
+# `demos` — browse the bundled demo gallery.
+demos() {
+    if [ -n "$1" ]; then
+        ls -1 "${YETTY_DEMOS}/scripts/$1" 2>/dev/null && return 0
+    fi
+    echo "yetty demo gallery — assets in ${YETTY_DEMOS}"
+    echo
+    echo "  ready-to-run scripts:"
+    ls -1 "${YETTY_DEMOS}/scripts" 2>/dev/null | sed 's/^/    /'
+    echo
+    echo "  run one, e.g.:  bash ${YETTY_DEMOS}/scripts/all.sh"
+}
+
+# Brand mint accent (#6BA892 = rgb 107,168,146) for the prompt glyph.
+PS1='\[\e[38;2;107;168;146m\]yetty-demo\[\e[0m\]:\w\$ '
+
+# Show the welcome banner once at login.
+if [ -f /etc/motd ]; then
+    cat /etc/motd
+fi

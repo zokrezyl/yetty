@@ -1,0 +1,20 @@
+
+   ┌──────────────────────────────────────────────────────────────┐
+   │                                                                │
+   │        y e t t y   —   TERMINAL UNCHAINED                      │
+   │                                                                │
+   │   Throwaway demo container — created for this session, wiped   │
+   │   when you disconnect. The yetty tools below emit rich content │
+   │   that renders right here in your browser terminal:            │
+   │                                                                │
+   │     ycat  ~/yetty-logo.jpeg                  an image          │
+   │     ycat  ~/demos/assets/svg/firefox-logo.svg   an SVG         │
+   │     yplot 'sin(x)/x'                         a live plot       │
+   │     yflame   ymesh   ychart-cli   ydiagram-cli   ydoc          │
+   │                                                                │
+   │     demos                       browse the full demo gallery   │
+   │                                                                │
+   │   Learn more at https://yetty.dev                              │
+   │                                                                │
+   └──────────────────────────────────────────────────────────────┘
+
