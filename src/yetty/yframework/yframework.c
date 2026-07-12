@@ -514,7 +514,7 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
 
     /* GPU allocator. */
     struct yetty_yrender_gpu_allocator_result alloc_res =
-        yetty_yrender_gpu_allocator_create(rt->gpu.device);
+        yetty_yrender_gpu_allocator_create(rt->gpu.app_gpu_context.instance, rt->gpu.device);
     if (!YETTY_IS_OK(alloc_res)) {
         return YETTY_ERR(yetty_ycore_void, "yframework: gpu_allocator_create failed", alloc_res);
     }

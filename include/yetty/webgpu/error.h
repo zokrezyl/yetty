@@ -2,6 +2,7 @@
 #define YETTY_YWEBGPU_ERROR_H
 
 #include <webgpu/webgpu.h>
+#include <yetty/ycore/result.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,20 +42,24 @@ WGPUUncapturedErrorCallbackInfo yetty_ywebgpu_get_error_callback_info(void);
  * Usage:
  *   yetty_ywebgpu_error_scope_push(device);
  *   ... wgpu calls validating untrusted input ...
- *   char message[512];
- *   if (yetty_ywebgpu_error_scope_pop(device, message, sizeof(message))) {
- *       // captured — surface `message` as a Result error
- *   }
+ *   struct yetty_ycore_void_result pop_res =
+ *       yetty_ywebgpu_error_scope_pop(instance, device);
+ *   YETTY_RETURN_IF_ERR(yetty_ycore_void, pop_res, "shader validation");
  *
- * Captures validation errors (filter = Validation). The pop callback runs
- * spontaneously inside wgpuDevicePopErrorScope on Dawn native — the scope
- * result for synchronously-validated calls is already resolved by then.
+ * Captures validation errors (filter = Validation). On Dawn native the
+ * pop callback runs spontaneously inside wgpuDevicePopErrorScope — the
+ * scope result for synchronously-validated calls is already resolved by
+ * then. On the browser backend resolution needs the event loop, so pop
+ * blocks on the scope future via wgpuInstanceWaitAny (Asyncify-backed;
+ * the instance must be created with WGPUInstanceFeatureName_TimedWaitAny)
+ * — a real validation failure surfaces as a Result on every platform
+ * instead of being demoted to an async log line. The full validation
+ * message is logged via yerror; the Result carries a static summary.
  */
 void yetty_ywebgpu_error_scope_push(WGPUDevice device);
 
-/* Returns 1 and fills message_out if a validation error was captured in
- * the matching push; 0 otherwise. message_out may be NULL. */
-int yetty_ywebgpu_error_scope_pop(WGPUDevice device, char *message_out, size_t message_capacity);
+struct yetty_ycore_void_result yetty_ywebgpu_error_scope_pop(WGPUInstance instance,
+                                                             WGPUDevice device);
 
 /* Assert that no uncaptured wgpu error fired during the preceding call.
  * Logs a short tag identifying the call site, exits to stderr on first

@@ -45,11 +45,17 @@ struct yetty_yrender_gpu_allocator_ops {
 
 struct yetty_ydraw_gpu_allocator {
     const struct yetty_yrender_gpu_allocator_ops *ops;
+    /* The WebGPU instance the device came from. Consumers that must
+     * block on a WGPUFuture (yetty_ywebgpu_error_scope_pop's browser
+     * path) reach it through the allocator, which every pipeline and
+     * resource binder already holds — no per-call-site threading. */
+    WGPUInstance instance;
 };
 
 YETTY_YRESULT_DECLARE(yetty_yrender_gpu_allocator, struct yetty_ydraw_gpu_allocator *);
 
-struct yetty_yrender_gpu_allocator_result yetty_yrender_gpu_allocator_create(WGPUDevice device);
+struct yetty_yrender_gpu_allocator_result yetty_yrender_gpu_allocator_create(WGPUInstance instance,
+                                                                             WGPUDevice device);
 
 /* Process-lifetime shader/pipeline cache, keyed by a hash of the generated
  * WGSL. Binders that produce a byte-identical shader (e.g. every ygrid
