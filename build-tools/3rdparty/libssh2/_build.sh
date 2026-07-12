@@ -2,13 +2,23 @@
 # Builds libssh2 (libssh2/libssh2) for $TARGET_PLATFORM via its upstream
 # CMake. Same per-platform handling pattern as libuv.
 #
-# OpenSSL backend: we link against the upstream openssl 4.x prebuilt
-# tarball published by build-3rdparty-openssl.yml. To keep the
-# producer self-contained, this script downloads that tarball at build
-# time (instead of requiring the consumer-side fetch to have run first).
-# Same model the consumer libssh2.cmake uses at yetty-build time —
-# the difference is we resolve openssl HERE so the resulting libssh2
-# archive carries no external configure-time path baked in.
+# Crypto backend is per-platform:
+#
+#   - Everything except webasm: OpenSSL. We link against the upstream
+#     openssl 4.x prebuilt tarball published by build-3rdparty-openssl.yml.
+#     To keep the producer self-contained, this script downloads that
+#     tarball at build time (instead of requiring the consumer-side fetch
+#     to have run first). Same model the consumer libssh2.cmake uses at
+#     yetty-build time — the difference is we resolve openssl HERE so the
+#     resulting libssh2 archive carries no external configure-time path
+#     baked in.
+#
+#   - webasm: mbedTLS, built from upstream source right here. An
+#     openssl-backed archive would drag libssl+libcrypto into yetty.wasm
+#     (a multi-MB browser-download hit for symbols libssh2 barely uses);
+#     libssh2's mbedTLS backend needs only libmbedcrypto.a and is the
+#     backend upstream recommends for embedded targets. The tarball
+#     bundles that archive so the consumer needs no separate crypto dep.
 #
 # windows-x86_64 is intentionally absent — see build.sh for the why.
 #
@@ -26,8 +36,10 @@
 #                              (default: read from
 #                               build-tools/3rdparty/openssl/version)
 #
-# Output tarball layout (consumed by build-tools/cmake/libs/libssh2.cmake):
+# Output tarball layout (consumed by build-tools/yetty/libs/libssh2.cmake
+# and, for webasm, libs/libssh2-webasm.cmake):
 #   lib/libssh2.a
+#   lib/libmbedcrypto.a    (webasm only)
 #   include/libssh2.h
 #   include/libssh2_publickey.h
 #   include/libssh2_sftp.h
@@ -45,18 +57,37 @@ VERSION_FILE="$SCRIPT_DIR/version"
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 
+# The full VERSION (may carry a packaging revision, e.g. 1.11.1-1) names
+# the tarball + release tag; the upstream source archive uses only the
+# component before the first dash. Same convention as mimalloc.
+UPSTREAM_VERSION="${VERSION%%-*}"
+
+# Crypto backend per platform — see the header comment for the why.
+case "$TARGET_PLATFORM" in
+    webasm) CRYPTO_BACKEND="mbedTLS" ;;
+    *)      CRYPTO_BACKEND="OpenSSL" ;;
+esac
+
+# mbedTLS pin (webasm backend only). Only libmbedcrypto is consumed —
+# libssh2's mbedTLS backend uses no TLS/X.509.
+MBEDTLS_VERSION="3.6.2"
+MBEDTLS_SHA256="8b54fb9bcf4d5a7078028e0520acddefb7900b3e66fec7f7175bb5b7d85ccdca"
+
 # OpenSSL version to link against. Read from the openssl 3rdparty
 # dir unless overridden — that pins libssh2's TLS backend to the same
 # version yetty itself uses.
-OSSL_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/openssl/version"
-: "${OPENSSL_VERSION_OVERRIDE:=}"
-if [ -n "$OPENSSL_VERSION_OVERRIDE" ]; then
-    OSSL_VERSION="$OPENSSL_VERSION_OVERRIDE"
-else
-    [ -f "$OSSL_VERSION_FILE" ] || { echo "missing $OSSL_VERSION_FILE" >&2; exit 1; }
-    OSSL_VERSION="$(tr -d '[:space:]' < "$OSSL_VERSION_FILE")"
+OSSL_VERSION=""
+if [ "$CRYPTO_BACKEND" = "OpenSSL" ]; then
+    OSSL_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/openssl/version"
+    : "${OPENSSL_VERSION_OVERRIDE:=}"
+    if [ -n "$OPENSSL_VERSION_OVERRIDE" ]; then
+        OSSL_VERSION="$OPENSSL_VERSION_OVERRIDE"
+    else
+        [ -f "$OSSL_VERSION_FILE" ] || { echo "missing $OSSL_VERSION_FILE" >&2; exit 1; }
+        OSSL_VERSION="$(tr -d '[:space:]' < "$OSSL_VERSION_FILE")"
+    fi
+    [ -n "$OSSL_VERSION" ] || { echo "openssl version unresolved" >&2; exit 1; }
 fi
-[ -n "$OSSL_VERSION" ] || { echo "openssl version unresolved" >&2; exit 1; }
 
 WORK_DIR="${WORK_DIR:-/tmp/yetty-3rdparty-libssh2-$TARGET_PLATFORM}"
 CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-3rdparty}"
@@ -64,18 +95,26 @@ NCPU="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 
 URL_BASE="${YETTY_3RDPARTY_URL_BASE:-https://github.com/zokrezyl/yetty/releases/download}"
 
-LIBSSH2_URL="https://github.com/libssh2/libssh2/archive/refs/tags/libssh2-${VERSION}.tar.gz"
-LIBSSH2_TARBALL="$CACHE_DIR/libssh2-${VERSION}.tar.gz"
-SRC_DIR="$WORK_DIR/libssh2-libssh2-${VERSION}"
+LIBSSH2_URL="https://github.com/libssh2/libssh2/archive/refs/tags/libssh2-${UPSTREAM_VERSION}.tar.gz"
+LIBSSH2_TARBALL="$CACHE_DIR/libssh2-${UPSTREAM_VERSION}.tar.gz"
+SRC_DIR="$WORK_DIR/libssh2-libssh2-${UPSTREAM_VERSION}"
 BUILD_DIR="$WORK_DIR/build-${TARGET_PLATFORM}"
 INSTALL_DIR="$WORK_DIR/install-${TARGET_PLATFORM}"
 STAGE="$WORK_DIR/stage-${TARGET_PLATFORM}"
 TARBALL="$OUTPUT_DIR/libssh2-${TARGET_PLATFORM}-${VERSION}.tar.gz"
 
-# Where we'll extract the prebuilt openssl for cmake to find.
+# Where we'll extract the prebuilt openssl for cmake to find (OpenSSL
+# backend only; OSSL_VERSION is empty on webasm and these stay unused).
 OSSL_TAR_URL="$URL_BASE/lib-openssl-${OSSL_VERSION}/openssl-${TARGET_PLATFORM}-${OSSL_VERSION}.tar.gz"
 OSSL_TARBALL="$CACHE_DIR/openssl-${TARGET_PLATFORM}-${OSSL_VERSION}.tar.gz"
 OSSL_PREFIX="$WORK_DIR/openssl-${TARGET_PLATFORM}-${OSSL_VERSION}"
+
+# mbedTLS source + build locations (mbedTLS backend only).
+MBEDTLS_URL="https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-${MBEDTLS_VERSION}/mbedtls-${MBEDTLS_VERSION}.tar.bz2"
+MBEDTLS_TARBALL="$CACHE_DIR/mbedtls-${MBEDTLS_VERSION}.tar.bz2"
+MBEDTLS_SRC_DIR="$WORK_DIR/mbedtls-${MBEDTLS_VERSION}"
+MBEDTLS_BUILD_DIR="$WORK_DIR/mbedtls-build-${TARGET_PLATFORM}"
+MBEDTLS_PREFIX="$WORK_DIR/mbedtls-prefix-${TARGET_PLATFORM}"
 
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 
@@ -100,38 +139,53 @@ fetch() {
 }
 
 #-----------------------------------------------------------------------------
-# Fetch libssh2 source + prebuilt openssl tarball.
+# Fetch libssh2 source + the crypto backend (prebuilt openssl tarball, or
+# mbedTLS source for webasm).
 #-----------------------------------------------------------------------------
-fetch "$LIBSSH2_URL" "$LIBSSH2_TARBALL" "libssh2 ${VERSION}"               libssh2-source
-fetch "$OSSL_TAR_URL" "$OSSL_TARBALL"   "openssl ${OSSL_VERSION} (${TARGET_PLATFORM}) — libssh2 TLS backend" libssh2-openssl
+fetch "$LIBSSH2_URL" "$LIBSSH2_TARBALL" "libssh2 ${UPSTREAM_VERSION}"      libssh2-source
 
 if [ ! -d "$SRC_DIR" ]; then
     echo "==> extracting libssh2 -> $SRC_DIR"
     tar -C "$WORK_DIR" -xzf "$LIBSSH2_TARBALL"
 fi
-echo "==> extracting prebuilt openssl -> $OSSL_PREFIX"
-rm -rf "$OSSL_PREFIX"
-mkdir -p "$OSSL_PREFIX"
-tar -C "$OSSL_PREFIX" -xzf "$OSSL_TARBALL"
 
-# Sanity-check the prebuilt openssl tarball — Unix ships libssl.a /
-# libcrypto.a, MSVC ships libssl.lib / libcrypto.lib.
 OSSL_SSL=""; OSSL_CRYPTO=""
-for _candidate in libssl.a libssl.lib; do
-    if [ -f "$OSSL_PREFIX/lib/$_candidate" ]; then
-        OSSL_SSL="$OSSL_PREFIX/lib/$_candidate"
-        break
+if [ "$CRYPTO_BACKEND" = "OpenSSL" ]; then
+    fetch "$OSSL_TAR_URL" "$OSSL_TARBALL" "openssl ${OSSL_VERSION} (${TARGET_PLATFORM}) — libssh2 TLS backend" libssh2-openssl
+
+    echo "==> extracting prebuilt openssl -> $OSSL_PREFIX"
+    rm -rf "$OSSL_PREFIX"
+    mkdir -p "$OSSL_PREFIX"
+    tar -C "$OSSL_PREFIX" -xzf "$OSSL_TARBALL"
+
+    # Sanity-check the prebuilt openssl tarball — Unix ships libssl.a /
+    # libcrypto.a, MSVC ships libssl.lib / libcrypto.lib.
+    for _candidate in libssl.a libssl.lib; do
+        if [ -f "$OSSL_PREFIX/lib/$_candidate" ]; then
+            OSSL_SSL="$OSSL_PREFIX/lib/$_candidate"
+            break
+        fi
+    done
+    for _candidate in libcrypto.a libcrypto.lib; do
+        if [ -f "$OSSL_PREFIX/lib/$_candidate" ]; then
+            OSSL_CRYPTO="$OSSL_PREFIX/lib/$_candidate"
+            break
+        fi
+    done
+    [ -n "$OSSL_SSL" ]    || { echo "missing libssl in $OSSL_PREFIX/lib/ — openssl tarball layout?" >&2; ls -la "$OSSL_PREFIX/lib/" >&2; exit 1; }
+    [ -n "$OSSL_CRYPTO" ] || { echo "missing libcrypto in $OSSL_PREFIX/lib/ — openssl tarball layout?" >&2; ls -la "$OSSL_PREFIX/lib/" >&2; exit 1; }
+    [ -d "$OSSL_PREFIX/include/openssl" ] || { echo "missing $OSSL_PREFIX/include/openssl/" >&2; exit 1; }
+else
+    fetch "$MBEDTLS_URL" "$MBEDTLS_TARBALL" "mbedTLS ${MBEDTLS_VERSION} — libssh2 crypto backend" libssh2-mbedtls
+    echo "${MBEDTLS_SHA256}  ${MBEDTLS_TARBALL}" | sha256sum -c - >/dev/null \
+        || { echo "mbedTLS tarball sha256 mismatch: $MBEDTLS_TARBALL" >&2; exit 1; }
+
+    if [ ! -d "$MBEDTLS_SRC_DIR" ]; then
+        echo "==> extracting mbedTLS -> $MBEDTLS_SRC_DIR"
+        tar -C "$WORK_DIR" -xjf "$MBEDTLS_TARBALL"
     fi
-done
-for _candidate in libcrypto.a libcrypto.lib; do
-    if [ -f "$OSSL_PREFIX/lib/$_candidate" ]; then
-        OSSL_CRYPTO="$OSSL_PREFIX/lib/$_candidate"
-        break
-    fi
-done
-[ -n "$OSSL_SSL" ]    || { echo "missing libssl in $OSSL_PREFIX/lib/ — openssl tarball layout?" >&2; ls -la "$OSSL_PREFIX/lib/" >&2; exit 1; }
-[ -n "$OSSL_CRYPTO" ] || { echo "missing libcrypto in $OSSL_PREFIX/lib/ — openssl tarball layout?" >&2; ls -la "$OSSL_PREFIX/lib/" >&2; exit 1; }
-[ -d "$OSSL_PREFIX/include/openssl" ] || { echo "missing $OSSL_PREFIX/include/openssl/" >&2; exit 1; }
+    [ -d "$MBEDTLS_SRC_DIR" ] || { echo "mbedTLS extraction layout changed? expected $MBEDTLS_SRC_DIR" >&2; exit 1; }
+fi
 
 rm -rf "$BUILD_DIR" "$INSTALL_DIR" "$STAGE"
 mkdir -p "$INSTALL_DIR" "$STAGE"
@@ -146,15 +200,6 @@ CMAKE_ARGS=(
     -DBUILD_STATIC_LIBS=ON
     -DBUILD_EXAMPLES=OFF
     -DBUILD_TESTING=OFF
-    # libssh2 1.11.x cmake var name is CRYPTO_BACKEND.
-    -DCRYPTO_BACKEND=OpenSSL
-    # Point cmake at our prebuilt openssl (find_package(OpenSSL) honors
-    # OPENSSL_ROOT_DIR + the *_LIBRARY / *_INCLUDE_DIR cache vars).
-    -DOPENSSL_ROOT_DIR="$OSSL_PREFIX"
-    -DOPENSSL_USE_STATIC_LIBS=ON
-    -DOPENSSL_INCLUDE_DIR="$OSSL_PREFIX/include"
-    -DOPENSSL_SSL_LIBRARY="$OSSL_SSL"
-    -DOPENSSL_CRYPTO_LIBRARY="$OSSL_CRYPTO"
     # libssh2's zlib compression is off — yetty links zlib downstream
     # via consumer wiring; folding it into libssh2 here would conflict
     # with that. Same as the from-source build.
@@ -162,6 +207,29 @@ CMAKE_ARGS=(
     -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
 )
+
+# libssh2 1.11.x cmake var name is CRYPTO_BACKEND.
+if [ "$CRYPTO_BACKEND" = "OpenSSL" ]; then
+    CMAKE_ARGS+=(
+        -DCRYPTO_BACKEND=OpenSSL
+        # Point cmake at our prebuilt openssl (find_package(OpenSSL) honors
+        # OPENSSL_ROOT_DIR + the *_LIBRARY / *_INCLUDE_DIR cache vars).
+        -DOPENSSL_ROOT_DIR="$OSSL_PREFIX"
+        -DOPENSSL_USE_STATIC_LIBS=ON
+        -DOPENSSL_INCLUDE_DIR="$OSSL_PREFIX/include"
+        -DOPENSSL_SSL_LIBRARY="$OSSL_SSL"
+        -DOPENSSL_CRYPTO_LIBRARY="$OSSL_CRYPTO"
+    )
+else
+    CMAKE_ARGS+=(
+        -DCRYPTO_BACKEND=mbedTLS
+        -DCMAKE_PREFIX_PATH="$MBEDTLS_PREFIX"
+        -DMBEDTLS_INCLUDE_DIR="$MBEDTLS_PREFIX/include"
+        -DMBEDCRYPTO_LIBRARY="$MBEDTLS_PREFIX/lib/libmbedcrypto.a"
+        -DMBEDTLS_LIBRARY="$MBEDTLS_PREFIX/lib/libmbedtls.a"
+        -DMBEDX509_LIBRARY="$MBEDTLS_PREFIX/lib/libmbedx509.a"
+    )
+fi
 EMCMAKE_PREFIX=""
 
 case "$TARGET_PLATFORM" in
@@ -262,9 +330,39 @@ windows-x86_64)
 esac
 
 #-----------------------------------------------------------------------------
+# mbedTLS backend: build + install it first so libssh2's configure below
+# finds the archives at the paths already wired into CMAKE_ARGS. Uses the
+# same toolchain prefix (emcmake for webasm) as the libssh2 build.
+#-----------------------------------------------------------------------------
+if [ "$CRYPTO_BACKEND" = "mbedTLS" ]; then
+    echo "==> configuring mbedTLS ${MBEDTLS_VERSION} for $TARGET_PLATFORM"
+    rm -rf "$MBEDTLS_BUILD_DIR" "$MBEDTLS_PREFIX"
+    # MBEDTLS_FATAL_WARNINGS=OFF — recent clang's
+    # -Wunterminated-string-initialization trips on mbedtls 3.6.x TLS1.3
+    # label tables under -Werror (in code libssh2 doesn't even use).
+    $EMCMAKE_PREFIX cmake -S "$MBEDTLS_SRC_DIR" -B "$MBEDTLS_BUILD_DIR" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$MBEDTLS_PREFIX" \
+        -DENABLE_TESTING=OFF \
+        -DENABLE_PROGRAMS=OFF \
+        -DMBEDTLS_FATAL_WARNINGS=OFF
+
+    echo "==> building mbedTLS (-j${NCPU})"
+    cmake --build "$MBEDTLS_BUILD_DIR" -j"$NCPU"
+    cmake --install "$MBEDTLS_BUILD_DIR"
+
+    [ -f "$MBEDTLS_PREFIX/lib/libmbedcrypto.a" ] \
+        || { echo "missing libmbedcrypto.a in $MBEDTLS_PREFIX/lib/ — mbedTLS install layout changed?" >&2; exit 1; }
+fi
+
+#-----------------------------------------------------------------------------
 # Configure + build + install
 #-----------------------------------------------------------------------------
-echo "==> configuring libssh2 ${VERSION} for $TARGET_PLATFORM (openssl ${OSSL_VERSION})"
+if [ "$CRYPTO_BACKEND" = "OpenSSL" ]; then
+    echo "==> configuring libssh2 ${VERSION} for $TARGET_PLATFORM (openssl ${OSSL_VERSION})"
+else
+    echo "==> configuring libssh2 ${VERSION} for $TARGET_PLATFORM (mbedTLS ${MBEDTLS_VERSION})"
+fi
 $EMCMAKE_PREFIX cmake -S "$SRC_DIR" -B "$BUILD_DIR" -G Ninja "${CMAKE_ARGS[@]}"
 
 echo "==> building (-j${NCPU})"
@@ -278,6 +376,8 @@ cmake --install "$BUILD_DIR"
 #   - lib{,64}/libssh2.a
 #   - include/libssh2.h, libssh2_publickey.h, libssh2_sftp.h
 #   - lib/pkgconfig/libssh2.pc + lib/cmake/libssh2/...  (we drop these)
+# mbedTLS backend additionally stages lib/libmbedcrypto.a — the libssh2
+# archive carries unresolved mbedcrypto symbols the consumer must link.
 #-----------------------------------------------------------------------------
 mkdir -p "$STAGE/lib" "$STAGE/include"
 for _D in lib lib64; do
@@ -287,6 +387,10 @@ for _D in lib lib64; do
     fi
 done
 cp -a "$INSTALL_DIR/include/." "$STAGE/include/"
+
+if [ "$CRYPTO_BACKEND" = "mbedTLS" ]; then
+    cp -a "$MBEDTLS_PREFIX/lib/libmbedcrypto.a" "$STAGE/lib/"
+fi
 
 if [ ! -f "$STAGE/lib/libssh2.a" ] && [ ! -f "$STAGE/lib/libssh2.lib" ]; then
     echo "missing libssh2.a / libssh2.lib in $STAGE/lib/ — install layout changed?" >&2
@@ -299,7 +403,11 @@ echo "==> packaging -> $TARBALL"
 tar -C "$STAGE" -czf "$TARBALL" .
 
 echo ""
-echo "libssh2 $VERSION ($TARGET_PLATFORM, openssl $OSSL_VERSION) ready:"
+if [ "$CRYPTO_BACKEND" = "OpenSSL" ]; then
+    echo "libssh2 $VERSION ($TARGET_PLATFORM, openssl $OSSL_VERSION) ready:"
+else
+    echo "libssh2 $VERSION ($TARGET_PLATFORM, mbedTLS $MBEDTLS_VERSION) ready:"
+fi
 ls -lh "$TARBALL"
 ENTRIES="$(tar -tzf "$TARBALL" | wc -l)"
 echo "contents ($ENTRIES files):"

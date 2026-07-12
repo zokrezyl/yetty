@@ -977,6 +977,11 @@ jobs:
         # terminal.html — the per-instance terminal page the tabbed
         # index.html shell embeds (one iframe = one wasm module).
         cp ${{ env.BUILD_DIR }}/terminal.html site/
+        # WebGPU health probe (tools/webasm-webgpu-health) — index.html
+        # runs it at page load; webgpu-health.html is the standalone
+        # diagnostics page the failure banner links to.
+        cp ${{ env.BUILD_DIR }}/webgpu-health.js site/
+        cp ${{ env.BUILD_DIR }}/webgpu-health.html site/
         cp ${{ env.BUILD_DIR }}/yetty.js site/
         cp ${{ env.BUILD_DIR }}/yetty.wasm site/
         # (no yetty.data — /demo and /src ship as lazy yfs subtrees,

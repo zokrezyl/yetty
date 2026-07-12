@@ -8,7 +8,9 @@ name: Build 3rdparty — libssh2
 # Note: the producer downloads the prebuilt openssl tarball at
 # build time so the resulting libssh2 archive is statically linked
 # against the same openssl version yetty itself uses (read from
-# build-tools/3rdparty/openssl/version).
+# build-tools/3rdparty/openssl/version). Exception: the webasm flavor
+# uses the mbedTLS backend (built from source in _build.sh) and bundles
+# libmbedcrypto.a in its tarball — no openssl in yetty.wasm.
 
 on:
   push:

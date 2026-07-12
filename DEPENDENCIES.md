@@ -74,6 +74,7 @@ Pinned versions are tracked under `build-tools/3rdparty/<name>/version`.
 | libcss | 0.9.2 | MIT | CSS engine |
 | QuickJS | 0.15.0 | MIT | JavaScript engine (ylexbor) |
 | libssh2 | 1.11.1 | BSD-3-Clause | SSH backend (yssh) |
+| mbedTLS | 3.6.2 | Apache-2.0 | libssh2 crypto backend (webasm only) |
 | libcurl | 8.20.0 | curl License (MIT/X11-style) | HTTP transport |
 | nghttp2 | 1.67.1 | MIT | HTTP/2 |
 | nghttp3 | 1.11.0 | MIT | HTTP/3 |

@@ -635,6 +635,11 @@
         </div>
     </div>
 
+    <!-- WebGPU health probe (tools/webasm-webgpu-health) — copied next to
+         this page by the webasm cmake glue. Loaded before the shell script
+         so the page-load hook below can run it immediately. -->
+    <script src="webgpu-health.js"></script>
+
     <script>
         // Parse URL parameters for configuration
         function getUrlParams() {
@@ -1436,6 +1441,28 @@
                 return;
             }
             openInstance(config);
+        })();
+
+        // ---- WebGPU health probe --------------------------------------
+        // Runs the full GPU bring-up chain (adapter → limits → device →
+        // canvas → shader compile → pipeline → pixel-verified draw) the
+        // moment the page loads, so a machine that cannot run yetty says
+        // so immediately — not only after a session type is picked and a
+        // terminal iframe boots. On failure a banner with the broken step,
+        // the advice, and a link to the full webgpu-health.html report is
+        // injected; degraded-but-usable setups (compatibility adapter,
+        // software rasterizer) get a dismissible warning instead.
+        (function () {
+            if (!window.yettyWebgpuHealth) {
+                // Probe script missing on this deployment — the
+                // per-instance gate in terminal.html still applies.
+                return;
+            }
+            window.yettyWebgpuHealth.run().then(function (report) {
+                window.yettyWebgpuHealth.installBanner(report, {
+                    detailsUrl: 'webgpu-health.html'
+                });
+            });
         })();
     </script>
 </body>
