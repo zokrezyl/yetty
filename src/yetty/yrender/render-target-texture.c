@@ -12,6 +12,7 @@
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yterminal/terminal.h>
 #include <yetty/yevent/event-loop.h>
+#include <yetty/yplatform/fatal-report.h>
 #include <yetty/yplatform/ywebgpu.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yplatform/thread.h>
@@ -909,10 +910,16 @@ static void render_target_texture_present_coro(void *arg)
         atomic_store(&rt->watchdog->started_ms, monotonic_ms());
     }
     ytime_start(surface_present);
-    wgpuSurfacePresent(rt->surface);
+    WGPUStatus present_status = wgpuSurfacePresent(rt->surface);
     ytime_report(surface_present);
     if (rt->watchdog) {
         atomic_store(&rt->watchdog->started_ms, 0);
+    }
+    if (present_status != WGPUStatus_Success) {
+        /* A failed present = the frame never reached the screen. Loud,
+         * not fatal: the next frame may recover (e.g. after resize). */
+        yerror("present_coro: wgpuSurfacePresent failed (status %d) — frame not shown",
+               (int)present_status);
     }
     YETTY_WGPU_CHECK("present_coro:SurfacePresent");
     ydebug("present_coro: AFTER  wgpuSurfacePresent");
@@ -981,11 +988,41 @@ static struct yetty_ycore_void_result render_target_texture_present(struct yetty
     YETTY_WGPU_CHECK("present:GetCurrentTexture");
     if (surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
         surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal) {
+        /* Name the status so a log reader can tell a lost surface from a
+         * timeout or an out-of-date swapchain, and mirror to the trace
+         * log — stderr alone bypasses ytrace file captures. */
+        const char *status_name = "unknown";
+        switch (surface_texture.status) {
+        case WGPUSurfaceGetCurrentTextureStatus_Timeout:
+            status_name = "Timeout";
+            break;
+        case WGPUSurfaceGetCurrentTextureStatus_Outdated:
+            status_name = "Outdated";
+            break;
+        case WGPUSurfaceGetCurrentTextureStatus_Lost:
+            status_name = "Lost";
+            break;
+        case WGPUSurfaceGetCurrentTextureStatus_Error:
+            status_name = "Error";
+            break;
+        default:
+            break;
+        }
+        yerror("present: wgpuSurfaceGetCurrentTexture failed: %s (status %d)", status_name,
+               (int)surface_texture.status);
         fprintf(stderr,
-                "\n[FATAL] wgpuSurfaceGetCurrentTexture returned non-Success status=%d "
+                "\n[FATAL] wgpuSurfaceGetCurrentTexture returned non-Success status=%d (%s) "
                 "(surface=%p). Likely surface lost or out-of-date — exiting.\n",
-                (int)surface_texture.status, (void *)rt->surface);
+                (int)surface_texture.status, status_name, (void *)rt->surface);
         fflush(stderr);
+        {
+            char page_message[192];
+            snprintf(page_message, sizeof(page_message),
+                     "acquiring the surface texture failed: %s (status %d) — the "
+                     "canvas/surface was lost",
+                     status_name, (int)surface_texture.status);
+            yetty_yplatform_fatal_report(page_message);
+        }
         _Exit(4);
     }
 
@@ -993,8 +1030,11 @@ static struct yetty_ycore_void_result render_target_texture_present(struct yetty
     WGPUTextureView surface_view = wgpuTextureCreateView(surface_texture.texture, NULL);
     YETTY_WGPU_CHECK("present:CreateView");
     if (!surface_view) {
+        yerror("present: wgpuTextureCreateView of the surface texture returned NULL");
         fprintf(stderr, "\n[FATAL] wgpuTextureCreateView returned NULL — exiting.\n");
         fflush(stderr);
+        yetty_yplatform_fatal_report(
+            "creating a view of the surface texture failed — the surface is unusable");
         _Exit(4);
     }
     ydebug("present: AFTER  wgpuTextureCreateView view=%p", (void *)surface_view);
@@ -1173,8 +1213,12 @@ static struct yetty_ycore_void_result render_target_texture_present(struct yetty
     } else {
         ydebug("present: BEFORE SurfacePresent (sync — no wgpu handle)");
         ytime_start(surface_present);
-        wgpuSurfacePresent(rt->surface);
+        WGPUStatus sync_present_status = wgpuSurfacePresent(rt->surface);
         ytime_report(surface_present);
+        if (sync_present_status != WGPUStatus_Success) {
+            yerror("present: wgpuSurfacePresent failed (status %d) — frame not shown",
+                   (int)sync_present_status);
+        }
         ydebug("present: AFTER SurfacePresent (sync)");
         wgpuTextureViewRelease(surface_view);
     }

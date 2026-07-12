@@ -25,6 +25,7 @@
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
+#include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -105,7 +106,19 @@ void yetty_yplatform_input_pipe_webasm_platform_input_pipe_process(
             return;
         }
         ydebug("webasm_pipe: dispatching event type=%d", (int)event.type);
-        pipe->event_loop->ops->dispatch(pipe->event_loop, &event);
+        /* External-callback boundary (void return): absorb by logging.
+         * Every keyboard/mouse/RESIZE event flows through here — a
+         * dropped error on the initial RESIZE means the first frame is
+         * never requested and the canvas stays blank with no message. */
+        struct yetty_ycore_int_result dispatch_res =
+            pipe->event_loop->ops->dispatch(pipe->event_loop, &event);
+        if (YETTY_IS_ERR(dispatch_res)) {
+            char chain_buf[512];
+            yetty_ycore_error_snprint(chain_buf, sizeof(chain_buf), dispatch_res.error);
+            yerror("webasm_pipe: dispatch of event type=%d failed: %s", (int)event.type,
+                   chain_buf);
+            yetty_ycore_error_destroy(dispatch_res.error);
+        }
     }
 }
 

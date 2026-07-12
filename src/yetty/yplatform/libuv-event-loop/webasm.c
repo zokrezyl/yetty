@@ -1,6 +1,7 @@
 /* WebAssembly event loop using emscripten main loop */
 
 #include <yetty/yevent/event-loop.h>
+#include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ynotify/ynotify.h>
 #include <yetty/yplatform/platform-input-pipe.h>
@@ -83,6 +84,12 @@ struct yetty_yplatform_webasm_event_loop {
      * render handler — e.g. a frame's emit writes to a memory-pty whose
      * wake callback is request_render — and recurse without bound. */
     int render_pending;
+    /* Absorbed-error throttles: main_loop_tick is an external-callback
+     * boundary (emscripten main loop, void return) so listener errors
+     * are absorbed by LOGGING — but a permanently failing per-frame
+     * handler at 60 fps must not flood the console. */
+    unsigned render_error_count;
+    unsigned timer_error_count;
 };
 
 /* Forward declarations */
@@ -206,7 +213,24 @@ static void main_loop_tick(void *arg)
             }
             for (int j = 0; j < n; j++) {
                 if (snapshot[j] && snapshot[j]->handler) {
-                    snapshot[j]->handler(snapshot[j], &event);
+                    /* External-callback boundary: absorb by logging.
+                     * Dropping this Result is how a failing animated
+                     * figure freezes with zero diagnostics. */
+                    struct yetty_ycore_int_result timer_res =
+                        snapshot[j]->handler(snapshot[j], &event);
+                    if (YETTY_IS_ERR(timer_res)) {
+                        impl->timer_error_count++;
+                        if (impl->timer_error_count <= 3 ||
+                            impl->timer_error_count % 120 == 0) {
+                            char chain_buf[512];
+                            yetty_ycore_error_snprint(chain_buf, sizeof(chain_buf),
+                                                      timer_res.error);
+                            yerror("webasm_event_loop: timer listener failed "
+                                   "(occurrence %u): %s",
+                                   impl->timer_error_count, chain_buf);
+                        }
+                        yetty_ycore_error_destroy(timer_res.error);
+                    }
                 }
             }
         }
@@ -220,7 +244,20 @@ static void main_loop_tick(void *arg)
         impl->render_pending = 0;
         struct yetty_yui_event render_event = {0};
         render_event.type = YETTY_YCORE_RENDER;
-        webasm_dispatch(&impl->base, &render_event);
+        /* External-callback boundary: absorb by logging. A dropped
+         * RENDER error here means the frame silently never paints —
+         * forever — which reads as "yetty renders nothing, no error". */
+        struct yetty_ycore_int_result render_res = webasm_dispatch(&impl->base, &render_event);
+        if (YETTY_IS_ERR(render_res)) {
+            impl->render_error_count++;
+            if (impl->render_error_count <= 3 || impl->render_error_count % 120 == 0) {
+                char chain_buf[512];
+                yetty_ycore_error_snprint(chain_buf, sizeof(chain_buf), render_res.error);
+                yerror("webasm_event_loop: RENDER dispatch failed (occurrence %u): %s",
+                       impl->render_error_count, chain_buf);
+            }
+            yetty_ycore_error_destroy(render_res.error);
+        }
     }
 }
 
@@ -379,7 +416,7 @@ static struct yetty_ycore_void_result webasm_broadcast(struct yetty_yevent_event
             struct yetty_ycore_int_result res = listener->handler(listener, event);
 
             if (!YETTY_IS_OK(res)) {
-                return YETTY_ERR(yetty_ycore_void, res.error.msg);
+                return YETTY_ERR(yetty_ycore_void, "webasm_broadcast: listener failed", res);
             }
         }
     }

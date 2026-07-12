@@ -91,12 +91,21 @@ static struct yetty_ycore_void_result yetty_app_run(struct yetty_yclass_object *
     }
     struct yetty_yetty_yetty *yetty = yetty_res.value;
 
-    /* First frame at the live framebuffer size, not the config default. */
+    /* First frame at the live framebuffer size, not the config default.
+     * This RESIZE is what triggers the first render request — a dropped
+     * write here means no frame is ever drawn, so it must not fail
+     * silently. */
     struct yetty_yui_event resize = {
         .type = YETTY_YCORE_RESIZE,
         .resize = {.width = (float)gpu->surface_width, .height = (float)gpu->surface_height},
     };
-    input_pipe->ops->write(input_pipe, &resize, sizeof(resize));
+    struct yetty_ycore_size_result resize_write_res =
+        input_pipe->ops->write(input_pipe, &resize, sizeof(resize));
+    if (YETTY_IS_ERR(resize_write_res)) {
+        yerror("yetty:app: initial RESIZE event write failed — no frame will be requested");
+        return YETTY_ERR(yetty_ycore_void, "yetty:app: initial resize event write failed",
+                         resize_write_res);
+    }
 
     struct yetty_ycore_void_result run_res = yetty_run(yetty);
 

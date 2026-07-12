@@ -1,0 +1,17 @@
+[Unit]
+Description=yetty SSH-over-WebSocket bridge (ws 127.0.0.1:@WS_PORT@ -> tcp 127.0.0.1:22)
+Documentation=https://yetty.dev
+After=network.target ssh.service
+
+[Service]
+# Transparent WebSocket <-> TCP relay. Loopback only: nginx terminates TLS in
+# front and the browser connects over wss://. Each WebSocket becomes one TCP
+# connection to sshd, which forces a fresh demo container per session.
+ExecStart=/usr/local/bin/websocat --binary ws-l:127.0.0.1:@WS_PORT@ tcp:127.0.0.1:22
+Restart=always
+RestartSec=2
+# Run unprivileged; the relay needs no special rights.
+DynamicUser=yes
+
+[Install]
+WantedBy=multi-user.target

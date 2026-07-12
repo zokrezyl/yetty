@@ -163,7 +163,8 @@ set_target_properties(yetty PROPERTIES
 include(${YETTY_ROOT}/build-tools/yetty/libs/brotli.cmake)
 
 # libssh2 (mbedTLS backend) — consumed by yssh/ssh-websocket-pty.c for
-# the --ssh-over-websocket session mode. From-source emscripten build.
+# the --ssh-over-websocket session mode. Prebuilt 3rdparty tarball
+# (webasm flavor bundles libmbedcrypto.a).
 include(${YETTY_ROOT}/build-tools/yetty/libs/libssh2-webasm.cmake)
 
 # lwIP — userspace TCP/IP stack for the in-browser netstack (ynet). Gives
@@ -347,6 +348,8 @@ set(_WEB_COPY_FILES
     ${CMAKE_BINARY_DIR}/terminal.html
     ${CMAKE_BINARY_DIR}/tinyemu-iframe.html
     ${CMAKE_BINARY_DIR}/yos-iframe.html
+    ${CMAKE_BINARY_DIR}/webgpu-health.js
+    ${CMAKE_BINARY_DIR}/webgpu-health.html
     ${CMAKE_BINARY_DIR}/serve.py
     ${CMAKE_BINARY_DIR}/favicon.ico
     ${CMAKE_BINARY_DIR}/apple-touch-icon.jpg
@@ -390,6 +393,21 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/yos/yos-iframe.html ${CMAKE_BINARY_DIR}/yos-iframe.html
     DEPENDS ${YETTY_ROOT}/build-tools/web/yos/yos-iframe.html
     COMMENT "Copy web/yos/yos-iframe.html → build dir"
+)
+# WebGPU health probe (tools/webasm-webgpu-health): the shell index.html
+# runs it at page load, before any terminal iframe boots. Its standalone
+# report page ships as webgpu-health.html.
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/webgpu-health.js
+    COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/tools/webasm-webgpu-health/webgpu-health.js ${CMAKE_BINARY_DIR}/webgpu-health.js
+    DEPENDS ${YETTY_ROOT}/tools/webasm-webgpu-health/webgpu-health.js
+    COMMENT "Copy tools/webasm-webgpu-health/webgpu-health.js → build dir"
+)
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/webgpu-health.html
+    COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/tools/webasm-webgpu-health/index.html ${CMAKE_BINARY_DIR}/webgpu-health.html
+    DEPENDS ${YETTY_ROOT}/tools/webasm-webgpu-health/index.html
+    COMMENT "Copy tools/webasm-webgpu-health/index.html → build dir webgpu-health.html"
 )
 
 # yos web bundle — engine modules + wasm tools + share pack, the static

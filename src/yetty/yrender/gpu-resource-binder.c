@@ -440,6 +440,9 @@ static struct yetty_ycore_void_result create_atlas(
     view_desc.mipLevelCount = 1;
     view_desc.arrayLayerCount = 1;
     a->view = wgpuTextureCreateView(a->texture, &view_desc);
+    if (!a->view) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create atlas texture view");
+    }
 
     WGPUSamplerDescriptor sampler_desc = {0};
     sampler_desc.addressModeU = WGPUAddressMode_ClampToEdge;
@@ -450,6 +453,9 @@ static struct yetty_ycore_void_result create_atlas(
     sampler_desc.mipmapFilter = WGPUMipmapFilterMode_Nearest;
     sampler_desc.maxAnisotropy = 1;
     a->sampler = wgpuDeviceCreateSampler(impl->device, &sampler_desc);
+    if (!a->sampler) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create atlas sampler");
+    }
 
     ydebug("GpuResourceBinder: %s %ux%u", atlas_names[ai], a->width, a->height);
     return YETTY_OK_VOID();

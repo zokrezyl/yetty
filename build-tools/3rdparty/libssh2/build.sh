@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # libssh2 3rdparty wrapper. Builds against the prebuilt openssl
 # tarball from build-tools/3rdparty/openssl/ — see _build.sh for the
-# cross-fetch of that asset at build time.
+# cross-fetch of that asset at build time. Exception: webasm builds
+# with the mbedTLS backend (compiled from source in _build.sh) and
+# bundles libmbedcrypto.a instead of depending on openssl.
 #
 # Required env:
 #   TARGET_PLATFORM   linux-x86_64 | linux-aarch64 |

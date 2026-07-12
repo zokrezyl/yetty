@@ -94,7 +94,8 @@ fi
 # Tier 1 (depends on tier 0):
 #   libpng   — fetches prebuilt zlib at build time
 #   freetype — fetches prebuilt zlib at build time
-#   libssh2  — fetches prebuilt openssl at build time
+#   libssh2  — fetches prebuilt openssl at build time (webasm: builds
+#              mbedTLS from source instead, no 3rdparty dep)
 #   libcurl  — fetches prebuilt openssl at build time
 #   glfw     — system X11 only (still build before glfw3webgpu)
 # Tier 2 (depends on tier 1):

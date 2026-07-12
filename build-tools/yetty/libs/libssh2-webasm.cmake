@@ -1,76 +1,46 @@
-# libssh2 for webasm — from-source emscripten build, mbedTLS crypto backend.
+# libssh2 for webasm — prebuilt static archives, mbedTLS crypto backend.
 #
-# The desktop/iOS/Android platforms consume a prebuilt openssl-backed
-# libssh2 archive from the 3rdparty release pipeline (libssh2.cmake).
-# No such prebuilt exists for webasm, and openssl is a heavy port to
-# wasm — mbedTLS compiles cleanly under emscripten and is the crypto
-# backend libssh2 upstream recommends for embedded targets, so the
-# webasm build compiles both from source at build time via
-# ExternalProject. (Candidate for the 3rdparty prebuilt pipeline later;
-# the from-source build adds ~1 min to a cold webasm build and nothing
-# to warm rebuilds.)
+# Consumes the webasm flavor of the 3rdparty libssh2 release tarball
+# published by build-3rdparty-libssh2.yml. Unlike the desktop/mobile
+# flavors (openssl-backed, consumed by libssh2.cmake), the webasm
+# tarball is built with the mbedTLS backend and bundles
+# lib/libmbedcrypto.a — an openssl-backed archive would drag
+# libssl+libcrypto into yetty.wasm (a multi-MB browser-download hit for
+# symbols libssh2 barely uses), while the mbedTLS backend needs only the
+# crypto archive. The from-source build lives in
+# build-tools/3rdparty/libssh2/_build.sh (webasm branch).
 #
 # Exposed target: `libssh2_webasm` — INTERFACE target carrying the
-# include dir and the static archives (libssh2 + mbedcrypto; libssh2's
-# mbedTLS backend uses only the crypto library, not TLS/X.509).
-#
-# NOTE: mbedTLS is built with MBEDTLS_FATAL_WARNINGS=OFF — recent
-# clang's -Wunterminated-string-initialization trips on mbedtls 3.6.x
-# TLS1.3 label tables under -Werror (in code libssh2 doesn't even use).
+# include dir and the two static archives (libssh2 + mbedcrypto).
 
 include_guard(GLOBAL)
-include(ExternalProject)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
-set(_SSH_WASM_PREFIX ${CMAKE_BINARY_DIR}/libssh2-webasm)
+if(TARGET libssh2_webasm)
+    return()
+endif()
 
-ExternalProject_Add(mbedtls_webasm_build
-    URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.2/mbedtls-3.6.2.tar.bz2
-    URL_HASH SHA256=8b54fb9bcf4d5a7078028e0520acddefb7900b3e66fec7f7175bb5b7d85ccdca
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    PREFIX ${_SSH_WASM_PREFIX}/mbedtls
-    CMAKE_ARGS
-        -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-        -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX=${_SSH_WASM_PREFIX}/prefix
-        -DENABLE_TESTING=OFF
-        -DENABLE_PROGRAMS=OFF
-        -DMBEDTLS_FATAL_WARNINGS=OFF
-    BUILD_BYPRODUCTS
-        ${_SSH_WASM_PREFIX}/prefix/lib/libmbedcrypto.a
-)
+yetty_3rdparty_fetch(libssh2 _LIBSSH2_DIR)
 
-ExternalProject_Add(libssh2_webasm_build
-    URL https://github.com/libssh2/libssh2/releases/download/libssh2-1.11.1/libssh2-1.11.1.tar.gz
-    URL_HASH SHA256=d9ec76cbe34db98eec3539fe2c899d26b0c837cb3eb466a56b0f109cabf658f7
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    PREFIX ${_SSH_WASM_PREFIX}/libssh2
-    DEPENDS mbedtls_webasm_build
-    CMAKE_ARGS
-        -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-        -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX=${_SSH_WASM_PREFIX}/prefix
-        -DCRYPTO_BACKEND=mbedTLS
-        -DBUILD_SHARED_LIBS=OFF
-        -DBUILD_STATIC_LIBS=ON
-        -DBUILD_EXAMPLES=OFF
-        -DBUILD_TESTING=OFF
-        -DENABLE_ZLIB_COMPRESSION=OFF
-        -DCMAKE_PREFIX_PATH=${_SSH_WASM_PREFIX}/prefix
-        -DMBEDTLS_INCLUDE_DIR=${_SSH_WASM_PREFIX}/prefix/include
-        -DMBEDCRYPTO_LIBRARY=${_SSH_WASM_PREFIX}/prefix/lib/libmbedcrypto.a
-        -DMBEDTLS_LIBRARY=${_SSH_WASM_PREFIX}/prefix/lib/libmbedtls.a
-        -DMBEDX509_LIBRARY=${_SSH_WASM_PREFIX}/prefix/lib/libmbedx509.a
-    BUILD_BYPRODUCTS
-        ${_SSH_WASM_PREFIX}/prefix/lib/libssh2.a
-)
-
-# The include dir must exist at configure time for INTERFACE_INCLUDE_DIRECTORIES.
-file(MAKE_DIRECTORY ${_SSH_WASM_PREFIX}/prefix/include)
+foreach(_LIBSSH2_ARCHIVE lib/libssh2.a lib/libmbedcrypto.a)
+    if(NOT EXISTS "${_LIBSSH2_DIR}/${_LIBSSH2_ARCHIVE}")
+        message(FATAL_ERROR
+            "libssh2 (webasm): ${_LIBSSH2_ARCHIVE} not found in ${_LIBSSH2_DIR} — \
+tarball layout changed? (check build-tools/3rdparty/libssh2/_build.sh)")
+    endif()
+endforeach()
+if(NOT EXISTS "${_LIBSSH2_DIR}/include/libssh2.h")
+    message(FATAL_ERROR
+        "libssh2 (webasm): libssh2.h not found in ${_LIBSSH2_DIR}/include/ — tarball layout changed?")
+endif()
 
 add_library(libssh2_webasm INTERFACE)
-add_dependencies(libssh2_webasm libssh2_webasm_build)
-target_include_directories(libssh2_webasm INTERFACE ${_SSH_WASM_PREFIX}/prefix/include)
+target_include_directories(libssh2_webasm INTERFACE "${_LIBSSH2_DIR}/include")
+# Archive order matters for wasm-ld: libssh2 first, then the mbedcrypto
+# archive that resolves its crypto symbols.
 target_link_libraries(libssh2_webasm INTERFACE
-    ${_SSH_WASM_PREFIX}/prefix/lib/libssh2.a
-    ${_SSH_WASM_PREFIX}/prefix/lib/libmbedcrypto.a
+    "${_LIBSSH2_DIR}/lib/libssh2.a"
+    "${_LIBSSH2_DIR}/lib/libmbedcrypto.a"
 )
+
+message(STATUS "libssh2: prebuilt v${YETTY_3RDPARTY_libssh2_VERSION} (webasm, mbedTLS backend)")
