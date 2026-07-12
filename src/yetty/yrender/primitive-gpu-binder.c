@@ -299,8 +299,7 @@ struct yetty_ycore_void_result yetty_yrender_gpu_binder_finalize(
         binder->mega_buffer = wgpuDeviceCreateBuffer(binder->device, &desc);
         if (!binder->mega_buffer) {
             binder->mega_buffer_capacity = 0;
-            return YETTY_ERR(yetty_ycore_void,
-                             "primitive_gpu_binder: mega buffer create failed");
+            return YETTY_ERR(yetty_ycore_void, "primitive_gpu_binder: mega buffer create failed");
         }
         binder->mega_buffer_capacity = new_cap;
         ydebug("primitive_gpu_binder: created mega buffer %zu bytes", new_cap);

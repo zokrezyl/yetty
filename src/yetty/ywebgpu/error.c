@@ -256,8 +256,8 @@ void yetty_ywebgpu_device_lost_callback(WGPUDevice const *device, WGPUDeviceLost
         fflush(stderr);
         {
             char page_message[640];
-            snprintf(page_message, sizeof(page_message), "WebGPU device lost (%s): %s",
-                     reason_str, buf);
+            snprintf(page_message, sizeof(page_message), "WebGPU device lost (%s): %s", reason_str,
+                     buf);
             yetty_yplatform_fatal_report(page_message);
         }
         _Exit(3);

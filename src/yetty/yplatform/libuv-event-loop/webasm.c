@@ -220,8 +220,7 @@ static void main_loop_tick(void *arg)
                         snapshot[j]->handler(snapshot[j], &event);
                     if (YETTY_IS_ERR(timer_res)) {
                         impl->timer_error_count++;
-                        if (impl->timer_error_count <= 3 ||
-                            impl->timer_error_count % 120 == 0) {
+                        if (impl->timer_error_count <= 3 || impl->timer_error_count % 120 == 0) {
                             char chain_buf[512];
                             yetty_ycore_error_snprint(chain_buf, sizeof(chain_buf),
                                                       timer_res.error);
