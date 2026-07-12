@@ -19,7 +19,21 @@
 #include <assert.h>
 #include <errno.h>
 #include <limits.h>
+#ifdef _MSC_VER
+/* MSVC has no <unistd.h>; the fd functions live in <io.h> under underscore
+ * names, and /std:c11 mode hides the POSIX aliases (__STDC__ is 1, so the
+ * UCRT suppresses its non-standard-name declarations). Map the names the
+ * vendored file tokenizer uses (fileno/fdopen/lseek/read and the off_t it
+ * casts to). _off_t comes from <corecrt.h>, already in scope via <stdio.h>. */
+#include <io.h>
+#define off_t _off_t
+#define fileno _fileno
+#define fdopen _fdopen
+#define lseek _lseek
+#define read _read
+#else
 #include <unistd.h>
+#endif
 
 #define PY_MAJOR_VERSION 3
 #define PY_MINOR_VERSION 14
