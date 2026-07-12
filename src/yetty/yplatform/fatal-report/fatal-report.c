@@ -24,15 +24,16 @@ EM_JS(void, yetty_yplatform_fatal_report_to_page, (const char *message_ptr), {
         text = 'yetty fatal error (message unavailable)';
     }
     try {
-        if (typeof Module !== 'undefined' &&
-            typeof Module.onYettyFatal === 'function') {
+        if (typeof Module != = 'undefined' &&typeof Module.onYettyFatal == = 'function') {
             Module.onYettyFatal(text);
             return;
         }
-    } catch (ignored) {}
+    } catch (ignored) {
+    }
     try {
         console.error('[yetty-fatal] ' + text);
-    } catch (ignored) {}
+    } catch (ignored) {
+    }
 });
 
 void yetty_yplatform_fatal_report(const char *message)

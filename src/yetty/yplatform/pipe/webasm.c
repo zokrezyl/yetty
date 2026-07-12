@@ -115,8 +115,7 @@ void yetty_yplatform_input_pipe_webasm_platform_input_pipe_process(
         if (YETTY_IS_ERR(dispatch_res)) {
             char chain_buf[512];
             yetty_ycore_error_snprint(chain_buf, sizeof(chain_buf), dispatch_res.error);
-            yerror("webasm_pipe: dispatch of event type=%d failed: %s", (int)event.type,
-                   chain_buf);
+            yerror("webasm_pipe: dispatch of event type=%d failed: %s", (int)event.type, chain_buf);
             yetty_ycore_error_destroy(dispatch_res.error);
         }
     }

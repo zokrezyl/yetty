@@ -13,9 +13,8 @@ static void request_state_capture_failure(struct yetty_ywebgpu_request_state *st
         return;
     }
     if (message.data && message.length > 0) {
-        size_t len = message.length < sizeof(state->error_msg) - 1
-                         ? message.length
-                         : sizeof(state->error_msg) - 1;
+        size_t len = message.length < sizeof(state->error_msg) - 1 ? message.length
+                                                                   : sizeof(state->error_msg) - 1;
         memcpy(state->error_msg, message.data, len);
         state->error_msg[len] = '\0';
     }

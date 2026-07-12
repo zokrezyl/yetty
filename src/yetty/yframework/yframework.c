@@ -1047,8 +1047,8 @@ struct yetty_ycore_void_result yetty_yframework_reconfigure_surface(struct yetty
          * so capture it in a scope and propagate. */
         yetty_ywebgpu_error_scope_push(rt->gpu.device);
         wgpuSurfaceConfigure(surface, &sc);
-        struct yetty_ycore_void_result configure_res = yetty_ywebgpu_error_scope_pop(
-            rt->gpu.app_gpu_context.instance, rt->gpu.device);
+        struct yetty_ycore_void_result configure_res =
+            yetty_ywebgpu_error_scope_pop(rt->gpu.app_gpu_context.instance, rt->gpu.device);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, configure_res,
                             "yframework_reconfigure_surface: surface configure was refused");
     }
