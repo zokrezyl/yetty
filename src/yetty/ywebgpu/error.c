@@ -1,4 +1,5 @@
 #include <yetty/webgpu/error.h>
+#include <yetty/yplatform/fatal-report.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -74,6 +75,14 @@ void yetty_ywebgpu_uncaptured_error_callback(WGPUDevice const *device, WGPUError
             "        Exiting.\n",
             type_str, yetty_ywebgpu_error.message);
     fflush(stderr);
+    {
+        /* On webasm stderr is only the console — hand the message to the
+         * hosting page so the user sees a dialog, not a frozen canvas. */
+        char page_message[640];
+        snprintf(page_message, sizeof(page_message), "WebGPU %s error: %s", type_str,
+                 yetty_ywebgpu_error.message);
+        yetty_yplatform_fatal_report(page_message);
+    }
     _Exit(2);
 }
 
@@ -245,6 +254,12 @@ void yetty_ywebgpu_device_lost_callback(WGPUDevice const *device, WGPUDeviceLost
                 "        Exiting.\n",
                 reason_str, buf);
         fflush(stderr);
+        {
+            char page_message[640];
+            snprintf(page_message, sizeof(page_message), "WebGPU device lost (%s): %s",
+                     reason_str, buf);
+            yetty_yplatform_fatal_report(page_message);
+        }
         _Exit(3);
     }
 }

@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
     yetty_ywebgpu_fill_default_limits(adapter, NULL, &limits);
 
     WGPUDevice device = NULL;
-    struct yetty_ywebgpu_device_request_state device_state = {{0}, 0};
+    struct yetty_ywebgpu_request_state device_state = {{0}, 0};
     WGPUDeviceDescriptor device_desc = {0};
     device_desc.requiredLimits = &limits;
     WGPURequestDeviceCallbackInfo device_callback_info = {0};

@@ -7,6 +7,9 @@
  *
  *   api      WebGPU API present (secure context, navigator.gpu, wasm)
  *   adapter  GPU adapter obtainable (core first, compatibility fallback)
+ *   hardware the adapter is a real GPU, not a silent CPU fallback
+ *            (SwiftShader/llvmpipe/WARP) — Chrome hands out SwiftShader
+ *            instead of a null adapter when hardware acceleration is off
  *   limits   adapter limits meet the floors yetty needs
  *   device   device creation with the limits yetty requests
  *   shader   WGSL probe shader compiles — uses yetty's binding pattern
@@ -27,7 +30,8 @@
  *
  * API (all under window.yettyWebgpuHealth):
  *   run(options)                 → Promise<report>, never rejects.
- *                                  options: { timeoutMs, log }
+ *                                  options: { timeoutMs, log,
+ *                                             allowSoftwareRenderer }
  *   installBanner(report, opts)  → inject a failure/warning banner into the
  *                                  current page (opts: { detailsUrl })
  *   createReportElement(report)  → detailed DOM node (steps, GPU, limits)
@@ -72,6 +76,7 @@
     var STEP_DEFINITIONS = [
         { name: 'api', title: 'WebGPU API available' },
         { name: 'adapter', title: 'GPU adapter' },
+        { name: 'hardware', title: 'Hardware GPU (not a software fallback)' },
         { name: 'limits', title: 'Adapter limits meet yetty’s floors' },
         { name: 'device', title: 'GPU device with yetty’s limits' },
         { name: 'shader', title: 'Probe shader compiles' },
@@ -131,40 +136,190 @@
     var RENDER_TARGET_SIZE = 16;
     var READBACK_BYTES_PER_ROW = 256; /* copyTextureToBuffer alignment */
 
-    var ADVICE_BY_STEP = {
-        api: 'Use a WebGPU-capable browser (Chrome/Edge 113+, recent ' +
-             'Safari, or Firefox with WebGPU enabled), and open the page ' +
-             'over HTTPS or from localhost — WebGPU needs a secure context.',
-        adapter: 'The browser exposes WebGPU but provided no GPU adapter. ' +
-                 'This usually means the GPU/driver is blocklisted: set ' +
-                 'chrome://flags/#enable-unsafe-webgpu to Enabled and ' +
-                 'relaunch, then check the WebGPU lines in chrome://gpu. ' +
-                 'A WebGPU-hooking browser extension can also cause this — ' +
-                 'try a Guest window.',
-        limits: 'This GPU adapter reports limits below what yetty needs. ' +
-                'If the machine has a stronger GPU, make the browser use ' +
-                'it (chrome://flags/#enable-unsafe-webgpu, or the OS ' +
-                'graphics-performance settings for the browser).',
+    /* Timed heavy pass: ~268M transcendental ops. A hardware GPU absorbs
+     * this in a few milliseconds; a CPU rasterizer needs hundreds — the
+     * wall-clock separates the two even when the adapter's identity
+     * strings don't admit to being software. */
+    var HEAVY_TARGET_SIZE = 1024;
+    var HEAVY_LOOP_ITERATIONS = 256;
+    /* SwiftShader measured ~118 ms on a 32-core desktop; real GPUs land
+     * in single-digit milliseconds. Weak mobile GPUs may trip this too —
+     * it is a warning, and on such devices an honest one. */
+    var SOFTWARE_SUSPECT_DRAW_MS = 100;
+
+    var HEAVY_SHADER_WGSL =
+        'struct HeavyVertexOutput {\n' +
+        '    @builtin(position) position : vec4<f32>,\n' +
+        '};\n' +
+        '\n' +
+        '@vertex\n' +
+        'fn heavy_vertex(@builtin(vertex_index) vertex_index : u32) -> HeavyVertexOutput {\n' +
+        '    var corners = array<vec2<f32>, 3>(\n' +
+        '        vec2<f32>(-1.0, -3.0),\n' +
+        '        vec2<f32>( 3.0,  1.0),\n' +
+        '        vec2<f32>(-1.0,  1.0));\n' +
+        '    var output : HeavyVertexOutput;\n' +
+        '    output.position = vec4<f32>(corners[vertex_index], 0.0, 1.0);\n' +
+        '    return output;\n' +
+        '}\n' +
+        '\n' +
+        '@fragment\n' +
+        'fn heavy_fragment(input : HeavyVertexOutput) -> @location(0) vec4<f32> {\n' +
+        '    /* Depends on the pixel position so the loop cannot be\n' +
+        '       constant-folded away. */\n' +
+        '    var accumulator = 0.0;\n' +
+        '    for (var iteration = 0u; iteration < ' + HEAVY_LOOP_ITERATIONS +
+        'u; iteration = iteration + 1u) {\n' +
+        '        accumulator = accumulator +\n' +
+        '            sin(input.position.x * 0.001 + f32(iteration)) *\n' +
+        '            cos(input.position.y * 0.001);\n' +
+        '    }\n' +
+        '    return vec4<f32>(fract(accumulator), 0.0, 0.0, 1.0);\n' +
+        '}\n';
+
+    /* What broke, one sentence per step — the platform-specific "what to
+     * do about it, in order" list is appended by adviceForStep() below. */
+    var STEP_FAILURE_LEADS = {
+        api: 'This browser does not expose (or blocks) the WebGPU API. ' +
+             'Also note WebGPU needs a secure context — HTTPS or localhost.',
+        adapter: 'The browser exposes WebGPU but handed out no GPU ' +
+                 'adapter — the GPU/driver is blocklisted or GPU ' +
+                 'acceleration is off. (A WebGPU-hooking browser ' +
+                 'extension can also cause this — try a Guest window.)',
+        hardware: 'The browser silently fell back to CPU-based software ' +
+                  'rendering (SwiftShader) — WebGPU “works” but is far ' +
+                  'too slow to run yetty. GPU acceleration is off or the ' +
+                  'GPU is blocklisted.',
+        limits: 'This GPU adapter reports limits below what yetty needs; ' +
+                'the browser is probably not using the machine’s real GPU.',
         device: 'A GPU adapter was found but creating a device from it ' +
-                'failed. Update the GPU driver, or override the blocklist ' +
-                'via chrome://flags/#enable-unsafe-webgpu and relaunch.',
-        canvas: 'The GPU renders correctly off-screen but presenting to ' +
-                'a canvas fails, so yetty would have nowhere to display. ' +
-                'A browser extension, a headless/virtualized environment, ' +
-                'or a broken compositor stack is the usual cause — try a ' +
-                'Guest window or another browser.',
-        shader: 'The WGSL compiler rejected yetty’s shader pattern. ' +
-                'This is a browser/driver defect — update the browser and ' +
-                'the GPU driver.',
+                'failed — driver or blocklist trouble.',
+        canvas: 'Rendering works off-screen but the image presented to ' +
+                'the canvas is broken or blank, so yetty draws and ' +
+                'nothing shows up (broken canvas compositing/interop; a ' +
+                'headless/virtualized environment or a WebGPU-hooking ' +
+                'extension can also cause this).',
+        shader: 'The WGSL compiler rejected yetty’s shader pattern — a ' +
+                'browser/driver defect. Update the browser and the GPU ' +
+                'driver first.',
         pipeline: 'The shader compiled but the render pipeline was ' +
-                  'refused. On compatibility-mode adapters this usually ' +
-                  'means storage buffers are unavailable in the vertex ' +
-                  'stage, which yetty requires. Update the GPU driver or ' +
-                  'use a browser/GPU with core WebGPU support.',
+                  'refused. On compatibility-mode adapters this means ' +
+                  'storage buffers are unavailable in the vertex stage, ' +
+                  'which yetty requires.',
         execute: 'The GPU accepted all setup but the rendered output is ' +
                  'wrong or unreadable — a driver defect. Update the GPU ' +
-                 'driver; if it persists, report the diagnostics below.'
+                 'driver first.'
     };
+
+    function detectHostPlatform() {
+        var userAgent = (typeof navigator !== 'undefined' &&
+                         navigator.userAgent) || '';
+        var maxTouchPoints = (typeof navigator !== 'undefined' &&
+                              navigator.maxTouchPoints) || 0;
+        /* Modern iPadOS masquerades as desktop Safari ("Macintosh") but
+         * is the only Mac-flavoured UA with a touch screen. */
+        var ios = /iPhone|iPad|iPod/.test(userAgent) ||
+                  (/Macintosh/.test(userAgent) && maxTouchPoints > 1);
+        var android = /Android/.test(userAgent);
+        var mac = !ios && /Macintosh|Mac OS X/.test(userAgent);
+        var windows = /Windows/.test(userAgent);
+        var firefox = /Firefox\//.test(userAgent);
+        var safari = /Safari\//.test(userAgent) &&
+                     !/Chrome|Chromium|CriOS|Edg/.test(userAgent);
+        return {
+            ios: ios,
+            android: android,
+            mac: mac,
+            windows: windows,
+            firefox: firefox,
+            safari: safari
+        };
+    }
+
+    /* Ordered, platform-specific fix list appended to the step lead.
+     * On Linux/Chromium the ORDER is derived from field results:
+     * chrome://flags/#enable-vulkan alone is the most common fix
+     * (hardware WebGPU on Linux Chrome runs on Vulkan); the blocklist
+     * override and the compositing-interop flag come after it. */
+    function adviceForStep(stepName) {
+        var host = detectHostPlatform();
+        var lead = STEP_FAILURE_LEADS[stepName] || '';
+
+        if (host.ios) {
+            return lead + ' On iOS/iPadOS every browser uses WebKit, so ' +
+                   'this is a Safari setting no matter which browser app ' +
+                   'you use: Settings → Apps → Safari → Advanced → ' +
+                   'Feature Flags → enable “WebGPU”, then restart the ' +
+                   'browser. On recent iOS (26+) WebGPU is on by ' +
+                   'default — if the flag is missing or it still fails, ' +
+                   'update iOS.';
+        }
+        if (host.mac && host.safari) {
+            return lead + ' In Safari on macOS: Safari → Settings → ' +
+                   'Advanced → enable “Show features for web ' +
+                   'developers”, then menu Develop → Feature Flags → ' +
+                   'enable “WebGPU” and reload. WebGPU is on by default ' +
+                   'in recent Safari (26+), so updating macOS/Safari is ' +
+                   'the cleanest fix. Chrome/Edge 113+ also work on ' +
+                   'macOS out of the box.';
+        }
+        if (host.firefox) {
+            return lead + ' In Firefox: open about:config, set ' +
+                   'dom.webgpu.enabled to true and restart. Firefox ' +
+                   'WebGPU is still maturing outside Windows — ' +
+                   'Chrome/Edge are the most reliable path today.';
+        }
+        if (host.mac) {
+            return lead + ' Chrome/Edge on macOS run WebGPU on Metal — ' +
+                   'there are no Vulkan flags on macOS. Try, in this ' +
+                   'order: ' +
+                   '1) update the browser and macOS; ' +
+                   '2) chrome://settings/system → “Use graphics ' +
+                   'acceleration when available” must be ON, relaunch; ' +
+                   '3) chrome://flags/#enable-unsafe-webgpu → Enabled ' +
+                   '(overrides the GPU blocklist), relaunch. ' +
+                   'Verify in chrome://gpu that WebGPU says Hardware ' +
+                   'accelerated.';
+        }
+        if (host.windows) {
+            return lead + ' On Windows WebGPU runs on D3D12. Try, in ' +
+                   'this order: ' +
+                   '1) update the GPU driver (vendor installer, not ' +
+                   'Windows Update); ' +
+                   '2) chrome://settings/system → “Use graphics ' +
+                   'acceleration when available” must be ON, relaunch; ' +
+                   '3) chrome://flags/#enable-unsafe-webgpu → Enabled ' +
+                   '(overrides the blocklist), relaunch. ' +
+                   'chrome://gpu shows the blocklist verdict.';
+        }
+        if (host.android) {
+            return lead + ' On Android: update Chrome and Android System ' +
+                   'WebView (WebGPU needs Android 12+ with a recent ' +
+                   'Chrome), then try ' +
+                   'chrome://flags/#enable-unsafe-webgpu → Enabled and ' +
+                   'relaunch.';
+        }
+        /* Linux + Chromium — default branch. */
+        var interopNote = stepName === 'canvas'
+            ? ' (this flag targets exactly this renders-but-presents-' +
+              'nothing case)'
+            : '';
+        return lead + ' On Linux, hardware WebGPU in Chrome runs on ' +
+               'Vulkan. Set these to Enabled IN THIS ORDER, relaunching ' +
+               'and re-testing after each one: ' +
+               '1) chrome://flags/#enable-vulkan — this alone is the ' +
+               'most common fix; ' +
+               '2) chrome://flags/#enable-unsafe-webgpu — overrides the ' +
+               'GPU/driver blocklist; ' +
+               '3) chrome://flags/#force-enable-webgpu-interop — forces ' +
+               'the WebGPU↔GL compositing interop' + interopNote + '. ' +
+               'Keep chrome://settings/system → “Use graphics ' +
+               'acceleration when available” ON. Verify in chrome://gpu ' +
+               'that Vulkan says Enabled and WebGPU says Hardware ' +
+               'accelerated; if `vulkaninfo` fails in a terminal, ' +
+               'install the Vulkan driver for your GPU ' +
+               '(mesa-vulkan-drivers, or the NVIDIA driver).';
+    }
 
     function nowMs() {
         return (typeof performance !== 'undefined' && performance.now)
@@ -220,6 +375,7 @@
         var lowered = description.toLowerCase();
         return lowered.indexOf('swiftshader') !== -1 ||
                lowered.indexOf('llvmpipe') !== -1 ||
+               lowered.indexOf('lavapipe') !== -1 ||
                lowered.indexOf('softpipe') !== -1 ||
                lowered.indexOf('software') !== -1 ||
                lowered.indexOf('warp') !== -1;
@@ -249,6 +405,7 @@
             requiredFloors: REQUIRED_LIMIT_FLOORS,
             warnings: [],
             uncapturedErrors: [],
+            heavyDrawMs: null,
             userAgent: (typeof navigator !== 'undefined' && navigator.userAgent) || '',
             totalMs: 0
         };
@@ -308,8 +465,17 @@
             delete record.startedMs;
             report.failedStep = stepName;
             report.reason = reason;
-            report.advice = ADVICE_BY_STEP[stepName] || null;
+            report.advice = adviceForStep(stepName);
             logLine('FAIL: ' + record.title + ' — ' + reason, 'error');
+        }
+
+        function warnStep(stepName, warningText) {
+            var record = stepByName[stepName];
+            record.status = 'warn';
+            record.detail = warningText;
+            record.durationMs = Math.round(nowMs() - (record.startedMs || nowMs()));
+            delete record.startedMs;
+            warn(warningText);
         }
 
         function warn(text) {
@@ -420,16 +586,6 @@
                 report.features = Array.from(adapter.features || []);
             } catch (ignored) {}
             report.adapterLimits = limitsSnapshot(adapter.limits);
-            if (adapter.isFallbackAdapter ||
-                looksLikeSoftwareRenderer(report.gpu.description + ' ' +
-                                          report.gpu.architecture + ' ' +
-                                          report.gpu.device)) {
-                report.softwareRenderer = true;
-                warn('the adapter is a software rasterizer (' +
-                     (report.gpu.description || report.gpu.architecture ||
-                      'fallback adapter') +
-                     ') — yetty will run, but slowly');
-            }
             if (report.compatibilityMode) {
                 warn('core WebGPU adapter unavailable — running on the ' +
                      'compatibility adapter');
@@ -440,6 +596,40 @@
                            'adapter';
             passStep('adapter', gpuLabel +
                      (report.compatibilityMode ? ' (compatibility mode)' : ''));
+
+            /* ---- step: hardware --------------------------------------- */
+            /* When the GPU process has no usable hardware backend (e.g.
+             * Vulkan off/blocklisted on Linux), Chrome does NOT return a
+             * null adapter — it silently hands out SwiftShader, without
+             * even setting isFallbackAdapter. Every functional probe
+             * passes on it (a CPU rasterizer executes shaders correctly,
+             * just orders of magnitude too slowly), so a software
+             * adapter must be a hard failure, not a warning. */
+            beginStep('hardware');
+            if (adapter.isFallbackAdapter ||
+                looksLikeSoftwareRenderer(report.gpu.description + ' ' +
+                                          report.gpu.architecture + ' ' +
+                                          report.gpu.device + ' ' +
+                                          report.gpu.vendor)) {
+                report.softwareRenderer = true;
+                var softwareLabel = report.gpu.architecture ||
+                                    report.gpu.description ||
+                                    'fallback adapter';
+                if (options.allowSoftwareRenderer) {
+                    warnStep('hardware', 'software rasterizer (' +
+                             softwareLabel + ') accepted because ' +
+                             'allowSoftwareRenderer is set — yetty will be ' +
+                             'very slow');
+                } else {
+                    failStep('hardware', 'the adapter is a CPU software ' +
+                             'rasterizer (' + softwareLabel + ') — the ' +
+                             'browser has no hardware GPU acceleration, ' +
+                             'and yetty would be unusably slow');
+                    return;
+                }
+            } else {
+                passStep('hardware', gpuLabel);
+            }
 
             /* ---- step: limits ----------------------------------------- */
             beginStep('limits');
@@ -718,6 +908,63 @@
                     }
                 }
                 readbackBuffer.unmap();
+
+                /* Timed heavy pass — catches software adapters whose
+                 * identity strings pass the signature check above. */
+                var heavyShaderModule = probeDevice.createShaderModule({
+                    label: 'yetty-webgpu-health-heavy-shader',
+                    code: HEAVY_SHADER_WGSL
+                });
+                var heavyPipelineDescriptor = {
+                    label: 'yetty-webgpu-health-heavy-pipeline',
+                    layout: 'auto',
+                    vertex: { module: heavyShaderModule,
+                              entryPoint: 'heavy_vertex' },
+                    fragment: {
+                        module: heavyShaderModule,
+                        entryPoint: 'heavy_fragment',
+                        targets: [{ format: 'rgba8unorm' }]
+                    },
+                    primitive: { topology: 'triangle-list' }
+                };
+                var heavyPipeline = probeDevice.createRenderPipelineAsync
+                    ? await probeDevice.createRenderPipelineAsync(
+                          heavyPipelineDescriptor)
+                    : probeDevice.createRenderPipeline(
+                          heavyPipelineDescriptor);
+                var heavyTarget = probeDevice.createTexture({
+                    label: 'probe-heavy-target',
+                    size: { width: HEAVY_TARGET_SIZE,
+                            height: HEAVY_TARGET_SIZE },
+                    format: 'rgba8unorm',
+                    usage: GPUTextureUsage.RENDER_ATTACHMENT
+                });
+                var heavyEncoder = probeDevice.createCommandEncoder();
+                var heavyPass = heavyEncoder.beginRenderPass({
+                    colorAttachments: [{
+                        view: heavyTarget.createView(),
+                        loadOp: 'clear',
+                        storeOp: 'store',
+                        clearValue: { r: 0, g: 0, b: 0, a: 1 }
+                    }]
+                });
+                heavyPass.setPipeline(heavyPipeline);
+                heavyPass.draw(3);
+                heavyPass.end();
+                var heavyStartMs = nowMs();
+                probeDevice.queue.submit([heavyEncoder.finish()]);
+                if (probeDevice.queue.onSubmittedWorkDone) {
+                    await probeDevice.queue.onSubmittedWorkDone();
+                    report.heavyDrawMs = Math.round(nowMs() - heavyStartMs);
+                    if (report.heavyDrawMs > SOFTWARE_SUSPECT_DRAW_MS &&
+                        !report.softwareRenderer) {
+                        warn('the timed draw took ' + report.heavyDrawMs +
+                             ' ms (hardware GPUs need a few ms) — this ' +
+                             'GPU behaves like a software rasterizer or ' +
+                             'is severely throttled; yetty may be ' +
+                             'unusably slow');
+                    }
+                }
             } catch (executeError) {
                 failStep('execute', 'probe draw/readback threw: ' +
                          describeError(executeError));
@@ -728,7 +975,10 @@
                          'probe: ' + report.uncapturedErrors.join('; '));
                 return;
             }
-            passStep('execute', 'draw executed, readback pixel-verified');
+            passStep('execute', 'draw executed, readback pixel-verified' +
+                     (report.heavyDrawMs !== null
+                         ? '; timed draw ' + report.heavyDrawMs + ' ms'
+                         : ''));
 
             /* ---- step: canvas ----------------------------------------- */
             beginStep('canvas');
@@ -759,20 +1009,103 @@
                     format: preferredFormat,
                     alphaMode: 'opaque'
                 });
-                var surfaceTexture = canvasContext.getCurrentTexture();
-                /* Clear the surface once — the same load/clear path the
-                 * real render target uses each frame. */
-                var surfaceEncoder = probeDevice.createCommandEncoder();
-                var surfacePass = surfaceEncoder.beginRenderPass({
-                    colorAttachments: [{
-                        view: surfaceTexture.createView(),
-                        loadOp: 'clear',
-                        storeOp: 'store',
-                        clearValue: { r: 0, g: 0, b: 0, a: 1 }
-                    }]
+
+                /* Draw the exact probe color to the canvas with a
+                 * pipeline targeting the surface format, reusing the
+                 * verified shader and resources from the execute step. */
+                var canvasPipelineDescriptor = {
+                    label: 'yetty-webgpu-health-canvas-pipeline',
+                    layout: 'auto',
+                    vertex: { module: shaderModule,
+                              entryPoint: 'probe_vertex' },
+                    fragment: {
+                        module: shaderModule,
+                        entryPoint: 'probe_fragment',
+                        targets: [{ format: preferredFormat }]
+                    },
+                    primitive: { topology: 'triangle-list' }
+                };
+                var canvasPipeline = probeDevice.createRenderPipelineAsync
+                    ? await probeDevice.createRenderPipelineAsync(
+                          canvasPipelineDescriptor)
+                    : probeDevice.createRenderPipeline(
+                          canvasPipelineDescriptor);
+                var canvasBindGroup = probeDevice.createBindGroup({
+                    label: 'probe-canvas-bind-group',
+                    layout: canvasPipeline.getBindGroupLayout(0),
+                    entries: [
+                        { binding: 0, resource: { buffer: storageBuffer } },
+                        { binding: 1, resource: { buffer: uniformBuffer } },
+                        { binding: 2, resource: atlasTexture.createView() },
+                        { binding: 3, resource: atlasSampler }
+                    ]
                 });
-                surfacePass.end();
-                probeDevice.queue.submit([surfaceEncoder.finish()]);
+
+                function drawProbeColorToCanvas() {
+                    var surfaceTexture = canvasContext.getCurrentTexture();
+                    var surfaceEncoder = probeDevice.createCommandEncoder();
+                    var surfacePass = surfaceEncoder.beginRenderPass({
+                        colorAttachments: [{
+                            view: surfaceTexture.createView(),
+                            loadOp: 'clear',
+                            storeOp: 'store',
+                            clearValue: { r: 1, g: 0, b: 0, a: 1 }
+                        }]
+                    });
+                    surfacePass.setPipeline(canvasPipeline);
+                    surfacePass.setBindGroup(0, canvasBindGroup);
+                    surfacePass.draw(3);
+                    surfacePass.end();
+                    probeDevice.queue.submit([surfaceEncoder.finish()]);
+                }
+
+                function waitForPresentation() {
+                    /* Two animation frames so the drawing buffer becomes
+                     * the canvas bitmap; timeout fallback for throttled
+                     * pages where rAF never fires. */
+                    function oneFrame() {
+                        return new Promise(function (resolve) {
+                            var settled = false;
+                            function finish() {
+                                if (!settled) { settled = true; resolve(); }
+                            }
+                            if (window.requestAnimationFrame) {
+                                window.requestAnimationFrame(finish);
+                            }
+                            setTimeout(finish, 150);
+                        });
+                    }
+                    return oneFrame().then(oneFrame);
+                }
+
+                function snapshotPresentedPixel() {
+                    /* drawImage sources the canvas' PRESENTED bitmap —
+                     * the only JS-visible evidence of what compositing
+                     * actually produced. Broken WebGPU↔GL interop shows
+                     * up here as transparent black. */
+                    var snapshotCanvas = document.createElement('canvas');
+                    snapshotCanvas.width = probeCanvas.width;
+                    snapshotCanvas.height = probeCanvas.height;
+                    var context2d = snapshotCanvas.getContext('2d',
+                        { willReadFrequently: true });
+                    context2d.drawImage(probeCanvas, 0, 0);
+                    var center = context2d.getImageData(
+                        probeCanvas.width >> 1, probeCanvas.height >> 1,
+                        1, 1).data;
+                    return [center[0], center[1], center[2], center[3]];
+                }
+
+                function presentedPixelMatches(pixel) {
+                    for (var channel = 0; channel < 4; channel++) {
+                        if (Math.abs(pixel[channel] -
+                                     EXPECTED_PIXEL_BYTES[channel]) > 4) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+
+                drawProbeColorToCanvas();
                 var canvasScopeError = await popErrorScopeMessage(probeDevice);
                 /* A failed present surfaces as an ASYNC device loss, not
                  * as a validation error — give the submitted work (or a
@@ -790,8 +1123,27 @@
                     return;
                 }
                 if (canvasScopeError) {
-                    failStep('canvas', 'configuring/clearing the webgpu ' +
-                             'canvas raised: ' + canvasScopeError);
+                    failStep('canvas', 'drawing to the webgpu canvas ' +
+                             'raised: ' + canvasScopeError);
+                    return;
+                }
+
+                await waitForPresentation();
+                var presentedPixel = snapshotPresentedPixel();
+                if (!presentedPixelMatches(presentedPixel)) {
+                    /* One retry: the first snapshot can race the very
+                     * first presentation of a fresh canvas. */
+                    drawProbeColorToCanvas();
+                    await waitForPresentation();
+                    presentedPixel = snapshotPresentedPixel();
+                }
+                if (!presentedPixelMatches(presentedPixel)) {
+                    failStep('canvas', 'the canvas PRESENTS [' +
+                             presentedPixel.join(', ') + '] where [' +
+                             EXPECTED_PIXEL_BYTES.join(', ') + '] was ' +
+                             'drawn — rendering succeeds off-screen but ' +
+                             'the presented image never reaches the ' +
+                             'compositor (broken WebGPU canvas interop)');
                     return;
                 }
                 canvasContext.unconfigure();
@@ -803,8 +1155,8 @@
                       describeError(canvasError));
                 return;
             }
-            passStep('canvas', preferredFormat +
-                     ' surface configured, cleared, presented');
+            passStep('canvas', preferredFormat + ' surface presented; ' +
+                     'presented image pixel-verified via 2D snapshot');
         }
 
         var timeoutHandle = null;
@@ -964,7 +1316,11 @@
         addRow(gpuTable, 'mode',
                report.compatibilityMode ? 'compatibility' : 'core');
         if (report.softwareRenderer) {
-            addRow(gpuTable, 'rasterizer', 'software (slow)');
+            addRow(gpuTable, 'rasterizer', 'software (CPU) — not usable');
+        }
+        if (report.heavyDrawMs !== null) {
+            addRow(gpuTable, 'timed draw',
+                   report.heavyDrawMs + ' ms (hardware GPUs: a few ms)');
         }
         var limitNames = Object.keys(REQUIRED_LIMIT_FLOORS);
         for (var limitIndex = 0; limitIndex < limitNames.length; limitIndex++) {

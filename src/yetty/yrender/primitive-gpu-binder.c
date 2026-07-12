@@ -111,10 +111,15 @@ struct yetty_primitive_gpu_binder_ptr_result yetty_yrender_gpu_binder_create(
         .usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst,
     };
     binder->quad_vertex_buffer = wgpuDeviceCreateBuffer(device, &vb_desc);
-    if (binder->quad_vertex_buffer) {
-        wgpuQueueWriteBuffer(queue, binder->quad_vertex_buffer, 0, quad_vertices,
-                             sizeof(quad_vertices));
+    if (!binder->quad_vertex_buffer) {
+        /* Without the quad there is nothing to instance — a later draw
+         * would silently emit garbage or nothing. Fail creation. */
+        free(binder);
+        return YETTY_ERR(yetty_primitive_gpu_binder_ptr,
+                         "primitive_gpu_binder: quad vertex buffer create failed");
     }
+    wgpuQueueWriteBuffer(queue, binder->quad_vertex_buffer, 0, quad_vertices,
+                         sizeof(quad_vertices));
 
     ydebug("primitive_gpu_binder: created");
     return YETTY_OK(yetty_primitive_gpu_binder_ptr, binder);
@@ -292,6 +297,11 @@ struct yetty_ycore_void_result yetty_yrender_gpu_binder_finalize(
             .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
         };
         binder->mega_buffer = wgpuDeviceCreateBuffer(binder->device, &desc);
+        if (!binder->mega_buffer) {
+            binder->mega_buffer_capacity = 0;
+            return YETTY_ERR(yetty_ycore_void,
+                             "primitive_gpu_binder: mega buffer create failed");
+        }
         binder->mega_buffer_capacity = new_cap;
         ydebug("primitive_gpu_binder: created mega buffer %zu bytes", new_cap);
     }
@@ -311,6 +321,10 @@ struct yetty_ycore_void_result yetty_yrender_gpu_binder_finalize(
             .usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
         };
         binder->uniform_buffer = wgpuDeviceCreateBuffer(binder->device, &desc);
+        if (!binder->uniform_buffer) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "primitive_gpu_binder: uniform buffer create failed");
+        }
         binder->uniform_buffer_size = desc.size;
     }
 
@@ -319,6 +333,10 @@ struct yetty_ycore_void_result yetty_yrender_gpu_binder_finalize(
         wgpuBindGroupLayoutRelease(binder->bind_group_layout);
     }
     binder->bind_group_layout = wgpuRenderPipelineGetBindGroupLayout(binder->pipeline, 0);
+    if (!binder->bind_group_layout) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "primitive_gpu_binder: pipeline bind group layout query failed");
+    }
 
     // Create bind group
     if (binder->bind_group) {
@@ -353,6 +371,9 @@ struct yetty_ycore_void_result yetty_yrender_gpu_binder_finalize(
         .entries = entries,
     };
     binder->bind_group = wgpuDeviceCreateBindGroup(binder->device, &bg_desc);
+    if (!binder->bind_group) {
+        return YETTY_ERR(yetty_ycore_void, "primitive_gpu_binder: bind group create failed");
+    }
 
     binder->finalized = 1;
     ydebug("primitive_gpu_binder: finalized with %zu buffers, %zu uniforms",
@@ -425,14 +446,21 @@ struct yetty_ycore_void_result yetty_yrender_gpu_binder_render(
         return YETTY_ERR(yetty_ycore_void, "pass is NULL");
     }
 
-    wgpuRenderPassEncoderSetPipeline(pass, binder->pipeline);
-    wgpuRenderPassEncoderSetBindGroup(pass, 0, binder->bind_group, 0, NULL);
-
-    if (binder->quad_vertex_buffer) {
-        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, binder->quad_vertex_buffer, 0,
-                                             6 * 2 * sizeof(float));
+    /* Drawing with a missing bind group / vertex buffer would encode an
+     * invalid pass (or garbage) and only surface — if at all — as an
+     * asynchronous uncaptured error far from here. Refuse instead. */
+    if (!binder->bind_group) {
+        return YETTY_ERR(yetty_ycore_void, "primitive_gpu_binder: render without bind group");
+    }
+    if (!binder->quad_vertex_buffer) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "primitive_gpu_binder: render without quad vertex buffer");
     }
 
+    wgpuRenderPassEncoderSetPipeline(pass, binder->pipeline);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, binder->bind_group, 0, NULL);
+    wgpuRenderPassEncoderSetVertexBuffer(pass, 0, binder->quad_vertex_buffer, 0,
+                                         6 * 2 * sizeof(float));
     wgpuRenderPassEncoderDraw(pass, 6, instance_count, 0, 0);
 
     return YETTY_OK_VOID();

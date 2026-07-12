@@ -224,25 +224,39 @@ static int yframework_adapter_is_warp(WGPUAdapter adapter)
 }
 
 /* Request an adapter synchronously. Native Dawn fires the callback inline
- * during the request; the emscripten path spins the loop. Returns NULL on
- * failure (e.g. a forced backend that isn't compiled in). */
+ * during the request; the emscripten path spins the loop (bounded — a
+ * wedged GPU process must produce a log line, not an eternal silent
+ * hang). Returns NULL on failure (e.g. a forced backend that isn't
+ * compiled in); the browser/driver reason is logged here, since this is
+ * where it is last available. */
+enum { YFRAMEWORK_REQUEST_WAIT_TIMEOUT_MS = 30000 };
+
 static WGPUAdapter yframework_request_adapter(WGPUInstance instance,
                                               const WGPURequestAdapterOptions *opts)
 {
     WGPUAdapter adapter = NULL;
-    int ready = 0;
+    struct yetty_ywebgpu_request_state request_state = {{0}, 0};
     WGPURequestAdapterCallbackInfo cb = {0};
     cb.mode = WGPUCallbackMode_AllowSpontaneous;
     cb.callback = yetty_ywebgpu_adapter_request_callback;
     cb.userdata1 = &adapter;
-    cb.userdata2 = &ready;
+    cb.userdata2 = &request_state;
     wgpuInstanceRequestAdapter(instance, opts, cb);
 #ifdef __EMSCRIPTEN__
-    while (!ready) {
+    double wait_start_ms = emscripten_get_now();
+    while (!request_state.ready) {
         emscripten_sleep(0);
+        if (emscripten_get_now() - wait_start_ms > YFRAMEWORK_REQUEST_WAIT_TIMEOUT_MS) {
+            yerror("yframework: adapter request never completed within %d ms — "
+                   "the browser's GPU process is wedged",
+                   YFRAMEWORK_REQUEST_WAIT_TIMEOUT_MS);
+            return NULL;
+        }
     }
 #endif
-    (void)ready;
+    if (!adapter && request_state.error_msg[0]) {
+        ywarn("yframework: adapter request failed: %s", request_state.error_msg);
+    }
     return adapter;
 }
 
@@ -388,7 +402,7 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
     }
 #endif
 
-    struct yetty_ywebgpu_device_request_state device_cb_data = {{0}, 0};
+    struct yetty_ywebgpu_request_state device_cb_data = {{0}, 0};
     WGPURequestDeviceCallbackInfo device_cb = {0};
     device_cb.mode = WGPUCallbackMode_AllowSpontaneous;
     device_cb.callback = yetty_ywebgpu_device_request_callback;
@@ -399,8 +413,15 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
     wgpuAdapterRequestDevice(rt->gpu.adapter, &device_desc, device_cb);
 
 #ifdef __EMSCRIPTEN__
+    double device_wait_start_ms = emscripten_get_now();
     while (!device_cb_data.ready) {
         emscripten_sleep(0);
+        if (emscripten_get_now() - device_wait_start_ms > YFRAMEWORK_REQUEST_WAIT_TIMEOUT_MS) {
+            yerror("yframework: device request never completed within %d ms — "
+                   "the browser's GPU process is wedged",
+                   YFRAMEWORK_REQUEST_WAIT_TIMEOUT_MS);
+            return YETTY_ERR(yetty_ycore_void, "yframework: device request timed out");
+        }
     }
 #endif
     if (!rt->gpu.device) {
@@ -415,7 +436,22 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
     rt->present_mode = WGPUPresentMode_Fifo;
     if (surface) {
         WGPUSurfaceCapabilities caps = {0};
-        wgpuSurfaceGetCapabilities(surface, rt->gpu.adapter, &caps);
+        WGPUStatus caps_status = wgpuSurfaceGetCapabilities(surface, rt->gpu.adapter, &caps);
+        if (caps_status != WGPUStatus_Success) {
+            /* Without capabilities the surface format stays Undefined and
+             * every later configure/pipeline silently misrenders — bail
+             * loudly instead. */
+            yerror("yframework: wgpuSurfaceGetCapabilities failed (status %d) — "
+                   "the surface is unusable with this adapter",
+                   (int)caps_status);
+            return YETTY_ERR(yetty_ycore_void, "yframework: surface capabilities query failed");
+        }
+        if (caps.formatCount == 0) {
+            yerror("yframework: surface reports zero supported texture formats — "
+                   "cannot pick a surface format");
+            wgpuSurfaceCapabilitiesFreeMembers(caps);
+            return YETTY_ERR(yetty_ycore_void, "yframework: surface has no supported formats");
+        }
         if (caps.formatCount > 0) {
             /* Prefer a UNORM (linear-byte) BGRA/RGBA surface over the *Srgb
              * variants. Dawn-on-Metal reports an sRGB-tagged format first on
@@ -507,7 +543,26 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
         sc.width = rt->gpu.app_gpu_context.surface_width;
         sc.height = rt->gpu.app_gpu_context.surface_height;
         sc.presentMode = rt->present_mode;
+        if (sc.width == 0 || sc.height == 0) {
+            /* A 0x0 configure "succeeds" and then never shows a pixel —
+             * the canvas/window has not been laid out yet. */
+            ywarn("yframework: configuring surface at %ux%u — window/canvas "
+                  "not laid out yet?",
+                  sc.width, sc.height);
+        }
+        /* wgpuSurfaceConfigure returns void and a configure failure is
+         * NOT a device error, so the uncaptured-error callback never
+         * sees it. Without this scope a refused configuration (bad
+         * format, canvas/compositor interop disabled, …) leaves init_gpu
+         * reporting success and every frame rendering into a surface
+         * that never presents. */
+        yetty_ywebgpu_error_scope_push(rt->gpu.device);
         wgpuSurfaceConfigure(surface, &sc);
+        struct yetty_ycore_void_result configure_res =
+            yetty_ywebgpu_error_scope_pop(instance, rt->gpu.device);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, configure_res,
+                            "yframework: surface configure was refused — the browser/OS "
+                            "rejected the WebGPU surface configuration");
         ydebug("yframework: surface configured %ux%u present_mode=%d", sc.width, sc.height,
                (int)sc.presentMode);
     }
@@ -972,6 +1027,9 @@ struct yetty_ycore_void_result yetty_yframework_reconfigure_surface(struct yetty
         return YETTY_ERR(yetty_ycore_void, "yframework_reconfigure_surface: rt is NULL");
     }
     if (width == 0 || height == 0) {
+        /* Nothing to configure, but a 0x0 "resize" at startup is how a
+         * missing layout pass hides — leave a trace. */
+        ywarn("yframework_reconfigure_surface: ignoring %ux%u resize", width, height);
         return YETTY_OK_VOID();
     }
 
@@ -984,7 +1042,15 @@ struct yetty_ycore_void_result yetty_yframework_reconfigure_surface(struct yetty
         sc.width = width;
         sc.height = height;
         sc.presentMode = rt->present_mode;
+        /* Same rationale as the init-time configure: a refused
+         * configuration is invisible to the uncaptured-error callback,
+         * so capture it in a scope and propagate. */
+        yetty_ywebgpu_error_scope_push(rt->gpu.device);
         wgpuSurfaceConfigure(surface, &sc);
+        struct yetty_ycore_void_result configure_res = yetty_ywebgpu_error_scope_pop(
+            rt->gpu.app_gpu_context.instance, rt->gpu.device);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, configure_res,
+                            "yframework_reconfigure_surface: surface configure was refused");
     }
     rt->gpu.app_gpu_context.surface_width = width;
     rt->gpu.app_gpu_context.surface_height = height;

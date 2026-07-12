@@ -29,6 +29,7 @@
 #include <webgpu/webgpu.h>
 
 #include <stdlib.h>
+#include <string.h>
 
 struct yetty_yplatform_wgpu {
     WGPUInstance instance;
@@ -42,6 +43,10 @@ struct yetty_yplatform_wgpu {
 struct yetty_yplatform_ywgpu_await_state {
     volatile int done;
     int status;
+    /* Browser/driver failure reason. Captured so the WARN on failure can
+     * carry the actual message — with tracing off, a debug-only log of
+     * the reason means it is effectively dropped. */
+    char error_msg[256];
 };
 
 struct yplatform_wgpu_ptr_result yetty_yplatform_wgpu_create(WGPUInstance instance,
@@ -71,6 +76,17 @@ void yetty_yplatform_wgpu_destroy(struct yetty_yplatform_wgpu *wgpu)
     free(wgpu);
 }
 
+static void await_state_capture_message(struct yetty_yplatform_ywgpu_await_state *st,
+                                        WGPUStringView msg)
+{
+    if (msg.data && msg.length > 0) {
+        size_t len =
+            msg.length < sizeof(st->error_msg) - 1 ? msg.length : sizeof(st->error_msg) - 1;
+        memcpy(st->error_msg, msg.data, len);
+        st->error_msg[len] = '\0';
+    }
+}
+
 static void map_callback(WGPUMapAsyncStatus status, WGPUStringView msg, void *userdata1,
                          void *userdata2)
 {
@@ -78,6 +94,7 @@ static void map_callback(WGPUMapAsyncStatus status, WGPUStringView msg, void *us
     struct yetty_yplatform_ywgpu_await_state *st = userdata1;
     ydebug("ywebgpu: map_callback status=%d msg=\"%.*s\"", (int)status, (int)msg.length,
            msg.data ? msg.data : "");
+    await_state_capture_message(st, msg);
     st->status = (int)status;
     st->done = 1;
 }
@@ -107,7 +124,8 @@ struct yetty_ycore_void_result yetty_yplatform_wgpu_buffer_map_await(
     }
 
     if (st.status != WGPUMapAsyncStatus_Success) {
-        ywarn("buffer_map_await: status=%d", st.status);
+        ywarn("buffer_map_await: status=%d msg=%s", st.status,
+              st.error_msg[0] ? st.error_msg : "(none)");
         return YETTY_ERR(yetty_ycore_void, "buffer map failed");
     }
     return YETTY_OK_VOID();
@@ -120,6 +138,7 @@ static void queue_done_callback(WGPUQueueWorkDoneStatus status, WGPUStringView m
     struct yetty_yplatform_ywgpu_await_state *st = userdata1;
     ydebug("ywebgpu: queue_done_callback status=%d msg=\"%.*s\"", (int)status, (int)msg.length,
            msg.data ? msg.data : "");
+    await_state_capture_message(st, msg);
     st->status = (int)status;
     st->done = 1;
 }
@@ -145,7 +164,8 @@ struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(
     }
 
     if (st.status != WGPUQueueWorkDoneStatus_Success) {
-        ywarn("queue_done_await: status=%d", st.status);
+        ywarn("queue_done_await: status=%d msg=%s", st.status,
+              st.error_msg[0] ? st.error_msg : "(none)");
         return YETTY_ERR(yetty_ycore_void, "queue work done failed");
     }
     return YETTY_OK_VOID();

@@ -45,6 +45,29 @@
         }
         #topbar a:hover { color: #74C5A5; }
         #topbar .sep { color: #364A47; }
+        /* ---- WebGPU health line (webgpu-health.js verdict) ---- */
+        #webgpu-health-line {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 3px 12px;
+            font-size: 12px;
+            background: #0B1014;
+            border-bottom: 1px solid #364A47;
+            color: #556162;
+        }
+        #webgpu-health-line.healthy { color: #6BA892; }
+        #webgpu-health-line.warn { color: #74C5A5; }
+        #webgpu-health-line.unhealthy { color: #f55; font-weight: bold; }
+        #webgpu-health-line a { color: #6BA892; }
+        #webgpu-health-line a:hover { color: #74C5A5; }
+        /* When the probe says yetty cannot run, the terminal UI is
+         * withheld — only the topbar, the health line and the injected
+         * failure banner (reason + chrome://flags advice) remain. */
+        body.webgpu-unhealthy #tabbar,
+        body.webgpu-unhealthy .tab-panel { display: none !important; }
         /* ---- Page tabs (plain HTML, not yetty's yui tabs) ---- */
         #tabbar {
             flex: 0 0 auto;
@@ -422,6 +445,11 @@
         <span class="sep">·</span>
         <a href="https://github.com/zokrezyl/yetty/releases/tag/@YETTY_RELEASE_TAG@" target="_blank" rel="noopener">@YETTY_RELEASE_TAG@</a>
     </div>
+
+    <!-- Verdict of the page-load WebGPU health probe. States: checking /
+         healthy (accent) / unhealthy (red, terminal UI withheld). Always
+         links to the full report page. -->
+    <div id="webgpu-health-line">checking WebGPU health…</div>
 
     <div id="tabbar">
         <button class="tab active" type="button" data-tab="terminals">Terminals</button>
@@ -1234,6 +1262,21 @@
                 return;
             }
 
+            // A terminal instance's wasm engine hit a fatal error (C-side
+            // fatal-report hook). The iframe shows its own abort dialog;
+            // mark the panel header so the failure is visible even when
+            // the panel is scrolled or collapsed.
+            if (data.type === 'yetty-fatal') {
+                const instance = instanceFromSource(event.source);
+                if (!instance) return;
+                const title = instance.panel.querySelector('.term-panel-title');
+                if (title && title.textContent.indexOf('fatal') === -1) {
+                    title.style.color = '#f55';
+                    title.textContent += ' — fatal error';
+                }
+                return;
+            }
+
             // Terminal instance control messages.
             if (data.type === 'yetty-instance-hello') {
                 const instance = instanceFromSource(event.source);
@@ -1421,7 +1464,10 @@
         // (alias ?wsurl=), ?user=, ?password=, ?target= fill the config.
         // Incomplete configs (ssh without user, relay without target) fall
         // back to the prefilled config dialog instead of guessing.
-        (function () {
+        // NOT invoked here — the health probe below calls it once the
+        // machine is known to be able to run yetty, so a broken setup
+        // doesn't start multi-hundred-MB downloads it can never use.
+        function openDeepLinkInstance() {
             let mode = (urlParams.mode || '').toLowerCase();
             if (!mode && urlParams.relay) { mode = 'relay'; }
             if (!MODES[mode]) return;
@@ -1441,27 +1487,72 @@
                 return;
             }
             openInstance(config);
-        })();
+        }
 
-        // ---- WebGPU health probe --------------------------------------
-        // Runs the full GPU bring-up chain (adapter → limits → device →
-        // canvas → shader compile → pipeline → pixel-verified draw) the
-        // moment the page loads, so a machine that cannot run yetty says
-        // so immediately — not only after a session type is picked and a
-        // terminal iframe boots. On failure a banner with the broken step,
-        // the advice, and a link to the full webgpu-health.html report is
-        // injected; degraded-but-usable setups (compatibility adapter,
-        // software rasterizer) get a dismissible warning instead.
+        // ---- WebGPU health probe (gates the whole page) -----------------
+        // Runs the full GPU bring-up chain (adapter → hardware → limits →
+        // device → shader compile → pipeline → pixel-verified draw →
+        // presented-image verification) the moment the page loads.
+        //   healthy   → accent one-liner in the health line + deep links run
+        //   unhealthy → red one-liner, the terminal UI is WITHHELD
+        //               (body.webgpu-unhealthy) and the failure banner with
+        //               the broken step + chrome://flags advice + a link to
+        //               the full report page is shown instead.
         (function () {
+            const healthLine = document.getElementById('webgpu-health-line');
+
+            function setHealthLine(cssClass, text, linkText) {
+                healthLine.className = cssClass;
+                healthLine.textContent = '';
+                const label = document.createElement('span');
+                label.textContent = text;
+                healthLine.appendChild(label);
+                const reportLink = document.createElement('a');
+                reportLink.href = 'webgpu-health.html';
+                reportLink.textContent = linkText;
+                healthLine.appendChild(reportLink);
+            }
+
             if (!window.yettyWebgpuHealth) {
-                // Probe script missing on this deployment — the
-                // per-instance gate in terminal.html still applies.
+                // Probe script missing on this deployment — behave as
+                // before; the per-instance gate in terminal.html still
+                // applies.
+                healthLine.style.display = 'none';
+                openDeepLinkInstance();
                 return;
             }
-            window.yettyWebgpuHealth.run().then(function (report) {
-                window.yettyWebgpuHealth.installBanner(report, {
-                    detailsUrl: 'webgpu-health.html'
-                });
+
+            window.yettyWebgpuHealth.run({
+                // ?allow-software=1 downgrades the software-rasterizer
+                // failure to a warning for whoever really wants to watch
+                // yetty render on the CPU.
+                allowSoftwareRenderer: urlParams['allow-software'] === '1'
+            }).then(function (report) {
+                if (report.canRun) {
+                    const warningNote = report.warnings.length
+                        ? ' (' + report.warnings.length + ' warning' +
+                          (report.warnings.length > 1 ? 's' : '') + ')'
+                        : '';
+                    setHealthLine(report.warnings.length ? 'warn' : 'healthy',
+                                  '✓ WebGPU seems to be healthy' + warningNote,
+                                  'health report');
+                    if (report.warnings.length) {
+                        // Dismissible amber banner with the warning detail.
+                        window.yettyWebgpuHealth.installBanner(report, {
+                            detailsUrl: 'webgpu-health.html'
+                        });
+                    }
+                    openDeepLinkInstance();
+                } else {
+                    setHealthLine('unhealthy',
+                                  '✗ WebGPU is unhealthy — yetty cannot run here: ' +
+                                  (report.reason || 'health check failed'),
+                                  'diagnostics & recommended fixes →');
+                    document.body.classList.add('webgpu-unhealthy');
+                    window.yettyWebgpuHealth.installBanner(report, {
+                        detailsUrl: 'webgpu-health.html'
+                    });
+                }
             });
         })();
     </script>

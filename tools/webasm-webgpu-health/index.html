@@ -140,7 +140,10 @@
             function runProbe() {
                 verdict.className = 'running';
                 verdict.textContent = 'Running the probe…';
-                window.yettyWebgpuHealth.run().then(renderReport);
+                window.yettyWebgpuHealth.run({
+                    allowSoftwareRenderer:
+                        /[?&]allow-software=1/.test(window.location.search)
+                }).then(renderReport);
             }
 
             document.getElementById('rerun')

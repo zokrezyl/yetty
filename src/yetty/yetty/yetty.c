@@ -159,7 +159,10 @@ static struct yetty_ycore_int_result yetty_event_handler(
             struct yetty_ycore_void_result res = yetty_yui_tabbar_model_render(
                 yetty->tabbar, yetty->runtime->render_target, yui_force);
             if (!YETTY_IS_OK(res)) {
-                yerror("yetty: tabbar render failed: %s", res.error.msg);
+                char chain_buf[512];
+                yetty_ycore_error_snprint(chain_buf, sizeof(chain_buf), res.error);
+                yerror("yetty: tabbar render failed: %s", chain_buf);
+                yetty_ycore_error_destroy(res.error);
             }
         }
         ytime_report(workspace_render);
@@ -168,7 +171,9 @@ static struct yetty_ycore_int_result yetty_event_handler(
             struct yetty_ycore_void_result yr =
                 yetty_yui_render(yetty->yui, yetty->runtime->render_target);
             if (!YETTY_IS_OK(yr)) {
-                yerror("yetty: yui render failed: %s", yr.error.msg);
+                char chain_buf[512];
+                yetty_ycore_error_snprint(chain_buf, sizeof(chain_buf), yr.error);
+                yerror("yetty: yui render failed: %s", chain_buf);
                 yetty_ycore_error_destroy(yr.error);
             }
         }
@@ -178,7 +183,10 @@ static struct yetty_ycore_int_result yetty_event_handler(
             yetty->runtime->render_target->ops->present(yetty->runtime->render_target);
         ytime_report(present);
         if (!YETTY_IS_OK(res)) {
-            yerror("yetty: present failed: %s", res.error.msg);
+            char chain_buf[512];
+            yetty_ycore_error_snprint(chain_buf, sizeof(chain_buf), res.error);
+            yerror("yetty: present failed: %s", chain_buf);
+            yetty_ycore_error_destroy(res.error);
         }
 
         ytime_report(full_frame);

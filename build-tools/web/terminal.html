@@ -477,6 +477,93 @@
             } catch (err) { /* the field is user-selectable as a last resort */ }
         }
 
+        // Platform-specific "what to try, in order" section of the abort
+        // dialog. On Linux the ORDER is derived from field results:
+        // #enable-vulkan alone is the most common fix (hardware WebGPU on
+        // Linux Chrome runs on Vulkan); blocklist override and the
+        // compositing-interop flag follow. macOS/iOS get Metal/WebKit
+        // instructions instead — there are no Vulkan flags there.
+        function buildPlatformFixSection() {
+            const userAgent = navigator.userAgent;
+            const maxTouchPoints = navigator.maxTouchPoints || 0;
+            const ios = /iPhone|iPad|iPod/.test(userAgent) ||
+                (/Macintosh/.test(userAgent) && maxTouchPoints > 1);
+            const android = /Android/.test(userAgent);
+            const mac = !ios && /Macintosh|Mac OS X/.test(userAgent);
+            const safari = /Safari\//.test(userAgent) &&
+                !/Chrome|Chromium|CriOS|Edg/.test(userAgent);
+
+            if (ios) {
+                return '<div class="abort-section-label">Try this first</div>' +
+                    '<div class="abort-step">Every iOS/iPadOS browser uses WebKit, ' +
+                    'so this is a Safari setting no matter which browser app you ' +
+                    'use: <strong>Settings → Apps → Safari → Advanced → Feature ' +
+                    'Flags → WebGPU</strong>, then restart the browser. On iOS 26+ ' +
+                    'WebGPU is on by default — if the flag is missing or it still ' +
+                    'fails, update iOS.</div>';
+            }
+            if (mac && safari) {
+                return '<div class="abort-section-label">Try this first</div>' +
+                    '<div class="abort-step">Safari on macOS: <strong>Safari → ' +
+                    'Settings → Advanced → “Show features for web ' +
+                    'developers”</strong>, then <strong>Develop → Feature Flags → ' +
+                    'WebGPU</strong> and reload. WebGPU is on by default in recent ' +
+                    'Safari (26+) — updating macOS/Safari is the cleanest fix. ' +
+                    'Chrome/Edge 113+ also work on macOS out of the box.</div>';
+            }
+            if (mac) {
+                return '<div class="abort-section-label">Try these, in order</div>' +
+                    '<div class="abort-step">Chrome/Edge on macOS run WebGPU on ' +
+                    'Metal — there are no Vulkan flags on macOS. 1. Update the ' +
+                    'browser and macOS. 2. Keep <strong>chrome://settings/system → ' +
+                    '“Use graphics acceleration when available”</strong> ON and ' +
+                    'relaunch. 3. Override the GPU blocklist:</div>' +
+                    copyField('chrome://flags/#enable-unsafe-webgpu') +
+                    '<div class="abort-hint">Set it to <strong>Enabled</strong> and ' +
+                    '<strong>Relaunch</strong>. <code>chrome://</code> pages cannot ' +
+                    'be opened from a link — paste into the address bar.</div>';
+            }
+            if (android) {
+                return '<div class="abort-section-label">Try these, in order</div>' +
+                    '<div class="abort-step">1. Update Chrome and Android System ' +
+                    'WebView (WebGPU needs Android 12+ with a recent Chrome). ' +
+                    '2. Override the GPU blocklist:</div>' +
+                    copyField('chrome://flags/#enable-unsafe-webgpu') +
+                    '<div class="abort-hint">Set it to <strong>Enabled</strong> and ' +
+                    'relaunch Chrome.</div>';
+            }
+            if (/Windows/.test(userAgent)) {
+                return '<div class="abort-section-label">Try these, in order</div>' +
+                    '<div class="abort-step">1. Update the GPU driver (vendor ' +
+                    'installer — WebGPU runs on D3D12). 2. Keep ' +
+                    '<strong>chrome://settings/system → “Use graphics acceleration ' +
+                    'when available”</strong> ON and relaunch. 3. Override the GPU ' +
+                    'blocklist:</div>' +
+                    copyField('chrome://flags/#enable-unsafe-webgpu') +
+                    '<div class="abort-hint">Set it to <strong>Enabled</strong> and ' +
+                    '<strong>Relaunch</strong>. <code>chrome://</code> pages cannot ' +
+                    'be opened from a link — paste into the address bar.</div>';
+            }
+            /* Linux (default): the ordered Vulkan flag ladder. */
+            return '<div class="abort-section-label">Try these, in order — ' +
+                'relaunch and re-test after each</div>' +
+                '<div class="abort-step">1. Enable Vulkan — hardware WebGPU on ' +
+                'Linux runs on it; this alone is the most common fix:</div>' +
+                copyField('chrome://flags/#enable-vulkan') +
+                '<div class="abort-step">2. Override the GPU/driver blocklist:</div>' +
+                copyField('chrome://flags/#enable-unsafe-webgpu') +
+                '<div class="abort-step">3. Force the WebGPU↔GL compositing ' +
+                'interop — for the case where yetty renders but the canvas shows ' +
+                'nothing:</div>' +
+                copyField('chrome://flags/#force-enable-webgpu-interop') +
+                '<div class="abort-hint">Set each to <strong>Enabled</strong> and ' +
+                'use <strong>Relaunch</strong>. Keep ' +
+                '<code>chrome://settings/system → “Use graphics acceleration when ' +
+                'available”</code> ON. <code>chrome://</code> pages cannot be ' +
+                'opened from a link — paste the copied text into the address ' +
+                'bar.</div>';
+        }
+
         // Central "yetty cannot start" dialog. Every abort path routes here so
         // the user always sees where to look (chrome://flags, chrome://gpu)
         // and what the specific failure was.
@@ -499,13 +586,7 @@
                 '<div class="abort-title">' + escapeHtml(options.heading) + '</div>' +
                 '<div class="abort-cause">' + escapeHtml(options.cause) + '</div>' +
 
-                '<div class="abort-section-label">Try this first</div>' +
-                '<div class="abort-step">Enable unsafe / blocklisted WebGPU, then ' +
-                'relaunch the browser:</div>' +
-                copyField('chrome://flags/#enable-unsafe-webgpu') +
-                '<div class="abort-hint">Set it to <strong>Enabled</strong> and use ' +
-                '<strong>Relaunch</strong>. Browser <code>chrome://</code> pages cannot ' +
-                'be opened from a link — paste the copied text into the address bar.</div>' +
+                buildPlatformFixSection() +
 
                 '<div class="abort-section-label">Investigate why</div>' +
                 '<div class="abort-step">Open the GPU report and read the ' +
@@ -514,8 +595,8 @@
                 '<div class="abort-hint">Look at the <code>WebGPU</code> and ' +
                 '<code>Vulkan</code> lines. If Vulkan is <em>Disabled</em>, or the Dawn ' +
                 '<code>WebGPU Status</code> section says <em>Blocklisted</em>, your ' +
-                'GPU/driver is not on the browser\'s WebGPU allow-list — the flag above ' +
-                'overrides that. On desktop, a WebGPU-hooking extension can also break ' +
+                'GPU/driver is not on the browser\'s WebGPU allow-list — the flags above ' +
+                'override that. On desktop, a WebGPU-hooking extension can also break ' +
                 'it; try a Guest window or disable extensions.</div>' +
 
                 '<div class="abort-diag">' + gpuRow +
@@ -703,6 +784,31 @@
                     reason: 'wasm abort: ' + (what || 'unknown'),
                     gpuInfo: gatherGpuInfo(),
                 });
+            },
+            // C-side fatal hook (yetty_yplatform_fatal_report): every
+            // unrecoverable GPU/runtime error — uncaptured WebGPU error,
+            // device lost, surface acquire failure, bring-up failure —
+            // calls this BEFORE _Exit()/returning. Without it those
+            // fatals reach only the console and the page keeps saying
+            // "yetty ready!" over a dead canvas.
+            onYettyFatal: function(text) {
+                const status = document.getElementById('status');
+                if (status) status.textContent = 'yetty hit a fatal error';
+                showAbortDialog({
+                    heading: 'yetty hit a fatal error',
+                    cause: 'The yetty engine reported an unrecoverable error and ' +
+                           'stopped. The exact reason is shown below; the pages ' +
+                           'referenced above show what the browser thinks of your GPU.',
+                    reason: text || 'no message',
+                    gpuInfo: gatherGpuInfo(),
+                });
+                // Let the hosting shell (index.html) mark this instance too.
+                try {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage(
+                            { type: 'yetty-fatal', text: text || '' }, '*');
+                    }
+                } catch (ignored) {}
             },
             // preRun runs AFTER yetty.js loads but BEFORE main() executes
             // This is where we inject environment variables into Emscripten's ENV

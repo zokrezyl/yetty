@@ -13,12 +13,13 @@ extern "C" {
  *
  * Conventions (matching the WebGPU C API):
  *   - userdata1: pointer to the output handle (WGPUAdapter * / WGPUDevice *)
- *   - userdata2: pointer to caller state:
- *       * adapter callback: int * "ready" flag, set to 1 on completion
- *       * device  callback: struct yetty_ywebgpu_device_request_state *
+ *   - userdata2: pointer to a struct yetty_ywebgpu_request_state — the
+ *     browser/driver failure message is copied into error_msg so the
+ *     caller can log the actual reason ("adapter blocklisted", …), not
+ *     just the fact of the failure.
  */
 
-struct yetty_ywebgpu_device_request_state {
+struct yetty_ywebgpu_request_state {
     char error_msg[256]; /* populated on failure (NUL-terminated) */
     int ready;           /* set to 1 on completion */
 };
