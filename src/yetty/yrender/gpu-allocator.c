@@ -306,7 +306,8 @@ static void gpu_allocator_get_stats(const struct yetty_ydraw_gpu_allocator *self
     out->capacity = MAX_ALLOCATIONS;
 }
 
-struct yetty_yrender_gpu_allocator_result yetty_yrender_gpu_allocator_create(WGPUDevice device)
+struct yetty_yrender_gpu_allocator_result yetty_yrender_gpu_allocator_create(WGPUInstance instance,
+                                                                             WGPUDevice device)
 {
     if (!device) {
         return YETTY_ERR(yetty_yrender_gpu_allocator, "device is null");
@@ -319,6 +320,7 @@ struct yetty_yrender_gpu_allocator_result yetty_yrender_gpu_allocator_create(WGP
     }
 
     impl->base.ops = &gpu_allocator_ops;
+    impl->base.instance = instance;
     impl->device = device;
 
     return YETTY_OK(yetty_yrender_gpu_allocator, &impl->base);

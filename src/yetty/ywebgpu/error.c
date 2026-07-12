@@ -4,6 +4,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef __EMSCRIPTEN__
+/* Coroutine query for the pop-scope wait guard — emscripten fibers
+ * cannot Asyncify-sleep, so a pop inside a coroutine must not block. */
+#include <yetty/yplatform/ycoroutine.h>
+#endif
+
 /* Global error state */
 struct yetty_ywebgpu_error_state yetty_ywebgpu_error = {0};
 
@@ -127,7 +133,8 @@ void yetty_ywebgpu_error_scope_push(WGPUDevice device)
     wgpuDevicePushErrorScope(device, WGPUErrorFilter_Validation);
 }
 
-int yetty_ywebgpu_error_scope_pop(WGPUDevice device, char *message_out, size_t message_capacity)
+struct yetty_ycore_void_result yetty_ywebgpu_error_scope_pop(WGPUInstance instance,
+                                                             WGPUDevice device)
 {
     /* Heap-allocated: on the browser backend the callback fires from a later
      * event-loop tick, after this frame is gone — a stack capture would be a
@@ -138,37 +145,59 @@ int yetty_ywebgpu_error_scope_pop(WGPUDevice device, char *message_out, size_t m
     info.mode = WGPUCallbackMode_AllowSpontaneous;
     info.callback = error_scope_pop_callback;
     info.userdata1 = capture;
-    (void)wgpuDevicePopErrorScope(device, info);
+    WGPUFuture future = wgpuDevicePopErrorScope(device, info);
     if (!capture) {
         /* Allocation failed; the scope is still balanced, the error (if
-         * any) is dropped by the NULL-guard in the callback. */
-        ywarn("ywebgpu: PopErrorScope capture allocation failed; "
-              "captured error (if any) is lost");
-        return 0;
+         * any) is dropped by the NULL-guard in the callback. The
+         * validation outcome is unknowable — report that instead of
+         * claiming success. */
+        return YETTY_ERR(yetty_ycore_void, "PopErrorScope capture allocation failed");
     }
+#ifdef __EMSCRIPTEN__
+    /* The browser backend resolves the scope only from a later event-loop
+     * tick — block on the future via wgpuInstanceWaitAny, which the
+     * emdawnwebgpu port implements as an Asyncify suspend (this build is
+     * asyncify-instrumented). Two guards: the instance must be available,
+     * and we must not be inside a stackful coroutine — emscripten fibers
+     * cannot Asyncify-sleep. */
+    if (!capture->completed && instance && !yetty_yplatform_coro_current()) {
+        enum { POP_SCOPE_WAIT_SECONDS = 5 };
+        WGPUFutureWaitInfo wait = {.future = future};
+        WGPUWaitStatus wait_status = wgpuInstanceWaitAny(
+            instance, 1, &wait, (uint64_t)POP_SCOPE_WAIT_SECONDS * 1000000000ull);
+        if (wait_status != WGPUWaitStatus_Success) {
+            ywarn("ywebgpu: PopErrorScope WaitAny failed (status %d) — was the "
+                  "instance created with WGPUInstanceFeatureName_TimedWaitAny?",
+                  (int)wait_status);
+        }
+    }
+#else
+    (void)instance;
+    (void)future;
+#endif
     if (!capture->completed) {
-        /* Dawn native resolves synchronously-validated scopes inline; the
-         * browser backend cannot. Detach: the callback will log any error
-         * when it eventually fires, and frees the capture. */
+        /* Dawn native resolves synchronously-validated scopes inline and
+         * the browser backend was waited on above — reaching this is
+         * exceptional (WaitAny unavailable, timed out, or a pop inside a
+         * coroutine). Detach: the callback will log any error when it
+         * eventually fires, and frees the capture. */
         capture->detached = 1;
         ywarn("ywebgpu: PopErrorScope did not complete inline; "
               "captured error (if any) will be logged asynchronously");
-        return 0;
+        return YETTY_OK_VOID();
     }
     int has_error = capture->has_error;
     if (has_error) {
+        /* Full driver message to the log; the Result carries a static
+         * summary (Result messages are pointers, never copies — a stack
+         * or freed buffer would dangle). */
         yerror("WebGPU captured validation error: %s", capture->message);
-        if (message_out && message_capacity > 0) {
-            size_t len = strlen(capture->message);
-            if (len > message_capacity - 1) {
-                len = message_capacity - 1;
-            }
-            memcpy(message_out, capture->message, len);
-            message_out[len] = '\0';
-        }
     }
     free(capture);
-    return has_error;
+    if (has_error) {
+        return YETTY_ERR(yetty_ycore_void, "WebGPU validation error (full message in log)");
+    }
+    return YETTY_OK_VOID();
 }
 
 void yetty_ywebgpu_device_lost_callback(WGPUDevice const *device, WGPUDeviceLostReason reason,

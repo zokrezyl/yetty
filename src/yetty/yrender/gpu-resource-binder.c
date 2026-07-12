@@ -1001,10 +1001,9 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(
     impl->shader_module = wgpuDeviceCreateShaderModule(impl->device, &shader_desc);
     free(merged);
 
-    char capture_message[512];
-    if (yetty_ywebgpu_error_scope_pop(impl->device, capture_message, sizeof(capture_message))) {
-        return YETTY_ERR(yetty_ycore_void, capture_message);
-    }
+    struct yetty_ycore_void_result shader_pop_res =
+        yetty_ywebgpu_error_scope_pop(impl->allocator->instance, impl->device);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, shader_pop_res, "shader module validation");
     if (!impl->shader_module) {
         return YETTY_ERR(yetty_ycore_void, "failed to compile shader");
     }
@@ -1079,13 +1078,15 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(
      * that parses but lacks vs_main / fs_main only fails here. */
     yetty_ywebgpu_error_scope_push(impl->device);
     impl->pipeline = wgpuDeviceCreateRenderPipeline(impl->device, &pipe_desc);
-    if (yetty_ywebgpu_error_scope_pop(impl->device, capture_message, sizeof(capture_message))) {
+    struct yetty_ycore_void_result pipeline_pop_res =
+        yetty_ywebgpu_error_scope_pop(impl->allocator->instance, impl->device);
+    if (YETTY_IS_ERR(pipeline_pop_res)) {
         if (impl->pipeline) {
             /* Dawn returns an invalid object on validation failure. */
             wgpuRenderPipelineRelease(impl->pipeline);
             impl->pipeline = NULL;
         }
-        return YETTY_ERR(yetty_ycore_void, capture_message);
+        return YETTY_ERR(yetty_ycore_void, "render pipeline validation", pipeline_pop_res);
     }
     if (!impl->pipeline) {
         return YETTY_ERR(yetty_ycore_void, "failed to create pipeline");

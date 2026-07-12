@@ -127,8 +127,19 @@ static struct yetty_ycore_void_result webasm_platform_init(struct yetty_yclass_o
      * navigator.clipboard EM_JS glue is not yet wired, and the previous webasm
      * bootstrap also ran with clipboard == NULL. Leave data->clipboard unset. */
 
-    /* WebGPU instance + surface (the canvas exists now). */
-    WGPUInstance instance = wgpuCreateInstance(NULL);
+    /* WebGPU instance + surface (the canvas exists now). TimedWaitAny
+     * lets synchronous-looking code block on a WGPUFuture through the
+     * port's Asyncify machinery — yetty_ywebgpu_error_scope_pop uses it
+     * so a validation error surfaces inline as a Result instead of
+     * being demoted to an async log line. */
+    static const WGPUInstanceFeatureName instance_features[] = {
+        WGPUInstanceFeatureName_TimedWaitAny,
+    };
+    WGPUInstanceDescriptor instance_desc = {0};
+    instance_desc.requiredFeatureCount =
+        sizeof(instance_features) / sizeof(instance_features[0]);
+    instance_desc.requiredFeatures = instance_features;
+    WGPUInstance instance = wgpuCreateInstance(&instance_desc);
     if (!instance) {
         return YETTY_ERR(yetty_ycore_void, "webasm_platform_init: WebGPU instance create failed");
     }
