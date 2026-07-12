@@ -63,8 +63,8 @@ void _Py_Dealloc(PyObject *o)
 
 int _Py_dup(int fd)
 {
-#ifdef _WIN32
-    return -1;
+#ifdef _MSC_VER
+    return _dup(fd); /* <io.h>, pulled in by Python.h */
 #else
     extern int dup(int);
     return dup(fd);

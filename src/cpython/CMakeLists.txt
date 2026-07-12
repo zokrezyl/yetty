@@ -56,9 +56,16 @@ target_include_directories(yetty_cpython PRIVATE
 # Public: only the clean wrapper header (include/yetty/cpython/cpython.h).
 target_include_directories(yetty_cpython PUBLIC ${YETTY_ROOT}/include)
 
-target_compile_definitions(yetty_cpython PRIVATE Py_BUILD_CORE)
 # Vendored third-party C: silence warnings, never treat them as errors here.
-target_compile_options(yetty_cpython PRIVATE -w)
+# (MSVC spells the suppress-all flag /w; GCC/clang spell it -w.)
+if(MSVC)
+    set(YETTY_CPYTHON_SILENCE_WARNINGS /w)
+else()
+    set(YETTY_CPYTHON_SILENCE_WARNINGS -w)
+endif()
+
+target_compile_definitions(yetty_cpython PRIVATE Py_BUILD_CORE)
+target_compile_options(yetty_cpython PRIVATE ${YETTY_CPYTHON_SILENCE_WARNINGS})
 
 # Standalone tool: py-parse <file.py> -> AST dump on stdout.
 add_executable(py-parse ${CPYTHON_DIR}/src/main_free.c)
@@ -66,5 +73,5 @@ set_target_properties(py-parse PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)
 target_include_directories(py-parse PRIVATE
     ${CPYTHON_DIR}/src/runtime ${CPYTHON_DIR}/src/ast ${CPYTHON_VEN})
 target_compile_definitions(py-parse PRIVATE Py_BUILD_CORE)
-target_compile_options(py-parse PRIVATE -w)
+target_compile_options(py-parse PRIVATE ${YETTY_CPYTHON_SILENCE_WARNINGS})
 target_link_libraries(py-parse PRIVATE yetty_cpython)
