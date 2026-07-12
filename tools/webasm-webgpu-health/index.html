@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>yetty — WebGPU health</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%;
+            min-height: 100%;
+            background: #0B1014;
+            color: #E0E5E4;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+        }
+        #page {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 24px 20px 60px 20px;
+        }
+        h1 {
+            font-size: 18px;
+            margin-bottom: 4px;
+        }
+        h1 .accent { color: #6BA892; }
+        #subtitle {
+            font-size: 12px;
+            color: #9FA7A8;
+            line-height: 1.6;
+            margin-bottom: 18px;
+        }
+        #verdict {
+            border: 1px solid #364A47;
+            border-radius: 8px;
+            background: #141A1F;
+            padding: 14px 16px;
+            font-size: 14px;
+            margin-bottom: 18px;
+        }
+        #verdict.running { color: #9FA7A8; }
+        #verdict.pass { border-left: 4px solid #6BA892; color: #74C5A5; }
+        #verdict.warn { border-left: 4px solid #74C5A5; color: #74C5A5; }
+        #verdict.fail { border-left: 4px solid #f55; color: #f55; }
+        #advice {
+            display: none;
+            border: 1px solid #364A47;
+            border-radius: 8px;
+            background: #141A1F;
+            padding: 12px 16px;
+            font-size: 12px;
+            color: #9FA7A8;
+            line-height: 1.7;
+            margin-bottom: 18px;
+        }
+        #advice.visible { display: block; }
+        #advice strong { color: #E0E5E4; }
+        #report-container {
+            border: 1px solid #364A47;
+            border-radius: 8px;
+            background: #141A1F;
+            padding: 14px 16px;
+            margin-bottom: 18px;
+            overflow-x: auto;
+        }
+        #buttons { display: flex; gap: 10px; margin-bottom: 18px; }
+        button {
+            background: #1E262C;
+            border: 1px solid #364A47;
+            border-radius: 6px;
+            color: #9FA7A8;
+            font-family: inherit;
+            font-size: 13px;
+            padding: 8px 16px;
+            cursor: pointer;
+        }
+        button:hover { color: #E0E5E4; border-color: #6BA892; }
+        #raw-json {
+            display: none;
+            background: #141A1F;
+            border: 1px solid #364A47;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 11px;
+            color: #9FA7A8;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        #raw-json.visible { display: block; }
+    </style>
+</head>
+<body>
+    <div id="page">
+        <h1><span class="accent">yetty</span> — WebGPU health check</h1>
+        <div id="subtitle">Probes the full GPU bring-up chain the yetty
+            terminal needs: WebGPU API → adapter → limits → device →
+            canvas → shader compile → pipeline → an actually-executed,
+            pixel-verified draw. The first broken link is reported with
+            what to do about it.</div>
+
+        <div id="verdict" class="running">Running the probe…</div>
+        <div id="advice"></div>
+
+        <div id="buttons">
+            <button id="rerun" type="button">Run again</button>
+            <button id="copy-json" type="button">Copy report JSON</button>
+            <button id="toggle-json" type="button">Show raw JSON</button>
+        </div>
+
+        <div id="report-container"></div>
+        <div id="raw-json"></div>
+    </div>
+
+    <script src="webgpu-health.js"></script>
+    <script>
+        (function () {
+            var verdict = document.getElementById('verdict');
+            var advice = document.getElementById('advice');
+            var reportContainer = document.getElementById('report-container');
+            var rawJson = document.getElementById('raw-json');
+            var lastReport = null;
+
+            function renderReport(report) {
+                lastReport = report;
+                verdict.textContent = window.yettyWebgpuHealth.summarize(report);
+                verdict.className = report.canRun
+                    ? (report.warnings.length ? 'warn' : 'pass')
+                    : 'fail';
+                if (!report.canRun && report.advice) {
+                    advice.textContent = report.advice;
+                    advice.classList.add('visible');
+                } else {
+                    advice.classList.remove('visible');
+                }
+                reportContainer.textContent = '';
+                reportContainer.appendChild(
+                    window.yettyWebgpuHealth.createReportElement(report));
+                rawJson.textContent = JSON.stringify(report, null, 2);
+            }
+
+            function runProbe() {
+                verdict.className = 'running';
+                verdict.textContent = 'Running the probe…';
+                window.yettyWebgpuHealth.run().then(renderReport);
+            }
+
+            document.getElementById('rerun')
+                .addEventListener('click', runProbe);
+            document.getElementById('toggle-json')
+                .addEventListener('click', function () {
+                    rawJson.classList.toggle('visible');
+                });
+            document.getElementById('copy-json')
+                .addEventListener('click', function (event) {
+                    if (!lastReport) return;
+                    var text = JSON.stringify(lastReport, null, 2);
+                    var button = event.target;
+                    function feedback() {
+                        var original = button.textContent;
+                        button.textContent = 'Copied!';
+                        setTimeout(function () {
+                            button.textContent = original;
+                        }, 1500);
+                    }
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text).then(feedback,
+                                                                 function () {});
+                    }
+                });
+
+            runProbe();
+        })();
+    </script>
+</body>
+</html>
