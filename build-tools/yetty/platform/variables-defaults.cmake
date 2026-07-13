@@ -50,6 +50,7 @@ set(YETTY_ENABLE_LIB_MINIMP4  ON CACHE BOOL "minimp4 — MP4 container" FORCE)
 # Audio
 option(YETTY_ENABLE_LIB_MINIAUDIO   "miniaudio — cross-platform audio I/O"  ON)
 option(YETTY_ENABLE_LIB_LIBOPUS     "libopus — Opus audio codec"            ON)
+option(YETTY_ENABLE_LIB_FDK_AAC     "fdk-aac — AAC-LC encoder (--record-audio)" ON)
 
 # Misc
 option(YETTY_ENABLE_LIB_TREESITTER  "tree-sitter — source code parsing"     ON)

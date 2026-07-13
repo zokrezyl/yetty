@@ -17,6 +17,9 @@ set(YETTY_ENABLE_LIB_QEMU_BINARY OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_THORVG   OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_LIBSSH2  OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_OPENH264 OFF CACHE BOOL "" FORCE)
+# fdk-aac is CPM-built from source; only mp4 recording uses it, and
+# recording is off on webasm anyway (no OpenH264). Skip the build cost.
+set(YETTY_ENABLE_LIB_FDK_AAC  OFF CACHE BOOL "" FORCE)
 
 # pdfio, tree-sitter, imgui: webasm prebuilts not yet published.
 set(YETTY_ENABLE_LIB_PDFIO      OFF CACHE BOOL "" FORCE)

@@ -233,3 +233,165 @@ uint32_t yetty_yplatform_audio_device_channels(const struct yetty_yplatform_audi
 {
     return dev ? dev->channels : 0u;
 }
+
+/*===========================================================================
+ * Capture-device implementation.
+ *
+ * Mirror image of the playback device above: miniaudio drives the mic on
+ * its own backend thread and dumps s16 frames into an SPSC ring; the
+ * consumer (mp4 recorder's encoder pump) drains via read_s16.
+ *===========================================================================*/
+
+struct yetty_yplatform_audio_capture {
+    ma_device device;
+    ma_pcm_rb ring;
+    uint32_t sample_rate;
+    uint32_t channels;
+    _Atomic int started;
+};
+
+static void audio_capture_callback(ma_device *device, void *out, const void *in, ma_uint32 frame_count)
+{
+    (void)out;
+    struct yetty_yplatform_audio_capture *cap =
+        (struct yetty_yplatform_audio_capture *)device->pUserData;
+    if (!cap || !in) {
+        return;
+    }
+    ma_uint32 want = frame_count;
+    const int16_t *src = (const int16_t *)in;
+    while (want > 0u) {
+        ma_uint32 chunk = want;
+        void *write_ptr = NULL;
+        if (ma_pcm_rb_acquire_write(&cap->ring, &chunk, &write_ptr) != MA_SUCCESS ||
+            chunk == 0u) {
+            /* Ring full — drop the surplus. Recording tolerates the
+             * occasional drop better than blocking the mic thread. */
+            return;
+        }
+        memcpy(write_ptr, src, (size_t)chunk * cap->channels * sizeof(int16_t));
+        ma_pcm_rb_commit_write(&cap->ring, chunk);
+        src += (size_t)chunk * cap->channels;
+        want -= chunk;
+    }
+}
+
+struct yetty_yplatform_audio_capture_ptr_result yetty_yplatform_audio_capture_create(
+    uint32_t sample_rate, uint32_t channels)
+{
+    if (sample_rate == 0u || channels == 0u || channels > 8u) {
+        return YETTY_ERR(yetty_yplatform_audio_capture_ptr,
+                         "audio-capture: invalid sample_rate/channels");
+    }
+
+    struct yetty_yplatform_audio_capture *cap = calloc(1u, sizeof(*cap));
+    if (!cap) {
+        return YETTY_ERR(yetty_yplatform_audio_capture_ptr, "audio-capture: alloc failed");
+    }
+    cap->sample_rate = sample_rate;
+    cap->channels = channels;
+    atomic_store_explicit(&cap->started, 0, memory_order_relaxed);
+
+    /* ~2 s of headroom — the encoder pump ticks every video frame, but
+     * we shouldn't drop mic data if the pump is briefly delayed. */
+    ma_uint32 ring_frames = sample_rate * 2u;
+    if (ma_pcm_rb_init(ma_format_s16, channels, ring_frames, NULL, NULL, &cap->ring) !=
+        MA_SUCCESS) {
+        free(cap);
+        return YETTY_ERR(yetty_yplatform_audio_capture_ptr,
+                         "audio-capture: ring buffer init failed");
+    }
+
+    ma_device_config cfg = ma_device_config_init(ma_device_type_capture);
+    cfg.capture.format = ma_format_s16;
+    cfg.capture.channels = channels;
+    cfg.sampleRate = sample_rate;
+    cfg.dataCallback = audio_capture_callback;
+    cfg.pUserData = cap;
+
+    if (ma_device_init(NULL, &cfg, &cap->device) != MA_SUCCESS) {
+        ma_pcm_rb_uninit(&cap->ring);
+        free(cap);
+        return YETTY_ERR(yetty_yplatform_audio_capture_ptr,
+                         "audio-capture: ma_device_init failed (no mic backend?)");
+    }
+    yinfo("audio-capture: device opened %u Hz × %u ch (%s backend)", sample_rate, channels,
+          ma_get_backend_name(cap->device.pContext->backend));
+    return YETTY_OK(yetty_yplatform_audio_capture_ptr, cap);
+}
+
+void yetty_yplatform_audio_capture_destroy(struct yetty_yplatform_audio_capture *cap)
+{
+    if (!cap) {
+        return;
+    }
+    if (atomic_load_explicit(&cap->started, memory_order_relaxed)) {
+        ma_device_stop(&cap->device);
+    }
+    ma_device_uninit(&cap->device);
+    ma_pcm_rb_uninit(&cap->ring);
+    free(cap);
+}
+
+struct yetty_ycore_void_result yetty_yplatform_audio_capture_start(
+    struct yetty_yplatform_audio_capture *cap)
+{
+    if (!cap) {
+        return YETTY_ERR(yetty_ycore_void, "audio-capture: start on null device");
+    }
+    if (atomic_load_explicit(&cap->started, memory_order_relaxed)) {
+        return YETTY_OK_VOID();
+    }
+    if (ma_device_start(&cap->device) != MA_SUCCESS) {
+        return YETTY_ERR(yetty_ycore_void, "audio-capture: ma_device_start failed");
+    }
+    atomic_store_explicit(&cap->started, 1, memory_order_release);
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yplatform_audio_capture_stop(
+    struct yetty_yplatform_audio_capture *cap)
+{
+    if (!cap) {
+        return YETTY_ERR(yetty_ycore_void, "audio-capture: stop on null device");
+    }
+    if (!atomic_load_explicit(&cap->started, memory_order_relaxed)) {
+        return YETTY_OK_VOID();
+    }
+    if (ma_device_stop(&cap->device) != MA_SUCCESS) {
+        return YETTY_ERR(yetty_ycore_void, "audio-capture: ma_device_stop failed");
+    }
+    atomic_store_explicit(&cap->started, 0, memory_order_release);
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_size_result yetty_yplatform_audio_capture_read_s16(
+    struct yetty_yplatform_audio_capture *cap, int16_t *pcm, size_t frames)
+{
+    if (!cap || !pcm) {
+        return YETTY_ERR(yetty_ycore_size, "audio-capture: read_s16 null arg");
+    }
+    size_t read = 0u;
+    while (read < frames) {
+        ma_uint32 want = (ma_uint32)(frames - read);
+        void *src = NULL;
+        if (ma_pcm_rb_acquire_read(&cap->ring, &want, &src) != MA_SUCCESS || want == 0u) {
+            break;
+        }
+        memcpy(pcm + read * cap->channels, src, (size_t)want * cap->channels * sizeof(int16_t));
+        ma_pcm_rb_commit_read(&cap->ring, want);
+        read += want;
+    }
+    return YETTY_OK(yetty_ycore_size, read);
+}
+
+uint32_t yetty_yplatform_audio_capture_sample_rate(
+    const struct yetty_yplatform_audio_capture *cap)
+{
+    return cap ? cap->sample_rate : 0u;
+}
+
+uint32_t yetty_yplatform_audio_capture_channels(const struct yetty_yplatform_audio_capture *cap)
+{
+    return cap ? cap->channels : 0u;
+}

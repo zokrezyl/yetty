@@ -1192,6 +1192,7 @@ enum {
     OPT_YVNC_H264_IDR_INTERVAL,
     OPT_YVNC_H264_SCREEN_CONTENT,
     OPT_RECORD,
+    OPT_RECORD_AUDIO,
     OPT_RPC_HOST,
     OPT_TEMU,
     OPT_QEMU,
@@ -1233,6 +1234,7 @@ static struct yetty_yplatform_option long_options[] = {
     {"yvnc-h264-idr-interval", required_argument, 0, OPT_YVNC_H264_IDR_INTERVAL},
     {"yvnc-h264-screen-content", required_argument, 0, OPT_YVNC_H264_SCREEN_CONTENT},
     {"record", required_argument, 0, OPT_RECORD},
+    {"record-audio", no_argument, 0, OPT_RECORD_AUDIO},
     {"rpc-host", required_argument, 0, OPT_RPC_HOST},
     {"rpc-port", required_argument, 0, 'r'},
     {"temu", no_argument, 0, OPT_TEMU},
@@ -1291,6 +1293,9 @@ static void print_usage(FILE *out, const char *prog)
                  "YDVNC_PASSWORD)\n");
     fprintf(out,
             "      --record=FILE                  Record session to MP4 (forces H.264 encoding)\n");
+    fprintf(out,
+            "      --record-audio                 Also capture microphone audio into the MP4 "
+            "(AAC-LC, requires --record)\n");
     fprintf(out, "      --rpc-host=HOST                RPC server host\n");
     fprintf(out, "  -r, --rpc-port=PORT                RPC server port\n");
     fprintf(out, "      --temu                         Run in-process TinyEMU RISC-V VM\n");
@@ -1449,6 +1454,9 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
         case OPT_RECORD:
             set_config(impl, "vnc/record-file", yetty_yplatform_optarg);
             set_config(impl, "vnc/use-h264", "true");
+            break;
+        case OPT_RECORD_AUDIO:
+            set_config(impl, "vnc/record-audio", "true");
             break;
         case OPT_RPC_HOST:
             set_config(impl, YETTY_YCONFIG_KEY_RPC_HOST, yetty_yplatform_optarg);
