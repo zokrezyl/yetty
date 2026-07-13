@@ -150,9 +150,9 @@ static struct yetty_ycore_size_result emit_file(const uint8_t *bytes, size_t len
     YETTY_RETURN_IF_ERR(yetty_ycore_size, yface_res, "ymcat: yface create");
     struct yetty_yface *yface = yface_res.value;
 
-    struct yetty_ycore_void_result step_res = yetty_yface_start_write(
-        yface, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_MIME_FILE, /*compressed=*/1, &meta,
-        sizeof(meta));
+    struct yetty_ycore_void_result step_res =
+        yetty_yface_start_write(yface, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_MIME_FILE,
+                                /*compressed=*/1, &meta, sizeof(meta));
     if (YETTY_IS_OK(step_res)) {
         step_res = yetty_yface_write(yface, prologue_bytes, prologue_len);
     }
@@ -214,8 +214,8 @@ static int process_one(const char *arg, const struct ymcat_opts *opts)
         return -1;
     }
 
-    struct yetty_ycore_size_result emit_res = emit_file(
-        bytes.data, bytes.size, opts->mime_hint, name_hint, opts->render_args, stdout);
+    struct yetty_ycore_size_result emit_res =
+        emit_file(bytes.data, bytes.size, opts->mime_hint, name_hint, opts->render_args, stdout);
     yetty_ycore_buffer_destroy(&bytes);
     if (YETTY_IS_ERR(emit_res)) {
         fprintf(stderr, "ymcat: %s: %s\n", arg, emit_res.error.msg);

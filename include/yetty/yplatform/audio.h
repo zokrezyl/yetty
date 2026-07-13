@@ -118,8 +118,7 @@ struct yetty_ycore_void_result yetty_yplatform_audio_capture_stop(
 struct yetty_ycore_size_result yetty_yplatform_audio_capture_read_s16(
     struct yetty_yplatform_audio_capture *cap, int16_t *pcm, size_t frames);
 
-uint32_t yetty_yplatform_audio_capture_sample_rate(
-    const struct yetty_yplatform_audio_capture *cap);
+uint32_t yetty_yplatform_audio_capture_sample_rate(const struct yetty_yplatform_audio_capture *cap);
 
 uint32_t yetty_yplatform_audio_capture_channels(const struct yetty_yplatform_audio_capture *cap);
 

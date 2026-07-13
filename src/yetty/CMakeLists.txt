@@ -296,6 +296,10 @@ if(YETTY_ENABLE_FEATURE_YSVG)
     add_subdirectory(ysvg)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YMSOFFICE)
+    add_subdirectory(ymsoffice)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YLOTTIE)
     add_subdirectory(ylottie)
 endif()

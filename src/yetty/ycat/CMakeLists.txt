@@ -51,6 +51,12 @@ endif()
 # built unconditionally), so no feature gate.
 list(APPEND YCAT_SOURCES handler-shadertoy.c)
 
+# Microsoft Office handler — docx/xlsx/pptx via ymsoffice. detect.c's OOXML
+# content sniffer is guarded by the same compile-time flag.
+if(YETTY_ENABLE_FEATURE_YMSOFFICE)
+    list(APPEND YCAT_SOURCES handler-msoffice.c)
+endif()
+
 # Circuit handler — draws ycircuit schematic DSL files. Same gate as the
 # ycircuit library itself (src/yetty/CMakeLists.txt). detect.c's content
 # sniffer is guarded by the same compile-time flag.
@@ -164,6 +170,11 @@ endif()
 
 target_link_libraries(yetty_ycat PUBLIC yetty_yshadertoy_core)
 target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_YSHADERTOY=1)
+
+if(YETTY_ENABLE_FEATURE_YMSOFFICE)
+    target_link_libraries(yetty_ycat PUBLIC yetty_ymsoffice)
+    target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_YMSOFFICE=1)
+endif()
 
 if(YETTY_ENABLE_FEATURE_YCIRCUIT AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
     target_link_libraries(yetty_ycat PUBLIC yetty_ycircuit)

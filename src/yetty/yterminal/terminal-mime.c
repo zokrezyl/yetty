@@ -85,6 +85,10 @@ typedef long long ssize_t;
 #ifdef YETTY_HAS_YMESH
 #include <yetty/ymesh/ymesh.h>
 #endif
+#ifdef YETTY_HAS_YMSOFFICE
+#include <yetty/ymsoffice/msoffice.h>
+#include <yetty/ymsoffice/render.h>
+#endif
 
 #include "terminal-mime.h"
 
@@ -125,8 +129,7 @@ static uint64_t mime_type_cap_bytes(struct yetty_yconfig_config *config, const c
 {
     int cap_mb = MIME_DEFAULT_MAX_SIZE_MB;
     if (config) {
-        int global_mb =
-            config->ops->get_int(config, YETTY_YCONFIG_KEY_MIME_MAX_SIZE_MB, cap_mb);
+        int global_mb = config->ops->get_int(config, YETTY_YCONFIG_KEY_MIME_MAX_SIZE_MB, cap_mb);
         char key[64];
         snprintf(key, sizeof(key), "mime/types/%s/max-size-mb", type_name);
         cap_mb = config->ops->get_int(config, key, global_mb);
@@ -168,8 +171,7 @@ static struct yetty_ycore_void_result mime_probe_over_cap(struct yetty_ywire_wir
     uint8_t probe;
     *over_cap = 0;
     while (!yetty_ywire_wire_statemachine_at_end(sm)) {
-        struct yetty_ycore_size_result read_res =
-            yetty_ywire_wire_statemachine_read(sm, &probe, 1);
+        struct yetty_ycore_size_result read_res = yetty_ywire_wire_statemachine_read(sm, &probe, 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, read_res, "mime: cap probe read");
         if (read_res.value > 0) {
             *over_cap = 1;
@@ -276,6 +278,32 @@ static struct yetty_ycore_void_result mime_render_markdown(
     struct yetty_ycore_void_result ingest_res = mime_ingest_list(terminal, render_res.value.buffer);
     yetty_ydraw_drawable_list_destroy(render_res.value.buffer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ingest_res, "mime: markdown ingest");
+    return YETTY_OK_VOID();
+}
+#endif
+
+#ifdef YETTY_HAS_YMSOFFICE
+static struct yetty_ycore_void_result mime_render_msoffice(
+    struct yetty_yterminal_terminal *terminal, const struct yetty_yterminal_mime_env *env,
+    const uint8_t *content, size_t content_len)
+{
+    struct yetty_ymsoffice_document_ptr_result parse_res =
+        yetty_ymsoffice_parse(content, content_len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, parse_res, "mime: ymsoffice parse");
+
+    struct yetty_ymsoffice_render_config msoffice_config = {
+        .cell_width = env->cell_width,
+        .cell_height = env->cell_height,
+        .width_cells = env->cols,
+        .height_cells = env->rows,
+    };
+    struct yetty_ymsoffice_render_result render_res =
+        yetty_ymsoffice_render(parse_res.value, &msoffice_config);
+    yetty_ymsoffice_document_destroy(parse_res.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, render_res, "mime: ymsoffice render");
+    struct yetty_ycore_void_result ingest_res = mime_ingest_list(terminal, render_res.value.buffer);
+    yetty_ydraw_drawable_list_destroy(render_res.value.buffer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ingest_res, "mime: msoffice ingest");
     return YETTY_OK_VOID();
 }
 #endif
@@ -594,9 +622,9 @@ static struct yetty_ycore_void_result mime_consume_envelope(
     memcpy(name_hint, prologue.name, prologue.name_len);
 
     /* --- detect + policy -------------------------------------------------- */
-    enum yetty_ymime_type type = yetty_ymime_detect(
-        mime_hint[0] ? mime_hint : NULL, name_hint[0] ? name_hint : NULL,
-        accum.data + prologue_size, accum.size - prologue_size);
+    enum yetty_ymime_type type =
+        yetty_ymime_detect(mime_hint[0] ? mime_hint : NULL, name_hint[0] ? name_hint : NULL,
+                           accum.data + prologue_size, accum.size - prologue_size);
     const char *type_name = yetty_ymime_type_name(type);
 
     int renderable;
@@ -608,6 +636,9 @@ static struct yetty_ycore_void_result mime_consume_envelope(
     case YETTY_YMIME_TYPE_MUSIC:
     case YETTY_YMIME_TYPE_CIRCUIT:
     case YETTY_YMIME_TYPE_MESH:
+    case YETTY_YMIME_TYPE_DOCX:
+    case YETTY_YMIME_TYPE_XLSX:
+    case YETTY_YMIME_TYPE_PPTX:
         renderable = 1;
         break;
     default:
@@ -754,6 +785,14 @@ static struct yetty_ycore_void_result mime_consume_envelope(
         case YETTY_YMIME_TYPE_MESH:
 #ifdef YETTY_HAS_YMESH
             render_res = mime_render_mesh(terminal, content, content_len);
+            rendered = 1;
+#endif
+            break;
+        case YETTY_YMIME_TYPE_DOCX:
+        case YETTY_YMIME_TYPE_XLSX:
+        case YETTY_YMIME_TYPE_PPTX:
+#ifdef YETTY_HAS_YMSOFFICE
+            render_res = mime_render_msoffice(terminal, &env, content, content_len);
             rendered = 1;
 #endif
             break;

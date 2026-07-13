@@ -111,6 +111,7 @@ The full startup/ownership chain and context structs are in
 | `ysvg` | SVG (Tiny 1.2) renderer → ydraw primitives | ✓ |
 | `ypdf` | PDF rendering via pdfio (MuPDF-validated tests) | ✓ |
 | `ymarkdown` | Markdown rendering/editing | ◐ |
+| `ymsoffice` | Microsoft Office (docx/xlsx/pptx) parsing → neutral model → ydraw ([README](../src/yetty/ymsoffice/README.md)) | ◐ |
 | `yrich` | Documents / spreadsheets / slides (`ydoc`, `ysheet`/`yspreadsheet`, `yslides`) | ◐ |
 | `ycat` | MIME-dispatched content viewer (detects PDF/image/SVG/Mermaid/video/text) | ✓ |
 | `ymesh` | 3D mesh loading/rendering (GLB) | ◐ |

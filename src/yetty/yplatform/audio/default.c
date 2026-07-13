@@ -250,7 +250,8 @@ struct yetty_yplatform_audio_capture {
     _Atomic int started;
 };
 
-static void audio_capture_callback(ma_device *device, void *out, const void *in, ma_uint32 frame_count)
+static void audio_capture_callback(ma_device *device, void *out, const void *in,
+                                   ma_uint32 frame_count)
 {
     (void)out;
     struct yetty_yplatform_audio_capture *cap =
@@ -263,8 +264,7 @@ static void audio_capture_callback(ma_device *device, void *out, const void *in,
     while (want > 0u) {
         ma_uint32 chunk = want;
         void *write_ptr = NULL;
-        if (ma_pcm_rb_acquire_write(&cap->ring, &chunk, &write_ptr) != MA_SUCCESS ||
-            chunk == 0u) {
+        if (ma_pcm_rb_acquire_write(&cap->ring, &chunk, &write_ptr) != MA_SUCCESS || chunk == 0u) {
             /* Ring full — drop the surplus. Recording tolerates the
              * occasional drop better than blocking the mic thread. */
             return;
@@ -385,8 +385,7 @@ struct yetty_ycore_size_result yetty_yplatform_audio_capture_read_s16(
     return YETTY_OK(yetty_ycore_size, read);
 }
 
-uint32_t yetty_yplatform_audio_capture_sample_rate(
-    const struct yetty_yplatform_audio_capture *cap)
+uint32_t yetty_yplatform_audio_capture_sample_rate(const struct yetty_yplatform_audio_capture *cap)
 {
     return cap ? cap->sample_rate : 0u;
 }

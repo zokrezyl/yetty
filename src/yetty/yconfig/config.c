@@ -1293,9 +1293,8 @@ static void print_usage(FILE *out, const char *prog)
                  "YDVNC_PASSWORD)\n");
     fprintf(out,
             "      --record=FILE                  Record session to MP4 (forces H.264 encoding)\n");
-    fprintf(out,
-            "      --record-audio                 Also capture microphone audio into the MP4 "
-            "(AAC-LC, requires --record)\n");
+    fprintf(out, "      --record-audio                 Also capture microphone audio into the MP4 "
+                 "(AAC-LC, requires --record)\n");
     fprintf(out, "      --rpc-host=HOST                RPC server host\n");
     fprintf(out, "  -r, --rpc-port=PORT                RPC server port\n");
     fprintf(out, "      --temu                         Run in-process TinyEMU RISC-V VM\n");

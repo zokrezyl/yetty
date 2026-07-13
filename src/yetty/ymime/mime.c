@@ -41,6 +41,12 @@ const char *yetty_ymime_type_name(enum yetty_ymime_type type)
         return "circuit";
     case YETTY_YMIME_TYPE_MESH:
         return "mesh";
+    case YETTY_YMIME_TYPE_DOCX:
+        return "docx";
+    case YETTY_YMIME_TYPE_XLSX:
+        return "xlsx";
+    case YETTY_YMIME_TYPE_PPTX:
+        return "pptx";
     case YETTY_YMIME_TYPE_UNKNOWN:
     default:
         return "unknown";
@@ -68,6 +74,12 @@ const char *yetty_ymime_type_canonical_mime(enum yetty_ymime_type type)
         return "text/x-ycircuit"; /* yetty's own DSL */
     case YETTY_YMIME_TYPE_MESH:
         return "model/gltf-binary";
+    case YETTY_YMIME_TYPE_DOCX:
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case YETTY_YMIME_TYPE_XLSX:
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case YETTY_YMIME_TYPE_PPTX:
+        return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
     case YETTY_YMIME_TYPE_UNKNOWN:
     default:
         return NULL;
@@ -109,6 +121,17 @@ enum yetty_ymime_type yetty_ymime_type_from_mime(const char *mime)
     }
     if (strcmp(mime, "model/gltf-binary") == 0) {
         return YETTY_YMIME_TYPE_MESH;
+    }
+    if (strcmp(mime, "application/vnd.openxmlformats-officedocument.wordprocessingml.document") ==
+        0) {
+        return YETTY_YMIME_TYPE_DOCX;
+    }
+    if (strcmp(mime, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") == 0) {
+        return YETTY_YMIME_TYPE_XLSX;
+    }
+    if (strcmp(mime, "application/vnd.openxmlformats-officedocument.presentationml.presentation") ==
+        0) {
+        return YETTY_YMIME_TYPE_PPTX;
     }
     if (strncmp(mime, "text/", 5) == 0) {
         return YETTY_YMIME_TYPE_TEXT;
@@ -171,6 +194,17 @@ enum yetty_ymime_type yetty_ymime_type_from_extension(const char *path_or_extens
     if (strcasecmp(extension, "glb") == 0) {
         return YETTY_YMIME_TYPE_MESH;
     }
+    /* OOXML documents (macro-enabled variants share the container). */
+    if (strcasecmp(extension, "docx") == 0 || strcasecmp(extension, "docm") == 0) {
+        return YETTY_YMIME_TYPE_DOCX;
+    }
+    if (strcasecmp(extension, "xlsx") == 0 || strcasecmp(extension, "xlsm") == 0) {
+        return YETTY_YMIME_TYPE_XLSX;
+    }
+    if (strcasecmp(extension, "pptx") == 0 || strcasecmp(extension, "pptm") == 0 ||
+        strcasecmp(extension, "ppsx") == 0) {
+        return YETTY_YMIME_TYPE_PPTX;
+    }
     if (strcasecmp(extension, "txt") == 0) {
         return YETTY_YMIME_TYPE_TEXT;
     }
@@ -219,8 +253,8 @@ static int looks_like_svg(const uint8_t *bytes, size_t len)
     if (scan >= 3u && bytes[0] == 0xEFu && bytes[1] == 0xBBu && bytes[2] == 0xBFu) {
         pos = 3;
     }
-    while (pos < scan && (bytes[pos] == ' ' || bytes[pos] == '\t' || bytes[pos] == '\r' ||
-                          bytes[pos] == '\n')) {
+    while (pos < scan &&
+           (bytes[pos] == ' ' || bytes[pos] == '\t' || bytes[pos] == '\r' || bytes[pos] == '\n')) {
         pos++;
     }
     if (pos >= scan || bytes[pos] != '<') {
@@ -305,6 +339,42 @@ static int looks_like_glb(const uint8_t *bytes, size_t len)
     return len >= 4u && memcmp(bytes, "glTF", 4) == 0;
 }
 
+/* OOXML: ZIP local-header magic plus a telltale part name in the window.
+ * ZIP stores entry names verbatim in local headers, so the marker usually
+ * sits early; when it only appears past the sniff window the extension /
+ * MIME hints still resolve the type. */
+static int window_contains(const uint8_t *bytes, size_t scan, const char *needle)
+{
+    size_t needle_len = strlen(needle);
+    if (needle_len > scan) {
+        return 0;
+    }
+    for (size_t i = 0; i + needle_len <= scan; i++) {
+        if (memcmp(bytes + i, needle, needle_len) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static enum yetty_ymime_type sniff_ooxml(const uint8_t *bytes, size_t len)
+{
+    if (len < 4u || bytes[0] != 'P' || bytes[1] != 'K' || bytes[2] != 0x03u || bytes[3] != 0x04u) {
+        return YETTY_YMIME_TYPE_UNKNOWN;
+    }
+    size_t scan = len < YETTY_YMIME_SNIFF_WINDOW ? len : YETTY_YMIME_SNIFF_WINDOW;
+    if (window_contains(bytes, scan, "word/document.xml")) {
+        return YETTY_YMIME_TYPE_DOCX;
+    }
+    if (window_contains(bytes, scan, "xl/workbook.xml")) {
+        return YETTY_YMIME_TYPE_XLSX;
+    }
+    if (window_contains(bytes, scan, "ppt/presentation.xml")) {
+        return YETTY_YMIME_TYPE_PPTX;
+    }
+    return YETTY_YMIME_TYPE_UNKNOWN;
+}
+
 /* LilyPond has no magic, but its leading commands are distinctive. */
 static int looks_like_lilypond(const uint8_t *bytes, size_t len)
 {
@@ -370,6 +440,12 @@ enum yetty_ymime_type yetty_ymime_sniff(const uint8_t *bytes, size_t len)
     }
     if (looks_like_glb(bytes, len)) {
         return YETTY_YMIME_TYPE_MESH;
+    }
+    {
+        enum yetty_ymime_type by_ooxml = sniff_ooxml(bytes, len);
+        if (by_ooxml != YETTY_YMIME_TYPE_UNKNOWN) {
+            return by_ooxml;
+        }
     }
     if (looks_like_svg(bytes, len)) {
         return YETTY_YMIME_TYPE_SVG;
@@ -438,8 +514,7 @@ struct yetty_ycore_size_result yetty_ymime_prologue_encode(
     if (prologue->mime_len > 255u || prologue->name_len > 255u) {
         return YETTY_ERR(yetty_ycore_size, "ymime prologue encode: mime/name too long");
     }
-    size_t total = 2u + 1u + prologue->mime_len + 1u + prologue->name_len + 2u +
-                   prologue->args_len;
+    size_t total = 2u + 1u + prologue->mime_len + 1u + prologue->name_len + 2u + prologue->args_len;
     if (total > YETTY_YMIME_PROLOGUE_MAX) {
         return YETTY_ERR(yetty_ycore_size, "ymime prologue encode: exceeds prologue max");
     }

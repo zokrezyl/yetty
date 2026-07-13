@@ -53,12 +53,15 @@ enum yetty_ymime_type {
     YETTY_YMIME_TYPE_TEXT,
     YETTY_YMIME_TYPE_MARKDOWN,
     YETTY_YMIME_TYPE_PDF,
-    YETTY_YMIME_TYPE_IMAGE,   /* raster family (png/jpeg/gif/… — stb set) */
+    YETTY_YMIME_TYPE_IMAGE, /* raster family (png/jpeg/gif/… — stb set) */
     YETTY_YMIME_TYPE_SVG,
     YETTY_YMIME_TYPE_VIDEO,   /* H.264 Annex-B */
     YETTY_YMIME_TYPE_MUSIC,   /* LilyPond score (engraved via ymusic) */
     YETTY_YMIME_TYPE_CIRCUIT, /* ycircuit schematic DSL */
     YETTY_YMIME_TYPE_MESH,    /* glTF binary (GLB) — rendered via ymesh */
+    YETTY_YMIME_TYPE_DOCX,    /* Word OOXML — rendered via ymsoffice */
+    YETTY_YMIME_TYPE_XLSX,    /* Excel OOXML — rendered via ymsoffice */
+    YETTY_YMIME_TYPE_PPTX,    /* PowerPoint OOXML — rendered via ymsoffice */
 };
 
 /* Short type name — the per-type config key segment (mime/types/<name>/…)

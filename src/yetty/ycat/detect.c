@@ -68,6 +68,20 @@ enum yetty_ycat_type yetty_ycat_type_from_mime(const char *mime)
     if (strcmp(mime, "image/svg+xml") == 0 || strcmp(mime, "image/svg") == 0) {
         return YETTY_YCAT_TYPE_SVG;
     }
+    /* OOXML container MIMEs (libmagic with a current magic DB reports the
+     * full vnd strings; older DBs fall back to application/zip, which the
+     * content sniffer resolves). */
+    if (strcmp(mime, "application/vnd.openxmlformats-officedocument.wordprocessingml.document") ==
+        0) {
+        return YETTY_YCAT_TYPE_DOCX;
+    }
+    if (strcmp(mime, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") == 0) {
+        return YETTY_YCAT_TYPE_XLSX;
+    }
+    if (strcmp(mime, "application/vnd.openxmlformats-officedocument.presentationml.presentation") ==
+        0) {
+        return YETTY_YCAT_TYPE_PPTX;
+    }
     /* libmagic with MAGIC_MIME_TYPE returns "image/png", "image/jpeg", etc.
      * stb_image decodes png/jpg/gif/bmp/tga/psd/hdr/pic/pnm; the handler
      * surfaces stb's own error if the subtype isn't supported. */
@@ -157,6 +171,17 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext)
      * (content with a `#ychart` directive or a chart key is still sniffed). */
     if (strcasecmp(noleading, "chart") == 0 || strcasecmp(noleading, "ychart") == 0) {
         return YETTY_YCAT_TYPE_CHART;
+    }
+    /* OOXML documents (plus the macro-enabled variants — same container). */
+    if (strcasecmp(noleading, "docx") == 0 || strcasecmp(noleading, "docm") == 0) {
+        return YETTY_YCAT_TYPE_DOCX;
+    }
+    if (strcasecmp(noleading, "xlsx") == 0 || strcasecmp(noleading, "xlsm") == 0) {
+        return YETTY_YCAT_TYPE_XLSX;
+    }
+    if (strcasecmp(noleading, "pptx") == 0 || strcasecmp(noleading, "pptm") == 0 ||
+        strcasecmp(noleading, "ppsx") == 0) {
+        return YETTY_YCAT_TYPE_PPTX;
     }
     if (strcasecmp(noleading, "txt") == 0) {
         return YETTY_YCAT_TYPE_TEXT;
@@ -366,6 +391,43 @@ static int looks_like_ycircuit(const uint8_t *bytes, size_t len)
 }
 #endif
 
+#ifdef YETTY_YCAT_HAS_YMSOFFICE
+/* OOXML sniff: a ZIP local-header magic plus one of the three telltale
+ * part names somewhere in the archive (entry names are stored verbatim in
+ * both the local headers and the central directory). */
+static int buffer_contains(const uint8_t *bytes, size_t len, const char *needle)
+{
+    size_t needle_len = strlen(needle);
+    if (needle_len > len) {
+        return 0;
+    }
+    for (size_t i = 0; i + needle_len <= len; i++) {
+        if (memcmp(bytes + i, needle, needle_len) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static enum yetty_ycat_type sniff_ooxml(const uint8_t *bytes, size_t len)
+{
+    if (!bytes || len < 4 || bytes[0] != 'P' || bytes[1] != 'K' || bytes[2] != 0x03 ||
+        bytes[3] != 0x04) {
+        return YETTY_YCAT_TYPE_UNKNOWN;
+    }
+    if (buffer_contains(bytes, len, "word/document.xml")) {
+        return YETTY_YCAT_TYPE_DOCX;
+    }
+    if (buffer_contains(bytes, len, "xl/workbook.xml")) {
+        return YETTY_YCAT_TYPE_XLSX;
+    }
+    if (buffer_contains(bytes, len, "ppt/presentation.xml")) {
+        return YETTY_YCAT_TYPE_PPTX;
+    }
+    return YETTY_YCAT_TYPE_UNKNOWN;
+}
+#endif
+
 enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const char *path)
 {
     /* Extension first on types libmagic generalises away (markdown,
@@ -375,7 +437,9 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
         by_ext == YETTY_YCAT_TYPE_SVG || by_ext == YETTY_YCAT_TYPE_MERMAID ||
         by_ext == YETTY_YCAT_TYPE_VIDEO || by_ext == YETTY_YCAT_TYPE_LOTTIE ||
         by_ext == YETTY_YCAT_TYPE_MUSIC || by_ext == YETTY_YCAT_TYPE_SHADERTOY ||
-        by_ext == YETTY_YCAT_TYPE_CIRCUIT || by_ext == YETTY_YCAT_TYPE_CHART) {
+        by_ext == YETTY_YCAT_TYPE_CIRCUIT || by_ext == YETTY_YCAT_TYPE_CHART ||
+        by_ext == YETTY_YCAT_TYPE_DOCX || by_ext == YETTY_YCAT_TYPE_XLSX ||
+        by_ext == YETTY_YCAT_TYPE_PPTX) {
         return by_ext;
     }
 
@@ -383,6 +447,17 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
     if (by_magic != YETTY_YCAT_TYPE_UNKNOWN && by_magic != YETTY_YCAT_TYPE_TEXT) {
         return by_magic;
     }
+
+#ifdef YETTY_YCAT_HAS_YMSOFFICE
+    /* OOXML sniff — catches piped/renamed files where libmagic only says
+     * application/zip. */
+    {
+        enum yetty_ycat_type by_ooxml = sniff_ooxml(bytes, len);
+        if (by_ooxml != YETTY_YCAT_TYPE_UNKNOWN) {
+            return by_ooxml;
+        }
+    }
+#endif
 
     /* H.264 Annex-B sniff — runs whenever libmagic gave us text/plain
      * or unknown. The 00 00 (00) 01 prefix is rare in plain text, so

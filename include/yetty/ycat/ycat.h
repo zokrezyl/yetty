@@ -44,6 +44,9 @@ enum yetty_ycat_type {
     YETTY_YCAT_TYPE_SHADERTOY, /* WGSL mainImage shader — animated yshadertoy prim */
     YETTY_YCAT_TYPE_CIRCUIT,   /* circuit schematic DSL — drawn via ycircuit */
     YETTY_YCAT_TYPE_CHART,     /* CSV/JSON/YAML chart data — drawn via ychart */
+    YETTY_YCAT_TYPE_DOCX,      /* Word OOXML — rendered via ymsoffice */
+    YETTY_YCAT_TYPE_XLSX,      /* Excel OOXML — rendered via ymsoffice */
+    YETTY_YCAT_TYPE_PPTX,      /* PowerPoint OOXML — rendered via ymsoffice */
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type);

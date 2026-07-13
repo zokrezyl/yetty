@@ -73,6 +73,9 @@ endif()
 if(YETTY_ENABLE_FEATURE_YMARKDOWN AND TARGET yetty_ymarkdown)
     add_subdirectory(ut/ymarkdown)
 endif()
+if(YETTY_ENABLE_FEATURE_YMSOFFICE AND TARGET yetty_ymsoffice)
+    add_subdirectory(ut/ymsoffice)
+endif()
 
 # Parser/render modules — golden parse/IR/ydraw tests, gated on their target.
 if(TARGET yetty_ychart)
