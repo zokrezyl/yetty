@@ -28,6 +28,22 @@
 #include <minimp4.h>
 #endif
 
+#ifdef YETTY_HAS_YAUDIO_RECORD
+/* --record-audio path: mic capture via the yplatform audio abstraction
+ * (miniaudio underneath), fdk-aac AAC-LC encoder, second mp4 track on
+ * the same MP4E_mux_t the video already writes to. */
+#include <yetty/yplatform/audio.h>
+#include <fdk-aac/aacenc_lib.h>
+
+/* AAC-LC parameters. 48 kHz stereo @ 128 kbps matches the poc recorder
+ * and every common consumer of the resulting .mp4. 1024 samples per
+ * frame is the AAC-LC frame size (fixed by the codec). */
+#define YETTY_YVNC_RECORD_AUDIO_SAMPLE_RATE 48000u
+#define YETTY_YVNC_RECORD_AUDIO_CHANNELS    2u
+#define YETTY_YVNC_RECORD_AUDIO_BITRATE     128000u
+#define YETTY_YVNC_RECORD_AUDIO_FRAME_SIZE  1024u
+#endif
+
 #define MAX_CLIENTS 16
 #define FULL_REFRESH_INTERVAL 300
 #define RECV_BUFFER_SIZE 65536
@@ -165,6 +181,26 @@ struct yetty_yvnc_server {
     int record_writer_initialized;
     uint32_t record_frames;
     uint32_t record_prev_ts_ms;
+#endif
+
+#ifdef YETTY_HAS_YAUDIO_RECORD
+    /* --record-audio state. Set up by config_vnc_server when both
+     * vnc/record-file and vnc/record-audio are on. Capture pushes s16
+     * frames into its own ring; the encode pump (audio_pump) drains
+     * 1024-sample chunks, hands them to fdk-aac, and writes each AAC
+     * frame to record_audio_track_id on record_mux. */
+    struct yetty_yplatform_audio_capture *record_audio_capture;
+    HANDLE_AACENCODER record_audio_encoder;
+    int record_audio_track_id;
+    /* Leftover s16 samples that didn't yet fill an AAC frame. Grows to
+     * AAC_FRAME_SIZE * channels at most; carried across pump calls. */
+    int16_t *record_audio_carry;
+    size_t record_audio_carry_frames;
+    /* Scratch drained-per-pump buffer. Sized once (1s worth of frames)
+     * so pump doesn't allocate on the hot path. */
+    int16_t *record_audio_scratch;
+    size_t record_audio_scratch_frames;
+    uint32_t record_audio_frames_written;
 #endif
 
     /* Stats */
@@ -482,6 +518,264 @@ static int vnc_record_write_cb(int64_t offset, const void *buffer, size_t size, 
 }
 #endif
 
+#ifdef YETTY_HAS_YAUDIO_RECORD
+/* Bring up the mic capture + AAC encoder + mp4 audio track. Called
+ * from config_vnc_server when both --record and --record-audio are
+ * set. On failure the whole record path is aborted (mp4 without the
+ * expected audio track would silently produce a video-only file). */
+static struct yetty_ycore_void_result record_audio_setup(struct yetty_yvnc_server *server)
+{
+    struct yetty_yplatform_audio_capture_ptr_result cap_res =
+        yetty_yplatform_audio_capture_create(YETTY_YVNC_RECORD_AUDIO_SAMPLE_RATE,
+                                             YETTY_YVNC_RECORD_AUDIO_CHANNELS);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cap_res, "vnc record-audio: capture create failed");
+    server->record_audio_capture = cap_res.value;
+
+    HANDLE_AACENCODER enc = NULL;
+    if (aacEncOpen(&enc, 0, YETTY_YVNC_RECORD_AUDIO_CHANNELS) != AACENC_OK) {
+        yetty_yplatform_audio_capture_destroy(server->record_audio_capture);
+        server->record_audio_capture = NULL;
+        return YETTY_ERR(yetty_ycore_void, "vnc record-audio: aacEncOpen failed");
+    }
+    /* AOT 2 = AAC-LC; TT_MP4_RAW hands raw frames back for direct mp4
+     * sample insertion (no ADTS wrapping). */
+    if (aacEncoder_SetParam(enc, AACENC_AOT, 2) != AACENC_OK ||
+        aacEncoder_SetParam(enc, AACENC_SAMPLERATE, YETTY_YVNC_RECORD_AUDIO_SAMPLE_RATE) !=
+            AACENC_OK ||
+        aacEncoder_SetParam(enc, AACENC_CHANNELMODE,
+                            YETTY_YVNC_RECORD_AUDIO_CHANNELS == 2u ? MODE_2 : MODE_1) !=
+            AACENC_OK ||
+        aacEncoder_SetParam(enc, AACENC_BITRATE, YETTY_YVNC_RECORD_AUDIO_BITRATE) != AACENC_OK ||
+        aacEncoder_SetParam(enc, AACENC_TRANSMUX, TT_MP4_RAW) != AACENC_OK) {
+        aacEncClose(&enc);
+        yetty_yplatform_audio_capture_destroy(server->record_audio_capture);
+        server->record_audio_capture = NULL;
+        return YETTY_ERR(yetty_ycore_void, "vnc record-audio: aacEncoder_SetParam failed");
+    }
+    /* No-op encode-call finalises parameter setup. */
+    if (aacEncEncode(enc, NULL, NULL, NULL, NULL) != AACENC_OK) {
+        aacEncClose(&enc);
+        yetty_yplatform_audio_capture_destroy(server->record_audio_capture);
+        server->record_audio_capture = NULL;
+        return YETTY_ERR(yetty_ycore_void, "vnc record-audio: aacEncEncode init failed");
+    }
+    AACENC_InfoStruct info = {0};
+    if (aacEncInfo(enc, &info) != AACENC_OK) {
+        aacEncClose(&enc);
+        yetty_yplatform_audio_capture_destroy(server->record_audio_capture);
+        server->record_audio_capture = NULL;
+        return YETTY_ERR(yetty_ycore_void, "vnc record-audio: aacEncInfo failed");
+    }
+    server->record_audio_encoder = enc;
+
+    /* Add the audio track to the same mux the video will use. Track
+     * time_scale = sample rate; default_duration = one AAC frame's
+     * worth of samples. object_type_indication = 0x40 (AAC / ISO
+     * 14496-3). */
+    MP4E_track_t track = {0};
+    track.track_media_kind = e_audio;
+    track.language[0] = 'u';
+    track.language[1] = 'n';
+    track.language[2] = 'd';
+    track.object_type_indication = MP4_OBJECT_TYPE_AUDIO_ISO_IEC_14496_3;
+    track.time_scale = YETTY_YVNC_RECORD_AUDIO_SAMPLE_RATE;
+    track.default_duration = YETTY_YVNC_RECORD_AUDIO_FRAME_SIZE;
+    track.u.a.channelcount = YETTY_YVNC_RECORD_AUDIO_CHANNELS;
+    int track_id = MP4E_add_track(server->record_mux, &track);
+    if (track_id < 0) {
+        aacEncClose(&server->record_audio_encoder);
+        server->record_audio_encoder = NULL;
+        yetty_yplatform_audio_capture_destroy(server->record_audio_capture);
+        server->record_audio_capture = NULL;
+        return YETTY_ERR(yetty_ycore_void, "vnc record-audio: MP4E_add_track failed");
+    }
+    server->record_audio_track_id = track_id;
+    /* AudioSpecificConfig blob — muxer needs it to describe the codec
+     * to the decoder. */
+    MP4E_set_dsi(server->record_mux, track_id, info.confBuf, (int)info.confSize);
+
+    /* Scratch buffers. Sized for 1s of audio (48000 frames × 2 ch × 2 B
+     * ≈ 190 KB); pump reads up to that per tick. */
+    size_t scratch_frames = YETTY_YVNC_RECORD_AUDIO_SAMPLE_RATE;
+    server->record_audio_scratch =
+        calloc(scratch_frames * YETTY_YVNC_RECORD_AUDIO_CHANNELS, sizeof(int16_t));
+    server->record_audio_carry = calloc(
+        YETTY_YVNC_RECORD_AUDIO_FRAME_SIZE * YETTY_YVNC_RECORD_AUDIO_CHANNELS, sizeof(int16_t));
+    if (!server->record_audio_scratch || !server->record_audio_carry) {
+        free(server->record_audio_scratch);
+        free(server->record_audio_carry);
+        server->record_audio_scratch = NULL;
+        server->record_audio_carry = NULL;
+        aacEncClose(&server->record_audio_encoder);
+        server->record_audio_encoder = NULL;
+        yetty_yplatform_audio_capture_destroy(server->record_audio_capture);
+        server->record_audio_capture = NULL;
+        return YETTY_ERR(yetty_ycore_void, "vnc record-audio: buffer alloc failed");
+    }
+    server->record_audio_scratch_frames = scratch_frames;
+
+    struct yetty_ycore_void_result start_res =
+        yetty_yplatform_audio_capture_start(server->record_audio_capture);
+    if (YETTY_IS_ERR(start_res)) {
+        free(server->record_audio_scratch);
+        free(server->record_audio_carry);
+        server->record_audio_scratch = NULL;
+        server->record_audio_carry = NULL;
+        aacEncClose(&server->record_audio_encoder);
+        server->record_audio_encoder = NULL;
+        yetty_yplatform_audio_capture_destroy(server->record_audio_capture);
+        server->record_audio_capture = NULL;
+        return YETTY_ERR(yetty_ycore_void, "vnc record-audio: capture start failed",
+                         start_res);
+    }
+    yinfo("VNC record-audio: %u Hz × %u ch AAC-LC @ %u bps -> track %d",
+          YETTY_YVNC_RECORD_AUDIO_SAMPLE_RATE, YETTY_YVNC_RECORD_AUDIO_CHANNELS,
+          YETTY_YVNC_RECORD_AUDIO_BITRATE, track_id);
+    return YETTY_OK_VOID();
+}
+
+/* Encode one 1024-sample AAC frame (frames_per_channel samples ×
+ * channels) into the mp4. Returns the number of encoded bytes written,
+ * 0 if the encoder held onto the input (rare — fdk-aac is single-pass
+ * for AAC-LC), negative on error. */
+static int record_audio_encode_frame(struct yetty_yvnc_server *server, const int16_t *pcm)
+{
+    AACENC_BufDesc in_buf = {0}, out_buf = {0};
+    AACENC_InArgs in_args = {0};
+    AACENC_OutArgs out_args = {0};
+
+    void *in_ptr = (void *)pcm;
+    int in_id = IN_AUDIO_DATA;
+    int in_elem_size = (int)sizeof(int16_t);
+    int in_size = (int)(YETTY_YVNC_RECORD_AUDIO_FRAME_SIZE * YETTY_YVNC_RECORD_AUDIO_CHANNELS *
+                        sizeof(int16_t));
+    in_buf.numBufs = 1;
+    in_buf.bufs = &in_ptr;
+    in_buf.bufferIdentifiers = &in_id;
+    in_buf.bufSizes = &in_size;
+    in_buf.bufElSizes = &in_elem_size;
+    in_args.numInSamples =
+        (INT)(YETTY_YVNC_RECORD_AUDIO_FRAME_SIZE * YETTY_YVNC_RECORD_AUDIO_CHANNELS);
+
+    /* fdk-aac's typical max AAC frame is 6144 bits per channel; give
+     * it a comfortable buffer. */
+    uint8_t out[8192];
+    void *out_ptr = out;
+    int out_id = OUT_BITSTREAM_DATA;
+    int out_size = (int)sizeof(out);
+    int out_elem_size = 1;
+    out_buf.numBufs = 1;
+    out_buf.bufs = &out_ptr;
+    out_buf.bufferIdentifiers = &out_id;
+    out_buf.bufSizes = &out_size;
+    out_buf.bufElSizes = &out_elem_size;
+
+    AACENC_ERROR err =
+        aacEncEncode(server->record_audio_encoder, &in_buf, &out_buf, &in_args, &out_args);
+    if (err != AACENC_OK) {
+        ywarn("VNC record-audio: aacEncEncode failed: %d", (int)err);
+        return -1;
+    }
+    if (out_args.numOutBytes <= 0) {
+        return 0;
+    }
+    int put = MP4E_put_sample(server->record_mux, server->record_audio_track_id, out,
+                              out_args.numOutBytes, (int)YETTY_YVNC_RECORD_AUDIO_FRAME_SIZE,
+                              MP4E_SAMPLE_DEFAULT);
+    if (put != MP4E_STATUS_OK) {
+        ywarn("VNC record-audio: MP4E_put_sample failed: %d", put);
+        return -1;
+    }
+    server->record_audio_frames_written++;
+    return out_args.numOutBytes;
+}
+
+/* Drain the mic ring and push whole AAC frames into the mp4. Runs on
+ * the video-encode thread — same cadence as the video path — so we
+ * naturally interleave audio samples with video NALs in wall-clock
+ * order. Any partial AAC frame worth of samples is held in
+ * record_audio_carry for next tick. */
+static void record_audio_pump(struct yetty_yvnc_server *server)
+{
+    if (!server->record_audio_capture || !server->record_audio_encoder) {
+        return;
+    }
+    const size_t channels = YETTY_YVNC_RECORD_AUDIO_CHANNELS;
+    const size_t frame_samples = YETTY_YVNC_RECORD_AUDIO_FRAME_SIZE;
+
+    /* 1. Drain the mic ring into the scratch buffer. */
+    struct yetty_ycore_size_result read_res = yetty_yplatform_audio_capture_read_s16(
+        server->record_audio_capture, server->record_audio_scratch,
+        server->record_audio_scratch_frames);
+    if (YETTY_IS_ERR(read_res)) {
+        ywarn("VNC record-audio: capture read failed: %s",
+              read_res.error.msg ? read_res.error.msg : "?");
+        return;
+    }
+    size_t got_frames = read_res.value;
+    if (got_frames == 0u && server->record_audio_carry_frames == 0u) {
+        return;
+    }
+
+    /* 2. Concatenate carry + fresh, encode in frame_samples chunks. */
+    const int16_t *src = server->record_audio_scratch;
+    size_t src_frames = got_frames;
+
+    while (server->record_audio_carry_frames + src_frames >= frame_samples) {
+        int16_t frame[YETTY_YVNC_RECORD_AUDIO_FRAME_SIZE * YETTY_YVNC_RECORD_AUDIO_CHANNELS];
+        size_t need = frame_samples - server->record_audio_carry_frames;
+
+        if (server->record_audio_carry_frames > 0u) {
+            memcpy(frame, server->record_audio_carry,
+                   server->record_audio_carry_frames * channels * sizeof(int16_t));
+        }
+        memcpy(frame + server->record_audio_carry_frames * channels, src,
+               need * channels * sizeof(int16_t));
+
+        (void)record_audio_encode_frame(server, frame);
+
+        server->record_audio_carry_frames = 0u;
+        src += need * channels;
+        src_frames -= need;
+    }
+
+    /* 3. Stash the leftover partial frame for next tick. */
+    if (src_frames > 0u) {
+        memcpy(server->record_audio_carry +
+                   server->record_audio_carry_frames * channels,
+               src, src_frames * channels * sizeof(int16_t));
+        server->record_audio_carry_frames += src_frames;
+    }
+}
+
+/* Reverse of record_audio_setup. Safe to call with a half-initialised
+ * state — every pointer is NULL-checked. Called from destroy. */
+static void record_audio_teardown(struct yetty_yvnc_server *server)
+{
+    if (server->record_audio_capture) {
+        struct yetty_ycore_void_result stop_res =
+            yetty_yplatform_audio_capture_stop(server->record_audio_capture);
+        if (YETTY_IS_ERR(stop_res)) {
+            ywarn("VNC record-audio: capture stop failed: %s",
+                  stop_res.error.msg ? stop_res.error.msg : "?");
+            yetty_ycore_error_destroy(stop_res.error);
+        }
+        yetty_yplatform_audio_capture_destroy(server->record_audio_capture);
+        server->record_audio_capture = NULL;
+    }
+    if (server->record_audio_encoder) {
+        aacEncClose(&server->record_audio_encoder);
+        server->record_audio_encoder = NULL;
+    }
+    free(server->record_audio_scratch);
+    free(server->record_audio_carry);
+    server->record_audio_scratch = NULL;
+    server->record_audio_carry = NULL;
+    server->record_audio_scratch_frames = 0u;
+    server->record_audio_carry_frames = 0u;
+}
+#endif /* YETTY_HAS_YAUDIO_RECORD */
+
 static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server *vnc_server,
                                                         const struct yetty_yconfig_config *config)
 {
@@ -551,6 +845,24 @@ static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server
             return YETTY_ERR(yetty_ycore_void, "vnc record: MP4E_open failed");
         }
         yinfo("VNC record: opened %s (waiting for first H.264 frame)", vnc_server->record_path);
+
+#ifdef YETTY_HAS_YAUDIO_RECORD
+        /* --record-audio: bring up mic capture + AAC encoder + mp4
+         * audio track NOW, so the audio track is added to the mux
+         * before the first video sample lands (the h26x writer adds
+         * the video track lazily on the first NAL). */
+        if (config->ops->get_bool(config, "vnc/record-audio", 0)) {
+            vnc_server->record_audio_track_id = -1;
+            struct yetty_ycore_void_result audio_res = record_audio_setup(vnc_server);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, audio_res,
+                                "vnc record: audio setup failed");
+        }
+#else
+        if (config->ops->get_bool(config, "vnc/record-audio", 0)) {
+            ywarn("VNC record: --record-audio requested but this build has no "
+                  "audio-record support (miniaudio/fdk-aac disabled)");
+        }
+#endif
     }
 #endif
 
@@ -625,8 +937,19 @@ struct yetty_ycore_void_result yetty_yvnc_server_destroy(struct yetty_yvnc_serve
     }
     free(server->yuv_buf);
 
-    /* Finalize MP4 recording. Order matters: close the H.264 writer first,
-   * then the muxer (which writes indices), then the file. */
+    /* Finalize MP4 recording. Order matters: stop audio capture and
+     * close the AAC encoder first (last audio samples land as mp4
+     * samples on the same mux), then close the H.264 writer, then the
+     * muxer (which writes indices), then the file. */
+#ifdef YETTY_HAS_YAUDIO_RECORD
+    /* One final pump to flush anything still in the mic ring, then
+     * tear the audio path down. */
+    if (server->record_mux) {
+        record_audio_pump(server);
+    }
+    uint32_t audio_frames_final = server->record_audio_frames_written;
+    record_audio_teardown(server);
+#endif
     if (server->record_writer_initialized) {
         mp4_h26x_write_close(&server->record_writer);
     }
@@ -637,7 +960,12 @@ struct yetty_ycore_void_result yetty_yvnc_server_destroy(struct yetty_yvnc_serve
         fclose(server->record_file);
     }
     if (server->record_path) {
+#ifdef YETTY_HAS_YAUDIO_RECORD
+        yinfo("VNC record: saved %s (%u video frames, %u audio frames)", server->record_path,
+              server->record_frames, audio_frames_final);
+#else
         yinfo("VNC record: saved %s (%u frames)", server->record_path, server->record_frames);
+#endif
         free(server->record_path);
     }
 #endif
@@ -1637,6 +1965,12 @@ static struct yetty_ycore_void_result h264_send_full_frame(struct yetty_yvnc_ser
                 server->record_frames++;
             }
         }
+#ifdef YETTY_HAS_YAUDIO_RECORD
+        /* Drain the mic ring into AAC frames on every video-encode
+         * tick. Piggybacks on the ~30 Hz video cadence — the 2s
+         * capture ring absorbs any occasional stall. */
+        record_audio_pump(server);
+#endif
     }
 
     /* H.264 path consumes the entire frame; clear dirty tracking so the

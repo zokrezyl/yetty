@@ -86,6 +86,43 @@ uint32_t yetty_yplatform_audio_device_sample_rate(const struct yetty_yplatform_a
 
 uint32_t yetty_yplatform_audio_device_channels(const struct yetty_yplatform_audio_device *dev);
 
+/*
+ * Capture-device API — parallel to the playback API above. Opens the
+ * system's default microphone with a signed-16 interleaved format,
+ * because AAC / Opus encoders and the mp4 recorder consume s16 natively.
+ *
+ * The backend fills an internal ring on its own thread; the consumer
+ * calls read_s16 from wherever it wants (poll loop, encoder pump). No
+ * callback delivery — that would drag threading concerns into every
+ * caller and doesn't buy anything the ring can't provide.
+ */
+struct yetty_yplatform_audio_capture;
+
+YETTY_YRESULT_DECLARE(yetty_yplatform_audio_capture_ptr, struct yetty_yplatform_audio_capture *);
+
+struct yetty_yplatform_audio_capture_ptr_result yetty_yplatform_audio_capture_create(
+    uint32_t sample_rate, uint32_t channels);
+
+void yetty_yplatform_audio_capture_destroy(struct yetty_yplatform_audio_capture *cap);
+
+struct yetty_ycore_void_result yetty_yplatform_audio_capture_start(
+    struct yetty_yplatform_audio_capture *cap);
+
+struct yetty_ycore_void_result yetty_yplatform_audio_capture_stop(
+    struct yetty_yplatform_audio_capture *cap);
+
+/* Drain up to `frames` multi-channel s16 frames into `pcm`. Returns the
+ * count actually read — may be < frames if the ring is empty (returns 0
+ * in that case, never blocks). Buffer size is frames * channels *
+ * sizeof(int16_t). */
+struct yetty_ycore_size_result yetty_yplatform_audio_capture_read_s16(
+    struct yetty_yplatform_audio_capture *cap, int16_t *pcm, size_t frames);
+
+uint32_t yetty_yplatform_audio_capture_sample_rate(
+    const struct yetty_yplatform_audio_capture *cap);
+
+uint32_t yetty_yplatform_audio_capture_channels(const struct yetty_yplatform_audio_capture *cap);
+
 #ifdef __cplusplus
 }
 #endif
