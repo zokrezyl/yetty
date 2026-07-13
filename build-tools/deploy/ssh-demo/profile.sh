@@ -1,11 +1,23 @@
 # Shell dressing for the ephemeral yetty demo container.
 # Sourced from /etc/profile.d for the login shell.
 
-# yetty product paths (installed into /usr/local at image build time).
-export XDG_BIN_HOME=/usr/local/bin
-export XDG_DATA_HOME=/usr/local/share
-export XDG_CONFIG_HOME=/usr/local/etc/xdg
+# yetty was installed system-wide under /usr/local at image build time. Its
+# path resolver (yplatform/paths) locates the product's data and config at
+# $XDG_DATA_HOME/yetty and $XDG_CONFIG_HOME/yetty. We must NOT point
+# XDG_DATA_HOME at /usr/local/share here: XDG_DATA_HOME is by definition the
+# user's *writable* data home, and overriding it would make every other
+# XDG-aware program follow us into the read-only rootfs (e.g. nvim tries to
+# create /usr/local/share/nvim and fails). So we keep the normal per-user XDG
+# defaults and instead bridge the read-only yetty install into the writable
+# per-session home with symlinks — the tools find their data, nvim & co. keep
+# a writable data home.
 export YETTY_DEMOS=/usr/local/share/yetty/demos
+
+xdg_data="${XDG_DATA_HOME:-${HOME}/.local/share}"
+xdg_config="${XDG_CONFIG_HOME:-${HOME}/.config}"
+mkdir -p "${xdg_data}" "${xdg_config}" 2>/dev/null || true
+ln -sfn /usr/local/share/yetty "${xdg_data}/yetty" 2>/dev/null || true
+ln -sfn /usr/local/etc/xdg/yetty "${xdg_config}/yetty" 2>/dev/null || true
 
 # Tell the yetty tools they're inside a yetty terminal so they emit rich-content
 # envelopes (the browser-side yetty renders them) instead of raw fallbacks.
@@ -22,6 +34,7 @@ export HISTFILE=/dev/null
 # commands work verbatim.
 ln -sfn "${YETTY_DEMOS}" "${HOME}/demos" 2>/dev/null || true
 ln -sf /usr/local/share/yetty/logo-2.jpeg "${HOME}/yetty-logo.jpeg" 2>/dev/null || true
+ln -sfn /usr/share/yetty/sources "${HOME}/sources" 2>/dev/null || true
 
 # `demos` — browse the bundled demo gallery.
 demos() {
