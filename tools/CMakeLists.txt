@@ -18,6 +18,10 @@ if(YETTY_ENABLE_TOOL_YCAT)
     add_subdirectory(ycat)
 endif()
 
+if(YETTY_ENABLE_TOOL_YMCAT)
+    add_subdirectory(ymcat)
+endif()
+
 if(YETTY_ENABLE_TOOL_YLESS)
     add_subdirectory(yless)
 endif()

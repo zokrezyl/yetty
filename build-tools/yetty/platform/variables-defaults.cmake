@@ -152,6 +152,7 @@ option(YETTY_ENABLE_TOOL_CARD_RUNNER     "card-runner tool"                  OFF
 option(YETTY_ENABLE_TOOL_YDRAW_GENERATOR "ydraw-generator tool"              OFF)
 option(YETTY_ENABLE_TOOL_YDRAW_BENCH    "ydraw-bench tool"                 ON)
 option(YETTY_ENABLE_TOOL_YCAT            "ycat tool"                         ON)
+option(YETTY_ENABLE_TOOL_YMCAT           "ymcat tool (raw file → terminal-side render)" ON)
 option(YETTY_ENABLE_TOOL_YLESS           "yless pager tool"                  ON)
 
 # FFI shared library (libyetty_ffi.so). OFF for the normal static build so the

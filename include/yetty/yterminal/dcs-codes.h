@@ -38,6 +38,16 @@
  * legacy flat-list producers (ypdf, ycat svg) keep using YDRAW_BIN. */
 #define YETTY_DCS_YDRAW_SCENE_BIN 600004
 
+/* Raw-file envelope — the payload is an UNRENDERED file (plus a small
+ * prologue carrying MIME/filename hints and render flags); the terminal
+ * detects the type (ymime) and runs the renderer itself (ysvg, ymarkdown,
+ * ypdf, yimage, …). This is the terminal-side counterpart of what ycat
+ * does client-side. args = yetty_yface_file_meta, which carries the
+ * chunk-continuation fields (stream_id / sequence / FIRST / LAST) — v1
+ * receivers only accept single-shot envelopes (FIRST|LAST), but the wire
+ * shape already supports chunked streams for v2. */
+#define YETTY_DCS_MIME_FILE 600005
+
 /*
  * yclass RPC. One code covers both directions of a yrpc session:
  * client→server envelopes carry yrpc request frames, server→client
