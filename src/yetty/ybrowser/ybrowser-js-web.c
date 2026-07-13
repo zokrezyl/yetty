@@ -1157,6 +1157,12 @@ void *yetty_ybrowser_loader_curl_share(struct yetty_ybrowser_loader *loader)
     return loader ? loader->share : NULL;
 }
 
+struct yetty_ybrowser_disk_cache *yetty_ybrowser_loader_disk_cache(
+    struct yetty_ybrowser_loader *loader)
+{
+    return loader ? &loader->disk_cache : NULL;
+}
+
 /* Apply the loader-owned bits (share handle, Alt-Svc cache) to one easy
  * handle. Shared by the sequential and curl_multi paths so both get
  * connection reuse AND HTTP/3 upgrades. */
@@ -1787,6 +1793,13 @@ struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrows
 }
 
 void *yetty_ybrowser_loader_curl_share(struct yetty_ybrowser_loader *loader)
+{
+    (void)loader;
+    return NULL;
+}
+
+struct yetty_ybrowser_disk_cache *yetty_ybrowser_loader_disk_cache(
+    struct yetty_ybrowser_loader *loader)
 {
     (void)loader;
     return NULL;
@@ -3616,8 +3629,9 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.requestIdleCallback = (cb) => setTimeout(cb, 1);"
         "globalThis.cancelIdleCallback = clearTimeout;"
         "";
-    JSValue stub_v = JS_Eval(ctx, stubs, strlen(stubs), "<webapi-stubs>", JS_EVAL_TYPE_GLOBAL);
-    if (JS_IsException(stub_v)) {
+    /* This blob recompiles on every runtime creation (one per page load) —
+	 * route it through the bytecode compile cache like page scripts. */
+    if (yetty_ylexbor_js_eval_cached(r, ctx, stubs, strlen(stubs), "<webapi-stubs>") != 0) {
         JSValue ex = JS_GetException(ctx);
         const char *m = JS_ToCString(ctx, ex);
         ydebug("js webapi-stub: %s", m ? m : "?");
@@ -3626,7 +3640,6 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         }
         JS_FreeValue(ctx, ex);
     }
-    JS_FreeValue(ctx, stub_v);
 
     JS_FreeValue(ctx, global);
 }

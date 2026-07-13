@@ -1103,6 +1103,18 @@ void yetty_ybrowser_disk_cache_store(struct yetty_ybrowser_disk_cache *cache, co
                                      int kind, const struct yetty_ybrowser_disk_cache_meta *meta,
                                      const char *body, size_t body_len);
 
+/* Extra `kind` for the disk cache's keyspace: content-addressed QuickJS
+ * bytecode (compile cache, see ybrowser-js.c). Deliberately NOT a member of
+ * enum yetty_ybrowser_request_kind — kind participates in the on-disk key,
+ * so a distinct value guarantees a bytecode entry can never alias the HTTP
+ * entry of some URL. */
+enum { YETTY_YBROWSER_DISK_CACHE_KIND_JS_BYTECODE = 32 };
+
+/* The loader's disk-cache tier, or NULL when the build has no libcurl
+ * loader (the stub loader carries no cache). Defined in ybrowser-js-web.c. */
+struct yetty_ybrowser_disk_cache *yetty_ybrowser_loader_disk_cache(
+    struct yetty_ybrowser_loader *loader);
+
 /* The transform svg_scene_merge applies (scene → page px), exposed so the
  * click hit-test can invert it. Defined in ybrowser-paint.c. */
 void yetty_ylexbor_svg_merge_transform(float min_x, float min_y, float scene_w, float scene_h,
@@ -1463,6 +1475,16 @@ struct yetty_ylexbor *yetty_ylexbor_js_engine_from_ctx(struct JSContext *ctx);
  * call with a NULL engine (no-op). Defined in ybrowser-js.c, always compiled
  * regardless of YETTY_HAVE_QUICKJS. */
 void yetty_ylexbor_console_push(struct yetty_ylexbor *r, int level, const char *text);
+
+/* Evaluate `source` in the global scope through the bytecode compile cache:
+ * big sources are keyed by content hash in the loader's disk cache, so a
+ * warm load deserializes bytecode instead of re-parsing (small sources and
+ * cache-less builds fall through to a plain JS_Eval). Returns 0 on success,
+ * -1 when the script threw — the exception is left pending on the context
+ * for the caller to inspect. Defined in ybrowser-js.c; only compiled (and
+ * only callable) when YETTY_HAVE_QUICKJS. */
+int yetty_ylexbor_js_eval_cached(struct yetty_ylexbor *r, struct JSContext *ctx,
+                                 const char *source, size_t source_len, const char *url_label);
 
 /* DOM-bindings install (called from js_init). */
 void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r);

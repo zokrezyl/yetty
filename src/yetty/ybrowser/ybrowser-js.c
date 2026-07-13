@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #ifndef YETTY_HAVE_QUICKJS
 #define YETTY_HAVE_QUICKJS 0
@@ -295,6 +296,133 @@ void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r)
 }
 
 /* ===========================================================================
+ * Bytecode compile cache — content-addressed entries on the loader's disk
+ * cache tier.
+ *
+ * Page scripts are run-once, so what QuickJS does with a big bundle is
+ * parse + compile + execute; the parse/compile half is a pure function of
+ * the source bytes. Caching its output (JS_WriteObject bytecode) keyed by a
+ * content hash turns every warm evaluation into JS_ReadObject +
+ * JS_EvalFunction. Entries live in the loader's HTTP disk cache under a
+ * private `kind`, so budget / LRU eviction / atomic writes are shared with
+ * HTTP entries, and a quickjs version bump (version is part of the key)
+ * simply keys fresh entries while the stale ones age out.
+ * ===========================================================================*/
+
+/* Below this the compile is cheaper than the hash + disk round-trip. */
+enum { JS_BYTECODE_CACHE_MIN_SOURCE_BYTES = 16 * 1024 };
+
+static void bytecode_cache_key(const char *source, size_t source_len, char *out, size_t out_size)
+{
+    /* FNV-1a over the source bytes. The quickjs version and the source
+     * length are part of the key text, so a bytecode format change can
+     * never resurrect stale entries. */
+    uint64_t hash = 1469598103934665603ull;
+    for (size_t i = 0; i < source_len; i++) {
+        hash = (hash ^ (unsigned char)source[i]) * 1099511628211ull;
+    }
+    snprintf(out, out_size, "qjsbc:%d.%d.%d:%zu:%016llx", QJS_VERSION_MAJOR, QJS_VERSION_MINOR,
+             QJS_VERSION_PATCH, source_len, (unsigned long long)hash);
+}
+
+static struct yetty_ybrowser_disk_cache *bytecode_cache_for(struct yetty_ylexbor *r,
+                                                            size_t source_len)
+{
+    if (source_len < JS_BYTECODE_CACHE_MIN_SOURCE_BYTES || r == NULL || r->loader == NULL) {
+        return NULL;
+    }
+    /* Kill switch for A/B timing runs. getenv-per-call on purpose (matches
+     * YBROWSER_JS_CONSOLE): script evaluation is not hot, and caching the
+     * answer would need a static variable. */
+    const char *env = getenv("YBROWSER_JS_BYTECODE_CACHE");
+    if (env != NULL && strcmp(env, "0") == 0) {
+        return NULL;
+    }
+    return yetty_ybrowser_loader_disk_cache(r->loader);
+}
+
+/* Compile-or-recall `source`, then execute it. Returns what a plain JS_Eval
+ * would have returned: the completion value, or JS_EXCEPTION with the
+ * exception pending on the context. */
+static JSValue eval_global_cached(struct yetty_ylexbor *r, JSContext *ctx, const char *source,
+                                  size_t source_len, const char *url_label)
+{
+    struct yetty_ybrowser_disk_cache *cache = bytecode_cache_for(r, source_len);
+    if (cache == NULL) {
+        return JS_Eval(ctx, source, source_len, url_label, JS_EVAL_TYPE_GLOBAL);
+    }
+
+    char key[96];
+    bytecode_cache_key(source, source_len, key, sizeof(key));
+
+    struct yetty_ybrowser_disk_cache_meta meta;
+    char *bytecode = NULL;
+    size_t bytecode_len = 0;
+    double lookup_start = yetty_ylexbor_prof_now_ms();
+    if (yetty_ybrowser_disk_cache_load(cache, key, YETTY_YBROWSER_DISK_CACHE_KIND_JS_BYTECODE,
+                                       &meta, &bytecode, &bytecode_len)) {
+        JSValue recalled = JS_ReadObject(ctx, (const uint8_t *)bytecode, bytecode_len,
+                                         JS_READ_OBJ_BYTECODE);
+        free(bytecode);
+        if (!JS_IsException(recalled)) {
+            yetty_ylexbor_prof("    js bc-hit  %4zu KB in %5.1f ms  %.80s", source_len / 1024,
+                               yetty_ylexbor_prof_now_ms() - lookup_start, url_label);
+            return JS_EvalFunction(ctx, recalled);
+        }
+        /* Undeserializable entry (should not happen — the version is in the
+         * key): absorb the exception and fall through to a fresh compile,
+         * whose store below overwrites the bad entry. */
+        JSValue read_error = JS_GetException(ctx);
+        JS_FreeValue(ctx, read_error);
+        JS_FreeValue(ctx, recalled);
+    }
+
+    double compile_start = yetty_ylexbor_prof_now_ms();
+    JSValue compiled = JS_Eval(ctx, source, source_len, url_label,
+                               JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_COMPILE_ONLY);
+    if (JS_IsException(compiled)) {
+        return compiled; /* compile error — identical shape to plain JS_Eval */
+    }
+    size_t serialized_len = 0;
+    uint8_t *serialized = JS_WriteObject(ctx, &serialized_len, compiled, JS_WRITE_OBJ_BYTECODE);
+    if (serialized != NULL) {
+        struct yetty_ybrowser_disk_cache_meta store_meta = {0};
+        store_meta.status = 200;
+        store_meta.stored_at = time(NULL);
+        /* Content-addressed → effectively immutable. The far-future expiry
+         * only matters to someone inspecting the entry file: recall above
+         * bypasses the loader's freshness logic entirely. */
+        store_meta.expires_at = store_meta.stored_at + (time_t)10 * 365 * 24 * 3600;
+        snprintf(store_meta.content_type, sizeof(store_meta.content_type),
+                 "application/x-quickjs-bytecode");
+        yetty_ybrowser_disk_cache_store(cache, key, YETTY_YBROWSER_DISK_CACHE_KIND_JS_BYTECODE,
+                                        &store_meta, (const char *)serialized, serialized_len);
+        js_free(ctx, serialized);
+    } else {
+        /* Serialization failure sets a pending exception — absorb it; the
+         * compiled function itself is fine to run. */
+        JSValue write_error = JS_GetException(ctx);
+        JS_FreeValue(ctx, write_error);
+    }
+    yetty_ylexbor_prof("    js compile %4zu KB in %5.1f ms (bc stored %zu KB)  %.80s",
+                       source_len / 1024, yetty_ylexbor_prof_now_ms() - compile_start,
+                       serialized_len / 1024, url_label);
+    return JS_EvalFunction(ctx, compiled);
+}
+
+int yetty_ylexbor_js_eval_cached(struct yetty_ylexbor *r, struct JSContext *ctx,
+                                 const char *source, size_t source_len, const char *url_label)
+{
+    JSValue value = eval_global_cached(r, ctx, source, source_len, url_label);
+    if (JS_IsException(value)) {
+        JS_FreeValue(ctx, value);
+        return -1; /* exception left pending for the caller */
+    }
+    JS_FreeValue(ctx, value);
+    return 0;
+}
+
+/* ===========================================================================
  * Run all inline <script> elements once.
  * ===========================================================================*/
 
@@ -348,7 +476,7 @@ static void print_src_at(const char *src, size_t slen, int line_no, int col_no)
 static void eval_buf(struct yetty_ylexbor *r, JSContext *ctx, const char *src, size_t slen,
                      const char *url)
 {
-    JSValue v = JS_Eval(ctx, src, slen, url ? url : "<inline>", JS_EVAL_TYPE_GLOBAL);
+    JSValue v = eval_global_cached(r, ctx, src, slen, url ? url : "<inline>");
     if (JS_IsException(v)) {
         /* Pull the line+col out of the stack frame so we can show
 		 * the offending source line. ydebug fires only when the
