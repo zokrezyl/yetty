@@ -33,7 +33,10 @@
  * (miniaudio underneath), fdk-aac AAC-LC encoder, second mp4 track on
  * the same MP4E_mux_t the video already writes to. */
 #include <yetty/yplatform/audio.h>
-#include <fdk-aac/aacenc_lib.h>
+/* The CPM-vendored fdk-aac source tree exports libAACenc/include etc.
+ * directly, so the header has no fdk-aac/ prefix (that prefix only
+ * exists in installed copies of the library). */
+#include <aacenc_lib.h>
 
 /* AAC-LC parameters. 48 kHz stereo @ 128 kbps matches the poc recorder
  * and every common consumer of the resulting .mp4. 1024 samples per
