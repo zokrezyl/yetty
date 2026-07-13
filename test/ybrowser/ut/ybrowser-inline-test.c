@@ -58,6 +58,9 @@ static struct yetty_ylexbor *load(const char *html, int viewport_w)
         exit(2);
     }
     struct yetty_ylexbor *yl = r.value;
+    /* Pin the flat advance ratio these tests' exact geometry expectations
+     * were authored against — the engine default is proportional metrics. */
+    yetty_ylexbor_set_glyph_advance_ratio(yl, 0.55f);
     struct yetty_ycore_void_result lr = yetty_ylexbor_load_html(yl, html, strlen(html));
     if (YETTY_IS_ERR(lr)) {
         fprintf(stderr, "load_html failed: %s\n", lr.error.msg);

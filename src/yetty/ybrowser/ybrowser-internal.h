@@ -72,10 +72,12 @@ struct yl_grid_track {
 		              * Only consulted when is_pct is set. */
 };
 
-/* 16 covers the 12-column grids real design systems use (github's Primer
- * Brand: `grid-template-columns: repeat(12, minmax(0,1fr))` with items placed
- * via `grid-column: span N`). */
-#define YL_GRID_MAX_TRACKS 16
+/* 24 covers the column counts real design systems use: 12 (github's Primer
+ * Brand, Bootstrap), 16, and 24 (BBC's `repeat(24, 1fr)` article grids, Ant
+ * Design). A template with more tracks than this is rejected, which collapses
+ * every spanned item to one track — keep this at least as large as the widest
+ * mainstream system. */
+#define YL_GRID_MAX_TRACKS 24
 
 /* Ancestor-context class requirements shared by the class-keyed grid
  * tables: a selector's non-target classes, matched loosely against the
@@ -125,7 +127,11 @@ struct yl_aspect_rule {
     char *selector;          /* owned — the ELEMENT selector (pseudo stripped) */
     void *compiled_selector; /* owned */
     uint8_t selector_state;
-    float ratio; /* height / width */
+    float ratio; /* height / width; 0 when raw_value carries a var() form */
+    /* `aspect-ratio: var(--x)` — the raw declaration value, re-resolved per
+     * matching element against element-scoped custom properties at lookup
+     * (github hero frames: `--aspect-ratio-desktop:16 / 9` set inline). */
+    char *raw_value; /* owned; NULL for numeric rules */
 };
 
 /* A `display: none` declaration whose selector uses a Selectors-Level-4
@@ -1172,13 +1178,23 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
  * pointer into it. Pointer is invalidated by load_html / destroy. */
 const char *yetty_ylexbor_arena_dup(struct yetty_ylexbor *r, const char *bytes, size_t len);
 
-/* Naive text width: glyph_count(s) * font_size * 0.55. Same shortcut
- * ynetsurf uses; will be replaced by FreeType-driven metrics later. */
+/* Text width. advance_ratio > 0 = flat (glyph_count × font_size × ratio,
+ * for monospace hosts / Ahem / tests); advance_ratio <= 0 = proportional
+ * per-codepoint Helvetica/Arial advances (the default — the metric family
+ * Chrome shapes the common site font stacks with on Linux). */
 float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size,
                                      float advance_ratio);
 
-/* The effective per-glyph advance ratio for `r` — the configured value or
- * the 0.55 default when unset. */
+/* Decode one UTF-8 sequence at `s` (len bytes available, len >= 1); writes
+ * the codepoint (U+FFFD on malformed input) and returns the byte step. */
+size_t yetty_ylexbor_utf8_decode(const char *s, size_t len, uint32_t *out_codepoint);
+
+/* Advance width of one codepoint in em units (Helvetica/Arial metrics for
+ * ASCII, class-based estimates beyond — CJK 1.0, other letters 0.556). */
+float yetty_ylexbor_codepoint_advance_em(uint32_t codepoint);
+
+/* The effective per-glyph advance ratio for `r` — the configured flat value,
+ * or 0 when unset, which selects the proportional default. */
 float yetty_ylexbor_glyph_advance_ratio(const struct yetty_ylexbor *r);
 
 /* ===========================================================================

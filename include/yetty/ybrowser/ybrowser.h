@@ -441,6 +441,15 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
                                    int *font_weight_out, int *italic_out, int *underline_out,
                                    char *text_out, int text_cap);
 
+/* Test-only: the box's effective paint state — folded opacity [0,1] and
+ * the visibility:hidden flag. Any out-pointer may be NULL. */
+int yetty_ylexbor_test_box_paint_at(const struct yetty_ylexbor *r, int index, float *opacity_out,
+                                    int *vis_hidden_out);
+
+/* Test-only: the box's resolved foreground (text/currentColor) color. */
+int yetty_ylexbor_test_box_fg_at(const struct yetty_ylexbor *r, int index, uint8_t *red_out,
+                                 uint8_t *green_out, uint8_t *blue_out, uint8_t *alpha_out);
+
 /* Test-only: fetch the box's `data-test` attribute (used by the Chrome
  * geometry oracle to key boxes by a stable name independent of DOM order).
  * Writes the NUL-terminated attribute value into out_buf (truncated to

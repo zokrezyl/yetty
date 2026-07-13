@@ -129,10 +129,10 @@ static const struct yl_default_style *default_for(lxb_tag_id_t tag)
      * its math markup). We hide the subtrees outright until we render
      * them properly. <svg> is NOT here: it gets a replaced box (sized
      * from CSS/attrs/viewBox, subtree never walked) so icon/logo
-     * layout reserves the right space. */
+     * layout reserves the right space. <video> is NOT here either —
+     * it gets a replaced box so media frames keep their shape. */
     case LXB_TAG_MATH:
     case LXB_TAG_AUDIO:
-    case LXB_TAG_VIDEO:
     case LXB_TAG_OBJECT:
     case LXB_TAG_EMBED:
     case LXB_TAG_CANVAS:
@@ -1360,12 +1360,20 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         b->font_italic = italic;
                         s.font_italic = italic;
                     }
-                    /* `font-family: Ahem` (the WPT test font) — every glyph is
-					 * exactly 1em wide, so use advance ratio 1.0 for exact text
-					 * geometry. Inherited via the style state so the flushed
-					 * inline-text boxes measure with it too. */
-                    if (yetty_ybrowser_libcss_font_is_ahem(cs)) {
-                        s.glyph_advance = 1.0f;
+                    /* Per-family advance override, inherited via the style
+					 * state so the flushed inline-text boxes measure with it
+					 * too. Ahem (the WPT test font): every glyph exactly 1em.
+					 * Monospace families: 0.602em — DejaVu Sans Mono /
+					 * Liberation Mono, what Chrome on Linux uses for
+					 * `monospace`. Everything else keeps the proportional
+					 * default (glyph_advance 0). */
+                    {
+                        int font_class = yetty_ybrowser_libcss_font_advance_class(cs);
+                        if (font_class == 1) {
+                            s.glyph_advance = 1.0f;
+                        } else if (font_class == 2) {
+                            s.glyph_advance = 0.602f;
+                        }
                     }
                     b->glyph_advance = s.glyph_advance;
                     b->border_box = yetty_ybrowser_libcss_box_sizing(cs) != 0;
@@ -1938,7 +1946,11 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     /* `position` + insets. RELATIVE shifts the box (and its
 					 * subtree) by the insets after normal-flow placement;
 					 * ABSOLUTE/FIXED pull it out of flow and place it against
-					 * a containing block. STICKY collapses to RELATIVE. */
+					 * a containing block. STICKY collapses to RELATIVE for
+					 * containing-block purposes, but its insets are scroll
+					 * constraints, not offsets — at rest (scroll 0) a sticky
+					 * box renders at its normal flow position, so its insets
+					 * are NOT recorded. */
                     {
                         int visibility = yetty_ybrowser_libcss_visibility(cs);
                         s.vis_hidden = visibility == CSS_VISIBILITY_HIDDEN ||
@@ -1960,7 +1972,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     } else {
                         b->position = YL_POS_STATIC;
                     }
-                    if (b->position != YL_POS_STATIC) {
+                    if (b->position != YL_POS_STATIC && pos != CSS_POSITION_STICKY) {
                         float inset = 0.0f;
                         float *inset_field[4] = {&b->pos_top, &b->pos_right, &b->pos_bottom,
                                                  &b->pos_left};
@@ -2246,9 +2258,13 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 ib->element = el;
                 /* Inherited style flows into the replaced element — the
 				 * SVG path resolves `currentColor` against fg and seeds
-				 * its default font-size from font_size. */
+				 * its default font-size from font_size. Opacity and
+				 * visibility fold down like any other box: an image inside
+				 * an opacity:0 subtree must not paint. */
                 ib->fg = s.fg;
                 ib->font_size = s.font_size;
+                ib->opacity = s.opacity;
+                ib->vis_hidden = s.vis_hidden;
 
                 /* HTML width/height attrs (in px) take priority
 				 * — the spec calls these the "presentation
@@ -2465,6 +2481,78 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 link_child(r, parent_idx, iframe_idx);
                 continue;
             }
+            if (child->local_name == LXB_TAG_VIDEO) {
+                /* <video> is a replaced element for layout: reserve its box
+                 * from the width/height presentation attrs, CSS pixel sizes,
+                 * or the CSS replaced default 300x150 (playback itself is a
+                 * separate concern — without the box, hero media frames
+                 * collapse and the whole section mis-stacks). */
+                struct yetty_ycore_void_result flush_res =
+                    flush_inline(r, parent_style, parent_idx, inline_collect);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "walk: flush before video");
+                uint32_t vidx;
+                struct yetty_ycore_void_result alloc_res = box_alloc(r, &vidx);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, alloc_res, "walk: box_alloc video");
+                struct yetty_ylexbor_box *video_box = &r->boxes.data[vidx];
+                video_box->kind = YL_BOX_INLINE_IMAGE;
+                video_box->element = el;
+                video_box->fg = s.fg;
+                video_box->font_size = s.font_size;
+                video_box->opacity = s.opacity;
+                video_box->vis_hidden = s.vis_hidden;
+
+                float attr_w = 0.0f, attr_h = 0.0f;
+                size_t alen = 0;
+                const lxb_char_t *aw =
+                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"width", 5, &alen);
+                if (aw && alen > 0) {
+                    attr_w = (float)atof((const char *)aw);
+                }
+                const lxb_char_t *ah =
+                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"height", 6, &alen);
+                if (ah && alen > 0) {
+                    attr_h = (float)atof((const char *)ah);
+                }
+                float css_w = 0.0f, css_h = 0.0f;
+                {
+                    size_t vstylen = 0;
+                    const lxb_char_t *vstyle = lxb_dom_element_get_attribute(
+                        el, (const lxb_char_t *)"style", 5, &vstylen);
+                    css_computed_style *video_cs = yetty_ybrowser_libcss_select(
+                        r, el, (const char *)vstyle, vstyle ? vstylen : 0);
+                    video_box = &r->boxes.data[vidx];
+                    if (video_cs) {
+                        float px = 0.0f;
+                        float pct_basis_video = s.font_size * 16.0f;
+                        if (yetty_ybrowser_libcss_width(r, video_cs, s.font_size, pct_basis_video,
+                                                        &px) &&
+                            px > 0.0f) {
+                            css_w = px;
+                        }
+                        if (yetty_ybrowser_libcss_height(r, video_cs, s.font_size, pct_basis_video,
+                                                         &px) &&
+                            px > 0.0f) {
+                            css_h = px;
+                        }
+                        yetty_ybrowser_libcss_release(video_cs);
+                        video_box = &r->boxes.data[vidx];
+                    }
+                }
+                float box_w = css_w > 0.0f ? css_w : attr_w;
+                float box_h = css_h > 0.0f ? css_h : attr_h;
+                if (box_w > 0.0f && box_h <= 0.0f) {
+                    box_h = box_w * 0.5f; /* the 300x150 replaced default's 2:1 */
+                } else if (box_h > 0.0f && box_w <= 0.0f) {
+                    box_w = box_h * 2.0f;
+                } else if (box_w <= 0.0f && box_h <= 0.0f) {
+                    box_w = 300.0f;
+                    box_h = 150.0f;
+                }
+                video_box->w = box_w;
+                video_box->h = box_h;
+                link_child(r, parent_idx, vidx);
+                continue;
+            }
             if (child->local_name == LXB_TAG_SVG) {
                 /* Inline <svg> is a replaced element for layout: a box
                  * sized from CSS, its width/height attributes, or the
@@ -2484,6 +2572,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 svg_box->element = el;
                 svg_box->fg = s.fg;
                 svg_box->font_size = s.font_size;
+                svg_box->opacity = s.opacity;
+                svg_box->vis_hidden = s.vis_hidden;
 
                 float attr_w = 0.0f, attr_h = 0.0f;
                 size_t alen = 0;
@@ -2510,6 +2600,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 }
 
                 float css_w = 0.0f, css_h = 0.0f;
+                float css_max_w = 0.0f, css_max_h = 0.0f;
                 {
                     size_t svg_istylen = 0;
                     const lxb_char_t *svg_istyle = lxb_dom_element_get_attribute(
@@ -2530,6 +2621,19 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                                          &px) &&
                             px > 0.0f) {
                             css_h = px;
+                        }
+                        /* Pixel max-width/-height cap the replaced box below
+                         * (aspect-preserving). Percent maxima (negative) need
+                         * a containing block and stay a layout concern. */
+                        if (yetty_ybrowser_libcss_max_width(r, svg_cs, s.font_size, pct_basis_svg,
+                                                            &px) &&
+                            px > 0.0f) {
+                            css_max_w = px;
+                        }
+                        if (yetty_ybrowser_libcss_max_height(r, svg_cs, s.font_size, pct_basis_svg,
+                                                             &px) &&
+                            px > 0.0f) {
+                            css_max_h = px;
                         }
                         /* The element's computed `color` (cascade-resolved,
 					 * so plain inheritance already flowed through it)
@@ -2583,6 +2687,17 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 					 * hurts more than an undersized one.) */
                     box_w = view_w > 0.0f ? view_w : 24.0f;
                     box_h = view_h > 0.0f ? view_h : 24.0f;
+                }
+                /* `max-width:16px` icon caps (github NavLink) — the markup
+                 * width attribute says 24 but the media-gated CSS clamps the
+                 * rendered icon; scale the other axis to keep the aspect. */
+                if (css_max_w > 0.0f && box_w > css_max_w) {
+                    box_h *= css_max_w / box_w;
+                    box_w = css_max_w;
+                }
+                if (css_max_h > 0.0f && box_h > css_max_h) {
+                    box_w *= css_max_h / box_h;
+                    box_h = css_max_h;
                 }
                 svg_box->w = box_w;
                 svg_box->h = box_h;

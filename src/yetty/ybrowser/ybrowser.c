@@ -127,45 +127,135 @@ static void arena_reset(struct yetty_ylexbor *r)
 }
 
 /* ===========================================================================
- * Naive text width — placeholder, will become FreeType-driven later.
- * Good enough for the same MVP layout shape ynetsurf uses.
+ * Text width. Two modes, selected by the advance-ratio argument:
+ *
+ *   ratio > 0  — FLAT: every glyph advances font_size * ratio. Used when the
+ *                renderer is known to be monospace (the in-yetty host sets
+ *                0.602 to match its terminal font; the WPT Ahem override is
+ *                a per-box 1.0) and by tests that pin wrap mechanics.
+ *
+ *   ratio <= 0 — PROPORTIONAL (the default): per-codepoint advances from
+ *                Helvetica/Arial metrics. Liberation Sans — the metric
+ *                match for the Helvetica/Arial/system-ui stacks nearly
+ *                every site requests — is what Chrome on Linux actually
+ *                shapes with, so these advances are the parity reference.
+ *                Real shaping (kerning, non-Latin scripts) is still ahead;
+ *                this removes the dominant flat-metric error.
  * ===========================================================================*/
+
+size_t yetty_ylexbor_utf8_decode(const char *s, size_t len, uint32_t *out_codepoint)
+{
+    unsigned char first = (unsigned char)s[0];
+    if (first < 0x80) {
+        *out_codepoint = first;
+        return 1;
+    }
+    if ((first & 0xE0) == 0xC0 && len >= 2) {
+        *out_codepoint = ((uint32_t)(first & 0x1F) << 6) | ((uint32_t)s[1] & 0x3F);
+        return 2;
+    }
+    if ((first & 0xF0) == 0xE0 && len >= 3) {
+        *out_codepoint = ((uint32_t)(first & 0x0F) << 12) | (((uint32_t)s[1] & 0x3F) << 6) |
+                         ((uint32_t)s[2] & 0x3F);
+        return 3;
+    }
+    if ((first & 0xF8) == 0xF0 && len >= 4) {
+        *out_codepoint = ((uint32_t)(first & 0x07) << 18) | (((uint32_t)s[1] & 0x3F) << 12) |
+                         (((uint32_t)s[2] & 0x3F) << 6) | ((uint32_t)s[3] & 0x3F);
+        return 4;
+    }
+    *out_codepoint = 0xFFFD;
+    return 1;
+}
+
+float yetty_ylexbor_codepoint_advance_em(uint32_t codepoint)
+{
+    /* Helvetica AFM advance widths, thousandths of an em, ASCII 32..126.
+     * Arial and Liberation Sans share these to the unit. */
+    static const uint16_t helvetica_advance[95] = {
+        278, 278, 355, 556,  556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,
+        556, 556, 556, 556,  556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
+        1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
+        667, 778, 722, 667,  611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
+        333, 556, 556, 500,  556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
+        556, 556, 333, 500,  278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+    };
+    if (codepoint >= 32 && codepoint <= 126) {
+        return (float)helvetica_advance[codepoint - 32] / 1000.0f;
+    }
+    /* Zero-width codepoints (also skipped by the wrap pass). */
+    if (codepoint == 0x00AD || codepoint == 0x200B || codepoint == 0x200C ||
+        codepoint == 0x200D || codepoint == 0xFEFF) {
+        return 0.0f;
+    }
+    if (codepoint == 0x00A0) {
+        return 0.278f; /* NBSP — same advance as a space */
+    }
+    /* Common punctuation outside ASCII. */
+    if (codepoint == 0x2013) {
+        return 0.556f; /* en dash */
+    }
+    if (codepoint == 0x2014 || codepoint == 0x2015) {
+        return 1.0f; /* em dash / horizontal bar */
+    }
+    if (codepoint >= 0x2018 && codepoint <= 0x201B) {
+        return 0.222f; /* curly single quotes */
+    }
+    if (codepoint >= 0x201C && codepoint <= 0x201F) {
+        return 0.333f; /* curly double quotes */
+    }
+    if (codepoint == 0x2026) {
+        return 1.0f; /* ellipsis */
+    }
+    if (codepoint == 0x2022) {
+        return 0.35f; /* bullet */
+    }
+    /* CJK, Hangul, kana, full-width forms: one em. */
+    if ((codepoint >= 0x1100 && codepoint <= 0x115F) ||
+        (codepoint >= 0x2E80 && codepoint <= 0x9FFF) ||
+        (codepoint >= 0xAC00 && codepoint <= 0xD7A3) ||
+        (codepoint >= 0xF900 && codepoint <= 0xFAFF) ||
+        (codepoint >= 0xFF00 && codepoint <= 0xFF60)) {
+        return 1.0f;
+    }
+    /* Everything else (accented Latin, Cyrillic, Greek, …): the Helvetica
+     * lowercase average — accented letters keep their base advance. */
+    return 0.556f;
+}
 
 float yetty_ylexbor_glyph_advance_ratio(const struct yetty_ylexbor *r)
 {
     if (r != NULL && r->glyph_advance_ratio > 0.0f) {
         return r->glyph_advance_ratio;
     }
-    return 0.55f;
+    return 0.0f; /* 0 = proportional Helvetica metrics (the default) */
 }
 
 float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size,
                                      float advance_ratio)
 {
-    int n = 0;
-    for (size_t i = 0; i < len;) {
-        unsigned char c = (unsigned char)s[i];
-        if (c < 0x80) {
-            i += 1;
-        } else if ((c & 0xE0) == 0xC0) {
-            i += 2;
-        } else if ((c & 0xF0) == 0xE0) {
-            i += 3;
-        } else if ((c & 0xF8) == 0xF0) {
-            i += 4;
-        } else {
-            i += 1;
+    if (advance_ratio > 0.0f) {
+        /* Flat mode: glyph count × fixed advance. */
+        int n = 0;
+        for (size_t i = 0; i < len;) {
+            uint32_t codepoint;
+            i += yetty_ylexbor_utf8_decode(s + i, len - i, &codepoint);
+            n++;
         }
-        n++;
+        float per_glyph = font_size * advance_ratio;
+        if (per_glyph < 1.0f) {
+            per_glyph = 1.0f;
+        }
+        return n * per_glyph;
     }
-    if (advance_ratio <= 0.0f) {
-        advance_ratio = 0.55f;
+    /* Proportional mode: sum per-codepoint Helvetica advances. */
+    float total_em = 0.0f;
+    for (size_t i = 0; i < len;) {
+        uint32_t codepoint;
+        i += yetty_ylexbor_utf8_decode(s + i, len - i, &codepoint);
+        total_em += yetty_ylexbor_codepoint_advance_em(codepoint);
     }
-    float per_glyph = font_size * advance_ratio;
-    if (per_glyph < 1.0f) {
-        per_glyph = 1.0f;
-    }
-    return n * per_glyph;
+    return total_em * font_size;
 }
 
 /* ===========================================================================
@@ -1232,6 +1322,44 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
             memcpy(text_out, b->marker_text, (size_t)n);
             text_out[n] = '\0';
         }
+    }
+    return 0;
+}
+
+int yetty_ylexbor_test_box_paint_at(const struct yetty_ylexbor *r, int index, float *opacity_out,
+                                    int *vis_hidden_out)
+{
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *box = &r->boxes.data[index];
+    if (opacity_out) {
+        *opacity_out = box->opacity;
+    }
+    if (vis_hidden_out) {
+        *vis_hidden_out = box->vis_hidden ? 1 : 0;
+    }
+    return 0;
+}
+
+int yetty_ylexbor_test_box_fg_at(const struct yetty_ylexbor *r, int index, uint8_t *red_out,
+                                 uint8_t *green_out, uint8_t *blue_out, uint8_t *alpha_out)
+{
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *box = &r->boxes.data[index];
+    if (red_out) {
+        *red_out = box->fg.r;
+    }
+    if (green_out) {
+        *green_out = box->fg.g;
+    }
+    if (blue_out) {
+        *blue_out = box->fg.b;
+    }
+    if (alpha_out) {
+        *alpha_out = box->fg.a;
     }
     return 0;
 }

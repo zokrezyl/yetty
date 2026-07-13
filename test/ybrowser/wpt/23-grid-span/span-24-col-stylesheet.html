@@ -1,0 +1,14 @@
+<!doctype html><meta charset=utf-8>
+<title>24-column grid (BBC/Ant Design column count) with STYLESHEET grid-column
+placement: `1/span 24` fills the row, `3/span 20` insets by two tracks.
+Pins both the >16-track template support and the class-rule placement path.</title>
+<style>
+body{margin:0}
+.g{display:grid;grid-template-columns:repeat(24, 1fr);width:1200px}
+.full{grid-column:1/span 24;height:30px}
+.inset{grid-column:3/span 20;height:30px}
+</style>
+<div class=g>
+  <div class=full  data-test="full"  data-expect="0,0,1200,30">a</div>
+  <div class=inset data-test="inset" data-expect="100,30,1000,30">b</div>
+</div>

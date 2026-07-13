@@ -43,6 +43,9 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ygui/ygui.h>
+#include <yetty/yfont/font.h>
+#include <yetty/yfont/msdf-font.h>
+#include <yetty/yplatform/paths.h>
 #include <yetty/yimage/yimage.h>
 #include <yetty/ysvg/ysvg.h>
 #include <yetty/yplatform/pty.h>
@@ -222,6 +225,21 @@ struct app {
     int pending_render;
     int running;
 
+    /* Page form inputs promoted to REAL ygui textinput widgets, overlaid on
+     * the ydraw_embed at each <input> box's document position (the embed
+     * rect already carries the scroll slide, so overlay rect = embed
+     * rect.min + box xy). Pool rebuilt after every ship — element/box
+     * indices die on re-parse. `page_input_focused` is the pool slot with
+     * key focus, -1 when none. */
+#define MAX_PAGE_INPUTS 16
+    struct {
+        int box_index;                    /* engine box index this overlays */
+        float doc_x, doc_y, w, h;         /* document-coord rect of the box */
+        struct yetty_yclass_object *widget; /* ygui textinput (created once) */
+    } page_inputs[MAX_PAGE_INPUTS];
+    int n_page_inputs;
+    int page_input_focused;
+
     /* DevTools: a bottom-docked panel with a live JavaScript console. Built
      * once in build_ui, collapsed to zero height until toggled with F12. The
      * `console_log` rich widget is redrawn from the active engine's console
@@ -359,6 +377,11 @@ static void ui_new_tab(struct app *a);
 static void ui_close_tab(struct app *a, int idx);
 static void switch_tab(struct app *a, int idx);
 static void navigate(struct app *a, struct tab *t, char *url, int push_to_back);
+/* UTF-8 + special-key encoders (defined with the standalone loop below;
+ * the client key-envelope decode reuses them). */
+static size_t utf8_encode(uint32_t cp, char *out);
+static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
+                                      size_t *out_n);
 static void nav_abort(struct tab *t);
 static void go_back(struct app *a);
 static void go_forward(struct app *a);
@@ -1181,6 +1204,7 @@ static void navigate_full(struct app *a, struct tab *t, char *url, int push_to_b
 /* Plain navigation — cache-preferring (link clicks, address bar, history). */
 static void navigate(struct app *a, struct tab *t, char *url, int push_to_back)
 {
+    a->page_input_focused = -1;
     navigate_full(a, t, url, push_to_back, 0);
 }
 
@@ -1371,6 +1395,11 @@ static struct yetty_ycore_void_result on_tab_changed(struct yetty_yclass_object 
 
 static void focus_address(struct app *a)
 {
+    if (a->page_input_focused >= 0 && a->page_input_focused < a->n_page_inputs &&
+        a->page_inputs[a->page_input_focused].widget) {
+        err_ok(yetty_ygui_textinput_set_focus(a->page_inputs[a->page_input_focused].widget, 0));
+    }
+    a->page_input_focused = -1;
     err_ok(yetty_ygui_textinput_set_focus(a->address, 1));
     /* Select the whole URL on focus, like every desktop browser — the next
      * keystroke replaces it, or the user can copy it straight away. */
@@ -1453,6 +1482,30 @@ static int key_cb(struct yetty_yclass_object *fw, uint32_t key, int mods, void *
     if (key == 0x17) { /* Ctrl-W → close tab */
         ui_close_tab(a, a->active);
         return 1;
+    }
+    if (!a->address_focused && !a->console_focused && a->page_input_focused >= 0 &&
+        a->page_input_focused < a->n_page_inputs &&
+        a->page_inputs[a->page_input_focused].widget) {
+        struct yetty_yclass_object *widget = a->page_inputs[a->page_input_focused].widget;
+        if (key == 0x1B) { /* Esc — release the page input */
+            err_ok(yetty_ygui_textinput_set_focus(widget, 0));
+            a->page_input_focused = -1;
+            yetty_ygui_framework_mark_dirty(fw);
+            return 1;
+        }
+        struct yetty_ycore_int_result page_key_res =
+            yetty_ygui_textinput_handle_key(widget, key, mods);
+        int page_consumed = 0;
+        if (YETTY_IS_ERR(page_key_res)) {
+            yetty_ycore_error_destroy(page_key_res.error);
+        } else {
+            page_consumed = page_key_res.value;
+        }
+        if (page_consumed) {
+            yetty_ygui_framework_mark_dirty(fw);
+            return 1;
+        }
+        /* fall through for keys the edit box doesn't take (Ctrl chords…) */
     }
     if (a->address_focused) {
         if (key == '\r' || key == '\n') {
@@ -1556,6 +1609,33 @@ static void page_click(struct app *a, float x, float y)
     struct tab *t = &a->tabs[a->active];
     if (!t->engine) {
         return;
+    }
+    /* Promoted form inputs sit on top of the page — a press inside one
+     * focuses that edit box (and lets the widget place the caret); a press
+     * anywhere else on the page releases it. */
+    {
+        int hit = -1;
+        for (int i = 0; i < a->n_page_inputs; i++) {
+            float vx = pr.min.x + a->page_inputs[i].doc_x;
+            float vy = pr.min.y + a->page_inputs[i].doc_y;
+            if (a->page_inputs[i].widget && x >= vx && x < vx + a->page_inputs[i].w && y >= vy &&
+                y < vy + a->page_inputs[i].h) {
+                hit = i;
+                break;
+            }
+        }
+        for (int i = 0; i < a->n_page_inputs; i++) {
+            if (a->page_inputs[i].widget) {
+                err_ok(yetty_ygui_textinput_set_focus(a->page_inputs[i].widget, i == hit));
+            }
+        }
+        a->page_input_focused = hit;
+        if (hit >= 0) {
+            a->address_focused = 0;
+            err_ok(yetty_ygui_textinput_set_focus(a->address, 0));
+            yetty_ygui_framework_mark_dirty(a->fw);
+            return; /* the widget's own click handling places the caret */
+        }
     }
     /* The embed rect already includes the scroll slide, so subtracting
 	 * rect.min yields document coords. A plain <a href> navigates;
@@ -1887,6 +1967,159 @@ static void render_pass(struct app *a)
                        yetty_ylexbor_prof_now_ms() - t_render);
 }
 
+/* Page-input promotion: every visible text-like <input> box in the active
+ * engine gets a REAL ygui textinput overlaid at its document position (the
+ * same edit widget the address bar and demo 44 use — caret, selection,
+ * word-drag, the lot). The pool is rebuilt after each ship: box indices and
+ * element pointers die on re-parse. Widgets are created once, parented to
+ * the root, absolutely placed (set_rect + raise) each pump so they ride
+ * scroll via the embed rect, and hidden when the pool shrinks. */
+static void reposition_page_inputs(struct app *a)
+{
+    if (a->n_page_inputs == 0 || a->showing_image || a->no_ui) {
+        return;
+    }
+    /* Absolute children of the scrollarea are placed at content_min + pos
+     * and are NOT slid by the scroll offset (layout.c places them outside
+     * the flex bookkeeping). The embed rect carries the slide, so anchoring
+     * pos to (embed.min - scroll.min) + doc keeps the overlays glued to the
+     * page as it scrolls. Re-run every pump tick. */
+    struct yetty_ycore_rectangle_result pr_res = yetty_ygui_widget_rect(a->page);
+    struct yetty_ycore_rectangle_result sr_res = yetty_ygui_widget_rect(a->scroll);
+    if (YETTY_IS_ERR(pr_res) || YETTY_IS_ERR(sr_res)) {
+        if (YETTY_IS_ERR(pr_res)) {
+            yetty_ycore_error_destroy(pr_res.error);
+        }
+        if (YETTY_IS_ERR(sr_res)) {
+            yetty_ycore_error_destroy(sr_res.error);
+        }
+        return;
+    }
+    float base_x = pr_res.value.min.x - sr_res.value.min.x;
+    float base_y = pr_res.value.min.y - sr_res.value.min.y;
+    float view_h = sr_res.value.max.y - sr_res.value.min.y;
+    for (int i = 0; i < a->n_page_inputs; i++) {
+        struct yetty_yclass_object *widget = a->page_inputs[i].widget;
+        if (!widget) {
+            continue;
+        }
+        float px = base_x + a->page_inputs[i].doc_x;
+        float py = base_y + a->page_inputs[i].doc_y;
+        /* The scrollarea scissor clips the figure, but a widget fully above/
+         * below the viewport must also stop eating clicks - hide it. */
+        int visible = py + a->page_inputs[i].h > 0.0f && py < view_h;
+        err_ok(yetty_ygui_widget_set_visible(widget, visible));
+        if (!visible) {
+            continue;
+        }
+        struct yetty_ygui_layout_const_ptr_result lay_res = yetty_ygui_widget_layout_get(widget);
+        if (YETTY_IS_ERR(lay_res)) {
+            yetty_ycore_error_destroy(lay_res.error);
+            continue;
+        }
+        struct yetty_ygui_layout lay = *lay_res.value;
+        lay.absolute = 1;
+        lay.pos_x = px;
+        lay.pos_y = py;
+        lay.width = a->page_inputs[i].w;
+        lay.height = a->page_inputs[i].h;
+        err_ok(yetty_ygui_widget_layout_set(widget, &lay));
+        err_ok(yetty_ygui_widget_raise(widget));
+    }
+}
+
+static void promote_page_inputs(struct app *a, struct tab *t)
+{
+    int used = 0;
+    /* Re-ships happen constantly (hover washes, streamed images) — keep the
+     * focused slot and its in-progress text across the rebuild; only a
+     * navigation (different document) genuinely invalidates them. */
+    int keep_focus = a->page_input_focused;
+    if (t->engine && !a->showing_image && !a->no_ui) {
+        int count = yetty_ylexbor_test_box_count(t->engine);
+        for (int bi = 0; bi < count && used < MAX_PAGE_INPUTS; bi++) {
+            float x = 0, y = 0, w = 0, h = 0;
+            char tag[32] = {0};
+            if (yetty_ylexbor_test_box_at(t->engine, bi, &x, &y, &w, &h, tag, sizeof(tag)) != 0) {
+                continue;
+            }
+            if (strcmp(tag, "input") != 0 || w < 24.0f || h < 10.0f) {
+                continue;
+            }
+            /* Hidden forms (webauthn shells, 2FA variants) carry inputs too -
+             * promoting those grabs focus for invisible widgets and shuffles
+             * the slots under the user typing. */
+            float box_opacity = 1.0f;
+            int box_hidden = 0;
+            (void)yetty_ylexbor_test_box_paint_at(t->engine, bi, &box_opacity, &box_hidden);
+            if (box_opacity < 0.02f || box_hidden) {
+                continue;
+            }
+            /* Text-like types only (default when the attr is absent). */
+            char type[24] = {0};
+            (void)yetty_ylexbor_test_box_attr_at(t->engine, bi, "type", type, sizeof(type));
+            if (type[0] != '\0' && strcmp(type, "text") != 0 && strcmp(type, "email") != 0 &&
+                strcmp(type, "password") != 0 && strcmp(type, "search") != 0 &&
+                strcmp(type, "url") != 0 && strcmp(type, "tel") != 0) {
+                continue;
+            }
+            struct yetty_yclass_object *widget = a->page_inputs[used].widget;
+            if (!widget) {
+                struct yetty_yclass_ptr_result cls = yetty_ygui_textinput_class_get();
+                if (YETTY_IS_ERR(cls)) {
+                    yetty_ycore_error_destroy(cls.error);
+                    break;
+                }
+                struct yetty_yclass_object_ptr_result add_res =
+                    yetty_ygui_widget_add(a->scroll, cls.value);
+                if (YETTY_IS_ERR(add_res)) {
+                    yetty_ycore_error_destroy(add_res.error);
+                    break;
+                }
+                widget = add_res.value;
+                a->page_inputs[used].widget = widget;
+                /* Absolute: exempt from the root vbox layout — same escape
+                 * hatch the dialog panel uses; reposition_page_inputs owns
+                 * the rect. */
+                struct yetty_ygui_layout_const_ptr_result lay_res =
+                    yetty_ygui_widget_layout_get(widget);
+                if (YETTY_IS_OK(lay_res)) {
+                    struct yetty_ygui_layout lay = *lay_res.value;
+                    lay.absolute = 1;
+                    err_ok(yetty_ygui_widget_layout_set(widget, &lay));
+                } else {
+                    yetty_ycore_error_destroy(lay_res.error);
+                }
+            }
+            char placeholder[128] = {0};
+            (void)yetty_ylexbor_test_box_attr_at(t->engine, bi, "placeholder", placeholder,
+                                                 sizeof(placeholder));
+            err_ok(yetty_ygui_textinput_set_placeholder(widget, placeholder));
+            if (used != keep_focus) {
+                char value[256] = {0};
+                (void)yetty_ylexbor_test_box_attr_at(t->engine, bi, "value", value, sizeof(value));
+                err_ok(yetty_ygui_textinput_set_text(widget, value));
+                err_ok(yetty_ygui_textinput_set_focus(widget, 0));
+            }
+            a->page_inputs[used].box_index = bi;
+            a->page_inputs[used].doc_x = x;
+            a->page_inputs[used].doc_y = y;
+            a->page_inputs[used].w = w;
+            a->page_inputs[used].h = h;
+            used++;
+        }
+    }
+    /* Hide pool slots beyond this page's input count. */
+    for (int i = used; i < a->n_page_inputs; i++) {
+        if (a->page_inputs[i].widget) {
+            err_ok(yetty_ygui_widget_set_visible(a->page_inputs[i].widget, 0));
+        }
+    }
+    a->n_page_inputs = used;
+    a->page_input_focused = (keep_focus >= 0 && keep_focus < used) ? keep_focus : -1;
+    reposition_page_inputs(a);
+}
+
 /* Pump the active tab's JS timers; flag a re-render if the DOM changed.
  * Returns ms until the next timer (clamped), or 100 when idle. */
 static int pump_active(struct app *a)
@@ -1894,6 +2127,9 @@ static int pump_active(struct app *a)
     struct tab *t = &a->tabs[a->active];
     int wait_ms = 100;
     int images_fetched = 0;
+    /* Overlaid form inputs ride the embed rect (scroll slide included) —
+     * re-place them every pump so scrolling doesn't leave them behind. */
+    reposition_page_inputs(a);
     if (t->engine) {
         /* Progressive rendering: scripts were deferred so the initial HTML+CSS
 		 * could paint immediately. Once that first paint has landed
@@ -2022,6 +2258,40 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         return;
     }
 
+    if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_KEY ||
+        osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY) {
+        /* After a mouse press focuses our figure, the HOST routes keyboard
+         * input here as key envelopes instead of writing bytes to the PTY —
+         * dropping them left the address bar / page inputs deaf right after
+         * any click. Mirror the standalone translation: CHAR -> UTF-8 text,
+         * DOWN -> encoded special key; both through framework_feed_input,
+         * which drives the same key_cb as the PTY byte path. */
+        if (payload_len < sizeof(struct yetty_client_input_key)) {
+            return;
+        }
+        const struct yetty_client_input_key *k =
+            (const struct yetty_client_input_key *)payload;
+        if (k->magic != YETTY_CLIENT_INPUT_KEY_MAGIC) {
+            return;
+        }
+        if (k->kind == YETTY_YMGUI_INPUT_KEY_CHAR && k->codepoint != 0) {
+            char utf8_buf[8];
+            size_t n = utf8_encode(k->codepoint, utf8_buf);
+            if (n > 0) {
+                err_ok(yetty_ygui_framework_feed_input(a->fw, utf8_buf, n));
+            }
+        } else if (k->kind == YETTY_YMGUI_INPUT_KEY_DOWN) {
+            char scratch[8];
+            size_t n = 0;
+            const char *bytes =
+                encode_special_key((uint32_t)k->key, k->mods, scratch, sizeof(scratch), &n);
+            if (bytes && n > 0) {
+                err_ok(yetty_ygui_framework_feed_input(a->fw, bytes, n));
+            }
+        }
+        yetty_ygui_framework_mark_dirty(a->fw);
+        return;
+    }
     if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE ||
         osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE) {
         if (payload_len < sizeof(struct yetty_client_input_resize)) {
@@ -2574,6 +2844,9 @@ static void render_doc(struct app *a, struct tab *t)
     set_content_height(a, a->page, content_h);
     t->needs_render = 0;
     t->rendered_w = w;
+    /* Every ship rebuilds the page's box tree — re-promote the form inputs
+     * so the overlay widgets track the fresh box indices/positions. */
+    promote_page_inputs(a, t);
     yetty_ygui_framework_mark_dirty(a->fw);
 }
 
@@ -2789,6 +3062,42 @@ static int client_pipe_drain(struct client_pipe_loop *loop)
     return drained;
 }
 
+/* Measurement font for the client framework — same DejaVu Mono MSDF the
+ * host renders with, so textinput carets, click hit-tests and label widths
+ * are computed with the REAL glyph advances (the standalone path wires a
+ * font at window creation; without one the widgets fall back to the crude
+ * fixed advance and the address bar caret lands between the wrong glyphs).
+ * Mirrors yguiapp's client measure font. */
+static struct yetty_yfont_font *client_measure_font_create(void)
+{
+    struct yetty_yplatform_paths_ptr_result paths_res = yetty_yplatform_paths_create();
+    if (YETTY_IS_ERR(paths_res)) {
+        yetty_ycore_error_destroy(paths_res.error);
+        return NULL;
+    }
+    char cdb_path[768];
+    char shader_path[768];
+    snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb",
+             paths_res.value->fonts_dir_buf, "DejaVuSansMNerdFontMono");
+    snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl",
+             paths_res.value->shaders_dir_buf);
+    struct yetty_font_font_result font_res =
+        yetty_yfont_msdf_font_create(cdb_path, shader_path, "ybrowser_measure");
+    struct yetty_ycore_void_result paths_destroy = yetty_yplatform_paths_destroy(paths_res.value);
+    if (YETTY_IS_ERR(paths_destroy)) {
+        yetty_ycore_error_destroy(paths_destroy.error);
+    }
+    if (YETTY_IS_ERR(font_res)) {
+        yetty_ycore_error_destroy(font_res.error);
+        return NULL;
+    }
+    struct yetty_ycore_void_result load = font_res.value->ops->load_basic_latin(font_res.value);
+    if (YETTY_IS_ERR(load)) {
+        yetty_ycore_error_destroy(load.error);
+    }
+    return font_res.value;
+}
+
 int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, float font_size)
 {
     ytrace_init();
@@ -2861,6 +3170,10 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
     a.fw = fr.value;
     err_ok(yetty_ygui_framework_set_viewport(a.fw, (float)viewport_w, (float)viewport_h));
     yetty_ygui_framework_set_key_cb(a.fw, key_cb, &a);
+    struct yetty_yfont_font *measure_font = client_measure_font_create();
+    if (measure_font) {
+        yetty_ygui_framework_set_font(a.fw, measure_font);
+    }
 
     /* Attach to the host yetty's root figure container over the yclass-RPC
 	 * DCS transport (stdin = responses, stdout = requests). The handshake
@@ -2999,6 +3312,9 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
     (void)yetty_ybrowser_loader_destroy(a.loader);
     a.loader = NULL;
     err_ok(yetty_ygui_framework_destroy(a.fw));
+    if (measure_font) {
+        measure_font->ops->destroy(measure_font);
+    }
     if (yf) {
         yetty_yface_destroy(yf);
     }

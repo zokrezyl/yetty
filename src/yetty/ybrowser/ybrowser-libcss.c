@@ -816,11 +816,14 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
 #endif
         /* Embedded content we don't render — hide outright so the walker
          * doesn't surface their text content (MathML etc.) as garbage at
-         * the top of the page. <svg> and <iframe> are NOT hidden: the box
-         * builder gives each a replaced box (subtree never walked) so the
-         * layout reserves the right space — the iframe box then renders its
-         * src document as a nested browsing context. */
-        "math, audio, video, object, embed, canvas { display: none; }\n"
+         * the top of the page. <svg>, <iframe> and <video> are NOT hidden:
+         * the box builder gives each a replaced box (subtree never walked)
+         * so the layout reserves the right space — the iframe box then
+         * renders its src document as a nested browsing context; the video
+         * box keeps hero/media frames from collapsing (playback is a
+         * separate concern). */
+        "math, audio, object, embed, canvas { display: none; }\n"
+        "video { display: inline; }\n"
         "span, a, strong, b, em, i, cite, code, small, sub, sup, mark, ins, del,"
         " s, u, kbd, samp, var, time, q, abbr, dfn { display: inline; }\n"
         "br { display: inline; }\n"
@@ -1271,9 +1274,10 @@ static float resolve_length_to_px(struct yetty_ylexbor *r, const css_computed_st
         return fixed_to_float(length) * font_size * 0.5f;
     }
     if (unit == CSS_UNIT_CH) {
-        /* Advance of the '0' glyph. We have no real metrics; approximate
-         * as half the font size (same shortcut as ex). */
-        return fixed_to_float(length) * font_size * 0.5f;
+        /* Advance of the '0' glyph — 0.556em in the Helvetica/Arial metrics
+         * the proportional text measure uses (Chrome's default sans is the
+         * metric-compatible Liberation Sans). */
+        return fixed_to_float(length) * font_size * 0.556f;
     }
     if (unit == CSS_UNIT_Q) {
         /* 1Q = 1/40 cm. */
@@ -1423,6 +1427,18 @@ int yetty_ybrowser_libcss_min_width(struct yetty_ylexbor *r, const css_computed_
     css_unit u = CSS_UNIT_PX;
     uint8_t k = css_computed_min_width(style, &l, &u);
     return len_or_pct_property(k, l, u, CSS_MIN_WIDTH_SET, r, style, font_size, pct_basis, out_px);
+}
+
+int yetty_ybrowser_libcss_max_height(struct yetty_ylexbor *r, const css_computed_style *style,
+                                     float font_size, float pct_basis, float *out_px)
+{
+    if (!style) {
+        return 0;
+    }
+    css_fixed l = 0;
+    css_unit u = CSS_UNIT_PX;
+    uint8_t k = css_computed_max_height(style, &l, &u);
+    return len_or_pct_property(k, l, u, CSS_MAX_HEIGHT_SET, r, style, font_size, pct_basis, out_px);
 }
 
 /* Margin / padding percentages resolve against the containing block's
@@ -1782,13 +1798,13 @@ int yetty_ybrowser_libcss_flex_direction(const css_computed_style *style)
     return css_computed_flex_direction(style);
 }
 
-int yetty_ybrowser_libcss_font_is_ahem(const css_computed_style *style)
+int yetty_ybrowser_libcss_font_advance_class(const css_computed_style *style)
 {
     if (!style) {
         return 0;
     }
     lwc_string **names = NULL;
-    (void)css_computed_font_family(style, &names);
+    uint8_t generic = css_computed_font_family(style, &names);
     if (names != NULL) {
         for (int i = 0; names[i] != NULL; i++) {
             const char *d = lwc_string_data(names[i]);
@@ -1796,7 +1812,24 @@ int yetty_ybrowser_libcss_font_is_ahem(const css_computed_style *style)
             if (l == 4 && strncasecmp(d, "ahem", 4) == 0) {
                 return 1;
             }
+            /* Named monospace families: "Courier New", "Consolas", "Menlo",
+             * "Monaco", and anything carrying a "mono" token ("SF Mono",
+             * "Roboto Mono", "monospace" spelled as a name, …). */
+            for (size_t k = 0; k + 4 <= l; k++) {
+                if (strncasecmp(d + k, "mono", 4) == 0) {
+                    return 2;
+                }
+            }
+            if ((l >= 7 && strncasecmp(d, "courier", 7) == 0) ||
+                (l == 8 && strncasecmp(d, "consolas", 8) == 0) ||
+                (l == 5 && strncasecmp(d, "menlo", 5) == 0) ||
+                (l == 6 && strncasecmp(d, "monaco", 6) == 0)) {
+                return 2;
+            }
         }
+    }
+    if (generic == CSS_FONT_FAMILY_MONOSPACE) {
+        return 2;
     }
     return 0;
 }
