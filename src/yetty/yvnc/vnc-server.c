@@ -39,9 +39,9 @@
  * and every common consumer of the resulting .mp4. 1024 samples per
  * frame is the AAC-LC frame size (fixed by the codec). */
 #define YETTY_YVNC_RECORD_AUDIO_SAMPLE_RATE 48000u
-#define YETTY_YVNC_RECORD_AUDIO_CHANNELS    2u
-#define YETTY_YVNC_RECORD_AUDIO_BITRATE     128000u
-#define YETTY_YVNC_RECORD_AUDIO_FRAME_SIZE  1024u
+#define YETTY_YVNC_RECORD_AUDIO_CHANNELS 2u
+#define YETTY_YVNC_RECORD_AUDIO_BITRATE 128000u
+#define YETTY_YVNC_RECORD_AUDIO_FRAME_SIZE 1024u
 #endif
 
 #define MAX_CLIENTS 16
@@ -525,9 +525,8 @@ static int vnc_record_write_cb(int64_t offset, const void *buffer, size_t size, 
  * expected audio track would silently produce a video-only file). */
 static struct yetty_ycore_void_result record_audio_setup(struct yetty_yvnc_server *server)
 {
-    struct yetty_yplatform_audio_capture_ptr_result cap_res =
-        yetty_yplatform_audio_capture_create(YETTY_YVNC_RECORD_AUDIO_SAMPLE_RATE,
-                                             YETTY_YVNC_RECORD_AUDIO_CHANNELS);
+    struct yetty_yplatform_audio_capture_ptr_result cap_res = yetty_yplatform_audio_capture_create(
+        YETTY_YVNC_RECORD_AUDIO_SAMPLE_RATE, YETTY_YVNC_RECORD_AUDIO_CHANNELS);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cap_res, "vnc record-audio: capture create failed");
     server->record_audio_capture = cap_res.value;
 
@@ -625,8 +624,7 @@ static struct yetty_ycore_void_result record_audio_setup(struct yetty_yvnc_serve
         server->record_audio_encoder = NULL;
         yetty_yplatform_audio_capture_destroy(server->record_audio_capture);
         server->record_audio_capture = NULL;
-        return YETTY_ERR(yetty_ycore_void, "vnc record-audio: capture start failed",
-                         start_res);
+        return YETTY_ERR(yetty_ycore_void, "vnc record-audio: capture start failed", start_res);
     }
     yinfo("VNC record-audio: %u Hz × %u ch AAC-LC @ %u bps -> track %d",
           YETTY_YVNC_RECORD_AUDIO_SAMPLE_RATE, YETTY_YVNC_RECORD_AUDIO_CHANNELS,
@@ -741,9 +739,8 @@ static void record_audio_pump(struct yetty_yvnc_server *server)
 
     /* 3. Stash the leftover partial frame for next tick. */
     if (src_frames > 0u) {
-        memcpy(server->record_audio_carry +
-                   server->record_audio_carry_frames * channels,
-               src, src_frames * channels * sizeof(int16_t));
+        memcpy(server->record_audio_carry + server->record_audio_carry_frames * channels, src,
+               src_frames * channels * sizeof(int16_t));
         server->record_audio_carry_frames += src_frames;
     }
 }
@@ -854,8 +851,7 @@ static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server
         if (config->ops->get_bool(config, "vnc/record-audio", 0)) {
             vnc_server->record_audio_track_id = -1;
             struct yetty_ycore_void_result audio_res = record_audio_setup(vnc_server);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, audio_res,
-                                "vnc record: audio setup failed");
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, audio_res, "vnc record: audio setup failed");
         }
 #else
         if (config->ops->get_bool(config, "vnc/record-audio", 0)) {
