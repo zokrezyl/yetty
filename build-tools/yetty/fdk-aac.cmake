@@ -13,4 +13,12 @@ CPMAddPackage(
 
 if(fdk-aac_ADDED)
     message(STATUS "fdk-aac: AAC encoder/decoder v2.0.3")
+
+    if(ANDROID)
+        # fdk-aac's libSBRdec includes AOSP's log/log.h and calls
+        # android_errorWriteLog(), neither of which the NDK ships.
+        # Point the target at a stub that no-ops the call.
+        target_include_directories(fdk-aac PRIVATE
+            ${CMAKE_CURRENT_LIST_DIR}/fdk-aac-android-compat)
+    endif()
 endif()
