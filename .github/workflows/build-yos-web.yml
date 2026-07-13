@@ -137,3 +137,7 @@ jobs:
           tag_name: ${{ needs.resolve.outputs.tag }}
           files: out/yos-web-*.tar.gz
           fail_on_unmatched_files: true
+          # Never claim the repo-wide "latest release" pointer — that
+          # belongs to the desktop `yetty-*` release, and install.sh
+          # resolves `releases/latest/download/...` against it.
+          make_latest: false
