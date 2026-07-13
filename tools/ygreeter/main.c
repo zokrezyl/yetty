@@ -3158,9 +3158,15 @@ static struct yetty_ycore_void_result client_chrome_sync(struct client_state *cs
         return YETTY_OK_VOID();
     }
     if (!cs->chrome_host) {
+        /* Wire mode has no local GPU context and thus no content_scale of its
+         * own — width/height + mouse coords come straight from the hosting
+         * yetty over the transport (host framebuffer px). Pass 1.0f so the
+         * host wrapper skips its fb→logical divide; the receiving side (host's
+         * ygrid) applies the host's own content_scale at add-record time. */
         struct yetty_ychrome_host_ptr_result host_result = yetty_ychrome_host_create_wire(
             cs->chrome_container, cs->chrome_session,
-            /*window_chrome=*/NULL, width, height, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
+            /*window_chrome=*/NULL, width, height, /*content_scale=*/1.0f, 34.0f, 8.0f,
+            YETTY_YCHROME_FLAG_ALL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, host_result, "client_chrome_sync: create wire host");
         cs->chrome_host = host_result.value;
         cs->chrome_width = (int)width;
@@ -4270,8 +4276,8 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
             app->root_container, app->font, &app->ctx, app->yframework->window_chrome,
-            (float)gpu->surface_width, (float)gpu->surface_height, 36.0f, 8.0f,
-            YETTY_YCHROME_FLAG_ALL);
+            (float)gpu->surface_width, (float)gpu->surface_height, app_content_scale(app), 36.0f,
+            8.0f, YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
         } else {

@@ -873,7 +873,8 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
             app->root, app->font, &app->ctx, app->yrt->window_chrome, (float)app->surface_w,
-            (float)app->surface_h, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
+            (float)app->surface_h, app->yrt->gpu.app_gpu_context.content_scale, 34.0f, 8.0f,
+            YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
         } else {

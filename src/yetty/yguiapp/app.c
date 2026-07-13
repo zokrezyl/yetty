@@ -68,8 +68,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Caption-strip height (px) for chrome-enabled standalone apps. The drawn strip
- * and the engine's drag/double-click zone share this value. */
+/* Caption-strip height (logical px) for chrome-enabled standalone apps. The
+ * drawn strip and the engine's drag/double-click zone share this value. */
 #define YGUIAPP_CHROME_CAPTION_H 34.0f
 
 /*===========================================================================
@@ -120,6 +120,18 @@ struct yetty_yclass_object_ptr_result yetty_yguiapp_app_create(struct yetty_ycla
 /* Generated method-stub for the build virtual, called from run() below. */
 struct yetty_ycore_void_result yetty_yguiapp_build(struct yetty_yclass_object *app,
                                                    struct yetty_yclass_object *root);
+
+/* HiDPI factor (framebuffer_px / logical_px) for the app's window. ygui + the
+ * ychrome engine both author in logical px; the ygrid receiver multiplies each
+ * coordinate by this at add-record time for display. Callers of chrome that
+ * naturally have framebuffer dimensions (surface size, resize event, mouse
+ * event) must divide by this before passing them to chrome. 1.0f fallback keeps
+ * the non-HiDPI / headless path unchanged. */
+static float yguiapp_content_scale(const struct yetty_yguiapp_app *app)
+{
+    float s = app->yframework->gpu.app_gpu_context.content_scale;
+    return s > 0.0f ? s : 1.0f;
+}
 
 /*===========================================================================
  * build — the widget-tree population hook. A ygui app subclasses yguiapp:app
@@ -362,7 +374,29 @@ static int yguiapp_chrome_handle(struct yetty_yguiapp_app *app, const struct yet
     if (!app->chrome_enabled || !app->chrome) {
         return 0;
     }
-    struct yetty_ycore_int_result cr = yetty_ychrome_handle_event(app->chrome, ev);
+    /* Chrome speaks LOGICAL px; the event we get is in framebuffer px. Scale
+     * mouse coordinates once so chrome's hit-test aligns with its rendered
+     * button footprint on HiDPI. Non-mouse events pass through untouched. */
+    const struct yetty_yui_event *forwarded = ev;
+    struct yetty_yui_event scaled;
+    float cs = yguiapp_content_scale(app);
+    if (ev && cs != 1.0f) {
+        switch (ev->type) {
+        case YETTY_YCORE_MOUSE_DOWN:
+        case YETTY_YCORE_MOUSE_UP:
+        case YETTY_YCORE_MOUSE_MOVE:
+        case YETTY_YCORE_MOUSE_DRAG:
+        case YETTY_YCORE_MOUSE_DOUBLE_CLICK:
+            scaled = *ev;
+            scaled.mouse.x = ev->mouse.x / cs;
+            scaled.mouse.y = ev->mouse.y / cs;
+            forwarded = &scaled;
+            break;
+        default:
+            break;
+        }
+    }
+    struct yetty_ycore_int_result cr = yetty_ychrome_handle_event(app->chrome, forwarded);
     int consumed = YETTY_IS_OK(cr) && cr.value;
     if (YETTY_IS_ERR(cr)) {
         yetty_ycore_error_destroy(cr.error);
@@ -452,12 +486,23 @@ static struct yetty_ycore_int_result yguiapp_event(struct yetty_yevent_event_lis
             struct yetty_yrender_viewport vp = {0, 0, ev->resize.width, ev->resize.height};
             app->render_target->ops->resize(app->render_target, vp);
         }
-        struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-            app->engine, (float)ev->resize.width, (float)ev->resize.height);
+        /* ygui + chrome both author in LOGICAL px; the receiver ygrid scales
+         * back up by content_scale for display. Divide the framebuffer resize
+         * once so viewport, chrome and caption rect stay in one coord space. */
+        float cs = yguiapp_content_scale(app);
+        float logical_w = (float)ev->resize.width / cs;
+        float logical_h = (float)ev->resize.height / cs;
+        struct yetty_ycore_void_result vr =
+            yetty_ygui_framework_set_viewport(app->engine, logical_w, logical_h);
         if (YETTY_IS_ERR(vr)) {
             yetty_ycore_error_destroy(vr.error);
         }
         if (app->root_container) {
+            /* The container rect stays in framebuffer px — that is what ygrid's
+             * per-figure absolute-coord scissor scales its LOGICAL child rects
+             * against on the display side. Keep the container in framebuffer
+             * to match how the initial rect (from gpu->surface_width/height)
+             * is authored below in run(). */
             struct yetty_ycore_rectangle rr = {
                 .min = {0, 0}, .max = {(float)ev->resize.width, (float)ev->resize.height}};
             yetty_yfigure_figure_rect_set(app->root_container, rr);
@@ -465,16 +510,15 @@ static struct yetty_ycore_int_result yguiapp_event(struct yetty_yevent_event_lis
         }
         /* Keep chrome's edge bands + the caption figure tracking the window. */
         if (app->chrome_enabled && app->chrome) {
-            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(
-                app->chrome, (float)ev->resize.width, (float)ev->resize.height);
+            struct yetty_ycore_void_result csz =
+                yetty_ychrome_set_size(app->chrome, logical_w, logical_h);
             if (YETTY_IS_ERR(csz)) {
                 yetty_ycore_error_destroy(csz.error);
             }
             if (app->chrome_caption) {
                 struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(app->chrome_caption);
                 struct yetty_ycore_rectangle rect = {
-                    .min = {0.0f, 0.0f},
-                    .max = {(float)ev->resize.width, YGUIAPP_CHROME_CAPTION_H}};
+                    .min = {0.0f, 0.0f}, .max = {logical_w, YGUIAPP_CHROME_CAPTION_H}};
                 struct yetty_ycore_void_result rr =
                     yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(fig)-1, rect);
                 if (YETTY_IS_ERR(rr)) {
@@ -749,8 +793,12 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
         struct yetty_ycore_void_result scr =
             yetty_ygui_framework_set_container_obj(app->engine, app->root_container);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "yguiapp:run: set_container_obj");
+        /* ygui viewport in LOGICAL px — the ygrid receiver scales chrome coords
+         * back to framebuffer for display. Without this divide the widget tree
+         * is laid out for a 2× canvas on HiDPI and everything overflows. */
+        float cs = yguiapp_content_scale(app);
         struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-            app->engine, (float)gpu->surface_width, (float)gpu->surface_height);
+            app->engine, (float)gpu->surface_width / cs, (float)gpu->surface_height / cs);
         if (YETTY_IS_ERR(vr)) {
             yetty_ycore_error_destroy(vr.error);
         }
@@ -792,13 +840,15 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
             if (YETTY_IS_ERR(ccfg)) {
                 yetty_ycore_error_destroy(ccfg.error);
             }
+            /* Chrome + its pinned caption figure both live in LOGICAL px. */
+            float cs = yguiapp_content_scale(app);
             struct yetty_ycore_void_result csz = yetty_ychrome_set_size(
-                app->chrome, (float)gpu->surface_width, (float)gpu->surface_height);
+                app->chrome, (float)gpu->surface_width / cs, (float)gpu->surface_height / cs);
             if (YETTY_IS_ERR(csz)) {
                 yetty_ycore_error_destroy(csz.error);
             }
             struct yetty_ycore_void_result cap =
-                yguiapp_chrome_caption_create(app, &ctx, (float)gpu->surface_width);
+                yguiapp_chrome_caption_create(app, &ctx, (float)gpu->surface_width / cs);
             if (YETTY_IS_ERR(cap)) {
                 ywarn("yguiapp: chrome caption create failed: %s", cap.error.msg);
                 yetty_ycore_error_destroy(cap.error);

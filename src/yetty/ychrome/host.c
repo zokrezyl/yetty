@@ -25,6 +25,7 @@
 
 #include <yetty/ychrome/chrome.h>
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/yevent/event.h> /* yetty_yui_event + mouse-event kinds */
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/producer.h>
@@ -79,11 +80,29 @@ struct yetty_ychrome_host {
     struct yetty_yclass_object *container;                   /* root container proxy */
     struct yetty_yfigure_producer_session *producer_session; /* owning session */
 
+    /* Window size, in LOGICAL px (framebuffer / content_scale). Callers pass
+     * framebuffer values on create / resized; the host divides once here so
+     * the wrapped chrome engine and the pinned figure rects stay in a single
+     * coordinate system that the receiving ygrid then multiplies back up for
+     * display. */
     float width;
     float height;
     float caption_height;
+    /* HiDPI factor captured at create time — 1.0 on non-HiDPI. Used to
+     * convert framebuffer inputs (dimensions, mouse events) to logical px
+     * for the chrome engine and the figure rects. */
+    float content_scale;
     int last_hover; /* last hovered control — re-paint the caption when it changes */
 };
+
+/* Scale a framebuffer-pixel dimension to logical px using the host's captured
+ * content_scale. A non-positive scale (should not happen for a validated host)
+ * falls back to 1.0 so callers still get sane numbers. */
+static float host_to_logical(const struct yetty_ychrome_host *host, float value_fb)
+{
+    float scale = host->content_scale > 0.0f ? host->content_scale : 1.0f;
+    return value_fb / scale;
+}
 
 #ifdef YETTY_YCHROME_HAS_LOCAL
 /* The figure's yclass object sits one slot before the figure pointer (the data
@@ -267,9 +286,9 @@ static struct yetty_ycore_void_result host_caption_refresh(struct yetty_ychrome_
  *=========================================================================*/
 
 static struct yetty_ychrome_host_ptr_result host_alloc(struct yetty_yclass_object *window_chrome,
-                                                       float width, float height,
-                                                       float caption_height, float edge_size,
-                                                       unsigned int flags)
+                                                       float width_fb, float height_fb,
+                                                       float content_scale, float caption_height,
+                                                       float edge_size, unsigned int flags)
 {
     struct yetty_ycore_void_result register_result = yetty_ychrome_register();
     YETTY_RETURN_IF_ERR(yetty_ychrome_host_ptr, register_result, "ychrome_host: register");
@@ -287,8 +306,9 @@ static struct yetty_ychrome_host_ptr_result host_alloc(struct yetty_yclass_objec
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host: alloc");
     }
     host->chrome = chrome_result.value;
-    host->width = width;
-    host->height = height;
+    host->content_scale = content_scale > 0.0f ? content_scale : 1.0f;
+    host->width = host_to_logical(host, width_fb);
+    host->height = host_to_logical(host, height_fb);
     host->caption_height = caption_height;
 
     struct yetty_ycore_void_result configure_result =
@@ -301,7 +321,7 @@ static struct yetty_ychrome_host_ptr_result host_alloc(struct yetty_yclass_objec
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host: configure", chained);
     }
     struct yetty_ycore_void_result size_result =
-        yetty_ychrome_set_size(host->chrome, width, height);
+        yetty_ychrome_set_size(host->chrome, host->width, host->height);
     if (YETTY_IS_ERR(size_result)) {
         struct yetty_ycore_void_result destroy_result = yetty_ychrome_destroy(host->chrome);
         free(host);
@@ -332,13 +352,13 @@ static struct yetty_ychrome_host_ptr_result host_build_fail(struct yetty_ychrome
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
     struct yetty_yclass_object *container_obj, struct yetty_yfont_font *font,
     const struct yetty_context *ctx, struct yetty_yclass_object *window_chrome, float width,
-    float height, float caption_height, float edge_size, unsigned int flags)
+    float height, float content_scale, float caption_height, float edge_size, unsigned int flags)
 {
     if (!container_obj) {
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host_create: container required");
     }
     struct yetty_ychrome_host_ptr_result alloc_result =
-        host_alloc(window_chrome, width, height, caption_height, edge_size, flags);
+        host_alloc(window_chrome, width, height, content_scale, caption_height, edge_size, flags);
     YETTY_RETURN_IF_ERR(yetty_ychrome_host_ptr, alloc_result, "ychrome_host_create");
     struct yetty_ychrome_host *host = alloc_result.value;
 
@@ -348,9 +368,11 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
      * chrome's container IS the app's whole content surface — that's the wire /
      * in-terminal case, handled in yetty_ychrome_host_create_wire. */
 
-    /* Caption — empty for now; host_caption_refresh paints it with hover state. */
-    struct yetty_ycore_rectangle caption_rect = {.min = {0.0f, 0.0f},
-                                                 .max = {width, caption_height}};
+    /* Caption — empty for now; host_caption_refresh paints it with hover state.
+     * Rect is in LOGICAL px (matches chrome's authoring space); ygrid's absolute
+     * scissor multiplies by content_scale for display. */
+    struct yetty_ycore_rectangle caption_rect = {
+        .min = {0.0f, 0.0f}, .max = {host->width, host->caption_height}};
     struct yetty_ygrid_grid_ptr_result caption_pin =
         host_pin_grid(container_obj, ctx, font, caption_rect, NULL, 0, YCHROME_CAPTION_Z,
                       YCHROME_LOCAL_CAPTION_ID);
@@ -370,14 +392,14 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
 
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
     struct yetty_yclass_object *container, struct yetty_yfigure_producer_session *producer_session,
-    struct yetty_yclass_object *window_chrome, float width, float height, float caption_height,
-    float edge_size, unsigned int flags)
+    struct yetty_yclass_object *window_chrome, float width, float height, float content_scale,
+    float caption_height, float edge_size, unsigned int flags)
 {
     if (!container) {
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host_create_wire: container required");
     }
     struct yetty_ychrome_host_ptr_result alloc_result =
-        host_alloc(window_chrome, width, height, caption_height, edge_size, flags);
+        host_alloc(window_chrome, width, height, content_scale, caption_height, edge_size, flags);
     YETTY_RETURN_IF_ERR(yetty_ychrome_host_ptr, alloc_result, "ychrome_host_create_wire");
     struct yetty_ychrome_host *host = alloc_result.value;
     host->container = container;
@@ -432,7 +454,30 @@ struct yetty_ycore_int_result yetty_ychrome_host_handle_event(struct yetty_ychro
     if (!host) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_ycore_int_result handle_result = yetty_ychrome_handle_event(host->chrome, event);
+    /* Chrome speaks LOGICAL px; callers hand us framebuffer-px events. Convert
+     * mouse coordinates once here so chrome's hit-test matches its rendered
+     * button footprint on HiDPI. Non-mouse events (RENDER, KEY_DOWN, RESIZE …)
+     * carry no cursor position and pass through untouched. */
+    const struct yetty_yui_event *forwarded = event;
+    struct yetty_yui_event scaled;
+    if (event && host->content_scale > 0.0f && host->content_scale != 1.0f) {
+        switch (event->type) {
+        case YETTY_YCORE_MOUSE_DOWN:
+        case YETTY_YCORE_MOUSE_UP:
+        case YETTY_YCORE_MOUSE_MOVE:
+        case YETTY_YCORE_MOUSE_DRAG:
+        case YETTY_YCORE_MOUSE_DOUBLE_CLICK:
+            scaled = *event;
+            scaled.mouse.x = event->mouse.x / host->content_scale;
+            scaled.mouse.y = event->mouse.y / host->content_scale;
+            forwarded = &scaled;
+            break;
+        default:
+            break;
+        }
+    }
+    struct yetty_ycore_int_result handle_result =
+        yetty_ychrome_handle_event(host->chrome, forwarded);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, handle_result, "ychrome_host_handle_event: handle");
     int consumed = handle_result.value;
 
@@ -450,14 +495,17 @@ struct yetty_ycore_int_result yetty_ychrome_host_handle_event(struct yetty_ychro
 }
 
 struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_host *host,
-                                                          float width, float height)
+                                                          float width_fb, float height_fb)
 {
     if (!host) {
         return YETTY_OK_VOID();
     }
-    host->width = width;
-    host->height = height;
-    struct yetty_ycore_void_result result = yetty_ychrome_set_size(host->chrome, width, height);
+    /* Framebuffer→logical at the boundary: chrome + the pinned figure rects
+     * live in logical px. */
+    host->width = host_to_logical(host, width_fb);
+    host->height = host_to_logical(host, height_fb);
+    struct yetty_ycore_void_result result =
+        yetty_ychrome_set_size(host->chrome, host->width, host->height);
 
     if (host->container) {
         /* WIRE: re-emit both figures at the new size (CREATE_CHILD re-mints). */
@@ -470,11 +518,12 @@ struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_h
     /* LOCAL: resize the backdrop figure + reload its box, reposition the
      * caption strip, then repaint the caption. */
     if (host->backdrop) {
-        struct yetty_ycore_rectangle full = {.min = {0.0f, 0.0f}, .max = {width, height}};
+        struct yetty_ycore_rectangle full = {.min = {0.0f, 0.0f},
+                                             .max = {host->width, host->height}};
         result = yetty_ycore_void_chain(
             result, yetty_yfigure_figure_rect_set(grid_figure_obj(host->backdrop), full));
         struct yetty_ydraw_drawable_list_result backdrop_list_result =
-            host_make_backdrop_list(width, height);
+            host_make_backdrop_list(host->width, host->height);
         if (YETTY_IS_OK(backdrop_list_result)) {
             result = yetty_ycore_void_chain(
                 result,
@@ -491,7 +540,7 @@ struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_h
     }
     if (host->caption) {
         struct yetty_ycore_rectangle caption_rect = {.min = {0.0f, 0.0f},
-                                                     .max = {width, host->caption_height}};
+                                                     .max = {host->width, host->caption_height}};
         result = yetty_ycore_void_chain(
             result, yetty_yfigure_figure_rect_set(grid_figure_obj(host->caption), caption_rect));
     }

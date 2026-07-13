@@ -951,7 +951,8 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         if (context->runtime && context->runtime->window_chrome) {
             struct yetty_ychrome_host_ptr_result ch = yetty_ychrome_host_create(
                 yui->root_container_obj, yui->font, context, context->runtime->window_chrome,
-                (float)surface_w, (float)surface_h, TITLEBAR_STRIP_H, 8.0f, YETTY_YCHROME_FLAG_ALL);
+                (float)surface_w, (float)surface_h, yui->content_scale, TITLEBAR_STRIP_H, 8.0f,
+                YETTY_YCHROME_FLAG_ALL);
             if (YETTY_IS_OK(ch)) {
                 yui->chrome = ch.value;
             } else {
@@ -2670,8 +2671,9 @@ static struct yetty_ycore_void_result yui_apply_cursor(struct yetty_yui *yui, fl
 
 /* Client-first / chrome-fallback: hand a pointer event the ygui engine didn't
  * consume to the window chrome (drag / edge-resize / maximize / window
- * controls). Chrome works in raw framebuffer px, so the unscaled event passes
- * straight through. Returns 1 if chrome claimed it. */
+ * controls). Chrome speaks LOGICAL px; the wrapping ychrome:host converts the
+ * framebuffer-px event we pass here to logical using the content_scale it
+ * captured at create time. Returns 1 if chrome claimed it. */
 static struct yetty_ycore_int_result yui_chrome_fallback(struct yetty_yui *yui,
                                                          const struct yetty_yui_event *event)
 {

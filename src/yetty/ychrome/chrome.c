@@ -22,9 +22,14 @@
  * handle those first and only forward an event to chrome_handle_event when your
  * own UI did not consume it. handle_event returns 1 when it claimed the event.
  *
- * Coordinates are in the same pixel space the app hit-tests its UI in (yetty
- * feeds framebuffer pixels). Call set_size() whenever the window resizes so the
- * right/bottom edge bands track the window.
+ * Coordinates are LOGICAL pixels throughout — the same units producer figures
+ * (ygui widgets, yplot, …) author in, i.e. framebuffer_px / content_scale. The
+ * caller is responsible for converting framebuffer inputs (events, window
+ * dimensions) into logical before feeding them in; the wrapping ychrome:host
+ * does that conversion for its callers. Call set_size() with the current
+ * logical window size whenever the window resizes so the right/bottom edge
+ * bands track it. The rendered drawable list is also in logical px; the
+ * receiving ygrid multiplies by content_scale for display.
  *
  * Every slot is `local@` — chrome is an in-process object, never proxied over
  * RPC. window-chrome.c is its platform backend (it forwards the gestures over
@@ -83,8 +88,9 @@ enum {
     /* Default resize-border thickness if configure() is passed 0. A touch wider
      * than common desktop slop (5–6 px) because there's no visible frame. */
     YCHROME_DEFAULT_EDGE_PX = 8,
-    /* Width (px) of each window-control button (minimize/maximize/close). The
-     * three sit flush against the right edge; render and hit-test share this. */
+    /* Width (logical px) of each window-control button (minimize/maximize/
+     * close). The three sit flush against the right edge; render and hit-test
+     * share this. */
     YCHROME_BTN_W = 46,
 };
 
@@ -103,9 +109,9 @@ struct YETTY_ANNOTATE("class@ychrome:chrome")
     /* Borrowed yplatform:window_chrome yclass object — set by configure(). */
     struct yetty_yclass_object *window_chrome;
 
-    float caption_height; /* top strip that drags / double-click-maximizes (px) */
-    float edge_size;      /* right/bottom resize border thickness (px)          */
-    float width;          /* current window size (px); set via set_size()       */
+    float caption_height; /* top strip that drags / double-click-maximizes (logical px) */
+    float edge_size;      /* right/bottom resize border thickness (logical px)          */
+    float width;          /* current window size (logical px); set via set_size()       */
     float height;
     uint32_t flags; /* YETTY_YCHROME_FLAG_*                               */
 
