@@ -1,0 +1,7 @@
+<!doctype html><meta charset=utf-8>
+<title>content-box: padding adds to the declared height; border-box includes it</title>
+<style>body{margin:0}</style>
+<div data-test="cb" data-expect="0,0,*,80"
+     style="height:56px;padding:12px 16px">x</div>
+<div data-test="bb" data-expect="0,80,*,56"
+     style="height:56px;padding:12px 16px;box-sizing:border-box">x</div>

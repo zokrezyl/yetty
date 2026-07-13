@@ -1,0 +1,12 @@
+<!doctype html><meta charset=utf-8>
+<title>aspect-ratio via custom property (element-scoped inline --var) resolves per
+element, and a media-gated `aspect-ratio:unset` cancels an earlier base ratio
+instead of falling through to it (github hero frames).</title>
+<style>
+body{margin:0}
+.frame{width:400px;aspect-ratio:var(--frame-ratio)}
+.sq{width:200px;aspect-ratio:1}
+@media (min-width:500px){.sq{aspect-ratio:unset}}
+</style>
+<div class=frame style="--frame-ratio:16 / 9" data-test="frame" data-expect="*,*,400,225"></div>
+<div class=sq data-test="sq" data-expect="*,*,200,40"><div style="height:40px">x</div></div>

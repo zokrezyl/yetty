@@ -105,6 +105,8 @@ int yetty_ybrowser_libcss_max_width(struct yetty_ylexbor *r, const css_computed_
                                     float font_size, float pct_basis, float *out_px);
 int yetty_ybrowser_libcss_min_width(struct yetty_ylexbor *r, const css_computed_style *style,
                                     float font_size, float pct_basis, float *out_px);
+int yetty_ybrowser_libcss_max_height(struct yetty_ylexbor *r, const css_computed_style *style,
+                                     float font_size, float pct_basis, float *out_px);
 /* Margin / padding: a percentage value is returned as a ratio (e.g. 0.10
  * for 10%) with *out_pct = true, because percent margins and paddings
  * both resolve against the containing block's content width — which is
@@ -145,9 +147,10 @@ int yetty_ybrowser_libcss_text_align(const css_computed_style *style);
 
 /* Flex direction: returns CSS_FLEX_DIRECTION_* (ROW/COLUMN/...). */
 int yetty_ybrowser_libcss_flex_direction(const css_computed_style *style);
-/* 1 if the computed font-family is the WPT test font `Ahem` (every glyph is
- * exactly 1em wide — lets text measurement be pixel-exact). */
-int yetty_ybrowser_libcss_font_is_ahem(const css_computed_style *style);
+/* Font advance class from the computed font-family: 0 = proportional
+ * (default), 1 = the WPT test font `Ahem` (every glyph exactly 1em),
+ * 2 = a monospace family (generic `monospace` or a named mono font). */
+int yetty_ybrowser_libcss_font_advance_class(const css_computed_style *style);
 /* Flex wrap: CSS_FLEX_WRAP_* (NOWRAP/WRAP/WRAP_REVERSE). Read from the cascade
  * so stylesheet `flex-wrap:wrap` (not just inline) is honored. */
 int yetty_ybrowser_libcss_flex_wrap(const css_computed_style *style);

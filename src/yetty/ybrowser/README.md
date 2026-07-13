@@ -33,12 +33,86 @@ cascade libcss handles better.
 | `ybrowser-box.c`       | DOM walk → flat box vector, reading computed style from libcss |
 | `ybrowser-layout.c`    | Box vector → laid-out coordinates (block flow, inline wrap, spec flex sizing + wrap/reverse/order, grid track sizing + placement, absolute/fixed positioning) |
 | `ybrowser-paint.c`     | Box vector → ydraw primitives (ysdf rects, text spans, `<img>` raster + data-URI images, inline/replaced SVG via ysvg) |
-| `ybrowser-css-vars.c`  | CSS custom-property scanner + `var(--foo[, fallback])` resolver |
+| `ybrowser-css-vars.c`  | The **libcss-gap compensation layer** (largest file in the engine): `var(--foo[, fallback])` resolver plus every pre-parse CSS rewriter and side-table scanner — see the dedicated section below |
 | `ybrowser-js.c`        | QuickJS lifecycle, `<script>` walker, microtask drain |
 | `ybrowser-js-dom.c`    | DOM API for the JS runtime (Element/Document, querySelector, events, …) |
-| `ybrowser-js-web.c`    | Web-platform stubs (fetch/XHR, timers, navigator, location, storage, …) |
-| `ybrowser-internal.h`  | Box-vector types, runtime struct, internal API |
-| `ybrowser.h`           | Public header |
+| `ybrowser-js-web.c`    | Web-platform stubs (fetch/XHR, timers, navigator, location, storage, …) **and the entire network loader** — the `yetty_ybrowser_loader_*` API, curl-multi scheduler thread, share handle, HTTP cache, cookies live here, not in a separate file |
+| `ybrowser-cache-disk.c`| Persistent disk tier of the RFC 9111 HTTP cache (`$XDG_CACHE_HOME/yetty`); the loader owns freshness decisions |
+| `ybrowser-internal.h`  | Box-vector types, runtime struct, side-table rule structs, the `yl_size_source` provenance enum, internal API — the best single file to read |
+| `ybrowser.h`           | Public header (includes a "Known gaps" block — keep it current) |
+
+## Load pipeline (`yetty_ylexbor_load_html`)
+
+1. **Teardown** — destroy the JS runtime first (timers/listeners hold raw
+   pointers into the old DOM), clear boxes/arena/side tables, bump
+   `fetch_generation` to invalidate in-flight async image jobs.
+2. **Parse** — `lxb_html_document_parse` (lexbor). MediaWiki pages get an
+   injected float-helper quirk sheet.
+3. **Style** — fetch `<link rel=stylesheet>` + inline `<style>`; per sheet:
+   side-table scanners run on the raw source, then the pre-parse rewriters,
+   then `css_stylesheet_append_data` into the libcss select context. libcss
+   owns the cascade; lexbor's own CSS is never initialized (perf).
+4. **Script** — inline + external `<script>` synchronously through QuickJS
+   unless `YBROWSER_NO_JS` / deferred; DOM mutations set `dom_dirty`.
+5. **Box build** — DOM + libcss computed styles → flat box vector, applying
+   the side tables (grid, transforms, aspect, keywords, opacity fold-down).
+6. **Layout** — block flow, flex solver, grid, tables, abspos; every final
+   size is stamped with a `yl_size_source` provenance value (surfaced by
+   `--dump-boxes` as `ws=`/`hs=` — this is what the Chrome-delta tooling
+   keys its mechanism clusters on).
+7. **Iframes** — each `<iframe>` renders in a child engine (depth-capped).
+8. **Paint** — composite stacking-key sort (shared with hit-testing), then
+   ydraw primitives; images decode via optional libwebp/libpng/turbojpeg;
+   inline SVG merges through ysvg. Landed images ship as per-group deltas.
+
+## The libcss-gap compensation layer
+
+libcss (0.9.x) predates large parts of modern CSS. The engine compensates
+with two mechanisms, both in `ybrowser-css-vars.c`, and this layer is by
+volume the largest part of the engine — when a CSS feature "doesn't work",
+look here before suspecting the cascade:
+
+**Pre-parse textual rewriters** (run on the stylesheet source before libcss
+parses it; wired in `ybrowser-libcss.c`):
+- `var()` substitution (custom properties — text substitution, not
+  cascade-scoped),
+- Media Queries L4 range syntax → classic min-/max- form,
+- `:is()` / `:where()` / compound-`:not()` desugar to L3 selector lists,
+- coarse `calc(<pct> ± <len>)` simplification,
+- `flex:` shorthand expansion.
+
+**Selector-matched side tables** (regex scanners storing per-selector rules,
+re-applied at box-build using lexbor's native L4-capable matcher): grid
+templates / spans / content caps, flex gaps, precise calc lengths,
+width keywords (`fit-content` &c.), `aspect-ratio` (+ the
+`::after{padding-bottom}` frame idiom), L4-selector `display:none`,
+`-webkit-line-clamp`, class-based `transform: translate*` (translate only),
+element-scoped `height: var()`.
+
+The structural cost: two style paths that can disagree, side tables use
+last-match-wins instead of real specificity, and each new CSS feature needs
+another scanner. Unifying this into one cascade is tracked in the
+Chrome-parity process epic, #516.
+
+## Tool flags & env vars (testing)
+
+`tools/ybrowser/main.c`: `--dump-boxes` (TSV box tree + `ws=`/`hs=` size
+provenance — the interface all geometry oracles consume), `--dump-geo`
+(dom-path keyed rects), `--dump-wpt` (check-layout-th expected-vs-actual),
+`--once`, `--interactive`, `--no-ui`, `--record <file>`, `-w`/`-H`,
+`--font-size`, `--osc`/`--raw`.
+
+Env: `YBROWSER_PROFILE` (stderr load-timeline profiler), `YBROWSER_NO_JS`,
+`YBROWSER_NO_IFRAMES`, `YBROWSER_JS_CONSOLE`, `YBROWSER_SYNC_NAV`,
+`YETTY_USER_AGENT`, `YLEXBOR_BOOT_BUDGET_MS`.
+
+## Testing
+
+The full test/oracle stack (C contract tests, the hand WPT suite, the
+whole-page Chrome-parity anchor suite with its delta comparator, render
+smoke, upstream WPT) is mapped in **`test/ybrowser/README.md`** — read that
+before investigating any layout divergence; the comparator's mechanism
+clusters usually name the offending code path directly.
 
 ## Backends
 

@@ -17,8 +17,9 @@ WPT forms):
 ## Running
 
 ```sh
-test/wpt/run.py            # all categories
-test/wpt/run.py 01 06      # only paths containing 01 / 06
+test/ybrowser/wpt/run.py            # all categories
+test/ybrowser/wpt/run.py 01 06      # only paths containing 01 / 06
+ctest --test-dir <build> -R ybrowser_wpt
 ```
 
 Env: `YBROWSER=<path>` (default `build-desktop-ytrace-release/...`),
@@ -46,6 +47,20 @@ Env: `YBROWSER=<path>` (default `build-desktop-ytrace-release/...`),
 | 15-grid-advanced | auto-placement to next row | green |
 | 16-position-advanced | fixed viewport, absolute right/bottom insets | green |
 | 17-zindex-overflow | z-index no geometry, overflow:scroll keeps size | — |
+| 18-custom-elements | custom/unknown elements lay out as inline/blockified | — |
+| 19-media-queries | @media width gating (incl. range syntax) | — |
+| 20-events | DOM event dispatch affecting layout | — |
+| 21-dom-implementation | document/DOM API contract | — |
+| 22-url | URL resolution | — |
+| 23-grid-span | grid-column/row span placement | — |
+| 24-flex-image | replaced items (images) in flex containers | — |
+| 25-position-flow | positioned boxes vs normal flow | — |
+| 27-flex-shrink | shrink distribution, min-content floors | — |
+| 28-form-controls | input/button/select intrinsic boxes | — |
+| 29-selectors | selector matching (:is/:where/:not desugar &c.) | — |
+| 30-iframe | iframe box + child-document geometry | — |
+
+(There is no category 26 — 25 jumps to 27.)
 
 
 ## Known failures (open engine bugs the suite pins)

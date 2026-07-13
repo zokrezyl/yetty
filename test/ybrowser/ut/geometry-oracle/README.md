@@ -6,11 +6,11 @@ instead of by eyeballing screenshots.
 
 ## The four layers
 
-1. **Narrow C contract tests** — `test/ut/ybrowser/ybrowser-layout-test.c`,
+1. **Narrow C contract tests** — `test/ybrowser/ut/ybrowser-layout-test.c`,
    `ybrowser-inline-test.c`. One behaviour pinned per test (box-sizing,
    percent basis, viewport units, line-height, inline wrap, …).
 
-2. **Paint-output tests** — `test/ut/ybrowser/ybrowser-paint-test.c`.
+2. **Paint-output tests** — `test/ybrowser/ut/ybrowser-paint-test.c`.
    Inspect the serialized `yetty_ydraw_drawable_list` the engine emits, with
    no Chrome and no GPU: image primitives whose bounds must match the
    laid-out box, and the text-decoration rects (underline / line-through /
@@ -26,7 +26,11 @@ instead of by eyeballing screenshots.
 
 ## Layer 3 usage
 
-Fixtures live in `test/ut/ybrowser/fixtures/`. Each fixture:
+> **Status:** layer 3 is currently **manual-only** — it is not wired into
+> ctest or the Makefile. Run the two scripts below directly. (Wiring it in
+> is part of the Chrome-parity process epic, #516.)
+
+Fixtures live in `test/ybrowser/ut/fixtures/`. Each fixture:
 
 - forces `* { font-family: monospace; font-size: 16px }` so `ybrowser`'s
   glyph-advance estimate (~0.602em) lines up with Chrome's real monospace
@@ -40,8 +44,7 @@ Fixtures live in `test/ut/ybrowser/fixtures/`. Each fixture:
 ### Refresh the references (intentional layout changes only)
 
 ```sh
-make ybrowser-refresh-refs
-# or: python3 test/ut/ybrowser/geometry-oracle/gen-chrome-refs.py [fixture.html ...]
+python3 test/ybrowser/ut/geometry-oracle/gen-chrome-refs.py [fixture.html ...]
 ```
 
 This runs each fixture through headless Chrome (`--dump-dom`, which executes
@@ -52,8 +55,7 @@ differently" decision.
 ### Compare ybrowser against the references
 
 ```sh
-make ybrowser-geometry-check
-# or: python3 test/ut/ybrowser/geometry-oracle/compare-geometry.py [--ybrowser PATH] [fixture.html ...]
+python3 test/ybrowser/ut/geometry-oracle/compare-geometry.py [--ybrowser PATH] [fixture.html ...]
 ```
 
 This runs the `ybrowser` tool's `--dump-boxes` mode (keyed by `data-test`),

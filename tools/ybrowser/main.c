@@ -714,9 +714,18 @@ int main(int argc, char **argv)
             const char *width_source = "?";
             const char *height_source = "?";
             (void)yetty_ylexbor_test_box_sources_at(yl, bi, &width_source, &height_source);
-            printf("%d\t%s\t%s\t%.1f\t%.1f\t%.1f\t%.1f\tw=%d\ti=%d\tu=%d\tws=%s\ths=%s\t%s\n", kind,
-                   tag[0] ? tag : "-", data_test[0] ? data_test : "-", x, y, w, h, weight, italic,
-                   underline, width_source, height_source, snippet);
+            float box_opacity = 1.0f;
+            int box_vis_hidden = 0;
+            (void)yetty_ylexbor_test_box_paint_at(yl, bi, &box_opacity, &box_vis_hidden);
+            uint8_t fg_red = 0, fg_green = 0, fg_blue = 0, fg_alpha = 0;
+            (void)yetty_ylexbor_test_box_fg_at(yl, bi, &fg_red, &fg_green, &fg_blue, &fg_alpha);
+            /* o=/v=/fg= (paint state) sit before the snippet, which consumers
+             * index as the LAST column. */
+            printf("%d\t%s\t%s\t%.1f\t%.1f\t%.1f\t%.1f\tw=%d\ti=%d\tu=%d\tws=%s\ths=%s\to=%.2f\t"
+                   "v=%d\tfg=%02x%02x%02x%02x\t%s\n",
+                   kind, tag[0] ? tag : "-", data_test[0] ? data_test : "-", x, y, w, h, weight,
+                   italic, underline, width_source, height_source, box_opacity, box_vis_hidden,
+                   fg_red, fg_green, fg_blue, fg_alpha, snippet);
         }
         fflush(stdout);
         yetty_ylexbor_destroy(yl);

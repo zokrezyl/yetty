@@ -35,15 +35,13 @@ FINDINGS_SHOWN = 12
 # what diverges; retire the entry when it goes green (the runner flags that).
 KNOWN_FAILURES = {
     # #458's engine gaps (stylesheet flex shorthand, shrink-to-fit under a
-    # distributing justify-content, flex:2 grow ratio) are fixed; what
-    # remains is font-metric drift: the naive mono glyph advance wraps
-    # paragraphs one line earlier/later than Chrome's sans-serif metrics
-    # (nav Δ27px wide, wrapped <p> heights Δ~30px, y-offsets downstream).
+    # distributing justify-content, flex:2 grow ratio) are fixed, and the
+    # proportional Helvetica advances halved the residue; what remains is
+    # line-height/leading drift on the wrapped hero paragraph (y Δ18-34px)
+    # plus one flex-grow width Δ17px.
     "flex-cards",
-    # #458's gaps (stylesheet `grid-column: span 2`, grid-item stretch to
-    # row height) are fixed; the two remaining findings are the same
-    # font-metric wrap drift on the banner paragraph (Δ25px height).
-    "grid-sidebar",
+    # grid-sidebar retired 2026-07: green after the stylesheet grid-column
+    # span + content-box height + proportional-metrics fixes.
 }
 
 
