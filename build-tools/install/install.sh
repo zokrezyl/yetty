@@ -66,15 +66,46 @@ resolve_asset() {
     esac
 }
 
-# Build the download URL. "latest" uses the version-independent redirect so the
-# script never needs updating per release; a pinned tag uses the direct path.
+# Build the download URL. A resolved tag uses the direct release path; the
+# literal "latest" falls back to GitHub's version-independent redirect.
 resolve_url() {
-    local asset="$1"
-    if [ "$version" = "latest" ]; then
+    local asset="$1" release_tag="$2"
+    if [ "$release_tag" = "latest" ]; then
         echo "https://github.com/${repo}/releases/latest/download/${asset}"
     else
-        echo "https://github.com/${repo}/releases/download/${version}/${asset}"
+        echo "https://github.com/${repo}/releases/download/${release_tag}/${asset}"
     fi
+}
+
+# Fetch a URL to stdout quietly. For small API metadata, not release payloads.
+fetch_text() {
+    local url="$1"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --max-time 30 "$url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- --timeout=30 "$url"
+    else
+        return 1
+    fi
+}
+
+# Resolve the newest desktop release tag (yetty-X.Y.Z). The repo publishes
+# several release families (yetty-*, yos-web-*, yetty-rootfs-riscv-*) and
+# GitHub's repo-wide "latest release" pointer belongs to whichever release
+# published most recently — not necessarily a desktop one. So "latest" is
+# resolved by listing releases and picking the highest yetty-X.Y.Z version.
+# Fails (prints nothing) when the API is unreachable or rate-limited; the
+# caller then falls back to the repo-wide redirect.
+resolve_latest_tag() {
+    local releases_json best_version
+    releases_json="$(fetch_text "https://api.github.com/repos/${repo}/releases?per_page=100")" || return 1
+    best_version="$(printf '%s\n' "$releases_json" \
+        | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"yetty-[0-9][0-9.]*"' \
+        | sed 's/.*"yetty-\([0-9][0-9.]*\)".*/\1/' \
+        | sort -t . -k 1,1n -k 2,2n -k 3,3n \
+        | tail -n 1 || true)"
+    [ -n "$best_version" ] || return 1
+    echo "yetty-${best_version}"
 }
 
 # Pick a downloader that streams to a file and fails loudly on HTTP errors.
@@ -92,14 +123,25 @@ download() {
 main() {
     command -v tar >/dev/null 2>&1 || die "need tar on PATH to unpack the installer"
 
-    local asset url archive installer
+    local asset url archive installer release_tag
     asset="$(resolve_asset)"
-    url="$(resolve_url "$asset")"
+
+    release_tag="$version"
+    if [ "$release_tag" = "latest" ]; then
+        if release_tag="$(resolve_latest_tag)"; then
+            log "latest desktop release is ${release_tag}"
+        else
+            release_tag="latest"
+            log "cannot list releases via the GitHub API; falling back to the repo-wide latest-release redirect"
+        fi
+    fi
+
+    url="$(resolve_url "$asset" "$release_tag")"
 
     workdir="$(mktemp -d "${TMPDIR:-/tmp}/yetty-install.XXXXXX")"
     archive="${workdir}/${asset}"
 
-    log "downloading ${asset} (${version}) from ${repo}"
+    log "downloading ${asset} (${release_tag}) from ${repo}"
     download "$url" "$archive"
 
     log "unpacking installer"

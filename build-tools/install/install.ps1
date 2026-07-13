@@ -44,9 +44,31 @@ $version = if ($env:YETTY_VERSION) { $env:YETTY_VERSION } else { 'latest' }
 # The Windows desktop release ships a single x64 archive.
 $asset = 'yetty-windows.zip'
 
-# "latest" uses the version-independent redirect so the script never needs
-# updating per release; a pinned tag uses the direct path.
-$url = if ($version -eq 'latest') {
+# Resolve "latest" to a concrete yetty-X.Y.Z tag. The repo publishes several
+# release families (yetty-*, yos-web-*, yetty-rootfs-riscv-*) and GitHub's
+# repo-wide "latest release" pointer belongs to whichever release published
+# most recently — not necessarily a desktop one. So pick the highest
+# yetty-X.Y.Z version from the release list; fall back to the repo-wide
+# redirect only if the API is unreachable (e.g. rate-limited).
+$resolvedTag = $null
+if ($version -eq 'latest') {
+    try {
+        $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases?per_page=100" -UseBasicParsing
+        $resolvedTag = $releases |
+            Where-Object { $_.tag_name -match '^yetty-\d+(\.\d+)+$' } |
+            Sort-Object { [version]($_.tag_name -replace '^yetty-', '') } |
+            Select-Object -Last 1 -ExpandProperty tag_name
+        if ($resolvedTag) {
+            Write-Log "latest desktop release is $resolvedTag"
+        }
+    } catch {
+        Write-Log 'cannot list releases via the GitHub API; falling back to the repo-wide latest-release redirect'
+    }
+}
+
+$url = if ($resolvedTag) {
+    "https://github.com/$repo/releases/download/$resolvedTag/$asset"
+} elseif ($version -eq 'latest') {
     "https://github.com/$repo/releases/latest/download/$asset"
 } else {
     "https://github.com/$repo/releases/download/$version/$asset"
@@ -58,7 +80,8 @@ New-Item -ItemType Directory -Path $workdir -Force | Out-Null
 try {
     $archive = Join-Path $workdir $asset
 
-    Write-Log "downloading $asset ($version) from $repo"
+    $displayVersion = if ($resolvedTag) { $resolvedTag } else { $version }
+    Write-Log "downloading $asset ($displayVersion) from $repo"
     Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
 
     Write-Log 'unpacking installer'
