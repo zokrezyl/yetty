@@ -3324,6 +3324,107 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
     return 0;
 }
 
+/* Encode a Unicode codepoint to UTF-8. Returns the byte count (1..4). */
+static size_t utf8_encode(uint32_t cp, char *out)
+{
+    if (cp < 0x80) {
+        out[0] = (char)cp;
+        return 1;
+    }
+    if (cp < 0x800) {
+        out[0] = (char)(0xC0 | (cp >> 6));
+        out[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    }
+    if (cp < 0x10000) {
+        out[0] = (char)(0xE0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+    out[0] = (char)(0xF0 | (cp >> 18));
+    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    out[3] = (char)(0x80 | (cp & 0x3F));
+    return 4;
+}
+
+/* GLFW navigation/editing keycode → terminal byte sequence. Printable text
+ * is NOT handled here — it arrives layout-translated via YETTY_YCORE_CHAR. */
+static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
+                                      size_t *out_len)
+{
+    /* xterm modifier parameter for CSI sequences: 1 + bitset(shift=1, alt=2,
+     * ctrl=4). mod_param == 0 means "no modifier" → emit the bare sequence so
+     * unmodified keys look exactly as before. The ygui input decoder reads this
+     * back out (see csi_decode_mods) and hands it to the widget as mods, which
+     * is what makes Shift+Arrow extend the selection. */
+    int mod_bits = 0;
+    if (glfw_mods & 0x0001) { /* GLFW_MOD_SHIFT */
+        mod_bits |= 1;
+    }
+    if (glfw_mods & 0x0004) { /* GLFW_MOD_ALT */
+        mod_bits |= 2;
+    }
+    if (glfw_mods & 0x0002) { /* GLFW_MOD_CONTROL */
+        mod_bits |= 4;
+    }
+    int mod_param = mod_bits ? mod_bits + 1 : 0;
+    switch (key) {
+    case 256:
+        scratch[0] = 0x1B;
+        *out_len = 1;
+        return scratch; /* ESC */
+    case 257:           /* Enter */
+    case 335:
+        scratch[0] = '\r';
+        *out_len = 1;
+        return scratch; /* KP Enter */
+    case 258:
+        scratch[0] = '\t';
+        *out_len = 1;
+        return scratch; /* Tab */
+    case 259:
+        scratch[0] = 0x7F;
+        *out_len = 1;
+        return scratch; /* Backspace */
+    case 261:           /* Del */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[3;%d~", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[3~");
+        return scratch;
+    case 263: /* ← */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dD", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[D");
+        return scratch;
+    case 262: /* → */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dC", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[C");
+        return scratch;
+    case 265: /* ↑ */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dA", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[A");
+        return scratch;
+    case 264: /* ↓ */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dB", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[B");
+        return scratch;
+    case 268: /* Home */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dH", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[H");
+        return scratch;
+    case 269: /* End */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dF", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[F");
+        return scratch;
+    case 301: /* F12 (GLFW_KEY_F12) → DevTools toggle. xterm CSI 24~. */
+        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[24~");
+        return scratch;
+    default:
+        *out_len = 0;
+        return NULL;
+    }
+}
+
 /* ===========================================================================
  * Standalone mode — own GPU window (no host yetty). Mirrors demo/ygui's
  * runner: the yplatform bootstrap brings up the window + WebGPU; we build a local
@@ -3419,10 +3520,6 @@ static void *sa_prefetch_main(void *arg)
                                            &s->prefetch_eff, &s->prefetch_ctype);
     return NULL;
 }
-
-static size_t utf8_encode(uint32_t cp, char *out);
-static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
-                                      size_t *out_len);
 
 static void sa_request_render(struct yetty_ybrowser_app *s)
 {
@@ -3644,107 +3741,6 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
     }
     sa_request_render(s);
     return YETTY_OK(yetty_ycore_int, 0);
-}
-
-/* Encode a Unicode codepoint to UTF-8. Returns the byte count (1..4). */
-static size_t utf8_encode(uint32_t cp, char *out)
-{
-    if (cp < 0x80) {
-        out[0] = (char)cp;
-        return 1;
-    }
-    if (cp < 0x800) {
-        out[0] = (char)(0xC0 | (cp >> 6));
-        out[1] = (char)(0x80 | (cp & 0x3F));
-        return 2;
-    }
-    if (cp < 0x10000) {
-        out[0] = (char)(0xE0 | (cp >> 12));
-        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
-        out[2] = (char)(0x80 | (cp & 0x3F));
-        return 3;
-    }
-    out[0] = (char)(0xF0 | (cp >> 18));
-    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
-    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
-    out[3] = (char)(0x80 | (cp & 0x3F));
-    return 4;
-}
-
-/* GLFW navigation/editing keycode → terminal byte sequence. Printable text
- * is NOT handled here — it arrives layout-translated via YETTY_YCORE_CHAR. */
-static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
-                                      size_t *out_len)
-{
-    /* xterm modifier parameter for CSI sequences: 1 + bitset(shift=1, alt=2,
-     * ctrl=4). mod_param == 0 means "no modifier" → emit the bare sequence so
-     * unmodified keys look exactly as before. The ygui input decoder reads this
-     * back out (see csi_decode_mods) and hands it to the widget as mods, which
-     * is what makes Shift+Arrow extend the selection. */
-    int mod_bits = 0;
-    if (glfw_mods & 0x0001) { /* GLFW_MOD_SHIFT */
-        mod_bits |= 1;
-    }
-    if (glfw_mods & 0x0004) { /* GLFW_MOD_ALT */
-        mod_bits |= 2;
-    }
-    if (glfw_mods & 0x0002) { /* GLFW_MOD_CONTROL */
-        mod_bits |= 4;
-    }
-    int mod_param = mod_bits ? mod_bits + 1 : 0;
-    switch (key) {
-    case 256:
-        scratch[0] = 0x1B;
-        *out_len = 1;
-        return scratch; /* ESC */
-    case 257:           /* Enter */
-    case 335:
-        scratch[0] = '\r';
-        *out_len = 1;
-        return scratch; /* KP Enter */
-    case 258:
-        scratch[0] = '\t';
-        *out_len = 1;
-        return scratch; /* Tab */
-    case 259:
-        scratch[0] = 0x7F;
-        *out_len = 1;
-        return scratch; /* Backspace */
-    case 261:           /* Del */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[3;%d~", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[3~");
-        return scratch;
-    case 263: /* ← */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dD", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[D");
-        return scratch;
-    case 262: /* → */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dC", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[C");
-        return scratch;
-    case 265: /* ↑ */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dA", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[A");
-        return scratch;
-    case 264: /* ↓ */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dB", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[B");
-        return scratch;
-    case 268: /* Home */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dH", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[H");
-        return scratch;
-    case 269: /* End */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dF", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[F");
-        return scratch;
-    case 301: /* F12 (GLFW_KEY_F12) → DevTools toggle. xterm CSI 24~. */
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[24~");
-        return scratch;
-    default:
-        *out_len = 0;
-        return NULL;
-    }
 }
 
 YETTY_ANNOTATE("override@yapp:app:init")
