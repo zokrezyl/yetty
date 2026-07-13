@@ -1451,8 +1451,8 @@ static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *termin
 static void terminal_ydraw_ingest_finish(struct yetty_yterminal_terminal *terminal,
                                          struct terminal_ydraw_ingest_state *state, int ok)
 {
-    ydebug("ydraw ingest: %u records (%u composites) bottom=%.0fpx ok=%d",
-           state->ingested_records, state->ingested_composites, state->content_bottom_px, ok);
+    ydebug("ydraw ingest: %u records (%u composites) bottom=%.0fpx ok=%d", state->ingested_records,
+           state->ingested_composites, state->content_bottom_px, ok);
 
     /* Reserve vertical space for this envelope's content by advancing the
      * libvterm cursor that many rows (newlines drive normal scrollback +
@@ -2457,10 +2457,9 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * itself. Policy (per-type enable + size caps) and dispatch live in
      * terminal-mime.c. */
     terminal->mime_handler_self = terminal;
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_DCS,
-                                                YETTY_DCS_MIME_FILE, /*has_args=*/1,
-                                                yetty_yterminal_mime_process_input,
-                                                &terminal->mime_handler_self);
+    rr = yetty_ywire_wire_statemachine_register(
+        terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_MIME_FILE, /*has_args=*/1,
+        yetty_yterminal_mime_process_input, &terminal->mime_handler_self);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register mime handler");
     ydebug("terminal_create: mime-file handler registered for DCS %d", YETTY_DCS_MIME_FILE);
 

@@ -7,7 +7,7 @@
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
-for demo in markdown svg pdf image music circuit mesh; do
+for demo in markdown svg pdf image music circuit mesh docx xlsx pptx; do
     "$DIR/$demo.sh"
     echo
 done

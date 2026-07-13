@@ -71,6 +71,12 @@ extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_chart(
     const struct yetty_ycat_config *config);
 #endif
 
+#ifdef YETTY_YCAT_HAS_YMSOFFICE
+extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_msoffice(
+    const uint8_t *bytes, size_t len, const char *path_hint,
+    const struct yetty_ycat_config *config);
+#endif
+
 /* Streaming handlers (multi-envelope: PDF page-per-envelope, markdown
  * screen-height-tile-per-envelope). */
 extern struct yetty_ycore_void_result yetty_ycat_handler_markdown_streaming(
@@ -102,11 +108,17 @@ static const struct {
     {YETTY_YCAT_TYPE_SHADERTOY, "shadertoy"},
     {YETTY_YCAT_TYPE_CIRCUIT, "circuit"},
     {YETTY_YCAT_TYPE_CHART, "chart"},
+    {YETTY_YCAT_TYPE_DOCX, "docx"},
+    {YETTY_YCAT_TYPE_XLSX, "xlsx"},
+    {YETTY_YCAT_TYPE_PPTX, "pptx"},
     /* alias rows — type_name() returns the first match above, from_name()
      * accepts either spelling for --card. */
     {YETTY_YCAT_TYPE_MUSIC, "lilypond"},
     {YETTY_YCAT_TYPE_SHADERTOY, "wgsl"},
     {YETTY_YCAT_TYPE_CIRCUIT, "schematic"},
+    {YETTY_YCAT_TYPE_DOCX, "word"},
+    {YETTY_YCAT_TYPE_XLSX, "excel"},
+    {YETTY_YCAT_TYPE_PPTX, "powerpoint"},
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type)
@@ -136,7 +148,7 @@ enum yetty_ycat_type yetty_ycat_type_from_name(const char *name)
  * Handler registry
  *===========================================================================*/
 
-#define YCAT_MAX_TYPE 16
+#define YCAT_MAX_TYPE 24
 
 static yetty_ycat_handler_fn handlers[YCAT_MAX_TYPE];
 static yetty_ycat_handler_streaming_fn handlers_streaming[YCAT_MAX_TYPE];
@@ -170,6 +182,11 @@ static void init_handlers(void)
 #endif
 #ifdef YETTY_YCAT_HAS_YCHART
     handlers[YETTY_YCAT_TYPE_CHART] = yetty_ycat_handler_chart;
+#endif
+#ifdef YETTY_YCAT_HAS_YMSOFFICE
+    handlers[YETTY_YCAT_TYPE_DOCX] = yetty_ycat_handler_msoffice;
+    handlers[YETTY_YCAT_TYPE_XLSX] = yetty_ycat_handler_msoffice;
+    handlers[YETTY_YCAT_TYPE_PPTX] = yetty_ycat_handler_msoffice;
 #endif
     handlers_streaming[YETTY_YCAT_TYPE_MARKDOWN] = yetty_ycat_handler_markdown_streaming;
     handlers_streaming[YETTY_YCAT_TYPE_PDF] = yetty_ycat_handler_pdf_streaming;

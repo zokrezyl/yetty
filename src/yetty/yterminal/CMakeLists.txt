@@ -71,6 +71,11 @@ if(YETTY_ENABLE_FEATURE_YCIRCUIT AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE
     target_link_libraries(yetty_yterminal yetty_ycircuit)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YMSOFFICE)
+    target_compile_definitions(yetty_yterminal PRIVATE YETTY_HAS_YMSOFFICE=1)
+    target_link_libraries(yetty_yterminal yetty_ymsoffice)
+endif()
+
 if(TARGET yetty_yrdawn_server)
     target_link_libraries(yetty_yterminal yetty_yrdawn_server)
 endif()

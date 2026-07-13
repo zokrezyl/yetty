@@ -75,6 +75,9 @@ run yimage/basic.sh
 run ymap/basic.sh
 run ymarkdown/basic.sh
 run ymesh/basic.sh
+run ymsoffice/docx.sh
+run ymsoffice/xlsx.sh
+run ymsoffice/pptx.sh
 run ymusic/basic.sh
 run ypdf/basic.sh
 
