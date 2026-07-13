@@ -7,7 +7,7 @@ PDF-embedded subset fonts, all collapse into one storage buffer + one atlas per
 format + one uniform block.
 
 This document covers the data structures and the binder flow. See
-[Design Overview](design.md) for the rationale and [Render Pipeline](render.md)
+[Design Overview](design.md) for the rationale and [Render Pipeline](../src/yetty/yrender/README.md)
 for the per-frame upload and recompilation logic.
 
 ---
@@ -122,7 +122,7 @@ binding layout, generating the WGSL glue automatically:
   region constants are prepended to each provider's shader body.
 
 The result is a constant number of GPU bindings regardless of how many
-components contributed. See [Render Pipeline](render.md) for the exact
+components contributed. See [Render Pipeline](../src/yetty/yrender/README.md) for the exact
 `finalize()` / `update()` step lists and the change-detection that triggers a
 re-finalize.
 

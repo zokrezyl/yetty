@@ -106,7 +106,7 @@ a figure.
 Bulk drawing and figure payloads ride DCS envelopes because they are large opaque
 payloads that terminal multiplexers can pass through verbatim. Short
 control/metadata, such as client input subscription and delivery, remains OSC.
-See `docs/ansi-codes.md` for the code table.
+See `src/yetty/ywire/README.md` for the code table.
 
 ---
 
@@ -169,7 +169,7 @@ textures, uniforms, shader code, and child resource sets. The
 
 This lets terminal content and figures share one binding strategy without being
 hard-coded into a fixed layer stack. See `docs/gpu-resource-binding.md` and
-`docs/render.md` for binder details.
+`src/yetty/yrender/README.md` for binder details.
 
 ---
 

@@ -55,7 +55,7 @@ works on a local object or a remote proxy) — yetty uses **yclass**, where the
 vtable, dispatch, RPC skeletons, and a binding model are *generated* from C23
 `[[clang::annotate(...)]]` annotations on the source. The figure modules
 (`yfigure`, `ygui`, `ymgui`, `yrdawn`, `ygrid`, `yterm`) are built this way. See
-[yclass](../src/yclass/README.md).
+[yclass](../src/yetty/yclass/README.md).
 
 ## Error Propagation
 
@@ -107,7 +107,7 @@ The binder operates in two phases:
 - `finalize()` — one-time: flatten tree, create GPU objects, compile pipeline
 - `update()` — per-frame: upload only dirty buffers/textures. If any size or dimension changed, re-finalize
 
-See [GPU Resource Binding](gpu-resource-binding.md) for the resource set structure, binder flow, and binding layout. See [Render Pipeline](render.md) for the dirty-driven upload and pipeline recompilation logic.
+See [GPU Resource Binding](gpu-resource-binding.md) for the resource set structure, binder flow, and binding layout. See [Render Pipeline](../src/yetty/yrender/README.md) for the dirty-driven upload and pipeline recompilation logic.
 
 ## Dirty-Flag Driven Pipeline
 
@@ -167,4 +167,4 @@ Platform-specific code is isolated behind ops interfaces:
 
 The shared code (GLFW window, libuv loop) lives in `src/yetty/yplatform/shared/`. Platform dirs contain only what differs.
 
-See [Platform](platform.md), [Platform PTY](platform-pty.md), and [Platform Pipe](platform-pipe.md) for the abstraction layers and per-platform implementations.
+See [yplatform](../src/yetty/yplatform/README.md) for the abstraction layers, the PTY and input-pipe transports, and per-platform implementations.

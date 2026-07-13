@@ -3,7 +3,7 @@
 How yetty owns and drives WebGPU objects. This complements
 [Contexts](contexts.md) (the build chain and context structs),
 [GPU Resource Binding](gpu-resource-binding.md) (how buffers/textures pack into a
-fixed binding set), and [Render Pipeline](render.md) (the per-frame upload loop).
+fixed binding set), and [Render Pipeline](../src/yetty/yrender/README.md) (the per-frame upload loop).
 
 Yetty uses the Dawn implementation of WebGPU through its C header
 (`webgpu/webgpu.h`). The whole stack is C; there are no WebGPU C++ wrappers.

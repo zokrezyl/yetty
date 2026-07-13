@@ -1,13 +1,11 @@
-# Terminal Screen
+# yterminal — the terminal view
 
 How a single terminal turns PTY bytes and OSC/DCS envelopes into a composited frame.
 This is the high-level orchestration view; the mechanisms it references each have
-a dedicated doc.
-
-> This document previously described an early C++ design (`TerminalScreen`,
-> `RenderableLayer`, a 4-layer cards model). The shipping architecture is pure C
-> and is split across the docs linked below; this page is now a short map into
-> them.
+a dedicated doc. `yterminal` owns the terminal object itself — PTY, scrollback,
+selection, input forwarding — and composes the content layer
+([yvterm](../yvterm/README.md)) with the root figure compositor
+([yfigure](../yfigure/README.md)).
 
 ---
 
@@ -29,7 +27,7 @@ A `struct yetty_yterminal_terminal` (`include/yetty/yterminal/terminal.h`) owns:
   `yfigure` compositor.
 
 Each content part / figure has a **dirty flag**; the terminal renders only what
-changed (see [Render Pipeline](render.md)).
+changed (see [yrender](../yrender/README.md)).
 
 ---
 
@@ -54,11 +52,11 @@ frame; render passes use `LoadOp_Load`, so a dirty top-level figure forces the
 content layer to repaint underneath before the root container composites again.
 
 - **Direct-to-target virtual layering + yfigure z-order**:
-  [Layered Rendering](layered-rendering.md).
+  [Layered Rendering](../../../docs/layered-rendering.md).
 - **Resource packing** (one storage buffer + per-format atlases + one uniform
-  block, generated WGSL): [GPU Resource Binding](gpu-resource-binding.md).
+  block, generated WGSL): [GPU Resource Binding](../../../docs/gpu-resource-binding.md).
 - **Object ownership** (device/queue/allocator/render target):
-  [WebGPU Architecture](webgpu-architecture.md).
+  [WebGPU Architecture](../../../docs/webgpu-architecture.md).
 
 ---
 
@@ -74,8 +72,9 @@ primitive stores the **rolling row** it was created at; the shader subtracts the
 current top rolling-row to find its screen position. Scroll is therefore O(1).
 Root-container figures are compositor-positioned and do not automatically
 participate in row scrolling. The full model, including content-layer scroll
-propagation and alt-screen save/restore, is in [Layered Rendering](layered-rendering.md);
-the primitive-side detail is in [ydraw](../src/yetty/ydraw/README.md).
+propagation and alt-screen save/restore, is in
+[Layered Rendering](../../../docs/layered-rendering.md);
+the primitive-side detail is in [ydraw](../ydraw/README.md).
 
 ---
 

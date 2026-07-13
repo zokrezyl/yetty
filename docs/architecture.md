@@ -7,15 +7,18 @@ core, start with the [Design Overview](design.md).
 
 **Maturity legend:** ✓ in use · ◐ partial / early · ○ stub / planned
 
+Every module directory under `src/yetty/<module>/` carries its own
+`README.md` with the details; this map is the index.
+
 ---
 
 ## The big picture
 
 ```
-                      main()  →  yetty_yinit_run()
+        main()  (src/yetty/yplatform/ymain/<os>.c → platform_run)
                                        │
-   platform bootstrap         ┌────────┴─────────┐   yinit: window, surface,
-   (window, surface, config,  │      yinit       │   config, asset extraction,
+   platform bootstrap         ┌────────┴─────────┐   yplatform: window, surface,
+   (window, surface, config,  │    yplatform     │   config, asset install,
     event pipes, OS loop)     └────────┬─────────┘   event pipes, OS event loop
                                        │
    GPU / event / RPC          ┌────────┴─────────┐   yframework: adapter, device,
@@ -43,12 +46,13 @@ The full startup/ownership chain and context structs are in
 
 | Module | Purpose | |
 |---|---|---|
-| `yinit` | Platform bootstrap: paths, asset extraction, config, window, surface, event pipes, OS loop; runs an app worker | ✓ |
+| `yapp` | Abstract `yapp:app` base class — the app object the platform entry creates and runs | ✓ |
 | `yframework` | Generic GPU/event/RPC services layer (adapter, device, queue, allocator, MSDF gen, render target, VNC + RPC servers) | ✓ |
 | `yetty` | Top-level terminal application instance | ✓ |
-| `ymain` | Thin `main()` wrapper that wires yinit → yframework → yetty | ✓ |
+| `yplatform/ymain` | Thin per-OS `main()` entry files (`src/yetty/yplatform/ymain/`) that register the classes and call `platform_run` | ✓ |
 | `yui` / `yui-core` | App UI: tabs, tiled panes, workspaces, settings/debug windows; view object abstraction | ✓ |
 | `yclient` | libuv event loop for client-side apps consuming the OSC/yface stream | ✓ |
+| `yguiapp` | Generic ygui app host — standalone window or in-terminal figure | ✓ |
 
 ## Terminal core
 
@@ -60,23 +64,26 @@ The full startup/ownership chain and context structs are in
 | `ycore` | Result/error types, math, buffers, util — the foundation everything builds on ([result](result.md)) | ✓ |
 | `yconfig` | YAML config parser with path-based key/value API | ✓ |
 | `yevent` | Event-loop abstraction (pipes, timers, TCP, listeners) | ✓ |
-| `yco` | Coroutine wrapper over libco ([coroutines](coroutines.md)) | ✓ |
+| `yco` | Coroutine wrapper over libco ([yco](../src/yetty/yco/README.md)) | ✓ |
 | `ynotify` | Thread-safe user-facing notifications | ✓ |
 | `ycdb` | Constant-database (cdb) key/value store | ✓ |
 | `yclass` | Annotation-driven class/object runtime + RPC + binding model ([yclass](../src/yetty/yclass/README.md)) | ✓ |
+| `yffi` | `libyetty_ffi.so` aggregate for host-language bindings ([ffi-gen](ffi-gen.md)) | ✓ |
 
 ## Rendering pipeline
 
 | Module | Purpose | |
 |---|---|---|
-| `yrender` | GPU pipeline: resource-set binder, allocator, pipeline, render targets, blender ([render](render.md), [GPU binding](gpu-resource-binding.md)) | ✓ |
+| `yrender` | GPU pipeline: resource-set binder, allocator, pipeline, render targets, blender ([yrender](../src/yetty/yrender/README.md), [GPU binding](gpu-resource-binding.md)) | ✓ |
 | `yrender-utils` | Screenshot, tile-diff helpers | ✓ |
 | `ydraw` | Canvas + rolling-row scrolling primitive model ([ydraw](../src/yetty/ydraw/README.md)) | ✓ |
 | `ydraw-core` | Serialized primitive buffer, draw list, drawable-list registry | ✓ |
 | `ydraw-factory` | Figure factory for composites | ✓ |
 | `ydraw-yaml` | YAML-driven figure construction | ✓ |
+| `ydraw-gen` | Schema-driven composite generator (`generate.py`; run manually) | ◐ |
 | `yfigure` | Figure/container model — the compositor that hosts rich content | ✓ |
 | `ygrid` | Figure: spatial-bucketed batch of SDF primitives + glyphs | ✓ |
+| `yshaders` | WGSL asset staging (effects-lib + collected module shaders; legacy reference content) | ◐ |
 | `ysdf` | SDF primitive handler (shape parse + construction) | ✓ |
 | `ywebgpu` | WebGPU request/limits/utils glue ([webgpu](webgpu.md)) | ✓ |
 
@@ -96,7 +103,7 @@ The full startup/ownership chain and context structs are in
 | Module | Purpose | |
 |---|---|---|
 | `yplot` | GPU charts / data visualization ([plot-enhanced](../src/yetty/yplot/README.md)) | ✓ |
-| `yimage` | Inline images (PNG/JPEG/WebP) | ✓ |
+| `yimage` | Inline images (stb_image: PNG/JPEG/GIF/BMP, …) | ✓ |
 | `yvideo` | Video playback (H.264 + MP4 parser) | ◐ |
 | `ygui` | Native widget toolkit (buttons, menus, tables, dialogs, …) | ✓ |
 | `ymgui` | Compositor-side GUI figure (yclass-based) | ✓ |
@@ -107,8 +114,15 @@ The full startup/ownership chain and context structs are in
 | `yrich` | Documents / spreadsheets / slides (`ydoc`, `ysheet`/`yspreadsheet`, `yslides`) | ◐ |
 | `ycat` | MIME-dispatched content viewer (detects PDF/image/SVG/Mermaid/video/text) | ✓ |
 | `ymesh` | 3D mesh loading/rendering (GLB) | ◐ |
-| `ythorvg` | SVG + Lottie via ThorVG (C interface only, no impl yet) | ○ |
+| `ythorvg` | SVG + Lottie via ThorVG (render-method backend; compositing/effects gaps) | ◐ |
 | `yecho` | Text/glyph/block parser → ydraw buffer (demo/utility) | ✓ |
+| `ychart` | Data (CSV/TSV/JSON/YAML) → chart (bar/line/pie/radar/treemap/sankey, …) as a ydraw buffer | ✓ |
+| `ycircuit` | Electronic circuit schematic → ydraw drawable list | ✓ |
+| `yflame` | Flame graphs from folded stack samples | ✓ |
+| `ylottie` | Lottie (Bodymovin subset) frame → ydraw buffer | ✓ |
+| `ymap` | Slippy-map renderer: `ymap:map` class + XYZ tile engine | ✓ |
+| `ymusic` | LilyPond-subset music engraving → ydraw (single staff) | ◐ |
+| `yshadertoy` | Shadertoy-style shader figure + composite primitive | ✓ |
 | `ymaze`, `yjungle`, `yzoo` | Animated test scenes (maze solver, SDF jungle, control-point zoo) | ◐ |
 
 ## Web rendering
@@ -129,17 +143,19 @@ The full startup/ownership chain and context structs are in
 | `yssh` | SSH PTY backend (libssh2) | ✓ |
 | `ytelnet` | Telnet PTY backend | ✓ |
 | `yctl` | TCP RPC control server (terminal automation) | ✓ |
+| `yview` | Client-side emitter for a server-side scrollable figure (yclass RPC producer) | ✓ |
 | `yrdawn` | Remote WebGPU canvas as a compositor figure (client + server) | ✓ |
 | `yvnc` | VNC client (RFB 3.8), GPU-decoded frames | ✓ |
 | `ydvnc` | Desktop VNC viewer integrated as a yui view | ✓ |
+| `ynet` | lwIP netstack over an L2 relay WebSocket (webasm; currently not wired up) | ◐ |
 
 ## Media codecs
 
 | Module | Purpose | |
 |---|---|---|
-| `yvcodec` | H.264 video decode (openh264) | ◐ |
-| `yacodec` | Audio codec dispatch | ◐ |
-| `yaudio` | WAV reader + audio playback (for yvideo) | ◐ |
+| `yvcodec` | H.264 encode + decode (openh264) — used by yvnc and yvideo | ✓ |
+| `yacodec` | Audio decode facade (Opus) with a wire-stable codec enum | ◐ |
+| `yaudio` | Offline WAV analysis (mmap reader, RMS envelope, interval detection) — playback lives in `yplatform/audio` | ◐ |
 
 ## Emulation
 
@@ -152,7 +168,9 @@ The full startup/ownership chain and context structs are in
 
 | Module | Purpose | |
 |---|---|---|
-| `yplatform` | Cross-platform layer: PTY, pipes, sockets, audio, clipboard, window manager, paths, process, threading, time ([platform](platform.md)) | ✓ |
+| `yplatform` | Cross-platform layer: PTY, pipes, sockets, audio, clipboard, window manager, paths, process, threading, time ([yplatform](../src/yetty/yplatform/README.md)) | ✓ |
+| `ypty` | PTY backend implementations (forkpty/ConPTY, memory pair, TinyEMU, websocket) behind the yplatform interface | ✓ |
+| `ychrome` | Borderless-window chrome gesture engine (`ychrome:chrome`) | ✓ |
 | `yncbin` | Embedded (incbin) asset management — brotli-compressed shaders/fonts/configs baked into the binary | ✓ |
 | `src/libvterm-0.3.3` | Vendored libvterm (VT100/xterm emulation) | ✓ |
 

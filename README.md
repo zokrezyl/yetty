@@ -37,7 +37,7 @@ The script downloads the installer for your platform from the latest release
 and runs it; `yinstall` unpacks the terminal, its companion tools, and assets
 into the right per-OS locations. To install manually, grab a build from
 [Releases](https://github.com/zokrezyl/yetty/releases/latest) or see
-[docs/yinstall.md](docs/yinstall.md).
+[src/yetty/yinstall/README.md](src/yetty/yinstall/README.md).
 
 ## What Yetty Is
 
@@ -200,7 +200,8 @@ The build system has targets for:
 | iOS / tvOS | Device and simulator build targets |
 | Linux aarch64 / riscv64 | Cross-build targets; riscv64 is tools/demos oriented |
 
-Platform quality varies by subsystem. See [docs/platform.md](docs/platform.md)
+Platform quality varies by subsystem. See
+[src/yetty/yplatform/README.md](src/yetty/yplatform/README.md)
 and [docs/architecture.md](docs/architecture.md) for lower-level details.
 
 ## Design Principles
@@ -228,13 +229,16 @@ Start here:
 | [Design Overview](docs/design.md) | Core decisions and rationale |
 | [Contexts](docs/contexts.md) | Bootstrap chain and context structs |
 | [Layered Rendering](docs/layered-rendering.md) | Terminal content layer, root figures, scrolling, and alt-screen behavior |
-| [Render Pipeline](docs/render.md) | Dirty-driven upload, compilation, and draw flow |
+| [Render Pipeline](src/yetty/yrender/README.md) | Dirty-driven upload, compilation, and draw flow |
 | [GPU Resource Binding](docs/gpu-resource-binding.md) | Buffer packing and atlas texture model |
-| [Platform Abstraction](docs/platform.md) | PTY, event loop, paths, windows, OS services |
+| [Platform Abstraction](src/yetty/yplatform/README.md) | PTY, event loop, paths, windows, OS services |
 | [FFI Generation](docs/ffi-gen.md) | Binding model and generated metadata |
 | [C Coding Style](docs/c-coding-style.md) | Naming, structs, memory, and result rules |
 
 Subsystem references:
+
+Every module under `src/yetty/` carries its own `README.md`; common entry
+points:
 
 | Area | Document |
 |---|---|
@@ -247,6 +251,10 @@ Subsystem references:
 | Class/codegen system | [src/yetty/yclass/README.md](src/yetty/yclass/README.md) |
 | VNC | [src/yetty/yvnc/README.md](src/yetty/yvnc/README.md) |
 | Tracing | [src/yetty/ytrace/README.md](src/yetty/ytrace/README.md) |
+| Terminal view | [src/yetty/yterminal/README.md](src/yetty/yterminal/README.md) |
+| Wire protocol (OSC/DCS codes) | [src/yetty/ywire/README.md](src/yetty/ywire/README.md) |
+| Coroutines | [src/yetty/yco/README.md](src/yetty/yco/README.md) |
+| Installer | [src/yetty/yinstall/README.md](src/yetty/yinstall/README.md) |
 
 ## Dependencies
 

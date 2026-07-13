@@ -1,4 +1,10 @@
-# Render Pipeline
+# yrender — render pipeline
+
+The GPU pipeline module: resource-set binder, GPU allocator, pipeline
+creation, and the render targets (texture, VNC, X11 tile). Layers and
+figures describe what to draw as trees of resource sets; yrender flattens
+them into one binding set and drives the dirty-driven upload/draw flow
+described below.
 
 ## Overview
 
@@ -104,11 +110,18 @@ struct Uniforms {
 
 ## Key Files
 
-- `include/yetty/yrender/gpu-resource-set.h` — resource set struct
-- `include/yetty/yrender/gpu-resource-binder.h` — binder interface
-- `src/yetty/yrender/gpu-resource-binder.c` — binder implementation
-- `include/yetty/yrender/types.h` — buffer, texture, uniform types
-- `src/yetty/yrender/types.c` — type utilities (size, alignment, hash)
+| file | role |
+|------|------|
+| `gpu-resource-binder.c` | the binder: flatten, pack, upload, WGSL generation (`include/yetty/yrender/gpu-resource-set.h`, `gpu-resource-binder.h`) |
+| `types.c` | buffer / texture / uniform types + size, alignment, hash utilities (`include/yetty/yrender/types.h`) |
+| `primitive-gpu-binder.c` | binder specialization for ydraw primitive buffers |
+| `gpu-allocator.c` | GPU buffer/texture allocation tracking |
+| `pipeline.c` | render pipeline creation / shader module compilation |
+| `font-dispatcher.c` | routes glyph requests to the font resource sets |
+| `render-target-texture.c` / `render-target-vnc.c` / `render-target-x11-tile.c` | render-target backends (`include/yetty/yrender/render-target.h`) |
+| `blend.wgsl` | blend shader source |
 
-See [GPU Resource Binding](gpu-resource-binding.md) for the resource-set struct
-and the `submit`/`finalize`/`update`/`bind` binder ops.
+See [GPU Resource Binding](../../../docs/gpu-resource-binding.md) for the
+resource-set struct and the `submit`/`finalize`/`update`/`bind` binder ops, and
+[Layered Rendering](../../../docs/layered-rendering.md) for how terminal layers
+and the figure compositor feed this pipeline.

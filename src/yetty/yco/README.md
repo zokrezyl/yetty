@@ -1,8 +1,13 @@
-# Coroutines
+# yco — stackful coroutines
 
 Yetty uses stackful coroutines to write inherently-async code (GPU completion,
 network I/O, multi-step protocols) as straight-line C, on top of the
-single-threaded libuv event loop.
+single-threaded libuv event loop. This module is the bottom of that stack:
+thin, `ydebug`-instrumented wrappers around libco (`co.c`,
+`include/yetty/yco/co.h`). The portable coroutine API and the wgpu awaits
+built on top of it live in [yplatform](../yplatform/README.md)
+(`ycoroutine.h`, `ywebgpu.h`); this README documents the whole coroutine
+system.
 
 ## Why
 
@@ -69,16 +74,17 @@ When the wgpu callback fires, the coroutine resumes at its yield point.
         include/yetty/yplatform/ycoroutine.h (coro API)
                                        │
                 ┌──────────────────────┴────────────────────┐
-                ▼ desktop                                   ▼ webasm (TBD)
-   src/yetty/yplatform/shared/                    src/yetty/yplatform/webasm/
-     ycoroutine.c   (libco via yco/co.h)            ycoroutine.c (emscripten_fiber_t)
-     ywebgpu.c      (libuv timer + post_to_loop)    ywebgpu.c    (JS event loop)
+                ▼ desktop                                   ▼ webasm
+   src/yetty/yplatform/coroutine/default.c        src/yetty/yplatform/coroutine/webasm.c
+     (libco via yco/co.h)                           (inline-resume stub, asyncify)
+   src/yetty/yplatform/webgpu/default.c           src/yetty/yplatform/webgpu/webasm.c
+     (libuv timer + post_to_loop)                   (asyncify + emscripten_sleep)
                                        │
                                        ▼
               src/yetty/yco/co.c — ydebug-instrumented libco wrappers
                                        │
                                        ▼
-              build-tools/cmake/libs/co.cmake → CPM(higan-emu/libco)
+              build-tools/yetty/libs/co.cmake → prebuilt libco tarball
 ```
 
 Key invariants:
@@ -108,11 +114,11 @@ Key invariants:
 
 ### Implementations (desktop)
 
-- `src/yetty/yplatform/shared/ycoroutine.c` — desktop coroutine impl on top
+- `src/yetty/yplatform/coroutine/default.c` — desktop coroutine impl on top
   of libco. Single-thread `g_current` tracks the active coroutine on the
   loop thread (NB: this is per-thread, not a cross-process global). Default
   stack 1 MiB.
-- `src/yetty/yplatform/shared/ywebgpu.c` — desktop wgpu await impl.
+- `src/yetty/yplatform/webgpu/default.c` — desktop wgpu await impl.
   - `struct yplatform_wgpu` owns instance, loop reference, tick timer,
     pending-await counter.
   - 1 ms libuv timer driving `ProcessEvents` on the loop thread, started
@@ -132,27 +138,27 @@ Key invariants:
                         void (*fn)(void *), void *arg)`.
   Thread-safe; may be called from any thread; `fn(arg)` runs on the loop
   thread.
-- `src/yetty/yplatform/shared/libuv-event-loop.c` — implementation:
+- `src/yetty/yplatform/libuv-event-loop/default.c` — implementation:
   mutex-protected single-linked queue of `(fn, arg)` nodes,
   drained by an `uv_async_t` callback after each `uv_async_send`.
 
 ### Build
 
-- `build-tools/cmake/libs/co.cmake` — CPM fetch of `higan-emu/libco`.
+- `build-tools/yetty/libs/co.cmake` — fetches the prebuilt libco tarball
+  (from-source build lives in `build-tools/3rdparty/libco/_build.sh`).
   Skipped on emscripten.
-- `build-tools/cmake/variables.cmake` — `YETTY_ENABLE_LIB_LIBCO ON`.
-- `build-tools/cmake/targets/shared.cmake` — includes `co.cmake`.
-- `build-tools/cmake/targets/webasm.cmake` — forces `LIBCO OFF`.
-- `build-tools/cmake/targets/linux.cmake` — adds `ycoroutine.c` and
-  `ywebgpu.c` to platform sources, links `yetty_yco`.
+- `build-tools/yetty/platform/<os>/cmake.cmake` — adds
+  `yplatform/coroutine/default.c` and `yplatform/webgpu/default.c` (or the
+  `webasm.c` variants) to the platform source set.
 - `src/yetty/CMakeLists.txt` — `add_subdirectory(yco)` (non-emscripten only).
 
 ### Wiring
 
-- `struct yetty_yetty_yetty` owns a `struct yplatform_wgpu *wgpu` member.
-- Created in `yetty_create` **before** `init_webgpu` (so the VNC server
-  picks it up), destroyed in `yetty_destroy` **before** the event loop.
-- `yetty_vnc_server_create` takes the `wgpu` pointer; the server stashes it
+- `yframework` creates the `struct yplatform_wgpu` await context alongside
+  the adapter/device/queue and hands it to the app inside the runtime
+  (`yetty->runtime->wgpu`); it is destroyed with the framework, before the
+  event loop.
+- The VNC server receives the `wgpu` pointer at create time and stashes it
   for the readback coroutine to pass into the awaits.
 
 ### Migrated code
@@ -243,14 +249,14 @@ active development target.
 
 Implemented, but with a different mechanism than desktop:
 
-- `src/yetty/yplatform/webasm/ywebgpu.c` — wgpu `_await` wrappers register a
+- `src/yetty/yplatform/webgpu/webasm.c` — wgpu `_await` wrappers register a
   callback and busy-wait on a `volatile done` flag using `emscripten_sleep`.
   Asyncify (already enabled via `-sASYNCIFY` in `webasm.cmake`) suspends
   the entire C call stack at the sleep; the browser pumps the wgpu
   Promise from the JS event loop and the callback flips the flag, at
   which point asyncify resumes the C stack. No `ProcessEvents` tick, no
   cross-thread routing, no `post_to_loop`.
-- `src/yetty/yplatform/webasm/ycoroutine.c` — degenerate stub. `spawn`
+- `src/yetty/yplatform/coroutine/webasm.c` — degenerate stub. `spawn`
   allocates a control struct, `resume` runs the entry function inline,
   `yield` is a warn-only no-op. The asyncify-suspend inside `_await` is
   what gives the JS event loop air to breathe; no fiber stack needed.
@@ -271,14 +277,11 @@ the GPU readback path is the only consumer and the stub is sufficient.
 ## File index
 
 ```
-build-tools/cmake/libs/co.cmake               libco fetch (CPM)
-build-tools/cmake/variables.cmake             + YETTY_ENABLE_LIB_LIBCO
-build-tools/cmake/targets/shared.cmake        includes co.cmake
-build-tools/cmake/targets/webasm.cmake        forces LIBCO OFF
-build-tools/cmake/targets/linux.cmake         adds new sources, links yetty_yco
+build-tools/yetty/libs/co.cmake               prebuilt libco fetch
+build-tools/3rdparty/libco/_build.sh          libco from-source build
 
 include/yetty/yco/co.h                        libco wrapper API
-include/yetty/yevent/event-loop.h              + post_to_loop op
+include/yetty/yevent/event-loop.h             + post_to_loop op
 include/yetty/yplatform/ycoroutine.h          coroutine API
 include/yetty/yplatform/ywebgpu.h             wgpu await API
 include/yetty/yvnc/vnc-server.h               + wgpu param to create
@@ -286,11 +289,11 @@ include/yetty/yvnc/vnc-server.h               + wgpu param to create
 src/yetty/CMakeLists.txt                      add_subdirectory(yco)
 src/yetty/yco/co.c                            libco wrappers + ydebug
 src/yetty/yco/CMakeLists.txt                  yetty_yco library
-src/yetty/yetty.c                             owns wgpu, creates/destroys
-src/yetty/yplatform/shared/ycoroutine.c       desktop coroutine impl
-src/yetty/yplatform/shared/ywebgpu.c          desktop wgpu awaits
-src/yetty/yplatform/shared/libuv-event-loop.c + post_to_loop queue
-src/yetty/yplatform/webasm/ycoroutine.c       webasm coroutine stub (inline-resume)
-src/yetty/yplatform/webasm/ywebgpu.c          webasm wgpu awaits (asyncify+sleep)
+src/yetty/yframework/yframework.c             creates/destroys the wgpu await context
+src/yetty/yplatform/coroutine/default.c       desktop coroutine impl
+src/yetty/yplatform/webgpu/default.c          desktop wgpu awaits
+src/yetty/yplatform/libuv-event-loop/default.c + post_to_loop queue
+src/yetty/yplatform/coroutine/webasm.c        webasm coroutine stub (inline-resume)
+src/yetty/yplatform/webgpu/webasm.c           webasm wgpu awaits (asyncify+sleep)
 src/yetty/yvnc/vnc-server.c                   readback migrated to coroutine
 ```

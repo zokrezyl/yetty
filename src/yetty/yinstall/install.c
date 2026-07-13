@@ -1,7 +1,7 @@
 /*
  * yinstall/install.c — the platform-independent installer core.
  *
- * Walks a declarative table of components (see docs/yinstall.md), unpacks
+ * Walks a declarative table of components (see src/yetty/yinstall/README.md), unpacks
  * each embedded blob to its per-OS destination, and prints a clear log of
  * what landed where. Reads the embedded bytes through the platform backend
  * (yetty_yplatform_install_foreach_asset) and resolves destinations through
