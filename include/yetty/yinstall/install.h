@@ -11,7 +11,7 @@
  * install loop, decompression, and the log. The embedded bytes are read
  * through yetty_yplatform_install_foreach_asset (incbin symbols on
  * Linux/macOS, RT_RCDATA on Windows); destinations resolve through
- * yetty_yplatform_get_{bin,data,config}_dir. See docs/yinstall.md.
+ * yetty_yplatform_get_{bin,data,config}_dir. See src/yetty/yinstall/README.md.
  */
 
 #ifndef YETTY_YINSTALL_INSTALL_H

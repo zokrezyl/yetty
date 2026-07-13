@@ -93,6 +93,10 @@ add_subdirectory(ywire)
 # Term subsystem: yvterm (text-grid figure) + yterminal (coordinator).
 # yvterm first — yterminal links it.
 add_subdirectory(yvterm)
+# ymime — file-type detection + DCS file-envelope prologue codec (leaf lib;
+# ycore only). Consumed by yterminal (terminal-side rendering of raw-file
+# envelopes) and ycat (--raw emit).
+add_subdirectory(ymime)
 add_subdirectory(yterminal)
 
 set(YETTY_SOURCES ${YETTY_SOURCES} PARENT_SCOPE)

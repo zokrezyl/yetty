@@ -1,9 +1,16 @@
-# ANSI / OSC / DCS Codes
+# ywire — the wire state machine and its ANSI / OSC / DCS codes
 
-This document catalogs the escape sequences yetty's wire protocol defines on
-top of a normal terminal byte stream — the **vendor OSC and DCS codes** that
-carry rich content (plots, images, GUIs), client-input events, and the yclass
-RPC channel between a child process and yetty.
+`ywire` is the envelope framer, decode stack, and dispatcher that sits between
+the PTY byte stream and everything that consumes it: raw text goes to the text
+grid, vendor envelopes go to registered handlers. The module is small —
+`wire-statemachine.c` (framer + dispatcher), `channel.c` and `connection.c`
+(handler channels and per-connection state), with public headers in
+`include/yetty/ywire/`.
+
+The bulk of this README catalogs the escape sequences yetty's wire protocol
+defines on top of a normal terminal byte stream — the **vendor OSC and DCS
+codes** that carry rich content (plots, images, GUIs), client-input events, and
+the yclass RPC channel between a child process and yetty.
 
 It is split into two worlds:
 
@@ -13,7 +20,7 @@ It is split into two worlds:
   [§5](#5-standard-sequences-that-drive-yetty).
 - **yetty vendor envelopes** (everything `6xxxxx` / `7xxxxx` / `8xxxxx`) are
   framed and dispatched by the **wire state machine**
-  (`src/yetty/ywire/wire-statemachine.c`). They are the subject of this doc.
+  (`wire-statemachine.c`). They are the subject of this catalog.
 
 The single source of truth for the numbers is three leaf headers — keep this
 doc in sync with them:
@@ -167,7 +174,7 @@ yetty-side state, but they are **not** yetty extensions.
 
 | Sequence | libvterm prop | yetty reaction |
 |---|---|---|
-| `CSI ?1049 h/l`, `?1047`, `?47` | `VTERM_PROP_ALTSCREEN` | Alt-screen toggle — the content layer swaps the ydraw canvas to/from its saved half. See [Layered Rendering](layered-rendering.md#alt-screen). |
+| `CSI ?1049 h/l`, `?1047`, `?47` | `VTERM_PROP_ALTSCREEN` | Alt-screen toggle — the content layer swaps the ydraw canvas to/from its saved half. See [Layered Rendering](../../../docs/layered-rendering.md#alt-screen). |
 | `CSI ?25 h/l` (DECTCEM)         | `VTERM_PROP_CURSORVISIBLE` | Show/hide the cursor in the GPU uniform. |
 | `CSI <n> SP q` (DECSCUSR)       | `VTERM_PROP_CURSORSHAPE` | Cursor shape: 1=block, 2=underline, 3=bar. |
 | `CSI ?1500 h/l` (card click)    | `VTERM_PROP_CARDCLICK` | Gate whether GLFW mouse-button events are forwarded to figures as `700000`/`700010`. |
@@ -194,4 +201,6 @@ handled inside libvterm and are not part of yetty's vendor namespace.
   (`…_register_wire`), `src/yetty/yterminal/terminal.c` (compositor + RPC)
 - ydraw payload decode: `src/yetty/yvterm/ydraw-content.c`
 - Standard-sequence reactions: `src/yetty/yvterm/text-layer.c::on_settermprop`
-- The layer / figure dynamic model these codes feed: `docs/layered-rendering.md`
+- The layer / figure dynamic model these codes feed:
+  [Layered Rendering](../../../docs/layered-rendering.md)
+- The semantic emit layer used by producers: [yface](../yface/README.md)

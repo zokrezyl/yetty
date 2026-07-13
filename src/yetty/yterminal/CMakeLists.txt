@@ -4,6 +4,7 @@
 # here too. Symbol prefix: yetty_yterminal_.
 add_library(yetty_yterminal
     terminal.c
+    terminal-mime.c
     background-layer.c
 )
 
@@ -27,12 +28,48 @@ target_link_libraries(yetty_yterminal
     yetty_yfont_core
     yetty_yui_core
     yetty_yface
+    yetty_ymime
     yetty_ywire
     yetty_yrdawn
     yetty_yfigure
     yetty_ygrid
     lz4_static
 )
+
+# Terminal-side file renderers for YETTY_DCS_MIME_FILE (terminal-mime.c).
+# Each renderer is optional; the handler discards types whose renderer is
+# not compiled in. Same gating style as the ymesh/yvideo factories below.
+if(YETTY_ENABLE_FEATURE_YSVG)
+    target_compile_definitions(yetty_yterminal PRIVATE YETTY_HAS_YSVG=1)
+    target_link_libraries(yetty_yterminal yetty_ysvg)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YMARKDOWN)
+    target_compile_definitions(yetty_yterminal PRIVATE YETTY_HAS_YMARKDOWN=1)
+    target_link_libraries(yetty_yterminal yetty_ymarkdown)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YPDF)
+    target_compile_definitions(yetty_yterminal PRIVATE YETTY_HAS_YPDF=1)
+    target_link_libraries(yetty_yterminal yetty_ypdf)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YIMAGE)
+    target_compile_definitions(yetty_yterminal PRIVATE YETTY_HAS_YIMAGE=1)
+    target_link_libraries(yetty_yterminal yetty_yimage_core)
+endif()
+
+# Same gates the ymusic / ycircuit libraries themselves use
+# (src/yetty/CMakeLists.txt).
+if(YETTY_ENABLE_FEATURE_YMUSIC AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
+    target_compile_definitions(yetty_yterminal PRIVATE YETTY_HAS_YMUSIC=1)
+    target_link_libraries(yetty_yterminal yetty_ymusic)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YCIRCUIT AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
+    target_compile_definitions(yetty_yterminal PRIVATE YETTY_HAS_YCIRCUIT=1)
+    target_link_libraries(yetty_yterminal yetty_ycircuit)
+endif()
 
 if(TARGET yetty_yrdawn_server)
     target_link_libraries(yetty_yterminal yetty_yrdawn_server)

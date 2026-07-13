@@ -106,6 +106,55 @@ struct yetty_yface_bin_meta {
     uint32_t reserved[2];      /* pad to 32 B for forward-compat */
 };
 
+/*
+ * Args meta for YETTY_DCS_MIME_FILE — the raw-file envelope the terminal
+ * renders itself (see <yetty/yterminal/dcs-codes.h>). Same 32-byte size
+ * as yetty_yface_bin_meta so it fits the wire statemachine's fixed args
+ * buffer.
+ *
+ * Continuation model (designed in from v1, enforced from v2):
+ * a logical file transfer is a run of envelopes sharing `stream_id`,
+ * with `sequence` counting 0..N, FIRST set on the first chunk and LAST
+ * on the final one. Normal terminal output may interleave between
+ * chunks. ABORT cancels an open stream. v1 senders and receivers use
+ * the single-shot form: one envelope with FIRST|LAST both set,
+ * sequence 0. Each chunk's payload is its own complete LZ4F frame.
+ *
+ * The variable-length part of the header (MIME hint, filename hint,
+ * render flags) does not fit the args slot; it rides as a prologue at
+ * the head of the FIRST chunk's decompressed payload — see
+ * <yetty/ymime/mime.h> for the codec.
+ */
+
+#define YETTY_YFACE_FILE_MAGIC 0x4C494649u /* "IFIL" */
+#define YETTY_YFACE_FILE_VERSION 1u
+
+#define YETTY_YFACE_FILE_FLAG_FIRST 0x1u
+#define YETTY_YFACE_FILE_FLAG_LAST 0x2u
+#define YETTY_YFACE_FILE_FLAG_ABORT 0x4u
+
+struct yetty_yface_file_meta {
+    uint32_t magic;           /* YETTY_YFACE_FILE_MAGIC */
+    uint8_t version;          /* YETTY_YFACE_FILE_VERSION */
+    uint8_t compressed;       /* YETTY_YFACE_COMP_* */
+    uint8_t compression_algo; /* reserved for non-LZ4F future codecs */
+    uint8_t flags;            /* YETTY_YFACE_FILE_FLAG_* */
+    uint32_t stream_id;       /* continuation correlation; sender-chosen */
+    uint32_t sequence;        /* chunk index within the stream, 0-based */
+    uint64_t total_raw_size;  /* whole decompressed file (with prologue),
+                               * 0 if unknown */
+    uint32_t chunk_raw_size;  /* decompressed size of THIS chunk, 0 if
+                               * unknown */
+    uint32_t reserved;
+};
+
+#ifndef __cplusplus
+/* Both metas must stay 32 B — the wire statemachine's args buffer is
+ * sized for exactly this. */
+_Static_assert(sizeof(struct yetty_yface_bin_meta) == 32, "bin_meta must be 32 bytes");
+_Static_assert(sizeof(struct yetty_yface_file_meta) == 32, "file_meta must be 32 bytes");
+#endif
+
 /*-----------------------------------------------------------------------------
  * Lifecycle
  *---------------------------------------------------------------------------*/

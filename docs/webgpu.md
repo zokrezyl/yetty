@@ -86,7 +86,7 @@ flattened resource-set tree, so there is **no fixed shared/per-view group split*
 ### RenderPipeline
 The full draw configuration: shader, vertex layout, blending, primitive
 topology. Yetty compiles a pipeline once and recompiles only when the shader code
-hash changes (see [Render Pipeline](render.md)).
+hash changes (see [Render Pipeline](../src/yetty/yrender/README.md)).
 
 ## Per-frame commands
 

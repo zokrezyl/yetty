@@ -7,7 +7,7 @@ transistor bodies etc. are SDF primitives (segments, circles, triangles);
 reference designators, values and free labels are MSDF text spans using the
 receiver's default font. The list ships through the standard ycat /
 scrolling-layer path (`ycat schematic.circuit`), so a schematic scrolls inline
-in the scrollback like any other rich card.
+in the scrollback like any other rich figure.
 
 The circuit model is a flat element list with a stable id per element —
 `hit_test` / `set_highlight` give an editor selection affordance, and the

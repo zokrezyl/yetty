@@ -61,6 +61,8 @@
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
 
+#include "terminal-mime.h"
+
 /* GLFW modifier bit layout — kept in sync with src/yetty/yetty/yetty.c.
  * Used here for clipboard shortcuts (Ctrl+Shift+C/V). */
 #define YETTY_MOD_SHIFT 0x0001
@@ -166,6 +168,9 @@ struct yetty_yterminal_terminal {
 
     /* Same self-back-pointer trick for the YDRAW handler coroutine. */
     struct yetty_yterminal_terminal *ydraw_handler_self;
+
+    /* Same trick for the raw-file (YETTY_DCS_MIME_FILE) handler coroutine. */
+    struct yetty_yterminal_terminal *mime_handler_self;
 
     /* Same trick for the effect-OSC handler coroutines. One distinct
      * self-pointer per effect class (pre/post/coord) so each OSC code gets its
@@ -1329,148 +1334,134 @@ static struct yetty_ycore_void_result terminal_effect_process_input(
     }
 }
 
-/* Ingest one YDRAW_BIN envelope into the scrolling rich-content ygrid. Records
- * are streamed via the drawable iterator and handed verbatim to the ygrid, which
- * rasterises SDF shapes, text-drawable-lists (with wire-shipped fonts), and
- * composite figures alike — the same renderer the chrome uses. ycat/ypdf/
- * markdown all flow through here. */
-static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
-    struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
+/* Shared ingest bookkeeping for one envelope's worth of inbound rich
+ * content. Two producers feed it: the wire-streamed YDRAW_BIN path
+ * (terminal_ydraw_consume_bin) and the in-process serialized path used by
+ * the terminal-side file renderer (yetty_yterminal_mime_ingest_serialized). */
+struct terminal_ydraw_ingest_state {
+    uint32_t cursor_row;
+    struct yetty_ycore_pixel_size text_cell;
+    /* Bottom extent of this envelope's drawn content (px, envelope-local,
+     * from the insert row's top). After ingestion the cursor is advanced
+     * past it so the next envelope's content (the next plot, the next PDF
+     * page, …) lands below instead of on top. Covers composites, SDF prims,
+     * and text alike — ycat ships one envelope per PDF page with y=0
+     * origin, so without this the pages would all stack at the same row. */
+    float content_bottom_px;
+    uint32_t ingested_records;
+    uint32_t ingested_composites;
+};
+
+/* Anchor rich content on the cursor's current visible line in yvterm's OWN
+ * grid. The grid owns a primitive/composite list per line on its scroll
+ * ring, so whatever sits at that line scrolls with the text for free — no
+ * separate ygrid, no rolling-row bookkeeping. Composites render via vterm's
+ * rich pass; raw SDF / text records are stored on the line for the SDF pass. */
+static struct yetty_ycore_void_result terminal_ydraw_ingest_begin(
+    struct yetty_yterminal_terminal *terminal, struct terminal_ydraw_ingest_state *state)
 {
-    /* Anchor rich content on the cursor's current visible line in yvterm's OWN
-     * grid. The grid owns a primitive/composite list per line on its scroll
-     * ring, so whatever sits at that line scrolls with the text for free — no
-     * separate ygrid, no rolling-row bookkeeping. Composites render via vterm's
-     * rich pass; raw SDF / text records are stored on the line for the SDF pass. */
-    uint32_t cur_row = 0, cur_col = 0, cur_vis = 0;
+    memset(state, 0, sizeof(*state));
+    uint32_t cursor_col = 0, cursor_visible = 0;
     struct yetty_ycore_void_result cursor_res =
-        yetty_yvterm_vterm_cursor(terminal->grid, &cur_row, &cur_col, &cur_vis);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, cursor_res, "terminal_ydraw_consume_bin: cursor");
+        yetty_yvterm_vterm_cursor(terminal->grid, &state->cursor_row, &cursor_col, &cursor_visible);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cursor_res, "terminal_ydraw ingest: cursor");
     struct pixel_size_result text_cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, text_cell_res, "terminal_ydraw_consume_bin: cell size");
-    struct yetty_ycore_pixel_size text_cell = text_cell_res.value;
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, text_cell_res, "terminal_ydraw ingest: cell size");
+    state->text_cell = text_cell_res.value;
+    return YETTY_OK_VOID();
+}
 
-    struct yetty_ydraw_drawable_iterator iter = {0};
-    struct yetty_ycore_void_result init_res =
-        yetty_ydraw_drawable_iterator_init(&iter, sm, terminal->ydraw_registry);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, init_res, "terminal_ydraw: iterator init");
-
-    /* Bottom extent of this envelope's drawn content (px, envelope-local, from
-     * the insert row's top). After ingestion the cursor is advanced past it so
-     * the next envelope's content (the next plot, the next PDF page, …) lands
-     * below instead of on top. Covers composites, SDF prims, and text alike —
-     * ycat ships one envelope per PDF page with y=0 origin, so without this the
-     * pages would all stack at the same row. */
-    float content_bottom_px = 0.0f;
-    uint32_t ingested_records = 0;
-    uint32_t ingested_composites = 0;
-
-    struct yetty_ycore_void_result result = YETTY_OK_VOID();
-    for (;;) {
-        struct yetty_ydraw_drawable_iterator_status_result step =
-            yetty_ydraw_drawable_iterator_next(&iter);
-        if (YETTY_IS_ERR(step)) {
-            result = YETTY_ERR(yetty_ycore_void, "terminal_ydraw: iterator next", step);
-            break;
+/* Place one ADD record (composite or raw SDF/text/font) on the anchor line.
+ * Per-record failures are absorbed (skip the record, keep the envelope). */
+static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *terminal,
+                                         struct terminal_ydraw_ingest_state *state,
+                                         const struct yetty_ydraw_drawable_list_entry *entry,
+                                         size_t size)
+{
+    const uint32_t *data = entry->data;
+    /* Track the content's bottom for the space-reservation pass in finish.
+     * The FONT resource record ships glyph bytes, not drawn geometry, so it
+     * has no meaningful extent — skip it. Composites carry their bounds at a
+     * fixed payload offset; SDF / text records expose them via the entry
+     * ops aabb. */
+    if (data[0] != YETTY_YDRAW_RESOURCE_FONT) {
+        struct rectangle_result aabb;
+        int have_aabb = 0;
+        if (yetty_ydraw_is_composite(data[0])) {
+            aabb = yetty_ydraw_composite_record_aabb(data);
+            have_aabb = 1;
+        } else if (entry->ops->aabb) {
+            aabb = entry->ops->aabb(data);
+            have_aabb = 1;
         }
-        if (step.value == YETTY_YDRAW_ITERATOR_EOE) {
-            break;
-        }
-        if (step.value != YETTY_YDRAW_ITERATOR_OK || iter.command.kind != YETTY_YDRAW_COMMAND_ADD) {
-            continue; /* DELETE/UPDATE not modelled yet — skip cleanly */
-        }
-        const uint32_t *data = iter.command.entry.data;
-        if (!data || !iter.command.entry.ops || !iter.command.entry.ops->size) {
-            continue;
-        }
-        struct yetty_ycore_size_result size_res = iter.command.entry.ops->size(data);
-        if (YETTY_IS_ERR(size_res)) {
-            yetty_ycore_error_destroy(size_res.error);
-            continue;
-        }
-        /* Track the content's bottom for the space-reservation pass below. The
-         * FONT resource record ships glyph bytes, not drawn geometry, so it has
-         * no meaningful extent — skip it. Composites carry their bounds at a
-         * fixed payload offset; SDF / text records expose them via the entry
-         * ops aabb. */
-        if (data[0] != YETTY_YDRAW_RESOURCE_FONT) {
-            struct rectangle_result aabb;
-            int have_aabb = 0;
-            if (yetty_ydraw_is_composite(data[0])) {
-                aabb = yetty_ydraw_composite_record_aabb(data);
-                have_aabb = 1;
-            } else if (iter.command.entry.ops->aabb) {
-                aabb = iter.command.entry.ops->aabb(data);
-                have_aabb = 1;
-            }
-            if (have_aabb) {
-                if (YETTY_IS_OK(aabb)) {
-                    if (aabb.value.max.y > content_bottom_px) {
-                        content_bottom_px = aabb.value.max.y;
-                    }
-                } else {
-                    yetty_ycore_error_destroy(aabb.error);
-                }
-            }
-        }
-        if (yetty_ydraw_is_composite(data[0]) && terminal->composite_factory) {
-            /* Retain the creating wire envelope on the line FIRST (verbatim, in
-             * the same arena the SDF records use — the SDF pass skips
-             * composite-type records). When the line ages past the scrollback
-             * hot window the figure runtime is destroyed and this envelope is
-             * what re-materializes it on scroll-back. Best-effort: a figure
-             * without a retained envelope still displays, it just cannot be
-             * rebuilt after eviction. */
-            struct yetty_ycore_uint32_result envelope_res = yetty_yvterm_vterm_append_primitive(
-                terminal->grid, cur_row, data, (uint32_t)(size_res.value / sizeof(uint32_t)));
-            if (YETTY_IS_ERR(envelope_res)) {
-                yetty_ycore_error_destroy(envelope_res.error);
-            }
-            /* Mint the figure instance and hand it to the line; the grid owns it
-             * and vterm's rich pass draws it at the line's pixel origin. */
-            struct yetty_ydraw_composite_ptr_result ir =
-                yetty_ydraw_composite_factory_create_instance(terminal->composite_factory, data,
-                                                              size_res.value, /*rolling_row=*/0u);
-            if (YETTY_IS_OK(ir)) {
-                struct yetty_ycore_uint32_result at =
-                    yetty_yvterm_vterm_attach_composite(terminal->grid, cur_row, ir.value);
-                if (YETTY_IS_ERR(at)) {
-                    ydebug("ydraw ingest: attach_composite type=0x%08x FAILED: %s", data[0],
-                           at.error.msg);
-                    yetty_ydraw_composite_destroy(ir.value);
-                    yetty_ycore_error_destroy(at.error);
-                } else {
-                    ingested_composites++;
+        if (have_aabb) {
+            if (YETTY_IS_OK(aabb)) {
+                if (aabb.value.max.y > state->content_bottom_px) {
+                    state->content_bottom_px = aabb.value.max.y;
                 }
             } else {
-                ydebug("ydraw ingest: create_instance type=0x%08x FAILED: %s", data[0],
-                       ir.error.msg);
-                yetty_ycore_error_destroy(ir.error);
-            }
-        } else {
-            /* Raw SDF prim / glyph / text-drawable-list / font record: store the
-             * whole wire record on the line for the SDF render pass to consume. */
-            struct yetty_ycore_uint32_result ap = yetty_yvterm_vterm_append_primitive(
-                terminal->grid, cur_row, data, (uint32_t)(size_res.value / sizeof(uint32_t)));
-            if (YETTY_IS_ERR(ap)) {
-                yetty_ycore_error_destroy(ap.error); /* skip one bad record, keep parsing */
+                yetty_ycore_error_destroy(aabb.error);
             }
         }
-        ingested_records++;
     }
+    if (yetty_ydraw_is_composite(data[0]) && terminal->composite_factory) {
+        /* Retain the creating wire envelope on the line FIRST (verbatim, in
+         * the same arena the SDF records use — the SDF pass skips
+         * composite-type records). When the line ages past the scrollback
+         * hot window the figure runtime is destroyed and this envelope is
+         * what re-materializes it on scroll-back. Best-effort: a figure
+         * without a retained envelope still displays, it just cannot be
+         * rebuilt after eviction. */
+        struct yetty_ycore_uint32_result envelope_res = yetty_yvterm_vterm_append_primitive(
+            terminal->grid, state->cursor_row, data, (uint32_t)(size / sizeof(uint32_t)));
+        if (YETTY_IS_ERR(envelope_res)) {
+            yetty_ycore_error_destroy(envelope_res.error);
+        }
+        /* Mint the figure instance and hand it to the line; the grid owns it
+         * and vterm's rich pass draws it at the line's pixel origin. */
+        struct yetty_ydraw_composite_ptr_result ir = yetty_ydraw_composite_factory_create_instance(
+            terminal->composite_factory, data, size, /*rolling_row=*/0u);
+        if (YETTY_IS_OK(ir)) {
+            struct yetty_ycore_uint32_result at =
+                yetty_yvterm_vterm_attach_composite(terminal->grid, state->cursor_row, ir.value);
+            if (YETTY_IS_ERR(at)) {
+                ydebug("ydraw ingest: attach_composite type=0x%08x FAILED: %s", data[0],
+                       at.error.msg);
+                yetty_ydraw_composite_destroy(ir.value);
+                yetty_ycore_error_destroy(at.error);
+            } else {
+                state->ingested_composites++;
+            }
+        } else {
+            ydebug("ydraw ingest: create_instance type=0x%08x FAILED: %s", data[0], ir.error.msg);
+            yetty_ycore_error_destroy(ir.error);
+        }
+    } else {
+        /* Raw SDF prim / glyph / text-drawable-list / font record: store the
+         * whole wire record on the line for the SDF render pass to consume. */
+        struct yetty_ycore_uint32_result ap = yetty_yvterm_vterm_append_primitive(
+            terminal->grid, state->cursor_row, data, (uint32_t)(size / sizeof(uint32_t)));
+        if (YETTY_IS_ERR(ap)) {
+            yetty_ycore_error_destroy(ap.error); /* skip one bad record, keep parsing */
+        }
+    }
+    state->ingested_records++;
+}
 
-    ydebug("ydraw ingest: %u records (%u composites) bottom=%.0fpx ok=%d", ingested_records,
-           ingested_composites, content_bottom_px, YETTY_IS_OK(result));
-    yetty_ydraw_drawable_iterator_destroy(&iter);
+static void terminal_ydraw_ingest_finish(struct yetty_yterminal_terminal *terminal,
+                                         struct terminal_ydraw_ingest_state *state, int ok)
+{
+    ydebug("ydraw ingest: %u records (%u composites) bottom=%.0fpx ok=%d",
+           state->ingested_records, state->ingested_composites, state->content_bottom_px, ok);
 
     /* Reserve vertical space for this envelope's content by advancing the
      * libvterm cursor that many rows (newlines drive normal scrollback +
      * rolling_row bookkeeping). Only the receiver knows the cell height, so this
      * row count cannot be computed by the producer. */
     uint32_t reserve_rows = 0u;
-    if (YETTY_IS_OK(result) && content_bottom_px > 0.0f && text_cell.height > 0) {
-        uint32_t cell_h = (uint32_t)text_cell.height;
-        reserve_rows = ((uint32_t)content_bottom_px + cell_h - 1u) / cell_h;
+    if (ok && state->content_bottom_px > 0.0f && state->text_cell.height > 0) {
+        uint32_t cell_h = (uint32_t)state->text_cell.height;
+        reserve_rows = ((uint32_t)state->content_bottom_px + cell_h - 1u) / cell_h;
         uint32_t remaining = reserve_rows;
         char newlines[256];
         memset(newlines, '\n', sizeof(newlines));
@@ -1492,15 +1483,143 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
      * first. After the reserve newlines the cursor sits on the line just below
      * the block, so the grid derives the block's bottom (cursor − 1) and top
      * (cursor − reserve_rows) from reserve_rows. */
-    if (YETTY_IS_OK(result) && reserve_rows > 0u) {
+    if (ok && reserve_rows > 0u) {
         struct yetty_ycore_void_result relocate_res =
             yetty_yvterm_vterm_relocate_rich_to_bottom(terminal->grid, reserve_rows);
         if (YETTY_IS_ERR(relocate_res)) {
             yetty_ycore_error_destroy(relocate_res.error);
         }
     }
+}
 
+/* Ingest one YDRAW_BIN envelope into the scrolling rich-content ygrid. Records
+ * are streamed via the drawable iterator and handed verbatim to the ygrid, which
+ * rasterises SDF shapes, text-drawable-lists (with wire-shipped fonts), and
+ * composite figures alike — the same renderer the chrome uses. ycat/ypdf/
+ * markdown all flow through here. */
+static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
+    struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct terminal_ydraw_ingest_state state;
+    struct yetty_ycore_void_result begin_res = terminal_ydraw_ingest_begin(terminal, &state);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, begin_res, "terminal_ydraw_consume_bin: begin");
+
+    struct yetty_ydraw_drawable_iterator iter = {0};
+    struct yetty_ycore_void_result init_res =
+        yetty_ydraw_drawable_iterator_init(&iter, sm, terminal->ydraw_registry);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, init_res, "terminal_ydraw: iterator init");
+
+    struct yetty_ycore_void_result result = YETTY_OK_VOID();
+    for (;;) {
+        struct yetty_ydraw_drawable_iterator_status_result step =
+            yetty_ydraw_drawable_iterator_next(&iter);
+        if (YETTY_IS_ERR(step)) {
+            result = YETTY_ERR(yetty_ycore_void, "terminal_ydraw: iterator next", step);
+            break;
+        }
+        if (step.value == YETTY_YDRAW_ITERATOR_EOE) {
+            break;
+        }
+        if (step.value != YETTY_YDRAW_ITERATOR_OK || iter.command.kind != YETTY_YDRAW_COMMAND_ADD) {
+            continue; /* DELETE/UPDATE not modelled yet — skip cleanly */
+        }
+        if (!iter.command.entry.data || !iter.command.entry.ops || !iter.command.entry.ops->size) {
+            continue;
+        }
+        struct yetty_ycore_size_result size_res =
+            iter.command.entry.ops->size(iter.command.entry.data);
+        if (YETTY_IS_ERR(size_res)) {
+            yetty_ycore_error_destroy(size_res.error);
+            continue;
+        }
+        terminal_ydraw_ingest_record(terminal, &state, &iter.command.entry, size_res.value);
+    }
+
+    yetty_ydraw_drawable_iterator_destroy(&iter);
+    terminal_ydraw_ingest_finish(terminal, &state, YETTY_IS_OK(result));
     return result;
+}
+
+/* Ingest a serialized drawable-list blob already sitting in memory — the
+ * terminal-side file renderer (terminal-mime.c) produces these by running
+ * ysvg/ymarkdown/ypdf/… locally and serializing the resulting drawable
+ * list. Same 24-byte framed header the wire iterator consumes (magic +
+ * scene bounds + byte_count), then a plain command walk. */
+struct yetty_ycore_void_result yetty_yterminal_mime_ingest_serialized(
+    struct yetty_yterminal_terminal *terminal, const uint8_t *bytes, size_t len)
+{
+    enum { SERIALIZED_HEADER_BYTES = 24 };
+    if (!terminal || !bytes) {
+        return YETTY_ERR(yetty_ycore_void, "mime ingest: NULL arg");
+    }
+    if (len < SERIALIZED_HEADER_BYTES) {
+        return YETTY_ERR(yetty_ycore_void, "mime ingest: blob shorter than envelope header");
+    }
+    uint32_t magic = 0;
+    memcpy(&magic, bytes, sizeof(magic));
+    if (magic != 0x31425059u /* 'YPB1' */) {
+        return YETTY_ERR(yetty_ycore_void, "mime ingest: bad envelope magic");
+    }
+    uint32_t byte_count = 0;
+    memcpy(&byte_count, bytes + 20, sizeof(byte_count));
+    size_t body_len = len - SERIALIZED_HEADER_BYTES;
+    if (byte_count < body_len) {
+        body_len = byte_count;
+    }
+    const uint8_t *cursor = bytes + SERIALIZED_HEADER_BYTES;
+
+    struct terminal_ydraw_ingest_state state;
+    struct yetty_ycore_void_result begin_res = terminal_ydraw_ingest_begin(terminal, &state);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, begin_res, "mime ingest: begin");
+
+    struct yetty_ycore_void_result result = YETTY_OK_VOID();
+    while (body_len >= sizeof(uint32_t)) {
+        struct yetty_ydraw_command command;
+        struct yetty_ycore_size_result step = yetty_ydraw_drawable_command_parse(
+            terminal->ydraw_registry, cursor, (uint32_t)body_len, &command);
+        if (YETTY_IS_ERR(step)) {
+            result = YETTY_ERR(yetty_ycore_void, "mime ingest: command parse", step);
+            break;
+        }
+        if (step.value == 0 || step.value > body_len) {
+            result = YETTY_ERR(yetty_ycore_void, "mime ingest: bad command stride");
+            break;
+        }
+        if (command.kind == YETTY_YDRAW_COMMAND_ADD && command.entry.data && command.entry.ops) {
+            terminal_ydraw_ingest_record(terminal, &state, &command.entry, step.value);
+        }
+        cursor += step.value;
+        body_len -= step.value;
+    }
+
+    terminal_ydraw_ingest_finish(terminal, &state, YETTY_IS_OK(result));
+    return result;
+}
+
+struct yetty_yterminal_mime_env yetty_yterminal_mime_env_get(
+    struct yetty_yterminal_terminal *terminal)
+{
+    struct yetty_yterminal_mime_env env = {0};
+    if (!terminal) {
+        return env;
+    }
+    env.config = terminal->context.yetty_context.runtime->config;
+    env.cols = terminal->cols;
+    env.rows = terminal->rows;
+    struct pixel_size_result cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
+    if (YETTY_IS_OK(cell_res)) {
+        env.cell_width = (uint32_t)cell_res.value.width;
+        env.cell_height = (uint32_t)cell_res.value.height;
+    } else {
+        yetty_ycore_error_destroy(cell_res.error);
+    }
+    return env;
+}
+
+void yetty_yterminal_mime_request_render(struct yetty_yterminal_terminal *terminal)
+{
+    terminal->context.yetty_context.event_loop->ops->request_render(
+        terminal->context.yetty_context.event_loop);
 }
 
 /* Wire handler for the YDRAW_* DCS codes: CLEAR drops all anchored rich
@@ -2332,6 +2451,18 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         }
     }
     ydebug("terminal_create: ydraw handlers registered (CLEAR/BIN/OVERLAY)");
+
+    /* Raw-file envelopes (YETTY_DCS_MIME_FILE): the payload is an unrendered
+     * file; the terminal detects the type (ymime) and runs the renderer
+     * itself. Policy (per-type enable + size caps) and dispatch live in
+     * terminal-mime.c. */
+    terminal->mime_handler_self = terminal;
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_DCS,
+                                                YETTY_DCS_MIME_FILE, /*has_args=*/1,
+                                                yetty_yterminal_mime_process_input,
+                                                &terminal->mime_handler_self);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register mime handler");
+    ydebug("terminal_create: mime-file handler registered for DCS %d", YETTY_DCS_MIME_FILE);
 
     /* Shader-effect OSC handlers (pre/post/coord). Each code gets a distinct
      * self-pointer so the SM spawns an independent coroutine per class. */

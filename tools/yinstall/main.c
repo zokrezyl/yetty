@@ -4,7 +4,7 @@
  * A self-contained executable that carries the whole yetty product as an
  * embedded payload and unpacks it to the right per-OS locations. All the
  * real work lives in the yetty_yinstall module; this is just argument
- * parsing and error reporting. See docs/yinstall.md.
+ * parsing and error reporting. See src/yetty/yinstall/README.md.
  */
 
 #include <stdio.h>

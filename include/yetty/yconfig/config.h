@@ -126,6 +126,13 @@ struct yetty_yconfig_config {
 #define YETTY_YCONFIG_KEY_RPC_HOST "rpc/host"
 #define YETTY_YCONFIG_KEY_RPC_PORT "rpc/port"
 #define YETTY_YCONFIG_KEY_RPC_SOCKET_PATH "rpc/socket-path"
+/* Terminal-side raw-file rendering (YETTY_DCS_MIME_FILE). Per-type policy
+ * keys are composed at runtime as mime/types/<type>/enabled and
+ * mime/types/<type>/max-size-mb, where <type> is a ymime type name
+ * (svg, markdown, pdf, image, video, music, circuit, mesh); the two keys
+ * below are the master switch and the default size cap. */
+#define YETTY_YCONFIG_KEY_MIME_ENABLED "mime/enabled"
+#define YETTY_YCONFIG_KEY_MIME_MAX_SIZE_MB "mime/max-size-mb"
 #define YETTY_YCONFIG_KEY_TEMU "temu"
 #define YETTY_YCONFIG_KEY_QEMU "qemu"
 #define YETTY_YCONFIG_KEY_SSH "ssh/enabled"
