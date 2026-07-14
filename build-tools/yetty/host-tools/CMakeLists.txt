@@ -124,8 +124,8 @@ endif()
 #   - /std:clatest + /experimental:c11atomics — clears __STDC_NO_ATOMICS__ for
 #     TUs that pull in <stdatomic.h>.
 # Scoped here (just before the yetty targets) so the third-party CPM builds
-# above are untouched. Without this the host yetty-ymsdf-gen build — invoked at
-# configure time by emmentaler-cdb.cmake — fails to compile ycdb.c on Windows.
+# above are untouched. Without this the host yetty-ymsdf-gen build fails to
+# compile ycdb.c on Windows.
 if(MSVC)
     add_compile_options(/Zc:preprocessor)
     add_compile_options(

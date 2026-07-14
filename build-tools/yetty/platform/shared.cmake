@@ -94,16 +94,14 @@ endif()
 include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 # fonts: one noarch tarball with the complete font asset set —
-#   *.cdb.br  MSDF CDB atlases for the base DejaVu faces (embedded verbatim
-#             into the msdf-fonts staging by incbin)
+#   *.cdb.br  MSDF CDB atlases for the base DejaVu faces and the Emmentaler
+#             music face — ymusic references "Emmentaler" by name (embedded
+#             verbatim into the msdf-fonts staging by incbin)
 #   *.ttf     the Noto world-coverage set (script faces + CJK + Color Emoji),
 #             staged into the runtime fonts dir where the terminal's
 #             codepoint-range font routing resolves them by name
 if(YETTY_ENABLE_FEATURE_CDB_GEN OR YETTY_ENABLE_FEATURE_MSDF_GEN OR YETTY_ENABLE_NOTO_FONTS)
     yetty_3rdparty_fetch(fonts _FONTS_DIR)
-    # Engrave the Emmentaler music-font CDB into the same dir so it ships with
-    # the install; ymusic references it by name (see emmentaler-cdb.cmake).
-    include(${YETTY_ROOT}/build-tools/yetty/emmentaler-cdb.cmake)
 endif()
 
 # yemu runtime (kernel + opensbi + alpine + unified yetty rootfs):

@@ -3,7 +3,8 @@
 # Platform-independent (.noarch) — one tarball serves every yetty target.
 #
 # Contents (one flat directory, consumed by two staging globs):
-#   *.cdb.br  — MSDF CDB atlases for the DejaVuSansMNerdFontMono faces,
+#   *.cdb.br  — MSDF CDB atlases for the DejaVuSansMNerdFontMono faces and
+#               the Emmentaler music face (referenced by name from ymusic),
 #               generated here with yetty-ymsdf-gen and brotli'd; the main
 #               build embeds them verbatim (msdf-fonts staging glob).
 #   *.ttf     — the Noto world-coverage set (script faces + CJK + Color
@@ -86,10 +87,20 @@ for ttf in "${TTF_FILES[@]}"; do
     "$YMSDF_GEN" --all "$ttf" "$RAW_DIR"
 done
 
-# Sanity check — expect one .cdb per TTF
+# Emmentaler music face (SIL OFL, vendored OTF): engraved into the same CDB
+# set. ymusic references the font by name ("Emmentaler"), so settle the
+# Emmentaler-20 stem to the bare name before compression.
+EMMENTALER_OTF="$FONT_DIR/Emmentaler-20.otf"
+[ -f "$EMMENTALER_OTF" ] || { echo "missing OTF: $EMMENTALER_OTF" >&2; exit 1; }
+echo "==> generating CDB for $(basename "$EMMENTALER_OTF")"
+"$YMSDF_GEN" --all "$EMMENTALER_OTF" "$RAW_DIR"
+mv "$RAW_DIR/Emmentaler-20.cdb" "$RAW_DIR/Emmentaler.cdb"
+
+# Sanity check — expect one .cdb per TTF plus Emmentaler
+EXPECTED_CDB_COUNT=$(( ${#TTF_FILES[@]} + 1 ))
 CDB_COUNT="$(find "$RAW_DIR" -maxdepth 1 -name '*.cdb' | wc -l)"
-if [ "$CDB_COUNT" -ne "${#TTF_FILES[@]}" ]; then
-    echo "expected ${#TTF_FILES[@]} cdb files, got $CDB_COUNT" >&2
+if [ "$CDB_COUNT" -ne "$EXPECTED_CDB_COUNT" ]; then
+    echo "expected $EXPECTED_CDB_COUNT cdb files, got $CDB_COUNT" >&2
     ls -la "$RAW_DIR" >&2
     exit 1
 fi
