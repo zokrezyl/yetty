@@ -57,7 +57,9 @@ target_include_directories(yetty_yfont_core PUBLIC
 )
 
 target_link_libraries(yetty_yfont_core PUBLIC
-    ${FREETYPE_ALL_LIBS} yetty_ycdb yetty_yfont_shader_glyph yetty_yrender_core)
+    ${FREETYPE_ALL_LIBS} yetty_ycdb yetty_yfont_shader_glyph yetty_yrender_core
+    yetty_yplatform_core # raster-font glob faces: cross-platform dir iteration
+)
 
 # Embed shaders via incbin (or stubs on Emscripten).
 # These WGSL shaders are part of the gpu_resource_set returned by each font

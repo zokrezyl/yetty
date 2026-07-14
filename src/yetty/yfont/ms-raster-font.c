@@ -9,12 +9,12 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yrender/texture-format.h>
+#include <yetty/yplatform/fs.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
-#include <dirent.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -771,31 +771,31 @@ static struct yetty_ycore_void_result raster_font_load_glob_faces(
     }
     size_t prefix_len = strlen(prefix);
 
-    DIR *fonts_dir_handle = opendir(font->fonts_dir);
+    struct yetty_yplatform_dir *fonts_dir_handle = yetty_yplatform_dir_open(font->fonts_dir);
     if (!fonts_dir_handle) {
         return YETTY_ERR(yetty_ycore_void, "fonts dir not readable for glob font");
     }
     char *file_names[RASTER_FONT_MAX_FALLBACK_FACES + 1];
     size_t file_count = 0;
-    struct dirent *entry;
-    while ((entry = readdir(fonts_dir_handle)) != NULL &&
+    struct yetty_yplatform_dir_entry entry;
+    while (yetty_yplatform_dir_next(fonts_dir_handle, &entry) &&
            file_count < RASTER_FONT_MAX_FALLBACK_FACES + 1) {
-        size_t name_len = strlen(entry->d_name);
+        size_t name_len = strlen(entry.name);
         if (name_len <= suffix_len) {
             continue;
         }
-        if (strncmp(entry->d_name, prefix, prefix_len) != 0) {
+        if (strncmp(entry.name, prefix, prefix_len) != 0) {
             continue;
         }
-        if (strcmp(entry->d_name + name_len - suffix_len, REGULAR_SUFFIX) != 0) {
+        if (strcmp(entry.name + name_len - suffix_len, REGULAR_SUFFIX) != 0) {
             continue;
         }
-        char *copy = strdup(entry->d_name);
+        char *copy = strdup(entry.name);
         if (copy) {
             file_names[file_count++] = copy;
         }
     }
-    closedir(fonts_dir_handle);
+    yetty_yplatform_dir_close(fonts_dir_handle);
     if (file_count == 0) {
         return YETTY_ERR(yetty_ycore_void, "no fonts match glob font name");
     }
