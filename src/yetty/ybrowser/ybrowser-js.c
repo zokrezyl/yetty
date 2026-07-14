@@ -402,8 +402,8 @@ static JSValue eval_global_cached(struct yetty_ylexbor *r, JSContext *ctx, const
     double lookup_start = yetty_ylexbor_prof_now_ms();
     if (yetty_ybrowser_disk_cache_load(cache, key, YETTY_YBROWSER_DISK_CACHE_KIND_JS_BYTECODE,
                                        &meta, &bytecode, &bytecode_len)) {
-        JSValue recalled = JS_ReadObject(ctx, (const uint8_t *)bytecode, bytecode_len,
-                                         JS_READ_OBJ_BYTECODE);
+        JSValue recalled =
+            JS_ReadObject(ctx, (const uint8_t *)bytecode, bytecode_len, JS_READ_OBJ_BYTECODE);
         free(bytecode);
         if (!JS_IsException(recalled)) {
             yetty_ylexbor_prof("    js bc-hit  %4zu KB in %5.1f ms  %.80s", source_len / 1024,
@@ -451,8 +451,8 @@ static JSValue eval_global_cached(struct yetty_ylexbor *r, JSContext *ctx, const
     return JS_EvalFunction(ctx, compiled);
 }
 
-int yetty_ylexbor_js_eval_cached(struct yetty_ylexbor *r, struct JSContext *ctx,
-                                 const char *source, size_t source_len, const char *url_label)
+int yetty_ylexbor_js_eval_cached(struct yetty_ylexbor *r, struct JSContext *ctx, const char *source,
+                                 size_t source_len, const char *url_label)
 {
     JSValue value = eval_global_cached(r, ctx, source, source_len, url_label);
     if (JS_IsException(value)) {
@@ -767,10 +767,9 @@ static void collect_scripts_recursive(struct yetty_ylexbor *r, lxb_dom_node_t *n
                 /* has_attribute, NOT get_attribute — the latter returns the
 				 * VALUE, which is NULL for the bare boolean form
 				 * `<script src=… async>`. */
-                int deferred =
-                    lxb_dom_element_has_attribute(el, (const lxb_char_t *)"async", 5) ||
-                    lxb_dom_element_has_attribute(el, (const lxb_char_t *)"defer", 5) ||
-                    is_module_script_type(el);
+                int deferred = lxb_dom_element_has_attribute(el, (const lxb_char_t *)"async", 5) ||
+                               lxb_dom_element_has_attribute(el, (const lxb_char_t *)"defer", 5) ||
+                               is_module_script_type(el);
                 struct script_entry entry = {.url = url, .deferred = deferred};
                 script_collect_push(collect, entry);
                 continue;

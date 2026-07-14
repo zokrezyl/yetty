@@ -19,29 +19,28 @@ static const char *TEST_YAML_PATH = "yconfig-structured-test.yaml";
 
 static void write_test_yaml(struct ytest *test)
 {
-    static const char yaml_text[] =
-        "terminal:\n"
-        "  text-layer:\n"
-        "    font:\n"
-        "      render-method: msdf\n"
-        "      ranges:\n"
-        "        - from: 0x4E00\n"
-        "          to: 0x9FFF\n"
-        "          font: NotoSansMonoCJKsc\n"
-        "          render-method: raster\n"
-        "        - from: 0x1F300\n"
-        "          to: 0x1FAFF\n"
-        "          font: NotoColorEmoji\n"
-        "          render-method: raster\n"
-        "        - from: 128\n"
-        "          to: 255\n"
-        "          font: DejaVuSansMNerdFontMono\n"
-        "          render-method: msdf\n"
-        "shaders:\n"
-        "  preload:\n"
-        "    glyphs:\n"
-        "      - spinner\n"
-        "      - hourglass\n";
+    static const char yaml_text[] = "terminal:\n"
+                                    "  text-layer:\n"
+                                    "    font:\n"
+                                    "      render-method: msdf\n"
+                                    "      ranges:\n"
+                                    "        - from: 0x4E00\n"
+                                    "          to: 0x9FFF\n"
+                                    "          font: NotoSansMonoCJKsc\n"
+                                    "          render-method: raster\n"
+                                    "        - from: 0x1F300\n"
+                                    "          to: 0x1FAFF\n"
+                                    "          font: NotoColorEmoji\n"
+                                    "          render-method: raster\n"
+                                    "        - from: 128\n"
+                                    "          to: 255\n"
+                                    "          font: DejaVuSansMNerdFontMono\n"
+                                    "          render-method: msdf\n"
+                                    "shaders:\n"
+                                    "  preload:\n"
+                                    "    glyphs:\n"
+                                    "      - spinner\n"
+                                    "      - hourglass\n";
 
     FILE *yaml_file = fopen(TEST_YAML_PATH, "w");
     YTEST_REQUIRE(test, yaml_file != NULL);
@@ -64,17 +63,15 @@ static void test_structured_list_entries(struct ytest *test)
 
     /* Structured fields resolve as <list>/<index>/<field>. */
     YTEST_REQUIRE_STR_EQ(
-        test,
-        config->ops->get_string(config, "terminal/text-layer/font/ranges/0/from", "missing"),
+        test, config->ops->get_string(config, "terminal/text-layer/font/ranges/0/from", "missing"),
         "0x4E00");
     YTEST_REQUIRE_STR_EQ(
         test, config->ops->get_string(config, "terminal/text-layer/font/ranges/0/font", "missing"),
         "NotoSansMonoCJKsc");
-    YTEST_REQUIRE_STR_EQ(
-        test,
-        config->ops->get_string(config, "terminal/text-layer/font/ranges/1/render-method",
-                                "missing"),
-        "raster");
+    YTEST_REQUIRE_STR_EQ(test,
+                         config->ops->get_string(
+                             config, "terminal/text-layer/font/ranges/1/render-method", "missing"),
+                         "raster");
     YTEST_REQUIRE_STR_EQ(
         test, config->ops->get_string(config, "terminal/text-layer/font/ranges/2/to", "missing"),
         "255");

@@ -1510,8 +1510,8 @@ void yetty_ylexbor_console_push(struct yetty_ylexbor *r, int level, const char *
  * -1 when the script threw — the exception is left pending on the context
  * for the caller to inspect. Defined in ybrowser-js.c; only compiled (and
  * only callable) when YETTY_HAVE_QUICKJS. */
-int yetty_ylexbor_js_eval_cached(struct yetty_ylexbor *r, struct JSContext *ctx,
-                                 const char *source, size_t source_len, const char *url_label);
+int yetty_ylexbor_js_eval_cached(struct yetty_ylexbor *r, struct JSContext *ctx, const char *source,
+                                 size_t source_len, const char *url_label);
 
 /* DOM-bindings install (called from js_init). */
 void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r);

@@ -160,8 +160,8 @@ static void node_remove_safe(JSContext *ctx, lxb_dom_node_t *node)
         static bool wipe_stack_enabled = false;
         static bool wipe_stack_registered = false;
         if (!wipe_stack_registered) {
-            wipe_stack_enabled = ytrace_register(&wipe_stack_enabled, __FILE__, __LINE__,
-                                                 __func__, "debug", "js dom-remove stack");
+            wipe_stack_enabled = ytrace_register(&wipe_stack_enabled, __FILE__, __LINE__, __func__,
+                                                 "debug", "js dom-remove stack");
             wipe_stack_registered = true;
         }
         if (ctx != NULL && wipe_stack_enabled) {
@@ -1765,8 +1765,8 @@ static JSValue js_el_insertAdjacentHTML(JSContext *ctx, JSValueConst this_val, i
         return JS_UNDEFINED;
     }
 
-    lxb_dom_element_t *container = lxb_dom_document_create_element(
-        self->owner_document, (const lxb_char_t *)"div", 3, NULL);
+    lxb_dom_element_t *container =
+        lxb_dom_document_create_element(self->owner_document, (const lxb_char_t *)"div", 3, NULL);
     if (container) {
         (void)lxb_html_element_inner_html_set(lxb_html_interface_element(container),
                                               (const lxb_char_t *)html, html_len);
@@ -1925,8 +1925,7 @@ static JSValue js_cd_length_set(JSContext *ctx, JSValueConst this_val, JSValueCo
     if (as_chardata(ctx, this_val) != NULL) {
         return JS_UNDEFINED;
     }
-    JS_DefinePropertyValueStr(ctx, this_val, "length", JS_DupValue(ctx, val),
-                              JS_PROP_C_W_E);
+    JS_DefinePropertyValueStr(ctx, this_val, "length", JS_DupValue(ctx, val), JS_PROP_C_W_E);
     return JS_UNDEFINED;
 }
 
@@ -3434,8 +3433,7 @@ static JSValue js_el_attributes_get(JSContext *ctx, JSValueConst this_val)
         size_t value_len = 0;
         const lxb_char_t *value = lxb_dom_attr_value(attr, &value_len);
         JSValue item = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, item, "name",
-                          JS_NewStringLen(ctx, (const char *)name, name_len));
+        JS_SetPropertyStr(ctx, item, "name", JS_NewStringLen(ctx, (const char *)name, name_len));
         JS_SetPropertyStr(ctx, item, "value",
                           value ? JS_NewStringLen(ctx, (const char *)value, value_len)
                                 : JS_NewString(ctx, ""));

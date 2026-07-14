@@ -375,8 +375,8 @@ static struct pixel_size_result ms_msdf_get_cell_size(const struct yetty_yfont_m
 	 * With frozen metrics the cell height comes from the line box (block
 	 * glyph span) instead of the lazily-tracked glyph extent, so the grid
 	 * geometry is stable and box-drawing glyphs tile it exactly. */
-    float scale_basis = (f->metrics_frozen && f->scale_extent > 0.0f) ? f->scale_extent
-                                                                      : visible_h_cdb;
+    float scale_basis =
+        (f->metrics_frozen && f->scale_extent > 0.0f) ? f->scale_extent : visible_h_cdb;
     float scale = f->requested_size / scale_basis;
     float cell_extent_cdb = f->metrics_frozen ? (f->cell_ascent + f->cell_descent) : scale_basis;
     float glyph_h = cell_extent_cdb * scale;
@@ -515,8 +515,8 @@ static struct yetty_yrender_gpu_resource_set_result ms_msdf_get_gpu_resource_set
 		 */
         float pad_cdb = f->pixel_range;
         float visible_h_cdb = (f->max_ascent + f->max_descent) - 2.0f * pad_cdb;
-        float scale_basis = (f->metrics_frozen && f->scale_extent > 0.0f) ? f->scale_extent
-                                                                          : visible_h_cdb;
+        float scale_basis =
+            (f->metrics_frozen && f->scale_extent > 0.0f) ? f->scale_extent : visible_h_cdb;
         float scale = (scale_basis > 0.0f) ? f->requested_size / scale_basis
                                            : f->requested_size / f->base_size;
         /* Baseline sits cell_ascent below the (padding-shifted) cell top.

@@ -678,8 +678,8 @@ static css_error cb_ua_default_for_property(void *pw, uint32_t property, css_hin
 
 /* Find the slot for `node` (or the empty slot where it would go). Open
  * addressing, linear probe; cap is always a power of two. */
-static struct yetty_ybrowser_libcss_node_slot *node_data_slot_find(
-    struct yetty_ybrowser_libcss *lc, void *node)
+static struct yetty_ybrowser_libcss_node_slot *node_data_slot_find(struct yetty_ybrowser_libcss *lc,
+                                                                   void *node)
 {
     size_t mask = lc->node_data_slot_cap - 1;
     size_t index = ((uintptr_t)node >> 4) & mask;
@@ -697,8 +697,7 @@ static int node_data_store_grow(struct yetty_ybrowser_libcss *lc)
     size_t new_cap = lc->node_data_slot_cap ? lc->node_data_slot_cap * 2 : 256;
     struct yetty_ybrowser_libcss_node_slot *old_slots = lc->node_data_slots;
     size_t old_cap = lc->node_data_slot_cap;
-    struct yetty_ybrowser_libcss_node_slot *new_slots =
-        calloc(new_cap, sizeof(*new_slots));
+    struct yetty_ybrowser_libcss_node_slot *new_slots = calloc(new_cap, sizeof(*new_slots));
     if (!new_slots) {
         return -1;
     }

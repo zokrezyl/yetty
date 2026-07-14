@@ -147,7 +147,7 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
  * from O(page) to O(viewport). */
 struct embed_cull {
     int active;
-    float y_min, y_max;      /* visible band (already padded), in emitted coords */
+    float y_min, y_max;        /* visible band (already padded), in emitted coords */
     size_t leaf_total, culled; /* instrumentation */
 };
 
@@ -172,7 +172,7 @@ static int embed_prim_extent(const uint32_t *prim, size_t bytes, float *y_lo, fl
             return 0;
         }
         const float *f = (const float *)prim;
-        float baseline = f[3];    /* y (translated) */
+        float baseline = f[3]; /* y (translated) */
         float font_size = f[4];
         if (!(font_size > 0.0f)) {
             return 0;
@@ -189,8 +189,7 @@ static int embed_prim_extent(const uint32_t *prim, size_t bytes, float *y_lo, fl
      * x,y. A composite carries the top type bit but is NOT id-carrying —
      * distinguish it from an id'd SDF (top bit + SDF base) by its base
      * having no SDF size. Culling these is the whole point of the exercise. */
-    if (yetty_ydraw_is_composite(type) &&
-        yetty_ysdf_primitive_size(RICH_TYPE_BASE(type)) == 0u) {
+    if (yetty_ydraw_is_composite(type) && yetty_ysdf_primitive_size(RICH_TYPE_BASE(type)) == 0u) {
         struct rectangle_result aabb = yetty_ydraw_composite_record_aabb(prim);
         if (YETTY_IS_ERR(aabb)) {
             yetty_ycore_error_destroy(aabb.error);
@@ -418,8 +417,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     ydebug("ydraw_embed cull active=%d clip=[%.0f..%.0f] rect=[%.0f..%.0f] dy=%.0f scene_min=%.0f "
            "src=%zuB emitted=%zuB culled=%zu/%zu leaf",
            cull.active, cull.y_min, cull.y_max, r.min.y, r.max.y, dy,
-           yetty_ydraw_drawable_list_scene_min_y(d->buf), src_size, after - before,
-           cull.culled, cull.leaf_total);
+           yetty_ydraw_drawable_list_scene_min_y(d->buf), src_size, after - before, cull.culled,
+           cull.leaf_total);
     return walk;
 }
 

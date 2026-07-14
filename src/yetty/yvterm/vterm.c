@@ -984,8 +984,8 @@ static struct yetty_ycore_void_result vterm_upload_face(struct yetty_yvterm_vter
 
     const struct yetty_yrender_texture *atlas = &rs->textures[0];
     if (atlas->data && atlas->width > 0 && atlas->height > 0) {
-        uint32_t format = atlas->format ? atlas->format
-                                        : (uint32_t)YETTY_YRENDER_TEXTURE_FORMAT_RGBA8_UNORM;
+        uint32_t format =
+            atlas->format ? atlas->format : (uint32_t)YETTY_YRENDER_TEXTURE_FORMAT_RGBA8_UNORM;
         if (!face->atlas_texture || atlas->width != face->atlas_width ||
             atlas->height != face->atlas_height || format != face->atlas_format) {
             struct yetty_ycore_void_result re =
@@ -1113,9 +1113,8 @@ static uint32_t vterm_face_find_or_create(struct yetty_yvterm_vterm *vterm,
 {
     for (uint32_t i = 0; i < vterm->face_count; ++i) {
         enum yvterm_font_method existing = vterm->faces[i].method;
-        int method_matches = existing == method ||
-                             (method == YVTERM_FONT_METHOD_RASTER &&
-                              existing == YVTERM_FONT_METHOD_RASTER_COLOR);
+        int method_matches = existing == method || (method == YVTERM_FONT_METHOD_RASTER &&
+                                                    existing == YVTERM_FONT_METHOD_RASTER_COLOR);
         if (method_matches && strcmp(vterm->faces[i].name, name) == 0) {
             return i;
         }
@@ -1128,8 +1127,8 @@ static uint32_t vterm_face_find_or_create(struct yetty_yvterm_vterm *vterm,
 
     struct yetty_font_ms_font_result font_res;
     if (method == YVTERM_FONT_METHOD_RASTER) {
-        struct pixel_size_result cell = vterm->faces[0].font->ops->get_cell_size(
-            vterm->faces[0].font);
+        struct pixel_size_result cell =
+            vterm->faces[0].font->ops->get_cell_size(vterm->faces[0].font);
         if (YETTY_IS_ERR(cell)) {
             yetty_ycore_error_destroy(cell.error);
             return 0;
@@ -1168,8 +1167,7 @@ static uint32_t vterm_face_find_or_create(struct yetty_yvterm_vterm *vterm,
                 gen.cdb_path = cdb_path;
                 gen.font_size = 32.0f;
                 gen.pixel_range = 4.0f;
-                struct yetty_ycore_void_result gen_res =
-                    generator->ops->generate(generator, &gen);
+                struct yetty_ycore_void_result gen_res = generator->ops->generate(generator, &gen);
                 if (YETTY_IS_ERR(gen_res)) {
                     ywarn("vterm: MSDF generation for range font '%s' failed: %s — "
                           "falling back to the base font",
@@ -1303,9 +1301,9 @@ static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *
         font_family = "DejaVuSansMNerdFontMono";
     }
     const char *render_method =
-        config ? config->ops->get_string(config, YETTY_YCONFIG_KEY_TERMINAL_FONT_RENDER_METHOD,
-                                         "msdf")
-               : "msdf";
+        config
+            ? config->ops->get_string(config, YETTY_YCONFIG_KEY_TERMINAL_FONT_RENDER_METHOD, "msdf")
+            : "msdf";
     struct yetty_yfont_ms_padding padding = vterm_font_padding_from_config(config);
 
     struct yetty_font_ms_font_result font_res;
@@ -2237,8 +2235,8 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_obj
     for (uint32_t i = 0; i < vterm->face_count; ++i) {
         struct yetty_yfont_ms_font *face_font = vterm->faces[i].font;
         if (face_font && face_font->ops && face_font->ops->set_cell_size) {
-            struct yetty_ycore_void_result fcr = face_font->ops->set_cell_size(face_font,
-                                                                               cell_size);
+            struct yetty_ycore_void_result fcr =
+                face_font->ops->set_cell_size(face_font, cell_size);
             if (YETTY_IS_ERR(fcr)) {
                 yetty_ycore_error_destroy(fcr.error);
             }

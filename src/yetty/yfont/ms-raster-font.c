@@ -843,8 +843,7 @@ struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create(
 }
 
 struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create_named(
-    struct yetty_yconfig_config *config, const char *font_name, float cell_width,
-    float cell_height)
+    struct yetty_yconfig_config *config, const char *font_name, float cell_width, float cell_height)
 {
     const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");

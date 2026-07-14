@@ -2880,9 +2880,8 @@ static void render_doc(struct app *a, struct tab *t)
             t->stable_relayouts++;
         }
         /* Grow the skip window each time output stays put, up to the cap. */
-        double next_interval = t->relayout_interval_ms > 0.0
-                                   ? t->relayout_interval_ms * 2.0
-                                   : RELAYOUT_GATE_MIN_MS;
+        double next_interval =
+            t->relayout_interval_ms > 0.0 ? t->relayout_interval_ms * 2.0 : RELAYOUT_GATE_MIN_MS;
         if (next_interval > RELAYOUT_GATE_MAX_MS) {
             next_interval = RELAYOUT_GATE_MAX_MS;
         }
