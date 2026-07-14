@@ -93,19 +93,17 @@ endif()
 # downloads + extracts + auto-decompresses .br files side-by-side.
 include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
-# msdf-fonts (cdb): pre-brotli'd, embedded directly by incbin.
-if(YETTY_ENABLE_FEATURE_CDB_GEN OR YETTY_ENABLE_FEATURE_MSDF_GEN)
-    yetty_3rdparty_fetch(cdb _CDB_DIR)
+# fonts: one noarch tarball with the complete font asset set —
+#   *.cdb.br  MSDF CDB atlases for the base DejaVu faces (embedded verbatim
+#             into the msdf-fonts staging by incbin)
+#   *.ttf     the Noto world-coverage set (script faces + CJK + Color Emoji),
+#             staged into the runtime fonts dir where the terminal's
+#             codepoint-range font routing resolves them by name
+if(YETTY_ENABLE_FEATURE_CDB_GEN OR YETTY_ENABLE_FEATURE_MSDF_GEN OR YETTY_ENABLE_NOTO_FONTS)
+    yetty_3rdparty_fetch(fonts _FONTS_DIR)
     # Engrave the Emmentaler music-font CDB into the same dir so it ships with
     # the install; ymusic references it by name (see emmentaler-cdb.cmake).
     include(${YETTY_ROOT}/build-tools/yetty/emmentaler-cdb.cmake)
-endif()
-
-# World-coverage Noto font set (script faces + CJK + Color Emoji): raw TTFs
-# staged into the runtime fonts dir next to the assets/fonts DejaVu faces.
-# The terminal's codepoint-range font routing resolves them by name.
-if(YETTY_ENABLE_NOTO_FONTS)
-    yetty_3rdparty_fetch(noto-fonts _NOTO_FONTS_DIR)
 endif()
 
 # yemu runtime (kernel + opensbi + alpine + unified yetty rootfs):
@@ -729,19 +727,19 @@ function(yetty_embed_assets TARGET)
         file(COPY "${FONT_FILE}" DESTINATION "${EMBED_DATA_DIR}/fonts")
     endforeach()
 
-    # World-coverage Noto set (fetched lib-noto-fonts noarch tarball): script
-    # faces + CJK + Color Emoji, consumed by the terminal's range routing.
-    if(YETTY_ENABLE_NOTO_FONTS AND YETTY_3RDPARTY_noto-fonts_DIR)
-        file(GLOB NOTO_FONT_FILES "${YETTY_3RDPARTY_noto-fonts_DIR}/*.ttf")
+    # World-coverage Noto set (from the fetched lib-fonts noarch tarball):
+    # script faces + CJK + Color Emoji, consumed by the range routing.
+    if(YETTY_ENABLE_NOTO_FONTS AND YETTY_3RDPARTY_fonts_DIR)
+        file(GLOB NOTO_FONT_FILES "${YETTY_3RDPARTY_fonts_DIR}/*.ttf")
         foreach(NOTO_FONT_FILE ${NOTO_FONT_FILES})
             file(COPY "${NOTO_FONT_FILE}" DESTINATION "${EMBED_DATA_DIR}/fonts")
         endforeach()
     endif()
 
-    # Copy msdf-fonts (cdb shipped pre-brotli'd as *.cdb.br; incbin's
+    # Copy msdf-fonts (shipped pre-brotli'd as *.cdb.br; incbin's
     # already-compressed path embeds the bytes as-is and strips .br from
-    # the in-binary asset name). Source dir comes from yetty_3rdparty_fetch(cdb).
-    file(GLOB MSDF_FILES "${YETTY_3RDPARTY_cdb_DIR}/*.cdb.br")
+    # the in-binary asset name). Source dir comes from yetty_3rdparty_fetch(fonts).
+    file(GLOB MSDF_FILES "${YETTY_3RDPARTY_fonts_DIR}/*.cdb.br")
     foreach(MSDF_FILE ${MSDF_FILES})
         file(COPY "${MSDF_FILE}" DESTINATION "${EMBED_DATA_DIR}/msdf-fonts")
     endforeach()

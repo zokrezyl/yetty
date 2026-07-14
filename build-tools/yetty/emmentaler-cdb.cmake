@@ -1,19 +1,19 @@
 # emmentaler-cdb.cmake
 # Generates the Emmentaler music-font MSDF CDB at configure time and drops it
-# into the cdb dir next to the fetched default-font CDBs, so the embed glob
-# (shared.cmake: ${YETTY_3RDPARTY_cdb_DIR}/*.cdb.br) ships it like any other
+# into the fonts dir next to the fetched default-font CDBs, so the embed glob
+# (shared.cmake: ${YETTY_3RDPARTY_fonts_DIR}/*.cdb.br) ships it like any other
 # installed font. ymusic then references the font by name ("Emmentaler") and
 # the receiver resolves msdf-fonts/Emmentaler.cdb from the install — no score
 # ever carries the ~200 KB font.
 #
-# Unlike the four DejaVu faces (shipped via the prebuilt `cdb` 3rdparty
+# Unlike the four DejaVu faces (shipped via the prebuilt `fonts` 3rdparty
 # tarball), Emmentaler is generated locally here: it is a single static music
 # face, cheap to engrave once, and keeping it out of the tarball avoids a
 # release-artifact round-trip just to add one font.
 #
 # Idempotent: skips entirely once Emmentaler.cdb.br exists in the cdb dir.
 
-set(_EMM_CDB_DIR "${YETTY_3RDPARTY_cdb_DIR}")
+set(_EMM_CDB_DIR "${YETTY_3RDPARTY_fonts_DIR}")
 set(_EMM_OTF "${YETTY_ROOT}/assets/fonts/Emmentaler-20.otf")
 set(_EMM_NAME "Emmentaler")
 set(_EMM_RAW "${_EMM_CDB_DIR}/${_EMM_NAME}.cdb")

@@ -86,6 +86,10 @@ LIBYAML_VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/build-tools/3rdparty/libyaml/
 LZ4_VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/build-tools/3rdparty/lz4/version")"
 PDFIO_VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/build-tools/3rdparty/pdfio/version")"
 FREETYPE_VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/build-tools/3rdparty/freetype/version")"
+# The version file may carry a packaging revision (e.g. 2.13.2-1) that names
+# the prebuilt tarball; the upstream source tag uses only the component
+# before the first dash — same convention as libssh2/mimalloc.
+FREETYPE_UPSTREAM_VERSION="${FREETYPE_VERSION%%-*}"
 YXML_VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/build-tools/3rdparty/yxml/version")"
 CDB_VERSION="4.3.2"   # howerj/cdb, same as build-tools/yetty/libs/cdb.cmake
 
@@ -106,10 +110,10 @@ fetch_ycat_sources() {
         "https://github.com/michaelrsweet/pdfio/archive/refs/tags/v${PDFIO_VERSION}.tar.gz" \
         "pdfio-src-${PDFIO_VERSION}.tar.gz" \
         "pdfio-${PDFIO_VERSION}"
-    local freetype_tag="VER-$(echo "$FREETYPE_VERSION" | tr '.' '-')"
+    local freetype_tag="VER-$(echo "$FREETYPE_UPSTREAM_VERSION" | tr '.' '-')"
     fetch_source freetype \
         "https://github.com/freetype/freetype/archive/refs/tags/${freetype_tag}.tar.gz" \
-        "freetype-src-${FREETYPE_VERSION}.tar.gz" \
+        "freetype-src-${FREETYPE_UPSTREAM_VERSION}.tar.gz" \
         "freetype-${freetype_tag}"
     fetch_source cdb \
         "https://github.com/howerj/cdb/archive/refs/tags/v${CDB_VERSION}.tar.gz" \

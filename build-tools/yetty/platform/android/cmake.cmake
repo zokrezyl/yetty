@@ -143,13 +143,19 @@ if(YETTY_ENABLE_FEATURE_ASSETS)
 endif()
 
 # Copy prebuilt CDB fonts to Android assets dir after build. Source is the
-# 3rdparty fetch dir populated by yetty_3rdparty_fetch(cdb). Files arrive
-# brotli-pre-compressed (.cdb.br); the runtime decompresses on read.
-if(YETTY_ENABLE_FEATURE_CDB_GEN AND DEFINED YETTY_3RDPARTY_cdb_DIR)
-    add_custom_command(TARGET yetty POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${YETTY_3RDPARTY_cdb_DIR}" "${ANDROID_ASSETS_DIR}/msdf-fonts"
-        COMMENT "Copying CDB fonts to Android assets (from 3rdparty fetch)"
-    )
+# 3rdparty fetch dir populated by yetty_3rdparty_fetch(fonts). Files arrive
+# brotli-pre-compressed (.cdb.br); the runtime decompresses on read. Copy
+# only the CDBs — the fonts fetch dir also carries the Noto TTF set (which
+# ships via the embed pipeline's fonts/ staging, not msdf-fonts/).
+if(YETTY_ENABLE_FEATURE_CDB_GEN AND DEFINED YETTY_3RDPARTY_fonts_DIR)
+    file(GLOB _ANDROID_MSDF_CDB_FILES "${YETTY_3RDPARTY_fonts_DIR}/*.cdb.br")
+    if(_ANDROID_MSDF_CDB_FILES)
+        add_custom_command(TARGET yetty POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${ANDROID_ASSETS_DIR}/msdf-fonts"
+            COMMAND ${CMAKE_COMMAND} -E copy ${_ANDROID_MSDF_CDB_FILES} "${ANDROID_ASSETS_DIR}/msdf-fonts/"
+            COMMENT "Copying CDB fonts to Android assets (from 3rdparty fetch)"
+        )
+    endif()
 endif()
 
 # Ship the QEMU binary as a JNI lib so it ends up in nativeLibraryDir at
