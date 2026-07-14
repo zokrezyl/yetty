@@ -192,9 +192,17 @@ function(yetty_stage_webasm_assets)
     _stage_glob("${YETTY_ROOT}/src/yetty/yfont/glyph-shaders/_*.wgsl"
                 "data/shaders/glyph-shaders" TRUE "/data")
 
-    # Fonts.
+    # Fonts (.otf too — Emmentaler, the ymusic face, is an OpenType file).
     _stage_glob("${YETTY_ROOT}/assets/fonts/*.ttf"
                 "data/fonts" TRUE "/data")
+    _stage_glob("${YETTY_ROOT}/assets/fonts/*.otf"
+                "data/fonts" TRUE "/data")
+
+    # World-coverage Noto set (fetched lib-noto-fonts noarch tarball).
+    if(YETTY_ENABLE_NOTO_FONTS AND YETTY_3RDPARTY_noto-fonts_DIR)
+        _stage_glob("${YETTY_3RDPARTY_noto-fonts_DIR}/*.ttf"
+                    "data/fonts" TRUE "/data")
+    endif()
 
     # MSDF CDBs (already shipped .br by 3rdparty cdb fetch).
     if(YETTY_3RDPARTY_cdb_DIR)

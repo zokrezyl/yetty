@@ -108,6 +108,19 @@ do not affect the license of Yetty's own code. They carry their own
 |-----------|---------|---------|-------|
 | NetSurf | 3.11 | GPLv2 | `ynetsurf` integration — **disabled by default**. Enabling it links GPLv2 code; build with it off to keep distribution permissive. |
 
+## Bundled fonts (redistributed as assets)
+
+Shipped into the runtime fonts dir on every channel (desktop via yinstall,
+android/ios/tvos embedded, webasm staged):
+
+- **DejaVu Sans Mono (Nerd Font patched)** — Bitstream Vera license +
+  public-domain additions — the base terminal face (`assets/fonts/`)
+- **Noto fonts** (script faces + Noto Sans CJK + Noto Color Emoji) — SIL
+  Open Font License 1.1 — world script coverage for the terminal's
+  codepoint-range font routing; fetched as the `lib-noto-fonts` noarch
+  asset tarball (`build-tools/3rdparty/noto-fonts/`), disable with
+  `YETTY_ENABLE_NOTO_FONTS=OFF`
+
 ## System libraries (dynamically linked, not redistributed)
 
 Provided by the host OS; linked against, not bundled:

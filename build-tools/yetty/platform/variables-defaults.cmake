@@ -186,6 +186,12 @@ option(YETTY_ENABLE_TOOL_YINSTALL        "yinstall installer"                ON)
 # rootfs sets it ON so its tools are self-contained. Set ON to build
 # standalone, self-extracting desktop binaries.
 option(YETTY_EMBED_ASSETS_IN_BINARIES "Bake assets into the desktop app binaries" OFF)
+# World-coverage Noto font set (script faces + CJK + Color Emoji), fetched as
+# the lib-noto-fonts noarch tarball and shipped into the runtime fonts dir on
+# every channel. The terminal's codepoint-range routing (config-defaults.yaml
+# terminal/text-layer/font/ranges) resolves these by name. ~90 MB raw; set
+# OFF for minimal builds — the range faces then fall back to the base font.
+option(YETTY_ENABLE_NOTO_FONTS "Ship the Noto world-coverage font set" ON)
 option(YETTY_ENABLE_TOOL_YMESH           "ymesh tool (.glb → OSC)"           ON)
 option(YETTY_ENABLE_TOOL_YVIDEO          "yvideo tool (.h264 → OSC stream)"  ON)
 option(YETTY_ENABLE_TOOL_YAUDIO_INTERVALS "yaudio-intervals tool (WAV energy interval finder)" ON)

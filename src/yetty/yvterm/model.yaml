@@ -306,8 +306,20 @@ classes:
         type: int
         get: false
         set: false
-      - name: font
-        type: "struct yetty_yfont_ms_font *"
+      - name: faces
+        type: "struct yvterm_font_face[4]"
+        get: false
+        set: false
+      - name: face_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: font_ranges
+        type: "struct yvterm_font_range[64]"
+        get: false
+        set: false
+      - name: font_range_count
+        type: uint32_t
         get: false
         set: false
       - name: post_fx_index
@@ -366,32 +378,8 @@ classes:
         type: int
         get: false
         set: false
-      - name: meta_buffer
-        type: int
-        get: false
-        set: false
       - name: uniform_buffer
         type: int
-        get: false
-        set: false
-      - name: atlas_texture
-        type: int
-        get: false
-        set: false
-      - name: atlas_view
-        type: int
-        get: false
-        set: false
-      - name: atlas_width
-        type: uint32_t
-        get: false
-        set: false
-      - name: atlas_height
-        type: uint32_t
-        get: false
-        set: false
-      - name: meta_capacity
-        type: size_t
         get: false
         set: false
       - name: bind_group
@@ -917,6 +905,35 @@ exposed:
         type: uint32_t
     doc: "/* Warm / cold tier budgets (scrollback/warm-bytes, scrollback/file-max-bytes;
  * 0 keeps the built-in warm default / unlimited file). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_palette_color
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+      - name: rgb
+        type: uint32_t
+    doc: "/* Set one of the 16 ANSI palette entries (web-style 0xRRGGBB). Indexed
+ * colours (SGR 30-37/90-97, 38;5;n for n < 16) are resolved through this
+ * table as PTY data is parsed, so install the palette before feeding the
+ * terminal any output. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_default_colors
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fg_rgb
+        type: uint32_t
+      - name: bg_rgb
+        type: uint32_t
+    doc: "/* Set the default foreground/background (web-style 0xRRGGBB) and re-seed
+ * everything already derived from the built-in libvterm defaults: the state
+ * is hard-reset so the active pen adopts the new colours, and the blank-line
+ * template plus both screen rings are re-blanked. Intended to run right after
+ * create, before any PTY data is fed — content already on screen is lost. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_register_memtags
     return_type: struct yetty_ycore_void_result
@@ -1460,6 +1477,16 @@ types:
         type: uint32_t
       - name: pad_b
         type: uint32_t
+      - name: face_methods
+        type: uint32_t
+      - name: face_pad0
+        type: uint32_t
+      - name: face_pad1
+        type: uint32_t
+      - name: face_pad2
+        type: uint32_t
+      - name: face_params
+        type: "float[4][4]"
   - name: yetty_yclass_object_ptr_result
     kind: result
     fields:
@@ -1736,6 +1763,49 @@ types:
         type: "struct yetty_ycore_memtag *"
       - name: live_pin_stamp
         type: uint32_t
+  - name: yvterm_font_face
+    kind: struct
+    fields:
+      - name: font
+        type: "struct yetty_yfont_ms_font *"
+      - name: method
+        type: enum yvterm_font_method
+      - name: name
+        type: "char[64]"
+      - name: meta_buffer
+        type: int
+      - name: meta_capacity
+        type: size_t
+      - name: atlas_texture
+        type: int
+      - name: atlas_view
+        type: int
+      - name: atlas_width
+        type: uint32_t
+      - name: atlas_height
+        type: uint32_t
+      - name: atlas_format
+        type: uint32_t
+      - name: bytes_per_pixel
+        type: uint32_t
+  - name: yvterm_font_method
+    kind: enum
+    values:
+      - name: YVTERM_FONT_METHOD_MSDF
+        value: 0
+      - name: YVTERM_FONT_METHOD_RASTER
+        value: 1
+      - name: YVTERM_FONT_METHOD_RASTER_COLOR
+        value: 2
+  - name: yvterm_font_range
+    kind: struct
+    fields:
+      - name: from
+        type: uint32_t
+      - name: to
+        type: uint32_t
+      - name: face
+        type: uint32_t
 local_types:
   yetty_yvterm_text_attr: src/yetty/yvterm/grid.c
   yetty_yvterm_text_cell: src/yetty/yvterm/grid.c
@@ -1746,6 +1816,9 @@ local_types:
   yetty_yvterm_reflow_source: src/yetty/yvterm/grid.c
   yetty_yvterm_reflow_logical: src/yetty/yvterm/grid.c
   grid_view_sweep_state: src/yetty/yvterm/grid.c
+  yvterm_font_method: src/yetty/yvterm/vterm.c
+  yvterm_font_face: src/yetty/yvterm/vterm.c
+  yvterm_font_range: src/yetty/yvterm/vterm.c
   vterm_uniforms: src/yetty/yvterm/vterm.c
   yetty_yvterm_vterm: src/yetty/yvterm/vterm.c
 local_typedefs:

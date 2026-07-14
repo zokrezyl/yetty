@@ -1,9 +1,12 @@
 #!/bin/bash
 # Builds freetype (freetype/freetype) for $TARGET_PLATFORM via its
-# upstream CMake. Optional deps disabled (harfbuzz/brotli/bzip2/png) —
+# upstream CMake. Optional deps disabled (harfbuzz/brotli/bzip2) —
 # yetty's consumer cmake wires those in separately. zlib IS enabled
 # because yetty embeds compressed PCF/SFNT fonts; we link against the
 # prebuilt zlib tarball at build time so freetype.a's .gz path resolves.
+# PNG is ALSO enabled (against the prebuilt libpng tarball): CBDT/CBLC
+# color-emoji strikes (Noto Color Emoji) are PNG-compressed and cannot
+# load without it.
 #
 # Output tarball layout (consumed by build-tools/cmake/libs/freetype.cmake):
 #   lib/libfreetype.a
@@ -19,7 +22,12 @@ trap 'rc=$?; echo "FAILED: rc=$rc line=$LINENO source=${BASH_SOURCE[0]} cmd: $BA
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "$SCRIPT_DIR/version")"
+# The full VERSION (may carry a packaging revision, e.g. 2.13.2-1) names
+# the tarball + release tag; the upstream source archive uses only the
+# component before the first dash. Same convention as libssh2/mimalloc.
+UPSTREAM_VERSION="${VERSION%%-*}"
 ZLIB_VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/build-tools/3rdparty/zlib/version")"
+PNG_VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/build-tools/3rdparty/libpng/version")"
 
 WORK_DIR="${WORK_DIR:-/tmp/yetty-3rdparty-freetype-$TARGET_PLATFORM}"
 CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-3rdparty}"
@@ -28,9 +36,9 @@ NCPU="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 URL_BASE="${YETTY_3RDPARTY_URL_BASE:-https://github.com/zokrezyl/yetty/releases/download}"
 
 # Upstream tags use the form "VER-2-13-2"
-TAG="VER-$(echo "$VERSION" | tr '.' '-')"
+TAG="VER-$(echo "$UPSTREAM_VERSION" | tr '.' '-')"
 URL="https://github.com/freetype/freetype/archive/refs/tags/${TAG}.tar.gz"
-TARBALL_CACHE="$CACHE_DIR/freetype-${VERSION}.tar.gz"
+TARBALL_CACHE="$CACHE_DIR/freetype-${UPSTREAM_VERSION}.tar.gz"
 SRC_DIR="$WORK_DIR/freetype-${TAG}"
 BUILD_DIR="$WORK_DIR/build-${TARGET_PLATFORM}"
 INSTALL_DIR="$WORK_DIR/install-${TARGET_PLATFORM}"
@@ -40,6 +48,10 @@ TARBALL="$OUTPUT_DIR/freetype-${TARGET_PLATFORM}-${VERSION}.tar.gz"
 ZLIB_TAR_URL="$URL_BASE/lib-zlib-${ZLIB_VERSION}/zlib-${TARGET_PLATFORM}-${ZLIB_VERSION}.tar.gz"
 ZLIB_TARBALL="$CACHE_DIR/zlib-${TARGET_PLATFORM}-${ZLIB_VERSION}.tar.gz"
 ZLIB_PREFIX="$WORK_DIR/zlib-${TARGET_PLATFORM}-${ZLIB_VERSION}"
+
+PNG_TAR_URL="$URL_BASE/lib-libpng-${PNG_VERSION}/libpng-${TARGET_PLATFORM}-${PNG_VERSION}.tar.gz"
+PNG_TARBALL="$CACHE_DIR/libpng-${TARGET_PLATFORM}-${PNG_VERSION}.tar.gz"
+PNG_PREFIX="$WORK_DIR/libpng-${TARGET_PLATFORM}-${PNG_VERSION}"
 
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 
@@ -59,14 +71,30 @@ fetch() {
     fi
 }
 
-fetch "$URL"          "$TARBALL_CACHE" "freetype ${VERSION} (${TAG})"            freetype-source
+fetch "$URL"          "$TARBALL_CACHE" "freetype ${UPSTREAM_VERSION} (${TAG})"    freetype-source
 fetch "$ZLIB_TAR_URL" "$ZLIB_TARBALL"  "zlib ${ZLIB_VERSION} (${TARGET_PLATFORM})" freetype-zlib
+fetch "$PNG_TAR_URL"  "$PNG_TARBALL"   "libpng ${PNG_VERSION} (${TARGET_PLATFORM})" freetype-libpng
 
 if [ ! -d "$SRC_DIR" ]; then tar -C "$WORK_DIR" -xzf "$TARBALL_CACHE"; fi
-# Always re-extract the prebuilt dep — see libpng's _build.sh for why.
-rm -rf "$ZLIB_PREFIX"
-mkdir -p "$ZLIB_PREFIX"
+# Always re-extract the prebuilt deps — see libpng's _build.sh for why.
+rm -rf "$ZLIB_PREFIX" "$PNG_PREFIX"
+mkdir -p "$ZLIB_PREFIX" "$PNG_PREFIX"
 tar -C "$ZLIB_PREFIX" -xzf "$ZLIB_TARBALL"
+tar -C "$PNG_PREFIX" -xzf "$PNG_TARBALL"
+
+PNG_STATIC_LIB="$PNG_PREFIX/lib/libpng.a"
+if [ ! -f "$PNG_STATIC_LIB" ]; then
+    PNG_STATIC_LIB="$PNG_PREFIX/lib/libpng16.a"
+fi
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    for _CAND in libpng16_static.lib libpng16.lib libpng.lib; do
+        if [ -f "$PNG_PREFIX/lib/$_CAND" ]; then
+            PNG_STATIC_LIB="$PNG_PREFIX/lib/$_CAND"
+            break
+        fi
+    done
+fi
+[ -f "$PNG_STATIC_LIB" ] || { echo "libpng static lib not found in $PNG_PREFIX/lib" >&2; exit 1; }
 
 rm -rf "$BUILD_DIR" "$INSTALL_DIR" "$STAGE"
 mkdir -p "$INSTALL_DIR" "$STAGE"
@@ -78,7 +106,10 @@ CMAKE_ARGS=(
     -DFT_DISABLE_HARFBUZZ=ON
     -DFT_DISABLE_BROTLI=ON
     -DFT_DISABLE_BZIP2=ON
-    -DFT_DISABLE_PNG=ON
+    -DFT_DISABLE_PNG=OFF
+    -DFT_REQUIRE_PNG=ON
+    -DPNG_PNG_INCLUDE_DIR="$PNG_PREFIX/include"
+    -DPNG_LIBRARY="$PNG_STATIC_LIB"
     -DFT_DISABLE_ZLIB=OFF
     -DFT_REQUIRE_ZLIB=ON
     -DZLIB_ROOT="$ZLIB_PREFIX"

@@ -27,8 +27,10 @@ if(TARGET freetype)
     return()
 endif()
 
-# zlib resolves first — freetype.a has unresolved zlib symbols.
+# zlib resolves first — freetype.a has unresolved zlib symbols. libpng
+# likewise: PNG support is enabled for CBDT/CBLC color-emoji strikes.
 include(${CMAKE_CURRENT_LIST_DIR}/zlib.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/libpng.cmake)
 
 yetty_3rdparty_fetch(freetype _FREETYPE_DIR)
 
@@ -53,7 +55,7 @@ add_library(freetype STATIC IMPORTED GLOBAL)
 set_target_properties(freetype PROPERTIES
     IMPORTED_LOCATION "${_FREETYPE_LIB}"
     INTERFACE_INCLUDE_DIRECTORIES "${_FREETYPE_INC}"
-    INTERFACE_LINK_LIBRARIES "ZLIB::ZLIB"
+    INTERFACE_LINK_LIBRARIES "png_static;ZLIB::ZLIB"
 )
 
 # If FindX11's cascade already created Freetype::Freetype as IMPORTED
@@ -69,7 +71,7 @@ if(TARGET Freetype::Freetype)
         IMPORTED_LOCATION_RELEASE "${_FREETYPE_LIB}"
         IMPORTED_LOCATION_DEBUG   "${_FREETYPE_LIB}"
         INTERFACE_INCLUDE_DIRECTORIES "${_FREETYPE_INC}"
-        INTERFACE_LINK_LIBRARIES  "ZLIB::ZLIB"
+        INTERFACE_LINK_LIBRARIES  "png_static;ZLIB::ZLIB"
     )
 else()
     add_library(Freetype::Freetype ALIAS freetype)

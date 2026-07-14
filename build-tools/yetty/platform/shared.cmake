@@ -101,6 +101,13 @@ if(YETTY_ENABLE_FEATURE_CDB_GEN OR YETTY_ENABLE_FEATURE_MSDF_GEN)
     include(${YETTY_ROOT}/build-tools/yetty/emmentaler-cdb.cmake)
 endif()
 
+# World-coverage Noto font set (script faces + CJK + Color Emoji): raw TTFs
+# staged into the runtime fonts dir next to the assets/fonts DejaVu faces.
+# The terminal's codepoint-range font routing resolves them by name.
+if(YETTY_ENABLE_NOTO_FONTS)
+    yetty_3rdparty_fetch(noto-fonts _NOTO_FONTS_DIR)
+endif()
+
 # yemu runtime (kernel + opensbi + alpine + unified yetty rootfs):
 # consumed by both the embed pipeline (via *.br) and the runtime-path
 # mode (via the auto-decompressed raw files).
@@ -721,6 +728,15 @@ function(yetty_embed_assets TARGET)
     foreach(FONT_FILE ${FONT_FILES})
         file(COPY "${FONT_FILE}" DESTINATION "${EMBED_DATA_DIR}/fonts")
     endforeach()
+
+    # World-coverage Noto set (fetched lib-noto-fonts noarch tarball): script
+    # faces + CJK + Color Emoji, consumed by the terminal's range routing.
+    if(YETTY_ENABLE_NOTO_FONTS AND YETTY_3RDPARTY_noto-fonts_DIR)
+        file(GLOB NOTO_FONT_FILES "${YETTY_3RDPARTY_noto-fonts_DIR}/*.ttf")
+        foreach(NOTO_FONT_FILE ${NOTO_FONT_FILES})
+            file(COPY "${NOTO_FONT_FILE}" DESTINATION "${EMBED_DATA_DIR}/fonts")
+        endforeach()
+    endif()
 
     # Copy msdf-fonts (cdb shipped pre-brotli'd as *.cdb.br; incbin's
     # already-compressed path embeds the bytes as-is and strips .br from

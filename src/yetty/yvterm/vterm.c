@@ -31,9 +31,13 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfont/ms-font.h>
 #include <yetty/yfont/ms-msdf-font.h>
+#include <yetty/yfont/ms-raster-font.h>
 #include <yetty/yframework/yframework.h>
+#include <yetty/ymsdf/generator.h>
+#include <yetty/yplatform/fs.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
+#include <yetty/yrender/texture-format.h>
 #include <yetty/yterminal/terminal.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yfont/shader-glyph.h> /* shader-glyph codepoint table lookup */
@@ -46,6 +50,54 @@
 
 /* GPU cell layout the text shader reads: 4 u32 words per cell. */
 enum { YVTERM_WORDS_PER_CELL = 4 };
+
+/*===========================================================================
+ * Multi-font faces — config-driven codepoint-range → font routing.
+ *
+ * Face 0 is always the base terminal font (font/family, the text layer's
+ * render-method). Extra faces come from the terminal/text-layer/font/ranges
+ * config list ({from, to, font, render-method} entries) so e.g. CJK ranges
+ * can route to a raster Noto face while Latin stays on the MSDF base font.
+ * Every face binds its own atlas texture + glyph-meta buffer; the text
+ * shader picks the face per cell (packed next to the cell width) and decodes
+ * per the face's render method.
+ *=========================================================================*/
+enum { YVTERM_MAX_FONT_FACES = 4 };
+enum { YVTERM_MAX_FONT_RANGES = 64 };
+enum { YVTERM_FONT_FACE_NAME_MAX = 64 };
+
+enum yvterm_font_method {
+    YVTERM_FONT_METHOD_MSDF = 0,
+    YVTERM_FONT_METHOD_RASTER = 1,
+    /* Raster face whose atlas is RGBA8 (color emoji) — detected from the
+     * created font's atlas format, not spelled in the config (the config
+     * still says "raster"). The shader samples pre-colored texels and skips
+     * foreground tinting. */
+    YVTERM_FONT_METHOD_RASTER_COLOR = 2,
+};
+
+struct yvterm_font_face {
+    struct yetty_yfont_ms_font *font; /* NULL = unused slot */
+    enum yvterm_font_method method;
+    char name[YVTERM_FONT_FACE_NAME_MAX];
+
+    /* Per-face GPU copies of the font's atlas + glyph metadata. */
+    WGPUBuffer meta_buffer;
+    size_t meta_capacity;
+    WGPUTexture atlas_texture;
+    WGPUTextureView atlas_view;
+    uint32_t atlas_width;
+    uint32_t atlas_height;
+    uint32_t atlas_format;    /* WGPUTextureFormat */
+    uint32_t bytes_per_pixel; /* of atlas_format */
+};
+
+/* One codepoint range routed to a face. Matched in config order. */
+struct yvterm_font_range {
+    uint32_t from;
+    uint32_t to;
+    uint32_t face;
+};
 
 /* How many rows BELOW the visible bottom the rich pass scans for figure anchors,
  * on top of one screen height. A figure is anchored on its BOTTOM line but spans
@@ -107,6 +159,14 @@ struct vterm_uniforms {
     float coord_fx_p5;
     uint32_t pad_a;
     uint32_t pad_b;
+    /* Multi-font faces: render method per face (4 bits each, low nibble =
+     * face 0) and per-face font geometry (pixel_range, scale, baseline_y,
+     * glyph_left) — one vec4 per face, 16-byte aligned for WGSL. */
+    uint32_t face_methods;
+    uint32_t face_pad0;
+    uint32_t face_pad1;
+    uint32_t face_pad2;
+    float face_params[YVTERM_MAX_FONT_FACES][4];
 };
 
 /* `struct yetty_ydraw_composite` is forward-declared in grid.c and kept opaque
@@ -201,7 +261,13 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("include@yetty/ytermi
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat target_format;
-    struct yetty_yfont_ms_font *font;
+
+    /* Font faces: slot 0 = base font, slots 1+ = config range faces. The
+     * codepoint→face routing table is matched in config order at pack time. */
+    struct yvterm_font_face faces[YVTERM_MAX_FONT_FACES];
+    uint32_t face_count;
+    struct yvterm_font_range font_ranges[YVTERM_MAX_FONT_RANGES];
+    uint32_t font_range_count;
 
     /* OSC-driven post-color effect for the (opaque) terminal text surface.
      * index 0 = none; matches effects-lib.wgsl / the OSC protocol numbering. */
@@ -221,19 +287,13 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("include@yetty/ytermi
     char *combined_shader;
     struct yetty_ycore_buffer effects_lib_code;
 
-    /* Owned wgpu resources. */
+    /* Owned wgpu resources. (Per-face atlas/meta live in faces[].) */
     WGPUShaderModule shader_module;
     WGPUBindGroupLayout bind_group_layout;
     WGPURenderPipeline pipeline;
     WGPUSampler sampler;
     WGPUBuffer cell_buffer;
-    WGPUBuffer meta_buffer;
     WGPUBuffer uniform_buffer;
-    WGPUTexture atlas_texture;
-    WGPUTextureView atlas_view;
-    uint32_t atlas_width;
-    uint32_t atlas_height;
-    size_t meta_capacity;
     WGPUBindGroup bind_group;
     int bind_group_valid;
     uint32_t cell_buffer_cells; /* capacity in cells */
@@ -308,12 +368,23 @@ static const char *vterm_text_wgsl(void)
         "    coord_fx_p0: f32, coord_fx_p1: f32, coord_fx_p2: f32,\n"
         "    coord_fx_p3: f32, coord_fx_p4: f32, coord_fx_p5: f32,\n"
         "    pad_a: u32, pad_b: u32,\n"
+        "    face_methods: u32, face_pad0: u32, face_pad1: u32, face_pad2: u32,\n"
+        "    face_params: array<vec4<f32>, 4>,\n"
         "};\n"
         "@group(0) @binding(0) var<storage, read> cells: array<u32>;\n"
         "@group(0) @binding(1) var<storage, read> glyph_meta: array<u32>;\n"
         "@group(0) @binding(2) var atlas_tex: texture_2d<f32>;\n"
         "@group(0) @binding(3) var atlas_smp: sampler;\n"
         "@group(0) @binding(4) var<uniform> uni: Uniforms;\n"
+        /* Extra font faces (config range faces). Unused slots are bound to the
+         * face-0 resources, and face_methods routes decoding, so the shader is
+         * compiled once regardless of how many faces the config declares. */
+        "@group(0) @binding(5) var<storage, read> face1_meta: array<u32>;\n"
+        "@group(0) @binding(6) var face1_tex: texture_2d<f32>;\n"
+        "@group(0) @binding(7) var<storage, read> face2_meta: array<u32>;\n"
+        "@group(0) @binding(8) var face2_tex: texture_2d<f32>;\n"
+        "@group(0) @binding(9) var<storage, read> face3_meta: array<u32>;\n"
+        "@group(0) @binding(10) var face3_tex: texture_2d<f32>;\n"
         "struct VSOut {\n"
         "    @builtin(position) pos: vec4<f32>,\n"
         "    @location(0) @interpolate(linear) grid_pixel: vec2<f32>,\n"
@@ -334,30 +405,77 @@ static const char *vterm_text_wgsl(void)
         "fn median3(r: f32, g: f32, b: f32) -> f32 {\n"
         "    return max(min(r,g), min(max(r,g), b));\n"
         "}\n"
-        "fn sample_glyph(glyph: u32, local_px: vec2<f32>) -> f32 {\n"
+        "fn face_meta(face: u32, index: u32) -> u32 {\n"
+        "    switch face {\n"
+        "        case 1u: { return face1_meta[index]; }\n"
+        "        case 2u: { return face2_meta[index]; }\n"
+        "        case 3u: { return face3_meta[index]; }\n"
+        "        default: { return glyph_meta[index]; }\n"
+        "    }\n"
+        "}\n"
+        "fn face_texel(face: u32, uv: vec2<f32>) -> vec4<f32> {\n"
+        "    switch face {\n"
+        "        case 1u: { return textureSampleLevel(face1_tex, atlas_smp, uv, 0.0); }\n"
+        "        case 2u: { return textureSampleLevel(face2_tex, atlas_smp, uv, 0.0); }\n"
+        "        case 3u: { return textureSampleLevel(face3_tex, atlas_smp, uv, 0.0); }\n"
+        "        default: { return textureSampleLevel(atlas_tex, atlas_smp, uv, 0.0); }\n"
+        "    }\n"
+        "}\n"
+        "fn face_atlas_size(face: u32) -> vec2<f32> {\n"
+        "    switch face {\n"
+        "        case 1u: { return vec2<f32>(textureDimensions(face1_tex)); }\n"
+        "        case 2u: { return vec2<f32>(textureDimensions(face2_tex)); }\n"
+        "        case 3u: { return vec2<f32>(textureDimensions(face3_tex)); }\n"
+        "        default: { return vec2<f32>(textureDimensions(atlas_tex)); }\n"
+        "    }\n"
+        "}\n"
+        /* Raster faces: 4-word meta (uv origin + slot width in cells), glyphs
+         * pre-rasterized at cell size. Returns the raw texel: R8 coverage
+         * lands in .r, color (RGBA8 emoji) texels come through whole. */
+        "fn sample_raster_texel(face: u32, glyph: u32, local_px: vec2<f32>) -> vec4<f32> {\n"
+        "    let base = glyph * 4u;\n"
+        "    let uv0 = vec2<f32>(bitcast<f32>(face_meta(face, base+0u)), "
+        "bitcast<f32>(face_meta(face, base+1u)));\n"
+        "    if (uv0.x < 0.0) { return vec4<f32>(0.0); }\n"
+        "    let width_cells = max(bitcast<f32>(face_meta(face, base+2u)), 1.0);\n"
+        "    let slot_px = vec2<f32>(uni.cell_size.x * width_cells, uni.cell_size.y);\n"
+        "    if (local_px.x < 0.0 || local_px.y < 0.0 || local_px.x >= slot_px.x || "
+        "local_px.y >= slot_px.y) { return vec4<f32>(0.0); }\n"
+        "    let uv = uv0 + local_px / face_atlas_size(face);\n"
+        "    return face_texel(face, uv);\n"
+        "}\n"
+        /* MSDF faces: 10-word glyph meta (uv_min, uv_max, size, bearing,
+         * advance, pad), face_params = (pixel_range, scale, baseline_y,
+         * glyph_left). */
+        "fn sample_face_glyph(face: u32, glyph: u32, local_px: vec2<f32>) -> f32 {\n"
+        "    let method = (uni.face_methods >> (face * 4u)) & 0xFu;\n"
+        "    if (method == 1u) {\n"
+        "        return sample_raster_texel(face, glyph, local_px).r;\n"
+        "    }\n"
+        "    let params = uni.face_params[face];\n"
         "    let base = glyph * 10u;\n"
-        "    let uv_min = vec2<f32>(bitcast<f32>(glyph_meta[base+0u]), "
-        "bitcast<f32>(glyph_meta[base+1u]));\n"
-        "    let uv_max = vec2<f32>(bitcast<f32>(glyph_meta[base+2u]), "
-        "bitcast<f32>(glyph_meta[base+3u]));\n"
-        "    let gsize = vec2<f32>(bitcast<f32>(glyph_meta[base+4u]), "
-        "bitcast<f32>(glyph_meta[base+5u]));\n"
-        "    let bear = vec2<f32>(bitcast<f32>(glyph_meta[base+6u]), "
-        "bitcast<f32>(glyph_meta[base+7u]));\n"
+        "    let uv_min = vec2<f32>(bitcast<f32>(face_meta(face, base+0u)), "
+        "bitcast<f32>(face_meta(face, base+1u)));\n"
+        "    let uv_max = vec2<f32>(bitcast<f32>(face_meta(face, base+2u)), "
+        "bitcast<f32>(face_meta(face, base+3u)));\n"
+        "    let gsize = vec2<f32>(bitcast<f32>(face_meta(face, base+4u)), "
+        "bitcast<f32>(face_meta(face, base+5u)));\n"
+        "    let bear = vec2<f32>(bitcast<f32>(face_meta(face, base+6u)), "
+        "bitcast<f32>(face_meta(face, base+7u)));\n"
         "    if (gsize.x <= 0.0 || gsize.y <= 0.0) { return 0.0; }\n"
-        "    let scaled_size = gsize * uni.scale;\n"
-        "    let scaled_bear = bear * uni.scale;\n"
-        "    let gtop = uni.baseline_y - scaled_bear.y;\n"
-        "    let gleft = uni.glyph_left + scaled_bear.x;\n"
+        "    let scaled_size = gsize * params.y;\n"
+        "    let scaled_bear = bear * params.y;\n"
+        "    let gtop = params.z - scaled_bear.y;\n"
+        "    let gleft = params.w + scaled_bear.x;\n"
         "    let gmin = vec2<f32>(gleft, gtop);\n"
         "    let gmax = vec2<f32>(gleft + scaled_size.x, gtop + scaled_size.y);\n"
         "    if (local_px.x < gmin.x || local_px.x >= gmax.x || local_px.y < gmin.y || "
         "local_px.y >= gmax.y) { return 0.0; }\n"
         "    let gl = (local_px - gmin) / scaled_size;\n"
         "    let uv = mix(uv_min, uv_max, gl);\n"
-        "    let texel = textureSampleLevel(atlas_tex, atlas_smp, uv, 0.0);\n"
+        "    let texel = face_texel(face, uv);\n"
         "    let sd = median3(texel.r, texel.g, texel.b);\n"
-        "    let screen_px_range = uni.pixel_range * uni.scale;\n"
+        "    let screen_px_range = params.x * params.y;\n"
         "    return clamp((sd - 0.5) * screen_px_range + 0.5, 0.0, 1.0);\n"
         "}\n"
         "@fragment\n"
@@ -409,15 +527,29 @@ static const char *vterm_text_wgsl(void)
          * the spill cell (width 0) to its right is blank. Continue sampling the
          * head glyph into the spill cell, shifted one cell to the right, so the
          * right half of CJK/double-width glyphs is drawn. */
+        "    var face = (cells[cell_index*4u + 3u] >> 8u) & 0xFFu;\n"
         "    if ((cells[cell_index*4u + 3u] & 0xFFu) == 0u && col > 0u) {\n"
         "        let head = slot * gcols + (col - 1u);\n"
         "        if ((cells[head*4u + 3u] & 0xFFu) == 2u) {\n"
         "            glyph = cells[head*4u + 0u];\n"
+        "            face = (cells[head*4u + 3u] >> 8u) & 0xFFu;\n"
         "            local.x = local.x + uni.cell_size.x;\n"
         "        }\n"
         "    }\n"
         "    var alpha = 0.0;\n"
-        "    if (glyph != 0u) { alpha = sample_glyph(glyph, local); }\n"
+        "    var glyph_rgb = vec3<f32>(0.0);\n"
+        "    var glyph_is_color = false;\n"
+        "    if (glyph != 0u) {\n"
+        "        let cell_method = (uni.face_methods >> (face * 4u)) & 0xFu;\n"
+        "        if (cell_method == 2u) {\n"
+        "            let texel = sample_raster_texel(face, glyph, local);\n"
+        "            glyph_rgb = texel.rgb;\n"
+        "            alpha = texel.a;\n"
+        "            glyph_is_color = true;\n"
+        "        } else {\n"
+        "            alpha = sample_face_glyph(face, glyph, local);\n"
+        "        }\n"
+        "    }\n"
         /* Underline (single 0x2 or double 0x4) sits just below the baseline;
          * strikethrough (0x40) crosses the cell middle. Both paint at full
          * coverage so they show on blank cells too. */
@@ -441,6 +573,9 @@ static const char *vterm_text_wgsl(void)
         "        else if (row == uni.sel_end_row) { selected = col <= uni.sel_end_col; }\n"
         "    }\n"
         "    var composed = mix(bg, fg, alpha);\n"
+        "    if (glyph_is_color) {\n" /* pre-colored emoji texel — no fg tint */
+        "        composed = mix(bg, glyph_rgb, alpha);\n"
+        "    }\n"
         "    if (is_cursor || selected) {\n"
         "        composed = mix(fg, bg, alpha);\n" /* inverted: fg fill, glyph punched in bg */
         "    }\n"
@@ -458,17 +593,30 @@ static const char *vterm_text_wgsl(void)
     return src;
 }
 
-/* Resolve a codepoint to an atlas glyph index for the given style. The styled
- * lookup lazy-loads the (style, codepoint) slot on demand, falling back to the
- * Regular face when a bold/italic CDB variant is absent. */
-static uint32_t vterm_resolve_glyph(struct yetty_yvterm_vterm *vterm, uint32_t codepoint,
-                                    enum yetty_yfont_ms_style style)
+/* Pick the face for a codepoint: first matching config range wins, face 0
+ * (the base font) is the default. */
+static uint32_t vterm_face_for_codepoint(const struct yetty_yvterm_vterm *vterm, uint32_t codepoint)
 {
-    if (!vterm->font || codepoint == 0) {
+    for (uint32_t i = 0; i < vterm->font_range_count; ++i) {
+        const struct yvterm_font_range *range = &vterm->font_ranges[i];
+        if (codepoint >= range->from && codepoint <= range->to) {
+            return range->face;
+        }
+    }
+    return 0;
+}
+
+/* Resolve a codepoint to an atlas glyph index in the given face for the given
+ * style. The styled lookup lazy-loads the (style, codepoint) slot on demand,
+ * falling back to the Regular face when a bold/italic variant is absent. */
+static uint32_t vterm_resolve_glyph(struct yetty_yvterm_vterm *vterm, uint32_t face_index,
+                                    uint32_t codepoint, enum yetty_yfont_ms_style style)
+{
+    struct yetty_yfont_ms_font *font = vterm->faces[face_index].font;
+    if (!font || codepoint == 0) {
         return 0;
     }
-    struct uint32_result gi =
-        vterm->font->ops->get_glyph_index_styled(vterm->font, codepoint, style);
+    struct uint32_result gi = font->ops->get_glyph_index_styled(font, codepoint, style);
     if (YETTY_IS_OK(gi)) {
         return gi.value;
     }
@@ -500,6 +648,7 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm,
         /* Concealed cells render their background only — resolve no glyph.
          * Bold/italic pick a styled atlas slot via the cell attributes. */
         uint32_t glyph = 0u;
+        uint32_t face = 0u;
         if (cell->codepoint && !(cell->attrs & YETTY_YVTERM_ATTR_CONCEAL)) {
             /* PUA-B shader-glyph cells are painted by the shader-glyph layer, not
              * the font atlas — leave glyph 0 so the text pass draws only the
@@ -508,7 +657,16 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm,
                 yetty_yfont_shader_glyph_codepoint_exists(cell->codepoint)) {
                 glyph = 0u;
             } else {
-                glyph = vterm_resolve_glyph(vterm, cell->codepoint, vterm_cell_style(cell->attrs));
+                face = vterm_face_for_codepoint(vterm, cell->codepoint);
+                glyph = vterm_resolve_glyph(vterm, face, cell->codepoint,
+                                            vterm_cell_style(cell->attrs));
+                /* A range face that cannot supply the glyph falls back to the
+                 * base font rather than leaving the cell blank. */
+                if (glyph == 0u && face != 0u) {
+                    face = 0u;
+                    glyph = vterm_resolve_glyph(vterm, 0u, cell->codepoint,
+                                                vterm_cell_style(cell->attrs));
+                }
             }
         }
         uint32_t fg = cell->fg;
@@ -519,7 +677,7 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm,
         words[0] = glyph;
         words[1] = fr | (fgr << 8) | (fb << 16) | (br << 24);
         words[2] = bgr | (bb << 8) | ((uint32_t)cell->attrs << 16);
-        words[3] = cell->width;
+        words[3] = (uint32_t)cell->width | (face << 8);
     }
 }
 
@@ -583,7 +741,7 @@ static struct yetty_ycore_void_result vterm_create_pipeline(struct yetty_yvterm_
         return YETTY_ERR(yetty_ycore_void, "vterm: shader module");
     }
 
-    WGPUBindGroupLayoutEntry entries[5] = {0};
+    WGPUBindGroupLayoutEntry entries[11] = {0};
     entries[0].binding = 0;
     entries[0].visibility = WGPUShaderStage_Fragment;
     entries[0].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
@@ -601,8 +759,18 @@ static struct yetty_ycore_void_result vterm_create_pipeline(struct yetty_yvterm_
     entries[4].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
     entries[4].buffer.type = WGPUBufferBindingType_Uniform;
     entries[4].buffer.minBindingSize = sizeof(struct vterm_uniforms);
+    /* Extra font faces: meta buffer + atlas texture per slot (5/6, 7/8, 9/10). */
+    for (uint32_t i = 1; i < YVTERM_MAX_FONT_FACES; ++i) {
+        entries[3 + i * 2].binding = 3 + i * 2;
+        entries[3 + i * 2].visibility = WGPUShaderStage_Fragment;
+        entries[3 + i * 2].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+        entries[4 + i * 2].binding = 4 + i * 2;
+        entries[4 + i * 2].visibility = WGPUShaderStage_Fragment;
+        entries[4 + i * 2].texture.sampleType = WGPUTextureSampleType_Float;
+        entries[4 + i * 2].texture.viewDimension = WGPUTextureViewDimension_2D;
+    }
     WGPUBindGroupLayoutDescriptor bgl_desc = {0};
-    bgl_desc.entryCount = 5;
+    bgl_desc.entryCount = 11;
     bgl_desc.entries = entries;
     vterm->bind_group_layout = wgpuDeviceCreateBindGroupLayout(vterm->device, &bgl_desc);
     if (!vterm->bind_group_layout) {
@@ -699,101 +867,165 @@ static struct yetty_ycore_void_result vterm_create_cell_buffer(struct yetty_yvte
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result vterm_recreate_atlas(struct yetty_yvterm_vterm *vterm,
-                                                           uint32_t width, uint32_t height)
+/* The font backends publish yrender texture-format enum values; their
+ * numbering does NOT match this Dawn header's WGPUTextureFormat, so map
+ * explicitly. */
+static WGPUTextureFormat vterm_texture_format_to_wgpu(uint32_t yrender_format)
 {
-    if (vterm->atlas_view) {
-        wgpuTextureViewRelease(vterm->atlas_view);
-        vterm->atlas_view = NULL;
+    switch (yrender_format) {
+    case YETTY_YRENDER_TEXTURE_FORMAT_R8_UNORM:
+        return WGPUTextureFormat_R8Unorm;
+    case YETTY_YRENDER_TEXTURE_FORMAT_RGBA8_UNORM:
+    default:
+        return WGPUTextureFormat_RGBA8Unorm;
     }
-    if (vterm->atlas_texture) {
-        wgpuTextureDestroy(vterm->atlas_texture);
-        wgpuTextureRelease(vterm->atlas_texture);
-        vterm->atlas_texture = NULL;
+}
+
+/* Bytes per pixel of the atlas formats the font backends produce. */
+static uint32_t vterm_texture_format_bpp(uint32_t yrender_format)
+{
+    switch (yrender_format) {
+    case YETTY_YRENDER_TEXTURE_FORMAT_R8_UNORM:
+        return 1u;
+    case YETTY_YRENDER_TEXTURE_FORMAT_RGBA8_UNORM:
+    default:
+        return 4u;
+    }
+}
+
+static struct yetty_ycore_void_result vterm_recreate_face_atlas(struct yetty_yvterm_vterm *vterm,
+                                                                struct yvterm_font_face *face,
+                                                                uint32_t width, uint32_t height,
+                                                                uint32_t format)
+{
+    if (face->atlas_view) {
+        wgpuTextureViewRelease(face->atlas_view);
+        face->atlas_view = NULL;
+    }
+    if (face->atlas_texture) {
+        wgpuTextureDestroy(face->atlas_texture);
+        wgpuTextureRelease(face->atlas_texture);
+        face->atlas_texture = NULL;
     }
     WGPUTextureDescriptor tex_desc = {0};
-    tex_desc.label = vterm_sv("yvterm atlas");
+    tex_desc.label = vterm_sv("yvterm face atlas");
     tex_desc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
     tex_desc.dimension = WGPUTextureDimension_2D;
     tex_desc.size.width = width;
     tex_desc.size.height = height;
     tex_desc.size.depthOrArrayLayers = 1;
-    tex_desc.format = WGPUTextureFormat_RGBA8Unorm;
+    tex_desc.format = vterm_texture_format_to_wgpu(format);
     tex_desc.mipLevelCount = 1;
     tex_desc.sampleCount = 1;
-    vterm->atlas_texture = wgpuDeviceCreateTexture(vterm->device, &tex_desc);
-    if (!vterm->atlas_texture) {
-        return YETTY_ERR(yetty_ycore_void, "vterm: atlas texture");
+    face->atlas_texture = wgpuDeviceCreateTexture(vterm->device, &tex_desc);
+    if (!face->atlas_texture) {
+        return YETTY_ERR(yetty_ycore_void, "vterm: face atlas texture");
     }
-    vterm->atlas_view = wgpuTextureCreateView(vterm->atlas_texture, NULL);
-    if (!vterm->atlas_view) {
-        return YETTY_ERR(yetty_ycore_void, "vterm: atlas view");
+    face->atlas_view = wgpuTextureCreateView(face->atlas_texture, NULL);
+    if (!face->atlas_view) {
+        return YETTY_ERR(yetty_ycore_void, "vterm: face atlas view");
     }
-    vterm->atlas_width = width;
-    vterm->atlas_height = height;
+    face->atlas_width = width;
+    face->atlas_height = height;
+    face->atlas_format = format;
+    face->bytes_per_pixel = vterm_texture_format_bpp(format);
     vterm->bind_group_valid = 0;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result vterm_recreate_meta(struct yetty_yvterm_vterm *vterm,
-                                                          size_t size)
+static struct yetty_ycore_void_result vterm_recreate_face_meta(struct yetty_yvterm_vterm *vterm,
+                                                               struct yvterm_font_face *face,
+                                                               size_t size)
 {
-    if (vterm->meta_buffer) {
-        wgpuBufferDestroy(vterm->meta_buffer);
-        wgpuBufferRelease(vterm->meta_buffer);
-        vterm->meta_buffer = NULL;
+    if (face->meta_buffer) {
+        wgpuBufferDestroy(face->meta_buffer);
+        wgpuBufferRelease(face->meta_buffer);
+        face->meta_buffer = NULL;
     }
     WGPUBufferDescriptor desc = {0};
-    desc.label = vterm_sv("yvterm meta");
+    desc.label = vterm_sv("yvterm face meta");
     desc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
     desc.size = size;
-    vterm->meta_buffer = wgpuDeviceCreateBuffer(vterm->device, &desc);
-    if (!vterm->meta_buffer) {
-        return YETTY_ERR(yetty_ycore_void, "vterm: meta buffer");
+    face->meta_buffer = wgpuDeviceCreateBuffer(vterm->device, &desc);
+    if (!face->meta_buffer) {
+        return YETTY_ERR(yetty_ycore_void, "vterm: face meta buffer");
     }
-    vterm->meta_capacity = size;
+    face->meta_capacity = size;
     vterm->bind_group_valid = 0;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result vterm_upload_font(struct yetty_yvterm_vterm *vterm)
+/* Upload one face's atlas + glyph metadata to its GPU copies, and refresh the
+ * per-face geometry uniforms. Face 0 additionally feeds the legacy scalar
+ * uniforms (scale/baseline drive underline placement and figure zoom). */
+static struct yetty_ycore_void_result vterm_upload_face(struct yetty_yvterm_vterm *vterm,
+                                                        uint32_t face_index)
 {
+    struct yvterm_font_face *face = &vterm->faces[face_index];
     struct yetty_yrender_gpu_resource_set_result rs_res =
-        vterm->font->ops->get_gpu_resource_set(vterm->font);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rs_res, "vterm_upload_font: get_gpu_resource_set");
+        face->font->ops->get_gpu_resource_set(face->font);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rs_res, "vterm_upload_face: get_gpu_resource_set");
     const struct yetty_yrender_gpu_resource_set *rs = rs_res.value;
 
-    vterm->uniforms.pixel_range = rs->uniforms[0].f32;
-    vterm->uniforms.scale = rs->uniforms[1].f32;
-    vterm->uniforms.baseline_y = rs->uniforms[2].f32;
-    vterm->uniforms.glyph_left = rs->uniforms[3].f32;
+    /* MSDF faces publish (pixel_range, scale, baseline_y, glyph_left); raster
+     * faces pre-rasterize at cell size and need no geometry uniforms. */
+    if (face->method == YVTERM_FONT_METHOD_MSDF) {
+        vterm->uniforms.face_params[face_index][0] = rs->uniforms[0].f32;
+        vterm->uniforms.face_params[face_index][1] = rs->uniforms[1].f32;
+        vterm->uniforms.face_params[face_index][2] = rs->uniforms[2].f32;
+        vterm->uniforms.face_params[face_index][3] = rs->uniforms[3].f32;
+        if (face_index == 0) {
+            vterm->uniforms.pixel_range = rs->uniforms[0].f32;
+            vterm->uniforms.scale = rs->uniforms[1].f32;
+            vterm->uniforms.baseline_y = rs->uniforms[2].f32;
+            vterm->uniforms.glyph_left = rs->uniforms[3].f32;
+        }
+    }
 
     const struct yetty_yrender_texture *atlas = &rs->textures[0];
     if (atlas->data && atlas->width > 0 && atlas->height > 0) {
-        if (!vterm->atlas_texture || atlas->width != vterm->atlas_width ||
-            atlas->height != vterm->atlas_height) {
+        uint32_t format = atlas->format ? atlas->format
+                                        : (uint32_t)YETTY_YRENDER_TEXTURE_FORMAT_RGBA8_UNORM;
+        if (!face->atlas_texture || atlas->width != face->atlas_width ||
+            atlas->height != face->atlas_height || format != face->atlas_format) {
             struct yetty_ycore_void_result re =
-                vterm_recreate_atlas(vterm, atlas->width, atlas->height);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, re, "vterm_upload_font: recreate_atlas");
+                vterm_recreate_face_atlas(vterm, face, atlas->width, atlas->height, format);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, re, "vterm_upload_face: recreate_atlas");
         }
         WGPUTexelCopyTextureInfo dest = {0};
-        dest.texture = vterm->atlas_texture;
+        dest.texture = face->atlas_texture;
         dest.mipLevel = 0;
         WGPUTexelCopyBufferLayout src_layout = {0};
-        src_layout.bytesPerRow = atlas->width * 4u;
+        src_layout.bytesPerRow = atlas->width * face->bytes_per_pixel;
         src_layout.rowsPerImage = atlas->height;
         WGPUExtent3D extent = {atlas->width, atlas->height, 1};
-        size_t bytes = (size_t)atlas->width * atlas->height * 4u;
+        size_t bytes = (size_t)atlas->width * atlas->height * face->bytes_per_pixel;
         wgpuQueueWriteTexture(vterm->queue, &dest, atlas->data, bytes, &src_layout, &extent);
     }
 
     const struct yetty_yrender_buffer *meta = &rs->buffers[0];
     if (meta->data && meta->size > 0) {
-        if (!vterm->meta_buffer || meta->size > vterm->meta_capacity) {
-            struct yetty_ycore_void_result re = vterm_recreate_meta(vterm, meta->size);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, re, "vterm_upload_font: recreate_meta");
+        if (!face->meta_buffer || meta->size > face->meta_capacity) {
+            struct yetty_ycore_void_result re = vterm_recreate_face_meta(vterm, face, meta->size);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, re, "vterm_upload_face: recreate_meta");
         }
-        wgpuQueueWriteBuffer(vterm->queue, vterm->meta_buffer, 0, meta->data, meta->size);
+        wgpuQueueWriteBuffer(vterm->queue, face->meta_buffer, 0, meta->data, meta->size);
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Upload every dirty face (face 0 = base font is always present). */
+static struct yetty_ycore_void_result vterm_upload_dirty_faces(struct yetty_yvterm_vterm *vterm)
+{
+    for (uint32_t i = 0; i < vterm->face_count; ++i) {
+        struct yetty_yfont_ms_font *font = vterm->faces[i].font;
+        if (!font) {
+            continue;
+        }
+        if (!vterm->faces[i].atlas_texture || font->ops->is_dirty(font)) {
+            struct yetty_ycore_void_result up = vterm_upload_face(vterm, i);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, up, "vterm_upload_dirty_faces");
+        }
     }
     return YETTY_OK_VOID();
 }
@@ -807,27 +1039,39 @@ static struct yetty_ycore_void_result vterm_ensure_bind_group(struct yetty_yvter
         wgpuBindGroupRelease(vterm->bind_group);
         vterm->bind_group = NULL;
     }
-    if (!vterm->cell_buffer || !vterm->meta_buffer || !vterm->atlas_view || !vterm->sampler ||
+    struct yvterm_font_face *base = &vterm->faces[0];
+    if (!vterm->cell_buffer || !base->meta_buffer || !base->atlas_view || !vterm->sampler ||
         !vterm->uniform_buffer) {
         return YETTY_ERR(yetty_ycore_void, "vterm_ensure_bind_group: missing resource");
     }
-    WGPUBindGroupEntry entries[5] = {0};
+    WGPUBindGroupEntry entries[11] = {0};
     entries[0].binding = 0;
     entries[0].buffer = vterm->cell_buffer;
     entries[0].size = WGPU_WHOLE_SIZE;
     entries[1].binding = 1;
-    entries[1].buffer = vterm->meta_buffer;
+    entries[1].buffer = base->meta_buffer;
     entries[1].size = WGPU_WHOLE_SIZE;
     entries[2].binding = 2;
-    entries[2].textureView = vterm->atlas_view;
+    entries[2].textureView = base->atlas_view;
     entries[3].binding = 3;
     entries[3].sampler = vterm->sampler;
     entries[4].binding = 4;
     entries[4].buffer = vterm->uniform_buffer;
     entries[4].size = sizeof(struct vterm_uniforms);
+    /* Extra face slots; unused ones alias the base resources (the shader
+     * never reads them for face 0 cells, but the layout needs a binding). */
+    for (uint32_t i = 1; i < YVTERM_MAX_FONT_FACES; ++i) {
+        struct yvterm_font_face *face = &vterm->faces[i];
+        int usable = face->font && face->meta_buffer && face->atlas_view;
+        entries[3 + i * 2].binding = 3 + i * 2; /* 5, 7, 9 */
+        entries[3 + i * 2].buffer = usable ? face->meta_buffer : base->meta_buffer;
+        entries[3 + i * 2].size = WGPU_WHOLE_SIZE;
+        entries[4 + i * 2].binding = 4 + i * 2; /* 6, 8, 10 */
+        entries[4 + i * 2].textureView = usable ? face->atlas_view : base->atlas_view;
+    }
     WGPUBindGroupDescriptor bg_desc = {0};
     bg_desc.layout = vterm->bind_group_layout;
-    bg_desc.entryCount = 5;
+    bg_desc.entryCount = 11;
     bg_desc.entries = entries;
     vterm->bind_group = wgpuDeviceCreateBindGroup(vterm->device, &bg_desc);
     if (!vterm->bind_group) {
@@ -835,6 +1079,188 @@ static struct yetty_ycore_void_result vterm_ensure_bind_group(struct yetty_yvter
     }
     vterm->bind_group_valid = 1;
     return YETTY_OK_VOID();
+}
+
+/* Cell padding around the glyph from config, as fractions of the glyph
+ * dimensions (terminal/text-layer/font/padding/{left,right,top,bottom}).
+ * Negative values tighten the cell below the glyph extent so contour glyphs
+ * (box drawing) overlap their neighbours and connect without seams. */
+static struct yetty_yfont_ms_padding vterm_font_padding_from_config(
+    const struct yetty_yconfig_config *config)
+{
+    struct yetty_yfont_ms_padding padding = {0};
+    if (!config) {
+        return padding;
+    }
+    padding.left = strtof(
+        config->ops->get_string(config, "terminal/text-layer/font/padding/left", "0.0"), NULL);
+    padding.right = strtof(
+        config->ops->get_string(config, "terminal/text-layer/font/padding/right", "0.0"), NULL);
+    padding.top = strtof(
+        config->ops->get_string(config, "terminal/text-layer/font/padding/top", "0.0"), NULL);
+    padding.bottom = strtof(
+        config->ops->get_string(config, "terminal/text-layer/font/padding/bottom", "0.0"), NULL);
+    return padding;
+}
+
+/* Find an existing face for (name, method) or create it. Returns the face
+ * index, or 0 (the base font) when the face can't be created or the face
+ * table is full — the range then simply renders with the base font. */
+static uint32_t vterm_face_find_or_create(struct yetty_yvterm_vterm *vterm,
+                                          struct yetty_yconfig_config *config, const char *name,
+                                          enum yvterm_font_method method, const char *fonts_dir,
+                                          const char *shaders_dir, float font_size)
+{
+    for (uint32_t i = 0; i < vterm->face_count; ++i) {
+        enum yvterm_font_method existing = vterm->faces[i].method;
+        int method_matches = existing == method ||
+                             (method == YVTERM_FONT_METHOD_RASTER &&
+                              existing == YVTERM_FONT_METHOD_RASTER_COLOR);
+        if (method_matches && strcmp(vterm->faces[i].name, name) == 0) {
+            return i;
+        }
+    }
+    if (vterm->face_count >= YVTERM_MAX_FONT_FACES) {
+        ywarn("vterm: font face table full (%u), range font '%s' falls back to the base font",
+              (unsigned)YVTERM_MAX_FONT_FACES, name);
+        return 0;
+    }
+
+    struct yetty_font_ms_font_result font_res;
+    if (method == YVTERM_FONT_METHOD_RASTER) {
+        struct pixel_size_result cell = vterm->faces[0].font->ops->get_cell_size(
+            vterm->faces[0].font);
+        if (YETTY_IS_ERR(cell)) {
+            yetty_ycore_error_destroy(cell.error);
+            return 0;
+        }
+        font_res = yetty_yfont_ms_raster_font_create_named(config, name, cell.value.width,
+                                                           cell.value.height);
+    } else {
+        /* Prebaked CDB next to the bundled fonts wins; otherwise generate one
+         * at runtime from the face's TTF into the cache dir with the shared
+         * GPU MSDF generator (same parameters as the ydraw blob-font path). */
+        char cdb_path[768];
+        char font_shader_path[768];
+        snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir, name);
+        if (!yetty_yplatform_file_exists(cdb_path)) {
+            const char *cache_dir = config->ops->get_string(config, "paths/cache", "");
+            char ttf_path[768];
+            snprintf(ttf_path, sizeof(ttf_path), "%s/%s-Regular.ttf", fonts_dir, name);
+            if (!cache_dir[0] || !yetty_yplatform_file_exists(ttf_path)) {
+                ywarn("vterm: range font '%s' has neither a CDB nor a TTF (%s) — "
+                      "falling back to the base font",
+                      name, ttf_path);
+                return 0;
+            }
+            char cache_fonts_dir[768];
+            snprintf(cache_fonts_dir, sizeof(cache_fonts_dir), "%s/msdf-fonts", cache_dir);
+            snprintf(cdb_path, sizeof(cdb_path), "%s/%s-Regular.cdb", cache_fonts_dir, name);
+            if (!yetty_yplatform_file_exists(cdb_path)) {
+                struct yetty_ymsdf_generator *generator = vterm->runtime->gpu.msdf_generator;
+                if (!generator) {
+                    ywarn("vterm: no MSDF generator — range font '%s' falls back", name);
+                    return 0;
+                }
+                yetty_yplatform_mkdir_p(cache_fonts_dir);
+                struct yetty_ymsdf_generator_config gen = {0};
+                gen.ttf_path = ttf_path;
+                gen.cdb_path = cdb_path;
+                gen.font_size = 32.0f;
+                gen.pixel_range = 4.0f;
+                struct yetty_ycore_void_result gen_res =
+                    generator->ops->generate(generator, &gen);
+                if (YETTY_IS_ERR(gen_res)) {
+                    ywarn("vterm: MSDF generation for range font '%s' failed: %s — "
+                          "falling back to the base font",
+                          name, gen_res.error.msg);
+                    yetty_ycore_error_destroy(gen_res.error);
+                    return 0;
+                }
+                ydebug("vterm: generated CDB '%s' for range font '%s'", cdb_path, name);
+            }
+        }
+        snprintf(font_shader_path, sizeof(font_shader_path), "%s/ms-msdf-font.wgsl", shaders_dir);
+        /* Same padding as the base face — range faces must share the cell
+         * geometry the base font establishes. */
+        struct yetty_yfont_ms_padding padding = vterm_font_padding_from_config(config);
+        font_res = yetty_yfont_ms_msdf_font_create(cdb_path, font_shader_path, font_size, padding);
+    }
+    if (YETTY_IS_ERR(font_res)) {
+        ywarn("vterm: range font '%s' (%s) failed, falling back to the base font: %s", name,
+              method == YVTERM_FONT_METHOD_RASTER ? "raster" : "msdf", font_res.error.msg);
+        yetty_ycore_error_destroy(font_res.error);
+        return 0;
+    }
+
+    uint32_t index = vterm->face_count++;
+    struct yvterm_font_face *face = &vterm->faces[index];
+    face->font = font_res.value;
+    face->method = method;
+    strncpy(face->name, name, YVTERM_FONT_FACE_NAME_MAX - 1);
+
+    /* A raster face with an RGBA8 atlas is a color (emoji) face. */
+    if (method == YVTERM_FONT_METHOD_RASTER) {
+        struct yetty_yrender_gpu_resource_set_result rs_res =
+            face->font->ops->get_gpu_resource_set(face->font);
+        if (YETTY_IS_OK(rs_res) &&
+            rs_res.value->textures[0].format == YETTY_YRENDER_TEXTURE_FORMAT_RGBA8_UNORM) {
+            face->method = YVTERM_FONT_METHOD_RASTER_COLOR;
+        } else if (YETTY_IS_ERR(rs_res)) {
+            yetty_ycore_error_destroy(rs_res.error);
+        }
+    }
+    return index;
+}
+
+/* Build the codepoint-range → face routing table from the config list
+ * (terminal/text-layer/font/ranges: {from, to, font, render-method}). */
+static void vterm_load_font_ranges(struct yetty_yvterm_vterm *vterm,
+                                   struct yetty_yconfig_config *config, const char *fonts_dir,
+                                   const char *shaders_dir, float font_size)
+{
+    int count = config->ops->get_array_count(config, YETTY_YCONFIG_KEY_TERMINAL_FONT_RANGES);
+    for (int i = 0; i < count && vterm->font_range_count < YVTERM_MAX_FONT_RANGES; ++i) {
+        char path[128];
+        snprintf(path, sizeof(path), "%s/%d/from", YETTY_YCONFIG_KEY_TERMINAL_FONT_RANGES, i);
+        const char *from_text = config->ops->get_string(config, path, NULL);
+        snprintf(path, sizeof(path), "%s/%d/to", YETTY_YCONFIG_KEY_TERMINAL_FONT_RANGES, i);
+        const char *to_text = config->ops->get_string(config, path, NULL);
+        snprintf(path, sizeof(path), "%s/%d/font", YETTY_YCONFIG_KEY_TERMINAL_FONT_RANGES, i);
+        const char *font_name = config->ops->get_string(config, path, NULL);
+        snprintf(path, sizeof(path), "%s/%d/render-method", YETTY_YCONFIG_KEY_TERMINAL_FONT_RANGES,
+                 i);
+        const char *method_text = config->ops->get_string(config, path, "msdf");
+        if (!from_text || !to_text || !font_name || !font_name[0]) {
+            ywarn("vterm: font range %d is missing from/to/font — skipped", i);
+            continue;
+        }
+        uint32_t from_codepoint = (uint32_t)strtoul(from_text, NULL, 0);
+        uint32_t to_codepoint = (uint32_t)strtoul(to_text, NULL, 0);
+        if (to_codepoint < from_codepoint) {
+            ywarn("vterm: font range %d has to < from (%s..%s) — skipped", i, from_text, to_text);
+            continue;
+        }
+        enum yvterm_font_method method = strcmp(method_text, "raster") == 0
+                                             ? YVTERM_FONT_METHOD_RASTER
+                                             : YVTERM_FONT_METHOD_MSDF;
+        uint32_t face = vterm_face_find_or_create(vterm, config, font_name, method, fonts_dir,
+                                                  shaders_dir, font_size);
+        if (face == 0) {
+            continue; /* base font already covers unrouted codepoints */
+        }
+        struct yvterm_font_range *range = &vterm->font_ranges[vterm->font_range_count++];
+        range->from = from_codepoint;
+        range->to = to_codepoint;
+        range->face = face;
+    }
+
+    /* Publish per-face render methods to the shader (4 bits per face). */
+    uint32_t methods = 0;
+    for (uint32_t i = 0; i < vterm->face_count; ++i) {
+        methods |= ((uint32_t)vterm->faces[i].method & 0xFu) << (i * 4u);
+    }
+    vterm->uniforms.face_methods = methods;
 }
 
 /* Best-effort GPU setup. On a soft failure (missing device, font/pipeline/SDF
@@ -870,27 +1296,65 @@ static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *
     int cfg_size = config ? config->ops->get_int(config, "terminal/text-layer/font/size", 14) : 14;
     float font_size = (float)cfg_size * content_scale;
 
-    char cdb_path[768];
-    char font_shader_path[768];
-    snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/DejaVuSansMNerdFontMono-Regular.cdb",
-             fonts_dir);
-    snprintf(font_shader_path, sizeof(font_shader_path), "%s/ms-msdf-font.wgsl", shaders_dir);
-    struct yetty_yfont_ms_padding padding = {0};
-    struct yetty_font_ms_font_result font_res =
-        yetty_yfont_ms_msdf_font_create(cdb_path, font_shader_path, font_size, padding);
+    /* Base font settings from config: family (font/family), rendering method
+     * (terminal/text-layer/font/render-method) and cell padding. */
+    const char *font_family = config ? config->ops->font_family(config) : NULL;
+    if (!font_family || !font_family[0] || strcmp(font_family, "default") == 0) {
+        font_family = "DejaVuSansMNerdFontMono";
+    }
+    const char *render_method =
+        config ? config->ops->get_string(config, YETTY_YCONFIG_KEY_TERMINAL_FONT_RENDER_METHOD,
+                                         "msdf")
+               : "msdf";
+    struct yetty_yfont_ms_padding padding = vterm_font_padding_from_config(config);
+
+    struct yetty_font_ms_font_result font_res;
+    enum yvterm_font_method base_method;
+    if (config && strcmp(render_method, "raster") == 0) {
+        /* FreeType-rasterized base face (reads font/family itself). The cell
+         * is derived from the configured size: glyph line box fits the cell
+         * height, monospace 1:2 aspect for the width, padding applied the
+         * same way the MSDF cell derivation does. */
+        float cell_height = font_size * (1.0f + padding.top + padding.bottom);
+        float cell_width = font_size * 0.5f * (1.0f + padding.left + padding.right);
+        font_res = yetty_yfont_ms_raster_font_create(config, cell_width, cell_height);
+        base_method = YVTERM_FONT_METHOD_RASTER;
+    } else {
+        char cdb_path[768];
+        char font_shader_path[768];
+        snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir,
+                 font_family);
+        snprintf(font_shader_path, sizeof(font_shader_path), "%s/ms-msdf-font.wgsl", shaders_dir);
+        font_res = yetty_yfont_ms_msdf_font_create(cdb_path, font_shader_path, font_size, padding);
+        base_method = YVTERM_FONT_METHOD_MSDF;
+    }
     if (YETTY_IS_ERR(font_res)) {
-        ywarn("vterm: font create failed (%s): %s", cdb_path, font_res.error.msg);
+        ywarn("vterm: base font '%s' (%s) create failed: %s", font_family, render_method,
+              font_res.error.msg);
         yetty_ycore_error_destroy(font_res.error);
         return YETTY_OK_VOID();
     }
-    vterm->font = font_res.value;
-    struct yetty_ycore_void_result latin = vterm->font->ops->load_basic_latin(vterm->font);
+    struct yvterm_font_face *base_face = &vterm->faces[0];
+    base_face->font = font_res.value;
+    base_face->method = base_method;
+    /* The family name (not a placeholder) so a config range naming the same
+     * font resolves to this face instead of loading a duplicate. */
+    strncpy(base_face->name, font_family, YVTERM_FONT_FACE_NAME_MAX - 1);
+    vterm->face_count = 1;
+    struct yetty_ycore_void_result latin = base_face->font->ops->load_basic_latin(base_face->font);
     if (YETTY_IS_ERR(latin)) {
         yetty_ycore_error_destroy(latin.error);
     }
-    struct pixel_size_result cell = vterm->font->ops->get_cell_size(vterm->font);
+    struct pixel_size_result cell = base_face->font->ops->get_cell_size(base_face->font);
     if (YETTY_IS_OK(cell)) {
         vterm->cell_size = cell.value;
+    }
+
+    /* Config codepoint-range faces (CJK/emoji/etc.) — created after the base
+     * font so raster faces inherit its cell size. Best-effort: a face that
+     * fails to load just routes its ranges back to the base font. */
+    if (config) {
+        vterm_load_font_ranges(vterm, config, fonts_dir, shaders_dir, font_size);
     }
 
     /* Load the effects library so vterm_create_pipeline can prepend it to the
@@ -920,7 +1384,7 @@ static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *
         yetty_ycore_error_destroy(cbr.error);
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result ufr = vterm_upload_font(vterm);
+    struct yetty_ycore_void_result ufr = vterm_upload_dirty_faces(vterm);
     if (YETTY_IS_ERR(ufr)) {
         yetty_ycore_error_destroy(ufr.error);
         return YETTY_OK_VOID();
@@ -976,19 +1440,22 @@ static void vterm_gpu_destroy(struct yetty_yvterm_vterm *vterm)
         wgpuBindGroupRelease(vterm->bind_group);
         vterm->bind_group = NULL;
     }
-    if (vterm->atlas_view) {
-        wgpuTextureViewRelease(vterm->atlas_view);
-        vterm->atlas_view = NULL;
-    }
-    if (vterm->atlas_texture) {
-        wgpuTextureDestroy(vterm->atlas_texture);
-        wgpuTextureRelease(vterm->atlas_texture);
-        vterm->atlas_texture = NULL;
-    }
-    if (vterm->meta_buffer) {
-        wgpuBufferDestroy(vterm->meta_buffer);
-        wgpuBufferRelease(vterm->meta_buffer);
-        vterm->meta_buffer = NULL;
+    for (uint32_t i = 0; i < YVTERM_MAX_FONT_FACES; ++i) {
+        struct yvterm_font_face *face = &vterm->faces[i];
+        if (face->atlas_view) {
+            wgpuTextureViewRelease(face->atlas_view);
+            face->atlas_view = NULL;
+        }
+        if (face->atlas_texture) {
+            wgpuTextureDestroy(face->atlas_texture);
+            wgpuTextureRelease(face->atlas_texture);
+            face->atlas_texture = NULL;
+        }
+        if (face->meta_buffer) {
+            wgpuBufferDestroy(face->meta_buffer);
+            wgpuBufferRelease(face->meta_buffer);
+            face->meta_buffer = NULL;
+        }
     }
     if (vterm->uniform_buffer) {
         wgpuBufferDestroy(vterm->uniform_buffer);
@@ -1023,10 +1490,14 @@ static void vterm_gpu_destroy(struct yetty_yvterm_vterm *vterm)
     free(vterm->row_scratch);
     vterm->row_scratch = NULL;
     vterm->row_scratch_cols = 0;
-    if (vterm->font) {
-        vterm->font->ops->destroy(vterm->font);
-        vterm->font = NULL;
+    for (uint32_t i = 0; i < YVTERM_MAX_FONT_FACES; ++i) {
+        if (vterm->faces[i].font) {
+            vterm->faces[i].font->ops->destroy(vterm->faces[i].font);
+            vterm->faces[i].font = NULL;
+        }
     }
+    vterm->face_count = 0;
+    vterm->font_range_count = 0;
     vterm->gpu_ready = 0;
 }
 
@@ -1108,11 +1579,9 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
         wgpuQueueWriteBuffer(vterm->queue, vterm->cell_buffer, (uint64_t)r * row_bytes,
                              vterm->row_scratch, row_bytes);
     }
-    /* Glyph resolution above may have grown the atlas/meta — re-pull the font. */
-    if (vterm->font->ops->is_dirty(vterm->font)) {
-        struct yetty_ycore_void_result fr = vterm_upload_font(vterm);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "vterm_render: upload_font");
-    }
+    /* Glyph resolution above may have grown an atlas/meta — re-pull dirty faces. */
+    struct yetty_ycore_void_result faces_res = vterm_upload_dirty_faces(vterm);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, faces_res, "vterm_render: upload faces");
 
     uint32_t cursor_row = 0, cursor_col = 0, cursor_visible = 0;
     struct yetty_ycore_void_result cursor_res =
@@ -1461,6 +1930,81 @@ typedef struct yetty_ycore_void_result (*yetty_yvterm_materialize_fn)(
     const uint32_t *envelope_words, uint32_t envelope_word_count, void *userdata,
     struct yetty_ydraw_composite **out_instance);
 
+/* Resolve one config colour key to the web-style 0xRRGGBB the grid setters
+ * take. Missing / malformed keys fall back to default_hex so a partial
+ * palette in config still works. */
+static uint32_t vterm_color_config_rgb(const struct yetty_yconfig_config *config, const char *key,
+                                       const char *default_hex)
+{
+    const char *text = NULL;
+    if (config && config->ops && config->ops->get_string) {
+        text = config->ops->get_string(config, key, default_hex);
+    }
+    if (!text || !text[0]) {
+        text = default_hex;
+    }
+    uint32_t packed = 0;
+    if (!yetty_ycore_parse_hex_color(text, &packed) &&
+        !yetty_ycore_parse_hex_color(default_hex, &packed)) {
+        return 0;
+    }
+    /* parse_hex_color packs byte0=R, byte1=G, byte2=B. */
+    uint32_t red = packed & 0xFFu;
+    uint32_t green = (packed >> 8) & 0xFFu;
+    uint32_t blue = (packed >> 16) & 0xFFu;
+    return (red << 16) | (green << 8) | blue;
+}
+
+/* Apply the configurable terminal colour palette to a freshly-made grid.
+ *
+ * libvterm resolves every indexed colour (ANSI 30-37/90-97, 38;5;n for n<16)
+ * through its 16-entry palette; truecolor (38;2;r;g;b) bypasses it entirely.
+ * The built-in defaults are deliberately harsh full-saturation primaries, so
+ * they are overridden here with softer values, each refinable via config:
+ *   terminal/colors/normal/{black,red,green,yellow,blue,magenta,cyan,white}
+ *   terminal/colors/bright/{...same...}
+ *   terminal/colors/{foreground,background}
+ * Must run before the grid receives PTY data — indexed colours are resolved
+ * at parse time, and set_default_colors hard-resets the state. */
+static void vterm_apply_color_config(struct yetty_yvterm_vterm *vterm,
+                                     const struct yetty_yconfig_config *config)
+{
+    /* Config key + soft default per palette slot — a muted xterm-style
+     * palette (the kind tmux / nvim / ls look right against). */
+    static const struct {
+        const char *key;
+        const char *hex;
+    } palette[16] = {
+        {"terminal/colors/normal/black", "#1d1f21"}, {"terminal/colors/normal/red", "#cc6666"},
+        {"terminal/colors/normal/green", "#b5bd68"}, {"terminal/colors/normal/yellow", "#f0c674"},
+        {"terminal/colors/normal/blue", "#81a2be"},  {"terminal/colors/normal/magenta", "#b294bb"},
+        {"terminal/colors/normal/cyan", "#8abeb7"},  {"terminal/colors/normal/white", "#c5c8c6"},
+        {"terminal/colors/bright/black", "#666666"}, {"terminal/colors/bright/red", "#d54e53"},
+        {"terminal/colors/bright/green", "#b9ca4a"}, {"terminal/colors/bright/yellow", "#e7c547"},
+        {"terminal/colors/bright/blue", "#7aa6da"},  {"terminal/colors/bright/magenta", "#c397d8"},
+        {"terminal/colors/bright/cyan", "#70c0ba"},  {"terminal/colors/bright/white", "#eaeaea"},
+    };
+
+    for (uint32_t index = 0; index < 16u; ++index) {
+        struct yetty_ycore_void_result palette_res = yetty_yvterm_grid_set_palette_color(
+            vterm->grid_obj, index,
+            vterm_color_config_rgb(config, palette[index].key, palette[index].hex));
+        if (YETTY_IS_ERR(palette_res)) {
+            yetty_ycore_error_destroy(palette_res.error);
+        }
+    }
+
+    /* Default fg/bg keep yetty's existing look unless config overrides them:
+     * near-white text on a black canvas (the pane background is painted
+     * separately by yui). */
+    struct yetty_ycore_void_result defaults_res = yetty_yvterm_grid_set_default_colors(
+        vterm->grid_obj, vterm_color_config_rgb(config, "terminal/colors/foreground", "#f0f0f0"),
+        vterm_color_config_rgb(config, "terminal/colors/background", "#000000"));
+    if (YETTY_IS_ERR(defaults_res)) {
+        yetty_ycore_error_destroy(defaults_res.error);
+    }
+}
+
 /* Create the terminal-content figure for one pane. The rect is set in pixels;
  * cell_size is stored so the terminal can read it immediately after create. The
  * terminal hooks (pty write, render request, mouse subscription) are stored for
@@ -1574,6 +2118,11 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
         return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_card_sub",
                          set_card_res);
     }
+    /* Colour palette + default fg/bg from the terminal/colors config keys —
+     * before any PTY data, since indexed colours resolve at parse time.
+     * Applied with a NULL config too: the soft built-in defaults replace
+     * libvterm's harsh primaries either way. */
+    vterm_apply_color_config(vterm, config);
     vterm->grid_size = (struct yetty_ycore_grid_size){.cols = cols, .rows = rows};
     vterm->cell_size = (struct yetty_ycore_pixel_size){.width = 9.0f, .height = 18.0f};
     vterm->request_render_fn = request_render_fn;
@@ -1682,13 +2231,17 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_obj
     /* Re-scale the glyphs to the new cell. Intrusive (Ctrl+Shift) zoom changes
      * the cell stride and reflows; without this the cells grow but the font
      * stays the same size. set_cell_size re-derives the MSDF render scale (no
-     * re-raster — MSDF is resolution-independent); the next frame's font upload
-     * picks it up. Best-effort: a font that can't rescale keeps the old size. */
-    if (vterm->font && vterm->font->ops && vterm->font->ops->set_cell_size) {
-        struct yetty_ycore_void_result fcr =
-            vterm->font->ops->set_cell_size(vterm->font, cell_size);
-        if (YETTY_IS_ERR(fcr)) {
-            yetty_ycore_error_destroy(fcr.error);
+     * re-raster — MSDF is resolution-independent) and re-rasterizes raster
+     * faces; the next frame's font upload picks it up. Best-effort: a font
+     * that can't rescale keeps the old size. */
+    for (uint32_t i = 0; i < vterm->face_count; ++i) {
+        struct yetty_yfont_ms_font *face_font = vterm->faces[i].font;
+        if (face_font && face_font->ops && face_font->ops->set_cell_size) {
+            struct yetty_ycore_void_result fcr = face_font->ops->set_cell_size(face_font,
+                                                                               cell_size);
+            if (YETTY_IS_ERR(fcr)) {
+                yetty_ycore_error_destroy(fcr.error);
+            }
         }
     }
     struct yetty_ycore_rectangle rect = {

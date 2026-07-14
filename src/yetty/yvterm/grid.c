@@ -3013,6 +3013,68 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_tier_budgets(struct yetty_y
     return YETTY_OK_VOID();
 }
 
+/* Set one of the 16 ANSI palette entries (web-style 0xRRGGBB). Indexed
+ * colours (SGR 30-37/90-97, 38;5;n for n < 16) are resolved through this
+ * table as PTY data is parsed, so install the palette before feeding the
+ * terminal any output. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_grid_set_palette_color(struct yetty_yclass_object *obj,
+                                                                   uint32_t index, uint32_t rgb)
+{
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_palette_color: from_obj");
+    struct yetty_yvterm_grid *grid = grid_res.value;
+    if (!grid->state) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm grid_set_palette_color: no vterm state");
+    }
+    if (index >= 16u) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm grid_set_palette_color: index out of range");
+    }
+    VTermColor color;
+    vterm_color_rgb(&color, (uint8_t)(rgb >> 16), (uint8_t)(rgb >> 8), (uint8_t)rgb);
+    vterm_state_set_palette_color(grid->state, (int)index, &color);
+    return YETTY_OK_VOID();
+}
+
+/* Set the default foreground/background (web-style 0xRRGGBB) and re-seed
+ * everything already derived from the built-in libvterm defaults: the state
+ * is hard-reset so the active pen adopts the new colours, and the blank-line
+ * template plus both screen rings are re-blanked. Intended to run right after
+ * create, before any PTY data is fed — content already on screen is lost. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_grid_set_default_colors(struct yetty_yclass_object *obj,
+                                                                    uint32_t fg_rgb,
+                                                                    uint32_t bg_rgb)
+{
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_default_colors: from_obj");
+    struct yetty_yvterm_grid *grid = grid_res.value;
+    if (!grid->state) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm grid_set_default_colors: no vterm state");
+    }
+    VTermColor fg;
+    VTermColor bg;
+    vterm_color_rgb(&fg, (uint8_t)(fg_rgb >> 16), (uint8_t)(fg_rgb >> 8), (uint8_t)fg_rgb);
+    vterm_color_rgb(&bg, (uint8_t)(bg_rgb >> 16), (uint8_t)(bg_rgb >> 8), (uint8_t)bg_rgb);
+    vterm_state_set_default_colors(grid->state, &fg, &bg);
+    grid->default_fg = pack_color(fg);
+    grid->default_bg = pack_color(bg);
+    grid->pen_fg = grid->default_fg;
+    grid->pen_bg = grid->default_bg;
+    /* Hard reset so libvterm's internal pen picks up the new defaults, then
+     * re-blank the derived buffers that were seeded with the old ones. */
+    vterm_state_reset(grid->state, 1);
+    if (grid->blank_line.text_cells) {
+        for (uint32_t col = 0; col < grid->cols; ++col) {
+            blank_cell(&grid->blank_line.text_cells[col], grid->default_fg, grid->default_bg);
+        }
+    }
+    screen_blank_all(&grid->primary, grid->cols, grid->default_fg, grid->default_bg);
+    screen_blank_all(&grid->alternate, grid->cols, grid->default_fg, grid->default_bg);
+    mark_dirty_all(grid);
+    return YETTY_OK_VOID();
+}
+
 /* Register the grid's per-owner byte accounting (ring + archive tags) with
  * the framework's memtag registry, feeding the yctl `memtags` dump. The grid
  * unregisters itself at dispose. */
