@@ -25,7 +25,7 @@ endfunction()
 # exists. Used for assets that may arrive either as raw files (from the
 # local-gen path in prepare-assets.cmake or the runtime-decompressed
 # yemu files) or as .br-only (from the prebuilt-fetch path —
-# yetty_3rdparty_fetch(cdb) in 3rdparty-fetch.cmake leaves cdbs compressed for
+# yetty_3rdparty_fetch(fonts) in 3rdparty-fetch.cmake leaves cdbs compressed for
 # direct incbin embedding).
 function(check_file_or_br PATH_NO_BR DESCRIPTION)
     math(EXPR CHECKED_COUNT "${CHECKED_COUNT} + 1" OUTPUT_FORMAT DECIMAL)

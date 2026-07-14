@@ -143,10 +143,16 @@ if(YETTY_ENABLE_FEATURE_ASSETS)
     add_dependencies(yetty copy-shaders copy-shaders-for-incbin copy-fonts-for-incbin)
 endif()
 
-if(YETTY_ENABLE_FEATURE_CDB_GEN AND DEFINED YETTY_3RDPARTY_cdb_DIR)
-    add_custom_command(TARGET yetty POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${YETTY_3RDPARTY_cdb_DIR}" "${TVOS_ASSETS_DIR}/msdf-fonts"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/assets/shaders" "${TVOS_ASSETS_DIR}/shaders"
-        COMMENT "Copying CDB fonts (3rdparty fetch) + shaders to tvOS assets"
-    )
+# Copy only the CDBs — the fonts fetch dir also carries the Noto TTF set
+# (shipped via the embed pipeline's fonts/ staging, not msdf-fonts/).
+if(YETTY_ENABLE_FEATURE_CDB_GEN AND DEFINED YETTY_3RDPARTY_fonts_DIR)
+    file(GLOB _TVOS_MSDF_CDB_FILES "${YETTY_3RDPARTY_fonts_DIR}/*.cdb.br")
+    if(_TVOS_MSDF_CDB_FILES)
+        add_custom_command(TARGET yetty POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${TVOS_ASSETS_DIR}/msdf-fonts"
+            COMMAND ${CMAKE_COMMAND} -E copy ${_TVOS_MSDF_CDB_FILES} "${TVOS_ASSETS_DIR}/msdf-fonts/"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/assets/shaders" "${TVOS_ASSETS_DIR}/shaders"
+            COMMENT "Copying CDB fonts (3rdparty fetch) + shaders to tvOS assets"
+        )
+    endif()
 endif()

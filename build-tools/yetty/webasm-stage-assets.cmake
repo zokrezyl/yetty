@@ -198,15 +198,15 @@ function(yetty_stage_webasm_assets)
     _stage_glob("${YETTY_ROOT}/assets/fonts/*.otf"
                 "data/fonts" TRUE "/data")
 
-    # World-coverage Noto set (fetched lib-noto-fonts noarch tarball).
-    if(YETTY_ENABLE_NOTO_FONTS AND YETTY_3RDPARTY_noto-fonts_DIR)
-        _stage_glob("${YETTY_3RDPARTY_noto-fonts_DIR}/*.ttf"
+    # World-coverage Noto set (from the fetched lib-fonts noarch tarball).
+    if(YETTY_ENABLE_NOTO_FONTS AND YETTY_3RDPARTY_fonts_DIR)
+        _stage_glob("${YETTY_3RDPARTY_fonts_DIR}/*.ttf"
                     "data/fonts" TRUE "/data")
     endif()
 
-    # MSDF CDBs (already shipped .br by 3rdparty cdb fetch).
-    if(YETTY_3RDPARTY_cdb_DIR)
-        _stage_glob("${YETTY_3RDPARTY_cdb_DIR}/*.cdb.br"
+    # MSDF CDBs (already shipped .br by the 3rdparty fonts fetch).
+    if(YETTY_3RDPARTY_fonts_DIR)
+        _stage_glob("${YETTY_3RDPARTY_fonts_DIR}/*.cdb.br"
                     "data/msdf-fonts" TRUE "/data")
     endif()
 

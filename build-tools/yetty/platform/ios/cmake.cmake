@@ -154,15 +154,21 @@ if(YETTY_ENABLE_FEATURE_ASSETS)
 endif()
 
 # Copy prebuilt CDB fonts and shaders to iOS assets dir after build.
-# CDB source: 3rdparty fetch dir (yetty_3rdparty_fetch(cdb)).
+# CDB source: 3rdparty fetch dir (yetty_3rdparty_fetch(fonts)). Copy only
+# the CDBs — the fonts fetch dir also carries the Noto TTF set (shipped
+# via the embed pipeline's fonts/ staging, not msdf-fonts/).
 # Shaders source: ${CMAKE_BINARY_DIR}/assets/shaders, populated by yetty's
 # own `copy-shaders` target in src/yetty/yshaders/CMakeLists.txt.
-if(YETTY_ENABLE_FEATURE_CDB_GEN AND DEFINED YETTY_3RDPARTY_cdb_DIR)
-    add_custom_command(TARGET yetty POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${YETTY_3RDPARTY_cdb_DIR}" "${IOS_ASSETS_DIR}/msdf-fonts"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/assets/shaders" "${IOS_ASSETS_DIR}/shaders"
-        COMMENT "Copying CDB fonts (3rdparty fetch) + shaders to iOS assets"
-    )
+if(YETTY_ENABLE_FEATURE_CDB_GEN AND DEFINED YETTY_3RDPARTY_fonts_DIR)
+    file(GLOB _IOS_MSDF_CDB_FILES "${YETTY_3RDPARTY_fonts_DIR}/*.cdb.br")
+    if(_IOS_MSDF_CDB_FILES)
+        add_custom_command(TARGET yetty POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${IOS_ASSETS_DIR}/msdf-fonts"
+            COMMAND ${CMAKE_COMMAND} -E copy ${_IOS_MSDF_CDB_FILES} "${IOS_ASSETS_DIR}/msdf-fonts/"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/assets/shaders" "${IOS_ASSETS_DIR}/shaders"
+            COMMENT "Copying CDB fonts (3rdparty fetch) + shaders to iOS assets"
+        )
+    endif()
 endif()
 
 # iOS embeds all assets via incbin - no runtime asset verification needed

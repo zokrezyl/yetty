@@ -117,9 +117,9 @@ android/ios/tvos embedded, webasm staged):
   public-domain additions — the base terminal face (`assets/fonts/`)
 - **Noto fonts** (script faces + Noto Sans CJK + Noto Color Emoji) — SIL
   Open Font License 1.1 — world script coverage for the terminal's
-  codepoint-range font routing; fetched as the `lib-noto-fonts` noarch
-  asset tarball (`build-tools/3rdparty/noto-fonts/`), disable with
-  `YETTY_ENABLE_NOTO_FONTS=OFF`
+  codepoint-range font routing; part of the `lib-fonts` noarch asset
+  tarball (`build-tools/3rdparty/fonts/`, which also carries the MSDF CDB
+  atlases), disable with `YETTY_ENABLE_NOTO_FONTS=OFF`
 
 ## System libraries (dynamically linked, not redistributed)
 

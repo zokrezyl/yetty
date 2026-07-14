@@ -8,7 +8,7 @@
 # you'd need to brotli the output. Today this dir is mainly for the
 # YETTY_ENABLE_FEATURE_CDB_GEN path used by ymsdf-gen tooling, not the
 # default embed path.
-set(PREBUILT_CDB_DIR "${CMAKE_BINARY_DIR}/3rdparty/cdb")
+set(PREBUILT_CDB_DIR "${CMAKE_BINARY_DIR}/3rdparty/fonts")
 set(FONT_DIR "${YETTY_ROOT}/assets/fonts")
 
 set(CDB_FILES

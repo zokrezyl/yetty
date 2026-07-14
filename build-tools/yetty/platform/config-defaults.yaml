@@ -143,7 +143,7 @@ terminal:
       # to the base font, so entries for absent fonts are harmless. A font
       # name with a '*' loads every matching <name>-Regular.ttf in the fonts
       # dir as one fallback chain (e.g. "Noto*" covers every staged script).
-      # The Noto fonts referenced below ship via the lib-noto-fonts asset
+      # The Noto fonts referenced below ship via the lib-fonts asset
       # tarball (YETTY_ENABLE_NOTO_FONTS, ON by default).
       ranges:
         - from: 0x1F300          # emoji: symbols & pictographs … extended-A

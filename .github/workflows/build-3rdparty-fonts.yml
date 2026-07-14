@@ -1,14 +1,16 @@
-name: Build 3rdparty — cdb
+name: Build 3rdparty — fonts
 
-# MSDF font CDBs (DejaVuSansMNerdFontMono Regular/Bold/Oblique/BoldOblique).
-# Platform-independent (.noarch) — one tarball serves every yetty target.
-# Triggered on `lib-cdb-<version>` tags. Version source of truth:
-# build-tools/3rdparty/cdb/version.
+# Complete font asset set: MSDF CDB atlases for the base DejaVu faces
+# (generated with yetty-ymsdf-gen, brotli'd) + the Noto world-coverage set
+# (script faces + CJK + Color Emoji) for the terminal's codepoint-range
+# font routing. Platform-independent (.noarch) — one tarball serves every
+# yetty target. Triggered on `lib-fonts-<version>` tags. Version source of
+# truth: build-tools/3rdparty/fonts/version.
 
 on:
   push:
     tags:
-      - 'lib-cdb-*'
+      - 'lib-fonts-*'
   workflow_dispatch: {}
 
 permissions:
@@ -25,24 +27,28 @@ jobs:
       - id: read
         run: |
           set -euo pipefail
-          V="$(tr -d '[:space:]' < build-tools/3rdparty/cdb/version)"
+          V="$(tr -d '[:space:]' < build-tools/3rdparty/fonts/version)"
           [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
           if [[ "${{ github.event_name }}" == "push" ]]; then
             REF="${GITHUB_REF#refs/tags/}"
-            EXPECT="lib-cdb-$V"
+            EXPECT="lib-fonts-$V"
             if [ "$REF" != "$EXPECT" ]; then
               echo "tag $REF does not match version file ($EXPECT)" >&2
               exit 1
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "tag=lib-cdb-$V" >> "$GITHUB_OUTPUT"
+          echo "tag=lib-fonts-$V" >> "$GITHUB_OUTPUT"
 
   build:
     needs: resolve
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji
       - uses: DeterminateSystems/nix-installer-action@main
         with:
           extra-conf: |
@@ -50,9 +56,9 @@ jobs:
       - run: mkdir -p out
       - run: |
           OUTPUT_DIR="$PWD/out" \
-          ./build-tools/3rdparty/cdb/build.sh
+          ./build-tools/3rdparty/fonts/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/cdb-*.tar.gz
+          files: out/fonts-*.tar.gz
           fail_on_unmatched_files: true
