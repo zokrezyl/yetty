@@ -22,6 +22,8 @@
 #ifndef YETTY_YFRAMEWORK_YFRAMEWORK_H
 #define YETTY_YFRAMEWORK_YFRAMEWORK_H
 
+#include <stdio.h>
+
 #include <yetty/ycore/result.h>
 #include <yetty/yetty/yetty.h>
 #include <webgpu/webgpu.h>
@@ -127,6 +129,15 @@ struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework 
  * adapter-info-fetch failure (the WebGPU call surface). */
 struct yetty_ycore_void_result yetty_yframework_log_gpu_info(WGPUAdapter adapter,
                                                              WGPUSurface surface);
+
+/* Print a human-readable diagnostic dump about this build to `out` and
+ * return — the backing of the -i/--info flag. Spins up a throwaway
+ * headless WebGPU instance + adapter to report the same GPU description
+ * logged at startup (backend, adapter, vendor/device, limits) and, when
+ * the audio capture backend is compiled in, the enumerated microphone
+ * input devices available for recording. Does not open a window and does
+ * not run the terminal; the caller exits after it returns. */
+struct yetty_ycore_void_result yetty_yframework_print_info(FILE *out);
 
 /* Reconfigure surface after a window resize. Called from the app's RESIZE
  * handler — yframework keeps the present_mode the initial capability scan

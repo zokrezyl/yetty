@@ -2516,8 +2516,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 float css_w = 0.0f, css_h = 0.0f;
                 {
                     size_t vstylen = 0;
-                    const lxb_char_t *vstyle = lxb_dom_element_get_attribute(
-                        el, (const lxb_char_t *)"style", 5, &vstylen);
+                    const lxb_char_t *vstyle =
+                        lxb_dom_element_get_attribute(el, (const lxb_char_t *)"style", 5, &vstylen);
                     css_computed_style *video_cs = yetty_ybrowser_libcss_select(
                         r, el, (const char *)vstyle, vstyle ? vstylen : 0);
                     video_box = &r->boxes.data[vidx];

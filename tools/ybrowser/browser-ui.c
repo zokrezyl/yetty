@@ -233,8 +233,8 @@ struct app {
      * key focus, -1 when none. */
 #define MAX_PAGE_INPUTS 16
     struct {
-        int box_index;                    /* engine box index this overlays */
-        float doc_x, doc_y, w, h;         /* document-coord rect of the box */
+        int box_index;                      /* engine box index this overlays */
+        float doc_x, doc_y, w, h;           /* document-coord rect of the box */
         struct yetty_yclass_object *widget; /* ygui textinput (created once) */
     } page_inputs[MAX_PAGE_INPUTS];
     int n_page_inputs;
@@ -1484,8 +1484,7 @@ static int key_cb(struct yetty_yclass_object *fw, uint32_t key, int mods, void *
         return 1;
     }
     if (!a->address_focused && !a->console_focused && a->page_input_focused >= 0 &&
-        a->page_input_focused < a->n_page_inputs &&
-        a->page_inputs[a->page_input_focused].widget) {
+        a->page_input_focused < a->n_page_inputs && a->page_inputs[a->page_input_focused].widget) {
         struct yetty_yclass_object *widget = a->page_inputs[a->page_input_focused].widget;
         if (key == 0x1B) { /* Esc — release the page input */
             err_ok(yetty_ygui_textinput_set_focus(widget, 0));
@@ -2269,8 +2268,7 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         if (payload_len < sizeof(struct yetty_client_input_key)) {
             return;
         }
-        const struct yetty_client_input_key *k =
-            (const struct yetty_client_input_key *)payload;
+        const struct yetty_client_input_key *k = (const struct yetty_client_input_key *)payload;
         if (k->magic != YETTY_CLIENT_INPUT_KEY_MAGIC) {
             return;
         }

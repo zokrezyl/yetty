@@ -40,6 +40,7 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include <miniaudio.h>
 
+#include <ctype.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -243,12 +244,76 @@ uint32_t yetty_yplatform_audio_device_channels(const struct yetty_yplatform_audi
  *===========================================================================*/
 
 struct yetty_yplatform_audio_capture {
+    /* Own the context (rather than passing NULL to ma_device_init) so the
+     * device can be opened by an explicit ma_device_id resolved through
+     * enumeration on this same context. The context must outlive the
+     * device — uninit order in destroy is device then context. */
+    ma_context context;
     ma_device device;
     ma_pcm_rb ring;
     uint32_t sample_rate;
     uint32_t channels;
     _Atomic int started;
 };
+
+/* Case-insensitive "does `haystack` contain `needle`?" — portable stand-in
+ * for the GNU-only strcasestr, used to match a device selector against a
+ * backend device name. Empty needle matches. */
+static bool audio_ci_contains(const char *haystack, const char *needle)
+{
+    if (!needle[0]) {
+        return true;
+    }
+    for (const char *base = haystack; *base; base++) {
+        const char *hay = base;
+        const char *ndl = needle;
+        while (*hay && *ndl && tolower((unsigned char)*hay) == tolower((unsigned char)*ndl)) {
+            hay++;
+            ndl++;
+        }
+        if (!*ndl) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Resolve a user selector against enumerated capture devices. Returns the
+ * matching index (>= 0), or -1 for "use the backend default" (empty /
+ * "default" selector). A non-empty selector that matches nothing returns
+ * -1 and sets *not_found. */
+static int32_t audio_resolve_capture_index(const ma_device_info *infos, ma_uint32 count,
+                                           const char *device_sel, bool *not_found)
+{
+    *not_found = false;
+    if (!device_sel || !device_sel[0] || strcmp(device_sel, "default") == 0) {
+        return -1;
+    }
+
+    bool all_digits = true;
+    for (const char *cursor = device_sel; *cursor; cursor++) {
+        if (*cursor < '0' || *cursor > '9') {
+            all_digits = false;
+            break;
+        }
+    }
+    if (all_digits) {
+        long index = strtol(device_sel, NULL, 10);
+        if (index >= 0 && (ma_uint32)index < count) {
+            return (int32_t)index;
+        }
+        *not_found = true;
+        return -1;
+    }
+
+    for (ma_uint32 i = 0; i < count; i++) {
+        if (audio_ci_contains(infos[i].name, device_sel)) {
+            return (int32_t)i;
+        }
+    }
+    *not_found = true;
+    return -1;
+}
 
 static void audio_capture_callback(ma_device *device, void *out, const void *in,
                                    ma_uint32 frame_count)
@@ -277,7 +342,7 @@ static void audio_capture_callback(ma_device *device, void *out, const void *in,
 }
 
 struct yetty_yplatform_audio_capture_ptr_result yetty_yplatform_audio_capture_create(
-    uint32_t sample_rate, uint32_t channels)
+    uint32_t sample_rate, uint32_t channels, const char *device_sel)
 {
     if (sample_rate == 0u || channels == 0u || channels > 8u) {
         return YETTY_ERR(yetty_yplatform_audio_capture_ptr,
@@ -302,14 +367,62 @@ struct yetty_yplatform_audio_capture_ptr_result yetty_yplatform_audio_capture_cr
                          "audio-capture: ring buffer init failed");
     }
 
+    if (ma_context_init(NULL, 0u, NULL, &cap->context) != MA_SUCCESS) {
+        ma_pcm_rb_uninit(&cap->ring);
+        free(cap);
+        return YETTY_ERR(yetty_yplatform_audio_capture_ptr,
+                         "audio-capture: ma_context_init failed (no mic backend?)");
+    }
+
+    /* Resolve an explicit device selector to a backend device id. NULL id
+     * pointer = the backend default. The id union is copied out by value
+     * before ma_device_init, so it stays valid even though the enumerated
+     * array is owned by the context. */
+    ma_device_id chosen_id;
+    ma_device_id *device_id_ptr = NULL;
+    if (device_sel && device_sel[0] && strcmp(device_sel, "default") != 0) {
+        ma_device_info *playback_infos = NULL;
+        ma_uint32 playback_count = 0u;
+        ma_device_info *capture_infos = NULL;
+        ma_uint32 capture_count = 0u;
+        if (ma_context_get_devices(&cap->context, &playback_infos, &playback_count, &capture_infos,
+                                   &capture_count) != MA_SUCCESS) {
+            ma_context_uninit(&cap->context);
+            ma_pcm_rb_uninit(&cap->ring);
+            free(cap);
+            return YETTY_ERR(yetty_yplatform_audio_capture_ptr,
+                             "audio-capture: ma_context_get_devices failed");
+        }
+        bool not_found = false;
+        int32_t index =
+            audio_resolve_capture_index(capture_infos, capture_count, device_sel, &not_found);
+        if (index < 0) {
+            /* device_sel is non-empty and non-"default" here, so index < 0
+             * always means "no match". Name the selector in the log (the
+             * Result msg is a borrowed literal and can't carry it). */
+            yerror("audio-capture: no input device matches '%s' (%u available; see --info)",
+                   device_sel, capture_count);
+            ma_context_uninit(&cap->context);
+            ma_pcm_rb_uninit(&cap->ring);
+            free(cap);
+            return YETTY_ERR(yetty_yplatform_audio_capture_ptr,
+                             "audio-capture: requested input device not found");
+        }
+        chosen_id = capture_infos[index].id;
+        device_id_ptr = &chosen_id;
+        yinfo("audio-capture: selected input [%d] %s", index, capture_infos[index].name);
+    }
+
     ma_device_config cfg = ma_device_config_init(ma_device_type_capture);
+    cfg.capture.pDeviceID = device_id_ptr;
     cfg.capture.format = ma_format_s16;
     cfg.capture.channels = channels;
     cfg.sampleRate = sample_rate;
     cfg.dataCallback = audio_capture_callback;
     cfg.pUserData = cap;
 
-    if (ma_device_init(NULL, &cfg, &cap->device) != MA_SUCCESS) {
+    if (ma_device_init(&cap->context, &cfg, &cap->device) != MA_SUCCESS) {
+        ma_context_uninit(&cap->context);
         ma_pcm_rb_uninit(&cap->ring);
         free(cap);
         return YETTY_ERR(yetty_yplatform_audio_capture_ptr,
@@ -329,6 +442,7 @@ void yetty_yplatform_audio_capture_destroy(struct yetty_yplatform_audio_capture 
         ma_device_stop(&cap->device);
     }
     ma_device_uninit(&cap->device);
+    ma_context_uninit(&cap->context);
     ma_pcm_rb_uninit(&cap->ring);
     free(cap);
 }
@@ -393,4 +507,67 @@ uint32_t yetty_yplatform_audio_capture_sample_rate(const struct yetty_yplatform_
 uint32_t yetty_yplatform_audio_capture_channels(const struct yetty_yplatform_audio_capture *cap)
 {
     return cap ? cap->channels : 0u;
+}
+
+struct yetty_yplatform_audio_capture_list_ptr_result yetty_yplatform_audio_capture_list_create(void)
+{
+    /* A context is the backend handle miniaudio enumerates through — the
+     * same object ma_device_init opens implicitly when passed NULL. NULL
+     * backend list means "probe the platform default order" (on Linux:
+     * PulseAudio → ALSA → JACK → sndio). */
+    ma_context context;
+    if (ma_context_init(NULL, 0u, NULL, &context) != MA_SUCCESS) {
+        return YETTY_ERR(yetty_yplatform_audio_capture_list_ptr,
+                         "audio-capture: ma_context_init failed (no backend?)");
+    }
+
+    ma_device_info *playback_infos = NULL;
+    ma_uint32 playback_count = 0u;
+    ma_device_info *capture_infos = NULL;
+    ma_uint32 capture_count = 0u;
+    if (ma_context_get_devices(&context, &playback_infos, &playback_count, &capture_infos,
+                               &capture_count) != MA_SUCCESS) {
+        ma_context_uninit(&context);
+        return YETTY_ERR(yetty_yplatform_audio_capture_list_ptr,
+                         "audio-capture: ma_context_get_devices failed");
+    }
+
+    struct yetty_yplatform_audio_capture_list *list = calloc(1u, sizeof(*list));
+    if (!list) {
+        ma_context_uninit(&context);
+        return YETTY_ERR(yetty_yplatform_audio_capture_list_ptr,
+                         "audio-capture: list alloc failed");
+    }
+    snprintf(list->backend, sizeof(list->backend), "%s", ma_get_backend_name(context.backend));
+
+    if (capture_count > 0u) {
+        list->devices = calloc((size_t)capture_count, sizeof(*list->devices));
+        if (!list->devices) {
+            free(list);
+            ma_context_uninit(&context);
+            return YETTY_ERR(yetty_yplatform_audio_capture_list_ptr,
+                             "audio-capture: device array alloc failed");
+        }
+    }
+
+    /* Copy names out now: the ma_device_info array is owned by the context
+     * and freed by ma_context_uninit below. */
+    for (ma_uint32 i = 0u; i < capture_count; i++) {
+        list->devices[i].index = i;
+        list->devices[i].is_default = capture_infos[i].isDefault ? true : false;
+        snprintf(list->devices[i].name, sizeof(list->devices[i].name), "%s", capture_infos[i].name);
+    }
+    list->count = (size_t)capture_count;
+
+    ma_context_uninit(&context);
+    return YETTY_OK(yetty_yplatform_audio_capture_list_ptr, list);
+}
+
+void yetty_yplatform_audio_capture_list_destroy(struct yetty_yplatform_audio_capture_list *list)
+{
+    if (!list) {
+        return;
+    }
+    free(list->devices);
+    free(list);
 }

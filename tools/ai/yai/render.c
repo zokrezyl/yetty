@@ -1334,7 +1334,9 @@ struct yetty_ycore_int_result yai_render_line_plot(struct yai_renderer *renderer
         .flags = YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS,
     };
     struct yetty_yplot_buffer_input buffer = {
-        .samples = samples, .count = count, .color = 0, /* palette default (mint) */
+        .samples = samples,
+        .count = count,
+        .color = 0, /* palette default (mint) */
     };
     struct yetty_ydraw_drawable_list_result render_res =
         yetty_yplot_render_with_buffers("", 0, &buffer, 1, &config);

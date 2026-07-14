@@ -30,12 +30,6 @@ export TMOUT="${TMOUT:-1800}"
 # Nothing persists across sessions anyway.
 export HISTFILE=/dev/null
 
-# Convenience links in the (tmpfs, per-session) home so the MOTD's example
-# commands work verbatim.
-ln -sfn "${YETTY_DEMOS}" "${HOME}/demos" 2>/dev/null || true
-ln -sf /usr/local/share/yetty/logo-2.jpeg "${HOME}/yetty-logo.jpeg" 2>/dev/null || true
-ln -sfn /usr/share/yetty/sources "${HOME}/sources" 2>/dev/null || true
-
 # `demos` — browse the bundled demo gallery.
 demos() {
     if [ -n "$1" ]; then

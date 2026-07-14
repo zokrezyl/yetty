@@ -39,6 +39,7 @@
 #define YETTY_YPLATFORM_AUDIO_H
 
 #include <yetty/ycore/result.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -100,8 +101,17 @@ struct yetty_yplatform_audio_capture;
 
 YETTY_YRESULT_DECLARE(yetty_yplatform_audio_capture_ptr, struct yetty_yplatform_audio_capture *);
 
+/* Open a capture device. `device_sel` picks the input:
+ *   - NULL / "" / "default"  → the backend's default microphone.
+ *   - an all-digit string     → the device at that enumeration index
+ *                               (see yetty_yplatform_audio_capture_list_create
+ *                               / the -i/--info listing).
+ *   - any other string        → the first device whose name contains it
+ *                               (case-insensitive substring).
+ * A non-empty selector that matches nothing is an error (the caller asked
+ * for a specific mic and it isn't there) — no silent fallback to default. */
 struct yetty_yplatform_audio_capture_ptr_result yetty_yplatform_audio_capture_create(
-    uint32_t sample_rate, uint32_t channels);
+    uint32_t sample_rate, uint32_t channels, const char *device_sel);
 
 void yetty_yplatform_audio_capture_destroy(struct yetty_yplatform_audio_capture *cap);
 
@@ -121,6 +131,41 @@ struct yetty_ycore_size_result yetty_yplatform_audio_capture_read_s16(
 uint32_t yetty_yplatform_audio_capture_sample_rate(const struct yetty_yplatform_audio_capture *cap);
 
 uint32_t yetty_yplatform_audio_capture_channels(const struct yetty_yplatform_audio_capture *cap);
+
+/*
+ * Capture-device enumeration — the backend's list of microphones/inputs.
+ *
+ * miniaudio identifies a device by a per-backend `ma_device_id` union (an
+ * ALSA/PulseAudio name string, a WASAPI wide string, a CoreAudio UID, an
+ * integer on AAudio/WinMM, …) — there is no single cross-platform string
+ * form. The portable handle a caller can surface to a user is therefore
+ * the human-readable `name` (or the enumeration `index`); a future
+ * device-selection flag resolves that back to a device by matching the
+ * enumerated list.
+ */
+struct yetty_yplatform_audio_capture_info {
+    uint32_t index;  /* position in the enumerated list */
+    bool is_default; /* the device opened when none is requested */
+    char name[256];  /* human-readable label from the backend */
+};
+
+struct yetty_yplatform_audio_capture_list {
+    struct yetty_yplatform_audio_capture_info *devices; /* `count` entries */
+    size_t count;
+    char backend[64]; /* backend that produced the list, e.g. "PulseAudio" */
+};
+
+YETTY_YRESULT_DECLARE(yetty_yplatform_audio_capture_list_ptr,
+                      struct yetty_yplatform_audio_capture_list *);
+
+/* Enumerate the system's capture (input) devices. Opens a throwaway
+ * backend context, queries it, and copies the results out — the returned
+ * list owns its own storage and stays valid after the context is torn
+ * down. Free with yetty_yplatform_audio_capture_list_destroy. */
+struct yetty_yplatform_audio_capture_list_ptr_result yetty_yplatform_audio_capture_list_create(
+    void);
+
+void yetty_yplatform_audio_capture_list_destroy(struct yetty_yplatform_audio_capture_list *list);
 
 #ifdef __cplusplus
 }

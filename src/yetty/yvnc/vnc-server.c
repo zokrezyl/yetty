@@ -526,10 +526,11 @@ static int vnc_record_write_cb(int64_t offset, const void *buffer, size_t size, 
  * from config_vnc_server when both --record and --record-audio are
  * set. On failure the whole record path is aborted (mp4 without the
  * expected audio track would silently produce a video-only file). */
-static struct yetty_ycore_void_result record_audio_setup(struct yetty_yvnc_server *server)
+static struct yetty_ycore_void_result record_audio_setup(struct yetty_yvnc_server *server,
+                                                         const char *device_sel)
 {
     struct yetty_yplatform_audio_capture_ptr_result cap_res = yetty_yplatform_audio_capture_create(
-        YETTY_YVNC_RECORD_AUDIO_SAMPLE_RATE, YETTY_YVNC_RECORD_AUDIO_CHANNELS);
+        YETTY_YVNC_RECORD_AUDIO_SAMPLE_RATE, YETTY_YVNC_RECORD_AUDIO_CHANNELS, device_sel);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cap_res, "vnc record-audio: capture create failed");
     server->record_audio_capture = cap_res.value;
 
@@ -853,7 +854,9 @@ static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server
          * the video track lazily on the first NAL). */
         if (config->ops->get_bool(config, "vnc/record-audio", 0)) {
             vnc_server->record_audio_track_id = -1;
-            struct yetty_ycore_void_result audio_res = record_audio_setup(vnc_server);
+            const char *audio_device =
+                config->ops->get_string(config, "vnc/record-audio-device", NULL);
+            struct yetty_ycore_void_result audio_res = record_audio_setup(vnc_server, audio_device);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, audio_res, "vnc record: audio setup failed");
         }
 #else
