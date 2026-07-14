@@ -1656,11 +1656,10 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
              * column, `max-width:50ch`; without the cap they span the full
              * container). Percent maxima resolve against the content width. */
             {
-                float cross_max = c->css_max_width > 0.0f
-                                      ? c->css_max_width
-                                      : (c->css_max_width < 0.0f
-                                             ? content_width * (-c->css_max_width)
-                                             : 0.0f);
+                float cross_max =
+                    c->css_max_width > 0.0f
+                        ? c->css_max_width
+                        : (c->css_max_width < 0.0f ? content_width * (-c->css_max_width) : 0.0f);
                 if (cross_max > 0.0f && c->w > cross_max) {
                     c->w = cross_max;
                 }
@@ -3157,8 +3156,9 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                 struct float_result gres = layout_block(r, cidx, cell_x, row_top, cell_w);
                 YETTY_RETURN_IF_ERR(float, gres, "layout_grid(named): child block");
                 c = &r->boxes.data[cidx];
-                child_h = (c->css_height > 0.0f) ? border_box_height_from_specified(c, c->css_height)
-                                                 : gres.value;
+                child_h = (c->css_height > 0.0f)
+                              ? border_box_height_from_specified(c, c->css_height)
+                              : gres.value;
                 c->h = child_h;
                 c->height_source = (c->css_height > 0.0f) ? YL_SRC_CSS : YL_SRC_CONTENT;
             } else if (c->kind == YL_BOX_INLINE_TEXT) {
@@ -3277,8 +3277,9 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                     return YETTY_ERR(float, "layout_grid: child block", block_res);
                 }
                 c = &r->boxes.data[cidx];
-                child_h = (c->css_height > 0.0f) ? border_box_height_from_specified(c, c->css_height)
-                                                 : block_res.value;
+                child_h = (c->css_height > 0.0f)
+                              ? border_box_height_from_specified(c, c->css_height)
+                              : block_res.value;
                 c->h = child_h;
                 c->height_source = (c->css_height > 0.0f) ? YL_SRC_CSS : YL_SRC_CONTENT;
             } else if (c->kind == YL_BOX_INLINE_TEXT) {
@@ -3770,8 +3771,8 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
                 }
                 c = &r->boxes.data[cidx];
                 if (parent_content_h > 0.0f) {
-                    child_h = border_box_height_from_specified(
-                        c, parent_content_h * (-c->css_height));
+                    child_h =
+                        border_box_height_from_specified(c, parent_content_h * (-c->css_height));
                 }
             }
             c->h = child_h;

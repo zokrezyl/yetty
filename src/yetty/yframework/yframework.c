@@ -30,6 +30,10 @@
 #include <yetty/ywebgpu/request.h>
 #include <yetty/webgpu/error.h>
 #include <yetty/yplatform/ywebgpu.h>
+#include <yetty/yplatform/vulkan-driver.h>
+#ifdef YETTY_HAS_YAUDIO
+#include <yetty/yplatform/audio.h>
+#endif
 #include <yetty/ymsdf/generator.h>
 #include <yetty/yvnc/vnc-server.h>
 #include <yetty/yctl/rpc-server.h>
@@ -258,6 +262,90 @@ static WGPUAdapter yframework_request_adapter(WGPUInstance instance,
         ywarn("yframework: adapter request failed: %s", request_state.error_msg);
     }
     return adapter;
+}
+
+/* Create the same kind of headless WebGPU instance the platform bring-up
+ * uses (TimedWaitAny feature; bundled Vulkan driver registered first) so
+ * --info reports the adapter the real run would pick. NULL on failure. */
+static WGPUInstance yframework_create_probe_instance(void)
+{
+    WGPUInstanceFeatureName instance_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
+    WGPUInstanceDescriptor instance_desc = {0};
+    instance_desc.requiredFeatureCount = 1;
+    instance_desc.requiredFeatures = instance_features;
+    yetty_yplatform_vulkan_register_bundled_driver();
+    return wgpuCreateInstance(&instance_desc);
+}
+
+#ifdef YETTY_HAS_YAUDIO
+static void yframework_print_audio_devices(FILE *out)
+{
+    struct yetty_yplatform_audio_capture_list_ptr_result list_res =
+        yetty_yplatform_audio_capture_list_create();
+    if (YETTY_IS_ERR(list_res)) {
+        fprintf(out, "Audio input:     unavailable (%s)\n", list_res.error.msg);
+        yetty_ycore_error_destroy(list_res.error);
+        return;
+    }
+    struct yetty_yplatform_audio_capture_list *list = list_res.value;
+    fprintf(out, "Audio backend:   %s\n", list->backend);
+    if (list->count == 0u) {
+        fprintf(out, "Audio inputs:    none detected\n");
+    } else {
+        fprintf(out, "Audio inputs (%zu, for --record-audio):\n", list->count);
+        for (size_t i = 0; i < list->count; i++) {
+            fprintf(out, "  [%u] %s%s\n", list->devices[i].index, list->devices[i].name,
+                    list->devices[i].is_default ? "  (default)" : "");
+        }
+    }
+    yetty_yplatform_audio_capture_list_destroy(list);
+}
+#endif
+
+struct yetty_ycore_void_result yetty_yframework_print_info(FILE *out)
+{
+    if (!out) {
+        return YETTY_ERR(yetty_ycore_void, "print_info: out is NULL");
+    }
+
+#ifdef YETTY_BUILD_VERSION
+    fprintf(out, "yetty %s\n\n", YETTY_BUILD_VERSION);
+#else
+    fprintf(out, "yetty\n\n");
+#endif
+
+    WGPUInstance instance = yframework_create_probe_instance();
+    if (!instance) {
+        return YETTY_ERR(yetty_ycore_void, "print_info: failed to create WebGPU instance");
+    }
+
+    WGPURequestAdapterOptions adapter_opts = {0};
+    adapter_opts.compatibleSurface = NULL; /* headless probe — no window */
+    adapter_opts.powerPreference = WGPUPowerPreference_HighPerformance;
+    adapter_opts.backendType = yframework_env_backend();
+    WGPUAdapter adapter = yframework_request_adapter(instance, &adapter_opts);
+    if (adapter) {
+        char *desc = yetty_ywebgpu_get_webgpu_description(adapter, NULL);
+        if (desc) {
+            fprintf(out, "%s", desc);
+            free(desc);
+        } else {
+            fprintf(out, "GPU:             adapter info unavailable\n");
+        }
+        wgpuAdapterRelease(adapter);
+    } else {
+        fprintf(out, "GPU:             no adapter available\n");
+    }
+
+#ifdef YETTY_HAS_YAUDIO
+    fprintf(out, "\n");
+    yframework_print_audio_devices(out);
+#else
+    fprintf(out, "\nAudio input:     capture backend not compiled in\n");
+#endif
+
+    wgpuInstanceRelease(instance);
+    return YETTY_OK_VOID();
 }
 
 /* Lifted verbatim from yetty/yetty.c init_webgpu(): request adapter +

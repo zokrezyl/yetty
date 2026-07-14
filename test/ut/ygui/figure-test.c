@@ -232,25 +232,78 @@ static void make_headless_framework(struct ytest *test,
  * handcrafted inline so the headless test needs no on-disk asset. */
 static const uint8_t k_bmp_2x2[] = {
     /* BITMAPFILEHEADER (14) */
-    0x42, 0x4D,             /* "BM"                       */
-    0x46, 0x00, 0x00, 0x00, /* file size = 70             */
-    0x00, 0x00, 0x00, 0x00, /* reserved                   */
-    0x36, 0x00, 0x00, 0x00, /* pixel data offset = 54     */
+    0x42,
+    0x4D, /* "BM"                       */
+    0x46,
+    0x00,
+    0x00,
+    0x00, /* file size = 70             */
+    0x00,
+    0x00,
+    0x00,
+    0x00, /* reserved                   */
+    0x36,
+    0x00,
+    0x00,
+    0x00, /* pixel data offset = 54     */
     /* BITMAPINFOHEADER (40) */
-    0x28, 0x00, 0x00, 0x00, /* header size = 40           */
-    0x02, 0x00, 0x00, 0x00, /* width = 2                  */
-    0x02, 0x00, 0x00, 0x00, /* height = 2                 */
-    0x01, 0x00,             /* planes = 1                 */
-    0x18, 0x00,             /* bpp = 24                   */
-    0x00, 0x00, 0x00, 0x00, /* compression = BI_RGB       */
-    0x10, 0x00, 0x00, 0x00, /* image size = 16            */
-    0x13, 0x0B, 0x00, 0x00, /* x ppm                      */
-    0x13, 0x0B, 0x00, 0x00, /* y ppm                      */
-    0x00, 0x00, 0x00, 0x00, /* colors used                */
-    0x00, 0x00, 0x00, 0x00, /* colors important           */
+    0x28,
+    0x00,
+    0x00,
+    0x00, /* header size = 40           */
+    0x02,
+    0x00,
+    0x00,
+    0x00, /* width = 2                  */
+    0x02,
+    0x00,
+    0x00,
+    0x00, /* height = 2                 */
+    0x01,
+    0x00, /* planes = 1                 */
+    0x18,
+    0x00, /* bpp = 24                   */
+    0x00,
+    0x00,
+    0x00,
+    0x00, /* compression = BI_RGB       */
+    0x10,
+    0x00,
+    0x00,
+    0x00, /* image size = 16            */
+    0x13,
+    0x0B,
+    0x00,
+    0x00, /* x ppm                      */
+    0x13,
+    0x0B,
+    0x00,
+    0x00, /* y ppm                      */
+    0x00,
+    0x00,
+    0x00,
+    0x00, /* colors used                */
+    0x00,
+    0x00,
+    0x00,
+    0x00, /* colors important           */
     /* pixel data: bottom-up, BGR, rows padded to 4 bytes */
-    0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, /* row0: blue, green + pad */
-    0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, /* row1: red,  white + pad */
+    0xFF,
+    0x00,
+    0x00,
+    0x00,
+    0xFF,
+    0x00,
+    0x00,
+    0x00, /* row0: blue, green + pad */
+    0x00,
+    0x00,
+    0xFF,
+    0xFF,
+    0xFF,
+    0xFF,
+    0x00,
+    0x00, /* row1: red,  white + pad */
 };
 
 /* Create a headless container + framework wired together, whose root panel

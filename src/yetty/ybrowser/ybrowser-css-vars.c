@@ -409,8 +409,8 @@ static int sel_attr_matches_root(struct yetty_ylexbor *r, const char *attr_start
         return 1;
     }
     size_t value_len = 0;
-    const lxb_char_t *value = lxb_dom_element_get_attribute(
-        root, (const lxb_char_t *)name_start, name_len, &value_len);
+    const lxb_char_t *value =
+        lxb_dom_element_get_attribute(root, (const lxb_char_t *)name_start, name_len, &value_len);
     if (value == NULL) {
         return 0; /* root doesn't carry the attribute at all */
     }
@@ -429,8 +429,7 @@ static int sel_attr_matches_root(struct yetty_ylexbor *r, const char *attr_start
         while (p < attr_end && *p != quote_ch) {
             p++;
         }
-        return (size_t)(p - val_start) == value_len &&
-               memcmp(val_start, value, value_len) == 0;
+        return (size_t)(p - val_start) == value_len && memcmp(val_start, value, value_len) == 0;
     }
     const char *val_start = p;
     while (p < attr_end && *p != ' ' && *p != '\t') {
@@ -3875,8 +3874,8 @@ float yetty_ylexbor_aspect_ratio_lookup(struct yetty_ylexbor *r, lxb_dom_element
         }
         /* var()-valued rule: resolve against the element's scoped custom
          * properties, then parse the resulting `W / H` (or single number). */
-        char *resolved = yetty_ylexbor_css_vars_resolve_for_element(
-            r, element, rule->raw_value, strlen(rule->raw_value));
+        char *resolved = yetty_ylexbor_css_vars_resolve_for_element(r, element, rule->raw_value,
+                                                                    strlen(rule->raw_value));
         if (resolved == NULL) {
             continue;
         }

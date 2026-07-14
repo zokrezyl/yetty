@@ -40,10 +40,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # shell keeps the normal per-user XDG defaults; profile.sh symlinks the yetty
 # data/config into the writable home so the tools still find their install.
 
-# "latest" currently points at a yos-web release with no Linux desktop asset,
-# so pin a release that ships yetty-linux.tar.gz. Override with
-# --build-arg YETTY_VERSION=yetty-X.Y.Z to bump.
-ARG YETTY_VERSION=yetty-0.2.55
+# GitHub's "latest" points at a yos-web release with no Linux desktop asset, so
+# pin the newest yetty-* release that ships yetty-linux.tar.gz. Both the tools/
+# demos (yinstall) and the bundled source tree below track this tag, so they
+# stay in lockstep. Override with --build-arg YETTY_VERSION=yetty-X.Y.Z to bump.
+ARG YETTY_VERSION=yetty-0.2.71
 
 RUN curl -fsSL https://yetty.dev/install.sh \
     | XDG_BIN_HOME=/usr/local/bin \

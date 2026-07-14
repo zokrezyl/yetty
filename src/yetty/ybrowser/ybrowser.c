@@ -173,19 +173,19 @@ float yetty_ylexbor_codepoint_advance_em(uint32_t codepoint)
     /* Helvetica AFM advance widths, thousandths of an em, ASCII 32..126.
      * Arial and Liberation Sans share these to the unit. */
     static const uint16_t helvetica_advance[95] = {
-        278, 278, 355, 556,  556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,
-        556, 556, 556, 556,  556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
+        278,  278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,
+        556,  556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
         1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
-        667, 778, 722, 667,  611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
-        333, 556, 556, 500,  556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
-        556, 556, 333, 500,  278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+        667,  778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
+        333,  556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
+        556,  556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
     };
     if (codepoint >= 32 && codepoint <= 126) {
         return (float)helvetica_advance[codepoint - 32] / 1000.0f;
     }
     /* Zero-width codepoints (also skipped by the wrap pass). */
-    if (codepoint == 0x00AD || codepoint == 0x200B || codepoint == 0x200C ||
-        codepoint == 0x200D || codepoint == 0xFEFF) {
+    if (codepoint == 0x00AD || codepoint == 0x200B || codepoint == 0x200C || codepoint == 0x200D ||
+        codepoint == 0xFEFF) {
         return 0.0f;
     }
     if (codepoint == 0x00A0) {

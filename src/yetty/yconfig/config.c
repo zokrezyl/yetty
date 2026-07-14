@@ -1262,7 +1262,7 @@ static struct yetty_yplatform_option long_options[] = {
     {"yvnc-h264-idr-interval", required_argument, 0, OPT_YVNC_H264_IDR_INTERVAL},
     {"yvnc-h264-screen-content", required_argument, 0, OPT_YVNC_H264_SCREEN_CONTENT},
     {"record", required_argument, 0, OPT_RECORD},
-    {"record-audio", no_argument, 0, OPT_RECORD_AUDIO},
+    {"record-audio", required_argument, 0, OPT_RECORD_AUDIO},
     {"rpc-host", required_argument, 0, OPT_RPC_HOST},
     {"rpc-port", required_argument, 0, 'r'},
     {"temu", no_argument, 0, OPT_TEMU},
@@ -1283,6 +1283,7 @@ static struct yetty_yplatform_option long_options[] = {
     {"log-file", required_argument, 0, OPT_LOG_FILE},
     {"log-function", required_argument, 0, OPT_LOG_FUNCTION},
     {"help", no_argument, 0, 'h'},
+    {"info", no_argument, 0, 'i'},
     {0, 0, 0, 0}};
 
 /* Usage destination follows GNU conventions:
@@ -1321,8 +1322,10 @@ static void print_usage(FILE *out, const char *prog)
                  "YDVNC_PASSWORD)\n");
     fprintf(out,
             "      --record=FILE                  Record session to MP4 (forces H.264 encoding)\n");
-    fprintf(out, "      --record-audio                 Also capture microphone audio into the MP4 "
-                 "(AAC-LC, requires --record)\n");
+    fprintf(out, "      --record-audio=DEVICE          Capture microphone audio into the MP4 "
+                 "(AAC-LC, requires --record).\n");
+    fprintf(out, "                                     DEVICE is an input index or name from "
+                 "--info, or 'default'\n");
     fprintf(out, "      --rpc-host=HOST                RPC server host\n");
     fprintf(out, "  -r, --rpc-port=PORT                RPC server port\n");
     fprintf(out, "      --temu                         Run in-process TinyEMU RISC-V VM\n");
@@ -1354,6 +1357,8 @@ static void print_usage(FILE *out, const char *prog)
     fprintf(out,
             "      --log-function=NAME[=on|off]  Per-function rule, e.g. --log-function=render\n");
     fprintf(out, "  -h, --help                         Show this help\n");
+    fprintf(out,
+            "  -i, --info                         Print build/GPU/audio-input info and exit\n");
     fprintf(out, "\n");
     fprintf(out, "Session-mode flags are mutually exclusive:\n");
     fprintf(out,
@@ -1425,7 +1430,7 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
     yetty_yplatform_optind = 1;
     const char *session_mode = NULL;
     int c;
-    while ((c = yetty_yplatform_getopt_long(argc, argv, "c:e:r:h", long_options, NULL)) != -1) {
+    while ((c = yetty_yplatform_getopt_long(argc, argv, "c:e:r:hi", long_options, NULL)) != -1) {
         switch (c) {
         case 'c':
             /* config file already loaded by try_load_config_file */
@@ -1484,6 +1489,7 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             break;
         case OPT_RECORD_AUDIO:
             set_config(impl, "vnc/record-audio", "true");
+            set_config(impl, "vnc/record-audio-device", yetty_yplatform_optarg);
             break;
         case OPT_RPC_HOST:
             set_config(impl, YETTY_YCONFIG_KEY_RPC_HOST, yetty_yplatform_optarg);
@@ -1626,6 +1632,12 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
         case 'h':
             print_usage(stdout, argv[0]);
             exit(0);
+        case 'i':
+            /* GPU/audio probing can't happen this low in the stack — record
+             * the request and let the platform bring-up print + exit once a
+             * WebGPU instance is reachable (see glfw_platform_run). */
+            set_config(impl, "info", "true");
+            break;
         default:
             print_usage(stderr, argv[0]);
             exit(1);

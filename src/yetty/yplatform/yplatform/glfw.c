@@ -36,6 +36,7 @@
 #include <yetty/yapp/app.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
+#include <yetty/yframework/yframework.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/vulkan-driver.h>
 #include <yetty/yplatform/platform-input-pipe.h>
@@ -215,6 +216,19 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
     struct yetty_yconfig_result config_res = yetty_yconfig_create(argc, argv);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, config_res, "glfw_platform: failed to create config");
     struct yetty_yconfig_config *config = config_res.value;
+
+    /* -i/--info: print the build/GPU/audio-input diagnostic and exit before
+     * touching the display server. yframework spins up a throwaway headless
+     * WebGPU instance for the GPU probe, so no window/glfwInit is needed. */
+    const char *want_info = config->ops->get_string(config, "info", NULL);
+    if (want_info && strcmp(want_info, "true") == 0) {
+        struct yetty_ycore_void_result info_res = yetty_yframework_print_info(stdout);
+        config->ops->destroy(config);
+        if (YETTY_IS_ERR(info_res)) {
+            return YETTY_ERR(yetty_ycore_void, "glfw_platform: --info failed", info_res);
+        }
+        return YETTY_OK_VOID();
+    }
 
     /* Headless (--yvnc-headless): VNC server runs without a window, so there is
      * no display server to talk to and glfwInit must not be called. */

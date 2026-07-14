@@ -102,9 +102,8 @@ static inline void ytest__abort(struct ytest *test)
 #if defined(__clang__) || defined(__GNUC__)
 __attribute__((format(printf, 6, 7)))
 #endif
-static inline int
-ytest__check(struct ytest *test, int passed, int fatal, const char *file, int line, const char *fmt,
-             ...)
+static inline int ytest__check(struct ytest *test, int passed, int fatal, const char *file,
+                               int line, const char *fmt, ...)
 {
     test->checks++;
     if (passed) {

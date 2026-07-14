@@ -135,6 +135,16 @@ target_link_libraries(yetty PRIVATE
     yetty_yplatform_window_chrome
 )
 
+# -i/--info enumerates audio-input (microphone) devices through the
+# cross-platform capture backend. Link the optional audio lib and flag its
+# availability when miniaudio is enabled (include modules are guarded).
+if(YETTY_ENABLE_LIB_MINIAUDIO)
+    include(${YETTY_ROOT}/build-tools/yetty/miniaudio.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/yplatform-audio.cmake)
+    target_link_libraries(yetty PRIVATE yetty_yplatform_audio)
+    target_compile_definitions(yetty PRIVATE YETTY_HAS_YAUDIO=1)
+endif()
+
 # Copy runtime assets to build directory
 if(YETTY_ENABLE_FEATURE_ASSETS)
     add_subdirectory(${YETTY_ROOT}/assets ${CMAKE_BINARY_DIR}/assets-build)
