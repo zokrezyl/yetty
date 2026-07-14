@@ -111,20 +111,23 @@ terminal:
       # - msdf:   Multi-channel signed distance field. Crisp at any zoom
       #           level because MSDF is re-evaluated per fragment.
       render-method: "msdf"
-      # Font size in pixels — the visual height of the glyph extent (top of
-      # tallest ascender to bottom of lowest descender). Cell height/width
-      # are derived from this plus the padding below.
+      # Font size in pixels — the visual height of the basic-latin glyph
+      # extent (top of tallest ascender to bottom of lowest descender).
+      # Cell width follows the font's advance at that scale; cell height
+      # follows the font's line box (the span box-drawing glyphs tile), so
+      # rows get the designer's leading rather than a tight glyph wrap:
+      #   cell_height = line_box  * scale * (1 + top  + bottom)
+      #   cell_width  = advance   * scale * (1 + left + right)
       size: 18
-      # Cell padding around the glyph, as fractions of the glyph dimensions:
-      #   cell_height = size           * (1 + top  + bottom)
-      #   cell_width  = size / hwratio * (1 + left + right)
-      # Defaults of 0 give a tight cell — the cell exactly wraps the glyph
-      # extent, with no "small glyph in cell" gap.
+      # Cell padding, as fractions of the unpadded cell dimensions. The
+      # slightly negative defaults pull the cell a few percent inside the
+      # glyph ink so box-drawing/contour glyphs overlap their neighbours and
+      # join without antialiasing seams.
       padding:
         left:   -0.05
         right:  -0.05
-        top:    0.0
-        bottom: 0.0
+        top:    -0.04
+        bottom: -0.04
       # Codepoint-range → font routing. Codepoints outside every range use
       # the base font above; ranges are matched in order, first hit wins.
       # Each entry:
