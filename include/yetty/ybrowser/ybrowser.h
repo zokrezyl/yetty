@@ -421,6 +421,13 @@ double yetty_ylexbor_prof_now_ms(void);
  * is internal and may change). `tag_out` is filled with the lowercased
  * element local name (e.g. "div", "p"); set to "" for anonymous boxes.
  * ===========================================================================*/
+
+/* Serialize the CURRENT document (after parsing and any JS mutations) as
+ * HTML into a malloc'd NUL-terminated string — the engine-side analogue of
+ * Chrome's --dump-dom, for diffing what scripts did to the tree. Caller
+ * frees the value. */
+struct yetty_ycore_char_ptr_result yetty_ylexbor_dump_dom(const struct yetty_ylexbor *r);
+
 int yetty_ylexbor_test_box_count(const struct yetty_ylexbor *r);
 int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x, float *y,
                               float *w, float *h, char *tag_out, int tag_cap);

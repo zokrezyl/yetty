@@ -2466,6 +2466,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             px > 0.0f) {
                             definite_h = px;
                         }
+                        yetty_ybrowser_libcss_release(iframe_cs);
                     }
                 }
                 /* Definite px wins; else a percentage attr fills the parent
@@ -2838,6 +2839,10 @@ struct yetty_ycore_void_result yetty_ylexbor_box_build(struct yetty_ylexbor *r)
         }
     }
     r->boxes.size = 0;
+    /* The dropped boxes were the only consumers of arena text (b->text,
+	 * marker_text, grid names) — release it, or every relayout duplicates
+	 * all page text again (unbounded growth on timer-driven pages). */
+    yetty_ylexbor_arena_reset(r);
 
     /* Root box wraps the whole viewport. */
     uint32_t root_idx;

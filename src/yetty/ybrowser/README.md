@@ -98,13 +98,18 @@ Chrome-parity process epic, #516.
 
 `tools/ybrowser/main.c`: `--dump-boxes` (TSV box tree + `ws=`/`hs=` size
 provenance — the interface all geometry oracles consume), `--dump-geo`
-(dom-path keyed rects), `--dump-wpt` (check-layout-th expected-vs-actual),
+(dom-path keyed rects), `--dump-dom` (serialized post-JS DOM, the engine-side
+analogue of Chrome's --dump-dom), `--dump-wpt` (check-layout-th
+expected-vs-actual),
 `--once`, `--interactive`, `--no-ui`, `--record <file>`, `-w`/`-H`,
 `--font-size`, `--osc`/`--raw`.
 
 Env: `YBROWSER_PROFILE` (stderr load-timeline profiler), `YBROWSER_NO_JS`,
 `YBROWSER_NO_IFRAMES`, `YBROWSER_JS_CONSOLE`, `YBROWSER_SYNC_NAV`,
-`YETTY_USER_AGENT`, `YLEXBOR_BOOT_BUDGET_MS`.
+`YETTY_USER_AGENT`, `YLEXBOR_BOOT_BUDGET_MS`,
+`YBROWSER_JS_BYTECODE_CACHE=0` (disable the QuickJS bytecode compile cache —
+sources ≥ 16 KB are normally content-hash-keyed on the loader's disk cache so
+warm loads skip parse+compile; see `ybrowser-js.c`).
 
 ## Testing
 

@@ -35,6 +35,29 @@ struct yetty_ybrowser_libcss {
     /* Back-pointer for callbacks that need viewport metrics / lookups. */
     struct yetty_ylexbor *r;
 
+    /* Class arrays handed to libcss by cb_node_classes during ONE
+	 * css_select_style call. libcss unrefs the strings but never frees
+	 * the ARRAYS (callback keeps ownership), and one select can request
+	 * classes for SEVERAL nodes (style-sharing probes siblings), so a
+	 * single reused buffer would be overwritten mid-select. Each call
+	 * gets its own array, recorded here; yetty_ybrowser_libcss_select
+	 * frees the batch right after css_select_style returns. */
+    lwc_string ***pending_class_arrays;
+    uint32_t pending_class_array_count, pending_class_array_cap;
+
+    /* Per-element libcss node_data store (open-addressing hash keyed by
+	 * the element pointer). libcss hands ownership over via the
+	 * set_libcss_node_data callback and KEEPS USING the data afterwards
+	 * (the parent-bloom path reads node_data->bloom for the rest of the
+	 * select), so it must stay alive; one live entry per element —
+	 * replacing destroys the previous entry. Destroyed wholesale in
+	 * libcss_destroy. */
+    struct yetty_ybrowser_libcss_node_slot {
+        void *node;
+        void *data;
+    } *node_data_slots;
+    size_t node_data_slot_count, node_data_slot_cap;
+
     /* @import recursion state: absolute URLs currently being loaded, so a
 	 * cyclic import (a imports b imports a) terminates instead of looping.
 	 * Bounded — deeper chains are cut off. */

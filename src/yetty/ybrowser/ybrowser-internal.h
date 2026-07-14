@@ -770,6 +770,20 @@ struct yetty_ylexbor_console_entry {
     char *text; /* owned */
 };
 
+/* One nested browsing context (an <iframe>'s child engine), retained across
+ * relayouts of the same document. Keying on the iframe element pointer (stable
+ * for the life of one parsed DOM) plus its source string lets resolve_iframes
+ * REUSE a child instead of tearing it down and re-parsing + re-running its
+ * scripts every relayout — the difference between compositing a cached embed
+ * and re-downloading/re-executing a whole YouTube player every frame. */
+struct yetty_ylexbor_iframe_child {
+    lxb_dom_element_t *element;  /* the <iframe>; borrowed, dies on document replace */
+    char *src_key;               /* resolved src URL or srcdoc content (owned) */
+    struct yetty_ylexbor *child; /* owned child engine */
+    int content_w, content_h;    /* inner size at last layout, to detect a resize */
+    int used;                    /* matched during the in-progress resolve pass */
+};
+
 struct yetty_ylexbor {
     /* Network loader (share handle, Alt-Svc cache). Either borrowed from
 	 * the host via config (owns_loader = 0) or created privately at
@@ -1015,7 +1029,7 @@ struct yetty_ylexbor {
 	 * into the iframe box. OWNED — destroyed on document replace and at engine
 	 * destroy. `iframe_depth` guards against unbounded nesting (an iframe whose
 	 * document iframes onward); the top-level document is 0. */
-    struct yetty_ylexbor **iframe_children;
+    struct yetty_ylexbor_iframe_child *iframe_children;
     int iframe_child_count, iframe_child_cap;
     int iframe_depth;
 };
@@ -1103,6 +1117,18 @@ void yetty_ybrowser_disk_cache_store(struct yetty_ybrowser_disk_cache *cache, co
                                      int kind, const struct yetty_ybrowser_disk_cache_meta *meta,
                                      const char *body, size_t body_len);
 
+/* Extra `kind` for the disk cache's keyspace: content-addressed QuickJS
+ * bytecode (compile cache, see ybrowser-js.c). Deliberately NOT a member of
+ * enum yetty_ybrowser_request_kind — kind participates in the on-disk key,
+ * so a distinct value guarantees a bytecode entry can never alias the HTTP
+ * entry of some URL. */
+enum { YETTY_YBROWSER_DISK_CACHE_KIND_JS_BYTECODE = 32 };
+
+/* The loader's disk-cache tier, or NULL when the build has no libcurl
+ * loader (the stub loader carries no cache). Defined in ybrowser-js-web.c. */
+struct yetty_ybrowser_disk_cache *yetty_ybrowser_loader_disk_cache(
+    struct yetty_ybrowser_loader *loader);
+
 /* The transform svg_scene_merge applies (scene → page px), exposed so the
  * click hit-test can invert it. Defined in ybrowser-paint.c. */
 void yetty_ylexbor_svg_merge_transform(float min_x, float min_y, float scene_w, float scene_h,
@@ -1177,6 +1203,14 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 /* Append text bytes to the document's text arena and return a stable
  * pointer into it. Pointer is invalidated by load_html / destroy. */
 const char *yetty_ylexbor_arena_dup(struct yetty_ylexbor *r, const char *bytes, size_t len);
+
+/* Free every chunk handed out by yetty_ylexbor_arena_dup. Callable only at
+ * the two points where no box can still reference arena text: the start of
+ * load_html, and box_build right after it drops the previous box vector.
+ * (Before box_build reset this, the arena grew monotonically — a page whose
+ * timers keep dirtying the DOM re-duplicated ALL page text on every
+ * relayout, ~100 MB/min on apnews.com.) */
+void yetty_ylexbor_arena_reset(struct yetty_ylexbor *r);
 
 /* Text width. advance_ratio > 0 = flat (glyph_count × font_size × ratio,
  * for monospace hosts / Ahem / tests); advance_ratio <= 0 = proportional
@@ -1453,6 +1487,11 @@ struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r);
 void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r);
 struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(struct yetty_ylexbor *r);
 
+/* True iff `url`'s host is a YouTube web host (youtube.com / www / m). Used only
+ * to attach the `SOCS=CAI` consent cookie a real browser sends, so YouTube
+ * serves the actual app rather than the cookieless consent wall. */
+int yetty_ylexbor_is_youtube_host(const char *url);
+
 /* Recover the owning engine from a QuickJS context. The engine pointer is
  * stashed as the runtime opaque (js_dom_state.r) by the DOM install, so this
  * works for any callback firing inside a page's JS. Returns NULL before the
@@ -1463,6 +1502,16 @@ struct yetty_ylexbor *yetty_ylexbor_js_engine_from_ctx(struct JSContext *ctx);
  * call with a NULL engine (no-op). Defined in ybrowser-js.c, always compiled
  * regardless of YETTY_HAVE_QUICKJS. */
 void yetty_ylexbor_console_push(struct yetty_ylexbor *r, int level, const char *text);
+
+/* Evaluate `source` in the global scope through the bytecode compile cache:
+ * big sources are keyed by content hash in the loader's disk cache, so a
+ * warm load deserializes bytecode instead of re-parsing (small sources and
+ * cache-less builds fall through to a plain JS_Eval). Returns 0 on success,
+ * -1 when the script threw — the exception is left pending on the context
+ * for the caller to inspect. Defined in ybrowser-js.c; only compiled (and
+ * only callable) when YETTY_HAVE_QUICKJS. */
+int yetty_ylexbor_js_eval_cached(struct yetty_ylexbor *r, struct JSContext *ctx, const char *source,
+                                 size_t source_len, const char *url_label);
 
 /* DOM-bindings install (called from js_init). */
 void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r);

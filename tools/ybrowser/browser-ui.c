@@ -148,6 +148,22 @@ enum content_kind {
  * images keep arriving, then once more when the last one lands. */
 #define IMG_RENDER_DEBOUNCE_MS 120.0
 
+/* Background-relayout throttle (see struct tab). After this many consecutive
+ * relayouts produce a byte-identical draw list, treat the DOM churn as
+ * background noise (a stuck analytics/paywall timer that dirties the DOM
+ * without changing anything visible) and stop relaying out every frame. This
+ * engine has no incremental layout — every relayout re-cascades the WHOLE
+ * document — so a full relayout of a real page is tens to hundreds of ms; doing
+ * it per frame pins a core. Instead we poll: skip the relayout, and grow the
+ * skip window on each stable render (exponential backoff) up to a cap, so a
+ * page that stays visually static is relaid out only occasionally while a page
+ * that actually changes snaps back to full rate. Autonomous JS visual updates
+ * on an otherwise-static page are picked up within the cap; user interaction,
+ * navigation, and resize bypass the gate entirely (they reset rendered_w). */
+#define RELAYOUT_STABLE_FRAMES 3
+#define RELAYOUT_GATE_MIN_MS 100.0
+#define RELAYOUT_GATE_MAX_MS 2000.0
+
 struct cache_entry {
     char *url;
     uint8_t *data;
@@ -194,6 +210,19 @@ struct tab {
     int scripts_pending;
     uint64_t dl_hash; /* hash of the last draw list we shipped */
     size_t dl_size;   /* size of the last draw list we shipped */
+
+    /* Background-relayout throttle. A page whose JS keeps a timer/rAF loop
+     * running dirties the DOM every tick; render_target_render then re-runs a
+     * full CSS re-cascade + box rebuild each frame even when the result is
+     * byte-identical (an ad/analytics timer that changes nothing visible). That
+     * pins a core at 100%. Once we've seen the output stay identical across a
+     * few relayouts we treat the churn as background noise and gate further
+     * relayouts to a slow poll — a forced render (nav / resize / tab-switch) or
+     * a relayout that actually changes the output resets the gate to full rate,
+     * so genuine animation is never throttled. */
+    int stable_relayouts;        /* consecutive relayouts with identical output */
+    double relayout_gate_ms;     /* skip background relayouts until this time */
+    double relayout_interval_ms; /* current backoff window; doubles while stable */
 };
 
 struct app {
@@ -2141,13 +2170,27 @@ static int pump_active(struct app *a)
             t->needs_render = 1;
             a->pending_render = 1;
             wait_ms = 0;
+        } else if (t->scripts_pending) {
+            /* Deferred scripts are queued but the first paint hasn't set
+             * rendered_w yet. Request the render and keep the loop ticking
+             * (wait_ms = 0) so we re-check next pump instead of blocking on an
+             * event that never comes — a page with no images/timers (e.g. the
+             * YouTube reader path, whose app scripts are skipped) otherwise
+             * stalls forever with the scripts unrun. */
+            a->pending_render = 1;
+            wait_ms = 0;
         }
         int next = yetty_ylexbor_pump_timers(t->engine);
         if (next >= 0) {
             wait_ms = next < 100 ? next : 100;
         }
         if (yetty_ylexbor_dom_dirty(t->engine)) {
-            t->needs_render = 1;
+            /* Re-render, but do NOT force needs_render — that flag means
+             * "ship even if the draw list is unchanged" (tab switch / fresh
+             * doc). A DOM mutation should only reship when it actually changes
+             * the output; forcing it here defeated the identical-output skip in
+             * render_target_render and made every background timer tick reship
+             * the whole page. Let the hash comparison decide. */
             a->pending_render = 1;
         }
         /* New page console.* output while DevTools is open → refresh the log. */
@@ -2780,6 +2823,24 @@ static void render_doc(struct app *a, struct tab *t)
         if (!t->engine) {
             return;
         }
+        /* Gate the expensive relayout+emit. Once the page has produced
+         * byte-identical output across a few renders, treat further renders as
+         * background churn (a timer/animation/image loop that isn't changing
+         * anything visible) and skip the whole relayout+emit until the poll
+         * window elapses. A width change is a real geometry change and always
+         * renders; content changes reset the stability counter (below), so nav
+         * / tab-switch / resize are never wrongly gated. Crucially this ignores
+         * needs_render: a stable page whose images keep "completing" forces
+         * needs_render every frame, and re-emitting a 31 MB draw list to get the
+         * same bytes is pure waste. */
+        int width_changed = (w != t->rendered_w);
+        double now_ms = yetty_ylexbor_prof_now_ms();
+        if (!width_changed && t->stable_relayouts >= RELAYOUT_STABLE_FRAMES &&
+            now_ms < t->relayout_gate_ms) {
+            t->needs_render = 0; /* satisfied by skipping — do not re-arm a full render */
+            t->rendered_w = w;
+            return;
+        }
         if (w != t->rendered_w) {
             int vh = (int)(h > a->viewport_h ? h : a->viewport_h);
             err_ok(yetty_ylexbor_set_viewport(t->engine, (int)w, vh));
@@ -2809,13 +2870,36 @@ static void render_doc(struct app *a, struct tab *t)
     const void *dl_bytes = yetty_ydraw_drawable_list_data(dl);
     size_t dl_sz = yetty_ydraw_drawable_list_size(dl);
     uint64_t h2 = fnv1a(dl_bytes, dl_sz);
-    if (!t->needs_render && dl_sz == t->dl_size && h2 == t->dl_hash) {
+    /* Output stability is tracked by BYTES ALONE (not gated on needs_render) so
+     * a page forced to re-render every frame by background churn still accrues
+     * stability and arms the relayout gate above. The reship still honours
+     * needs_render, so a tab switch / fresh doc re-ships even when bytes match. */
+    int output_same = (dl_sz == t->dl_size && h2 == t->dl_hash);
+    if (output_same) {
+        if (t->stable_relayouts < RELAYOUT_STABLE_FRAMES) {
+            t->stable_relayouts++;
+        }
+        /* Grow the skip window each time output stays put, up to the cap. */
+        double next_interval =
+            t->relayout_interval_ms > 0.0 ? t->relayout_interval_ms * 2.0 : RELAYOUT_GATE_MIN_MS;
+        if (next_interval > RELAYOUT_GATE_MAX_MS) {
+            next_interval = RELAYOUT_GATE_MAX_MS;
+        }
+        t->relayout_interval_ms = next_interval;
+        t->relayout_gate_ms = yetty_ylexbor_prof_now_ms() + next_interval;
+    } else {
+        /* Real visual change — resume full-rate rendering. */
+        t->stable_relayouts = 0;
+        t->relayout_gate_ms = 0.0;
+        t->relayout_interval_ms = 0.0;
+        t->dl_hash = h2;
+        t->dl_size = dl_sz;
+    }
+    if (output_same && !t->needs_render) {
         yetty_ydraw_drawable_list_destroy(dl);
         t->rendered_w = w;
         return;
     }
-    t->dl_hash = h2;
-    t->dl_size = dl_sz;
 
     /* In-yetty the page ships as one figure-body RPC, and the wire caps
 	 * bodies at 64 MiB (#437; raised from 16 once images started shipping
@@ -2962,11 +3046,26 @@ static void render_active(struct app *a)
 	 * relayout shifted anything (or there's no baseline yet) fall through to a
 	 * full render. */
     if (a->img_delta_pending && !t->needs_render) {
-        if (try_image_delta(a, t)) {
+        /* The figure-delta ship is applied only by the in-yetty host receiver
+         * (event_loop == NULL). The standalone window (event_loop != NULL)
+         * composites from its own local page buffer and never sees a figure
+         * delta, so it must re-emit the whole page to show decoded pixels. */
+        if (a->event_loop == NULL && try_image_delta(a, t)) {
             a->img_delta_pending = 0;
             return;
         }
-        t->needs_render = 1; /* delta bailed — force render_doc to repaint */
+        /* The per-image delta path bailed (no baseline — e.g. the page's DOM was
+         * rewritten after its first ship, as the YouTube reader does), so a real
+         * image just finished decoding but can only be shown by a full re-emit.
+         * needs_render alone is not enough: the output-stability relayout gate
+         * deliberately ignores it. Reset the stability counters too so render_doc
+         * actually relayouts+emits and the new pixels composite — image
+         * completions are finite, so this can't reintroduce the stable-churn burn
+         * the gate exists to prevent. */
+        t->needs_render = 1;
+        t->stable_relayouts = 0;
+        t->relayout_gate_ms = 0.0;
+        t->relayout_interval_ms = 0.0;
     }
     a->img_delta_pending = 0;
     render_doc(a, t);
@@ -3477,6 +3576,20 @@ struct YETTY_ANNOTATE("class@ybrowser:app") YETTY_ANNOTATE("parent@yapp:app") ye
     struct yetty_ydraw_target *render_target;
     const char *initial_url;
 
+    /* Frame pacing. The render loop re-arms itself whenever the page still has
+     * ongoing work (JS timers/animation dirtying the framework, or images still
+     * in flight). Re-arming an *immediate* render there spins the loop at
+     * unbounded frame rate — a page with a permanent background task (an ad
+     * iframe's polling timer, a stuck image fetch) pins a whole core at 100%.
+     * Instead the continuous re-arm goes through this repeating ~60fps timer:
+     * each tick posts one render, and the render handler restarts the timer
+     * only while work remains, so an idle page waits on real input events (0%
+     * CPU) and a busy page is capped at the display rate. Discrete input/resize
+     * events still request an immediate render, so interaction stays crisp. */
+    yetty_yevent_timer_id repaint_timer;
+    int repaint_timer_ready;   /* timer created + registered */
+    int repaint_timer_running; /* our copy of the libuv active flag */
+
     /* Initial-page prefetch. Started on a background thread at sa_worker
      * entry so the HTML download overlaps the GPU/font/UI setup that follows,
      * then joined and folded into the page cache just before the first tab
@@ -3519,12 +3632,55 @@ static void *sa_prefetch_main(void *arg)
     return NULL;
 }
 
+/* ~60fps. The continuous render re-arm is paced to at least this interval so a
+ * page with a permanent background task cannot spin the loop faster than the
+ * display can show. */
+#define YBROWSER_FRAME_INTERVAL_MS 16
+
 static void sa_request_render(struct yetty_ybrowser_app *s)
 {
     if (s->yframework && s->yframework->event_loop &&
         s->yframework->event_loop->ops->request_render) {
         s->yframework->event_loop->ops->request_render(s->yframework->event_loop);
     }
+}
+
+/* Keep the paced heartbeat running (used when the page still has ongoing work).
+ * Idempotent: starting an already-running libuv timer just resets its period,
+ * so guard on our own flag to leave the current cadence untouched. Falls back
+ * to an immediate render if the loop has no timer facility. */
+static void sa_schedule_render(struct yetty_ybrowser_app *s)
+{
+    if (!s->repaint_timer_ready) {
+        sa_request_render(s);
+        return;
+    }
+    if (s->repaint_timer_running) {
+        return;
+    }
+    struct yetty_yevent_event_loop *loop = s->yframework->event_loop;
+    struct yetty_ycore_void_result start = loop->ops->start_timer(loop, s->repaint_timer);
+    if (YETTY_IS_ERR(start)) {
+        yetty_ycore_error_destroy(start.error);
+        sa_request_render(s); /* degrade to the old immediate re-arm */
+        return;
+    }
+    s->repaint_timer_running = 1;
+}
+
+/* Stop the heartbeat — the page went idle, so the loop should block on real
+ * events (input, GPU completion) rather than tick. */
+static void sa_stop_render_timer(struct yetty_ybrowser_app *s)
+{
+    if (!s->repaint_timer_ready || !s->repaint_timer_running) {
+        return;
+    }
+    struct yetty_yevent_event_loop *loop = s->yframework->event_loop;
+    struct yetty_ycore_void_result stop = loop->ops->stop_timer(loop, s->repaint_timer);
+    if (YETTY_IS_ERR(stop)) {
+        yetty_ycore_error_destroy(stop.error);
+    }
+    s->repaint_timer_running = 0;
 }
 
 static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_listener *listener,
@@ -3538,6 +3694,16 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         }
         struct yetty_yui_event re = {.type = YETTY_YCORE_RENDER};
         return sa_event_handler(listener, &re);
+    }
+
+    /* Paced heartbeat: the frame timer fired. Turn it into exactly one render;
+     * the render handler restarts the timer only if work still remains. This is
+     * what bounds a continuously-dirtying page to the display rate instead of
+     * letting it spin the loop. */
+    if (ev->type == YETTY_YCORE_TIMER && s->repaint_timer_ready &&
+        ev->timer.timer_id == s->repaint_timer) {
+        sa_request_render(s);
+        return YETTY_OK(yetty_ycore_int, 1);
     }
 
     if (ev->type == YETTY_YCORE_RENDER) {
@@ -3591,7 +3757,9 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
 			 * or while there are still deferred images to stream in
 			 * (pump_active returns 0 when it just fetched one). */
         if (yetty_ygui_framework_is_dirty(s->app.fw) || pump_wait == 0) {
-            sa_request_render(s);
+            sa_schedule_render(s);
+        } else {
+            sa_stop_render_timer(s);
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -3973,12 +4141,52 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         yetty_yevent_register_default_listeners(s->yframework->event_loop, &s->listener);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rel, "ybrowser standalone: register_listeners");
 
+    /* Create the frame-pacing heartbeat timer (see the repaint_timer comment on
+     * struct yetty_ybrowser_app). It stays stopped until the render loop finds
+     * ongoing work; sa_schedule_render/sa_stop_render_timer drive it. If the
+     * loop can't give us a timer, the helpers fall back to immediate re-arms —
+     * the old (spinning) behaviour, so pacing is a pure improvement, never a
+     * regression. */
+    {
+        struct yetty_yevent_event_loop *loop = s->yframework->event_loop;
+        struct yetty_yevent_timer_id_result timer_res = loop->ops->create_timer(loop);
+        if (YETTY_IS_ERR(timer_res)) {
+            yetty_ycore_error_destroy(timer_res.error);
+        } else {
+            s->repaint_timer = timer_res.value;
+            struct yetty_ycore_void_result cfg =
+                loop->ops->config_timer(loop, s->repaint_timer, YBROWSER_FRAME_INTERVAL_MS);
+            struct yetty_ycore_void_result reg =
+                loop->ops->register_timer_listener(loop, s->repaint_timer, &s->listener);
+            if (YETTY_IS_ERR(cfg) || YETTY_IS_ERR(reg)) {
+                if (YETTY_IS_ERR(cfg)) {
+                    yetty_ycore_error_destroy(cfg.error);
+                }
+                if (YETTY_IS_ERR(reg)) {
+                    yetty_ycore_error_destroy(reg.error);
+                }
+                (void)loop->ops->destroy_timer(loop, s->repaint_timer);
+            } else {
+                s->repaint_timer_ready = 1;
+            }
+        }
+    }
+
     yetty_yevent_post_async(input_pipe, &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     struct yetty_ycore_void_result run_res =
         s->yframework->event_loop->ops->start(s->yframework->event_loop);
     if (YETTY_IS_ERR(run_res)) {
         yetty_ycore_error_destroy(run_res.error);
+    }
+
+    /* Release the frame-pacing timer now the loop has stopped. */
+    if (s->repaint_timer_ready) {
+        struct yetty_yevent_event_loop *loop = s->yframework->event_loop;
+        sa_stop_render_timer(s);
+        (void)loop->ops->deregister_timer_listener(loop, s->repaint_timer, &s->listener);
+        (void)loop->ops->destroy_timer(loop, s->repaint_timer);
+        s->repaint_timer_ready = 0;
     }
 
     /* Teardown. Destroy the image pool FIRST: it joins the worker threads
