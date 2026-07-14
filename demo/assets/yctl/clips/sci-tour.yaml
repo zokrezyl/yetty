@@ -1,0 +1,96 @@
+# Clip: the sci tour - yetty for the scientific community, in one scrollback.
+#
+# The scenario types one command (./sci-tour.sh), which walks a
+# computational scientist's day on real data: a live RK4 three-body run
+# (energy check in the log), an animated GPU interference field, the
+# Keeling curve, GW150914 strain vs template, a month of global
+# seismicity, Sentinel-2 satellite imagery, a PubChem molecule in 3D, a
+# live wave-optics shader, the analysis pipeline DAG, a solver profile
+# and the markdown lab notebook. When the parade settles, the scenario
+# scrolls back up through the whole history - one continuous scrollback -
+# then closes.
+#
+# WARNING: the last step is `shutdown` - it exits the yetty it runs
+# against. Only play this against a dedicated recording instance.
+#
+# One-shot recording (from the repo root):
+#
+#   ./demo/scripts/yctl/clips/sci-tour.sh
+#   # -> tmp/clips/sci-tour/sci-tour.mp4
+#
+# The wrapper stages sci-tour-body.sh as ./sci-tour.sh, best-effort
+# fetches the record-time-only assets (the GW150914 discovery paper PDF)
+# and exports YETTY_REPO / YETTY_BUILD_DIR. See _record-common.sh.
+#
+# Timing note: the big sleep after the command must exceed the body's own
+# runtime (it paces itself with sleeps; the satellite act may spend up to
+# ~25s fetching tiles on a cold cache). Oversize is harmless - just clean
+# prompt frames before the closing flourish; undersize clips the last acts.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 14
+      speed-deviation: 0.25
+      avg-typo: 0.0
+
+script:
+  - sleep: 0.4
+
+  # Kick off the self-driving tour, then let the whole parade play out.
+  - type: "./sci-tour.sh"
+  - special-char: ENTER
+  - sleep: 75.0
+
+  # Cruise UP through the history - the whole day is still there, one
+  # continuous scrollback.
+  - mouse-move: { x: 840, y: 460 }
+  - sleep: 0.3
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 1.5             # hold: a screen of real science, mid-history
+
+  # Drop back to the prompt for the end card.
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.6
+
+  - type:
+      text: "# the experiment, the data, the paper - one terminal."
+      avg-speed: 24
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type:
+      text: "# github.com/zokrezyl/yetty | yetty.dev"
+      avg-speed: 24
+  - special-char: ENTER
+  - sleep: 2.5
+
+  - shutdown: ~
