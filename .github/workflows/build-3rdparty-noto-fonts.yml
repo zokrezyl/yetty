@@ -1,0 +1,58 @@
+name: Build 3rdparty — noto-fonts
+
+# World-coverage Noto font set (script faces + CJK + Color Emoji) for the
+# terminal's codepoint-range font routing. Platform-independent (.noarch) —
+# one tarball serves every yetty target. Triggered on `lib-noto-fonts-<version>`
+# tags. Version source of truth: build-tools/3rdparty/noto-fonts/version.
+
+on:
+  push:
+    tags:
+      - 'lib-noto-fonts-*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag:     ${{ steps.read.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          set -euo pipefail
+          V="$(tr -d '[:space:]' < build-tools/3rdparty/noto-fonts/version)"
+          [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            REF="${GITHUB_REF#refs/tags/}"
+            EXPECT="lib-noto-fonts-$V"
+            if [ "$REF" != "$EXPECT" ]; then
+              echo "tag $REF does not match version file ($EXPECT)" >&2
+              exit 1
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=lib-noto-fonts-$V" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji
+      - run: mkdir -p out
+      - run: |
+          OUTPUT_DIR="$PWD/out" \
+          ./build-tools/3rdparty/noto-fonts/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/noto-fonts-*.tar.gz
+          fail_on_unmatched_files: true

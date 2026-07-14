@@ -343,9 +343,12 @@ static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *pa
         }
     } else if (event.type == YAML_SEQUENCE_START_EVENT) {
         /* Store the sequence as a child node with each item as a child
-         * keyed by index "0", "1", … . Nested sequences/mappings inside
-         * the sequence are still skipped — yetty config consumers only
-         * need flat string lists today (e.g. shaders/preload/glyphs). */
+         * keyed by index "0", "1", … . A scalar item becomes a value
+         * child (flat string lists, e.g. shaders/preload/glyphs); a
+         * mapping item becomes a subtree child, so structured list
+         * entries resolve as <list>/<index>/<field> (e.g. the terminal
+         * font range table). Sequences nested inside a sequence are
+         * still skipped — no consumer needs them. */
         yaml_event_delete(&event);
         struct config_node *seq = node_get_or_create_child(parent, key);
         int index = 0;
@@ -367,7 +370,32 @@ static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *pa
                 yaml_event_delete(&event);
                 continue;
             }
-            /* Nested seq/map: skip the whole sub-tree. */
+            if (event.type == YAML_MAPPING_START_EVENT && seq) {
+                yaml_event_delete(&event);
+                char idx_key[16];
+                snprintf(idx_key, sizeof(idx_key), "%d", index);
+                struct config_node *item = node_get_or_create_child(seq, idx_key);
+                if (item) {
+                    load_yaml_mapping(parser, item, dir);
+                    index++;
+                    continue;
+                }
+                /* No storage for the item — consume the mapping events. */
+                int skip_depth = 1;
+                while (skip_depth > 0 && yaml_parser_parse(parser, &event)) {
+                    if (event.type == YAML_SEQUENCE_START_EVENT ||
+                        event.type == YAML_MAPPING_START_EVENT) {
+                        skip_depth++;
+                    } else if (event.type == YAML_SEQUENCE_END_EVENT ||
+                               event.type == YAML_MAPPING_END_EVENT) {
+                        skip_depth--;
+                    }
+                    yaml_event_delete(&event);
+                }
+                index++;
+                continue;
+            }
+            /* Nested sequence (or mapping with no storage): skip the sub-tree. */
             int depth = 1;
             if (event.type == YAML_SEQUENCE_START_EVENT || event.type == YAML_MAPPING_START_EVENT) {
                 yaml_event_delete(&event);

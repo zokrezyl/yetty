@@ -301,13 +301,22 @@ if(YETTY_ENABLE_LIB_INCBIN)
     file(REMOVE_RECURSE "${_YGREETER_ANDROID_EMBED}")
     file(MAKE_DIRECTORY "${_YGREETER_ANDROID_EMBED}")
 
-    # shaders / fonts / msdf-fonts — reuse what yetty_embed_assets(yetty)
-    # already collected for libyetty.so (same render stack, same fonts).
-    foreach(_SUB shaders fonts msdf-fonts)
+    # shaders / msdf-fonts — reuse what yetty_embed_assets(yetty) already
+    # collected for libyetty.so (same render stack, same fonts).
+    foreach(_SUB shaders msdf-fonts)
         if(EXISTS "${CMAKE_BINARY_DIR}/embed-data/${_SUB}")
             file(COPY "${CMAKE_BINARY_DIR}/embed-data/${_SUB}"
                  DESTINATION "${_YGREETER_ANDROID_EMBED}")
         endif()
+    endforeach()
+    # fonts — exclude the world-coverage Noto set: libyetty.so already ships
+    # it once into the shared data dir, and embedding ~90 MB a second time
+    # per companion .so would balloon the APK. The greeter UI only needs the
+    # base faces.
+    file(GLOB _YGREETER_FONT_FILES "${CMAKE_BINARY_DIR}/embed-data/fonts/*")
+    list(FILTER _YGREETER_FONT_FILES EXCLUDE REGEX "/Noto[^/]+$")
+    foreach(_YGREETER_FONT_FILE ${_YGREETER_FONT_FILES})
+        file(COPY "${_YGREETER_FONT_FILE}" DESTINATION "${_YGREETER_ANDROID_EMBED}/fonts")
     endforeach()
 
     # ygreeter's own showcase assets, extracted to the data-dir root.
@@ -447,13 +456,20 @@ if(YETTY_ENABLE_LIB_INCBIN)
     file(REMOVE_RECURSE "${_YHELLO_ANDROID_EMBED}")
     file(MAKE_DIRECTORY "${_YHELLO_ANDROID_EMBED}")
 
-    # shaders / fonts / msdf-fonts — reuse what yetty_embed_assets(yetty)
-    # already collected for libyetty.so (same render stack, same fonts).
-    foreach(_SUB shaders fonts msdf-fonts)
+    # shaders / msdf-fonts — reuse what yetty_embed_assets(yetty) already
+    # collected for libyetty.so (same render stack, same fonts).
+    foreach(_SUB shaders msdf-fonts)
         if(EXISTS "${CMAKE_BINARY_DIR}/embed-data/${_SUB}")
             file(COPY "${CMAKE_BINARY_DIR}/embed-data/${_SUB}"
                  DESTINATION "${_YHELLO_ANDROID_EMBED}")
         endif()
+    endforeach()
+    # fonts — exclude the world-coverage Noto set (libyetty.so ships it once;
+    # see the ygreeter block above for the why).
+    file(GLOB _YHELLO_FONT_FILES "${CMAKE_BINARY_DIR}/embed-data/fonts/*")
+    list(FILTER _YHELLO_FONT_FILES EXCLUDE REGEX "/Noto[^/]+$")
+    foreach(_YHELLO_FONT_FILE ${_YHELLO_FONT_FILES})
+        file(COPY "${_YHELLO_FONT_FILE}" DESTINATION "${_YHELLO_ANDROID_EMBED}/fonts")
     endforeach()
 
     # yhello's own showcase assets, extracted to the data-dir root.

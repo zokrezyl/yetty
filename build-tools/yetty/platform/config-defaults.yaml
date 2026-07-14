@@ -111,20 +111,85 @@ terminal:
       # - msdf:   Multi-channel signed distance field. Crisp at any zoom
       #           level because MSDF is re-evaluated per fragment.
       render-method: "msdf"
-      # Font size in pixels — the visual height of the glyph extent (top of
-      # tallest ascender to bottom of lowest descender). Cell height/width
-      # are derived from this plus the padding below.
+      # Font size in pixels — the visual height of the basic-latin glyph
+      # extent (top of tallest ascender to bottom of lowest descender).
+      # Cell width follows the font's advance at that scale; cell height
+      # follows the font's line box (the span box-drawing glyphs tile), so
+      # rows get the designer's leading rather than a tight glyph wrap:
+      #   cell_height = line_box  * scale * (1 + top  + bottom)
+      #   cell_width  = advance   * scale * (1 + left + right)
       size: 18
-      # Cell padding around the glyph, as fractions of the glyph dimensions:
-      #   cell_height = size           * (1 + top  + bottom)
-      #   cell_width  = size / hwratio * (1 + left + right)
-      # Defaults of 0 give a tight cell — the cell exactly wraps the glyph
-      # extent, with no "small glyph in cell" gap.
+      # Cell padding, as fractions of the unpadded cell dimensions. The
+      # slightly negative defaults pull the cell a few percent inside the
+      # glyph ink so box-drawing/contour glyphs overlap their neighbours and
+      # join without antialiasing seams.
       padding:
         left:   -0.05
         right:  -0.05
-        top:    0.0
-        bottom: 0.0
+        top:    -0.04
+        bottom: -0.04
+      # Codepoint-range → font routing. Codepoints outside every range use
+      # the base font above; ranges are matched in order, first hit wins.
+      # Each entry:
+      #   from / to      — first/last codepoint, hex ("0x4E00") or decimal
+      #   font           — font name resolved under the fonts dir as
+      #                    <name>-Regular.ttf (or bare <name>.ttf); msdf
+      #                    faces load <name>-Regular.cdb from msdf-fonts/,
+      #                    generating it at runtime from the TTF when absent
+      #   render-method  — "msdf" (crisp under zoom) or "raster" (FreeType
+      #                    bitmaps; color fonts like Noto Color Emoji are
+      #                    detected automatically and rendered in color)
+      # A face that fails to load logs a warning and its ranges fall back
+      # to the base font, so entries for absent fonts are harmless. A font
+      # name with a '*' loads every matching <name>-Regular.ttf in the fonts
+      # dir as one fallback chain (e.g. "Noto*" covers every staged script).
+      # The Noto fonts referenced below ship via the lib-noto-fonts asset
+      # tarball (YETTY_ENABLE_NOTO_FONTS, ON by default).
+      ranges:
+        - from: 0x1F300          # emoji: symbols & pictographs … extended-A
+          to: 0x1FAFF
+          font: NotoColorEmoji
+          render-method: raster
+        - from: 0x2600           # emoji: misc symbols + dingbats
+          to: 0x27BF
+          font: NotoColorEmoji
+          render-method: raster
+        - from: 0x4E00           # CJK unified ideographs
+          to: 0x9FFF
+          font: NotoSansCJK
+          render-method: raster
+        - from: 0x3000           # CJK punctuation, kana
+          to: 0x30FF
+          font: NotoSansCJK
+          render-method: raster
+        - from: 0xAC00           # hangul syllables
+          to: 0xD7A3
+          font: NotoSansCJK
+          render-method: raster
+        - from: 0x0530           # world: Armenian … Ol Chiki
+          to: 0x1CFF
+          font: "Noto*"
+          render-method: raster
+        - from: 0x2C00           # Glagolitic … Ethiopic extended
+          to: 0x2DFF
+          font: "Noto*"
+          render-method: raster
+        - from: 0xA000           # Yi, Vai, Bamum, Javanese, Meetei Mayek …
+          to: 0xABFF
+          font: "Noto*"
+          render-method: raster
+        - from: 0x10000          # SMP: historic + Brahmi, Chakma, Sharada …
+          to: 0x11FFF
+          font: "Noto*"
+          render-method: raster
+        - from: 0x16A00          # Mro, Pahawh Hmong, Miao …
+          to: 0x16FFF
+          font: "Noto*"
+          render-method: raster
+        - from: 0x1E800          # Mende Kikakui, Adlam
+          to: 0x1E95F
+          font: "Noto*"
+          render-method: raster
 
 # ─────────────────────────────────────────────────────────────────────────────
 # YPaint (non-monospace font used for ydraw text spans)

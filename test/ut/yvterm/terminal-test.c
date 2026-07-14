@@ -136,6 +136,43 @@ static void test_ansi_attrs_and_color(struct ytest *test)
 }
 
 /*---------------------------------------------------------------------------
+ * Configurable colours: the 16-entry ANSI palette and the default fg/bg
+ * installed via the grid setters (the terminal/colors config path) must be
+ * what indexed SGR colours and blank cells resolve to.
+ *-------------------------------------------------------------------------*/
+static void test_palette_and_default_colors(struct ytest *test)
+{
+    struct yetty_yclass_object *grid = make_grid(test, 80, 24, 100);
+
+    /* Web-style 0xRRGGBB in; cells store ABGR-packed (red in the low byte). */
+    struct yetty_ycore_void_result palette_res =
+        yetty_yvterm_grid_set_palette_color(grid, 1 /* red */, 0x112233);
+    YTEST_REQUIRE_OK(test, palette_res);
+    struct yetty_ycore_void_result defaults_res =
+        yetty_yvterm_grid_set_default_colors(grid, 0xF0F0F0, 0x000000);
+    YTEST_REQUIRE_OK(test, defaults_res);
+
+    /* Blank cells already carry the new default colours. */
+    YTEST_CHECK_EQ_SIZE(test, cell_at(test, grid, 0, 0)->fg, 0xFFF0F0F0u);
+    YTEST_CHECK_EQ_SIZE(test, cell_at(test, grid, 0, 0)->bg, 0xFF000000u);
+
+    /* A(default fg) B(SGR 31 → palette slot 1) C(reset → default fg) */
+    feed(test, grid, "A\033[31mB\033[0mC");
+    YTEST_CHECK_EQ_SIZE(test, cell_at(test, grid, 0, 0)->fg, 0xFFF0F0F0u);
+    YTEST_CHECK_EQ_SIZE(test, cell_at(test, grid, 0, 1)->fg, 0xFF332211u);
+    YTEST_CHECK_EQ_SIZE(test, cell_at(test, grid, 0, 2)->fg, 0xFFF0F0F0u);
+
+    /* Out-of-range palette index is rejected. */
+    struct yetty_ycore_void_result bad_res = yetty_yvterm_grid_set_palette_color(grid, 16, 0);
+    YTEST_CHECK(test, YETTY_IS_ERR(bad_res));
+    if (YETTY_IS_ERR(bad_res)) {
+        yetty_ycore_error_destroy(bad_res.error);
+    }
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
  * Cursor movement: CUP, print, CR, LF, CUU, CUF.
  *-------------------------------------------------------------------------*/
 static void test_cursor_movement(struct ytest *test)
@@ -165,6 +202,58 @@ static void test_cursor_movement(struct ytest *test)
     YTEST_REQUIRE_OK(test, yetty_yvterm_grid_cursor(grid, &row, &col, &vis));
     YTEST_CHECK_EQ_SIZE(test, row, 1);
     YTEST_CHECK_EQ_SIZE(test, col, 6);
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
+ * Unicode width: cursor advance must match the pinned modern Unicode
+ * version (regenerated combining.inc / fullwidth.inc), not the historical
+ * Unicode 5.0 tables — post-5.0 wide codepoints and combining marks are
+ * the cases that regressed before the regeneration.
+ *-------------------------------------------------------------------------*/
+static void test_unicode_widths(struct ytest *test)
+{
+    struct yetty_yclass_object *grid = make_grid(test, 80, 24, 100);
+    uint32_t row, col, vis;
+
+    feed(test, grid, "\rA"); /* ASCII stays narrow */
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_cursor(grid, &row, &col, &vis));
+    YTEST_CHECK_EQ_SIZE(test, col, 1);
+
+    feed(test, grid, "\r\xEF\xBC\xA1"); /* U+FF21 fullwidth A — classic wide */
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_cursor(grid, &row, &col, &vis));
+    YTEST_CHECK_EQ_SIZE(test, col, 2);
+
+    feed(test, grid, "\r\xF0\x9F\x98\x80"); /* U+1F600 grinning face (Unicode 8) */
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_cursor(grid, &row, &col, &vis));
+    YTEST_CHECK_EQ_SIZE(test, col, 2);
+
+    feed(test, grid, "\r\xF0\x9F\xAA\xB2"); /* U+1FAB2 beetle (Unicode 13) */
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_cursor(grid, &row, &col, &vis));
+    YTEST_CHECK_EQ_SIZE(test, col, 2);
+
+    feed(test, grid, "\r\xF0\xB0\x80\x80"); /* U+30000 CJK extension G (Unicode 13) */
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_cursor(grid, &row, &col, &vis));
+    YTEST_CHECK_EQ_SIZE(test, col, 2);
+
+    feed(test, grid, "\rA\xCC\x80"); /* A + U+0300 combining grave — no advance */
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_cursor(grid, &row, &col, &vis));
+    YTEST_CHECK_EQ_SIZE(test, col, 1);
+
+    feed(test, grid, "\rA\xF0\x9E\xA5\x84"); /* A + U+1E944 Adlam combining (Unicode 9) */
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_cursor(grid, &row, &col, &vis));
+    YTEST_CHECK_EQ_SIZE(test, col, 1);
+
+    feed(test, grid, "\rA\xE1\x85\xA0"); /* A + U+1160 hangul jungseong filler — zero width */
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_cursor(grid, &row, &col, &vis));
+    YTEST_CHECK_EQ_SIZE(test, col, 1);
+
+    /* U+0B95 tamil KA + U+0BBE spacing vowel sign (Mc) — the spacing mark
+     * advances one cell so the cluster measures 2, matching the reference. */
+    feed(test, grid, "\r\xE0\xAE\x95\xE0\xAE\xBE");
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_cursor(grid, &row, &col, &vis));
+    YTEST_CHECK_EQ_SIZE(test, col, 2);
 
     yetty_yvterm_grid_dispose(grid);
 }
@@ -335,7 +424,9 @@ int main(void)
     YTEST_RUN(&test, test_byte_ingestion);
     YTEST_RUN(&test, test_memory_pty_transport);
     YTEST_RUN(&test, test_ansi_attrs_and_color);
+    YTEST_RUN(&test, test_palette_and_default_colors);
     YTEST_RUN(&test, test_cursor_movement);
+    YTEST_RUN(&test, test_unicode_widths);
     YTEST_RUN(&test, test_scrollback);
     YTEST_RUN(&test, test_alt_screen);
     YTEST_RUN(&test, test_resize);

@@ -123,6 +123,16 @@ struct yetty_yconfig_config {
 #define YETTY_YCONFIG_KEY_DEBUG_DAMAGE_RECTS "debug/damage-rects"
 #define YETTY_YCONFIG_KEY_FONT_FAMILY "font/family"
 #define YETTY_YCONFIG_KEY_TERMINAL_FONT_RENDER_METHOD "terminal/text-layer/font/render-method"
+/* Codepoint-range → font routing for the terminal text layer. A YAML
+ * list; each entry is a mapping with fields:
+ *   from:          first codepoint of the range ("0x4E00" or decimal)
+ *   to:            last codepoint of the range (inclusive)
+ *   font:          font name resolved under paths/fonts (e.g. NotoSansMonoCJKsc)
+ *   render-method: "msdf" | "raster"
+ * Entries are matched in order; codepoints outside every range use the
+ * base font/family with the text layer's render-method. Individual
+ * fields resolve as terminal/text-layer/font/ranges/<index>/<field>. */
+#define YETTY_YCONFIG_KEY_TERMINAL_FONT_RANGES "terminal/text-layer/font/ranges"
 #define YETTY_YCONFIG_KEY_RPC_HOST "rpc/host"
 #define YETTY_YCONFIG_KEY_RPC_PORT "rpc/port"
 #define YETTY_YCONFIG_KEY_RPC_SOCKET_PATH "rpc/socket-path"

@@ -14,6 +14,8 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
+#include <dirent.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -25,6 +27,7 @@
 #define FONT_UV_COUNT(f) ((f)->rs.buffers[0].size / sizeof(struct yetty_yfont_raster_glyph_uv))
 
 #define RASTER_FONT_MAX_PATH 512
+#define RASTER_FONT_MAX_FALLBACK_FACES 384
 #define RASTER_FONT_SLOT_PADDING 1
 #define RASTER_FONT_ATLAS_MAX_DIMENSION 16384
 #define RASTER_FONT_ATLAS_PADDING 2
@@ -35,9 +38,15 @@
 static const char *FACE_SUFFIXES[] = {"-Regular.ttf", "-Bold.ttf", "-Oblique.ttf",
                                       "-BoldOblique.ttf"};
 
+/* Per-glyph GPU record: atlas UV origin of the slot's content plus the slot
+ * width in cells (CJK/emoji glyphs advance two cells and get a double-width
+ * slot). 4 floats — matches the stride in ms-raster-font.wgsl and the
+ * terminal text shader's raster branch. */
 struct yetty_yfont_raster_glyph_uv {
     float uv_x;
     float uv_y;
+    float width_cells;
+    float pad;
 };
 
 struct yetty_yfont_codepoint_slot {
@@ -55,8 +64,21 @@ struct yetty_yfont_raster_font {
     uint32_t font_size;
     int baseline;
 
+    /* Color (CBDT/COLR bitmap-strike) face, e.g. Noto Color Emoji: the atlas
+     * is RGBA8 (4 bytes/pixel) and strike bitmaps are box-filtered into the
+     * cell-sized slot at rasterize time. Monochrome faces keep the R8 atlas. */
+    int color_mode;
+    uint32_t atlas_bpp;
+
     FT_Library ft_library;
     FT_Face ft_faces[4];
+
+    /* Fallback chain (Regular style only): when the primary faces have no
+     * glyph for a codepoint, these are tried in order. Populated by a glob
+     * font name (e.g. "NotoSans*" loads every NotoSans<Script>-Regular.ttf
+     * in the fonts dir), so one face can cover many scripts. */
+    FT_Face fallback_faces[RASTER_FONT_MAX_FALLBACK_FACES];
+    size_t fallback_count;
 
     /* Shader code (owned) */
     struct yetty_ycore_buffer shader_code;
@@ -170,10 +192,67 @@ static void raster_font_add_slot(struct yetty_yfont_raster_font *font, int style
     font->codepoint_slots_count[style_idx]++;
 }
 
+/* Apply the font's current pixel size to one face: scalable faces get the
+ * computed font_size; fixed-strike faces select the strike closest to the
+ * cell height. */
+static void raster_font_apply_size_to_face(struct yetty_yfont_raster_font *font, FT_Face face)
+{
+    if (!face) {
+        return;
+    }
+    if (FT_IS_SCALABLE(face)) {
+        FT_Set_Pixel_Sizes(face, 0, font->font_size);
+        return;
+    }
+    if (face->num_fixed_sizes == 0) {
+        return;
+    }
+    int best_strike = 0;
+    long best_delta = LONG_MAX;
+    for (int s = 0; s < face->num_fixed_sizes; s++) {
+        long strike_height = face->available_sizes[s].height;
+        long delta = labs(strike_height - (long)font->cell_height);
+        if (delta < best_delta) {
+            best_delta = delta;
+            best_strike = s;
+        }
+    }
+    FT_Select_Size(face, best_strike);
+}
+
 static void raster_font_update_font_size(struct yetty_yfont_raster_font *font)
 {
     FT_Face regular_face = font->ft_faces[0];
     if (!regular_face) {
+        return;
+    }
+
+    if (!FT_IS_SCALABLE(regular_face)) {
+        /* Fixed-strike face (color emoji): select the strike closest to the
+         * cell height on every face; bitmaps are scaled into the cell box at
+         * rasterize time, so the exact strike only affects quality. */
+        for (int i = 0; i < 4; i++) {
+            FT_Face face = font->ft_faces[i];
+            if (!face || face->num_fixed_sizes == 0) {
+                continue;
+            }
+            int best_strike = 0;
+            long best_delta = LONG_MAX;
+            for (int s = 0; s < face->num_fixed_sizes; s++) {
+                long strike_height = face->available_sizes[s].height;
+                long delta = labs(strike_height - (long)font->cell_height);
+                if (delta < best_delta) {
+                    best_delta = delta;
+                    best_strike = s;
+                }
+            }
+            FT_Select_Size(face, best_strike);
+        }
+        font->font_size = (uint32_t)font->cell_height;
+        font->baseline = (int)font->cell_height - 1;
+        for (size_t i = 0; i < font->fallback_count; i++) {
+            raster_font_apply_size_to_face(font, font->fallback_faces[i]);
+        }
         return;
     }
 
@@ -200,6 +279,9 @@ static void raster_font_update_font_size(struct yetty_yfont_raster_font *font)
             FT_Set_Pixel_Sizes(font->ft_faces[i], 0, font->font_size);
         }
     }
+    for (size_t i = 0; i < font->fallback_count; i++) {
+        raster_font_apply_size_to_face(font, font->fallback_faces[i]);
+    }
 
     /* Recalculate metrics at new size */
     ascender = regular_face->size->metrics.ascender >> 6;
@@ -218,9 +300,15 @@ static void raster_font_grow_atlas(struct yetty_yfont_raster_font *font)
     uint32_t new_width = old_width;
     uint32_t new_height = old_height;
 
-    /* Grow by one row of glyph slots */
+    /* Grow width by a batch of slots; grow height geometrically (double,
+     * at least one slot row, clamped to the max dimension) — per-row growth
+     * makes bulk glyph loads (an emoji sweep) do O(rows) full-atlas copies
+     * + UV rescales. */
     uint32_t grow_w = GLYPH_SLOT_W(font) * 8; /* 8 glyphs wide */
-    uint32_t grow_h = GLYPH_SLOT_H(font);     /* 1 row */
+    uint32_t grow_h = old_height > GLYPH_SLOT_H(font) ? old_height : GLYPH_SLOT_H(font);
+    if (old_height + grow_h > RASTER_FONT_ATLAS_MAX_DIMENSION) {
+        grow_h = RASTER_FONT_ATLAS_MAX_DIMENSION - old_height; /* 0 = maxed out */
+    }
 
     int can_grow_width = (new_width + grow_w <= RASTER_FONT_ATLAS_MAX_DIMENSION);
     int can_grow_height = (new_height + grow_h <= RASTER_FONT_ATLAS_MAX_DIMENSION);
@@ -247,14 +335,16 @@ static void raster_font_grow_atlas(struct yetty_yfont_raster_font *font)
     ydebug("Growing raster font atlas from %ux%u to %ux%u", old_width, old_height, new_width,
            new_height);
 
-    uint8_t *new_data = calloc(new_width * new_height, 1);
+    uint32_t bpp = font->atlas_bpp ? font->atlas_bpp : 1u;
+    uint8_t *new_data = calloc((size_t)new_width * new_height, bpp);
     if (!new_data) {
         yerror("Failed to allocate new atlas data");
         return;
     }
 
     for (uint32_t y = 0; y < old_height; y++) {
-        memcpy(new_data + y * new_width, FONT_ATLAS(font).data + y * old_width, old_width);
+        memcpy(new_data + (size_t)y * new_width * bpp,
+               FONT_ATLAS(font).data + (size_t)y * old_width * bpp, (size_t)old_width * bpp);
     }
 
     free(FONT_ATLAS(font).data);
@@ -305,11 +395,27 @@ static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uin
         if (style != YETTY_YFONT_MS_STYLE_REGULAR) {
             return raster_font_rasterize_glyph(font, codepoint, YETTY_YFONT_MS_STYLE_REGULAR);
         }
-        ydebug("rasterize: no glyph for U+%04X and style already REGULAR, returning 0", codepoint);
-        return 0;
+        /* Walk the fallback chain — first face that covers the codepoint wins. */
+        for (size_t i = 0; i < font->fallback_count; i++) {
+            FT_UInt fallback_index = FT_Get_Char_Index(font->fallback_faces[i], codepoint);
+            if (fallback_index != 0) {
+                face = font->fallback_faces[i];
+                glyph_index = fallback_index;
+                break;
+            }
+        }
+        if (glyph_index == 0) {
+            ydebug("rasterize: no glyph for U+%04X in primary or %zu fallbacks", codepoint,
+                   font->fallback_count);
+            return 0;
+        }
     }
 
-    int ft_err = FT_Load_Glyph(face, glyph_index, FT_LOAD_RENDER);
+    FT_Int32 load_flags = FT_LOAD_RENDER;
+    if (font->color_mode) {
+        load_flags |= FT_LOAD_COLOR;
+    }
+    int ft_err = FT_Load_Glyph(face, glyph_index, load_flags);
     if (ft_err) {
         ydebug("rasterize: FT_Load_Glyph err=%d for U+%04X glyph=%u", ft_err, codepoint,
                glyph_index);
@@ -341,6 +447,7 @@ static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uin
     if (bitmap->width == 0 || bitmap->rows == 0) {
         uvs[slot_idx].uv_x = -1.0f;
         uvs[slot_idx].uv_y = -1.0f;
+        uvs[slot_idx].width_cells = 1.0f;
         raster_font_add_slot(font, style_idx, codepoint, slot_idx);
         font->next_slot_idx++;
         return 1;
@@ -348,7 +455,15 @@ static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uin
 
     int cell_w = (int)font->cell_width;
     int cell_h = (int)font->cell_height;
-    uint32_t glyph_width = (uint32_t)cell_w + RASTER_FONT_ATLAS_PADDING * 2;
+    /* Double-width glyphs (CJK, emoji) advance two cells — give them a
+     * double-width atlas slot so the full glyph is kept. Fixed-strike color
+     * faces report the advance at strike scale; normalize to cell scale. */
+    float advance_px = (float)slot->advance.x / 64.0f;
+    if (font->color_mode && face->size && face->size->metrics.y_ppem > 0) {
+        advance_px *= font->cell_height / (float)face->size->metrics.y_ppem;
+    }
+    uint32_t width_cells = advance_px > font->cell_width * 1.5f ? 2u : 1u;
+    uint32_t glyph_width = (uint32_t)cell_w * width_cells + RASTER_FONT_ATLAS_PADDING * 2;
     uint32_t glyph_height = (uint32_t)cell_h + RASTER_FONT_ATLAS_PADDING * 2;
     uint32_t aw = FONT_ATLAS(font).width;
     uint32_t ah = FONT_ATLAS(font).height;
@@ -360,28 +475,34 @@ static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uin
         font->shelf_height = 0;
     }
 
-    if (font->shelf_y + glyph_height > ah) {
+    /* Grow until the new shelf row fits: a single grow step can land
+     * PADDING pixels short right after a shelf wrap (row stride is
+     * shelf_height + PADDING, growth is whole slot rows). Progress is
+     * checked so a maxed-out atlas still terminates. */
+    while (font->shelf_y + glyph_height > ah) {
+        uint32_t old_width = aw;
+        uint32_t old_height = ah;
         raster_font_grow_atlas(font);
         aw = FONT_ATLAS(font).width;
         ah = FONT_ATLAS(font).height;
         atlas_size = (size_t)aw * ah;
-    }
-
-    if (font->shelf_y + glyph_height > ah) {
-        yerror("Atlas full, cannot fit glyph for U+%04X", codepoint);
-        return 0;
+        if (aw == old_width && ah == old_height) {
+            yerror("Atlas full, cannot fit glyph for U+%04X", codepoint);
+            return 0;
+        }
     }
 
     uint32_t atlas_x = font->shelf_x;
     uint32_t atlas_y = font->shelf_y;
     uint8_t *pixels = FONT_ATLAS(font).data;
+    uint32_t bpp = font->atlas_bpp ? font->atlas_bpp : 1u;
 
     /* Clear cell area */
     for (uint32_t y = 0; y < glyph_height; y++) {
         for (uint32_t x = 0; x < glyph_width; x++) {
             uint32_t dst_idx = (atlas_y + y) * aw + (atlas_x + x);
             if (dst_idx < atlas_size) {
-                pixels[dst_idx] = 0;
+                memset(pixels + (size_t)dst_idx * bpp, 0, bpp);
             }
         }
     }
@@ -415,13 +536,112 @@ static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uin
     }
 
     /* Copy bitmap to atlas */
-    for (int y = 0; y < glyph_h; y++) {
-        for (int x = 0; x < glyph_w; x++) {
-            int src_idx = y * bitmap->pitch + x;
-            uint32_t dst_idx = (atlas_y + (uint32_t)offset_y + (uint32_t)y) * aw +
-                               (atlas_x + (uint32_t)offset_x + (uint32_t)x);
-            if (dst_idx < atlas_size) {
-                pixels[dst_idx] = bitmap->buffer[src_idx];
+    if (font->color_mode && bitmap->pixel_mode == FT_PIXEL_MODE_BGRA) {
+        /* Color strike (premultiplied BGRA): box-filter into the slot's
+         * content box, preserving aspect ratio, centered. Output is straight
+         * (un-premultiplied) RGBA — the shader blends rgb with the alpha. */
+        uint32_t box_w = (uint32_t)cell_w * width_cells;
+        uint32_t box_h = (uint32_t)cell_h;
+        float scale_w = (float)box_w / (float)glyph_w;
+        float scale_h = (float)box_h / (float)glyph_h;
+        float scale = scale_w < scale_h ? scale_w : scale_h;
+        uint32_t out_w = (uint32_t)((float)glyph_w * scale);
+        uint32_t out_h = (uint32_t)((float)glyph_h * scale);
+        if (out_w == 0) {
+            out_w = 1;
+        }
+        if (out_h == 0) {
+            out_h = 1;
+        }
+        uint32_t box_off_x = RASTER_FONT_ATLAS_PADDING + (box_w - out_w) / 2;
+        uint32_t box_off_y = RASTER_FONT_ATLAS_PADDING + (box_h - out_h) / 2;
+        for (uint32_t y = 0; y < out_h; y++) {
+            uint32_t src_y0 = (uint32_t)((float)y / scale);
+            uint32_t src_y1 = (uint32_t)((float)(y + 1) / scale);
+            if (src_y1 <= src_y0) {
+                src_y1 = src_y0 + 1;
+            }
+            if (src_y1 > (uint32_t)glyph_h) {
+                src_y1 = (uint32_t)glyph_h;
+            }
+            for (uint32_t x = 0; x < out_w; x++) {
+                uint32_t src_x0 = (uint32_t)((float)x / scale);
+                uint32_t src_x1 = (uint32_t)((float)(x + 1) / scale);
+                if (src_x1 <= src_x0) {
+                    src_x1 = src_x0 + 1;
+                }
+                if (src_x1 > (uint32_t)glyph_w) {
+                    src_x1 = (uint32_t)glyph_w;
+                }
+                uint32_t sum_b = 0, sum_g = 0, sum_r = 0, sum_a = 0, samples = 0;
+                for (uint32_t sy = src_y0; sy < src_y1; sy++) {
+                    const uint8_t *row = bitmap->buffer + (size_t)sy * (size_t)bitmap->pitch;
+                    for (uint32_t sx = src_x0; sx < src_x1; sx++) {
+                        const uint8_t *texel = row + (size_t)sx * 4u;
+                        sum_b += texel[0];
+                        sum_g += texel[1];
+                        sum_r += texel[2];
+                        sum_a += texel[3];
+                        samples++;
+                    }
+                }
+                if (samples == 0) {
+                    continue;
+                }
+                uint32_t avg_a = sum_a / samples;
+                uint32_t avg_r = sum_r / samples;
+                uint32_t avg_g = sum_g / samples;
+                uint32_t avg_b = sum_b / samples;
+                if (avg_a > 0) {
+                    /* premultiplied → straight */
+                    avg_r = avg_r * 255u / avg_a;
+                    avg_g = avg_g * 255u / avg_a;
+                    avg_b = avg_b * 255u / avg_a;
+                    if (avg_r > 255u) {
+                        avg_r = 255u;
+                    }
+                    if (avg_g > 255u) {
+                        avg_g = 255u;
+                    }
+                    if (avg_b > 255u) {
+                        avg_b = 255u;
+                    }
+                }
+                uint32_t dst_idx = (atlas_y + box_off_y + y) * aw + (atlas_x + box_off_x + x);
+                if (dst_idx < atlas_size) {
+                    uint8_t *dst = pixels + (size_t)dst_idx * 4u;
+                    dst[0] = (uint8_t)avg_r;
+                    dst[1] = (uint8_t)avg_g;
+                    dst[2] = (uint8_t)avg_b;
+                    dst[3] = (uint8_t)avg_a;
+                }
+            }
+        }
+    } else if (font->color_mode) {
+        /* Grayscale glyph in a color font — white with coverage alpha. */
+        for (int y = 0; y < glyph_h; y++) {
+            for (int x = 0; x < glyph_w; x++) {
+                int src_idx = y * bitmap->pitch + x;
+                uint32_t dst_idx = (atlas_y + (uint32_t)offset_y + (uint32_t)y) * aw +
+                                   (atlas_x + (uint32_t)offset_x + (uint32_t)x);
+                if (dst_idx < atlas_size) {
+                    uint8_t *dst = pixels + (size_t)dst_idx * 4u;
+                    dst[0] = 255u;
+                    dst[1] = 255u;
+                    dst[2] = 255u;
+                    dst[3] = bitmap->buffer[src_idx];
+                }
+            }
+        }
+    } else {
+        for (int y = 0; y < glyph_h; y++) {
+            for (int x = 0; x < glyph_w; x++) {
+                int src_idx = y * bitmap->pitch + x;
+                uint32_t dst_idx = (atlas_y + (uint32_t)offset_y + (uint32_t)y) * aw +
+                                   (atlas_x + (uint32_t)offset_x + (uint32_t)x);
+                if (dst_idx < atlas_size) {
+                    pixels[dst_idx] = bitmap->buffer[src_idx];
+                }
             }
         }
     }
@@ -429,6 +649,7 @@ static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uin
     /* Store UV — point to cell content start (skip padding) */
     uvs[slot_idx].uv_x = (float)(atlas_x + RASTER_FONT_ATLAS_PADDING) / (float)aw;
     uvs[slot_idx].uv_y = (float)(atlas_y + RASTER_FONT_ATLAS_PADDING) / (float)ah;
+    uvs[slot_idx].width_cells = (float)width_cells;
     raster_font_add_slot(font, style_idx, codepoint, slot_idx);
 
     /* Sample a few pixel values from the bitmap */
@@ -456,7 +677,8 @@ static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uin
 
 static void raster_font_rasterize_all(struct yetty_yfont_raster_font *font)
 {
-    size_t atlas_size = (size_t)FONT_ATLAS(font).width * FONT_ATLAS(font).height;
+    size_t atlas_size = (size_t)FONT_ATLAS(font).width * FONT_ATLAS(font).height *
+                        (font->atlas_bpp ? font->atlas_bpp : 1u);
     memset(FONT_ATLAS(font).data, 0, atlas_size);
 
     /* Reset shelf packer */
@@ -469,6 +691,7 @@ static void raster_font_rasterize_all(struct yetty_yfont_raster_font *font)
     font->next_slot_idx = 1;
     FONT_UVS(font)[0].uv_x = -1.0f;
     FONT_UVS(font)[0].uv_y = -1.0f;
+    FONT_UVS(font)[0].width_cells = 1.0f;
     FONT_UV_BUF(font).size = sizeof(struct yetty_yfont_raster_glyph_uv);
 
     for (int i = 0; i < 4; i++) {
@@ -499,6 +722,13 @@ static void raster_font_cleanup(struct yetty_yfont_raster_font *font)
             font->ft_faces[i] = NULL;
         }
     }
+    for (size_t i = 0; i < font->fallback_count; i++) {
+        if (font->fallback_faces[i]) {
+            FT_Done_Face(font->fallback_faces[i]);
+            font->fallback_faces[i] = NULL;
+        }
+    }
+    font->fallback_count = 0;
     if (font->ft_library) {
         FT_Done_FreeType(font->ft_library);
         font->ft_library = NULL;
@@ -515,6 +745,92 @@ static void raster_font_cleanup(struct yetty_yfont_raster_font *font)
     }
 }
 
+static int raster_font_name_compare(const void *left, const void *right)
+{
+    const char *const *left_name = left;
+    const char *const *right_name = right;
+    return strcmp(*left_name, *right_name);
+}
+
+/* Load faces for a glob font name ("NotoSans*"): every
+ * <prefix><anything>-Regular.ttf in the fonts dir, sorted by name. The first
+ * match becomes the primary face, the rest form the fallback chain — one
+ * configured face can cover every script the staged fonts cover. Color
+ * faces are skipped (they need the RGBA8 atlas; use a dedicated range). */
+static struct yetty_ycore_void_result raster_font_load_glob_faces(
+    struct yetty_yfont_raster_font *font)
+{
+    static const char REGULAR_SUFFIX[] = "-Regular.ttf";
+    const size_t suffix_len = sizeof(REGULAR_SUFFIX) - 1;
+
+    char prefix[RASTER_FONT_MAX_PATH];
+    snprintf(prefix, sizeof(prefix), "%s", font->font_name);
+    char *star = strchr(prefix, '*');
+    if (star) {
+        *star = '\0';
+    }
+    size_t prefix_len = strlen(prefix);
+
+    DIR *fonts_dir_handle = opendir(font->fonts_dir);
+    if (!fonts_dir_handle) {
+        return YETTY_ERR(yetty_ycore_void, "fonts dir not readable for glob font");
+    }
+    char *file_names[RASTER_FONT_MAX_FALLBACK_FACES + 1];
+    size_t file_count = 0;
+    struct dirent *entry;
+    while ((entry = readdir(fonts_dir_handle)) != NULL &&
+           file_count < RASTER_FONT_MAX_FALLBACK_FACES + 1) {
+        size_t name_len = strlen(entry->d_name);
+        if (name_len <= suffix_len) {
+            continue;
+        }
+        if (strncmp(entry->d_name, prefix, prefix_len) != 0) {
+            continue;
+        }
+        if (strcmp(entry->d_name + name_len - suffix_len, REGULAR_SUFFIX) != 0) {
+            continue;
+        }
+        char *copy = strdup(entry->d_name);
+        if (copy) {
+            file_names[file_count++] = copy;
+        }
+    }
+    closedir(fonts_dir_handle);
+    if (file_count == 0) {
+        return YETTY_ERR(yetty_ycore_void, "no fonts match glob font name");
+    }
+    qsort(file_names, file_count, sizeof(char *), raster_font_name_compare);
+
+    for (size_t i = 0; i < file_count; i++) {
+        char path[RASTER_FONT_MAX_PATH * 2];
+        snprintf(path, sizeof(path), "%s/%s", font->fonts_dir, file_names[i]);
+        FT_Face face = NULL;
+        if (FT_New_Face(font->ft_library, path, 0, &face)) {
+            free(file_names[i]);
+            continue;
+        }
+        if (FT_HAS_COLOR(face)) {
+            FT_Done_Face(face);
+            free(file_names[i]);
+            continue;
+        }
+        if (!font->ft_faces[0]) {
+            font->ft_faces[0] = face;
+        } else if (font->fallback_count < RASTER_FONT_MAX_FALLBACK_FACES) {
+            font->fallback_faces[font->fallback_count++] = face;
+        } else {
+            FT_Done_Face(face);
+        }
+        free(file_names[i]);
+    }
+    if (!font->ft_faces[0]) {
+        return YETTY_ERR(yetty_ycore_void, "glob font matched files but none loaded");
+    }
+    ydebug("RasterFont glob '%s': primary + %zu fallback faces", font->font_name,
+           font->fallback_count);
+    return YETTY_OK_VOID();
+}
+
 /*===========================================================================
  * Create
  *===========================================================================*/
@@ -522,10 +838,18 @@ static void raster_font_cleanup(struct yetty_yfont_raster_font *font)
 struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create(
     struct yetty_yconfig_config *config, float cell_width, float cell_height)
 {
+    const char *font_family = config->ops->font_family(config);
+    return yetty_yfont_ms_raster_font_create_named(config, font_family, cell_width, cell_height);
+}
+
+struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create_named(
+    struct yetty_yconfig_config *config, const char *font_name, float cell_width,
+    float cell_height)
+{
     const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
-    const char *font_family = config->ops->font_family(config);
-    if (!font_family || strcmp(font_family, "default") == 0) {
+    const char *font_family = font_name;
+    if (!font_family || !font_family[0] || strcmp(font_family, "default") == 0) {
         font_family = "DejaVuSansMNerdFontMono";
     }
 
@@ -585,6 +909,7 @@ struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create(
 
     FONT_UVS(font)[0].uv_x = -1.0f;
     FONT_UVS(font)[0].uv_y = -1.0f;
+    FONT_UVS(font)[0].width_cells = 1.0f;
     FONT_UV_BUF(font).size = sizeof(struct yetty_yfont_raster_glyph_uv);
     font->next_slot_idx = 1;
 
@@ -598,17 +923,50 @@ struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create(
         return YETTY_ERR(yetty_font_ms_font, "Failed to initialize FreeType");
     }
 
-    for (int i = 0; i < 4; i++) {
-        char path[RASTER_FONT_MAX_PATH * 2];
-        snprintf(path, sizeof(path), "%s/%s%s", font->fonts_dir, font->font_name, FACE_SUFFIXES[i]);
-        if (FT_New_Face(font->ft_library, path, 0, &font->ft_faces[i])) {
-            if (i == 0) {
-                raster_font_cleanup(font);
-                free(font);
-                return YETTY_ERR(yetty_font_ms_font, "Failed to load font");
-            }
-            font->ft_faces[i] = NULL;
+    if (strchr(font->font_name, '*')) {
+        struct yetty_ycore_void_result glob_res = raster_font_load_glob_faces(font);
+        if (YETTY_IS_ERR(glob_res)) {
+            raster_font_cleanup(font);
+            free(font);
+            return YETTY_ERR(yetty_font_ms_font, "Failed to load glob font", glob_res);
         }
+    } else {
+        for (int i = 0; i < 4; i++) {
+            char path[RASTER_FONT_MAX_PATH * 2];
+            snprintf(path, sizeof(path), "%s/%s%s", font->fonts_dir, font->font_name,
+                     FACE_SUFFIXES[i]);
+            if (FT_New_Face(font->ft_library, path, 0, &font->ft_faces[i])) {
+                if (i == 0) {
+                    /* Single-file faces (e.g. NotoColorEmoji.ttf) carry no style
+                     * suffix — fall back to the bare name for Regular. */
+                    snprintf(path, sizeof(path), "%s/%s.ttf", font->fonts_dir, font->font_name);
+                    if (FT_New_Face(font->ft_library, path, 0, &font->ft_faces[0]) == 0) {
+                        continue;
+                    }
+                    raster_font_cleanup(font);
+                    free(font);
+                    return YETTY_ERR(yetty_font_ms_font, "Failed to load font");
+                }
+                font->ft_faces[i] = NULL;
+            }
+        }
+    }
+
+    if (FT_HAS_COLOR(font->ft_faces[0])) {
+        /* Color bitmap face (emoji): switch the atlas to RGBA8. */
+        font->color_mode = 1;
+        font->atlas_bpp = 4;
+        FONT_ATLAS(font).format = YETTY_YRENDER_TEXTURE_FORMAT_RGBA8_UNORM;
+        size_t atlas_pixels = (size_t)FONT_ATLAS(font).width * FONT_ATLAS(font).height;
+        free(FONT_ATLAS(font).data);
+        FONT_ATLAS(font).data = calloc(atlas_pixels, 4);
+        if (!FONT_ATLAS(font).data) {
+            raster_font_cleanup(font);
+            free(font);
+            return YETTY_ERR(yetty_font_ms_font, "Failed to allocate color atlas");
+        }
+    } else {
+        font->atlas_bpp = 1;
     }
 
     raster_font_update_font_size(font);

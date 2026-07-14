@@ -43,6 +43,13 @@ if(TARGET yetty_yctl)
     add_subdirectory(ut/yctl)
 endif()
 
+# yconfig — YAML config tree: flat + structured sequence entries, slash-path
+# navigation. config.c has no lib target of its own, so the test compiles it
+# directly; gate on the yaml 3rd-party target it parses with.
+if(TARGET yaml)
+    add_subdirectory(ut/yconfig)
+endif()
+
 # ywire — OSC/DCS wire framing + codecs.
 if(TARGET yetty_ywire)
     add_subdirectory(ut/ywire)

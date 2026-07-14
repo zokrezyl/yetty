@@ -94,6 +94,27 @@ struct yetty_yfont_ms_msdf_font {
     float max_descent;
     float advance_cdb;
 
+    /* Frozen metric basis, established once by load_basic_latin (which the
+	 * terminal calls right after create). Without freezing, every glyph
+	 * loaded later that exceeds the tracked extents (box drawing, tall Nerd
+	 * Font icons) re-derives scale and baseline, shrinking all glyphs
+	 * relative to the already-fixed cell grid — box-drawing joins open up
+	 * depending on session history.
+	 *   scale_extent          — visible basic-latin extent `requested_size`
+	 *                           maps onto (size = glyph height, unchanged)
+	 *   cell_ascent/descent   — visible line box measured from the
+	 *                           full-block reference glyph (U+2588), the span
+	 *                           box-drawing glyphs are designed to tile
+	 *                           exactly; falls back to the basic-latin
+	 *                           extents when the font has no block glyph.
+	 * All three are in CDB units with the pixel_range pad stripped. While
+	 * metrics_frozen is set, max_ascent/max_descent stop moving the cell,
+	 * baseline and scale. */
+    int metrics_frozen;
+    float scale_extent;
+    float cell_ascent;
+    float cell_descent;
+
     /* Cell padding (fractions of glyph dimensions). Cell wraps the glyph
 	 * extent with padding on each side. */
     struct yetty_yfont_ms_padding padding;
@@ -185,8 +206,9 @@ static struct uint32_result load_one(struct yetty_yfont_ms_msdf_font *f, uint32_
     }
 
     /* Track vertical extents (padding-inflated) so the shader can derive
-	 * the baseline. */
-    if (hdr.size_y > 0.0f) {
+	 * the baseline — only until the basis is frozen; afterwards new extreme
+	 * glyphs must not reshuffle the established grid geometry. */
+    if (!f->metrics_frozen && hdr.size_y > 0.0f) {
         float ascent = hdr.bearing_y;               /* above baseline */
         float descent = hdr.size_y - hdr.bearing_y; /* below baseline */
         if (ascent > f->max_ascent) {
@@ -349,9 +371,15 @@ static struct pixel_size_result ms_msdf_get_cell_size(const struct yetty_yfont_m
     }
     /* font.size is the visible glyph extent in pixels (height). Cell
 	 * width = advance × same scale — i.e. the font designer's chosen
-	 * letter spacing, matching alacritty and other mainstream terminals. */
-    float scale = f->requested_size / visible_h_cdb;
-    float glyph_h = f->requested_size;
+	 * letter spacing, matching alacritty and other mainstream terminals.
+	 * With frozen metrics the cell height comes from the line box (block
+	 * glyph span) instead of the lazily-tracked glyph extent, so the grid
+	 * geometry is stable and box-drawing glyphs tile it exactly. */
+    float scale_basis = (f->metrics_frozen && f->scale_extent > 0.0f) ? f->scale_extent
+                                                                      : visible_h_cdb;
+    float scale = f->requested_size / scale_basis;
+    float cell_extent_cdb = f->metrics_frozen ? (f->cell_ascent + f->cell_descent) : scale_basis;
+    float glyph_h = cell_extent_cdb * scale;
     float glyph_w = f->advance_cdb * scale;
     struct yetty_ycore_pixel_size sz;
     sz.height = glyph_h * (1.0f + f->padding.top + f->padding.bottom);
@@ -419,6 +447,25 @@ static struct yetty_ycore_void_result ms_msdf_load_basic_latin(struct yetty_yfon
             YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: load_one");
         }
     }
+
+    /* Freeze the metric basis (see the struct field comment). The scale basis
+	 * is the basic-latin extent just loaded; the cell basis is the line box,
+	 * probed via the full-block glyph while extents still track — a font
+	 * without U+2588 keeps the basic-latin extents as its cell box. */
+    if (!f->metrics_frozen) {
+        float pad_cdb = f->pixel_range;
+        float basic_latin_extent = (f->max_ascent + f->max_descent) - 2.0f * pad_cdb;
+        struct uint32_result block_res = load_one(f, 0x2588, YETTY_YFONT_MS_STYLE_REGULAR);
+        if (YETTY_IS_ERR(block_res)) {
+            /* Best-effort probe — the fallback basis is already tracked. */
+            yetty_ycore_error_destroy(block_res.error);
+        }
+        f->scale_extent = basic_latin_extent;
+        f->cell_ascent = f->max_ascent - pad_cdb;
+        f->cell_descent = f->max_descent - pad_cdb;
+        f->metrics_frozen = 1;
+        f->dirty = 1;
+    }
     return YETTY_OK_VOID();
 }
 
@@ -468,12 +515,21 @@ static struct yetty_yrender_gpu_resource_set_result ms_msdf_get_gpu_resource_set
 		 */
         float pad_cdb = f->pixel_range;
         float visible_h_cdb = (f->max_ascent + f->max_descent) - 2.0f * pad_cdb;
-        float scale = (visible_h_cdb > 0.0f) ? f->requested_size / visible_h_cdb
-                                             : f->requested_size / f->base_size;
+        float scale_basis = (f->metrics_frozen && f->scale_extent > 0.0f) ? f->scale_extent
+                                                                          : visible_h_cdb;
+        float scale = (scale_basis > 0.0f) ? f->requested_size / scale_basis
+                                           : f->requested_size / f->base_size;
+        /* Baseline sits cell_ascent below the (padding-shifted) cell top.
+	     * Frozen: the line-box basis; unfrozen: the tracked glyph extent
+	     * (identical formula — for the unfrozen basis the vertical extent in
+	     * pixels is exactly requested_size). */
+        float cell_ascent_cdb = f->metrics_frozen ? f->cell_ascent : (f->max_ascent - pad_cdb);
+        float cell_descent_cdb = f->metrics_frozen ? f->cell_descent : (f->max_descent - pad_cdb);
+        float vertical_extent_px = (cell_ascent_cdb + cell_descent_cdb) * scale;
         float glyph_w = f->advance_cdb * scale;
-        float top_pad_px = f->requested_size * f->padding.top;
+        float top_pad_px = vertical_extent_px * f->padding.top;
         float left_pad_px = glyph_w * f->padding.left;
-        float baseline_y = top_pad_px + (f->max_ascent - pad_cdb) * scale;
+        float baseline_y = top_pad_px + cell_ascent_cdb * scale;
 
         f->rs.uniforms[0].f32 = f->pixel_range;
         f->rs.uniforms[1].f32 = scale;
@@ -498,9 +554,16 @@ static struct yetty_ycore_void_result ms_msdf_set_cell_size(struct yetty_yfont_m
     }
     /* Back out the requested glyph height from the cell height; ignore the
 	 * caller's width — cell width is derived from font geometry, not from
-	 * what the caller asks for. */
+	 * what the caller asks for. With frozen metrics the cell height maps to
+	 * the line-box extent, so undo that ratio too (inverse of
+	 * ms_msdf_get_cell_size). */
     float h_div = 1.0f + f->padding.top + f->padding.bottom;
-    f->requested_size = cell_size.height / h_div;
+    float cell_extent_cdb = f->cell_ascent + f->cell_descent;
+    if (f->metrics_frozen && cell_extent_cdb > 0.0f && f->scale_extent > 0.0f) {
+        f->requested_size = cell_size.height * f->scale_extent / (cell_extent_cdb * h_div);
+    } else {
+        f->requested_size = cell_size.height / h_div;
+    }
     f->dirty = 1;
     return YETTY_OK_VOID();
 }
