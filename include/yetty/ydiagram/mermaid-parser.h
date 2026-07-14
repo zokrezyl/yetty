@@ -21,6 +21,15 @@
  *   A ==>  B      thick arrow
  *   A -->|label| B
  *   subgraph id [label] ... end
+ *   classDef name fill:#rrggbb,stroke:#rrggbb,color:#rrggbb,stroke-width:N
+ *   class id1,id2 name
+ *   style id fill:#rrggbb,...
+ *   A[text]:::name          class shorthand
+ *   linkStyle ...           consumed, not yet mapped onto edge styles
+ *
+ * Styling directives may appear before or after the nodes they reference;
+ * they are resolved once the whole input has been parsed. Colors accept
+ * #rgb / #rrggbb / #rrggbbaa and common CSS color names.
  *
  * Stateless: every parse() call works on a fresh graph; the parser owns no
  * persistent state across calls.

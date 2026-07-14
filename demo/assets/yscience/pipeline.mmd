@@ -1,0 +1,8 @@
+graph LR
+    A[detector strain] --> B[calibration]
+    B --> C[noise subtraction]
+    C --> D[matched filter]
+    D --> E[candidate events]
+    E --> F[parameter estimation]
+    F --> G[posterior samples]
+    G --> H[paper figures]
