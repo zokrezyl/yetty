@@ -1687,13 +1687,34 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
 
     struct yetty_ydraw_drawable_list *saved_dl = ctx->ygrid_drawable_list;
     uint32_t saved_fid = ctx->current_figure_id;
+    int saved_clip_active = ctx->fig_clip_active;
+    struct yetty_ycore_rectangle saved_clip = ctx->fig_clip;
     ctx->ygrid_drawable_list = figure_dl;
     ctx->current_figure_id = node_id;
+
+    /* Narrow the clip to this figure's rect (a scrollarea's viewport) for the
+     * duration of its subtree body paint, mirroring the container walk. The
+     * figure GPU-scissors to this rect anyway, so a body-emitting widget
+     * (ydraw_embed) can drop primitives outside it up front instead of emitting
+     * the whole tall page every frame. Nested figures intersect with this. */
+    struct yetty_ycore_rectangle_result frect_res = yetty_ygui_widget_rect(node);
+    if (YETTY_IS_OK(frect_res)) {
+        struct yetty_ycore_rectangle frect = frect_res.value;
+        if (ctx->fig_clip_active) {
+            frect = emit_rect_intersect(frect, ctx->fig_clip);
+        }
+        ctx->fig_clip = frect;
+        ctx->fig_clip_active = 1;
+    } else {
+        yetty_ycore_error_destroy(frect_res.error);
+    }
 
     struct yetty_ycore_void_result br = walk_emit_body_inline(node, ctx);
 
     ctx->ygrid_drawable_list = saved_dl;
     ctx->current_figure_id = saved_fid;
+    ctx->fig_clip = saved_clip;
+    ctx->fig_clip_active = saved_clip_active;
 
     if (YETTY_IS_ERR(br)) {
         yetty_ydraw_drawable_list_destroy(figure_dl);

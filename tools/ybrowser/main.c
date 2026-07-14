@@ -375,6 +375,10 @@ int main(int argc, char **argv)
     /* --dump-geo: emit `dom-path  x  y  w  h` per element box, for matching
      * against Chrome's getBoundingClientRect (geometry diff oracle). */
     int dump_geo = 0;
+    /* --dump-dom: after load (and JS), serialize the current DOM as HTML to
+     * stdout — the engine-side analogue of Chrome's --dump-dom, for seeing
+     * what page scripts did to the tree. */
+    int dump_dom = 0;
     /* Standalone-only: hide the browser chrome (tab strip + address bar) so
      * the window is just the page, and record the GPU output to an mp4 via
      * the core (yframework/yvnc) recorder. */
@@ -390,6 +394,9 @@ int main(int argc, char **argv)
             interactive = 0;
         } else if (!strcmp(a, "--dump-geo")) {
             dump_geo = 1;
+            interactive = 0;
+        } else if (!strcmp(a, "--dump-dom")) {
+            dump_dom = 1;
             interactive = 0;
         } else if (!strcmp(a, "--dump-wpt")) {
             dump_wpt = 1;
@@ -512,7 +519,7 @@ int main(int argc, char **argv)
     /* Standalone SVG input renders through ysvg — same envelope as a page.
 	 * The geometry-dump modes stay on the HTML engine (they inspect the
 	 * box tree, which an SVG scene does not have). */
-    if (!dump_boxes && !dump_wpt && !dump_geo &&
+    if (!dump_boxes && !dump_wpt && !dump_geo && !dump_dom &&
         ybrowser_content_is_svg(content_type, (const unsigned char *)html, html_len)) {
         struct yetty_ysvg_render_config svg_cfg = {
             .cell_width = 8,
@@ -588,6 +595,25 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    /* Navigation-stress harness: re-load the same document N times in one
+	 * process to exercise the load_html teardown/re-parse path (the code a
+	 * real click-navigation runs) headlessly, e.g. under ASAN. Debug aid;
+	 * off unless YBROWSER_NAV_STRESS is set. */
+    {
+        const char *stress_env = getenv("YBROWSER_NAV_STRESS");
+        int stress_rounds = stress_env ? atoi(stress_env) : 0;
+        for (int round = 0; round < stress_rounds; round++) {
+            struct yetty_ycore_void_result reload = yetty_ylexbor_load_html(yl, html, html_len);
+            if (YETTY_IS_ERR(reload)) {
+                fprintf(stderr, "nav-stress reload %d: %s\n", round, reload.error.msg);
+                yetty_ycore_error_destroy(reload.error);
+                break;
+            }
+            (void)yetty_ylexbor_relayout(yl);
+            fprintf(stderr, "nav-stress round %d ok\n", round);
+        }
+    }
+
     /* SPA boot: most modern pages render their initial body via
 	 * setTimeout(fn, 0) / queueMicrotask / requestAnimationFrame
 	 * chains that haven't fired by the time load_html returns. Pump
@@ -623,6 +649,23 @@ int main(int argc, char **argv)
     }
     if (yetty_ylexbor_dom_dirty(yl)) {
         (void)yetty_ylexbor_relayout(yl);
+    }
+
+    if (dump_dom) {
+        struct yetty_ycore_char_ptr_result dom_res = yetty_ylexbor_dump_dom(yl);
+        if (YETTY_IS_ERR(dom_res)) {
+            fprintf(stderr, "dump-dom: %s\n", dom_res.error.msg);
+            yetty_ycore_error_destroy(dom_res.error);
+        } else {
+            fputs(dom_res.value, stdout);
+            fputc('\n', stdout);
+            free(dom_res.value);
+        }
+        fflush(stdout);
+        yetty_ylexbor_destroy(yl);
+        free(html);
+        (void)yetty_ybrowser_loader_destroy(loader);
+        return 0;
     }
 
     if (dump_geo) {

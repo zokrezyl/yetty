@@ -23,11 +23,14 @@ struct yetty_ygui_ydraw_embed_ptr_result yetty_ygui_ydraw_embed_from(
     struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/cmds.h>
+#include <yetty/ydraw-core/composite.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ysdf/funcs.gen.h>
+#include <yetty/ysdf/handler.h>
 #include <yetty/ysdf/types.gen.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -134,6 +137,85 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
     }
 }
 
+/* Vertical viewport cull for the emit walk. When an embed lives inside a
+ * scrollarea (or any nested figure), the emit context narrows fig_clip to the
+ * visible rect; every primitive outside it is scissored away at composite time
+ * anyway. Emitting the whole tall page every frame — re-translated by the
+ * scroll offset — is what makes a long document scroll at a few fps. So we drop
+ * primitives that fall entirely outside the visible band up front: the ygrid
+ * only ever holds the on-screen slice, so both the emit and the composite go
+ * from O(page) to O(viewport). */
+struct embed_cull {
+    int active;
+    float y_min, y_max;      /* visible band (already padded), in emitted coords */
+    size_t leaf_total, culled; /* instrumentation */
+};
+
+/* Vertical extent [*y_lo, *y_hi] of a TRANSLATED leaf primitive, or 0 if this
+ * primitive's bounds can't be read exactly — in which case it is never culled.
+ * Cullable: text runs, composites (yimage/yplot/…, the dominant byte cost of a
+ * web page), and bare SDF shapes. Kept unconditionally: id-carrying prims,
+ * fonts, and unknown types, whose exact bounds we don't read here. Being
+ * conservative is the safety property: an over-large extent only keeps an
+ * off-screen prim (a tiny waste); an under-large one would clip a visible prim
+ * (a bug), so text is padded by more than a full em. A culled prim is provably
+ * outside the same AABB the compositor scissors against, so culling can never
+ * drop anything that would have been visible. */
+static int embed_prim_extent(const uint32_t *prim, size_t bytes, float *y_lo, float *y_hi)
+{
+    if (bytes < sizeof(uint32_t)) {
+        return 0;
+    }
+    uint32_t type = prim[0];
+    if (type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
+        if (bytes < 5 * sizeof(uint32_t)) {
+            return 0;
+        }
+        const float *f = (const float *)prim;
+        float baseline = f[3];    /* y (translated) */
+        float font_size = f[4];
+        if (!(font_size > 0.0f)) {
+            return 0;
+        }
+        *y_lo = baseline - font_size * 1.5f; /* ascent + slack */
+        *y_hi = baseline + font_size * 0.6f; /* descent + slack */
+        return 1;
+    }
+    /* Composite (yimage / yplot / ymesh …). On a web page this is the
+     * dominant BYTE cost — every decoded image bitmap rides inline in its
+     * record, so a tall page is tens of MB of off-screen image pixels that
+     * we re-emit and re-composite every frame while scrolling. The AABB is
+     * the first 16 payload bytes (x,y,w,h); translate_prim already shifted
+     * x,y. A composite carries the top type bit but is NOT id-carrying —
+     * distinguish it from an id'd SDF (top bit + SDF base) by its base
+     * having no SDF size. Culling these is the whole point of the exercise. */
+    if (yetty_ydraw_is_composite(type) &&
+        yetty_ysdf_primitive_size(RICH_TYPE_BASE(type)) == 0u) {
+        struct rectangle_result aabb = yetty_ydraw_composite_record_aabb(prim);
+        if (YETTY_IS_ERR(aabb)) {
+            yetty_ycore_error_destroy(aabb.error);
+            return 0;
+        }
+        *y_lo = aabb.value.min.y;
+        *y_hi = aabb.value.max.y;
+        return 1;
+    }
+    if (type & YETTY_YDRAW_HAS_ID_FLAG) {
+        return 0; /* group / delta / id'd prim — keep */
+    }
+    if (yetty_ysdf_primitive_size(RICH_TYPE_BASE(type)) > 0u) {
+        struct rectangle_result aabb = yetty_ysdf_drawable_aabb(prim);
+        if (YETTY_IS_ERR(aabb)) {
+            yetty_ycore_error_destroy(aabb.error);
+            return 0;
+        }
+        *y_lo = aabb.value.min.y;
+        *y_hi = aabb.value.max.y;
+        return 1;
+    }
+    return 0; /* font / unknown — keep */
+}
+
 /* Walk `len` bytes of a source ydraw stream at `p`, translating every leaf
  * primitive's position by (dx, dy) and appending it to `dst`. CMD_GROUP
  * records are RE-FRAMED into `dst` — a fresh begin_group/end_group around the
@@ -152,7 +234,8 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
 static struct yetty_ycore_void_result embed_emit_range(struct yetty_ydraw_drawable_list *dst,
                                                        const uint8_t *p, size_t len, float dx,
                                                        float dy, uint8_t *stack, size_t stack_sz,
-                                                       uint8_t **heap, size_t *heap_cap)
+                                                       uint8_t **heap, size_t *heap_cap,
+                                                       struct embed_cull *cull)
 {
     size_t remaining = len;
     while (remaining >= sizeof(uint32_t)) {
@@ -187,8 +270,9 @@ static struct yetty_ycore_void_result embed_emit_range(struct yetty_ydraw_drawab
             }
             struct yetty_ydraw_id_result marker = yetty_ydraw_drawable_list_begin_group(dst, gid);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, marker, "ydraw_embed paint: begin_group");
-            struct yetty_ycore_void_result body_res = embed_emit_range(
-                dst, p + 3 * sizeof(uint32_t), payload, dx, dy, stack, stack_sz, heap, heap_cap);
+            struct yetty_ycore_void_result body_res =
+                embed_emit_range(dst, p + 3 * sizeof(uint32_t), payload, dx, dy, stack, stack_sz,
+                                 heap, heap_cap, cull);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "ydraw_embed paint: group body");
             struct yetty_ycore_void_result end_res =
                 yetty_ydraw_drawable_list_end_group(dst, marker.value);
@@ -260,6 +344,17 @@ static struct yetty_ycore_void_result embed_emit_range(struct yetty_ydraw_drawab
         }
         memcpy(work, p, s);
         translate_prim((uint32_t *)work, s, dx, dy);
+        if (cull->active) {
+            cull->leaf_total++;
+            float y_lo, y_hi;
+            if (embed_prim_extent((const uint32_t *)work, s, &y_lo, &y_hi) &&
+                (y_hi < cull->y_min || y_lo > cull->y_max)) {
+                cull->culled++;
+                p += s; /* entirely off-screen — scissored anyway, so drop it */
+                remaining -= s;
+                continue;
+            }
+        }
         struct yetty_ydraw_id_result ar = yetty_ydraw_drawable_list_add_prim(dst, work, s);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "ydraw_embed paint: add_prim");
         p += s;
@@ -301,12 +396,30 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     if (!src || src_size == 0) {
         return YETTY_OK_VOID();
     }
+    /* Cull to the visible band when a figure ancestor (e.g. a scrollarea) has
+     * narrowed the clip. Pad by a chunk so a partially-scrolled row at either
+     * edge is always present and small scrolls don't churn the whole emit. */
+    struct embed_cull cull = {0};
+    if (ctx->fig_clip_active) {
+        const float margin = 256.0f;
+        cull.active = 1;
+        cull.y_min = ctx->fig_clip.min.y - margin;
+        cull.y_max = ctx->fig_clip.max.y + margin;
+    }
+    size_t before = yetty_ydraw_drawable_list_size(ctx->ygrid_drawable_list);
     uint8_t stack[4096];
     uint8_t *heap = NULL;
     size_t heap_cap = 0;
-    struct yetty_ycore_void_result walk = embed_emit_range(
-        ctx->ygrid_drawable_list, src, src_size, dx, dy, stack, sizeof(stack), &heap, &heap_cap);
+    struct yetty_ycore_void_result walk =
+        embed_emit_range(ctx->ygrid_drawable_list, src, src_size, dx, dy, stack, sizeof(stack),
+                         &heap, &heap_cap, &cull);
     free(heap);
+    size_t after = yetty_ydraw_drawable_list_size(ctx->ygrid_drawable_list);
+    ydebug("ydraw_embed cull active=%d clip=[%.0f..%.0f] rect=[%.0f..%.0f] dy=%.0f scene_min=%.0f "
+           "src=%zuB emitted=%zuB culled=%zu/%zu leaf",
+           cull.active, cull.y_min, cull.y_max, r.min.y, r.max.y, dy,
+           yetty_ydraw_drawable_list_scene_min_y(d->buf), src_size, after - before,
+           cull.culled, cull.leaf_total);
     return walk;
 }
 

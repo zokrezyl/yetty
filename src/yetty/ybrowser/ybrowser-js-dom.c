@@ -140,8 +140,42 @@ struct yetty_ylexbor *yetty_ylexbor_js_engine_from_ctx(struct JSContext *ctx)
  * never received a stylesheet, so removing or re-appending it segfaulted.
  * Such elements take the steps-free removal; everything else keeps full
  * removing-steps semantics. */
-static void node_remove_safe(lxb_dom_node_t *node)
+static void node_remove_safe(JSContext *ctx, lxb_dom_node_t *node)
 {
+    /* Wipes of a document-level container are load-bearing events when
+	 * chasing "page went blank" bugs — trace them with the child tag and
+	 * the JS stack of whoever is doing the removing. */
+    if (node->parent && node->parent->type == LXB_DOM_NODE_TYPE_ELEMENT &&
+        (node->parent->local_name == LXB_TAG_HTML || node->parent->local_name == LXB_TAG_HEAD ||
+         node->parent->local_name == LXB_TAG_BODY)) {
+        ydebug("js dom-remove from <%s>: child tag=%u type=%d",
+               node->parent->local_name == LXB_TAG_HTML   ? "html"
+               : node->parent->local_name == LXB_TAG_HEAD ? "head"
+                                                          : "body",
+               (unsigned)node->local_name, (int)node->type);
+        /* JS stack of the remover. Building it costs a JS_Eval, so gate it
+		 * on its own trace point the way the ydebug macro gates output —
+		 * off by default, enabled together with the rest via
+		 * YTRACE_DEFAULT_ON. */
+        static bool wipe_stack_enabled = false;
+        static bool wipe_stack_registered = false;
+        if (!wipe_stack_registered) {
+            wipe_stack_enabled = ytrace_register(&wipe_stack_enabled, __FILE__, __LINE__,
+                                                 __func__, "debug", "js dom-remove stack");
+            wipe_stack_registered = true;
+        }
+        if (ctx != NULL && wipe_stack_enabled) {
+            JSValue probe = JS_Eval(ctx, "(new Error('dom-wipe')).stack",
+                                    strlen("(new Error('dom-wipe')).stack"), "<wipe-probe>",
+                                    JS_EVAL_TYPE_GLOBAL);
+            const char *stack = JS_ToCString(ctx, probe);
+            if (stack) {
+                ydebug("js dom-remove stack:\n%s", stack);
+                JS_FreeCString(ctx, stack);
+            }
+            JS_FreeValue(ctx, probe);
+        }
+    }
     if (node->type == LXB_DOM_NODE_TYPE_ELEMENT && node->local_name == LXB_TAG_STYLE &&
         lxb_html_interface_style(node)->stylesheet == NULL) {
         lxb_dom_node_remove_wo_events(node);
@@ -685,7 +719,7 @@ static JSValue js_el_appendChild(JSContext *ctx, JSValueConst this_val, int argc
 	 * sibling chain (next/prev becomes ambiguous), so a later tree
 	 * walk on the old parent infinite-loops. */
     if (child->parent) {
-        node_remove_safe(child);
+        node_remove_safe(ctx, child);
     }
     lxb_dom_node_insert_child(parent, child);
     style_element_ingest(ctx, child);
@@ -703,7 +737,7 @@ static JSValue js_el_removeChild(JSContext *ctx, JSValueConst this_val, int argc
     if (!child) {
         return JS_UNDEFINED;
     }
-    node_remove_safe(child);
+    node_remove_safe(ctx, child);
     mark_dirty(ctx);
     return JS_DupValue(ctx, argv[0]);
 }
@@ -763,10 +797,10 @@ static lxb_dom_node_t *coerce_to_node(JSContext *ctx, JSValueConst v, lxb_dom_do
 /* All ChildNode/ParentNode insertion paths must detach the incoming
  * node from its old parent first — see js_el_appendChild for the
  * reasoning (lexbor leaves stale sibling links otherwise). */
-static void detach(lxb_dom_node_t *n)
+static void detach(JSContext *ctx, lxb_dom_node_t *n)
 {
     if (n && n->parent) {
-        node_remove_safe(n);
+        node_remove_safe(ctx, n);
     }
 }
 
@@ -788,7 +822,7 @@ static JSValue js_el_before(JSContext *ctx, JSValueConst this_val, int argc, JSV
         if (node_would_cycle(self->parent, n)) {
             continue;
         }
-        detach(n);
+        detach(ctx, n);
         lxb_dom_node_insert_before(self, n);
     }
     mark_dirty(ctx);
@@ -814,7 +848,7 @@ static JSValue js_el_after(JSContext *ctx, JSValueConst this_val, int argc, JSVa
         if (node_would_cycle(self->parent, n)) {
             continue;
         }
-        detach(n);
+        detach(ctx, n);
         lxb_dom_node_insert_after(anchor, n);
         anchor = n;
     }
@@ -838,10 +872,10 @@ static JSValue js_el_replaceWith(JSContext *ctx, JSValueConst this_val, int argc
         if (node_would_cycle(self->parent, n)) {
             continue;
         }
-        detach(n);
+        detach(ctx, n);
         lxb_dom_node_insert_before(self, n);
     }
-    node_remove_safe(self);
+    node_remove_safe(ctx, self);
     mark_dirty(ctx);
     return JS_UNDEFINED;
 }
@@ -864,7 +898,7 @@ static JSValue js_el_prepend(JSContext *ctx, JSValueConst this_val, int argc, JS
         if (node_would_cycle(parent, n)) {
             continue;
         }
-        detach(n);
+        detach(ctx, n);
         if (first) {
             lxb_dom_node_insert_before(first, n);
         } else {
@@ -890,7 +924,7 @@ static JSValue js_el_append(JSContext *ctx, JSValueConst this_val, int argc, JSV
         if (node_would_cycle(parent, n)) {
             continue;
         }
-        detach(n);
+        detach(ctx, n);
         lxb_dom_node_insert_child(parent, n);
     }
     mark_dirty(ctx);
@@ -923,7 +957,7 @@ static JSValue js_el_insertBefore(JSContext *ctx, JSValueConst this_val, int arg
     /* Detach from the current parent first — lexbor's insert paths assume an
      * unlinked node (see appendChild). */
     if (node->parent) {
-        node_remove_safe(node);
+        node_remove_safe(ctx, node);
     }
     if (ref && ref->parent == parent) {
         lxb_dom_node_insert_before(ref, node);
@@ -954,10 +988,10 @@ static JSValue js_el_replaceChild(JSContext *ctx, JSValueConst this_val, int arg
         return JS_DupValue(ctx, argv[1]);
     }
     if (node->parent) {
-        node_remove_safe(node);
+        node_remove_safe(ctx, node);
     }
     lxb_dom_node_insert_before(old, node);
-    node_remove_safe(old);
+    node_remove_safe(ctx, old);
     mark_dirty(ctx);
     return JS_DupValue(ctx, argv[1]);
 }
@@ -1619,7 +1653,7 @@ static JSValue js_el_textContent_set(JSContext *ctx, JSValueConst this_val, JSVa
 		 * nodes stay allocated until the document dies — same contract
 		 * as the innerHTML setter below. */
         while (n->first_child) {
-            node_remove_safe(n->first_child);
+            node_remove_safe(ctx, n->first_child);
         }
         lxb_dom_node_text_content_set(n, (const lxb_char_t *)s, slen);
         if (n->parent) {
@@ -1684,9 +1718,15 @@ static JSValue js_el_innerHTML_set(JSContext *ctx, JSValueConst this_val, JSValu
     if (!s) {
         return JS_UNDEFINED;
     }
+    if (n->type == LXB_DOM_NODE_TYPE_ELEMENT &&
+        (n->local_name == LXB_TAG_HTML || n->local_name == LXB_TAG_HEAD ||
+         n->local_name == LXB_TAG_BODY)) {
+        ydebug("js innerHTML SET on document container tag=%u new_len=%zu head=%.120s",
+               (unsigned)n->local_name, slen, s);
+    }
     /* Wipe existing children. */
     while (n->first_child) {
-        node_remove_safe(n->first_child);
+        node_remove_safe(ctx, n->first_child);
     }
     /* Parse fragment under this element's context. */
     lxb_html_document_t *doc = lxb_html_interface_document(n->owner_document);
@@ -1698,6 +1738,74 @@ static JSValue js_el_innerHTML_set(JSContext *ctx, JSValueConst this_val, JSValu
     }
     JS_FreeCString(ctx, s);
     mark_dirty(ctx);
+    return JS_UNDEFINED;
+}
+
+/* insertAdjacentHTML(position, html) — parse `html` in a detached container
+ * element, then move the resulting nodes into place. Matches the four spec
+ * positions; unknown positions are ignored (a browser throws SyntaxError —
+ * absorbing keeps the minimal-surface behavior of the other bindings). */
+static JSValue js_el_insertAdjacentHTML(JSContext *ctx, JSValueConst this_val, int argc,
+                                        JSValueConst *argv)
+{
+    lxb_dom_node_t *self = unwrap_node(ctx, this_val);
+    if (!self || argc < 2 || self->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+        return JS_UNDEFINED;
+    }
+    const char *position = JS_ToCString(ctx, argv[0]);
+    size_t html_len = 0;
+    const char *html = JS_ToCStringLen(ctx, &html_len, argv[1]);
+    if (!position || !html) {
+        if (position) {
+            JS_FreeCString(ctx, position);
+        }
+        if (html) {
+            JS_FreeCString(ctx, html);
+        }
+        return JS_UNDEFINED;
+    }
+
+    lxb_dom_element_t *container = lxb_dom_document_create_element(
+        self->owner_document, (const lxb_char_t *)"div", 3, NULL);
+    if (container) {
+        (void)lxb_html_element_inner_html_set(lxb_html_interface_element(container),
+                                              (const lxb_char_t *)html, html_len);
+        lxb_dom_node_t *container_node = lxb_dom_interface_node(container);
+        /* Move children out in document order. The pre-insert detach
+		 * matters — see the appendChild comment on sibling-chain
+		 * corruption. */
+        lxb_dom_node_t *after_anchor = self; /* for afterend ordering */
+        lxb_dom_node_t *moved;
+        while ((moved = container_node->first_child) != NULL) {
+            node_remove_safe(ctx, moved);
+            if (strcmp(position, "beforebegin") == 0 && self->parent) {
+                lxb_dom_node_insert_before(self, moved);
+            } else if (strcmp(position, "afterbegin") == 0) {
+                if (self->first_child) {
+                    lxb_dom_node_insert_before(self->first_child, moved);
+                } else {
+                    lxb_dom_node_insert_child(self, moved);
+                }
+                /* keep insertion order: subsequent nodes go after `moved` */
+                while (container_node->first_child) {
+                    lxb_dom_node_t *next = container_node->first_child;
+                    node_remove_safe(ctx, next);
+                    lxb_dom_node_insert_after(moved, next);
+                    moved = next;
+                }
+            } else if (strcmp(position, "afterend") == 0 && self->parent) {
+                lxb_dom_node_insert_after(after_anchor, moved);
+                after_anchor = moved;
+            } else if (strcmp(position, "beforeend") == 0) {
+                lxb_dom_node_insert_child(self, moved);
+            } else {
+                break; /* unknown position (or detached beforebegin/afterend) */
+            }
+        }
+        mark_dirty(ctx);
+    }
+    JS_FreeCString(ctx, position);
+    JS_FreeCString(ctx, html);
     return JS_UNDEFINED;
 }
 
@@ -1804,6 +1912,22 @@ static JSValue js_cd_length_get(JSContext *ctx, JSValueConst this_val)
         return JS_NewInt32(ctx, 0);
     }
     return JS_NewInt32(ctx, (int32_t)cd->data.length);
+}
+
+/* Assignment to `length`. On real CharacterData the property is readonly —
+ * sloppy-mode assignment silently no-ops, matching a browser. On an element
+ * a browser has NO `length` at all, so `el.length = 0` (apnews' bsp-read-more
+ * does exactly this) creates a plain own property; without this setter the
+ * shared proto accessor would make that assignment throw "no setter for
+ * property". Shadow with an own value property to restore normal semantics. */
+static JSValue js_cd_length_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
+{
+    if (as_chardata(ctx, this_val) != NULL) {
+        return JS_UNDEFINED;
+    }
+    JS_DefinePropertyValueStr(ctx, this_val, "length", JS_DupValue(ctx, val),
+                              JS_PROP_C_W_E);
+    return JS_UNDEFINED;
 }
 
 static JSValue js_cd_appendData(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -3289,6 +3413,37 @@ static JSValue js_el_getAttributeNames_stub(JSContext *ctx, JSValueConst this_va
     return arr;
 }
 
+/* `attributes` — a snapshot array of {name, value} objects. Covers the
+ * common clone loop `for (t < el.attributes.length) { s = el.attributes[t];
+ * … s.name, s.value }` (apnews' custom-headline element); live NamedNodeMap
+ * semantics are not modeled. */
+static JSValue js_el_attributes_get(JSContext *ctx, JSValueConst this_val)
+{
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    JSValue arr = JS_NewArray(ctx);
+    if (!el) {
+        return arr;
+    }
+    uint32_t index = 0;
+    for (lxb_dom_attr_t *attr = el->first_attr; attr; attr = attr->next) {
+        size_t name_len = 0;
+        const lxb_char_t *name = lxb_dom_attr_qualified_name(attr, &name_len);
+        if (!name) {
+            continue;
+        }
+        size_t value_len = 0;
+        const lxb_char_t *value = lxb_dom_attr_value(attr, &value_len);
+        JSValue item = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, item, "name",
+                          JS_NewStringLen(ctx, (const char *)name, name_len));
+        JS_SetPropertyStr(ctx, item, "value",
+                          value ? JS_NewStringLen(ctx, (const char *)value, value_len)
+                                : JS_NewString(ctx, ""));
+        JS_SetPropertyUint32(ctx, arr, index++, item);
+    }
+    return arr;
+}
+
 static JSValue js_el_cloneNode_stub(JSContext *ctx, JSValueConst this_val, int argc,
                                     JSValueConst *argv)
 {
@@ -3588,6 +3743,85 @@ static JSValue js_doc_implementation_get(JSContext *ctx, JSValueConst this_val)
     return obj;
 }
 
+/* DOMParser.parseFromString(source, mimeType) — parse into a throwaway
+ * lexbor document, then IMPORT (deep-clone) its documentElement/head/body
+ * into the LIVE document's memory pool and return a plain object carrying
+ * those imports as documentElement/head/body. Every MIME type takes the
+ * HTML parser (no XML parser in the engine).
+ *
+ * Why import into the main pool rather than keep the parsed document
+ * alive: page code grafts these nodes into the live tree (Zephr's outcome
+ * renderer moves t.head/t.body childNodes into the page). If the nodes
+ * physically lived in a SEPARATE document's allocator, that graft would
+ * link cross-pool nodes into the main tree — and on navigation the main
+ * document's re-parse and the parsed document's teardown would both manage
+ * the same node memory (heap corruption surfacing later in malloc). Importing
+ * makes every returned node main-pool, so grafting is same-pool and the
+ * nodes are freed exactly once, by the main document. The throwaway parse
+ * document is destroyed here; nothing outlives this call. */
+static JSValue js_domparser_parse_from_string(JSContext *ctx, JSValueConst this_val, int argc,
+                                              JSValueConst *argv)
+{
+    (void)this_val;
+    struct yetty_ylexbor *r = runtime_ylex(ctx);
+    if (!r || argc < 1) {
+        return JS_NULL;
+    }
+    size_t source_len = 0;
+    const char *source = JS_ToCStringLen(ctx, &source_len, argv[0]);
+    if (!source) {
+        return JS_NULL;
+    }
+    lxb_html_document_t *parsed_doc = lxb_html_document_create();
+    if (!parsed_doc) {
+        JS_FreeCString(ctx, source);
+        return JS_NULL;
+    }
+    lxb_status_t parse_status =
+        lxb_html_document_parse(parsed_doc, (const lxb_char_t *)source, source_len);
+    JS_FreeCString(ctx, source);
+    if (parse_status != LXB_STATUS_OK) {
+        lxb_html_document_destroy(parsed_doc);
+        return JS_NULL;
+    }
+
+    lxb_dom_document_t *main_doc = lxb_dom_interface_document(r->document);
+    JSValue parsed_obj = JS_NewObject(ctx);
+
+    /* documentElement — first element child of the parsed document. */
+    lxb_dom_node_t *parsed_node = lxb_dom_interface_node(parsed_doc);
+    for (lxb_dom_node_t *child = parsed_node->first_child; child; child = child->next) {
+        if (child->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+            lxb_dom_node_t *imported = lxb_dom_document_import_node(main_doc, child, true);
+            if (imported) {
+                JS_SetPropertyStr(ctx, parsed_obj, "documentElement",
+                                  wrap_element(ctx, lxb_dom_interface_element(imported)));
+            }
+            break;
+        }
+    }
+    lxb_html_body_element_t *parsed_body = lxb_html_document_body_element(parsed_doc);
+    if (parsed_body) {
+        lxb_dom_node_t *imported =
+            lxb_dom_document_import_node(main_doc, lxb_dom_interface_node(parsed_body), true);
+        if (imported) {
+            JS_SetPropertyStr(ctx, parsed_obj, "body",
+                              wrap_element(ctx, lxb_dom_interface_element(imported)));
+        }
+    }
+    lxb_html_head_element_t *parsed_head = lxb_html_document_head_element(parsed_doc);
+    if (parsed_head) {
+        lxb_dom_node_t *imported =
+            lxb_dom_document_import_node(main_doc, lxb_dom_interface_node(parsed_head), true);
+        if (imported) {
+            JS_SetPropertyStr(ctx, parsed_obj, "head",
+                              wrap_element(ctx, lxb_dom_interface_element(imported)));
+        }
+    }
+    lxb_html_document_destroy(parsed_doc);
+    return parsed_obj;
+}
+
 void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
 {
     JSContext *ctx = (JSContext *)r->js_ctx;
@@ -3677,13 +3911,18 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CFUNC_DEF("removeEventListener", 2, js_el_undef_stub),
         JS_CFUNC_DEF("toggleAttribute", 1, js_el_toggleAttr_stub),
         JS_CGETSET_DEF("textContent", js_el_textContent_get, js_el_textContent_set),
+        /* innerText ≈ textContent — no layout-aware rendering of the text,
+    	 * but sites read it constantly for truncation/measure logic. */
+        JS_CGETSET_DEF("innerText", js_el_textContent_get, js_el_textContent_set),
         JS_CGETSET_DEF("innerHTML", js_el_innerHTML_get, js_el_innerHTML_set),
         JS_CGETSET_DEF("outerHTML", js_el_outerHTML_get, NULL),
+        JS_CFUNC_DEF("insertAdjacentHTML", 2, js_el_insertAdjacentHTML),
+        JS_CGETSET_DEF("attributes", js_el_attributes_get, NULL),
         /* CharacterData (Text/Comment) — `data` and `length` plus the
     	 * appendData/insertData/deleteData/replaceData/substringData
     	 * mutators. as_chardata() in each guards element-only nodes. */
         JS_CGETSET_DEF("data", js_cd_data_get, js_cd_data_set),
-        JS_CGETSET_DEF("length", js_cd_length_get, NULL),
+        JS_CGETSET_DEF("length", js_cd_length_get, js_cd_length_set),
         JS_CFUNC_DEF("appendData", 1, js_cd_appendData),
         JS_CFUNC_DEF("insertData", 2, js_cd_insertData),
         JS_CFUNC_DEF("deleteData", 2, js_cd_deleteData),
@@ -3779,6 +4018,28 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue doc_obj = wrap_document(ctx, r->document);
     JS_SetPropertyStr(ctx, global, "document", doc_obj);
+
+    /* DOMParser — real parsing into a SEPARATE document (see
+	 * js_domparser_parse_from_string). The constructor shim lives in JS;
+	 * every instance shares the C parse function. This replaces an old
+	 * `parseFromString = () => document` stub that returned the LIVE
+	 * document — code that "moves the parsed nodes into the page" (Zephr's
+	 * outcome renderer on apnews.com) then moved the live page's own
+	 * head/body children into a detached fragment, blanking the page. */
+    JS_SetPropertyStr(ctx, global, "__ylexborParseHTML",
+                      JS_NewCFunction(ctx, js_domparser_parse_from_string, "parseFromString", 2));
+    {
+        static const char domparser_def[] =
+            "(function DOMParser(){ this.parseFromString = globalThis.__ylexborParseHTML; })";
+        JSValue domparser_ctor = JS_Eval(ctx, domparser_def, sizeof(domparser_def) - 1,
+                                         "<domparser>", JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(domparser_ctor)) {
+            JSValue ctor_error = JS_GetException(ctx);
+            JS_FreeValue(ctx, ctor_error);
+        } else {
+            JS_SetPropertyStr(ctx, global, "DOMParser", domparser_ctor);
+        }
+    }
 
     /* document.documentElement / body / head — convenience props. */
     lxb_dom_node_t *doc_node = lxb_dom_interface_node(r->document);

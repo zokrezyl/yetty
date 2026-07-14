@@ -210,13 +210,54 @@ DEFINE_CONSOLE_FN(info, "info")
 DEFINE_CONSOLE_FN(debug, "debug")
 DEFINE_CONSOLE_FN(warn, "warn")
 DEFINE_CONSOLE_FN(error, "error")
+DEFINE_CONSOLE_FN(trace, "debug")
+DEFINE_CONSOLE_FN(dir, "debug")
+DEFINE_CONSOLE_FN(table, "debug")
+
+/* time/timeEnd/count/group families — sites call these unconditionally
+ * (apnews' leaderboard element gates its whole connectedCallback on
+ * console.time), so they must exist; the timing/grouping itself has no
+ * value here. */
+static JSValue js_console_noop(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)ctx;
+    (void)this_val;
+    (void)argc;
+    (void)argv;
+    return JS_UNDEFINED;
+}
+
+static JSValue js_console_assert(JSContext *ctx, JSValueConst this_val, int argc,
+                                 JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc > 0 && !JS_ToBool(ctx, argv[0])) {
+        console_print(ctx, "error", argc - 1, argv + 1);
+    }
+    return JS_UNDEFINED;
+}
 
 static void install_console(JSContext *ctx)
 {
     static const JSCFunctionListEntry console_funcs[] = {
-        JS_CFUNC_DEF("log", 1, js_console_log),     JS_CFUNC_DEF("info", 1, js_console_info),
-        JS_CFUNC_DEF("debug", 1, js_console_debug), JS_CFUNC_DEF("warn", 1, js_console_warn),
+        JS_CFUNC_DEF("log", 1, js_console_log),
+        JS_CFUNC_DEF("info", 1, js_console_info),
+        JS_CFUNC_DEF("debug", 1, js_console_debug),
+        JS_CFUNC_DEF("warn", 1, js_console_warn),
         JS_CFUNC_DEF("error", 1, js_console_error),
+        JS_CFUNC_DEF("trace", 0, js_console_trace),
+        JS_CFUNC_DEF("dir", 1, js_console_dir),
+        JS_CFUNC_DEF("table", 1, js_console_table),
+        JS_CFUNC_DEF("assert", 2, js_console_assert),
+        JS_CFUNC_DEF("time", 1, js_console_noop),
+        JS_CFUNC_DEF("timeLog", 1, js_console_noop),
+        JS_CFUNC_DEF("timeEnd", 1, js_console_noop),
+        JS_CFUNC_DEF("count", 1, js_console_noop),
+        JS_CFUNC_DEF("countReset", 1, js_console_noop),
+        JS_CFUNC_DEF("group", 1, js_console_noop),
+        JS_CFUNC_DEF("groupCollapsed", 1, js_console_noop),
+        JS_CFUNC_DEF("groupEnd", 0, js_console_noop),
+        JS_CFUNC_DEF("clear", 0, js_console_noop),
     };
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue console = JS_NewObject(ctx);
@@ -594,6 +635,15 @@ static int is_js_script_type(lxb_dom_element_t *el)
     return 0;
 }
 
+/* True iff type="module" — modules are implicitly deferred. */
+static int is_module_script_type(lxb_dom_element_t *el)
+{
+    size_t tlen = 0;
+    const lxb_char_t *type =
+        lxb_dom_element_get_attribute(el, (const lxb_char_t *)"type", 4, &tlen);
+    return type != NULL && tlen == 6 && strncmp((const char *)type, "module", 6) == 0;
+}
+
 /* True iff `url` points at a well-known analytics / advertising / tracking
  * script. These never produce visible content, yet a synchronous inline
  * fetch+eval of one (e.g. googletagmanager's 425 KB gtag.js) blocks first
@@ -619,6 +669,17 @@ static int is_tracking_script_url(const char *url)
         "cdn.segment.com",
         "cdn.mxpnl.com",
         "amplitude.com/libs",
+        /* A/B-testing engine. Beyond being pure analytics, its anti-flicker
+		 * mode hides the whole page until its data endpoints answer —
+		 * apnews.com renders 3 boxes instead of ~5000 when those return
+		 * 429, because nothing ever un-hides the body. */
+        ".kameleoon.io/",
+        /* Nativo sponsored-content/ad loader. On apnews.com it detaches
+		 * every child of <head> and <body> when run against this engine's
+		 * partial API surface — a real browser keeps it on the ad path.
+		 * Ad delivery has no rendering value here; skip like the other ad
+		 * networks. */
+        "s.ntv.io/",
     };
     if (!url) {
         return 0;
@@ -634,11 +695,21 @@ static int is_tracking_script_url(const char *url)
 /* One <script> to execute, in document order. EITHER `url` is set (an
  * external script — after the parallel-fetch step the matching response
  * carries its body) OR `inline_body` is set. Execution order is the
- * collected order in both cases — only the FETCHING is parallel. */
+ * collected order in both cases — only the FETCHING is parallel.
+ *
+ * `deferred` marks async / defer / type=module scripts. A browser runs
+ * plain inline scripts DURING the parse and async/defer bundles after it,
+ * so a bundle's customElements.define() always sees the globals that
+ * inline scripts set up (apnews.com: <script async> All.min in <head>
+ * reads window.i18n assigned by an inline script much later in <body>).
+ * Since this engine executes everything post-parse, honoring that order
+ * means: blocking scripts first, then the deferred batch, both in
+ * document order. */
 struct script_entry {
     char *url;         /* owned; external script when non-NULL */
     char *inline_body; /* owned when url == NULL */
     size_t inline_len;
+    int deferred; /* async / defer attribute, or type=module */
 };
 
 struct script_collect {
@@ -693,14 +764,25 @@ static void collect_scripts_recursive(struct yetty_ylexbor *r, lxb_dom_node_t *n
                     free(url);
                     continue;
                 }
-                struct script_entry entry = {.url = url};
+                /* has_attribute, NOT get_attribute — the latter returns the
+				 * VALUE, which is NULL for the bare boolean form
+				 * `<script src=… async>`. */
+                int deferred =
+                    lxb_dom_element_has_attribute(el, (const lxb_char_t *)"async", 5) ||
+                    lxb_dom_element_has_attribute(el, (const lxb_char_t *)"defer", 5) ||
+                    is_module_script_type(el);
+                struct script_entry entry = {.url = url, .deferred = deferred};
                 script_collect_push(collect, entry);
                 continue;
             }
             size_t slen = 0;
             char *inline_src = collect_script_text(c, &slen);
             if (inline_src) {
-                struct script_entry entry = {.inline_body = inline_src, .inline_len = slen};
+                /* async/defer are ignored on inline scripts per spec;
+				 * only type=module defers an inline body. */
+                struct script_entry entry = {.inline_body = inline_src,
+                                             .inline_len = slen,
+                                             .deferred = is_module_script_type(el)};
                 script_collect_push(collect, entry);
             }
             continue; /* don't recurse into <script> children */
@@ -767,24 +849,33 @@ static void run_collected_scripts(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
         }
     }
 
-    for (int i = 0; i < collect.count; i++) {
-        struct script_entry *entry = &collect.items[i];
-        if (entry->url) {
-            struct yetty_ybrowser_response *response =
-                entry_to_slot ? &fetch_responses[entry_to_slot[i]] : NULL;
-            if (response && response->body && response->status >= 200 && response->status < 300) {
-                eval_buf(r, ctx, response->body, response->body_len, entry->url);
+    /* Two passes: blocking scripts first (a browser runs those during the
+	 * parse), then the async/defer/module batch — document order within
+	 * each. See the script_entry comment. */
+    for (int pass = 0; pass < 2; pass++) {
+        for (int i = 0; i < collect.count; i++) {
+            struct script_entry *entry = &collect.items[i];
+            if (entry->deferred != pass) {
+                continue;
+            }
+            if (entry->url) {
+                struct yetty_ybrowser_response *response =
+                    entry_to_slot ? &fetch_responses[entry_to_slot[i]] : NULL;
+                if (response && response->body && response->status >= 200 &&
+                    response->status < 300) {
+                    eval_buf(r, ctx, response->body, response->body_len, entry->url);
+                } else {
+                    ydebug("js script-load %s status=%ld", entry->url,
+                           response ? response->status : 0L);
+                }
+                if (response) {
+                    yetty_ybrowser_response_dispose(response);
+                }
+                free(entry->url);
             } else {
-                ydebug("js script-load %s status=%ld", entry->url,
-                       response ? response->status : 0L);
+                eval_buf(r, ctx, entry->inline_body, entry->inline_len, "<inline>");
+                free(entry->inline_body);
             }
-            if (response) {
-                yetty_ybrowser_response_dispose(response);
-            }
-            free(entry->url);
-        } else {
-            eval_buf(r, ctx, entry->inline_body, entry->inline_len, "<inline>");
-            free(entry->inline_body);
         }
     }
     free(fetch_requests);

@@ -1319,6 +1319,15 @@ static struct curl_slist *build_request_headers(const struct yetty_ybrowser_requ
                  sec_fetch_site_for(request->url, request->referer));
         headers = curl_slist_append(headers, site_header);
     }
+    /* YouTube serves a consent-wall page with an EMPTY feed to a cookieless
+     * client (a `consentBumpV2Renderer`, no video data). `SOCS=CAI` is the
+     * "consent already recorded" value that unlocks the real server-rendered
+     * content (search results, watch pages) — the same bypass lightweight
+     * YouTube frontends use. The general cookie engine is off for documents,
+     * so inject this fixed cookie directly. */
+    if (yetty_ylexbor_is_youtube_host(request->url)) {
+        headers = curl_slist_append(headers, "Cookie: SOCS=CAI");
+    }
     /* Caller-supplied headers last (fetch()/XHR: Authorization,
 	 * Content-Type, X-*). */
     for (int i = 0; i < request->extra_header_count; i++) {
@@ -2989,11 +2998,26 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "addEventListener:()=>{} }; };"
         "globalThis.BroadcastChannel= function(){ this.postMessage = ()=>{}; this.close=()=>{}; "
         "this.addEventListener=()=>{}; };"
-        "globalThis.AbortController = function(){ this.signal = { aborted:false, "
-        "addEventListener:()=>{}, removeEventListener:()=>{} }; this.abort = ()=>{ "
-        "this.signal.aborted=true; }; };"
-        "globalThis.AbortSignal     = { abort: ()=>({ aborted:true }), timeout: ()=>({ "
-        "aborted:false, addEventListener:()=>{} }) };"
+        /* AbortController/AbortSignal — the signal must carry throwIfAborted()
+         * (the kevlar app reads `signal.throwIfAborted` and threw
+         * "cannot read property 'throwIfAborted' of undefined" without it) plus
+         * the static AbortSignal.abort/timeout/any factories, each returning a
+         * signal that owns the same method surface. */
+        "globalThis.AbortSignal = (function(){"
+        "  function make(){ return { aborted:false, reason:undefined, onabort:null,"
+        "    throwIfAborted:function(){ if(this.aborted) throw (this.reason||new Error('aborted')); },"
+        "    addEventListener:function(){}, removeEventListener:function(){},"
+        "    dispatchEvent:function(){ return false; } }; }"
+        "  var S=function(){ return make(); };"
+        "  S.abort  =function(reason){ var s=make(); s.aborted=true; s.reason=reason; return s; };"
+        "  S.timeout=function(){ return make(); };"
+        "  S.any    =function(){ return make(); };"
+        "  S._make  =make;"
+        "  return S; })();"
+        "globalThis.AbortController = function(){ this.signal = globalThis.AbortSignal._make();"
+        "  this.abort = function(reason){ this.signal.aborted=true; this.signal.reason=reason;"
+        "    if(typeof this.signal.onabort==='function'){ try{ this.signal.onabort({type:'abort'}); }"
+        "    catch(e){} } }; };"
         "globalThis.indexedDB       = { open: ()=>({ onsuccess:null, onerror:null, "
         "addEventListener:()=>{} }), deleteDatabase: ()=>({}) };"
         "globalThis.btoa = s => { let b=''; for (let i=0;i<s.length;i++) "
@@ -3412,9 +3436,65 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.MessagePort   = function(){};"
         "globalThis.Worklet       = function(){ this.addModule=()=>Promise.resolve(); };"
         "globalThis.LinkPreloadManager = function(){};"
-        "globalThis.NodeIterator  = function(){};"
-        "globalThis.TreeWalker    = function(){ this.nextNode=()=>null; "
-        "this.previousNode=()=>null; };"
+        /* NodeFilter — the constant bag DOM traversal APIs and the Shadow-DOM
+         * (webcomponents) polyfill reference. Its absence was a hard
+         * ReferenceError that aborted the whole polyfill script. */
+        "globalThis.NodeFilter    = { SHOW_ALL:0xFFFFFFFF, SHOW_ELEMENT:1, "
+        "SHOW_ATTRIBUTE:2, SHOW_TEXT:4, SHOW_CDATA_SECTION:8, SHOW_ENTITY_REFERENCE:16, "
+        "SHOW_ENTITY:32, SHOW_PROCESSING_INSTRUCTION:64, SHOW_COMMENT:128, SHOW_DOCUMENT:256, "
+        "SHOW_DOCUMENT_TYPE:512, SHOW_DOCUMENT_FRAGMENT:1024, SHOW_NOTATION:2048, "
+        "FILTER_ACCEPT:1, FILTER_REJECT:2, FILTER_SKIP:3 };"
+        /* A REAL TreeWalker / NodeIterator over the live DOM (the node wrappers
+         * already expose firstChild/nextSibling/parentNode/nodeType). The
+         * Shadow-DOM (webcomponents) polyfill calls
+         * document.createTreeWalker(document, NodeFilter.SHOW_ALL, …) to scan the
+         * tree — a no-op walker made it silently patch nothing and the app then
+         * crashed. whatToShow filters by nodeType bit (1<<(nodeType-1)); the
+         * optional filter may be a function or a {acceptNode} object and returns
+         * FILTER_ACCEPT/REJECT/SKIP. */
+        "(function(){"
+        "function accept(node,show,filter){var nt=node.nodeType||0;"
+        "if(nt>=1&&nt<=32&&!(((show>>>0))&(1<<(nt-1))))return 3;"
+        "if(!filter)return 1;"
+        "var fn=(typeof filter==='function')?filter:(filter&&filter.acceptNode?"
+        "function(n){return filter.acceptNode(n);}:null);"
+        "if(!fn)return 1;var v=fn(node);return (typeof v==='number')?v:1;}"
+        "function TW(root,show,filter){this.root=root;this.whatToShow=(show>>>0)||0xFFFFFFFF;"
+        "this.filter=filter||null;this.currentNode=root;}"
+        "TW.prototype.nextNode=function(){var node=this.currentNode,r=1;"
+        "for(;;){while(r!==2&&node&&node.firstChild){node=node.firstChild;"
+        "r=accept(node,this.whatToShow,this.filter);"
+        "if(r===1){this.currentNode=node;return node;}}"
+        "var nx=null,n=node;while(n&&n!==this.root){if(n.nextSibling){nx=n.nextSibling;break;}"
+        "n=n.parentNode;}if(!nx)return null;node=nx;"
+        "r=accept(node,this.whatToShow,this.filter);"
+        "if(r===1){this.currentNode=node;return node;}}};"
+        "TW.prototype.parentNode=function(){var n=this.currentNode;"
+        "while(n&&n!==this.root){n=n.parentNode;"
+        "if(n&&accept(n,this.whatToShow,this.filter)===1){this.currentNode=n;return n;}}return null;};"
+        "TW.prototype.firstChild=function(){var n=this.currentNode&&this.currentNode.firstChild;"
+        "while(n){var r=accept(n,this.whatToShow,this.filter);"
+        "if(r===1){this.currentNode=n;return n;}if(r===3&&n.firstChild){n=n.firstChild;continue;}"
+        "n=n.nextSibling;}return null;};"
+        "TW.prototype.nextSibling=function(){var n=this.currentNode&&this.currentNode.nextSibling;"
+        "while(n){if(accept(n,this.whatToShow,this.filter)===1){this.currentNode=n;return n;}"
+        "n=n.nextSibling;}return null;};"
+        "TW.prototype.previousNode=function(){return null;};"
+        "TW.prototype.lastChild=function(){return null;};"
+        "TW.prototype.previousSibling=function(){return null;};"
+        "globalThis.TreeWalker=TW;"
+        "function NI(root,show,filter){this._tw=new TW(root,show,filter);this.root=root;"
+        "this.referenceNode=root;this.whatToShow=(show>>>0)||0xFFFFFFFF;this.pointerBeforeReferenceNode=true;}"
+        "NI.prototype.nextNode=function(){var n=this._tw.nextNode();if(n)this.referenceNode=n;return n;};"
+        "NI.prototype.previousNode=function(){return null;};"
+        "NI.prototype.detach=function(){};"
+        "globalThis.NodeIterator=NI;"
+        "if(typeof document!=='undefined'){"
+        "document.createTreeWalker=function(root,show,filter){"
+        "return new TW(root,show===undefined?0xFFFFFFFF:show,filter);};"
+        "document.createNodeIterator=function(root,show,filter){"
+        "return new NI(root,show===undefined?0xFFFFFFFF:show,filter);};}"
+        "})();"
         "globalThis.ProgressEvent = function(t,init){ globalThis.Event.call(this,t,init); "
         "this.lengthComputable=!!(init&&init.lengthComputable); "
         "this.loaded=(init&&init.loaded)||0; this.total=(init&&init.total)||0; };"
@@ -3438,6 +3518,18 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.DocumentFragment  = function(){};"
         "globalThis.Text              = function(){};"
         "globalThis.Comment           = function(){};"
+        /* Rest of the Node hierarchy. The Shadow-DOM (webcomponents) polyfill and
+         * the kevlar app iterate a list of these constructors patching
+         * `.prototype.insertBefore`/`removeChild`; a missing one (CharacterData
+         * was the first) threw "cannot read property 'prototype' of undefined"
+         * and aborted app startup. */
+        "globalThis.CharacterData     = function(){};"
+        "globalThis.ProcessingInstruction = function(){};"
+        "globalThis.DocumentType      = function(){};"
+        "globalThis.CDATASection      = function(){};"
+        "globalThis.HTMLSlotElement   = function(){};"
+        "globalThis.StaticRange       = function(){};"
+        "globalThis.DOMImplementation = function(){};"
         "globalThis.Attr              = function(){};"
         "globalThis.NodeList          = function(){};"
         "globalThis.HTMLCollection    = function(){};"
@@ -3490,7 +3582,9 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "this.items={length:0}; this.getData=()=>''; this.setData=()=>{}; };"
         "globalThis.DOMException      = function(message, name){ this.message=message||''; "
         "this.name=name||'Error'; };"
-        "globalThis.DOMParser         = function(){ this.parseFromString = (s, t) => document; };"
+        /* DOMParser is installed by the DOM bindings (real parse into a
+		 * separate document) — no stub here. The old `=> document` stub
+		 * made "move the parsed nodes" code move the LIVE page's children. */
         "globalThis.XPathResult       = function(){};"
         "globalThis.TextEncoder       = function(){ this.encode = s => { const a = new "
         "Uint8Array(s.length); for (let i=0;i<s.length;i++) a[i]=s.charCodeAt(i)&0xff; return a; "

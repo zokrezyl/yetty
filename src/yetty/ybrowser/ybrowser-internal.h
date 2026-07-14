@@ -770,6 +770,20 @@ struct yetty_ylexbor_console_entry {
     char *text; /* owned */
 };
 
+/* One nested browsing context (an <iframe>'s child engine), retained across
+ * relayouts of the same document. Keying on the iframe element pointer (stable
+ * for the life of one parsed DOM) plus its source string lets resolve_iframes
+ * REUSE a child instead of tearing it down and re-parsing + re-running its
+ * scripts every relayout — the difference between compositing a cached embed
+ * and re-downloading/re-executing a whole YouTube player every frame. */
+struct yetty_ylexbor_iframe_child {
+    lxb_dom_element_t *element;  /* the <iframe>; borrowed, dies on document replace */
+    char *src_key;               /* resolved src URL or srcdoc content (owned) */
+    struct yetty_ylexbor *child; /* owned child engine */
+    int content_w, content_h;    /* inner size at last layout, to detect a resize */
+    int used;                    /* matched during the in-progress resolve pass */
+};
+
 struct yetty_ylexbor {
     /* Network loader (share handle, Alt-Svc cache). Either borrowed from
 	 * the host via config (owns_loader = 0) or created privately at
@@ -1015,7 +1029,7 @@ struct yetty_ylexbor {
 	 * into the iframe box. OWNED — destroyed on document replace and at engine
 	 * destroy. `iframe_depth` guards against unbounded nesting (an iframe whose
 	 * document iframes onward); the top-level document is 0. */
-    struct yetty_ylexbor **iframe_children;
+    struct yetty_ylexbor_iframe_child *iframe_children;
     int iframe_child_count, iframe_child_cap;
     int iframe_depth;
 };
@@ -1189,6 +1203,14 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 /* Append text bytes to the document's text arena and return a stable
  * pointer into it. Pointer is invalidated by load_html / destroy. */
 const char *yetty_ylexbor_arena_dup(struct yetty_ylexbor *r, const char *bytes, size_t len);
+
+/* Free every chunk handed out by yetty_ylexbor_arena_dup. Callable only at
+ * the two points where no box can still reference arena text: the start of
+ * load_html, and box_build right after it drops the previous box vector.
+ * (Before box_build reset this, the arena grew monotonically — a page whose
+ * timers keep dirtying the DOM re-duplicated ALL page text on every
+ * relayout, ~100 MB/min on apnews.com.) */
+void yetty_ylexbor_arena_reset(struct yetty_ylexbor *r);
 
 /* Text width. advance_ratio > 0 = flat (glyph_count × font_size × ratio,
  * for monospace hosts / Ahem / tests); advance_ratio <= 0 = proportional
@@ -1464,6 +1486,11 @@ struct yetty_ycore_void_result _yetty_ylexbor_box_vec_reserve(struct yetty_ylexb
 struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r);
 void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r);
 struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(struct yetty_ylexbor *r);
+
+/* True iff `url`'s host is a YouTube web host (youtube.com / www / m). Used only
+ * to attach the `SOCS=CAI` consent cookie a real browser sends, so YouTube
+ * serves the actual app rather than the cookieless consent wall. */
+int yetty_ylexbor_is_youtube_host(const char *url);
 
 /* Recover the owning engine from a QuickJS context. The engine pointer is
  * stashed as the runtime opaque (js_dom_state.r) by the DOM install, so this

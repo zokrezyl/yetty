@@ -37,10 +37,14 @@ VERSION="$(tr -d '[:space:]' < "$SCRIPT_DIR/version")"
 # Component versions. The libcss version is the package version (in
 # `version`); the others are pinned here so the file system of truth
 # stays a single semver. Bump alongside libcss when upstream rolls.
+#
+# The package version may carry a local patch level (`0.9.2-p1`) — the
+# upstream source fetch strips it; the patches under patches/ are what
+# the suffix accounts for.
 BUILDSYSTEM_VERSION="1.10"
 WAPCAPLET_VERSION="0.4.3"
 PARSERUTILS_VERSION="0.2.5"
-LIBCSS_VERSION="$VERSION"
+LIBCSS_VERSION="${VERSION%%-p*}"
 
 WORK_DIR="${WORK_DIR:-/tmp/yetty-3rdparty-libcss-$TARGET_PLATFORM}"
 CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-3rdparty}"
@@ -179,6 +183,20 @@ fetch_and_extract buildsystem    "$BUILDSYSTEM_VERSION"  ".tar.gz"
 fetch_and_extract libwapcaplet   "$WAPCAPLET_VERSION"    "-src.tar.gz"
 fetch_and_extract libparserutils "$PARSERUTILS_VERSION"  "-src.tar.gz"
 fetch_and_extract libcss         "$LIBCSS_VERSION"       "-src.tar.gz"
+
+# Local patches — upstream fixes not yet in the pinned release. Applied to
+# the freshly-extracted libcss source; the `-pN` suffix in `version`
+# tracks the patch level so patched tarballs never collide with pristine
+# ones. Currently: the select-engine free() of the static empty_bloom
+# (upstream f1c3e3d1, fixed after 0.9.2) — on a root-element select any
+# mid-selection error freed a .bss address, poisoning the heap freelist
+# and corrupting the interned-string pool minutes later (apnews.com
+# crashes).
+for _patch in "$SCRIPT_DIR"/patches/*.patch; do
+    [ -e "$_patch" ] || continue
+    echo "==> applying $(basename "$_patch")"
+    patch -d "$WORK_DIR/libcss-${LIBCSS_VERSION}" -p1 < "$_patch"
+done
 
 BUILDSYSTEM_DIR="$WORK_DIR/buildsystem-${BUILDSYSTEM_VERSION}"
 [ -f "$BUILDSYSTEM_DIR/makefiles/Makefile.top" ] || {

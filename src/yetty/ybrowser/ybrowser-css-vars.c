@@ -457,6 +457,62 @@ static int sel_is_global_target(struct yetty_ylexbor *r, const char *sel, size_t
             p++;
             continue;
         }
+        if (c == ':' && (size_t)(end - p) >= 5 && strncasecmp(p, ":not(", 5) == 0) {
+            /* Negation. The whole `:not(arg)` span is skipped so its inner
+             * tokens aren't evaluated with un-negated semantics by the branches
+             * below. For an `[attr]` argument we invert the root test: a root
+             * that HAS the attribute makes `:not([attr])` false, so the rule
+             * does not apply to this document — reject the global capture.
+             * (apnews gates its collapsed-leaderboard tokens on
+             * `html:not([data-header-hasleaderboard])`; the header DOES carry
+             * that attribute, so the 0px override must not win.) */
+            const char *arg = p + 5;
+            const char *close = arg;
+            int not_depth = 1;
+            char not_quote = 0;
+            while (close < end && not_depth > 0) {
+                if (not_quote) {
+                    if (*close == not_quote) {
+                        not_quote = 0;
+                    }
+                } else if (*close == '"' || *close == '\'') {
+                    not_quote = *close;
+                } else if (*close == '(') {
+                    not_depth++;
+                } else if (*close == ')') {
+                    not_depth--;
+                    if (not_depth == 0) {
+                        break;
+                    }
+                }
+                close++;
+            }
+            for (const char *ai = arg; ai < close;) {
+                if (*ai == '[') {
+                    const char *attr_start = ai + 1;
+                    const char *attr_end = attr_start;
+                    char attr_quote = 0;
+                    while (attr_end < close && (attr_quote || *attr_end != ']')) {
+                        if (attr_quote) {
+                            if (*attr_end == attr_quote) {
+                                attr_quote = 0;
+                            }
+                        } else if (*attr_end == '"' || *attr_end == '\'') {
+                            attr_quote = *attr_end;
+                        }
+                        attr_end++;
+                    }
+                    if (sel_attr_matches_root(r, attr_start, attr_end)) {
+                        return 0; /* :not([attr]) but the root has the attribute */
+                    }
+                    ai = attr_end < close ? attr_end + 1 : close;
+                    continue;
+                }
+                ai++;
+            }
+            p = close < end ? close + 1 : end;
+            continue;
+        }
         if (c == '[') {
             const char *attr_start = p + 1;
             const char *attr_end = attr_start;
@@ -3212,14 +3268,17 @@ void yetty_ylexbor_css_scan_var_heights(struct yetty_ylexbor *r, const char *src
         if (val_end <= val_start || val_end - val_start > 512) {
             continue;
         }
-        int has_var = 0;
+        /* Capture `height:` values carrying var() (resolved element-scoped at
+         * lookup) or calc() (a length-only calc folded to a constant px there).
+         * Plain lengths/keywords libcss already handles. */
+        int has_var_or_calc = 0;
         for (size_t k = val_start; k + 4 <= val_end; k++) {
-            if (memcmp(src + k, "var(", 4) == 0) {
-                has_var = 1;
+            if (memcmp(src + k, "var(", 4) == 0 || memcmp(src + k, "calc", 4) == 0) {
+                has_var_or_calc = 1;
                 break;
             }
         }
-        if (!has_var) {
+        if (!has_var_or_calc) {
             continue;
         }
         if (!grid_media_active_at(r, src, len, i)) {
@@ -3271,13 +3330,97 @@ void yetty_ylexbor_css_scan_var_heights(struct yetty_ylexbor *r, const char *src
     }
 }
 
+/* Evaluate a `calc(...)` whose terms are all absolute lengths (px / rem / em)
+ * joined by + or - into a single constant pixel value. libcss 0.9.x cannot
+ * parse calc() and drops the declaration; a length-only calc has a fixed
+ * result that needs no containing block (apnews reserves its leaderboard-ad
+ * slot with `height:calc(var(--adHeight) + var(--adXtraSpace))`, both px). A
+ * percentage or any unmodelled unit makes the result non-constant → false, so
+ * the caller keeps libcss's value or defers to a containing-block path. `rem`
+ * uses the 16px root size; `em` uses the element's font size. */
+static bool calc_eval_const_length(const char *value, float font_size, float *out_px)
+{
+    if (value == NULL) {
+        return false;
+    }
+    while (isspace((unsigned char)*value)) {
+        value++;
+    }
+    if (strncasecmp(value, "calc(", 5) != 0) {
+        return false;
+    }
+    const char *p = value + 5;
+    const char *end = value + strlen(value);
+    while (end > p && isspace((unsigned char)end[-1])) {
+        end--;
+    }
+    if (end <= p || end[-1] != ')') {
+        return false;
+    }
+    end--; /* exclude the closing paren */
+
+    float total = 0.0f;
+    int8_t sign = 1;
+    bool have_term = false;
+    while (p < end) {
+        while (p < end && isspace((unsigned char)*p)) {
+            p++;
+        }
+        if (p >= end) {
+            break;
+        }
+        if (*p == '+' || *p == '-') {
+            if (!have_term) {
+                return false; /* leading / doubled operator — malformed */
+            }
+            sign = (*p == '-') ? -1 : 1;
+            have_term = false;
+            p++;
+            continue;
+        }
+        if (have_term) {
+            return false; /* two terms with no operator between them */
+        }
+        char *num_end = NULL;
+        float mag = strtof(p, &num_end);
+        if (num_end == NULL || num_end == p) {
+            return false; /* nested calc(), a stray var(), min()/max() … — give up */
+        }
+        size_t ulen = 0;
+        while (num_end + ulen < end &&
+               (isalpha((unsigned char)num_end[ulen]) || num_end[ulen] == '%')) {
+            ulen++;
+        }
+        float px;
+        if (ulen == 0) {
+            px = mag; /* unitless — only 0 is valid, but treat as px */
+        } else if (ulen == 2 && strncasecmp(num_end, "px", 2) == 0) {
+            px = mag;
+        } else if (ulen == 3 && strncasecmp(num_end, "rem", 3) == 0) {
+            px = mag * 16.0f;
+        } else if (ulen == 2 && strncasecmp(num_end, "em", 2) == 0) {
+            px = mag * font_size;
+        } else {
+            return false; /* %, vw, vh, ch … — not a constant length */
+        }
+        total += (float)sign * px;
+        have_term = true;
+        sign = 1;
+        p = num_end + ulen;
+    }
+    if (!have_term) {
+        return false; /* empty, or trailing operator */
+    }
+    *out_px = total;
+    return true;
+}
+
 int yetty_ylexbor_var_height_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element,
                                     float font_size, float *out_px)
 {
     if (r == NULL || element == NULL || r->var_height_count == 0) {
         return 0;
     }
-    (void)font_size;
     /* Last matching rule wins — capture preserved cascade order. */
     for (int e = r->var_height_count; e-- > 0;) {
         struct yl_var_height_rule *rule = &r->var_height_rules[e];
@@ -3293,6 +3436,15 @@ int yetty_ylexbor_var_height_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *
         float px = strtof(value, &unit_end);
         int definite =
             unit_end && unit_end != value && strncmp(unit_end, "px", 2) == 0 && px >= 0.0f;
+        /* `height:calc(<len> + <len>)` — vars already substituted to lengths;
+         * fold the length-only calc to a constant px. */
+        if (!definite) {
+            float calc_px = 0.0f;
+            if (calc_eval_const_length(value, font_size, &calc_px) && calc_px >= 0.0f) {
+                px = calc_px;
+                definite = 1;
+            }
+        }
         free(resolved);
         if (definite) {
             *out_px = px;

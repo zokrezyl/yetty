@@ -98,7 +98,9 @@ Chrome-parity process epic, #516.
 
 `tools/ybrowser/main.c`: `--dump-boxes` (TSV box tree + `ws=`/`hs=` size
 provenance — the interface all geometry oracles consume), `--dump-geo`
-(dom-path keyed rects), `--dump-wpt` (check-layout-th expected-vs-actual),
+(dom-path keyed rects), `--dump-dom` (serialized post-JS DOM, the engine-side
+analogue of Chrome's --dump-dom), `--dump-wpt` (check-layout-th
+expected-vs-actual),
 `--once`, `--interactive`, `--no-ui`, `--record <file>`, `-w`/`-H`,
 `--font-size`, `--osc`/`--raw`.
 
