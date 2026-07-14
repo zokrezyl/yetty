@@ -158,6 +158,16 @@ struct yetty_ycore_void_result yetty_ygrid_clear_local(struct yetty_ygrid_grid *
 struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *grid, uint32_t slot,
                                                     struct yetty_yfont_font *font);
 
+/* Toggle the grid-internal coordinate mode. Mirror of the base yfigure flag —
+ * grids created by the ygrid factory get both set in one shot, but callers
+ * that hand-mint a grid via yetty_ygrid_create (the ychrome host, in particular)
+ * must set this here so scale_record_coords and the scissor path treat the wire
+ * as logical-px chrome. Without it, incoming coords stay unscaled and HiDPI
+ * chrome renders at half its intended size and position. See
+ * `ygrid_factory_impl` for the paired base-figure setter that ALSO needs
+ * calling for hit-test / re-origin. */
+void yetty_ygrid_set_absolute_coords(struct yetty_ygrid_grid *grid, int absolute_coords);
+
 /* Content extent in px. By default a ygrid's content fills its on-screen
  * rect; set a larger extent to make it a scroll viewport — the cell grid
  * and prim bucketing then span the content while the rect stays the

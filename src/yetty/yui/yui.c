@@ -2802,11 +2802,19 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
         }
         /* Chrome runs after apply_cursor so its resize-edge cursor wins at the
          * window margins; over the body it leaves the cursor alone. */
+        int chrome_consumed = 0;
         if (!feed_r.value && !has_pressed) {
             struct yetty_ycore_int_result fallback_r = yui_chrome_fallback(yui, event);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, fallback_r, "on_event: chrome fallback (move)");
+            chrome_consumed = fallback_r.value;
         }
-        return YETTY_OK(yetty_ycore_int, active || has_pressed ? 1 : 0);
+        /* Report chrome consumption too — during a window-frame drag or edge
+         * resize, chrome is actively consuming every move. Reporting 0 leaks
+         * every move down to the terminal, which forwards it to the focused
+         * client as a mouse-move OSC. On a resize storm the PTY back-pressures
+         * and terminal_yface_emit's retry loop pins the main thread — visible
+         * as yetty freezing until the user releases the drag. */
+        return YETTY_OK(yetty_ycore_int, active || has_pressed || chrome_consumed ? 1 : 0);
     }
     case YETTY_YCORE_KEY_DOWN:
         /* Route editing keys to the focused dialog textinput. Printable

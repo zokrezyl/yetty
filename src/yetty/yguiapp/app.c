@@ -350,11 +350,17 @@ static struct yetty_ycore_void_result yguiapp_chrome_caption_create(struct yetty
     }
     struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(app->chrome_caption);
     struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig)-1;
-    /* Pin to the top (no scroll) and force on top of the app content. */
+    /* Pin to the top (no scroll) and force on top of the app content. Two
+     * flags to set: the base-figure flag (hit-test / re-origin) AND the
+     * grid-internal one (scale_record_coords + scissor). Missing the grid one
+     * silently disables the receiver-side HiDPI scaling — the caption then
+     * renders at logical size in framebuffer space and the buttons land in
+     * the middle of the strip instead of flush right. */
     struct yetty_ycore_void_result ar = yetty_yfigure_figure_absolute_coords_set(fobj, 1);
     if (YETTY_IS_ERR(ar)) {
         yetty_ycore_error_destroy(ar.error);
     }
+    yetty_ygrid_set_absolute_coords(app->chrome_caption, 1);
     struct yetty_ycore_void_result zr = yetty_yfigure_figure_z_set(fobj, 100000);
     if (YETTY_IS_ERR(zr)) {
         yetty_ycore_error_destroy(zr.error);

@@ -649,13 +649,30 @@ static struct yetty_ycore_void_result container_do_create_child(
     /* A freshly minted producer card anchors to the current top content row so
      * it tracks terminal scrolling. Host-structural figures (content grid, tab
      * chrome) are seated via add_child, not this producer path, so they stay
-     * unanchored. */
+     * unanchored.
+     *
+     * Absolute-coords figures (ygui chrome — browser toolbar, ymgui overlays)
+     * are pane-pinned overlays; they should NOT slide with terminal scrolling.
+     * Skip anchoring for them. Without this, ygui chrome created after the
+     * shell has printed any lines gets shifted down by (content_root_row -
+     * creation_row) * cell_height — the browser's tabbar visibly parked one
+     * or two shell-output rows below its intended fb y = viewport_offset. */
     {
         struct child_entry *entry;
         HASH_FIND_INT(container->children, &child_id, entry);
         if (entry) {
-            entry->scroll_anchored = 1;
-            entry->creation_row = container->content_root_row;
+            int is_absolute = 0;
+            struct yetty_yclass_object *child_obj = (struct yetty_yclass_object *)(child) - 1;
+            struct yetty_ycore_int_result abs_r = yetty_yfigure_figure_absolute_coords_get(child_obj);
+            if (YETTY_IS_OK(abs_r)) {
+                is_absolute = abs_r.value;
+            } else {
+                yetty_ycore_error_destroy(abs_r.error);
+            }
+            entry->scroll_anchored = is_absolute ? 0 : 1;
+            if (!is_absolute) {
+                entry->creation_row = container->content_root_row;
+            }
         }
     }
     if (init_len > 0) {

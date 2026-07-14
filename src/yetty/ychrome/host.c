@@ -181,6 +181,11 @@ static struct yetty_ygrid_grid_ptr_result host_pin_grid(struct yetty_yclass_obje
     struct yetty_ycore_void_result absolute_result =
         yetty_yfigure_figure_absolute_coords_set(figure_obj, 1);
     YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, absolute_result, "chrome host pin: absolute_coords");
+    /* Also flip the grid-internal flag so scale_record_coords + the render
+     * scissor rewrite our logical-px wire to framebuffer on HiDPI. The base
+     * figure flag drives hit-test and re-origin; the grid flag drives the
+     * receiver-side scaling — both must be set for a hand-minted ygrid. */
+    yetty_ygrid_set_absolute_coords(grid, 1);
     struct yetty_ycore_void_result z_result = yetty_yfigure_figure_z_set(figure_obj, z);
     YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, z_result, "chrome host pin: z_set");
     if (body && body_len > 0) {

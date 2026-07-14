@@ -406,6 +406,7 @@ struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_g
 struct yetty_ycore_void_result yetty_ygrid_clear_local(struct yetty_ygrid_grid *grid);
 struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *grid, uint32_t slot,
                                                     struct yetty_yfont_font *font);
+void yetty_ygrid_set_absolute_coords(struct yetty_ygrid_grid *grid, int absolute_coords);
 void yetty_ygrid_set_content_size(struct yetty_ygrid_grid *grid, float content_w, float content_h);
 void yetty_ygrid_set_scroll(struct yetty_ygrid_grid *grid, float scroll_x, float scroll_y);
 void yetty_ygrid_set_composite_factory(struct yetty_ygrid_grid *grid,
@@ -3255,10 +3256,18 @@ static struct yetty_ycore_void_result scale_record_coords(struct yetty_ygrid_gri
     if (!g->absolute_coords) {
         return YETTY_OK_VOID();
     }
-    float scale = g->content_scale;
+    float scale = g->content_scale > 0.0f ? g->content_scale : 1.0f;
     if (scale == 1.0f) {
         return YETTY_OK_VOID();
     }
+    /* Absolute-coords ygrids paint into target->viewport, and yetty's render
+     * target already has target->viewport origin at the pane's fb origin
+     * (yui composes its chrome outside that viewport). So prim coords are
+     * PANE-LOCAL px, not surface-absolute — scale to fb here, but do NOT
+     * translate by figure_rect.min. Doing so double-adds the pane origin
+     * and shifts every ygui overlay one yui-strip-height further down. */
+    float origin_x_fb = 0.0f;
+    float origin_y_fb = 0.0f;
     uint32_t word_count = (uint32_t)(record_len / 4u);
     if (word_count < 5u) {
         return YETTY_OK_VOID();
@@ -3267,10 +3276,18 @@ static struct yetty_ycore_void_result scale_record_coords(struct yetty_ygrid_gri
     uint32_t type = words[0];
 
     if (type == YGRID_GLYPH_TYPE || type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
-        /* Both layouts place x, y, font_size at words 2, 3, 4. */
-        scale_record_word(&words[2], scale);
-        scale_record_word(&words[3], scale);
-        scale_record_word(&words[4], scale);
+        /* Both layouts place x, y, font_size at words 2, 3, 4. font_size
+         * scales but has no positional origin. */
+        float x, y, sz;
+        memcpy(&x, &words[2], 4);
+        memcpy(&y, &words[3], 4);
+        memcpy(&sz, &words[4], 4);
+        x = x * scale + origin_x_fb;
+        y = y * scale + origin_y_fb;
+        sz *= scale;
+        memcpy(&words[2], &x, 4);
+        memcpy(&words[3], &y, 4);
+        memcpy(&words[4], &sz, 4);
         return YETTY_OK_VOID();
     }
 
@@ -3285,27 +3302,17 @@ static struct yetty_ycore_void_result scale_record_coords(struct yetty_ygrid_gri
         ydebug("scale_record_coords: SKIP type=0x%08X (not SDF) word_count=%u", type, word_count);
         return YETTY_OK_VOID();
     }
-    uint32_t geom_end = word_count;
-    if (type == YETTY_YSDF_LINEAR_GRADIENT_BOX || type == YETTY_YSDF_RADIAL_GRADIENT_BOX) {
-        geom_end -= 2u; /* trailing u32 color words stay intact */
-    }
-    /* Snapshot pre-scale fill/stroke for the dump below. */
-    uint32_t fill = words[2];
-    uint32_t stroke = words[3];
-    scale_record_word(&words[4], scale); /* stroke_w */
-    for (uint32_t i = 5u; i < geom_end; ++i) {
-        scale_record_word(&words[i], scale);
-    }
-    if (word_count >= 10u) {
-        float cx, cy, hw, hh;
-        memcpy(&cx, &words[5], 4);
-        memcpy(&cy, &words[6], 4);
-        memcpy(&hw, &words[7], 4);
-        memcpy(&hh, &words[8], 4);
-        ydebug("scale_record_coords: SDF type=0x%08X fill=0x%08X stroke=0x%08X "
-               "post-scale center=(%.1f,%.1f) half=(%.1f,%.1f)",
-               type, fill, stroke, cx, cy, hw, hh);
-    }
+    /* stroke_w scales but has no origin. */
+    scale_record_word(&words[4], scale);
+    /* Delegate the per-prim schema to the generated SDF transform helper
+     * (yetty_ysdf_geometry_transform in ysdf/types.gen.h). It knows which
+     * geometry words are positions (segment endpoints, triangle vertices,
+     * gradient endpoints) versus magnitudes (radius, half, thickness),
+     * so translation lands only on the position words. Words 5+ are the
+     * geometry block. */
+    yetty_ysdf_geometry_transform(type, (float *)&words[5], origin_x_fb, origin_y_fb, scale, scale);
+    (void)origin_x_fb;
+    (void)origin_y_fb;
     return YETTY_OK_VOID();
 }
 
@@ -3420,6 +3427,14 @@ struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *gri
         YETTY_RETURN_IF_ERR(yetty_ycore_void, set_dirty_r, "ygrid: set dirty");
     }
     return YETTY_OK_VOID();
+}
+
+void yetty_ygrid_set_absolute_coords(struct yetty_ygrid_grid *grid, int absolute_coords)
+{
+    if (!grid) {
+        return;
+    }
+    grid->absolute_coords = absolute_coords ? 1 : 0;
 }
 
 /*===========================================================================

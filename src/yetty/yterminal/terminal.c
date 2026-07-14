@@ -244,11 +244,27 @@ struct yetty_yterminal_terminal {
      * the iterator can step SDF primitives and composite (FAM) records. */
     struct yetty_ydraw_drawable_list_registry *ydraw_registry;
 
-    /* Bundle handed as registry user-data on every kind ygrid handles.
-     * Lives on the terminal because the registry stores a pointer to it,
-     * and the host has to outlive every ygrid the registry might still
-     * mint. */
-    struct yetty_ygrid_factory_args figure_args;
+    /* Bundle handed as registry user-data. TWO of them, differing in
+     * `absolute_coords`, because clients and terminal-native producers pull
+     * from the same registry but want opposite coordinate semantics:
+     *
+     *   figure_args_default (absolute_coords = 1) — registered under the
+     *     default kind = "ygrid". Client apps (ybrowser, ymgui) attach over
+     *     yclass-RPC and drive their ygui figures through this factory. Their
+     *     widget tree is authored in LOGICAL pixels; the receiver ygrid
+     *     multiplies by content_scale so the pane fills at physical Retina
+     *     size and chrome renders at the right visual size on HiDPI.
+     *
+     *   figure_args_producer (absolute_coords = 0) — registered under
+     *     producer kinds (yplot, yimage, yvideo, yzoo, yjungle). These are
+     *     terminal-native card figures placed by the host; their prims are
+     *     card-local framebuffer coords, so the ygrid stays in local mode
+     *     and renders each card into its own rect verbatim.
+     *
+     * Both structs are program-lifetime data on the terminal (the registry
+     * stores raw pointers to them and outlives every ygrid it mints). */
+    struct yetty_ygrid_factory_args figure_args_default;
+    struct yetty_ygrid_factory_args figure_args_producer;
 
     /* The figure tree is reached via
      * yetty_yfigure_container_as_figure(root_container); producers drive it
@@ -655,10 +671,16 @@ static struct yetty_ycore_void_result terminal_emit_card_focus(
 static struct yetty_ycore_void_result terminal_emit_card_resize(
     struct yetty_yterminal_terminal *terminal, uint32_t figure_id, float width, float height)
 {
+    /* Publish the host display's HiDPI factor alongside the framebuffer-px
+     * size so clients that author in logical px (browser CSS viewport, ygui
+     * layout) can divide once and render 1:1 with the physical pane. */
+    float content_scale =
+        terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
     struct yetty_client_input_resize msg = {
         .magic = YETTY_CLIENT_INPUT_RESIZE_MAGIC,
         .version = YMGUI_WIRE_VERSION,
         .figure_id = figure_id,
+        .content_scale = content_scale,
         .width = width,
         .height = height,
     };
@@ -2283,16 +2305,27 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
                             "terminal_create: ydraw registry complex");
     }
 
-    terminal->figure_args.default_font = terminal->compositor_font;
-    terminal->figure_args.composite_factory = terminal->composite_factory;
+    /* Default-kind factory (kind = "ygrid"): absolute coords ON so client
+     * apps that attach over yclass-RPC (ybrowser, ymgui) get their logical-px
+     * ygui figures scaled up to framebuffer by the receiver on HiDPI. */
+    terminal->figure_args_default.default_font = terminal->compositor_font;
+    terminal->figure_args_default.composite_factory = terminal->composite_factory;
+    terminal->figure_args_default.absolute_coords = 1;
+
+    /* Producer-kind factory (yplot / yimage / …): absolute coords OFF —
+     * card producers author in card-local framebuffer coords and the
+     * compositor places each card at its own rect, so no receiver scaling. */
+    terminal->figure_args_producer.default_font = terminal->compositor_font;
+    terminal->figure_args_producer.composite_factory = terminal->composite_factory;
+    terminal->figure_args_producer.absolute_coords = 0;
 
     struct yetty_yfigure_registry_ptr_result reg_res = yetty_yfigure_registry_create();
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_res,
                         "terminal_create: figure registry create failed");
     terminal->figure_registry = reg_res.value;
     {
-        struct yetty_ycore_void_result rf =
-            yetty_ygrid_register_factory(terminal->figure_registry, &terminal->figure_args);
+        struct yetty_ycore_void_result rf = yetty_ygrid_register_factory(
+            terminal->figure_registry, &terminal->figure_args_default);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rf,
                             "terminal_create: ygrid register_factory");
         /* Producer-widget kinds reuse the ygrid factory today (same SDF /
@@ -2305,7 +2338,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); i++) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
                 terminal->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
-                &terminal->figure_args);
+                &terminal->figure_args_producer);
             YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, kr,
                                 "terminal_create: ygrid register_factory_for_kind");
         }
@@ -2982,10 +3015,20 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
      * producers (ygreeter, ygui) emit pane-local rects. Push the pane
      * origin into the compositor so it can shift incoming rects, keeping
      * the rendered pixels aligned with the mouse coords the input
-     * pipeline subtracts (bounds.x/y) on the way down to the producer. */
+     * pipeline subtracts (bounds.x/y) on the way down to the producer.
+     *
+     * bounds is in FRAMEBUFFER px (yui composes its chrome in fb). Divide by
+     * layout_content_scale so the offset is in LOGICAL — client-authored ygui
+     * figures ship their CREATE_CHILD rect in LOGICAL, and the container
+     * stores rect_local + viewport_offset on each child. Storing them in a
+     * single unit system means the ygrid scissor (rect * content_scale) reaches
+     * the right fb region on HiDPI. On non-HiDPI (scale == 1.0) fb == logical
+     * and this divide is a no-op, matching pre-HiDPI behaviour. */
+    float offset_scale = terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
     if (terminal->root_container_obj) {
-        yetty_yfigure_container_set_viewport_offset(terminal->root_container_obj, bounds.x,
-                                                    bounds.y);
+        yetty_yfigure_container_set_viewport_offset(terminal->root_container_obj,
+                                                    bounds.x / offset_scale,
+                                                    bounds.y / offset_scale);
     }
 
     /* Actually resize the terminal when the pixel size changes. The

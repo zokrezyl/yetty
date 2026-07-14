@@ -263,6 +263,15 @@ struct app {
     float viewport_w, viewport_h;
     float font_size;
 
+    /* HiDPI factor learned from the host via SC_CLIENT_INPUT_FIGURE_RESIZE.
+     * 1.0 until the first envelope arrives — everything the client authors
+     * in logical px (ygui viewport, mouse hit-test) divides framebuffer-px
+     * inputs (ws_xpixel, forwarded mouse coords) by this. The very first
+     * frame ships at framebuffer scale (mismatched on HiDPI, but visible)
+     * because we don't have a local way to observe the host's scale until
+     * the RESIZE OSC arrives after the mouse-subscribe handshake. */
+    float host_content_scale;
+
     /* Standalone (own-window) mode only — set so the quit shortcut can stop
 	 * the GPU event loop. NULL in the in-yetty client loop. */
     struct yetty_yevent_event_loop *event_loop;
@@ -342,11 +351,31 @@ static uint64_t fnv1a(const void *data, size_t len)
     return h;
 }
 
-/* Current pane pixel size from the controlling tty. The host updates the
- * pty winsize as the pane resizes, so polling this each tick tracks the
- * real size even when no pane-wide resize OSC is delivered. Prefers the
- * pixel fields; falls back to a cell-grid approximation. */
-static int pick_pane_px(int *w, int *h)
+/* Host display HiDPI factor (framebuffer_px / logical_px), learned from the
+ * SC_CLIENT_INPUT_FIGURE_RESIZE OSC. Falls back to 1.0 before the envelope
+ * arrives — the very first frame renders at framebuffer scale, then RESIZE
+ * lands and the viewport snaps to logical. The ygui widget layer + lexbor's
+ * CSS viewport both run in LOGICAL px once RESIZE has arrived; the host's
+ * absolute-coords ygrid multiplies our records by content_scale at add-record
+ * time to reach framebuffer. So the only places that divide by this scale
+ * are the fb→logical boundaries: pick_pane_px (ws_xpixel), on_osc for RESIZE
+ * (rz->width) and MOUSE (m->x). Widget-rect reads are already logical and
+ * pass through render_doc / page_click unmodified. */
+static float pane_host_scale_from(const struct app *a)
+{
+    if (!a) {
+        return 1.0f;
+    }
+    return a->host_content_scale > 0.0f ? a->host_content_scale : 1.0f;
+}
+
+/* Current pane LOGICAL pixel size (framebuffer / host_content_scale) from
+ * the controlling tty. The host writes ws_xpixel / ws_ypixel in framebuffer
+ * pixels each time the pane resizes; ygui runs in logical, so divide by the
+ * host scale (learned from the resize OSC — 1.0 before it arrives, in which
+ * case this returns framebuffer, matching the framebuffer-sized initial
+ * viewport seeded by ybrowser_ui_run). */
+static int pick_pane_px(const struct app *a, int *w, int *h)
 {
     int fds[] = {STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
     for (size_t i = 0; i < sizeof(fds) / sizeof(fds[0]); i++) {
@@ -357,9 +386,10 @@ static int pick_pane_px(int *w, int *h)
         if (ioctl(fds[i], TIOCGWINSZ, &ws) != 0) {
             continue;
         }
+        float scale = pane_host_scale_from(a);
         if (ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
-            *w = ws.ws_xpixel;
-            *h = ws.ws_ypixel;
+            *w = (int)((float)ws.ws_xpixel / scale);
+            *h = (int)((float)ws.ws_ypixel / scale);
             return 1;
         }
         if (ws.ws_col > 0 && ws.ws_row > 0) {
@@ -2234,25 +2264,30 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
             return;
         }
         const struct yetty_client_input_mouse *m = (const struct yetty_client_input_mouse *)payload;
+        /* Host forwards mouse coords in framebuffer px; widgets hit-test in
+         * logical, so divide by the host content_scale learned from the
+         * resize OSC. */
+        float scale = pane_host_scale_from(a);
+        float mx = (float)m->x / scale;
+        float my = (float)m->y / scale;
         if (m->kind == YETTY_YMGUI_INPUT_MOUSE_POS) {
             struct yetty_ycore_int_result fr =
-                yetty_ygui_framework_feed_mouse_motion(a->fw, m->x, m->y);
+                yetty_ygui_framework_feed_mouse_motion(a->fw, mx, my);
             if (YETTY_IS_ERR(fr)) {
                 yetty_ycore_error_destroy(fr.error);
             }
         } else if (m->kind == YETTY_YMGUI_INPUT_MOUSE_BUTTON) {
             struct yetty_ycore_int_result fr =
-                yetty_ygui_framework_feed_mouse_button(a->fw, m->x, m->y, m->button, m->pressed, 0);
+                yetty_ygui_framework_feed_mouse_button(a->fw, mx, my, m->button, m->pressed, 0);
             if (YETTY_IS_ERR(fr)) {
                 yetty_ycore_error_destroy(fr.error);
             }
             if (m->pressed) {
-                page_click(a, m->x, m->y);
+                page_click(a, mx, my);
             }
             yetty_ygui_framework_mark_dirty(a->fw);
         } else if (m->kind == YETTY_YMGUI_INPUT_MOUSE_WHEEL) {
-            err_ok_int(
-                yetty_ygui_framework_feed_mouse_scroll(a->fw, m->x, m->y, 0.0f, m->wheel_dy));
+            err_ok_int(yetty_ygui_framework_feed_mouse_scroll(a->fw, mx, my, 0.0f, m->wheel_dy));
         }
         return;
     }
@@ -2297,10 +2332,23 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         }
         const struct yetty_client_input_resize *rz =
             (const struct yetty_client_input_resize *)payload;
+        /* Learn the host's HiDPI factor first so pane_host_scale_from below
+         * sees the new value. The host's default-kind ygrid factory runs in
+         * absolute-coords mode: our LOGICAL-px widget prims get scaled up to
+         * framebuffer at receiver add-record time, so the viewport we hand
+         * ygui must ALSO be logical (fb / scale). Widget rects come back
+         * from ygui in the same logical space and feed lexbor's CSS viewport
+         * directly — no second divide (render_doc). */
+        if (rz->content_scale > 0.0f) {
+            a->host_content_scale = rz->content_scale;
+        }
         if (rz->width > 0 && rz->height > 0) {
-            a->viewport_w = rz->width;
-            a->viewport_h = rz->height;
-            err_ok(yetty_ygui_framework_set_viewport(a->fw, rz->width, rz->height));
+            float scale = pane_host_scale_from(a);
+            float logical_w = rz->width / scale;
+            float logical_h = rz->height / scale;
+            a->viewport_w = logical_w;
+            a->viewport_h = logical_h;
+            err_ok(yetty_ygui_framework_set_viewport(a->fw, logical_w, logical_h));
             a->pending_render = 1; /* content width may have changed */
             yetty_ygui_framework_mark_dirty(a->fw);
         }
@@ -2781,8 +2829,20 @@ static void render_doc(struct app *a, struct tab *t)
             return;
         }
         if (w != t->rendered_w) {
+            /* w and h are ygui widget-rect coords, already in LOGICAL px
+             * because the ygui framework viewport is set from
+             * ws_xpixel/host_content_scale (see pick_pane_px + on_osc).
+             * Lexbor's CSS viewport IS logical, so pass them through. Any
+             * further /scale divide here halves the CSS canvas on HiDPI. */
+            int vw = (int)w;
             int vh = (int)(h > a->viewport_h ? h : a->viewport_h);
-            err_ok(yetty_ylexbor_set_viewport(t->engine, (int)w, vh));
+            if (vw < 1) {
+                vw = 1;
+            }
+            if (vh < 1) {
+                vh = 1;
+            }
+            err_ok(yetty_ylexbor_set_viewport(t->engine, vw, vh));
         }
         err_ok(yetty_ylexbor_relayout(t->engine));
         struct yetty_ydraw_drawable_list_result dlr =
@@ -3118,6 +3178,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 
     struct app a = {0};
     a.running = 1;
+    a.host_content_scale = 1.0f;
     a.viewport_w = (float)viewport_w;
     a.viewport_h = (float)viewport_h;
     a.font_size = font_size > 0.0f ? font_size : 16.0f;
@@ -3166,6 +3227,16 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
         return 1;
     }
     a.fw = fr.value;
+    /* Initial viewport in FRAMEBUFFER px (probe_terminal_size reads raw
+     * ws_xpixel). host_content_scale isn't known until the RESIZE OSC
+     * arrives; on HiDPI the very first frame therefore lays chrome out at
+     * the framebuffer size and the receiving ygrid scales it x content_scale
+     * — visibly wrong for a tick, then RESIZE OSC arrives and everything
+     * snaps to logical. Shipping a wrong-scale first frame is still better
+     * than the alternative of not shipping widgets at all: without a
+     * viewport set the framework layouts at its 800x600 default and every
+     * downstream consumer (build_ui-time widget size hints, engine viewport)
+     * uses stale numbers. */
     err_ok(yetty_ygui_framework_set_viewport(a.fw, (float)viewport_w, (float)viewport_h));
     yetty_ygui_framework_set_key_cb(a.fw, key_cb, &a);
     struct yetty_yfont_font *measure_font = client_measure_font_create();
@@ -3217,16 +3288,25 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 
     char buf[8192];
     while (a.running) {
-        /* Track the real pane size from the tty (the host may never send a
-		 * pane-wide resize OSC, and the initial size is a guess). */
-        int pw = 0, ph = 0;
-        if (pick_pane_px(&pw, &ph) && ((float)pw != a.viewport_w || (float)ph != a.viewport_h)) {
-            a.viewport_w = (float)pw;
-            a.viewport_h = (float)ph;
-            err_ok(yetty_ygui_framework_set_viewport(a.fw, (float)pw, (float)ph));
-            a.tabs[a.active].needs_render = 1;
-            a.pending_render = 1;
-            yetty_ygui_framework_mark_dirty(a.fw);
+        /* Poll pane size from the tty ONLY while we have no RESIZE OSC yet.
+		 * Once host_content_scale is real, the RESIZE OSC carries the whole
+		 * pane in fb (host publishes applied_w / applied_h) — trust it. The
+		 * tty's ws_xpixel is `cols * cell_width`, i.e. only the character
+		 * grid area, so it undercounts the pane by up to one cell of chrome
+		 * padding. A yetty host sends RESIZE on every pane resize (the
+		 * mouse-subscribe path in terminal.c), so we don't lose live resize
+		 * either; foreign hosts that never send it fall back to this poll. */
+        if (a.host_content_scale <= 0.0f || a.host_content_scale == 1.0f) {
+            int pw = 0, ph = 0;
+            if (pick_pane_px(&a, &pw, &ph) &&
+                ((float)pw != a.viewport_w || (float)ph != a.viewport_h)) {
+                a.viewport_w = (float)pw;
+                a.viewport_h = (float)ph;
+                err_ok(yetty_ygui_framework_set_viewport(a.fw, (float)pw, (float)ph));
+                a.tabs[a.active].needs_render = 1;
+                a.pending_render = 1;
+                yetty_ygui_framework_mark_dirty(a.fw);
+            }
         }
 
         /* Pump the active tab's JS timers; cap the select wait so timers
@@ -3321,6 +3401,114 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
     }
     return 0;
 }
+
+/* Encode a Unicode codepoint to UTF-8. Returns the byte count (1..4). */
+static size_t utf8_encode(uint32_t cp, char *out)
+{
+    if (cp < 0x80) {
+        out[0] = (char)cp;
+        return 1;
+    }
+    if (cp < 0x800) {
+        out[0] = (char)(0xC0 | (cp >> 6));
+        out[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    }
+    if (cp < 0x10000) {
+        out[0] = (char)(0xE0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+    out[0] = (char)(0xF0 | (cp >> 18));
+    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    out[3] = (char)(0x80 | (cp & 0x3F));
+    return 4;
+}
+
+/* GLFW navigation/editing keycode → terminal byte sequence. Printable text
+ * is NOT handled here — it arrives layout-translated via YETTY_YCORE_CHAR. */
+static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
+                                      size_t *out_len)
+{
+    /* xterm modifier parameter for CSI sequences: 1 + bitset(shift=1, alt=2,
+     * ctrl=4). mod_param == 0 means "no modifier" → emit the bare sequence so
+     * unmodified keys look exactly as before. The ygui input decoder reads this
+     * back out (see csi_decode_mods) and hands it to the widget as mods, which
+     * is what makes Shift+Arrow extend the selection. */
+    int mod_bits = 0;
+    if (glfw_mods & 0x0001) { /* GLFW_MOD_SHIFT */
+        mod_bits |= 1;
+    }
+    if (glfw_mods & 0x0004) { /* GLFW_MOD_ALT */
+        mod_bits |= 2;
+    }
+    if (glfw_mods & 0x0002) { /* GLFW_MOD_CONTROL */
+        mod_bits |= 4;
+    }
+    int mod_param = mod_bits ? mod_bits + 1 : 0;
+    switch (key) {
+    case 256:
+        scratch[0] = 0x1B;
+        *out_len = 1;
+        return scratch; /* ESC */
+    case 257:           /* Enter */
+    case 335:
+        scratch[0] = '\r';
+        *out_len = 1;
+        return scratch; /* KP Enter */
+    case 258:
+        scratch[0] = '\t';
+        *out_len = 1;
+        return scratch; /* Tab */
+    case 259:
+        scratch[0] = 0x7F;
+        *out_len = 1;
+        return scratch; /* Backspace */
+    case 261:           /* Del */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[3;%d~", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[3~");
+        return scratch;
+    case 263: /* ← */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dD", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[D");
+        return scratch;
+    case 262: /* → */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dC", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[C");
+        return scratch;
+    case 265: /* ↑ */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dA", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[A");
+        return scratch;
+    case 264: /* ↓ */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dB", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[B");
+        return scratch;
+    case 268: /* Home */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dH", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[H");
+        return scratch;
+    case 269: /* End */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dF", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[F");
+        return scratch;
+    case 301: /* F12 (GLFW_KEY_F12) → DevTools toggle. xterm CSI 24~. */
+        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[24~");
+        return scratch;
+    default:
+        *out_len = 0;
+        return NULL;
+    }
+}
+
+/* ===========================================================================
+ * UTF-8 + special-key encoders. Small helpers used by BOTH modes: the client
+ * on_osc path decodes forwarded key envelopes with them (any build), and the
+ * standalone GLFW key handler further below reuses the same. Kept out of the
+ * standalone ifdef so the macOS / Windows client-only builds link.
+ * ===========================================================================*/
 
 /* Encode a Unicode codepoint to UTF-8. Returns the byte count (1..4). */
 static size_t utf8_encode(uint32_t cp, char *out)
