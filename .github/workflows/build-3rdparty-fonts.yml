@@ -48,11 +48,8 @@ jobs:
       - run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            ninja-build brotli zlib1g-dev \
             fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji
-      - uses: DeterminateSystems/nix-installer-action@main
-        with:
-          extra-conf: |
-            experimental-features = nix-command flakes
       - run: mkdir -p out
       - run: |
           OUTPUT_DIR="$PWD/out" \

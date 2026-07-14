@@ -23,8 +23,9 @@
 #   WORK_DIR          optional — intermediate tree (default: /tmp/yetty-asset-fonts)
 #   BROTLI_QUALITY    optional — CDB compression (default 11)
 #
-# Run via the wrapper build.sh (which handles the nix develop for the
-# ymsdf-gen toolchain; the CI workflow apt-installs the Noto packages).
+# Run via the wrapper build.sh. Toolchain needs: cmake, ninja, a C/C++23
+# compiler, git, curl, brotli — plain distro packages; the CI workflow
+# apt-installs ninja/brotli plus the Noto font packages.
 
 set -Eeuo pipefail
 trap 'rc=$?; echo "FAILED: rc=$rc line=$LINENO cmd: $BASH_COMMAND" >&2' ERR
@@ -66,7 +67,7 @@ mkdir -p "$STAGE"
 #-----------------------------------------------------------------------------
 
 echo "==> configuring host tools"
-cmake -S "$REPO_ROOT/build-tools/cmake/host-tools" -B "$BUILD_DIR" \
+cmake -S "$REPO_ROOT/build-tools/yetty/host-tools" -B "$BUILD_DIR" \
     -G Ninja \
     -DCMAKE_BUILD_TYPE=Release
 
