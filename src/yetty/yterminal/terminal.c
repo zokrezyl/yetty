@@ -1,4 +1,5 @@
 #include <yetty/yframework/yframework.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -125,6 +126,17 @@ struct yetty_yterminal_terminal {
      * the ratio, so text density follows the viewer's display without
      * re-baking the font (MSDF glyphs stay crisp at any cell size). */
     float layout_content_scale;
+    /* Structural (Ctrl+Shift+wheel) zoom state. cell_zoom accumulates the
+     * wheel factor over zoom_base_cell — the cell stride captured when the
+     * first zoom event arrives (rescaled on display-density changes).
+     * Each tick derives the snapped cell from base × cell_zoom; deriving
+     * from the previous SNAPPED cell instead would feed the rounding back
+     * into the next tick: a 9 px cell width times 1.05 rounds back to
+     * 9 forever while the 19 px height moves — zoom then grows only
+     * vertically. cell_zoom <= 0 means "not seeded yet"; a reset event
+     * returns to exactly 1.0 (the pre-zoom cell). */
+    struct yetty_ycore_pixel_size zoom_base_cell;
+    float cell_zoom;
     /* Set by workspace_set_active via SET_FOCUS — true means this terminal
      * is the foreground view in its workspace AND the workspace is the
      * tabbar's active one. Layers can read this to switch cursor style
@@ -2854,18 +2866,37 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
             float density_ratio = live_scale / terminal->layout_content_scale;
             cell_w_target *= density_ratio;
             cell_h_target *= density_ratio;
+            /* Keep the structural-zoom reference in the new density too. */
+            if (terminal->cell_zoom > 0.0f) {
+                terminal->zoom_base_cell.width *= density_ratio;
+                terminal->zoom_base_cell.height *= density_ratio;
+            }
             terminal->layout_content_scale = live_scale;
         }
     }
 
+    /* Snap the cell stride to whole pixels. The font already reports a
+     * snapped cell, but the density ratio above (or a legacy fractional
+     * metric) can reintroduce fractions, and a fractional stride places
+     * every column/row at a different subpixel phase — the same glyph then
+     * samples its distance field at a different offset in each cell and
+     * stems come out alternately crisp and blurry. */
+    float cell_w_snapped = fmaxf(1.0f, roundf(cell_w_target));
+    float cell_h_snapped = fmaxf(1.0f, roundf(cell_h_target));
+
     /* Resolve the reservation; never let the content rect collapse below a
      * single cell in either axis (a client could reserve more than the pane). */
     float content_x = 0.0f, content_y = 0.0f, content_w = 0.0f, content_h = 0.0f;
-    terminal_resolve_content_rect(terminal, pane_w, pane_h, cell_w_target, cell_h_target,
+    terminal_resolve_content_rect(terminal, pane_w, pane_h, cell_w_snapped, cell_h_snapped,
                                   &content_x, &content_y, &content_w, &content_h);
 
-    uint32_t new_cols = (uint32_t)(content_w / cell_w_target + 0.5f);
-    uint32_t new_rows = (uint32_t)(content_h / cell_h_target + 0.5f);
+    /* Whole cells only — the text shader maps grid pixels 1:1 across the
+     * content rect, so the rect must equal cols*cell exactly; stretching
+     * the cell to cover the remainder (the old behaviour) made the stride
+     * fractional again. The sub-cell remainder strip at the right/bottom
+     * edge stays pane background. */
+    uint32_t new_cols = (uint32_t)(content_w / cell_w_snapped);
+    uint32_t new_rows = (uint32_t)(content_h / cell_h_snapped);
     if (new_cols == 0) {
         new_cols = 1;
     }
@@ -2873,17 +2904,20 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
         new_rows = 1;
     }
     struct yetty_ycore_pixel_size new_cell = {
-        .width = content_w / (float)new_cols,
-        .height = content_h / (float)new_rows,
+        .width = cell_w_snapped,
+        .height = cell_h_snapped,
     };
     struct yetty_ycore_void_result rgr = yetty_yterminal_terminal_resize_grid(
         terminal, (struct yetty_ycore_grid_size){.cols = new_cols, .rows = new_rows}, new_cell);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rgr, "terminal_apply_pane_geometry: resize_grid");
 
     /* Hand the renderer the resolved rect: the grid figure spans the whole
-     * pane; vterm's render slot places the text surface on this rect. */
+     * pane; vterm's render slot places the text surface on this rect. The
+     * rect is clipped to the exact grid extent so grid pixels stay 1:1 with
+     * framebuffer pixels. */
     struct yetty_ycore_void_result content_rect_res = yetty_yvterm_vterm_set_content_rect(
-        terminal->grid, content_x, content_y, content_w, content_h);
+        terminal->grid, content_x, content_y, (float)new_cols * cell_w_snapped,
+        (float)new_rows * cell_h_snapped);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, content_rect_res,
                         "terminal_apply_pane_geometry: set content rect");
 
@@ -3189,23 +3223,6 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * set_cell_size + resize_grid pair drifted because the cell write
          * and the grid write weren't atomic. */
         float delta = event->zoom_cell_size.delta;
-        float factor;
-        if (event->zoom_cell_size.reset) {
-            /* Baseline isn't currently cached; treat reset as "no scale change". */
-            factor = 1.0f;
-        } else {
-            factor = 1.0f + delta;
-            if (factor < 0.5f) {
-                factor = 0.5f;
-            }
-            if (factor > 3.0f) {
-                factor = 3.0f;
-            }
-        }
-        ydebug("terminal: ZOOM_CELL_SIZE delta=%.3f factor=%.3f", delta, factor);
-        if (factor == 1.0f) {
-            return YETTY_OK(yetty_ycore_int, 1);
-        }
 
         float view_w = terminal->view.bounds.w;
         float view_h = terminal->view.bounds.h;
@@ -3215,14 +3232,54 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         }
 
         if (terminal->grid) {
-            struct pixel_size_result cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
-            YETTY_RETURN_IF_ERR(yetty_ycore_int, cell_res,
-                                "terminal_view_on_event: zoom cell size");
-            struct yetty_ycore_pixel_size cell = cell_res.value;
-            float cell_w_target = (cell.width > 0 ? cell.width : 10.0f) * factor;
-            float cell_h_target = (cell.height > 0 ? cell.height : 20.0f) * factor;
-            uint32_t new_cols = (uint32_t)(view_w / cell_w_target + 0.5f);
-            uint32_t new_rows = (uint32_t)(view_h / cell_h_target + 0.5f);
+            /* Seed the zoom base from the live cell on first use, so the
+             * accumulated factor always applies to the same reference. */
+            if (terminal->cell_zoom <= 0.0f) {
+                struct pixel_size_result cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, cell_res,
+                                    "terminal_view_on_event: zoom cell size");
+                terminal->zoom_base_cell = cell_res.value;
+                if (terminal->zoom_base_cell.width <= 0.0f) {
+                    terminal->zoom_base_cell.width = 10.0f;
+                }
+                if (terminal->zoom_base_cell.height <= 0.0f) {
+                    terminal->zoom_base_cell.height = 20.0f;
+                }
+                terminal->cell_zoom = 1.0f;
+            }
+            if (event->zoom_cell_size.reset) {
+                terminal->cell_zoom = 1.0f;
+            } else {
+                float factor = 1.0f + delta;
+                if (factor < 0.5f) {
+                    factor = 0.5f;
+                }
+                if (factor > 3.0f) {
+                    factor = 3.0f;
+                }
+                terminal->cell_zoom *= factor;
+                if (terminal->cell_zoom < 0.25f) {
+                    terminal->cell_zoom = 0.25f;
+                }
+                if (terminal->cell_zoom > 8.0f) {
+                    terminal->cell_zoom = 8.0f;
+                }
+            }
+            ydebug("terminal: ZOOM_CELL_SIZE delta=%.3f zoom=%.3f", delta, terminal->cell_zoom);
+            /* Whole-pixel cell stride, whole cells, rect == grid extent —
+             * same rules as terminal_apply_pane_geometry (a fractional
+             * stride breaks the shared subpixel phase of the glyph grid).
+             * Derived from the fixed base so per-tick rounding never feeds
+             * back into the next tick. */
+            float cell_w_target =
+                fmaxf(1.0f, roundf(terminal->zoom_base_cell.width * terminal->cell_zoom));
+            float cell_h_target =
+                fmaxf(1.0f, roundf(terminal->zoom_base_cell.height * terminal->cell_zoom));
+            float content_x = 0.0f, content_y = 0.0f, content_w = 0.0f, content_h = 0.0f;
+            terminal_resolve_content_rect(terminal, view_w, view_h, cell_w_target, cell_h_target,
+                                          &content_x, &content_y, &content_w, &content_h);
+            uint32_t new_cols = (uint32_t)(content_w / cell_w_target);
+            uint32_t new_rows = (uint32_t)(content_h / cell_h_target);
             if (new_cols == 0) {
                 new_cols = 1;
             }
@@ -3230,14 +3287,19 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 new_rows = 1;
             }
             struct yetty_ycore_pixel_size new_cell = {
-                .width = view_w / (float)new_cols,
-                .height = view_h / (float)new_rows,
+                .width = cell_w_target,
+                .height = cell_h_target,
             };
             struct yetty_ycore_void_result rgr = yetty_yterminal_terminal_resize_grid(
                 terminal, (struct yetty_ycore_grid_size){.cols = new_cols, .rows = new_rows},
                 new_cell);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, rgr,
                                 "terminal_view_on_event: terminal_resize_grid (zoom) failed");
+            struct yetty_ycore_void_result content_rect_res = yetty_yvterm_vterm_set_content_rect(
+                terminal->grid, content_x, content_y, (float)new_cols * cell_w_target,
+                (float)new_rows * cell_h_target);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, content_rect_res,
+                                "terminal_view_on_event: zoom content rect");
             if (terminal->context.pty->ops->resize) {
                 struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
                     terminal->context.pty, new_cols, new_rows, new_cols * (uint32_t)new_cell.width,

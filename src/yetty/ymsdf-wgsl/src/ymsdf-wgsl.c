@@ -1551,9 +1551,19 @@ struct yetty_ycore_void_result yetty_ymsdf_wgsl_config_generate(
         u.glyph_size[0] = e->atlas_w;
         u.glyph_size[1] = e->atlas_h;
         u.translate[0] = padding_glyph_space - e->b.min_x;
-        u.translate[1] = e->b.min_y - padding_glyph_space;
+        /* Pin the ink TOP exactly `padding` px below the bitmap top —
+         * bearing_y_px assumes it. Anchoring the bottom let the ceil()
+         * slack of atlas_h land at the top, giving each glyph a 0..1 px
+         * vertical jitter on the rendered baseline (same fix as the CPU
+         * generator). Identity when bh*scale is integral. */
+        u.translate[1] = e->b.max_y - ((float)e->atlas_h - (float)padding) / scale;
         u.scale = scale;
-        u.range = range;
+        /* The compute shader measures distances in glyph space and
+         * normalizes by u.range, so u.range is in GLYPH units. The font
+         * shaders assume the field spans `range` OUTPUT pixels — convert
+         * (matches the CPU generator; the two only coincided for 2048-upm
+         * fonts at size 32, where scale == 1.0). */
+        u.range = range / scale;
         u.meta_offset = e->meta_offset;
         u.point_offset = e->point_offset;
         u.glyph_height = (float)e->atlas_h;

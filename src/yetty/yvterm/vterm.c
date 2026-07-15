@@ -444,6 +444,14 @@ static const char *vterm_text_wgsl(void)
         "    let uv = uv0 + local_px / face_atlas_size(face);\n"
         "    return face_texel(face, uv);\n"
         "}\n"
+        /* One MSDF coverage tap: median of the three channels, mapped to an
+         * alpha ramp screen_px_range screen-pixels steep around the 0.5
+         * iso-line. */
+        "fn msdf_coverage(face: u32, uv: vec2<f32>, screen_px_range: f32) -> f32 {\n"
+        "    let texel = face_texel(face, uv);\n"
+        "    let sd = median3(texel.r, texel.g, texel.b);\n"
+        "    return clamp((sd - 0.5) * screen_px_range + 0.5, 0.0, 1.0);\n"
+        "}\n"
         /* MSDF faces: 10-word glyph meta (uv_min, uv_max, size, bearing,
          * advance, pad), face_params = (pixel_range, scale, baseline_y,
          * glyph_left). */
@@ -473,10 +481,28 @@ static const char *vterm_text_wgsl(void)
         "local_px.y >= gmax.y) { return 0.0; }\n"
         "    let gl = (local_px - gmin) / scaled_size;\n"
         "    let uv = mix(uv_min, uv_max, gl);\n"
-        "    let texel = face_texel(face, uv);\n"
-        "    let sd = median3(texel.r, texel.g, texel.b);\n"
-        "    let screen_px_range = params.x * params.y;\n"
-        "    return clamp((sd - 0.5) * screen_px_range + 0.5, 0.0, 1.0);\n"
+        /* AA width in SCREEN pixels: field range in atlas texels (params.x)
+         * × grid px per texel (params.y) × screen px per grid px (the
+         * visual zoom). Without the zoom factor the ramp is 1 grid px, so a
+         * zoomed-in glyph edge smears across `zoom` screen pixels. Clamped
+         * so deep minification never drops the ramp below one screen px. */
+        "    let zoom = max(uni.visual_zoom_scale, 0.0001);\n"
+        "    let screen_px_range = max(params.x * params.y * zoom, 1.0);\n"
+        "    let texels_per_screen_px = 1.0 / (params.y * zoom);\n"
+        "    if (texels_per_screen_px < 1.25) {\n"
+        "        return msdf_coverage(face, uv, screen_px_range);\n"
+        "    }\n"
+        /* Minified: one screen pixel spans >1.25 atlas texels, and a single
+         * bilinear tap under-resolves the field (stroke-weight wobble,
+         * nicked corners). Box-filter instead: 2x2 taps at ±0.25 screen px,
+         * each with a half-pixel ramp, averaged. */
+        "    let tap_uv = (uv_max - uv_min) / scaled_size * (0.25 / zoom);\n"
+        "    let tap_range = screen_px_range * 2.0;\n"
+        "    var coverage = msdf_coverage(face, uv + vec2<f32>(-tap_uv.x, -tap_uv.y), tap_range);\n"
+        "    coverage += msdf_coverage(face, uv + vec2<f32>(tap_uv.x, -tap_uv.y), tap_range);\n"
+        "    coverage += msdf_coverage(face, uv + vec2<f32>(-tap_uv.x, tap_uv.y), tap_range);\n"
+        "    coverage += msdf_coverage(face, uv + vec2<f32>(tap_uv.x, tap_uv.y), tap_range);\n"
+        "    return coverage * 0.25;\n"
         "}\n"
         "@fragment\n"
         "fn fs_main(in: VSOut) -> @location(0) vec4<f32> {\n"
