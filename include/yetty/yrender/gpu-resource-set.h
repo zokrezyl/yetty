@@ -11,7 +11,12 @@ extern "C" {
 
 #define YETTY_YRENDER_RS_MAX_TEXTURES 4
 #define YETTY_YRENDER_RS_MAX_BUFFERS 4
-#define YETTY_YRENDER_RS_MAX_UNIFORMS 32
+/* Bumped from 32 to 64: yplot's uniform block grew past 32 slots (tick
+ * steps, colormap/field range, per-curve band encoding, plus the binder's
+ * zoom/viewport extras and the server-side time slot). The array is a
+ * static capacity, not a GPU limit — the binder packs only uniform_count
+ * entries. */
+#define YETTY_YRENDER_RS_MAX_UNIFORMS 64
 /* Bumped from 4 to 64: ydraw-layer attaches one child per canvas-owned
  * font (default + every PDF-embedded font), and a single PDF can carry
  * a couple dozen subset fonts. 64 is also well within MAX_FLAT_TEXTURES

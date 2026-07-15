@@ -71,6 +71,12 @@ extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_chart(
     const struct yetty_ycat_config *config);
 #endif
 
+#ifdef YETTY_YCAT_HAS_YPLOT
+extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_plot(
+    const uint8_t *bytes, size_t len, const char *path_hint,
+    const struct yetty_ycat_config *config);
+#endif
+
 #ifdef YETTY_YCAT_HAS_YMSOFFICE
 extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_msoffice(
     const uint8_t *bytes, size_t len, const char *path_hint,
@@ -108,12 +114,14 @@ static const struct {
     {YETTY_YCAT_TYPE_SHADERTOY, "shadertoy"},
     {YETTY_YCAT_TYPE_CIRCUIT, "circuit"},
     {YETTY_YCAT_TYPE_CHART, "chart"},
+    {YETTY_YCAT_TYPE_PLOT, "plot"},
     {YETTY_YCAT_TYPE_DOCX, "docx"},
     {YETTY_YCAT_TYPE_XLSX, "xlsx"},
     {YETTY_YCAT_TYPE_PPTX, "pptx"},
     /* alias rows — type_name() returns the first match above, from_name()
      * accepts either spelling for --card. */
     {YETTY_YCAT_TYPE_MUSIC, "lilypond"},
+    {YETTY_YCAT_TYPE_PLOT, "npy"},
     {YETTY_YCAT_TYPE_SHADERTOY, "wgsl"},
     {YETTY_YCAT_TYPE_CIRCUIT, "schematic"},
     {YETTY_YCAT_TYPE_DOCX, "word"},
@@ -182,6 +190,9 @@ static void init_handlers(void)
 #endif
 #ifdef YETTY_YCAT_HAS_YCHART
     handlers[YETTY_YCAT_TYPE_CHART] = yetty_ycat_handler_chart;
+#endif
+#ifdef YETTY_YCAT_HAS_YPLOT
+    handlers[YETTY_YCAT_TYPE_PLOT] = yetty_ycat_handler_plot;
 #endif
 #ifdef YETTY_YCAT_HAS_YMSOFFICE
     handlers[YETTY_YCAT_TYPE_DOCX] = yetty_ycat_handler_msoffice;

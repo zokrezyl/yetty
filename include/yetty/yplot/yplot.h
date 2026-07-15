@@ -18,6 +18,7 @@
  *   ydraw_core_drawable_list_add_prim(buffer) — attach to a ydraw draw list
  */
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -42,6 +43,26 @@ extern "C" {
  * program's `uses_y` is true): the function is a 2D field f(x,y), and the
  * shader renders it as a colormapped heatmap instead of a line curve. */
 #define YETTY_YPLOT_FLAG_FIELD 0x10u
+/* Logarithmic (base-10) axis scales. The corresponding range must be
+ * strictly positive — the render entry points reject a log axis whose
+ * min/max is <= 0. Grid lines and tick labels land on decades. */
+#define YETTY_YPLOT_FLAG_XLOG 0x20u
+#define YETTY_YPLOT_FLAG_YLOG 0x40u
+
+/* Legend visibility for yetty_yplot_render_config. */
+enum yetty_yplot_legend_mode {
+    YETTY_YPLOT_LEGEND_AUTO = 0, /* shown when >= 2 named curves */
+    YETTY_YPLOT_LEGEND_ON = 1,   /* shown when >= 1 named curve */
+    YETTY_YPLOT_LEGEND_OFF = 2,  /* never shown */
+};
+
+/* Colormap for field/heatmap plots (matches the shader's colormap_id). */
+enum yetty_yplot_colormap {
+    YETTY_YPLOT_COLORMAP_VIRIDIS = 0,
+    YETTY_YPLOT_COLORMAP_PLASMA = 1,
+    YETTY_YPLOT_COLORMAP_MAGMA = 2,
+    YETTY_YPLOT_COLORMAP_INFERNO = 3,
+};
 
 /* Geometry + axis configuration. NULL fields fall back to defaults. */
 struct yetty_yplot_render_config {
@@ -54,14 +75,69 @@ struct yetty_yplot_render_config {
     float y_min;    /* -1.5 */
     float y_max;    /*  1.5 */
     uint32_t flags; /* YETTY_YPLOT_FLAG_* (default = grid|axes|labels) */
+
+    /* Optional figure text, rendered client-side as MSDF text prims in
+     * margins reserved around the plot rect. NULL/empty = absent. The
+     * strings only need to live until the render call returns. */
+    const char *title;   /* centered above the plot */
+    const char *x_label; /* centered below the x tick labels */
+    const char *y_label; /* above the y tick column (glyph expansion has
+                          * no rotation support, so no rotated label) */
+
+    enum yetty_yplot_legend_mode legend_mode;
+
+    /* Field/heatmap plots: colormap and the value range it spans. Equal
+     * min/max means unset — the shader falls back to [-1, 1]. A colorbar
+     * with min/mid/max labels is drawn beside field plots whenever axis
+     * labels are enabled. */
+    enum yetty_yplot_colormap colormap;
+    float field_min;
+    float field_max;
+};
+
+/* Uncertainty display style for a curve's envelope. */
+enum yetty_yplot_band_style {
+    YETTY_YPLOT_BAND_FILL = 0,     /* translucent fill between lo and hi */
+    YETTY_YPLOT_BAND_WHISKERS = 1, /* error bars at decimated samples */
 };
 
 /* One data buffer + optional color. color = 0 picks a palette default. */
 struct yetty_yplot_buffer_input {
     const float *samples;
     size_t count;
-    uint32_t color; /* ARGB; 0 → palette default for the corresponding slot */
+    uint32_t color;   /* ARGB; 0 → palette default for the corresponding slot */
+    const char *name; /* optional curve name for the legend; NULL = unnamed */
+
+    /* Uncertainty envelope: `has_band` set means band_lo/band_hi index
+     * into the SAME buffer array, pointing at the lower/upper curves. The
+     * referenced buffers are usually marked `hidden` so only the envelope
+     * shows, not their own line curves. Zero-initialized = no band. */
+    bool has_band;
+    int band_lo;
+    int band_hi;
+    enum yetty_yplot_band_style band_style;
+    bool hidden; /* band input only: no line curve, no legend entry */
+
+    /* Ring-buffer streaming: the shader unwraps display order from the
+     * head (oldest sample) so the newest is at the right edge; producers
+     * advance the head with the CMD_UPDATE ring-head op. */
+    bool ring;
 };
+
+/* Samples loaded from a data file — see yetty_yplot_load_samples(). */
+struct yetty_yplot_loaded_samples {
+    float *samples; /* heap; caller releases with free() */
+    size_t count;
+};
+YETTY_YRESULT_DECLARE(yetty_yplot_loaded_samples, struct yetty_yplot_loaded_samples);
+
+/* Load plot samples from a data file. Formats: NumPy .npy (little-endian
+ * f4/f8/i4/i8, 1-D, C order) and delimited text (CSV/TSV/whitespace).
+ * `spec` is "path", "path:column-name" or "path:column-index"; text files
+ * default to the second column when several are present (first otherwise),
+ * a non-numeric first row is consumed as the header, and '#' lines are
+ * skipped. */
+struct yetty_yplot_loaded_samples_result yetty_yplot_load_samples(const char *spec);
 
 /* Render `source` (multi-plot-expression syntax — see yexpr_parse_plot)
  * into a fresh ydraw-core buffer holding ONE yplot complex prim.

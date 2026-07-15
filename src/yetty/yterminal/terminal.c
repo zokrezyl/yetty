@@ -256,6 +256,12 @@ struct yetty_yterminal_terminal {
      * the iterator can step SDF primitives and composite (FAM) records. */
     struct yetty_ydraw_drawable_list_registry *ydraw_registry;
 
+    /* CMD_UPDATE routing for scrollback figures: each envelope's composites
+     * register here under their ordinal (1, 2, ...) so a producer's later
+     * update envelopes (live plot samples, chunked video NALs) reach the
+     * instance. Instances unregister themselves on destroy. */
+    struct yetty_ydraw_stream_registry stream_targets;
+
     /* Bundle handed as registry user-data on every kind ygrid handles.
      * Lives on the terminal because the registry stores a pointer to it,
      * and the host has to outlive every ygrid the registry might still
@@ -1443,6 +1449,10 @@ static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *termin
                 yetty_ycore_error_destroy(at.error);
             } else {
                 state->ingested_composites++;
+                /* Make the figure addressable by later update envelopes:
+                 * ordinal within its creating envelope = stream id. */
+                yetty_ydraw_stream_registry_register(&terminal->stream_targets,
+                                                     state->ingested_composites, ir.value);
             }
         } else {
             ydebug("ydraw ingest: create_instance type=0x%08x FAILED: %s", data[0], ir.error.msg);
@@ -1458,6 +1468,34 @@ static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *termin
         }
     }
     state->ingested_records++;
+}
+
+/* Route one CMD_UPDATE command to the live figure registered under its
+ * target id (live plot samples, chunked video NALs). The payload's first
+ * u32 is the figure-defined target_field; the rest is the body. Failures
+ * are absorbed like any other per-record problem. */
+static void terminal_ydraw_route_update(struct yetty_yterminal_terminal *terminal,
+                                        struct terminal_ydraw_ingest_state *state,
+                                        const struct yetty_ydraw_command_update *update)
+{
+    state->ingested_records++;
+    if (update->size < sizeof(uint32_t)) {
+        return; /* no target_field word — nothing to dispatch */
+    }
+    struct yetty_ydraw_composite *target =
+        yetty_ydraw_stream_registry_find(&terminal->stream_targets, update->id);
+    if (!target || !target->ops || !target->ops->update) {
+        ydebug("ydraw ingest: CMD_UPDATE id=%u has no live updatable target", update->id);
+        return;
+    }
+    uint32_t target_field;
+    memcpy(&target_field, update->data, sizeof(target_field));
+    struct yetty_ycore_void_result update_res = target->ops->update(
+        target, target_field, update->data + sizeof(uint32_t), update->size - sizeof(uint32_t));
+    if (YETTY_IS_ERR(update_res)) {
+        ydebug("ydraw ingest: CMD_UPDATE id=%u failed: %s", update->id, update_res.error.msg);
+        yetty_ycore_error_destroy(update_res.error);
+    }
 }
 
 static void terminal_ydraw_ingest_finish(struct yetty_yterminal_terminal *terminal,
@@ -1532,8 +1570,13 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
         if (step.value == YETTY_YDRAW_ITERATOR_EOE) {
             break;
         }
+        if (step.value == YETTY_YDRAW_ITERATOR_OK &&
+            iter.command.kind == YETTY_YDRAW_COMMAND_UPDATE) {
+            terminal_ydraw_route_update(terminal, &state, &iter.command.update);
+            continue;
+        }
         if (step.value != YETTY_YDRAW_ITERATOR_OK || iter.command.kind != YETTY_YDRAW_COMMAND_ADD) {
-            continue; /* DELETE/UPDATE not modelled yet — skip cleanly */
+            continue; /* DELETE not modelled yet — skip cleanly */
         }
         if (!iter.command.entry.data || !iter.command.entry.ops || !iter.command.entry.ops->size) {
             continue;

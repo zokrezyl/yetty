@@ -71,7 +71,7 @@ struct yetty_ydiagram_edge_style yetty_ydiagram_default_edge_style(void)
 {
     struct yetty_ydiagram_edge_style s = {
         .stroke_color = 0xFFFFFFFFu,
-        .stroke_width = 1.5f,
+        .stroke_width = 2.0f,
         .line_style = YETTY_YDIAGRAM_LINE_SOLID,
         .source_arrow = YETTY_YDIAGRAM_ARROW_NONE,
         .target_arrow = YETTY_YDIAGRAM_ARROW_NORMAL,

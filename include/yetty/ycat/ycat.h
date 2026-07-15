@@ -47,6 +47,7 @@ enum yetty_ycat_type {
     YETTY_YCAT_TYPE_DOCX,      /* Word OOXML — rendered via ymsoffice */
     YETTY_YCAT_TYPE_XLSX,      /* Excel OOXML — rendered via ymsoffice */
     YETTY_YCAT_TYPE_PPTX,      /* PowerPoint OOXML — rendered via ymsoffice */
+    YETTY_YCAT_TYPE_PLOT,      /* numeric series (.npy / data columns) — drawn via yplot */
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type);

@@ -30,11 +30,10 @@
 
 #define YPLOT_ANIMATION_PERIOD_MS 16 /* ~60 Hz */
 
-/* Index of the `time` uniform inside yplot's per-instance RS. Must
- * match the slot populated in yplot-gen.c's populate_rs (currently
- * the last slot, after the zoom/viewport extras). Hardcoded on both
- * sides — easier to keep in sync than via an extern header. */
-#define YETTY_YPLOT_TIME_UNIFORM_SLOT 26u
+/* Index of the `time` uniform inside yplot's per-instance RS: the
+ * generated YETTY_YPLOT_UNIFORM_TIME_SLOT (yplot-gen.h), which tracks
+ * the schema. A local copy of that number went stale the first time
+ * the uniform list grew — never hardcode it again. */
 
 struct yplot_time_factory_state {
     struct yetty_yevent_event_loop *event_loop;
@@ -154,7 +153,7 @@ static struct yetty_ycore_int_result on_tick(struct yetty_yevent_event_listener 
         st->start_monotonic_sec = now;
     }
     float t = (float)(now - st->start_monotonic_sec);
-    instance->resource_set->uniforms[YETTY_YPLOT_TIME_UNIFORM_SLOT].f32 = t;
+    instance->resource_set->uniforms[YETTY_YPLOT_UNIFORM_TIME_SLOT].f32 = t;
     /* Per-figure dirty + global render kick. ydraw_layer_render's
      * figure loop only invokes inst->render iff inst->dirty || force. */
     instance->dirty = 1;

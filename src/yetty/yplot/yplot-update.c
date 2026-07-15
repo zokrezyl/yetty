@@ -16,6 +16,7 @@
 #include <yetty/ytrace/ytrace.h>
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 /* yplot-time.c — hooks the instance into the shared animation timer when
@@ -83,11 +84,49 @@ static struct yetty_ycore_void_result yplot_update_data_chunk(
     return YETTY_OK_VOID();
 }
 
+/* Ring-head op: point the shader's ring unwrap for one data buffer at a
+ * new oldest-sample index. The head lives in the ring_heads_<i> uniform
+ * (0 = linear mode, else head + 1) — resolved by NAME in the instance RS
+ * so schema growth can never silently misroute it (a hardcoded slot copy
+ * went stale once already — see yplot-time.c). The value must ALSO land
+ * in the retained wire payload: the generated instance render re-parses
+ * the wire into the RS on every frame (uniform i ← payload word i), so a
+ * bare RS write would be clobbered by the next render. Same
+ * keep-the-wire-consistent contract as yplot_update_data_chunk above. */
+static struct yetty_ycore_void_result yplot_update_ring_head(struct yetty_ydraw_composite *instance,
+                                                             uint32_t buffer_index,
+                                                             uint32_t head_index)
+{
+    if (!instance->resource_set || !instance->buffer_data) {
+        return YETTY_ERR(yetty_ycore_void, "ring head: instance not finalised");
+    }
+    if (buffer_index >= 8u) {
+        return YETTY_ERR(yetty_ycore_void, "ring head: buffer index out of range");
+    }
+    char uniform_name[32];
+    snprintf(uniform_name, sizeof uniform_name, "ring_heads_%u", buffer_index);
+    struct yetty_yrender_gpu_resource_set *rs = instance->resource_set;
+    for (size_t i = 0; i < rs->uniform_count && i < YETTY_YPLOT_UNIFORMS_WORDS; i++) {
+        if (strcmp(rs->uniforms[i].name, uniform_name) == 0) {
+            rs->uniforms[i].u32 = head_index + 1u;
+            uint32_t *payload = (uint32_t *)instance->buffer_data + 2;
+            payload[i] = head_index + 1u;
+            instance->dirty = 1;
+            ydebug("yplot ring head: buffer %u head=%u (slot %zu)", buffer_index, head_index, i);
+            return YETTY_OK_VOID();
+        }
+    }
+    return YETTY_ERR(yetty_ycore_void, "ring head: ring_heads uniform not found");
+}
+
 /* CMD_UPDATE payload schema (defined by yplot):
  *   u32 buffer_index   — index into the `data` array of the yplot
  *   u32 sample_offset  — first sample to overwrite (in f32s into THAT buffer)
  *   u32 count          — number of f32 samples
  *   f32 samples[count] — new sample values
+ *
+ * sample_offset == 0xFFFFFFFF is the RING-HEAD op: `count` carries the new
+ * head index (physical index of the oldest sample) and no samples follow.
  *
  * Under the generic CMD_UPDATE dispatcher the first u32 of the payload is
  * peeled off as `target_field` (= buffer_index here); the rest arrives as
@@ -106,6 +145,9 @@ struct yetty_ycore_void_result yetty_yplot_instance_update(struct yetty_ydraw_co
     const uint32_t *header = (const uint32_t *)body;
     uint32_t sample_offset = header[0];
     uint32_t count = header[1];
+    if (sample_offset == 0xFFFFFFFFu) {
+        return yplot_update_ring_head(instance, target_field, /*head_index=*/count);
+    }
     size_t expected = 8u + (size_t)count * sizeof(float);
     if (body_size < expected) {
         return YETTY_ERR(yetty_ycore_void, "yplot update: body samples truncated");

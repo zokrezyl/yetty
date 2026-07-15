@@ -496,6 +496,44 @@ async def _play_step(client: RpcClient, step, defaults: dict,
         await client.mouse_scroll(x, y, dx, dy, mods)
         return
 
+    if verb == "run":
+        # Sugar for `type` + ENTER: types the command line (honouring the
+        # typing config, same payload forms as `type`), then presses Enter.
+        if isinstance(payload, str):
+            await _play_type(client, payload, defaults, rng)
+        elif isinstance(payload, dict):
+            text = payload.get("text", "")
+            typing = _merge_typing(defaults, payload)
+            await _play_type(client, text, typing, rng)
+        else:
+            raise ValueError(f"run: unsupported payload type: {payload!r}")
+        await client.press_key(Keys.ENTER)
+        return
+
+    if verb == "wait-for":
+        # Close the loop on external progress instead of open-loop sleeps:
+        # {file: <path>, timeout: <s>, poll: <s>} waits until the file
+        # exists. Staged body scripts touch a marker file per act, so the
+        # scenario advances exactly when the act is done — on any machine.
+        if not isinstance(payload, dict) or "file" not in payload:
+            raise ValueError(f"wait-for: expected mapping with `file`, got {payload!r}")
+        marker_path = str(payload["file"])
+        timeout = float(payload.get("timeout", 60.0))
+        poll_interval = float(payload.get("poll", 0.25))
+        deadline = asyncio.get_running_loop().time() + timeout
+        while not os.path.exists(marker_path):
+            if asyncio.get_running_loop().time() >= deadline:
+                raise TimeoutError(
+                    f"wait-for: {marker_path} did not appear within {timeout}s")
+            await asyncio.sleep(poll_interval)
+        return
+
+    if verb == "resize":
+        if not isinstance(payload, dict) or "w" not in payload or "h" not in payload:
+            raise ValueError(f"resize: expected mapping {{w, h}}, got {payload!r}")
+        await client.resize(float(payload["w"]), float(payload["h"]))
+        return
+
     if verb == "shutdown":
         # Payload is ignored. Use as the last step in a script when you
         # want yetty (and any --record video output) to wind down cleanly.

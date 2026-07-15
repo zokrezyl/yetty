@@ -98,6 +98,7 @@ option(YETTY_ENABLE_FEATURE_YDRAW    "ydraw — drawing library (canvas, SDF, co
 option(YETTY_ENABLE_FEATURE_YRICH     "yrich — rich text"                    ON)
 option(YETTY_ENABLE_FEATURE_YDIAGRAM   "diagram — diagram rendering"          ON)
 option(YETTY_ENABLE_FEATURE_YCHART    "ychart — chart rendering (bar/pie/…)" ON)
+option(YETTY_ENABLE_FEATURE_YMATH     "ymath — TeX-subset math rendering"    ON)
 option(YETTY_ENABLE_FEATURE_YPLOT     "yplot — plotting"                     ON)
 option(YETTY_ENABLE_FEATURE_YFLAME    "yflame — flame graphs"                ON)
 option(YETTY_ENABLE_FEATURE_YMUSIC    "ymusic — music notation rendering"    ON)

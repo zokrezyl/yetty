@@ -186,6 +186,23 @@ methods:
     local: true
     oneway: false
     return_payload_type: int
+  - slot: overlay_geojson
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: geojson_text
+        type: "const char *"
+    doc: "/* overlay_geojson: load a GeoJSON document (FeatureCollection / Feature /
+ * bare geometry) as the map's data overlay, replacing any previous one.
+ * Point/MultiPoint become markers (radius from a numeric `mag` property
+ * when present), LineString/MultiLineString become tracks, Polygon outer
+ * rings become outlines. */"
+    local: true
+    oneway: false
+    return_payload_type: null
   - slot: render
     domain: ymap
     owning_class: map
@@ -272,6 +289,22 @@ classes:
         type: int
         get: false
         set: false
+      - name: overlay_points
+        type: "struct ymap_overlay_point *"
+        get: false
+        set: false
+      - name: overlay_point_count
+        type: size_t
+        get: false
+        set: false
+      - name: overlay_paths
+        type: "struct ymap_overlay_path *"
+        get: false
+        set: false
+      - name: overlay_path_count
+        type: size_t
+        get: false
+        set: false
     ops:
       - slot: configure
         slot_domain: ymap
@@ -309,6 +342,9 @@ classes:
       - slot: is_vector
         slot_domain: ymap
         impl: map_is_vector
+      - slot: overlay_geojson
+        slot_domain: ymap
+        impl: map_overlay_geojson
       - slot: render
         slot_domain: ymap
         impl: map_render
@@ -424,6 +460,8 @@ types:
             type: struct yetty_ycore_error
 local_types:
   ymap_provider: src/yetty/ymap/map.c
+  ymap_overlay_point: src/yetty/ymap/map.c
+  ymap_overlay_path: src/yetty/ymap/map.c
   yetty_ymap_map: src/yetty/ymap/map.c
   yetty_ymap_map_ptr_result: src/yetty/ymap/map.c
 local_typedefs:

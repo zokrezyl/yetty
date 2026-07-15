@@ -219,6 +219,10 @@ if(YETTY_ENABLE_FEATURE_YCHART)
     add_subdirectory(ychart)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YMATH)
+    add_subdirectory(ymath)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YTHORVG)
     if(YETTY_ENABLE_LIB_THORVG)
         add_subdirectory(ythorvg)

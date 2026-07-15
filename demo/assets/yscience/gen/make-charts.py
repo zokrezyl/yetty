@@ -66,6 +66,13 @@ def gistemp_anomaly(raw_dir: Path, out_dir: Path) -> None:
         "y": "anomaly (deg C)",
         "series": [{"name": "annual mean", "values": points}],
     })
+    # Column form for yplot --data (year anomaly, whitespace-separated).
+    annual_path = out_dir / "gistemp-annual.txt"
+    with open(annual_path, "w") as out:
+        out.write("# NASA GISTEMP v4 global land-ocean annual (J-D) anomaly, deg C\n")
+        for point in points:
+            out.write(f"{point['x']} {point['y']}\n")
+    print(f"wrote {annual_path} ({annual_path.stat().st_size} bytes)")
 
 
 def read_strain_series(path: Path, decimate: int) -> list:

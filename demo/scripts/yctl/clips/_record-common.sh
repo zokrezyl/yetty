@@ -24,7 +24,7 @@ CLIPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 BUILD_DIR="${YETTY_BUILD_DIR:-$ROOT/build-desktop-ytrace-release}"
 YETTY_BIN="$BUILD_DIR/yetty"
-TOOL_PATH="$BUILD_DIR/tools/ycat:$BUILD_DIR/tools/ydiagram:$BUILD_DIR/tools/yplot:$BUILD_DIR/tools/ychart:$BUILD_DIR/tools/yvideo:$BUILD_DIR/tools/yflame:$BUILD_DIR/tools/ymesh:$BUILD_DIR/tools/ythorvg:$BUILD_DIR/tools/yecho"
+TOOL_PATH="$BUILD_DIR/tools/ycat:$BUILD_DIR/tools/ydiagram:$BUILD_DIR/tools/yplot:$BUILD_DIR/tools/yplot-stream:$BUILD_DIR/tools/ymath:$BUILD_DIR/tools/ymap:$BUILD_DIR/tools/ychart:$BUILD_DIR/tools/yvideo:$BUILD_DIR/tools/yflame:$BUILD_DIR/tools/ymesh:$BUILD_DIR/tools/ythorvg:$BUILD_DIR/tools/yecho"
 
 # True once something accepts TCP connections on $HOST:$PORT. The
 # "server listening" log line is trace-level (invisible at the default

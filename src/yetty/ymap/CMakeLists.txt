@@ -18,6 +18,9 @@
 # terminal needs no ymap-specific code. Gated on libcurl + yimage (see
 # src/yetty/CMakeLists.txt).
 
+# GeoJSON overlay parsing (map.c overlay_geojson) uses the prebuilt yyjson.
+include(${YETTY_ROOT}/build-tools/yetty/libs/yyjson.cmake)
+
 add_library(yetty_ymap STATIC
     map.c
     rpc.gen.c
@@ -41,6 +44,7 @@ target_link_libraries(yetty_ymap PUBLIC
     yetty_yplatform_core
     yetty_ysdf
     CURL::libcurl
+    yyjson::yyjson
 )
 
 # map.c carries `[[clang::annotate(...)]]` (C23 attribute syntax) — same

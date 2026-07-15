@@ -22,9 +22,25 @@ STAGING_DIR="$ROOT/tmp/clips/sci-tour"
 mkdir -p "$STAGING_DIR"
 cp "$ROOT/demo/assets/yctl/clips/sci-tour-body.sh" "$STAGING_DIR/sci-tour.sh"
 chmod +x "$STAGING_DIR/sci-tour.sh"
+rm -f "$STAGING_DIR/tour-done"
 
 # Record-time-only downloads (best-effort; the tour skips what is missing).
 "$ROOT/demo/assets/yscience/fetch-data.sh" "$STAGING_DIR" || true
+
+# Point-cloud act asset: a 2000-point helix as a vertex-only binary PLY,
+# generated into the staging dir (synthetic by design — no license text
+# needed, and it exercises the ymesh point-cloud path).
+python3 - "$STAGING_DIR/helix.ply" <<'EOF' || true
+import math, struct, sys
+count = 2000
+with open(sys.argv[1], 'wb') as out:
+    header = ("ply\nformat binary_little_endian 1.0\nelement vertex %d\n"
+              "property float x\nproperty float y\nproperty float z\nend_header\n" % count)
+    out.write(header.encode())
+    for i in range(count):
+        angle = i / count * 12 * math.pi
+        out.write(struct.pack('<3f', math.cos(angle), angle / 8.0 - 2.4, math.sin(angle)))
+EOF
 
 export YETTY_REPO="$ROOT"
 export YETTY_BUILD_DIR="$BUILD_DIR"

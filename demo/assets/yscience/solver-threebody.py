@@ -79,7 +79,42 @@ def rk4_step(positions, velocities, step):
                 2 * acceleration_k3[body][axis] + acceleration_k4[body][axis])
 
 
+def stream_mode(sample_budget: int) -> int:
+    """Live-telemetry mode: integrate continuously and print the body-1 /
+    body-2 separation (a real dynamical observable that oscillates through
+    the choreography) at ~30 Hz — pipe into yplot-stream for a live plot.
+    Exits on its own after `sample_budget` samples so a piped consumer sees
+    EOF and terminates cleanly (never leave an orphan producer streaming
+    CMD_UPDATE envelopes at whatever figure holds its stream id next)."""
+    positions = [[-0.97000436, 0.24308753],
+                 [0.97000436, -0.24308753],
+                 [0.0, 0.0]]
+    velocities = [[0.4662036850, 0.4323657300],
+                  [0.4662036850, 0.4323657300],
+                  [-0.9324073700, -0.8647314600]]
+    print(f"three-body solver: streaming body-1/body-2 separation at ~30 Hz")
+    sys.stdout.flush()
+    samples_emitted = 0
+    step_index = 0
+    while samples_emitted < sample_budget:
+        rk4_step(positions, velocities, TIME_STEP)
+        if step_index % 12 == 0:
+            delta_x = positions[1][0] - positions[0][0]
+            delta_y = positions[1][1] - positions[0][1]
+            separation = (delta_x * delta_x + delta_y * delta_y) ** 0.5
+            print(f"{separation:.5f}")
+            sys.stdout.flush()
+            samples_emitted += 1
+            time.sleep(0.033)
+        step_index += 1
+    print("solver finished")
+    return 0
+
+
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "--stream":
+        sample_budget = int(sys.argv[2]) if len(sys.argv) > 2 else 400
+        return stream_mode(sample_budget)
     output_path = sys.argv[1] if len(sys.argv) > 1 else "threebody-orbit.json"
 
     positions = [[-0.97000436, 0.24308753],

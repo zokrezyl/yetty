@@ -47,6 +47,8 @@ fetch gw-template-H.txt \
 # USGS: M>=4.5 earthquakes, last 30 days (live feed - snapshot varies).
 fetch quakes-45-month.csv \
     "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_month.csv"
+fetch quakes-45-month.geojson \
+    "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_month.geojson"
 
 # PubChem: caffeine (CID 2519) 3D conformer, SDF. Public data.
 fetch caffeine.sdf \

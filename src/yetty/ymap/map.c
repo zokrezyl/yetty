@@ -32,6 +32,9 @@
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ysdf/funcs.gen.h>
+
+#include <yyjson.h>
 
 #include <yetty/yface/yface.h>
 #include <yetty/ymap/engine.h>
@@ -145,6 +148,14 @@ struct YETTY_ANNOTATE("class@ymap:map") YETTY_ANNOTATE("include@yetty/ydraw-core
      * repeated per frame during interactive pan/zoom. */
     char cache_base[1024];
     int cache_base_resolved;
+
+    /* GeoJSON data overlay, baked over the basemap on every render and
+     * re-projected through Web-Mercator on pan/zoom. Owned (path
+     * coordinate arrays included). */
+    struct yetty_ymap_overlay_point *overlay_points;
+    size_t overlay_point_count;
+    struct yetty_ymap_overlay_path *overlay_paths;
+    size_t overlay_path_count;
 };
 
 /* Result wrapper for the map handle. Declared here (not pulled from map.h,
@@ -478,6 +489,192 @@ static struct yetty_ycore_int_result map_is_vector(struct yetty_yclass_object *o
     return YETTY_OK(yetty_ycore_int, vector);
 }
 
+static void map_overlay_clear(struct yetty_ymap_map *map)
+{
+    free(map->overlay_points);
+    map->overlay_points = NULL;
+    map->overlay_point_count = 0;
+    for (size_t i = 0; i < map->overlay_path_count; i++) {
+        free(map->overlay_paths[i].coordinates);
+    }
+    free(map->overlay_paths);
+    map->overlay_paths = NULL;
+    map->overlay_path_count = 0;
+}
+
+/* Marker styling: magnitude-like numeric properties scale the radius so
+ * quake feeds read at a glance; everything else gets a fixed dot. */
+static float overlay_point_radius(yyjson_val *properties)
+{
+    if (properties) {
+        yyjson_val *magnitude = yyjson_obj_get(properties, "mag");
+        if (magnitude && yyjson_is_num(magnitude)) {
+            double value = yyjson_get_num(magnitude);
+            if (value < 0.0) {
+                value = 0.0;
+            }
+            return 2.0f + (float)value * 1.6f;
+        }
+    }
+    return 4.0f;
+}
+
+static struct yetty_ycore_void_result overlay_append_point(struct yetty_ymap_map *map,
+                                                           yyjson_val *coordinates,
+                                                           yyjson_val *properties)
+{
+    if (!coordinates || !yyjson_is_arr(coordinates) || yyjson_arr_size(coordinates) < 2) {
+        return YETTY_OK_VOID(); /* skip malformed coordinates */
+    }
+    struct yetty_ymap_overlay_point *grown =
+        realloc(map->overlay_points,
+                (map->overlay_point_count + 1) * sizeof(struct yetty_ymap_overlay_point));
+    if (!grown) {
+        return YETTY_ERR(yetty_ycore_void, "overlay: point alloc failed");
+    }
+    map->overlay_points = grown;
+    struct yetty_ymap_overlay_point *point = &map->overlay_points[map->overlay_point_count++];
+    point->longitude = yyjson_get_num(yyjson_arr_get(coordinates, 0));
+    point->latitude = yyjson_get_num(yyjson_arr_get(coordinates, 1));
+    point->radius_px = overlay_point_radius(properties);
+    /* Brand accent, mostly opaque. */
+    point->red = 0x6B;
+    point->green = 0xA8;
+    point->blue = 0x92;
+    point->alpha = 0xE6;
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result overlay_append_path(struct yetty_ymap_map *map,
+                                                          yyjson_val *coordinates)
+{
+    if (!coordinates || !yyjson_is_arr(coordinates)) {
+        return YETTY_OK_VOID();
+    }
+    size_t point_count = yyjson_arr_size(coordinates);
+    if (point_count < 2) {
+        return YETTY_OK_VOID();
+    }
+    double *pairs = malloc(point_count * 2 * sizeof(double));
+    if (!pairs) {
+        return YETTY_ERR(yetty_ycore_void, "overlay: path alloc failed");
+    }
+    size_t stored = 0;
+    yyjson_val *pair;
+    yyjson_arr_iter pair_iter;
+    yyjson_arr_iter_init(coordinates, &pair_iter);
+    while ((pair = yyjson_arr_iter_next(&pair_iter)) != NULL) {
+        if (!yyjson_is_arr(pair) || yyjson_arr_size(pair) < 2) {
+            continue;
+        }
+        pairs[stored * 2 + 0] = yyjson_get_num(yyjson_arr_get(pair, 0));
+        pairs[stored * 2 + 1] = yyjson_get_num(yyjson_arr_get(pair, 1));
+        stored++;
+    }
+    if (stored < 2) {
+        free(pairs);
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ymap_overlay_path *grown = realloc(
+        map->overlay_paths, (map->overlay_path_count + 1) * sizeof(struct yetty_ymap_overlay_path));
+    if (!grown) {
+        free(pairs);
+        return YETTY_ERR(yetty_ycore_void, "overlay: path list alloc failed");
+    }
+    map->overlay_paths = grown;
+    struct yetty_ymap_overlay_path *path = &map->overlay_paths[map->overlay_path_count++];
+    path->coordinates = pairs;
+    path->point_count = stored;
+    path->red = 0x74; /* accent bright */
+    path->green = 0xC5;
+    path->blue = 0xA5;
+    path->alpha = 0xE6;
+    return YETTY_OK_VOID();
+}
+
+/* overlay_geojson: load a GeoJSON document (FeatureCollection / Feature /
+ * bare geometry) as the map's data overlay, replacing any previous one.
+ * Point/MultiPoint become markers (radius from a numeric `mag` property
+ * when present), LineString/MultiLineString become tracks, Polygon outer
+ * rings become outlines. */
+YETTY_ANNOTATE("virtual@ymap:map:overlay_geojson")
+YETTY_ANNOTATE("local@ymap:overlay_geojson")
+static struct yetty_ycore_void_result map_overlay_geojson(struct yetty_yclass_object *obj,
+                                                          const char *geojson_text)
+{
+    struct yetty_yclass_void_ptr_result map_r = map_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, map_r, "ymap overlay_geojson: from_obj");
+    struct yetty_ymap_map *map = map_r.value;
+    if (!geojson_text) {
+        map_overlay_clear(map);
+        return YETTY_OK_VOID();
+    }
+
+    yyjson_doc *document = yyjson_read(geojson_text, strlen(geojson_text), 0);
+    if (!document) {
+        return YETTY_ERR(yetty_ycore_void, "ymap overlay_geojson: JSON parse failed");
+    }
+    map_overlay_clear(map);
+
+    /* Normalize the three accepted roots into a feature list walk. */
+    yyjson_val *root = yyjson_doc_get_root(document);
+    yyjson_val *features = yyjson_obj_get(root, "features");
+    yyjson_val *single_feature_geometry = yyjson_obj_get(root, "geometry");
+
+    struct yetty_ycore_void_result status = YETTY_OK_VOID();
+    size_t feature_count = features && yyjson_is_arr(features) ? yyjson_arr_size(features) : 1;
+    for (size_t index = 0; index < feature_count && YETTY_IS_OK(status); index++) {
+        yyjson_val *geometry;
+        yyjson_val *properties = NULL;
+        if (features && yyjson_is_arr(features)) {
+            yyjson_val *feature = yyjson_arr_get(features, index);
+            geometry = yyjson_obj_get(feature, "geometry");
+            properties = yyjson_obj_get(feature, "properties");
+        } else if (single_feature_geometry) {
+            geometry = single_feature_geometry;
+            properties = yyjson_obj_get(root, "properties");
+        } else {
+            geometry = root;
+        }
+        if (!geometry) {
+            continue;
+        }
+        const char *type = yyjson_get_str(yyjson_obj_get(geometry, "type"));
+        yyjson_val *coordinates = yyjson_obj_get(geometry, "coordinates");
+        if (!type || !coordinates) {
+            continue;
+        }
+        if (strcmp(type, "Point") == 0) {
+            status = overlay_append_point(map, coordinates, properties);
+        } else if (strcmp(type, "MultiPoint") == 0) {
+            yyjson_val *entry;
+            yyjson_arr_iter iter;
+            yyjson_arr_iter_init(coordinates, &iter);
+            while (YETTY_IS_OK(status) && (entry = yyjson_arr_iter_next(&iter)) != NULL) {
+                status = overlay_append_point(map, entry, properties);
+            }
+        } else if (strcmp(type, "LineString") == 0) {
+            status = overlay_append_path(map, coordinates);
+        } else if (strcmp(type, "MultiLineString") == 0 || strcmp(type, "Polygon") == 0) {
+            yyjson_val *entry;
+            yyjson_arr_iter iter;
+            yyjson_arr_iter_init(coordinates, &iter);
+            while (YETTY_IS_OK(status) && (entry = yyjson_arr_iter_next(&iter)) != NULL) {
+                status = overlay_append_path(map, entry);
+            }
+        }
+        /* other geometry types skipped */
+    }
+    yyjson_doc_free(document);
+    if (YETTY_IS_ERR(status)) {
+        map_overlay_clear(map);
+        return YETTY_ERR(yetty_ycore_void, "ymap overlay_geojson: load", status);
+    }
+    ydebug("ymap overlay: %zu points, %zu paths", map->overlay_point_count,
+           map->overlay_path_count);
+    return YETTY_OK_VOID();
+}
+
 /* render: fetch the covering tiles (parallel, disk-cached) and emit the
  * visible map as a fresh ydraw drawable list (caller owns it). Pointer
  * return -> local-only. */
@@ -517,6 +714,16 @@ static struct yetty_ydraw_drawable_list_result map_render(struct yetty_yclass_ob
     char cache_dir[1024];
     snprintf(cache_dir, sizeof(cache_dir), "%s/ymap/%s", map->cache_base, provider_name);
 
+    /* The overlay bakes into the raster composite (SDF prims appended to
+     * the list would be painted over by the composite figure). Vector
+     * providers don't carry the overlay yet. */
+    struct yetty_ymap_overlay overlay = {
+        .points = map->overlay_points,
+        .point_count = map->overlay_point_count,
+        .paths = map->overlay_paths,
+        .path_count = map->overlay_path_count,
+    };
+    bool have_overlay = map->overlay_point_count > 0 || map->overlay_path_count > 0;
     struct yetty_ymap_config engine_config = {
         .latitude = map->latitude,
         .longitude = map->longitude,
@@ -526,6 +733,7 @@ static struct yetty_ydraw_drawable_list_result map_render(struct yetty_yclass_ob
         .tile_url_template = url_template,
         .cache_dir = cache_dir,
         .tile_file_extension = extension,
+        .overlay = have_overlay && !vector ? &overlay : NULL,
     };
     return vector ? yetty_ymap_render_vector(&engine_config)
                   : yetty_ymap_render_raster(&engine_config);
@@ -542,6 +750,7 @@ static struct yetty_ycore_void_result map_destroy(struct yetty_yclass_object *ob
     struct yetty_yclass_void_ptr_result map_r = map_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, map_r, "ymap destroy: from_obj");
     struct yetty_ymap_map *map = map_r.value;
+    map_overlay_clear(map);
     free(map->custom_url_template);
     free(map->custom_attribution);
     return yetty_yclass_object_free(obj);

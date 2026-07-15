@@ -36,6 +36,8 @@ struct yetty_ycore_int_result yetty_ymap_get_zoom(struct yetty_yclass_object *ob
 struct yetty_ycore_void_result yetty_ymap_geolocate(struct yetty_yclass_object *obj);
 struct yetty_ycore_const_char_ptr_result yetty_ymap_attribution(struct yetty_yclass_object *obj);
 struct yetty_ycore_int_result yetty_ymap_is_vector(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ymap_overlay_geojson(struct yetty_yclass_object *obj,
+                                                          const char *geojson_text);
 struct yetty_ydraw_drawable_list_result yetty_ymap_render(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ymap_destroy(struct yetty_yclass_object *obj);
 typedef struct yetty_ycore_void_result (*yetty_ymap_configure_fn)(struct yetty_yclass_object *,
@@ -60,6 +62,8 @@ typedef struct yetty_ycore_void_result (*yetty_ymap_geolocate_fn)(struct yetty_y
 typedef struct yetty_ycore_const_char_ptr_result (*yetty_ymap_attribution_fn)(
     struct yetty_yclass_object *);
 typedef struct yetty_ycore_int_result (*yetty_ymap_is_vector_fn)(struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ymap_overlay_geojson_fn)(
+    struct yetty_yclass_object *, const char *);
 typedef struct yetty_ydraw_drawable_list_result (*yetty_ymap_render_fn)(
     struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_ymap_destroy_fn)(struct yetty_yclass_object *);
@@ -90,6 +94,9 @@ YETTY_MAYBE_UNUSED
 static yetty_ymap_attribution_fn yetty_ymap_map_yetty_ymap_attribution_check = map_attribution;
 YETTY_MAYBE_UNUSED
 static yetty_ymap_is_vector_fn yetty_ymap_map_yetty_ymap_is_vector_check = map_is_vector;
+YETTY_MAYBE_UNUSED
+static yetty_ymap_overlay_geojson_fn yetty_ymap_map_yetty_ymap_overlay_geojson_check =
+    map_overlay_geojson;
 YETTY_MAYBE_UNUSED
 static yetty_ymap_render_fn yetty_ymap_map_yetty_ymap_render_check = map_render;
 YETTY_MAYBE_UNUSED
@@ -135,6 +142,8 @@ struct yetty_yclass_ptr_result yetty_ymap_map_class_get(void)
          (yetty_yclass_impl_t)map_attribution},
         {"yetty_ymap", "is_vector", (yetty_yclass_method_id_t)yetty_ymap_is_vector,
          (yetty_yclass_impl_t)map_is_vector},
+        {"yetty_ymap", "overlay_geojson", (yetty_yclass_method_id_t)yetty_ymap_overlay_geojson,
+         (yetty_yclass_impl_t)map_overlay_geojson},
         {"yetty_ymap", "render", (yetty_yclass_method_id_t)yetty_ymap_render,
          (yetty_yclass_impl_t)map_render},
         {"yetty_ymap", "destroy", (yetty_yclass_method_id_t)yetty_ymap_destroy,
@@ -513,6 +522,34 @@ struct yetty_ycore_int_result yetty_ymap_is_vector(struct yetty_yclass_object *o
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ymap_is_vector: dispatch_lookup failed");
     return ((yetty_ymap_is_vector_fn)dispatch_impl_r.value)(obj);
+}
+
+struct yetty_ycore_void_result yetty_ymap_overlay_geojson(struct yetty_yclass_object *obj,
+                                                          const char *geojson_text)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_ymap", (yetty_yclass_method_id_t)yetty_ymap_overlay_geojson);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_void, "yetty_ymap_overlay_geojson: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ymap_overlay_geojson: NULL object");
+    }
+
+    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                        "yetty_ymap_overlay_geojson: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                        "yetty_ymap_overlay_geojson: dispatch_lookup failed");
+    return ((yetty_ymap_overlay_geojson_fn)dispatch_impl_r.value)(obj, geojson_text);
 }
 
 struct yetty_ydraw_drawable_list_result yetty_ymap_render(struct yetty_yclass_object *obj)

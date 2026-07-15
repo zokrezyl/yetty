@@ -182,6 +182,86 @@ IDENTIFIER  = [a-zA-Z_][a-zA-Z0-9_]*
 NUMBER      = [0-9]+ ('.' [0-9]+)?
 ```
 
+## Axes, Scales and Figure Text
+
+The library render path (`yetty_yplot_render*` — what `tools/yplot` and
+ycat use) supports log scales, a tick-aligned grid, and figure chrome. All
+text (tick numbers, title, axis names, legend) is emitted **client-side**
+as MSDF TEXT prims in margins reserved around the plot rect; the shader
+only ever draws the plot area. The `{card=plot; ...}` yaml-factory path
+builds a bare instance and carries none of the text chrome.
+
+### Log scales
+
+```bash
+yplot --ylog --yrange=0.001..1 --xrange=0..10 'residual=exp(0-x)/2'
+yplot --xlog --xrange=0.1..1000 'f=log(x)'
+```
+
+- Flags `YETTY_YPLOT_FLAG_XLOG` / `YETTY_YPLOT_FLAG_YLOG` (base-10) ride
+  the wire `flags` word; the shader maps coordinates in log10 space.
+- A log axis requires `0 < min < max` — the render entry points reject
+  anything else. The CLI substitutes a `0.1..100` default when no range
+  is given.
+- Ticks and grid land on decades; ranges under three decades also get
+  `{2, 5}` mantissa ticks; sub-decade ranges fall back to linear nice
+  ticks positioned logarithmically.
+
+### Tick-aligned grid
+
+The `x_step` / `y_step` uniforms carry the chosen tick spacing (data
+units) to the shader so linear grid lines sit exactly under the labelled
+ticks. `0` (labels disabled, or a log axis) falls back to the legacy
+fixed 10-division grid or the decade grid respectively.
+
+### Loading data files
+
+```bash
+yplot --data 'H1 observed=strain.npy' --title 'GW150914'
+yplot --data 'co2=co2_mm_mlo.csv:average'          # column by header name
+yplot --data 'strain=fig1-observed-H.txt:1'        # column by 0-based index
+ycat measurements.npy                               # auto-detected line plot
+```
+
+`yetty_yplot_load_samples()` (yplot-data.c) reads NumPy `.npy` (v1/v2,
+little-endian `f4/f8/i4/i8`, 1-D, C order) and delimited text (comma, tab
+or whitespace — sniffed; `#` comment lines skipped; a non-numeric first
+row is consumed as the header). Default column: the second when several
+are present. `--data` curves auto-range the axes to the data extent and
+sample index and take legend entries from their `NAME=` prefix. ycat
+renders `.npy` files as line plots and bare headered CSV/TSV as ychart
+figures.
+
+### Uncertainty: envelopes and error bars
+
+```bash
+yplot --data 'signal=run.csv:1' --band 'signal=run.csv:3,run.csv:4'
+yplot --data 'signal=run.csv:1' --err 'signal=run.csv:2'
+```
+
+`--band CURVE=LO,HI` shades a translucent envelope between two data specs;
+`--err CURVE=SPEC` draws capped whisker bars at decimated sample positions
+spanning curve ± err. On the wire this is the `band_slots` uniform
+(per-color-slot `(lo_slot+1) | (hi_slot+1)<<8 | style<<16`) plus
+`hidden_mask` (envelope inputs render no line of their own); API users set
+`has_band`/`band_lo`/`band_hi`/`band_style`/`hidden` on
+`struct yetty_yplot_buffer_input`.
+
+### Title, axis names, legend
+
+```bash
+yplot --title 'solver convergence' --xlabel iteration --ylabel residual \
+      --legend 'r=exp(0-x)/2'
+```
+
+- `title` (centered above), `x_label` (under the x ticks), `y_label`
+  (above the y tick column — glyph expansion has no rotation support, so
+  no rotated label) come from `struct yetty_yplot_render_config`.
+- Legend: `YETTY_YPLOT_LEGEND_AUTO` (default, shown for ≥ 2 named
+  curves), `_ON` (≥ 1), `_OFF`. CLI: `--legend` / `--no-legend`.
+- Everything above is gated behind `YETTY_YPLOT_FLAG_LABELS`
+  (`--no-labels` removes all figure text).
+
 ## Examples
 
 ### Pure Function Plots
@@ -271,6 +351,37 @@ NUMBER      = [0-9]+ ('.' [0-9]+)?
 {plot: @buffer1 * (1 + 0.5 * sin(time))}
 ```
 
+### Ring-buffer live streaming (yplot-stream)
+
+```bash
+python3 solver.py | yplot-stream --len=400 --yrange=-1..1 --title 'residual'
+```
+
+`tools/yplot-stream` turns a number stream on stdin into a live scrolling
+plot: one INIT envelope creates a ring-mode yplot (zero-filled buffer of
+`--len` samples), then every numeric stdin line becomes a two-op
+CMD_UPDATE envelope — the sample written at the ring head plus a
+head-advance. Non-numeric lines pass through to stdout, so a solver's log
+interleaves with its own live plot in one scrollback. Constant memory,
+per-sample uploads, endless.
+
+Mechanics:
+
+- `ring_heads[8]` uniforms (0 = linear, else head + 1, head = oldest
+  sample); the shader unwraps display order so the newest sample is
+  always at the right edge. `struct yetty_yplot_buffer_input.ring`
+  pre-arms ring mode on the wire.
+- CMD_UPDATE ring-head op: `sample_offset == 0xFFFFFFFF`, `count` = new
+  head index (yplot-update.c). The op writes both the RS uniform and the
+  retained wire payload — the instance render re-parses the wire each
+  frame, so a bare RS write would be clobbered.
+- Scrollback figures accept CMD_UPDATE via the terminal's stream
+  registry: each envelope's composites register under their ordinal
+  (1, 2, ...); later envelopes' updates route by that id
+  (most-recent-wins per id; a later figure-creating envelope re-claims
+  low ids, so producers should finish streaming before other figures are
+  created).
+
 ### External Streaming
 
 Named buffers enable external clients to stream data to plot cards via shared memory.
@@ -341,15 +452,27 @@ printf '\033]666666;run -c plot;--buffer data="initial.csv"\033\\'
 printf '\033]666666;run -c plot;--buffer x=100,y=100\033\\'
 ```
 
-### 2D Heatmaps (Future)
+### 2D Heatmaps / Fields
+
+An expression that references `y` is a 2D field `f(x, y)`: the sender sets
+`YETTY_YPLOT_FLAG_FIELD` and the shader renders a colormapped heatmap
+instead of a line curve — no `mode=` keyword needed.
 
 ```bash
 # Function of two variables
-{plot x=-2..2 y=-2..2 mode=heatmap: sin(x) * cos(y)}
+yplot 'z=sin(3*x)*cos(2*y)'
 
-# Interference pattern
-{plot x=-5..5 y=-5..5 mode=heatmap: sin(sqrt(x^2 + y^2))}
+# Interference pattern, magma colormap, explicit value range + colorbar
+yplot --colormap magma --field-range=-2..2 'psi=sin(sqrt(x*x+y*y))'
 ```
+
+- Colormaps: viridis (default), plasma, magma, inferno — selected by the
+  `colormap_id` uniform (`--colormap`), implemented as polynomial fits in
+  `yplot.wgsl` with a C twin in `yplot.c` for the colorbar.
+- `--field-range=lo..hi` (uniforms `field_min`/`field_max`) fixes the
+  value→color mapping; unset means the historical `[-1, 1]`.
+- A colorbar with max/mid/min labels is drawn in a right margin whenever
+  axis labels are enabled.
 
 ## Implementation Plan
 

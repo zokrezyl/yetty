@@ -3,6 +3,7 @@
 # without WebGPU (riscv64).
 add_library(yetty_yplot_core STATIC
     yplot.c
+    yplot-data.c
     yplot-gen-wire.c
     yplot-yaml.c
 )

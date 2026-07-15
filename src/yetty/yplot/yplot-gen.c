@@ -147,65 +147,131 @@ static void yplot_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
     strncpy(rs->uniforms[7].name, "y_max", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[7].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[7].u32 = 0;
-    strncpy(rs->uniforms[8].name, "flags", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[8].type = YETTY_YRENDER_UNIFORM_U32;
+    strncpy(rs->uniforms[8].name, "x_step", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[8].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[8].u32 = 0;
-    strncpy(rs->uniforms[9].name, "function_count", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[9].type = YETTY_YRENDER_UNIFORM_U32;
+    strncpy(rs->uniforms[9].name, "y_step", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[9].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[9].u32 = 0;
-    strncpy(rs->uniforms[10].name, "colors_0", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->uniforms[10].name, "colormap_id", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[10].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[10].u32 = 0;
-    strncpy(rs->uniforms[11].name, "colors_1", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[11].type = YETTY_YRENDER_UNIFORM_U32;
+    strncpy(rs->uniforms[11].name, "field_min", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[11].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[11].u32 = 0;
-    strncpy(rs->uniforms[12].name, "colors_2", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[12].type = YETTY_YRENDER_UNIFORM_U32;
+    strncpy(rs->uniforms[12].name, "field_max", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[12].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[12].u32 = 0;
-    strncpy(rs->uniforms[13].name, "colors_3", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->uniforms[13].name, "flags", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[13].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[13].u32 = 0;
-    strncpy(rs->uniforms[14].name, "colors_4", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->uniforms[14].name, "function_count", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[14].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[14].u32 = 0;
-    strncpy(rs->uniforms[15].name, "colors_5", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->uniforms[15].name, "colors_0", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[15].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[15].u32 = 0;
-    strncpy(rs->uniforms[16].name, "colors_6", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->uniforms[16].name, "colors_1", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[16].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[16].u32 = 0;
-    strncpy(rs->uniforms[17].name, "colors_7", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->uniforms[17].name, "colors_2", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[17].type = YETTY_YRENDER_UNIFORM_U32;
     rs->uniforms[17].u32 = 0;
-    strncpy(rs->uniforms[18].name, "visual_zoom_scale", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[18].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[18].f32 = 1.0f;
-    strncpy(rs->uniforms[19].name, "visual_zoom_off_x", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[19].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[19].f32 = 0.0f;
-    strncpy(rs->uniforms[20].name, "visual_zoom_off_y", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[20].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[20].f32 = 0.0f;
-    strncpy(rs->uniforms[21].name, "cell_zoom_scale", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[21].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[21].f32 = 1.0f;
-    strncpy(rs->uniforms[22].name, "cell_zoom_off_x", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[22].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[22].f32 = 0.0f;
-    strncpy(rs->uniforms[23].name, "cell_zoom_off_y", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[23].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[23].f32 = 0.0f;
-    strncpy(rs->uniforms[24].name, "viewport_w", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[24].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[24].f32 = 0.0f;
-    strncpy(rs->uniforms[25].name, "viewport_h", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[25].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[25].f32 = 0.0f;
+    strncpy(rs->uniforms[18].name, "colors_3", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[18].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[18].u32 = 0;
+    strncpy(rs->uniforms[19].name, "colors_4", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[19].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[19].u32 = 0;
+    strncpy(rs->uniforms[20].name, "colors_5", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[20].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[20].u32 = 0;
+    strncpy(rs->uniforms[21].name, "colors_6", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[21].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[21].u32 = 0;
+    strncpy(rs->uniforms[22].name, "colors_7", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[22].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[22].u32 = 0;
+    strncpy(rs->uniforms[23].name, "band_slots_0", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[23].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[23].u32 = 0;
+    strncpy(rs->uniforms[24].name, "band_slots_1", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[24].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[24].u32 = 0;
+    strncpy(rs->uniforms[25].name, "band_slots_2", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[25].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[25].u32 = 0;
+    strncpy(rs->uniforms[26].name, "band_slots_3", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[26].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[26].u32 = 0;
+    strncpy(rs->uniforms[27].name, "band_slots_4", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[27].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[27].u32 = 0;
+    strncpy(rs->uniforms[28].name, "band_slots_5", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[28].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[28].u32 = 0;
+    strncpy(rs->uniforms[29].name, "band_slots_6", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[29].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[29].u32 = 0;
+    strncpy(rs->uniforms[30].name, "band_slots_7", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[30].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[30].u32 = 0;
+    strncpy(rs->uniforms[31].name, "hidden_mask", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[31].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[31].u32 = 0;
+    strncpy(rs->uniforms[32].name, "ring_heads_0", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[32].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[32].u32 = 0;
+    strncpy(rs->uniforms[33].name, "ring_heads_1", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[33].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[33].u32 = 0;
+    strncpy(rs->uniforms[34].name, "ring_heads_2", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[34].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[34].u32 = 0;
+    strncpy(rs->uniforms[35].name, "ring_heads_3", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[35].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[35].u32 = 0;
+    strncpy(rs->uniforms[36].name, "ring_heads_4", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[36].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[36].u32 = 0;
+    strncpy(rs->uniforms[37].name, "ring_heads_5", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[37].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[37].u32 = 0;
+    strncpy(rs->uniforms[38].name, "ring_heads_6", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[38].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[38].u32 = 0;
+    strncpy(rs->uniforms[39].name, "ring_heads_7", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[39].type = YETTY_YRENDER_UNIFORM_U32;
+    rs->uniforms[39].u32 = 0;
+    strncpy(rs->uniforms[40].name, "visual_zoom_scale", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[40].type = YETTY_YRENDER_UNIFORM_F32;
+    rs->uniforms[40].f32 = 1.0f;
+    strncpy(rs->uniforms[41].name, "visual_zoom_off_x", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[41].type = YETTY_YRENDER_UNIFORM_F32;
+    rs->uniforms[41].f32 = 0.0f;
+    strncpy(rs->uniforms[42].name, "visual_zoom_off_y", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[42].type = YETTY_YRENDER_UNIFORM_F32;
+    rs->uniforms[42].f32 = 0.0f;
+    strncpy(rs->uniforms[43].name, "cell_zoom_scale", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[43].type = YETTY_YRENDER_UNIFORM_F32;
+    rs->uniforms[43].f32 = 1.0f;
+    strncpy(rs->uniforms[44].name, "cell_zoom_off_x", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[44].type = YETTY_YRENDER_UNIFORM_F32;
+    rs->uniforms[44].f32 = 0.0f;
+    strncpy(rs->uniforms[45].name, "cell_zoom_off_y", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[45].type = YETTY_YRENDER_UNIFORM_F32;
+    rs->uniforms[45].f32 = 0.0f;
+    strncpy(rs->uniforms[46].name, "viewport_w", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[46].type = YETTY_YRENDER_UNIFORM_F32;
+    rs->uniforms[46].f32 = 0.0f;
+    strncpy(rs->uniforms[47].name, "viewport_h", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[47].type = YETTY_YRENDER_UNIFORM_F32;
+    rs->uniforms[47].f32 = 0.0f;
     /* `time` — server-side, not on the wire. */
-    strncpy(rs->uniforms[26].name, "time", YETTY_YRENDER_NAME_MAX - 1);
-    rs->uniforms[26].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[26].f32 = 0.0f;
-    rs->uniform_count = 27;
+    strncpy(rs->uniforms[48].name, "time", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[48].type = YETTY_YRENDER_UNIFORM_F32;
+    rs->uniforms[48].f32 = 0.0f;
+    rs->uniform_count = 49;
 
     // Single merged storage buffer — the shader walks the
     // self-describing [len][data]... layout at runtime.
@@ -243,36 +309,58 @@ static struct yetty_ycore_void_result yplot_instance_render(struct yetty_ydraw_c
     const uint32_t *payload = data + 2; // skip type_id and payload_size
 
     // Update uniforms from wire format
-    rs->uniforms[0].f32 = *(float *)&payload[0]; /* bounds_x */
-    rs->uniforms[1].f32 = *(float *)&payload[1]; /* bounds_y */
-    rs->uniforms[2].f32 = *(float *)&payload[2]; /* bounds_w */
-    rs->uniforms[3].f32 = *(float *)&payload[3]; /* bounds_h */
-    rs->uniforms[4].f32 = *(float *)&payload[4]; /* x_min */
-    rs->uniforms[5].f32 = *(float *)&payload[5]; /* x_max */
-    rs->uniforms[6].f32 = *(float *)&payload[6]; /* y_min */
-    rs->uniforms[7].f32 = *(float *)&payload[7]; /* y_max */
-    rs->uniforms[8].u32 = payload[8];            /* flags */
-    rs->uniforms[9].u32 = payload[9];            /* function_count */
-    rs->uniforms[10].u32 = payload[10];          /* colors_0 */
-    rs->uniforms[11].u32 = payload[11];          /* colors_1 */
-    rs->uniforms[12].u32 = payload[12];          /* colors_2 */
-    rs->uniforms[13].u32 = payload[13];          /* colors_3 */
-    rs->uniforms[14].u32 = payload[14];          /* colors_4 */
-    rs->uniforms[15].u32 = payload[15];          /* colors_5 */
-    rs->uniforms[16].u32 = payload[16];          /* colors_6 */
-    rs->uniforms[17].u32 = payload[17];          /* colors_7 */
+    rs->uniforms[0].f32 = *(float *)&payload[0];   /* bounds_x */
+    rs->uniforms[1].f32 = *(float *)&payload[1];   /* bounds_y */
+    rs->uniforms[2].f32 = *(float *)&payload[2];   /* bounds_w */
+    rs->uniforms[3].f32 = *(float *)&payload[3];   /* bounds_h */
+    rs->uniforms[4].f32 = *(float *)&payload[4];   /* x_min */
+    rs->uniforms[5].f32 = *(float *)&payload[5];   /* x_max */
+    rs->uniforms[6].f32 = *(float *)&payload[6];   /* y_min */
+    rs->uniforms[7].f32 = *(float *)&payload[7];   /* y_max */
+    rs->uniforms[8].f32 = *(float *)&payload[8];   /* x_step */
+    rs->uniforms[9].f32 = *(float *)&payload[9];   /* y_step */
+    rs->uniforms[10].u32 = payload[10];            /* colormap_id */
+    rs->uniforms[11].f32 = *(float *)&payload[11]; /* field_min */
+    rs->uniforms[12].f32 = *(float *)&payload[12]; /* field_max */
+    rs->uniforms[13].u32 = payload[13];            /* flags */
+    rs->uniforms[14].u32 = payload[14];            /* function_count */
+    rs->uniforms[15].u32 = payload[15];            /* colors_0 */
+    rs->uniforms[16].u32 = payload[16];            /* colors_1 */
+    rs->uniforms[17].u32 = payload[17];            /* colors_2 */
+    rs->uniforms[18].u32 = payload[18];            /* colors_3 */
+    rs->uniforms[19].u32 = payload[19];            /* colors_4 */
+    rs->uniforms[20].u32 = payload[20];            /* colors_5 */
+    rs->uniforms[21].u32 = payload[21];            /* colors_6 */
+    rs->uniforms[22].u32 = payload[22];            /* colors_7 */
+    rs->uniforms[23].u32 = payload[23];            /* band_slots_0 */
+    rs->uniforms[24].u32 = payload[24];            /* band_slots_1 */
+    rs->uniforms[25].u32 = payload[25];            /* band_slots_2 */
+    rs->uniforms[26].u32 = payload[26];            /* band_slots_3 */
+    rs->uniforms[27].u32 = payload[27];            /* band_slots_4 */
+    rs->uniforms[28].u32 = payload[28];            /* band_slots_5 */
+    rs->uniforms[29].u32 = payload[29];            /* band_slots_6 */
+    rs->uniforms[30].u32 = payload[30];            /* band_slots_7 */
+    rs->uniforms[31].u32 = payload[31];            /* hidden_mask */
+    rs->uniforms[32].u32 = payload[32];            /* ring_heads_0 */
+    rs->uniforms[33].u32 = payload[33];            /* ring_heads_1 */
+    rs->uniforms[34].u32 = payload[34];            /* ring_heads_2 */
+    rs->uniforms[35].u32 = payload[35];            /* ring_heads_3 */
+    rs->uniforms[36].u32 = payload[36];            /* ring_heads_4 */
+    rs->uniforms[37].u32 = payload[37];            /* ring_heads_5 */
+    rs->uniforms[38].u32 = payload[38];            /* ring_heads_6 */
+    rs->uniforms[39].u32 = payload[39];            /* ring_heads_7 */
 
     // Pull current zoom state from the factory into this instance's RS.
-    rs->uniforms[18].f32 = factory->visual_zoom_scale > 0.0f ? factory->visual_zoom_scale : 1.0f;
-    rs->uniforms[19].f32 = factory->visual_zoom_off_x;
-    rs->uniforms[20].f32 = factory->visual_zoom_off_y;
-    rs->uniforms[21].f32 = factory->cell_zoom_scale > 0.0f ? factory->cell_zoom_scale : 1.0f;
-    rs->uniforms[22].f32 = factory->cell_zoom_off_x;
-    rs->uniforms[23].f32 = factory->cell_zoom_off_y;
+    rs->uniforms[40].f32 = factory->visual_zoom_scale > 0.0f ? factory->visual_zoom_scale : 1.0f;
+    rs->uniforms[41].f32 = factory->visual_zoom_off_x;
+    rs->uniforms[42].f32 = factory->visual_zoom_off_y;
+    rs->uniforms[43].f32 = factory->cell_zoom_scale > 0.0f ? factory->cell_zoom_scale : 1.0f;
+    rs->uniforms[44].f32 = factory->cell_zoom_off_x;
+    rs->uniforms[45].f32 = factory->cell_zoom_off_y;
 
     // Visual-zoom viewport — read from the target every frame.
-    rs->uniforms[24].f32 = target->viewport.w;
-    rs->uniforms[25].f32 = target->viewport.h;
+    rs->uniforms[46].f32 = target->viewport.w;
+    rs->uniforms[47].f32 = target->viewport.h;
 
     // Compose the caller-provided pane position with the record's own
     // ENVELOPE-LOCAL origin: a multi-figure envelope (a browser page's
@@ -297,8 +385,8 @@ static struct yetty_ycore_void_result yplot_instance_render(struct yetty_ydraw_c
      * the binder's write_buffer_chunk op; a per-frame dirty would
      * re-upload the whole region every frame. */
     uint32_t payload_bytes = data[1];
-    const uint32_t *storage = payload + 18;
-    size_t storage_size = (size_t)payload_bytes - 18u * sizeof(uint32_t);
+    const uint32_t *storage = payload + 40;
+    size_t storage_size = (size_t)payload_bytes - 40u * sizeof(uint32_t);
     rs->buffers[0].data = (uint8_t *)(uintptr_t)storage;
     rs->buffers[0].size = storage_size;
 
@@ -515,8 +603,8 @@ static struct yetty_ydraw_composite_ptr_result yplot_create_instance(
         const uint32_t *data = (const uint32_t *)instance->buffer_data;
         const uint32_t *payload = data + 2;
         uint32_t payload_bytes = data[1];
-        const uint32_t *storage = payload + 18;
-        size_t storage_size = (size_t)payload_bytes - 18u * sizeof(uint32_t);
+        const uint32_t *storage = payload + 40;
+        size_t storage_size = (size_t)payload_bytes - 40u * sizeof(uint32_t);
         instance->resource_set->buffers[0].data = (uint8_t *)(uintptr_t)storage;
         instance->resource_set->buffers[0].size = storage_size;
         instance->resource_set->buffers[0].dirty = 1;

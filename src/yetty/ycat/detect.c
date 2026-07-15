@@ -166,11 +166,16 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext)
     if (strcasecmp(noleading, "circuit") == 0 || strcasecmp(noleading, "yct") == 0) {
         return YETTY_YCAT_TYPE_CIRCUIT;
     }
-    /* ychart data files. Generic .csv/.json/.yaml are NOT mapped here — only
-     * the explicit chart extensions, so plain data files are not hijacked
-     * (content with a `#ychart` directive or a chart key is still sniffed). */
+    /* ychart data files. Generic .json/.yaml are NOT mapped here — only
+     * the explicit chart extensions, so structured data files are not
+     * hijacked (content with a `#ychart` directive or a chart key is still
+     * sniffed; bare tabular .csv/.tsv is claimed by the content sniff). */
     if (strcasecmp(noleading, "chart") == 0 || strcasecmp(noleading, "ychart") == 0) {
         return YETTY_YCAT_TYPE_CHART;
+    }
+    /* NumPy arrays — rendered as a line plot via yplot. */
+    if (strcasecmp(noleading, "npy") == 0) {
+        return YETTY_YCAT_TYPE_PLOT;
     }
     /* OOXML documents (plus the macro-enabled variants — same container). */
     if (strcasecmp(noleading, "docx") == 0 || strcasecmp(noleading, "docm") == 0) {
@@ -350,6 +355,98 @@ static int looks_like_lilypond(const uint8_t *bytes, size_t len)
 }
 #endif
 
+#ifdef YETTY_YCAT_HAS_YCHART
+/* Bare tabular data sniff: a headered CSV/TSV with no chart marker. The
+ * shape test is deliberately strict so prose with commas is never claimed:
+ * the first line needs >= 2 delimited fields, the next lines (up to four
+ * checked) must repeat the same field count, and the second line must
+ * carry at least one numeric field. */
+static int looks_like_bare_table(const char *text, size_t len)
+{
+    size_t scan = len < 4096u ? len : 4096u;
+    char delimiter = 0;
+    size_t line_index = 0;
+    size_t expected_fields = 0;
+    int numeric_seen = 0;
+
+    size_t pos = 0;
+    while (pos < scan && line_index < 4) {
+        size_t line_start = pos;
+        while (pos < scan && text[pos] != '\n') {
+            pos++;
+        }
+        size_t line_end = pos;
+        if (pos < scan) {
+            pos++;
+        }
+        while (line_end > line_start && (text[line_end - 1] == '\r' || text[line_end - 1] == ' ')) {
+            line_end--;
+        }
+        if (line_end == line_start) {
+            if (line_index == 0) {
+                continue; /* skip leading blank lines */
+            }
+            break; /* blank line ends the table prefix */
+        }
+        if (text[line_start] == '#') {
+            continue;
+        }
+
+        if (line_index == 0) {
+            /* Delimiter from the header line. */
+            for (size_t i = line_start; i < line_end; i++) {
+                if (text[i] == ',') {
+                    delimiter = ',';
+                    break;
+                }
+                if (text[i] == '\t') {
+                    delimiter = '\t';
+                    break;
+                }
+            }
+            if (delimiter == 0) {
+                return 0;
+            }
+        }
+
+        size_t field_count = 1;
+        size_t field_start = line_start;
+        for (size_t i = line_start; i <= line_end; i++) {
+            if (i == line_end || text[i] == delimiter) {
+                if (line_index >= 1 && !numeric_seen) {
+                    char field[64];
+                    size_t field_len = i - field_start;
+                    if (field_len > 0 && field_len < sizeof(field)) {
+                        memcpy(field, text + field_start, field_len);
+                        field[field_len] = '\0';
+                        char *end = NULL;
+                        strtod(field, &end);
+                        if (end != field && end && *end == '\0') {
+                            numeric_seen = 1;
+                        }
+                    }
+                }
+                if (i < line_end) {
+                    field_count++;
+                }
+                field_start = i + 1;
+            }
+        }
+        if (line_index == 0) {
+            if (field_count < 2) {
+                return 0;
+            }
+            expected_fields = field_count;
+        } else if (field_count != expected_fields) {
+            return 0;
+        }
+        line_index++;
+    }
+
+    return line_index >= 2 && numeric_seen;
+}
+#endif
+
 #ifdef YETTY_YCAT_HAS_YCIRCUIT
 /* The ycircuit DSL has no libmagic signature, but (like mermaid's `graph`)
  * it opens with a required keyword: the first non-blank, non-comment line
@@ -466,12 +563,25 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
         return YETTY_YCAT_TYPE_VIDEO;
     }
 
+#ifdef YETTY_YCAT_HAS_YPLOT
+    /* NumPy .npy magic — rendered as a line plot via yplot. */
+    if (bytes && len >= 6 && memcmp(bytes, "\x93NUMPY", 6) == 0) {
+        return YETTY_YCAT_TYPE_PLOT;
+    }
+#endif
+
 #ifdef YETTY_YCAT_HAS_YCHART
     /* ychart has no libmagic signature; the sniff is conservative — only a
      * `#ychart` directive line or JSON/YAML with a top-level chart key is
-     * claimed, so a plain CSV/JSON/YAML data file is left as text. Runs before
+     * claimed, so a plain JSON/YAML data file is left as text. Runs before
      * the mermaid sniff (a chart marker never looks like `graph`/`flowchart`). */
     if (bytes && len > 0 && yetty_ychart_can_parse((const char *)bytes, len)) {
+        return YETTY_YCAT_TYPE_CHART;
+    }
+    /* Bare tabular data (headered CSV/TSV): consistent delimiter counts on
+     * the first rows and a numeric second row. ychart derives a default
+     * column chart from it, so `ycat data.csv` shows a figure, not text. */
+    if (bytes && len > 0 && looks_like_bare_table((const char *)bytes, len)) {
         return YETTY_YCAT_TYPE_CHART;
     }
 #endif

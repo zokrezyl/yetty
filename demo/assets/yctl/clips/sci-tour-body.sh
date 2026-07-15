@@ -3,22 +3,29 @@
 # yetty for the scientific community, every act on real data.
 #
 # One pass over a computational scientist's day, in one scrollback:
-# a real numerical experiment running live (three-body figure-8, RK4,
-# with the energy-conservation check in the log), an animated GPU wave
-# field, the Keeling curve, the GW150914 strain against its template,
-# a month of global seismicity, satellite imagery, a molecule in 3D,
-# live wave-optics on the GPU, the analysis pipeline, a profile, and
-# the lab notebook.
+#   1  a real solver streaming its observable LIVE into a scrolling plot
+#   2  the same solver's computed orbit as a figure + its convergence
+#      story on a log axis
+#   3  wave physics as an animated colormapped GPU field with a colorbar
+#   4  the climate record (Keeling curve, GISTEMP)
+#   5  GW150914 strain vs template straight from the GWOSC data files,
+#      then the discovery paper inline
+#   6  a month of global seismicity — baked over NASA satellite tiles
+#   7  typeset mathematics (ymath)
+#   8  molecules and point clouds in 3D (ymesh: GLB + PLY)
+#   9  a live N-body galaxy through the yrdawn bridge
+#  10  matplotlib figures inline (the Python story)
+#  11  pipeline DAG, solver profile, markdown lab notebook
 #
-# It is staged into the recording directory and typed as `./sci-tour.sh`
-# by demo/assets/yctl/clips/sci-tour.yaml. Run it directly to preview:
+# Staged into the recording directory and typed as `./sci-tour.sh` by
+# demo/assets/yctl/clips/sci-tour.yaml. Preview directly:
 #
 #   YETTY_REPO=$PWD ./demo/assets/yctl/clips/sci-tour-body.sh
 #
 # Environment (exported by demo/scripts/yctl/clips/sci-tour.sh):
 #   YETTY_REPO        repo root — used to find demo/assets
 #   YETTY_BUILD_DIR   build tree with the tools (default: <repo>/build-desktop-ytrace-release)
-#   HOLD              seconds each figure holds on screen (default: 1.3)
+#   HOLD              seconds each figure holds on screen (default: 1.6)
 #
 # Every step is best-effort: a missing tool, asset or network resource
 # prints a note and the tour moves on, so one gap never aborts the parade.
@@ -27,9 +34,8 @@ REPO="${YETTY_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 BUILD="${YETTY_BUILD_DIR:-$REPO/build-desktop-ytrace-release}"
 ASSETS="$REPO/demo/assets"
 SCI="$ASSETS/yscience"
-HOLD="${HOLD:-1.3}"
+HOLD="${HOLD:-1.6}"
 
-# Resolve a tool binary: prefer the build tree, fall back to $PATH.
 tool() {
     local dir="$1" name="$2"
     if [ -x "$BUILD/tools/$dir/$name" ]; then
@@ -42,25 +48,24 @@ tool() {
 YCAT="$(tool ycat ycat)"
 YCHART="$(tool ychart ychart)"
 YPLOT="$(tool yplot yplot)"
+YPLOT_STREAM="$(tool yplot-stream yplot-stream)"
+YMATH="$(tool ymath ymath)"
+YMAP="$(tool ymap ymap)"
 YDIAGRAM="$(tool ydiagram ydiagram)"
 YFLAME="$(tool yflame yflame)"
 YMESH="$(tool ymesh ymesh)"
-YMAP="$(tool ymap ymap)"
+NBODY="$BUILD/demo/yrdawn/12_nbody/demo-yrdawn-12-nbody"
 
 FIG_W=1500
-FIG_H=680
+FIG_H=640
 CELL_W=165
 
-# Mint section header (BRAND_ACCENT #6BA892), then a beat.
 sec() {
     printf '\n\033[1;38;2;107;168;146m▊ %s\033[0m\n\n' "$1"
     sleep 0.5
 }
 hold() { sleep "$HOLD"; }
-
-# Run a possibly-blocking player under a hard wall-clock cap.
 cap() { timeout -k 1 "$1" "${@:2}" 2>/dev/null || true; }
-
 have() { [ -n "$1" ] && [ -x "$1" ]; }
 
 # ── 0. cold open ─────────────────────────────────────────────────────────
@@ -68,39 +73,78 @@ if have "$YCAT" && [ -f "$ASSETS/yimage/wordmark.png" ]; then
     "$YCAT" -w "$CELL_W" "$ASSETS/yimage/wordmark.png"
     sleep 1.0
 fi
-printf '\033[38;2;159;167;168myetty for science — simulations, data and papers, one scrollback.\033[0m\n'
+printf '\033[38;2;159;167;168myetty for science — simulations, live data and papers, one scrollback.\033[0m\n'
 hold
 
-# ── 1. a real numerical experiment, running live ─────────────────────────
-sec "run — three-body figure-8 orbit, RK4, energy check (python + ychart)"
-if command -v python3 >/dev/null && [ -f "$SCI/solver-threebody.py" ]; then
-    python3 "$SCI/solver-threebody.py" threebody-orbit.json
-    sleep 0.6
-    if have "$YCHART" && [ -f threebody-orbit.json ]; then
-        "$YCHART" --width 1100 --height "$FIG_H" threebody-orbit.json
-    fi
+# ── 1. a real solver, streaming LIVE ─────────────────────────────────────
+sec "live — the three-body solver streaming an observable into a scrolling plot"
+if command -v python3 >/dev/null && have "$YPLOT_STREAM" && [ -f "$SCI/solver-threebody.py" ]; then
+    # No timeout wrapper: the solver's --stream budget self-terminates the
+    # pipeline (EOF → yplot-stream exits). A timeout here can orphan the
+    # pipeline (timeout signals only its direct child), leaving a zombie
+    # producer whose CMD_UPDATE envelopes retarget whatever figure claims
+    # the stream id next — that corrupts later acts.
+    python3 "$SCI/solver-threebody.py" --stream 420 | \
+        "$YPLOT_STREAM" --len=280 --yrange=0..4 \
+        --title='body 1 - body 2 separation (live)' || true
 fi
 hold
 
-# ── 2. wave physics on the GPU ───────────────────────────────────────────
-sec "field — interference of two circular waves, f(x,y) live on the GPU (yplot)"
+# ── 2. the computed orbit + the convergence story ────────────────────────
+sec "run — one full figure-8 period, RK4, energy conserved to 1e-15"
+if command -v python3 >/dev/null && [ -f "$SCI/solver-threebody.py" ]; then
+    python3 "$SCI/solver-threebody.py" threebody-orbit.json
+fi
+hold
+
+sec "scales — log-axis residual decay, straight line = exponential (yplot)"
+if have "$YPLOT"; then
+    "$YPLOT" -w "$FIG_W" -H 560 --ylog --yrange=0.000001..1 --xrange=0..30 \
+        --title 'iterative solver convergence' --xlabel 'iteration' --ylabel 'residual' \
+        'jacobi=exp(0-0.25*x); gauss_seidel=exp(0-0.5*x); multigrid=exp(0-1.5*x)' \
+        '@jacobi.color=#FF6B6B' '@gauss_seidel.color=#FFE66D' '@multigrid.color=#6BA892'
+fi
+hold
+
+# ── 3. wave physics on the GPU ───────────────────────────────────────────
+sec "field — two-source interference, f(x,y) live on the GPU, magma + colorbar"
 if have "$YPLOT"; then
     "$YPLOT" -w "$FIG_W" -H "$FIG_H" --xrange=-6.28..6.28 --yrange=-3.14..3.14 \
+        --colormap magma --field-range=-1.6..1.6 \
+        --title 'psi(x,y,t) - two coherent sources' --xlabel 'x' \
         'psi=sin(8*sqrt((x-1.5)*(x-1.5)+y*y)-2*time)/(1+sqrt((x-1.5)*(x-1.5)+y*y))+sin(8*sqrt((x+1.5)*(x+1.5)+y*y)-2*time)/(1+sqrt((x+1.5)*(x+1.5)+y*y))'
 fi
 hold
 
-# ── 3. the climate record ────────────────────────────────────────────────
+# ── 4. the climate record ────────────────────────────────────────────────
 sec "data — sixty-seven years of CO2: the Keeling curve (NOAA GML)"
-have "$YCHART" && "$YCHART" --width "$FIG_W" --height "$FIG_H" "$SCI/co2-keeling.json"
+if have "$YPLOT" && [ -f co2_mm_mlo.csv ]; then
+    "$YPLOT" -w "$FIG_W" -H "$FIG_H" \
+        --title 'atmospheric CO2 at Mauna Loa - the Keeling curve' \
+        --xlabel 'months since 1958-03' --ylabel 'CO2 (ppm)' \
+        --data 'monthly mean=co2_mm_mlo.csv:average'
+fi
 hold
-sec "data — 145 years of global temperature anomaly (NASA GISTEMP)"
-have "$YCHART" && "$YCHART" --width "$FIG_W" --height "$FIG_H" "$SCI/gistemp-anomaly.json"
+sec "data — 145 years of warming (NASA GISTEMP)"
+if have "$YPLOT" && [ -f "$SCI/gistemp-annual.txt" ]; then
+    "$YPLOT" -w "$FIG_W" -H 520 \
+        --title 'global mean temperature anomaly vs 1951-1980' \
+        --xlabel 'years since 1880' --ylabel 'anomaly (deg C)' \
+        --data "annual mean=$SCI/gistemp-annual.txt:1"
+fi
 hold
 
-# ── 4. the first gravitational wave ──────────────────────────────────────
-sec "signal — GW150914: observed strain vs numerical-relativity template (GWOSC)"
-have "$YCHART" && "$YCHART" --width "$FIG_W" --height "$FIG_H" "$SCI/gw150914.json"
+# ── 5. the first gravitational wave ──────────────────────────────────────
+sec "signal — GW150914: H1 strain vs numerical relativity, from the GWOSC files"
+if have "$YPLOT" && [ -f gw-observed-H.txt ] && [ -f gw-template-H.txt ]; then
+    "$YPLOT" -w "$FIG_W" -H "$FIG_H" \
+        --title 'GW150914 - the first gravitational-wave detection' \
+        --xlabel 'sample (16 kHz)' --ylabel 'strain (1e-21)' --legend \
+        --data 'H1 observed=gw-observed-H.txt:1' \
+        --data 'NR template=gw-template-H.txt:1'
+elif have "$YCHART"; then
+    "$YCHART" --width "$FIG_W" --height "$FIG_H" "$SCI/gw150914.json"
+fi
 hold
 if have "$YCAT" && [ -f gw150914-paper.pdf ]; then
     sec "paper — the discovery paper, PRL 116, 061102 (arXiv:1602.03837)"
@@ -108,43 +152,70 @@ if have "$YCAT" && [ -f gw150914-paper.pdf ]; then
     sleep 2.0
 fi
 
-# ── 5. a month of global seismicity ──────────────────────────────────────
-sec "catalog — every M>=4.5 earthquake of the last 30 days: plates emerge (USGS)"
-have "$YCHART" && "$YCHART" --width "$FIG_W" --height "$FIG_H" "$SCI/quakes-world.json"
+# ── 6. global seismicity on satellite imagery ────────────────────────────
+sec "earth — a month of M>=4.5 quakes baked over NASA Blue Marble (ymap)"
+if have "$YMAP" && [ -f quakes-45-month.geojson ]; then
+    cap 60 "$YMAP" -P gibs-bluemarble --lat 0 --lon 140 -z 3 -w 130 -H 40 \
+        --geojson quakes-45-month.geojson
+elif have "$YCHART"; then
+    "$YCHART" --width "$FIG_W" --height "$FIG_H" "$SCI/quakes-world.json"
+fi
 hold
 
-# ── 6. satellite imagery ─────────────────────────────────────────────────
-sec "earth — Sentinel-2 cloudless over Mount Etna (ymap)"
-have "$YMAP" && cap 25 "$YMAP" -P s2cloudless --lat 37.751 --lon 14.994 -z 11 -w 120 -H 36
+# ── 7. typeset mathematics ───────────────────────────────────────────────
+sec "math — the equations behind the acts, typeset inline (ymath)"
+if have "$YMATH"; then
+    "$YMATH" --size=32 '\frac{\partial u}{\partial t} = \alpha \nabla^2 u'
+    echo
+    "$YMATH" --size=32 '\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}'
+    echo
+    "$YMATH" --size=32 'x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}'
+    echo
+fi
 hold
 
-# ── 7. molecular structure ───────────────────────────────────────────────
-sec "molecule — caffeine, PubChem CID 2519, ball-and-stick (ymesh)"
+# ── 8. molecules and point clouds ────────────────────────────────────────
+sec "molecule — caffeine from PubChem, ball-and-stick (ymesh, GLB)"
 have "$YMESH" && cap 8 "$YMESH" --once -w 900 -H "$FIG_H" "$SCI/caffeine.glb"
 hold
+if [ -f helix.ply ]; then
+    sec "point cloud — 2000 samples, vertex-only PLY (ymesh)"
+    have "$YMESH" && cap 8 "$YMESH" --once -w 700 -H "$FIG_H" helix.ply
+    hold
+fi
 
-# ── 8. wave optics, live ─────────────────────────────────────────────────
-sec "live — two-source interference, computed per pixel per frame (shader)"
-have "$YCAT" && "$YCAT" -c shadertoy "$SCI/waves.wgsl"
-sleep 2.0
+# ── 9. a live N-body galaxy through the yrdawn bridge ────────────────────
+if [ -x "$NBODY" ]; then
+    sec "gravity — 480 bodies, leapfrog, streamed live through the yrdawn bridge"
+    # --foreground: the bridge client reads its responses from the tty;
+    # in timeout's default (background) process group that read raises
+    # SIGTTIN and the demo never draws.
+    timeout -k 1 --foreground 14 "$NBODY" 2>/dev/null || true
+    hold
+fi
 
-# ── 9. the analysis pipeline ─────────────────────────────────────────────
+# ── 10. the Python story ─────────────────────────────────────────────────
+if [ -x "$REPO/demo/python/mpl-demo.py" ] && command -v uv >/dev/null; then
+    sec "python — matplotlib figures, rendered inline (yetty.mpl)"
+    cap 120 "$REPO/demo/python/mpl-demo.py"
+    hold
+fi
+
+# ── 11. pipeline, profile, notebook ──────────────────────────────────────
 sec "pipeline — strain to posterior, as a DAG (ydiagram)"
 have "$YDIAGRAM" && "$YDIAGRAM" "$SCI/pipeline.mmd"
 hold
 
-# ── 10. profiling the solver ─────────────────────────────────────────────
 sec "profile — where the solver spends its time (yflame)"
 have "$YFLAME" && [ -f "$ASSETS/yflame/profile.folded" ] && \
     "$YFLAME" -w "$FIG_W" "$ASSETS/yflame/profile.folded"
 hold
 
-# ── 11. the lab notebook ─────────────────────────────────────────────────
 sec "notebook — the day's results, rendered markdown (ycat)"
 have "$YCAT" && "$YCAT" -w 130 -c markdown "$SCI/sci-report.md"
 hold
 
 # ── close ────────────────────────────────────────────────────────────────
 printf '\n\033[1;38;2;107;168;146m▊ that was one scrollback.\033[0m '
-printf '\033[38;2;159;167;168mthe experiment, the data, the paper — together.\033[0m\n\n'
+printf '\033[38;2;159;167;168mthe experiment, the live data, the paper — together.\033[0m\n\n'
 sleep 1.5

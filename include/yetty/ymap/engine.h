@@ -67,6 +67,36 @@ struct yetty_ymap_config {
      * "png" for raster, "mvt" for vector. Satellite providers (NASA
      * GIBS, EOX Sentinel-2) serve jpeg. */
     const char *tile_file_extension;
+
+    /* Optional data overlay (GeoJSON markers/tracks loaded by the ymap
+     * class). The raster path BAKES it into the composited image after
+     * the tile blit — SDF prims appended to the drawable list would be
+     * painted over by the composite figure in the terminal's render
+     * order. NULL = no overlay. */
+    const struct yetty_ymap_overlay *overlay;
+};
+
+/* One overlay marker: a geographic point styled at load time. Colors are
+ * straight RGBA bytes (r/g/b/a). */
+struct yetty_ymap_overlay_point {
+    double longitude;
+    double latitude;
+    float radius_px;
+    uint8_t red, green, blue, alpha;
+};
+
+/* One overlay path (LineString / polygon ring): lon,lat pairs. */
+struct yetty_ymap_overlay_path {
+    double *coordinates; /* owned by the ymap class; [lon0, lat0, ...] */
+    size_t point_count;
+    uint8_t red, green, blue, alpha;
+};
+
+struct yetty_ymap_overlay {
+    const struct yetty_ymap_overlay_point *points;
+    size_t point_count;
+    const struct yetty_ymap_overlay_path *paths;
+    size_t path_count;
 };
 
 /* Forward/inverse slippy projection: degrees ↔ global pixel coordinates

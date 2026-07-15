@@ -26,6 +26,12 @@ if(YETTY_ENABLE_FEATURE_YCHART)
     list(APPEND YCAT_SOURCES handler-chart.c)
 endif()
 
+# Plot handler (.npy numeric series) — optional, needs the GPU-less yplot
+# wire emitter.
+if(YETTY_ENABLE_FEATURE_YPLOT)
+    list(APPEND YCAT_SOURCES handler-plot.c)
+endif()
+
 # Video handler (#198 item 6a). Only built when yvideo's core wire
 # emitter is available — that lib is compiled unconditionally on
 # desktop but skipped on platforms that don't enable YVIDEO.
@@ -151,6 +157,11 @@ endif()
 if(YETTY_ENABLE_FEATURE_YCHART)
     target_link_libraries(yetty_ycat PUBLIC yetty_ychart)
     target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_YCHART=1)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YPLOT)
+    target_link_libraries(yetty_ycat PUBLIC yetty_yplot_core)
+    target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_YPLOT=1)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YVIDEO)

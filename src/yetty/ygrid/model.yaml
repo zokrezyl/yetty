@@ -428,7 +428,7 @@ types:
       - name: buffer_count
         type: size_t
       - name: uniforms
-        type: "struct yetty_yrender_uniform[32]"
+        type: "struct yetty_yrender_uniform[64]"
       - name: uniform_count
         type: size_t
       - name: shader

@@ -215,6 +215,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // grid.c logs "max prims/cell" at staging rebuild; keep this above it.
     let loop_count = min(cell_count, 1024u);
 
+    // Premultiplied-alpha accumulators: starting from vec3(0),
+    // `mix(result_color, rgb, alpha)` keeps result_color premultiplied
+    // (each contribution enters as rgb * alpha), and result_alpha composes
+    // src-over. The final return must NOT multiply by alpha again — that
+    // squares the alpha of every translucent pixel and crushes AA fringes
+    // and thin strokes to near-black.
     var result_color = vec3<f32>(0.0);
     var result_alpha = 0.0;
 
@@ -276,7 +282,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 let glyph_rgba = ydraw_unpack_color(color_packed);
                 let alpha = glyph_alpha * glyph_rgba.a;
                 result_color = mix(result_color, glyph_rgba.rgb, alpha);
-                result_alpha = max(result_alpha, alpha);
+                result_alpha = alpha + result_alpha * (1.0 - alpha);
             }
             continue;
         }
@@ -299,31 +305,43 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             has_fill = fill_color != 0u;
         }
 
-        if (d < 0.0 && has_fill) {
-            let edge_alpha = clamp(-d * 2.0, 0.0, 1.0);
-            let alpha = edge_alpha * fill_rgba.a;
+        // Analytic AA: scene == pixel space here, so a fixed one-pixel
+        // coverage ramp (half a pixel to each side of the boundary) equals
+        // screen-space fwidth AA — which WGSL forbids inside this
+        // non-uniform loop.
+        // Coverage is gamma-corrected (^(1/2.2)) because compositing happens
+        // on sRGB-encoded values: without it a 50%-covered fringe displays at
+        // ~21% perceived brightness and thin light-on-dark lines look pinched
+        // and ropey. Exact over a black background, close enough elsewhere.
+        if (d < 0.5 && has_fill) {
+            let coverage = clamp(0.5 - d, 0.0, 1.0);
+            let alpha = pow(coverage, 1.0 / 2.2) * fill_rgba.a;
             result_color = mix(result_color, fill_rgba.rgb, alpha);
-            result_alpha = max(result_alpha, alpha);
+            result_alpha = alpha + result_alpha * (1.0 - alpha);
         }
 
-        // Render stroke
+        // Render stroke. Strokes thinner than 1px draw as a 1px band dimmed
+        // by the requested width, so hairlines stay visible (and uniform)
+        // at any subpixel position.
         let stroke_color = ydraw_read_stroke_color(drawable_offset);
         let stroke_width = ydraw_read_stroke_width(drawable_offset);
         if (stroke_width > 0.0 && stroke_color != 0u) {
-            let stroke_dist = abs(d) - stroke_width * 0.5;
-            if (stroke_dist < 0.0) {
+            let effective_stroke_width = max(stroke_width, 1.0);
+            let stroke_dist = abs(d) - effective_stroke_width * 0.5;
+            if (stroke_dist < 0.5) {
                 let stroke_rgba = ydraw_unpack_color(stroke_color);
-                let edge_alpha = clamp(-stroke_dist * 2.0, 0.0, 1.0);
-                let alpha = edge_alpha * stroke_rgba.a;
+                let coverage = clamp(0.5 - stroke_dist, 0.0, 1.0) * min(stroke_width, 1.0);
+                let alpha = pow(coverage, 1.0 / 2.2) * stroke_rgba.a;
                 result_color = mix(result_color, stroke_rgba.rgb, alpha);
-                result_alpha = max(result_alpha, alpha);
+                result_alpha = alpha + result_alpha * (1.0 - alpha);
             }
         }
     }
 
     // Pointwise post-color effect (OSC-driven; index 0 = passthrough). Reads
-    // the shared frame clock so animation matches every other shader. Applied
-    // before premultiply so it acts on the straight (un-premultiplied) colour.
+    // the shared frame clock so animation matches every other shader. Acts on
+    // the premultiplied colour; identical to straight colour wherever
+    // alpha == 1, which is the whole opaque map surface.
     let fx_index = uniforms.ydraw_ydraw_post_fx_index;
     if (fx_index != 0u) {
         // The figure compositor has no pointer inputs — pass zero mouse/cursor.
@@ -336,6 +354,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             uniforms.ydraw_ydraw_post_fx_p4, uniforms.ydraw_ydraw_post_fx_p5);
     }
 
-    // Output with premultiplied alpha for proper blending
-    return vec4<f32>(result_color * result_alpha, result_alpha);
+    // result_color is already premultiplied (see accumulator comment above);
+    // the pipeline blends with (One, OneMinusSrcAlpha).
+    return vec4<f32>(result_color, result_alpha);
 }
