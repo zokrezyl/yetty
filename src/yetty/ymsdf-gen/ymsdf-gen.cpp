@@ -142,10 +142,23 @@ static glyph_result generate_glyph(worker_ctx &ctx, uint32_t codepoint)
 	msdfgen::edgeColoringSimple(shape, 3.0);
 
 	msdfgen::Bitmap<float, 3> msdf(bmp_w, bmp_h);
+	/* Pin the ink TOP exactly `padding` px below the bitmap top, because
+	 * bearing_y above is measured from the bitmap top with that exact
+	 * assumption. Anchoring the bottom (the old `padding/scale - bounds.b`)
+	 * let the ceil() slack of bmp_h land at the TOP, shifting every
+	 * glyph's ink down by 0..1 px depending on the fractional part of its
+	 * ink height — a per-glyph vertical jitter on the rendered baseline
+	 * (i/l visibly higher than n/m at small sizes, worse when zoomed). */
 	msdfgen::Vector2 translate(
 		padding / scale - bounds.l,
-		padding / scale - bounds.b);
-	msdfgen::generateMSDF(msdf, shape, ctx.pixel_range, scale, translate);
+		(bmp_h - padding) / scale - bounds.t);
+	/* generateMSDF's range parameter is in SHAPE units, not output pixels.
+	 * The consumers (ms-msdf-font, msdf-font shaders) assume the field
+	 * spans pixel_range OUTPUT pixels, so convert: shape range = px range
+	 * / (px per shape unit). Without this the true pixel range drifts
+	 * with font_size and units_per_EM (it only matched the assumed value
+	 * for 2048-upm fonts generated at size 32, where scale == 1.0). */
+	msdfgen::generateMSDF(msdf, shape, ctx.pixel_range / scale, scale, translate);
 
 	/* Convert to RGBA8 with Y-flip */
 	res.pixels.resize(bmp_w * bmp_h * 4);

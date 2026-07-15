@@ -239,6 +239,36 @@ static struct yetty_ycore_int_result yetty_event_handler(
         /* No zoom modifier — fall through to workspace forwarding below. */
     }
 
+    /* Keyboard zoom — mirrors the modifier'd wheel above. The platform layer
+     * delivers Ctrl-modified printable keys as CHAR events carrying the
+     * LAYOUT-RESOLVED key label (glfwGetKeyName), so the plus key matches by
+     * character on any layout: '=' is the unshifted label of the US/Dvorak
+     * plus key, '+' the QWERTZ and keypad one. Ctrl+plus/minus steps the
+     * visual (soft) zoom like Ctrl+wheel; with Shift it steps the structural
+     * cell-size (hard) zoom like Ctrl+Shift+wheel. Placed BEFORE the
+     * zoom-active keyboard capture below so the shortcuts keep working while
+     * zoomed. */
+    if (event->type == YETTY_YCORE_CHAR && (event->chr.mods & YETTY_MOD_CONTROL)) {
+        uint32_t zoom_char = event->chr.codepoint;
+        int zoom_in = zoom_char == '+' || zoom_char == '=';
+        int zoom_out = zoom_char == '-';
+        if (zoom_in || zoom_out) {
+            struct yetty_yui_event ev = {0};
+            if (event->chr.mods & YETTY_MOD_SHIFT) {
+                ev.type = YETTY_YCORE_ZOOM_CELL_SIZE;
+                ev.zoom_cell_size.delta = zoom_in ? 0.04f : -0.04f;
+            } else {
+                ev.type = YETTY_YCORE_ZOOM_VISUAL;
+                ev.zoom_visual.delta = zoom_in ? 0.1f : -0.1f;
+                /* A key event has no cursor — anchor at the window centre. */
+                ev.zoom_visual.anchor_x = yetty->window_width * 0.5f;
+                ev.zoom_visual.anchor_y = yetty->window_height * 0.5f;
+            }
+            yetty_yevent_post_async(yetty->context.runtime->platform_input_pipe, &ev);
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+    }
+
     /* While visual zoom is active, the keyboard is captured: Enter and Esc
      * exit the zoom; every other key/char event is silently swallowed so the
      * shell under the terminal doesn't see a phantom keystroke while the

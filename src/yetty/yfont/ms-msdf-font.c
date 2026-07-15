@@ -16,6 +16,7 @@
 #include <yetty/yrender/texture-format.h>
 #include <yetty/ytrace/ytrace.h>
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -382,8 +383,13 @@ static struct pixel_size_result ms_msdf_get_cell_size(const struct yetty_yfont_m
     float glyph_h = cell_extent_cdb * scale;
     float glyph_w = f->advance_cdb * scale;
     struct yetty_ycore_pixel_size sz;
-    sz.height = glyph_h * (1.0f + f->padding.top + f->padding.bottom);
-    sz.width = glyph_w * (1.0f + f->padding.left + f->padding.right);
+    /* Snap the cell pitch to whole pixels. A fractional pitch places every
+	 * column/row at a different subpixel phase, so the same glyph samples the
+	 * distance field at a different offset in each cell and stems come out
+	 * alternately crisp and blurry. One shared phase for the whole grid is
+	 * the closest an unhinted distance field can get to hinting. */
+    sz.height = fmaxf(1.0f, roundf(glyph_h * (1.0f + f->padding.top + f->padding.bottom)));
+    sz.width = fmaxf(1.0f, roundf(glyph_w * (1.0f + f->padding.left + f->padding.right)));
     return YETTY_OK(pixel_size, sz);
 }
 
@@ -533,8 +539,11 @@ static struct yetty_yrender_gpu_resource_set_result ms_msdf_get_gpu_resource_set
 
         f->rs.uniforms[0].f32 = f->pixel_range;
         f->rs.uniforms[1].f32 = scale;
-        f->rs.uniforms[2].f32 = baseline_y;
-        f->rs.uniforms[3].f32 = left_pad_px;
+        /* Snap baseline and glyph origin to whole pixels — together with the
+	     * snapped cell pitch (get_cell_size) every cell renders its glyph at
+	     * one shared subpixel phase instead of a per-column/per-row one. */
+        f->rs.uniforms[2].f32 = roundf(baseline_y);
+        f->rs.uniforms[3].f32 = roundf(left_pad_px);
 
         f->dirty = 0;
     }
