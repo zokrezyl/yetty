@@ -187,10 +187,13 @@ fi
 # ── 9. a live N-body galaxy through the yrdawn bridge ────────────────────
 if [ -x "$NBODY" ]; then
     sec "gravity — 480 bodies, leapfrog, streamed live through the yrdawn bridge"
+    # The demo ends on its own (~12 s) and tears its canvas down
+    # (DELETE_CHILD) on the way out — including on SIGTERM, so the
+    # safety timeout below can't leave the figure orphaned on screen.
     # --foreground: the bridge client reads its responses from the tty;
     # in timeout's default (background) process group that read raises
     # SIGTTIN and the demo never draws.
-    timeout -k 1 --foreground 14 "$NBODY" 2>/dev/null || true
+    timeout -k 2 --foreground 20 "$NBODY" 2>/dev/null || true
     hold
 fi
 

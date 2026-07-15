@@ -90,6 +90,6 @@ script:
       text: "# github.com/zokrezyl/yetty | yetty.dev"
       avg-speed: 24
   - special-char: ENTER
-  - sleep: 2.5
+  - sleep: 15
 
   - shutdown: ~

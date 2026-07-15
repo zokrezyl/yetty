@@ -21,7 +21,7 @@
 #define FRAME_W 560u
 #define FRAME_H 400u
 #define BODY_COUNT 480
-#define FRAME_COUNT 600 /* ~20 s at 30 fps */
+#define FRAME_COUNT 360 /* ~12 s at 30 fps — ends before the sci-tour act cap */
 #define FRAME_INTERVAL_MS 33
 #define TIME_STEP 0.004f
 #define SOFTENING 0.02f
