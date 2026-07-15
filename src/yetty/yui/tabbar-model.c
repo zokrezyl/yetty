@@ -14,6 +14,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
+#include <yetty/yevent/dispatch.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yplatform/ywindow-chrome/window-chrome.h>
@@ -41,6 +42,7 @@
 
 struct yetty_yui_tabbar_model;
 static void tabbar_request_render(const struct yetty_yui_tabbar_model *bar);
+static void tabbar_request_shutdown(const struct yetty_yui_tabbar_model *bar);
 
 struct yetty_yui_tabbar_model {
     struct yetty_yui_workspace **workspaces;
@@ -572,12 +574,12 @@ static struct yetty_ycore_void_result tabbar_close_active(struct yetty_yui_tabba
     if (bar->count == 0) {
         return YETTY_OK_VOID();
     }
-    /* Refuse to close the last workspace — most browsers close the window
-     * in that case, but yetty's lifecycle is owned by yetty.c (which posts
-     * SHUTDOWN on window-close). Leaving the last workspace open keeps the UI in a
-     * defined state until the user explicitly asks to quit. */
+    /* Closing the last workspace closes the app (like a browser closing its
+     * window on the last tab). Escalate to SHUTDOWN and let yetty.c tear
+     * down — do not destroy the workspace here; the cleanup chain does. */
     if (bar->count == 1) {
-        ydebug("tabbar: refusing to close last workspace");
+        ydebug("tabbar: closing last workspace → shutdown");
+        tabbar_request_shutdown(bar);
         return YETTY_OK_VOID();
     }
 
@@ -633,6 +635,20 @@ static void tabbar_request_render(const struct yetty_yui_tabbar_model *bar)
     if (loop->ops && loop->ops->request_render) {
         loop->ops->request_render(loop);
     }
+}
+
+/* Closing the last remaining workspace closes the application — the last tab
+ * behaves like the window close button. Post SHUTDOWN through the same
+ * platform input pipe the PTY-EOF and window-close paths use and let yetty.c
+ * drive the teardown (workspaces + terminals are reaped by the cleanup chain,
+ * so the caller must NOT destroy the workspace itself here). */
+static void tabbar_request_shutdown(const struct yetty_yui_tabbar_model *bar)
+{
+    if (!bar || !bar->yetty_ctx || !bar->yetty_ctx->runtime) {
+        return;
+    }
+    struct yetty_yui_event ev = {.type = YETTY_YCORE_SHUTDOWN};
+    yetty_yevent_post_async(bar->yetty_ctx->runtime->platform_input_pipe, &ev);
 }
 
 static struct yetty_ycore_void_result tabbar_switch(struct yetty_yui_tabbar_model *bar, size_t idx)
@@ -1051,8 +1067,9 @@ struct yetty_ycore_void_result yetty_yui_tabbar_model_switch_to(struct yetty_yui
 }
 
 /* Index-aware close; mirrors the bookkeeping of the static tabbar_close_active
- * but lets the caller pick which tab to drop. The "refuse to close the last
- * workspace" guard stays — it's a UX invariant, not specific to active-vs-N. */
+ * but lets the caller pick which tab to drop. Closing the last workspace
+ * shuts the app down (same as tabbar_close_active), so the tab 'x' on the
+ * final tab closes yetty. */
 struct yetty_ycore_void_result yetty_yui_tabbar_model_close_at(struct yetty_yui_tabbar_model *bar,
                                                                size_t idx)
 {
@@ -1062,8 +1079,11 @@ struct yetty_ycore_void_result yetty_yui_tabbar_model_close_at(struct yetty_yui_
     if (idx >= bar->count) {
         return YETTY_OK_VOID();
     }
+    /* Last workspace → close the app (see tabbar_request_shutdown). Do not
+     * destroy the workspace here; the shutdown cleanup chain reaps it. */
     if (bar->count == 1) {
-        ydebug("tabbar: refusing to close last workspace");
+        ydebug("tabbar: closing last workspace → shutdown");
+        tabbar_request_shutdown(bar);
         return YETTY_OK_VOID();
     }
     struct yetty_yui_workspace *ws = bar->workspaces[idx];

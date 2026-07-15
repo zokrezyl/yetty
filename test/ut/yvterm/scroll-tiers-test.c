@@ -167,6 +167,16 @@ static uint32_t slot_codepoint(struct ytest *test, struct yetty_yclass_object *g
     return cells.value[col].codepoint;
 }
 
+static const struct yetty_yvterm_text_cell *slot_cell(struct ytest *test,
+                                                      struct yetty_yclass_object *grid,
+                                                      uint32_t slot, uint32_t col)
+{
+    struct yetty_yvterm_text_cell_const_ptr_result cells = yetty_yvterm_grid_slot_cells(grid, slot);
+    YTEST_REQUIRE_OK(test, cells);
+    YTEST_REQUIRE_NOT_NULL(test, cells.value);
+    return &cells.value[col];
+}
+
 /* Anchor one fake figure + its wire envelope on the cursor row, mirroring the
  * ingest order (envelope first, then the instance). Returns the line's
  * timeline index (== rows scrolled so far, since content starts at row 0). */
@@ -216,6 +226,34 @@ static void test_age_out_archives_line(struct ytest *test)
     YTEST_CHECK_EQ_INT(test, live_anchor(test, grid), 9);
     /* The archive keeps it reachable: the floor must NOT move. */
     YTEST_CHECK_EQ_INT(test, history_floor(test, grid), 0);
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
+ * Grapheme clusters survive the archive round-trip (#570): a combining cluster
+ * aged into warm/cold history must materialize back with every mark intact, not
+ * just its base codepoint. Exercises the variable-length mark payload in the
+ * tier serialize/inflate path.
+ *-------------------------------------------------------------------------*/
+static void test_cluster_survives_archive(struct ytest *test)
+{
+    struct yetty_yclass_object *grid = make_grid(test, 20, 4, 0, 8);
+    /* col 0: 'e' + U+0301 acute; col 1: space; col 2: 'a' + U+0301 + U+0323. */
+    feed(test, grid, "e\xcc\x81 a\xcc\x81\xcc\xa3");
+    feed_newlines(test, grid, 40); /* age timeline line 0 into the archive */
+
+    const uint32_t *window = view_window(test, grid, 1, 0, 4);
+    const struct yetty_yvterm_text_cell *acute = slot_cell(test, grid, window[0], 0);
+    YTEST_CHECK_EQ_INT(test, acute->codepoint, 'e');
+    YTEST_CHECK_EQ_INT(test, acute->mark_count, 1);
+    YTEST_CHECK_EQ_INT(test, acute->marks[0], 0x0301);
+
+    const struct yetty_yvterm_text_cell *stacked = slot_cell(test, grid, window[0], 2);
+    YTEST_CHECK_EQ_INT(test, stacked->codepoint, 'a');
+    YTEST_CHECK_EQ_INT(test, stacked->mark_count, 2);
+    YTEST_CHECK_EQ_INT(test, stacked->marks[0], 0x0301);
+    YTEST_CHECK_EQ_INT(test, stacked->marks[1], 0x0323);
 
     yetty_yvterm_grid_dispose(grid);
 }
@@ -540,6 +578,7 @@ int main(void)
 {
     struct ytest test = ytest_begin("yvterm_scroll_tiers");
     YTEST_RUN(&test, test_age_out_archives_line);
+    YTEST_RUN(&test, test_cluster_survives_archive);
     YTEST_RUN(&test, test_view_resolves_archived_lines);
     YTEST_RUN(&test, test_materialize_failure_is_absorbed);
     YTEST_RUN(&test, test_warm_budget_spills_to_disk);

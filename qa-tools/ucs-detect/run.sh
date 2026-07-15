@@ -16,7 +16,7 @@
 # Examples:
 #   qa-tools/ucs-detect/run.sh
 #   qa-tools/ucs-detect/run.sh ./build-desktop-ytrace-release/yetty \
-#       tmp/baseline.yaml --limit-category-time 60
+#       tmp/baseline.yaml --limit-codepoints 300 --limit-graphemes 25
 set -eu
 
 repo_root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -38,41 +38,76 @@ command -v uvx >/dev/null 2>&1 || {
 }
 
 mkdir -p tmp
-rm -f "$output_yaml"
+output_dir=$(cd "$(dirname "$output_yaml")" && pwd)
+output_yaml_abs=$output_dir/$(basename "$output_yaml")
+rm -f "$output_yaml_abs"
 
-# ucs-detect probes the terminal on stderr (session stream) and reads
-# replies on stdin — neither may be redirected. The trailing marker file
-# lets this script distinguish "ucs-detect finished" from "yetty died
-# mid-run". TERM is pinned because yetty does not set it for its child,
-# and an inherited launcher TERM (e.g. tmux-256color) distorts the
-# terminal fingerprint.
-done_marker=tmp/ucs-detect-done.marker
+# ucs-detect probes the terminal on its --stream fd (stderr by default) and
+# reads replies on the same tty; that fd is the yetty PTY here and must not
+# be redirected. A trailing marker file, touched only after ucs-detect
+# returns, tells this script "measurement finished" independently of yetty's
+# own exit. TERM is pinned because yetty does not set it for its child, and
+# an inherited launcher TERM (e.g. tmux-256color) would distort the terminal
+# fingerprint.
+done_marker=$repo_root/tmp/ucs-detect-done.marker
+yetty_log=$repo_root/tmp/ucs-detect-yetty.log
 rm -f "$done_marker"
 
 inner_command="TERM=xterm-256color uvx ucs-detect \
-    --save-yaml '$output_yaml' \
+    --save-yaml '$output_yaml_abs' \
     --set-software-name yetty \
     --set-software-version '$git_version' \
     $*; touch '$done_marker'"
 
 echo "running ucs-detect inside $yetty_binary (version $git_version) ..."
-echo "result yaml: $output_yaml"
+echo "result yaml: $output_yaml_abs"
 
-# Keep yetty's own trace out of the picture unless the caller set it.
+# yetty is launched in the BACKGROUND and torn down by the specific PID we
+# capture here — never by name. yetty exits on its own shortly after the -e
+# child does, but the marker is the precise "measurement finished" signal
+# (independent of teardown timing), and reaping our own PID keeps the harness
+# robust if a future regression stalls that teardown again.
 YTRACE_DEFAULT_ON=${YTRACE_DEFAULT_ON:-no} \
-    "$yetty_binary" -e "bash -c \"$inner_command\"" >tmp/ucs-detect-yetty.log 2>&1
+    "$yetty_binary" -e "bash -c \"$inner_command\"" >"$yetty_log" 2>&1 &
+yetty_pid=$!
 
-if [ ! -f "$done_marker" ]; then
-    echo "error: yetty exited before ucs-detect completed" >&2
-    echo "  yetty log:      tmp/ucs-detect-yetty.log" >&2
-    echo "  ucs-detect log: tmp/ucs-detect-stderr.log" >&2
+# Wall-clock ceiling for the measurement itself. Generous — a full unsampled
+# language walk is minutes. Override with UCS_DETECT_TIMEOUT for large runs.
+measure_timeout=${UCS_DETECT_TIMEOUT:-600}
+waited=0
+while [ ! -f "$done_marker" ]; do
+    if ! kill -0 "$yetty_pid" 2>/dev/null; then
+        echo "error: yetty exited before ucs-detect finished (no marker)" >&2
+        echo "  yetty log: $yetty_log" >&2
+        exit 1
+    fi
+    if [ "$waited" -ge "$measure_timeout" ]; then
+        echo "error: ucs-detect did not finish within ${measure_timeout}s" >&2
+        echo "  killing yetty pid $yetty_pid; yetty log: $yetty_log" >&2
+        kill "$yetty_pid" 2>/dev/null || true
+        exit 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+done
+
+# Measurement done. Give yetty a brief grace to exit on its own, then reap
+# the exact PID we started (the shutdown stall means it usually will not).
+grace=0
+while kill -0 "$yetty_pid" 2>/dev/null; do
+    if [ "$grace" -ge 3 ]; then
+        kill "$yetty_pid" 2>/dev/null || true
+        break
+    fi
+    sleep 1
+    grace=$((grace + 1))
+done
+wait "$yetty_pid" 2>/dev/null || true
+
+if [ ! -s "$output_yaml_abs" ]; then
+    echo "error: ucs-detect finished but produced no YAML at $output_yaml_abs" >&2
+    echo "  yetty log: $yetty_log" >&2
     exit 1
 fi
 
-if [ ! -s "$output_yaml" ]; then
-    echo "error: ucs-detect finished but produced no YAML at $output_yaml" >&2
-    echo "  ucs-detect log: tmp/ucs-detect-stderr.log" >&2
-    exit 1
-fi
-
-echo "done: $output_yaml"
+echo "done: $output_yaml_abs"

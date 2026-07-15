@@ -14,6 +14,7 @@
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#include FT_TRUETYPE_TABLES_H
 
 #include <limits.h>
 #include <stdlib.h>
@@ -220,6 +221,58 @@ static void raster_font_apply_size_to_face(struct yetty_yfont_raster_font *font,
     FT_Select_Size(face, best_strike);
 }
 
+/* Ascender/descender (in pixels, at the face's current ppem) used to fit a
+ * face's glyphs into the cell.
+ *
+ * font_size is derived so the face's line box fills the cell height. That is
+ * fine for Latin, but broad-coverage faces bake generous leading into their
+ * vertical metrics — NotoSansCJK carries ascent 1160 / descent -288 per 1000
+ * upm (1.45x the em), and the Noto fallback faces used for Thai, Devanagari,
+ * Arabic, Hebrew, Bengali, Tamil, … are worse still — so fitting THAT box to
+ * the cell shrinks the visible glyphs to a fraction of the cell and every
+ * Asian / complex script renders tiny next to Latin text.
+ *
+ * Guard against it: when the hhea box overflows the em, prefer the
+ * typographic (OS/2) box for a truer ascent:descent split, then clamp the
+ * total to the em. The em is the design body the glyphs are drawn against, so
+ * clamping sizes them to fill the cell rather than shrinking them to fit stray
+ * leading. Faces whose box already fits the em (Latin, most scripts) are
+ * untouched. The clamp is unconditional because some faces set the typo box
+ * as large as hhea — without it they would still render tiny. */
+static void raster_font_face_metrics(FT_Face face, int *ascender_out, int *descender_out)
+{
+    int ascender = (int)(face->size->metrics.ascender >> 6);
+    int descender = (int)labs(face->size->metrics.descender >> 6);
+    int em_px = (int)(face->size->metrics.y_ppem);
+
+    if (em_px <= 0 || ascender + descender <= em_px) {
+        *ascender_out = ascender;
+        *descender_out = descender;
+        return;
+    }
+
+    TT_OS2 *os2 = (TT_OS2 *)FT_Get_Sfnt_Table(face, FT_SFNT_OS2);
+    FT_UShort upm = face->units_per_EM;
+    if (os2 && upm && (os2->sTypoAscender != 0 || os2->sTypoDescender != 0)) {
+        long ppem = (long)face->size->metrics.y_ppem;
+        int typo_ascender = (int)((long)os2->sTypoAscender * ppem / upm);
+        int typo_descender = (int)labs((long)os2->sTypoDescender * ppem / upm);
+        if (typo_ascender + typo_descender > 0) {
+            ascender = typo_ascender;
+            descender = typo_descender;
+        }
+    }
+
+    int total = ascender + descender;
+    if (total > em_px && total > 0) {
+        ascender = ascender * em_px / total;
+        descender = descender * em_px / total;
+    }
+
+    *ascender_out = ascender;
+    *descender_out = descender;
+}
+
 static void raster_font_update_font_size(struct yetty_yfont_raster_font *font)
 {
     FT_Face regular_face = font->ft_faces[0];
@@ -259,10 +312,11 @@ static void raster_font_update_font_size(struct yetty_yfont_raster_font *font)
     /* Set initial size to get metrics (use cell height as starting point) */
     FT_Set_Pixel_Sizes(regular_face, 0, (FT_UInt)font->cell_height);
 
-    /* Get font metrics in pixels (at current size) */
-    /* FreeType metrics are in 26.6 fixed point (divide by 64) */
-    int ascender = regular_face->size->metrics.ascender >> 6;
-    int descender = (int)labs(regular_face->size->metrics.descender >> 6);
+    /* Get font metrics in pixels (at current size). raster_font_face_metrics
+     * substitutes the typographic box for faces (CJK) whose hhea line box
+     * overflows the em, so their glyphs are not shrunk to fit stray leading. */
+    int ascender, descender;
+    raster_font_face_metrics(regular_face, &ascender, &descender);
     int line_height = ascender + descender;
 
     /* Scale font size so line height fits in cell height (with small margin) */
@@ -283,9 +337,8 @@ static void raster_font_update_font_size(struct yetty_yfont_raster_font *font)
         raster_font_apply_size_to_face(font, font->fallback_faces[i]);
     }
 
-    /* Recalculate metrics at new size */
-    ascender = regular_face->size->metrics.ascender >> 6;
-    descender = (int)labs(regular_face->size->metrics.descender >> 6);
+    /* Recalculate metrics at new size (same typographic-box substitution). */
+    raster_font_face_metrics(regular_face, &ascender, &descender);
 
     /* Baseline position from top of cell (center the text vertically) */
     int actual_line_height = ascender + descender;

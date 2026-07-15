@@ -19,6 +19,18 @@ yetty_add_c_test(
     LABELS  contract wire
     TIMEOUT 30)
 
+# Foreign-DCS / foreign-OSC passthrough (#579): XTGETTCAP, DECRQSS and
+# unhandled standard OSC (52/title/…) must traverse the framer byte-identical
+# instead of being swallowed + leaked as screen text; owned envelopes still
+# parse and are not relayed as text; truncated foreign DCS does not wedge.
+yetty_add_c_test(
+    NAME    ywire_passthrough
+    SOURCES passthrough-test.c
+    LIBS    yetty_ywire yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract wire
+    TIMEOUT 30)
+
 # Streaming-encoder reuse (#30): one long-lived SM emitting many envelopes
 # back-to-back — LZ4F context reuse across frames/block boundaries, mixed
 # compression, encode+decode interleaved on one SM (the DCS-transport shape),

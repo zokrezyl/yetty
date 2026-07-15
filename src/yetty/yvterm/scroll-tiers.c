@@ -41,9 +41,19 @@ enum {
     LINE_WORD_PRIMITIVE_COUNT = 4,
     LINE_WORD_ARENA_COUNT = 5,
     LINE_WORD_RICH_SPAN = 6,
-    LINE_HEADER_WORDS = 7,
+    /* Total combining-mark words trailing the cell runs (one block per run
+     * whose representative cell carries marks). Kept in the header so a line
+     * record's size can be validated before walking the variable-length
+     * runs. */
+    LINE_WORD_MARK_WORDS = 7,
+    LINE_HEADER_WORDS = 8,
     LINE_FLAG_CONTINUATION = 1u << 0,
     CELL_RUN_WORDS = 5,
+    /* A run's cell mark_count is packed into the high byte of its repeat
+     * word; the low 24 bits hold the repeat count (always ≥ terminal cols,
+     * far under 2^24). The marks follow the run's CELL_RUN_WORDS. */
+    CELL_RUN_REPEAT_MASK = 0x00FFFFFFu,
+    CELL_RUN_MARK_SHIFT = 24,
 };
 
 /* Spill-file record header (self-delimiting, one per sealed segment). */
@@ -186,9 +196,17 @@ static struct yetty_ycore_void_result builder_reserve_line_slot(struct yetty_yvt
 static int cells_equal(const struct yetty_yvterm_text_cell *left,
                        const struct yetty_yvterm_text_cell *right)
 {
-    return left->codepoint == right->codepoint && left->fg == right->fg && left->bg == right->bg &&
-           left->attrs == right->attrs && left->width == right->width &&
-           left->flags == right->flags;
+    if (left->codepoint != right->codepoint || left->fg != right->fg || left->bg != right->bg ||
+        left->attrs != right->attrs || left->width != right->width || left->flags != right->flags ||
+        left->mark_count != right->mark_count) {
+        return 0;
+    }
+    for (uint8_t mark = 0; mark < left->mark_count; ++mark) {
+        if (left->marks[mark] != right->marks[mark]) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 static struct yetty_ycore_void_result builder_push_line(struct yetty_yvterm_tiers *tiers,
@@ -196,8 +214,10 @@ static struct yetty_ycore_void_result builder_push_line(struct yetty_yvterm_tier
                                                         uint32_t used_cols, uint32_t original_cols)
 {
     struct yetty_yvterm_tier_builder *builder = &tiers->builder;
-    /* Count cell runs first so the record size is exact. */
+    /* Count cell runs (and the combining-mark words they trail) first so the
+     * record size is exact. */
     uint32_t run_count = 0;
+    uint32_t mark_words = 0;
     for (uint32_t col = 0; col < used_cols;) {
         uint32_t run_end = col + 1u;
         while (run_end < used_cols &&
@@ -205,11 +225,12 @@ static struct yetty_ycore_void_result builder_push_line(struct yetty_yvterm_tier
             run_end++;
         }
         run_count++;
+        mark_words += line->text_cells[col].mark_count;
         col = run_end;
     }
 
     size_t word_count = LINE_HEADER_WORDS + (size_t)run_count * CELL_RUN_WORDS +
-                        (size_t)line->primitive_count * 2u + line->arena_count;
+                        (size_t)mark_words + (size_t)line->primitive_count * 2u + line->arena_count;
     struct yetty_ycore_void_result reserve_res =
         builder_reserve(tiers, word_count * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reserve_res, "scroll tiers: push_line reserve");
@@ -227,6 +248,7 @@ static struct yetty_ycore_void_result builder_push_line(struct yetty_yvterm_tier
     words[LINE_WORD_PRIMITIVE_COUNT] = line->primitive_count;
     words[LINE_WORD_ARENA_COUNT] = line->arena_count;
     words[LINE_WORD_RICH_SPAN] = line->rich_span_rows;
+    words[LINE_WORD_MARK_WORDS] = mark_words;
     uint32_t *cursor = words + LINE_HEADER_WORDS;
 
     for (uint32_t col = 0; col < used_cols;) {
@@ -236,13 +258,16 @@ static struct yetty_ycore_void_result builder_push_line(struct yetty_yvterm_tier
             run_end++;
         }
         const struct yetty_yvterm_text_cell *cell = &line->text_cells[col];
-        cursor[0] = run_end - col;
+        cursor[0] = (run_end - col) | ((uint32_t)cell->mark_count << CELL_RUN_MARK_SHIFT);
         cursor[1] = cell->codepoint;
         cursor[2] = cell->fg;
         cursor[3] = cell->bg;
         cursor[4] =
             (uint32_t)cell->attrs | ((uint32_t)cell->width << 16) | ((uint32_t)cell->flags << 24);
         cursor += CELL_RUN_WORDS;
+        for (uint8_t mark = 0; mark < cell->mark_count; ++mark) {
+            *cursor++ = cell->marks[mark];
+        }
         col = run_end;
     }
     for (uint32_t index = 0; index < line->primitive_count; ++index) {
@@ -533,8 +558,9 @@ static struct yetty_ycore_void_result tier_inflate_line(struct yetty_yvterm_tier
     uint32_t run_count = words[LINE_WORD_RUN_COUNT];
     uint32_t primitive_count = words[LINE_WORD_PRIMITIVE_COUNT];
     uint32_t arena_count = words[LINE_WORD_ARENA_COUNT];
-    if (LINE_HEADER_WORDS + (size_t)run_count * CELL_RUN_WORDS + (size_t)primitive_count * 2u +
-            arena_count >
+    uint32_t mark_words = words[LINE_WORD_MARK_WORDS];
+    if (LINE_HEADER_WORDS + (size_t)run_count * CELL_RUN_WORDS + (size_t)mark_words +
+            (size_t)primitive_count * 2u + arena_count >
         word_count) {
         return YETTY_ERR(yetty_ycore_void, "scroll tiers: corrupt line record");
     }
@@ -554,8 +580,13 @@ static struct yetty_ycore_void_result tier_inflate_line(struct yetty_yvterm_tier
 
     const uint32_t *cursor = words + LINE_HEADER_WORDS;
     uint32_t col = 0;
-    for (uint32_t run = 0; run < run_count; ++run, cursor += CELL_RUN_WORDS) {
-        uint32_t repeat = cursor[0];
+    for (uint32_t run = 0; run < run_count; ++run) {
+        uint32_t repeat = cursor[0] & CELL_RUN_REPEAT_MASK;
+        uint8_t mark_count = (uint8_t)((cursor[0] >> CELL_RUN_MARK_SHIFT) & 0xFFu);
+        if (mark_count > YETTY_YVTERM_CELL_MAX_MARKS) {
+            mark_count = YETTY_YVTERM_CELL_MAX_MARKS; /* defend against a corrupt byte */
+        }
+        const uint32_t *run_marks = cursor + CELL_RUN_WORDS;
         for (uint32_t step = 0; step < repeat; ++step, ++col) {
             if (col >= cols) {
                 break; /* narrower view — clip */
@@ -568,7 +599,12 @@ static struct yetty_ycore_void_result tier_inflate_line(struct yetty_yvterm_tier
             cell->attrs = (uint16_t)(cursor[4] & 0xFFFFu);
             cell->width = (uint8_t)((cursor[4] >> 16) & 0xFFu);
             cell->flags = (uint8_t)((cursor[4] >> 24) & 0xFFu);
+            cell->mark_count = mark_count;
+            for (uint8_t mark = 0; mark < mark_count; ++mark) {
+                cell->marks[mark] = run_marks[mark];
+            }
         }
+        cursor += CELL_RUN_WORDS + mark_count;
     }
 
     if (suppress_rich || (primitive_count == 0 && arena_count == 0)) {
