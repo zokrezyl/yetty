@@ -68,11 +68,43 @@ static void test_deterministic(struct ytest *test)
     yetty_ydraw_drawable_list_destroy(b.value.buffer);
 }
 
+/* Regression: XML permits "</name S? >" (ETag ::= '</' Name S? '>'), and
+ * Inkscape/Sodipodi exports pretty-print the root closer as "</svg\n   >".
+ * Those must parse and render, not fail whole-document. */
+static void test_endtag_whitespace_parses(struct ytest *test)
+{
+    const char *svg = "<svg viewBox=\"0 0 10 10\">"
+                      "<rect x=\"1\" y=\"1\" width=\"8\" height=\"8\" fill=\"#00ff00\"/>"
+                      "</svg\n   >";
+    struct yetty_ysvg_render_config cfg = {0};
+    struct yetty_ysvg_render_result rr = yetty_ysvg_render(svg, strlen(svg), NULL, 0, &cfg);
+    YTEST_REQUIRE_OK(test, rr);
+    YTEST_CHECK(test, yetty_ydraw_drawable_list_size(rr.value.buffer) > 0);
+    yetty_ydraw_drawable_list_destroy(rr.value.buffer);
+}
+
+/* Regression: a malformed <path> must not blank the document — per the SVG
+ * error-processing model the sibling <rect> still renders. */
+static void test_bad_path_recovers(struct ytest *test)
+{
+    const char *svg = "<svg viewBox=\"0 0 10 10\">"
+                      "<path d=\"M0 0 L\"/>" /* truncated command → skipped */
+                      "<rect x=\"1\" y=\"1\" width=\"8\" height=\"8\" fill=\"#0000ff\"/>"
+                      "</svg>";
+    struct yetty_ysvg_render_config cfg = {0};
+    struct yetty_ysvg_render_result rr = yetty_ysvg_render(svg, strlen(svg), NULL, 0, &cfg);
+    YTEST_REQUIRE_OK(test, rr);
+    YTEST_CHECK(test, yetty_ydraw_drawable_list_size(rr.value.buffer) > 0);
+    yetty_ydraw_drawable_list_destroy(rr.value.buffer);
+}
+
 int main(void)
 {
     struct ytest test = ytest_begin("ysvg_parse");
     YTEST_RUN(&test, test_valid_render_nonempty);
     YTEST_RUN(&test, test_malformed_rejected);
     YTEST_RUN(&test, test_deterministic);
+    YTEST_RUN(&test, test_endtag_whitespace_parses);
+    YTEST_RUN(&test, test_bad_path_recovers);
     return ytest_end(&test);
 }

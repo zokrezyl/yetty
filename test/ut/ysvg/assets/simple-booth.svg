@@ -1,0 +1,320 @@
+<?xml version="1.0"?>
+<svg
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:cc="http://creativecommons.org/ns#"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:svg="http://www.w3.org/2000/svg"
+    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+    xmlns:ns1="http://sozi.baierouge.fr"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+    id="svg2"
+    viewBox="0 0 1052.4 744.09"
+    version="1.1"
+  >
+  <defs
+      id="defs4"
+    >
+    <filter
+        id="filter3886"
+        color-interpolation-filters="sRGB"
+      >
+      <feGaussianBlur
+          id="feGaussianBlur3888"
+          stdDeviation="0.8374111"
+      />
+    </filter
+    >
+    <filter
+        id="filter3867"
+      >
+      <feGaussianBlur
+          id="feGaussianBlur3869"
+          stdDeviation="3.1020415"
+      />
+    </filter
+    >
+  </defs
+  >
+  <g
+      id="layer1"
+      transform="translate(-74.074 -216.32)"
+    >
+    <rect
+        id="rect3025"
+        ry="0"
+        height="83.22"
+        width="689.12"
+        y="722.39"
+        x="237.39"
+        fill="#808000"
+    />
+    <path
+        id="path3828"
+        opacity=".50453"
+        filter="url(#filter3867)"
+        d="m833.92 771.52-16.435-8.0028-229.74 24.911-251.62-43.765-10.929 12.184 243.65 38.353 96.043-3.4337z"
+    />
+    <rect
+        id="rect3019"
+        transform="scale(1,-1)"
+        ry="0"
+        height="426.03"
+        width="689.12"
+        y="-722.39"
+        x="237.39"
+        fill="#79d2ff"
+    />
+    <path
+        id="rect3694"
+        fill="#800000"
+        d="m689.25 434.78-357.21 62.375v248.88l231.51 38.738 28.231 3.7588 229.52-24.551v-237.25z"
+    />
+    <path
+        id="rect3020"
+        fill="#fff"
+        d="m587.17 551v238.47l38.469-3.9375v-238.47z"
+    />
+    <rect
+        id="rect3676"
+        transform="matrix(-.99094 -.13428 0 1 0 0)"
+        ry="0"
+        height="250.16"
+        width="29.565"
+        y="450.57"
+        x="-364.52"
+        fill="#cebebc"
+    />
+    <path
+        id="rect3678"
+        fill="#cebebc"
+        d="m562.95 547.5 0.9092 240.33 26.435 2.355v-238.97z"
+    />
+    <path
+        id="rect3816"
+        opacity=".50453"
+        filter="url(#filter3867)"
+        d="m743.14 480.81-15.611-20.374c-140.07 119.2-233.87 82.243-420.09 58.933l-9.2792 16.308 286.53 35.054 53.156-0.13477z"
+    />
+    <path
+        id="rect3686"
+        fill="#cebebc"
+        d="m295.39 521.27 0.83541 9.7188 294.59 30.844 0.8354-11.39z"
+    />
+    <path
+        id="path11046"
+        fill="#cebebc"
+        d="m792.03 532.36 0.8354 235.27 8.5649-0.20073 0.22898-235.53z"
+    />
+    <rect
+        id="rect11037"
+        ry="0"
+        transform="matrix(.98696 -.16096 0 1 0 0)"
+        height="238.47"
+        width="20.359"
+        y="659.92"
+        x="811.61"
+        fill="#fff"
+    />
+    <path
+        id="rect3868"
+        opacity=".35"
+        filter="url(#filter3886)"
+        d="m725.23 445.28-16.156 16.812 79.736 92.364 9.6778 0.75543 20.53 20.433 6.3626-14.91z"
+    />
+    <path
+        id="rect3684"
+        fill="#cebebc"
+        d="m728.29 439.6-13.938 14.5 112.73 112.24 18.493 0.53729z"
+    />
+    <path
+        id="path3018"
+        fill="#fff"
+        d="m741.33 461.22 106.05 109.86 0.53-24.5-109.4-113.2z"
+    />
+    <path
+        id="path3027"
+        fill="#fff"
+        d="m743.61 461.22-118.42 101.44-34.86-0.71-0.36-10.08 148.4-118.53z"
+    />
+    <path
+        id="rect3022"
+        fill="#fff"
+        d="m672.07 572.78v21.031l95.938 0.21875v-21z"
+    />
+    <path
+        id="rect2900"
+        fill="#999"
+        d="m422.12 423.62-127.26 97.89 296.51 30.309 149.41-118.04z"
+    />
+    <path
+        id="rect11031"
+        fill="#cebebc"
+        d="m662.54 573.4 1.1617 207.64 8.7938-1.1167-0.32629-206.98z"
+    />
+    <path
+        id="path11042"
+        fill="#cebebc"
+        d="m745.24 593.42 0.8354 178.71 8.7938-1.0588v-178.09z"
+    />
+    <path
+        id="path3008"
+        fill="#b3b3b3"
+        d="m683.5 596.5 3.1211-3.1348 69.571-0.69045-11.758 3.1661z"
+    />
+    <path
+        id="path11040"
+        fill="#fff"
+        d="m686.76 573.4 0.8354 205.14-15.433 1.3896v-206.98z"
+    />
+    <path
+        id="path11044"
+        fill="#fff"
+        d="m769.47 573.4 0.8354 195.91-15.759 1.7158 0.32629-198.08z"
+    />
+    <path
+        id="rect3012"
+        fill="#ffe680"
+        d="m686.75 595.25v183.23l59.468-6.7456 0.32629-176.48z"
+    />
+    <path
+        id="path3020"
+        fill="#520"
+        d="m736.26 595.97-49.606-0.7142-0.20862 183.06 51.1-13.25z"
+    />
+    <path
+        id="rect3047"
+        fill="#ffe680"
+        d="m423.7 589.16v71.875l73.625 8.8125v-71.844l-73.625-8.8438z"
+    />
+    <path
+        id="path3040"
+        fill="#cebebc"
+        d="m422.35 598.14 0.12376 54.498 5.7076-2.4394 0.27075-52.076z"
+    />
+    <path
+        id="path3030"
+        fill="#fff"
+        d="m407.79 581.91v83.625l95.938 10.531v-6.9375h0.21875l-0.21875-76.688zm14.844 16.125 64.969 7.125v54.625l-64.375-7.0938z"
+    />
+    <path
+        id="path3038"
+        fill="#cebebc"
+        d="m502.29 592.38 1.1617 83.85 5.2667-2.8802-0.32629-83.191z"
+    />
+    <path
+        id="path3042"
+        fill="#fff"
+        d="m407.78 581.9 6.0757-2.1896 94.188 10.556-4.3258 2.1836z"
+    />
+    <path
+        id="path3045"
+        fill="#cebebc"
+        d="m487.61 660.31-65.129-7.6687 5.7076-2.4394 59.351 6.5635z"
+    />
+    <path
+        id="path3794"
+        fill="#ffd500"
+        d="m573.73 296.38h-85.781c-3.4036 5.9934-5.5 12.673-5.5 19.875 0 24.19 21.673 43.812 48.406 43.812s48.406-19.623 48.406-43.812c0-7.2054-2.1245-13.88-5.5312-19.875z"
+    />
+  </g
+  >
+  <metadata
+    >
+    <rdf:RDF
+      >
+      <cc:Work
+        >
+        <dc:format
+          >image/svg+xml</dc:format
+        >
+        <dc:type
+            rdf:resource="http://purl.org/dc/dcmitype/StillImage"
+        />
+        <cc:license
+            rdf:resource="http://creativecommons.org/licenses/publicdomain/"
+        />
+        <dc:publisher
+          >
+          <cc:Agent
+              rdf:about="http://openclipart.org/"
+            >
+            <dc:title
+              >Openclipart</dc:title
+            >
+          </cc:Agent
+          >
+        </dc:publisher
+        >
+        <dc:title
+          >Simple Booth</dc:title
+        >
+        <dc:date
+          >2013-07-14T14:15:33</dc:date
+        >
+        <dc:description
+          >Very simple image of a red booth with a grey roof.</dc:description
+        >
+        <dc:source
+          >https://openclipart.org/detail/180866/simple-booth-by-rdevries-180866</dc:source
+        >
+        <dc:creator
+          >
+          <cc:Agent
+            >
+            <dc:title
+              >rdevries</dc:title
+            >
+          </cc:Agent
+          >
+        </dc:creator
+        >
+        <dc:subject
+          >
+          <rdf:Bag
+            >
+            <rdf:li
+              >basic</rdf:li
+            >
+            <rdf:li
+              >booth</rdf:li
+            >
+            <rdf:li
+              >build</rdf:li
+            >
+            <rdf:li
+              >building</rdf:li
+            >
+            <rdf:li
+              >shed</rdf:li
+            >
+            <rdf:li
+              >simple</rdf:li
+            >
+          </rdf:Bag
+          >
+        </dc:subject
+        >
+      </cc:Work
+      >
+      <cc:License
+          rdf:about="http://creativecommons.org/licenses/publicdomain/"
+        >
+        <cc:permits
+            rdf:resource="http://creativecommons.org/ns#Reproduction"
+        />
+        <cc:permits
+            rdf:resource="http://creativecommons.org/ns#Distribution"
+        />
+        <cc:permits
+            rdf:resource="http://creativecommons.org/ns#DerivativeWorks"
+        />
+      </cc:License
+      >
+    </rdf:RDF
+    >
+  </metadata
+  >
+</svg
+>
