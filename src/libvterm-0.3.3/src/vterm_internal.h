@@ -175,6 +175,14 @@ struct VTermState
   char termcap_query[256];
   size_t termcap_query_len;
 
+  /* Kitty keyboard protocol flag stack. The top-of-stack entry is the current
+   * active flag set (bit 0 disambiguate-escape-codes, bit 1 report-event-types,
+   * bit 2 report-alternate-keys, bit 3 report-all-keys-as-escape-codes,
+   * bit 4 report-associated-text). An empty stack means the current flags are 0
+   * (protocol disabled). See on_csi's 'u'-command handling. */
+  uint8_t kitty_kbd_stack[16];
+  int kitty_kbd_stackpos;
+
   struct {
     const VTermSelectionCallbacks *callbacks;
     void *user;

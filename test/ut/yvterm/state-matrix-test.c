@@ -368,6 +368,73 @@ static void test_mode_2027_clustering(struct ytest *test)
 }
 
 /*---------------------------------------------------------------------------
+ * Kitty keyboard protocol (CSI ? u query / > push / < pop / = set). The query
+ * reply is written back through the grid's pty-write hook, so a small sink
+ * captures the emitted bytes for comparison.
+ *-------------------------------------------------------------------------*/
+struct kitty_reply_capture {
+    char buf[64];
+    size_t len;
+};
+
+static struct yetty_ycore_void_result kitty_reply_sink(const char *bytes, size_t len,
+                                                       void *userdata)
+{
+    struct kitty_reply_capture *capture = userdata;
+    for (size_t index = 0; index < len && capture->len < sizeof(capture->buf) - 1; index++) {
+        capture->buf[capture->len++] = bytes[index];
+    }
+    capture->buf[capture->len] = 0;
+    return YETTY_OK_VOID();
+}
+
+static void test_kitty_keyboard(struct ytest *test)
+{
+    struct kitty_reply_capture capture = {0};
+    struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+    struct yetty_ycore_void_result set =
+        yetty_yvterm_grid_set_pty_write(grid, kitty_reply_sink, &capture);
+    YTEST_REQUIRE_OK(test, set);
+
+    /* Empty stack → query (CSI ? u) reports flags 0. */
+    feeds(test, grid, "\x1b[?u");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?0u");
+
+    /* Push disambiguate (flag 1) via CSI > 1 u; query now reports 1. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[>1u\x1b[?u");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?1u");
+
+    /* CSI = 2 ; 2 u — mode 2 sets (ORs in) report-events bit: 1|2 = 3. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[=2;2u\x1b[?u");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?3u");
+
+    /* CSI = 1 ; 3 u — mode 3 clears the disambiguate bit: 3 & ~1 = 2. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[=1;3u\x1b[?u");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?2u");
+
+    /* CSI < u pops the pushed entry → empty stack → flags 0. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[<u\x1b[?u");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?0u");
+
+    /* CSI = 5 u — mode 1 (default) replaces the whole set; on an empty stack it
+     * seeds a base entry. 5 = disambiguate | report-alternates. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[=5u\x1b[?u");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?5u");
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
  * Cursor save/restore (DECSC / DECRC).
  *-------------------------------------------------------------------------*/
 static void test_cursor_save_restore(struct ytest *test)
@@ -596,6 +663,7 @@ int main(void)
     YTEST_RUN(&test, test_grapheme_cluster);
     YTEST_RUN(&test, test_emoji_sequence_widths);
     YTEST_RUN(&test, test_mode_2027_clustering);
+    YTEST_RUN(&test, test_kitty_keyboard);
     YTEST_RUN(&test, test_cursor_save_restore);
     YTEST_RUN(&test, test_erase_in_line);
     YTEST_RUN(&test, test_bce);

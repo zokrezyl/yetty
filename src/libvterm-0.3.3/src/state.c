@@ -963,6 +963,83 @@ static void request_version_string(VTermState *state)
       VTERM_VERSION_MAJOR, VTERM_VERSION_MINOR);
 }
 
+/* Kitty keyboard protocol flag stack helpers. The current active flags are the
+ * top-of-stack entry, or 0 when the stack is empty (protocol disabled). */
+
+#define KITTY_KBD_STACK_MAX \
+  ((int)(sizeof(((VTermState *)0)->kitty_kbd_stack) / sizeof(uint8_t)))
+
+/* Supported flag bits. Anything outside this mask is silently dropped so a
+ * future flag an application requests does not leave a phantom bit set. */
+#define KITTY_KBD_FLAGS_MASK 0x1f
+
+static uint8_t kitty_kbd_current(const VTermState *state)
+{
+  if(state->kitty_kbd_stackpos <= 0)
+    return 0;
+  return state->kitty_kbd_stack[state->kitty_kbd_stackpos - 1];
+}
+
+/* CSI ? u -- report the current flags as CSI ? <flags> u. */
+static void kitty_kbd_report(VTermState *state)
+{
+  vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%du", kitty_kbd_current(state));
+}
+
+/* CSI > flags u -- push a new entry with the given flags, becoming current.
+ * When the stack is full the oldest entry is evicted (matching kitty). */
+static void kitty_kbd_push(VTermState *state, unsigned int flags)
+{
+  flags &= KITTY_KBD_FLAGS_MASK;
+
+  if(state->kitty_kbd_stackpos >= KITTY_KBD_STACK_MAX) {
+    for(int index = 1; index < KITTY_KBD_STACK_MAX; index++)
+      state->kitty_kbd_stack[index - 1] = state->kitty_kbd_stack[index];
+    state->kitty_kbd_stack[KITTY_KBD_STACK_MAX - 1] = (uint8_t)flags;
+    return;
+  }
+
+  state->kitty_kbd_stack[state->kitty_kbd_stackpos++] = (uint8_t)flags;
+}
+
+/* CSI < number u -- pop <number> (default 1) entries off the stack. */
+static void kitty_kbd_pop(VTermState *state, int count)
+{
+  if(count < 1)
+    count = 1;
+  state->kitty_kbd_stackpos -= count;
+  if(state->kitty_kbd_stackpos < 0)
+    state->kitty_kbd_stackpos = 0;
+}
+
+/* CSI = flags ; mode u -- modify the current flags in place.
+ * mode 1 (default): set the flags to exactly <flags>.
+ * mode 2: set (OR in) the given bits. mode 3: clear (AND-NOT) the given bits. */
+static void kitty_kbd_set(VTermState *state, unsigned int flags, int mode)
+{
+  flags &= KITTY_KBD_FLAGS_MASK;
+
+  if(state->kitty_kbd_stackpos <= 0) {
+    state->kitty_kbd_stack[0] = 0;
+    state->kitty_kbd_stackpos = 1;
+  }
+
+  uint8_t *current = &state->kitty_kbd_stack[state->kitty_kbd_stackpos - 1];
+
+  switch(mode) {
+  case 2:
+    *current |= (uint8_t)flags;
+    break;
+  case 3:
+    *current &= (uint8_t)~flags;
+    break;
+  case 1:
+  default:
+    *current = (uint8_t)flags;
+    break;
+  }
+}
+
 static int on_csi(const char *leader, const long args[], int argcount, const char *intermed, char command, void *user)
 {
   VTermState *state = user;
@@ -977,6 +1054,8 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
     switch(leader[0]) {
     case '?':
     case '>':
+    case '<':
+    case '=':
       leader_byte = leader[0];
       break;
     default:
@@ -1431,6 +1510,23 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
     }
     break;
 
+
+  case LEADER('?', 0x75): // Kitty keyboard protocol - query current flags
+    kitty_kbd_report(state);
+    break;
+
+  case LEADER('>', 0x75): // Kitty keyboard protocol - push flags
+    kitty_kbd_push(state, CSI_ARG_OR(args[0], 0));
+    break;
+
+  case LEADER('<', 0x75): // Kitty keyboard protocol - pop flags
+    kitty_kbd_pop(state, CSI_ARG_OR(args[0], 1));
+    break;
+
+  case LEADER('=', 0x75): // Kitty keyboard protocol - set flags
+    kitty_kbd_set(state, CSI_ARG_OR(args[0], 0),
+        argcount < 2 || CSI_ARG_IS_MISSING(args[1]) ? 1 : CSI_ARG(args[1]));
+    break;
 
   case INTERMED('!', 0x70): // DECSTR - DEC soft terminal reset
     vterm_state_reset(state, 0);
@@ -2222,6 +2318,8 @@ void vterm_state_reset(VTermState *state, int hard)
   state->mode.report_focus    = 0;
   state->mode.grapheme_cluster = 1; // mode 2027 - grapheme clustering on by default
   state->mode.synchronized_output = 0; // mode 2026 - synchronized output off by default
+
+  state->kitty_kbd_stackpos = 0; // kitty keyboard protocol - empty stack (disabled)
 
   state->mouse_flags = 0;
 
