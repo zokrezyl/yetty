@@ -62,7 +62,8 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     yetty_yterminal_pty_write_fn pty_write_fn, void *pty_write_userdata,
     yetty_yterminal_request_render_fn request_render_fn, void *request_render_userdata,
     yetty_yterminal_mouse_sub_fn mouse_sub_fn, void *mouse_sub_userdata,
-    yetty_yterminal_clipboard_write_fn clipboard_write_fn, void *clipboard_write_userdata);
+    yetty_yterminal_clipboard_write_fn clipboard_write_fn, void *clipboard_write_userdata,
+    yetty_yterminal_sixel_write_fn sixel_write_fn, void *sixel_write_userdata);
 /* Upcast to the figure base (first slice in the object). */
 struct yetty_yfigure_figure_ptr_result yetty_yvterm_vterm_as_figure(
     struct yetty_yclass_object *obj);

@@ -30,6 +30,8 @@ typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(
     const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_pty_write_fn)(const char *, size_t,
                                                                          void *);
+typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_sixel_write_fn)(const char *, size_t,
+                                                                           void *);
 
 enum yetty_yvterm_text_attr {
     YETTY_YVTERM_ATTR_BOLD = 1,
@@ -112,6 +114,8 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_pty_write(struct yetty_ycla
                                                                void *userdata);
 struct yetty_ycore_void_result yetty_yvterm_grid_set_clipboard_write(
     struct yetty_yclass_object *obj, yetty_yvterm_grid_clipboard_write_fn fn, void *userdata);
+struct yetty_ycore_void_result yetty_yvterm_grid_set_sixel_write(
+    struct yetty_yclass_object *obj, yetty_yvterm_grid_sixel_write_fn fn, void *userdata);
 struct yetty_ycore_void_result yetty_yvterm_grid_set_clear_hook(struct yetty_yclass_object *obj,
                                                                 yetty_yvterm_grid_clear_hook_fn fn,
                                                                 void *userdata);

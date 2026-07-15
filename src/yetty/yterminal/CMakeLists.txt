@@ -59,6 +59,11 @@ if(YETTY_ENABLE_FEATURE_YIMAGE)
     target_link_libraries(yetty_yterminal yetty_yimage_core)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YSIXEL AND YETTY_ENABLE_FEATURE_YIMAGE)
+    target_compile_definitions(yetty_yterminal PRIVATE YETTY_HAS_YSIXEL=1)
+    target_link_libraries(yetty_yterminal yetty_ysixel_core)
+endif()
+
 # Same gates the ymusic / ycircuit libraries themselves use
 # (src/yetty/CMakeLists.txt).
 if(YETTY_ENABLE_FEATURE_YMUSIC AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)

@@ -312,6 +312,12 @@ if(YETTY_ENABLE_FEATURE_YIMAGE)
     add_subdirectory(yimage)
 endif()
 
+# ysixel — sixel graphics decoder. Reuses the yimage prim serializer/factory,
+# so it is meaningless without yimage.
+if(YETTY_ENABLE_FEATURE_YSIXEL AND YETTY_ENABLE_FEATURE_YIMAGE)
+    add_subdirectory(ysixel)
+endif()
+
 # ymap — the slippy-map module (yclass model + tile engine). Client-side
 # only; needs the yimage wire serializer and libcurl for tile download.
 if(YETTY_ENABLE_FEATURE_YMAP AND YETTY_ENABLE_FEATURE_YIMAGE

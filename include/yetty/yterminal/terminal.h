@@ -65,6 +65,14 @@ typedef struct yetty_ycore_void_result (*yetty_yterminal_clipboard_write_fn)(con
                                                                              int clipboard,
                                                                              void *userdata);
 
+/* Sixel-image callback — fired when the child emits a sixel image
+ * (`DCS <params> q <data> ST`). `data`/`len` is the raw sixel payload (the
+ * text after the `q` intro, without the DCS envelope). The terminal decodes it
+ * to RGBA and presents it as an anchored image figure at the cursor row. */
+typedef struct yetty_ycore_void_result (*yetty_yterminal_sixel_write_fn)(const char *data,
+                                                                         size_t len,
+                                                                         void *userdata);
+
 /* Terminal-wide input subscription callback — fired when a layer
  * receives YETTY_OSC_CS_CLIENT_INPUT_SUB from the inferior. `flags` is the
  * new (post-update) bitmask of YETTY_YMGUI_TERM_SUB_* bits. flags == 0

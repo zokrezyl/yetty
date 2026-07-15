@@ -1369,13 +1369,43 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
   case 0x63: // DA - ECMA-48 8.3.24
     val = CSI_ARG_OR(args[0], 0);
     if(val == 0)
-      // DEC VT100 response
-      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;2c");
+      // DEC VT100 response, with attribute 4 = sixel graphics so
+      // capability probes (ucs-detect, img2sixel, chafa) see sixel support.
+      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;2;4c");
     break;
 
   case LEADER('>', 0x63): // DEC secondary Device Attributes
     vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, ">%d;%d;%dc", 0, 100, 0);
     break;
+
+  case LEADER('?', 0x53): { // XTSMGRAPHICS - set/query sixel/ReGIS geometry
+    // CSI ? Pi ; Pa ; Pv S  — Pi selects the item (1 colour registers,
+    // 2 sixel geometry), Pa the action (1 read, 2 reset, 3 set, 4 read max).
+    // Reply: CSI ? Pi ; Ps ; Pv S with Ps 0 success / 1 bad Pi / 2 bad Pa /
+    // 3 failure. We answer read/read-max for colour registers and sixel
+    // geometry; set/reset succeed without mutating (fixed capabilities).
+    int item = CSI_ARG_OR(args[0], 0);
+    int action = (argcount < 2 || CSI_ARG_IS_MISSING(args[1])) ? 0 : CSI_ARG(args[1]);
+    // Actions 1 read, 2 reset, 3 set, 4 read-max are all answered with our
+    // fixed capability values (Ps=0 success); an unknown action reports Ps=2.
+    int action_ok = (action >= 1 && action <= 4);
+    if(item == 1) { // colour registers
+      if(action_ok)
+        vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;0;%dS", 256);
+      else
+        vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;2S");
+    }
+    else if(item == 2) { // sixel geometry (max width;height in pixels)
+      if(action_ok)
+        vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?2;0;%d;%dS", 1000, 1000);
+      else
+        vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?2;2S");
+    }
+    else {
+      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%d;1S", item);
+    }
+    break;
+  }
 
   case 0x64: // VPA - ECMA-48 8.3.158
     row = CSI_ARG_OR(args[0], 1);

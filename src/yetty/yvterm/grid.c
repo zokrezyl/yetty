@@ -65,6 +65,14 @@ typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clipboard_write_fn)(c
                                                                                size_t len,
                                                                                int clipboard,
                                                                                void *userdata);
+/* Sixel write callback — a child emitted a sixel image (DCS <params> q <data>
+ * ST); libvterm streams the payload to the grid's DCS fallback, which hands the
+ * accumulated `q`-payload bytes up to the owner (the terminal) to decode and
+ * present through the image path. Own typedef, same decoupling as the other
+ * grid callbacks. */
+typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_sixel_write_fn)(const char *data,
+                                                                           size_t len,
+                                                                           void *userdata);
 enum YETTY_ANNOTATE("expose") yetty_yvterm_text_attr {
     YETTY_YVTERM_ATTR_BOLD = 1u << 0,
     YETTY_YVTERM_ATTR_UNDERLINE = 1u << 1,
@@ -271,6 +279,18 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
     size_t osc_color_len;
     uint32_t configured_fg;
     uint32_t configured_bg;
+
+    /* Sixel image write (DCS q). The DCS fallback accumulates the payload here
+     * across fragments and hands the whole image to clipboard_write_fn's sibling
+     * on the final fragment. `sixel_overflow` trips past the cap so an oversized
+     * stream is dropped rather than growing without bound. */
+    yetty_yvterm_grid_sixel_write_fn sixel_write_fn;
+    void *sixel_write_userdata;
+    char *sixel_accum;
+    size_t sixel_accum_len;
+    size_t sixel_accum_cap;
+    int sixel_overflow;
+    int sixel_active;
 
     /* Selection rectangle in grid cells (terminal-driven). */
     int selection_active;
@@ -1475,10 +1495,75 @@ static int cb_osc(int command, VTermStringFragment frag, void *user)
     return 1;
 }
 
+/* Upper bound on one accumulated sixel payload (text form). The decoder caps
+ * the resulting pixels too; this just bounds the intermediate buffer. */
+#define YETTY_YVTERM_SIXEL_MAX (16u * 1024u * 1024u)
+
+/* DCS fallback for sixel images: `DCS <params> q <data> ST`. libvterm captures
+ * the params and the `q` in `command` and streams `<data>` as fragments. Any
+ * DCS whose command ends in `q` and is not the DECRQSS/XTGETTCAP forms (already
+ * handled upstream) is a sixel; accumulate its payload and, on the final
+ * fragment, hand the whole image to the owner. Non-sixel DCS is declined. */
+YETTY_EXTERNAL_CALLBACK
+static int cb_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user)
+{
+    struct yetty_yvterm_grid *grid = user;
+
+    if (frag.initial) {
+        /* Sixel iff the command's final byte is 'q' (0x71). */
+        grid->sixel_active = (commandlen >= 1 && command[commandlen - 1] == 'q');
+        grid->sixel_accum_len = 0;
+        grid->sixel_overflow = 0;
+    }
+    if (!grid->sixel_active) {
+        return 0; /* not sixel — let libvterm log it as unhandled */
+    }
+
+    if (frag.len && !grid->sixel_overflow) {
+        size_t needed = grid->sixel_accum_len + frag.len;
+        if (needed > YETTY_YVTERM_SIXEL_MAX) {
+            grid->sixel_overflow = 1;
+        } else if (needed > grid->sixel_accum_cap) {
+            size_t new_cap = grid->sixel_accum_cap ? grid->sixel_accum_cap : 4096;
+            while (new_cap < needed) {
+                new_cap *= 2;
+            }
+            char *grown = realloc(grid->sixel_accum, new_cap);
+            if (!grown) {
+                grid->sixel_overflow = 1;
+            } else {
+                grid->sixel_accum = grown;
+                grid->sixel_accum_cap = new_cap;
+            }
+        }
+        if (!grid->sixel_overflow) {
+            memcpy(grid->sixel_accum + grid->sixel_accum_len, frag.str, frag.len);
+            grid->sixel_accum_len += frag.len;
+        }
+    }
+
+    if (frag.final) {
+        if (grid->sixel_write_fn && !grid->sixel_overflow && grid->sixel_accum_len > 0) {
+            /* External-callback boundary: a failed present has nowhere to go. */
+            struct yetty_ycore_void_result wr = grid->sixel_write_fn(
+                grid->sixel_accum, grid->sixel_accum_len, grid->sixel_write_userdata);
+            if (YETTY_IS_ERR(wr)) {
+                yetty_ycore_error_destroy(wr.error);
+            }
+        }
+        grid->sixel_accum_len = 0;
+        grid->sixel_overflow = 0;
+        grid->sixel_active = 0;
+    }
+
+    return 1;
+}
+
 static const VTermStateFallbacks *grid_fallbacks(void)
 {
     static const VTermStateFallbacks fallbacks = {
         .osc = cb_osc,
+        .dcs = cb_dcs,
     };
     return &fallbacks;
 }
@@ -1662,6 +1747,10 @@ static void grid_model_teardown(struct yetty_yvterm_grid *grid)
     grid->osc52_accum = NULL;
     grid->osc52_accum_cap = 0;
     grid->osc52_accum_len = 0;
+    free(grid->sixel_accum);
+    grid->sixel_accum = NULL;
+    grid->sixel_accum_cap = 0;
+    grid->sixel_accum_len = 0;
 }
 
 /*===========================================================================
@@ -2287,6 +2376,17 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_clipboard_write(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_clipboard_write: from_obj");
     grid_res.value->clipboard_write_fn = fn;
     grid_res.value->clipboard_write_userdata = userdata;
+    return YETTY_OK_VOID();
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_grid_set_sixel_write(
+    struct yetty_yclass_object *obj, yetty_yvterm_grid_sixel_write_fn fn, void *userdata)
+{
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_sixel_write: from_obj");
+    grid_res.value->sixel_write_fn = fn;
+    grid_res.value->sixel_write_userdata = userdata;
     return YETTY_OK_VOID();
 }
 
