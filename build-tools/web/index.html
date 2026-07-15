@@ -962,7 +962,9 @@
                 needsUrl: true,
                 urlLabel: 'WebSocket URL',
                 needsSsh: true,
-                hint: 'Deep link: <code>?mode=ssh&amp;user=you</code> ' +
+                hint: 'Prefilled with the demo login yetty / yetty — change ' +
+                      'either to reach your own host. Deep link: ' +
+                      '<code>?mode=ssh&amp;user=you</code> ' +
                       '(the dialog keeps the password out of the URL/history)'
             },
             relay: {
@@ -985,12 +987,24 @@
             }
         };
 
+        // SSH points at the public secure websocket bridge (wss://,
+        // TLS-terminated) rather than a per-host ws:// endpoint — an
+        // https-served page cannot open an insecure ws:// socket
+        // (mixed-content), and the bridge lives at its own subdomain.
+        // The :8025 is shown explicitly so it's clear the port can be
+        // changed here or via ?url=wss://host:PORT.
         const MODE_DEFAULT_URLS = {
             websocket: 'ws://' + (location.hostname || '127.0.0.1') + ':8090',
             telnet:    'ws://' + (location.hostname || '127.0.0.1') + ':8024',
-            ssh:       'ws://' + (location.hostname || '127.0.0.1') + ':8025',
+            ssh:       'wss://ws.yetty.dev:8025',
             relay:     'wss://relay.widgetry.org/',
         };
+
+        // Throwaway demo credentials for the hosted SSH bridge (the
+        // ssh-demo deploy provisions this login). Prefilled into the SSH
+        // dialog; either field can be overwritten before connecting.
+        const SSH_DEMO_USER = 'yetty';
+        const SSH_DEMO_PASSWORD = 'yetty';
 
         const instances = [];
         let nextInstanceId = 1;
@@ -1034,7 +1048,7 @@
                        (config.relayTarget ? ' → ' + config.relayTarget : '');
             }
             if (config.mode === 'ssh') {
-                return (config.sshUser || 'root') + ' @ ' + (config.wsUrl || '');
+                return (config.sshUser || SSH_DEMO_USER) + ' @ ' + (config.wsUrl || '');
             }
             return config.wsUrl || '';
         }
@@ -1370,8 +1384,13 @@
                 }
                 sshUserRow.classList.toggle('visible', !!modeInfo.needsSsh);
                 sshPasswordRow.classList.toggle('visible', !!modeInfo.needsSsh);
-                if (modeInfo.needsSsh && presets && presets.sshUser) {
-                    sshUserInput.value = presets.sshUser;
+                if (modeInfo.needsSsh) {
+                    // Prefill the demo credentials so the SSH demo is one
+                    // click; a deep-link ?user=/?password= still wins.
+                    sshUserInput.value =
+                        (presets && presets.sshUser) || SSH_DEMO_USER;
+                    sshPasswordInput.value =
+                        (presets && presets.sshPassword) || SSH_DEMO_PASSWORD;
                 }
                 relayTargetRow.classList.toggle('visible',
                                                 !!modeInfo.needsRelayTarget);
