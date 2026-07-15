@@ -31,10 +31,8 @@ struct yetty_demoygui_40_ymaze_ptr_result {
         struct yetty_ycore_error error;
     };
 };
-struct yetty_demoygui_40_ymaze_ptr_result yetty_demoygui_40_ymaze_from(
-    struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_demoygui_40_ymaze_to(
-    struct yetty_demoygui_40_ymaze *data);
+struct yetty_demoygui_40_ymaze_ptr_result yetty_demoygui_40_ymaze_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_demoygui_40_ymaze_to(struct yetty_demoygui_40_ymaze *data);
 
 struct yetty_yclass_object_ptr_result yetty_demoygui_40_ymaze_create(struct yetty_yclass_ctx *ctx);
 

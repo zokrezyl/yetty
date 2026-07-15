@@ -18,12 +18,10 @@ struct yetty_ycore_void_result yetty_demoygui_35_collapsing_header_open_register
 
 /* ---- demoygui_35_collapsing_header_open: class name -> accessor (lazy) ---------------------- */
 
-static struct yetty_yclass_ptr_result yetty_demoygui_35_collapsing_header_open_accessor_lookup(
-    const char *name)
+static struct yetty_yclass_ptr_result yetty_demoygui_35_collapsing_header_open_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "yetty_demoygui_35_collapsing_header_open") == 0) {
+    if (strcmp(name, "yetty_demoygui_35_collapsing_header_open") == 0)
         return yetty_demoygui_35_collapsing_header_open_class_get();
-    }
     /* "Not mine": OK with NULL value -- yetty_yclass_by_name walks to next hook. */
     return YETTY_OK(yetty_yclass_ptr, NULL);
 }
@@ -33,9 +31,8 @@ static struct yetty_yclass_ptr_result yetty_demoygui_35_collapsing_header_open_a
 struct yetty_ycore_void_result yetty_demoygui_35_collapsing_header_open_register(void)
 {
     static bool registered = false;
-    if (registered) {
+    if (registered)
         return YETTY_OK_VOID();
-    }
 
     struct yetty_ycore_void_result add_accessor_r =
         yetty_yclass_add_accessor_lookup(yetty_demoygui_35_collapsing_header_open_accessor_lookup);

@@ -31,13 +31,10 @@ struct yetty_demoygui_26_ybrowser_ptr_result {
         struct yetty_ycore_error error;
     };
 };
-struct yetty_demoygui_26_ybrowser_ptr_result yetty_demoygui_26_ybrowser_from(
-    struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_demoygui_26_ybrowser_to(
-    struct yetty_demoygui_26_ybrowser *data);
+struct yetty_demoygui_26_ybrowser_ptr_result yetty_demoygui_26_ybrowser_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_demoygui_26_ybrowser_to(struct yetty_demoygui_26_ybrowser *data);
 
-struct yetty_yclass_object_ptr_result yetty_demoygui_26_ybrowser_create(
-    struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_demoygui_26_ybrowser_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_demoygui_register(void);
 
