@@ -993,12 +993,24 @@
         // ---- Transport / session-mode argv --------------------------------
         // The flags travel to wasm main() via Module.arguments, which
         // Module.callMain() (yetty-assets-preload.js) picks up.
+        // SSH points at the public secure websocket bridge (wss://,
+        // TLS-terminated) rather than a per-host ws:// endpoint — an
+        // https-served page cannot open an insecure ws:// socket
+        // (mixed-content), and the bridge lives at its own subdomain.
+        // The :8025 is shown explicitly so it's clear the port can be
+        // changed here or via ?url=wss://host:PORT.
         const MODE_DEFAULT_URLS = {
             websocket: 'ws://' + (location.hostname || '127.0.0.1') + ':8090',
             telnet:    'ws://' + (location.hostname || '127.0.0.1') + ':8024',
-            ssh:       'ws://' + (location.hostname || '127.0.0.1') + ':8025',
+            ssh:       'wss://ws.yetty.dev:8025',
             relay:     'wss://relay.widgetry.org/',
         };
+
+        // Throwaway demo credentials for the hosted SSH bridge (the
+        // ssh-demo deploy provisions this login). Used as the fallback
+        // when a deep link omits user/password.
+        const SSH_DEMO_USER = 'yetty';
+        const SSH_DEMO_PASSWORD = 'yetty';
 
         function buildModuleArguments(config) {
             const mode = config.mode;
@@ -1013,8 +1025,9 @@
                 // The host part of USER@HOST is informational on webasm —
                 // the bridge owns the TCP endpoint; libssh2 in the
                 // browser terminates the crypto.
-                const args = ['--ssh', (config.sshUser || 'root') + '@websocket',
-                              '--ssh-password', config.sshPassword || ''];
+                const args = ['--ssh',
+                              (config.sshUser || SSH_DEMO_USER) + '@websocket',
+                              '--ssh-password', config.sshPassword || SSH_DEMO_PASSWORD];
                 if (wsUrl) args.push('--websocket-url', wsUrl);
                 return args;
             }
