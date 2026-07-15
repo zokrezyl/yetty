@@ -23,6 +23,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <yetty/yplatform/compat.h>
+
 /* Read the whole file into a heap buffer (NUL-terminated for text use). */
 static struct yetty_ycore_void_result read_entire_file(const char *path, uint8_t **out_bytes,
                                                        size_t *out_size)
