@@ -19,7 +19,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "bindings", "python"))
+# Resolve the bindings package: YETTY_REPO when staged elsewhere (the
+# sci-tour recording copies this script into its staging cwd), else
+# relative to this file in the source tree.
+repo_root = os.environ.get(
+    "YETTY_REPO", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+sys.path.insert(0, os.path.join(repo_root, "bindings", "python"))
 from yetty import mpl as yetty_mpl
 
 yetty_mpl.install()

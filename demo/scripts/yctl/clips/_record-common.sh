@@ -24,7 +24,7 @@ CLIPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 BUILD_DIR="${YETTY_BUILD_DIR:-$ROOT/build-desktop-ytrace-release}"
 YETTY_BIN="$BUILD_DIR/yetty"
-TOOL_PATH="$BUILD_DIR/tools/ycat:$BUILD_DIR/tools/ydiagram:$BUILD_DIR/tools/yplot:$BUILD_DIR/tools/yplot-stream:$BUILD_DIR/tools/ymath:$BUILD_DIR/tools/ymap:$BUILD_DIR/tools/ychart:$BUILD_DIR/tools/yvideo:$BUILD_DIR/tools/yflame:$BUILD_DIR/tools/ymesh:$BUILD_DIR/tools/ythorvg:$BUILD_DIR/tools/yecho"
+TOOL_PATH="$BUILD_DIR/tools/ycat:$BUILD_DIR/tools/ydiagram:$BUILD_DIR/tools/yplot:$BUILD_DIR/tools/yplot-stream:$BUILD_DIR/tools/ymath:$BUILD_DIR/tools/ymap:$BUILD_DIR/tools/ychart:$BUILD_DIR/tools/yvideo:$BUILD_DIR/tools/yflame:$BUILD_DIR/tools/ymesh:$BUILD_DIR/tools/ythorvg:$BUILD_DIR/tools/yecho:$BUILD_DIR/demo/yrdawn/12_nbody"
 
 # True once something accepts TCP connections on $HOST:$PORT. The
 # "server listening" log line is trace-level (invisible at the default
@@ -37,6 +37,10 @@ record_clip() {
     local scenario="$1"
     local staging_dir="$2"
     local output_name="$3"
+    # Optional working directory for the recording session. Defaults to the
+    # staging dir (the classic staged-assets clips); scenario-driven clips
+    # that type real repo paths pass the repo root and stage nothing.
+    local run_cwd="${4:-$staging_dir}"
     local log_file="$staging_dir/yetty-record.log"
 
     if [ ! -x "$YETTY_BIN" ]; then
@@ -51,9 +55,9 @@ record_clip() {
     mkdir -p "$staging_dir"
 
     (
-        cd "$staging_dir"
+        cd "$run_cwd"
         exec env PATH="$TOOL_PATH:$PATH" "$YETTY_BIN" \
-            --record "$output_name" --rpc-port "$PORT" -e bash
+            --record "$staging_dir/$output_name" --rpc-port "$PORT" -e bash
     ) > "$log_file" 2>&1 &
     local yetty_pid=$!
 

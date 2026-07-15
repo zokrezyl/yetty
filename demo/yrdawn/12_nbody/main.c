@@ -13,6 +13,8 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
 #include <yetty/yrdawn/client.h>
 
@@ -142,8 +144,23 @@ static void nbody_draw(const struct nbody_state *state, uint8_t *pixels)
     }
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    /* --timeout N / --timeout=N: exit (with full canvas teardown) after N
+     * seconds of wall clock, whatever the frame counter says. Frame pacing
+     * varies with load, so scripted runs bound the act by TIME. */
+    double timeout_seconds = 0.0;
+    for (int i = 1; i < argc; i++) {
+        if (strncmp(argv[i], "--timeout=", 10) == 0) {
+            timeout_seconds = strtod(argv[i] + 10, NULL);
+        } else if (strcmp(argv[i], "--timeout") == 0 && i + 1 < argc) {
+            timeout_seconds = strtod(argv[++i], NULL);
+        } else {
+            fprintf(stderr, "usage: %s [--timeout <seconds>]\n", argv[0]);
+            return 2;
+        }
+    }
+
     demo_raw_stdin();
     FILE *trace = demo_trace_open("12-nbody");
 #define LOG(...)                                                                                   \
@@ -171,8 +188,20 @@ int main(void)
     nbody_init(state);
     nbody_accelerations(state);
 
+    struct timespec start_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+
     int failures = 0;
     for (int frame = 0; frame < FRAME_COUNT && !demo_quit_flag; frame++) {
+        if (timeout_seconds > 0.0) {
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            double elapsed = (double)(now.tv_sec - start_time.tv_sec) +
+                             (double)(now.tv_nsec - start_time.tv_nsec) / 1.0e9;
+            if (elapsed >= timeout_seconds) {
+                break;
+            }
+        }
         /* A few physics substeps per displayed frame keeps orbits tight. */
         for (int substep = 0; substep < 3; substep++) {
             nbody_step(state);
