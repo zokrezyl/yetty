@@ -1071,6 +1071,20 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
             }
             continue;
         }
+        if (child->type == LXB_DOM_NODE_TYPE_DOCUMENT_FRAGMENT) {
+            /* Shadow root. Web-component UIs (Polymer/ShadyDOM: youtube.com's
+             * masthead, guide, page content) stamp their real content into a
+             * shadow-root fragment hung off the host as a native child. That
+             * fragment's subtree is the element's rendered (composed) content,
+             * so walk into it as though its children were the host's — same
+             * parent box, same inherited style. Nested hosts recurse the same
+             * way. Slotted light children still render via the normal
+             * element-child pass below. */
+            struct yetty_ycore_void_result shadow_res =
+                walk(r, child, parent_style, parent_idx, inline_collect, depth + 1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, shadow_res, "walk: shadow root fragment");
+            continue;
+        }
         if (child->type != LXB_DOM_NODE_TYPE_ELEMENT) {
             continue;
         }

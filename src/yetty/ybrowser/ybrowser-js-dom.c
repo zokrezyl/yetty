@@ -140,42 +140,8 @@ struct yetty_ylexbor *yetty_ylexbor_js_engine_from_ctx(struct JSContext *ctx)
  * never received a stylesheet, so removing or re-appending it segfaulted.
  * Such elements take the steps-free removal; everything else keeps full
  * removing-steps semantics. */
-static void node_remove_safe(JSContext *ctx, lxb_dom_node_t *node)
+static void node_remove_safe(lxb_dom_node_t *node)
 {
-    /* Wipes of a document-level container are load-bearing events when
-	 * chasing "page went blank" bugs — trace them with the child tag and
-	 * the JS stack of whoever is doing the removing. */
-    if (node->parent && node->parent->type == LXB_DOM_NODE_TYPE_ELEMENT &&
-        (node->parent->local_name == LXB_TAG_HTML || node->parent->local_name == LXB_TAG_HEAD ||
-         node->parent->local_name == LXB_TAG_BODY)) {
-        ydebug("js dom-remove from <%s>: child tag=%u type=%d",
-               node->parent->local_name == LXB_TAG_HTML   ? "html"
-               : node->parent->local_name == LXB_TAG_HEAD ? "head"
-                                                          : "body",
-               (unsigned)node->local_name, (int)node->type);
-        /* JS stack of the remover. Building it costs a JS_Eval, so gate it
-		 * on its own trace point the way the ydebug macro gates output —
-		 * off by default, enabled together with the rest via
-		 * YTRACE_DEFAULT_ON. */
-        static bool wipe_stack_enabled = false;
-        static bool wipe_stack_registered = false;
-        if (!wipe_stack_registered) {
-            wipe_stack_enabled = ytrace_register(&wipe_stack_enabled, __FILE__, __LINE__, __func__,
-                                                 "debug", "js dom-remove stack");
-            wipe_stack_registered = true;
-        }
-        if (ctx != NULL && wipe_stack_enabled) {
-            JSValue probe = JS_Eval(ctx, "(new Error('dom-wipe')).stack",
-                                    strlen("(new Error('dom-wipe')).stack"), "<wipe-probe>",
-                                    JS_EVAL_TYPE_GLOBAL);
-            const char *stack = JS_ToCString(ctx, probe);
-            if (stack) {
-                ydebug("js dom-remove stack:\n%s", stack);
-                JS_FreeCString(ctx, stack);
-            }
-            JS_FreeValue(ctx, probe);
-        }
-    }
     if (node->type == LXB_DOM_NODE_TYPE_ELEMENT && node->local_name == LXB_TAG_STYLE &&
         lxb_html_interface_style(node)->stylesheet == NULL) {
         lxb_dom_node_remove_wo_events(node);
@@ -719,7 +685,7 @@ static JSValue js_el_appendChild(JSContext *ctx, JSValueConst this_val, int argc
 	 * sibling chain (next/prev becomes ambiguous), so a later tree
 	 * walk on the old parent infinite-loops. */
     if (child->parent) {
-        node_remove_safe(ctx, child);
+        node_remove_safe(child);
     }
     lxb_dom_node_insert_child(parent, child);
     style_element_ingest(ctx, child);
@@ -737,7 +703,7 @@ static JSValue js_el_removeChild(JSContext *ctx, JSValueConst this_val, int argc
     if (!child) {
         return JS_UNDEFINED;
     }
-    node_remove_safe(ctx, child);
+    node_remove_safe(child);
     mark_dirty(ctx);
     return JS_DupValue(ctx, argv[0]);
 }
@@ -797,10 +763,10 @@ static lxb_dom_node_t *coerce_to_node(JSContext *ctx, JSValueConst v, lxb_dom_do
 /* All ChildNode/ParentNode insertion paths must detach the incoming
  * node from its old parent first — see js_el_appendChild for the
  * reasoning (lexbor leaves stale sibling links otherwise). */
-static void detach(JSContext *ctx, lxb_dom_node_t *n)
+static void detach(lxb_dom_node_t *n)
 {
     if (n && n->parent) {
-        node_remove_safe(ctx, n);
+        node_remove_safe(n);
     }
 }
 
@@ -822,7 +788,7 @@ static JSValue js_el_before(JSContext *ctx, JSValueConst this_val, int argc, JSV
         if (node_would_cycle(self->parent, n)) {
             continue;
         }
-        detach(ctx, n);
+        detach(n);
         lxb_dom_node_insert_before(self, n);
     }
     mark_dirty(ctx);
@@ -848,7 +814,7 @@ static JSValue js_el_after(JSContext *ctx, JSValueConst this_val, int argc, JSVa
         if (node_would_cycle(self->parent, n)) {
             continue;
         }
-        detach(ctx, n);
+        detach(n);
         lxb_dom_node_insert_after(anchor, n);
         anchor = n;
     }
@@ -872,10 +838,10 @@ static JSValue js_el_replaceWith(JSContext *ctx, JSValueConst this_val, int argc
         if (node_would_cycle(self->parent, n)) {
             continue;
         }
-        detach(ctx, n);
+        detach(n);
         lxb_dom_node_insert_before(self, n);
     }
-    node_remove_safe(ctx, self);
+    node_remove_safe(self);
     mark_dirty(ctx);
     return JS_UNDEFINED;
 }
@@ -898,7 +864,7 @@ static JSValue js_el_prepend(JSContext *ctx, JSValueConst this_val, int argc, JS
         if (node_would_cycle(parent, n)) {
             continue;
         }
-        detach(ctx, n);
+        detach(n);
         if (first) {
             lxb_dom_node_insert_before(first, n);
         } else {
@@ -924,7 +890,7 @@ static JSValue js_el_append(JSContext *ctx, JSValueConst this_val, int argc, JSV
         if (node_would_cycle(parent, n)) {
             continue;
         }
-        detach(ctx, n);
+        detach(n);
         lxb_dom_node_insert_child(parent, n);
     }
     mark_dirty(ctx);
@@ -957,7 +923,7 @@ static JSValue js_el_insertBefore(JSContext *ctx, JSValueConst this_val, int arg
     /* Detach from the current parent first — lexbor's insert paths assume an
      * unlinked node (see appendChild). */
     if (node->parent) {
-        node_remove_safe(ctx, node);
+        node_remove_safe(node);
     }
     if (ref && ref->parent == parent) {
         lxb_dom_node_insert_before(ref, node);
@@ -988,10 +954,10 @@ static JSValue js_el_replaceChild(JSContext *ctx, JSValueConst this_val, int arg
         return JS_DupValue(ctx, argv[1]);
     }
     if (node->parent) {
-        node_remove_safe(ctx, node);
+        node_remove_safe(node);
     }
     lxb_dom_node_insert_before(old, node);
-    node_remove_safe(ctx, old);
+    node_remove_safe(old);
     mark_dirty(ctx);
     return JS_DupValue(ctx, argv[1]);
 }
@@ -1476,6 +1442,30 @@ static JSValue js_doc_createDocumentFragment(JSContext *ctx, JSValueConst this_v
     return el;
 }
 
+/* document.importNode(node, deep) — imports a node from another document.
+ * The engine is single-document, so this reduces to a deep/shallow clone of the
+ * source node returned as a wrapped node. Polymer's template stamping
+ * (`_stampTemplate`) relies on it to clone `<template>.content`. */
+static JSValue js_doc_importNode(JSContext *ctx, JSValueConst this_val, int argc,
+                                 JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1) {
+        return JS_NULL;
+    }
+    lxb_dom_node_t *source = unwrap_node(ctx, argv[0]);
+    if (!source) {
+        return JS_NULL;
+    }
+    int deep = argc > 1 ? JS_ToBool(ctx, argv[1]) : 0;
+    lxb_dom_node_t *clone = lxb_dom_node_clone(source, deep ? true : false);
+    if (!clone) {
+        return JS_NULL;
+    }
+    mark_dirty(ctx);
+    return wrap_node_any(ctx, clone);
+}
+
 static JSValue js_doc_createComment(JSContext *ctx, JSValueConst this_val, int argc,
                                     JSValueConst *argv)
 {
@@ -1568,13 +1558,23 @@ static JSValue js_el_empty_obj_get(JSContext *ctx, JSValueConst this_val)
     return JS_NewObject(ctx);
 }
 
-/* `<template>.content` — spec returns a DocumentFragment with the
- * template's parsed contents. We don't model fragments separately, so
- * return the element itself: appendChild / firstElementChild etc. all
- * work transparently against the real DOM. */
+/* `<template>.content` — spec returns a DocumentFragment holding the template's
+ * parsed contents. lexbor parses that content into a *separate* content
+ * fragment (`lxb_html_template_element_t.content`), NOT as regular children of
+ * the <template> element — so returning the element itself hands back an empty
+ * subtree. Polymer's `_stampTemplate` clones `.content` via
+ * document.importNode; an empty clone yields no stamped nodes. Return the real
+ * content fragment when present. */
 static JSValue js_el_content_get(JSContext *ctx, JSValueConst this_val)
 {
-    (void)ctx;
+    lxb_dom_node_t *node = unwrap_node(ctx, this_val);
+    if (node && node->type == LXB_DOM_NODE_TYPE_ELEMENT &&
+        node->local_name == LXB_TAG_TEMPLATE) {
+        lxb_html_template_element_t *tmpl = lxb_html_interface_template(node);
+        if (tmpl->content) {
+            return wrap_node_any(ctx, lxb_dom_interface_node(tmpl->content));
+        }
+    }
     return JS_DupValue(ctx, this_val);
 }
 
@@ -1653,7 +1653,7 @@ static JSValue js_el_textContent_set(JSContext *ctx, JSValueConst this_val, JSVa
 		 * nodes stay allocated until the document dies — same contract
 		 * as the innerHTML setter below. */
         while (n->first_child) {
-            node_remove_safe(ctx, n->first_child);
+            node_remove_safe(n->first_child);
         }
         lxb_dom_node_text_content_set(n, (const lxb_char_t *)s, slen);
         if (n->parent) {
@@ -1718,94 +1718,40 @@ static JSValue js_el_innerHTML_set(JSContext *ctx, JSValueConst this_val, JSValu
     if (!s) {
         return JS_UNDEFINED;
     }
-    if (n->type == LXB_DOM_NODE_TYPE_ELEMENT &&
-        (n->local_name == LXB_TAG_HTML || n->local_name == LXB_TAG_HEAD ||
-         n->local_name == LXB_TAG_BODY)) {
-        ydebug("js innerHTML SET on document container tag=%u new_len=%zu head=%.120s",
-               (unsigned)n->local_name, slen, s);
-    }
     /* Wipe existing children. */
     while (n->first_child) {
-        node_remove_safe(ctx, n->first_child);
+        node_remove_safe(n->first_child);
     }
     /* Parse fragment under this element's context. */
     lxb_html_document_t *doc = lxb_html_interface_document(n->owner_document);
     if (n->type == LXB_DOM_NODE_TYPE_ELEMENT) {
         lxb_html_element_t *htmlel = lxb_html_interface_element(n);
         (void)lxb_html_element_inner_html_set(htmlel, (const lxb_char_t *)s, slen);
+        /* Per spec, setting `.innerHTML` on a <template> parses into its
+         * content DocumentFragment, not as element children. lexbor's
+         * inner_html_set leaves the parsed nodes as regular children, so
+         * relocate them into the content fragment — matching how the HTML
+         * parser fills a parser-created template and keeping `.content`
+         * authoritative (Polymer builds element templates this way). */
+        if (n->local_name == LXB_TAG_TEMPLATE) {
+            lxb_html_template_element_t *tmpl = lxb_html_interface_template(n);
+            if (tmpl->content) {
+                lxb_dom_node_t *fragment = lxb_dom_interface_node(tmpl->content);
+                while (fragment->first_child) {
+                    node_remove_safe(fragment->first_child);
+                }
+                lxb_dom_node_t *child;
+                while ((child = n->first_child) != NULL) {
+                    lxb_dom_node_remove(child);
+                    lxb_dom_node_insert_child(fragment, child);
+                }
+            }
+        }
     } else {
         (void)doc;
     }
     JS_FreeCString(ctx, s);
     mark_dirty(ctx);
-    return JS_UNDEFINED;
-}
-
-/* insertAdjacentHTML(position, html) — parse `html` in a detached container
- * element, then move the resulting nodes into place. Matches the four spec
- * positions; unknown positions are ignored (a browser throws SyntaxError —
- * absorbing keeps the minimal-surface behavior of the other bindings). */
-static JSValue js_el_insertAdjacentHTML(JSContext *ctx, JSValueConst this_val, int argc,
-                                        JSValueConst *argv)
-{
-    lxb_dom_node_t *self = unwrap_node(ctx, this_val);
-    if (!self || argc < 2 || self->type != LXB_DOM_NODE_TYPE_ELEMENT) {
-        return JS_UNDEFINED;
-    }
-    const char *position = JS_ToCString(ctx, argv[0]);
-    size_t html_len = 0;
-    const char *html = JS_ToCStringLen(ctx, &html_len, argv[1]);
-    if (!position || !html) {
-        if (position) {
-            JS_FreeCString(ctx, position);
-        }
-        if (html) {
-            JS_FreeCString(ctx, html);
-        }
-        return JS_UNDEFINED;
-    }
-
-    lxb_dom_element_t *container =
-        lxb_dom_document_create_element(self->owner_document, (const lxb_char_t *)"div", 3, NULL);
-    if (container) {
-        (void)lxb_html_element_inner_html_set(lxb_html_interface_element(container),
-                                              (const lxb_char_t *)html, html_len);
-        lxb_dom_node_t *container_node = lxb_dom_interface_node(container);
-        /* Move children out in document order. The pre-insert detach
-		 * matters — see the appendChild comment on sibling-chain
-		 * corruption. */
-        lxb_dom_node_t *after_anchor = self; /* for afterend ordering */
-        lxb_dom_node_t *moved;
-        while ((moved = container_node->first_child) != NULL) {
-            node_remove_safe(ctx, moved);
-            if (strcmp(position, "beforebegin") == 0 && self->parent) {
-                lxb_dom_node_insert_before(self, moved);
-            } else if (strcmp(position, "afterbegin") == 0) {
-                if (self->first_child) {
-                    lxb_dom_node_insert_before(self->first_child, moved);
-                } else {
-                    lxb_dom_node_insert_child(self, moved);
-                }
-                /* keep insertion order: subsequent nodes go after `moved` */
-                while (container_node->first_child) {
-                    lxb_dom_node_t *next = container_node->first_child;
-                    node_remove_safe(ctx, next);
-                    lxb_dom_node_insert_after(moved, next);
-                    moved = next;
-                }
-            } else if (strcmp(position, "afterend") == 0 && self->parent) {
-                lxb_dom_node_insert_after(after_anchor, moved);
-                after_anchor = moved;
-            } else if (strcmp(position, "beforeend") == 0) {
-                lxb_dom_node_insert_child(self, moved);
-            } else {
-                break; /* unknown position (or detached beforebegin/afterend) */
-            }
-        }
-        mark_dirty(ctx);
-    }
-    JS_FreeCString(ctx, position);
-    JS_FreeCString(ctx, html);
     return JS_UNDEFINED;
 }
 
@@ -1912,21 +1858,6 @@ static JSValue js_cd_length_get(JSContext *ctx, JSValueConst this_val)
         return JS_NewInt32(ctx, 0);
     }
     return JS_NewInt32(ctx, (int32_t)cd->data.length);
-}
-
-/* Assignment to `length`. On real CharacterData the property is readonly —
- * sloppy-mode assignment silently no-ops, matching a browser. On an element
- * a browser has NO `length` at all, so `el.length = 0` (apnews' bsp-read-more
- * does exactly this) creates a plain own property; without this setter the
- * shared proto accessor would make that assignment throw "no setter for
- * property". Shadow with an own value property to restore normal semantics. */
-static JSValue js_cd_length_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
-{
-    if (as_chardata(ctx, this_val) != NULL) {
-        return JS_UNDEFINED;
-    }
-    JS_DefinePropertyValueStr(ctx, this_val, "length", JS_DupValue(ctx, val), JS_PROP_C_W_E);
-    return JS_UNDEFINED;
 }
 
 static JSValue js_cd_appendData(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -3258,6 +3189,68 @@ static JSValue js_classlist_toString(JSContext *ctx, JSValueConst this_val, int 
     return js_classlist_value_get(ctx, this_val);
 }
 
+/* Define `object[Symbol.iterator] = fn`. QuickJS's function-list installer keys
+ * on plain string atoms, so a well-known symbol has to be attached by hand. */
+static void js_dom_define_iterator(JSContext *ctx, JSValueConst object, JSValue fn)
+{
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue symbol_ctor = JS_GetPropertyStr(ctx, global, "Symbol");
+    JSValue iterator_sym = JS_GetPropertyStr(ctx, symbol_ctor, "iterator");
+    JSAtom iterator_atom = JS_ValueToAtom(ctx, iterator_sym);
+    JS_DefinePropertyValue(ctx, object, iterator_atom, fn,
+                           JS_PROP_CONFIGURABLE | JS_PROP_WRITABLE);
+    JS_FreeAtom(ctx, iterator_atom);
+    JS_FreeValue(ctx, iterator_sym);
+    JS_FreeValue(ctx, symbol_ctor);
+    JS_FreeValue(ctx, global);
+}
+
+/* classList[Symbol.iterator]() — DOMTokenList is iterable. Build an array of
+ * the current class tokens and hand back its own array iterator so that
+ * `[...el.classList]` / `for (const c of el.classList)` work. */
+static JSValue js_classlist_symbol_iterator(JSContext *ctx, JSValueConst this_val, int argc,
+                                            JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JSValue arr = JS_NewArray(ctx);
+    lxb_dom_element_t *el = JS_GetOpaque(this_val, dom_state(ctx)->class_classlist_id);
+    uint32_t count = 0;
+    if (el) {
+        size_t clen = 0;
+        const lxb_char_t *cls =
+            lxb_dom_element_get_attribute(el, (const lxb_char_t *)"class", 5, &clen);
+        if (cls) {
+            size_t start = 0;
+            for (size_t pos = 0; pos <= clen; pos++) {
+                int is_ws = (pos == clen) || cls[pos] == ' ' || cls[pos] == '\t' ||
+                            cls[pos] == '\n' || cls[pos] == '\r' || cls[pos] == '\f';
+                if (is_ws) {
+                    if (pos > start) {
+                        JS_SetPropertyUint32(
+                            ctx, arr, count++,
+                            JS_NewStringLen(ctx, (const char *)(cls + start), pos - start));
+                    }
+                    start = pos + 1;
+                }
+            }
+        }
+    }
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue symbol_ctor = JS_GetPropertyStr(ctx, global, "Symbol");
+    JSValue iterator_sym = JS_GetPropertyStr(ctx, symbol_ctor, "iterator");
+    JSAtom iterator_atom = JS_ValueToAtom(ctx, iterator_sym);
+    JSValue array_iter_fn = JS_GetProperty(ctx, arr, iterator_atom);
+    JSValue result = JS_Call(ctx, array_iter_fn, arr, 0, NULL);
+    JS_FreeValue(ctx, array_iter_fn);
+    JS_FreeAtom(ctx, iterator_atom);
+    JS_FreeValue(ctx, iterator_sym);
+    JS_FreeValue(ctx, symbol_ctor);
+    JS_FreeValue(ctx, global);
+    JS_FreeValue(ctx, arr);
+    return result;
+}
+
 static JSValue js_el_classList_get(JSContext *ctx, JSValueConst this_val)
 {
     static const JSCFunctionListEntry classlist_funcs[] = {
@@ -3280,6 +3273,9 @@ static JSValue js_el_classList_get(JSContext *ctx, JSValueConst this_val)
     JS_SetOpaque(v, el);
     JS_SetPropertyFunctionList(ctx, v, classlist_funcs,
                                sizeof(classlist_funcs) / sizeof(classlist_funcs[0]));
+    js_dom_define_iterator(ctx, v,
+                           JS_NewCFunction(ctx, js_classlist_symbol_iterator,
+                                           "[Symbol.iterator]", 0));
     return v;
 }
 
@@ -3398,7 +3394,7 @@ static JSValue js_el_getAttributeNames_stub(JSContext *ctx, JSValueConst this_va
     (void)argv;
     lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     JSValue arr = JS_NewArray(ctx);
-    if (!el) {
+    if (!el || ((lxb_dom_node_t *)el)->type != LXB_DOM_NODE_TYPE_ELEMENT) {
         return arr;
     }
     uint32_t i = 0;
@@ -3412,33 +3408,97 @@ static JSValue js_el_getAttributeNames_stub(JSContext *ctx, JSValueConst this_va
     return arr;
 }
 
-/* `attributes` — a snapshot array of {name, value} objects. Covers the
- * common clone loop `for (t < el.attributes.length) { s = el.attributes[t];
- * … s.name, s.value }` (apnews' custom-headline element); live NamedNodeMap
- * semantics are not modeled. */
+/* element.attributes — a NamedNodeMap. Returned as a real JS Array so it is
+ * spread-able / for-of iterable (`[...el.attributes]`) and index/length
+ * addressable out of the box, with `item()` and `getNamedItem()` added on top
+ * for the NamedNodeMap surface. Polymer/kevlar element constructors spread
+ * `[...this.attributes]`; an undefined value there throws
+ * "cannot read property 'Symbol.iterator' of undefined". */
+static JSValue js_el_attr_item(JSContext *ctx, JSValueConst this_val, int argc,
+                               JSValueConst *argv)
+{
+    if (argc < 1) {
+        return JS_NULL;
+    }
+    int32_t index = 0;
+    if (JS_ToInt32(ctx, &index, argv[0]) < 0) {
+        return JS_NULL;
+    }
+    JSValue at = JS_GetPropertyUint32(ctx, this_val, (uint32_t)index);
+    if (JS_IsUndefined(at)) {
+        return JS_NULL;
+    }
+    return at;
+}
+
+static JSValue js_el_attr_getNamedItem(JSContext *ctx, JSValueConst this_val, int argc,
+                                       JSValueConst *argv)
+{
+    if (argc < 1) {
+        return JS_NULL;
+    }
+    const char *want = JS_ToCString(ctx, argv[0]);
+    if (!want) {
+        return JS_NULL;
+    }
+    JSValue result = JS_NULL;
+    uint32_t length = 0;
+    JSValue length_val = JS_GetPropertyStr(ctx, this_val, "length");
+    JS_ToUint32(ctx, &length, length_val);
+    JS_FreeValue(ctx, length_val);
+    for (uint32_t i = 0; i < length; i++) {
+        JSValue entry = JS_GetPropertyUint32(ctx, this_val, i);
+        JSValue name_val = JS_GetPropertyStr(ctx, entry, "name");
+        const char *name = JS_ToCString(ctx, name_val);
+        if (name && strcmp(name, want) == 0) {
+            JS_FreeCString(ctx, name);
+            JS_FreeValue(ctx, name_val);
+            result = entry;
+            break;
+        }
+        if (name) {
+            JS_FreeCString(ctx, name);
+        }
+        JS_FreeValue(ctx, name_val);
+        JS_FreeValue(ctx, entry);
+    }
+    JS_FreeCString(ctx, want);
+    return result;
+}
+
 static JSValue js_el_attributes_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     JSValue arr = JS_NewArray(ctx);
-    if (!el) {
-        return arr;
-    }
-    uint32_t index = 0;
-    for (lxb_dom_attr_t *attr = el->first_attr; attr; attr = attr->next) {
-        size_t name_len = 0;
-        const lxb_char_t *name = lxb_dom_attr_qualified_name(attr, &name_len);
-        if (!name) {
-            continue;
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    uint32_t i = 0;
+    /* The element-class wrapper also carries Text/Comment nodes; reading
+     * ->first_attr off a non-element node walks garbage. Only Elements
+     * have an attribute list. */
+    if (el && ((lxb_dom_node_t *)el)->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+        for (lxb_dom_attr_t *a = el->first_attr; a; a = a->next) {
+            size_t nlen = 0;
+            const lxb_char_t *nm = lxb_dom_attr_qualified_name(a, &nlen);
+            size_t llen = 0;
+            const lxb_char_t *ln = lxb_dom_attr_local_name(a, &llen);
+            size_t vlen = 0;
+            const lxb_char_t *va = lxb_dom_attr_value(a, &vlen);
+            JSValue entry = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, entry, "name",
+                              JS_NewStringLen(ctx, nm ? (const char *)nm : "", nm ? nlen : 0));
+            JS_SetPropertyStr(ctx, entry, "localName",
+                              JS_NewStringLen(ctx, ln ? (const char *)ln : "", ln ? llen : 0));
+            JS_SetPropertyStr(ctx, entry, "value",
+                              JS_NewStringLen(ctx, va ? (const char *)va : "", va ? vlen : 0));
+            JS_SetPropertyStr(ctx, entry, "namespaceURI", JS_NULL);
+            JS_SetPropertyStr(ctx, entry, "prefix", JS_NULL);
+            JS_SetPropertyStr(ctx, entry, "specified", JS_TRUE);
+            JS_SetPropertyUint32(ctx, arr, i++, entry);
         }
-        size_t value_len = 0;
-        const lxb_char_t *value = lxb_dom_attr_value(attr, &value_len);
-        JSValue item = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, item, "name", JS_NewStringLen(ctx, (const char *)name, name_len));
-        JS_SetPropertyStr(ctx, item, "value",
-                          value ? JS_NewStringLen(ctx, (const char *)value, value_len)
-                                : JS_NewString(ctx, ""));
-        JS_SetPropertyUint32(ctx, arr, index++, item);
     }
+    JS_SetPropertyStr(ctx, arr, "item",
+                      JS_NewCFunction(ctx, js_el_attr_item, "item", 1));
+    JS_SetPropertyStr(ctx, arr, "getNamedItem",
+                      JS_NewCFunction(ctx, js_el_attr_getNamedItem, "getNamedItem", 1));
     return arr;
 }
 
@@ -3741,83 +3801,32 @@ static JSValue js_doc_implementation_get(JSContext *ctx, JSValueConst this_val)
     return obj;
 }
 
-/* DOMParser.parseFromString(source, mimeType) — parse into a throwaway
- * lexbor document, then IMPORT (deep-clone) its documentElement/head/body
- * into the LIVE document's memory pool and return a plain object carrying
- * those imports as documentElement/head/body. Every MIME type takes the
- * HTML parser (no XML parser in the engine).
- *
- * Why import into the main pool rather than keep the parsed document
- * alive: page code grafts these nodes into the live tree (Zephr's outcome
- * renderer moves t.head/t.body childNodes into the page). If the nodes
- * physically lived in a SEPARATE document's allocator, that graft would
- * link cross-pool nodes into the main tree — and on navigation the main
- * document's re-parse and the parsed document's teardown would both manage
- * the same node memory (heap corruption surfacing later in malloc). Importing
- * makes every returned node main-pool, so grafting is same-pool and the
- * nodes are freed exactly once, by the main document. The throwaway parse
- * document is destroyed here; nothing outlives this call. */
-static JSValue js_domparser_parse_from_string(JSContext *ctx, JSValueConst this_val, int argc,
-                                              JSValueConst *argv)
+/* Constructor stub for the DOM interface globals (EventTarget/Node/Element/…).
+ * `new Element()` returns a plain object whose prototype is the constructor's
+ * .prototype so `class X extends HTMLElement {…}` (custom elements) and the
+ * Shady-DOM polyfill's `X.prototype` walks both work. Instances of real DOM
+ * nodes come from wrap_element(), not from calling these. */
+static JSValue js_dom_iface_ctor(JSContext *ctx, JSValueConst new_target, int argc,
+                                 JSValueConst *argv)
 {
-    (void)this_val;
-    struct yetty_ylexbor *r = runtime_ylex(ctx);
-    if (!r || argc < 1) {
-        return JS_NULL;
-    }
-    size_t source_len = 0;
-    const char *source = JS_ToCStringLen(ctx, &source_len, argv[0]);
-    if (!source) {
-        return JS_NULL;
-    }
-    lxb_html_document_t *parsed_doc = lxb_html_document_create();
-    if (!parsed_doc) {
-        JS_FreeCString(ctx, source);
-        return JS_NULL;
-    }
-    lxb_status_t parse_status =
-        lxb_html_document_parse(parsed_doc, (const lxb_char_t *)source, source_len);
-    JS_FreeCString(ctx, source);
-    if (parse_status != LXB_STATUS_OK) {
-        lxb_html_document_destroy(parsed_doc);
-        return JS_NULL;
-    }
+    (void)argc;
+    (void)argv;
+    JSValue proto = JS_GetPropertyStr(ctx, new_target, "prototype");
+    JSValue self = JS_IsObject(proto) ? JS_NewObjectProto(ctx, proto) : JS_NewObject(ctx);
+    JS_FreeValue(ctx, proto);
+    return self;
+}
 
-    lxb_dom_document_t *main_doc = lxb_dom_interface_document(r->document);
-    JSValue parsed_obj = JS_NewObject(ctx);
-
-    /* documentElement — first element child of the parsed document. */
-    lxb_dom_node_t *parsed_node = lxb_dom_interface_node(parsed_doc);
-    for (lxb_dom_node_t *child = parsed_node->first_child; child; child = child->next) {
-        if (child->type == LXB_DOM_NODE_TYPE_ELEMENT) {
-            lxb_dom_node_t *imported = lxb_dom_document_import_node(main_doc, child, true);
-            if (imported) {
-                JS_SetPropertyStr(ctx, parsed_obj, "documentElement",
-                                  wrap_element(ctx, lxb_dom_interface_element(imported)));
-            }
-            break;
-        }
-    }
-    lxb_html_body_element_t *parsed_body = lxb_html_document_body_element(parsed_doc);
-    if (parsed_body) {
-        lxb_dom_node_t *imported =
-            lxb_dom_document_import_node(main_doc, lxb_dom_interface_node(parsed_body), true);
-        if (imported) {
-            JS_SetPropertyStr(ctx, parsed_obj, "body",
-                              wrap_element(ctx, lxb_dom_interface_element(imported)));
-        }
-    }
-    lxb_html_head_element_t *parsed_head = lxb_html_document_head_element(parsed_doc);
-    if (parsed_head) {
-        lxb_dom_node_t *imported =
-            lxb_dom_document_import_node(main_doc, lxb_dom_interface_node(parsed_head), true);
-        if (imported) {
-            JS_SetPropertyStr(ctx, parsed_obj, "head",
-                              wrap_element(ctx, lxb_dom_interface_element(imported)));
-        }
-    }
-    lxb_html_document_destroy(parsed_doc);
-    return parsed_obj;
+/* Install a DOM interface constructor `name` on the global with `.prototype`
+ * set to `proto` (a borrowed ref — this dups what it keeps). */
+static void install_dom_iface(JSContext *ctx, JSValueConst global, const char *name,
+                              JSValueConst proto)
+{
+    JSValue ctor = JS_NewCFunction2(ctx, js_dom_iface_ctor, name, 0, JS_CFUNC_constructor, 0);
+    JS_SetPropertyStr(ctx, ctor, "prototype", JS_DupValue(ctx, proto));
+    JS_DefinePropertyValueStr(ctx, (JSValue)proto, "constructor", JS_DupValue(ctx, ctor),
+                              JS_PROP_CONFIGURABLE | JS_PROP_WRITABLE);
+    JS_SetPropertyStr(ctx, (JSValue)global, name, ctor);
 }
 
 void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
@@ -3896,6 +3905,7 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CFUNC_DEF("hasChildNodes", 0, js_el_hasChildNodes_stub),
         JS_CFUNC_DEF("hasAttributes", 0, js_el_hasAttributes_stub),
         JS_CFUNC_DEF("getAttributeNames", 0, js_el_getAttributeNames_stub),
+        JS_CGETSET_DEF("attributes", js_el_attributes_get, NULL),
         JS_CFUNC_DEF("cloneNode", 1, js_el_cloneNode_stub),
         JS_CFUNC_DEF("getBoundingClientRect", 0, js_el_getBoundingClientRect),
         JS_CFUNC_DEF("getClientRects", 0, js_el_clientRects_stub),
@@ -3909,18 +3919,13 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CFUNC_DEF("removeEventListener", 2, js_el_undef_stub),
         JS_CFUNC_DEF("toggleAttribute", 1, js_el_toggleAttr_stub),
         JS_CGETSET_DEF("textContent", js_el_textContent_get, js_el_textContent_set),
-        /* innerText ≈ textContent — no layout-aware rendering of the text,
-    	 * but sites read it constantly for truncation/measure logic. */
-        JS_CGETSET_DEF("innerText", js_el_textContent_get, js_el_textContent_set),
         JS_CGETSET_DEF("innerHTML", js_el_innerHTML_get, js_el_innerHTML_set),
         JS_CGETSET_DEF("outerHTML", js_el_outerHTML_get, NULL),
-        JS_CFUNC_DEF("insertAdjacentHTML", 2, js_el_insertAdjacentHTML),
-        JS_CGETSET_DEF("attributes", js_el_attributes_get, NULL),
         /* CharacterData (Text/Comment) — `data` and `length` plus the
     	 * appendData/insertData/deleteData/replaceData/substringData
     	 * mutators. as_chardata() in each guards element-only nodes. */
         JS_CGETSET_DEF("data", js_cd_data_get, js_cd_data_set),
-        JS_CGETSET_DEF("length", js_cd_length_get, js_cd_length_set),
+        JS_CGETSET_DEF("length", js_cd_length_get, NULL),
         JS_CFUNC_DEF("appendData", 1, js_cd_appendData),
         JS_CFUNC_DEF("insertData", 2, js_cd_insertData),
         JS_CFUNC_DEF("deleteData", 2, js_cd_deleteData),
@@ -3966,11 +3971,23 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CGETSET_DEF("rel", js_el_rel_get, js_el_rel_set),
         JS_CGETSET_DEF("target", js_el_target_get, js_el_target_set),
     };
-    /* Element prototype — methods + accessors via JS_CGETSET_DEF. */
-    JSValue el_proto = JS_NewObject(ctx);
-    JS_SetPropertyFunctionList(ctx, el_proto, element_funcs,
+    /* DOM interface prototype CHAIN: element_proto -> node_proto ->
+     * event_target_proto. Every node instance points at element_proto, so it
+     * still reaches all methods by inheritance (all methods start on
+     * element_proto). YouTube's Shady-DOM polyfill captures native methods
+     * per-interface via Object.getOwnPropertyDescriptor(Node.prototype, …) and
+     * re-patches them, expecting instances to pick up the patch through
+     * inheritance — impossible when every method is an OWN prop of one flat
+     * proto. The redistribute step (js_dom_redistribute_protos below, run after
+     * the globals are wired) moves the Node/EventTarget methods UP to the level
+     * the polyfill inspects; reachability is unchanged either way. */
+    JSValue event_target_proto = JS_NewObject(ctx);
+    JSValue node_proto = JS_NewObjectProto(ctx, event_target_proto);
+    JSValue element_proto = JS_NewObjectProto(ctx, node_proto);
+    JS_SetPropertyFunctionList(ctx, element_proto, element_funcs,
                                sizeof(element_funcs) / sizeof(element_funcs[0]));
-    JS_SetClassProto(ctx, state->class_element_id, el_proto);
+    /* SetClassProto consumes a ref; keep element_proto for the wiring below. */
+    JS_SetClassProto(ctx, state->class_element_id, JS_DupValue(ctx, element_proto));
 
     static const JSCFunctionListEntry document_funcs[] = {
         JS_CFUNC_DEF("getElementById", 1, js_doc_getElementById),
@@ -3983,6 +4000,7 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CFUNC_DEF("createElementNS", 2, js_doc_createElementNS),
         JS_CFUNC_DEF("createTextNode", 1, js_doc_createTextNode),
         JS_CFUNC_DEF("createDocumentFragment", 0, js_doc_createDocumentFragment),
+        JS_CFUNC_DEF("importNode", 2, js_doc_importNode),
         JS_CFUNC_DEF("createComment", 1, js_doc_createComment),
         JS_CFUNC_DEF("addEventListener", 2, js_el_addEventListener),
         JS_CFUNC_DEF("dispatchEvent", 1, js_el_dispatchEvent),
@@ -4007,37 +4025,55 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
 	 * We give it the *same* methods as Element so document.querySelector
 	 * works directly (not via the Element prototype chain since we
 	 * don't model that yet). */
-    JSValue doc_proto = JS_NewObject(ctx);
+    JSValue doc_proto = JS_NewObjectProto(ctx, node_proto);
     JS_SetPropertyFunctionList(ctx, doc_proto, document_funcs,
                                sizeof(document_funcs) / sizeof(document_funcs[0]));
-    JS_SetClassProto(ctx, state->class_document_id, doc_proto);
+    JS_SetClassProto(ctx, state->class_document_id, JS_DupValue(ctx, doc_proto));
 
     /* globalThis.document */
     JSValue global = JS_GetGlobalObject(ctx);
+
+    /* Wire the real DOM interface constructors so their .prototype IS the chain
+	 * object instances inherit from. The web-api stubs (js_web_install, run
+	 * next) must not clobber these — they guard with `|| function(){}`. */
+    install_dom_iface(ctx, global, "EventTarget", event_target_proto);
+    install_dom_iface(ctx, global, "Node", node_proto);
+    install_dom_iface(ctx, global, "Element", element_proto);
+    install_dom_iface(ctx, global, "Document", doc_proto);
+
+    /* Move Node/EventTarget methods from element_proto UP to the interface
+	 * level the Shady-DOM polyfill inspects (it captures own-props per
+	 * prototype). Instances still reach everything through the chain; any name
+	 * absent from element_proto is skipped. */
+    static const char redistribute_js[] =
+        "(function(){"
+        "  function move(from,to,names){"
+        "    for(var i=0;i<names.length;i++){var n=names[i];"
+        "      var d=Object.getOwnPropertyDescriptor(from,n);"
+        "      if(d){Object.defineProperty(to,n,d); if(d.configurable) delete from[n];}}}"
+        "  var ep=Element.prototype, np=Node.prototype, tp=EventTarget.prototype;"
+        "  move(ep,tp,['addEventListener','removeEventListener','dispatchEvent']);"
+        "  move(ep,np,['appendChild','removeChild','insertBefore','replaceChild',"
+        "    'prepend','append','before','after','remove','replaceWith','cloneNode',"
+        "    'contains','hasChildNodes','normalize','textContent','firstChild','lastChild',"
+        "    'nextSibling','previousSibling','parentNode','parentElement','childNodes',"
+        "    'nodeType','nodeName','ownerDocument','data','length','appendData','insertData',"
+        "    'deleteData','replaceData','substringData']);"
+        "})();";
+    JSValue redistribute_res = JS_Eval(ctx, redistribute_js, sizeof(redistribute_js) - 1,
+                                       "<dom-protos>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(redistribute_res)) {
+        JS_FreeValue(ctx, JS_GetException(ctx));
+    }
+    JS_FreeValue(ctx, redistribute_res);
+
+    JS_FreeValue(ctx, event_target_proto);
+    JS_FreeValue(ctx, node_proto);
+    JS_FreeValue(ctx, element_proto);
+    JS_FreeValue(ctx, doc_proto);
+
     JSValue doc_obj = wrap_document(ctx, r->document);
     JS_SetPropertyStr(ctx, global, "document", doc_obj);
-
-    /* DOMParser — real parsing into a SEPARATE document (see
-	 * js_domparser_parse_from_string). The constructor shim lives in JS;
-	 * every instance shares the C parse function. This replaces an old
-	 * `parseFromString = () => document` stub that returned the LIVE
-	 * document — code that "moves the parsed nodes into the page" (Zephr's
-	 * outcome renderer on apnews.com) then moved the live page's own
-	 * head/body children into a detached fragment, blanking the page. */
-    JS_SetPropertyStr(ctx, global, "__ylexborParseHTML",
-                      JS_NewCFunction(ctx, js_domparser_parse_from_string, "parseFromString", 2));
-    {
-        static const char domparser_def[] =
-            "(function DOMParser(){ this.parseFromString = globalThis.__ylexborParseHTML; })";
-        JSValue domparser_ctor = JS_Eval(ctx, domparser_def, sizeof(domparser_def) - 1,
-                                         "<domparser>", JS_EVAL_TYPE_GLOBAL);
-        if (JS_IsException(domparser_ctor)) {
-            JSValue ctor_error = JS_GetException(ctx);
-            JS_FreeValue(ctx, ctor_error);
-        } else {
-            JS_SetPropertyStr(ctx, global, "DOMParser", domparser_ctor);
-        }
-    }
 
     /* document.documentElement / body / head — convenience props. */
     lxb_dom_node_t *doc_node = lxb_dom_interface_node(r->document);

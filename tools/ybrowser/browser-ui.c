@@ -43,9 +43,6 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ygui/ygui.h>
-#include <yetty/yfont/font.h>
-#include <yetty/yfont/msdf-font.h>
-#include <yetty/yplatform/paths.h>
 #include <yetty/yimage/yimage.h>
 #include <yetty/ysvg/ysvg.h>
 #include <yetty/yplatform/pty.h>
@@ -71,13 +68,13 @@
  * pipeline (see pack_rgba in ybrowser-paint.c). The level colors reuse the
  * brand palette; warn/error are functional severity colors the brand set does
  * not define (a console must read amber for warnings and red for errors). */
-#define CONSOLE_TEXT 0xFFE4E5E0u   /* #E0E5E4 brand text-primary — log/info */
-#define CONSOLE_MUTED 0xFF626155u  /* #556162 brand text-muted — debug */
-#define CONSOLE_WARN 0xFF4DA3E5u   /* #E5A34D amber */
-#define CONSOLE_ERROR 0xFF4D57E5u  /* #E5574D red */
-#define CONSOLE_INPUT 0xFFA8A79Fu  /* #9FA7A8 brand text-secondary — typed input */
-#define CONSOLE_ACCENT 0xFF92A86Bu /* #6BA892 brand accent — prompt/marker glyphs */
-#define CONSOLE_RESULT 0xFFA5C574u /* #74C5A5 brand accent-bright — eval result */
+#define CONSOLE_TEXT 0xFFE4E5E0u    /* #E0E5E4 brand text-primary — log/info */
+#define CONSOLE_MUTED 0xFF626155u   /* #556162 brand text-muted — debug */
+#define CONSOLE_WARN 0xFF4DA3E5u    /* #E5A34D amber */
+#define CONSOLE_ERROR 0xFF4D57E5u   /* #E5574D red */
+#define CONSOLE_INPUT 0xFFA8A79Fu   /* #9FA7A8 brand text-secondary — typed input */
+#define CONSOLE_ACCENT 0xFF92A86Bu  /* #6BA892 brand accent — prompt/marker glyphs */
+#define CONSOLE_RESULT 0xFFA5C574u  /* #74C5A5 brand accent-bright — eval result */
 #define CONSOLE_FONT_SIZE 13.0f
 #define DEVTOOLS_HEIGHT 300.0f
 
@@ -148,22 +145,6 @@ enum content_kind {
  * images keep arriving, then once more when the last one lands. */
 #define IMG_RENDER_DEBOUNCE_MS 120.0
 
-/* Background-relayout throttle (see struct tab). After this many consecutive
- * relayouts produce a byte-identical draw list, treat the DOM churn as
- * background noise (a stuck analytics/paywall timer that dirties the DOM
- * without changing anything visible) and stop relaying out every frame. This
- * engine has no incremental layout — every relayout re-cascades the WHOLE
- * document — so a full relayout of a real page is tens to hundreds of ms; doing
- * it per frame pins a core. Instead we poll: skip the relayout, and grow the
- * skip window on each stable render (exponential backoff) up to a cap, so a
- * page that stays visually static is relaid out only occasionally while a page
- * that actually changes snaps back to full rate. Autonomous JS visual updates
- * on an otherwise-static page are picked up within the cap; user interaction,
- * navigation, and resize bypass the gate entirely (they reset rendered_w). */
-#define RELAYOUT_STABLE_FRAMES 3
-#define RELAYOUT_GATE_MIN_MS 100.0
-#define RELAYOUT_GATE_MAX_MS 2000.0
-
 struct cache_entry {
     char *url;
     uint8_t *data;
@@ -210,19 +191,6 @@ struct tab {
     int scripts_pending;
     uint64_t dl_hash; /* hash of the last draw list we shipped */
     size_t dl_size;   /* size of the last draw list we shipped */
-
-    /* Background-relayout throttle. A page whose JS keeps a timer/rAF loop
-     * running dirties the DOM every tick; render_target_render then re-runs a
-     * full CSS re-cascade + box rebuild each frame even when the result is
-     * byte-identical (an ad/analytics timer that changes nothing visible). That
-     * pins a core at 100%. Once we've seen the output stay identical across a
-     * few relayouts we treat the churn as background noise and gate further
-     * relayouts to a slow poll — a forced render (nav / resize / tab-switch) or
-     * a relayout that actually changes the output resets the gate to full rate,
-     * so genuine animation is never throttled. */
-    int stable_relayouts;        /* consecutive relayouts with identical output */
-    double relayout_gate_ms;     /* skip background relayouts until this time */
-    double relayout_interval_ms; /* current backoff window; doubles while stable */
 };
 
 struct app {
@@ -253,21 +221,6 @@ struct app {
     int address_focused;
     int pending_render;
     int running;
-
-    /* Page form inputs promoted to REAL ygui textinput widgets, overlaid on
-     * the ydraw_embed at each <input> box's document position (the embed
-     * rect already carries the scroll slide, so overlay rect = embed
-     * rect.min + box xy). Pool rebuilt after every ship — element/box
-     * indices die on re-parse. `page_input_focused` is the pool slot with
-     * key focus, -1 when none. */
-#define MAX_PAGE_INPUTS 16
-    struct {
-        int box_index;                      /* engine box index this overlays */
-        float doc_x, doc_y, w, h;           /* document-coord rect of the box */
-        struct yetty_yclass_object *widget; /* ygui textinput (created once) */
-    } page_inputs[MAX_PAGE_INPUTS];
-    int n_page_inputs;
-    int page_input_focused;
 
     /* DevTools: a bottom-docked panel with a live JavaScript console. Built
      * once in build_ui, collapsed to zero height until toggled with F12. The
@@ -406,11 +359,6 @@ static void ui_new_tab(struct app *a);
 static void ui_close_tab(struct app *a, int idx);
 static void switch_tab(struct app *a, int idx);
 static void navigate(struct app *a, struct tab *t, char *url, int push_to_back);
-/* UTF-8 + special-key encoders (defined with the standalone loop below;
- * the client key-envelope decode reuses them). */
-static size_t utf8_encode(uint32_t cp, char *out);
-static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
-                                      size_t *out_n);
 static void nav_abort(struct tab *t);
 static void go_back(struct app *a);
 static void go_forward(struct app *a);
@@ -421,9 +369,8 @@ static int build_ui(struct app *a);
 static void dt_layout(struct yetty_yclass_object *w, float height, float flex_grow, float pad_x,
                       float pad_y);
 static void dt_set_hidden(struct yetty_yclass_object *w, int hidden);
-static struct yetty_yclass_object *dt_add_label(struct yetty_yclass_object *parent,
-                                                const char *text, struct yetty_ycore_rgba color,
-                                                float font_size);
+static struct yetty_yclass_object *dt_add_label(struct yetty_yclass_object *parent, const char *text,
+                                                struct yetty_ycore_rgba color, float font_size);
 static void toggle_devtools(struct app *a);
 static void switch_devtools_tab(struct app *a, int tab);
 static void dom_tree_rebuild(struct app *a);
@@ -1233,7 +1180,6 @@ static void navigate_full(struct app *a, struct tab *t, char *url, int push_to_b
 /* Plain navigation — cache-preferring (link clicks, address bar, history). */
 static void navigate(struct app *a, struct tab *t, char *url, int push_to_back)
 {
-    a->page_input_focused = -1;
     navigate_full(a, t, url, push_to_back, 0);
 }
 
@@ -1424,11 +1370,6 @@ static struct yetty_ycore_void_result on_tab_changed(struct yetty_yclass_object 
 
 static void focus_address(struct app *a)
 {
-    if (a->page_input_focused >= 0 && a->page_input_focused < a->n_page_inputs &&
-        a->page_inputs[a->page_input_focused].widget) {
-        err_ok(yetty_ygui_textinput_set_focus(a->page_inputs[a->page_input_focused].widget, 0));
-    }
-    a->page_input_focused = -1;
     err_ok(yetty_ygui_textinput_set_focus(a->address, 1));
     /* Select the whole URL on focus, like every desktop browser — the next
      * keystroke replaces it, or the user can copy it straight away. */
@@ -1511,29 +1452,6 @@ static int key_cb(struct yetty_yclass_object *fw, uint32_t key, int mods, void *
     if (key == 0x17) { /* Ctrl-W → close tab */
         ui_close_tab(a, a->active);
         return 1;
-    }
-    if (!a->address_focused && !a->console_focused && a->page_input_focused >= 0 &&
-        a->page_input_focused < a->n_page_inputs && a->page_inputs[a->page_input_focused].widget) {
-        struct yetty_yclass_object *widget = a->page_inputs[a->page_input_focused].widget;
-        if (key == 0x1B) { /* Esc — release the page input */
-            err_ok(yetty_ygui_textinput_set_focus(widget, 0));
-            a->page_input_focused = -1;
-            yetty_ygui_framework_mark_dirty(fw);
-            return 1;
-        }
-        struct yetty_ycore_int_result page_key_res =
-            yetty_ygui_textinput_handle_key(widget, key, mods);
-        int page_consumed = 0;
-        if (YETTY_IS_ERR(page_key_res)) {
-            yetty_ycore_error_destroy(page_key_res.error);
-        } else {
-            page_consumed = page_key_res.value;
-        }
-        if (page_consumed) {
-            yetty_ygui_framework_mark_dirty(fw);
-            return 1;
-        }
-        /* fall through for keys the edit box doesn't take (Ctrl chords…) */
     }
     if (a->address_focused) {
         if (key == '\r' || key == '\n') {
@@ -1638,33 +1556,6 @@ static void page_click(struct app *a, float x, float y)
     if (!t->engine) {
         return;
     }
-    /* Promoted form inputs sit on top of the page — a press inside one
-     * focuses that edit box (and lets the widget place the caret); a press
-     * anywhere else on the page releases it. */
-    {
-        int hit = -1;
-        for (int i = 0; i < a->n_page_inputs; i++) {
-            float vx = pr.min.x + a->page_inputs[i].doc_x;
-            float vy = pr.min.y + a->page_inputs[i].doc_y;
-            if (a->page_inputs[i].widget && x >= vx && x < vx + a->page_inputs[i].w && y >= vy &&
-                y < vy + a->page_inputs[i].h) {
-                hit = i;
-                break;
-            }
-        }
-        for (int i = 0; i < a->n_page_inputs; i++) {
-            if (a->page_inputs[i].widget) {
-                err_ok(yetty_ygui_textinput_set_focus(a->page_inputs[i].widget, i == hit));
-            }
-        }
-        a->page_input_focused = hit;
-        if (hit >= 0) {
-            a->address_focused = 0;
-            err_ok(yetty_ygui_textinput_set_focus(a->address, 0));
-            yetty_ygui_framework_mark_dirty(a->fw);
-            return; /* the widget's own click handling places the caret */
-        }
-    }
     /* The embed rect already includes the scroll slide, so subtracting
 	 * rect.min yields document coords. A plain <a href> navigates;
 	 * otherwise dispatch a JS click. */
@@ -1750,9 +1641,9 @@ static int dom_tree_visit(void *user, int depth, int has_children, const char *l
         }
         builder->parent_at_depth[depth + 1] = node_res.value;
     } else {
-        struct yetty_ycore_rgba color =
-            label[0] == '"' ? (struct yetty_ycore_rgba){159, 167, 168, 255}  /* text */
-                            : (struct yetty_ycore_rgba){116, 197, 165, 255}; /* elem */
+        struct yetty_ycore_rgba color = label[0] == '"'
+                                            ? (struct yetty_ycore_rgba){159, 167, 168, 255} /* text */
+                                            : (struct yetty_ycore_rgba){116, 197, 165, 255}; /* elem */
         struct yetty_yclass_object *leaf = dt_add_label(parent, label, color, CONSOLE_FONT_SIZE);
         if (leaf) {
             /* Explicit row height: labels report no intrinsic height to the flex
@@ -1863,8 +1754,8 @@ static void console_add_wrapped(struct app *a, const char *marker, const char *t
         line[copy_len] = '\0';
         err_ok(yetty_ygui_rich_add_line(a->console_log));
         if (first_segment && marker && marker[0]) {
-            err_ok(yetty_ygui_rich_add_span(a->console_log, marker, CONSOLE_FONT_SIZE,
-                                            CONSOLE_ACCENT));
+            err_ok(
+                yetty_ygui_rich_add_span(a->console_log, marker, CONSOLE_FONT_SIZE, CONSOLE_ACCENT));
         }
         err_ok(yetty_ygui_rich_add_span(a->console_log, line, CONSOLE_FONT_SIZE, color));
         first_segment = 0;
@@ -1995,159 +1886,6 @@ static void render_pass(struct app *a)
                        yetty_ylexbor_prof_now_ms() - t_render);
 }
 
-/* Page-input promotion: every visible text-like <input> box in the active
- * engine gets a REAL ygui textinput overlaid at its document position (the
- * same edit widget the address bar and demo 44 use — caret, selection,
- * word-drag, the lot). The pool is rebuilt after each ship: box indices and
- * element pointers die on re-parse. Widgets are created once, parented to
- * the root, absolutely placed (set_rect + raise) each pump so they ride
- * scroll via the embed rect, and hidden when the pool shrinks. */
-static void reposition_page_inputs(struct app *a)
-{
-    if (a->n_page_inputs == 0 || a->showing_image || a->no_ui) {
-        return;
-    }
-    /* Absolute children of the scrollarea are placed at content_min + pos
-     * and are NOT slid by the scroll offset (layout.c places them outside
-     * the flex bookkeeping). The embed rect carries the slide, so anchoring
-     * pos to (embed.min - scroll.min) + doc keeps the overlays glued to the
-     * page as it scrolls. Re-run every pump tick. */
-    struct yetty_ycore_rectangle_result pr_res = yetty_ygui_widget_rect(a->page);
-    struct yetty_ycore_rectangle_result sr_res = yetty_ygui_widget_rect(a->scroll);
-    if (YETTY_IS_ERR(pr_res) || YETTY_IS_ERR(sr_res)) {
-        if (YETTY_IS_ERR(pr_res)) {
-            yetty_ycore_error_destroy(pr_res.error);
-        }
-        if (YETTY_IS_ERR(sr_res)) {
-            yetty_ycore_error_destroy(sr_res.error);
-        }
-        return;
-    }
-    float base_x = pr_res.value.min.x - sr_res.value.min.x;
-    float base_y = pr_res.value.min.y - sr_res.value.min.y;
-    float view_h = sr_res.value.max.y - sr_res.value.min.y;
-    for (int i = 0; i < a->n_page_inputs; i++) {
-        struct yetty_yclass_object *widget = a->page_inputs[i].widget;
-        if (!widget) {
-            continue;
-        }
-        float px = base_x + a->page_inputs[i].doc_x;
-        float py = base_y + a->page_inputs[i].doc_y;
-        /* The scrollarea scissor clips the figure, but a widget fully above/
-         * below the viewport must also stop eating clicks - hide it. */
-        int visible = py + a->page_inputs[i].h > 0.0f && py < view_h;
-        err_ok(yetty_ygui_widget_set_visible(widget, visible));
-        if (!visible) {
-            continue;
-        }
-        struct yetty_ygui_layout_const_ptr_result lay_res = yetty_ygui_widget_layout_get(widget);
-        if (YETTY_IS_ERR(lay_res)) {
-            yetty_ycore_error_destroy(lay_res.error);
-            continue;
-        }
-        struct yetty_ygui_layout lay = *lay_res.value;
-        lay.absolute = 1;
-        lay.pos_x = px;
-        lay.pos_y = py;
-        lay.width = a->page_inputs[i].w;
-        lay.height = a->page_inputs[i].h;
-        err_ok(yetty_ygui_widget_layout_set(widget, &lay));
-        err_ok(yetty_ygui_widget_raise(widget));
-    }
-}
-
-static void promote_page_inputs(struct app *a, struct tab *t)
-{
-    int used = 0;
-    /* Re-ships happen constantly (hover washes, streamed images) — keep the
-     * focused slot and its in-progress text across the rebuild; only a
-     * navigation (different document) genuinely invalidates them. */
-    int keep_focus = a->page_input_focused;
-    if (t->engine && !a->showing_image && !a->no_ui) {
-        int count = yetty_ylexbor_test_box_count(t->engine);
-        for (int bi = 0; bi < count && used < MAX_PAGE_INPUTS; bi++) {
-            float x = 0, y = 0, w = 0, h = 0;
-            char tag[32] = {0};
-            if (yetty_ylexbor_test_box_at(t->engine, bi, &x, &y, &w, &h, tag, sizeof(tag)) != 0) {
-                continue;
-            }
-            if (strcmp(tag, "input") != 0 || w < 24.0f || h < 10.0f) {
-                continue;
-            }
-            /* Hidden forms (webauthn shells, 2FA variants) carry inputs too -
-             * promoting those grabs focus for invisible widgets and shuffles
-             * the slots under the user typing. */
-            float box_opacity = 1.0f;
-            int box_hidden = 0;
-            (void)yetty_ylexbor_test_box_paint_at(t->engine, bi, &box_opacity, &box_hidden);
-            if (box_opacity < 0.02f || box_hidden) {
-                continue;
-            }
-            /* Text-like types only (default when the attr is absent). */
-            char type[24] = {0};
-            (void)yetty_ylexbor_test_box_attr_at(t->engine, bi, "type", type, sizeof(type));
-            if (type[0] != '\0' && strcmp(type, "text") != 0 && strcmp(type, "email") != 0 &&
-                strcmp(type, "password") != 0 && strcmp(type, "search") != 0 &&
-                strcmp(type, "url") != 0 && strcmp(type, "tel") != 0) {
-                continue;
-            }
-            struct yetty_yclass_object *widget = a->page_inputs[used].widget;
-            if (!widget) {
-                struct yetty_yclass_ptr_result cls = yetty_ygui_textinput_class_get();
-                if (YETTY_IS_ERR(cls)) {
-                    yetty_ycore_error_destroy(cls.error);
-                    break;
-                }
-                struct yetty_yclass_object_ptr_result add_res =
-                    yetty_ygui_widget_add(a->scroll, cls.value);
-                if (YETTY_IS_ERR(add_res)) {
-                    yetty_ycore_error_destroy(add_res.error);
-                    break;
-                }
-                widget = add_res.value;
-                a->page_inputs[used].widget = widget;
-                /* Absolute: exempt from the root vbox layout — same escape
-                 * hatch the dialog panel uses; reposition_page_inputs owns
-                 * the rect. */
-                struct yetty_ygui_layout_const_ptr_result lay_res =
-                    yetty_ygui_widget_layout_get(widget);
-                if (YETTY_IS_OK(lay_res)) {
-                    struct yetty_ygui_layout lay = *lay_res.value;
-                    lay.absolute = 1;
-                    err_ok(yetty_ygui_widget_layout_set(widget, &lay));
-                } else {
-                    yetty_ycore_error_destroy(lay_res.error);
-                }
-            }
-            char placeholder[128] = {0};
-            (void)yetty_ylexbor_test_box_attr_at(t->engine, bi, "placeholder", placeholder,
-                                                 sizeof(placeholder));
-            err_ok(yetty_ygui_textinput_set_placeholder(widget, placeholder));
-            if (used != keep_focus) {
-                char value[256] = {0};
-                (void)yetty_ylexbor_test_box_attr_at(t->engine, bi, "value", value, sizeof(value));
-                err_ok(yetty_ygui_textinput_set_text(widget, value));
-                err_ok(yetty_ygui_textinput_set_focus(widget, 0));
-            }
-            a->page_inputs[used].box_index = bi;
-            a->page_inputs[used].doc_x = x;
-            a->page_inputs[used].doc_y = y;
-            a->page_inputs[used].w = w;
-            a->page_inputs[used].h = h;
-            used++;
-        }
-    }
-    /* Hide pool slots beyond this page's input count. */
-    for (int i = used; i < a->n_page_inputs; i++) {
-        if (a->page_inputs[i].widget) {
-            err_ok(yetty_ygui_widget_set_visible(a->page_inputs[i].widget, 0));
-        }
-    }
-    a->n_page_inputs = used;
-    a->page_input_focused = (keep_focus >= 0 && keep_focus < used) ? keep_focus : -1;
-    reposition_page_inputs(a);
-}
-
 /* Pump the active tab's JS timers; flag a re-render if the DOM changed.
  * Returns ms until the next timer (clamped), or 100 when idle. */
 static int pump_active(struct app *a)
@@ -2155,9 +1893,6 @@ static int pump_active(struct app *a)
     struct tab *t = &a->tabs[a->active];
     int wait_ms = 100;
     int images_fetched = 0;
-    /* Overlaid form inputs ride the embed rect (scroll slide included) —
-     * re-place them every pump so scrolling doesn't leave them behind. */
-    reposition_page_inputs(a);
     if (t->engine) {
         /* Progressive rendering: scripts were deferred so the initial HTML+CSS
 		 * could paint immediately. Once that first paint has landed
@@ -2170,31 +1905,18 @@ static int pump_active(struct app *a)
             t->needs_render = 1;
             a->pending_render = 1;
             wait_ms = 0;
-        } else if (t->scripts_pending) {
-            /* Deferred scripts are queued but the first paint hasn't set
-             * rendered_w yet. Request the render and keep the loop ticking
-             * (wait_ms = 0) so we re-check next pump instead of blocking on an
-             * event that never comes — a page with no images/timers (e.g. the
-             * YouTube reader path, whose app scripts are skipped) otherwise
-             * stalls forever with the scripts unrun. */
-            a->pending_render = 1;
-            wait_ms = 0;
         }
         int next = yetty_ylexbor_pump_timers(t->engine);
         if (next >= 0) {
             wait_ms = next < 100 ? next : 100;
         }
         if (yetty_ylexbor_dom_dirty(t->engine)) {
-            /* Re-render, but do NOT force needs_render — that flag means
-             * "ship even if the draw list is unchanged" (tab switch / fresh
-             * doc). A DOM mutation should only reship when it actually changes
-             * the output; forcing it here defeated the identical-output skip in
-             * render_target_render and made every background timer tick reship
-             * the whole page. Let the hash comparison decide. */
+            t->needs_render = 1;
             a->pending_render = 1;
         }
         /* New page console.* output while DevTools is open → refresh the log. */
-        if (a->devtools_open && yetty_ylexbor_console_total(t->engine) != a->console_seen_total) {
+        if (a->devtools_open &&
+            yetty_ylexbor_console_total(t->engine) != a->console_seen_total) {
             a->console_dirty = 1;
             a->pending_render = 1;
         }
@@ -2300,39 +2022,6 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         return;
     }
 
-    if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_KEY ||
-        osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY) {
-        /* After a mouse press focuses our figure, the HOST routes keyboard
-         * input here as key envelopes instead of writing bytes to the PTY —
-         * dropping them left the address bar / page inputs deaf right after
-         * any click. Mirror the standalone translation: CHAR -> UTF-8 text,
-         * DOWN -> encoded special key; both through framework_feed_input,
-         * which drives the same key_cb as the PTY byte path. */
-        if (payload_len < sizeof(struct yetty_client_input_key)) {
-            return;
-        }
-        const struct yetty_client_input_key *k = (const struct yetty_client_input_key *)payload;
-        if (k->magic != YETTY_CLIENT_INPUT_KEY_MAGIC) {
-            return;
-        }
-        if (k->kind == YETTY_YMGUI_INPUT_KEY_CHAR && k->codepoint != 0) {
-            char utf8_buf[8];
-            size_t n = utf8_encode(k->codepoint, utf8_buf);
-            if (n > 0) {
-                err_ok(yetty_ygui_framework_feed_input(a->fw, utf8_buf, n));
-            }
-        } else if (k->kind == YETTY_YMGUI_INPUT_KEY_DOWN) {
-            char scratch[8];
-            size_t n = 0;
-            const char *bytes =
-                encode_special_key((uint32_t)k->key, k->mods, scratch, sizeof(scratch), &n);
-            if (bytes && n > 0) {
-                err_ok(yetty_ygui_framework_feed_input(a->fw, bytes, n));
-            }
-        }
-        yetty_ygui_framework_mark_dirty(a->fw);
-        return;
-    }
     if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE ||
         osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE) {
         if (payload_len < sizeof(struct yetty_client_input_resize)) {
@@ -2823,24 +2512,6 @@ static void render_doc(struct app *a, struct tab *t)
         if (!t->engine) {
             return;
         }
-        /* Gate the expensive relayout+emit. Once the page has produced
-         * byte-identical output across a few renders, treat further renders as
-         * background churn (a timer/animation/image loop that isn't changing
-         * anything visible) and skip the whole relayout+emit until the poll
-         * window elapses. A width change is a real geometry change and always
-         * renders; content changes reset the stability counter (below), so nav
-         * / tab-switch / resize are never wrongly gated. Crucially this ignores
-         * needs_render: a stable page whose images keep "completing" forces
-         * needs_render every frame, and re-emitting a 31 MB draw list to get the
-         * same bytes is pure waste. */
-        int width_changed = (w != t->rendered_w);
-        double now_ms = yetty_ylexbor_prof_now_ms();
-        if (!width_changed && t->stable_relayouts >= RELAYOUT_STABLE_FRAMES &&
-            now_ms < t->relayout_gate_ms) {
-            t->needs_render = 0; /* satisfied by skipping — do not re-arm a full render */
-            t->rendered_w = w;
-            return;
-        }
         if (w != t->rendered_w) {
             int vh = (int)(h > a->viewport_h ? h : a->viewport_h);
             err_ok(yetty_ylexbor_set_viewport(t->engine, (int)w, vh));
@@ -2870,36 +2541,13 @@ static void render_doc(struct app *a, struct tab *t)
     const void *dl_bytes = yetty_ydraw_drawable_list_data(dl);
     size_t dl_sz = yetty_ydraw_drawable_list_size(dl);
     uint64_t h2 = fnv1a(dl_bytes, dl_sz);
-    /* Output stability is tracked by BYTES ALONE (not gated on needs_render) so
-     * a page forced to re-render every frame by background churn still accrues
-     * stability and arms the relayout gate above. The reship still honours
-     * needs_render, so a tab switch / fresh doc re-ships even when bytes match. */
-    int output_same = (dl_sz == t->dl_size && h2 == t->dl_hash);
-    if (output_same) {
-        if (t->stable_relayouts < RELAYOUT_STABLE_FRAMES) {
-            t->stable_relayouts++;
-        }
-        /* Grow the skip window each time output stays put, up to the cap. */
-        double next_interval =
-            t->relayout_interval_ms > 0.0 ? t->relayout_interval_ms * 2.0 : RELAYOUT_GATE_MIN_MS;
-        if (next_interval > RELAYOUT_GATE_MAX_MS) {
-            next_interval = RELAYOUT_GATE_MAX_MS;
-        }
-        t->relayout_interval_ms = next_interval;
-        t->relayout_gate_ms = yetty_ylexbor_prof_now_ms() + next_interval;
-    } else {
-        /* Real visual change — resume full-rate rendering. */
-        t->stable_relayouts = 0;
-        t->relayout_gate_ms = 0.0;
-        t->relayout_interval_ms = 0.0;
-        t->dl_hash = h2;
-        t->dl_size = dl_sz;
-    }
-    if (output_same && !t->needs_render) {
+    if (!t->needs_render && dl_sz == t->dl_size && h2 == t->dl_hash) {
         yetty_ydraw_drawable_list_destroy(dl);
         t->rendered_w = w;
         return;
     }
+    t->dl_hash = h2;
+    t->dl_size = dl_sz;
 
     /* In-yetty the page ships as one figure-body RPC, and the wire caps
 	 * bodies at 64 MiB (#437; raised from 16 once images started shipping
@@ -2926,9 +2574,6 @@ static void render_doc(struct app *a, struct tab *t)
     set_content_height(a, a->page, content_h);
     t->needs_render = 0;
     t->rendered_w = w;
-    /* Every ship rebuilds the page's box tree — re-promote the form inputs
-     * so the overlay widgets track the fresh box indices/positions. */
-    promote_page_inputs(a, t);
     yetty_ygui_framework_mark_dirty(a->fw);
 }
 
@@ -3046,26 +2691,11 @@ static void render_active(struct app *a)
 	 * relayout shifted anything (or there's no baseline yet) fall through to a
 	 * full render. */
     if (a->img_delta_pending && !t->needs_render) {
-        /* The figure-delta ship is applied only by the in-yetty host receiver
-         * (event_loop == NULL). The standalone window (event_loop != NULL)
-         * composites from its own local page buffer and never sees a figure
-         * delta, so it must re-emit the whole page to show decoded pixels. */
-        if (a->event_loop == NULL && try_image_delta(a, t)) {
+        if (try_image_delta(a, t)) {
             a->img_delta_pending = 0;
             return;
         }
-        /* The per-image delta path bailed (no baseline — e.g. the page's DOM was
-         * rewritten after its first ship, as the YouTube reader does), so a real
-         * image just finished decoding but can only be shown by a full re-emit.
-         * needs_render alone is not enough: the output-stability relayout gate
-         * deliberately ignores it. Reset the stability counters too so render_doc
-         * actually relayouts+emits and the new pixels composite — image
-         * completions are finite, so this can't reintroduce the stable-churn burn
-         * the gate exists to prevent. */
-        t->needs_render = 1;
-        t->stable_relayouts = 0;
-        t->relayout_gate_ms = 0.0;
-        t->relayout_interval_ms = 0.0;
+        t->needs_render = 1; /* delta bailed — force render_doc to repaint */
     }
     a->img_delta_pending = 0;
     render_doc(a, t);
@@ -3159,42 +2789,6 @@ static int client_pipe_drain(struct client_pipe_loop *loop)
     return drained;
 }
 
-/* Measurement font for the client framework — same DejaVu Mono MSDF the
- * host renders with, so textinput carets, click hit-tests and label widths
- * are computed with the REAL glyph advances (the standalone path wires a
- * font at window creation; without one the widgets fall back to the crude
- * fixed advance and the address bar caret lands between the wrong glyphs).
- * Mirrors yguiapp's client measure font. */
-static struct yetty_yfont_font *client_measure_font_create(void)
-{
-    struct yetty_yplatform_paths_ptr_result paths_res = yetty_yplatform_paths_create();
-    if (YETTY_IS_ERR(paths_res)) {
-        yetty_ycore_error_destroy(paths_res.error);
-        return NULL;
-    }
-    char cdb_path[768];
-    char shader_path[768];
-    snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb",
-             paths_res.value->fonts_dir_buf, "DejaVuSansMNerdFontMono");
-    snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl",
-             paths_res.value->shaders_dir_buf);
-    struct yetty_font_font_result font_res =
-        yetty_yfont_msdf_font_create(cdb_path, shader_path, "ybrowser_measure");
-    struct yetty_ycore_void_result paths_destroy = yetty_yplatform_paths_destroy(paths_res.value);
-    if (YETTY_IS_ERR(paths_destroy)) {
-        yetty_ycore_error_destroy(paths_destroy.error);
-    }
-    if (YETTY_IS_ERR(font_res)) {
-        yetty_ycore_error_destroy(font_res.error);
-        return NULL;
-    }
-    struct yetty_ycore_void_result load = font_res.value->ops->load_basic_latin(font_res.value);
-    if (YETTY_IS_ERR(load)) {
-        yetty_ycore_error_destroy(load.error);
-    }
-    return font_res.value;
-}
-
 int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, float font_size)
 {
     ytrace_init();
@@ -3267,10 +2861,6 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
     a.fw = fr.value;
     err_ok(yetty_ygui_framework_set_viewport(a.fw, (float)viewport_w, (float)viewport_h));
     yetty_ygui_framework_set_key_cb(a.fw, key_cb, &a);
-    struct yetty_yfont_font *measure_font = client_measure_font_create();
-    if (measure_font) {
-        yetty_ygui_framework_set_font(a.fw, measure_font);
-    }
 
     /* Attach to the host yetty's root figure container over the yclass-RPC
 	 * DCS transport (stdin = responses, stdout = requests). The handshake
@@ -3409,9 +2999,6 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
     (void)yetty_ybrowser_loader_destroy(a.loader);
     a.loader = NULL;
     err_ok(yetty_ygui_framework_destroy(a.fw));
-    if (measure_font) {
-        measure_font->ops->destroy(measure_font);
-    }
     if (yf) {
         yetty_yface_destroy(yf);
     }
@@ -3419,107 +3006,6 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
         tcsetattr(STDIN_FILENO, TCSANOW, &saved);
     }
     return 0;
-}
-
-/* Encode a Unicode codepoint to UTF-8. Returns the byte count (1..4). */
-static size_t utf8_encode(uint32_t cp, char *out)
-{
-    if (cp < 0x80) {
-        out[0] = (char)cp;
-        return 1;
-    }
-    if (cp < 0x800) {
-        out[0] = (char)(0xC0 | (cp >> 6));
-        out[1] = (char)(0x80 | (cp & 0x3F));
-        return 2;
-    }
-    if (cp < 0x10000) {
-        out[0] = (char)(0xE0 | (cp >> 12));
-        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
-        out[2] = (char)(0x80 | (cp & 0x3F));
-        return 3;
-    }
-    out[0] = (char)(0xF0 | (cp >> 18));
-    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
-    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
-    out[3] = (char)(0x80 | (cp & 0x3F));
-    return 4;
-}
-
-/* GLFW navigation/editing keycode → terminal byte sequence. Printable text
- * is NOT handled here — it arrives layout-translated via YETTY_YCORE_CHAR. */
-static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
-                                      size_t *out_len)
-{
-    /* xterm modifier parameter for CSI sequences: 1 + bitset(shift=1, alt=2,
-     * ctrl=4). mod_param == 0 means "no modifier" → emit the bare sequence so
-     * unmodified keys look exactly as before. The ygui input decoder reads this
-     * back out (see csi_decode_mods) and hands it to the widget as mods, which
-     * is what makes Shift+Arrow extend the selection. */
-    int mod_bits = 0;
-    if (glfw_mods & 0x0001) { /* GLFW_MOD_SHIFT */
-        mod_bits |= 1;
-    }
-    if (glfw_mods & 0x0004) { /* GLFW_MOD_ALT */
-        mod_bits |= 2;
-    }
-    if (glfw_mods & 0x0002) { /* GLFW_MOD_CONTROL */
-        mod_bits |= 4;
-    }
-    int mod_param = mod_bits ? mod_bits + 1 : 0;
-    switch (key) {
-    case 256:
-        scratch[0] = 0x1B;
-        *out_len = 1;
-        return scratch; /* ESC */
-    case 257:           /* Enter */
-    case 335:
-        scratch[0] = '\r';
-        *out_len = 1;
-        return scratch; /* KP Enter */
-    case 258:
-        scratch[0] = '\t';
-        *out_len = 1;
-        return scratch; /* Tab */
-    case 259:
-        scratch[0] = 0x7F;
-        *out_len = 1;
-        return scratch; /* Backspace */
-    case 261:           /* Del */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[3;%d~", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[3~");
-        return scratch;
-    case 263: /* ← */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dD", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[D");
-        return scratch;
-    case 262: /* → */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dC", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[C");
-        return scratch;
-    case 265: /* ↑ */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dA", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[A");
-        return scratch;
-    case 264: /* ↓ */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dB", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[B");
-        return scratch;
-    case 268: /* Home */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dH", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[H");
-        return scratch;
-    case 269: /* End */
-        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dF", mod_param)
-                             : (size_t)snprintf(scratch, scratch_n, "\x1b[F");
-        return scratch;
-    case 301: /* F12 (GLFW_KEY_F12) → DevTools toggle. xterm CSI 24~. */
-        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[24~");
-        return scratch;
-    default:
-        *out_len = 0;
-        return NULL;
-    }
 }
 
 /* ===========================================================================
@@ -3576,19 +3062,17 @@ struct YETTY_ANNOTATE("class@ybrowser:app") YETTY_ANNOTATE("parent@yapp:app") ye
     struct yetty_ydraw_target *render_target;
     const char *initial_url;
 
-    /* Frame pacing. The render loop re-arms itself whenever the page still has
-     * ongoing work (JS timers/animation dirtying the framework, or images still
-     * in flight). Re-arming an *immediate* render there spins the loop at
-     * unbounded frame rate — a page with a permanent background task (an ad
-     * iframe's polling timer, a stuck image fetch) pins a whole core at 100%.
-     * Instead the continuous re-arm goes through this repeating ~60fps timer:
-     * each tick posts one render, and the render handler restarts the timer
-     * only while work remains, so an idle page waits on real input events (0%
-     * CPU) and a busy page is capped at the display rate. Discrete input/resize
-     * events still request an immediate render, so interaction stays crisp. */
-    yetty_yevent_timer_id repaint_timer;
-    int repaint_timer_ready;   /* timer created + registered */
-    int repaint_timer_running; /* our copy of the libuv active flag */
+    /* Steady frame pump. request_render() is an immediate, un-paced wake, so a
+     * page whose only remaining work is a pending JS timer / rAF / idle
+     * callback (e.g. an SPA hydrating its content asynchronously) would stall:
+     * the render loop only re-arms while the framework is dirty. This ~60fps
+     * timer keeps pump_active() running so those callbacks fire; the RENDER
+     * handler still only PRESENTS when something actually changed, so idle
+     * pages stay cheap. */
+    struct yetty_yevent_event_listener frame_listener;
+    yetty_yevent_timer_id frame_timer;
+    int frame_timer_active;
+    int presented_once;
 
     /* Initial-page prefetch. Started on a background thread at sa_worker
      * entry so the HTML download overlaps the GPU/font/UI setup that follows,
@@ -3632,10 +3116,9 @@ static void *sa_prefetch_main(void *arg)
     return NULL;
 }
 
-/* ~60fps. The continuous render re-arm is paced to at least this interval so a
- * page with a permanent background task cannot spin the loop faster than the
- * display can show. */
-#define YBROWSER_FRAME_INTERVAL_MS 16
+static size_t utf8_encode(uint32_t cp, char *out);
+static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
+                                      size_t *out_len);
 
 static void sa_request_render(struct yetty_ybrowser_app *s)
 {
@@ -3645,42 +3128,17 @@ static void sa_request_render(struct yetty_ybrowser_app *s)
     }
 }
 
-/* Keep the paced heartbeat running (used when the page still has ongoing work).
- * Idempotent: starting an already-running libuv timer just resets its period,
- * so guard on our own flag to leave the current cadence untouched. Falls back
- * to an immediate render if the loop has no timer facility. */
-static void sa_schedule_render(struct yetty_ybrowser_app *s)
+/* ~60fps pump. Wakes the render loop so the active page's JS timers / rAF /
+ * requestIdleCallback callbacks keep firing even with no input; the RENDER
+ * handler decides whether that actually produces a new frame. */
+static void sa_request_render(struct yetty_ybrowser_app *s);
+static struct yetty_ycore_int_result sa_frame_tick(struct yetty_yevent_event_listener *listener,
+                                                   const struct yetty_yui_event *ev)
 {
-    if (!s->repaint_timer_ready) {
-        sa_request_render(s);
-        return;
-    }
-    if (s->repaint_timer_running) {
-        return;
-    }
-    struct yetty_yevent_event_loop *loop = s->yframework->event_loop;
-    struct yetty_ycore_void_result start = loop->ops->start_timer(loop, s->repaint_timer);
-    if (YETTY_IS_ERR(start)) {
-        yetty_ycore_error_destroy(start.error);
-        sa_request_render(s); /* degrade to the old immediate re-arm */
-        return;
-    }
-    s->repaint_timer_running = 1;
-}
-
-/* Stop the heartbeat — the page went idle, so the loop should block on real
- * events (input, GPU completion) rather than tick. */
-static void sa_stop_render_timer(struct yetty_ybrowser_app *s)
-{
-    if (!s->repaint_timer_ready || !s->repaint_timer_running) {
-        return;
-    }
-    struct yetty_yevent_event_loop *loop = s->yframework->event_loop;
-    struct yetty_ycore_void_result stop = loop->ops->stop_timer(loop, s->repaint_timer);
-    if (YETTY_IS_ERR(stop)) {
-        yetty_ycore_error_destroy(stop.error);
-    }
-    s->repaint_timer_running = 0;
+    (void)ev;
+    struct yetty_ybrowser_app *s = container_of(listener, struct yetty_ybrowser_app, frame_listener);
+    sa_request_render(s);
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_listener *listener,
@@ -3694,16 +3152,6 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         }
         struct yetty_yui_event re = {.type = YETTY_YCORE_RENDER};
         return sa_event_handler(listener, &re);
-    }
-
-    /* Paced heartbeat: the frame timer fired. Turn it into exactly one render;
-     * the render handler restarts the timer only if work still remains. This is
-     * what bounds a continuously-dirtying page to the display rate instead of
-     * letting it spin the loop. */
-    if (ev->type == YETTY_YCORE_TIMER && s->repaint_timer_ready &&
-        ev->timer.timer_id == s->repaint_timer) {
-        sa_request_render(s);
-        return YETTY_OK(yetty_ycore_int, 1);
     }
 
     if (ev->type == YETTY_YCORE_RENDER) {
@@ -3729,6 +3177,14 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         /* Per-frame browser work: pump JS timers, re-render the active
 		 * tab into the embed when needed. */
         int pump_wait = pump_active(&s->app);
+        /* Present only when this tick actually changed something visible. The
+         * frame timer wakes us ~60fps to keep page JS timers/rAF/idle callbacks
+         * running, but a static page must not re-clear/render/present every
+         * tick. pump_active already folds a dirty DOM into pending_render, so
+         * these flags capture "there is a new frame to show". */
+        int want_present = !s->presented_once || s->app.pending_render ||
+                           s->app.tabs[s->app.active].needs_render || s->app.img_dirty ||
+                           yetty_ygui_framework_is_dirty(s->app.fw);
         if (s->app.pending_render || s->app.tabs[s->app.active].needs_render) {
             render_pass(&s->app);
         }
@@ -3736,30 +3192,32 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
             /* Direct dispatch: emit applies the figure tree straight into the
              * local root container (no wire statemachine to pump afterward). */
             err_ok(yetty_ygui_framework_emit(s->app.fw));
+            want_present = 1;
         }
-        struct yetty_ycore_void_result cl = s->render_target->ops->clear(s->render_target);
-        if (YETTY_IS_ERR(cl)) {
-            yetty_ycore_error_destroy(cl.error);
-        }
-        if (s->root_container) {
-            struct yetty_ycore_void_result rr =
-                yetty_yfigure_render(s->root_container, s->render_target);
-            if (YETTY_IS_ERR(rr)) {
-                yetty_ycore_error_destroy(rr.error);
+        if (want_present) {
+            struct yetty_ycore_void_result cl = s->render_target->ops->clear(s->render_target);
+            if (YETTY_IS_ERR(cl)) {
+                yetty_ycore_error_destroy(cl.error);
             }
-            yetty_yfigure_figure_dirty_set(s->root_container, 0);
-        }
-        struct yetty_ycore_void_result pp = s->render_target->ops->present(s->render_target);
-        if (YETTY_IS_ERR(pp)) {
-            yetty_ycore_error_destroy(pp.error);
+            if (s->root_container) {
+                struct yetty_ycore_void_result rr =
+                    yetty_yfigure_render(s->root_container, s->render_target);
+                if (YETTY_IS_ERR(rr)) {
+                    yetty_ycore_error_destroy(rr.error);
+                }
+                yetty_yfigure_figure_dirty_set(s->root_container, 0);
+            }
+            struct yetty_ycore_void_result pp = s->render_target->ops->present(s->render_target);
+            if (YETTY_IS_ERR(pp)) {
+                yetty_ycore_error_destroy(pp.error);
+            }
+            s->presented_once = 1;
         }
         /* Keep ticking while the framework is dirty (JS timers/animation),
 			 * or while there are still deferred images to stream in
 			 * (pump_active returns 0 when it just fetched one). */
         if (yetty_ygui_framework_is_dirty(s->app.fw) || pump_wait == 0) {
-            sa_schedule_render(s);
-        } else {
-            sa_stop_render_timer(s);
+            sa_request_render(s);
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -3907,6 +3365,107 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
     }
     sa_request_render(s);
     return YETTY_OK(yetty_ycore_int, 0);
+}
+
+/* Encode a Unicode codepoint to UTF-8. Returns the byte count (1..4). */
+static size_t utf8_encode(uint32_t cp, char *out)
+{
+    if (cp < 0x80) {
+        out[0] = (char)cp;
+        return 1;
+    }
+    if (cp < 0x800) {
+        out[0] = (char)(0xC0 | (cp >> 6));
+        out[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    }
+    if (cp < 0x10000) {
+        out[0] = (char)(0xE0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+    out[0] = (char)(0xF0 | (cp >> 18));
+    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    out[3] = (char)(0x80 | (cp & 0x3F));
+    return 4;
+}
+
+/* GLFW navigation/editing keycode → terminal byte sequence. Printable text
+ * is NOT handled here — it arrives layout-translated via YETTY_YCORE_CHAR. */
+static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
+                                      size_t *out_len)
+{
+    /* xterm modifier parameter for CSI sequences: 1 + bitset(shift=1, alt=2,
+     * ctrl=4). mod_param == 0 means "no modifier" → emit the bare sequence so
+     * unmodified keys look exactly as before. The ygui input decoder reads this
+     * back out (see csi_decode_mods) and hands it to the widget as mods, which
+     * is what makes Shift+Arrow extend the selection. */
+    int mod_bits = 0;
+    if (glfw_mods & 0x0001) { /* GLFW_MOD_SHIFT */
+        mod_bits |= 1;
+    }
+    if (glfw_mods & 0x0004) { /* GLFW_MOD_ALT */
+        mod_bits |= 2;
+    }
+    if (glfw_mods & 0x0002) { /* GLFW_MOD_CONTROL */
+        mod_bits |= 4;
+    }
+    int mod_param = mod_bits ? mod_bits + 1 : 0;
+    switch (key) {
+    case 256:
+        scratch[0] = 0x1B;
+        *out_len = 1;
+        return scratch; /* ESC */
+    case 257:           /* Enter */
+    case 335:
+        scratch[0] = '\r';
+        *out_len = 1;
+        return scratch; /* KP Enter */
+    case 258:
+        scratch[0] = '\t';
+        *out_len = 1;
+        return scratch; /* Tab */
+    case 259:
+        scratch[0] = 0x7F;
+        *out_len = 1;
+        return scratch; /* Backspace */
+    case 261:           /* Del */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[3;%d~", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[3~");
+        return scratch;
+    case 263: /* ← */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dD", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[D");
+        return scratch;
+    case 262: /* → */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dC", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[C");
+        return scratch;
+    case 265: /* ↑ */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dA", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[A");
+        return scratch;
+    case 264: /* ↓ */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dB", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[B");
+        return scratch;
+    case 268: /* Home */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dH", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[H");
+        return scratch;
+    case 269: /* End */
+        *out_len = mod_param ? (size_t)snprintf(scratch, scratch_n, "\x1b[1;%dF", mod_param)
+                             : (size_t)snprintf(scratch, scratch_n, "\x1b[F");
+        return scratch;
+    case 301: /* F12 (GLFW_KEY_F12) → DevTools toggle. xterm CSI 24~. */
+        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[24~");
+        return scratch;
+    default:
+        *out_len = 0;
+        return NULL;
+    }
 }
 
 YETTY_ANNOTATE("override@yapp:app:init")
@@ -4141,34 +3700,33 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         yetty_yevent_register_default_listeners(s->yframework->event_loop, &s->listener);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rel, "ybrowser standalone: register_listeners");
 
-    /* Create the frame-pacing heartbeat timer (see the repaint_timer comment on
-     * struct yetty_ybrowser_app). It stays stopped until the render loop finds
-     * ongoing work; sa_schedule_render/sa_stop_render_timer drive it. If the
-     * loop can't give us a timer, the helpers fall back to immediate re-arms —
-     * the old (spinning) behaviour, so pacing is a pure improvement, never a
-     * regression. */
+    /* ~60fps frame pump so the active page's JS timers / rAF / requestIdleCallback
+     * keep firing without input (async SPA hydration, e.g. YouTube's feed). The
+     * RENDER handler still only presents on a real visual change, so idle pages
+     * do not burn CPU/GPU. */
     {
         struct yetty_yevent_event_loop *loop = s->yframework->event_loop;
-        struct yetty_yevent_timer_id_result timer_res = loop->ops->create_timer(loop);
-        if (YETTY_IS_ERR(timer_res)) {
-            yetty_ycore_error_destroy(timer_res.error);
-        } else {
-            s->repaint_timer = timer_res.value;
-            struct yetty_ycore_void_result cfg =
-                loop->ops->config_timer(loop, s->repaint_timer, YBROWSER_FRAME_INTERVAL_MS);
-            struct yetty_ycore_void_result reg =
-                loop->ops->register_timer_listener(loop, s->repaint_timer, &s->listener);
-            if (YETTY_IS_ERR(cfg) || YETTY_IS_ERR(reg)) {
-                if (YETTY_IS_ERR(cfg)) {
-                    yetty_ycore_error_destroy(cfg.error);
-                }
-                if (YETTY_IS_ERR(reg)) {
-                    yetty_ycore_error_destroy(reg.error);
-                }
-                (void)loop->ops->destroy_timer(loop, s->repaint_timer);
-            } else {
-                s->repaint_timer_ready = 1;
+        struct yetty_yevent_timer_id_result tr = loop->ops->create_timer(loop);
+        if (YETTY_IS_OK(tr)) {
+            s->frame_timer = tr.value;
+            s->frame_listener.handler = sa_frame_tick;
+            struct yetty_ycore_void_result cr = loop->ops->config_timer(loop, s->frame_timer, 16);
+            if (YETTY_IS_ERR(cr)) {
+                yetty_ycore_error_destroy(cr.error);
             }
+            struct yetty_ycore_void_result lr =
+                loop->ops->register_timer_listener(loop, s->frame_timer, &s->frame_listener);
+            if (YETTY_IS_ERR(lr)) {
+                yetty_ycore_error_destroy(lr.error);
+            }
+            struct yetty_ycore_void_result st = loop->ops->start_timer(loop, s->frame_timer);
+            if (YETTY_IS_ERR(st)) {
+                yetty_ycore_error_destroy(st.error);
+            } else {
+                s->frame_timer_active = 1;
+            }
+        } else {
+            yetty_ycore_error_destroy(tr.error);
         }
     }
 
@@ -4178,15 +3736,6 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         s->yframework->event_loop->ops->start(s->yframework->event_loop);
     if (YETTY_IS_ERR(run_res)) {
         yetty_ycore_error_destroy(run_res.error);
-    }
-
-    /* Release the frame-pacing timer now the loop has stopped. */
-    if (s->repaint_timer_ready) {
-        struct yetty_yevent_event_loop *loop = s->yframework->event_loop;
-        sa_stop_render_timer(s);
-        (void)loop->ops->deregister_timer_listener(loop, s->repaint_timer, &s->listener);
-        (void)loop->ops->destroy_timer(loop, s->repaint_timer);
-        s->repaint_timer_ready = 0;
     }
 
     /* Teardown. Destroy the image pool FIRST: it joins the worker threads

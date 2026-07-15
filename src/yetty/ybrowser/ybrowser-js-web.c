@@ -1157,12 +1157,6 @@ void *yetty_ybrowser_loader_curl_share(struct yetty_ybrowser_loader *loader)
     return loader ? loader->share : NULL;
 }
 
-struct yetty_ybrowser_disk_cache *yetty_ybrowser_loader_disk_cache(
-    struct yetty_ybrowser_loader *loader)
-{
-    return loader ? &loader->disk_cache : NULL;
-}
-
 /* Apply the loader-owned bits (share handle, Alt-Svc cache) to one easy
  * handle. Shared by the sequential and curl_multi paths so both get
  * connection reuse AND HTTP/3 upgrades. */
@@ -1318,15 +1312,6 @@ static struct curl_slist *build_request_headers(const struct yetty_ybrowser_requ
         snprintf(site_header, sizeof(site_header), "Sec-Fetch-Site: %s",
                  sec_fetch_site_for(request->url, request->referer));
         headers = curl_slist_append(headers, site_header);
-    }
-    /* YouTube serves a consent-wall page with an EMPTY feed to a cookieless
-     * client (a `consentBumpV2Renderer`, no video data). `SOCS=CAI` is the
-     * "consent already recorded" value that unlocks the real server-rendered
-     * content (search results, watch pages) — the same bypass lightweight
-     * YouTube frontends use. The general cookie engine is off for documents,
-     * so inject this fixed cookie directly. */
-    if (yetty_ylexbor_is_youtube_host(request->url)) {
-        headers = curl_slist_append(headers, "Cookie: SOCS=CAI");
     }
     /* Caller-supplied headers last (fetch()/XHR: Authorization,
 	 * Content-Type, X-*). */
@@ -1807,13 +1792,6 @@ void *yetty_ybrowser_loader_curl_share(struct yetty_ybrowser_loader *loader)
     return NULL;
 }
 
-struct yetty_ybrowser_disk_cache *yetty_ybrowser_loader_disk_cache(
-    struct yetty_ybrowser_loader *loader)
-{
-    (void)loader;
-    return NULL;
-}
-
 void yetty_ybrowser_loader_cache_put_pixels(struct yetty_ybrowser_loader *loader, const char *url,
                                             const uint32_t *pixels, int width, int height)
 {
@@ -2242,15 +2220,20 @@ static void js_fetch_parse_init(JSContext *ctx, JSValueConst init, struct js_fet
 
     JSValue headers_val = JS_GetPropertyStr(ctx, init, "headers");
     if (JS_IsObject(headers_val)) {
+        /* A Headers instance keeps its name→value pairs in an internal map
+         * object exposed as `headerMap` (its own props are accessor methods,
+         * not the header entries); a plain object is iterated directly. */
+        JSValue header_map = JS_GetPropertyStr(ctx, headers_val, "headerMap");
+        JSValueConst header_source = JS_IsObject(header_map) ? header_map : headers_val;
         JSPropertyEnum *props = NULL;
         uint32_t prop_count = 0;
-        if (JS_GetOwnPropertyNames(ctx, &props, &prop_count, headers_val,
+        if (JS_GetOwnPropertyNames(ctx, &props, &prop_count, header_source,
                                    JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) == 0) {
             params->header_lines =
                 calloc(prop_count ? prop_count : 1, sizeof(*params->header_lines));
             for (uint32_t i = 0; params->header_lines && i < prop_count; i++) {
                 const char *name = JS_AtomToCString(ctx, props[i].atom);
-                JSValue value_val = JS_GetProperty(ctx, headers_val, props[i].atom);
+                JSValue value_val = JS_GetProperty(ctx, header_source, props[i].atom);
                 const char *value = JS_ToCString(ctx, value_val);
                 if (name && value) {
                     size_t line_len = strlen(name) + 2 + strlen(value) + 1;
@@ -2270,6 +2253,7 @@ static void js_fetch_parse_init(JSContext *ctx, JSValueConst init, struct js_fet
             }
             JS_FreePropertyEnum(ctx, props, prop_count);
         }
+        JS_FreeValue(ctx, header_map);
     }
     JS_FreeValue(ctx, headers_val);
 }
@@ -2314,6 +2298,8 @@ struct js_fetch_job {
 static void js_fetch_job_run(void *job_ptr)
 {
     struct js_fetch_job *job = job_ptr;
+    ydebug("js fetch: %s %s", job->params.method ? job->params.method : "GET",
+           job->params.url ? job->params.url : "(null)");
     struct yetty_ybrowser_request request = {
         .url = job->params.url,
         .kind = YETTY_YBROWSER_REQUEST_XHR,
@@ -2387,21 +2373,45 @@ static JSValue js_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValue
         JS_FreeValue(ctx, error_obj);
         goto out;
     }
-    const char *url_arg = JS_ToCString(ctx, argv[0]);
+    /* The first argument is a URL string OR a Request object. A Request
+     * carries the URL in .url (plus .method/.headers/.body); stringifying it
+     * directly would yield "[object Object]". Read .url when it's a string. */
+    JSValue request_url_val = JS_UNDEFINED;
+    bool arg0_is_request = false;
+    const char *url_arg = NULL;
+    if (JS_IsObject(argv[0]) && !JS_IsString(argv[0])) {
+        JSValue url_prop = JS_GetPropertyStr(ctx, argv[0], "url");
+        if (JS_IsString(url_prop)) {
+            request_url_val = url_prop;
+            url_arg = JS_ToCString(ctx, request_url_val);
+            arg0_is_request = true;
+        } else {
+            JS_FreeValue(ctx, url_prop);
+        }
+    }
+    if (!arg0_is_request) {
+        url_arg = JS_ToCString(ctx, argv[0]);
+    }
     if (!url_arg) {
+        JS_FreeValue(ctx, request_url_val);
         goto out;
     }
     struct js_fetch_params params = {0};
     params.url = yetty_ylexbor_resolve_url(r, url_arg);
     JS_FreeCString(ctx, url_arg);
+    JS_FreeValue(ctx, request_url_val);
     if (!params.url) {
         JSValue error_obj = JS_NewError(ctx);
         JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, (JSValueConst[]){error_obj});
         JS_FreeValue(ctx, error_obj);
         goto out;
     }
-    if (argc >= 2) {
+    /* Init precedence: an explicit init object wins; otherwise a Request
+     * object supplies its own method/headers/body. */
+    if (argc >= 2 && JS_IsObject(argv[1])) {
         js_fetch_parse_init(ctx, argv[1], &params);
+    } else if (arg0_is_request) {
+        js_fetch_parse_init(ctx, argv[0], &params);
     }
 
     /* Async path: hand the transfer to the worker pool and resolve from
@@ -2992,33 +3002,43 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
     /* Misc stubs — feature detection rarely actually USES these,
 	 * just checks they exist. */
     const char *stubs =
+        /* Shady-DOM composition control. Some apps (YouTube's Polymer build)
+         * set window.ShadyDOM = {force:true, preferPerformance:true,
+         * noPatch:true}. Those two performance flags tell Shady-DOM to skip
+         * physically composing each shadow tree into the light DOM, on the
+         * assumption that a native shadow-DOM renderer will draw the shadow
+         * trees. This engine renders the native tree only, so without physical
+         * composition the stamped content is invisible. Intercept the
+         * assignment and clear both flags so Shady-DOM composes shadow content
+         * into the native DOM (its classic non-shadow-browser mode). */
+        "(function(){ var shadyOpts; Object.defineProperty(globalThis,'ShadyDOM',{"
+        "  configurable:true,"
+        "  get:function(){ return shadyOpts; },"
+        "  set:function(v){ if(v && typeof v==='object'){ v.preferPerformance=false; } "
+        "    shadyOpts=v; } }); })();"
         "globalThis.Worker          = function(){ this.postMessage = ()=>{}; "
         "this.terminate=()=>{}; this.addEventListener=()=>{}; };"
         "globalThis.SharedWorker    = function(){ this.port = { postMessage:()=>{}, "
         "addEventListener:()=>{} }; };"
         "globalThis.BroadcastChannel= function(){ this.postMessage = ()=>{}; this.close=()=>{}; "
         "this.addEventListener=()=>{}; };"
-        /* AbortController/AbortSignal — the signal must carry throwIfAborted()
-         * (the kevlar app reads `signal.throwIfAborted` and threw
-         * "cannot read property 'throwIfAborted' of undefined" without it) plus
-         * the static AbortSignal.abort/timeout/any factories, each returning a
-         * signal that owns the same method surface. */
+        /* AbortSignal must carry throwIfAborted() (the kevlar app reads
+		 * signal.throwIfAborted and threw "cannot read property 'throwIfAborted'
+		 * of undefined" without it) plus the static abort/timeout/any factories,
+		 * each returning a signal with the same method surface. */
         "globalThis.AbortSignal = (function(){"
         "  function make(){ return { aborted:false, reason:undefined, onabort:null,"
-        "    throwIfAborted:function(){ if(this.aborted) throw (this.reason||new "
-        "Error('aborted')); },"
+        "    throwIfAborted:function(){ if(this.aborted) throw (this.reason||new Error('aborted')); },"
         "    addEventListener:function(){}, removeEventListener:function(){},"
         "    dispatchEvent:function(){ return false; } }; }"
         "  var S=function(){ return make(); };"
-        "  S.abort  =function(reason){ var s=make(); s.aborted=true; s.reason=reason; return s; };"
+        "  S.abort=function(r){ var s=make(); s.aborted=true; s.reason=r; return s; };"
         "  S.timeout=function(){ return make(); };"
-        "  S.any    =function(){ return make(); };"
-        "  S._make  =make;"
-        "  return S; })();"
+        "  S.any=function(){ return make(); };"
+        "  S._make=make; return S; })();"
         "globalThis.AbortController = function(){ this.signal = globalThis.AbortSignal._make();"
-        "  this.abort = function(reason){ this.signal.aborted=true; this.signal.reason=reason;"
-        "    if(typeof this.signal.onabort==='function'){ try{ "
-        "this.signal.onabort({type:'abort'}); }"
+        "  this.abort = function(r){ this.signal.aborted=true; this.signal.reason=r;"
+        "    if(typeof this.signal.onabort==='function'){ try{ this.signal.onabort({type:'abort'}); }"
         "    catch(e){} } }; };"
         "globalThis.indexedDB       = { open: ()=>({ onsuccess:null, onerror:null, "
         "addEventListener:()=>{} }), deleteDatabase: ()=>({}) };"
@@ -3279,45 +3299,8 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "this.data = init?init.data:null; this.origin = init?init.origin||'':''; };"
         "globalThis.MutationObserver = function(cb){ this.observe=()=>{}; this.disconnect=()=>{}; "
         "this.takeRecords=()=>[]; };"
-        /* IntersectionObserver: immediately-intersecting approximation. A
-         * silent no-op left every scroll-reveal site invisible — github's
-         * landing page keeps sections `opacity:0` until its observer fires.
-         * Each observe() schedules one batched microtask callback with
-         * isIntersecting=true, so reveal-on-scroll and lazy-load code runs
-         * its visible path. Real viewport tracking is a later concern. */
-        "globalThis.IntersectionObserver = function(cb, opts){"
-        "  this._cb = cb; this._pending = []; this._scheduled = false;"
-        "  this.root = (opts && opts.root) || null;"
-        "  this.rootMargin = (opts && opts.rootMargin) || '0px';"
-        "  var th = opts && opts.threshold;"
-        "  this.thresholds = th == null ? [0] : (Array.isArray(th) ? th : [th]);"
-        "  var self = this;"
-        "  this.observe = function(el){"
-        "    if (!el || self._pending.indexOf(el) >= 0) return;"
-        "    self._pending.push(el);"
-        "    if (self._scheduled) return;"
-        "    self._scheduled = true;"
-        "    Promise.resolve().then(function(){"
-        "      self._scheduled = false;"
-        "      var targets = self._pending; self._pending = [];"
-        "      var entries = targets.map(function(t){"
-        "        var r = t.getBoundingClientRect ? t.getBoundingClientRect()"
-        "                                        : {x:0,y:0,width:0,height:0,top:0,left:0,"
-        "                                           right:0,bottom:0};"
-        "        return { isIntersecting: true, intersectionRatio: 1, target: t,"
-        "                 boundingClientRect: r, intersectionRect: r, rootBounds: null,"
-        "                 time: Date.now() };"
-        "      });"
-        "      try { cb(entries, self); } catch (e) {}"
-        "    });"
-        "  };"
-        "  this.unobserve = function(el){"
-        "    var i = self._pending.indexOf(el);"
-        "    if (i >= 0) self._pending.splice(i, 1);"
-        "  };"
-        "  this.disconnect = function(){ self._pending = []; };"
-        "  this.takeRecords = function(){ return []; };"
-        "};"
+        "globalThis.IntersectionObserver = function(cb){ this.observe=()=>{}; "
+        "this.unobserve=()=>{}; this.disconnect=()=>{}; this.takeRecords=()=>[]; };"
         "globalThis.ResizeObserver = function(cb){ this.observe=()=>{}; this.unobserve=()=>{}; "
         "this.disconnect=()=>{}; };"
         "globalThis.PerformanceObserver = function(cb){ this.observe=()=>{}; "
@@ -3339,7 +3322,11 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "colorDepth:24, pixelDepth:24 };"
         /* EventTarget — base class many libs `class X extends
 		 * EventTarget` against. Mirrors addEventListener etc. */
-        "globalThis.EventTarget = function(){"
+        /* dom_install already wired a real EventTarget whose prototype carries
+		 * the native addEventListener/dispatchEvent the Shady-DOM polyfill
+		 * captures — keep it if present; only fall back to this generic stub
+		 * when the DOM bindings are absent. */
+        "globalThis.EventTarget = globalThis.EventTarget || function(){"
         "  this._lst = {};"
         "  this.addEventListener = (t, fn) => { (this._lst[t] = this._lst[t] || []).push(fn); };"
         "  this.removeEventListener = (t, fn) => { const a = this._lst[t]; if (!a) return; const i "
@@ -3367,10 +3354,39 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.HTMLElement.prototype.disconnectedCallback = function(){};"
         "globalThis.HTMLElement.prototype.adoptedCallback = function(){};"
         "globalThis.HTMLElement.prototype.attributeChangedCallback = function(){};"
-        "globalThis.Element     = function(){};"
-        "globalThis.Node        = function(){};"
-        "globalThis.Document    = function(){};"
+        /* Element/Node/Document are wired by dom_install with real prototype
+		 * chains (Element.prototype -> Node.prototype -> EventTarget.prototype);
+		 * keep those, fall back to bare stubs only without the DOM bindings. */
+        "globalThis.Element     = globalThis.Element  || function(){};"
+        "globalThis.Node        = globalThis.Node     || function(){};"
+        "globalThis.Document    = globalThis.Document || function(){};"
         "globalThis.HTMLDocument= function(){};"
+        /* Chain HTMLElement onto the real Element.prototype so element methods
+		 * and the interface hierarchy are inherited by `class X extends
+		 * HTMLElement` custom elements. */
+        "try{ Object.setPrototypeOf(globalThis.HTMLElement.prototype, globalThis.Element.prototype); "
+        "}catch(e){}"
+        /* Canvas 2D context stub — the web-animations polyfill creates a
+		 * <canvas> and calls getContext('2d') to normalise CSS colors; without
+		 * it the whole polyfill threw "not a function". Non-drawing stub: it
+		 * stores fillStyle and no-ops the drawing surface. */
+        "try{ if(globalThis.Element && !globalThis.Element.prototype.getContext){"
+        "  globalThis.Element.prototype.getContext = function(){ var fs='#000000';"
+        "    return { canvas:this, get fillStyle(){return fs;}, set fillStyle(v){fs=v;},"
+        "      strokeStyle:'#000', globalAlpha:1, lineWidth:1, font:'10px sans-serif',"
+        "      fillRect:function(){}, clearRect:function(){}, strokeRect:function(){},"
+        "      beginPath:function(){}, closePath:function(){}, moveTo:function(){}, lineTo:function(){},"
+        "      arc:function(){}, rect:function(){}, fill:function(){}, stroke:function(){}, clip:function(){},"
+        "      save:function(){}, restore:function(){}, scale:function(){}, rotate:function(){},"
+        "      translate:function(){}, transform:function(){}, setTransform:function(){}, drawImage:function(){},"
+        "      putImageData:function(){}, fillText:function(){}, strokeText:function(){},"
+        "      createLinearGradient:function(){return {addColorStop:function(){}};},"
+        "      createRadialGradient:function(){return {addColorStop:function(){}};},"
+        "      createPattern:function(){return {};},"
+        "      getImageData:function(x,y,w,h){w=w||1;h=h||1;"
+        "        return {data:new Uint8ClampedArray(w*h*4), width:w, height:h};},"
+        "      measureText:function(t){return {width:(t?String(t).length:0)*6};} };"
+        "  }; } }catch(e){}"
         "globalThis.HTMLAnchorElement = function(){};"
         "globalThis.HTMLImageElement  = function(){};"
         "globalThis.HTMLInputElement  = function(){};"
@@ -3438,27 +3454,21 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.MessagePort   = function(){};"
         "globalThis.Worklet       = function(){ this.addModule=()=>Promise.resolve(); };"
         "globalThis.LinkPreloadManager = function(){};"
-        /* NodeFilter — the constant bag DOM traversal APIs and the Shadow-DOM
-         * (webcomponents) polyfill reference. Its absence was a hard
-         * ReferenceError that aborted the whole polyfill script. */
-        "globalThis.NodeFilter    = { SHOW_ALL:0xFFFFFFFF, SHOW_ELEMENT:1, "
-        "SHOW_ATTRIBUTE:2, SHOW_TEXT:4, SHOW_CDATA_SECTION:8, SHOW_ENTITY_REFERENCE:16, "
-        "SHOW_ENTITY:32, SHOW_PROCESSING_INSTRUCTION:64, SHOW_COMMENT:128, SHOW_DOCUMENT:256, "
+        /* NodeFilter constants — the Shady-DOM (webcomponents) polyfill and DOM
+		 * traversal reference them; absence was a hard ReferenceError. */
+        "globalThis.NodeFilter    = { SHOW_ALL:0xFFFFFFFF, SHOW_ELEMENT:1, SHOW_ATTRIBUTE:2, "
+        "SHOW_TEXT:4, SHOW_CDATA_SECTION:8, SHOW_ENTITY_REFERENCE:16, SHOW_ENTITY:32, "
+        "SHOW_PROCESSING_INSTRUCTION:64, SHOW_COMMENT:128, SHOW_DOCUMENT:256, "
         "SHOW_DOCUMENT_TYPE:512, SHOW_DOCUMENT_FRAGMENT:1024, SHOW_NOTATION:2048, "
         "FILTER_ACCEPT:1, FILTER_REJECT:2, FILTER_SKIP:3 };"
-        /* A REAL TreeWalker / NodeIterator over the live DOM (the node wrappers
-         * already expose firstChild/nextSibling/parentNode/nodeType). The
-         * Shadow-DOM (webcomponents) polyfill calls
-         * document.createTreeWalker(document, NodeFilter.SHOW_ALL, …) to scan the
-         * tree — a no-op walker made it silently patch nothing and the app then
-         * crashed. whatToShow filters by nodeType bit (1<<(nodeType-1)); the
-         * optional filter may be a function or a {acceptNode} object and returns
-         * FILTER_ACCEPT/REJECT/SKIP. */
+        /* A REAL TreeWalker/NodeIterator over the live DOM (node wrappers expose
+		 * firstChild/nextSibling/parentNode/nodeType). The Shady-DOM polyfill
+		 * calls document.createTreeWalker(document, SHOW_ALL, …) to scan the tree
+		 * — a no-op walker made it patch nothing and the app crashed. */
         "(function(){"
         "function accept(node,show,filter){var nt=node.nodeType||0;"
         "if(nt>=1&&nt<=32&&!(((show>>>0))&(1<<(nt-1))))return 3;"
-        "if(!filter)return 1;"
-        "var fn=(typeof filter==='function')?filter:(filter&&filter.acceptNode?"
+        "if(!filter)return 1;var fn=(typeof filter==='function')?filter:(filter&&filter.acceptNode?"
         "function(n){return filter.acceptNode(n);}:null);"
         "if(!fn)return 1;var v=fn(node);return (typeof v==='number')?v:1;}"
         "function TW(root,show,filter){this.root=root;this.whatToShow=(show>>>0)||0xFFFFFFFF;"
@@ -3468,13 +3478,11 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "r=accept(node,this.whatToShow,this.filter);"
         "if(r===1){this.currentNode=node;return node;}}"
         "var nx=null,n=node;while(n&&n!==this.root){if(n.nextSibling){nx=n.nextSibling;break;}"
-        "n=n.parentNode;}if(!nx)return null;node=nx;"
-        "r=accept(node,this.whatToShow,this.filter);"
+        "n=n.parentNode;}if(!nx)return null;node=nx;r=accept(node,this.whatToShow,this.filter);"
         "if(r===1){this.currentNode=node;return node;}}};"
         "TW.prototype.parentNode=function(){var n=this.currentNode;"
         "while(n&&n!==this.root){n=n.parentNode;"
-        "if(n&&accept(n,this.whatToShow,this.filter)===1){this.currentNode=n;return n;}}return "
-        "null;};"
+        "if(n&&accept(n,this.whatToShow,this.filter)===1){this.currentNode=n;return n;}}return null;};"
         "TW.prototype.firstChild=function(){var n=this.currentNode&&this.currentNode.firstChild;"
         "while(n){var r=accept(n,this.whatToShow,this.filter);"
         "if(r===1){this.currentNode=n;return n;}if(r===3&&n.firstChild){n=n.firstChild;continue;}"
@@ -3487,12 +3495,9 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "TW.prototype.previousSibling=function(){return null;};"
         "globalThis.TreeWalker=TW;"
         "function NI(root,show,filter){this._tw=new TW(root,show,filter);this.root=root;"
-        "this.referenceNode=root;this.whatToShow=(show>>>0)||0xFFFFFFFF;this."
-        "pointerBeforeReferenceNode=true;}"
-        "NI.prototype.nextNode=function(){var "
-        "n=this._tw.nextNode();if(n)this.referenceNode=n;return n;};"
-        "NI.prototype.previousNode=function(){return null;};"
-        "NI.prototype.detach=function(){};"
+        "this.referenceNode=root;this.whatToShow=(show>>>0)||0xFFFFFFFF;this.pointerBeforeReferenceNode=true;}"
+        "NI.prototype.nextNode=function(){var n=this._tw.nextNode();if(n)this.referenceNode=n;return n;};"
+        "NI.prototype.previousNode=function(){return null;};NI.prototype.detach=function(){};"
         "globalThis.NodeIterator=NI;"
         "if(typeof document!=='undefined'){"
         "document.createTreeWalker=function(root,show,filter){"
@@ -3523,11 +3528,11 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.DocumentFragment  = function(){};"
         "globalThis.Text              = function(){};"
         "globalThis.Comment           = function(){};"
-        /* Rest of the Node hierarchy. The Shadow-DOM (webcomponents) polyfill and
-         * the kevlar app iterate a list of these constructors patching
-         * `.prototype.insertBefore`/`removeChild`; a missing one (CharacterData
-         * was the first) threw "cannot read property 'prototype' of undefined"
-         * and aborted app startup. */
+        /* Rest of the Node hierarchy. The Shady-DOM polyfill and kevlar iterate
+		 * a list of these constructors patching `.prototype.insertBefore`; a
+		 * missing one (CharacterData was first) threw "cannot read property
+		 * 'prototype' of undefined". Chain the character-data types onto the real
+		 * Node.prototype so the patched methods reach them. */
         "globalThis.CharacterData     = function(){};"
         "globalThis.ProcessingInstruction = function(){};"
         "globalThis.DocumentType      = function(){};"
@@ -3535,6 +3540,75 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.HTMLSlotElement   = function(){};"
         "globalThis.StaticRange       = function(){};"
         "globalThis.DOMImplementation = function(){};"
+        "try{ if(globalThis.Node){"
+        "  Object.setPrototypeOf(globalThis.CharacterData.prototype, globalThis.Node.prototype);"
+        "  Object.setPrototypeOf(globalThis.Text.prototype, globalThis.CharacterData.prototype);"
+        "  Object.setPrototypeOf(globalThis.Comment.prototype, globalThis.CharacterData.prototype);"
+        "  Object.setPrototypeOf(globalThis.DocumentFragment.prototype, globalThis.Node.prototype);"
+        "} }catch(e){}"
+        /* nodeType / document-position constants. The spec exposes these on both
+         * the Node interface object AND Node.prototype (so `Node.ELEMENT_NODE`
+         * and `someNode.ELEMENT_NODE` both resolve). Without them every
+         * `node.nodeType === Node.ELEMENT_NODE` comparison in web code tests
+         * against undefined and silently takes the wrong branch — this is what
+         * broke YouTube's Shady-DOM polyfill wholesale (its ShadowRoot.nodeType
+         * getter returns Node.DOCUMENT_FRAGMENT_NODE, which was undefined). */
+        "try{ if(globalThis.Node){ var NT={"
+        "ELEMENT_NODE:1,ATTRIBUTE_NODE:2,TEXT_NODE:3,CDATA_SECTION_NODE:4,"
+        "ENTITY_REFERENCE_NODE:5,ENTITY_NODE:6,PROCESSING_INSTRUCTION_NODE:7,"
+        "COMMENT_NODE:8,DOCUMENT_NODE:9,DOCUMENT_TYPE_NODE:10,"
+        "DOCUMENT_FRAGMENT_NODE:11,NOTATION_NODE:12,"
+        "DOCUMENT_POSITION_DISCONNECTED:1,DOCUMENT_POSITION_PRECEDING:2,"
+        "DOCUMENT_POSITION_FOLLOWING:4,DOCUMENT_POSITION_CONTAINS:8,"
+        "DOCUMENT_POSITION_CONTAINED_BY:16,DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC:32};"
+        "for(var ntk in NT){ try{ globalThis.Node[ntk]=NT[ntk];"
+        "globalThis.Node.prototype[ntk]=NT[ntk]; }catch(e){} } } }catch(e){}"
+        /* Native-ish Shadow DOM. Providing Element.prototype.attachShadow +
+         * Node.prototype.getRootNode makes the Shady-DOM polyfill's feature
+         * probe (`w.Rb=!(!attachShadow||!getRootNode)`, `inUse=force||!Rb`)
+         * report native support, so it stays dormant instead of patching the
+         * whole DOM (which it can't fully drive against this engine). The
+         * shadow root is a light view over the host: mutations delegate to the
+         * host element, so stamped template content lands in the host's child
+         * list and the layout engine renders it. Slot distribution is not
+         * modeled — the composed tree is approximated by the host's children. */
+        "try{ if(globalThis.Element && globalThis.Node){"
+        "  globalThis.Element.prototype.attachShadow=function(init){"
+        "    var host=this;"
+        "    if(host.__shadowRoot) return host.__shadowRoot;"
+        "    var root={host:host, mode:(init&&init.mode)||'open', nodeType:11,"
+        "      ownerDocument:(typeof document!=='undefined'?document:null),"
+        "      appendChild:function(n){return host.appendChild(n);},"
+        "      insertBefore:function(n,r){return host.insertBefore(n,r);},"
+        "      removeChild:function(n){return host.removeChild(n);},"
+        "      replaceChild:function(a,b){return host.replaceChild(a,b);},"
+        "      append:function(){return host.append.apply(host,arguments);},"
+        "      prepend:function(){return host.prepend.apply(host,arguments);},"
+        "      querySelector:function(s){return host.querySelector(s);},"
+        "      querySelectorAll:function(s){return host.querySelectorAll(s);},"
+        "      getElementById:function(id){return host.querySelector('#'+id);},"
+        "      addEventListener:function(){return host.addEventListener.apply(host,arguments);},"
+        "      removeEventListener:function(){return host.removeEventListener.apply(host,arguments);},"
+        "      dispatchEvent:function(e){return host.dispatchEvent(e);},"
+        "      cloneNode:function(d){return host.cloneNode(d);},"
+        "      contains:function(n){return host.contains?host.contains(n):false;},"
+        "      getRootNode:function(){return this;}};"
+        "    Object.defineProperty(root,'childNodes',{get:function(){return host.childNodes;}});"
+        "    Object.defineProperty(root,'children',{get:function(){return host.children;}});"
+        "    Object.defineProperty(root,'firstChild',{get:function(){return host.firstChild;}});"
+        "    Object.defineProperty(root,'lastChild',{get:function(){return host.lastChild;}});"
+        "    Object.defineProperty(root,'firstElementChild',{get:function(){return host.firstElementChild;}});"
+        "    Object.defineProperty(root,'innerHTML',{get:function(){return host.innerHTML;},set:function(v){host.innerHTML=v;}});"
+        "    Object.defineProperty(root,'textContent',{get:function(){return host.textContent;},set:function(v){host.textContent=v;}});"
+        "    Object.defineProperty(root,'activeElement',{get:function(){return null;}});"
+        "    try{Object.defineProperty(host,'shadowRoot',{value:root,configurable:true});}catch(e){host.shadowRoot=root;}"
+        "    host.__shadowRoot=root;"
+        "    return root;"
+        "  };"
+        "  if(!globalThis.Node.prototype.getRootNode){"
+        "    globalThis.Node.prototype.getRootNode=function(opts){var n=this;while(n&&n.parentNode){n=n.parentNode;}return n||this;};"
+        "  }"
+        "} }catch(e){}"
         "globalThis.Attr              = function(){};"
         "globalThis.NodeList          = function(){};"
         "globalThis.HTMLCollection    = function(){};"
@@ -3557,8 +3631,20 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.Screen            = function(){};"
         "globalThis.Storage           = function(){};"
         "globalThis.Window            = function(){};"
+        /* Window IS an EventTarget, and the Shady-DOM polyfill captures the
+		 * native event methods off Window.prototype then reads them back as
+		 * window.__shady_native_addEventListener — so window must inherit from
+		 * Window.prototype, which must own addEventListener/etc. */
+        "try{"
+        "  globalThis.Window.prototype.addEventListener = globalThis.addEventListener;"
+        "  globalThis.Window.prototype.removeEventListener = globalThis.removeEventListener;"
+        "  globalThis.Window.prototype.dispatchEvent = globalThis.dispatchEvent;"
+        "  if(globalThis.EventTarget)"
+        "    Object.setPrototypeOf(globalThis.Window.prototype, globalThis.EventTarget.prototype);"
+        "  Object.setPrototypeOf(globalThis, globalThis.Window.prototype);"
+        "}catch(e){}"
         "globalThis.WindowProxy       = function(){};"
-        "globalThis.Headers           = function(init){ const m={}; "
+        "globalThis.Headers           = function(init){ const m={}; this.headerMap=m; "
         "this.get=k=>m[String(k).toLowerCase()]||null; "
         "this.set=(k,v)=>{m[String(k).toLowerCase()]=v;}; this.has=k=>String(k).toLowerCase() in "
         "m; this.append=this.set; this.delete=k=>{delete m[String(k).toLowerCase()];}; "
@@ -3587,9 +3673,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "this.items={length:0}; this.getData=()=>''; this.setData=()=>{}; };"
         "globalThis.DOMException      = function(message, name){ this.message=message||''; "
         "this.name=name||'Error'; };"
-        /* DOMParser is installed by the DOM bindings (real parse into a
-		 * separate document) — no stub here. The old `=> document` stub
-		 * made "move the parsed nodes" code move the LIVE page's children. */
+        "globalThis.DOMParser         = function(){ this.parseFromString = (s, t) => document; };"
         "globalThis.XPathResult       = function(){};"
         "globalThis.TextEncoder       = function(){ this.encode = s => { const a = new "
         "Uint8Array(s.length); for (let i=0;i<s.length;i++) a[i]=s.charCodeAt(i)&0xff; return a; "
@@ -3687,6 +3771,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "    e&&e.message, '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- "
         "'));}catch(_){}} };"
         "  this.define=(n,c)=>{ m[n]=c; chain();"
+        "    try{ globalThis.ybPageTokenShim && globalThis.ybPageTokenShim(); }catch(e){}"
         "    try{ var els=document.querySelectorAll(n); for(var i=0;i<els.length;i++) "
         "upgrade(els[i],c);"
         "    }catch(e){}"
@@ -3696,6 +3781,50 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "    return new Promise(res=>{ (defers[n]=defers[n]||[]).push(()=>res(m[n])); }); };"
         "  this.upgrade=root=>{ for(var n in m){ try{ var els=(root||document).querySelectorAll(n);"
         "    for(var i=0;i<els.length;i++) upgrade(els[i],m[n]); }catch(e){} } }; };"
+        /* Boot-ordering shim: some Polymer apps resolve a per-page
+         * dependency-injection token inside an element's ready() observer,
+         * before the page element that provides it has been stamped — an
+         * ordering that throws a non-optional injector error and aborts the
+         * whole app upgrade. Seed a benign placeholder so ready() completes;
+         * the real page element overrides the provider moments later. The
+         * token is located by its .name, so this does not depend on the app's
+         * minified identifiers. */
+        "globalThis.ybPageTokenShim=function(){"
+        "  try{ var ns=globalThis.default_kevlar_base;"
+        "    if(!ns||globalThis.ybPageTokenSeeded)return;"
+        /* Locate the PAGE_TOKEN injection token by its .name (the token class
+         * stores the name verbatim), so the app's minified export name does
+         * not matter. */
+        "    var tok=null,k; for(k in ns){ try{ var v=ns[k];"
+        "      if(v && typeof v==='object' && v.name==='PAGE_TOKEN'){ tok=v; break; } }catch(e){} }"
+        "    if(!tok)return;"
+        /* Locate the injector singleton accessor(s) without depending on the
+         * minified name: it is a zero-arg function whose body lazily builds a
+         * singleton and returns it — `X||(X=new Y);return X`, the SAME
+         * identifier assigned and returned (backreference). Only functions
+         * matching that exact source shape are invoked (avoids calling
+         * arbitrary side-effecting functions), then shape-checked for the
+         * injector surface. There can be more than one injector; seed every
+         * candidate so whichever one the app's observer resolves against has
+         * the provider. */
+        "    var page={getScrollTop:function(){return 0;},scrollToTop:function(){},"
+        "      getScrollableElement:function(){return document.body;},"
+        "      getPageScrollingElement:function(){return document.body;},"
+        "      getContentContainer:function(){return document.body;}};"
+        "    var stub={getCurrentPage:function(){return page;}};"
+        "    var singleton=/(\\w+)\\|\\|\\(\\1=new \\w+\\);return \\1/, seeded=0;"
+        "    for(k in ns){ try{ var f=ns[k];"
+        "      if(typeof f==='function' && f.length===0){"
+        "        var src=Function.prototype.toString.call(f);"
+        "        if(src.length<200 && singleton.test(src)){"
+        "          var candidate=f();"
+        "          if(candidate && typeof candidate.addProvider==='function' && candidate.providers"
+        "             && typeof candidate.providers.has==='function' && typeof candidate.resolve==='function'){"
+        "            if(!candidate.providers.has(tok)) candidate.addProvider({provide:tok,useValue:stub});"
+        "            seeded++; } } } }catch(e){} }"
+        "    if(seeded>0) globalThis.ybPageTokenSeeded=true;"
+        "  }catch(e){}"
+        "};"
         "globalThis.customElements = new globalThis.CustomElementRegistry();"
         "globalThis.Image       = function(){ this.src=''; this.onload=null; this.onerror=null; "
         "this.addEventListener=()=>{}; };"
@@ -3725,12 +3854,22 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "this.addEventListener=()=>{}; this.readyState=3; };"
         "globalThis.HTMLCanvasElement = function(){};"
         "globalThis.OffscreenCanvas = function(){ this.getContext = () => null; };"
-        "globalThis.requestIdleCallback = (cb) => setTimeout(cb, 1);"
+        /* requestIdleCallback must hand the callback an IdleDeadline; code that
+         * reads `deadline.timeRemaining()` / `.didTimeout` throws on undefined,
+         * which silently kills idle-scheduled work (framework hydration/render
+         * chunks are frequently idle-scheduled). */
+        "globalThis.requestIdleCallback = (cb) => setTimeout(function(){"
+        "  cb({didTimeout:false, timeRemaining:function(){return 50;}}); }, 1);"
         "globalThis.cancelIdleCallback = clearTimeout;"
+        /* rAF callbacks receive a DOMHighResTimeStamp; without it, `t - last`
+         * math yields NaN and breaks scheduler loops. Wrap the native rAF to
+         * inject one. */
+        "if(globalThis.requestAnimationFrame){ var nativeRaf=globalThis.requestAnimationFrame;"
+        "  globalThis.requestAnimationFrame = (cb) => nativeRaf(function(){"
+        "    cb((globalThis.performance&&performance.now)?performance.now():0); }); }"
         "";
-    /* This blob recompiles on every runtime creation (one per page load) —
-	 * route it through the bytecode compile cache like page scripts. */
-    if (yetty_ylexbor_js_eval_cached(r, ctx, stubs, strlen(stubs), "<webapi-stubs>") != 0) {
+    JSValue stub_v = JS_Eval(ctx, stubs, strlen(stubs), "<webapi-stubs>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(stub_v)) {
         JSValue ex = JS_GetException(ctx);
         const char *m = JS_ToCString(ctx, ex);
         ydebug("js webapi-stub: %s", m ? m : "?");
@@ -3739,6 +3878,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         }
         JS_FreeValue(ctx, ex);
     }
+    JS_FreeValue(ctx, stub_v);
 
     JS_FreeValue(ctx, global);
 }
