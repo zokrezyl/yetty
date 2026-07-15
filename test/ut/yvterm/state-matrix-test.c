@@ -325,6 +325,49 @@ static void test_emoji_sequence_widths(struct ytest *test)
 }
 
 /*---------------------------------------------------------------------------
+ * Mode 2027 grapheme clustering (#572): with the mode set (the default) a ZWJ
+ * family advances as one width-2 cluster; with it reset the cursor falls back
+ * to legacy per-codepoint advance. The observable difference is the cursor
+ * arithmetic — the DECRQM report itself is exercised by the ucs-detect harness.
+ *-------------------------------------------------------------------------*/
+static void test_mode_2027_clustering(struct ytest *test)
+{
+    /* man ZWJ woman ZWJ girl (👨‍👩‍👧, 5 codepoints). */
+    const char *family = "\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9\xE2\x80\x8D\xF0\x9F\x91\xA7";
+    uint32_t row, col;
+
+    /* Default: mode 2027 on → one width-2 cluster. */
+    {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+        feeds(test, grid, family);
+        cursor_of(test, grid, &row, &col);
+        YTEST_CHECK_EQ_SIZE(test, col, 2);
+        yetty_yvterm_grid_dispose(grid);
+    }
+
+    /* CSI ? 2027 l → clustering off: each wide element and the width-0 joiners
+     * advance independently (2 + 0 + 2 + 0 + 2 = 6). */
+    {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+        feeds(test, grid, "\x1b[?2027l");
+        feeds(test, grid, family);
+        cursor_of(test, grid, &row, &col);
+        YTEST_CHECK_EQ_SIZE(test, col, 6);
+        yetty_yvterm_grid_dispose(grid);
+    }
+
+    /* CSI ? 2027 h re-enables clustering. */
+    {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+        feeds(test, grid, "\x1b[?2027l\x1b[?2027h");
+        feeds(test, grid, family);
+        cursor_of(test, grid, &row, &col);
+        YTEST_CHECK_EQ_SIZE(test, col, 2);
+        yetty_yvterm_grid_dispose(grid);
+    }
+}
+
+/*---------------------------------------------------------------------------
  * Cursor save/restore (DECSC / DECRC).
  *-------------------------------------------------------------------------*/
 static void test_cursor_save_restore(struct ytest *test)
@@ -552,6 +595,7 @@ int main(void)
     YTEST_RUN(&test, test_modern_width_tables);
     YTEST_RUN(&test, test_grapheme_cluster);
     YTEST_RUN(&test, test_emoji_sequence_widths);
+    YTEST_RUN(&test, test_mode_2027_clustering);
     YTEST_RUN(&test, test_cursor_save_restore);
     YTEST_RUN(&test, test_erase_in_line);
     YTEST_RUN(&test, test_bce);

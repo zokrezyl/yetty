@@ -123,6 +123,7 @@ struct VTermState
     unsigned int card_click:1;    // DEC mode 1500 - card click events
     unsigned int card_move:1;     // DEC mode 1501 - card move events
     unsigned int card_key:1;      // DEC mode 1502 - card keyboard events
+    unsigned int grapheme_cluster:1; // DEC mode 2027 - grapheme clustering (default on)
   } mode;
 
   VTermEncodingInstance encoding[4], encoding_utf8;
@@ -296,6 +297,6 @@ VTermEncoding *vterm_lookup_encoding(VTermEncodingType type, char designation);
 
 int vterm_unicode_width(uint32_t codepoint);
 int vterm_unicode_is_combining(uint32_t codepoint);
-int vterm_unicode_cluster(const uint32_t *codepoints, int start, int npoints, int *width_out);
+int vterm_unicode_cluster(const uint32_t *codepoints, int start, int npoints, int grapheme_cluster, int *width_out);
 
 #endif

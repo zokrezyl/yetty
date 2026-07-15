@@ -354,7 +354,8 @@ static int on_text(const char bytes[], size_t len, void *user)
      * cursor lands where wcwidth expects, and the stored chars are truncated. */
     int glyph_starts = i;
     int width;
-    int cluster_len = vterm_unicode_cluster(codepoints, glyph_starts, npoints, &width);
+    int cluster_len = vterm_unicode_cluster(codepoints, glyph_starts, npoints,
+                                            state->mode.grapheme_cluster, &width);
     int glyph_ends = glyph_starts + cluster_len;
 
     uint32_t chars[VTERM_MAX_CHARS_PER_CELL + 1];
@@ -827,6 +828,10 @@ static void set_dec_mode(VTermState *state, int num, int val)
     state->mode.bracketpaste = val;
     break;
 
+  case 2027: // grapheme clustering — cursor advances by whole grapheme cluster
+    state->mode.grapheme_cluster = val;
+    break;
+
   case 1500:
     settermprop_bool(state, VTERM_PROP_CARDCLICK, val);
     state->mode.card_click = val;
@@ -915,6 +920,10 @@ static void request_dec_mode(VTermState *state, int num)
 
     case 2004:
       reply = state->mode.bracketpaste;
+      break;
+
+    case 2027:
+      reply = state->mode.grapheme_cluster;
       break;
 
     case 1500:
@@ -2106,6 +2115,7 @@ void vterm_state_reset(VTermState *state, int hard)
   state->mode.leftrightmargin = 0;
   state->mode.bracketpaste    = 0;
   state->mode.report_focus    = 0;
+  state->mode.grapheme_cluster = 1; // mode 2027 - grapheme clustering on by default
 
   state->mouse_flags = 0;
 

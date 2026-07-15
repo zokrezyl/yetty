@@ -291,7 +291,7 @@ static int is_regional_indicator(uint32_t codepoint)
  *                                          own width)
  */
 INTERNAL int vterm_unicode_cluster(const uint32_t *codepoints, int start, int npoints,
-                                   int *width_out)
+                                   int grapheme_cluster, int *width_out)
 {
   uint32_t base = codepoints[start];
   int i = start + 1;
@@ -304,6 +304,17 @@ INTERNAL int vterm_unicode_cluster(const uint32_t *codepoints, int start, int np
     width = 0;
   else
     width = vterm_unicode_width(base);
+
+  /* Mode 2027 reset: legacy behaviour — a cluster is the base plus trailing
+   * combining marks only, and the width is the plain per-codepoint sum. The
+   * extended emoji rules below are skipped, so a ZWJ / skin-tone / flag
+   * sequence advances element-by-element as classic wcwidth terminals do. */
+  if(!grapheme_cluster) {
+    while(i < npoints && vterm_unicode_is_combining(codepoints[i]))
+      i++;
+    *width_out = width;
+    return i - start;
+  }
 
   if(is_regional_indicator(base)) {
     if(i < npoints && is_regional_indicator(codepoints[i])) {
