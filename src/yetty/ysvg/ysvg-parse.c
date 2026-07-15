@@ -386,14 +386,92 @@ static int handle_attrval(struct ysvg_parse_ctx *ctx, const char *data)
  * Public entry: parse + destroy
  *===========================================================================*/
 
-struct yetty_ysvg_doc_ptr_result yetty_ysvg_parse(const char *src, size_t len)
+/* is_xml_ws — the XML S production (space, tab, LF, CR) plus the form feed some
+ * authoring tools emit. */
+static int is_xml_ws(unsigned char c)
 {
-    if (!src && len > 0) {
-        return YETTY_ERR(yetty_ysvg_doc_ptr, "ysvg-parse: src is NULL but len > 0");
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+}
+
+/* normalize_endtag_ws — return a malloc'd copy of [src,len) with any whitespace
+ * between an end-tag name and its '>' removed ("</name  >" → "</name>"). The
+ * vendored yxml build rejects that whitespace even though XML §3.1 permits it
+ * (ETag ::= '</' Name S? '>') — Inkscape/Sodipodi exports pretty-print their
+ * closers as "</svg\n   >", which then fail to parse. Comment and CDATA spans
+ * are copied verbatim so their contents are never touched. Returns NULL when
+ * there is nothing to change (no retry needed) or on allocation failure. */
+static char *normalize_endtag_ws(const char *src, size_t len, size_t *out_len)
+{
+    char *out = malloc(len + 1);
+    if (!out) {
+        return NULL;
     }
+    size_t oi = 0;
+    int changed = 0;
+    for (size_t i = 0; i < len;) {
+        /* Comment: copy verbatim through the closing "-->". */
+        if (src[i] == '<' && i + 4 <= len && memcmp(src + i, "<!--", 4) == 0) {
+            size_t j = i;
+            while (j < len) {
+                out[oi++] = src[j];
+                if (j >= i + 3 && src[j] == '>' && src[j - 1] == '-' && src[j - 2] == '-') {
+                    j++;
+                    break;
+                }
+                j++;
+            }
+            i = j;
+            continue;
+        }
+        /* CDATA: copy verbatim through the closing "]]>". */
+        if (src[i] == '<' && i + 9 <= len && memcmp(src + i, "<![CDATA[", 9) == 0) {
+            size_t j = i;
+            while (j < len) {
+                out[oi++] = src[j];
+                if (j >= i + 2 && src[j] == '>' && src[j - 1] == ']' && src[j - 2] == ']') {
+                    j++;
+                    break;
+                }
+                j++;
+            }
+            i = j;
+            continue;
+        }
+        /* End tag: keep '</' and the name, drop trailing whitespace, keep '>'. */
+        if (src[i] == '<' && i + 1 < len && src[i + 1] == '/') {
+            out[oi++] = src[i++]; /* '<' */
+            out[oi++] = src[i++]; /* '/' */
+            while (i < len && src[i] != '>' && !is_xml_ws((unsigned char)src[i])) {
+                out[oi++] = src[i++];
+            }
+            while (i < len && is_xml_ws((unsigned char)src[i])) {
+                i++;
+                changed = 1;
+            }
+            if (i < len && src[i] == '>') {
+                out[oi++] = src[i++];
+            }
+            continue;
+        }
+        out[oi++] = src[i++];
+    }
+    out[oi] = '\0';
+    if (!changed) {
+        free(out);
+        return NULL;
+    }
+    *out_len = oi;
+    return out;
+}
+
+/* attempt_parse — stream [src,len) through yxml into a fresh doc. Returns the
+ * doc on success, or NULL with *err set (a static string) on failure. */
+static struct yetty_ysvg_doc *attempt_parse(const char *src, size_t len, const char **err)
+{
     struct yetty_ysvg_doc *doc = calloc(1, sizeof(struct yetty_ysvg_doc));
     if (!doc) {
-        return YETTY_ERR(yetty_ysvg_doc_ptr, "ysvg-parse: out of memory (doc)");
+        *err = "ysvg-parse: out of memory (doc)";
+        return NULL;
     }
 
     /* yxml workspace lives on the heap — names/attrs above a few bytes
@@ -401,7 +479,8 @@ struct yetty_ysvg_doc_ptr_result yetty_ysvg_parse(const char *src, size_t len)
     void *yxbuf = malloc(YSVG_YXML_BUFSIZE);
     if (!yxbuf) {
         free(doc);
-        return YETTY_ERR(yetty_ysvg_doc_ptr, "ysvg-parse: out of memory (yxml buf)");
+        *err = "ysvg-parse: out of memory (yxml buf)";
+        return NULL;
     }
     yxml_t x;
     yxml_init(&x, yxbuf, YSVG_YXML_BUFSIZE);
@@ -475,11 +554,38 @@ struct yetty_ysvg_doc_ptr_result yetty_ysvg_parse(const char *src, size_t len)
     free(yxbuf);
 
     if (rc < 0 || !doc->root) {
-        const char *msg = ctx.err ? ctx.err : "ysvg-parse: no root element";
+        *err = ctx.err ? ctx.err : "ysvg-parse: no root element";
         yetty_ysvg_doc_destroy(doc);
-        return YETTY_ERR(yetty_ysvg_doc_ptr, msg);
+        return NULL;
     }
-    return YETTY_OK(yetty_ysvg_doc_ptr, doc);
+    return doc;
+}
+
+struct yetty_ysvg_doc_ptr_result yetty_ysvg_parse(const char *src, size_t len)
+{
+    if (!src && len > 0) {
+        return YETTY_ERR(yetty_ysvg_doc_ptr, "ysvg-parse: src is NULL but len > 0");
+    }
+
+    const char *err = NULL;
+    struct yetty_ysvg_doc *doc = attempt_parse(src, len, &err);
+    if (doc) {
+        return YETTY_OK(yetty_ysvg_doc_ptr, doc);
+    }
+
+    /* Retry once with end-tag whitespace normalized away — cheap, and only on
+     * the already-failed path, so well-formed documents pay nothing. */
+    size_t norm_len = 0;
+    char *normalized = normalize_endtag_ws(src, len, &norm_len);
+    if (normalized) {
+        const char *retry_err = NULL;
+        struct yetty_ysvg_doc *retry_doc = attempt_parse(normalized, norm_len, &retry_err);
+        free(normalized);
+        if (retry_doc) {
+            return YETTY_OK(yetty_ysvg_doc_ptr, retry_doc);
+        }
+    }
+    return YETTY_ERR(yetty_ysvg_doc_ptr, err);
 }
 
 void yetty_ysvg_doc_destroy(struct yetty_ysvg_doc *doc)

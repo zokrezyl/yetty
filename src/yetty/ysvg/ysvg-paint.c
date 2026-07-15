@@ -1116,6 +1116,16 @@ static struct yetty_ycore_void_result emit_use(struct ysvg_paint_state *ps,
     return walk(&use_ctx, target);
 }
 
+/* soft_fail — one element failed to emit (bad path data, unresolvable image,
+ * …). Per the SVG error-processing model a broken element must not blank the
+ * whole document: log it, release the error's cause chain, and let the walk
+ * carry on with the rest of the tree. */
+static void soft_fail(struct yetty_ycore_void_result result, const char *what)
+{
+    ywarn("ysvg: skipping <%s>: %s", what, result.error.msg ? result.error.msg : "(emit failed)");
+    yetty_ycore_error_destroy(result.error);
+}
+
 static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
                                            const struct yetty_ysvg_node *n)
 {
@@ -1170,67 +1180,72 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
     case YETTY_YSVG_ELEM_RECT: {
         struct yetty_ycore_void_result r = emit_rect(&ps, n);
         if (YETTY_IS_ERR(r)) {
-            return r;
+            soft_fail(r, "rect");
         }
         break;
     }
     case YETTY_YSVG_ELEM_CIRCLE: {
         struct yetty_ycore_void_result r = emit_circle(&ps, n);
         if (YETTY_IS_ERR(r)) {
-            return r;
+            soft_fail(r, "circle");
         }
         break;
     }
     case YETTY_YSVG_ELEM_ELLIPSE: {
         struct yetty_ycore_void_result r = emit_ellipse(&ps, n);
         if (YETTY_IS_ERR(r)) {
-            return r;
+            soft_fail(r, "ellipse");
         }
         break;
     }
     case YETTY_YSVG_ELEM_LINE: {
         struct yetty_ycore_void_result r = emit_line(&ps, n);
         if (YETTY_IS_ERR(r)) {
-            return r;
+            soft_fail(r, "line");
         }
         break;
     }
     case YETTY_YSVG_ELEM_POLYLINE: {
         struct yetty_ycore_void_result r = emit_points_shape(&ps, n, 0);
         if (YETTY_IS_ERR(r)) {
-            return r;
+            soft_fail(r, "polyline");
         }
         break;
     }
     case YETTY_YSVG_ELEM_POLYGON: {
         struct yetty_ycore_void_result r = emit_points_shape(&ps, n, 1);
         if (YETTY_IS_ERR(r)) {
-            return r;
+            soft_fail(r, "polygon");
         }
         break;
     }
     case YETTY_YSVG_ELEM_PATH: {
         struct yetty_ycore_void_result r = emit_path(&ps, n);
         if (YETTY_IS_ERR(r)) {
-            return r;
+            soft_fail(r, "path");
         }
         break;
     }
     case YETTY_YSVG_ELEM_TEXT: {
         struct yetty_ycore_void_result r = emit_text(&ps, n);
         if (YETTY_IS_ERR(r)) {
-            return r;
+            soft_fail(r, "text");
         }
         break;
     }
-    case YETTY_YSVG_ELEM_USE:
+    case YETTY_YSVG_ELEM_USE: {
         /* <use> paints the referenced subtree itself; it has no renderable
          * children of its own, so return rather than recurse. */
-        return emit_use(&ps, n);
+        struct yetty_ycore_void_result r = emit_use(&ps, n);
+        if (YETTY_IS_ERR(r)) {
+            soft_fail(r, "use");
+        }
+        return YETTY_OK_VOID();
+    }
     case YETTY_YSVG_ELEM_IMAGE: {
         struct yetty_ycore_void_result image_res = emit_image(&ps, n);
         if (YETTY_IS_ERR(image_res)) {
-            return image_res;
+            soft_fail(image_res, "image");
         }
         return YETTY_OK_VOID();
     }
@@ -1290,7 +1305,7 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
     for (struct yetty_ysvg_node *c = n->first_child; c; c = c->next_sibling) {
         struct yetty_ycore_void_result r = walk(&ps, c);
         if (YETTY_IS_ERR(r)) {
-            return r;
+            soft_fail(r, "subtree");
         }
     }
     parent->text_y = ps.text_y;
