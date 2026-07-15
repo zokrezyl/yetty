@@ -55,6 +55,16 @@ typedef struct yetty_ycore_void_result (*yetty_yterminal_mouse_sub_fn)(int click
                                                                        int key_enabled,
                                                                        void *userdata);
 
+/* Clipboard-write callback - fired when the child emits OSC 52 to set the
+ * clipboard. `text`/`len` is the already base64-decoded payload; `clipboard`
+ * is non-zero for the system clipboard target ('c') and zero for the primary
+ * selection ('p'/'s'). The terminal forwards the text to the platform
+ * clipboard. Read-back (`OSC 52 ; c ; ?`) is intentionally not plumbed. */
+typedef struct yetty_ycore_void_result (*yetty_yterminal_clipboard_write_fn)(const char *text,
+                                                                             size_t len,
+                                                                             int clipboard,
+                                                                             void *userdata);
+
 /* Terminal-wide input subscription callback — fired when a layer
  * receives YETTY_OSC_CS_CLIENT_INPUT_SUB from the inferior. `flags` is the
  * new (post-update) bitmask of YETTY_YMGUI_TERM_SUB_* bits. flags == 0

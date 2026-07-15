@@ -2047,6 +2047,10 @@ static const char *termcap_lookup(const char *name)
   if(strcmp(name, "Co") == 0)     return "256";    /* max colors (terminfo)  */
   if(strcmp(name, "colors") == 0) return "256";    /* max colors (long name) */
   if(strcmp(name, "RGB") == 0)    return "8/8/8";  /* direct-color channels  */
+  /* OSC 52 set-clipboard capability (terminfo Ms). Advertising it is how
+   * clipboard-aware programs (and ucs-detect) discover OSC 52 support without
+   * issuing a real clipboard write. */
+  if(strcmp(name, "Ms") == 0)     return "\x1b]52;%p1%s;%p2%s\x07";
   return NULL;
 }
 

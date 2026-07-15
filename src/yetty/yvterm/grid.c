@@ -54,6 +54,17 @@ bool yetty_ydraw_is_composite(uint32_t type);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_pty_write_fn)(const char *bytes,
                                                                          size_t len,
                                                                          void *userdata);
+/* OSC 52 clipboard-write callback — a program yanking text (nvim/tmux/…) emits
+ * OSC 52; libvterm base64-decodes it and this hands the plain text up to the
+ * owner (the terminal) so it can reach the system clipboard. Own typedef, same
+ * decoupling rationale as the pty-write callback: the model stays free of any
+ * yterminal / yplatform dependency and the owner passes a compatible function.
+ * The clipboard flag distinguishes the clipboard target ('c') from the primary
+ * selection ('p'/'s') so the owner can route per platform capability. */
+typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clipboard_write_fn)(const char *text,
+                                                                               size_t len,
+                                                                               int clipboard,
+                                                                               void *userdata);
 enum YETTY_ANNOTATE("expose") yetty_yvterm_text_attr {
     YETTY_YVTERM_ATTR_BOLD = 1u << 0,
     YETTY_YVTERM_ATTR_UNDERLINE = 1u << 1,
@@ -235,6 +246,22 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
     /* Keyboard output / libvterm query responses go to the child via this. */
     yetty_yvterm_grid_pty_write_fn pty_write_fn;
     void *pty_write_userdata;
+
+    /* OSC 52 clipboard write. libvterm decodes the base64 payload into
+     * `osc52_decode` and hands it back in fragments; those are accumulated into
+     * `osc52_accum` and, on the final fragment, delivered through
+     * clipboard_write_fn. `osc52_overflow` trips when a payload exceeds the cap
+     * so an oversized write is dropped rather than growing without bound. Read
+     * (`OSC 52 ; c ; ?`) is intentionally not wired — clipboard contents stay
+     * unreadable by the child. */
+    yetty_yvterm_grid_clipboard_write_fn clipboard_write_fn;
+    void *clipboard_write_userdata;
+    char osc52_decode[1024];
+    char *osc52_accum;
+    size_t osc52_accum_len;
+    size_t osc52_accum_cap;
+    int osc52_overflow;
+    int osc52_clipboard;
 
     /* Selection rectangle in grid cells (terminal-driven). */
     int selection_active;
@@ -1162,6 +1189,79 @@ static const VTermStateCallbacks *grid_state_callbacks(void)
     return &callbacks;
 }
 
+/* Upper bound on a single OSC 52 clipboard payload. Bounds the accumulation
+ * buffer so a hostile or runaway sequence cannot grow it without limit; a
+ * larger payload is dropped rather than truncated (a truncated clipboard is
+ * worse than none). */
+#define YETTY_YVTERM_OSC52_MAX (1u << 20) /* 1 MiB decoded */
+
+/* libvterm base64-decodes an OSC 52 write into the scratch buffer we handed it
+ * and calls this once per decoded chunk (initial..final). Accumulate the chunks
+ * and, on the final one, deliver the whole payload to the owner's clipboard
+ * hook. Only the write direction is wired; there is no `query` callback, so a
+ * read request (`OSC 52 ; c ; ?`) is silently ignored and the child can never
+ * read the clipboard back. */
+YETTY_EXTERNAL_CALLBACK
+static int cb_selection_set(VTermSelectionMask mask, VTermStringFragment frag, void *user)
+{
+    struct yetty_yvterm_grid *grid = user;
+
+    if (frag.initial) {
+        grid->osc52_accum_len = 0;
+        grid->osc52_overflow = 0;
+        /* CLIPBOARD ('c') → system clipboard; PRIMARY/SELECT ('p'/'s', and the
+         * no-target default) → primary selection. */
+        grid->osc52_clipboard = (mask & VTERM_SELECTION_CLIPBOARD) ? 1 : 0;
+    }
+
+    if (frag.len && !grid->osc52_overflow) {
+        size_t needed = grid->osc52_accum_len + frag.len;
+        if (needed > YETTY_YVTERM_OSC52_MAX) {
+            grid->osc52_overflow = 1;
+        } else if (needed > grid->osc52_accum_cap) {
+            size_t new_cap = grid->osc52_accum_cap ? grid->osc52_accum_cap : 1024;
+            while (new_cap < needed) {
+                new_cap *= 2;
+            }
+            char *grown = realloc(grid->osc52_accum, new_cap);
+            if (!grown) {
+                grid->osc52_overflow = 1;
+            } else {
+                grid->osc52_accum = grown;
+                grid->osc52_accum_cap = new_cap;
+            }
+        }
+        if (!grid->osc52_overflow) {
+            memcpy(grid->osc52_accum + grid->osc52_accum_len, frag.str, frag.len);
+            grid->osc52_accum_len += frag.len;
+        }
+    }
+
+    if (frag.final) {
+        if (grid->clipboard_write_fn && !grid->osc52_overflow && grid->osc52_accum_len > 0) {
+            /* External-callback boundary: libvterm's `set` returns int, so a
+             * failed clipboard write has nowhere to propagate — absorb it. */
+            struct yetty_ycore_void_result wr =
+                grid->clipboard_write_fn(grid->osc52_accum, grid->osc52_accum_len,
+                                         grid->osc52_clipboard, grid->clipboard_write_userdata);
+            (void)wr;
+        }
+        grid->osc52_accum_len = 0;
+        grid->osc52_overflow = 0;
+    }
+
+    return 1;
+}
+
+static const VTermSelectionCallbacks *grid_selection_callbacks(void)
+{
+    static const VTermSelectionCallbacks callbacks = {
+        .set = cb_selection_set,
+        .query = NULL, /* read stays off: the child cannot read the clipboard */
+    };
+    return &callbacks;
+}
+
 /*===========================================================================
  * Grid model lifecycle — the model lives embedded in the vterm object.
  *=========================================================================*/
@@ -1277,6 +1377,10 @@ static struct yetty_ycore_void_result grid_model_init(struct yetty_yvterm_grid *
     vterm_set_utf8(grid->vterm, 1);
     grid->state = vterm_obtain_state(grid->vterm);
     vterm_state_set_callbacks(grid->state, grid_state_callbacks(), grid);
+    /* OSC 52 write path: libvterm decodes the base64 into osc52_decode and hands
+     * the plain text to cb_selection_set, which forwards it to the clipboard. */
+    vterm_state_set_selection_callbacks(grid->state, grid_selection_callbacks(), grid,
+                                        grid->osc52_decode, sizeof(grid->osc52_decode));
 
     VTermColor default_fg;
     VTermColor default_bg;
@@ -1328,6 +1432,10 @@ static void grid_model_teardown(struct yetty_yvterm_grid *grid)
     grid->window_slots = NULL;
     grid->window_capacity = 0;
     grid->window_count = 0;
+    free(grid->osc52_accum);
+    grid->osc52_accum = NULL;
+    grid->osc52_accum_cap = 0;
+    grid->osc52_accum_len = 0;
 }
 
 /*===========================================================================
@@ -1942,6 +2050,17 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_pty_write(struct yetty_ycla
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_pty_write: from_obj");
     grid_res.value->pty_write_fn = fn;
     grid_res.value->pty_write_userdata = userdata;
+    return YETTY_OK_VOID();
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_grid_set_clipboard_write(
+    struct yetty_yclass_object *obj, yetty_yvterm_grid_clipboard_write_fn fn, void *userdata)
+{
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_clipboard_write: from_obj");
+    grid_res.value->clipboard_write_fn = fn;
+    grid_res.value->clipboard_write_userdata = userdata;
     return YETTY_OK_VOID();
 }
 

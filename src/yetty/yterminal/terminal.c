@@ -1769,6 +1769,29 @@ static struct yetty_ycore_void_result terminal_mouse_sub_callback(int click_enab
     return YETTY_OK_VOID();
 }
 
+/* yetty_yterminal_clipboard_write_fn impl — the child emitted OSC 52 to set the
+ * clipboard. libvterm already base64-decoded the payload, so hand the plain text
+ * to the platform clipboard, reusing the same hop as mouse-selection copy. The
+ * platform exposes a single clipboard, so the primary-selection target is routed
+ * there too rather than dropped; `clipboard` is kept for a future
+ * PRIMARY-capable backend. */
+static struct yetty_ycore_void_result terminal_clipboard_write_callback(const char *text,
+                                                                        size_t len, int clipboard,
+                                                                        void *userdata)
+{
+    struct yetty_yterminal_terminal *terminal = userdata;
+    struct yetty_yclass_object *clip = terminal->context.yetty_context.runtime->clipboard;
+    if (!clip) {
+        ydebug("terminal_clipboard_write_callback: no clipboard");
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result sr = yetty_yplatform_clipboard_set_text(clip, text, len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr,
+                        "terminal_clipboard_write_callback: clipboard set_text failed");
+    yinfo("terminal: OSC 52 set %zu bytes to %s", len, clipboard ? "clipboard" : "primary");
+    return YETTY_OK_VOID();
+}
+
 /* yetty_yterminal_request_render_fn impl — called when the content layer needs a
  * render frame. */
 static struct yetty_ycore_void_result terminal_request_render_callback(void *userdata)
@@ -2178,7 +2201,8 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * the lowest-z child of the root container further below. */
     struct yetty_yclass_object_ptr_result grid_res = yetty_yvterm_vterm_figure_create(
         cols, rows, yetty_context, terminal_pty_write_callback, terminal,
-        terminal_request_render_callback, terminal, terminal_mouse_sub_callback, terminal);
+        terminal_request_render_callback, terminal, terminal_mouse_sub_callback, terminal,
+        terminal_clipboard_write_callback, terminal);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, grid_res,
                         "terminal_create: grid figure create failed");
     terminal->grid = grid_res.value;

@@ -435,6 +435,63 @@ static void test_kitty_keyboard(struct ytest *test)
 }
 
 /*---------------------------------------------------------------------------
+ * OSC 52 clipboard write. libvterm base64-decodes the payload and hands the
+ * plain text to the grid's clipboard-write hook; a mock sink captures it.
+ *-------------------------------------------------------------------------*/
+struct osc52_capture {
+    char buf[64];
+    size_t len;
+    int clipboard;
+    int calls;
+};
+
+static struct yetty_ycore_void_result osc52_sink(const char *text, size_t len, int clipboard,
+                                                 void *userdata)
+{
+    struct osc52_capture *capture = userdata;
+    capture->calls++;
+    capture->clipboard = clipboard;
+    capture->len = len < sizeof(capture->buf) - 1 ? len : sizeof(capture->buf) - 1;
+    memcpy(capture->buf, text, capture->len);
+    capture->buf[capture->len] = 0;
+    return YETTY_OK_VOID();
+}
+
+static void test_osc52_clipboard(struct ytest *test)
+{
+    struct osc52_capture capture = {0};
+    struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+    struct yetty_ycore_void_result set =
+        yetty_yvterm_grid_set_clipboard_write(grid, osc52_sink, &capture);
+    YTEST_REQUIRE_OK(test, set);
+
+    /* OSC 52 ; c ; base64("hello") ST → "hello" to the system clipboard. */
+    feeds(test, grid, "\x1b]52;c;aGVsbG8=\x07");
+    YTEST_CHECK_EQ_INT(test, capture.calls, 1);
+    YTEST_CHECK_STR_EQ(test, capture.buf, "hello");
+    YTEST_CHECK_EQ_INT(test, capture.clipboard, 1);
+
+    /* Primary-selection target 'p' → same text, clipboard flag 0. */
+    capture = (struct osc52_capture){0};
+    feeds(test, grid, "\x1b]52;p;aGVsbG8=\x07");
+    YTEST_CHECK_EQ_INT(test, capture.calls, 1);
+    YTEST_CHECK_STR_EQ(test, capture.buf, "hello");
+    YTEST_CHECK_EQ_INT(test, capture.clipboard, 0);
+
+    /* Invalid base64 → no clipboard write (rejected safely, nothing lands). */
+    capture = (struct osc52_capture){0};
+    feeds(test, grid, "\x1b]52;c;@@@bad@@@\x07");
+    YTEST_CHECK_EQ_INT(test, capture.calls, 0);
+
+    /* Read request (OSC 52 ; c ; ?) is not wired → no callback, no leak. */
+    capture = (struct osc52_capture){0};
+    feeds(test, grid, "\x1b]52;c;?\x07");
+    YTEST_CHECK_EQ_INT(test, capture.calls, 0);
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
  * Cursor save/restore (DECSC / DECRC).
  *-------------------------------------------------------------------------*/
 static void test_cursor_save_restore(struct ytest *test)
@@ -664,6 +721,7 @@ int main(void)
     YTEST_RUN(&test, test_emoji_sequence_widths);
     YTEST_RUN(&test, test_mode_2027_clustering);
     YTEST_RUN(&test, test_kitty_keyboard);
+    YTEST_RUN(&test, test_osc52_clipboard);
     YTEST_RUN(&test, test_cursor_save_restore);
     YTEST_RUN(&test, test_erase_in_line);
     YTEST_RUN(&test, test_bce);

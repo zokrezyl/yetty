@@ -2042,7 +2042,8 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     uint32_t cols, uint32_t rows, const struct yetty_context *context,
     yetty_yterminal_pty_write_fn pty_write_fn, void *pty_write_userdata,
     yetty_yterminal_request_render_fn request_render_fn, void *request_render_userdata,
-    yetty_yterminal_mouse_sub_fn mouse_sub_fn, void *mouse_sub_userdata)
+    yetty_yterminal_mouse_sub_fn mouse_sub_fn, void *mouse_sub_userdata,
+    yetty_yterminal_clipboard_write_fn clipboard_write_fn, void *clipboard_write_userdata)
 {
     if (cols == 0 || rows == 0) {
         return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: invalid size");
@@ -2125,7 +2126,16 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
         set_card_res = yetty_yvterm_grid_set_card_sub(
             vterm->grid_obj, (yetty_yvterm_grid_card_sub_fn)mouse_sub_fn, mouse_sub_userdata);
     }
-    if (YETTY_IS_ERR(set_pty_res) || YETTY_IS_ERR(set_card_res)) {
+    /* OSC 52 clipboard writes from the model reach the terminal through this;
+     * same decoupling as pty_write — the terminal's clipboard_write_fn matches
+     * the grid's clipboard_write signature. */
+    struct yetty_ycore_void_result set_clip_res = YETTY_OK_VOID();
+    if (YETTY_IS_OK(set_pty_res) && YETTY_IS_OK(set_card_res)) {
+        set_clip_res = yetty_yvterm_grid_set_clipboard_write(
+            vterm->grid_obj, (yetty_yvterm_grid_clipboard_write_fn)clipboard_write_fn,
+            clipboard_write_userdata);
+    }
+    if (YETTY_IS_ERR(set_pty_res) || YETTY_IS_ERR(set_card_res) || YETTY_IS_ERR(set_clip_res)) {
         struct yetty_ycore_void_result grid_dispose_res =
             yetty_yvterm_grid_dispose(vterm->grid_obj);
         if (YETTY_IS_ERR(grid_dispose_res)) {
@@ -2139,8 +2149,12 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
             return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_pty_write",
                              set_pty_res);
         }
-        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_card_sub",
-                         set_card_res);
+        if (YETTY_IS_ERR(set_card_res)) {
+            return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_card_sub",
+                             set_card_res);
+        }
+        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_clipboard_write",
+                         set_clip_res);
     }
     /* Colour palette + default fg/bg from the terminal/colors config keys —
      * before any PTY data, since indexed colours resolve at parse time.
