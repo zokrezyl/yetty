@@ -41,6 +41,20 @@
 #define LIBUV_WRITE_POOL_BUF_SIZE 4096
 #define LIBUV_WRITE_POOL_MAX_DEPTH 128
 
+/* Render pacing. A RENDER dispatch runs the full GPU frame synchronously on
+ * this loop thread, so dispatching once per render request turns a
+ * per-character PTY client (write one glyph → wait for the CPR reply →
+ * repeat, e.g. ucs-detect) into one full GPU submit per character: the loop
+ * spends its whole budget in command-encode/submit and PTY throughput
+ * collapses to one character per frame. Pace frames instead: dispatch
+ * immediately when the last frame is at least this old (keypress→echo
+ * latency stays untouched), and while requests storm in, coalesce them into
+ * one dispatch per interval via a one-shot timer. PTY reads and query
+ * replies keep flowing between frames. 8ms caps the storm at 125fps;
+ * actual presentation is still gated by the swapchain present mode.
+ * Override with YETTY_RENDER_MIN_INTERVAL_MS (0 disables pacing). */
+#define LIBUV_RENDER_MIN_INTERVAL_MS 8
+
 struct libuv_write_req;
 
 /* TCP connection - used for both server connections and client connections */
@@ -152,6 +166,13 @@ struct yetty_yplatform_libuv_event_loop {
 
     uv_async_t render_async;
     int render_pending;
+
+    /* Render pacing (see LIBUV_RENDER_MIN_INTERVAL_MS): one-shot timer that
+     * fires the coalesced dispatch when requests arrive faster than the
+     * interval; last-dispatch stamp is uv_hrtime in milliseconds. */
+    uv_timer_t render_throttle_timer;
+    uint64_t render_last_dispatch_ms;
+    uint64_t render_min_interval_ms;
 
     /* Cross-thread post-to-loop queue (drained by on_post_async). */
     uv_async_t post_async;
@@ -273,17 +294,49 @@ static void on_signal(uv_signal_t *handle, int signum)
 }
 #endif
 
+static void render_dispatch_now(struct yetty_yplatform_libuv_event_loop *impl)
+{
+    struct yetty_yui_event event = {.type = YETTY_YCORE_RENDER};
+
+    /* Clear pending BEFORE dispatching so a request_render issued while the
+     * frame renders (animation self-requests, figure mutations applied by a
+     * handler) marks a fresh pending and schedules the next frame. */
+    impl->render_pending = 0;
+    impl->render_last_dispatch_ms = uv_hrtime() / 1000000u;
+    libuv_dispatch(&impl->base, &event);
+}
+
+YETTY_EXTERNAL_CALLBACK
+static void on_render_throttle_timer(uv_timer_t *handle)
+{
+    struct yetty_yplatform_libuv_event_loop *impl = handle->data;
+    if (impl->render_pending) {
+        render_dispatch_now(impl);
+    }
+}
+
 YETTY_EXTERNAL_CALLBACK
 static void on_render_async(uv_async_t *handle)
 {
     struct yetty_yplatform_libuv_event_loop *impl = handle->data;
-    struct yetty_yui_event event = {0};
 
     ydebug("on_render_async: render_pending=%d", impl->render_pending);
-    if (impl->render_pending) {
-        impl->render_pending = 0;
-        event.type = YETTY_YCORE_RENDER;
-        libuv_dispatch(&impl->base, &event);
+    if (!impl->render_pending) {
+        return;
+    }
+    uint64_t now_ms = uv_hrtime() / 1000000u;
+    uint64_t elapsed_ms = now_ms - impl->render_last_dispatch_ms;
+    if (elapsed_ms >= impl->render_min_interval_ms) {
+        render_dispatch_now(impl);
+        return;
+    }
+    /* Inside the pacing window: coalesce into the armed timer. Do NOT
+     * restart an active timer — re-arming on every request would keep
+     * pushing the deadline out and starve rendering under a steady
+     * request storm. */
+    if (!uv_is_active((uv_handle_t *)&impl->render_throttle_timer)) {
+        uv_timer_start(&impl->render_throttle_timer, on_render_throttle_timer,
+                       impl->render_min_interval_ms - elapsed_ms, 0);
     }
 }
 
@@ -401,6 +454,8 @@ static struct yetty_ycore_void_result libuv_destroy(struct yetty_yevent_event_lo
     uv_close((uv_handle_t *)&impl->sigint_handle, NULL);
     uv_close((uv_handle_t *)&impl->sigterm_handle, NULL);
 #endif
+    uv_timer_stop(&impl->render_throttle_timer);
+    uv_close((uv_handle_t *)&impl->render_throttle_timer, NULL);
     uv_close((uv_handle_t *)&impl->render_async, NULL);
     uv_close((uv_handle_t *)&impl->post_async, NULL);
 
@@ -1444,9 +1499,26 @@ struct yetty_ycore_event_loop_result yetty_ycore_event_loop_create(
     impl->loop = uv_default_loop();
     impl->platform_input_pipe = pipe;
 
-    /* Render async */
+    /* Render async + pacing timer */
     impl->render_async.data = impl;
     uv_async_init(impl->loop, &impl->render_async, on_render_async);
+    impl->render_throttle_timer.data = impl;
+    uv_timer_init(impl->loop, &impl->render_throttle_timer);
+    impl->render_min_interval_ms = LIBUV_RENDER_MIN_INTERVAL_MS;
+    {
+        const char *interval_env = getenv("YETTY_RENDER_MIN_INTERVAL_MS");
+        if (interval_env && interval_env[0]) {
+            char *parse_end = NULL;
+            unsigned long parsed_ms = strtoul(interval_env, &parse_end, 10);
+            if (parse_end && *parse_end == '\0' && parsed_ms <= 1000) {
+                impl->render_min_interval_ms = parsed_ms;
+            } else {
+                ywarn("event-loop: ignoring invalid YETTY_RENDER_MIN_INTERVAL_MS=\"%s\" "
+                      "(expect integer 0..1000)",
+                      interval_env);
+            }
+        }
+    }
 
     /* Post-to-loop machinery (used by the GPU poll thread to resume coros). */
     impl->post_async.data = impl;
