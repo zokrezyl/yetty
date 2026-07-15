@@ -151,6 +151,16 @@ struct yetty_ywire_wire_statemachine {
     int current_code;
     struct wire_handler *current_handler; /* NULL if no handler for (kind, code) */
 
+    /* Raw code-section bytes (the decimal code digits) captured as they
+     * arrive in SCAN_OSC_CODE. Kept so that a foreign (non-yetty) OSC/DCS
+     * control string — XTGETTCAP (ESC P +q …), DECRQSS (ESC P $q …), a
+     * standard OSC whose code has no yetty handler — can be re-emitted
+     * byte-identical when the framer decides to pass it through to the
+     * terminal. Digits only; the introducer (ESC + kind) and the
+     * separator / foreign byte are reconstructed at passthrough time. */
+    uint8_t code_raw[16];
+    size_t code_raw_len;
+
     /* Default sink for SCAN_RAW. */
     yetty_ywire_process_input_fn default_fn;
     void *default_userdata;
@@ -909,6 +919,7 @@ static void envelope_reset(struct yetty_ywire_wire_statemachine *sm)
 
     sm->args_b64_len = 0;
     sm->args_decoded_len = 0;
+    sm->code_raw_len = 0;
     sm->b64_carry_n = 0;
     sm->b64_eos = 0;
     sm->terminator_seen = 0;
@@ -919,6 +930,40 @@ static void envelope_reset(struct yetty_ywire_wire_statemachine *sm)
     if (sm->lz4_ctx) {
         LZ4F_resetDecompressionContext(sm->lz4_ctx);
     }
+}
+
+/* A foreign (non-yetty) OSC/DCS control string has reached the framer:
+ * its code section is not a yetty envelope — either the byte after the
+ * code is non-numeric (XTGETTCAP `ESC P +q`, DECRQSS `ESC P $q`, an OSC
+ * whose first code byte is not a digit) or the code parses cleanly but
+ * no handler is registered for it (standard OSC 0/1/2/7/8/52/133, …).
+ *
+ * Re-emit the introducer (ESC + kind) + the code digits consumed so far
+ * + `tail` (the non-numeric byte, or the code separator) into the raw
+ * out-carry, then drop to SCAN_RAW. The remainder of the string (body +
+ * ST/BEL terminator) then relays byte-identical to the terminal through
+ * the normal raw path — a foreign control string is just `ESC <bytes>
+ * ST`, which SCAN_RAW + SCAN_AFTER_ESC already pass through verbatim.
+ * libvterm frames and answers (or gracefully ignores) it natively.
+ *
+ * envelope_reset() wipes out-carry as its last act, so it MUST run before
+ * the re-emitted bytes are appended — hence the explicit ordering here. */
+static struct yetty_ycore_void_result passthrough_foreign_control(
+    struct yetty_ywire_wire_statemachine *sm, uint8_t tail)
+{
+    uint8_t relay[2 + sizeof(sm->code_raw) + 1];
+    size_t relay_len = 0;
+    relay[relay_len++] = '\033';
+    relay[relay_len++] = (uint8_t)sm->current_kind;
+    memcpy(relay + relay_len, sm->code_raw, sm->code_raw_len);
+    relay_len += sm->code_raw_len;
+    relay[relay_len++] = tail;
+
+    sm->current_kind = WIRE_KIND_NONE;
+    sm->current_code = 0;
+    envelope_reset(sm);
+    sm->state = SCAN_RAW;
+    return out_carry_append(sm, relay, relay_len);
 }
 
 /*===========================================================================
@@ -1300,9 +1345,21 @@ static void sm_coro_entry(void *arg)
             switch (sm->state) {
             case SCAN_RAW: {
                 if (sm->read_pos < sm->write_pos && ring_at(sm, sm->read_pos) == '\033') {
-                    sm->read_pos++;
-                    sm->state = SCAN_AFTER_ESC;
-                    break;
+                    /* Flush any pending raw-passthrough bytes to the sink
+                     * before entering a new escape sequence. envelope_reset()
+                     * wipes the out-carry at envelope start, so a foreign
+                     * control string relayed immediately before a yetty
+                     * envelope would otherwise lose its trailing ST. Only
+                     * defer when a default sink coro exists to drain it — with
+                     * no consumer the bytes cannot drain, so take the ESC
+                     * transition (dropping them, as before) rather than spin. */
+                    if (out_carry_avail(sm) == 0 || !find_handler_coro(sm, sm->default_userdata)) {
+                        sm->read_pos++;
+                        sm->state = SCAN_AFTER_ESC;
+                        break;
+                    }
+                    /* else fall through to resume the default coro, which
+                     * drains out_carry; the ESC is handled next iteration. */
                 }
                 struct handler_coro *hc = find_handler_coro(sm, sm->default_userdata);
                 if (hc) {
@@ -1434,6 +1491,9 @@ static void sm_coro_entry(void *arg)
                                    ? (c == YETTY_YWIRE_DCS_FINAL)
                                    : (c == ';');
                 if (c >= '0' && c <= '9') {
+                    if (sm->code_raw_len < sizeof(sm->code_raw)) {
+                        sm->code_raw[sm->code_raw_len++] = c;
+                    }
                     sm->current_code = sm->current_code * 10 + (int)(c - '0');
                 } else if (code_end) {
                     /* Resolve handler at the code separator. The handler's
@@ -1466,16 +1526,38 @@ static void sm_coro_entry(void *arg)
                                                   "test trigger: synthetic OSC 99099 error", mid);
                         return;
                     }
-                    if (sm->current_handler && sm->current_handler->has_args) {
+                    if (!sm->current_handler) {
+                        /* Numeric code, valid separator, but no registered
+                         * handler and no catch-all: a foreign OSC/DCS
+                         * (standard OSC 0/1/2/7/8/52/133, …) rather than a
+                         * yetty envelope. Relay the whole string to the
+                         * terminal untouched instead of draining-and-dropping
+                         * it — libvterm handles or ignores it gracefully. */
+                        struct yetty_ycore_void_result relay = passthrough_foreign_control(sm, c);
+                        if (YETTY_IS_ERR(relay)) {
+                            sm->sm_result = YETTY_ERR(yetty_ycore_void,
+                                                      "wire: foreign envelope passthrough", relay);
+                            return;
+                        }
+                    } else if (sm->current_handler->has_args) {
                         sm->state = SCAN_OSC_ARGS;
                     } else {
                         sm->state = SCAN_OSC_BODY;
                     }
                 } else {
-                    ywarn("wire: malformed envelope code byte=0x%02x kind=0x%02x", (unsigned)c,
-                          (unsigned)sm->current_kind);
-                    sm->state = SCAN_RAW;
-                    sm->current_kind = WIRE_KIND_NONE;
+                    /* Not a yetty envelope: the byte after the code section
+                     * is neither a digit nor the code separator (XTGETTCAP
+                     * `+`, DECRQSS `$`, or a non-numeric OSC code byte).
+                     * Re-emit the introducer + consumed bytes and relay the
+                     * foreign control string through untouched rather than
+                     * swallowing the introducer and leaking its tail as
+                     * screen text. */
+                    struct yetty_ycore_void_result relay = passthrough_foreign_control(sm, c);
+                    if (YETTY_IS_ERR(relay)) {
+                        sm->sm_result =
+                            YETTY_ERR(yetty_ycore_void, "wire: foreign control passthrough", relay);
+                        return;
+                    }
                 }
                 break;
             }
