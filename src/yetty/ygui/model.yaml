@@ -1636,6 +1636,30 @@ classes:
         type: int
         get: false
         set: false
+      - name: word_drag
+        type: int
+        get: false
+        set: false
+      - name: word_anchor_lo
+        type: size_t
+        get: false
+        set: false
+      - name: word_anchor_hi
+        type: size_t
+        get: false
+        set: false
+      - name: last_press_time
+        type: double
+        get: false
+        set: false
+      - name: last_press_index
+        type: size_t
+        get: false
+        set: false
+      - name: click_count
+        type: int
+        get: false
+        set: false
     ops:
       - slot: widget_on_press
         slot_domain: ygui
@@ -5280,6 +5304,7 @@ local_types:
   yetty_ygui_ydiagram: src/yetty/ygui/widgets/ydiagram.c
   yetty_ygui_ydraw_embed_ptr_result: src/yetty/ygui/widgets/ydraw_embed.c
   yetty_ygui_ydraw_embed: src/yetty/ygui/widgets/ydraw_embed.c
+  embed_cull: src/yetty/ygui/widgets/ydraw_embed.c
   yetty_ygui_yimage_ptr_result: src/yetty/ygui/widgets/yimage.c
   yetty_ygui_yimage: src/yetty/ygui/widgets/yimage.c
   yetty_ygui_yjungle_ptr_result: src/yetty/ygui/widgets/yjungle.c

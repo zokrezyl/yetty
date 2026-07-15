@@ -157,12 +157,47 @@ struct yetty_ydraw_composite {
     struct yetty_ydraw_composite *res_next;
     int resident;
 
+    /* Stream-update routing — scrollback figures that accept CMD_UPDATE
+     * records from LATER envelopes (live plots, chunked video) register
+     * in the host's stream registry under a small id; the registry entry
+     * is cleared centrally in yetty_ydraw_composite_destroy via this
+     * back-pointer (same lifetime pattern as `residency` above). Zero on
+     * a fresh instance → not registered. */
+    uint32_t stream_id;
+    struct yetty_ydraw_stream_registry *stream_registry;
+
     // Render to target at x,y (canvas provides x,y for scrolling)
     struct yetty_ycore_void_result (*render)(struct yetty_ydraw_composite *self,
                                              struct yetty_ydraw_target *target, float x, float y);
 };
 
 YETTY_YRESULT_DECLARE(yetty_ydraw_composite_ptr, struct yetty_ydraw_composite *);
+
+//=============================================================================
+// Stream-update registry
+//=============================================================================
+
+/* Routes CMD_UPDATE records arriving in later envelopes to live composite
+ * instances. Ids are small per-host handles (the terminal scrollback path
+ * assigns each envelope's composites ordinals 1, 2, ...); registering an
+ * id again replaces the previous target (most-recent-wins), and instances
+ * unregister themselves on destroy. Fixed capacity: streaming producers
+ * address at most a handful of concurrently-live figures. */
+#define YETTY_YDRAW_STREAM_TARGETS_MAX 16u
+
+struct yetty_ydraw_stream_registry {
+    struct yetty_ydraw_composite *targets[YETTY_YDRAW_STREAM_TARGETS_MAX];
+};
+
+/* Register `instance` under `stream_id` (1-based; ids outside
+ * 1..YETTY_YDRAW_STREAM_TARGETS_MAX are ignored). */
+void yetty_ydraw_stream_registry_register(struct yetty_ydraw_stream_registry *registry,
+                                          uint32_t stream_id,
+                                          struct yetty_ydraw_composite *instance);
+
+/* The live instance registered under `stream_id`, or NULL. */
+struct yetty_ydraw_composite *yetty_ydraw_stream_registry_find(
+    struct yetty_ydraw_stream_registry *registry, uint32_t stream_id);
 
 //=============================================================================
 // Concrete factory interface - one per type (yplot, image, video, etc.)

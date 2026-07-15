@@ -83,6 +83,10 @@ static void usage(FILE *out, const char *prog)
             "  -o, --lon=DEG        map center longitude\n"
             "  -z, --zoom=N         zoom level (default: %u; clamped to the\n"
             "                       provider's range)\n"
+            "      --geojson=FILE   data overlay: GeoJSON points/tracks/\n"
+            "                       polygons drawn over the basemap (marker\n"
+            "                       radius scales with a numeric `mag`\n"
+            "                       property when present)\n"
             "  -P, --provider=NAME  tile provider (default: osm, or\n"
             "                       osm-vector with -V)\n"
             "      --list-providers print the built-in provider registry\n"
@@ -107,6 +111,7 @@ enum {
     OPT_SLEEP_AFTER = 1000,
     OPT_NO_GEOIP = 1001,
     OPT_LIST_PROVIDERS = 1002,
+    OPT_GEOJSON = 1003,
 };
 
 static int list_providers(void)
@@ -146,6 +151,7 @@ int main(int argc, char **argv)
     bool no_geoip = false;
     bool have_zoom = false;
     const char *provider_name = NULL;
+    const char *geojson_path = NULL;
 
     static const struct yetty_yplatform_option long_opts[] = {
         {"lat", required_argument, NULL, 'a'},
@@ -158,6 +164,7 @@ int main(int argc, char **argv)
         {"interactive", no_argument, NULL, 'i'},
         {"no-geoip", no_argument, NULL, OPT_NO_GEOIP},
         {"provider", required_argument, NULL, 'P'},
+        {"geojson", required_argument, NULL, OPT_GEOJSON},
         {"list-providers", no_argument, NULL, OPT_LIST_PROVIDERS},
         {"sleep-after", required_argument, NULL, OPT_SLEEP_AFTER},
         {"help", no_argument, NULL, 'h'},
@@ -203,6 +210,9 @@ int main(int argc, char **argv)
             break;
         case 'P':
             provider_name = yetty_yplatform_optarg;
+            break;
+        case OPT_GEOJSON:
+            geojson_path = yetty_yplatform_optarg;
             break;
         case OPT_LIST_PROVIDERS:
             return list_providers();
@@ -267,6 +277,35 @@ int main(int argc, char **argv)
         if (YETTY_IS_ERR(provider_res)) {
             fprintf(stderr, "ymap: unknown provider '%s' (see --list-providers)\n", chosen);
             yetty_ycore_error_destroy(provider_res.error);
+            goto out;
+        }
+    }
+
+    if (geojson_path) {
+        FILE *geojson_file = fopen(geojson_path, "rb");
+        if (!geojson_file) {
+            fprintf(stderr, "ymap: cannot open --geojson file %s\n", geojson_path);
+            goto out;
+        }
+        fseek(geojson_file, 0, SEEK_END);
+        long geojson_size = ftell(geojson_file);
+        rewind(geojson_file);
+        char *geojson_text = geojson_size > 0 ? malloc((size_t)geojson_size + 1) : NULL;
+        if (!geojson_text ||
+            fread(geojson_text, 1, (size_t)geojson_size, geojson_file) != (size_t)geojson_size) {
+            fprintf(stderr, "ymap: cannot read --geojson file %s\n", geojson_path);
+            free(geojson_text);
+            fclose(geojson_file);
+            goto out;
+        }
+        fclose(geojson_file);
+        geojson_text[geojson_size] = '\0';
+        struct yetty_ycore_void_result overlay_res =
+            yetty_ymap_overlay_geojson(map_object, geojson_text);
+        free(geojson_text);
+        if (YETTY_IS_ERR(overlay_res)) {
+            fprintf(stderr, "ymap: --geojson rejected: %s\n", overlay_res.error.msg);
+            yetty_ycore_error_destroy(overlay_res.error);
             goto out;
         }
     }

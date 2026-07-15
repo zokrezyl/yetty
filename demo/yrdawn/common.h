@@ -15,6 +15,7 @@
 #ifndef YETTY_DEMO_YRDAWN_COMMON_H
 #define YETTY_DEMO_YRDAWN_COMMON_H
 
+#include <signal.h>
 #include <stdio.h>
 #include <stdint.h>
 
@@ -29,14 +30,17 @@ void demo_sleep_ms(int ms);
 FILE *demo_trace_open(const char *demo_name);
 
 /* 'q' or Ctrl-C from the host yetty flips this flag; poll it in any wait
- * loop. Two install paths:
+ * loop. SIGTERM/SIGINT/SIGHUP flip it too (installed by demo_raw_stdin),
+ * so an external kill still runs the post-loop teardown that emits
+ * DELETE_CHILD — otherwise the canvas figure outlives the process on
+ * screen. Two key-input install paths:
  *   - demo_install_quit_input(client): the working path. Hooks raw (non-
  *     envelope) PTY bytes — plain keystrokes delivered when no figure has
  *     focus. demo_bringup_single_canvas calls this for you.
  *   - demo_install_quit_on_q(canvas): figure-focused key events. Only fires
  *     if the canvas has keyboard focus, which the demos don't grab — kept
  *     for completeness / forward compatibility. */
-extern int demo_quit_flag;
+extern volatile sig_atomic_t demo_quit_flag;
 void demo_install_quit_on_q(struct yetty_yrdawn_canvas *canvas);
 void demo_install_quit_input(struct yetty_yrdawn_client *client);
 

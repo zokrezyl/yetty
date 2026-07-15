@@ -19,10 +19,10 @@ struct yetty_ydraw_composite;
 
 /* Number of u32 words the uniforms occupy in the wire (and as a prefix in
  * the payload before the storage region). */
-#define YETTY_YPLOT_UNIFORMS_WORDS 18u
+#define YETTY_YPLOT_UNIFORMS_WORDS 40u
 
 /* RS slot of the server-side `time` uniform (not on the wire). */
-#define YETTY_YPLOT_UNIFORM_TIME_SLOT 26u
+#define YETTY_YPLOT_UNIFORM_TIME_SLOT 48u
 
 // Uniforms struct (goes to GPU uniform buffer)
 struct yetty_yplot_uniforms {
@@ -34,9 +34,17 @@ struct yetty_yplot_uniforms {
     float x_max;
     float y_min;
     float y_max;
+    float x_step;
+    float y_step;
+    uint32_t colormap_id;
+    float field_min;
+    float field_max;
     uint32_t flags;
     uint32_t function_count;
     uint32_t colors[8];
+    uint32_t band_slots[8];
+    uint32_t hidden_mask;
+    uint32_t ring_heads[8];
 };
 
 /* One `data` entry. The wire encoding repeats [len][samples...]

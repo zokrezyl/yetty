@@ -66,6 +66,54 @@ static void test_pipeline(struct ytest *test)
 }
 
 /*---------------------------------------------------------------------------
+ * Styling directives: classDef / class / style / ::: shorthand land on the
+ * node styles, directive lines don't leak into the graph as nodes, and the
+ * measurer-less layout still sizes boxes from the label length.
+ *-------------------------------------------------------------------------*/
+static void test_styling_directives(struct ytest *test)
+{
+    const char *styled_input = "flowchart LR\n"
+                               "  prompt[AI agent prompt] --> render[Render Mermaid inline]:::hot\n"
+                               "  classDef hot fill:#20242b,stroke:#6ee7b7,color:#f8fafc\n"
+                               "  classDef cold fill:#273449,stroke-width:3px\n"
+                               "  class prompt cold\n"
+                               "  style prompt color:#f59e0b\n"
+                               "  linkStyle 0 stroke:#ff0000\n";
+
+    struct yetty_ydiagram_graph g;
+    YTEST_REQUIRE_OK(test, yetty_ydiagram_graph_init(&g));
+    YTEST_REQUIRE_OK(test, yetty_ydiagram_mermaid_parse(styled_input, strlen(styled_input), &g));
+
+    /* Directive lines must not become literal nodes. */
+    YTEST_CHECK_EQ_INT(test, g.node_count, 2);
+    YTEST_CHECK_EQ_INT(test, g.edge_count, 1);
+
+    struct yetty_ydiagram_node *prompt_node = yetty_ydiagram_graph_find_node(&g, "prompt");
+    struct yetty_ydiagram_node *render_node = yetty_ydiagram_graph_find_node(&g, "render");
+    YTEST_REQUIRE_NOT_NULL(test, prompt_node);
+    YTEST_REQUIRE_NOT_NULL(test, render_node);
+
+    /* Colors pack as ydraw RGBA, R in the low byte. */
+    YTEST_CHECK(test, render_node->style.fill_color == 0xFF2B2420u);   /* #20242b */
+    YTEST_CHECK(test, render_node->style.stroke_color == 0xFFB7E76Eu); /* #6ee7b7 */
+    YTEST_CHECK(test, render_node->style.text_color == 0xFFFCFAF8u);   /* #f8fafc */
+
+    YTEST_CHECK(test, prompt_node->style.fill_color == 0xFF493427u); /* #273449 */
+    YTEST_CHECK_NEAR(test, prompt_node->style.stroke_width, 3.0f, 0.001f);
+    /* `style` overrides land on top of the class assignment. */
+    YTEST_CHECK(test, prompt_node->style.text_color == 0xFF0B9EF5u); /* #f59e0b */
+
+    /* No measure callback: box widths still follow the label length via the
+     * heuristic instead of collapsing to the 80px default. */
+    YTEST_REQUIRE_OK(test, yetty_ydiagram_layout(&g, NULL, NULL, NULL));
+    YTEST_CHECK(test, render_node->width > 150.0f); /* "Render Mermaid inline" */
+    YTEST_CHECK(test, prompt_node->width > 100.0f); /* "AI agent prompt" */
+    YTEST_CHECK(test, render_node->width > prompt_node->width);
+
+    yetty_ydiagram_graph_destroy(&g);
+}
+
+/*---------------------------------------------------------------------------
  * The top-level render produces a non-empty, byte-identical buffer twice.
  *-------------------------------------------------------------------------*/
 static void test_render_deterministic(struct ytest *test)
@@ -94,6 +142,7 @@ int main(void)
 {
     struct ytest test = ytest_begin("ydiagram_golden");
     YTEST_RUN(&test, test_pipeline);
+    YTEST_RUN(&test, test_styling_directives);
     YTEST_RUN(&test, test_render_deterministic);
     return ytest_end(&test);
 }

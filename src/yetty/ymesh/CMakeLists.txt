@@ -1,7 +1,9 @@
-# yetty_ymesh_core — wire-format / GLB decode (cgltf) / OSC emit. GPU-less.
+# yetty_ymesh_core — wire-format / mesh decode (GLB via cgltf, PLY/STL/OBJ
+# via ymesh-load.c) / OSC emit. GPU-less.
 add_library(yetty_ymesh_core STATIC
     ymesh.c
     ymesh-glb.c
+    ymesh-load.c
 )
 
 target_include_directories(yetty_ymesh_core PUBLIC

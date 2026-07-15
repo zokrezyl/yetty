@@ -1,10 +1,22 @@
-# ymesh — 3D mesh (glTF .glb) figure
+# ymesh — 3D mesh figure (glTF .glb / PLY / STL / OBJ)
 
-`ymesh` loads a glTF 2.0 binary (`.glb`) mesh and renders it as a composite
-ydraw figure with a real 3D pipeline (vertex + index buffers, depth test,
-Lambert shading or wireframe). It is split like yvideo: a GPU-less client
-side that serialises the wire format, and a server side that owns the raw
-WebGPU pipeline inside the terminal.
+`ymesh` loads a mesh and renders it as a composite ydraw figure with a
+real 3D pipeline (vertex + index buffers, depth test, Lambert shading or
+wireframe). It is split like yvideo: a GPU-less client side that
+serialises the wire format, and a server side that owns the raw WebGPU
+pipeline inside the terminal.
+
+Formats (content-sniffed by `ymesh-load.c`, no extension needed):
+
+| format | notes |
+|--------|-------|
+| `.glb` | glTF 2.0 binary via cgltf (first mesh, first primitive) |
+| `.ply` | ascii + binary_little_endian; missing normals are computed; a **vertex-only PLY renders as a point cloud** (octahedron marker per point, sized from the cloud bbox, capped at 150k points) |
+| `.stl` | binary + ascii, flat-shaded per facet |
+| `.obj` | `v`/`vn`/`f` with fan triangulation and negative indices; missing normals computed (smooth, area-weighted) |
+
+Per-vertex PLY colors are not yet carried to the GPU — the wire has no
+color attribute (follow-up in #596).
 
 ## Two targets
 

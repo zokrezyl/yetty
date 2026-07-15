@@ -40,6 +40,11 @@ endif()
 
 if(YETTY_ENABLE_TOOL_YPLOT)
     add_subdirectory(yplot)
+    add_subdirectory(yplot-stream)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YMATH)
+    add_subdirectory(ymath)
 endif()
 
 if(YETTY_ENABLE_TOOL_YFSPY)

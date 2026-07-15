@@ -1,0 +1,226 @@
+# Clip: the sci tour - yetty for the scientific community, in one scrollback.
+#
+# THE SCENARIO IS THE DRIVER: every act below is a real command TYPED at
+# the prompt, character by character, exactly like feature-tour.yaml —
+# the viewer watches a person type and run each element.
+#
+# NOTHING IS STAGED OR COPIED: the session runs from the repo root and
+# the typed commands use the real paths — committed assets under
+# demo/assets/..., record-time downloads under tmp/sci-data/ (fetched by
+# the wrapper, demo/scripts/yctl/clips/sci-tour.sh). Tools and the yrdawn
+# N-body demo come from PATH.
+#
+# WARNING: ends in `shutdown` - only play against a dedicated instance.
+#
+# One-shot recording (from the repo root):
+#
+#   ./demo/scripts/yctl/clips/sci-tour.sh
+#   # -> tmp/clips/sci-tour/sci-tour.mp4
+
+config:
+  defaults:
+    typing:
+      avg-speed: 90
+      speed-deviation: 0.1
+      avg-typo: 0.0
+
+script:
+  - sleep: 0.6
+
+  - type: 'ycat -w 150 demo/assets/yimage/wordmark.png'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 2.0
+
+  - type: '# a real solver, streaming an observable LIVE into a scrolling plot'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'python3 demo/assets/yscience/solver-threebody.py --stream 420 | yplot-stream --len=280 --yrange=0..4 --title=''body 1 - body 2 separation (live)'''
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 18.0
+
+  - type: '# the same solver, one full figure-8 period - energy conserved to 1e-15'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'python3 demo/assets/yscience/solver-threebody.py tmp/sci-data/orbit.json'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 3.0
+
+  - type: '# convergence on a log axis - a straight line is an exponential'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'yplot -w 1400 -H 560 --ylog --yrange=0.000001..1 --xrange=0..30 --title ''solver convergence'' --xlabel iteration --ylabel residual ''jacobi=exp(0-0.25*x); multigrid=exp(0-1.5*x)'''
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 3.0
+
+  - type: '# wave interference - f(x,y) evaluated per pixel on the GPU, live'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'yplot -w 1400 -H 600 --xrange=-6.28..6.28 --yrange=-3.14..3.14 --colormap magma --field-range=-2..2 --title ''two-source interference'' ''psi=sin(8*sqrt((x-1.5)*(x-1.5)+y*y)-2*time)+sin(8*sqrt((x+1.5)*(x+1.5)+y*y)-2*time)'''
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 3.0
+
+  - type: '# sixty-seven years of CO2 - the Keeling curve (NOAA)'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'yplot -w 1400 -H 560 --title ''Mauna Loa CO2'' --xlabel ''months since 1958'' --ylabel ppm --data ''monthly mean=tmp/sci-data/co2_mm_mlo.csv:average'''
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 3.0
+
+  - type: '# 145 years of warming (NASA GISTEMP)'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'yplot -w 1400 -H 480 --title ''global temperature anomaly'' --xlabel ''years since 1880'' --ylabel ''deg C'' --data ''annual mean=demo/assets/yscience/gistemp-annual.txt:1'''
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 3.0
+
+  - type: '# GW150914 - observed strain vs numerical relativity (GWOSC data files)'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'yplot -w 1400 -H 560 --legend --title GW150914 --xlabel ''sample (16 kHz)'' --ylabel ''strain (1e-21)'' --data ''H1 observed=tmp/sci-data/gw-observed-H.txt:1'' --data ''NR template=tmp/sci-data/gw-template-H.txt:1'''
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 3.0
+
+  - type: '# the discovery paper, rendered inline'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ycat tmp/sci-data/gw150914-paper.pdf'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 3.5
+
+  - type: '# a month of global seismicity over NASA satellite imagery'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ymap -P gibs-bluemarble --lat 0 --lon 140 -z 3 -w 130 -H 40 --geojson tmp/sci-data/quakes-45-month.geojson'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 9.0
+
+  - type: '# typeset mathematics'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ymath --size=32 ''\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}'''
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 1.5
+  - type: 'ymath --size=32 ''x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}'''
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 2.0
+
+  - type: '# caffeine, straight from PubChem - ball-and-stick'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ymesh --once -w 900 -H 600 demo/assets/yscience/caffeine.glb'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 3.0
+
+  - type: '# a 2000-point cloud - vertex-only PLY'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ymesh --once -w 700 -H 600 tmp/sci-data/helix.ply'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 3.0
+
+  - type: '# 480 bodies of live gravity, streamed through the yrdawn bridge'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'demo-yrdawn-12-nbody --timeout 10'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 14.0
+
+  - type: '# matplotlib figures, rendered inline (yetty.mpl)'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'demo/python/mpl-demo.py'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 30.0
+
+  - type: '# the analysis pipeline'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ydiagram demo/assets/yscience/pipeline.mmd'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 3.0
+
+  - type: '# where the solver spends its time'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'yflame -w 1400 demo/assets/yflame/profile.folded'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 3.0
+
+  - type: '# the lab notebook'
+  - special-char: ENTER
+  - sleep: 0.1
+  - type: 'ycat -w 130 -c markdown demo/assets/yscience/sci-report.md'
+  - sleep: 0.18
+  - special-char: ENTER
+  - sleep: 3.5
+
+  # Cruise UP through the history - the whole day is still there, one
+  # continuous scrollback.
+  - mouse-move: { x: 840, y: 460 }
+  - sleep: 0.3
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 0.09
+  - mouse-scroll: { x: 840, y: 460, dy: 4 }
+  - sleep: 1.5             # hold: a screen of real science, mid-history
+
+  # Drop back to the prompt for the end card.
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.06
+  - mouse-scroll: { x: 840, y: 460, dy: -8 }
+  - sleep: 0.6
+
+  - type:
+      text: '# the experiment, the live data, the paper - one terminal.'
+      avg-speed: 24
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type:
+      text: '# github.com/zokrezyl/yetty | yetty.dev'
+      avg-speed: 24
+  - special-char: ENTER
+  - sleep: 15
+
+  - shutdown: ~

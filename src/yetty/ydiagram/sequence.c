@@ -424,7 +424,7 @@ static struct yetty_ycore_void_result seq_emit_drawables(
     for (size_t i = 0; i < s->part_count; i++) {
         float x = s->parts[i].x;
         struct yetty_ycore_void_result lifeline_result =
-            seq_dashed(r, x, life_top, x, life_bottom, lifeline_color, 1.2f);
+            seq_dashed(r, x, life_top, x, life_bottom, lifeline_color, 1.6f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lifeline_result, "seq_emit: lifeline");
     }
 
@@ -476,18 +476,18 @@ static struct yetty_ycore_void_result seq_emit_drawables(
             float loop_w = 36.0f;
             float y0 = e->y, y1 = e->y + 20.0f;
             struct yetty_ycore_void_result top_seg_result =
-                seq_seg(r, xs, y0, xs + loop_w, y0, stroke, 1.4f);
+                seq_seg(r, xs, y0, xs + loop_w, y0, stroke, 2.0f);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, top_seg_result, "seq_emit: self-loop top");
             struct yetty_ycore_void_result side_seg_result =
-                seq_seg(r, xs + loop_w, y0, xs + loop_w, y1, stroke, 1.4f);
+                seq_seg(r, xs + loop_w, y0, xs + loop_w, y1, stroke, 2.0f);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, side_seg_result, "seq_emit: self-loop side");
             if (e->dashed) {
                 struct yetty_ycore_void_result ret_result =
-                    seq_dashed(r, xs + loop_w, y1, xs + 6.0f, y1, stroke, 1.4f);
+                    seq_dashed(r, xs + loop_w, y1, xs + 6.0f, y1, stroke, 2.0f);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, ret_result, "seq_emit: self-loop return");
             } else {
                 struct yetty_ycore_void_result ret_result =
-                    seq_seg(r, xs + loop_w, y1, xs + 6.0f, y1, stroke, 1.4f);
+                    seq_seg(r, xs + loop_w, y1, xs + 6.0f, y1, stroke, 2.0f);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, ret_result, "seq_emit: self-loop return");
             }
             if (e->arrow) {
@@ -505,11 +505,11 @@ static struct yetty_ycore_void_result seq_emit_drawables(
         float tip = xt - dir * 1.0f;
         if (e->dashed) {
             struct yetty_ycore_void_result line_result =
-                seq_dashed(r, xs, e->y, tip, e->y, stroke, 1.4f);
+                seq_dashed(r, xs, e->y, tip, e->y, stroke, 2.0f);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, line_result, "seq_emit: message line");
         } else {
             struct yetty_ycore_void_result line_result =
-                seq_seg(r, xs, e->y, tip, e->y, stroke, 1.4f);
+                seq_seg(r, xs, e->y, tip, e->y, stroke, 2.0f);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, line_result, "seq_emit: message line");
         }
         if (e->arrow) {

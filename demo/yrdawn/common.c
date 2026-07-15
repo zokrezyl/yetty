@@ -2,13 +2,27 @@
 
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
 
 #include <yetty/yrdawn/client.h>
 
-int demo_quit_flag = 0;
+volatile sig_atomic_t demo_quit_flag = 0;
+
+/* Termination signals must run the same orderly-quit path as 'q': every
+ * demo emits DELETE_CHILD for its canvases in the teardown after the
+ * frame loop, and a default-action SIGTERM (e.g. from `timeout`) would
+ * skip that — leaving the figure orphaned on screen after the process
+ * is gone. Only the flag is touched here (async-signal-safe); the frame
+ * loop notices within one frame interval. */
+static void demo_on_terminate_signal(int signal_number)
+{
+    (void)signal_number;
+    demo_quit_flag = 1;
+}
 
 /* Input key kinds (mirrors enum yetty_client_input_key_kind). */
 enum {
@@ -67,12 +81,50 @@ void demo_install_quit_input(struct yetty_yrdawn_client *client)
     yetty_yrdawn_client_set_raw_input_cb(client, demo_on_raw, NULL);
 }
 
+/* Original tty attributes, restored at process exit so the hosting shell
+ * gets its cooked mode back (leaving OPOST off staircases every later
+ * prompt line). Function-local statics via accessors would be overkill for
+ * this single-purpose pair, but the no-file-scope-state rule still holds —
+ * so the saved state lives inside the restore closure's owner. */
+static struct termios *demo_saved_termios(void)
+{
+    static struct termios saved;
+    return &saved;
+}
+
+static int *demo_saved_termios_valid(void)
+{
+    static int valid = 0;
+    return &valid;
+}
+
+static void demo_restore_stdin(void)
+{
+    if (*demo_saved_termios_valid()) {
+        (void)tcsetattr(STDIN_FILENO, TCSANOW, demo_saved_termios());
+    }
+}
+
 void demo_raw_stdin(void)
 {
+    /* Every demo calls this first — piggyback the orderly-quit signal
+     * hookup so SIGTERM/SIGINT/SIGHUP end the frame loop instead of
+     * killing the process before canvas teardown. */
+    struct sigaction quit_action;
+    memset(&quit_action, 0, sizeof quit_action);
+    quit_action.sa_handler = demo_on_terminate_signal;
+    (void)sigaction(SIGTERM, &quit_action, NULL);
+    (void)sigaction(SIGINT, &quit_action, NULL);
+    (void)sigaction(SIGHUP, &quit_action, NULL);
+
     struct termios t;
     if (tcgetattr(STDIN_FILENO, &t) != 0) {
         return;
     }
+    *demo_saved_termios() = t;
+    *demo_saved_termios_valid() = 1;
+    (void)atexit(demo_restore_stdin);
+
     t.c_lflag &= ~(ICANON | ECHO | ECHOE | ECHOK | ECHONL | ISIG);
     t.c_iflag &= ~(IXON | IXOFF | ICRNL | INLCR | IGNCR | BRKINT | INPCK | ISTRIP);
     t.c_oflag &= ~OPOST;

@@ -22,7 +22,12 @@ keyword and dispatches:
 Flowchart syntax covers the common node shapes (`A[rect]`, `A(rounded)`,
 `A((circle))`, `A{diamond}`, `A{{hexagon}}`, `A[(cylinder)]`, `A([stadium])`,
 `A[/parallelogram/]`), edge styles (`-->`, `---`, `-.->`, `==>`, edge
-labels), and `subgraph … end` clusters. Sequence diagrams support
+labels), `subgraph … end` clusters, and node styling: `classDef` (including
+`default`), `class`, `style`, and the `A[x]:::name` shorthand map `fill` /
+`stroke` / `color` / `stroke-width` onto node styles (hex colors or common
+CSS names; directives may appear before or after the nodes they reference).
+`linkStyle` is consumed but not yet mapped onto edge styles. Sequence
+diagrams support
 participants/actors, solid/dashed and open/filled arrows, self-messages, and
 notes; `loop/alt/opt/par/else/end` blocks are accepted (inner messages
 render, frames are future work).

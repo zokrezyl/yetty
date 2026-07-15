@@ -81,6 +81,13 @@ struct yetty_ycore_const_char_ptr_result yetty_ymap_attribution(struct yetty_ycl
 /* is_vector: 1 when the active provider renders through the vector
  * (SDF/MSDF) pipeline — frontends use it to pick drag-render pacing. */
 struct yetty_ycore_int_result yetty_ymap_is_vector(struct yetty_yclass_object *obj);
+/* overlay_geojson: load a GeoJSON document (FeatureCollection / Feature /
+ * bare geometry) as the map's data overlay, replacing any previous one.
+ * Point/MultiPoint become markers (radius from a numeric `mag` property
+ * when present), LineString/MultiLineString become tracks, Polygon outer
+ * rings become outlines. */
+struct yetty_ycore_void_result yetty_ymap_overlay_geojson(struct yetty_yclass_object *obj,
+                                                          const char *geojson_text);
 /* render: fetch the covering tiles (parallel, disk-cached) and emit the
  * visible map as a fresh ydraw drawable list (caller owns it). Pointer
  * return -> local-only. */
@@ -110,6 +117,8 @@ typedef struct yetty_ycore_void_result (*yetty_ymap_geolocate_fn)(struct yetty_y
 typedef struct yetty_ycore_const_char_ptr_result (*yetty_ymap_attribution_fn)(
     struct yetty_yclass_object *);
 typedef struct yetty_ycore_int_result (*yetty_ymap_is_vector_fn)(struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ymap_overlay_geojson_fn)(
+    struct yetty_yclass_object *, const char *);
 typedef struct yetty_ydraw_drawable_list_result (*yetty_ymap_render_fn)(
     struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_ymap_destroy_fn)(struct yetty_yclass_object *);

@@ -1,6 +1,7 @@
 /*
- * ymesh.c — public API: load a .glb, parse via cgltf, serialize to the
- * ymesh wire format, attach to a fresh ydraw buffer, emit via OSC.
+ * ymesh.c — public API: load a mesh (GLB / PLY / STL / OBJ — content
+ * sniffed by ymesh-load.c), serialize to the ymesh wire format, attach to
+ * a fresh ydraw buffer, emit via OSC.
  *
  * See include/yetty/ymesh/ymesh.h for the wire format. Hand-written (not
  * schema-generated) because ymesh's GPU pipeline uses a real vertex layout
@@ -8,7 +9,7 @@
  */
 
 #include <yetty/ymesh/ymesh.h>
-#include <yetty/ymesh/ymesh-glb.h>
+#include <yetty/ymesh/ymesh-load.h>
 
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
@@ -102,9 +103,9 @@ struct yetty_ydraw_drawable_list_result yetty_ymesh_render(
         return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh: glb_bytes is NULL/empty");
     }
 
-    struct yetty_ymesh_glb_data_result mr = yetty_ymesh_glb_parse(glb_bytes, len);
+    struct yetty_ymesh_glb_data_result mr = yetty_ymesh_load(glb_bytes, len);
     if (YETTY_IS_ERR(mr)) {
-        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh: glb parse failed", mr);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymesh: mesh parse failed", mr);
     }
     struct yetty_ymesh_glb_data mesh = mr.value;
 

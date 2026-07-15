@@ -80,6 +80,113 @@ void yetty_ymap_global_pixel_to_lonlat(double pixel_x, double pixel_y, uint32_t 
 }
 
 /*=============================================================================
+ * Data-overlay bake
+ *===========================================================================*/
+
+/* Alpha-blend one RGBA8 pixel of the composite. */
+static void overlay_blend_pixel(uint32_t *composite, uint32_t viewport_w, uint32_t viewport_h,
+                                int64_t x, int64_t y, uint8_t red, uint8_t green, uint8_t blue,
+                                uint8_t alpha)
+{
+    if (x < 0 || y < 0 || x >= (int64_t)viewport_w || y >= (int64_t)viewport_h || alpha == 0) {
+        return;
+    }
+    uint8_t *pixel = (uint8_t *)&composite[(size_t)y * viewport_w + (size_t)x];
+    uint32_t inverse = 255u - alpha;
+    pixel[0] = (uint8_t)((red * alpha + pixel[0] * inverse) / 255u);
+    pixel[1] = (uint8_t)((green * alpha + pixel[1] * inverse) / 255u);
+    pixel[2] = (uint8_t)((blue * alpha + pixel[2] * inverse) / 255u);
+}
+
+/* Filled anti-aliased-ish disc with a dark rim so markers read on any
+ * basemap. */
+static void overlay_draw_marker(uint32_t *composite, uint32_t viewport_w, uint32_t viewport_h,
+                                double center_x, double center_y,
+                                const struct yetty_ymap_overlay_point *point)
+{
+    double rim_radius = point->radius_px + 1.0;
+    int64_t x_first = (int64_t)floor(center_x - rim_radius - 1.0);
+    int64_t x_last = (int64_t)ceil(center_x + rim_radius + 1.0);
+    int64_t y_first = (int64_t)floor(center_y - rim_radius - 1.0);
+    int64_t y_last = (int64_t)ceil(center_y + rim_radius + 1.0);
+    for (int64_t y = y_first; y <= y_last; y++) {
+        for (int64_t x = x_first; x <= x_last; x++) {
+            double distance = hypot((double)x + 0.5 - center_x, (double)y + 0.5 - center_y);
+            if (distance <= point->radius_px) {
+                /* Soft edge over the last pixel of the fill. */
+                double coverage = point->radius_px - distance;
+                double edge = coverage < 1.0 ? coverage : 1.0;
+                overlay_blend_pixel(composite, viewport_w, viewport_h, x, y, point->red,
+                                    point->green, point->blue,
+                                    (uint8_t)((double)point->alpha * edge));
+            } else if (distance <= rim_radius) {
+                overlay_blend_pixel(composite, viewport_w, viewport_h, x, y, 0x0B, 0x10, 0x14,
+                                    (uint8_t)(point->alpha / 2));
+            }
+        }
+    }
+}
+
+/* 2px-wide line segment (crude DDA — fine at overlay densities). */
+static void overlay_draw_segment(uint32_t *composite, uint32_t viewport_w, uint32_t viewport_h,
+                                 double start_x, double start_y, double end_x, double end_y,
+                                 const struct yetty_ymap_overlay_path *path)
+{
+    double delta_x = end_x - start_x;
+    double delta_y = end_y - start_y;
+    double length = hypot(delta_x, delta_y);
+    int64_t steps = (int64_t)ceil(length);
+    if (steps == 0) {
+        steps = 1;
+    }
+    for (int64_t step = 0; step <= steps; step++) {
+        double position = (double)step / (double)steps;
+        double x = start_x + delta_x * position;
+        double y = start_y + delta_y * position;
+        for (int64_t offset_y = 0; offset_y <= 1; offset_y++) {
+            for (int64_t offset_x = 0; offset_x <= 1; offset_x++) {
+                overlay_blend_pixel(composite, viewport_w, viewport_h, (int64_t)floor(x) + offset_x,
+                                    (int64_t)floor(y) + offset_y, path->red, path->green,
+                                    path->blue, path->alpha);
+            }
+        }
+    }
+}
+
+/* Project every overlay feature at the current view and paint it into the
+ * composited basemap. Whole-feature clipping happens per pixel inside the
+ * blend, so features straddling the edges just clip cleanly. */
+static void ymap_overlay_bake(const struct yetty_ymap_config *config, int64_t origin_x,
+                              int64_t origin_y, uint32_t *composite)
+{
+    const struct yetty_ymap_overlay *overlay = config->overlay;
+    for (size_t i = 0; i < overlay->path_count; i++) {
+        const struct yetty_ymap_overlay_path *path = &overlay->paths[i];
+        for (size_t segment = 0; segment + 1 < path->point_count; segment++) {
+            double start_x, start_y, end_x, end_y;
+            yetty_ymap_lonlat_to_global_pixel(path->coordinates[segment * 2],
+                                              path->coordinates[segment * 2 + 1], config->zoom,
+                                              &start_x, &start_y);
+            yetty_ymap_lonlat_to_global_pixel(path->coordinates[segment * 2 + 2],
+                                              path->coordinates[segment * 2 + 3], config->zoom,
+                                              &end_x, &end_y);
+            overlay_draw_segment(composite, config->width_px, config->height_px,
+                                 start_x - (double)origin_x, start_y - (double)origin_y,
+                                 end_x - (double)origin_x, end_y - (double)origin_y, path);
+        }
+    }
+    for (size_t i = 0; i < overlay->point_count; i++) {
+        const struct yetty_ymap_overlay_point *point = &overlay->points[i];
+        double pixel_x, pixel_y;
+        yetty_ymap_lonlat_to_global_pixel(point->longitude, point->latitude, config->zoom, &pixel_x,
+                                          &pixel_y);
+        overlay_draw_marker(composite, config->width_px, config->height_px,
+                            pixel_x - (double)origin_x, pixel_y - (double)origin_y, point);
+    }
+    ydebug("ymap overlay: baked %zu points, %zu paths", overlay->point_count, overlay->path_count);
+}
+
+/*=============================================================================
  * Composite render
  *===========================================================================*/
 
@@ -270,6 +377,10 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
     }
     ydebug("ymap: composited %u/%lld tiles for %ux%u px at z%u", tiles_blitted,
            (long long)tiles_total, config->width_px, config->height_px, config->zoom);
+
+    if (config->overlay) {
+        ymap_overlay_bake(config, origin_x, origin_y, composite);
+    }
 
     /* Pack as ONE yimage prim — identical path to yetty_yimage_render,
      * minus the decode (we already hold raw RGBA8). */

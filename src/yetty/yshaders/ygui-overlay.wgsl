@@ -264,24 +264,35 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
             let colors = primColors(primOff);
             let fillColorPacked = colors.x;
-            if (d < 0.0 && fillColorPacked != 0u) {
+            // Analytic AA: scene == pixel space here, so a fixed one-pixel
+            // coverage ramp (half a pixel to each side of the boundary)
+            // equals screen-space fwidth AA — which WGSL forbids inside
+            // this non-uniform loop.
+            // Coverage is gamma-corrected (^(1/2.2)) because compositing
+            // happens on sRGB-encoded values; keeps thin light-on-dark
+            // fringes at their linear-light brightness.
+            if (d < 0.5 && fillColorPacked != 0u) {
                 let fillColor = unpackColor(fillColorPacked);
                 let fillAlpha = unpackAlpha(fillColorPacked);
-                let edgeAlpha = clamp(-d * 2.0, 0.0, 1.0);
-                let alpha = edgeAlpha * fillAlpha;
+                let coverage = clamp(0.5 - d, 0.0, 1.0);
+                let alpha = pow(coverage, 1.0 / 2.2) * fillAlpha;
                 resultColor = mix(resultColor, fillColor, alpha);
                 resultAlpha = max(resultAlpha, alpha);
             }
 
+            // Strokes thinner than 1px draw as a 1px band dimmed by the
+            // requested width, so hairlines stay visible (and uniform) at
+            // any subpixel position.
             let strokeColorPacked = colors.y;
             let strokeWidth = primStrokeWidth(primOff);
             if (strokeWidth > 0.0 && strokeColorPacked != 0u) {
-                let strokeDist = abs(d) - strokeWidth * 0.5;
-                if (strokeDist < 0.0) {
+                let effectiveStrokeWidth = max(strokeWidth, 1.0);
+                let strokeDist = abs(d) - effectiveStrokeWidth * 0.5;
+                if (strokeDist < 0.5) {
                     let strokeColor = unpackColor(strokeColorPacked);
                     let strokeAlpha = unpackAlpha(strokeColorPacked);
-                    let edgeAlpha = clamp(-strokeDist * 2.0, 0.0, 1.0);
-                    let alpha = edgeAlpha * strokeAlpha;
+                    let coverage = clamp(0.5 - strokeDist, 0.0, 1.0) * min(strokeWidth, 1.0);
+                    let alpha = pow(coverage, 1.0 / 2.2) * strokeAlpha;
                     resultColor = mix(resultColor, strokeColor, alpha);
                     resultAlpha = max(resultAlpha, alpha);
                 }

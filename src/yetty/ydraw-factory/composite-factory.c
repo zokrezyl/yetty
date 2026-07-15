@@ -379,6 +379,43 @@ void yetty_ydraw_composite_factory_set_cell_zoom(struct yetty_ydraw_composite_fa
 }
 
 //=============================================================================
+// Stream-update registry
+//=============================================================================
+
+void yetty_ydraw_stream_registry_register(struct yetty_ydraw_stream_registry *registry,
+                                          uint32_t stream_id,
+                                          struct yetty_ydraw_composite *instance)
+{
+    if (!registry || !instance || stream_id == 0 || stream_id > YETTY_YDRAW_STREAM_TARGETS_MAX) {
+        return;
+    }
+    instance->stream_id = stream_id;
+    instance->stream_registry = registry;
+    registry->targets[stream_id - 1u] = instance;
+}
+
+struct yetty_ydraw_composite *yetty_ydraw_stream_registry_find(
+    struct yetty_ydraw_stream_registry *registry, uint32_t stream_id)
+{
+    if (!registry || stream_id == 0 || stream_id > YETTY_YDRAW_STREAM_TARGETS_MAX) {
+        return NULL;
+    }
+    return registry->targets[stream_id - 1u];
+}
+
+/* Clear every slot still pointing at `instance`. A replaced instance keeps
+ * a stale back-pointer, so only self-matching slots may be cleared. */
+static void stream_registry_remove(struct yetty_ydraw_stream_registry *registry,
+                                   struct yetty_ydraw_composite *instance)
+{
+    for (uint32_t i = 0; i < YETTY_YDRAW_STREAM_TARGETS_MAX; i++) {
+        if (registry->targets[i] == instance) {
+            registry->targets[i] = NULL;
+        }
+    }
+}
+
+//=============================================================================
 // Instance destruction (uses back-pointer)
 //=============================================================================
 
@@ -386,6 +423,13 @@ void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance)
 {
     if (!instance) {
         return;
+    }
+
+    /* Leave the stream registry before teardown so a later CMD_UPDATE can
+     * never route into a freed instance. */
+    if (instance->stream_registry) {
+        stream_registry_remove(instance->stream_registry, instance);
+        instance->stream_registry = NULL;
     }
 
     /* Drop out of the GPU residency LRU before teardown so the manager never

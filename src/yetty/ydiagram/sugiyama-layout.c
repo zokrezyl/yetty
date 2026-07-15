@@ -629,8 +629,8 @@ static void size_nodes(struct yetty_ydiagram_graph *g, const struct yetty_ydiagr
             n->height = header_h + (float)n->row_count * line_h;
             continue;
         }
-        if (measure && n->label && n->label[0]) {
-            float tw = measure(n->label, strlen(n->label), n->style.font_size, userdata);
+        if (n->label && n->label[0]) {
+            float tw = measure_label(measure, n->label, n->style.font_size, userdata);
             n->width = tw + p->node_padding_x * 2.0f;
             n->height = n->style.font_size + p->node_padding_y * 2.0f;
             if (n->width < default_w) {
@@ -953,6 +953,15 @@ struct yetty_ycore_void_result yetty_ydiagram_layout(
 
     reduce_crossings(g, &t, p.max_iterations);
     size_nodes(g, &p, measure, userdata);
+    /* LR/RL run the layered layout transposed: swap every node's extents now
+     * so the flow axis is separated by label widths, not text heights.
+     * apply_direction() transposes the centre positions and swaps the extents
+     * back — boxes must stay text-oriented, never rotated. */
+    if (g->direction == YETTY_YDIAGRAM_DIR_LR || g->direction == YETTY_YDIAGRAM_DIR_RL) {
+        for (size_t i = 0; i < g->node_count; i++) {
+            swap_float(&g->nodes[i].width, &g->nodes[i].height);
+        }
+    }
     place_nodes(g, &p, &t);
     layer_table_free(&t);
 

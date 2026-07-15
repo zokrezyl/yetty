@@ -659,6 +659,15 @@ fn renderYdrawOverlay(slotIndex: u32, pixelPos: vec2<f32>) -> vec4<f32> {
         contentMinY + (pixelPos.y / gridPixelH) * contentH
     );
 
+    // SDF distances below are in scene units, but the analytic AA ramp must
+    // be one *pixel* wide. WGSL forbids fwidth() inside the non-uniform
+    // primitive loop, so derive the scale from the same mapping as scenePos;
+    // with anisotropic scale the smaller axis keeps the ramp >= 1px.
+    let pixelsPerSceneX = gridPixelW / max(contentW, 1e-6);
+    let pixelsPerSceneY = gridPixelH / max(contentH, 1e-6);
+    let pixelsPerScene = min(pixelsPerSceneX, pixelsPerSceneY);
+    let sceneUnitsPerPixel = 1.0 / max(pixelsPerScene, 1e-6);
+
     // Grid lookup
     let invCellSizeX = 1.0 / cellSizeX;
     let invCellSizeY = 1.0 / cellSizeY;
@@ -689,22 +698,31 @@ fn renderYdrawOverlay(slotIndex: u32, pixelPos: vec2<f32>) -> vec4<f32> {
 
         let colors = ydrawPrimColors(primOff);
         let fillColorPacked = colors.x;
-        if (d < 0.0 && fillColorPacked != 0u) {
+        // One-pixel coverage ramp, half a pixel to each side of the boundary.
+        // Coverage is gamma-corrected (^(1/2.2)) because compositing happens
+        // on sRGB-encoded values; keeps thin light-on-dark fringes at their
+        // linear-light brightness.
+        if (d * pixelsPerScene < 0.5 && fillColorPacked != 0u) {
             let fillColorAlpha = unpackColorAlpha(fillColorPacked);
-            let edgeAlpha = clamp(-d * 2.0, 0.0, 1.0);
-            let alpha = edgeAlpha * fillColorAlpha.a;
+            let coverage = clamp(0.5 - d * pixelsPerScene, 0.0, 1.0);
+            let alpha = pow(coverage, 1.0 / 2.2) * fillColorAlpha.a;
             resultColor = mix(resultColor, fillColorAlpha.rgb, alpha);
             resultAlpha = max(resultAlpha, alpha);
         }
 
+        // Strokes thinner than 1px draw as a 1px band dimmed by the
+        // requested width, so hairlines stay visible (and uniform) at any
+        // subpixel position.
         let strokeColorPacked = colors.y;
         let strokeWidth = ydrawPrimStrokeWidth(primOff);
         if (strokeWidth > 0.0 && strokeColorPacked != 0u) {
-            let strokeDist = abs(d) - strokeWidth * 0.5;
-            if (strokeDist < 0.0) {
+            let effectiveStrokeWidth = max(strokeWidth, sceneUnitsPerPixel);
+            let strokeDist = abs(d) - effectiveStrokeWidth * 0.5;
+            if (strokeDist * pixelsPerScene < 0.5) {
                 let strokeColorAlpha = unpackColorAlpha(strokeColorPacked);
-                let edgeAlpha = clamp(-strokeDist * 2.0, 0.0, 1.0);
-                let alpha = edgeAlpha * strokeColorAlpha.a;
+                let coverage = clamp(0.5 - strokeDist * pixelsPerScene, 0.0, 1.0) *
+                               min(strokeWidth * pixelsPerScene, 1.0);
+                let alpha = pow(coverage, 1.0 / 2.2) * strokeColorAlpha.a;
                 resultColor = mix(resultColor, strokeColorAlpha.rgb, alpha);
                 resultAlpha = max(resultAlpha, alpha);
             }

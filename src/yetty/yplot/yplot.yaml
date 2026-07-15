@@ -56,6 +56,28 @@ uniforms:
   - name: y_max
     type: f32
     default: 1.5
+  # Tick spacing in DATA units, matching the client-side tick labels, so the
+  # shader grid lands exactly under the labelled ticks. 0 = no tick info
+  # (shader falls back to the legacy fixed 10-division grid). Ignored on a
+  # log-scaled axis (the shader grids log axes at decade lines).
+  - name: x_step
+    type: f32
+    default: 0.0
+  - name: y_step
+    type: f32
+    default: 0.0
+  # Field/heatmap rendering: which colormap (0 viridis, 1 plasma, 2 magma,
+  # 3 inferno) and the value range mapped onto it. min == max means unset
+  # (the shader falls back to the historical -1..1 mapping).
+  - name: colormap_id
+    type: u32
+    default: 0
+  - name: field_min
+    type: f32
+    default: -1.0
+  - name: field_max
+    type: f32
+    default: 1.0
   - name: flags
     type: u32
     default: 7
@@ -63,6 +85,26 @@ uniforms:
     type: u32
     default: 0
   - name: colors
+    type: u32
+    count: 8
+  # Uncertainty display, indexed by color slot: 0 = none, else
+  # (lo_slot + 1) | (hi_slot + 1) << 8 | style << 16, where lo/hi are data
+  # buffer slots feeding the envelope and style is 0 = translucent band,
+  # 1 = whisker error bars at decimated sample positions.
+  - name: band_slots
+    type: u32
+    count: 8
+  # Bit i set = data buffer slot i is band input only — its own line curve
+  # is not drawn.
+  - name: hidden_mask
+    type: u32
+    default: 0
+  # Ring-buffer mode per data-buffer slot: 0 = linear, else (head + 1)
+  # where head is the physical index of the OLDEST sample. The shader
+  # unwraps so the newest sample always sits at the right edge; producers
+  # advance the head via the CMD_UPDATE head op (sample_offset sentinel
+  # 0xFFFFFFFF — see yplot-update.c).
+  - name: ring_heads
     type: u32
     count: 8
 

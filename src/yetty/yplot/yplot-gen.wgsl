@@ -36,6 +36,26 @@ fn yplot_get_y_max() -> f32 {
     return uniforms.yplot_y_max;
 }
 
+fn yplot_get_x_step() -> f32 {
+    return uniforms.yplot_x_step;
+}
+
+fn yplot_get_y_step() -> f32 {
+    return uniforms.yplot_y_step;
+}
+
+fn yplot_get_colormap_id() -> u32 {
+    return uniforms.yplot_colormap_id;
+}
+
+fn yplot_get_field_min() -> f32 {
+    return uniforms.yplot_field_min;
+}
+
+fn yplot_get_field_max() -> f32 {
+    return uniforms.yplot_field_max;
+}
+
 fn yplot_get_flags() -> u32 {
     return uniforms.yplot_flags;
 }
@@ -57,6 +77,42 @@ fn yplot_get_colors(idx: u32) -> u32 {
         case 6u: { return uniforms.yplot_colors_6; }
         case 7u: { return uniforms.yplot_colors_7; }
         default: { return uniforms.yplot_colors_0; }
+    }
+}
+
+fn yplot_get_band_slots(idx: u32) -> u32 {
+    // Array uniform: yplot_band_slots_0 through yplot_band_slots_7
+    // Access via switch since WGSL doesn't support dynamic struct field access
+    switch idx {
+        case 0u: { return uniforms.yplot_band_slots_0; }
+        case 1u: { return uniforms.yplot_band_slots_1; }
+        case 2u: { return uniforms.yplot_band_slots_2; }
+        case 3u: { return uniforms.yplot_band_slots_3; }
+        case 4u: { return uniforms.yplot_band_slots_4; }
+        case 5u: { return uniforms.yplot_band_slots_5; }
+        case 6u: { return uniforms.yplot_band_slots_6; }
+        case 7u: { return uniforms.yplot_band_slots_7; }
+        default: { return uniforms.yplot_band_slots_0; }
+    }
+}
+
+fn yplot_get_hidden_mask() -> u32 {
+    return uniforms.yplot_hidden_mask;
+}
+
+fn yplot_get_ring_heads(idx: u32) -> u32 {
+    // Array uniform: yplot_ring_heads_0 through yplot_ring_heads_7
+    // Access via switch since WGSL doesn't support dynamic struct field access
+    switch idx {
+        case 0u: { return uniforms.yplot_ring_heads_0; }
+        case 1u: { return uniforms.yplot_ring_heads_1; }
+        case 2u: { return uniforms.yplot_ring_heads_2; }
+        case 3u: { return uniforms.yplot_ring_heads_3; }
+        case 4u: { return uniforms.yplot_ring_heads_4; }
+        case 5u: { return uniforms.yplot_ring_heads_5; }
+        case 6u: { return uniforms.yplot_ring_heads_6; }
+        case 7u: { return uniforms.yplot_ring_heads_7; }
+        default: { return uniforms.yplot_ring_heads_0; }
     }
 }
 
