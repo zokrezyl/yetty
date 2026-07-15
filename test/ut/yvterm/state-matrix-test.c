@@ -492,6 +492,50 @@ static void test_osc52_clipboard(struct ytest *test)
 }
 
 /*---------------------------------------------------------------------------
+ * OSC 10/11 dynamic default colors: query reply, #/rgb: set forms, and the
+ * OSC 110/111 reset. Query replies come back through the grid's pty-write hook.
+ *-------------------------------------------------------------------------*/
+static void test_osc_dynamic_colors(struct ytest *test)
+{
+    struct kitty_reply_capture capture = {0};
+    struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+    struct yetty_ycore_void_result set =
+        yetty_yvterm_grid_set_pty_write(grid, kitty_reply_sink, &capture);
+    YTEST_REQUIRE_OK(test, set);
+
+    /* Query the configured default background; remember the reply for the
+     * reset check below. Reply shape: OSC 11 ; rgb:RRRR/GGGG/BBBB ST. */
+    feeds(test, grid, "\x1b]11;?\x07");
+    YTEST_CHECK(test, strncmp(capture.buf, "\x1b]11;rgb:", 9) == 0);
+    char configured_bg[48];
+    strncpy(configured_bg, capture.buf, sizeof(configured_bg) - 1);
+    configured_bg[sizeof(configured_bg) - 1] = 0;
+
+    /* Set background via #rrggbb; query echoes it, 8-bit scaled to 16-bit. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b]11;#1e1e2e\x07");
+    feeds(test, grid, "\x1b]11;?\x07");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b]11;rgb:1e1e/1e1e/2e2e\x1b\\");
+
+    /* Set foreground via rgb:rr/gg/bb; query OSC 10 echoes it. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b]10;rgb:ff/80/00\x07");
+    feeds(test, grid, "\x1b]10;?\x07");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b]10;rgb:ffff/8080/0000\x1b\\");
+
+    /* OSC 111 resets background to the configured value. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b]111\x07");
+    feeds(test, grid, "\x1b]11;?\x07");
+    YTEST_CHECK_STR_EQ(test, capture.buf, configured_bg);
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
  * Cursor save/restore (DECSC / DECRC).
  *-------------------------------------------------------------------------*/
 static void test_cursor_save_restore(struct ytest *test)
@@ -722,6 +766,7 @@ int main(void)
     YTEST_RUN(&test, test_mode_2027_clustering);
     YTEST_RUN(&test, test_kitty_keyboard);
     YTEST_RUN(&test, test_osc52_clipboard);
+    YTEST_RUN(&test, test_osc_dynamic_colors);
     YTEST_RUN(&test, test_cursor_save_restore);
     YTEST_RUN(&test, test_erase_in_line);
     YTEST_RUN(&test, test_bce);
