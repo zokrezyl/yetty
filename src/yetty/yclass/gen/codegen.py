@@ -370,6 +370,17 @@ def _fn_args(decl: dict) -> list:
     return args
 
 
+def _fmt_field(type_str: str, name: str) -> str:
+    """Render one struct member as C. clang hands array members back as
+    `elem[N]` (e.g. `uint32_t[5]`), but C syntax puts the dimensions after
+    the NAME — so `uint32_t[5]` + `marks` becomes `uint32_t marks[5]`.
+    Non-array types keep the original `<type> <name>` spelling verbatim."""
+    match = re.match(r"^(.*?)\s*((?:\[\d*\])+)$", type_str.strip())
+    if match:
+        return f"{match.group(1).strip()} {name}{match.group(2)}"
+    return f"{type_str} {name}"
+
+
 def _fmt_param(a: dict) -> str:
     """Render one arg as a C parameter `<type> <name>` (or just `<type>`
     for an unnamed param). No space before a pointer star so the output
@@ -921,7 +932,8 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                 if name:
                     fields = _record_fields(decl, file_bytes_cache, decl_file)
                     if fields:
-                        body = "\n".join(f"    {fld['type']} {fld['name']};" for fld in fields)
+                        body = "\n".join(f"    {_fmt_field(fld['type'], fld['name'])};"
+                                         for fld in fields)
                         type_text = f"struct {name} {{\n{body}\n}};"
                     else:
                         type_text = f"struct {name};"

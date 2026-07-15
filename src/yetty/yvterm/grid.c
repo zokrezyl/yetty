@@ -65,10 +65,24 @@ enum YETTY_ANNOTATE("expose") yetty_yvterm_text_attr {
     YETTY_YVTERM_ATTR_CONCEAL = 1u << 7,
 };
 
+/* Combining marks a single cell can carry beyond its base codepoint. Matches
+ * libvterm's VTERM_MAX_CHARS_PER_CELL (6) minus the base — the static assert
+ * below keeps the two in lock-step. Stored inline so a cluster travels with the
+ * cell through every scroll/move/blank path (all of which copy or clear the
+ * whole struct) without a parallel side table to keep in sync. */
+enum YETTY_ANNOTATE("expose") yetty_yvterm_cell_limits {
+    YETTY_YVTERM_CELL_MAX_MARKS = 5,
+};
+
+_Static_assert(YETTY_YVTERM_CELL_MAX_MARKS == VTERM_MAX_CHARS_PER_CELL - 1,
+               "cell mark storage must match libvterm VTERM_MAX_CHARS_PER_CELL");
+
 /* One terminal text cell. Glyph lookup is renderer-owned; the model stores the
  * source codepoint and style. width is 1 for normal cells, 2 for a wide glyph
- * head, and 0 for the wide glyph spill cell. Exposed so the renderer packs from
- * the bulk per-line accessor without copying. */
+ * head, and 0 for the wide glyph spill cell. `codepoint` is the grapheme
+ * cluster's base; `marks[0..mark_count)` are its combining continuation
+ * (libvterm's chars[1..]), so no codepoint of a cluster is dropped. Exposed so
+ * the renderer packs from the bulk per-line accessor without copying. */
 struct YETTY_ANNOTATE("expose") yetty_yvterm_text_cell {
     uint32_t glyph_index;
     uint32_t codepoint;
@@ -77,6 +91,8 @@ struct YETTY_ANNOTATE("expose") yetty_yvterm_text_cell {
     uint16_t attrs;
     uint8_t width;
     uint8_t flags;
+    uint8_t mark_count;
+    uint32_t marks[YETTY_YVTERM_CELL_MAX_MARKS];
 };
 
 /* The line ring / screen / archive-tier types are shared with the tier engine
@@ -561,6 +577,7 @@ static void blank_cell(struct yetty_yvterm_text_cell *cell, uint32_t fg, uint32_
     cell->attrs = 0;
     cell->width = 1;
     cell->flags = 0;
+    cell->mark_count = 0;
 }
 
 /* Blank every cell of a line to the given fg/bg and release its rich content.
@@ -780,6 +797,19 @@ static int cb_putglyph(VTermGlyphInfo *info, VTermPos pos, void *user)
     cell->attrs = grid->pen_attrs;
     cell->width = (uint8_t)(info->width >= 2 ? 2 : 1);
     cell->flags = 0;
+    /* Preserve the whole grapheme cluster: chars[1..] are the combining
+     * marks / variation selectors / ZWJ continuation libvterm packed into
+     * this cell. Base is in `codepoint`; the rest go inline so the font layer
+     * can later render base+marks. libvterm 0-terminates chars[] at
+     * VTERM_MAX_CHARS_PER_CELL, matching YETTY_YVTERM_CELL_MAX_MARKS + 1. */
+    cell->mark_count = 0;
+    if (info->chars && info->chars[0]) {
+        for (int chars_index = 1;
+             chars_index <= YETTY_YVTERM_CELL_MAX_MARKS && info->chars[chars_index];
+             ++chars_index) {
+            cell->marks[cell->mark_count++] = info->chars[chars_index];
+        }
+    }
 
     if (info->width == 2 && (uint32_t)pos.col + 1u < grid->cols) {
         struct yetty_yvterm_text_cell *next =
@@ -791,6 +821,7 @@ static int cb_putglyph(VTermGlyphInfo *info, VTermPos pos, void *user)
         next->attrs = grid->pen_attrs;
         next->width = 0;
         next->flags = 0;
+        next->mark_count = 0;
     }
 
     /* If this row anchors owned primitives/composites, writing text over it

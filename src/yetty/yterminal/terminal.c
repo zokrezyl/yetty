@@ -439,20 +439,38 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
      * render path from doing further GPU work while the close event is in
      * flight. */
         struct yetty_platform_pty *pty = terminal->context.pty;
+        /* No way to check the child → assume it is gone and close, rather
+         * than leak a pane that can never be dismissed. */
         int child_alive = 0;
         if (pty && pty->ops->child_alive) {
             /* A dying child closes its pty fds a hair BEFORE it becomes
-             * waitable (exit_files precedes exit_notify), so the read error
-             * can outrun the zombie transition. Re-poll briefly: a normal
-             * exit resolves within microseconds; only a child that stays
-             * alive through all rechecks is a genuine transient hangup.
-             * Without this, Ctrl-C'ing the shell could leave the pane open
-             * forever (the errored stream never delivers a second EOF). */
-            for (int attempt = 0; attempt < 64; ++attempt) {
-                child_alive = pty->ops->child_alive(pty) == 1;
-                if (!child_alive) {
+             * waitable (exit_files precedes exit_notify); on Linux the master
+             * read then returns EIO, not EOF, so this callback routinely
+             * outruns the child's zombie transition. Poll with a real delay
+             * between attempts — a tight spin resolves in microseconds and
+             * loses the race against a heavier child tree (e.g. bash → uv →
+             * python from `yetty -e 'uvx …'`), which is exactly how a fully
+             * exited session was being misread as "still alive" and the pane
+             * (and the whole app, when it is the last one) left hanging.
+             *
+             * A normally-exiting child is reaped within a few ms and closes
+             * the pane; only a child still alive after the entire grace
+             * window is a genuine transient hangup (Ctrl-C that the shell
+             * survived) we keep the terminal open for. Checking before each
+             * sleep means the common case adds no latency. This runs on the
+             * event-loop thread, but only once, at terminal death, where a
+             * sub-second stall is invisible. */
+            enum { CHILD_REAP_GRACE_MS = 500, CHILD_REAP_STEP_MS = 10 };
+            child_alive = 1;
+            for (int waited_ms = 0;; waited_ms += CHILD_REAP_STEP_MS) {
+                if (pty->ops->child_alive(pty) != 1) {
+                    child_alive = 0;
                     break;
                 }
+                if (waited_ms >= CHILD_REAP_GRACE_MS) {
+                    break;
+                }
+                yetty_yplatform_ytime_sleep_ms(CHILD_REAP_STEP_MS);
             }
         }
         if (child_alive) {

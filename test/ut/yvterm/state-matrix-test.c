@@ -147,6 +147,120 @@ static void test_wide_glyph(struct ytest *test)
 }
 
 /*---------------------------------------------------------------------------
+ * Post-Unicode-5.0 width coverage (#569). The width tables (fullwidth.inc /
+ * combining.inc) are regenerated from one pinned modern Unicode version, so
+ * codepoints introduced after the frozen 2007 (Unicode 5.0) table must be
+ * classified correctly now: recent wide glyphs occupy two columns, recent
+ * combining marks occupy none. Under the stale table these post-5.0
+ * codepoints were all mis-measured as plain width-1 cells.
+ *-------------------------------------------------------------------------*/
+static void test_modern_width_tables(struct ytest *test)
+{
+    /* Wide glyphs first seen in Unicode 12 / 14 / 15 / 16 — head cell width
+     * 2, zero-width spill, cursor advances two columns. */
+    static const struct {
+        const char *utf8;
+        uint32_t codepoint;
+    } wides[] = {
+        {"\xf0\x9f\x9b\x95", 0x1F6D5}, /* HINDU TEMPLE   — Unicode 12.0 */
+        {"\xf0\x9f\xab\xa0", 0x1FAE0}, /* MELTING FACE   — Unicode 14.0 */
+        {"\xf0\x9f\x9b\x9c", 0x1F6DC}, /* WIRELESS       — Unicode 15.0 */
+        {"\xf0\x9f\xab\x9f", 0x1FADF}, /* SPLATTER       — Unicode 16.0 */
+    };
+    for (size_t i = 0; i < sizeof(wides) / sizeof(wides[0]); i++) {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
+        uint32_t row, col;
+        feeds(test, grid, wides[i].utf8);
+        const struct yetty_yvterm_text_cell *head = cell_at(test, grid, 0, 0);
+        const struct yetty_yvterm_text_cell *spill = cell_at(test, grid, 0, 1);
+        YTEST_CHECK_EQ_INT(test, head->codepoint, wides[i].codepoint);
+        YTEST_CHECK_EQ_INT(test, head->width, 2);
+        YTEST_CHECK_EQ_INT(test, spill->width, 0);
+        cursor_of(test, grid, &row, &col);
+        YTEST_CHECK_EQ_SIZE(test, col, 2);
+        yetty_yvterm_grid_dispose(grid);
+    }
+
+    /* Combining marks first seen after Unicode 5.0 must be zero-width: fed
+     * after a base glyph they attach to it and leave the cursor on the base's
+     * single column. A stale table would type these as spacing and push the
+     * cursor to column 2. */
+    static const char *const combining_after_base[] = {
+        "x\xf0\x9e\xa5\x8a", /* U+1E94A ADLAM NUKTA          — Unicode 9.0  */
+        "x\xf0\x91\xbc\x80", /* U+11F00 KAWI SIGN CANDRABINDU — Unicode 15.0 */
+    };
+    for (size_t i = 0; i < sizeof(combining_after_base) / sizeof(combining_after_base[0]); i++) {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
+        uint32_t row, col;
+        feeds(test, grid, combining_after_base[i]);
+        YTEST_CHECK_EQ_INT(test, cp_at(test, grid, 0, 0), 'x');
+        cursor_of(test, grid, &row, &col);
+        YTEST_CHECK_EQ_SIZE(test, col, 1);
+        yetty_yvterm_grid_dispose(grid);
+    }
+}
+
+/*---------------------------------------------------------------------------
+ * Grapheme-cluster cell model (#570): libvterm hands the whole cluster (base
+ * + combining marks / variation selectors) to cb_putglyph as chars[]; the grid
+ * must keep every codepoint, not just the base. The base stays in `codepoint`,
+ * the continuation in marks[0..mark_count).
+ *-------------------------------------------------------------------------*/
+static void test_grapheme_cluster(struct ytest *test)
+{
+    /* Base 'e' + U+0301 COMBINING ACUTE ACCENT: one cell, one mark, cursor
+     * advances by the base's single column. */
+    {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
+        uint32_t row, col;
+        feeds(test, grid, "e\xcc\x81");
+        const struct yetty_yvterm_text_cell *cell = cell_at(test, grid, 0, 0);
+        YTEST_CHECK_EQ_INT(test, cell->codepoint, 'e');
+        YTEST_CHECK_EQ_INT(test, cell->mark_count, 1);
+        YTEST_CHECK_EQ_INT(test, cell->marks[0], 0x0301);
+        cursor_of(test, grid, &row, &col);
+        YTEST_CHECK_EQ_SIZE(test, col, 1);
+        yetty_yvterm_grid_dispose(grid);
+    }
+
+    /* Base U+2764 HEAVY BLACK HEART + U+FE0F VARIATION SELECTOR-16: the VS is
+     * a zero-width continuation, so both codepoints live in one cell. */
+    {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
+        feeds(test, grid, "\xe2\x9d\xa4\xef\xb8\x8f");
+        const struct yetty_yvterm_text_cell *cell = cell_at(test, grid, 0, 0);
+        YTEST_CHECK_EQ_INT(test, cell->codepoint, 0x2764);
+        YTEST_CHECK_EQ_INT(test, cell->mark_count, 1);
+        YTEST_CHECK_EQ_INT(test, cell->marks[0], 0xFE0F);
+        yetty_yvterm_grid_dispose(grid);
+    }
+
+    /* Two stacked combining marks: base 'a' + U+0301 + U+0323 (dot below).
+     * Both continuation codepoints are retained in order. */
+    {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
+        feeds(test, grid, "a\xcc\x81\xcc\xa3");
+        const struct yetty_yvterm_text_cell *cell = cell_at(test, grid, 0, 0);
+        YTEST_CHECK_EQ_INT(test, cell->codepoint, 'a');
+        YTEST_CHECK_EQ_INT(test, cell->mark_count, 2);
+        YTEST_CHECK_EQ_INT(test, cell->marks[0], 0x0301);
+        YTEST_CHECK_EQ_INT(test, cell->marks[1], 0x0323);
+        yetty_yvterm_grid_dispose(grid);
+    }
+
+    /* Overwriting a cluster cell with a plain glyph drops the stale marks. */
+    {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
+        feeds(test, grid, "a\xcc\x81");
+        feeds(test, grid, "\rz"); /* CR home, overwrite col 0 with 'z' */
+        const struct yetty_yvterm_text_cell *cell = cell_at(test, grid, 0, 0);
+        YTEST_CHECK_EQ_INT(test, cell->codepoint, 'z');
+        YTEST_CHECK_EQ_INT(test, cell->mark_count, 0);
+        yetty_yvterm_grid_dispose(grid);
+    }
+}
+
+/*---------------------------------------------------------------------------
  * Cursor save/restore (DECSC / DECRC).
  *-------------------------------------------------------------------------*/
 static void test_cursor_save_restore(struct ytest *test)
@@ -371,6 +485,8 @@ int main(void)
     YTEST_RUN(&test, test_tab_stops);
     YTEST_RUN(&test, test_autowrap);
     YTEST_RUN(&test, test_wide_glyph);
+    YTEST_RUN(&test, test_modern_width_tables);
+    YTEST_RUN(&test, test_grapheme_cluster);
     YTEST_RUN(&test, test_cursor_save_restore);
     YTEST_RUN(&test, test_erase_in_line);
     YTEST_RUN(&test, test_bce);

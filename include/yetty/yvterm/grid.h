@@ -39,10 +39,20 @@ enum yetty_yvterm_text_attr {
     YETTY_YVTERM_ATTR_STRIKE = 64,
     YETTY_YVTERM_ATTR_CONCEAL = 128,
 };
+/* Combining marks a single cell can carry beyond its base codepoint. Matches
+ * libvterm's VTERM_MAX_CHARS_PER_CELL (6) minus the base — the static assert
+ * below keeps the two in lock-step. Stored inline so a cluster travels with the
+ * cell through every scroll/move/blank path (all of which copy or clear the
+ * whole struct) without a parallel side table to keep in sync. */
+enum yetty_yvterm_cell_limits {
+    YETTY_YVTERM_CELL_MAX_MARKS = 5,
+};
 /* One terminal text cell. Glyph lookup is renderer-owned; the model stores the
  * source codepoint and style. width is 1 for normal cells, 2 for a wide glyph
- * head, and 0 for the wide glyph spill cell. Exposed so the renderer packs from
- * the bulk per-line accessor without copying. */
+ * head, and 0 for the wide glyph spill cell. `codepoint` is the grapheme
+ * cluster's base; `marks[0..mark_count)` are its combining continuation
+ * (libvterm's chars[1..]), so no codepoint of a cluster is dropped. Exposed so
+ * the renderer packs from the bulk per-line accessor without copying. */
 struct yetty_yvterm_text_cell {
     uint32_t glyph_index;
     uint32_t codepoint;
@@ -51,6 +61,8 @@ struct yetty_yvterm_text_cell {
     uint16_t attrs;
     uint8_t width;
     uint8_t flags;
+    uint8_t mark_count;
+    uint32_t marks[5];
 };
 struct yetty_ydraw_composite_const_ptr_ptr_result {
     int ok;

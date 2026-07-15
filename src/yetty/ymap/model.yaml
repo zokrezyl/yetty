@@ -290,7 +290,7 @@ classes:
         get: false
         set: false
       - name: overlay_points
-        type: "struct ymap_overlay_point *"
+        type: "struct yetty_ymap_overlay_point *"
         get: false
         set: false
       - name: overlay_point_count
@@ -298,7 +298,7 @@ classes:
         get: false
         set: false
       - name: overlay_paths
-        type: "struct ymap_overlay_path *"
+        type: "struct yetty_ymap_overlay_path *"
         get: false
         set: false
       - name: overlay_path_count
@@ -460,8 +460,6 @@ types:
             type: struct yetty_ycore_error
 local_types:
   ymap_provider: src/yetty/ymap/map.c
-  ymap_overlay_point: src/yetty/ymap/map.c
-  ymap_overlay_path: src/yetty/ymap/map.c
   yetty_ymap_map: src/yetty/ymap/map.c
   yetty_ymap_map_ptr_result: src/yetty/ymap/map.c
 local_typedefs:
