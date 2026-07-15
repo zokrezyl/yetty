@@ -832,6 +832,13 @@ static void set_dec_mode(VTermState *state, int num, int val)
     state->mode.grapheme_cluster = val;
     break;
 
+  case 2026: // synchronized output (BSU/ESU) — batch presentation while set.
+    // yetty's renderer is already dirty-flag driven and frame-paced, so output
+    // is coalesced per frame; tracking the mode advertises support and gives
+    // the render loop a flag to honour for cross-frame batching.
+    state->mode.synchronized_output = val;
+    break;
+
   case 1500:
     settermprop_bool(state, VTERM_PROP_CARDCLICK, val);
     state->mode.card_click = val;
@@ -924,6 +931,10 @@ static void request_dec_mode(VTermState *state, int num)
 
     case 2027:
       reply = state->mode.grapheme_cluster;
+      break;
+
+    case 2026:
+      reply = state->mode.synchronized_output;
       break;
 
     case 1500:
@@ -1923,12 +1934,106 @@ static void request_status_string(VTermState *state, VTermStringFragment frag)
   vterm_push_output_sprintf_str(state->vt, C1_DCS, true, "0$r");
 }
 
+static int hex_nibble(char ch)
+{
+  if(ch >= '0' && ch <= '9') return ch - '0';
+  if(ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+  if(ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+  return -1;
+}
+
+/* Look up a terminfo/termcap capability by its short (terminfo) name for
+ * XTGETTCAP. Only the baseline set applications commonly probe; everything
+ * else answers "invalid" so the query still round-trips correctly. */
+static const char *termcap_lookup(const char *name)
+{
+  if(strcmp(name, "TN") == 0)     return "yetty";  /* terminal name          */
+  if(strcmp(name, "Co") == 0)     return "256";    /* max colors (terminfo)  */
+  if(strcmp(name, "colors") == 0) return "256";    /* max colors (long name) */
+  if(strcmp(name, "RGB") == 0)    return "8/8/8";  /* direct-color channels  */
+  return NULL;
+}
+
+/* Emit one XTGETTCAP reply: DCS 1 + r <hexname>=<hexvalue> ST for a known
+ * capability, DCS 0 + r <hexname> ST for an unknown one. `hexname` is echoed
+ * back verbatim (the raw hex token the client sent). */
+static void termcap_reply_one(VTermState *state, const char *hexname, const char *name)
+{
+  const char *value = name[0] ? termcap_lookup(name) : NULL;
+  if(!value) {
+    vterm_push_output_sprintf_str(state->vt, C1_DCS, true, "0+r%s", hexname);
+    return;
+  }
+
+  char hexvalue[128];
+  size_t hexvalue_len = 0;
+  for(const unsigned char *cursor = (const unsigned char *)value;
+      *cursor && hexvalue_len + 2 < sizeof(hexvalue); cursor++)
+    hexvalue_len += snprintf(hexvalue + hexvalue_len, sizeof(hexvalue) - hexvalue_len,
+                             "%02X", *cursor);
+  hexvalue[hexvalue_len] = 0;
+
+  vterm_push_output_sprintf_str(state->vt, C1_DCS, true, "1+r%s=%s", hexname, hexvalue);
+}
+
+/* XTGETTCAP (DCS + q <hex names, ; separated> ST): decode each hex-encoded
+ * capability name and answer per-capability. Fragments are accumulated until
+ * the final one arrives. */
+static void request_termcap(VTermState *state, VTermStringFragment frag)
+{
+  if(frag.initial)
+    state->termcap_query_len = 0;
+
+  while(state->termcap_query_len < sizeof(state->termcap_query) - 1 && frag.len--)
+    state->termcap_query[state->termcap_query_len++] = (frag.str++)[0];
+  state->termcap_query[state->termcap_query_len] = 0;
+
+  if(!frag.final)
+    return;
+
+  char *query = state->termcap_query;
+  size_t query_len = state->termcap_query_len;
+  size_t token_start = 0;
+
+  for(size_t i = 0; i <= query_len; i++) {
+    if(i < query_len && query[i] != ';')
+      continue;
+
+    size_t token_len = i - token_start;
+    char hexname[64];
+    if(token_len >= sizeof(hexname))
+      token_len = sizeof(hexname) - 1;
+    memcpy(hexname, query + token_start, token_len);
+    hexname[token_len] = 0;
+
+    char name[32];
+    size_t name_len = 0;
+    int valid = (token_len > 0) && (token_len % 2 == 0);
+    for(size_t pos = 0; valid && pos + 2 <= token_len && name_len + 1 < sizeof(name); pos += 2) {
+      int high = hex_nibble(hexname[pos]);
+      int low  = hex_nibble(hexname[pos + 1]);
+      if(high < 0 || low < 0) { valid = 0; break; }
+      name[name_len++] = (char)((high << 4) | low);
+    }
+    name[name_len] = 0;
+
+    termcap_reply_one(state, hexname, valid ? name : "");
+    token_start = i + 1;
+  }
+
+  state->termcap_query_len = 0;
+}
+
 static int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user)
 {
   VTermState *state = user;
 
   if(commandlen == 2 && strneq(command, "$q", 2)) {
     request_status_string(state, frag);
+    return 1;
+  }
+  else if(commandlen == 2 && strneq(command, "+q", 2)) {
+    request_termcap(state, frag);
     return 1;
   }
   else if(state->fallbacks && state->fallbacks->dcs)
@@ -2116,6 +2221,7 @@ void vterm_state_reset(VTermState *state, int hard)
   state->mode.bracketpaste    = 0;
   state->mode.report_focus    = 0;
   state->mode.grapheme_cluster = 1; // mode 2027 - grapheme clustering on by default
+  state->mode.synchronized_output = 0; // mode 2026 - synchronized output off by default
 
   state->mouse_flags = 0;
 

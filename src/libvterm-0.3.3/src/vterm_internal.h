@@ -124,6 +124,7 @@ struct VTermState
     unsigned int card_move:1;     // DEC mode 1501 - card move events
     unsigned int card_key:1;      // DEC mode 1502 - card keyboard events
     unsigned int grapheme_cluster:1; // DEC mode 2027 - grapheme clustering (default on)
+    unsigned int synchronized_output:1; // DEC mode 2026 - synchronized output (BSU/ESU)
   } mode;
 
   VTermEncodingInstance encoding[4], encoding_utf8;
@@ -168,6 +169,11 @@ struct VTermState
       uint32_t sendpartial;
     } selection;
   } tmp;
+
+  /* Accumulates the hex-encoded capability names of an XTGETTCAP (DCS +q)
+   * query across data fragments; processed when the final fragment arrives. */
+  char termcap_query[256];
+  size_t termcap_query_len;
 
   struct {
     const VTermSelectionCallbacks *callbacks;
