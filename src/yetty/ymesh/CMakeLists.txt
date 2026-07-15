@@ -17,6 +17,12 @@ target_link_libraries(yetty_ymesh_core PUBLIC
     yetty_yface
 )
 
+# libm for sqrtf in ymesh-load.c (no-op on Windows / macOS where math is
+# in the C runtime; the stricter riscv64 cross-linker needs it explicit).
+if(NOT WIN32)
+    target_link_libraries(yetty_ymesh_core PUBLIC m)
+endif()
+
 # yetty_ymesh — GPU pipeline (concrete factory). Pulls Dawn / WebGPU.
 if(YETTY_ENABLE_LIB_WEBGPU)
     add_library(yetty_ymesh STATIC
