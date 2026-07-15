@@ -345,36 +345,29 @@ static int on_text(const char bytes[], size_t len, void *user)
   }
 
   for(; i < npoints; i++) {
-    // Try to find combining characters following this
+    /* Grapheme / emoji cluster starting here: how many codepoints it spans
+     * and the terminal display width it advances. Handles combining marks,
+     * VS16/VS15 presentation selectors, ZWJ sequences, emoji skin-tone
+     * modifiers and regional-indicator flag pairs (see vterm_unicode_cluster).
+     * The cluster may span more codepoints than a cell can store
+     * (VTERM_MAX_CHARS_PER_CELL); the advance still uses the full span so the
+     * cursor lands where wcwidth expects, and the stored chars are truncated. */
     int glyph_starts = i;
-    int glyph_ends;
-    for(glyph_ends = i + 1;
-        (glyph_ends < npoints) && (glyph_ends < glyph_starts + VTERM_MAX_CHARS_PER_CELL);
-        glyph_ends++)
-      if(!vterm_unicode_is_combining(codepoints[glyph_ends]))
-        break;
-
-    int width = 0;
+    int width;
+    int cluster_len = vterm_unicode_cluster(codepoints, glyph_starts, npoints, &width);
+    int glyph_ends = glyph_starts + cluster_len;
 
     uint32_t chars[VTERM_MAX_CHARS_PER_CELL + 1];
+    int nchars = 0;
+    for(int src_idx = glyph_starts;
+        src_idx < glyph_ends && nchars < VTERM_MAX_CHARS_PER_CELL;
+        src_idx++)
+      chars[nchars++] = codepoints[src_idx];
+    chars[nchars] = 0;
 
-    for( ; i < glyph_ends; i++) {
-      chars[i - glyph_starts] = codepoints[i];
-      int this_width = vterm_unicode_width(codepoints[i]);
-#ifdef DEBUG
-      if(this_width < 0) {
-        fprintf(stderr, "Text with negative-width codepoint U+%04x\n", codepoints[i]);
-        abort();
-      }
-#endif
-      width += this_width;
-    }
-
-    while(i < npoints && vterm_unicode_is_combining(codepoints[i]))
-      i++;
-
-    chars[glyph_ends - glyph_starts] = 0;
-    i--;
+    /* Point i at the last codepoint of the cluster; the for-loop's i++ steps
+     * to the first codepoint of the next one. */
+    i = glyph_ends - 1;
 
 #ifdef DEBUG_GLYPH_COMBINE
     int printpos;
