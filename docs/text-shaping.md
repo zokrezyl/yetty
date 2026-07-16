@@ -140,14 +140,15 @@ for every platform including webasm and android. Notably:
   `shared.cmake`.
 - HarfBuzz is C++; the project already links C++ (Dawn/WebGPU), so no new
   toolchain surface. Android C++ via `c++_static` is already how openh264 ships.
-- **WebASM was the one real risk — now cleared at the build level.** webasm
-  disables its other C++ prebuilts over an emcc ABI mismatch, but HarfBuzz is
+- **WebASM was the one real risk — now cleared end to end.** webasm disables
+  its other C++ prebuilts over an emcc ABI mismatch, but HarfBuzz is
   pure-compute (no threads, no POSIX file I/O) and patterns after FreeType
   (which does build for wasm). Built in the emcc pipeline (non-mt variant, no
   `-pthread`) it produces a relocatable-wasm object with the shaping symbols
-  defined — the exact format `wasm-ld` links into `yetty.wasm`. The final
-  in-binary link on desktop is proven; the wasm in-binary link follows the same
-  shape once the wasm build enables the `YETTY_ENABLE_LIB_HARFBUZZ` gate.
+  defined — the exact format `wasm-ld` links into `yetty.wasm`. The full
+  in-binary link is now proven on all three targets built locally: desktop
+  (linux-x86_64), the complete `yetty.wasm`, and android arm64-v8a (its
+  `libyetty.so` exports `hb_shape` / `hb_buffer_create`).
 
 **Runtime (bounded by a shape cache).** Only complex-script runs need shaping;
 Latin / CJK / emoji stay on the fast per-codepoint path. Shaped lines are cached
@@ -276,8 +277,9 @@ Phasing:
     ligature table never overlaps the complex-script codepoint ranges, so the
     two shaping passes are disjoint. Verified live via
     `demo/scripts/harfbuzz/ligatures.sh`; table pinned by `yfont_ligature` test.
-  - Gated on `YETTY_ENABLE_LIB_HARFBUZZ` like the rest of the track (so
-    default builds are unaffected). A runtime on/off config key is a follow-up.
+  - Gated on `YETTY_ENABLE_LIB_HARFBUZZ` like the rest of the track (now ON by
+    default, so ligatures are on for every build). A runtime on/off config key
+    to let users disable them is a follow-up.
 
 If Phase 1's webasm spike fails to link, the fallback is to gate
 `YETTY_ENABLE_LIB_HARFBUZZ` OFF on webasm (complex scripts fall back to the
@@ -300,11 +302,13 @@ override.
    (`shape_row_cells` / `sdf_shaping_face_for`, each face uniquely namespaced).
    Complex text typed at the shell renders shaped live for all five families;
    verified via `demo/scripts/harfbuzz/` and the render unit test. (#616)
-4. **WebASM HarfBuzz build spike** — build validated: HarfBuzz compiles under
-   emcc (non-mt, no `-pthread`) to a relocatable-wasm object with
-   `hb_shape_full` / `hb_buffer_create` defined — the format `wasm-ld` consumes
-   for `yetty.wasm`. The desktop in-binary link is proven; the wasm in-binary
-   link follows once the wasm build turns on `YETTY_ENABLE_LIB_HARFBUZZ`. (#617)
+4. **WebASM HarfBuzz build** — DONE. HarfBuzz compiles under emcc (non-mt, no
+   `-pthread`) and the full `yetty.wasm` links it in (the earlier spike only
+   proved the relocatable object). `YETTY_ENABLE_LIB_HARFBUZZ` now defaults ON
+   for every target — prebuilt tarballs for desktop/webasm/android/ios/macos/
+   windows are published in the `lib-harfbuzz-8.5.0-1` release, so the
+   cache-first fetch resolves everywhere. Desktop, `yetty.wasm`, and android
+   arm64-v8a were all built locally with it on. (#617)
 5. **Programming-ligature shaping on the terminal grid** — DONE (Phase 2). The
    grid glyph sampler hard-clips glyphs to their cell, so instead of widening
    the cell format, ligature spans are suppressed on the grid and drawn as one
