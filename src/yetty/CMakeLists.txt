@@ -141,6 +141,10 @@ add_subdirectory(yshadertoy)
 # and glyphs. First migration target for ygui's scene content.
 add_subdirectory(ygrid)
 
+# ygit — read-only Git history/inspection component (yclass `repo` class over
+# libgit2). Reusable by the tools/ygit app and any future interactive pane.
+add_subdirectory(ygit)
+
 # yplatform — split into two libs (core + full). Must come after ycore
 # (PUBLIC dep) and before any tool / consumer of its target names.
 add_subdirectory(yplatform)

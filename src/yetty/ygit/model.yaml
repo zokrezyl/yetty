@@ -1,0 +1,299 @@
+methods:
+  - slot: constructor
+    domain: ygit
+    owning_class: repo
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: destructor
+    domain: ygit
+    owning_class: repo
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+classes:
+  - name: repo
+    domain: ygit
+    accessor: yetty_ygit_repo_class_get
+    type: regular
+    source_file: src/yetty/ygit/repo.c
+    parent: null
+    mixins: []
+    data: struct yetty_ygit_repo
+    data_fields:
+      - name: path
+        type: "char *"
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: ygit
+        impl: repo_constructor
+      - slot: destructor
+        slot_domain: ygit
+        impl: repo_destructor
+    doc: null
+exposed:
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_open
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: path
+        type: "const char *"
+    doc: "/* Point the repository at `path`. Does not open it eagerly — each query opens
+ * and closes the repository so a long-lived handle never pins an fd. */"
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_path
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_is_repo
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_log
+    return_type: struct yetty_ygit_log_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: revision
+        type: "const char *"
+      - name: max_count
+        type: int
+    doc: null
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_log_all
+    return_type: struct yetty_ygit_log_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: max_count
+        type: int
+    doc: "/* Like log, but from every branch tip — the whole DAG, unmerged lanes and all. */"
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_status
+    return_type: struct yetty_ygit_status_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_branches
+    return_type: struct yetty_ygit_branches_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_show
+    return_type: struct yetty_ygit_commit_detail_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: revision
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_read_blob
+    return_type: struct yetty_ygit_blob_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: spec
+        type: "const char *"
+    doc: "/* Read a file blob at a revision — `spec` is \"<rev>:<path>\" (or a bare path,
+ * defaulting to HEAD). The reusable hook a rich renderer uses to show a file as
+ * it existed at any point in history. */"
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_diff
+    return_type: struct yetty_ygit_diff_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: revision
+        type: "const char *"
+    doc: "/* Diff a commit (revision, NULL → HEAD) against its first parent. Each changed
+ * file carries both blob images and, for text, the structured hunks — enough
+ * for a renderer to draw a visual before/after or a syntax-highlighted patch. */"
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_destroy
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Run the destructor slot, then release the object storage. Mirrors the
+ * create/destroy symmetry other yclass modules expose. */"
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_const_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const char *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ygit_blob_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ygit_blob *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ygit_branches_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ygit_branches *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ygit_commit_detail_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ygit_commit_detail *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ygit_diff_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ygit_diff *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ygit_log_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ygit_log *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ygit_status_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ygit_status *"
+          - name: error
+            type: struct yetty_ycore_error
+local_types:
+  yetty_ygit_repo_ptr_result: src/yetty/ygit/repo.c
+  yetty_ygit_repo: src/yetty/ygit/repo.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ygit/repo.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ygit/repo.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ygit/repo.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ygit/repo.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ygit/repo.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+includes:
+  src/yetty/ygit/repo.c:
+    - yetty/ygit/git-backend.h
