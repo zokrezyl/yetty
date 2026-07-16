@@ -536,6 +536,109 @@ static void test_osc_dynamic_colors(struct ytest *test)
 }
 
 /*---------------------------------------------------------------------------
+ * DEC mode 2048 in-band window resize. Enabling reports the current size
+ * immediately; a pixel-size change while enabled emits a fresh notification;
+ * DECRQM reports the mode. Notifications arrive through the pty-write hook.
+ *-------------------------------------------------------------------------*/
+static void test_mode_2048_inband_resize(struct ytest *test)
+{
+    struct kitty_reply_capture capture = {0};
+    struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
+    struct yetty_ycore_void_result set =
+        yetty_yvterm_grid_set_pty_write(grid, kitty_reply_sink, &capture);
+    YTEST_REQUIRE_OK(test, set);
+
+    /* Feed the pixel size before enabling; the mode is off so nothing emits. */
+    struct yetty_ycore_void_result px = yetty_yvterm_grid_set_pixel_size(grid, 800, 480);
+    YTEST_REQUIRE_OK(test, px);
+    YTEST_CHECK_EQ_INT(test, (int)capture.len, 0);
+
+    /* Enable → immediate CSI 48 ; rows ; cols ; height_px ; width_px t. */
+    feeds(test, grid, "\x1b[?2048h");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[48;24;80;480;800t");
+
+    /* DECRQM → set. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[?2048$p");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?2048;1$y");
+
+    /* A pixel-size change emits a fresh notification (cols/rows unchanged). */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    px = yetty_yvterm_grid_set_pixel_size(grid, 1000, 600);
+    YTEST_REQUIRE_OK(test, px);
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[48;24;80;600;1000t");
+
+    /* The same size again is a no-op — no duplicate notification. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    px = yetty_yvterm_grid_set_pixel_size(grid, 1000, 600);
+    YTEST_REQUIRE_OK(test, px);
+    YTEST_CHECK_EQ_INT(test, (int)capture.len, 0);
+
+    /* Disable → later size changes are silent. */
+    feeds(test, grid, "\x1b[?2048l");
+    capture.len = 0;
+    capture.buf[0] = 0;
+    px = yetty_yvterm_grid_set_pixel_size(grid, 1200, 700);
+    YTEST_REQUIRE_OK(test, px);
+    YTEST_CHECK_EQ_INT(test, (int)capture.len, 0);
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
+ * DEC mode 2031 color-scheme notifications. DSR 996 reports the current
+ * light/dark scheme (CSI ? 997 ; N n); while enabled, a default-background
+ * change flips the scheme and emits the notification; DECRQM reports the mode.
+ *-------------------------------------------------------------------------*/
+static void test_mode_2031_color_scheme(struct ytest *test)
+{
+    struct kitty_reply_capture capture = {0};
+    struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
+    struct yetty_ycore_void_result set =
+        yetty_yvterm_grid_set_pty_write(grid, kitty_reply_sink, &capture);
+    YTEST_REQUIRE_OK(test, set);
+
+    /* Enable, then pin a dark background so the scheme is deterministic. */
+    feeds(test, grid, "\x1b[?2031h");
+    feeds(test, grid, "\x1b]11;#000000\x07");
+
+    /* DSR 996 → color-scheme report. Black background → dark (1). */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[?996n");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?997;1n");
+
+    /* DECRQM → set. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[?2031$p");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?2031;1$y");
+
+    /* A background change to white flips the scheme and notifies: light (2). */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b]11;#ffffff\x07");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?997;2n");
+
+    /* Setting the same background again does not re-notify. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b]11;#ffffff\x07");
+    YTEST_CHECK_EQ_INT(test, (int)capture.len, 0);
+
+    /* Back to black flips it to dark again. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b]11;#000000\x07");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?997;1n");
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
  * Cursor save/restore (DECSC / DECRC).
  *-------------------------------------------------------------------------*/
 static void test_cursor_save_restore(struct ytest *test)
@@ -767,6 +870,8 @@ int main(void)
     YTEST_RUN(&test, test_kitty_keyboard);
     YTEST_RUN(&test, test_osc52_clipboard);
     YTEST_RUN(&test, test_osc_dynamic_colors);
+    YTEST_RUN(&test, test_mode_2048_inband_resize);
+    YTEST_RUN(&test, test_mode_2031_color_scheme);
     YTEST_RUN(&test, test_cursor_save_restore);
     YTEST_RUN(&test, test_erase_in_line);
     YTEST_RUN(&test, test_bce);

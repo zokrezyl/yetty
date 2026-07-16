@@ -1390,6 +1390,17 @@ static int grid_parse_osc_color(const char *spec, size_t len, uint32_t *packed_o
  * libvterm's state and the grid's cache, refresh the blank-line template so new
  * rows adopt it, and mark the screen dirty. Existing cells keep their baked
  * colours. */
+/* DEC mode 2031 color scheme from a packed default background: 1 (dark) or
+ * 2 (light) by Rec.601 luma. The pack order is red | green<<8 | blue<<16. */
+static int grid_color_scheme_from_bg(uint32_t bg)
+{
+    uint32_t red = bg & 0xFFu;
+    uint32_t green = (bg >> 8) & 0xFFu;
+    uint32_t blue = (bg >> 16) & 0xFFu;
+    uint32_t luma = (299u * red + 587u * green + 114u * blue) / 1000u;
+    return luma < 128u ? 1 : 2; /* 1 = dark, 2 = light */
+}
+
 static void grid_osc_apply_color(struct yetty_yvterm_grid *grid, int command, uint32_t packed)
 {
     VTermColor col;
@@ -1400,6 +1411,13 @@ static void grid_osc_apply_color(struct yetty_yvterm_grid *grid, int command, ui
     } else {
         vterm_state_set_default_colors(grid->state, NULL, &col);
         grid->default_bg = packed;
+        /* The default background defines the terminal's light/dark theme; a
+         * change may flip it. Hand the new scheme to libvterm — if DEC mode
+         * 2031 is set, the CSI ? 997 notification it queues is drained to the
+         * child by the enclosing grid_feed's flush (this runs during input). */
+        if (grid->vterm) {
+            vterm_set_color_scheme(grid->vterm, grid_color_scheme_from_bg(grid->default_bg));
+        }
     }
     if (grid->blank_line.text_cells) {
         for (uint32_t col_idx = 0; col_idx < grid->cols; ++col_idx) {
@@ -1698,6 +1716,10 @@ static struct yetty_ycore_void_result grid_model_init(struct yetty_yvterm_grid *
     /* Baseline for OSC 110/111 reset until the terminal applies config colours. */
     grid->configured_fg = grid->default_fg;
     grid->configured_bg = grid->default_bg;
+    /* Seed the DEC mode 2031 color scheme from the initial background (the
+     * terminal overrides default_bg from config right after create, which
+     * refreshes this). Mode 2031 is off at init, so this only stores. */
+    vterm_set_color_scheme(grid->vterm, grid_color_scheme_from_bg(grid->default_bg));
 
     vterm_state_reset(grid->state, 1);
     grid->pen_fg = grid->default_fg;
@@ -2451,6 +2473,24 @@ struct yetty_ycore_void_result yetty_yvterm_grid_feed(struct yetty_yclass_object
      * point leaves query replies stranded in libvterm's output buffer. No-op
      * when no pty_write_fn is set or there is nothing to send. */
     return grid_flush_output(grid_res.value);
+}
+
+/* Feed the current text-area pixel size to libvterm so DEC mode 2048 (in-band
+ * window resize) can report it, then drain any notification the size change
+ * produced. Called by the terminal on every resize (and once initially). */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_grid_set_pixel_size(struct yetty_yclass_object *obj,
+                                                                uint32_t width_px,
+                                                                uint32_t height_px)
+{
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_pixel_size: from_obj");
+    struct yetty_yvterm_grid *grid = grid_res.value;
+    if (!grid->vterm) {
+        return YETTY_OK_VOID();
+    }
+    vterm_set_pixel_size(grid->vterm, (int)width_px, (int)height_px);
+    return grid_flush_output(grid);
 }
 
 YETTY_ANNOTATE("expose")
@@ -3540,6 +3580,10 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_default_colors(struct yetty
     grid->configured_bg = grid->default_bg;
     grid->pen_fg = grid->default_fg;
     grid->pen_bg = grid->default_bg;
+    /* Refresh the DEC mode 2031 color scheme from the configured background. */
+    if (grid->vterm) {
+        vterm_set_color_scheme(grid->vterm, grid_color_scheme_from_bg(grid->default_bg));
+    }
     /* Hard reset so libvterm's internal pen picks up the new defaults, then
      * re-blank the derived buffers that were seeded with the old ones. */
     vterm_state_reset(grid->state, 1);

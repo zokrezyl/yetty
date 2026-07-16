@@ -129,6 +129,12 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_materialize(
     struct yetty_yclass_object *obj, yetty_yvterm_grid_materialize_fn fn, void *userdata);
 struct yetty_ycore_void_result yetty_yvterm_grid_feed(struct yetty_yclass_object *obj,
                                                       const char *bytes, size_t len);
+/* Feed the current text-area pixel size to libvterm so DEC mode 2048 (in-band
+ * window resize) can report it, then drain any notification the size change
+ * produced. Called by the terminal on every resize (and once initially). */
+struct yetty_ycore_void_result yetty_yvterm_grid_set_pixel_size(struct yetty_yclass_object *obj,
+                                                                uint32_t width_px,
+                                                                uint32_t height_px);
 struct yetty_ycore_void_result yetty_yvterm_grid_resize(struct yetty_yclass_object *obj,
                                                         uint32_t cols, uint32_t rows);
 struct yetty_ycore_int_result yetty_yvterm_grid_is_dirty(struct yetty_yclass_object *obj);

@@ -125,6 +125,8 @@ struct VTermState
     unsigned int card_key:1;      // DEC mode 1502 - card keyboard events
     unsigned int grapheme_cluster:1; // DEC mode 2027 - grapheme clustering (default on)
     unsigned int synchronized_output:1; // DEC mode 2026 - synchronized output (BSU/ESU)
+    unsigned int in_band_resize:1;   // DEC mode 2048 - in-band window resize notifications
+    unsigned int color_scheme_updates:1; // DEC mode 2031 - color-scheme (light/dark) change notifications
   } mode;
 
   VTermEncodingInstance encoding[4], encoding_utf8;
@@ -182,6 +184,22 @@ struct VTermState
    * (protocol disabled). See on_csi's 'u'-command handling. */
   uint8_t kitty_kbd_stack[16];
   int kitty_kbd_stackpos;
+
+  /* DEC mode 2048 - in-band window resize notifications. libvterm has no pixel
+   * geometry of its own, so the embedder feeds the current text-area pixel size
+   * via vterm_set_pixel_size(); the notification CSI 48 ; rows ; cols ; hpx ;
+   * wpx t is emitted on enable and whenever the pixel size changes while the
+   * mode is set. last_notified_* dedupes redundant resize calls. */
+  int pixel_width;
+  int pixel_height;
+  int inband_last_pixel_width;
+  int inband_last_pixel_height;
+
+  /* DEC mode 2031 - color-scheme change notifications. `color_scheme` is the
+   * current preference the embedder reports via vterm_state_set_color_scheme()
+   * (0 no-preference, 1 dark, 2 light); a change emits CSI ? 997 ; N n while
+   * the mode is set, and DSR CSI ? 996 n reports it on demand. */
+  int color_scheme;
 
   struct {
     const VTermSelectionCallbacks *callbacks;

@@ -2296,6 +2296,12 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_obj
     struct yetty_ycore_void_result resize_res =
         yetty_yvterm_grid_resize(vterm->grid_obj, grid_size.cols, grid_size.rows);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_res, "yvterm vterm_resize: grid_resize");
+    /* Feed the text-area pixel size to the grid so DEC mode 2048 (in-band window
+     * resize) can report it to the child. Grid rows/cols are already updated. */
+    struct yetty_ycore_void_result pixel_res = yetty_yvterm_grid_set_pixel_size(
+        vterm->grid_obj, (uint32_t)((float)grid_size.cols * cell_size.width),
+        (uint32_t)((float)grid_size.rows * cell_size.height));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pixel_res, "yvterm vterm_resize: set_pixel_size");
     /* Reflow re-bases the grid's absolute row numbering, so any scrolled-back
      * view anchored on the old numbering is stale — snap back to the live tail. */
     /* The grid (single view owner) already ended any scrolled-back view

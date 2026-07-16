@@ -642,6 +642,19 @@ exposed:
         type: size_t
     doc: null
   - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_pixel_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: width_px
+        type: uint32_t
+      - name: height_px
+        type: uint32_t
+    doc: "/* Feed the current text-area pixel size to libvterm so DEC mode 2048 (in-band
+ * window resize) can report it, then drain any notification the size change
+ * produced. Called by the terminal on every resize (and once initially). */"
+  - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_resize
     return_type: struct yetty_ycore_void_result
     args:
