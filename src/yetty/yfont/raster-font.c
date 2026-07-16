@@ -27,6 +27,11 @@
 #include FT_FREETYPE_H
 #include FT_ADVANCES_H
 
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+#include FT_TRUETYPE_TABLES_H /* FT_Load_Sfnt_Table — feeds tables to HarfBuzz */
+#include <hb.h>
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -75,6 +80,15 @@ struct yetty_yfont_raster_font {
      * clipboard extraction can recover the codepoint from a glyph
      * index stored in a ydraw glyph prim. */
     struct yetty_ycore_map slot_to_cp;
+    /* Shaped-glyph atlas key: OpenType glyph id → atlas slot. Distinct from
+     * glyph_map (codepoint-keyed) because shaping output is glyph ids that do
+     * not round-trip to a single codepoint. Populated by load_one_gid. */
+    struct yetty_ycore_map gid_map;
+
+    /* Lazily-created HarfBuzz font (hb_font_t *), standalone over this face's
+     * SFNT tables. NULL until the first shape_run; void* so the struct layout
+     * does not depend on the HarfBuzz headers. */
+    void *hb_font;
 
     /* GPU — present only in full mode. */
     struct yetty_ycore_buffer shader_code;
@@ -118,20 +132,13 @@ static void atlas_grow(struct yetty_yfont_raster_font *f)
     f->atlas_height = new_h;
 }
 
-/* Lookup or rasterize a glyph. Always populates metadata; only writes atlas
- * pixels when has_atlas=1 and the glyph has non-zero bitmap. */
-static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t cp)
+/* Allocate a fresh atlas slot for a FreeType glyph id, populate its metadata
+ * and (in full mode) rasterize its pixels into the atlas. Does NOT touch any
+ * lookup map — the caller keys the returned slot by codepoint or by glyph id
+ * as appropriate. Shared by the codepoint path (load_one) and the shaped
+ * glyph-id path (load_one_gid). */
+static struct uint32_result rasterize_gid_into_slot(struct yetty_yfont_raster_font *f, FT_UInt gid)
 {
-    const uint32_t *existing = yetty_ycore_map_get(&f->glyph_map, cp);
-    if (existing) {
-        return YETTY_OK(uint32, *existing);
-    }
-
-    FT_UInt gid = FT_Get_Char_Index(f->ft_face, cp);
-    if (gid == 0) {
-        return YETTY_ERR(uint32, "glyph not found");
-    }
-
     uint32_t slot = f->next_slot;
     if (slot >= f->meta_capacity) {
         uint32_t new_cap = f->meta_capacity * 2;
@@ -152,16 +159,12 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
     if (!f->has_atlas) {
         /* Metrics-only: advance only, no rasterization. */
         f->next_slot++;
-        yetty_ycore_map_put(&f->glyph_map, cp, slot);
-        yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         return YETTY_OK(uint32, slot);
     }
 
     if (FT_Set_Pixel_Sizes(f->ft_face, 0, (FT_UInt)f->base_size) != 0 ||
         FT_Load_Glyph(f->ft_face, gid, FT_LOAD_RENDER) != 0) {
         f->next_slot++;
-        yetty_ycore_map_put(&f->glyph_map, cp, slot);
-        yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         f->dirty = 1;
         return YETTY_OK(uint32, slot);
     }
@@ -176,18 +179,14 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
 
     if (bmp->width == 0 || bmp->rows == 0) {
         f->next_slot++;
-        yetty_ycore_map_put(&f->glyph_map, cp, slot);
-        yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         f->dirty = 1;
         return YETTY_OK(uint32, slot);
     }
 
     if (bmp->width > f->cell_size || bmp->rows > f->cell_size) {
-        ywarn("raster_font: glyph U+%04X %ux%u exceeds cell %u; skipping pixels", cp, bmp->width,
+        ywarn("raster_font: gid %u %ux%u exceeds cell %u; skipping pixels", gid, bmp->width,
               bmp->rows, f->cell_size);
         f->next_slot++;
-        yetty_ycore_map_put(&f->glyph_map, cp, slot);
-        yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         f->dirty = 1;
         return YETTY_OK(uint32, slot);
     }
@@ -214,9 +213,49 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
     m->cell_idx = (float)cell_idx;
     f->next_cell++;
     f->next_slot++;
+    f->dirty = 1;
+    return YETTY_OK(uint32, slot);
+}
+
+/* Lookup or rasterize a glyph by codepoint. */
+static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t cp)
+{
+    const uint32_t *existing = yetty_ycore_map_get(&f->glyph_map, cp);
+    if (existing) {
+        return YETTY_OK(uint32, *existing);
+    }
+
+    FT_UInt gid = FT_Get_Char_Index(f->ft_face, cp);
+    if (gid == 0) {
+        return YETTY_ERR(uint32, "glyph not found");
+    }
+
+    struct uint32_result slot_res = rasterize_gid_into_slot(f, gid);
+    if (YETTY_IS_ERR(slot_res)) {
+        return slot_res;
+    }
+    uint32_t slot = slot_res.value;
     yetty_ycore_map_put(&f->glyph_map, cp, slot);
     yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
-    f->dirty = 1;
+    return YETTY_OK(uint32, slot);
+}
+
+/* Lookup or rasterize a glyph by its OpenType glyph id (shaper output). The
+ * atlas slot is keyed on the gid; there is no reverse cp mapping because a
+ * shaped gid may not correspond to a single source codepoint. */
+static struct uint32_result load_one_gid(struct yetty_yfont_raster_font *f, uint32_t gid)
+{
+    const uint32_t *existing = yetty_ycore_map_get(&f->gid_map, gid);
+    if (existing) {
+        return YETTY_OK(uint32, *existing);
+    }
+
+    struct uint32_result slot_res = rasterize_gid_into_slot(f, (FT_UInt)gid);
+    if (YETTY_IS_ERR(slot_res)) {
+        return slot_res;
+    }
+    uint32_t slot = slot_res.value;
+    yetty_ycore_map_put(&f->gid_map, gid, slot);
     return YETTY_OK(uint32, slot);
 }
 
@@ -231,6 +270,11 @@ static void raster_destroy(struct yetty_yfont_font *self)
         return;
     }
 
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+    if (f->hb_font) {
+        hb_font_destroy((hb_font_t *)f->hb_font);
+    }
+#endif
     if (f->ft_face) {
         FT_Done_Face(f->ft_face);
     }
@@ -243,6 +287,7 @@ static void raster_destroy(struct yetty_yfont_font *self)
     free(f->shader_code.data);
     yetty_ycore_map_destroy(&f->glyph_map);
     yetty_ycore_map_destroy(&f->slot_to_cp);
+    yetty_ycore_map_destroy(&f->gid_map);
     free(f);
 }
 
@@ -275,6 +320,133 @@ static struct uint32_result raster_get_glyph_index_styled(struct yetty_yfont_fon
     (void)style;
     return raster_get_glyph_index(self, cp);
 }
+
+static struct uint32_result raster_get_glyph_index_by_gid(struct yetty_yfont_font *self,
+                                                          uint32_t gid)
+{
+    struct yetty_yfont_raster_font *f = (struct yetty_yfont_raster_font *)self;
+    if (!f) {
+        return YETTY_ERR(uint32, "font is NULL");
+    }
+    return load_one_gid(f, gid);
+}
+
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+/* HarfBuzz table-reference callback: hands a raw SFNT table from the FreeType
+ * face to HarfBuzz. This is the standalone FT<->HB bridge — HarfBuzz reads
+ * cmap/GSUB/GPOS/GDEF directly from these blobs and never touches FreeType
+ * outlines (rasterization stays with FreeType via load_one_gid), so the two
+ * libraries are decoupled and there is no build-order cycle. */
+static hb_blob_t *raster_hb_reference_table(hb_face_t *hb_face, hb_tag_t tag, void *user_data)
+{
+    (void)hb_face;
+    FT_Face ft_face = (FT_Face)user_data;
+    FT_ULong length = 0;
+    if (FT_Load_Sfnt_Table(ft_face, tag, 0, NULL, &length) != 0 || length == 0) {
+        return NULL;
+    }
+    FT_Byte *buffer = malloc(length);
+    if (!buffer) {
+        return NULL;
+    }
+    if (FT_Load_Sfnt_Table(ft_face, tag, 0, buffer, &length) != 0) {
+        free(buffer);
+        return NULL;
+    }
+    return hb_blob_create((const char *)buffer, (unsigned)length, HB_MEMORY_MODE_WRITABLE, buffer,
+                          free);
+}
+
+/* Lazily build (and cache) the HarfBuzz font over this face's SFNT tables. */
+static hb_font_t *raster_hb_font_get(struct yetty_yfont_raster_font *f)
+{
+    if (f->hb_font) {
+        return (hb_font_t *)f->hb_font;
+    }
+    hb_face_t *hb_face = hb_face_create_for_tables(raster_hb_reference_table, f->ft_face, NULL);
+    if (!hb_face) {
+        return NULL;
+    }
+    hb_face_set_index(hb_face, (unsigned)(f->ft_face->face_index & 0xFFFF));
+    hb_face_set_upem(hb_face, (unsigned)f->ft_face->units_per_EM);
+    if (hb_face_get_glyph_count(hb_face) == 0) {
+        hb_face_destroy(hb_face);
+        return NULL;
+    }
+    hb_font_t *hb_font = hb_font_create(hb_face);
+    hb_face_destroy(hb_face); /* hb_font retains a reference */
+    if (!hb_font) {
+        return NULL;
+    }
+    /* 26.6 scale so shaped advances/offsets come back in base_size pixels with
+     * 1/64 px precision; callers divide by 64. */
+    int scale = (int)(f->base_size * 64.0f + 0.5f);
+    hb_font_set_scale(hb_font, scale, scale);
+    f->hb_font = hb_font;
+    return hb_font;
+}
+
+static struct uint32_result raster_shape_run(struct yetty_yfont_font *self,
+                                             const uint32_t *codepoints, size_t count,
+                                             struct yetty_yfont_shaped_glyph *out, size_t out_cap)
+{
+    struct yetty_yfont_raster_font *f = (struct yetty_yfont_raster_font *)self;
+    if (!f) {
+        return YETTY_ERR(uint32, "font is NULL");
+    }
+    if (!codepoints || count == 0) {
+        return YETTY_OK(uint32, 0);
+    }
+    if (!out || out_cap == 0) {
+        return YETTY_ERR(uint32, "output buffer is NULL");
+    }
+
+    hb_font_t *hb_font = raster_hb_font_get(f);
+    if (!hb_font) {
+        return YETTY_ERR(uint32, "harfbuzz font creation failed");
+    }
+
+    hb_buffer_t *buffer = hb_buffer_create();
+    if (!buffer || !hb_buffer_allocation_successful(buffer)) {
+        if (buffer) {
+            hb_buffer_destroy(buffer);
+        }
+        return YETTY_ERR(uint32, "hb_buffer_create failed");
+    }
+    for (size_t i = 0; i < count; i++) {
+        hb_buffer_add(buffer, (hb_codepoint_t)codepoints[i], (unsigned)i);
+    }
+    hb_buffer_set_content_type(buffer, HB_BUFFER_CONTENT_TYPE_UNICODE);
+    /* Infer script, direction and language from the run content — the caller
+     * groups runs by shaping class, so a run is a single segment. */
+    hb_buffer_guess_segment_properties(buffer);
+    hb_shape(hb_font, buffer, NULL, 0);
+
+    unsigned glyph_count = 0;
+    hb_glyph_info_t *infos = hb_buffer_get_glyph_infos(buffer, &glyph_count);
+    hb_glyph_position_t *positions = hb_buffer_get_glyph_positions(buffer, &glyph_count);
+    if (!infos || !positions) {
+        hb_buffer_destroy(buffer);
+        return YETTY_ERR(uint32, "harfbuzz produced no output");
+    }
+
+    if (glyph_count > out_cap) {
+        ywarn("raster_font: shaped run truncated %u -> %zu glyphs (buffer too small)", glyph_count,
+              out_cap);
+    }
+    size_t produced = glyph_count < out_cap ? glyph_count : out_cap;
+    for (size_t i = 0; i < produced; i++) {
+        out[i].gid = infos[i].codepoint; /* after shaping, .codepoint holds the glyph id */
+        out[i].cluster = infos[i].cluster;
+        out[i].x_advance = (float)positions[i].x_advance / 64.0f;
+        out[i].x_offset = (float)positions[i].x_offset / 64.0f;
+        out[i].y_offset = (float)positions[i].y_offset / 64.0f;
+    }
+
+    hb_buffer_destroy(buffer);
+    return YETTY_OK(uint32, (uint32_t)produced);
+}
+#endif /* YETTY_ENABLE_LIB_HARFBUZZ */
 
 static struct yetty_ycore_void_result raster_load_glyphs(struct yetty_yfont_font *self,
                                                          const uint32_t *cps, size_t count)
@@ -432,6 +604,10 @@ static const struct yetty_yfont_font_ops raster_font_ops = {
     .get_codepoint = raster_get_codepoint,
     .get_glyph_index = raster_get_glyph_index,
     .get_glyph_index_styled = raster_get_glyph_index_styled,
+    .get_glyph_index_by_gid = raster_get_glyph_index_by_gid,
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+    .shape_run = raster_shape_run,
+#endif
     .load_glyphs = raster_load_glyphs,
     .load_basic_latin = raster_load_basic_latin,
     .get_advance = raster_get_advance,
@@ -462,6 +638,10 @@ static struct yetty_font_font_result raster_font_finalise(struct yetty_yfont_ras
     if (yetty_ycore_map_init(&f->slot_to_cp, MAP_CAPACITY) < 0) {
         raster_destroy(&f->base);
         return YETTY_ERR(yetty_font_font, "inverse map init failed");
+    }
+    if (yetty_ycore_map_init(&f->gid_map, MAP_CAPACITY) < 0) {
+        raster_destroy(&f->base);
+        return YETTY_ERR(yetty_font_font, "gid map init failed");
     }
 
     f->meta_capacity = 256;

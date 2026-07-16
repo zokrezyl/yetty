@@ -38,6 +38,12 @@ option(YETTY_ENABLE_LIB_VTERM       "libvterm — terminal emulation"          O
 option(YETTY_ENABLE_LIB_ZLIB        "zlib — compression"                    ON)
 option(YETTY_ENABLE_LIB_LIBPNG      "libpng — PNG support"                  ON)
 option(YETTY_ENABLE_LIB_FREETYPE    "freetype — font rendering"             ON)
+# Complex-script shaping (Arabic joining, Indic reordering, Thai marks).
+# Default OFF until the prebuilt tarballs are published by
+# build-3rdparty-harfbuzz.yml (a `lib-harfbuzz-<version>` tag) — turning it ON
+# before the release exists would fail every build on a 404 fetch. Flip ON
+# once the release is up; the webasm gate is decided by the emcc spike (#617).
+option(YETTY_ENABLE_LIB_HARFBUZZ    "harfbuzz — complex-script shaping"     OFF)
 option(YETTY_ENABLE_LIB_MSDFGEN     "msdfgen — MSDF font generation"        OFF)
 option(YETTY_ENABLE_LIB_CDB         "cdb — constant database"               OFF)
 

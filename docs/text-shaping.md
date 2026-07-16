@@ -5,10 +5,14 @@ render Arabic, Indic (Devanagari, Bengali, Tamil, …) and Thai *correctly* in
 yetty, now that the bundled-font coverage has landed. This document records the
 decision, the measured numbers behind it, and the follow-up implementation work.
 
-Status: **decision recorded — adopt HarfBuzz, scoped and phased.** Measured
-numbers below; the runtime perf figure is designed-and-bounded and is confirmed
-by the Phase 1 spike. Implementation is split into the follow-up issues listed at
-the end.
+Status: **adopted — Phase 0 done; Phase 1 shaping engine + ydraw render path
+landed and demonstrated.** The HarfBuzz dependency is integrated for every
+platform (desktop/android/ios/webasm build all validated), the shaper + atlas
+re-key + the free-position render path are implemented and unit-tested, and the
+Arabic-joining / Devanagari-reordering spike is rendered correctly (see the end
+of Phase 1 below). The remaining work is routing *terminal-typed* complex runs
+through the same path (grid suppression + per-script shaping faces on the
+sdf-layer); the exact hook points are recorded below. Measured numbers follow.
 
 ## The problem
 
@@ -106,7 +110,7 @@ default.
 |---|---|---|
 | HarfBuzz 8.3.0, full shared (all shapers, no ICU/glib) | ~1.05 MB | system reference on x86_64 |
 | HarfBuzz, ICU integration (`libharfbuzz-icu`) | 14 KB | **separable — core needs no ICU** |
-| HarfBuzz, minimal static (`HB_TINY`/`HB_LEAN`, built-in `hb-ucd` Unicode, no glib/ICU/Graphite) | ~0.4–0.7 MB (est.; confirm in spike) | the intended build |
+| HarfBuzz, minimal static (built-in `hb-ucd` Unicode, no glib/ICU/Graphite/FreeType) | 1.88 MB archive (x86_64) / 1.75 MB (wasm); ~0.7 MB gzipped tarball. In-binary footprint is smaller after `--gc-sections` drops unused shaping code. | the shipped build |
 | FreeType static, this build | 1.15 MB | for scale |
 
 HarfBuzz's only optional heavy deps (ICU, glib, Graphite2) are all off by
@@ -131,12 +135,14 @@ for every platform including webasm and android. Notably:
   `shared.cmake`.
 - HarfBuzz is C++; the project already links C++ (Dawn/WebGPU), so no new
   toolchain surface. Android C++ via `c++_static` is already how openh264 ships.
-- **WebASM is the one real risk.** webasm currently disables its other C++
-  prebuilts over an emcc ABI mismatch. HarfBuzz is pure-compute (no threads, no
-  POSIX file I/O), so it should pattern after FreeType (which *does* build for
-  wasm) rather than the rejected C++ prebuilts — but it must be built in the same
-  emcc pipeline (non-mt variant, no `-pthread`) and a spike must confirm it links
-  into `yetty.wasm` before committing to it there.
+- **WebASM was the one real risk — now cleared at the build level.** webasm
+  disables its other C++ prebuilts over an emcc ABI mismatch, but HarfBuzz is
+  pure-compute (no threads, no POSIX file I/O) and patterns after FreeType
+  (which does build for wasm). Built in the emcc pipeline (non-mt variant, no
+  `-pthread`) it produces a relocatable-wasm object with the shaping symbols
+  defined — the exact format `wasm-ld` links into `yetty.wasm`. The final
+  in-binary link is deferred only because no `hb_*` call reaches the wasm build
+  until the terminal-grid routing lands.
 
 **Runtime (bounded by a shape cache).** Only complex-script runs need shaping;
 Latin / CJK / emoji stay on the fast per-codepoint path. Shaped lines are cached
@@ -166,19 +172,71 @@ shader.
 
 Phasing:
 
-- **Phase 0 — interim combining-mark rendering (no HarfBuzz).** Render the
-  already-captured `marks[]` via FreeType metrics (stack over the base within the
-  cell, spill like a wide glyph where needed). Biggest bang-for-buck: it fixes
-  the fully-broken diacritic case (Latin/Greek/Cyrillic/Hebrew/Vietnamese) with
-  no new dependency and no atlas re-key. Does **not** address Arabic joining or
-  Indic reordering.
-- **Phase 1 — HarfBuzz for complex scripts via the ydraw free-position path.**
-  Add the HarfBuzz dependency (minimal static build). Route runs of
-  Arabic/Indic/Thai codepoints through a shaper feeding `expand_text_span`
-  (per-glyph x/y + advance already exist there), with a per-line shape cache.
-  Requires the atlas to gain a `(glyph_id, face)` key (or a parallel shaped-glyph
-  atlas). Delivers correct Arabic and Devanagari — the spike that demonstrates
-  this in a live session is the acceptance for this phase.
+- **Phase 0 — interim combining-mark rendering (no HarfBuzz). DONE.** The
+  raster (FreeType) backend now composites the captured `marks[]` over the base
+  into one cluster-keyed atlas slot (`ms-raster-font.c`
+  `get_glyph_index_cluster` + a per-style cluster cache), each mark placed at
+  its own FreeType bearing and max-blended. `vterm_pack_line` resolves
+  mark-bearing cells through that path; because the default base face is MSDF
+  (no live rasterizer), a mark cell whose face is MSDF is re-resolved against a
+  raster face that covers the base **and** the marks (the wide `Noto*` glob),
+  so diacritics render under the stock config rather than only when the base is
+  raster. Verified: Latin/Greek/Cyrillic/Vietnamese (é à ô ü ñ ç, ế ọ, и́, ά)
+  plus Hebrew points and Thai/Devanagari matras. Does **not** address Arabic
+  joining or Indic reordering (those stay for Phase 1). Two documented limits:
+  the MSDF backend cannot composite (it has no live rasterizer, so its own
+  glyphs still drop marks — hence the raster re-resolve), and a mark that
+  overhangs the base cell is clamped into the slot rather than spilling.
+- **Phase 1 — HarfBuzz for complex scripts via the ydraw free-position path.
+  Shaping engine + render path DONE; terminal-grid routing REMAINS.** Landed:
+  - The HarfBuzz dependency (minimal static build, no ICU/glib/Graphite,
+    built-in `hb-ucd`), fetched as a prebuilt tarball per platform
+    (`build-tools/3rdparty/harfbuzz/`, `build-tools/yetty/libs/harfbuzz.cmake`,
+    the `build-3rdparty-harfbuzz.yml` CI matrix, and the
+    `YETTY_ENABLE_LIB_HARFBUZZ` option). Standalone FT↔HB coupling: HarfBuzz
+    reads the SFNT tables from the loaded FreeType face
+    (`hb_face_create_for_tables` + `FT_Load_Sfnt_Table`), so there is no
+    build-order cycle. Linux/webasm tarballs built and validated locally; the
+    desktop yetty binary links it. (#615)
+  - The shaper itself — `raster-font.c` `shape_run` op: `hb_buffer` +
+    `hb_buffer_guess_segment_properties` (infers script/direction/language) +
+    `hb_shape`, returning per-glyph gid + advance + GPOS offsets in base_size
+    pixels. Scripts are grouped into runs by an OpenType-free classifier
+    (`shaping-script.c`, `yetty_yfont_shaping_script_for_codepoint`). (#616)
+  - The atlas `(glyph_id, face)` re-key — `raster-font.c`
+    `get_glyph_index_by_gid` + a `gid_map`, rasterizing by glyph index via the
+    shared `rasterize_gid_into_slot` core (the face is the font object, so the
+    key reduces to the gid). (#616)
+  - The render path — `sdf-layer.c` `expand_text_span` now detects complex
+    runs and emits shaped glyphs through the existing free-position glyph
+    records (`expand_shaped_run`): per shaped glyph it resolves the gid to an
+    atlas slot and places it at `pen + (bearing + GPOS_offset) * scale`,
+    advancing by the shaped advance. HarfBuzz emits visual order for LTR and
+    RTL alike, so the left-to-right pen walk is correct for both. Backends with
+    no shaper (MSDF, or a build with HarfBuzz off) leave `shape_run` NULL and
+    fall through to the per-codepoint path — the whole feature is a runtime
+    no-op when the gate is off. (#616)
+  - Tests + spike: `test/ut/yfont/shaping-test.c` asserts Arabic contextual
+    joining (a medial letter's gid differs from its isolated gid), Devanagari
+    pre-base-matra reordering (glyph order is non-monotonic vs input), the gid
+    atlas resolves+caches, and the classifier. `shaping-render-test.c` drives
+    the full shape→atlas→rasterize→composite pipeline and (with
+    `YFONT_SHAPING_DUMP=<path.ppm>`) emits a canvas — "العربية" renders as a
+    correctly joined cursive run and "हिन्दी" with the reordered i-matra + the
+    न्द conjunct. That canvas is the Phase 1 acceptance spike. (#616)
+
+  Remaining for terminal-typed complex text (typing Arabic at the shell): the
+  terminal grid renders cells through `vterm_pack_line` + the grid shader, NOT
+  through the sdf-layer that owns the shaping render path. To route a terminal
+  run through it: (1) `vterm_pack_line` sets `words[0]=0` for the run's covered
+  cells so the grid draws only their background (the existing shader-glyph-cell
+  precedent), and (2) the sdf-layer, in its per-window-row Pass 2, scans that
+  row's cells for complex runs and calls `expand_shaped_run` against a
+  per-script raster shaping face loaded into `layer->fonts[]` (the sdf-layer
+  currently holds only the MSDF default + ycat wire fonts, none covering the
+  complex scripts, so it needs a small per-script face loader). The per-line
+  shape cache is then the line's own primitive/scan result, invalidated on line
+  edit; the O(1) rolling-row scroll already preserves it.
 - **Phase 2 — optional: programming ligatures / contextual Latin on the main
   grid** (Fira Code `=>`, `!=`, …). Only if there is demand; this is the largest
   rework because it needs the terminal cell format/shader to carry ligature-span
@@ -193,19 +251,23 @@ override.
 
 ## Follow-up implementation issues
 
-1. **Interim combining-mark rendering (no HarfBuzz)** — render captured
-   `marks[]` via FreeType metrics into the cell; the diacritic case that is
-   fully dropped today. (Phase 0.)
-2. **HarfBuzz dependency integration** — `build-tools/3rdparty/harfbuzz` +
-   `libs/harfbuzz.cmake` + CI matrix + `YETTY_ENABLE_LIB_HARFBUZZ` option;
-   minimal static build (no ICU/glib/Graphite), standalone FT coupling. (Phase 1
-   prerequisite.)
-3. **Complex-script shaping via the ydraw free-position path** — Arabic/Indic/
-   Thai run detection → HarfBuzz → `expand_text_span`, with the atlas
-   `(glyph_id, face)` re-key and a per-line shape cache. The live-session Arabic +
-   Devanagari demonstration lands here. (Phase 1.)
-4. **WebASM HarfBuzz build spike** — validate the emcc-built tarball links into
-   `yetty.wasm`; decide the webasm gate. (Phase 1.)
+1. **Interim combining-mark rendering (no HarfBuzz)** — DONE (Phase 0). Render
+   captured `marks[]` via FreeType metrics into the cell; the diacritic case
+   that was fully dropped. (#614)
+2. **HarfBuzz dependency integration** — DONE. `build-tools/3rdparty/harfbuzz`
+   + `libs/harfbuzz.cmake` + CI matrix + `YETTY_ENABLE_LIB_HARFBUZZ` option;
+   minimal static build (no ICU/glib/Graphite), standalone FT coupling. (#615)
+3. **Complex-script shaping via the ydraw free-position path** — shaping engine
+   + render path DONE, terminal-grid routing remains (see Phase 1 above).
+   Arabic/Indic/Thai run detection → HarfBuzz → `expand_text_span` shaped
+   emission, with the atlas `(glyph_id, face)` re-key. The Arabic + Devanagari
+   spike renders correctly (`shaping-render-test.c`). (#616)
+4. **WebASM HarfBuzz build spike** — build validated: HarfBuzz compiles under
+   emcc (non-mt, no `-pthread`) to a relocatable-wasm object with
+   `hb_shape_full` / `hb_buffer_create` defined — the format `wasm-ld` consumes
+   for `yetty.wasm`. The full `yetty.wasm` link lands with the terminal-grid
+   routing (nothing calls `hb_*` in the wasm build until then). (#617)
 5. **(Stretch) Programming-ligature shaping on the terminal grid** — kitty-style
    shaped-glyph→cell mapping; requires the terminal cell GPU format to carry
-   ligature spans. (Phase 2, demand-gated.)
+   ligature spans. (Phase 2, demand-gated — out of scope for the initial
+   adoption per the issue.) (#618)

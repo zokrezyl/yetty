@@ -348,6 +348,12 @@ if(YETTY_ENABLE_LIB_FREETYPE)
     include(${YETTY_ROOT}/build-tools/yetty/libs/freetype.cmake)
 endif()
 
+if(YETTY_ENABLE_LIB_HARFBUZZ)
+    # Standalone shaper — fed font tables from the FreeType faces at runtime,
+    # so it carries no freetype link dependency here.
+    include(${YETTY_ROOT}/build-tools/yetty/libs/harfbuzz.cmake)
+endif()
+
 if(YETTY_ENABLE_LIB_MSDFGEN)
     include(${YETTY_ROOT}/build-tools/yetty/libs/msdfgen.cmake)
 endif()

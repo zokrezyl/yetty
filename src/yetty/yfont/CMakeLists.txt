@@ -47,6 +47,9 @@ add_library(yetty_yfont_core STATIC
     ms-msdf-font.c
     msdf-font.c
     raster-font.c
+    # Codepoint -> shaping-script classification for complex-script run
+    # detection. HarfBuzz-free — always compiled.
+    shaping-script.c
     font-cache.c
 )
 
@@ -60,6 +63,16 @@ target_link_libraries(yetty_yfont_core PUBLIC
     ${FREETYPE_ALL_LIBS} yetty_ycdb yetty_yfont_shader_glyph yetty_yrender_core
     yetty_yplatform_core # raster-font glob faces: cross-platform dir iteration
 )
+
+# Complex-script shaping (raster-font.c). When enabled, link the standalone
+# HarfBuzz shaper and define the gate macro PUBLIC so consumers that route
+# runs through the shaper (yvterm) compile the same paths. Off by default —
+# raster-font's shape_run op is then NULL and callers fall back to the
+# per-codepoint path.
+if(YETTY_ENABLE_LIB_HARFBUZZ)
+    target_link_libraries(yetty_yfont_core PUBLIC harfbuzz::harfbuzz)
+    target_compile_definitions(yetty_yfont_core PUBLIC YETTY_ENABLE_LIB_HARFBUZZ=1)
+endif()
 
 # Embed shaders via incbin (or stubs on Emscripten).
 # These WGSL shaders are part of the gpu_resource_set returned by each font
