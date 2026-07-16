@@ -1,0 +1,171 @@
+name: Build 3rdparty — libgit2
+
+# Per-platform prebuilt static libgit2, published as release assets on the
+# `lib-libgit2-<version>` tag and fetched at configure time by
+# build-tools/yetty/3rdparty-fetch.cmake (which falls back to a from-source
+# build only when the asset is missing). Consumed by the ygit component
+# (src/yetty/ygit) and the ygit tool.
+#
+# libgit2 is built self-contained (bundled zlib, builtin regex/http-parser,
+# no network transports — see build-tools/3rdparty/libgit2/_build.sh), so
+# every target needs only a C toolchain + cmake + ninja; no nix, no external
+# deps. The 6 targets match the platforms _build.sh supports and the ones the
+# ygit feature is enabled on (desktop: linux x3, macOS x2, Windows).
+#
+# Version source of truth: build-tools/3rdparty/libgit2/version.
+
+on:
+  push:
+    tags:
+      - 'lib-libgit2-*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag:     ${{ steps.read.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          set -euo pipefail
+          V="$(tr -d '[:space:]' < build-tools/3rdparty/libgit2/version)"
+          [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            REF="${GITHUB_REF#refs/tags/}"
+            EXPECT="lib-libgit2-$V"
+            if [ "$REF" != "$EXPECT" ]; then
+              echo "tag $REF does not match version file ($EXPECT)" >&2
+              exit 1
+            fi
+          fi
+          echo "version=$V"          >> "$GITHUB_OUTPUT"
+          echo "tag=lib-libgit2-$V"  >> "$GITHUB_OUTPUT"
+
+  build-linux-x86_64:
+    needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="linux-x86_64" \
+          OUTPUT_DIR="$PWD/out" \
+          USE_NIX=0 \
+          ./build-tools/3rdparty/libgit2/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/libgit2-linux-x86_64-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-linux-aarch64:
+    needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install aarch64 cross toolchain + build deps
+        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake ninja-build pkg-config
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="linux-aarch64" \
+          OUTPUT_DIR="$PWD/out" \
+          USE_NIX=0 \
+          CROSS_PREFIX="aarch64-linux-gnu-" \
+          ./build-tools/3rdparty/libgit2/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/libgit2-linux-aarch64-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-linux-riscv64:
+    needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install riscv64 cross toolchain + build deps
+        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends gcc-riscv64-linux-gnu g++-riscv64-linux-gnu cmake ninja-build pkg-config
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="linux-riscv64" \
+          OUTPUT_DIR="$PWD/out" \
+          USE_NIX=0 \
+          CROSS_PREFIX="riscv64-linux-gnu-" \
+          ./build-tools/3rdparty/libgit2/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/libgit2-linux-riscv64-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-darwin-arm64:
+    needs: resolve
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: brew install ninja   # cmake ships with the runner
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="macos-arm64" \
+          OUTPUT_DIR="$PWD/out" \
+          USE_NIX=0 \
+          ./build-tools/3rdparty/libgit2/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/libgit2-macos-arm64-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-darwin-x86_64:
+    needs: resolve
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: brew install ninja   # cmake ships with the runner
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="macos-x86_64" \
+          OUTPUT_DIR="$PWD/out" \
+          USE_NIX=0 \
+          ./build-tools/3rdparty/libgit2/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/libgit2-macos-x86_64-*.tar.gz
+          fail_on_unmatched_files: true
+
+  # Windows: native MSVC (build.sh's windows branch requires cl on PATH and
+  # builds with the Ninja generator, so both MSVC and ninja must be present).
+  build-windows:
+    needs: resolve
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Install ninja
+        run: choco install ninja -y --no-progress
+      - name: Build libgit2 for windows-x86_64
+        shell: bash
+        run: |
+          mkdir -p out
+          TARGET_PLATFORM="windows-x86_64" \
+          OUTPUT_DIR="$PWD/out" \
+          ./build-tools/3rdparty/libgit2/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/libgit2-windows-x86_64-*.tar.gz
+          fail_on_unmatched_files: true

@@ -51,7 +51,12 @@ if(WIN32)
     target_link_libraries(libgit2 INTERFACE ws2_32 advapi32 rpcrt4 crypt32 ole32 secur32 winhttp)
 else()
     target_link_libraries(libgit2 INTERFACE Threads::Threads)
-    if(NOT APPLE)
+    if(APPLE)
+        # macOS links the system zlib: libgit2 1.8.4's bundled zlib doesn't
+        # compile against recent macOS SDKs, so the prebuilt is built with
+        # -DUSE_BUNDLED_ZLIB=OFF (see build-tools/3rdparty/libgit2/_build.sh).
+        target_link_libraries(libgit2 INTERFACE z)
+    else()
         target_link_libraries(libgit2 INTERFACE rt)  # glibc clock_gettime; not on macOS
     endif()
 endif()

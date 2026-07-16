@@ -103,8 +103,13 @@ linux-riscv64)
         "-DCMAKE_SYSTEM_PROCESSOR=riscv64"
         "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
     ) ;;
-macos-x86_64) CMAKE_ARGS+=("-DCMAKE_OSX_ARCHITECTURES=x86_64") ;;
-macos-arm64)  CMAKE_ARGS+=("-DCMAKE_OSX_ARCHITECTURES=arm64")  ;;
+# macOS: libgit2 1.8.4's bundled zlib (deps/zlib) does not compile against
+# recent macOS SDKs — its zutil.h '#define fdopen(fd,mode) NULL' poisons the
+# SDK stdio.h fdopen prototype. Use the always-present system zlib instead
+# (the later -D overrides the global -DUSE_BUNDLED_ZLIB=ON). Consumers link
+# -lz on Apple — see build-tools/yetty/libs/libgit2.cmake.
+macos-x86_64) CMAKE_ARGS+=("-DCMAKE_OSX_ARCHITECTURES=x86_64" "-DUSE_BUNDLED_ZLIB=OFF") ;;
+macos-arm64)  CMAKE_ARGS+=("-DCMAKE_OSX_ARCHITECTURES=arm64"  "-DUSE_BUNDLED_ZLIB=OFF") ;;
 windows-x86_64)
     # Native MSVC — caller must have vcvarsall'd the shell. cmake auto-
     # detects cl.exe with the Ninja generator.
