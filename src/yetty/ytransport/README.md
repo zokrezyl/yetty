@@ -40,7 +40,7 @@ ownership of the transport they are handed and `destroy()` it on teardown.
 |---|---|---|---|
 | tcp | `yetty_ytransport_tcp_transport_create(host, port, event_loop)` | desktop / iOS / Android | event loop's TCP client API (libuv) |
 | websocket | `yetty_ytransport_websocket_transport_create(url)` | webasm | one `send()` = one binary WebSocket message (framing preserved) |
-| lwip | `yetty_ytransport_lwip_transport_create(host, port)` | webasm | lwIP `tcp_pcb` over the [`ynet`](../ynet/README.md) netstack (DNS-resolves, waits for DHCP, honours `tcp_sndbuf` backpressure with a pending ring) |
+| lwip | `yetty_ytransport_lwip_transport_create(host, port)` | webasm | lwIP `tcp_pcb` over the [`ywasmnet`](../ywasmnet/README.md) netstack (DNS-resolves, waits for DHCP, honours `tcp_sndbuf` backpressure with a pending ring) |
 | iframe | `yetty_ytransport_iframe_transport_create(port)` | webasm | postMessage to the TinyEMU iframe, which injects a synthetic inbound TCP connection into slirp — many terminals share one in-VM telnetd |
 
 Message-framing matters: `websocket-pty` (raw shell bytes + resize control

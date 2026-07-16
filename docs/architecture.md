@@ -148,7 +148,7 @@ The full startup/ownership chain and context structs are in
 | `yrdawn` | Remote WebGPU canvas as a compositor figure (client + server) | ✓ |
 | `yvnc` | VNC client (RFB 3.8), GPU-decoded frames | ✓ |
 | `ydvnc` | Desktop VNC viewer integrated as a yui view | ✓ |
-| `ynet` | lwIP netstack over an L2 relay WebSocket (webasm; currently not wired up) | ◐ |
+| `ywasmnet` | lwIP netstack over an L2 relay WebSocket (webasm; currently not wired up) | ◐ |
 
 ## Media codecs
 

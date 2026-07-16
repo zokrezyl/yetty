@@ -13,7 +13,7 @@
  * callbacks, never re-entrantly.
  */
 
-#include <yetty/ynet/netstack.h>
+#include <yetty/ywasmnet/netstack.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -33,11 +33,11 @@
 
 /* Largest ethernet frame we ship/accept (1500 MTU + 14 header + a
  * little slack). One WebSocket binary message == one frame. */
-#define YETTY_YNET_FRAME_MAX 1600
+#define YETTY_YWASMNET_FRAME_MAX 1600
 /* lwIP timeout wheel cadence. 50 ms is plenty for DHCP/TCP timers. */
-#define YETTY_YNET_TICK_MS 50.0
+#define YETTY_YWASMNET_TICK_MS 50.0
 
-struct yetty_ynet_netstack {
+struct yetty_ywasmnet_netstack {
     struct netif netif;
     EMSCRIPTEN_WEBSOCKET_T socket;
     char *relay_url;
@@ -53,15 +53,15 @@ struct yetty_ynet_netstack {
  * into a stack buffer for the single binary WebSocket message. */
 static err_t netstack_linkoutput(struct netif *netif, struct pbuf *frame)
 {
-    struct yetty_ynet_netstack *netstack = netif->state;
+    struct yetty_ywasmnet_netstack *netstack = netif->state;
     if (!netstack->link_up) {
         return ERR_IF;
     }
-    if (frame->tot_len > YETTY_YNET_FRAME_MAX) {
-        ywarn("ynet: dropping oversize frame (%u bytes)", (unsigned)frame->tot_len);
+    if (frame->tot_len > YETTY_YWASMNET_FRAME_MAX) {
+        ywarn("ywasmnet: dropping oversize frame (%u bytes)", (unsigned)frame->tot_len);
         return ERR_MEM;
     }
-    uint8_t bytes[YETTY_YNET_FRAME_MAX];
+    uint8_t bytes[YETTY_YWASMNET_FRAME_MAX];
     u16_t copied = pbuf_copy_partial(frame, bytes, frame->tot_len, 0);
     EMSCRIPTEN_RESULT send_result =
         emscripten_websocket_send_binary(netstack->socket, bytes, copied);
@@ -70,7 +70,7 @@ static err_t netstack_linkoutput(struct netif *netif, struct pbuf *frame)
 
 static err_t netstack_netif_init(struct netif *netif)
 {
-    struct yetty_ynet_netstack *netstack = netif->state;
+    struct yetty_ywasmnet_netstack *netstack = netif->state;
     netif->name[0] = 'y';
     netif->name[1] = '0';
     netif->output = etharp_output; /* IP → ARP → linkoutput */
@@ -85,7 +85,7 @@ static err_t netstack_netif_init(struct netif *netif)
 /* Fires on link/address changes. Log the lease once it binds. */
 static void netstack_status_callback(struct netif *netif)
 {
-    struct yetty_ynet_netstack *netstack = netif->state;
+    struct yetty_ywasmnet_netstack *netstack = netif->state;
     const ip4_addr_t *ip = netif_ip4_addr(netif);
     if (ip4_addr_isany_val(*ip)) {
         return; /* up but not yet addressed */
@@ -108,7 +108,7 @@ static void netstack_status_callback(struct netif *netif)
     strncpy(dns_str, ipaddr_ntoa(dns), sizeof(dns_str) - 1);
     dns_str[sizeof(dns_str) - 1] = '\0';
 
-    yinfo("ynet: DHCP lease bound — ip=%s gw=%s mask=%s dns=%s", ip_str, gw_str,
+    yinfo("ywasmnet: DHCP lease bound — ip=%s gw=%s mask=%s dns=%s", ip_str, gw_str,
           ip4addr_ntoa(netif_ip4_netmask(netif)), dns_str);
 }
 
@@ -120,13 +120,13 @@ static EM_BOOL netstack_on_open(int event_type, const EmscriptenWebSocketOpenEve
 {
     (void)event_type;
     (void)event;
-    struct yetty_ynet_netstack *netstack = user_data;
+    struct yetty_ywasmnet_netstack *netstack = user_data;
     netstack->link_up = 1;
     netif_set_link_up(&netstack->netif);
-    yinfo("ynet: relay connected (%s), starting DHCP", netstack->relay_url);
+    yinfo("ywasmnet: relay connected (%s), starting DHCP", netstack->relay_url);
     err_t dhcp_result = dhcp_start(&netstack->netif);
     if (dhcp_result != ERR_OK) {
-        yerror("ynet: dhcp_start failed (err=%d)", (int)dhcp_result);
+        yerror("ywasmnet: dhcp_start failed (err=%d)", (int)dhcp_result);
     }
     return EM_TRUE;
 }
@@ -136,13 +136,13 @@ static EM_BOOL netstack_on_message(int event_type, const EmscriptenWebSocketMess
                                    void *user_data)
 {
     (void)event_type;
-    struct yetty_ynet_netstack *netstack = user_data;
+    struct yetty_ywasmnet_netstack *netstack = user_data;
     if (event->numBytes == 0 || event->isText) {
         return EM_TRUE; /* relay speaks binary frames only */
     }
     struct pbuf *frame = pbuf_alloc(PBUF_RAW, (u16_t)event->numBytes, PBUF_POOL);
     if (!frame) {
-        ywarn("ynet: out of pbufs, dropping inbound frame (%u bytes)", (unsigned)event->numBytes);
+        ywarn("ywasmnet: out of pbufs, dropping inbound frame (%u bytes)", (unsigned)event->numBytes);
         return EM_TRUE;
     }
     pbuf_take(frame, event->data, (u16_t)event->numBytes);
@@ -158,8 +158,8 @@ static EM_BOOL netstack_on_error(int event_type, const EmscriptenWebSocketErrorE
 {
     (void)event_type;
     (void)event;
-    struct yetty_ynet_netstack *netstack = user_data;
-    yerror("ynet: relay socket error (%s)", netstack->relay_url);
+    struct yetty_ywasmnet_netstack *netstack = user_data;
+    yerror("ywasmnet: relay socket error (%s)", netstack->relay_url);
     return EM_TRUE;
 }
 
@@ -168,8 +168,8 @@ static EM_BOOL netstack_on_close(int event_type, const EmscriptenWebSocketCloseE
                                  void *user_data)
 {
     (void)event_type;
-    struct yetty_ynet_netstack *netstack = user_data;
-    yinfo("ynet: relay disconnected (code=%d clean=%d)", (int)event->code, (int)event->wasClean);
+    struct yetty_ywasmnet_netstack *netstack = user_data;
+    yinfo("ywasmnet: relay disconnected (code=%d clean=%d)", (int)event->code, (int)event->wasClean);
     netstack->link_up = 0;
     netif_set_link_down(&netstack->netif);
     return EM_TRUE;
@@ -186,23 +186,23 @@ static void netstack_tick(void *user_data)
 
 /* ---- Lifecycle ---------------------------------------------------- */
 
-struct yetty_ynet_netstack_ptr_result yetty_ynet_netstack_create(const char *relay_url)
+struct yetty_ywasmnet_netstack_ptr_result yetty_ywasmnet_netstack_create(const char *relay_url)
 {
     if (!relay_url || !relay_url[0]) {
-        return YETTY_ERR(yetty_ynet_netstack_ptr, "ynet: relay url required");
+        return YETTY_ERR(yetty_ywasmnet_netstack_ptr, "ywasmnet: relay url required");
     }
     if (!emscripten_websocket_is_supported()) {
-        return YETTY_ERR(yetty_ynet_netstack_ptr, "ynet: WebSocket unsupported in this browser");
+        return YETTY_ERR(yetty_ywasmnet_netstack_ptr, "ywasmnet: WebSocket unsupported in this browser");
     }
 
-    struct yetty_ynet_netstack *netstack = calloc(1, sizeof(*netstack));
+    struct yetty_ywasmnet_netstack *netstack = calloc(1, sizeof(*netstack));
     if (!netstack) {
-        return YETTY_ERR(yetty_ynet_netstack_ptr, "ynet: alloc failed");
+        return YETTY_ERR(yetty_ywasmnet_netstack_ptr, "ywasmnet: alloc failed");
     }
     netstack->relay_url = strdup(relay_url);
     if (!netstack->relay_url) {
         free(netstack);
-        return YETTY_ERR(yetty_ynet_netstack_ptr, "ynet: relay url copy failed");
+        return YETTY_ERR(yetty_ywasmnet_netstack_ptr, "ywasmnet: relay url copy failed");
     }
 
     /* Locally-administered unicast MAC: bit1 of the first octet set
@@ -221,14 +221,14 @@ struct yetty_ynet_netstack_ptr_result yetty_ynet_netstack_create(const char *rel
                    netif_input)) {
         free(netstack->relay_url);
         free(netstack);
-        return YETTY_ERR(yetty_ynet_netstack_ptr, "ynet: netif_add failed");
+        return YETTY_ERR(yetty_ywasmnet_netstack_ptr, "ywasmnet: netif_add failed");
     }
     netif_set_default(&netstack->netif);
     netif_set_status_callback(&netstack->netif, netstack_status_callback);
     netif_set_up(&netstack->netif);
 
     /* Drive lwIP timers from a browser interval (DHCP/TCP retransmits). */
-    netstack->timer_id = emscripten_set_interval(netstack_tick, YETTY_YNET_TICK_MS, netstack);
+    netstack->timer_id = emscripten_set_interval(netstack_tick, YETTY_YWASMNET_TICK_MS, netstack);
 
     EmscriptenWebSocketCreateAttributes attributes;
     emscripten_websocket_init_create_attributes(&attributes);
@@ -239,25 +239,25 @@ struct yetty_ynet_netstack_ptr_result yetty_ynet_netstack_create(const char *rel
         netif_remove(&netstack->netif);
         free(netstack->relay_url);
         free(netstack);
-        return YETTY_ERR(yetty_ynet_netstack_ptr, "ynet: emscripten_websocket_new failed");
+        return YETTY_ERR(yetty_ywasmnet_netstack_ptr, "ywasmnet: emscripten_websocket_new failed");
     }
     emscripten_websocket_set_onopen_callback(netstack->socket, netstack, netstack_on_open);
     emscripten_websocket_set_onmessage_callback(netstack->socket, netstack, netstack_on_message);
     emscripten_websocket_set_onerror_callback(netstack->socket, netstack, netstack_on_error);
     emscripten_websocket_set_onclose_callback(netstack->socket, netstack, netstack_on_close);
 
-    yinfo("ynet: netstack up, connecting relay %s (mac %02x:%02x:%02x:%02x:%02x:%02x)",
+    yinfo("ywasmnet: netstack up, connecting relay %s (mac %02x:%02x:%02x:%02x:%02x:%02x)",
           netstack->relay_url, netstack->mac[0], netstack->mac[1], netstack->mac[2],
           netstack->mac[3], netstack->mac[4], netstack->mac[5]);
-    return YETTY_OK(yetty_ynet_netstack_ptr, netstack);
+    return YETTY_OK(yetty_ywasmnet_netstack_ptr, netstack);
 }
 
-int yetty_ynet_netstack_is_ready(const struct yetty_ynet_netstack *netstack)
+int yetty_ywasmnet_netstack_is_ready(const struct yetty_ywasmnet_netstack *netstack)
 {
     return netstack && netstack->bound;
 }
 
-void yetty_ynet_netstack_destroy(struct yetty_ynet_netstack *netstack)
+void yetty_ywasmnet_netstack_destroy(struct yetty_ywasmnet_netstack *netstack)
 {
     if (!netstack) {
         return;

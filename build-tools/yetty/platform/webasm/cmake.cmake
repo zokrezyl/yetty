@@ -43,8 +43,8 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ytransport/websocket-transport.c
     ${YETTY_ROOT}/src/yetty/ytransport/lwip-transport.c
     ${YETTY_ROOT}/src/yetty/yssh/ssh-websocket-pty.c
-    ${YETTY_ROOT}/src/yetty/ynet/netstack.c
-    ${YETTY_ROOT}/src/yetty/ynet/lwip-port.c
+    ${YETTY_ROOT}/src/yetty/ywasmnet/netstack.c
+    ${YETTY_ROOT}/src/yetty/ywasmnet/lwip-port.c
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/brotli-glue.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
@@ -167,10 +167,10 @@ include(${YETTY_ROOT}/build-tools/yetty/libs/brotli.cmake)
 # (webasm flavor bundles libmbedcrypto.a).
 include(${YETTY_ROOT}/build-tools/yetty/libs/libssh2-webasm.cmake)
 
-# lwIP — userspace TCP/IP stack for the in-browser netstack (ynet). Gives
-# real TCP connectivity over an L2 relay WebSocket, no VM. FetchContent
-# source build with yetty's toolchain; PUBLIC include dirs propagate to
-# the ynet sources compiled into the yetty target.
+# lwIP — userspace TCP/IP stack for the in-browser netstack (ywasmnet).
+# Gives real TCP connectivity over an L2 relay WebSocket, no VM.
+# FetchContent source build with yetty's toolchain; PUBLIC include dirs
+# propagate to the ywasmnet sources compiled into the yetty target.
 include(${YETTY_ROOT}/build-tools/yetty/libs/lwip-webasm.cmake)
 
 target_link_libraries(yetty PRIVATE

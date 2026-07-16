@@ -77,7 +77,7 @@ loop->ops->start(loop);
 [yframework](../yframework/README.md) creates and owns the loop;
 [yctl](../yctl/README.md) builds its RPC server on the TCP surface;
 [yterminal](../yterminal/README.md) registers PTY pipes;
-[yui](../yui/README.md), [yvnc](../yvnc/README.md), ydvnc, ypty, ynet and
+[yui](../yui/README.md), [yvnc](../yvnc/README.md), ydvnc, ypty, ywasmnet and
 others use timers, TCP, and listeners. Implementations:
 `src/yetty/yplatform/libuv-event-loop/{default,webasm}.c`.
 

@@ -1,5 +1,5 @@
 /* lwip-transport — yetty_ytransport_conn_transport over an lwIP TCP
- * connection (the in-browser netstack, src/yetty/ynet/).
+ * connection (the in-browser netstack, src/yetty/ywasmnet/).
  *
  * This is what makes the netstack useful: a single outbound TCP
  * connection to a real host:port, carried by lwIP over the relay
@@ -12,7 +12,7 @@
  *     telnet-pty / ssh-websocket-pty
  *        └ conn_transport (this)
  *             └ lwIP tcp_pcb  (DNS-resolves host, tcp_connect)
- *                  └ IP / TCP over the ynet netstack
+ *                  └ IP / TCP over the ywasmnet netstack
  *                       └ ethernet frames ⇄ relay WebSocket
  *
  * The netstack (lwip_init + netif + DHCP) must be up first; this
