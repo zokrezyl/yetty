@@ -143,7 +143,15 @@ add_subdirectory(ygrid)
 
 # ygit — read-only Git history/inspection component (yclass `repo` class over
 # libgit2). Reusable by the tools/ygit app and any future interactive pane.
-add_subdirectory(ygit)
+# Desktop-only: libgit2 prebuilts are published only for linux/macOS/Windows
+# (there is no ios/tvos/android/webasm libgit2), and including this
+# unconditionally fetches libgit2 at configure time — which 404s on those
+# platforms. Mirrors the yinstall desktop gate below.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR WIN32 OR APPLE)
+    if(NOT YETTY_IOS AND NOT YETTY_TVOS AND NOT YETTY_ANDROID AND NOT ANDROID)
+        add_subdirectory(ygit)
+    endif()
+endif()
 
 # yplatform — split into two libs (core + full). Must come after ycore
 # (PUBLIC dep) and before any tool / consumer of its target names.

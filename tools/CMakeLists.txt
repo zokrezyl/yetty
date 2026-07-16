@@ -86,7 +86,9 @@ if(YETTY_ENABLE_TOOL_YTOP)
     add_subdirectory(ytop)
 endif()
 
-if(YETTY_ENABLE_TOOL_YGIT)
+# yetty_ygit only exists on desktop (see the ygit desktop gate in
+# src/yetty/CMakeLists.txt) — gate on the target so non-desktop builds skip it.
+if(YETTY_ENABLE_TOOL_YGIT AND TARGET yetty_ygit)
     add_subdirectory(ygit)
 endif()
 
