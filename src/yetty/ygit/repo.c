@@ -126,6 +126,16 @@ struct yetty_ygit_log_ptr_result yetty_ygit_repo_log(struct yetty_yclass_object 
     return yetty_ygit_backend_log(path_res.value, revision, max_count);
 }
 
+/* Like log, but from every branch tip — the whole DAG, unmerged lanes and all. */
+YETTY_ANNOTATE("expose")
+struct yetty_ygit_log_ptr_result yetty_ygit_repo_log_all(struct yetty_yclass_object *obj,
+                                                         int max_count)
+{
+    struct yetty_ycore_const_char_ptr_result path_res = repo_require_path(obj);
+    YETTY_RETURN_IF_ERR(yetty_ygit_log_ptr, path_res, "yetty_ygit_repo_log_all");
+    return yetty_ygit_backend_log_all(path_res.value, max_count);
+}
+
 YETTY_ANNOTATE("expose")
 struct yetty_ygit_status_ptr_result yetty_ygit_repo_status(struct yetty_yclass_object *obj)
 {
@@ -149,6 +159,33 @@ struct yetty_ygit_commit_detail_ptr_result yetty_ygit_repo_show(struct yetty_ycl
     struct yetty_ycore_const_char_ptr_result path_res = repo_require_path(obj);
     YETTY_RETURN_IF_ERR(yetty_ygit_commit_detail_ptr, path_res, "yetty_ygit_repo_show");
     return yetty_ygit_backend_show(path_res.value, revision);
+}
+
+/* Read a file blob at a revision — `spec` is "<rev>:<path>" (or a bare path,
+ * defaulting to HEAD). The reusable hook a rich renderer uses to show a file as
+ * it existed at any point in history. */
+YETTY_ANNOTATE("expose")
+struct yetty_ygit_blob_ptr_result yetty_ygit_repo_read_blob(struct yetty_yclass_object *obj,
+                                                            const char *spec)
+{
+    struct yetty_ycore_const_char_ptr_result path_res = repo_require_path(obj);
+    YETTY_RETURN_IF_ERR(yetty_ygit_blob_ptr, path_res, "yetty_ygit_repo_read_blob");
+    if (!spec) {
+        return YETTY_ERR(yetty_ygit_blob_ptr, "yetty_ygit_repo_read_blob: NULL spec");
+    }
+    return yetty_ygit_backend_read_blob(path_res.value, spec);
+}
+
+/* Diff a commit (revision, NULL → HEAD) against its first parent. Each changed
+ * file carries both blob images and, for text, the structured hunks — enough
+ * for a renderer to draw a visual before/after or a syntax-highlighted patch. */
+YETTY_ANNOTATE("expose")
+struct yetty_ygit_diff_ptr_result yetty_ygit_repo_diff(struct yetty_yclass_object *obj,
+                                                       const char *revision)
+{
+    struct yetty_ycore_const_char_ptr_result path_res = repo_require_path(obj);
+    YETTY_RETURN_IF_ERR(yetty_ygit_diff_ptr, path_res, "yetty_ygit_repo_diff");
+    return yetty_ygit_backend_diff(path_res.value, revision);
 }
 
 /* Run the destructor slot, then release the object storage. Mirrors the

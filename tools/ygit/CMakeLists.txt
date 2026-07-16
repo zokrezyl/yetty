@@ -9,6 +9,7 @@
 
 add_executable(ygit
     main.c
+    render.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
 )
 
@@ -18,12 +19,22 @@ target_include_directories(ygit PRIVATE
     ${YETTY_ROOT}/src
 )
 
+find_package(Threads REQUIRED)
 target_link_libraries(ygit PRIVATE
     yetty_ygit
     yetty_yclass
     yetty_ycore
+    yetty_ycat            # render.c reuses ycat's handlers + OSC envelope encoder
     yetty_yplatform_core  # ytrace.c uses yetty_yplatform_ymutex_* (ytop gets this via ygui)
+    Threads::Threads
 )
+
+# Re-link brotli at the very end so libcurl.a (pulled in transitively by
+# yetty_ycat) can resolve its Content-Encoding: br symbols — same reason and
+# fix as tools/ycat/CMakeLists.txt.
+if(YETTY_ENABLE_LIB_LIBCURL AND TARGET CURL::libcurl AND TARGET brotlidec)
+    target_link_libraries(ygit PRIVATE brotlidec brotlicommon)
+endif()
 
 if(NOT MSVC)
     target_compile_options(ygit PRIVATE -Wall -Wextra)

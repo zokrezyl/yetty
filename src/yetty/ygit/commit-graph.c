@@ -15,6 +15,20 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Duplicate a string with malloc so every allocation in this file pairs with
+ * the same free() the process's allocator provides — glibc strdup() would bind
+ * libc's own malloc, which mismatches an interposed allocator on free. */
+static char *ygit_graph_strdup(const char *text)
+{
+    size_t length = strlen(text);
+    char *copy = malloc(length + 1);
+    if (!copy) {
+        return NULL;
+    }
+    memcpy(copy, text, length + 1);
+    return copy;
+}
+
 /* Active-lane vector: active[k] is the full hash the lane is waiting for, or
  * NULL for a free lane. */
 struct ygit_lane_set {
@@ -114,7 +128,7 @@ struct yetty_ygit_graph_ptr_result yetty_ygit_graph_build(struct yetty_ygit_log 
         }
         /* This commit now occupies `column` for the snapshot. */
         if (!lanes.waiting[column]) {
-            lanes.waiting[column] = strdup(commit->full_hash);
+            lanes.waiting[column] = ygit_graph_strdup(commit->full_hash);
             if (!lanes.waiting[column]) {
                 result = YETTY_ERR(yetty_ygit_graph_ptr, "ygit graph: out of memory");
                 goto cleanup;
@@ -159,7 +173,7 @@ struct yetty_ygit_graph_ptr_result yetty_ygit_graph_build(struct yetty_ygit_log 
         free(lanes.waiting[column]);
         lanes.waiting[column] = NULL;
         if (commit->parent_count > 0) {
-            lanes.waiting[column] = strdup(commit->parent_hashes[0]);
+            lanes.waiting[column] = ygit_graph_strdup(commit->parent_hashes[0]);
             if (!lanes.waiting[column]) {
                 result = YETTY_ERR(yetty_ygit_graph_ptr, "ygit graph: out of memory");
                 goto cleanup;
@@ -175,7 +189,7 @@ struct yetty_ygit_graph_ptr_result yetty_ygit_graph_build(struct yetty_ygit_log 
                     result = YETTY_ERR(yetty_ygit_graph_ptr, "ygit graph: out of memory");
                     goto cleanup;
                 }
-                lanes.waiting[branch_column] = strdup(commit->parent_hashes[parent_index]);
+                lanes.waiting[branch_column] = ygit_graph_strdup(commit->parent_hashes[parent_index]);
                 if (!lanes.waiting[branch_column]) {
                     result = YETTY_ERR(yetty_ygit_graph_ptr, "ygit graph: out of memory");
                     goto cleanup;

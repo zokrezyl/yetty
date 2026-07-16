@@ -80,6 +80,15 @@ exposed:
         type: int
     doc: null
   - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_log_all
+    return_type: struct yetty_ygit_log_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: max_count
+        type: int
+    doc: "/* Like log, but from every branch tip — the whole DAG, unmerged lanes and all. */"
+  - source_file: src/yetty/ygit/repo.c
     name: yetty_ygit_repo_status
     return_type: struct yetty_ygit_status_ptr_result
     args:
@@ -102,6 +111,28 @@ exposed:
       - name: revision
         type: "const char *"
     doc: null
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_read_blob
+    return_type: struct yetty_ygit_blob_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: spec
+        type: "const char *"
+    doc: "/* Read a file blob at a revision — `spec` is \"<rev>:<path>\" (or a bare path,
+ * defaulting to HEAD). The reusable hook a rich renderer uses to show a file as
+ * it existed at any point in history. */"
+  - source_file: src/yetty/ygit/repo.c
+    name: yetty_ygit_repo_diff
+    return_type: struct yetty_ygit_diff_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: revision
+        type: "const char *"
+    doc: "/* Diff a commit (revision, NULL → HEAD) against its first parent. Each changed
+ * file carries both blob images and, for text, the structured hunks — enough
+ * for a renderer to draw a visual before/after or a syntax-highlighted patch. */"
   - source_file: src/yetty/ygit/repo.c
     name: yetty_ygit_repo_destroy
     return_type: struct yetty_ycore_void_result
@@ -172,6 +203,18 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_ygit_blob_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ygit_blob *"
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ygit_branches_ptr_result
     kind: result
     fields:
@@ -194,6 +237,18 @@ types:
         fields:
           - name: value
             type: "struct yetty_ygit_commit_detail *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ygit_diff_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ygit_diff *"
           - name: error
             type: struct yetty_ycore_error
   - name: yetty_ygit_log_ptr_result

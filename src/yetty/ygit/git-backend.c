@@ -268,6 +268,32 @@ void yetty_ygit_commit_detail_destroy(struct yetty_ygit_commit_detail *detail)
     free(detail);
 }
 
+void yetty_ygit_diff_destroy(struct yetty_ygit_diff *diff)
+{
+    if (!diff) {
+        return;
+    }
+    yetty_ygit_commit_release(&diff->commit);
+    for (size_t file_index = 0; file_index < diff->file_count; file_index++) {
+        struct yetty_ygit_diff_file *file = &diff->files[file_index];
+        free(file->old_path);
+        free(file->new_path);
+        free(file->old_data);
+        free(file->new_data);
+        for (size_t hunk_index = 0; hunk_index < file->hunk_count; hunk_index++) {
+            struct yetty_ygit_diff_hunk *hunk = &file->hunks[hunk_index];
+            free(hunk->header);
+            for (size_t line_index = 0; line_index < hunk->line_count; line_index++) {
+                free(hunk->lines[line_index].content);
+            }
+            free(hunk->lines);
+        }
+        free(file->hunks);
+    }
+    free(diff->files);
+    free(diff);
+}
+
 /* --- is_repo ------------------------------------------------------------ */
 
 static struct yetty_ycore_int_result is_repo_impl(const char *repo_path)
@@ -297,7 +323,7 @@ struct yetty_ycore_int_result yetty_ygit_backend_is_repo(const char *repo_path)
 /* --- log ---------------------------------------------------------------- */
 
 static struct yetty_ygit_log_ptr_result log_impl(const char *repo_path, const char *revision,
-                                                 int max_count)
+                                                 int max_count, int all_refs)
 {
     struct yetty_ygit_log_ptr_result result = YETTY_ERR(yetty_ygit_log_ptr, "ygit log: unreached");
     git_repository *repo = NULL;
@@ -315,7 +341,20 @@ static struct yetty_ygit_log_ptr_result log_impl(const char *repo_path, const ch
     }
     git_revwalk_sorting(walk, GIT_SORT_TOPOLOGICAL | GIT_SORT_TIME);
 
-    if (revision && revision[0]) {
+    if (all_refs) {
+        /* Every branch tip, so the walk covers the whole DAG (including lanes
+         * that never merged). No branches (unborn HEAD) is an empty log. */
+        if (git_revwalk_push_glob(walk, "refs/heads/*") < 0) {
+            log = calloc(1, sizeof(*log));
+            if (!log) {
+                result = YETTY_ERR(yetty_ygit_log_ptr, "ygit log: out of memory");
+                goto cleanup;
+            }
+            result = YETTY_OK(yetty_ygit_log_ptr, log);
+            log = NULL;
+            goto cleanup;
+        }
+    } else if (revision && revision[0]) {
         git_object *object = NULL;
         git_object *commit_object = NULL;
         if (git_revparse_single(&object, repo, revision) < 0) {
@@ -419,7 +458,20 @@ struct yetty_ygit_log_ptr_result yetty_ygit_backend_log(const char *repo_path, c
     if (git_libgit2_init() < 0) {
         return YETTY_ERR(yetty_ygit_log_ptr, "ygit: libgit2 init failed");
     }
-    struct yetty_ygit_log_ptr_result result = log_impl(repo_path, revision, max_count);
+    struct yetty_ygit_log_ptr_result result = log_impl(repo_path, revision, max_count, 0);
+    git_libgit2_shutdown();
+    return result;
+}
+
+struct yetty_ygit_log_ptr_result yetty_ygit_backend_log_all(const char *repo_path, int max_count)
+{
+    if (!repo_path) {
+        return YETTY_ERR(yetty_ygit_log_ptr, "ygit log: NULL path");
+    }
+    if (git_libgit2_init() < 0) {
+        return YETTY_ERR(yetty_ygit_log_ptr, "ygit: libgit2 init failed");
+    }
+    struct yetty_ygit_log_ptr_result result = log_impl(repo_path, NULL, max_count, 1);
     git_libgit2_shutdown();
     return result;
 }
@@ -834,6 +886,367 @@ struct yetty_ygit_commit_detail_ptr_result yetty_ygit_backend_show(const char *r
         return YETTY_ERR(yetty_ygit_commit_detail_ptr, "ygit: libgit2 init failed");
     }
     struct yetty_ygit_commit_detail_ptr_result result = show_impl(repo_path, revision);
+    git_libgit2_shutdown();
+    return result;
+}
+
+/* --- diff (commit vs first parent, with blob images + text hunks) ------- */
+
+/* Duplicate `text[0..len)` with any trailing CR/LF stripped, NUL-terminated. */
+static char *ygit_trim_newline_dup(const char *text, size_t len)
+{
+    while (len > 0 && (text[len - 1] == '\n' || text[len - 1] == '\r')) {
+        len--;
+    }
+    char *copy = malloc(len + 1);
+    if (!copy) {
+        return NULL;
+    }
+    if (len) {
+        memcpy(copy, text, len);
+    }
+    copy[len] = '\0';
+    return copy;
+}
+
+/* Copy a blob's raw bytes by oid. A zero oid (the missing side of an add or
+ * delete) yields NULL/0 and success. Returns -1 on lookup / allocation failure. */
+static int ygit_copy_blob(git_repository *repo, const git_oid *oid, unsigned char **data_out,
+                          size_t *size_out)
+{
+    *data_out = NULL;
+    *size_out = 0;
+    if (git_oid_is_zero(oid)) {
+        return 0;
+    }
+    git_blob *blob = NULL;
+    if (git_blob_lookup(&blob, repo, oid) < 0) {
+        return -1;
+    }
+    const void *raw = git_blob_rawcontent(blob);
+    size_t raw_size = (size_t)git_blob_rawsize(blob);
+    unsigned char *copy = malloc(raw_size ? raw_size : 1);
+    if (!copy) {
+        git_blob_free(blob);
+        return -1;
+    }
+    if (raw_size) {
+        memcpy(copy, raw, raw_size);
+    }
+    git_blob_free(blob);
+    *data_out = copy;
+    *size_out = raw_size;
+    return 0;
+}
+
+static char ygit_delta_status_char(git_delta_t status)
+{
+    switch (status) {
+    case GIT_DELTA_ADDED:
+        return 'A';
+    case GIT_DELTA_DELETED:
+        return 'D';
+    case GIT_DELTA_RENAMED:
+        return 'R';
+    case GIT_DELTA_COPIED:
+        return 'C';
+    case GIT_DELTA_TYPECHANGE:
+        return 'T';
+    case GIT_DELTA_MODIFIED:
+    default:
+        return 'M';
+    }
+}
+
+/* Pull one file's structured hunks (headers + origin-tagged lines) out of its
+ * patch. Hunk/line counts are advanced as each is populated so a mid-way
+ * failure leaves the file safe for yetty_ygit_diff_destroy. Returns -1 on OOM. */
+static int ygit_collect_hunks(git_patch *patch, struct yetty_ygit_diff_file *file)
+{
+    size_t hunk_total = git_patch_num_hunks(patch);
+    if (hunk_total == 0) {
+        return 0;
+    }
+    file->hunks = calloc(hunk_total, sizeof(*file->hunks));
+    if (!file->hunks) {
+        return -1;
+    }
+    for (size_t hunk_index = 0; hunk_index < hunk_total; hunk_index++) {
+        const git_diff_hunk *git_hunk = NULL;
+        size_t lines_in_hunk = 0;
+        if (git_patch_get_hunk(&git_hunk, &lines_in_hunk, patch, hunk_index) < 0) {
+            return -1;
+        }
+        struct yetty_ygit_diff_hunk *hunk = &file->hunks[file->hunk_count];
+        hunk->header = ygit_trim_newline_dup(git_hunk->header, git_hunk->header_len);
+        if (!hunk->header) {
+            return -1;
+        }
+        file->hunk_count++; /* header tracked → destroy will free from here on */
+
+        if (lines_in_hunk > 0) {
+            hunk->lines = calloc(lines_in_hunk, sizeof(*hunk->lines));
+            if (!hunk->lines) {
+                return -1;
+            }
+        }
+        for (size_t line_index = 0; line_index < lines_in_hunk; line_index++) {
+            const git_diff_line *git_line = NULL;
+            if (git_patch_get_line_in_hunk(&git_line, patch, hunk_index, line_index) < 0) {
+                return -1;
+            }
+            if (git_line->origin != GIT_DIFF_LINE_CONTEXT &&
+                git_line->origin != GIT_DIFF_LINE_ADDITION &&
+                git_line->origin != GIT_DIFF_LINE_DELETION) {
+                continue; /* skip the "\ No newline at end of file" markers */
+            }
+            struct yetty_ygit_diff_line *line = &hunk->lines[hunk->line_count];
+            line->origin = git_line->origin;
+            line->old_lineno = git_line->old_lineno;
+            line->new_lineno = git_line->new_lineno;
+            line->content = ygit_trim_newline_dup(git_line->content, git_line->content_len);
+            if (!line->content) {
+                return -1;
+            }
+            hunk->line_count++;
+        }
+    }
+    return 0;
+}
+
+static struct yetty_ygit_diff_ptr_result diff_impl(const char *repo_path, const char *revision)
+{
+    struct yetty_ygit_diff_ptr_result result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: unreached");
+    git_repository *repo = NULL;
+    git_object *object = NULL;
+    git_object *commit_object = NULL;
+    git_tree *commit_tree = NULL;
+    git_tree *parent_tree = NULL;
+    git_diff *diff = NULL;
+    struct yetty_ygit_diff *out = NULL;
+
+    if (git_repository_open_ext(&repo, repo_path, 0, NULL) < 0) {
+        result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: cannot open repository");
+        goto cleanup;
+    }
+    const char *rev = (revision && revision[0]) ? revision : "HEAD";
+    if (git_revparse_single(&object, repo, rev) < 0) {
+        result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: cannot resolve revision");
+        goto cleanup;
+    }
+    if (git_object_peel(&commit_object, object, GIT_OBJECT_COMMIT) < 0) {
+        result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: revision is not a commit");
+        goto cleanup;
+    }
+    git_commit *commit = (git_commit *)commit_object;
+
+    if (git_commit_tree(&commit_tree, commit) < 0) {
+        result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: cannot read commit tree");
+        goto cleanup;
+    }
+    if (git_commit_parentcount(commit) > 0) {
+        git_commit *parent = NULL;
+        if (git_commit_parent(&parent, commit, 0) == 0) {
+            git_commit_tree(&parent_tree, parent);
+            git_commit_free(parent);
+        }
+    }
+    if (git_diff_tree_to_tree(&diff, repo, parent_tree, commit_tree, NULL) < 0) {
+        result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: tree diff failed");
+        goto cleanup;
+    }
+
+    out = calloc(1, sizeof(*out));
+    if (!out) {
+        result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: out of memory");
+        goto cleanup;
+    }
+    if (ygit_commit_fill(&out->commit, commit) < 0) {
+        result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: out of memory");
+        goto cleanup;
+    }
+
+    size_t delta_count = git_diff_num_deltas(diff);
+    if (delta_count > 0) {
+        out->files = calloc(delta_count, sizeof(*out->files));
+        if (!out->files) {
+            result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: out of memory");
+            goto cleanup;
+        }
+        for (size_t index = 0; index < delta_count; index++) {
+            git_patch *patch = NULL;
+            if (git_patch_from_diff(&patch, diff, index) < 0) {
+                result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: patch build failed");
+                goto cleanup;
+            }
+            const git_diff_delta *delta = git_patch_get_delta(patch);
+            struct yetty_ygit_diff_file *file = &out->files[out->file_count];
+            out->file_count++; /* slot is zeroed; track before filling */
+
+            file->status = ygit_delta_status_char(delta->status);
+            file->is_binary = (delta->flags & GIT_DIFF_FLAG_BINARY) ? 1 : 0;
+
+            int old_present = !git_oid_is_zero(&delta->old_file.id);
+            int new_present = !git_oid_is_zero(&delta->new_file.id);
+            if (old_present && delta->old_file.path) {
+                file->old_path = ygit_strdup(delta->old_file.path);
+                if (!file->old_path) {
+                    git_patch_free(patch);
+                    result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: out of memory");
+                    goto cleanup;
+                }
+            }
+            if (new_present && delta->new_file.path) {
+                file->new_path = ygit_strdup(delta->new_file.path);
+                if (!file->new_path) {
+                    git_patch_free(patch);
+                    result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: out of memory");
+                    goto cleanup;
+                }
+            }
+            if (ygit_copy_blob(repo, &delta->old_file.id, &file->old_data, &file->old_size) < 0 ||
+                ygit_copy_blob(repo, &delta->new_file.id, &file->new_data, &file->new_size) < 0) {
+                git_patch_free(patch);
+                result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: blob read failed");
+                goto cleanup;
+            }
+            if (!file->is_binary && ygit_collect_hunks(patch, file) < 0) {
+                git_patch_free(patch);
+                result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: out of memory");
+                goto cleanup;
+            }
+            git_patch_free(patch);
+        }
+    }
+
+    result = YETTY_OK(yetty_ygit_diff_ptr, out);
+    out = NULL;
+
+cleanup:
+    yetty_ygit_diff_destroy(out);
+    git_diff_free(diff);
+    git_tree_free(parent_tree);
+    git_tree_free(commit_tree);
+    git_object_free(commit_object);
+    git_object_free(object);
+    git_repository_free(repo);
+    return result;
+}
+
+struct yetty_ygit_diff_ptr_result yetty_ygit_backend_diff(const char *repo_path,
+                                                          const char *revision)
+{
+    if (!repo_path) {
+        return YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: NULL path");
+    }
+    if (git_libgit2_init() < 0) {
+        return YETTY_ERR(yetty_ygit_diff_ptr, "ygit: libgit2 init failed");
+    }
+    struct yetty_ygit_diff_ptr_result result = diff_impl(repo_path, revision);
+    git_libgit2_shutdown();
+    return result;
+}
+
+/* --- read_blob (file contents at a revision) ---------------------------- */
+
+void yetty_ygit_blob_destroy(struct yetty_ygit_blob *blob)
+{
+    if (!blob) {
+        return;
+    }
+    free(blob->data);
+    free(blob->name);
+    free(blob);
+}
+
+/* Base name of the path portion of a "<rev>:<path>" spec (or of a bare path):
+ * the text after the last '/', itself after the last ':'. */
+static const char *ygit_spec_basename(const char *spec)
+{
+    const char *path = strrchr(spec, ':');
+    path = path ? path + 1 : spec;
+    const char *slash = strrchr(path, '/');
+    return slash ? slash + 1 : path;
+}
+
+static struct yetty_ygit_blob_ptr_result read_blob_impl(const char *repo_path, const char *spec)
+{
+    struct yetty_ygit_blob_ptr_result result =
+        YETTY_ERR(yetty_ygit_blob_ptr, "ygit view: unreached");
+    git_repository *repo = NULL;
+    git_object *object = NULL;
+    struct yetty_ygit_blob *blob = NULL;
+
+    /* A spec with no ':' names a path in the working revision — default to HEAD.
+     * git_revparse_single resolves "<rev>:<path>" to the blob directly. */
+    char *owned_spec = NULL;
+    const char *effective_spec = spec;
+    if (!strchr(spec, ':')) {
+        size_t length = strlen(spec);
+        owned_spec = malloc(length + 6); /* "HEAD:" + spec + NUL */
+        if (!owned_spec) {
+            result = YETTY_ERR(yetty_ygit_blob_ptr, "ygit view: out of memory");
+            goto cleanup;
+        }
+        memcpy(owned_spec, "HEAD:", 5);
+        memcpy(owned_spec + 5, spec, length + 1);
+        effective_spec = owned_spec;
+    }
+
+    if (git_repository_open_ext(&repo, repo_path, 0, NULL) < 0) {
+        result = YETTY_ERR(yetty_ygit_blob_ptr, "ygit view: cannot open repository");
+        goto cleanup;
+    }
+    if (git_revparse_single(&object, repo, effective_spec) < 0) {
+        result = YETTY_ERR(yetty_ygit_blob_ptr, "ygit view: no such path at that revision");
+        goto cleanup;
+    }
+    if (git_object_type(object) != GIT_OBJECT_BLOB) {
+        result = YETTY_ERR(yetty_ygit_blob_ptr, "ygit view: path is a directory, not a file");
+        goto cleanup;
+    }
+
+    const git_blob *git_blob_object = (const git_blob *)object;
+    const void *raw = git_blob_rawcontent(git_blob_object);
+    size_t raw_size = (size_t)git_blob_rawsize(git_blob_object);
+
+    blob = calloc(1, sizeof(*blob));
+    if (!blob) {
+        result = YETTY_ERR(yetty_ygit_blob_ptr, "ygit view: out of memory");
+        goto cleanup;
+    }
+    blob->size = raw_size;
+    blob->data = malloc(raw_size ? raw_size : 1);
+    blob->name = ygit_strdup(ygit_spec_basename(spec));
+    if (!blob->data || !blob->name) {
+        result = YETTY_ERR(yetty_ygit_blob_ptr, "ygit view: out of memory");
+        goto cleanup;
+    }
+    if (raw_size) {
+        memcpy(blob->data, raw, raw_size);
+    }
+
+    result = YETTY_OK(yetty_ygit_blob_ptr, blob);
+    blob = NULL;
+
+cleanup:
+    yetty_ygit_blob_destroy(blob);
+    git_object_free(object);
+    git_repository_free(repo);
+    free(owned_spec);
+    return result;
+}
+
+struct yetty_ygit_blob_ptr_result yetty_ygit_backend_read_blob(const char *repo_path,
+                                                               const char *spec)
+{
+    if (!repo_path || !spec) {
+        return YETTY_ERR(yetty_ygit_blob_ptr, "ygit view: NULL argument");
+    }
+    if (git_libgit2_init() < 0) {
+        return YETTY_ERR(yetty_ygit_blob_ptr, "ygit: libgit2 init failed");
+    }
+    struct yetty_ygit_blob_ptr_result result = read_blob_impl(repo_path, spec);
     git_libgit2_shutdown();
     return result;
 }

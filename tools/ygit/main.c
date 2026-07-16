@@ -10,7 +10,10 @@
  *   ygit [-C DIR] log   [-n N] [REV] commit list (metadata + refs)
  *   ygit [-C DIR] graph [-n N] [REV] commit DAG with lane layout
  *   ygit [-C DIR] branches           local branches
- *   ygit [-C DIR] show  REV          one commit: metadata, body, file changes
+ *   ygit [-C DIR] show  REV [-p]     one commit: metadata, body, file changes
+ *   ygit [-C DIR] diff  [REV]        a commit's diff, rendered (assets before/
+ *                                    after; source syntax-highlighted)
+ *   ygit [-C DIR] view  REV:PATH     render a file at a revision inline
  *
  * With no subcommand it prints status. REV defaults to HEAD.
  */
@@ -19,12 +22,26 @@
 #include <yetty/ygit/git-backend.h>
 #include <yetty/ygit/commit-graph.h>
 #include <yetty/yclass/class.h>
+#include <yetty/ycore/terminal-detect.h>
+
+#include "render.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
+
+/* Terminal width in columns, defaulting to 80 when stdout is not a tty. */
+static int ygit_terminal_cols(void)
+{
+    struct winsize window;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &window) == 0 && window.ws_col > 0) {
+        return window.ws_col;
+    }
+    return 80;
+}
 
 /* ANSI colouring, only when stdout is a terminal. */
 struct ygit_style {
@@ -123,9 +140,11 @@ static int ygit_cmd_status(struct yetty_yclass_object *repo, const struct ygit_s
 }
 
 static int ygit_cmd_log(struct yetty_yclass_object *repo, const char *revision, int max_count,
-                        const struct ygit_style *style)
+                        int all_refs, const struct ygit_style *style)
 {
-    struct yetty_ygit_log_ptr_result log_res = yetty_ygit_repo_log(repo, revision, max_count);
+    struct yetty_ygit_log_ptr_result log_res =
+        all_refs ? yetty_ygit_repo_log_all(repo, max_count)
+                 : yetty_ygit_repo_log(repo, revision, max_count);
     if (YETTY_IS_ERR(log_res)) {
         ygit_report_error(log_res.error);
         return 1;
@@ -148,9 +167,11 @@ static int ygit_cmd_log(struct yetty_yclass_object *repo, const char *revision, 
 }
 
 static int ygit_cmd_graph(struct yetty_yclass_object *repo, const char *revision, int max_count,
-                          const struct ygit_style *style)
+                          int all_refs, const struct ygit_style *style)
 {
-    struct yetty_ygit_log_ptr_result log_res = yetty_ygit_repo_log(repo, revision, max_count);
+    struct yetty_ygit_log_ptr_result log_res =
+        all_refs ? yetty_ygit_repo_log_all(repo, max_count)
+                 : yetty_ygit_repo_log(repo, revision, max_count);
     if (YETTY_IS_ERR(log_res)) {
         ygit_report_error(log_res.error);
         return 1;
@@ -164,6 +185,15 @@ static int ygit_cmd_graph(struct yetty_yclass_object *repo, const char *revision
         return 1;
     }
     struct yetty_ygit_graph *graph = graph_res.value;
+
+    /* Inside yetty, draw the DAG as a GPU figure (coloured lanes + circle
+     * nodes). Anywhere else, fall back to the Unicode lane view below. */
+    if (yetty_running_under_yetty()) {
+        int figure_status = ygit_render_graph_figure(log, graph, ygit_terminal_cols());
+        yetty_ygit_graph_destroy(graph);
+        yetty_ygit_log_destroy(log);
+        return figure_status;
+    }
 
     for (size_t index = 0; index < log->count; index++) {
         const struct yetty_ygit_commit *commit = &log->commits[index];
@@ -252,14 +282,56 @@ static int ygit_cmd_show(struct yetty_yclass_object *repo, const char *revision,
     return 0;
 }
 
+/* Render a file as it existed at a revision, inline. This is the view git
+ * cannot give you: an image, a PDF, an SVG, rendered Markdown, or highlighted
+ * source, drawn from history. */
+static int ygit_cmd_view(struct yetty_yclass_object *repo, const char *spec)
+{
+    struct yetty_ygit_blob_ptr_result blob_res = yetty_ygit_repo_read_blob(repo, spec);
+    if (YETTY_IS_ERR(blob_res)) {
+        ygit_report_error(blob_res.error);
+        return 1;
+    }
+    struct yetty_ygit_blob *blob = blob_res.value;
+    int status = ygit_render_blob(blob->data, blob->size, blob->name, ygit_terminal_cols());
+    yetty_ygit_blob_destroy(blob);
+    return status;
+}
+
+/* Render a commit's diff against its first parent. Renderable assets are drawn
+ * as a visual before/after; text/source as a syntax-highlighted unified diff.
+ * This is the diff git cannot draw. */
+static int ygit_cmd_diff(struct yetty_yclass_object *repo, const char *revision)
+{
+    struct yetty_ygit_diff_ptr_result diff_res = yetty_ygit_repo_diff(repo, revision);
+    if (YETTY_IS_ERR(diff_res)) {
+        ygit_report_error(diff_res.error);
+        return 1;
+    }
+    struct yetty_ygit_diff *diff = diff_res.value;
+    int status = 0;
+    if (diff->file_count == 0) {
+        printf("(no changes in this commit)\n");
+    } else {
+        status = ygit_render_diff(diff, ygit_terminal_cols());
+    }
+    yetty_ygit_diff_destroy(diff);
+    return status;
+}
+
 static void ygit_usage(FILE *stream)
 {
     fprintf(stream, "usage: ygit [-C DIR] <command> [args]\n"
                     "  status                 repository status + branch overview\n"
-                    "  log   [-n N] [REV]     commit list (metadata + refs)\n"
-                    "  graph [-n N] [REV]     commit DAG with lane layout\n"
+                    "  log   [-n N] [--all] [REV]  commit list (metadata + refs)\n"
+                    "  graph [-n N] [--all] [REV]  commit DAG (drawn inside yetty)\n"
                     "  branches               local branches\n"
-                    "  show  REV              one commit: metadata, body, file changes\n");
+                    "  show  REV [-p]         one commit: metadata, body, file changes\n"
+                    "                         (-p also renders the diff)\n"
+                    "  diff  [REV]            a commit's diff against its parent, rendered\n"
+                    "                         (assets drawn before/after; source highlighted)\n"
+                    "  view  REV:PATH         render a file at a revision inline\n"
+                    "                         (image / PDF / SVG / Markdown / source)\n");
 }
 
 int main(int argc, char **argv)
@@ -284,13 +356,22 @@ int main(int argc, char **argv)
 
     const char *command = (arg < argc) ? argv[arg++] : "status";
 
-    /* Optional -n N for log / graph, then an optional REV. */
+    /* Optional -n N for log / graph, --all for log / graph, -p/--patch for show,
+     * then an optional REV. */
     int max_count = 100;
+    int show_patch = 0;
+    int all_refs = 0;
     const char *revision = NULL;
     while (arg < argc) {
         if (strcmp(argv[arg], "-n") == 0 && arg + 1 < argc) {
             max_count = atoi(argv[arg + 1]);
             arg += 2;
+        } else if (strcmp(argv[arg], "-p") == 0 || strcmp(argv[arg], "--patch") == 0) {
+            show_patch = 1;
+            arg += 1;
+        } else if (strcmp(argv[arg], "-a") == 0 || strcmp(argv[arg], "--all") == 0) {
+            all_refs = 1;
+            arg += 1;
         } else {
             revision = argv[arg++];
         }
@@ -335,9 +416,9 @@ int main(int argc, char **argv)
     if (strcmp(command, "status") == 0) {
         status = ygit_cmd_status(repo, &style);
     } else if (strcmp(command, "log") == 0) {
-        status = ygit_cmd_log(repo, revision, max_count, &style);
+        status = ygit_cmd_log(repo, revision, max_count, all_refs, &style);
     } else if (strcmp(command, "graph") == 0) {
-        status = ygit_cmd_graph(repo, revision, max_count, &style);
+        status = ygit_cmd_graph(repo, revision, max_count, all_refs, &style);
     } else if (strcmp(command, "branches") == 0) {
         status = ygit_cmd_branches(repo, &style);
     } else if (strcmp(command, "show") == 0) {
@@ -346,6 +427,18 @@ int main(int argc, char **argv)
             status = 2;
         } else {
             status = ygit_cmd_show(repo, revision, &style);
+            if (status == 0 && show_patch) {
+                status = ygit_cmd_diff(repo, revision);
+            }
+        }
+    } else if (strcmp(command, "diff") == 0) {
+        status = ygit_cmd_diff(repo, revision);
+    } else if (strcmp(command, "view") == 0) {
+        if (!revision) {
+            fprintf(stderr, "ygit view: a REV:PATH spec is required\n");
+            status = 2;
+        } else {
+            status = ygit_cmd_view(repo, revision);
         }
     } else {
         fprintf(stderr, "ygit: unknown command '%s'\n", command);
