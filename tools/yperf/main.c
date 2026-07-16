@@ -1,5 +1,5 @@
 /*
- * yprof — a perf / flame-graph workbench built on the ygui widget engine and
+ * yperf — a perf / flame-graph workbench built on the ygui widget engine and
  * the yflame renderer.
  *
  * The profile model (profile.c) parses folded stacks (or collapses `perf
@@ -13,17 +13,25 @@
  * keystrokes fed to the ygui framework. Mouse reporting is turned on the same
  * way tools/yflame does — a pane-wide input subscription plus DEC ?1500h/?1501h.
  *
- *   Inside a yetty terminal:
- *       perf script | stackcollapse-perf.pl > out.folded
- *       yetty -e './yprof out.folded'
- *       yetty -e './yprof --perf perf.data'        # collapse perf.data directly
- *       yetty -e './yprof --diff base.folded cur.folded'   # differential colours
+ *   Record and view in one step (like tools/yflame.sh, but the full workbench):
+ *       yetty -e './yperf -- ./my_program --args'   # profile a command, then show
+ *       yetty -e './yperf -p 4242 -d 5'             # profile a running pid for 5s
+ *       yetty -e './yperf -a -d 5'                  # whole system for 5s (needs privs)
+ *       yetty -e './yperf --demo'                   # synthetic data, no perf needed
+ *
+ *   Or ingest an existing capture:
+ *       yetty -e './yperf out.folded'               # folded stacks
+ *       yetty -e './yperf --perf perf.data'         # collapse perf.data directly
+ *       yetty -e './yperf --diff base.folded cur.folded'   # differential colours
  *
  *   Scrollback figure (renders inline, no dashboard):
- *       yetty -e './yprof --emit out.folded'
+ *       yetty -e './yperf --emit out.folded'
  *
  *   Headless (structured text, no GUI):
- *       ./yprof --print out.folded
+ *       ./yperf --print out.folded
+ *
+ * The capture path shells out to the user's `perf` (a separate GPL process) and
+ * bundles no profiler code, exactly as tools/yflame.sh does.
  */
 #define _DEFAULT_SOURCE 1
 
@@ -35,12 +43,15 @@
 #include <yetty/yterminal/client-input.h> /* mouse / resize / subscription wire */
 #include <yetty/ytrace/ytrace.h>
 
+#include <errno.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -110,8 +121,112 @@ static struct yetty_ycore_void_result run_perf_script(const char *path, char **o
     return YETTY_OK_VOID();
 }
 
+/* Record a profile with `perf record` into a fresh temp perf.data, returning its
+ * path (heap-owned) in *out_path. For a command, `record_argv` / `record_argc`
+ * is the program to profile; otherwise `pid` (a running process) or `all_system`
+ * selects the target and the capture runs for `duration` seconds. Call graphs
+ * are DWARF-unwound unless `frame_pointer` is set. Shells out to the user's
+ * `perf`; no profiler code is bundled. */
+static struct yetty_ycore_void_result perf_record_capture(char **record_argv, int record_argc,
+                                                          const char *pid, int all_system,
+                                                          int duration, int freq, int frame_pointer,
+                                                          char **out_path)
+{
+    const char *tmpdir = getenv("TMPDIR");
+    if (!tmpdir || !tmpdir[0]) {
+        tmpdir = "/tmp";
+    }
+    char path_template[4096];
+    snprintf(path_template, sizeof(path_template), "%s/yperf-XXXXXX", tmpdir);
+    int fd = mkstemp(path_template);
+    if (fd < 0) {
+        return YETTY_ERR(yetty_ycore_void, "cannot create a temporary perf.data");
+    }
+    close(fd);
+
+    char freq_buf[16], duration_buf[16];
+    snprintf(freq_buf, sizeof(freq_buf), "%d", freq);
+    snprintf(duration_buf, sizeof(duration_buf), "%d", duration);
+    const char *call_graph = frame_pointer ? "fp" : "dwarf";
+
+    /* perf record -F <freq> --call-graph <cg> -o <tmp> <target> */
+    size_t max_args = 16 + (size_t)(record_argc > 0 ? record_argc : 0);
+    char **argv = calloc(max_args, sizeof(char *));
+    if (!argv) {
+        unlink(path_template);
+        return YETTY_ERR(yetty_ycore_void, "out of memory building perf command");
+    }
+    size_t argn = 0;
+    argv[argn++] = "perf";
+    argv[argn++] = "record";
+    argv[argn++] = "-F";
+    argv[argn++] = freq_buf;
+    argv[argn++] = "--call-graph";
+    argv[argn++] = (char *)(uintptr_t)call_graph;
+    argv[argn++] = "-o";
+    argv[argn++] = path_template;
+    if (record_argc > 0) {
+        argv[argn++] = "--";
+        for (int i = 0; i < record_argc; i++) {
+            argv[argn++] = record_argv[i];
+        }
+    } else if (all_system) {
+        argv[argn++] = "-a";
+        argv[argn++] = "--";
+        argv[argn++] = "sleep";
+        argv[argn++] = duration_buf;
+    } else {
+        argv[argn++] = "-p";
+        argv[argn++] = (char *)(uintptr_t)pid;
+        argv[argn++] = "--";
+        argv[argn++] = "sleep";
+        argv[argn++] = duration_buf;
+    }
+    argv[argn] = NULL;
+
+    fprintf(stderr, "yperf: recording with perf (-F %s, --call-graph %s)…\n", freq_buf, call_graph);
+    pid_t child = fork();
+    if (child < 0) {
+        free(argv);
+        unlink(path_template);
+        return YETTY_ERR(yetty_ycore_void, "fork failed for perf record");
+    }
+    if (child == 0) {
+        execvp("perf", argv);
+        fprintf(stderr, "yperf: cannot run perf (install linux-perf / linux-tools)\n");
+        _exit(127);
+    }
+    int status = 0;
+    while (waitpid(child, &status, 0) < 0 && errno == EINTR) {
+        /* retry on interrupt */
+    }
+    free(argv);
+
+    /* perf record itself exits non-zero when the profiled program does (or is
+     * Ctrl-C'd) — the capture is still valid. Only bail when perf could not be
+     * started at all, or when nothing was captured. */
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 127) {
+        unlink(path_template);
+        return YETTY_ERR(yetty_ycore_void,
+                         "perf could not be started (install linux-perf / linux-tools)");
+    }
+    struct stat st;
+    if (stat(path_template, &st) != 0 || st.st_size == 0) {
+        unlink(path_template);
+        return YETTY_ERR(yetty_ycore_void,
+                         "perf captured no data (try sudo, or sysctl kernel.perf_event_paranoid=1)");
+    }
+    char *path = strdup(path_template);
+    if (!path) {
+        unlink(path_template);
+        return YETTY_ERR(yetty_ycore_void, "out of memory");
+    }
+    *out_path = path;
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result load_profile(const char *path, int perf_data, int perf_script,
-                                                   struct yprof_profile **out)
+                                                   struct yperf_profile **out)
 {
     char *input = NULL;
     size_t input_len = 0;
@@ -119,7 +234,7 @@ static struct yetty_ycore_void_result load_profile(const char *path, int perf_da
     if (perf_data) {
         read_res = run_perf_script(path, &input, &input_len);
     } else {
-        read_res = yprof_read_all(path, &input, &input_len);
+        read_res = yperf_read_all(path, &input, &input_len);
     }
     if (YETTY_IS_ERR(read_res)) {
         return read_res; /* surface the specific cause (bad path, perf failure, …) */
@@ -127,9 +242,9 @@ static struct yetty_ycore_void_result load_profile(const char *path, int perf_da
 
     struct yetty_ycore_void_result build_res;
     if (perf_data || perf_script) {
-        build_res = yprof_profile_from_perf_script(input, input_len, out);
+        build_res = yperf_profile_from_perf_script(input, input_len, out);
     } else {
-        build_res = yprof_profile_from_folded(input, input_len, out);
+        build_res = yperf_profile_from_folded(input, input_len, out);
     }
     free(input);
     return build_res;
@@ -139,37 +254,47 @@ static struct yetty_ycore_void_result load_profile(const char *path, int perf_da
 /* Headless text mode (consumption mode 3, and a test path)            */
 /* ------------------------------------------------------------------ */
 
-static void yprof_print(struct yprof_profile *profile)
+static void yperf_print(struct yperf_profile *profile)
 {
     printf("%llu stacks  %llu samples  %zu symbols  max-depth %u\n\n",
            (unsigned long long)profile->stack_count, (unsigned long long)profile->total_samples,
            profile->n_symbols, profile->max_depth);
-    yprof_profile_sort(profile, YPROF_SORT_SELF);
+    yperf_profile_sort(profile, YPERF_SORT_SELF);
     printf("%-40s %10s %8s %10s\n", "SYMBOL", "SELF", "SELF%", "TOTAL");
     double denom = profile->total_samples ? (double)profile->total_samples : 1.0;
     size_t rows = profile->n_symbols < 25 ? profile->n_symbols : 25;
     for (size_t i = 0; i < rows; i++) {
-        const struct yprof_symbol *sym = &profile->symbols[i];
+        const struct yperf_symbol *sym = &profile->symbols[i];
         char self[16], total[16];
-        yprof_fmt_count(sym->self, self, sizeof(self));
-        yprof_fmt_count(sym->total, total, sizeof(total));
+        yperf_fmt_count(sym->self, self, sizeof(self));
+        yperf_fmt_count(sym->total, total, sizeof(total));
         printf("%-40.40s %10s %7.1f%% %10s\n", sym->name, self, 100.0 * (double)sym->self / denom,
                total);
     }
 }
 
-static void yprof_usage(void)
+static void yperf_usage(void)
 {
-    printf("yprof — perf / flame-graph workbench\n\n"
-           "usage: yprof [options] [file]\n"
+    printf("yperf — perf / flame-graph workbench\n\n"
+           "usage: yperf [options] [file | -- <command>]\n\n"
+           "capture (shells out to perf):\n"
+           "  -- <command> [args] record <command> until it exits, then show it\n"
+           "  -p, --pid <pid>     record a running process for --duration seconds\n"
+           "  -a, --all           record the whole system for --duration seconds\n"
+           "  -d, --duration <s>  capture duration for --pid / --all (default 10)\n"
+           "      --freq <hz>     sampling frequency (default 997)\n"
+           "      --fp            frame-pointer stacks (default: DWARF call-graph)\n"
+           "      --demo          render built-in synthetic data (no perf needed)\n\n"
+           "ingest an existing capture:\n"
            "  file                folded-stack file (default: read stdin)\n"
            "  --perf <data>       run `perf script -i <data>` and collapse it\n"
            "  --perf-script       treat the input as raw `perf script` output\n"
-           "  --diff <base> <cur> colour <cur> by its delta vs folded <base>\n"
+           "  --diff <base> <cur> colour <cur> by its delta vs folded <base>\n\n"
+           "view:\n"
            "  --focus <symbol>    open zoomed to <symbol> (also applies to --emit)\n"
            "  -e, --emit          emit the flame as a scrollback figure, then exit\n"
            "  -i, --icicle        icicle orientation (root at top)\n"
-           "  -p, --print         print the top-symbol table, then exit (no GUI)\n"
+           "      --print         print the top-symbol table, then exit (no GUI)\n"
            "  -h, --help          show this help\n\n"
            "interactive keys: [j/k] move  [/] search  [enter] zoom  [f] filter  "
            "[F] clear  [s] sort  [i] flame/icicle  [r] reset  [q] quit\n");
@@ -181,13 +306,13 @@ static void yprof_usage(void)
 
 /* Cross-highlight: after the selection moves, the flame highlights the selected
  * symbol's frames, so re-emit it alongside the cheap table refresh. */
-static void after_select(struct yprof_app *app)
+static void after_select(struct yperf_app *app)
 {
-    yprof_ui_refresh_table(app);
-    yprof_ui_render_flame(app);
+    yperf_ui_refresh_table(app);
+    yperf_ui_render_flame(app);
 }
 
-static void nav_move(struct yprof_app *app, int delta)
+static void nav_move(struct yperf_app *app, int delta)
 {
     if (!app->profile || app->profile->n_symbols == 0) {
         return;
@@ -203,21 +328,21 @@ static void nav_move(struct yprof_app *app, int delta)
     after_select(app);
 }
 
-static void nav_cycle_sort(struct yprof_app *app)
+static void nav_cycle_sort(struct yperf_app *app)
 {
-    app->sort_mode = (enum yprof_sort_mode)((app->sort_mode + 1) % YPROF_SORT_MODE_COUNT);
-    yprof_profile_sort(app->profile, app->sort_mode);
+    app->sort_mode = (enum yperf_sort_mode)((app->sort_mode + 1) % YPERF_SORT_MODE_COUNT);
+    yperf_profile_sort(app->profile, app->sort_mode);
     app->selected = 0;
     after_select(app);
 }
 
-static void nav_toggle_icicle(struct yprof_app *app)
+static void nav_toggle_icicle(struct yperf_app *app)
 {
     app->icicle = !app->icicle;
-    yprof_ui_refresh(app); /* re-renders the flame with the new orientation */
+    yperf_ui_refresh(app); /* re-renders the flame with the new orientation */
 }
 
-static void focus_selected(struct yprof_app *app)
+static void focus_selected(struct yperf_app *app)
 {
     if (!app->profile || app->profile->n_symbols == 0 || app->selected < 0 ||
         (size_t)app->selected >= app->profile->n_symbols) {
@@ -225,10 +350,10 @@ static void focus_selected(struct yprof_app *app)
     }
     const char *name = app->profile->symbols[app->selected].name;
     error_absorb(yetty_yflame_focus_name(app->flame, name, strlen(name)));
-    yprof_ui_render_flame(app);
+    yperf_ui_render_flame(app);
 }
 
-static void reset_view(struct yprof_app *app)
+static void reset_view(struct yperf_app *app)
 {
     error_absorb(yetty_yflame_reset(app->flame));
     app->search_active = 0;
@@ -239,56 +364,56 @@ static void reset_view(struct yprof_app *app)
 
 /* Rebuild `profile` from the original capture, keeping only stacks that contain
  * `symbol` (NULL restores the full capture, timeline and all). */
-static void apply_filter(struct yprof_app *app, const char *symbol)
+static void apply_filter(struct yperf_app *app, const char *symbol)
 {
     if (!app->orig_profile) {
         return;
     }
     if (!symbol) {
         if (app->profile != app->orig_profile) {
-            yprof_profile_destroy(app->profile);
+            yperf_profile_destroy(app->profile);
             app->profile = app->orig_profile;
         }
         app->filter[0] = '\0';
-        yprof_profile_sort(app->profile, app->sort_mode);
+        yperf_profile_sort(app->profile, app->sort_mode);
         app->selected = 0;
-        yprof_ui_relayout(app);
-        yprof_ui_refresh(app);
+        yperf_ui_relayout(app);
+        yperf_ui_refresh(app);
         return;
     }
 
     char *folded = NULL;
     size_t folded_len = 0;
-    struct yetty_ycore_void_result filtered = yprof_folded_filter(
+    struct yetty_ycore_void_result filtered = yperf_folded_filter(
         app->orig_profile->folded, app->orig_profile->folded_len, symbol, &folded, &folded_len);
     if (YETTY_IS_ERR(filtered)) {
         yetty_ycore_error_destroy(filtered.error);
         return;
     }
-    struct yprof_profile *built = NULL;
+    struct yperf_profile *built = NULL;
     struct yetty_ycore_void_result built_res =
-        yprof_profile_from_folded(folded, folded_len, &built);
+        yperf_profile_from_folded(folded, folded_len, &built);
     free(folded);
     if (YETTY_IS_ERR(built_res)) {
         yetty_ycore_error_destroy(built_res.error);
         return;
     }
     if (built->n_symbols == 0) {
-        yprof_profile_destroy(built); /* no match — leave the current view alone */
+        yperf_profile_destroy(built); /* no match — leave the current view alone */
         return;
     }
     if (app->profile != app->orig_profile) {
-        yprof_profile_destroy(app->profile);
+        yperf_profile_destroy(app->profile);
     }
     app->profile = built;
-    yprof_profile_sort(app->profile, app->sort_mode);
+    yperf_profile_sort(app->profile, app->sort_mode);
     app->selected = 0;
     snprintf(app->filter, sizeof(app->filter), "%s", symbol);
-    yprof_ui_relayout(app);
-    yprof_ui_refresh(app);
+    yperf_ui_relayout(app);
+    yperf_ui_refresh(app);
 }
 
-static void filter_selected(struct yprof_app *app)
+static void filter_selected(struct yperf_app *app)
 {
     if (!app->profile || app->profile->n_symbols == 0 || app->selected < 0 ||
         (size_t)app->selected >= app->profile->n_symbols) {
@@ -301,22 +426,22 @@ static void filter_selected(struct yprof_app *app)
 /* Client-mode harness                                                 */
 /* ------------------------------------------------------------------ */
 
-struct yprof_client {
+struct yperf_client {
     uv_loop_t loop;
     uv_poll_t stdin_poll;
     uv_signal_t sigwinch;
     uv_prepare_t prep;
     struct yetty_yface *yface;
-    struct yprof_app *app;
+    struct yperf_app *app;
 };
 
 /* Keystrokes while the search field is open build the query and re-highlight
  * the flame live. Returns 1 (always consumed while searching). */
-static int search_key(struct yprof_app *app, uint32_t key)
+static int search_key(struct yperf_app *app, uint32_t key)
 {
     if (key == 0x0d || key == 0x0a) { /* Enter — keep the highlight, leave search mode */
         app->search_active = 0;
-        yprof_ui_refresh_table(app);
+        yperf_ui_refresh_table(app);
         return 1;
     }
     if (key == 0x1b || key == 0x07) { /* Esc / Ctrl-G — cancel and clear the query */
@@ -330,8 +455,8 @@ static int search_key(struct yprof_app *app, uint32_t key)
         if (app->search_len > 0) {
             app->search[--app->search_len] = '\0';
         }
-        yprof_ui_render_flame(app);
-        yprof_ui_refresh_table(app);
+        yperf_ui_render_flame(app);
+        yperf_ui_refresh_table(app);
         return 1;
     }
     if (key >= 0x20 && key < 0x7f) { /* printable ASCII */
@@ -339,8 +464,8 @@ static int search_key(struct yprof_app *app, uint32_t key)
             app->search[app->search_len++] = (char)key;
             app->search[app->search_len] = '\0';
         }
-        yprof_ui_render_flame(app);
-        yprof_ui_refresh_table(app);
+        yperf_ui_render_flame(app);
+        yperf_ui_refresh_table(app);
         return 1;
     }
     return 1;
@@ -350,8 +475,8 @@ static int on_key(struct yetty_yclass_object *engine, uint32_t key, int mods, vo
 {
     (void)engine;
     (void)mods;
-    struct yprof_client *client = user;
-    struct yprof_app *app = client->app;
+    struct yperf_client *client = user;
+    struct yperf_app *app = client->app;
 
     if (app->search_active) {
         return search_key(app, key);
@@ -384,8 +509,8 @@ static int on_key(struct yetty_yclass_object *engine, uint32_t key, int mods, vo
         app->search_active = 1;
         app->search_len = 0;
         app->search[0] = '\0';
-        yprof_ui_render_flame(app); /* clears any selected-symbol highlight */
-        yprof_ui_refresh_table(app);
+        yperf_ui_render_flame(app); /* clears any selected-symbol highlight */
+        yperf_ui_refresh_table(app);
         return 1;
     case 0x0d: /* Enter — zoom the flame to the selected symbol */
     case 0x0a:
@@ -427,15 +552,15 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
 {
     (void)args;
     (void)args_len;
-    struct yprof_client *client = user;
-    struct yprof_app *app = client->app;
+    struct yperf_client *client = user;
+    struct yperf_app *app = client->app;
 
     if ((osc_code == YETTY_OSC_SC_CLIENT_INPUT_MOUSE ||
          osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE) &&
         payload_len >= sizeof(struct yetty_client_input_mouse)) {
         const struct yetty_client_input_mouse *mouse =
             (const struct yetty_client_input_mouse *)payload;
-        yprof_ui_flame_mouse(app, mouse->kind, mouse->x, mouse->y, mouse->button, mouse->pressed,
+        yperf_ui_flame_mouse(app, mouse->kind, mouse->x, mouse->y, mouse->button, mouse->pressed,
                              mouse->wheel_dy);
     } else if ((osc_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE ||
                 osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE) &&
@@ -445,15 +570,15 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         if (resize->width > 0.0f && resize->height > 0.0f) {
             error_absorb(
                 yetty_ygui_framework_set_viewport(app->engine, resize->width, resize->height));
-            yprof_ui_relayout(app);
-            yprof_ui_refresh(app);
+            yperf_ui_relayout(app);
+            yperf_ui_refresh(app);
         }
     }
 }
 
 static void on_raw(void *user, const char *bytes, size_t n)
 {
-    struct yprof_client *client = user;
+    struct yperf_client *client = user;
     error_absorb(yetty_ygui_framework_feed_input(client->app->engine, bytes, n));
 }
 
@@ -492,9 +617,9 @@ static void subscribe_mouse(int enable)
     (void)written;
 }
 
-static void yprof_stdin_cb(uv_poll_t *handle, int status, int events)
+static void yperf_stdin_cb(uv_poll_t *handle, int status, int events)
 {
-    struct yprof_client *client = handle->data;
+    struct yperf_client *client = handle->data;
     if (status < 0 || !(events & UV_READABLE)) {
         return;
     }
@@ -507,26 +632,26 @@ static void yprof_stdin_cb(uv_poll_t *handle, int status, int events)
     }
 }
 
-static void yprof_pickup_winsz(struct yprof_client *client)
+static void yperf_pickup_winsz(struct yperf_client *client)
 {
     struct winsize ws;
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
         error_absorb(yetty_ygui_framework_set_viewport(client->app->engine, (float)ws.ws_xpixel,
                                                        (float)ws.ws_ypixel));
-        yprof_ui_relayout(client->app);
-        yprof_ui_refresh(client->app);
+        yperf_ui_relayout(client->app);
+        yperf_ui_refresh(client->app);
     }
 }
 
-static void yprof_sigwinch_cb(uv_signal_t *handle, int signum)
+static void yperf_sigwinch_cb(uv_signal_t *handle, int signum)
 {
     (void)signum;
-    yprof_pickup_winsz((struct yprof_client *)handle->data);
+    yperf_pickup_winsz((struct yperf_client *)handle->data);
 }
 
-static void yprof_prep_cb(uv_prepare_t *handle)
+static void yperf_prep_cb(uv_prepare_t *handle)
 {
-    struct yprof_client *client = handle->data;
+    struct yperf_client *client = handle->data;
     if (yetty_ygui_framework_is_dirty(client->app->engine)) {
         error_absorb(yetty_ygui_framework_emit(client->app->engine));
     }
@@ -535,13 +660,21 @@ static void yprof_prep_cb(uv_prepare_t *handle)
     }
 }
 
-static void yprof_close_cb(uv_handle_t *handle)
+static void yperf_close_cb(uv_handle_t *handle)
 {
     (void)handle;
 }
 
-static int yprof_run_client(struct yprof_app *app)
+static int yperf_run_client(struct yperf_app *app)
 {
+    /* Wipe the pane (and scrollback) so any capture-time perf progress / warning
+     * chatter printed before we attach doesn't bleed through the dashboard. */
+    {
+        static const char clear_screen[] = "\x1b[2J\x1b[3J\x1b[H";
+        ssize_t written = write(STDOUT_FILENO, clear_screen, sizeof(clear_screen) - 1);
+        (void)written;
+    }
+
     struct termios saved;
     int tty_raw_ok = 0;
     if (isatty(STDIN_FILENO) && tcgetattr(STDIN_FILENO, &saved) == 0) {
@@ -554,16 +687,16 @@ static int yprof_run_client(struct yprof_app *app)
         }
     }
 
-    struct yprof_client client = {0};
+    struct yperf_client client = {0};
     client.app = app;
     if (uv_loop_init(&client.loop) != 0) {
-        fprintf(stderr, "yprof: uv_loop_init failed\n");
+        fprintf(stderr, "yperf: uv_loop_init failed\n");
         goto cleanup;
     }
 
     struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(framework_res)) {
-        fprintf(stderr, "yprof: framework_create failed: %s\n", framework_res.error.msg);
+        fprintf(stderr, "yperf: framework_create failed: %s\n", framework_res.error.msg);
         yetty_ycore_error_destroy(framework_res.error);
         goto cleanup_loop;
     }
@@ -573,14 +706,14 @@ static int yprof_run_client(struct yprof_app *app)
     struct yetty_ycore_void_result attach_res =
         yetty_ygui_framework_attach(app->engine, STDIN_FILENO, STDOUT_FILENO, /*compressed=*/1);
     if (YETTY_IS_ERR(attach_res)) {
-        fprintf(stderr, "yprof: framework_attach failed: %s\n", attach_res.error.msg);
+        fprintf(stderr, "yperf: framework_attach failed: %s\n", attach_res.error.msg);
         yetty_ycore_error_destroy(attach_res.error);
         goto cleanup_loop;
     }
 
     struct yetty_yface_ptr_result yface_res = yetty_yface_create();
     if (YETTY_IS_ERR(yface_res)) {
-        fprintf(stderr, "yprof: yface_create failed: %s\n", yface_res.error.msg);
+        fprintf(stderr, "yperf: yface_create failed: %s\n", yface_res.error.msg);
         yetty_ycore_error_destroy(yface_res.error);
         goto cleanup_loop;
     }
@@ -592,8 +725,8 @@ static int yprof_run_client(struct yprof_app *app)
     if (YETTY_IS_OK(root_res)) {
         app->root_widget = root_res.value;
         error_absorb(yetty_ygui_framework_set_root(app->engine, app->root_widget));
-        error_absorb(yprof_ui_build(app));
-        yprof_ui_refresh(app);
+        error_absorb(yperf_ui_build(app));
+        yperf_ui_refresh(app);
     } else {
         yetty_ycore_error_destroy(root_res.error);
     }
@@ -602,24 +735,24 @@ static int yprof_run_client(struct yprof_app *app)
 
     if (uv_poll_init(&client.loop, &client.stdin_poll, STDIN_FILENO) == 0) {
         client.stdin_poll.data = &client;
-        uv_poll_start(&client.stdin_poll, UV_READABLE, yprof_stdin_cb);
+        uv_poll_start(&client.stdin_poll, UV_READABLE, yperf_stdin_cb);
     }
     if (uv_signal_init(&client.loop, &client.sigwinch) == 0) {
         client.sigwinch.data = &client;
-        uv_signal_start(&client.sigwinch, yprof_sigwinch_cb, SIGWINCH);
+        uv_signal_start(&client.sigwinch, yperf_sigwinch_cb, SIGWINCH);
     }
     if (uv_prepare_init(&client.loop, &client.prep) == 0) {
         client.prep.data = &client;
-        uv_prepare_start(&client.prep, yprof_prep_cb);
+        uv_prepare_start(&client.prep, yperf_prep_cb);
     }
 
-    yprof_pickup_winsz(&client);
+    yperf_pickup_winsz(&client);
 
     /* --focus: zoom to the requested symbol once the flame has been parsed. */
     if (app->pending_focus[0]) {
         error_absorb(
             yetty_yflame_focus_name(app->flame, app->pending_focus, strlen(app->pending_focus)));
-        yprof_ui_render_flame(app);
+        yperf_ui_render_flame(app);
         app->pending_focus[0] = '\0';
     }
 
@@ -630,13 +763,13 @@ static int yprof_run_client(struct yprof_app *app)
     uv_poll_stop(&client.stdin_poll);
     uv_signal_stop(&client.sigwinch);
     uv_prepare_stop(&client.prep);
-    uv_close((uv_handle_t *)&client.stdin_poll, yprof_close_cb);
-    uv_close((uv_handle_t *)&client.sigwinch, yprof_close_cb);
-    uv_close((uv_handle_t *)&client.prep, yprof_close_cb);
+    uv_close((uv_handle_t *)&client.stdin_poll, yperf_close_cb);
+    uv_close((uv_handle_t *)&client.sigwinch, yperf_close_cb);
+    uv_close((uv_handle_t *)&client.prep, yperf_close_cb);
     uv_run(&client.loop, UV_RUN_NOWAIT);
 
     error_absorb(yetty_ygui_framework_clear(app->engine));
-    yprof_ui_free(app);
+    yperf_ui_free(app);
     if (client.yface) {
         yetty_yface_destroy(client.yface);
     }
@@ -655,17 +788,17 @@ cleanup:
 /* Scrollback-figure emit (consumption mode 2)                         */
 /* ------------------------------------------------------------------ */
 
-static int yprof_emit_figure(struct yprof_app *app, const char *focus_symbol)
+static int yperf_emit_figure(struct yperf_app *app, const char *focus_symbol)
 {
     struct yetty_ycore_void_result reg_res = yetty_yflame_register();
     if (YETTY_IS_ERR(reg_res)) {
-        fprintf(stderr, "yprof: yflame register failed: %s\n", reg_res.error.msg);
+        fprintf(stderr, "yperf: yflame register failed: %s\n", reg_res.error.msg);
         yetty_ycore_error_destroy(reg_res.error);
         return 1;
     }
     struct yetty_yclass_object_ptr_result flame_res = yetty_yflame_flame_create(NULL);
     if (YETTY_IS_ERR(flame_res)) {
-        fprintf(stderr, "yprof: yflame create failed: %s\n", flame_res.error.msg);
+        fprintf(stderr, "yperf: yflame create failed: %s\n", flame_res.error.msg);
         yetty_ycore_error_destroy(flame_res.error);
         return 1;
     }
@@ -684,14 +817,14 @@ static int yprof_emit_figure(struct yprof_app *app, const char *focus_symbol)
     int rc = 0;
     struct yetty_ydraw_drawable_list_result list_res = yetty_yflame_render(flame);
     if (YETTY_IS_ERR(list_res)) {
-        fprintf(stderr, "yprof: flame render failed: %s\n", list_res.error.msg);
+        fprintf(stderr, "yperf: flame render failed: %s\n", list_res.error.msg);
         yetty_ycore_error_destroy(list_res.error);
         rc = 1;
     } else {
         struct yetty_ycore_void_result emitted =
             yetty_yflame_emit_osc(list_res.value, STDOUT_FILENO);
         if (YETTY_IS_ERR(emitted)) {
-            fprintf(stderr, "yprof: emit failed: %s\n", emitted.error.msg);
+            fprintf(stderr, "yperf: emit failed: %s\n", emitted.error.msg);
             yetty_ycore_error_destroy(emitted.error);
             rc = 1;
         }
@@ -708,13 +841,23 @@ int main(int argc, char **argv)
     const char *diff_base = NULL, *diff_cur = NULL;
     const char *focus_symbol = NULL;
     int print_mode = 0, perf_script = 0, icicle = 0, emit_mode = 0;
+    /* Capture options. */
+    char **record_argv = NULL;
+    int record_argc = 0;
+    const char *pid = NULL;
+    int all_system = 0, demo = 0, duration = 10, freq = 997, frame_pointer = 0;
 
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
-        if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
-            yprof_usage();
+        if (strcmp(arg, "--") == 0) {
+            /* Everything after `--` is the command to profile with perf. */
+            record_argv = &argv[i + 1];
+            record_argc = argc - (i + 1);
+            break;
+        } else if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
+            yperf_usage();
             return 0;
-        } else if (strcmp(arg, "-p") == 0 || strcmp(arg, "--print") == 0) {
+        } else if (strcmp(arg, "--print") == 0) {
             print_mode = 1;
         } else if (strcmp(arg, "-e") == 0 || strcmp(arg, "--emit") == 0) {
             emit_mode = 1;
@@ -722,21 +865,51 @@ int main(int argc, char **argv)
             perf_script = 1;
         } else if (strcmp(arg, "-i") == 0 || strcmp(arg, "--icicle") == 0) {
             icicle = 1;
+        } else if (strcmp(arg, "-a") == 0 || strcmp(arg, "--all") == 0) {
+            all_system = 1;
+        } else if (strcmp(arg, "--demo") == 0) {
+            demo = 1;
+        } else if (strcmp(arg, "--fp") == 0) {
+            frame_pointer = 1;
+        } else if (strcmp(arg, "-p") == 0 || strcmp(arg, "--pid") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "yperf: %s requires a pid\n", arg);
+                return 1;
+            }
+            pid = argv[++i];
+        } else if (strcmp(arg, "-d") == 0 || strcmp(arg, "--duration") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "yperf: %s requires seconds\n", arg);
+                return 1;
+            }
+            duration = atoi(argv[++i]);
+            if (duration <= 0) {
+                duration = 10;
+            }
+        } else if (strcmp(arg, "--freq") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "yperf: --freq requires a frequency in hz\n");
+                return 1;
+            }
+            freq = atoi(argv[++i]);
+            if (freq <= 0) {
+                freq = 997;
+            }
         } else if (strcmp(arg, "--perf") == 0) {
             if (i + 1 >= argc) {
-                fprintf(stderr, "yprof: --perf requires a perf.data path\n");
+                fprintf(stderr, "yperf: --perf requires a perf.data path\n");
                 return 1;
             }
             perf_data_path = argv[++i];
         } else if (strcmp(arg, "--focus") == 0) {
             if (i + 1 >= argc) {
-                fprintf(stderr, "yprof: --focus requires a symbol name\n");
+                fprintf(stderr, "yperf: --focus requires a symbol name\n");
                 return 1;
             }
             focus_symbol = argv[++i];
         } else if (strcmp(arg, "--diff") == 0) {
             if (i + 2 >= argc) {
-                fprintf(stderr, "yprof: --diff requires <base> <cur> folded files\n");
+                fprintf(stderr, "yperf: --diff requires <base> <cur> folded files\n");
                 return 1;
             }
             diff_base = argv[++i];
@@ -748,50 +921,100 @@ int main(int argc, char **argv)
 
     ytrace_init();
 
+    /* A capture (record a command / pid / system) produces a temp perf.data that
+     * flows through the same perf-script collapse path as --perf. */
+    int record_mode = (record_argc > 0) || pid || all_system;
+    char *captured = NULL;
+    char source_label[1024] = {0};
+    if (record_mode) {
+        struct yetty_ycore_void_result cap = perf_record_capture(
+            record_argv, record_argc, pid, all_system, duration, freq, frame_pointer, &captured);
+        if (YETTY_IS_ERR(cap)) {
+            fprintf(stderr, "yperf: %s\n", cap.error.msg);
+            yetty_ycore_error_destroy(cap.error);
+            return 1;
+        }
+        perf_data_path = captured;
+        if (record_argc > 0) {
+            snprintf(source_label, sizeof(source_label), "%s", record_argv[0]);
+        } else if (all_system) {
+            snprintf(source_label, sizeof(source_label), "system-wide (%ds)", duration);
+        } else {
+            snprintf(source_label, sizeof(source_label), "pid %s (%ds)", pid, duration);
+        }
+    }
+
     /* --diff loads the current capture as the profile and the base capture as
-     * the flame baseline; otherwise the usual single-capture path runs. */
+     * the flame baseline; a capture sets perf_data_path to its temp file;
+     * otherwise the usual single-capture path runs. */
     const char *load_path = diff_cur ? diff_cur : (perf_data_path ? perf_data_path : path);
-    struct yprof_profile *profile = NULL;
-    struct yetty_ycore_void_result load_res =
-        load_profile(load_path, perf_data_path != NULL, perf_script, &profile);
+    struct yperf_profile *profile = NULL;
+    struct yetty_ycore_void_result load_res;
+    if (demo) {
+        static const char demo_folded[] = "main;parse;lex 60\n"
+                                          "main;parse;expand 18\n"
+                                          "main;parse;intern 9\n"
+                                          "main;typecheck;unify 40\n"
+                                          "main;typecheck;solve 25\n"
+                                          "main;codegen;lower 55\n"
+                                          "main;codegen;regalloc;spill 30\n"
+                                          "main;codegen;regalloc;color 22\n"
+                                          "main;codegen;emit 14\n"
+                                          "main;link;gc 12\n"
+                                          "main;link;reloc 8\n"
+                                          "main 6\n";
+        load_res = yperf_profile_from_folded(demo_folded, sizeof(demo_folded) - 1, &profile);
+        snprintf(source_label, sizeof(source_label), "demo");
+    } else {
+        load_res = load_profile(load_path, perf_data_path != NULL, perf_script, &profile);
+    }
+    /* The temp perf.data has been consumed by the collapser; drop it now. */
+    if (captured) {
+        unlink(captured);
+        free(captured);
+        captured = NULL;
+    }
     if (YETTY_IS_ERR(load_res)) {
-        fprintf(stderr, "yprof: %s\n", load_res.error.msg);
+        fprintf(stderr, "yperf: %s\n", load_res.error.msg);
         yetty_ycore_error_destroy(load_res.error);
         return 1;
     }
     if (profile->n_symbols == 0) {
-        fprintf(stderr, "yprof: no samples found in input\n");
-        yprof_profile_destroy(profile);
+        fprintf(stderr, "yperf: no samples found in input\n");
+        yperf_profile_destroy(profile);
         return 1;
+    }
+    if (source_label[0] == '\0') {
+        snprintf(source_label, sizeof(source_label), "%s", load_path ? load_path : "stdin");
     }
 
     if (print_mode) {
-        yprof_print(profile);
-        yprof_profile_destroy(profile);
+        yperf_print(profile);
+        yperf_profile_destroy(profile);
         return 0;
     }
 
-    struct yprof_app *app = calloc(1, sizeof(*app));
+    struct yperf_app *app = calloc(1, sizeof(*app));
     if (!app) {
-        yprof_profile_destroy(profile);
+        yperf_profile_destroy(profile);
         return 1;
     }
     app->running = 1;
-    app->sort_mode = YPROF_SORT_SELF;
+    app->sort_mode = YPERF_SORT_SELF;
     app->icicle = icicle;
     app->profile = profile;
     app->orig_profile = profile;
-    snprintf(app->source, sizeof(app->source), "%s", load_path ? load_path : "stdin");
-    yprof_profile_sort(app->profile, app->sort_mode);
+    snprintf(app->source, sizeof(app->source), "%s", source_label);
+    yperf_profile_sort(app->profile, app->sort_mode);
 
     /* Load the diff baseline text (folded); the flame applies it after parse. */
     if (diff_base) {
         struct yetty_ycore_void_result base_res =
-            yprof_read_all(diff_base, &app->baseline_folded, &app->baseline_folded_len);
+            yperf_read_all(diff_base, &app->baseline_folded, &app->baseline_folded_len);
         if (YETTY_IS_ERR(base_res)) {
-            fprintf(stderr, "yprof: reading diff baseline: %s\n", base_res.error.msg);
+            fprintf(stderr, "yperf: reading diff baseline: %s\n", base_res.error.msg);
             yetty_ycore_error_destroy(base_res.error);
-            yprof_profile_destroy(app->orig_profile);
+            yperf_profile_destroy(app->orig_profile);
             free(app);
             return 1;
         }
@@ -802,17 +1025,17 @@ int main(int argc, char **argv)
 
     int rc;
     if (emit_mode) {
-        rc = yprof_emit_figure(app, focus_symbol);
+        rc = yperf_emit_figure(app, focus_symbol);
     } else {
         struct yetty_ycore_void_result reg_res = yetty_yflame_register();
         if (YETTY_IS_ERR(reg_res)) {
-            fprintf(stderr, "yprof: yflame register failed: %s\n", reg_res.error.msg);
+            fprintf(stderr, "yperf: yflame register failed: %s\n", reg_res.error.msg);
             yetty_ycore_error_destroy(reg_res.error);
             rc = 1;
         } else {
             struct yetty_yclass_object_ptr_result flame_res = yetty_yflame_flame_create(NULL);
             if (YETTY_IS_ERR(flame_res)) {
-                fprintf(stderr, "yprof: yflame create failed: %s\n", flame_res.error.msg);
+                fprintf(stderr, "yperf: yflame create failed: %s\n", flame_res.error.msg);
                 yetty_ycore_error_destroy(flame_res.error);
                 rc = 1;
             } else {
@@ -820,16 +1043,16 @@ int main(int argc, char **argv)
                 if (focus_symbol) {
                     snprintf(app->pending_focus, sizeof(app->pending_focus), "%s", focus_symbol);
                 }
-                rc = yprof_run_client(app);
+                rc = yperf_run_client(app);
                 error_absorb(yetty_yflame_destroy(app->flame));
             }
         }
     }
 
     if (app->profile != app->orig_profile) {
-        yprof_profile_destroy(app->profile);
+        yperf_profile_destroy(app->profile);
     }
-    yprof_profile_destroy(app->orig_profile);
+    yperf_profile_destroy(app->orig_profile);
     free(app->baseline_folded);
     free(app);
     return rc;

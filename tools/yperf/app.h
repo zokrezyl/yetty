@@ -1,32 +1,32 @@
 /*
- * app.h — central yprof application state.
+ * app.h — central yperf application state.
  *
- * `struct yprof_app` owns the parsed profile, the reused `yflame` object that
+ * `struct yperf_app` owns the parsed profile, the reused `yflame` object that
  * renders the flame graph, the symbol-table cursor + sort, and the ygui engine
  * and widget tree. Heap-allocated once in main() and threaded by pointer
  * through the harness and the UI, mirroring ytop/ydu.
  */
-#ifndef YPROF_APP_H
-#define YPROF_APP_H
+#ifndef YPERF_APP_H
+#define YPERF_APP_H
 
 #include "profile.h"
 
 struct yetty_yclass_object;
-struct yprof_ui;
+struct yperf_ui;
 
-struct yprof_app {
+struct yperf_app {
     /* ygui engine + root of the widget tree. */
     struct yetty_yclass_object *engine;
     struct yetty_yclass_object *root_widget;
-    struct yprof_ui *ui; /* opaque widget handles, owned by ui.c */
+    struct yperf_ui *ui; /* opaque widget handles, owned by ui.c */
 
     /* Flame render + profile model. */
     struct yetty_yclass_object *flame; /* yflame object, reconfigured each render */
-    struct yprof_profile *profile;
+    struct yperf_profile *profile;
 
     /* Symbol-table interaction. */
     int selected; /* index into profile->symbols, in current sort order */
-    enum yprof_sort_mode sort_mode;
+    enum yperf_sort_mode sort_mode;
     int icicle; /* 0 = flame (root at bottom), 1 = icicle (root at top) */
     char source[1024];
 
@@ -43,7 +43,7 @@ struct yprof_app {
      * filter is cleared. When no filter is active, `profile == orig_profile`.
      * Empty `filter` = no filter. */
     char filter[256];
-    struct yprof_profile *orig_profile;
+    struct yperf_profile *orig_profile;
 
     /* Diff mode: baseline folded text handed to the flame as a set_baseline
      * after every (re)parse; frames colour by delta. NULL = no diff. */
@@ -57,4 +57,4 @@ struct yprof_app {
     int running;
 };
 
-#endif /* YPROF_APP_H */
+#endif /* YPERF_APP_H */

@@ -1,36 +1,36 @@
 /*
- * profile.h — yprof profile model.
+ * profile.h — yperf profile model.
  *
- * yprof reuses the `yflame` class for the flame-graph render, but yflame parses
+ * yperf reuses the `yflame` class for the flame-graph render, but yflame parses
  * folded text and does not expose its call tree. So the profile model here owns
  * two things: the folded-stack text (handed verbatim to yflame) and an
  * aggregated per-symbol table (self / total sample counts) computed by parsing
  * the same folded text. It also holds a best-effort `perf script` collapser so
  * a raw perf capture can be turned into folded text.
  *
- * The model has no yetty dependency beyond the Result type, so `yprof --print`
+ * The model has no yetty dependency beyond the Result type, so `yperf --print`
  * exercises it headless.
  */
-#ifndef YPROF_PROFILE_H
-#define YPROF_PROFILE_H
+#ifndef YPERF_PROFILE_H
+#define YPERF_PROFILE_H
 
 #include <stddef.h>
 #include <stdint.h>
 
 #include <yetty/ycore/result.h>
 
-struct yprof_symbol {
+struct yperf_symbol {
     char *name;
     uint64_t self;  /* samples where this symbol is the leaf (on-CPU top) */
     uint64_t total; /* samples where this symbol appears anywhere in the stack */
     uint64_t gen;   /* per-stack dedup generation, used while aggregating total */
 };
 
-struct yprof_profile {
+struct yperf_profile {
     char *folded; /* folded-stack text (owned), fed verbatim to yflame */
     size_t folded_len;
 
-    struct yprof_symbol *symbols;
+    struct yperf_symbol *symbols;
     size_t n_symbols;
     size_t cap_symbols;
     int32_t *buckets; /* name -> symbol index hash, freed once aggregation is done */
@@ -50,40 +50,40 @@ struct yprof_profile {
     double time_end;
 };
 
-enum yprof_sort_mode {
-    YPROF_SORT_SELF = 0, /* self samples, largest first (default) */
-    YPROF_SORT_TOTAL,    /* total samples, largest first */
-    YPROF_SORT_NAME,     /* symbol name, A->Z */
-    YPROF_SORT_MODE_COUNT
+enum yperf_sort_mode {
+    YPERF_SORT_SELF = 0, /* self samples, largest first (default) */
+    YPERF_SORT_TOTAL,    /* total samples, largest first */
+    YPERF_SORT_NAME,     /* symbol name, A->Z */
+    YPERF_SORT_MODE_COUNT
 };
 
 /* Build a profile from Brendan-Gregg folded text (`frame;frame;... count`).
  * Takes its own copy of the text. */
-struct yetty_ycore_void_result yprof_profile_from_folded(const char *folded, size_t len,
-                                                         struct yprof_profile **out);
+struct yetty_ycore_void_result yperf_profile_from_folded(const char *folded, size_t len,
+                                                         struct yperf_profile **out);
 
 /* Build a profile from raw `perf script` text by collapsing it to folded first. */
-struct yetty_ycore_void_result yprof_profile_from_perf_script(const char *text, size_t len,
-                                                              struct yprof_profile **out);
+struct yetty_ycore_void_result yperf_profile_from_perf_script(const char *text, size_t len,
+                                                              struct yperf_profile **out);
 
-void yprof_profile_destroy(struct yprof_profile *profile);
-void yprof_profile_sort(struct yprof_profile *profile, enum yprof_sort_mode mode);
-const char *yprof_sort_mode_name(enum yprof_sort_mode mode);
+void yperf_profile_destroy(struct yperf_profile *profile);
+void yperf_profile_sort(struct yperf_profile *profile, enum yperf_sort_mode mode);
+const char *yperf_sort_mode_name(enum yperf_sort_mode mode);
 
 /* Read a whole file (path) or stdin (path == NULL) into a heap buffer. */
-struct yetty_ycore_void_result yprof_read_all(const char *path, char **out, size_t *out_len);
+struct yetty_ycore_void_result yperf_read_all(const char *path, char **out, size_t *out_len);
 
 /* Collapse raw `perf script` text into folded text (heap-owned in *out). */
-struct yetty_ycore_void_result yprof_collapse_perf_script(const char *text, size_t len, char **out,
+struct yetty_ycore_void_result yperf_collapse_perf_script(const char *text, size_t len, char **out,
                                                           size_t *out_len);
 
 /* Keep only folded lines whose stack contains `symbol` as a whole frame; the
  * result is fresh folded text (heap-owned in *out). Used to drill the profile
  * down to callers/callees of one symbol. A NULL/empty symbol copies verbatim. */
-struct yetty_ycore_void_result yprof_folded_filter(const char *folded, size_t len,
+struct yetty_ycore_void_result yperf_folded_filter(const char *folded, size_t len,
                                                    const char *symbol, char **out, size_t *out_len);
 
 /* Compact sample-count formatting (e.g. "2175", "12.3k", "4.1M"). */
-void yprof_fmt_count(uint64_t value, char *out, size_t out_size);
+void yperf_fmt_count(uint64_t value, char *out, size_t out_size);
 
-#endif /* YPROF_PROFILE_H */
+#endif /* YPERF_PROFILE_H */

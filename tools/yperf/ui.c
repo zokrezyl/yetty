@@ -1,16 +1,16 @@
 /*
- * ui.c — yprof presentation layer.
+ * ui.c — yperf presentation layer.
  *
  * The flame graph is produced by the yflame class: configure(width, row height,
  * flags) → parse(folded) → render() yields a ydraw drawable list that is handed
  * to a ygui ydraw_embed widget. Below it, a sortable top-symbol table (self /
  * total sample counts) is populated from the profile model; an optional sample
  * timeline strip sits above the flame for timestamped (perf) captures. Layout is
- * absolute and recomputed in yprof_ui_relayout so it reflows on resize.
+ * absolute and recomputed in yperf_ui_relayout so it reflows on resize.
  *
  * The flame is expensive to reparse but cheap to re-emit, so two render paths
- * exist: yprof_ui_refresh rebuilds it (configure + parse), while
- * yprof_ui_render_flame only re-emits with the current focus / hover / highlight
+ * exist: yperf_ui_refresh rebuilds it (configure + parse), while
+ * yperf_ui_render_flame only re-emits with the current focus / hover / highlight
  * — the path used for cross-highlight, search, hover, and mouse zoom.
  */
 #include "ui.h"
@@ -30,24 +30,24 @@
 /* Palette (macros, not file-scope data)                               */
 /* ------------------------------------------------------------------ */
 
-#define YPROF_RGBA(r, g, b, a) ((struct yetty_ycore_rgba){(r), (g), (b), (a)})
+#define YPERF_RGBA(r, g, b, a) ((struct yetty_ycore_rgba){(r), (g), (b), (a)})
 
-#define YPROF_COL_BG_LIFTED YPROF_RGBA(20, 26, 31, 255)
-#define YPROF_COL_BORDER YPROF_RGBA(54, 74, 71, 255)
-#define YPROF_COL_TEXT YPROF_RGBA(224, 229, 228, 255)
-#define YPROF_COL_TEXT_SECONDARY YPROF_RGBA(159, 167, 168, 255)
-#define YPROF_COL_TEXT_MUTED YPROF_RGBA(85, 97, 98, 255)
-#define YPROF_COL_ACCENT YPROF_RGBA(107, 168, 146, 255)
-#define YPROF_COL_ACCENT_BRIGHT YPROF_RGBA(116, 197, 165, 255)
+#define YPERF_COL_BG_LIFTED YPERF_RGBA(20, 26, 31, 255)
+#define YPERF_COL_BORDER YPERF_RGBA(54, 74, 71, 255)
+#define YPERF_COL_TEXT YPERF_RGBA(224, 229, 228, 255)
+#define YPERF_COL_TEXT_SECONDARY YPERF_RGBA(159, 167, 168, 255)
+#define YPERF_COL_TEXT_MUTED YPERF_RGBA(85, 97, 98, 255)
+#define YPERF_COL_ACCENT YPERF_RGBA(107, 168, 146, 255)
+#define YPERF_COL_ACCENT_BRIGHT YPERF_RGBA(116, 197, 165, 255)
 
 /* BRAND_ACCENT #6BA892 as an ABGR fill for the ydraw timeline bars. */
-#define YPROF_BAR_FILL 0xFF92A86Bu
+#define YPERF_BAR_FILL 0xFF92A86Bu
 
 /* ------------------------------------------------------------------ */
 /* Widget handle table                                                 */
 /* ------------------------------------------------------------------ */
 
-struct yprof_ui {
+struct yperf_ui {
     struct yetty_yclass_object *title;
     struct yetty_yclass_object *source;
     struct yetty_yclass_object *totals;
@@ -81,7 +81,7 @@ static void absorb(struct yetty_ycore_void_result result)
     }
 }
 
-static struct yetty_yclass_object *ui_add(struct yprof_app *app,
+static struct yetty_yclass_object *ui_add(struct yperf_app *app,
                                           struct yetty_yclass_ptr_result cls_result)
 {
     if (YETTY_IS_ERR(cls_result)) {
@@ -132,8 +132,8 @@ static void panel_style(struct yetty_yclass_object *panel)
     if (!panel) {
         return;
     }
-    absorb(yetty_ygui_panel_set_bg(panel, YPROF_COL_BG_LIFTED));
-    absorb(yetty_ygui_panel_set_border(panel, YPROF_COL_BORDER, 1.0f));
+    absorb(yetty_ygui_panel_set_bg(panel, YPERF_COL_BG_LIFTED));
+    absorb(yetty_ygui_panel_set_border(panel, YPERF_COL_BORDER, 1.0f));
 }
 
 /* ------------------------------------------------------------------ */
@@ -142,7 +142,7 @@ static void panel_style(struct yetty_yclass_object *panel)
 
 /* The substring to highlight in the flame: an active search query, else the
  * selected symbol (so the table row and its flame frames stay in sync). */
-static size_t current_highlight(struct yprof_app *app, char *out, size_t out_size)
+static size_t current_highlight(struct yperf_app *app, char *out, size_t out_size)
 {
     if (app->search_len > 0) {
         size_t n = app->search_len < out_size - 1 ? app->search_len : out_size - 1;
@@ -165,7 +165,7 @@ static size_t current_highlight(struct yprof_app *app, char *out, size_t out_siz
     return 0;
 }
 
-static void apply_highlight(struct yprof_app *app)
+static void apply_highlight(struct yperf_app *app)
 {
     char highlight[256];
     size_t n = current_highlight(app, highlight, sizeof(highlight));
@@ -178,9 +178,9 @@ static void apply_highlight(struct yprof_app *app)
 
 /* Full rebuild: reconfigure geometry, reparse the (possibly filtered) folded
  * text, re-apply the diff baseline (parse clears it) and highlight, emit. */
-static void build_flame(struct yprof_app *app)
+static void build_flame(struct yperf_app *app)
 {
-    struct yprof_ui *ui = app->ui;
+    struct yperf_ui *ui = app->ui;
     if (!ui->flame_embed || !app->flame || !app->profile) {
         return;
     }
@@ -222,7 +222,7 @@ static void build_flame(struct yprof_app *app)
     absorb(yetty_ygui_ydraw_embed_set_buffer(ui->flame_embed, list_res.value));
 }
 
-void yprof_ui_render_flame(struct yprof_app *app)
+void yperf_ui_render_flame(struct yperf_app *app)
 {
     if (!app || !app->ui || !app->ui->flame_embed || !app->flame) {
         return;
@@ -240,9 +240,9 @@ void yprof_ui_render_flame(struct yprof_app *app)
 /* Sample timeline strip (perf captures only)                          */
 /* ------------------------------------------------------------------ */
 
-static void build_timeline(struct yprof_app *app)
+static void build_timeline(struct yperf_app *app)
 {
-    struct yprof_ui *ui = app->ui;
+    struct yperf_ui *ui = app->ui;
     if (!ui->timeline_embed || !app->profile || app->profile->timeline_n == 0) {
         return;
     }
@@ -251,7 +251,7 @@ static void build_timeline(struct yprof_app *app)
     if (width < 4.0f || height < 4.0f) {
         return;
     }
-    struct yprof_profile *profile = app->profile;
+    struct yperf_profile *profile = app->profile;
 
     struct yetty_ydraw_drawable_list_config config = {
         .scene_min_x = 0.0f,
@@ -289,7 +289,7 @@ static void build_timeline(struct yprof_app *app)
             .corner_radius = 0.0f,
         };
         struct yetty_ycore_void_result box = yetty_ydraw_drawable_list_add_cmd_add_box(
-            buf, /*id=*/0, /*z_order=*/z++, YPROF_BAR_FILL, /*stroke=*/0u, /*stroke_width=*/0.0f,
+            buf, /*id=*/0, /*z_order=*/z++, YPERF_BAR_FILL, /*stroke=*/0u, /*stroke_width=*/0.0f,
             &geom);
         if (YETTY_IS_ERR(box)) {
             yetty_ycore_error_destroy(box.error);
@@ -304,9 +304,9 @@ static void build_timeline(struct yprof_app *app)
 /* Hover detail                                                        */
 /* ------------------------------------------------------------------ */
 
-static void set_hover_detail(struct yprof_app *app, int32_t id)
+static void set_hover_detail(struct yperf_app *app, int32_t id)
 {
-    struct yprof_ui *ui = app->ui;
+    struct yperf_ui *ui = app->ui;
     ui->detail[0] = '\0';
     if (id < 0) {
         return;
@@ -327,7 +327,7 @@ static void set_hover_detail(struct yprof_app *app, int32_t id)
         yetty_ycore_error_destroy(root_res.error);
     }
     char count[24];
-    yprof_fmt_count(value, count, sizeof(count));
+    yperf_fmt_count(value, count, sizeof(count));
     double pct = root ? 100.0 * (double)value / (double)root : 0.0;
     snprintf(ui->detail, sizeof(ui->detail), "%s  \xc2\xb7  %s samples  \xc2\xb7  %.1f%%", name,
              count, pct);
@@ -337,7 +337,7 @@ static void set_hover_detail(struct yprof_app *app, int32_t id)
 /* Mouse routing to the flame                                          */
 /* ------------------------------------------------------------------ */
 
-static int32_t flame_hit(struct yprof_app *app, float flame_x, float flame_y)
+static int32_t flame_hit(struct yperf_app *app, float flame_x, float flame_y)
 {
     struct yetty_ycore_int_result hit = yetty_yflame_hit_test(app->flame, flame_x, flame_y);
     if (YETTY_IS_ERR(hit)) {
@@ -347,13 +347,13 @@ static int32_t flame_hit(struct yprof_app *app, float flame_x, float flame_y)
     return (int32_t)hit.value;
 }
 
-void yprof_ui_flame_mouse(struct yprof_app *app, uint32_t kind, float pane_x, float pane_y,
+void yperf_ui_flame_mouse(struct yperf_app *app, uint32_t kind, float pane_x, float pane_y,
                           int button, int pressed, float wheel_dy)
 {
     if (!app || !app->ui || !app->flame) {
         return;
     }
-    struct yprof_ui *ui = app->ui;
+    struct yperf_ui *ui = app->ui;
     float flame_x = pane_x - ui->flame_x;
     float flame_y = pane_y - ui->flame_y;
     int inside =
@@ -366,8 +366,8 @@ void yprof_ui_flame_mouse(struct yprof_app *app, uint32_t kind, float pane_x, fl
             ui->hover_id = highlight;
             absorb(yetty_yflame_set_highlight(app->flame, highlight));
             set_hover_detail(app, highlight);
-            yprof_ui_render_flame(app);
-            yprof_ui_refresh_table(app); /* refreshes the status line with the detail */
+            yperf_ui_render_flame(app);
+            yperf_ui_refresh_table(app); /* refreshes the status line with the detail */
         }
         return;
     }
@@ -389,7 +389,7 @@ void yprof_ui_flame_mouse(struct yprof_app *app, uint32_t kind, float pane_x, fl
         } else {
             absorb(yetty_yflame_focus_parent(app->flame));
         }
-        yprof_ui_render_flame(app);
+        yperf_ui_render_flame(app);
     } else if (kind == YETTY_YMGUI_INPUT_MOUSE_WHEEL) {
         if (wheel_dy > 0.0f && id >= 0) {
             absorb(yetty_yflame_focus(app->flame, id));
@@ -398,7 +398,7 @@ void yprof_ui_flame_mouse(struct yprof_app *app, uint32_t kind, float pane_x, fl
         } else {
             return;
         }
-        yprof_ui_render_flame(app);
+        yperf_ui_render_flame(app);
     }
 }
 
@@ -406,10 +406,10 @@ void yprof_ui_flame_mouse(struct yprof_app *app, uint32_t kind, float pane_x, fl
 /* Symbol table                                                        */
 /* ------------------------------------------------------------------ */
 
-static void refresh_table(struct yprof_app *app)
+static void refresh_table(struct yperf_app *app)
 {
-    struct yprof_ui *ui = app->ui;
-    struct yprof_profile *profile = app->profile;
+    struct yperf_ui *ui = app->ui;
+    struct yperf_profile *profile = app->profile;
     absorb(yetty_ygui_table_clear_rows(ui->table));
     if (!profile) {
         return;
@@ -435,12 +435,12 @@ static void refresh_table(struct yprof_app *app)
         if (idx >= total) {
             break;
         }
-        const struct yprof_symbol *sym = &profile->symbols[idx];
+        const struct yperf_symbol *sym = &profile->symbols[idx];
         char name[300], self[16], self_pct[12], total_s[16], total_pct[12];
         const char *marker = (idx == app->selected) ? "> " : "  ";
         snprintf(name, sizeof(name), "%s%s", marker, sym->name);
-        yprof_fmt_count(sym->self, self, sizeof(self));
-        yprof_fmt_count(sym->total, total_s, sizeof(total_s));
+        yperf_fmt_count(sym->self, self, sizeof(self));
+        yperf_fmt_count(sym->total, total_s, sizeof(total_s));
         snprintf(self_pct, sizeof(self_pct), "%.1f%%", 100.0 * (double)sym->self / denom);
         snprintf(total_pct, sizeof(total_pct), "%.1f%%", 100.0 * (double)sym->total / denom);
         const char *cells[] = {name, self, self_pct, total_s, total_pct};
@@ -448,9 +448,9 @@ static void refresh_table(struct yprof_app *app)
     }
 }
 
-static void refresh_header(struct yprof_app *app)
+static void refresh_header(struct yperf_app *app)
 {
-    struct yprof_ui *ui = app->ui;
+    struct yperf_ui *ui = app->ui;
     char buf[1152];
     const char *orient = app->icicle ? "icicle" : "flame";
 
@@ -465,7 +465,7 @@ static void refresh_header(struct yprof_app *app)
     uint64_t samples = app->profile ? app->profile->total_samples : 0;
     size_t symbols = app->profile ? app->profile->n_symbols : 0;
     char sample_str[24];
-    yprof_fmt_count(samples, sample_str, sizeof(sample_str));
+    yperf_fmt_count(samples, sample_str, sizeof(sample_str));
     if (app->filter[0]) {
         snprintf(buf, sizeof(buf),
                  "%llu stacks  \xc2\xb7  %s samples  \xc2\xb7  %zu symbols   filter: %s",
@@ -485,7 +485,7 @@ static void refresh_header(struct yprof_app *app)
         snprintf(buf, sizeof(buf),
                  "[j/k] move  [/] search  [enter] zoom  [f] filter  [F] clear  [s] sort:%s  "
                  "[i] %s  [r] reset  [q] quit",
-                 yprof_sort_mode_name(app->sort_mode), orient);
+                 yperf_sort_mode_name(app->sort_mode), orient);
     }
     ui_set_text(ui->status, buf);
 }
@@ -494,33 +494,33 @@ static void refresh_header(struct yprof_app *app)
 /* Build / free                                                        */
 /* ------------------------------------------------------------------ */
 
-struct yetty_ycore_void_result yprof_ui_build(struct yprof_app *app)
+struct yetty_ycore_void_result yperf_ui_build(struct yperf_app *app)
 {
     if (!app || !app->root_widget) {
-        return YETTY_ERR(yetty_ycore_void, "yprof_ui_build: no root");
+        return YETTY_ERR(yetty_ycore_void, "yperf_ui_build: no root");
     }
-    struct yprof_ui *ui = calloc(1, sizeof(*ui));
+    struct yperf_ui *ui = calloc(1, sizeof(*ui));
     if (!ui) {
-        return YETTY_ERR(yetty_ycore_void, "yprof_ui_build: calloc");
+        return YETTY_ERR(yetty_ycore_void, "yperf_ui_build: calloc");
     }
     ui->hover_id = -1;
     app->ui = ui;
 
     ui->title = ui_add(app, yetty_ygui_label_class_get());
-    ui_set_text(ui->title, "yprof");
-    ui_set_color(ui->title, YPROF_COL_ACCENT_BRIGHT);
+    ui_set_text(ui->title, "yperf");
+    ui_set_color(ui->title, YPERF_COL_ACCENT_BRIGHT);
     ui_set_font(ui->title, 16.0f);
 
     ui->source = ui_add(app, yetty_ygui_label_class_get());
-    ui_set_color(ui->source, YPROF_COL_TEXT);
+    ui_set_color(ui->source, YPERF_COL_TEXT);
     ui_set_font(ui->source, 12.0f);
 
     ui->totals = ui_add(app, yetty_ygui_label_class_get());
-    ui_set_color(ui->totals, YPROF_COL_TEXT_SECONDARY);
+    ui_set_color(ui->totals, YPERF_COL_TEXT_SECONDARY);
     ui_set_font(ui->totals, 12.0f);
 
     ui->status = ui_add(app, yetty_ygui_label_class_get());
-    ui_set_color(ui->status, YPROF_COL_TEXT_MUTED);
+    ui_set_color(ui->status, YPERF_COL_TEXT_MUTED);
     ui_set_font(ui->status, 11.0f);
 
     ui->timeline_panel = ui_add(app, yetty_ygui_panel_class_get());
@@ -539,11 +539,11 @@ struct yetty_ycore_void_result yprof_ui_build(struct yprof_app *app)
         absorb(yetty_ygui_table_set_columns(ui->table, 5, columns));
     }
 
-    yprof_ui_relayout(app);
+    yperf_ui_relayout(app);
     return YETTY_OK_VOID();
 }
 
-void yprof_ui_free(struct yprof_app *app)
+void yperf_ui_free(struct yperf_app *app)
 {
     if (app && app->ui) {
         free(app->ui);
@@ -555,19 +555,19 @@ void yprof_ui_free(struct yprof_app *app)
 /* Layout                                                              */
 /* ------------------------------------------------------------------ */
 
-#define YPROF_MARGIN 10.0f
-#define YPROF_PAD 8.0f
-#define YPROF_GAP 8.0f
-#define YPROF_LINE 18.0f
-#define YPROF_STATUS 16.0f
-#define YPROF_TIMELINE_H 46.0f
+#define YPERF_MARGIN 10.0f
+#define YPERF_PAD 8.0f
+#define YPERF_GAP 8.0f
+#define YPERF_LINE 18.0f
+#define YPERF_STATUS 16.0f
+#define YPERF_TIMELINE_H 46.0f
 
-void yprof_ui_relayout(struct yprof_app *app)
+void yperf_ui_relayout(struct yperf_app *app)
 {
     if (!app || !app->ui) {
         return;
     }
-    struct yprof_ui *ui = app->ui;
+    struct yperf_ui *ui = app->ui;
 
     float vw = 0.0f, vh = 0.0f;
     yetty_ygui_framework_viewport(app->engine, &vw, &vh);
@@ -578,17 +578,17 @@ void yprof_ui_relayout(struct yprof_app *app)
         vh = 800.0f;
     }
 
-    float x = YPROF_MARGIN;
-    float y = YPROF_MARGIN;
-    float full_w = vw - 2.0f * YPROF_MARGIN;
+    float x = YPERF_MARGIN;
+    float y = YPERF_MARGIN;
+    float full_w = vw - 2.0f * YPERF_MARGIN;
 
-    ui_place(ui->title, x, y, 70.0f, YPROF_LINE);
-    ui_place(ui->source, x + 74.0f, y + 1.0f, full_w - 74.0f, YPROF_LINE);
-    y += YPROF_LINE + 2.0f;
-    ui_place(ui->totals, x, y, full_w, YPROF_LINE);
-    y += YPROF_LINE + YPROF_GAP;
+    ui_place(ui->title, x, y, 70.0f, YPERF_LINE);
+    ui_place(ui->source, x + 74.0f, y + 1.0f, full_w - 74.0f, YPERF_LINE);
+    y += YPERF_LINE + 2.0f;
+    ui_place(ui->totals, x, y, full_w, YPERF_LINE);
+    y += YPERF_LINE + YPERF_GAP;
 
-    float body_bottom = vh - YPROF_MARGIN - YPROF_STATUS - YPROF_GAP;
+    float body_bottom = vh - YPERF_MARGIN - YPERF_STATUS - YPERF_GAP;
     float body_h = body_bottom - y;
     if (body_h < 160.0f) {
         body_h = 160.0f;
@@ -596,14 +596,14 @@ void yprof_ui_relayout(struct yprof_app *app)
 
     int has_timeline = (app->profile && app->profile->timeline_n > 0);
     if (has_timeline) {
-        ui_place(ui->timeline_panel, x, y, full_w, YPROF_TIMELINE_H);
-        float tw = full_w - 2.0f * YPROF_PAD;
-        float th = YPROF_TIMELINE_H - 2.0f * YPROF_PAD;
-        ui_place(ui->timeline_embed, x + YPROF_PAD, y + YPROF_PAD, tw, th);
+        ui_place(ui->timeline_panel, x, y, full_w, YPERF_TIMELINE_H);
+        float tw = full_w - 2.0f * YPERF_PAD;
+        float th = YPERF_TIMELINE_H - 2.0f * YPERF_PAD;
+        ui_place(ui->timeline_embed, x + YPERF_PAD, y + YPERF_PAD, tw, th);
         ui->timeline_w = tw;
         ui->timeline_h = th;
-        y += YPROF_TIMELINE_H + YPROF_GAP;
-        body_h -= YPROF_TIMELINE_H + YPROF_GAP;
+        y += YPERF_TIMELINE_H + YPERF_GAP;
+        body_h -= YPERF_TIMELINE_H + YPERF_GAP;
     } else {
         /* Park the unused strip off-screen so it never paints. */
         ui_place(ui->timeline_panel, -4.0f, -4.0f, 0.0f, 0.0f);
@@ -613,36 +613,36 @@ void yprof_ui_relayout(struct yprof_app *app)
     }
 
     float flame_h = body_h * 0.55f;
-    float table_h = body_h - flame_h - YPROF_GAP;
+    float table_h = body_h - flame_h - YPERF_GAP;
 
     ui_place(ui->flame_panel, x, y, full_w, flame_h);
-    float inner_w = full_w - 2.0f * YPROF_PAD;
-    float inner_h = flame_h - 2.0f * YPROF_PAD;
-    ui_place(ui->flame_embed, x + YPROF_PAD, y + YPROF_PAD, inner_w, inner_h);
-    ui->flame_x = x + YPROF_PAD;
-    ui->flame_y = y + YPROF_PAD;
+    float inner_w = full_w - 2.0f * YPERF_PAD;
+    float inner_h = flame_h - 2.0f * YPERF_PAD;
+    ui_place(ui->flame_embed, x + YPERF_PAD, y + YPERF_PAD, inner_w, inner_h);
+    ui->flame_x = x + YPERF_PAD;
+    ui->flame_y = y + YPERF_PAD;
     ui->flame_w = inner_w;
     ui->flame_h = inner_h;
 
-    float table_y = y + flame_h + YPROF_GAP;
+    float table_y = y + flame_h + YPERF_GAP;
     ui_place(ui->table_panel, x, table_y, full_w, table_h);
-    ui_place(ui->table, x + YPROF_PAD, table_y + YPROF_PAD, full_w - 2.0f * YPROF_PAD,
-             table_h - 2.0f * YPROF_PAD);
+    ui_place(ui->table, x + YPERF_PAD, table_y + YPERF_PAD, full_w - 2.0f * YPERF_PAD,
+             table_h - 2.0f * YPERF_PAD);
 
-    int rows = (int)((table_h - 2.0f * YPROF_PAD - 22.0f) / 20.0f);
+    int rows = (int)((table_h - 2.0f * YPERF_PAD - 22.0f) / 20.0f);
     if (rows < 3) {
         rows = 3;
     }
     ui->table_rows = rows;
 
-    ui_place(ui->status, x, vh - YPROF_MARGIN - YPROF_STATUS, full_w, YPROF_STATUS);
+    ui_place(ui->status, x, vh - YPERF_MARGIN - YPERF_STATUS, full_w, YPERF_STATUS);
 }
 
 /* ------------------------------------------------------------------ */
 /* Refresh                                                             */
 /* ------------------------------------------------------------------ */
 
-void yprof_ui_refresh_table(struct yprof_app *app)
+void yperf_ui_refresh_table(struct yperf_app *app)
 {
     if (!app || !app->ui) {
         return;
@@ -651,7 +651,7 @@ void yprof_ui_refresh_table(struct yprof_app *app)
     refresh_table(app);
 }
 
-void yprof_ui_refresh(struct yprof_app *app)
+void yperf_ui_refresh(struct yperf_app *app)
 {
     if (!app || !app->ui) {
         return;

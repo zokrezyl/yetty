@@ -1,5 +1,5 @@
 /*
- * profile.c — folded-stack aggregation and perf-script collapsing for yprof.
+ * profile.c — folded-stack aggregation and perf-script collapsing for yperf.
  *
  * The symbol table is built by walking the folded text: the leaf frame of each
  * stack gets its count added to `self`, and every distinct frame in the stack
@@ -29,7 +29,7 @@ static uint64_t fnv1a(const char *bytes, size_t len)
     return hash;
 }
 
-static int symtab_grow(struct yprof_profile *profile)
+static int symtab_grow(struct yperf_profile *profile)
 {
     size_t new_cap = profile->bucket_cap ? profile->bucket_cap * 2 : 256;
     int32_t *buckets = malloc(new_cap * sizeof(*buckets));
@@ -55,7 +55,7 @@ static int symtab_grow(struct yprof_profile *profile)
 }
 
 /* Intern a symbol name; returns its index, or -1 on allocation failure. */
-static int64_t symtab_intern(struct yprof_profile *profile, const char *name, size_t len)
+static int64_t symtab_intern(struct yperf_profile *profile, const char *name, size_t len)
 {
     if (profile->bucket_cap == 0 || (profile->n_symbols + 1) * 10 >= profile->bucket_cap * 7) {
         if (!symtab_grow(profile)) {
@@ -65,7 +65,7 @@ static int64_t symtab_intern(struct yprof_profile *profile, const char *name, si
     size_t mask = profile->bucket_cap - 1;
     size_t slot = (size_t)fnv1a(name, len) & mask;
     while (profile->buckets[slot] >= 0) {
-        struct yprof_symbol *sym = &profile->symbols[profile->buckets[slot]];
+        struct yperf_symbol *sym = &profile->symbols[profile->buckets[slot]];
         if (strlen(sym->name) == len && memcmp(sym->name, name, len) == 0) {
             return profile->buckets[slot];
         }
@@ -73,7 +73,7 @@ static int64_t symtab_intern(struct yprof_profile *profile, const char *name, si
     }
     if (profile->n_symbols == profile->cap_symbols) {
         size_t new_cap = profile->cap_symbols ? profile->cap_symbols * 2 : 128;
-        struct yprof_symbol *grown = realloc(profile->symbols, new_cap * sizeof(*grown));
+        struct yperf_symbol *grown = realloc(profile->symbols, new_cap * sizeof(*grown));
         if (!grown) {
             return -1;
         }
@@ -100,7 +100,7 @@ static int64_t symtab_intern(struct yprof_profile *profile, const char *name, si
 /* Folded-stack parsing                                                */
 /* ------------------------------------------------------------------ */
 
-static struct yetty_ycore_void_result aggregate_folded(struct yprof_profile *profile)
+static struct yetty_ycore_void_result aggregate_folded(struct yperf_profile *profile)
 {
     const char *text = profile->folded;
     size_t len = profile->folded_len;
@@ -186,9 +186,9 @@ static struct yetty_ycore_void_result aggregate_folded(struct yprof_profile *pro
 /* Profile lifecycle                                                   */
 /* ------------------------------------------------------------------ */
 
-static struct yprof_profile *profile_new(const char *folded, size_t len)
+static struct yperf_profile *profile_new(const char *folded, size_t len)
 {
-    struct yprof_profile *profile = calloc(1, sizeof(*profile));
+    struct yperf_profile *profile = calloc(1, sizeof(*profile));
     if (!profile) {
         return NULL;
     }
@@ -203,7 +203,7 @@ static struct yprof_profile *profile_new(const char *folded, size_t len)
     return profile;
 }
 
-void yprof_profile_destroy(struct yprof_profile *profile)
+void yperf_profile_destroy(struct yperf_profile *profile)
 {
     if (!profile) {
         return;
@@ -218,19 +218,19 @@ void yprof_profile_destroy(struct yprof_profile *profile)
     free(profile);
 }
 
-struct yetty_ycore_void_result yprof_profile_from_folded(const char *folded, size_t len,
-                                                         struct yprof_profile **out)
+struct yetty_ycore_void_result yperf_profile_from_folded(const char *folded, size_t len,
+                                                         struct yperf_profile **out)
 {
     if (!folded || !out) {
-        return YETTY_ERR(yetty_ycore_void, "yprof_profile_from_folded: null argument");
+        return YETTY_ERR(yetty_ycore_void, "yperf_profile_from_folded: null argument");
     }
-    struct yprof_profile *profile = profile_new(folded, len);
+    struct yperf_profile *profile = profile_new(folded, len);
     if (!profile) {
         return YETTY_ERR(yetty_ycore_void, "out of memory");
     }
     struct yetty_ycore_void_result agg = aggregate_folded(profile);
     if (YETTY_IS_ERR(agg)) {
-        yprof_profile_destroy(profile);
+        yperf_profile_destroy(profile);
         return agg;
     }
     /* The name index is only needed while aggregating. */
@@ -259,11 +259,11 @@ static int folded_line_has_symbol(const char *frames, size_t frames_len, const c
     return 0;
 }
 
-struct yetty_ycore_void_result yprof_folded_filter(const char *folded, size_t len,
+struct yetty_ycore_void_result yperf_folded_filter(const char *folded, size_t len,
                                                    const char *symbol, char **out, size_t *out_len)
 {
     if (!folded || !out || !out_len) {
-        return YETTY_ERR(yetty_ycore_void, "yprof_folded_filter: null argument");
+        return YETTY_ERR(yetty_ycore_void, "yperf_folded_filter: null argument");
     }
     size_t symbol_len = symbol ? strlen(symbol) : 0;
     size_t cap = len + 1, pos = 0;
@@ -359,9 +359,9 @@ static double perf_header_timestamp(const char *line, size_t len)
 /* Scan raw perf-script text for per-sample timestamps and bucket them into a
  * fixed-width sample-rate timeline on the profile (best-effort; absent for
  * input without timestamps). */
-static void extract_timeline(struct yprof_profile *profile, const char *text, size_t len)
+static void extract_timeline(struct yperf_profile *profile, const char *text, size_t len)
 {
-    enum { YPROF_TIMELINE_BUCKETS = 120 };
+    enum { YPERF_TIMELINE_BUCKETS = 120 };
     double *stamps = NULL;
     size_t n = 0, cap = 0;
     size_t i = 0;
@@ -415,7 +415,7 @@ static void extract_timeline(struct yprof_profile *profile, const char *text, si
         free(stamps);
         return;
     }
-    uint32_t *buckets = calloc(YPROF_TIMELINE_BUCKETS, sizeof(*buckets));
+    uint32_t *buckets = calloc(YPERF_TIMELINE_BUCKETS, sizeof(*buckets));
     if (!buckets) {
         free(stamps);
         return;
@@ -423,9 +423,9 @@ static void extract_timeline(struct yprof_profile *profile, const char *text, si
     double span = hi - lo;
     uint32_t peak = 0;
     for (size_t k = 0; k < n; k++) {
-        size_t b = (size_t)((stamps[k] - lo) / span * (double)(YPROF_TIMELINE_BUCKETS - 1));
-        if (b >= YPROF_TIMELINE_BUCKETS) {
-            b = YPROF_TIMELINE_BUCKETS - 1;
+        size_t b = (size_t)((stamps[k] - lo) / span * (double)(YPERF_TIMELINE_BUCKETS - 1));
+        if (b >= YPERF_TIMELINE_BUCKETS) {
+            b = YPERF_TIMELINE_BUCKETS - 1;
         }
         buckets[b]++;
         if (buckets[b] > peak) {
@@ -434,21 +434,21 @@ static void extract_timeline(struct yprof_profile *profile, const char *text, si
     }
     free(stamps);
     profile->timeline = buckets;
-    profile->timeline_n = YPROF_TIMELINE_BUCKETS;
+    profile->timeline_n = YPERF_TIMELINE_BUCKETS;
     profile->timeline_peak = peak;
     profile->time_start = lo;
     profile->time_end = hi;
 }
 
-struct yetty_ycore_void_result yprof_profile_from_perf_script(const char *text, size_t len,
-                                                              struct yprof_profile **out)
+struct yetty_ycore_void_result yperf_profile_from_perf_script(const char *text, size_t len,
+                                                              struct yperf_profile **out)
 {
     char *folded = NULL;
     size_t folded_len = 0;
     struct yetty_ycore_void_result collapse =
-        yprof_collapse_perf_script(text, len, &folded, &folded_len);
+        yperf_collapse_perf_script(text, len, &folded, &folded_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, collapse, "perf-script collapse failed");
-    struct yetty_ycore_void_result built = yprof_profile_from_folded(folded, folded_len, out);
+    struct yetty_ycore_void_result built = yperf_profile_from_folded(folded, folded_len, out);
     free(folded);
     if (YETTY_IS_OK(built) && out && *out) {
         extract_timeline(*out, text, len);
@@ -462,7 +462,7 @@ struct yetty_ycore_void_result yprof_profile_from_perf_script(const char *text, 
 
 static int cmp_self(const void *a, const void *b)
 {
-    const struct yprof_symbol *x = a, *y = b;
+    const struct yperf_symbol *x = a, *y = b;
     if (x->self != y->self) {
         return y->self > x->self ? 1 : -1;
     }
@@ -471,7 +471,7 @@ static int cmp_self(const void *a, const void *b)
 
 static int cmp_total(const void *a, const void *b)
 {
-    const struct yprof_symbol *x = a, *y = b;
+    const struct yperf_symbol *x = a, *y = b;
     if (x->total != y->total) {
         return y->total > x->total ? 1 : -1;
     }
@@ -480,43 +480,43 @@ static int cmp_total(const void *a, const void *b)
 
 static int cmp_name(const void *a, const void *b)
 {
-    const struct yprof_symbol *x = a, *y = b;
+    const struct yperf_symbol *x = a, *y = b;
     return strcmp(x->name, y->name);
 }
 
-void yprof_profile_sort(struct yprof_profile *profile, enum yprof_sort_mode mode)
+void yperf_profile_sort(struct yperf_profile *profile, enum yperf_sort_mode mode)
 {
     if (!profile || profile->n_symbols < 2) {
         return;
     }
     int (*cmp)(const void *, const void *) = cmp_self;
     switch (mode) {
-    case YPROF_SORT_SELF:
+    case YPERF_SORT_SELF:
         cmp = cmp_self;
         break;
-    case YPROF_SORT_TOTAL:
+    case YPERF_SORT_TOTAL:
         cmp = cmp_total;
         break;
-    case YPROF_SORT_NAME:
+    case YPERF_SORT_NAME:
         cmp = cmp_name;
         break;
-    case YPROF_SORT_MODE_COUNT:
+    case YPERF_SORT_MODE_COUNT:
         cmp = cmp_self;
         break;
     }
     qsort(profile->symbols, profile->n_symbols, sizeof(profile->symbols[0]), cmp);
 }
 
-const char *yprof_sort_mode_name(enum yprof_sort_mode mode)
+const char *yperf_sort_mode_name(enum yperf_sort_mode mode)
 {
     switch (mode) {
-    case YPROF_SORT_SELF:
+    case YPERF_SORT_SELF:
         return "self";
-    case YPROF_SORT_TOTAL:
+    case YPERF_SORT_TOTAL:
         return "total";
-    case YPROF_SORT_NAME:
+    case YPERF_SORT_NAME:
         return "name";
-    case YPROF_SORT_MODE_COUNT:
+    case YPERF_SORT_MODE_COUNT:
         break;
     }
     return "?";
@@ -556,10 +556,10 @@ static struct yetty_ycore_void_result read_stream(FILE *stream, char **out, size
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yprof_read_all(const char *path, char **out, size_t *out_len)
+struct yetty_ycore_void_result yperf_read_all(const char *path, char **out, size_t *out_len)
 {
     if (!out || !out_len) {
-        return YETTY_ERR(yetty_ycore_void, "yprof_read_all: null argument");
+        return YETTY_ERR(yetty_ycore_void, "yperf_read_all: null argument");
     }
     if (!path) {
         return read_stream(stdin, out, out_len);
@@ -814,11 +814,11 @@ static void free_frames(char **frames, size_t *n_frames)
     *n_frames = 0;
 }
 
-struct yetty_ycore_void_result yprof_collapse_perf_script(const char *text, size_t len, char **out,
+struct yetty_ycore_void_result yperf_collapse_perf_script(const char *text, size_t len, char **out,
                                                           size_t *out_len)
 {
     if (!text || !out || !out_len) {
-        return YETTY_ERR(yetty_ycore_void, "yprof_collapse_perf_script: null argument");
+        return YETTY_ERR(yetty_ycore_void, "yperf_collapse_perf_script: null argument");
     }
     struct collapse_map map = {0};
     char comm[256] = {0};
@@ -935,7 +935,7 @@ done:
 /* Formatting                                                          */
 /* ------------------------------------------------------------------ */
 
-void yprof_fmt_count(uint64_t value, char *out, size_t out_size)
+void yperf_fmt_count(uint64_t value, char *out, size_t out_size)
 {
     if (value >= 10000000ULL) {
         snprintf(out, out_size, "%.1fM", (double)value / 1e6);

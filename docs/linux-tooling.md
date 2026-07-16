@@ -153,9 +153,9 @@ Features:
 Container and Kubernetes log sources should later be implemented as adapters
 to this tool instead of separate log-viewing implementations.
 
-### `yprof` — performance and tracing workbench
+### `yperf` — performance and tracing workbench
 
-`yprof` productizes the existing `yflame` renderer and connects it to common
+`yperf` productizes the existing `yflame` renderer and connects it to common
 Linux profiling workflows.
 
 Initial features:
@@ -257,7 +257,7 @@ tool whenever practical.
    and dissection backend can begin in parallel with `ydu`.
 3. Build `ylog` to validate high-volume streaming and coordinated time filters,
    promoting the streaming and time-series views to shared status.
-4. Build `yprof` around the existing `yflame` implementation.
+4. Build `yperf` around the existing `yflame` implementation.
 5. Build `ydata` to generalize table-and-chart exploration for pipelines.
 6. Build `ygit` after the shared graph and rich-inspection components mature.
 Complete and close the prerequisite `ynet` → `ywasmnet` module rename
@@ -290,7 +290,7 @@ Together, the selected tools form a coherent visual Linux workbench:
 - `ytop`: what is consuming the machine's resources?
 - `ynet`: what is communicating over the network?
 - `ylog`: what did the system and applications report?
-- `yprof`: where is execution time being spent?
+- `yperf`: where is execution time being spent?
 - `ydu`: where did storage capacity go?
 - `ydata`: what does this pipeline's data contain?
 - `ygit`: how did this codebase change?
