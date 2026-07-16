@@ -1,0 +1,615 @@
+methods:
+  - slot: client_open
+    domain: yjupyter
+    owning_class: client
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: base_url
+        type: "const char *"
+      - name: token
+        type: "const char *"
+    doc: "/* open: create a kernel over REST and open its WebSocket channel. `token` may be
+ * \"\" for a tokenless server. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: client_execute
+    domain: yjupyter
+    owning_class: client
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: code
+        type: "const char *"
+      - name: tag
+        type: "const char *"
+    doc: "/* execute: send an execute_request for `code` on the shell channel, correlated
+ * to `tag`. Returns the request msg_id (owned; caller frees). */"
+    local: true
+    oneway: false
+    return_payload_type: "char *"
+  - slot: client_poll
+    domain: yjupyter
+    owning_class: client
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: timeout_ms
+        type: int
+    doc: "/* poll: wait up to `timeout_ms` for the next incoming message. Returns a
+ * message object (caller owns) whose kernel status has already updated the
+ * session; errors on timeout or a closed connection. */"
+    local: true
+    oneway: false
+    return_payload_type: "struct yetty_yclass_object *"
+  - slot: client_kernel_state
+    domain: yjupyter
+    owning_class: client
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* kernel_state: the tracked busy/idle/... state of the kernel. */"
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: client_tag_for
+    domain: yjupyter
+    owning_class: client
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: parent_msg_id
+        type: "const char *"
+    doc: "/* tag_for: the caller tag correlated to a reply's parent_header.msg_id. */"
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: client_close
+    domain: yjupyter
+    owning_class: client
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* close: shut the WebSocket and delete the kernel over REST. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: client_destroy
+    domain: yjupyter
+    owning_class: client
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* destroy: close the connection, free the session, and the yclass allocation. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: message_build
+    domain: yjupyter
+    owning_class: message
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: msg_type
+        type: "const char *"
+      - name: channel
+        type: "const char *"
+      - name: session_id
+        type: "const char *"
+      - name: msg_id
+        type: "const char *"
+      - name: parent_msg_id
+        type: "const char *"
+      - name: content_json
+        type: "const char *"
+    doc: "/* build: populate this message as a Jupyter v5 frame. `content_json` is the
+ * message content object as JSON text (or \"\" for an empty object);
+ * `parent_msg_id` is \"\" for an originating request. Replaces any prior content. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: message_from_wire
+    domain: yjupyter
+    owning_class: message
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: json
+        type: "const char *"
+    doc: "/* from_wire: parse an incoming WebSocket JSON frame into this message. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: message_to_wire
+    domain: yjupyter
+    owning_class: message
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* to_wire: serialize the message as a WebSocket JSON frame (owned; caller frees). */"
+    local: true
+    oneway: false
+    return_payload_type: "char *"
+  - slot: message_msg_type
+    domain: yjupyter
+    owning_class: message
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* header/routing accessors (borrowed; valid while the message lives). */"
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: message_msg_id
+    domain: yjupyter
+    owning_class: message
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: message_parent_msg_id
+    domain: yjupyter
+    owning_class: message
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: message_channel
+    domain: yjupyter
+    owning_class: message
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: message_session
+    domain: yjupyter
+    owning_class: message
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: message_content_json
+    domain: yjupyter
+    owning_class: message
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* content_json: the message content object as JSON text (owned). */"
+    local: true
+    oneway: false
+    return_payload_type: "char *"
+  - slot: message_content_string
+    domain: yjupyter
+    owning_class: message
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: key
+        type: "const char *"
+    doc: "/* content_string: a string field of the content object (e.g. \"code\", \"text\",
+ * \"name\", \"execution_state\", \"ename\", \"status\"); owned, \"\" when absent. */"
+    local: true
+    oneway: false
+    return_payload_type: "char *"
+  - slot: message_content_int
+    domain: yjupyter
+    owning_class: message
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: key
+        type: "const char *"
+    doc: "/* content_int: an integer field of the content object (e.g. \"execution_count\");
+ * -1 when absent or not an integer. */"
+    local: true
+    oneway: false
+    return_payload_type: int
+  - slot: message_destroy
+    domain: yjupyter
+    owning_class: message
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: session_init
+    domain: yjupyter
+    owning_class: session
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: session_id
+        type: "const char *"
+    doc: "/* init: set the session id (a non-empty value is required — Jupyter Server keys
+ * a kernel session on it). Resets counters, correlation, and kernel state. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: session_id
+    domain: yjupyter
+    owning_class: session
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: session_kernel_state
+    domain: yjupyter
+    owning_class: session
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: session_new_request
+    domain: yjupyter
+    owning_class: session
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: msg_type
+        type: "const char *"
+      - name: channel
+        type: "const char *"
+      - name: content_json
+        type: "const char *"
+      - name: tag
+        type: "const char *"
+    doc: "/* new_request: build a request message on `channel` with `content_json`,
+ * assigning a fresh session-unique msg_id. When `tag` is non-empty, the
+ * (msg_id -> tag) pair is recorded so replies can be correlated back with
+ * tag_for(). Returns a message object the caller owns (destroy it). */"
+    local: true
+    oneway: false
+    return_payload_type: "struct yetty_yclass_object *"
+  - slot: session_handle_wire
+    domain: yjupyter
+    owning_class: session
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: json
+        type: "const char *"
+    doc: "/* handle_wire: parse an incoming WebSocket frame into a message object (caller
+ * owns it). When it is an IOPub `status` message, the kernel busy/idle state is
+ * updated from its content.execution_state. */"
+    local: true
+    oneway: false
+    return_payload_type: "struct yetty_yclass_object *"
+  - slot: session_tag_for
+    domain: yjupyter
+    owning_class: session
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: parent_msg_id
+        type: "const char *"
+    doc: "/* tag_for: the caller tag recorded for the request whose msg_id is
+ * `parent_msg_id` (i.e. the reply's parent_header.msg_id). \"\" when unknown —
+ * an orphan the caller should route to a diagnostic stream, never an arbitrary
+ * request. */"
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: session_destroy
+    domain: yjupyter
+    owning_class: session
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: null
+classes:
+  - name: client
+    domain: yjupyter
+    accessor: yetty_yjupyter_client_class_get
+    type: regular
+    source_file: src/yetty/yjupyter/client.c
+    parent: null
+    mixins: []
+    data: struct yetty_yjupyter_client
+    data_fields:
+      - name: base_url
+        type: "char *"
+        get: false
+        set: false
+      - name: token
+        type: "char *"
+        get: false
+        set: false
+      - name: kernel_id
+        type: "char *"
+        get: false
+        set: false
+      - name: ws_session
+        type: "char *"
+        get: false
+        set: false
+      - name: sockfd
+        type: int
+        get: false
+        set: false
+      - name: session
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+    ops:
+      - slot: client_open
+        slot_domain: yjupyter
+        impl: client_open
+      - slot: client_execute
+        slot_domain: yjupyter
+        impl: client_execute
+      - slot: client_poll
+        slot_domain: yjupyter
+        impl: client_poll
+      - slot: client_kernel_state
+        slot_domain: yjupyter
+        impl: client_kernel_state
+      - slot: client_tag_for
+        slot_domain: yjupyter
+        impl: client_tag_for
+      - slot: client_close
+        slot_domain: yjupyter
+        impl: client_close
+      - slot: client_destroy
+        slot_domain: yjupyter
+        impl: client_destroy
+    doc: null
+  - name: message
+    domain: yjupyter
+    accessor: yetty_yjupyter_message_class_get
+    type: regular
+    source_file: src/yetty/yjupyter/protocol.c
+    parent: null
+    mixins: []
+    data: struct yetty_yjupyter_message
+    data_fields:
+      - name: doc
+        type: "int *"
+        get: false
+        set: false
+      - name: root
+        type: "int *"
+        get: false
+        set: false
+    ops:
+      - slot: message_build
+        slot_domain: yjupyter
+        impl: message_build
+      - slot: message_from_wire
+        slot_domain: yjupyter
+        impl: message_from_wire
+      - slot: message_to_wire
+        slot_domain: yjupyter
+        impl: message_to_wire
+      - slot: message_msg_type
+        slot_domain: yjupyter
+        impl: message_msg_type
+      - slot: message_msg_id
+        slot_domain: yjupyter
+        impl: message_msg_id
+      - slot: message_parent_msg_id
+        slot_domain: yjupyter
+        impl: message_parent_msg_id
+      - slot: message_channel
+        slot_domain: yjupyter
+        impl: message_channel
+      - slot: message_session
+        slot_domain: yjupyter
+        impl: message_session
+      - slot: message_content_json
+        slot_domain: yjupyter
+        impl: message_content_json
+      - slot: message_content_string
+        slot_domain: yjupyter
+        impl: message_content_string
+      - slot: message_content_int
+        slot_domain: yjupyter
+        impl: message_content_int
+      - slot: message_destroy
+        slot_domain: yjupyter
+        impl: message_destroy
+    doc: null
+  - name: session
+    domain: yjupyter
+    accessor: yetty_yjupyter_session_class_get
+    type: regular
+    source_file: src/yetty/yjupyter/protocol.c
+    parent: null
+    mixins: []
+    data: struct yetty_yjupyter_session
+    data_fields:
+      - name: session_id
+        type: "char *"
+        get: false
+        set: false
+      - name: msg_counter
+        type: unsigned long long
+        get: false
+        set: false
+      - name: kernel_state
+        type: "char *"
+        get: false
+        set: false
+      - name: pending
+        type: "struct yjupyter_pending *"
+        get: false
+        set: false
+      - name: pending_count
+        type: size_t
+        get: false
+        set: false
+      - name: pending_cap
+        type: size_t
+        get: false
+        set: false
+    ops:
+      - slot: session_init
+        slot_domain: yjupyter
+        impl: session_init
+      - slot: session_id
+        slot_domain: yjupyter
+        impl: session_id
+      - slot: session_kernel_state
+        slot_domain: yjupyter
+        impl: session_kernel_state
+      - slot: session_new_request
+        slot_domain: yjupyter
+        impl: session_new_request
+      - slot: session_handle_wire
+        slot_domain: yjupyter
+        impl: session_handle_wire
+      - slot: session_tag_for
+        slot_domain: yjupyter
+        impl: session_tag_for
+      - slot: session_destroy
+        slot_domain: yjupyter
+        impl: session_destroy
+    doc: null
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "char *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_const_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const char *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+local_types:
+  yetty_yjupyter_client: src/yetty/yjupyter/client.c
+  yetty_yjupyter_client_ptr_result: src/yetty/yjupyter/client.c
+  curl_sink: src/yetty/yjupyter/client.c
+  yetty_yjupyter_message: src/yetty/yjupyter/protocol.c
+  yjupyter_pending: src/yetty/yjupyter/protocol.c
+  yetty_yjupyter_session: src/yetty/yjupyter/protocol.c
+  yetty_yjupyter_message_ptr_result: src/yetty/yjupyter/protocol.c
+  yetty_yjupyter_session_ptr_result: src/yetty/yjupyter/protocol.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/yjupyter/client.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/yjupyter/client.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/yjupyter/client.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/yjupyter/client.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/yjupyter/client.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

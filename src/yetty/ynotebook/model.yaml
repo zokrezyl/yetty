@@ -1,0 +1,776 @@
+methods:
+  - slot: mime_bundle_from_json_text
+    domain: ynotebook
+    owning_class: mime_bundle
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: data_json
+        type: "const char *"
+      - name: metadata_json
+        type: "const char *"
+    doc: "/* from_json_text: replace the bundle's contents from an nbformat `data` object
+ * (JSON text). `metadata_json` is the matching `metadata` object as JSON text,
+ * or NULL / \"\" for none. Each representation is classified as text, binary
+ * (base64-decoded), or a retained JSON value. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: mime_bundle_to_json_text
+    domain: ynotebook
+    owning_class: mime_bundle
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* to_json_text: serialize the bundle as an nbformat `data` object (JSON text).
+ * Caller owns the returned string and frees it with free(). */"
+    local: true
+    oneway: false
+    return_payload_type: "char *"
+  - slot: mime_bundle_count
+    domain: ynotebook
+    owning_class: mime_bundle
+    return_type: struct yetty_ycore_size_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* count: number of representations. */"
+    local: true
+    oneway: false
+    return_payload_type: size_t
+  - slot: mime_bundle_mime_at
+    domain: ynotebook
+    owning_class: mime_bundle
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: size_t
+    doc: "/* mime_at: the MIME type string of representation `index` (borrowed). */"
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: mime_bundle_kind_at
+    domain: ynotebook
+    owning_class: mime_bundle
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: size_t
+    doc: "/* kind_at: payload kind of representation `index` — \"text\", \"binary\", or
+ * \"json\" (borrowed static string). */"
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: mime_bundle_bytes_at
+    domain: ynotebook
+    owning_class: mime_bundle
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: size_t
+      - name: out_bytes
+        type: "const uint8_t **"
+      - name: out_len
+        type: "size_t *"
+    doc: "/* bytes_at: the text/binary payload of representation `index` (borrowed, points
+ * into the bundle). Yields NULL/0 for a json representation. Local: it returns
+ * a borrowed buffer through out-pointers. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: mime_bundle_json_at
+    domain: ynotebook
+    owning_class: mime_bundle
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: size_t
+    doc: "/* json_at: representation `index` serialized as pretty JSON text (owned; caller
+ * frees). Empty string for a non-json representation — bytes_at covers those.
+ * Local: it allocates and returns owned text. */"
+    local: true
+    oneway: false
+    return_payload_type: "char *"
+  - slot: mime_bundle_destroy
+    domain: ynotebook
+    owning_class: mime_bundle
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* destroy: free the representations and the yclass allocation. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: output_type
+    domain: ynotebook
+    owning_class: output
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* output_type: \"stream\", \"display_data\", \"execute_result\", \"error\", or the raw
+ * type string of an output kind Yetty does not model. */"
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: output_stream_name
+    domain: ynotebook
+    owning_class: output
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* stream_name: \"stdout\" / \"stderr\" for a stream output; \"\" otherwise. */"
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: output_text
+    domain: ynotebook
+    owning_class: output
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* text: the stream text of a stream output (owned; caller frees). Empty string
+ * for non-stream outputs. */"
+    local: true
+    oneway: false
+    return_payload_type: "char *"
+  - slot: output_execution_count
+    domain: ynotebook
+    owning_class: output
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* execution_count: the execute_result prompt number, or -1 when absent/null. */"
+    local: true
+    oneway: false
+    return_payload_type: int
+  - slot: output_error_name
+    domain: ynotebook
+    owning_class: output
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* error_name / error_value: the ename / evalue of an error output; \"\" else. */"
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: output_error_value
+    domain: ynotebook
+    owning_class: output
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: output_bundle
+    domain: ynotebook
+    owning_class: output
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* bundle: the mime_bundle object for a display_data / execute_result output.
+ * Errors when the output carries no rich data. The bundle is owned by the
+ * output — do not destroy it directly. */"
+    local: true
+    oneway: false
+    return_payload_type: "struct yetty_yclass_object *"
+  - slot: output_destroy
+    domain: ynotebook
+    owning_class: output
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* destroy: free the mime_bundle and the yclass allocation. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: cell_type
+    domain: ynotebook
+    owning_class: cell
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* cell_type: \"code\", \"markdown\", \"raw\", or a raw type Yetty does not model. */"
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: cell_id
+    domain: ynotebook
+    owning_class: cell
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* cell_id: the cell id (nbformat 4.5+); \"\" when absent. */"
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: cell_source
+    domain: ynotebook
+    owning_class: cell
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* cell_source: the cell source, joined to one string (owned; caller frees). */"
+    local: true
+    oneway: false
+    return_payload_type: "char *"
+  - slot: cell_set_source
+    domain: ynotebook
+    owning_class: cell
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: "/* cell_set_source: replace the cell source with `text` (stored as one string). */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: cell_execution_count
+    domain: ynotebook
+    owning_class: cell
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* cell_execution_count: code-cell prompt number, or -1 when absent/null. */"
+    local: true
+    oneway: false
+    return_payload_type: int
+  - slot: cell_output_count
+    domain: ynotebook
+    owning_class: cell
+    return_type: struct yetty_ycore_size_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* cell_output_count: number of outputs (code cells). */"
+    local: true
+    oneway: false
+    return_payload_type: size_t
+  - slot: cell_output_at
+    domain: ynotebook
+    owning_class: cell
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: size_t
+    doc: "/* cell_output_at: the output object at `index` (owned by the cell). */"
+    local: true
+    oneway: false
+    return_payload_type: "struct yetty_yclass_object *"
+  - slot: cell_metadata_json
+    domain: ynotebook
+    owning_class: cell
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* cell_metadata_json: the cell metadata object as JSON text (owned). */"
+    local: true
+    oneway: false
+    return_payload_type: "char *"
+  - slot: cell_apply_message
+    domain: ynotebook
+    owning_class: cell
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: msg_type
+        type: "const char *"
+      - name: content_json
+        type: "const char *"
+    doc: "/* apply_message: fold a decoded IOPub output message (msg_type + its content as
+ * JSON text) into this cell's outputs, mutating the retained tree. Implements
+ * the nbformat output rules: consecutive same-name stream records coalesce;
+ * clear_output(wait=true) defers the clear until the next output arrives;
+ * display_data / execute_result / error append. Non-output message types
+ * (status, execute_input, …) are ignored. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: cell_destroy
+    domain: ynotebook
+    owning_class: cell
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* destroy: free the output objects and the yclass allocation. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: notebook_load_text
+    domain: ynotebook
+    owning_class: notebook
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: json
+        type: "const char *"
+    doc: "/* load_text: parse an .ipynb document from JSON text, replacing any current
+ * content. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: notebook_load_file
+    domain: ynotebook
+    owning_class: notebook
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: path
+        type: "const char *"
+    doc: "/* load_file: read and parse an .ipynb file, replacing any current content. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: notebook_to_text
+    domain: ynotebook
+    owning_class: notebook
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* to_text: serialize the notebook to nbformat JSON text (owned; caller frees).
+ * The retained document tree is re-emitted, so unknown fields survive. */"
+    local: true
+    oneway: false
+    return_payload_type: "char *"
+  - slot: notebook_save_file
+    domain: ynotebook
+    owning_class: notebook
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: path
+        type: "const char *"
+    doc: "/* save_file: serialize and write the notebook atomically (temp sibling then
+ * rename over the target). */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: notebook_nbformat
+    domain: ynotebook
+    owning_class: notebook
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* nbformat / nbformat_minor: the document format version. */"
+    local: true
+    oneway: false
+    return_payload_type: int
+  - slot: notebook_nbformat_minor
+    domain: ynotebook
+    owning_class: notebook
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: int
+  - slot: notebook_cell_count
+    domain: ynotebook
+    owning_class: notebook
+    return_type: struct yetty_ycore_size_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* cell_count: number of cells. */"
+    local: true
+    oneway: false
+    return_payload_type: size_t
+  - slot: notebook_cell_at
+    domain: ynotebook
+    owning_class: notebook
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: size_t
+    doc: "/* cell_at: the cell object at `index` (owned by the notebook). */"
+    local: true
+    oneway: false
+    return_payload_type: "struct yetty_yclass_object *"
+  - slot: notebook_metadata_json
+    domain: ynotebook
+    owning_class: notebook
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* metadata_json: the notebook-level metadata object as JSON text (owned). */"
+    local: true
+    oneway: false
+    return_payload_type: "char *"
+  - slot: notebook_destroy
+    domain: ynotebook
+    owning_class: notebook
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* destroy: free every cell/output, the master document, and the allocation. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+classes:
+  - name: mime_bundle
+    domain: ynotebook
+    accessor: yetty_ynotebook_mime_bundle_class_get
+    type: regular
+    source_file: src/yetty/ynotebook/mime-bundle.c
+    parent: null
+    mixins: []
+    data: struct yetty_ynotebook_mime_bundle
+    data_fields:
+      - name: reprs
+        type: "struct yetty_ynotebook_mime_repr *"
+        get: false
+        set: false
+      - name: count
+        type: size_t
+        get: false
+        set: false
+      - name: cap
+        type: size_t
+        get: false
+        set: false
+    ops:
+      - slot: mime_bundle_from_json_text
+        slot_domain: ynotebook
+        impl: mime_bundle_from_json_text
+      - slot: mime_bundle_to_json_text
+        slot_domain: ynotebook
+        impl: mime_bundle_to_json_text
+      - slot: mime_bundle_count
+        slot_domain: ynotebook
+        impl: mime_bundle_count
+      - slot: mime_bundle_mime_at
+        slot_domain: ynotebook
+        impl: mime_bundle_mime_at
+      - slot: mime_bundle_kind_at
+        slot_domain: ynotebook
+        impl: mime_bundle_kind_at
+      - slot: mime_bundle_bytes_at
+        slot_domain: ynotebook
+        impl: mime_bundle_bytes_at
+      - slot: mime_bundle_json_at
+        slot_domain: ynotebook
+        impl: mime_bundle_json_at
+      - slot: mime_bundle_destroy
+        slot_domain: ynotebook
+        impl: mime_bundle_destroy
+    doc: null
+  - name: output
+    domain: ynotebook
+    accessor: yetty_ynotebook_output_class_get
+    type: regular
+    source_file: src/yetty/ynotebook/notebook.c
+    parent: null
+    mixins: []
+    data: struct yetty_ynotebook_output
+    data_fields:
+      - name: doc
+        type: "int *"
+        get: false
+        set: false
+      - name: node
+        type: "int *"
+        get: false
+        set: false
+      - name: bundle
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+    ops:
+      - slot: output_type
+        slot_domain: ynotebook
+        impl: output_type
+      - slot: output_stream_name
+        slot_domain: ynotebook
+        impl: output_stream_name
+      - slot: output_text
+        slot_domain: ynotebook
+        impl: output_text
+      - slot: output_execution_count
+        slot_domain: ynotebook
+        impl: output_execution_count
+      - slot: output_error_name
+        slot_domain: ynotebook
+        impl: output_error_name
+      - slot: output_error_value
+        slot_domain: ynotebook
+        impl: output_error_value
+      - slot: output_bundle
+        slot_domain: ynotebook
+        impl: output_bundle
+      - slot: output_destroy
+        slot_domain: ynotebook
+        impl: output_destroy
+    doc: null
+  - name: cell
+    domain: ynotebook
+    accessor: yetty_ynotebook_cell_class_get
+    type: regular
+    source_file: src/yetty/ynotebook/notebook.c
+    parent: null
+    mixins: []
+    data: struct yetty_ynotebook_cell
+    data_fields:
+      - name: doc
+        type: "int *"
+        get: false
+        set: false
+      - name: node
+        type: "int *"
+        get: false
+        set: false
+      - name: outputs
+        type: "struct yetty_yclass_object **"
+        get: false
+        set: false
+      - name: output_count
+        type: size_t
+        get: false
+        set: false
+      - name: pending_clear
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: cell_type
+        slot_domain: ynotebook
+        impl: cell_type
+      - slot: cell_id
+        slot_domain: ynotebook
+        impl: cell_id
+      - slot: cell_source
+        slot_domain: ynotebook
+        impl: cell_source
+      - slot: cell_set_source
+        slot_domain: ynotebook
+        impl: cell_set_source
+      - slot: cell_execution_count
+        slot_domain: ynotebook
+        impl: cell_execution_count
+      - slot: cell_output_count
+        slot_domain: ynotebook
+        impl: cell_output_count
+      - slot: cell_output_at
+        slot_domain: ynotebook
+        impl: cell_output_at
+      - slot: cell_metadata_json
+        slot_domain: ynotebook
+        impl: cell_metadata_json
+      - slot: cell_apply_message
+        slot_domain: ynotebook
+        impl: cell_apply_message
+      - slot: cell_destroy
+        slot_domain: ynotebook
+        impl: cell_destroy
+    doc: null
+  - name: notebook
+    domain: ynotebook
+    accessor: yetty_ynotebook_notebook_class_get
+    type: regular
+    source_file: src/yetty/ynotebook/notebook.c
+    parent: null
+    mixins: []
+    data: struct yetty_ynotebook_notebook
+    data_fields:
+      - name: doc
+        type: "int *"
+        get: false
+        set: false
+      - name: root
+        type: "int *"
+        get: false
+        set: false
+      - name: cells
+        type: "struct yetty_yclass_object **"
+        get: false
+        set: false
+      - name: cell_count
+        type: size_t
+        get: false
+        set: false
+    ops:
+      - slot: notebook_load_text
+        slot_domain: ynotebook
+        impl: notebook_load_text
+      - slot: notebook_load_file
+        slot_domain: ynotebook
+        impl: notebook_load_file
+      - slot: notebook_to_text
+        slot_domain: ynotebook
+        impl: notebook_to_text
+      - slot: notebook_save_file
+        slot_domain: ynotebook
+        impl: notebook_save_file
+      - slot: notebook_nbformat
+        slot_domain: ynotebook
+        impl: notebook_nbformat
+      - slot: notebook_nbformat_minor
+        slot_domain: ynotebook
+        impl: notebook_nbformat_minor
+      - slot: notebook_cell_count
+        slot_domain: ynotebook
+        impl: notebook_cell_count
+      - slot: notebook_cell_at
+        slot_domain: ynotebook
+        impl: notebook_cell_at
+      - slot: notebook_metadata_json
+        slot_domain: ynotebook
+        impl: notebook_metadata_json
+      - slot: notebook_destroy
+        slot_domain: ynotebook
+        impl: notebook_destroy
+    doc: null
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "char *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_const_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const char *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_size_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: size_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+local_types:
+  yetty_ynotebook_mime_kind: src/yetty/ynotebook/mime-bundle.c
+  yetty_ynotebook_mime_repr: src/yetty/ynotebook/mime-bundle.c
+  yetty_ynotebook_mime_bundle: src/yetty/ynotebook/mime-bundle.c
+  yetty_ynotebook_mime_bundle_ptr_result: src/yetty/ynotebook/mime-bundle.c
+  yetty_ynotebook_output: src/yetty/ynotebook/notebook.c
+  yetty_ynotebook_cell: src/yetty/ynotebook/notebook.c
+  yetty_ynotebook_notebook: src/yetty/ynotebook/notebook.c
+  yetty_ynotebook_output_ptr_result: src/yetty/ynotebook/notebook.c
+  yetty_ynotebook_cell_ptr_result: src/yetty/ynotebook/notebook.c
+  yetty_ynotebook_notebook_ptr_result: src/yetty/ynotebook/notebook.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ynotebook/mime-bundle.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ynotebook/mime-bundle.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ynotebook/mime-bundle.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ynotebook/mime-bundle.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ynotebook/mime-bundle.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

@@ -22,6 +22,14 @@ if(YETTY_ENABLE_TOOL_YMCAT)
     add_subdirectory(ymcat)
 endif()
 
+# ynb-cat — render a Jupyter .ipynb notebook to the terminal: cell sources plus
+# each output's richest MIME representation, shipped as rich figures. Drives the
+# yetty_ynotebook model; needs ymime + yface for the file-envelope emitter.
+if(YETTY_ENABLE_TOOL_YNB_CAT AND TARGET yetty_ynotebook
+   AND TARGET yetty_ymime AND TARGET yetty_yface)
+    add_subdirectory(ynb-cat)
+endif()
+
 if(YETTY_ENABLE_TOOL_YLESS)
     add_subdirectory(yless)
 endif()

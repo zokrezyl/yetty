@@ -149,6 +149,8 @@ option(YETTY_ENABLE_FEATURE_YMSOFFICE "ymsoffice — docx/xlsx/pptx to ydraw buf
 option(YETTY_ENABLE_FEATURE_YLOTTIE   "ylottie — Lottie (single frame) to ydraw buffer" ON)
 option(YETTY_ENABLE_FEATURE_YMAP      "ymap — slippy-map model + tile engine" ON)
 option(YETTY_ENABLE_FEATURE_YNET      "ynet — network capture model (libpcap)" ON)
+option(YETTY_ENABLE_FEATURE_YNOTEBOOK "ynotebook — Jupyter notebook model (MIME bundle)" ON)
+option(YETTY_ENABLE_FEATURE_YJUPYTER  "yjupyter — Jupyter v5 kernel protocol client" ON)
 
 # Build pipeline
 option(YETTY_ENABLE_FEATURE_ASSETS    "assets — runtime asset copying"       ON)
@@ -164,6 +166,7 @@ option(YETTY_ENABLE_TOOL_YDRAW_GENERATOR "ydraw-generator tool"              OFF
 option(YETTY_ENABLE_TOOL_YDRAW_BENCH    "ydraw-bench tool"                 ON)
 option(YETTY_ENABLE_TOOL_YCAT            "ycat tool"                         ON)
 option(YETTY_ENABLE_TOOL_YMCAT           "ymcat tool (raw file → terminal-side render)" ON)
+option(YETTY_ENABLE_TOOL_YNB_CAT         "ynb-cat tool (render a .ipynb notebook's MIME outputs)" ON)
 option(YETTY_ENABLE_TOOL_YLESS           "yless pager tool"                  ON)
 
 # FFI shared library (libyetty_ffi.so). OFF for the normal static build so the
