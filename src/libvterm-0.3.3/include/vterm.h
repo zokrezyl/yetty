@@ -219,6 +219,19 @@ void vterm_free(VTerm *vt);
 void vterm_get_size(const VTerm *vt, int *rowsp, int *colsp);
 void vterm_set_size(VTerm *vt, int rows, int cols);
 
+/* DEC mode 2048 - in-band window resize notifications. libvterm tracks only the
+ * cell grid; the embedder feeds the text-area pixel size here. When DEC mode
+ * 2048 is set, a change to this size emits CSI 48 ; rows ; cols ; height_px ;
+ * width_px t to the child (the same size the child would read from the initial
+ * report emitted when it enables the mode). Call it on every resize. */
+void vterm_set_pixel_size(VTerm *vt, int width, int height);
+
+/* DEC mode 2031 - color-scheme change notifications. scheme is 0 (no
+ * preference), 1 (dark) or 2 (light). When DEC mode 2031 is set, a change emits
+ * CSI ? 997 ; scheme n to the child; DSR CSI ? 996 n reports the current value
+ * regardless of the mode. Call it initially and whenever the theme changes. */
+void vterm_set_color_scheme(VTerm *vt, int scheme);
+
 int vterm_get_utf8(const VTerm *vt);
 void vterm_set_utf8(VTerm *vt, int is_utf8);
 

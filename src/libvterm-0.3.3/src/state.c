@@ -740,6 +740,52 @@ static void set_mode(VTermState *state, int num, int val)
   }
 }
 
+/* DEC mode 2048 - emit the in-band window resize notification
+ * CSI 48 ; rows ; cols ; height_px ; width_px t. rows/cols come from the cell
+ * grid; the pixel dimensions are whatever the embedder last fed via
+ * vterm_set_pixel_size(). Records the emitted pixel size so a redundant
+ * set_pixel_size call (same geometry) does not re-notify. */
+static void state_send_inband_resize(VTermState *state)
+{
+  vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "48;%d;%d;%d;%dt",
+      state->rows, state->cols, state->pixel_height, state->pixel_width);
+  state->inband_last_pixel_width = state->pixel_width;
+  state->inband_last_pixel_height = state->pixel_height;
+}
+
+/* DEC mode 2031 - emit the color-scheme report/notification CSI ? 997 ; N n,
+ * where N is 0 (no preference), 1 (dark) or 2 (light). Shared by the change
+ * notification and the DSR CSI ? 996 n query. */
+static void state_send_color_scheme(VTermState *state)
+{
+  vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?997;%dn", state->color_scheme);
+}
+
+void vterm_set_pixel_size(VTerm *vt, int width, int height)
+{
+  VTermState *state = vt->state;
+  if(!state)
+    return;
+  state->pixel_width = width;
+  state->pixel_height = height;
+  // Notify only when the geometry actually changed, so redundant resize calls
+  // with identical dimensions do not spam the child.
+  if(state->mode.in_band_resize &&
+     (width != state->inband_last_pixel_width || height != state->inband_last_pixel_height))
+    state_send_inband_resize(state);
+}
+
+void vterm_set_color_scheme(VTerm *vt, int scheme)
+{
+  VTermState *state = vt->state;
+  if(!state)
+    return;
+  int changed = (scheme != state->color_scheme);
+  state->color_scheme = scheme;
+  if(changed && state->mode.color_scheme_updates)
+    state_send_color_scheme(state);
+}
+
 static void set_dec_mode(VTermState *state, int num, int val)
 {
   switch(num) {
@@ -839,6 +885,20 @@ static void set_dec_mode(VTermState *state, int num, int val)
     state->mode.synchronized_output = val;
     break;
 
+  case 2031: // color-scheme change notifications (light/dark).
+    state->mode.color_scheme_updates = val;
+    break;
+
+  case 2048: // in-band window resize notifications.
+    state->mode.in_band_resize = val;
+    if(val) {
+      // Report the current size immediately on enable, so the child has a known
+      // starting geometry without a resize round-trip. Also arms last_notified_*
+      // so the next genuine resize is not suppressed as a no-op.
+      state_send_inband_resize(state);
+    }
+    break;
+
   case 1500:
     settermprop_bool(state, VTERM_PROP_CARDCLICK, val);
     state->mode.card_click = val;
@@ -935,6 +995,14 @@ static void request_dec_mode(VTermState *state, int num)
 
     case 2026:
       reply = state->mode.synchronized_output;
+      break;
+
+    case 2031:
+      reply = state->mode.color_scheme_updates;
+      break;
+
+    case 2048:
+      reply = state->mode.in_band_resize;
       break;
 
     case 1500:
@@ -1369,9 +1437,10 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
   case 0x63: // DA - ECMA-48 8.3.24
     val = CSI_ARG_OR(args[0], 0);
     if(val == 0)
-      // DEC VT100 response, with attribute 4 = sixel graphics so
-      // capability probes (ucs-detect, img2sixel, chafa) see sixel support.
-      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;2;4c");
+      // DEC VT100 response. Attribute 4 = sixel graphics and 52 = OSC 52
+      // clipboard access, so capability probes (ucs-detect, img2sixel, chafa)
+      // see sixel and clipboard support.
+      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;2;4;52c");
     break;
 
   case LEADER('>', 0x63): // DEC secondary Device Attributes
@@ -1535,6 +1604,9 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
         break;
       case 6: // CPR - cursor position report
         vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "%s%d;%dR", qmark, state->pos.row + 1, state->pos.col + 1);
+        break;
+      case 996: // DEC mode 2031 - query current color scheme (light/dark)
+        state_send_color_scheme(state);
         break;
       }
     }
@@ -2081,6 +2153,11 @@ static const char *termcap_lookup(const char *name)
    * clipboard-aware programs (and ucs-detect) discover OSC 52 support without
    * issuing a real clipboard write. */
   if(strcmp(name, "Ms") == 0)     return "\x1b]52;%p1%s;%p2%s\x07";
+  /* Styled-underline capability (terminfo Smulx): SGR 4:n selects the
+   * underline style. yetty parses 4:1 single, 4:2 double, 4:3 curly, so
+   * advertising Smulx is a faithful capability report. (Setulc / coloured
+   * underlines are intentionally not advertised: SGR 58 is not supported.) */
+  if(strcmp(name, "Smulx") == 0)  return "\x1b[4:%p1%dm";
   return NULL;
 }
 
@@ -2352,6 +2429,10 @@ void vterm_state_reset(VTermState *state, int hard)
   state->mode.report_focus    = 0;
   state->mode.grapheme_cluster = 1; // mode 2027 - grapheme clustering on by default
   state->mode.synchronized_output = 0; // mode 2026 - synchronized output off by default
+  state->mode.in_band_resize = 0; // mode 2048 - opt-in, off until the app enables it
+  state->mode.color_scheme_updates = 0; // mode 2031 - opt-in, off until the app enables it
+  // pixel_width/height and color_scheme are physical embedder state (window
+  // size, theme); a terminal reset must not clear them, so they are left alone.
 
   state->kitty_kbd_stackpos = 0; // kitty keyboard protocol - empty stack (disabled)
 
