@@ -78,7 +78,8 @@ Config keys are in [yconfig](../yconfig/README.md).
 
 ```c
 struct yetty_yclass_object_ptr_result obj_res = yetty_yvterm_vterm_figure_create(
-    cols, rows, context, pty_write_fn, pty_ud, request_render_fn, rr_ud, mouse_sub_fn, ms_ud);
+    cols, rows, context, pty_write_fn, pty_ud, request_render_fn, rr_ud, mouse_sub_fn, ms_ud,
+    clipboard_write_fn, clip_ud);                        /* OSC 52 clipboard writes out */
 
 yetty_yvterm_vterm_feed(obj, bytes, len);            /* PTY output in */
 yetty_yvterm_vterm_resize(obj, grid_size, cell_size);

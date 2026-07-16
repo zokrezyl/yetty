@@ -260,6 +260,281 @@ static void test_grapheme_cluster(struct ytest *test)
     }
 }
 
+/* Feed one UTF-8 cluster onto a fresh grid and return the column the cursor
+ * advanced to (i.e. the cluster's display width from col 0). */
+static uint32_t advance_of(struct ytest *test, const char *utf8)
+{
+    struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+    feeds(test, grid, utf8);
+    uint32_t row, col;
+    cursor_of(test, grid, &row, &col);
+    yetty_yvterm_grid_dispose(grid);
+    return col;
+}
+
+/*---------------------------------------------------------------------------
+ * Emoji sequence width semantics (#571): VS16/VS15, ZWJ, skin tones, flags.
+ * Each sequence must advance the cursor by exactly what wcwidth reports for
+ * the pinned Unicode version — the quantity ucs-detect measures via CPR.
+ * Codepoints are spelled as raw UTF-8 \x escapes so the invisible joiners /
+ * selectors are unambiguous in the source.
+ *-------------------------------------------------------------------------*/
+static void test_emoji_sequence_widths(struct ytest *test)
+{
+    /* Regional-indicator flag pair (U+1F1FA U+1F1F8 = 🇺🇸) → one width-2 cluster. */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8"), 2);
+
+    /* Two flags in a row (US then JP) → two clusters, four columns — the second
+     * regional-indicator pair must not merge with the first. */
+    YTEST_CHECK_EQ_SIZE(
+        test, advance_of(test, "\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8\xF0\x9F\x87\xAF\xF0\x9F\x87\xB5"),
+        4);
+
+    /* ZWJ family (man ZWJ woman ZWJ girl = 👨‍👩‍👧, 5 codepoints) → width 2. */
+    YTEST_CHECK_EQ_SIZE(
+        test,
+        advance_of(test,
+                   "\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9\xE2\x80\x8D\xF0\x9F\x91\xA7"),
+        2);
+
+    /* man ZWJ rocket (👨‍🚀) → width 2. */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x9A\x80"), 2);
+
+    /* Umbrella + VS16 (☂️) → narrow base promoted to width 2. */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xE2\x98\x82\xEF\xB8\x8F"), 2);
+
+    /* Umbrella + VS15 (☂︎) → text presentation, width 1. */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xE2\x98\x82\xEF\xB8\x8E"), 1);
+
+    /* Woman + skin-tone modifier (👩🏽) → absorbed into base, width 2 (not 4). */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xF0\x9F\x91\xA9\xF0\x9F\x8F\xBD"), 2);
+
+    /* Degenerate: lone regional indicator keeps width 2; plain wide emoji is 2. */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xF0\x9F\x87\xA6"), 2);
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xF0\x9F\x91\xA8"), 2);
+
+    /* The head cell of a ZWJ family reports width 2 with a width-0 spill. */
+    {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+        feeds(test, grid,
+              "\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9\xE2\x80\x8D\xF0\x9F\x91\xA7");
+        YTEST_CHECK_EQ_INT(test, cell_at(test, grid, 0, 0)->width, 2);
+        YTEST_CHECK_EQ_INT(test, cell_at(test, grid, 0, 1)->width, 0);
+        yetty_yvterm_grid_dispose(grid);
+    }
+}
+
+/*---------------------------------------------------------------------------
+ * Mode 2027 grapheme clustering (#572): with the mode set (the default) a ZWJ
+ * family advances as one width-2 cluster; with it reset the cursor falls back
+ * to legacy per-codepoint advance. The observable difference is the cursor
+ * arithmetic — the DECRQM report itself is exercised by the ucs-detect harness.
+ *-------------------------------------------------------------------------*/
+static void test_mode_2027_clustering(struct ytest *test)
+{
+    /* man ZWJ woman ZWJ girl (👨‍👩‍👧, 5 codepoints). */
+    const char *family = "\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9\xE2\x80\x8D\xF0\x9F\x91\xA7";
+    uint32_t row, col;
+
+    /* Default: mode 2027 on → one width-2 cluster. */
+    {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+        feeds(test, grid, family);
+        cursor_of(test, grid, &row, &col);
+        YTEST_CHECK_EQ_SIZE(test, col, 2);
+        yetty_yvterm_grid_dispose(grid);
+    }
+
+    /* CSI ? 2027 l → clustering off: each wide element and the width-0 joiners
+     * advance independently (2 + 0 + 2 + 0 + 2 = 6). */
+    {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+        feeds(test, grid, "\x1b[?2027l");
+        feeds(test, grid, family);
+        cursor_of(test, grid, &row, &col);
+        YTEST_CHECK_EQ_SIZE(test, col, 6);
+        yetty_yvterm_grid_dispose(grid);
+    }
+
+    /* CSI ? 2027 h re-enables clustering. */
+    {
+        struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+        feeds(test, grid, "\x1b[?2027l\x1b[?2027h");
+        feeds(test, grid, family);
+        cursor_of(test, grid, &row, &col);
+        YTEST_CHECK_EQ_SIZE(test, col, 2);
+        yetty_yvterm_grid_dispose(grid);
+    }
+}
+
+/*---------------------------------------------------------------------------
+ * Kitty keyboard protocol (CSI ? u query / > push / < pop / = set). The query
+ * reply is written back through the grid's pty-write hook, so a small sink
+ * captures the emitted bytes for comparison.
+ *-------------------------------------------------------------------------*/
+struct kitty_reply_capture {
+    char buf[64];
+    size_t len;
+};
+
+static struct yetty_ycore_void_result kitty_reply_sink(const char *bytes, size_t len,
+                                                       void *userdata)
+{
+    struct kitty_reply_capture *capture = userdata;
+    for (size_t index = 0; index < len && capture->len < sizeof(capture->buf) - 1; index++) {
+        capture->buf[capture->len++] = bytes[index];
+    }
+    capture->buf[capture->len] = 0;
+    return YETTY_OK_VOID();
+}
+
+static void test_kitty_keyboard(struct ytest *test)
+{
+    struct kitty_reply_capture capture = {0};
+    struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+    struct yetty_ycore_void_result set =
+        yetty_yvterm_grid_set_pty_write(grid, kitty_reply_sink, &capture);
+    YTEST_REQUIRE_OK(test, set);
+
+    /* Empty stack → query (CSI ? u) reports flags 0. */
+    feeds(test, grid, "\x1b[?u");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?0u");
+
+    /* Push disambiguate (flag 1) via CSI > 1 u; query now reports 1. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[>1u\x1b[?u");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?1u");
+
+    /* CSI = 2 ; 2 u — mode 2 sets (ORs in) report-events bit: 1|2 = 3. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[=2;2u\x1b[?u");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?3u");
+
+    /* CSI = 1 ; 3 u — mode 3 clears the disambiguate bit: 3 & ~1 = 2. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[=1;3u\x1b[?u");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?2u");
+
+    /* CSI < u pops the pushed entry → empty stack → flags 0. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[<u\x1b[?u");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?0u");
+
+    /* CSI = 5 u — mode 1 (default) replaces the whole set; on an empty stack it
+     * seeds a base entry. 5 = disambiguate | report-alternates. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b[=5u\x1b[?u");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?5u");
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
+ * OSC 52 clipboard write. libvterm base64-decodes the payload and hands the
+ * plain text to the grid's clipboard-write hook; a mock sink captures it.
+ *-------------------------------------------------------------------------*/
+struct osc52_capture {
+    char buf[64];
+    size_t len;
+    int clipboard;
+    int calls;
+};
+
+static struct yetty_ycore_void_result osc52_sink(const char *text, size_t len, int clipboard,
+                                                 void *userdata)
+{
+    struct osc52_capture *capture = userdata;
+    capture->calls++;
+    capture->clipboard = clipboard;
+    capture->len = len < sizeof(capture->buf) - 1 ? len : sizeof(capture->buf) - 1;
+    memcpy(capture->buf, text, capture->len);
+    capture->buf[capture->len] = 0;
+    return YETTY_OK_VOID();
+}
+
+static void test_osc52_clipboard(struct ytest *test)
+{
+    struct osc52_capture capture = {0};
+    struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+    struct yetty_ycore_void_result set =
+        yetty_yvterm_grid_set_clipboard_write(grid, osc52_sink, &capture);
+    YTEST_REQUIRE_OK(test, set);
+
+    /* OSC 52 ; c ; base64("hello") ST → "hello" to the system clipboard. */
+    feeds(test, grid, "\x1b]52;c;aGVsbG8=\x07");
+    YTEST_CHECK_EQ_INT(test, capture.calls, 1);
+    YTEST_CHECK_STR_EQ(test, capture.buf, "hello");
+    YTEST_CHECK_EQ_INT(test, capture.clipboard, 1);
+
+    /* Primary-selection target 'p' → same text, clipboard flag 0. */
+    capture = (struct osc52_capture){0};
+    feeds(test, grid, "\x1b]52;p;aGVsbG8=\x07");
+    YTEST_CHECK_EQ_INT(test, capture.calls, 1);
+    YTEST_CHECK_STR_EQ(test, capture.buf, "hello");
+    YTEST_CHECK_EQ_INT(test, capture.clipboard, 0);
+
+    /* Invalid base64 → no clipboard write (rejected safely, nothing lands). */
+    capture = (struct osc52_capture){0};
+    feeds(test, grid, "\x1b]52;c;@@@bad@@@\x07");
+    YTEST_CHECK_EQ_INT(test, capture.calls, 0);
+
+    /* Read request (OSC 52 ; c ; ?) is not wired → no callback, no leak. */
+    capture = (struct osc52_capture){0};
+    feeds(test, grid, "\x1b]52;c;?\x07");
+    YTEST_CHECK_EQ_INT(test, capture.calls, 0);
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
+ * OSC 10/11 dynamic default colors: query reply, #/rgb: set forms, and the
+ * OSC 110/111 reset. Query replies come back through the grid's pty-write hook.
+ *-------------------------------------------------------------------------*/
+static void test_osc_dynamic_colors(struct ytest *test)
+{
+    struct kitty_reply_capture capture = {0};
+    struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
+    struct yetty_ycore_void_result set =
+        yetty_yvterm_grid_set_pty_write(grid, kitty_reply_sink, &capture);
+    YTEST_REQUIRE_OK(test, set);
+
+    /* Query the configured default background; remember the reply for the
+     * reset check below. Reply shape: OSC 11 ; rgb:RRRR/GGGG/BBBB ST. */
+    feeds(test, grid, "\x1b]11;?\x07");
+    YTEST_CHECK(test, strncmp(capture.buf, "\x1b]11;rgb:", 9) == 0);
+    char configured_bg[48];
+    strncpy(configured_bg, capture.buf, sizeof(configured_bg) - 1);
+    configured_bg[sizeof(configured_bg) - 1] = 0;
+
+    /* Set background via #rrggbb; query echoes it, 8-bit scaled to 16-bit. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b]11;#1e1e2e\x07");
+    feeds(test, grid, "\x1b]11;?\x07");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b]11;rgb:1e1e/1e1e/2e2e\x1b\\");
+
+    /* Set foreground via rgb:rr/gg/bb; query OSC 10 echoes it. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b]10;rgb:ff/80/00\x07");
+    feeds(test, grid, "\x1b]10;?\x07");
+    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b]10;rgb:ffff/8080/0000\x1b\\");
+
+    /* OSC 111 resets background to the configured value. */
+    capture.len = 0;
+    capture.buf[0] = 0;
+    feeds(test, grid, "\x1b]111\x07");
+    feeds(test, grid, "\x1b]11;?\x07");
+    YTEST_CHECK_STR_EQ(test, capture.buf, configured_bg);
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
 /*---------------------------------------------------------------------------
  * Cursor save/restore (DECSC / DECRC).
  *-------------------------------------------------------------------------*/
@@ -487,6 +762,11 @@ int main(void)
     YTEST_RUN(&test, test_wide_glyph);
     YTEST_RUN(&test, test_modern_width_tables);
     YTEST_RUN(&test, test_grapheme_cluster);
+    YTEST_RUN(&test, test_emoji_sequence_widths);
+    YTEST_RUN(&test, test_mode_2027_clustering);
+    YTEST_RUN(&test, test_kitty_keyboard);
+    YTEST_RUN(&test, test_osc52_clipboard);
+    YTEST_RUN(&test, test_osc_dynamic_colors);
     YTEST_RUN(&test, test_cursor_save_restore);
     YTEST_RUN(&test, test_erase_in_line);
     YTEST_RUN(&test, test_bce);

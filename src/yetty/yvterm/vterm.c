@@ -51,6 +51,11 @@
 /* GPU cell layout the text shader reads: 4 u32 words per cell. */
 enum { YVTERM_WORDS_PER_CELL = 4 };
 
+/* Sentinel glyph index the text shader draws as a hollow "notdef" box. Set when
+ * a printable, spacing codepoint resolves to no glyph in any face — a visible
+ * tofu instead of a silently blank cell. Real atlas indices are far below this. */
+enum { YVTERM_GLYPH_TOFU = 0xFFFFFFFFu };
+
 /*===========================================================================
  * Multi-font faces — config-driven codepoint-range → font routing.
  *
@@ -565,7 +570,20 @@ static const char *vterm_text_wgsl(void)
         "    var alpha = 0.0;\n"
         "    var glyph_rgb = vec3<f32>(0.0);\n"
         "    var glyph_is_color = false;\n"
-        "    if (glyph != 0u) {\n"
+        /* 0xFFFFFFFF = notdef sentinel: a codepoint no face could supply. Draw a
+         * hollow box inset from the cell edges (fg-tinted) so a missing glyph is
+         * a visible tofu, never a blank cell. */
+        "    if (glyph == 0xFFFFFFFFu) {\n"
+        "        let inx = uni.cell_size.x * 0.16;\n"
+        "        let iny = uni.cell_size.y * 0.12;\n"
+        "        let th = max(1.0, uni.cell_size.x * 0.07);\n"
+        "        let x0 = inx; let x1 = uni.cell_size.x - inx;\n"
+        "        let y0 = iny; let y1 = uni.cell_size.y - iny;\n"
+        "        let on_box = local.x >= x0 && local.x <= x1 && local.y >= y0 && local.y <= y1;\n"
+        "        let in_hole = local.x >= x0 + th && local.x <= x1 - th &&\n"
+        "                      local.y >= y0 + th && local.y <= y1 - th;\n"
+        "        if (on_box && !in_hole) { alpha = 1.0; }\n"
+        "    } else if (glyph != 0u) {\n"
         "        let cell_method = (uni.face_methods >> (face * 4u)) & 0xFu;\n"
         "        if (cell_method == 2u) {\n"
         "            let texel = sample_raster_texel(face, glyph, local);\n"
@@ -692,6 +710,13 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm,
                     face = 0u;
                     glyph = vterm_resolve_glyph(vterm, 0u, cell->codepoint,
                                                 vterm_cell_style(cell->attrs));
+                }
+                /* No face (nor its fallback chain) has this printable, spacing
+                 * codepoint: draw a visible notdef box instead of a blank cell.
+                 * Zero-width spill/combining cells (width 0) stay invisible. */
+                if (glyph == 0u && cell->codepoint >= 0x20u && cell->width >= 1) {
+                    glyph = YVTERM_GLYPH_TOFU;
+                    face = 0u;
                 }
             }
         }
@@ -2042,7 +2067,9 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     uint32_t cols, uint32_t rows, const struct yetty_context *context,
     yetty_yterminal_pty_write_fn pty_write_fn, void *pty_write_userdata,
     yetty_yterminal_request_render_fn request_render_fn, void *request_render_userdata,
-    yetty_yterminal_mouse_sub_fn mouse_sub_fn, void *mouse_sub_userdata)
+    yetty_yterminal_mouse_sub_fn mouse_sub_fn, void *mouse_sub_userdata,
+    yetty_yterminal_clipboard_write_fn clipboard_write_fn, void *clipboard_write_userdata,
+    yetty_yterminal_sixel_write_fn sixel_write_fn, void *sixel_write_userdata)
 {
     if (cols == 0 || rows == 0) {
         return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: invalid size");
@@ -2125,7 +2152,25 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
         set_card_res = yetty_yvterm_grid_set_card_sub(
             vterm->grid_obj, (yetty_yvterm_grid_card_sub_fn)mouse_sub_fn, mouse_sub_userdata);
     }
-    if (YETTY_IS_ERR(set_pty_res) || YETTY_IS_ERR(set_card_res)) {
+    /* OSC 52 clipboard writes from the model reach the terminal through this;
+     * same decoupling as pty_write — the terminal's clipboard_write_fn matches
+     * the grid's clipboard_write signature. */
+    struct yetty_ycore_void_result set_clip_res = YETTY_OK_VOID();
+    if (YETTY_IS_OK(set_pty_res) && YETTY_IS_OK(set_card_res)) {
+        set_clip_res = yetty_yvterm_grid_set_clipboard_write(
+            vterm->grid_obj, (yetty_yvterm_grid_clipboard_write_fn)clipboard_write_fn,
+            clipboard_write_userdata);
+    }
+    /* Sixel images from the model (DCS <params> q <data> ST) reach the terminal
+     * through this; same decoupling as clipboard_write. */
+    struct yetty_ycore_void_result set_sixel_res = YETTY_OK_VOID();
+    if (YETTY_IS_OK(set_pty_res) && YETTY_IS_OK(set_card_res) && YETTY_IS_OK(set_clip_res)) {
+        set_sixel_res = yetty_yvterm_grid_set_sixel_write(
+            vterm->grid_obj, (yetty_yvterm_grid_sixel_write_fn)sixel_write_fn,
+            sixel_write_userdata);
+    }
+    if (YETTY_IS_ERR(set_pty_res) || YETTY_IS_ERR(set_card_res) || YETTY_IS_ERR(set_clip_res) ||
+        YETTY_IS_ERR(set_sixel_res)) {
         struct yetty_ycore_void_result grid_dispose_res =
             yetty_yvterm_grid_dispose(vterm->grid_obj);
         if (YETTY_IS_ERR(grid_dispose_res)) {
@@ -2139,8 +2184,16 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
             return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_pty_write",
                              set_pty_res);
         }
-        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_card_sub",
-                         set_card_res);
+        if (YETTY_IS_ERR(set_card_res)) {
+            return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_card_sub",
+                             set_card_res);
+        }
+        if (YETTY_IS_ERR(set_clip_res)) {
+            return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_clipboard_write",
+                             set_clip_res);
+        }
+        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_sixel_write",
+                         set_sixel_res);
     }
     /* Colour palette + default fg/bg from the terminal/colors config keys —
      * before any PTY data, since indexed colours resolve at parse time.

@@ -189,6 +189,82 @@ classes:
         type: "void *"
         get: false
         set: false
+      - name: clipboard_write_fn
+        type: yetty_yvterm_grid_clipboard_write_fn
+        get: false
+        set: false
+      - name: clipboard_write_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: osc52_decode
+        type: "char[1024]"
+        get: false
+        set: false
+      - name: osc52_accum
+        type: "char *"
+        get: false
+        set: false
+      - name: osc52_accum_len
+        type: size_t
+        get: false
+        set: false
+      - name: osc52_accum_cap
+        type: size_t
+        get: false
+        set: false
+      - name: osc52_overflow
+        type: int
+        get: false
+        set: false
+      - name: osc52_clipboard
+        type: int
+        get: false
+        set: false
+      - name: osc_color_buf
+        type: "char[64]"
+        get: false
+        set: false
+      - name: osc_color_len
+        type: size_t
+        get: false
+        set: false
+      - name: configured_fg
+        type: uint32_t
+        get: false
+        set: false
+      - name: configured_bg
+        type: uint32_t
+        get: false
+        set: false
+      - name: sixel_write_fn
+        type: yetty_yvterm_grid_sixel_write_fn
+        get: false
+        set: false
+      - name: sixel_write_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: sixel_accum
+        type: "char *"
+        get: false
+        set: false
+      - name: sixel_accum_len
+        type: size_t
+        get: false
+        set: false
+      - name: sixel_accum_cap
+        type: size_t
+        get: false
+        set: false
+      - name: sixel_overflow
+        type: int
+        get: false
+        set: false
+      - name: sixel_active
+        type: int
+        get: false
+        set: false
       - name: selection_active
         type: int
         get: false
@@ -494,6 +570,28 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: fn
         type: yetty_yvterm_grid_pty_write_fn
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_clipboard_write
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_grid_clipboard_write_fn
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_sixel_write
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_grid_sixel_write_fn
       - name: userdata
         type: "void *"
     doc: null
@@ -1036,6 +1134,14 @@ exposed:
       - name: mouse_sub_fn
         type: yetty_yterminal_mouse_sub_fn
       - name: mouse_sub_userdata
+        type: "void *"
+      - name: clipboard_write_fn
+        type: yetty_yterminal_clipboard_write_fn
+      - name: clipboard_write_userdata
+        type: "void *"
+      - name: sixel_write_fn
+        type: yetty_yterminal_sixel_write_fn
+      - name: sixel_write_userdata
         type: "void *"
     doc: "/* Create the terminal-content figure for one pane. The rect is set in pixels;
  * cell_size is stored so the terminal can read it immediately after create. The
@@ -1854,6 +1960,12 @@ local_typedefs:
   yetty_yvterm_grid_pty_write_fn:
     source_file: src/yetty/yvterm/grid.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_pty_write_fn)(const char *, size_t, void *);"
+  yetty_yvterm_grid_clipboard_write_fn:
+    source_file: src/yetty/yvterm/grid.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clipboard_write_fn)(const char *, size_t, int, void *);"
+  yetty_yvterm_grid_sixel_write_fn:
+    source_file: src/yetty/yvterm/grid.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_sixel_write_fn)(const char *, size_t, void *);"
   yetty_yvterm_grid_clear_hook_fn:
     source_file: src/yetty/yvterm/grid.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);"

@@ -127,6 +127,7 @@ option(YETTY_ENABLE_FEATURE_YCDB      "ycdb — constant database wrapper"     O
 option(YETTY_ENABLE_FEATURE_YEXPR     "yexpr — expression parser"            ON)
 option(YETTY_ENABLE_FEATURE_YFSVM     "yfsvm — fragment shader VM"           ON)
 option(YETTY_ENABLE_FEATURE_YIMAGE    "yimage — image composite"     ON)
+option(YETTY_ENABLE_FEATURE_YSIXEL    "ysixel — sixel graphics decoder"     ON)
 option(YETTY_ENABLE_FEATURE_YMAZE     "ymaze — animated maze ydraw demo"    ON)
 option(YETTY_ENABLE_FEATURE_YZOO      "yzoo — animated control-point zoo demo" ON)
 option(YETTY_ENABLE_FEATURE_YJUNGLE   "yjungle — incremental scene-canvas test" ON)

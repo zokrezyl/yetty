@@ -345,36 +345,30 @@ static int on_text(const char bytes[], size_t len, void *user)
   }
 
   for(; i < npoints; i++) {
-    // Try to find combining characters following this
+    /* Grapheme / emoji cluster starting here: how many codepoints it spans
+     * and the terminal display width it advances. Handles combining marks,
+     * VS16/VS15 presentation selectors, ZWJ sequences, emoji skin-tone
+     * modifiers and regional-indicator flag pairs (see vterm_unicode_cluster).
+     * The cluster may span more codepoints than a cell can store
+     * (VTERM_MAX_CHARS_PER_CELL); the advance still uses the full span so the
+     * cursor lands where wcwidth expects, and the stored chars are truncated. */
     int glyph_starts = i;
-    int glyph_ends;
-    for(glyph_ends = i + 1;
-        (glyph_ends < npoints) && (glyph_ends < glyph_starts + VTERM_MAX_CHARS_PER_CELL);
-        glyph_ends++)
-      if(!vterm_unicode_is_combining(codepoints[glyph_ends]))
-        break;
-
-    int width = 0;
+    int width;
+    int cluster_len = vterm_unicode_cluster(codepoints, glyph_starts, npoints,
+                                            state->mode.grapheme_cluster, &width);
+    int glyph_ends = glyph_starts + cluster_len;
 
     uint32_t chars[VTERM_MAX_CHARS_PER_CELL + 1];
+    int nchars = 0;
+    for(int src_idx = glyph_starts;
+        src_idx < glyph_ends && nchars < VTERM_MAX_CHARS_PER_CELL;
+        src_idx++)
+      chars[nchars++] = codepoints[src_idx];
+    chars[nchars] = 0;
 
-    for( ; i < glyph_ends; i++) {
-      chars[i - glyph_starts] = codepoints[i];
-      int this_width = vterm_unicode_width(codepoints[i]);
-#ifdef DEBUG
-      if(this_width < 0) {
-        fprintf(stderr, "Text with negative-width codepoint U+%04x\n", codepoints[i]);
-        abort();
-      }
-#endif
-      width += this_width;
-    }
-
-    while(i < npoints && vterm_unicode_is_combining(codepoints[i]))
-      i++;
-
-    chars[glyph_ends - glyph_starts] = 0;
-    i--;
+    /* Point i at the last codepoint of the cluster; the for-loop's i++ steps
+     * to the first codepoint of the next one. */
+    i = glyph_ends - 1;
 
 #ifdef DEBUG_GLYPH_COMBINE
     int printpos;
@@ -834,6 +828,17 @@ static void set_dec_mode(VTermState *state, int num, int val)
     state->mode.bracketpaste = val;
     break;
 
+  case 2027: // grapheme clustering — cursor advances by whole grapheme cluster
+    state->mode.grapheme_cluster = val;
+    break;
+
+  case 2026: // synchronized output (BSU/ESU) — batch presentation while set.
+    // yetty's renderer is already dirty-flag driven and frame-paced, so output
+    // is coalesced per frame; tracking the mode advertises support and gives
+    // the render loop a flag to honour for cross-frame batching.
+    state->mode.synchronized_output = val;
+    break;
+
   case 1500:
     settermprop_bool(state, VTERM_PROP_CARDCLICK, val);
     state->mode.card_click = val;
@@ -924,6 +929,14 @@ static void request_dec_mode(VTermState *state, int num)
       reply = state->mode.bracketpaste;
       break;
 
+    case 2027:
+      reply = state->mode.grapheme_cluster;
+      break;
+
+    case 2026:
+      reply = state->mode.synchronized_output;
+      break;
+
     case 1500:
       reply = state->mode.card_click;
       break;
@@ -950,6 +963,83 @@ static void request_version_string(VTermState *state)
       VTERM_VERSION_MAJOR, VTERM_VERSION_MINOR);
 }
 
+/* Kitty keyboard protocol flag stack helpers. The current active flags are the
+ * top-of-stack entry, or 0 when the stack is empty (protocol disabled). */
+
+#define KITTY_KBD_STACK_MAX \
+  ((int)(sizeof(((VTermState *)0)->kitty_kbd_stack) / sizeof(uint8_t)))
+
+/* Supported flag bits. Anything outside this mask is silently dropped so a
+ * future flag an application requests does not leave a phantom bit set. */
+#define KITTY_KBD_FLAGS_MASK 0x1f
+
+static uint8_t kitty_kbd_current(const VTermState *state)
+{
+  if(state->kitty_kbd_stackpos <= 0)
+    return 0;
+  return state->kitty_kbd_stack[state->kitty_kbd_stackpos - 1];
+}
+
+/* CSI ? u -- report the current flags as CSI ? <flags> u. */
+static void kitty_kbd_report(VTermState *state)
+{
+  vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%du", kitty_kbd_current(state));
+}
+
+/* CSI > flags u -- push a new entry with the given flags, becoming current.
+ * When the stack is full the oldest entry is evicted (matching kitty). */
+static void kitty_kbd_push(VTermState *state, unsigned int flags)
+{
+  flags &= KITTY_KBD_FLAGS_MASK;
+
+  if(state->kitty_kbd_stackpos >= KITTY_KBD_STACK_MAX) {
+    for(int index = 1; index < KITTY_KBD_STACK_MAX; index++)
+      state->kitty_kbd_stack[index - 1] = state->kitty_kbd_stack[index];
+    state->kitty_kbd_stack[KITTY_KBD_STACK_MAX - 1] = (uint8_t)flags;
+    return;
+  }
+
+  state->kitty_kbd_stack[state->kitty_kbd_stackpos++] = (uint8_t)flags;
+}
+
+/* CSI < number u -- pop <number> (default 1) entries off the stack. */
+static void kitty_kbd_pop(VTermState *state, int count)
+{
+  if(count < 1)
+    count = 1;
+  state->kitty_kbd_stackpos -= count;
+  if(state->kitty_kbd_stackpos < 0)
+    state->kitty_kbd_stackpos = 0;
+}
+
+/* CSI = flags ; mode u -- modify the current flags in place.
+ * mode 1 (default): set the flags to exactly <flags>.
+ * mode 2: set (OR in) the given bits. mode 3: clear (AND-NOT) the given bits. */
+static void kitty_kbd_set(VTermState *state, unsigned int flags, int mode)
+{
+  flags &= KITTY_KBD_FLAGS_MASK;
+
+  if(state->kitty_kbd_stackpos <= 0) {
+    state->kitty_kbd_stack[0] = 0;
+    state->kitty_kbd_stackpos = 1;
+  }
+
+  uint8_t *current = &state->kitty_kbd_stack[state->kitty_kbd_stackpos - 1];
+
+  switch(mode) {
+  case 2:
+    *current |= (uint8_t)flags;
+    break;
+  case 3:
+    *current &= (uint8_t)~flags;
+    break;
+  case 1:
+  default:
+    *current = (uint8_t)flags;
+    break;
+  }
+}
+
 static int on_csi(const char *leader, const long args[], int argcount, const char *intermed, char command, void *user)
 {
   VTermState *state = user;
@@ -964,6 +1054,8 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
     switch(leader[0]) {
     case '?':
     case '>':
+    case '<':
+    case '=':
       leader_byte = leader[0];
       break;
     default:
@@ -1277,13 +1369,43 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
   case 0x63: // DA - ECMA-48 8.3.24
     val = CSI_ARG_OR(args[0], 0);
     if(val == 0)
-      // DEC VT100 response
-      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;2c");
+      // DEC VT100 response, with attribute 4 = sixel graphics so
+      // capability probes (ucs-detect, img2sixel, chafa) see sixel support.
+      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;2;4c");
     break;
 
   case LEADER('>', 0x63): // DEC secondary Device Attributes
     vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, ">%d;%d;%dc", 0, 100, 0);
     break;
+
+  case LEADER('?', 0x53): { // XTSMGRAPHICS - set/query sixel/ReGIS geometry
+    // CSI ? Pi ; Pa ; Pv S  — Pi selects the item (1 colour registers,
+    // 2 sixel geometry), Pa the action (1 read, 2 reset, 3 set, 4 read max).
+    // Reply: CSI ? Pi ; Ps ; Pv S with Ps 0 success / 1 bad Pi / 2 bad Pa /
+    // 3 failure. We answer read/read-max for colour registers and sixel
+    // geometry; set/reset succeed without mutating (fixed capabilities).
+    int item = CSI_ARG_OR(args[0], 0);
+    int action = (argcount < 2 || CSI_ARG_IS_MISSING(args[1])) ? 0 : CSI_ARG(args[1]);
+    // Actions 1 read, 2 reset, 3 set, 4 read-max are all answered with our
+    // fixed capability values (Ps=0 success); an unknown action reports Ps=2.
+    int action_ok = (action >= 1 && action <= 4);
+    if(item == 1) { // colour registers
+      if(action_ok)
+        vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;0;%dS", 256);
+      else
+        vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;2S");
+    }
+    else if(item == 2) { // sixel geometry (max width;height in pixels)
+      if(action_ok)
+        vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?2;0;%d;%dS", 1000, 1000);
+      else
+        vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?2;2S");
+    }
+    else {
+      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%d;1S", item);
+    }
+    break;
+  }
 
   case 0x64: // VPA - ECMA-48 8.3.158
     row = CSI_ARG_OR(args[0], 1);
@@ -1418,6 +1540,23 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
     }
     break;
 
+
+  case LEADER('?', 0x75): // Kitty keyboard protocol - query current flags
+    kitty_kbd_report(state);
+    break;
+
+  case LEADER('>', 0x75): // Kitty keyboard protocol - push flags
+    kitty_kbd_push(state, CSI_ARG_OR(args[0], 0));
+    break;
+
+  case LEADER('<', 0x75): // Kitty keyboard protocol - pop flags
+    kitty_kbd_pop(state, CSI_ARG_OR(args[0], 1));
+    break;
+
+  case LEADER('=', 0x75): // Kitty keyboard protocol - set flags
+    kitty_kbd_set(state, CSI_ARG_OR(args[0], 0),
+        argcount < 2 || CSI_ARG_IS_MISSING(args[1]) ? 1 : CSI_ARG(args[1]));
+    break;
 
   case INTERMED('!', 0x70): // DECSTR - DEC soft terminal reset
     vterm_state_reset(state, 0);
@@ -1921,12 +2060,110 @@ static void request_status_string(VTermState *state, VTermStringFragment frag)
   vterm_push_output_sprintf_str(state->vt, C1_DCS, true, "0$r");
 }
 
+static int hex_nibble(char ch)
+{
+  if(ch >= '0' && ch <= '9') return ch - '0';
+  if(ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+  if(ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+  return -1;
+}
+
+/* Look up a terminfo/termcap capability by its short (terminfo) name for
+ * XTGETTCAP. Only the baseline set applications commonly probe; everything
+ * else answers "invalid" so the query still round-trips correctly. */
+static const char *termcap_lookup(const char *name)
+{
+  if(strcmp(name, "TN") == 0)     return "yetty";  /* terminal name          */
+  if(strcmp(name, "Co") == 0)     return "256";    /* max colors (terminfo)  */
+  if(strcmp(name, "colors") == 0) return "256";    /* max colors (long name) */
+  if(strcmp(name, "RGB") == 0)    return "8/8/8";  /* direct-color channels  */
+  /* OSC 52 set-clipboard capability (terminfo Ms). Advertising it is how
+   * clipboard-aware programs (and ucs-detect) discover OSC 52 support without
+   * issuing a real clipboard write. */
+  if(strcmp(name, "Ms") == 0)     return "\x1b]52;%p1%s;%p2%s\x07";
+  return NULL;
+}
+
+/* Emit one XTGETTCAP reply: DCS 1 + r <hexname>=<hexvalue> ST for a known
+ * capability, DCS 0 + r <hexname> ST for an unknown one. `hexname` is echoed
+ * back verbatim (the raw hex token the client sent). */
+static void termcap_reply_one(VTermState *state, const char *hexname, const char *name)
+{
+  const char *value = name[0] ? termcap_lookup(name) : NULL;
+  if(!value) {
+    vterm_push_output_sprintf_str(state->vt, C1_DCS, true, "0+r%s", hexname);
+    return;
+  }
+
+  char hexvalue[128];
+  size_t hexvalue_len = 0;
+  for(const unsigned char *cursor = (const unsigned char *)value;
+      *cursor && hexvalue_len + 2 < sizeof(hexvalue); cursor++)
+    hexvalue_len += snprintf(hexvalue + hexvalue_len, sizeof(hexvalue) - hexvalue_len,
+                             "%02X", *cursor);
+  hexvalue[hexvalue_len] = 0;
+
+  vterm_push_output_sprintf_str(state->vt, C1_DCS, true, "1+r%s=%s", hexname, hexvalue);
+}
+
+/* XTGETTCAP (DCS + q <hex names, ; separated> ST): decode each hex-encoded
+ * capability name and answer per-capability. Fragments are accumulated until
+ * the final one arrives. */
+static void request_termcap(VTermState *state, VTermStringFragment frag)
+{
+  if(frag.initial)
+    state->termcap_query_len = 0;
+
+  while(state->termcap_query_len < sizeof(state->termcap_query) - 1 && frag.len--)
+    state->termcap_query[state->termcap_query_len++] = (frag.str++)[0];
+  state->termcap_query[state->termcap_query_len] = 0;
+
+  if(!frag.final)
+    return;
+
+  char *query = state->termcap_query;
+  size_t query_len = state->termcap_query_len;
+  size_t token_start = 0;
+
+  for(size_t i = 0; i <= query_len; i++) {
+    if(i < query_len && query[i] != ';')
+      continue;
+
+    size_t token_len = i - token_start;
+    char hexname[64];
+    if(token_len >= sizeof(hexname))
+      token_len = sizeof(hexname) - 1;
+    memcpy(hexname, query + token_start, token_len);
+    hexname[token_len] = 0;
+
+    char name[32];
+    size_t name_len = 0;
+    int valid = (token_len > 0) && (token_len % 2 == 0);
+    for(size_t pos = 0; valid && pos + 2 <= token_len && name_len + 1 < sizeof(name); pos += 2) {
+      int high = hex_nibble(hexname[pos]);
+      int low  = hex_nibble(hexname[pos + 1]);
+      if(high < 0 || low < 0) { valid = 0; break; }
+      name[name_len++] = (char)((high << 4) | low);
+    }
+    name[name_len] = 0;
+
+    termcap_reply_one(state, hexname, valid ? name : "");
+    token_start = i + 1;
+  }
+
+  state->termcap_query_len = 0;
+}
+
 static int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user)
 {
   VTermState *state = user;
 
   if(commandlen == 2 && strneq(command, "$q", 2)) {
     request_status_string(state, frag);
+    return 1;
+  }
+  else if(commandlen == 2 && strneq(command, "+q", 2)) {
+    request_termcap(state, frag);
     return 1;
   }
   else if(state->fallbacks && state->fallbacks->dcs)
@@ -2113,6 +2350,10 @@ void vterm_state_reset(VTermState *state, int hard)
   state->mode.leftrightmargin = 0;
   state->mode.bracketpaste    = 0;
   state->mode.report_focus    = 0;
+  state->mode.grapheme_cluster = 1; // mode 2027 - grapheme clustering on by default
+  state->mode.synchronized_output = 0; // mode 2026 - synchronized output off by default
+
+  state->kitty_kbd_stackpos = 0; // kitty keyboard protocol - empty stack (disabled)
 
   state->mouse_flags = 0;
 

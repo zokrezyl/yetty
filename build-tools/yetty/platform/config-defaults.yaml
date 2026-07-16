@@ -146,13 +146,29 @@ terminal:
       # The Noto fonts referenced below ship via the lib-fonts asset
       # tarball (YETTY_ENABLE_NOTO_FONTS, ON by default).
       ranges:
+        - from: 0x1F000          # mahjong, dominoes, cards, enclosed + regional
+          to: 0x1F2FF            #   indicators (flag letter pairs)
+          font: NotoColorEmoji
+          render-method: raster
         - from: 0x1F300          # emoji: symbols & pictographs … extended-A
           to: 0x1FAFF
+          font: NotoColorEmoji
+          render-method: raster
+        - from: 0x2300           # emoji: misc technical (⌚ ⌛ ⏰ ⏳ …)
+          to: 0x23FF
           font: NotoColorEmoji
           render-method: raster
         - from: 0x2600           # emoji: misc symbols + dingbats
           to: 0x27BF
           font: NotoColorEmoji
+          render-method: raster
+        - from: 0x2B00           # emoji: stars & arrows (⭐ ⬆ ⬇ …)
+          to: 0x2BFF
+          font: NotoColorEmoji
+          render-method: raster
+        - from: 0x3400           # CJK unified ideographs extension A
+          to: 0x4DBF
+          font: NotoSansCJK
           render-method: raster
         - from: 0x4E00           # CJK unified ideographs
           to: 0x9FFF
@@ -160,6 +176,22 @@ terminal:
           render-method: raster
         - from: 0x3000           # CJK punctuation, kana
           to: 0x30FF
+          font: NotoSansCJK
+          render-method: raster
+        - from: 0x31C0           # CJK strokes, katakana ext, enclosed CJK …
+          to: 0x33FF
+          font: NotoSansCJK
+          render-method: raster
+        - from: 0xF900           # CJK compat ideographs + compat forms
+          to: 0xFAFF
+          font: NotoSansCJK
+          render-method: raster
+        - from: 0xFE30           # CJK compat forms, small form variants
+          to: 0xFE4F
+          font: NotoSansCJK
+          render-method: raster
+        - from: 0xFF00           # halfwidth & fullwidth forms (fullwidth punct.)
+          to: 0xFFEF
           font: NotoSansCJK
           render-method: raster
         - from: 0xAC00           # hangul syllables

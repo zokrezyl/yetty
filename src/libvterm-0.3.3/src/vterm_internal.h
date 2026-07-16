@@ -123,6 +123,8 @@ struct VTermState
     unsigned int card_click:1;    // DEC mode 1500 - card click events
     unsigned int card_move:1;     // DEC mode 1501 - card move events
     unsigned int card_key:1;      // DEC mode 1502 - card keyboard events
+    unsigned int grapheme_cluster:1; // DEC mode 2027 - grapheme clustering (default on)
+    unsigned int synchronized_output:1; // DEC mode 2026 - synchronized output (BSU/ESU)
   } mode;
 
   VTermEncodingInstance encoding[4], encoding_utf8;
@@ -167,6 +169,19 @@ struct VTermState
       uint32_t sendpartial;
     } selection;
   } tmp;
+
+  /* Accumulates the hex-encoded capability names of an XTGETTCAP (DCS +q)
+   * query across data fragments; processed when the final fragment arrives. */
+  char termcap_query[256];
+  size_t termcap_query_len;
+
+  /* Kitty keyboard protocol flag stack. The top-of-stack entry is the current
+   * active flag set (bit 0 disambiguate-escape-codes, bit 1 report-event-types,
+   * bit 2 report-alternate-keys, bit 3 report-all-keys-as-escape-codes,
+   * bit 4 report-associated-text). An empty stack means the current flags are 0
+   * (protocol disabled). See on_csi's 'u'-command handling. */
+  uint8_t kitty_kbd_stack[16];
+  int kitty_kbd_stackpos;
 
   struct {
     const VTermSelectionCallbacks *callbacks;
@@ -296,5 +311,6 @@ VTermEncoding *vterm_lookup_encoding(VTermEncodingType type, char designation);
 
 int vterm_unicode_width(uint32_t codepoint);
 int vterm_unicode_is_combining(uint32_t codepoint);
+int vterm_unicode_cluster(const uint32_t *codepoints, int start, int npoints, int grapheme_cluster, int *width_out);
 
 #endif

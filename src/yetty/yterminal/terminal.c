@@ -52,6 +52,10 @@
 #if defined(YETTY_HAS_YVIDEO) && YETTY_HAS_YVIDEO
 #include <yetty/yvideo/yvideo-gen.h>
 #endif
+#if defined(YETTY_HAS_YSIXEL) && YETTY_HAS_YSIXEL
+#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ysixel/sixel.h>
+#endif
 #include <yetty/yterminal/terminal.h>
 #include <yetty/yvterm/vterm.h>
 #include <yetty/yfigure/figure.h>
@@ -1769,6 +1773,64 @@ static struct yetty_ycore_void_result terminal_mouse_sub_callback(int click_enab
     return YETTY_OK_VOID();
 }
 
+/* yetty_yterminal_clipboard_write_fn impl — the child emitted OSC 52 to set the
+ * clipboard. libvterm already base64-decoded the payload, so hand the plain text
+ * to the platform clipboard, reusing the same hop as mouse-selection copy. The
+ * platform exposes a single clipboard, so the primary-selection target is routed
+ * there too rather than dropped; `clipboard` is kept for a future
+ * PRIMARY-capable backend. */
+static struct yetty_ycore_void_result terminal_clipboard_write_callback(const char *text,
+                                                                        size_t len, int clipboard,
+                                                                        void *userdata)
+{
+    struct yetty_yterminal_terminal *terminal = userdata;
+    struct yetty_yclass_object *clip = terminal->context.yetty_context.runtime->clipboard;
+    if (!clip) {
+        ydebug("terminal_clipboard_write_callback: no clipboard");
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result sr = yetty_yplatform_clipboard_set_text(clip, text, len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr,
+                        "terminal_clipboard_write_callback: clipboard set_text failed");
+    yinfo("terminal: OSC 52 set %zu bytes to %s", len, clipboard ? "clipboard" : "primary");
+    return YETTY_OK_VOID();
+}
+
+/* yetty_yterminal_sixel_write_fn impl — the child emitted a sixel image
+ * (`DCS <params> q <data> ST`). Decode the payload to RGBA, package it as one
+ * yimage prim in a fresh drawable list, and feed it through the same serialized
+ * ingest path a ycat image envelope takes, so it anchors and scrolls with the
+ * text. Downscaled (aspect-preserving) to the pane width when wider. Built only
+ * when the ysixel decoder is compiled in; otherwise the DCS is silently
+ * dropped (the callback is never registered). */
+#if defined(YETTY_HAS_YSIXEL) && YETTY_HAS_YSIXEL
+static struct yetty_ycore_void_result terminal_sixel_write_callback(const char *data, size_t len,
+                                                                    void *userdata)
+{
+    struct yetty_yterminal_terminal *terminal = userdata;
+    struct yetty_yterminal_mime_env env = yetty_yterminal_mime_env_get(terminal);
+    struct yetty_ysixel_render_config sixel_config = {
+        .max_width_px = (float)(env.cols * env.cell_width),
+    };
+    struct yetty_ydraw_drawable_list_result render_res =
+        yetty_ysixel_render(data, len, &sixel_config);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, render_res, "terminal: sixel decode/render");
+
+    const uint8_t *serialized = NULL;
+    size_t serialized_len = yetty_ydraw_drawable_list_serialize(render_res.value, &serialized);
+    if (serialized_len == 0 || !serialized) {
+        yetty_ydraw_drawable_list_destroy(render_res.value);
+        return YETTY_ERR(yetty_ycore_void, "terminal: sixel serialize produced no bytes");
+    }
+    struct yetty_ycore_void_result ingest_res =
+        yetty_yterminal_mime_ingest_serialized(terminal, serialized, serialized_len);
+    yetty_ydraw_drawable_list_destroy(render_res.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ingest_res, "terminal: sixel ingest");
+    yinfo("terminal: sixel image %zu bytes decoded and anchored", len);
+    return YETTY_OK_VOID();
+}
+#endif
+
 /* yetty_yterminal_request_render_fn impl — called when the content layer needs a
  * render frame. */
 static struct yetty_ycore_void_result terminal_request_render_callback(void *userdata)
@@ -2176,9 +2238,15 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * mouse-subscription callback still targets the terminal because it mutates
      * terminal-side state (focused figure, outbound resize OSC). It is seated as
      * the lowest-z child of the root container further below. */
+#if defined(YETTY_HAS_YSIXEL) && YETTY_HAS_YSIXEL
+    yetty_yterminal_sixel_write_fn sixel_write_cb = terminal_sixel_write_callback;
+#else
+    yetty_yterminal_sixel_write_fn sixel_write_cb = NULL;
+#endif
     struct yetty_yclass_object_ptr_result grid_res = yetty_yvterm_vterm_figure_create(
         cols, rows, yetty_context, terminal_pty_write_callback, terminal,
-        terminal_request_render_callback, terminal, terminal_mouse_sub_callback, terminal);
+        terminal_request_render_callback, terminal, terminal_mouse_sub_callback, terminal,
+        terminal_clipboard_write_callback, terminal, sixel_write_cb, terminal);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, grid_res,
                         "terminal_create: grid figure create failed");
     terminal->grid = grid_res.value;

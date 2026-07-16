@@ -262,6 +262,99 @@ INTERNAL int vterm_unicode_width(uint32_t codepoint)
   return mk_wcwidth(codepoint);
 }
 
+/* Fitzpatrick skin-tone modifiers — bind to the preceding emoji base. */
+static int is_emoji_modifier(uint32_t codepoint)
+{
+  return codepoint >= 0x1F3FB && codepoint <= 0x1F3FF;
+}
+
+/* Regional indicator symbols — a pair forms one flag. */
+static int is_regional_indicator(uint32_t codepoint)
+{
+  return codepoint >= 0x1F1E6 && codepoint <= 0x1F1FF;
+}
+
+/*
+ * Number of codepoints in the extended grapheme / emoji cluster beginning at
+ * codepoints[start], with the cluster's terminal display width written to
+ * *width_out. Keeps the sequence-aware width decision inside the vendored
+ * libvterm layer (the single width authority) so the state machine advances
+ * the cursor by the same amount the wcwidth library (what ucs-detect measures
+ * against) reports for the pinned Unicode version:
+ *
+ *   - combining marks (U+0300… etc.)      absorb, width unchanged
+ *   - VS16 (U+FE0F)                        promote a narrow base to width 2
+ *   - VS15 (U+FE0E)                        demote to width 1 (text presentation)
+ *   - ZWJ (U+200D) + following element     one cluster, width 2
+ *   - skin-tone modifier (U+1F3FB…1F3FF)   absorb into the base, width 2
+ *   - regional-indicator pair              one flag, width 2 (lone RI keeps its
+ *                                          own width)
+ */
+INTERNAL int vterm_unicode_cluster(const uint32_t *codepoints, int start, int npoints,
+                                   int grapheme_cluster, int *width_out)
+{
+  uint32_t base = codepoints[start];
+  int i = start + 1;
+  int width;
+
+  /* A well-formed cluster never starts with a joiner/combining mark; if one
+   * leads (lone ZWJ, stray mark) treat it as zero width and do not swallow a
+   * following base into it. */
+  if(base == 0x200D || vterm_unicode_is_combining(base))
+    width = 0;
+  else
+    width = vterm_unicode_width(base);
+
+  /* Mode 2027 reset: legacy behaviour — a cluster is the base plus trailing
+   * combining marks only, and the width is the plain per-codepoint sum. The
+   * extended emoji rules below are skipped, so a ZWJ / skin-tone / flag
+   * sequence advances element-by-element as classic wcwidth terminals do. */
+  if(!grapheme_cluster) {
+    while(i < npoints && vterm_unicode_is_combining(codepoints[i]))
+      i++;
+    *width_out = width;
+    return i - start;
+  }
+
+  if(is_regional_indicator(base)) {
+    if(i < npoints && is_regional_indicator(codepoints[i])) {
+      i++;
+      width = 2;
+    }
+    *width_out = width;
+    return i - start;
+  }
+
+  while(i < npoints) {
+    uint32_t c = codepoints[i];
+    if(c == 0xFE0F) {
+      width = 2;
+    }
+    else if(c == 0xFE0E) {
+      width = 1;
+    }
+    else if(is_emoji_modifier(c)) {
+      width = 2;
+    }
+    else if(c == 0x200D) {
+      /* Absorb the ZWJ and the element it joins; the joined element's own
+       * modifiers / further ZWJs are absorbed as the loop continues. */
+      width = 2;
+      i++;
+      if(i < npoints)
+        i++;
+      continue;
+    }
+    else if(!vterm_unicode_is_combining(c)) {
+      break;
+    }
+    i++;
+  }
+
+  *width_out = width;
+  return i - start;
+}
+
 INTERNAL int vterm_unicode_is_combining(uint32_t codepoint)
 {
   return bisearch(codepoint, combining, sizeof(combining) / sizeof(struct interval) - 1);

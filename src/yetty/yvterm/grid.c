@@ -54,6 +54,25 @@ bool yetty_ydraw_is_composite(uint32_t type);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_pty_write_fn)(const char *bytes,
                                                                          size_t len,
                                                                          void *userdata);
+/* OSC 52 clipboard-write callback — a program yanking text (nvim/tmux/…) emits
+ * OSC 52; libvterm base64-decodes it and this hands the plain text up to the
+ * owner (the terminal) so it can reach the system clipboard. Own typedef, same
+ * decoupling rationale as the pty-write callback: the model stays free of any
+ * yterminal / yplatform dependency and the owner passes a compatible function.
+ * The clipboard flag distinguishes the clipboard target ('c') from the primary
+ * selection ('p'/'s') so the owner can route per platform capability. */
+typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clipboard_write_fn)(const char *text,
+                                                                               size_t len,
+                                                                               int clipboard,
+                                                                               void *userdata);
+/* Sixel write callback — a child emitted a sixel image (DCS <params> q <data>
+ * ST); libvterm streams the payload to the grid's DCS fallback, which hands the
+ * accumulated `q`-payload bytes up to the owner (the terminal) to decode and
+ * present through the image path. Own typedef, same decoupling as the other
+ * grid callbacks. */
+typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_sixel_write_fn)(const char *data,
+                                                                           size_t len,
+                                                                           void *userdata);
 enum YETTY_ANNOTATE("expose") yetty_yvterm_text_attr {
     YETTY_YVTERM_ATTR_BOLD = 1u << 0,
     YETTY_YVTERM_ATTR_UNDERLINE = 1u << 1,
@@ -235,6 +254,43 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
     /* Keyboard output / libvterm query responses go to the child via this. */
     yetty_yvterm_grid_pty_write_fn pty_write_fn;
     void *pty_write_userdata;
+
+    /* OSC 52 clipboard write. libvterm decodes the base64 payload into
+     * `osc52_decode` and hands it back in fragments; those are accumulated into
+     * `osc52_accum` and, on the final fragment, delivered through
+     * clipboard_write_fn. `osc52_overflow` trips when a payload exceeds the cap
+     * so an oversized write is dropped rather than growing without bound. Read
+     * (`OSC 52 ; c ; ?`) is intentionally not wired — clipboard contents stay
+     * unreadable by the child. */
+    yetty_yvterm_grid_clipboard_write_fn clipboard_write_fn;
+    void *clipboard_write_userdata;
+    char osc52_decode[1024];
+    char *osc52_accum;
+    size_t osc52_accum_len;
+    size_t osc52_accum_cap;
+    int osc52_overflow;
+    int osc52_clipboard;
+
+    /* OSC 10/11 dynamic default colours. `osc_color_buf` accumulates the
+     * query/set payload across fragments; `configured_fg`/`configured_bg` hold
+     * the startup colours so OSC 110/111 can restore them after an OSC 10/11
+     * set. Stored in pack_color() layout (0xAABBGGRR). */
+    char osc_color_buf[64];
+    size_t osc_color_len;
+    uint32_t configured_fg;
+    uint32_t configured_bg;
+
+    /* Sixel image write (DCS q). The DCS fallback accumulates the payload here
+     * across fragments and hands the whole image to clipboard_write_fn's sibling
+     * on the final fragment. `sixel_overflow` trips past the cap so an oversized
+     * stream is dropped rather than growing without bound. */
+    yetty_yvterm_grid_sixel_write_fn sixel_write_fn;
+    void *sixel_write_userdata;
+    char *sixel_accum;
+    size_t sixel_accum_len;
+    size_t sixel_accum_cap;
+    int sixel_overflow;
+    int sixel_active;
 
     /* Selection rectangle in grid cells (terminal-driven). */
     int selection_active;
@@ -1162,6 +1218,356 @@ static const VTermStateCallbacks *grid_state_callbacks(void)
     return &callbacks;
 }
 
+/* Upper bound on a single OSC 52 clipboard payload. Bounds the accumulation
+ * buffer so a hostile or runaway sequence cannot grow it without limit; a
+ * larger payload is dropped rather than truncated (a truncated clipboard is
+ * worse than none). */
+#define YETTY_YVTERM_OSC52_MAX (1u << 20) /* 1 MiB decoded */
+
+/* libvterm base64-decodes an OSC 52 write into the scratch buffer we handed it
+ * and calls this once per decoded chunk (initial..final). Accumulate the chunks
+ * and, on the final one, deliver the whole payload to the owner's clipboard
+ * hook. Only the write direction is wired; there is no `query` callback, so a
+ * read request (`OSC 52 ; c ; ?`) is silently ignored and the child can never
+ * read the clipboard back. */
+YETTY_EXTERNAL_CALLBACK
+static int cb_selection_set(VTermSelectionMask mask, VTermStringFragment frag, void *user)
+{
+    struct yetty_yvterm_grid *grid = user;
+
+    if (frag.initial) {
+        grid->osc52_accum_len = 0;
+        grid->osc52_overflow = 0;
+        /* CLIPBOARD ('c') → system clipboard; PRIMARY/SELECT ('p'/'s', and the
+         * no-target default) → primary selection. */
+        grid->osc52_clipboard = (mask & VTERM_SELECTION_CLIPBOARD) ? 1 : 0;
+    }
+
+    if (frag.len && !grid->osc52_overflow) {
+        size_t needed = grid->osc52_accum_len + frag.len;
+        if (needed > YETTY_YVTERM_OSC52_MAX) {
+            grid->osc52_overflow = 1;
+        } else if (needed > grid->osc52_accum_cap) {
+            size_t new_cap = grid->osc52_accum_cap ? grid->osc52_accum_cap : 1024;
+            while (new_cap < needed) {
+                new_cap *= 2;
+            }
+            char *grown = realloc(grid->osc52_accum, new_cap);
+            if (!grown) {
+                grid->osc52_overflow = 1;
+            } else {
+                grid->osc52_accum = grown;
+                grid->osc52_accum_cap = new_cap;
+            }
+        }
+        if (!grid->osc52_overflow) {
+            memcpy(grid->osc52_accum + grid->osc52_accum_len, frag.str, frag.len);
+            grid->osc52_accum_len += frag.len;
+        }
+    }
+
+    if (frag.final) {
+        if (grid->clipboard_write_fn && !grid->osc52_overflow && grid->osc52_accum_len > 0) {
+            /* External-callback boundary: libvterm's `set` returns int, so a
+             * failed clipboard write has nowhere to propagate — absorb it. */
+            struct yetty_ycore_void_result wr =
+                grid->clipboard_write_fn(grid->osc52_accum, grid->osc52_accum_len,
+                                         grid->osc52_clipboard, grid->clipboard_write_userdata);
+            (void)wr;
+        }
+        grid->osc52_accum_len = 0;
+        grid->osc52_overflow = 0;
+    }
+
+    return 1;
+}
+
+static const VTermSelectionCallbacks *grid_selection_callbacks(void)
+{
+    static const VTermSelectionCallbacks callbacks = {
+        .set = cb_selection_set,
+        .query = NULL, /* read stays off: the child cannot read the clipboard */
+    };
+    return &callbacks;
+}
+
+/*---------------------------------------------------------------------------
+ * OSC 10/11/110/111 — dynamic default foreground/background colours.
+ *-------------------------------------------------------------------------*/
+
+static int osc_hex_digit(char ch)
+{
+    if (ch >= '0' && ch <= '9') {
+        return ch - '0';
+    }
+    if (ch >= 'a' && ch <= 'f') {
+        return ch - 'a' + 10;
+    }
+    if (ch >= 'A' && ch <= 'F') {
+        return ch - 'A' + 10;
+    }
+    return -1;
+}
+
+/* Scale a width-digit hex channel (each digit 4 bits) to 8 bits, matching
+ * XParseColor: value / (16^width - 1) * 255. */
+static uint32_t osc_scale_channel(uint32_t raw, int width)
+{
+    uint32_t max = (1u << (4 * width)) - 1u;
+    if (max == 0) {
+        return 0;
+    }
+    return (raw * 255u + max / 2u) / max;
+}
+
+/* Parse one hex channel of up to 4 digits starting at *spec; advances *spec.
+ * Returns the 8-bit value, or -1 on a malformed/empty channel. */
+static int osc_parse_channel(const char **spec, const char *end)
+{
+    const char *cursor = *spec;
+    uint32_t raw = 0;
+    int width = 0;
+    while (cursor < end && width < 4) {
+        int digit = osc_hex_digit(*cursor);
+        if (digit < 0) {
+            break;
+        }
+        raw = (raw << 4) | (uint32_t)digit;
+        width++;
+        cursor++;
+    }
+    if (width == 0) {
+        return -1;
+    }
+    *spec = cursor;
+    return (int)osc_scale_channel(raw, width);
+}
+
+/* Parse an OSC 10/11 colour spec into pack_color() layout. Accepts "#rgb",
+ * "#rrggbb", "#rrrrggggbbbb" (equal-width channels) and "rgb:R/G/B" with 1-4
+ * hex digits per channel. Returns 1 on success. X11 colour names are not
+ * recognised. */
+static int grid_parse_osc_color(const char *spec, size_t len, uint32_t *packed_out)
+{
+    const char *end = spec + len;
+    int red, green, blue;
+
+    if (len >= 1 && spec[0] == '#') {
+        size_t digits = len - 1;
+        if (digits != 3 && digits != 6 && digits != 12) {
+            return 0;
+        }
+        int width = (int)(digits / 3);
+        const char *cursor = spec + 1;
+        red = osc_parse_channel(&cursor, cursor + width);
+        green = osc_parse_channel(&cursor, cursor + width);
+        blue = osc_parse_channel(&cursor, cursor + width);
+    } else if (len >= 4 && strncmp(spec, "rgb:", 4) == 0) {
+        const char *cursor = spec + 4;
+        red = osc_parse_channel(&cursor, end);
+        if (cursor >= end || *cursor != '/') {
+            return 0;
+        }
+        cursor++;
+        green = osc_parse_channel(&cursor, end);
+        if (cursor >= end || *cursor != '/') {
+            return 0;
+        }
+        cursor++;
+        blue = osc_parse_channel(&cursor, end);
+    } else {
+        return 0;
+    }
+
+    if (red < 0 || green < 0 || blue < 0) {
+        return 0;
+    }
+    *packed_out = (uint32_t)red | ((uint32_t)green << 8) | ((uint32_t)blue << 16) | (0xFFu << 24);
+    return 1;
+}
+
+/* Apply a new default colour (command 10 → foreground, 11 → background) to both
+ * libvterm's state and the grid's cache, refresh the blank-line template so new
+ * rows adopt it, and mark the screen dirty. Existing cells keep their baked
+ * colours. */
+static void grid_osc_apply_color(struct yetty_yvterm_grid *grid, int command, uint32_t packed)
+{
+    VTermColor col;
+    vterm_color_rgb(&col, (uint8_t)packed, (uint8_t)(packed >> 8), (uint8_t)(packed >> 16));
+    if (command == 10) {
+        vterm_state_set_default_colors(grid->state, &col, NULL);
+        grid->default_fg = packed;
+    } else {
+        vterm_state_set_default_colors(grid->state, NULL, &col);
+        grid->default_bg = packed;
+    }
+    if (grid->blank_line.text_cells) {
+        for (uint32_t col_idx = 0; col_idx < grid->cols; ++col_idx) {
+            blank_cell(&grid->blank_line.text_cells[col_idx], grid->default_fg, grid->default_bg);
+        }
+    }
+    mark_dirty_all(grid);
+}
+
+/* Emit an OSC 10/11 colour report to the child, scaling the 8-bit channels to
+ * xterm's 16-bit-per-channel form: `OSC 1x ; rgb:rrrr/gggg/bbbb ST`. */
+static void grid_osc_report_color(struct yetty_yvterm_grid *grid, int command, uint32_t packed)
+{
+    if (!grid->pty_write_fn) {
+        return;
+    }
+    static const char digits[] = "0123456789abcdef";
+    uint32_t channels[3] = {packed & 0xFFu, (packed >> 8) & 0xFFu, (packed >> 16) & 0xFFu};
+    char reply[32];
+    size_t pos = 0;
+    reply[pos++] = 0x1b;
+    reply[pos++] = ']';
+    reply[pos++] = '1';
+    reply[pos++] = (command == 10) ? '0' : '1';
+    reply[pos++] = ';';
+    reply[pos++] = 'r';
+    reply[pos++] = 'g';
+    reply[pos++] = 'b';
+    reply[pos++] = ':';
+    for (int channel = 0; channel < 3; ++channel) {
+        uint32_t scaled = (channels[channel] << 8) | channels[channel];
+        reply[pos++] = digits[(scaled >> 12) & 0xF];
+        reply[pos++] = digits[(scaled >> 8) & 0xF];
+        reply[pos++] = digits[(scaled >> 4) & 0xF];
+        reply[pos++] = digits[scaled & 0xF];
+        reply[pos++] = (channel < 2) ? '/' : 0x1b;
+    }
+    reply[pos++] = '\\'; /* ST tail (ESC \) */
+    struct yetty_ycore_void_result wr = grid->pty_write_fn(reply, pos, grid->pty_write_userdata);
+    /* External-callback boundary: a failed reply write has nowhere to go. */
+    if (YETTY_IS_ERR(wr)) {
+        yetty_ycore_error_destroy(wr.error);
+    }
+}
+
+/* OSC fallback for the dynamic-colour operations libvterm does not handle:
+ *   OSC 10 ; ?           query default foreground → reply
+ *   OSC 11 ; ?           query default background → reply
+ *   OSC 10/11 ; <colour> set the default foreground/background
+ *   OSC 110 / OSC 111    reset foreground/background to the configured value
+ * Other OSC codes are declined (return 0) so libvterm's own path is unaffected. */
+YETTY_EXTERNAL_CALLBACK
+static int cb_osc(int command, VTermStringFragment frag, void *user)
+{
+    struct yetty_yvterm_grid *grid = user;
+
+    if (command == 110 || command == 111) {
+        /* Reset carries no payload; act once on the terminating fragment. */
+        if (!frag.final) {
+            return 1;
+        }
+        uint32_t restored = (command == 110) ? grid->configured_fg : grid->configured_bg;
+        grid_osc_apply_color(grid, command == 110 ? 10 : 11, restored);
+        return 1;
+    }
+
+    if (command != 10 && command != 11) {
+        return 0;
+    }
+
+    if (frag.initial) {
+        grid->osc_color_len = 0;
+    }
+    for (size_t index = 0;
+         index < frag.len && grid->osc_color_len < sizeof(grid->osc_color_buf) - 1; index++) {
+        grid->osc_color_buf[grid->osc_color_len++] = frag.str[index];
+    }
+    if (!frag.final) {
+        return 1;
+    }
+    grid->osc_color_buf[grid->osc_color_len] = 0;
+
+    if (grid->osc_color_len == 1 && grid->osc_color_buf[0] == '?') {
+        uint32_t packed = (command == 10) ? grid->default_fg : grid->default_bg;
+        grid_osc_report_color(grid, command, packed);
+        return 1;
+    }
+
+    uint32_t packed;
+    if (grid_parse_osc_color(grid->osc_color_buf, grid->osc_color_len, &packed)) {
+        grid_osc_apply_color(grid, command, packed);
+    }
+    return 1;
+}
+
+/* Upper bound on one accumulated sixel payload (text form). The decoder caps
+ * the resulting pixels too; this just bounds the intermediate buffer. */
+#define YETTY_YVTERM_SIXEL_MAX (16u * 1024u * 1024u)
+
+/* DCS fallback for sixel images: `DCS <params> q <data> ST`. libvterm captures
+ * the params and the `q` in `command` and streams `<data>` as fragments. Any
+ * DCS whose command ends in `q` and is not the DECRQSS/XTGETTCAP forms (already
+ * handled upstream) is a sixel; accumulate its payload and, on the final
+ * fragment, hand the whole image to the owner. Non-sixel DCS is declined. */
+YETTY_EXTERNAL_CALLBACK
+static int cb_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user)
+{
+    struct yetty_yvterm_grid *grid = user;
+
+    if (frag.initial) {
+        /* Sixel iff the command's final byte is 'q' (0x71). */
+        grid->sixel_active = (commandlen >= 1 && command[commandlen - 1] == 'q');
+        grid->sixel_accum_len = 0;
+        grid->sixel_overflow = 0;
+    }
+    if (!grid->sixel_active) {
+        return 0; /* not sixel — let libvterm log it as unhandled */
+    }
+
+    if (frag.len && !grid->sixel_overflow) {
+        size_t needed = grid->sixel_accum_len + frag.len;
+        if (needed > YETTY_YVTERM_SIXEL_MAX) {
+            grid->sixel_overflow = 1;
+        } else if (needed > grid->sixel_accum_cap) {
+            size_t new_cap = grid->sixel_accum_cap ? grid->sixel_accum_cap : 4096;
+            while (new_cap < needed) {
+                new_cap *= 2;
+            }
+            char *grown = realloc(grid->sixel_accum, new_cap);
+            if (!grown) {
+                grid->sixel_overflow = 1;
+            } else {
+                grid->sixel_accum = grown;
+                grid->sixel_accum_cap = new_cap;
+            }
+        }
+        if (!grid->sixel_overflow) {
+            memcpy(grid->sixel_accum + grid->sixel_accum_len, frag.str, frag.len);
+            grid->sixel_accum_len += frag.len;
+        }
+    }
+
+    if (frag.final) {
+        if (grid->sixel_write_fn && !grid->sixel_overflow && grid->sixel_accum_len > 0) {
+            /* External-callback boundary: a failed present has nowhere to go. */
+            struct yetty_ycore_void_result wr = grid->sixel_write_fn(
+                grid->sixel_accum, grid->sixel_accum_len, grid->sixel_write_userdata);
+            if (YETTY_IS_ERR(wr)) {
+                yetty_ycore_error_destroy(wr.error);
+            }
+        }
+        grid->sixel_accum_len = 0;
+        grid->sixel_overflow = 0;
+        grid->sixel_active = 0;
+    }
+
+    return 1;
+}
+
+static const VTermStateFallbacks *grid_fallbacks(void)
+{
+    static const VTermStateFallbacks fallbacks = {
+        .osc = cb_osc,
+        .dcs = cb_dcs,
+    };
+    return &fallbacks;
+}
+
 /*===========================================================================
  * Grid model lifecycle — the model lives embedded in the vterm object.
  *=========================================================================*/
@@ -1277,12 +1683,21 @@ static struct yetty_ycore_void_result grid_model_init(struct yetty_yvterm_grid *
     vterm_set_utf8(grid->vterm, 1);
     grid->state = vterm_obtain_state(grid->vterm);
     vterm_state_set_callbacks(grid->state, grid_state_callbacks(), grid);
+    /* OSC 52 write path: libvterm decodes the base64 into osc52_decode and hands
+     * the plain text to cb_selection_set, which forwards it to the clipboard. */
+    vterm_state_set_selection_callbacks(grid->state, grid_selection_callbacks(), grid,
+                                        grid->osc52_decode, sizeof(grid->osc52_decode));
+    /* OSC 10/11/110/111 dynamic default colours route through this fallback. */
+    vterm_state_set_unrecognised_fallbacks(grid->state, grid_fallbacks(), grid);
 
     VTermColor default_fg;
     VTermColor default_bg;
     vterm_state_get_default_colors(grid->state, &default_fg, &default_bg);
     grid->default_fg = pack_color(default_fg);
     grid->default_bg = pack_color(default_bg);
+    /* Baseline for OSC 110/111 reset until the terminal applies config colours. */
+    grid->configured_fg = grid->default_fg;
+    grid->configured_bg = grid->default_bg;
 
     vterm_state_reset(grid->state, 1);
     grid->pen_fg = grid->default_fg;
@@ -1328,6 +1743,14 @@ static void grid_model_teardown(struct yetty_yvterm_grid *grid)
     grid->window_slots = NULL;
     grid->window_capacity = 0;
     grid->window_count = 0;
+    free(grid->osc52_accum);
+    grid->osc52_accum = NULL;
+    grid->osc52_accum_cap = 0;
+    grid->osc52_accum_len = 0;
+    free(grid->sixel_accum);
+    grid->sixel_accum = NULL;
+    grid->sixel_accum_cap = 0;
+    grid->sixel_accum_len = 0;
 }
 
 /*===========================================================================
@@ -1942,6 +2365,28 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_pty_write(struct yetty_ycla
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_pty_write: from_obj");
     grid_res.value->pty_write_fn = fn;
     grid_res.value->pty_write_userdata = userdata;
+    return YETTY_OK_VOID();
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_grid_set_clipboard_write(
+    struct yetty_yclass_object *obj, yetty_yvterm_grid_clipboard_write_fn fn, void *userdata)
+{
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_clipboard_write: from_obj");
+    grid_res.value->clipboard_write_fn = fn;
+    grid_res.value->clipboard_write_userdata = userdata;
+    return YETTY_OK_VOID();
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_grid_set_sixel_write(
+    struct yetty_yclass_object *obj, yetty_yvterm_grid_sixel_write_fn fn, void *userdata)
+{
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_sixel_write: from_obj");
+    grid_res.value->sixel_write_fn = fn;
+    grid_res.value->sixel_write_userdata = userdata;
     return YETTY_OK_VOID();
 }
 
@@ -3090,6 +3535,9 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_default_colors(struct yetty
     vterm_state_set_default_colors(grid->state, &fg, &bg);
     grid->default_fg = pack_color(fg);
     grid->default_bg = pack_color(bg);
+    /* These configured colours are the OSC 110/111 reset target. */
+    grid->configured_fg = grid->default_fg;
+    grid->configured_bg = grid->default_bg;
     grid->pen_fg = grid->default_fg;
     grid->pen_bg = grid->default_bg;
     /* Hard reset so libvterm's internal pen picks up the new defaults, then
