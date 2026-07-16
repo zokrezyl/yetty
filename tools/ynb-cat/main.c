@@ -15,7 +15,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <io.h>
+#ifndef STDOUT_FILENO
+#define STDOUT_FILENO 1 /* the only unistd.h symbol used here */
+#endif
+#else
 #include <unistd.h>
+#endif
 
 #include <yetty/yface/yface.h>
 #include <yetty/ymime/mime.h>
