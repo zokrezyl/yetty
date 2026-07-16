@@ -129,13 +129,16 @@ static long render_run(struct ytest *test, struct canvas *canvas, struct yetty_y
     return ink;
 }
 
-static struct yetty_yfont_font *load_font(struct ytest *test, const char *name)
+/* Load a raster font in full (atlas) mode, or return NULL if it is not staged
+ * so a caller can skip just that line. */
+static struct yetty_yfont_font *load_font_opt(struct ytest *test, const char *name)
 {
     char path[1024];
     snprintf(path, sizeof(path), "%s/%s", YFONT_TEST_FONT_DIR, name);
     FILE *probe = fopen(path, "rb");
     if (!probe) {
-        YTEST_SKIP(test, "%s not staged at %s", name, YFONT_TEST_FONT_DIR);
+        fprintf(stderr, "skip: %s not staged at %s\n", name, YFONT_TEST_FONT_DIR);
+        return NULL;
     }
     fclose(probe);
 
@@ -149,27 +152,46 @@ int main(void)
 {
     struct ytest test = ytest_begin("yfont_shaping_render");
 
-    struct canvas canvas = canvas_create(1000, 200);
+    struct canvas canvas = canvas_create(1200, 480);
     YTEST_REQUIRE_NOT_NULL(&test, canvas.pixels);
 
-    /* Arabic: "العربية" (al-ʿarabiyya) — cursive joined run. */
-    struct yetty_yfont_font *arabic = load_font(&test, "NotoNaskhArabic-Regular.ttf");
-    YTEST_REQUIRE_NOT_NULL(&test, (void *)arabic->ops->shape_run);
-    const uint32_t arabic_word[] = {0x0627, 0x0644, 0x0639, 0x0631, 0x0628, 0x064A, 0x0629};
-    long arabic_ink = render_run(&test, &canvas, arabic,
-                                 arabic_word, sizeof(arabic_word) / sizeof(arabic_word[0]),
-                                 40.0f, 70.0f);
-    YTEST_CHECK(&test, arabic_ink > 0);
-    arabic->ops->destroy(arabic);
+    /* One canonical word per shaping family, matching demo/scripts/harfbuzz/.
+     * Arabic "العربية" (joined), Devanagari "हिन्दी" (reordered matra + न्द
+     * conjunct), Bengali "বাংলা", Tamil "தமிழ்" (split/reordered signs), Thai
+     * "สวัสดี" (stacked marks). */
+    struct sample {
+        const char *font;
+        uint32_t codepoints[16];
+        size_t count;
+        float baseline;
+    };
+    const struct sample samples[] = {
+        {"NotoNaskhArabic-Regular.ttf",
+         {0x0627, 0x0644, 0x0639, 0x0631, 0x0628, 0x064A, 0x0629}, 7, 70.0f},
+        {"NotoSansDevanagari-Regular.ttf",
+         {0x0939, 0x093F, 0x0928, 0x094D, 0x0926, 0x0940}, 6, 160.0f},
+        {"NotoSansBengali-Regular.ttf", {0x09AC, 0x09BE, 0x0982, 0x09B2, 0x09BE}, 5, 250.0f},
+        {"NotoSansTamil-Regular.ttf", {0x0BA4, 0x0BAE, 0x0BBF, 0x0BB4, 0x0BCD}, 5, 340.0f},
+        {"NotoSansThai-Regular.ttf",
+         {0x0E2A, 0x0E27, 0x0E31, 0x0E2A, 0x0E14, 0x0E35}, 6, 420.0f},
+    };
 
-    /* Devanagari: "हिन्दी" (hindī) — reordered matra + conjunct. */
-    struct yetty_yfont_font *deva = load_font(&test, "NotoSansDevanagari-Regular.ttf");
-    const uint32_t deva_word[] = {0x0939, 0x093F, 0x0928, 0x094D, 0x0926, 0x0940};
-    long deva_ink = render_run(&test, &canvas, deva,
-                               deva_word, sizeof(deva_word) / sizeof(deva_word[0]),
-                               40.0f, 150.0f);
-    YTEST_CHECK(&test, deva_ink > 0);
-    deva->ops->destroy(deva);
+    int rendered = 0;
+    for (size_t i = 0; i < sizeof(samples) / sizeof(samples[0]); i++) {
+        struct yetty_yfont_font *font = load_font_opt(&test, samples[i].font);
+        if (!font) {
+            continue;
+        }
+        YTEST_REQUIRE_NOT_NULL(&test, (void *)font->ops->shape_run);
+        long ink = render_run(&test, &canvas, font, samples[i].codepoints, samples[i].count, 40.0f,
+                              samples[i].baseline);
+        YTEST_CHECK(&test, ink > 0);
+        font->ops->destroy(font);
+        rendered++;
+    }
+    if (rendered == 0) {
+        YTEST_SKIP(&test, "no complex-script fonts staged at %s", YFONT_TEST_FONT_DIR);
+    }
 
     const char *dump = getenv("YFONT_SHAPING_DUMP");
     if (dump && dump[0]) {
