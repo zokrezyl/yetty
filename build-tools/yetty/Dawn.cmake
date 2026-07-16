@@ -30,9 +30,13 @@
 
 include(FetchContent)
 
-# Dawn release version (date-based versioning)
-set(DAWN_VERSION "20260624.223603" CACHE STRING "Dawn version to use")
-set(DAWN_COMMIT "11ab3f92ed451db8c1e1366abcddd9c202e0738d" CACHE STRING "Dawn commit hash")
+# Dawn release version (date-based versioning). Single source of truth for all
+# platforms lives in dawn-version.cmake:
+#   - dawn-exotic ships linux (x86_64/aarch64) + Windows + tvOS slices → Linux
+#     desktop, Windows, tvOS.
+#   - google/dawn ships macOS + dawn-apple (iOS) at this version → macOS, iOS.
+# Every platform is on this single version.
+include(${CMAKE_CURRENT_LIST_DIR}/dawn-version.cmake)
 
 # iOS uses XCFramework from upstream Google dawn-apple package.
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
@@ -219,7 +223,9 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 
 else()
     # Remaining desktop platforms: macOS, Windows (Linux is handled above
-    # via dawn-exotic and returns before reaching here).
+    # via dawn-exotic and returns before reaching here). macOS uses google/dawn
+    # and Windows uses dawn-exotic, both at the current DAWN_VERSION
+    # (v20260714.215939).
     if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64")
             set(DAWN_PLATFORM "macos-latest")

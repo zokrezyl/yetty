@@ -104,7 +104,9 @@ endif()
 # files instead of CPM-fetched).
 if(EMSCRIPTEN)
     target_link_libraries(imgui PUBLIC webgpu)
-    target_compile_options(imgui PUBLIC --use-port=emdawnwebgpu)
+    # --use-port for the emdawnwebgpu port is inherited from the webgpu
+    # INTERFACE target (build-tools/yetty/libs/webgpu.cmake); passing it here
+    # too would register the external port twice (emcc: duplicate port name).
     target_link_options(imgui PUBLIC -sUSE_GLFW=3)
     target_compile_definitions(imgui PUBLIC IMGUI_IMPL_WEBGPU_BACKEND_DAWN=1)
 elseif(YETTY_IOS OR YETTY_TVOS
