@@ -1437,9 +1437,10 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
   case 0x63: // DA - ECMA-48 8.3.24
     val = CSI_ARG_OR(args[0], 0);
     if(val == 0)
-      // DEC VT100 response, with attribute 4 = sixel graphics so
-      // capability probes (ucs-detect, img2sixel, chafa) see sixel support.
-      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;2;4c");
+      // DEC VT100 response. Attribute 4 = sixel graphics and 52 = OSC 52
+      // clipboard access, so capability probes (ucs-detect, img2sixel, chafa)
+      // see sixel and clipboard support.
+      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;2;4;52c");
     break;
 
   case LEADER('>', 0x63): // DEC secondary Device Attributes
@@ -2152,6 +2153,11 @@ static const char *termcap_lookup(const char *name)
    * clipboard-aware programs (and ucs-detect) discover OSC 52 support without
    * issuing a real clipboard write. */
   if(strcmp(name, "Ms") == 0)     return "\x1b]52;%p1%s;%p2%s\x07";
+  /* Styled-underline capability (terminfo Smulx): SGR 4:n selects the
+   * underline style. yetty parses 4:1 single, 4:2 double, 4:3 curly, so
+   * advertising Smulx is a faithful capability report. (Setulc / coloured
+   * underlines are intentionally not advertised: SGR 58 is not supported.) */
+  if(strcmp(name, "Smulx") == 0)  return "\x1b[4:%p1%dm";
   return NULL;
 }
 

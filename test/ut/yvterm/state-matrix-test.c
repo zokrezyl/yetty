@@ -273,6 +273,36 @@ static uint32_t advance_of(struct ytest *test, const char *utf8)
 }
 
 /*---------------------------------------------------------------------------
+ * Complex-script (Indic) cluster width: a base consonant plus a spacing
+ * vowel sign (category Mc), or a virama-linked consonant conjunct, is one
+ * grapheme cluster whose width caps at 2 cells — matching what the wcwidth
+ * reference (the ucs-detect measure) reports. Without the cluster rules the
+ * grid would count each consonant and each spacing mark as its own column
+ * and overshoot (3, 4, …). A dangling virama with no following consonant,
+ * and a virama+ZWJ explicit half-form request, both stay width 1.
+ *-------------------------------------------------------------------------*/
+static void test_indic_cluster_width(struct ytest *test)
+{
+    /* base + spacing mark (Mc) → 2 */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xe0\xa4\x95\xe0\xa4\xbf"), 2); /* कि */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xe0\xae\x95\xe0\xae\xbf"), 2); /* Tamil கி */
+    /* base + spacing mark + anusvara (Bengali কিং) → 2 */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xe0\xa6\x95\xe0\xa6\xbf\xe0\xa6\x82"), 2);
+    /* virama conjunct KA+vir+SSA (क्ष) → 2 */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xe0\xa4\x95\xe0\xa5\x8d\xe0\xa4\xb7"), 2);
+    /* conjunct + trailing matra KA+vir+TA+vowelI (ক্তি) → 2 */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xe0\xa6\x95\xe0\xa7\x8d\xe0\xa6\xa4\xe0\xa6\xbf"),
+                        2);
+    /* triple conjunct KA+vir+SSA+vir+MA (क्ष्म) — still capped at 2 */
+    YTEST_CHECK_EQ_SIZE(
+        test, advance_of(test, "\xe0\xa4\x95\xe0\xa5\x8d\xe0\xa4\xb7\xe0\xa5\x8d\xe0\xa4\xae"), 2);
+    /* dangling virama KA+vir (क्) — no consonant follows → width 1 */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xe0\xa4\x95\xe0\xa5\x8d"), 1);
+    /* explicit half-form KA+vir+ZWJ (क्‍) — ZWJ transparent to width → 1 */
+    YTEST_CHECK_EQ_SIZE(test, advance_of(test, "\xe0\xa4\x95\xe0\xa5\x8d\xe2\x80\x8d"), 1);
+}
+
+/*---------------------------------------------------------------------------
  * Emoji sequence width semantics (#571): VS16/VS15, ZWJ, skin tones, flags.
  * Each sequence must advance the cursor by exactly what wcwidth reports for
  * the pinned Unicode version — the quantity ucs-detect measures via CPR.
@@ -865,6 +895,7 @@ int main(void)
     YTEST_RUN(&test, test_wide_glyph);
     YTEST_RUN(&test, test_modern_width_tables);
     YTEST_RUN(&test, test_grapheme_cluster);
+    YTEST_RUN(&test, test_indic_cluster_width);
     YTEST_RUN(&test, test_emoji_sequence_widths);
     YTEST_RUN(&test, test_mode_2027_clustering);
     YTEST_RUN(&test, test_kitty_keyboard);

@@ -23,6 +23,7 @@ Then rebuild. The generated .inc files must never be edited by hand.
 import pathlib
 
 from wcwidth import list_versions
+from wcwidth._constants import _ISC_VIRAMA_SET
 from wcwidth.table_mc import CATEGORY_MC
 from wcwidth.table_wide import WIDE_EASTASIAN
 from wcwidth.table_zero import ZERO_WIDTH
@@ -54,6 +55,17 @@ def banner(table_name: str, unicode_version: str) -> str:
         " *   ./src/libvterm-0.3.3/gen-width-tables.py\n"
         " */\n" % (table_name, unicode_version)
     )
+
+
+def set_to_intervals(codepoints) -> list[tuple[int, int]]:
+    """Collapse a flat set of codepoints into sorted non-overlapping intervals."""
+    intervals = []
+    for codepoint in sorted(codepoints):
+        if intervals and codepoint == intervals[-1][1] + 1:
+            intervals[-1] = (intervals[-1][0], codepoint)
+        else:
+            intervals.append((codepoint, codepoint))
+    return intervals
 
 
 def clamp_low_entries(intervals) -> list[tuple[int, int]]:
@@ -88,13 +100,20 @@ def subtract_intervals(minuend, subtrahend) -> list[tuple[int, int]]:
 def main() -> None:
     unicode_version = list_versions()[-1]
     wide_intervals = list(WIDE_EASTASIAN[unicode_version])
-    # Spacing combining marks (category Mc) are excluded from the zero
-    # table: the wcwidth reference measures a base + Mc cluster as 2
-    # cells, so per-codepoint advance base(1) + Mc(1) is the faithful
-    # approximation until cluster-aware width lands.
+    # Spacing combining marks (category Mc) are kept out of the zero
+    # table because they are not non-spacing marks; vterm_unicode_cluster()
+    # instead folds a base + Mc into one cluster capped at 2 cells via the
+    # separate spacing-mark table below, matching the cluster-aware width
+    # the wcwidth reference reports.
     zero_intervals = clamp_low_entries(
         subtract_intervals(ZERO_WIDTH[unicode_version], CATEGORY_MC[unicode_version])
     )
+    # Spacing combining marks (Mc) and virama (halant) codepoints drive the
+    # cluster-width rules in vterm_unicode_cluster(): a spacing mark caps its
+    # cluster at 2, and a virama joins the following consonant into one
+    # conjunct cluster also capped at 2.
+    spacing_mark_intervals = clamp_low_entries(list(CATEGORY_MC[unicode_version]))
+    virama_intervals = clamp_low_entries(set_to_intervals(_ISC_VIRAMA_SET))
 
     repo_root = pathlib.Path(__file__).resolve().parent.parent.parent
     outputs = {
@@ -104,6 +123,16 @@ def main() -> None:
             "Zero-width/combining (width 0, Mc spacing marks excluded)", unicode_version
         )
         + format_intervals(zero_intervals),
+        "spacing-mark.inc": banner(
+            "Spacing combining marks (category Mc, cluster caps at width 2)",
+            unicode_version,
+        )
+        + format_intervals(spacing_mark_intervals),
+        "virama.inc": banner(
+            "Virama / halant conjunct linkers (cluster caps at width 2)",
+            unicode_version,
+        )
+        + format_intervals(virama_intervals),
     }
 
     for source_dir in LIBVTERM_SOURCE_DIRS:
