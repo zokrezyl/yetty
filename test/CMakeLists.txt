@@ -65,6 +65,16 @@ if(TARGET yetty_yvterm)
     add_subdirectory(ut/yvterm)
 endif()
 
+# ynotebook — nbformat MIME bundle model (text/binary/json payloads). Pure.
+if(TARGET yetty_ynotebook)
+    add_subdirectory(ut/ynotebook)
+endif()
+
+# yjupyter — Jupyter v5 message protocol + session correlation. Pure.
+if(TARGET yetty_yjupyter)
+    add_subdirectory(ut/yjupyter)
+endif()
+
 # yvnc — VNC capture protocol: pure tile-grid math + wire-format headers.
 if(TARGET yetty_vnc)
     add_subdirectory(ut/yvnc)

@@ -339,6 +339,19 @@ if(YETTY_ENABLE_FEATURE_YMESH)
     add_subdirectory(ymesh)
 endif()
 
+# ynotebook — native Jupyter notebook model (nbformat + MIME bundle). Headless
+# model layer; parses/writes JSON with the prebuilt yyjson, base64 via ycore.
+if(YETTY_ENABLE_FEATURE_YNOTEBOOK)
+    add_subdirectory(ynotebook)
+endif()
+
+# yjupyter — Jupyter v5 kernel protocol client (message codec + session) plus
+# the live REST/WebSocket connection (yjupyter:client). client.c needs libcurl
+# for REST, so gate the module on it like ymap.
+if(YETTY_ENABLE_FEATURE_YJUPYTER AND YETTY_ENABLE_LIB_LIBCURL AND TARGET CURL::libcurl)
+    add_subdirectory(yjupyter)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YVIDEO)
     add_subdirectory(yvideo)
 endif()
