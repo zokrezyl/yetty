@@ -148,6 +148,7 @@ option(YETTY_ENABLE_FEATURE_YSVG      "ysvg — SVG (Tiny 1.2) to ydraw buffer" 
 option(YETTY_ENABLE_FEATURE_YMSOFFICE "ymsoffice — docx/xlsx/pptx to ydraw buffer" ON)
 option(YETTY_ENABLE_FEATURE_YLOTTIE   "ylottie — Lottie (single frame) to ydraw buffer" ON)
 option(YETTY_ENABLE_FEATURE_YMAP      "ymap — slippy-map model + tile engine" ON)
+option(YETTY_ENABLE_FEATURE_YNET      "ynet — network capture model (libpcap)" ON)
 
 # Build pipeline
 option(YETTY_ENABLE_FEATURE_ASSETS    "assets — runtime asset copying"       ON)
@@ -179,6 +180,7 @@ option(YETTY_ENABLE_TOOL_YFSPY           "yfspy tool (Python-shader plot)"   ON)
 option(YETTY_ENABLE_TOOL_YMAP            "ymap tool (slippy-map frontend)"   ON)
 option(YETTY_ENABLE_TOOL_YTOP            "ytop tool (CPU monitor)"           ON)
 option(YETTY_ENABLE_TOOL_YGIT            "ygit tool (Git history explorer)"  ON)
+option(YETTY_ENABLE_TOOL_YNET            "ynet tool (network capture/analyzer)" ON)
 option(YETTY_ENABLE_TOOL_CCC             "ccc tool (claude CLI loop)"        ON)
 option(YETTY_ENABLE_TOOL_YAI             "yai tool (AI engine loop)"         ON)
 option(YETTY_ENABLE_TOOL_YGREETER        "ygreeter first-contact tool"       ON)

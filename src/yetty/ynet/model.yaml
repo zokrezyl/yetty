@@ -1,0 +1,428 @@
+methods:
+  - slot: load_file
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: path
+        type: "const char *"
+    doc: "/* Load a pcap / pcapng file. Reads every packet, dissects it for the summary
+ * columns + 5-tuple, copies its bytes into the arena, and folds it into the
+ * flow table. Uses libpcap offline reading — no root, no live interface. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: packet_count
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: uint32_t
+  - slot: packet_time
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: float
+  - slot: packet_length
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: uint32_t
+  - slot: packet_protocol
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: packet_source
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: packet_destination
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: packet_info
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: packet_bytes
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_const_uint8_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const uint8_t *"
+  - slot: packet_caplen
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: uint32_t
+  - slot: flow_count
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: uint32_t
+  - slot: flow_summary
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: render
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ydraw_drawable_list_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: width
+        type: uint32_t
+      - name: height
+        type: uint32_t
+    doc: "/* Render the capture's conversations as a topology figure. `width`/`height` are
+ * the figure's pixel size (0 → defaults). Returns a ydraw drawable list the
+ * caller emits and then destroys. */"
+    local: true
+    oneway: false
+    return_payload_type: "struct yetty_ydraw_drawable_list *"
+  - slot: destroy
+    domain: ynet
+    owning_class: capture
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: null
+classes:
+  - name: capture
+    domain: ynet
+    accessor: yetty_ynet_capture_class_get
+    type: regular
+    source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    parent: null
+    mixins: []
+    data: struct yetty_ynet_capture
+    data_fields:
+      - name: path
+        type: "char *"
+        get: false
+        set: false
+      - name: link_type
+        type: int
+        get: false
+        set: false
+      - name: bytes
+        type: "uint8_t *"
+        get: false
+        set: false
+      - name: bytes_length
+        type: size_t
+        get: false
+        set: false
+      - name: bytes_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: records
+        type: "struct ynet_packet_record *"
+        get: false
+        set: false
+      - name: record_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: record_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: flows
+        type: "struct ynet_flow *"
+        get: false
+        set: false
+      - name: flow_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: flow_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: first_timestamp_seconds
+        type: uint64_t
+        get: false
+        set: false
+      - name: first_timestamp_microseconds
+        type: uint32_t
+        get: false
+        set: false
+      - name: have_first_timestamp
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: load_file
+        slot_domain: ynet
+        impl: capture_load_file
+      - slot: packet_count
+        slot_domain: ynet
+        impl: capture_packet_count
+      - slot: packet_time
+        slot_domain: ynet
+        impl: capture_packet_time
+      - slot: packet_length
+        slot_domain: ynet
+        impl: capture_packet_length
+      - slot: packet_protocol
+        slot_domain: ynet
+        impl: capture_packet_protocol
+      - slot: packet_source
+        slot_domain: ynet
+        impl: capture_packet_source
+      - slot: packet_destination
+        slot_domain: ynet
+        impl: capture_packet_destination
+      - slot: packet_info
+        slot_domain: ynet
+        impl: capture_packet_info
+      - slot: packet_bytes
+        slot_domain: ynet
+        impl: capture_packet_bytes
+      - slot: packet_caplen
+        slot_domain: ynet
+        impl: capture_packet_caplen
+      - slot: flow_count
+        slot_domain: ynet
+        impl: capture_flow_count
+      - slot: flow_summary
+        slot_domain: ynet
+        impl: capture_flow_summary
+      - slot: render
+        slot_domain: ynet
+        impl: capture_render
+      - slot: destroy
+        slot_domain: ynet
+        impl: capture_destroy
+    doc: null
+exposed:
+  - source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    name: yetty_ynet_emit_osc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: list
+        type: "const struct yetty_ydraw_drawable_list *"
+      - name: fd
+        type: int
+    doc: "/* Serialize a rendered drawable list as a YDRAW_BIN OSC envelope on `fd` — the
+ * scrolling-layer figure path (mirrors yflame's emit_osc). */"
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_const_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const char *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_const_uint8_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const uint8_t *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_float_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: float
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_uint32_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: uint32_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ydraw_drawable_list_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ydraw_drawable_list *"
+          - name: error
+            type: struct yetty_ycore_error
+local_types:
+  ynet_packet_summary: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+  ynet_packet_record: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+  ynet_flow: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+  yetty_ynet_capture: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+  yetty_ynet_capture_ptr_result: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+  ynet_topo_host: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+local_typedefs:
+  __int128_t:
+    source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+includes:
+  /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c:
+    - yetty/ydraw-core/drawable-list.h
