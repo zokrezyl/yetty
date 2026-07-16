@@ -62,7 +62,8 @@ static long render_run(struct ytest *test, struct canvas *canvas, struct yetty_y
                        const uint32_t *codepoints, size_t count, float pen_x, float baseline)
 {
     struct yetty_yfont_shaped_glyph shaped[SHAPE_MAX];
-    struct uint32_result shape_res = font->ops->shape_run(font, codepoints, count, shaped, SHAPE_MAX);
+    struct uint32_result shape_res =
+        font->ops->shape_run(font, codepoints, count, shaped, SHAPE_MAX);
     YTEST_REQUIRE_OK(test, shape_res);
     uint32_t glyph_count = shape_res.value;
     YTEST_REQUIRE(test, glyph_count > 0);
@@ -143,7 +144,7 @@ static struct yetty_yfont_font *load_font_opt(struct ytest *test, const char *na
     fclose(probe);
 
     struct yetty_font_font_result font_res =
-        yetty_yfont_raster_font_create_from_file(path, YFONT_RASTER_SHADER, 48.0f);
+        yetty_yfont_raster_font_create_from_file(path, YFONT_RASTER_SHADER, 48.0f, name);
     YTEST_REQUIRE_OK(test, font_res);
     return font_res.value;
 }
@@ -167,13 +168,16 @@ int main(void)
     };
     const struct sample samples[] = {
         {"NotoNaskhArabic-Regular.ttf",
-         {0x0627, 0x0644, 0x0639, 0x0631, 0x0628, 0x064A, 0x0629}, 7, 70.0f},
+         {0x0627, 0x0644, 0x0639, 0x0631, 0x0628, 0x064A, 0x0629},
+         7,
+         70.0f},
         {"NotoSansDevanagari-Regular.ttf",
-         {0x0939, 0x093F, 0x0928, 0x094D, 0x0926, 0x0940}, 6, 160.0f},
+         {0x0939, 0x093F, 0x0928, 0x094D, 0x0926, 0x0940},
+         6,
+         160.0f},
         {"NotoSansBengali-Regular.ttf", {0x09AC, 0x09BE, 0x0982, 0x09B2, 0x09BE}, 5, 250.0f},
         {"NotoSansTamil-Regular.ttf", {0x0BA4, 0x0BAE, 0x0BBF, 0x0BB4, 0x0BCD}, 5, 340.0f},
-        {"NotoSansThai-Regular.ttf",
-         {0x0E2A, 0x0E27, 0x0E31, 0x0E2A, 0x0E14, 0x0E35}, 6, 420.0f},
+        {"NotoSansThai-Regular.ttf", {0x0E2A, 0x0E27, 0x0E31, 0x0E2A, 0x0E14, 0x0E35}, 6, 420.0f},
     };
 
     int rendered = 0;

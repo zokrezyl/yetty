@@ -622,8 +622,36 @@ static const struct yetty_yfont_font_ops raster_font_ops = {
  *===========================================================================*/
 
 /* Common init after ft_face is set up. shader_path may be NULL (metrics-only). */
+/* Build a unique, WGSL-valid resource-set namespace from a caller-supplied
+ * identifier. Every raster face installed as a child of the same binder tree
+ * must have a distinct namespace, otherwise the generated per-face uniforms
+ * and functions (`<ns>_texture_region`, `<ns>_glyph_sample`, …) collide and
+ * the merged shader fails to compile. Non-identifier characters in `name`
+ * (hyphens, dots from font filenames or PDF tags) are folded to '_'. Falls
+ * back to a stable default when no name is supplied. */
+static void raster_font_build_namespace(char *out, size_t out_size, const char *name)
+{
+    if (!name || !*name) {
+        snprintf(out, out_size, "raster_font");
+        return;
+    }
+    int written = snprintf(out, out_size, "raster_%s", name);
+    if (written < 0) {
+        snprintf(out, out_size, "raster_font");
+        return;
+    }
+    for (char *cursor = out; *cursor; cursor++) {
+        int is_ident = (*cursor >= 'a' && *cursor <= 'z') || (*cursor >= 'A' && *cursor <= 'Z') ||
+                       (*cursor >= '0' && *cursor <= '9') || *cursor == '_';
+        if (!is_ident) {
+            *cursor = '_';
+        }
+    }
+}
+
 static struct yetty_font_font_result raster_font_finalise(struct yetty_yfont_raster_font *f,
-                                                          const char *shader_path)
+                                                          const char *shader_path,
+                                                          const char *namespace)
 {
     f->base.ops = &raster_font_ops;
     f->units_per_em = (float)f->ft_face->units_per_EM;
@@ -688,8 +716,9 @@ static struct yetty_font_font_result raster_font_finalise(struct yetty_yfont_ras
         return YETTY_ERR(yetty_font_font, "FT_Set_Pixel_Sizes failed");
     }
 
-    /* GPU resource set */
-    strncpy(f->rs.namespace, "raster_font", YETTY_YRENDER_NAME_MAX - 1);
+    /* GPU resource set. Namespace must be unique per face within a binder
+     * tree; derive it from the caller-supplied identifier. */
+    raster_font_build_namespace(f->rs.namespace, YETTY_YRENDER_NAME_MAX, namespace);
 
     f->rs.texture_count = 1;
     struct yetty_yrender_texture *tex = &f->rs.textures[0];
@@ -705,7 +734,7 @@ static struct yetty_font_font_result raster_font_finalise(struct yetty_yfont_ras
     strncpy(buf->wgsl_type, "array<f32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
     buf->readonly = 1;
 
-    f->rs.uniform_count = 3;
+    f->rs.uniform_count = 4;
     strncpy(f->rs.uniforms[0].name, "base_size", YETTY_YRENDER_NAME_MAX - 1);
     f->rs.uniforms[0].type = YETTY_YRENDER_UNIFORM_F32;
     f->rs.uniforms[0].f32 = f->base_size;
@@ -718,6 +747,15 @@ static struct yetty_font_font_result raster_font_finalise(struct yetty_yfont_ras
     f->rs.uniforms[2].type = YETTY_YRENDER_UNIFORM_U32;
     f->rs.uniforms[2].u32 = f->atlas_cols;
 
+    /* Atlas sub-region (u_min, v_min, u_max, v_max) inside the packed R8
+     * mega-atlas. Filled in by the binder at bind-group time — it sees a
+     * VEC4 uniform named `<texname>_region` and writes the texture's
+     * normalised position into it. We only need to declare it here so the
+     * generated uniforms struct carries the `__NS___texture_region` member
+     * the shader samples against. */
+    strncpy(f->rs.uniforms[3].name, "texture_region", YETTY_YRENDER_NAME_MAX - 1);
+    f->rs.uniforms[3].type = YETTY_YRENDER_UNIFORM_VEC4;
+
     yetty_yrender_shader_code_set(&f->rs.shader, (const char *)f->shader_code.data,
                                   f->shader_code.size);
 
@@ -728,7 +766,8 @@ static struct yetty_font_font_result raster_font_finalise(struct yetty_yfont_ras
 
 struct yetty_font_font_result yetty_yfont_raster_font_create_from_file(const char *ttf_path,
                                                                        const char *shader_path,
-                                                                       float base_size)
+                                                                       float base_size,
+                                                                       const char *namespace)
 {
     if (!ttf_path) {
         return YETTY_ERR(yetty_font_font, "ttf_path is NULL");
@@ -750,7 +789,7 @@ struct yetty_font_font_result yetty_yfont_raster_font_create_from_file(const cha
         return YETTY_ERR(yetty_font_font, "FT_New_Face failed");
     }
 
-    return raster_font_finalise(f, shader_path);
+    return raster_font_finalise(f, shader_path, namespace);
 }
 
 struct yetty_font_font_result yetty_yfont_raster_font_create_from_data(const uint8_t *ttf_data,
@@ -759,7 +798,6 @@ struct yetty_font_font_result yetty_yfont_raster_font_create_from_data(const uin
                                                                        const char *shader_path,
                                                                        float base_size)
 {
-    (void)name;
     if (!ttf_data || ttf_size == 0) {
         return YETTY_ERR(yetty_font_font, "ttf_data is empty");
     }
@@ -792,5 +830,5 @@ struct yetty_font_font_result yetty_yfont_raster_font_create_from_data(const uin
         return YETTY_ERR(yetty_font_font, "FT_New_Memory_Face failed");
     }
 
-    return raster_font_finalise(f, shader_path);
+    return raster_font_finalise(f, shader_path, name);
 }

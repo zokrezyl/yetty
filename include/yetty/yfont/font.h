@@ -51,15 +51,27 @@ enum yetty_yfont_shaping_script {
  * so callers can detect shaping runs even in builds without the shaper. */
 enum yetty_yfont_shaping_script yetty_yfont_shaping_script_for_codepoint(uint32_t codepoint);
 
+/* Longest ligature (in a monospace programming font) supported by the table. */
+#define YETTY_YFONT_LIGATURE_MAX_LEN 4u
+
+/* Programming-ligature detection for the terminal grid. Returns the number of
+ * codepoints of the longest known programming ligature that begins at
+ * codepoints[pos] (e.g. 2 for "=>", 3 for "===", 4 for "<==>"), or 0 if none.
+ * HarfBuzz-free and deterministic — the same table is consulted by the grid
+ * glyph-suppression pass and the SDF shaping pass so they agree, without
+ * communicating, on exactly which cells a ligature covers. The set is
+ * punctuation-only, so it never triggers on ordinary words or numbers. */
+size_t yetty_yfont_ligature_length_at(const uint32_t *codepoints, size_t count, size_t pos);
+
 /* One shaped output glyph. Positions are in pixels at the font's base_size,
  * matching struct yetty_yfont_glyph_meta_gpu conventions, so the ydraw
  * free-position path can place them directly and scale by font_size/base_size. */
 struct yetty_yfont_shaped_glyph {
-    uint32_t gid;        /* OpenType glyph id in this face — feed to get_glyph_index_by_gid */
-    float x_offset;      /* GPOS x offset from the pen, px at base_size */
-    float y_offset;      /* GPOS y offset from the pen, px at base_size (up positive) */
-    float x_advance;     /* horizontal advance, px at base_size */
-    uint32_t cluster;    /* source codepoint index within the run */
+    uint32_t gid;     /* OpenType glyph id in this face — feed to get_glyph_index_by_gid */
+    float x_offset;   /* GPOS x offset from the pen, px at base_size */
+    float y_offset;   /* GPOS y offset from the pen, px at base_size (up positive) */
+    float x_advance;  /* horizontal advance, px at base_size */
+    uint32_t cluster; /* source codepoint index within the run */
 };
 
 /* Font ops */

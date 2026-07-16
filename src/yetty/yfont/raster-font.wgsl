@@ -1,37 +1,44 @@
 // Raster (FreeType R8 atlas) font shader — ydraw-layer glue.
 //
-// Mirrors msdf-font.wgsl's interface so ydraw-layer can call the same three
-// helper names regardless of which backend is active. Glyph metadata layout
-// matches struct glyph_meta_gpu in raster-font.c:
-//   [0] size_x       bitmap width  in pixels at base_size
-//   [1] size_y       bitmap height in pixels at base_size
-//   [2] bearing_x    (unused — bearing is pre-applied on the CPU)
-//   [3] bearing_y    (unused — bearing is pre-applied on the CPU)
-//   [4] advance
-//   [5] cell_idx     atlas cell index (-1 for empty glyphs)
+// Instance-namespaced exactly like msdf-font.wgsl: the binder substitutes
+// __NS__ with this instance's unique namespace at shader-merge time, so
+// multiple raster faces (complex-script shaping) coexist as separate children
+// of one layer alongside the MSDF fonts. Differs from MSDF only in the atlas
+// format (R8 coverage — no median / pixel-range distance field): the glyph
+// metadata layout, cell centring and region-UV math are identical.
 //
-// Bitmaps are centered within cell_size×cell_size cells just like MSDF, so
-// the UV logic is identical; only the atlas format (R8 vs RGBA8) and the
-// final distance-field math differ.
+// Per-instance values supplied by the binder:
+//   uniforms.__NS___base_size       — pixel size the atlas was rasterized at
+//   uniforms.__NS___cell_size       — atlas cell side in pixels
+//   uniforms.__NS___atlas_cols      — cells per atlas row
+//   uniforms.__NS___buffer_offset   — start of glyph metadata in storage
+//   uniforms.__NS___texture_region  — vec4(u_min, v_min, u_max, v_max) of this
+//                                     face's slice in the packed R8 atlas
+//
+// Glyph metadata layout (6 u32 / glyph) matches struct glyph_meta_gpu in
+// raster-font.c:
+//   [0] size_x   [1] size_y   [2] bearing_x   [3] bearing_y
+//   [4] advance  [5] cell_idx (-1 for empty glyphs like space)
 
-fn font_base_size() -> f32 {
-    return uniforms.raster_font_base_size;
+fn __NS___base_size() -> f32 {
+    return uniforms.__NS___base_size;
 }
 
-fn font_glyph_size(glyph_index: u32) -> vec2<f32> {
-    let base = uniforms.raster_font_buffer_offset + glyph_index * 6u;
+fn __NS___glyph_size(glyph_index: u32) -> vec2<f32> {
+    let base = uniforms.__NS___buffer_offset + glyph_index * 6u;
     return vec2<f32>(
         bitcast<f32>(storage_buffer[base + 0u]),
         bitcast<f32>(storage_buffer[base + 1u])
     );
 }
 
-// Alpha coverage for a glyph at normalized glyph-local coords (0..1).
-// pixel_scale is accepted for signature-parity with MSDF; raster ignores it.
-fn font_glyph_sample(glyph_index: u32,
-                     glyph_uv: vec2<f32>,
-                     pixel_scale: f32) -> f32 {
-    let meta_base = uniforms.raster_font_buffer_offset + glyph_index * 6u;
+// Alpha coverage for a glyph at normalised glyph-local coords (0..1).
+// pixel_scale is accepted for signature-parity with MSDF; raster ignores it
+// because FreeType already anti-aliases the coverage baked into the atlas.
+fn __NS___glyph_sample(glyph_index: u32,
+                       glyph_uv: vec2<f32>,
+                       pixel_scale: f32) -> f32 {
+    let meta_base = uniforms.__NS___buffer_offset + glyph_index * 6u;
     let glyph_size = vec2<f32>(
         bitcast<f32>(storage_buffer[meta_base + 0u]),
         bitcast<f32>(storage_buffer[meta_base + 1u])
@@ -45,19 +52,26 @@ fn font_glyph_sample(glyph_index: u32,
     }
 
     let cell_idx = u32(cell_idx_f);
-    let cell_size_px = f32(uniforms.raster_font_cell_size);
-    let atlas_cols = uniforms.raster_font_atlas_cols;
+    let cell_size_px = f32(uniforms.__NS___cell_size);
+    let atlas_cols = uniforms.__NS___atlas_cols;
     let col = cell_idx % atlas_cols;
     let row = cell_idx / atlas_cols;
 
+    // Sub-region of the packed R8 atlas this face occupies (normalised UV).
+    let region = uniforms.__NS___texture_region;
+    let region_origin_uv = region.xy;
     let atlas_size = vec2<f32>(textureDimensions(atlas_r8_texture, 0));
+
+    // Cell origin within the face's own atlas, then mapped into the packed one.
     let cell_origin_px = vec2<f32>(f32(col), f32(row)) * cell_size_px;
     let padding = (vec2<f32>(cell_size_px) - glyph_size) * 0.5;
-    let uv_min = (cell_origin_px + padding) / atlas_size;
-    let uv_max = (cell_origin_px + padding + glyph_size) / atlas_size;
+    let inner_min_px = cell_origin_px + padding;
+    let inner_max_px = cell_origin_px + padding + glyph_size;
+
+    let uv_min = region_origin_uv + inner_min_px / atlas_size;
+    let uv_max = region_origin_uv + inner_max_px / atlas_size;
     let uv = clamp(glyph_uv, vec2<f32>(0.0), vec2<f32>(1.0));
     let sample_uv = mix(uv_min, uv_max, uv);
 
-    return textureSampleLevel(atlas_r8_texture, atlas_r8_sampler,
-                              sample_uv, 0.0).r;
+    return textureSampleLevel(atlas_r8_texture, atlas_r8_sampler, sample_uv, 0.0).r;
 }

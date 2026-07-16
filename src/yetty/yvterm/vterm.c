@@ -29,6 +29,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfigure/figure.h>
+#include <yetty/yfont/font.h>
 #include <yetty/yfont/ms-font.h>
 #include <yetty/yfont/ms-msdf-font.h>
 #include <yetty/yfont/ms-raster-font.h>
@@ -45,6 +46,7 @@
 #include <yetty/yvterm/shader-glyph-pua.h> /* PUA-B codepoint helpers */
 #include <yetty/ywire/wire-statemachine.h>
 
+#include "ligature-cells.h"
 #include "sdf-layer.h"
 #include "shader-glyph-layer.h"
 
@@ -696,19 +698,49 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm,
                             const struct yetty_yvterm_text_cell *cells, uint32_t cols,
                             uint32_t *out)
 {
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+    /* Cells still covered by a programming ligature the SDF layer draws over
+     * the grid (see ligature-cells.h). Counts down across the span. */
+    uint32_t ligature_remaining = 0u;
+#endif
     for (uint32_t col = 0; col < cols; ++col) {
         const struct yetty_yvterm_text_cell *cell = &cells[col];
         /* Concealed cells render their background only — resolve no glyph.
          * Bold/italic pick a styled atlas slot via the cell attributes. */
         uint32_t glyph = 0u;
         uint32_t face = 0u;
-        if (cell->codepoint && !(cell->attrs & YETTY_YVTERM_ATTR_CONCEAL)) {
+        int resolve_glyph = cell->codepoint && !(cell->attrs & YETTY_YVTERM_ATTR_CONCEAL);
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+        if (ligature_remaining > 0u) {
+            /* Interior cell of a programming ligature: the SDF layer shapes the
+             * whole ligature and draws its glyph on top, so paint background
+             * only here — same contract as complex-script / shader-glyph cells. */
+            ligature_remaining--;
+            resolve_glyph = 0;
+        } else if (resolve_glyph) {
+            size_t ligature_len = yetty_yvterm_ligature_run_length(cells, cols, col);
+            if (ligature_len >= 2u) {
+                ligature_remaining = (uint32_t)(ligature_len - 1u);
+                resolve_glyph = 0;
+            }
+        }
+#endif
+        if (resolve_glyph) {
             /* PUA-B shader-glyph cells are painted by the shader-glyph layer, not
              * the font atlas — leave glyph 0 so the text pass draws only the
              * cell background under the animation. */
             if (yetty_shader_glyph_codepoint_in_range(cell->codepoint) &&
                 yetty_yfont_shader_glyph_codepoint_exists(cell->codepoint)) {
                 glyph = 0u;
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+            } else if (yetty_yfont_shaping_script_for_codepoint(cell->codepoint) !=
+                       YETTY_YFONT_SHAPING_NONE) {
+                /* Complex-script cell (Arabic/Indic/Thai/...): the SDF layer
+                 * shapes the run and draws it (joining, reordering, mark
+                 * positioning). Leave the grid glyph empty so the text pass
+                 * paints only the cell background — same as shader-glyph cells. */
+                glyph = 0u;
+#endif
             } else {
                 face = vterm_face_for_codepoint(vterm, cell->codepoint);
                 glyph = vterm_resolve_glyph(vterm, face, cell->codepoint, cell->marks,
@@ -735,7 +767,8 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm,
                     enum yetty_yfont_ms_style mark_style = vterm_cell_style(cell->attrs);
                     uint32_t chosen_face = 0u;
                     int chosen_found = 0;
-                    for (uint32_t raster_face = 0u; raster_face < vterm->face_count; ++raster_face) {
+                    for (uint32_t raster_face = 0u; raster_face < vterm->face_count;
+                         ++raster_face) {
                         if (vterm->faces[raster_face].method != YVTERM_FONT_METHOD_RASTER) {
                             continue;
                         }

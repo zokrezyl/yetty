@@ -27,3 +27,12 @@ yetty_add_c_test(
 target_compile_definitions(yfont_shaping_render-test PRIVATE
     YFONT_TEST_FONT_DIR=\"${CMAKE_BINARY_DIR}/embed-data/fonts\"
     YFONT_RASTER_SHADER=\"${YETTY_ROOT}/src/yetty/yfont/raster-font.wgsl\")
+
+# Programming-ligature detection table (font-free, deterministic).
+yetty_add_c_test(
+    NAME    yfont_ligature
+    SOURCES ligature-test.c
+    LIBS    yetty_yfont_core yetty_ycore yetty_yrender yetty_yplatform_core
+    SHIMS   trace
+    LABELS  unit
+    TIMEOUT 30)

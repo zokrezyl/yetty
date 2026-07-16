@@ -35,6 +35,7 @@
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/font-cache.h>
+#include <yetty/yfont/raster-font.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ymsdf/generator.h>
 #include <yetty/yplatform/fs.h>
@@ -47,6 +48,8 @@
 #include <yetty/ysdf/handler.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yvterm/grid.h>
+
+#include "ligature-cells.h"
 
 /* GLYPH primitive type — matches the shader's YDRAW_SDF_GLYPH (and ygrid). */
 #define YVTERM_SDF_GLYPH_TYPE 200u
@@ -72,6 +75,19 @@
 
 /* Producer-assigned font ids are small; cap the slot map at a generous size. */
 #define YVTERM_SDF_MAX_FONT_IDS 256
+
+/* One complex-script shaping face is loaded per script that appears on screen
+ * (Arabic, Devanagari, Bengali, Tamil, Thai, ...); cap the set generously. */
+#define YVTERM_SDF_MAX_SHAPING_FACES 16
+
+/* A lazily-loaded raster shaping face for terminal complex-script runs. Owned
+ * by the layer (created directly from a bundled TTF, not via the font cache). */
+struct sdf_shaping_face {
+    char file[64];                 /* bundled TTF filename — dedup key */
+    struct yetty_yfont_font *font; /* NULL when the load failed (do not retry) */
+    uint32_t slot;                 /* font slot this face occupies */
+    int attempted;                 /* 1 once a load was tried (success or fail) */
+};
 
 /* Per-prim metadata recorded at index time (one render's worth). */
 struct sdf_prim_meta {
@@ -120,6 +136,12 @@ struct yetty_yvterm_sdf_layer {
     uint32_t last_emitted_font_generation;
     int32_t wire_font_slot[YVTERM_SDF_MAX_FONT_IDS];
     uint32_t next_font_slot;
+
+    /* Complex-script shaping faces for terminal cell runs (owned). Loaded from
+     * the bundled TTFs under fonts_dir; the raster shader comes from shaders_dir. */
+    char fonts_dir[512];
+    struct sdf_shaping_face shaping_faces[YVTERM_SDF_MAX_SHAPING_FACES];
+    uint32_t shaping_face_count;
 
     /* Per-frame transient: wire records, prim table, cell buckets, staging. */
     uint8_t *bytes;
@@ -723,18 +745,101 @@ static uint32_t decode_utf8(const uint8_t **cursor_ptr, const uint8_t *end)
     return codepoint;
 }
 
-/* Shape a maximal run of one complex script starting at *cursor_ptr and emit
- * its shaped glyphs as free-position glyph records. Advances *cursor_ptr past
- * the run and *cursor_x_ptr by the run's total advance. Pen offsets/advances
- * come from the shaper (base_size pixels); each shaped glyph id resolves to an
- * atlas slot through the (glyph_id, face) path. HarfBuzz emits glyphs in visual
- * order for both LTR and RTL runs, so a simple left-to-right pen walk lays the
- * run out correctly regardless of direction. */
+/* Placement + colour for a shaped run, in the layer's line-local space. Shared
+ * by the ydraw text span and the terminal cell scan. */
+struct sdf_shaped_run_style {
+    uint32_t layer_id;  /* z / layer index stored in the record */
+    uint32_t color;     /* packed glyph colour */
+    float font_size;    /* target render size, px */
+    float base_size;    /* the shaping face's atlas base size, px */
+    float char_spacing; /* extra px added after each glyph */
+    float baseline_y;   /* text baseline, line-local px */
+};
+
+/* Shape codepoints[] with `font` and emit one free-position glyph record per
+ * shaped glyph, walking the pen from *cursor_x_ptr. Each shaped glyph id
+ * resolves to an atlas slot through the (glyph_id, face) path. HarfBuzz emits
+ * glyphs in visual order for LTR and RTL alike, so the left-to-right pen walk is
+ * correct regardless of direction. */
+static struct yetty_ycore_void_result emit_shaped_glyphs(struct yetty_yvterm_sdf_layer *layer,
+                                                         struct yetty_yfont_font *font,
+                                                         uint32_t slot, const uint32_t *codepoints,
+                                                         size_t count,
+                                                         const struct sdf_shaped_run_style *style,
+                                                         float *cursor_x_ptr)
+{
+    float scale = (style->base_size > 0.0f) ? style->font_size / style->base_size : 1.0f;
+
+    enum { SHAPE_RUN_MAX = 256 };
+    struct yetty_yfont_shaped_glyph shaped[SHAPE_RUN_MAX];
+    struct uint32_result shape_res =
+        font->ops->shape_run(font, codepoints, count, shaped, SHAPE_RUN_MAX);
+    if (YETTY_IS_ERR(shape_res)) {
+        /* Skip this run rather than abort the caller. */
+        yetty_ycore_error_destroy(shape_res.error);
+        return YETTY_OK_VOID();
+    }
+    uint32_t glyph_count = shape_res.value;
+
+    float cursor_x = *cursor_x_ptr;
+    for (uint32_t gi = 0; gi < glyph_count; gi++) {
+        struct uint32_result slot_res = font->ops->get_glyph_index_by_gid(font, shaped[gi].gid);
+        if (YETTY_IS_ERR(slot_res)) {
+            yetty_ycore_error_destroy(slot_res.error);
+            cursor_x += shaped[gi].x_advance * scale + style->char_spacing;
+            continue;
+        }
+        uint32_t glyph_index = slot_res.value;
+
+        struct yetty_yrender_gpu_resource_set_result fresh_rs_result =
+            font->ops->get_gpu_resource_set(font);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fresh_rs_result, "sdf-layer: shaped run font rs");
+        const struct yetty_yrender_gpu_resource_set *fresh_rs = fresh_rs_result.value;
+        if (fresh_rs->buffer_count == 0 || !fresh_rs->buffers[0].data) {
+            return YETTY_ERR(yetty_ycore_void, "sdf-layer: shaped run font has no glyph metadata");
+        }
+        const float *meta = (const float *)fresh_rs->buffers[0].data;
+        uint32_t meta_count = (uint32_t)(fresh_rs->buffers[0].size / (6u * sizeof(float)));
+        if (glyph_index >= meta_count) {
+            cursor_x += shaped[gi].x_advance * scale + style->char_spacing;
+            continue;
+        }
+        const float *glyph_meta = meta + glyph_index * 6u;
+        float size_x = glyph_meta[0];
+        float size_y = glyph_meta[1];
+        float bearing_x = glyph_meta[2];
+        float bearing_y = glyph_meta[3];
+
+        if (size_x > 0.0f && size_y > 0.0f) {
+            float glyph_x = cursor_x + (bearing_x + shaped[gi].x_offset) * scale;
+            float glyph_y = style->baseline_y - (bearing_y + shaped[gi].y_offset) * scale;
+
+            uint32_t glyph_record[7];
+            glyph_record[0] = YVTERM_SDF_GLYPH_TYPE;
+            glyph_record[1] = style->layer_id;
+            memcpy(&glyph_record[2], &glyph_x, sizeof(float));
+            memcpy(&glyph_record[3], &glyph_y, sizeof(float));
+            memcpy(&glyph_record[4], &style->font_size, sizeof(float));
+            glyph_record[5] = (glyph_index & 0xFFFFu) | ((slot + 1u) << 16);
+            glyph_record[6] = style->color;
+
+            struct yetty_ycore_void_result ir = index_record(layer, glyph_record, 7u);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, ir, "sdf-layer: shaped run index glyph");
+        }
+
+        cursor_x += shaped[gi].x_advance * scale + style->char_spacing;
+    }
+    *cursor_x_ptr = cursor_x;
+    return YETTY_OK_VOID();
+}
+
+/* [ydraw path] Gather a maximal same-script run from the UTF-8 span starting at
+ * *cursor_ptr, then shape + emit it. Advances *cursor_ptr past the run and
+ * *cursor_x_ptr by the run's total advance. */
 static struct yetty_ycore_void_result expand_shaped_run(
     struct yetty_yvterm_sdf_layer *layer, const struct yetty_ydraw_text_drawable_list_view *span,
-    struct yetty_yfont_font *font, uint32_t slot, float scale,
-    enum yetty_yfont_shaping_script script, const uint8_t **cursor_ptr, const uint8_t *end,
-    float *cursor_x_ptr)
+    struct yetty_yfont_font *font, uint32_t slot, enum yetty_yfont_shaping_script script,
+    const uint8_t **cursor_ptr, const uint8_t *end, float *cursor_x_ptr)
 {
     /* A single shaped run rarely exceeds a line; a longer contiguous run is
      * shaped in chunks (losing only cross-chunk joining at the boundary). */
@@ -758,68 +863,312 @@ static struct yetty_ycore_void_result expand_shaped_run(
     }
     *cursor_ptr = cursor;
 
-    struct yetty_yfont_shaped_glyph shaped[SHAPE_RUN_MAX];
-    struct uint32_result shape_res =
-        font->ops->shape_run(font, run_codepoints, run_count, shaped, SHAPE_RUN_MAX);
-    if (YETTY_IS_ERR(shape_res)) {
-        /* Skip this run rather than abort the whole span; cursor already moved
-         * past it. */
-        yetty_ycore_error_destroy(shape_res.error);
+    struct sdf_shaped_run_style style = {
+        .layer_id = span->layer,
+        .color = span->color,
+        .font_size = span->font_size,
+        .base_size = font->ops->get_base_size(font),
+        .char_spacing = span->char_spacing,
+        .baseline_y = span->y,
+    };
+    return emit_shaped_glyphs(layer, font, slot, run_codepoints, run_count, &style, cursor_x_ptr);
+}
+
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+/* Map a codepoint to the bundled TTF that shapes its script. NULL for scripts
+ * we do not shape — the grid renders those per-codepoint as before. */
+static const char *shaping_font_file_for_codepoint(uint32_t codepoint)
+{
+    if ((codepoint >= 0x0600 && codepoint <= 0x06FF) ||
+        (codepoint >= 0x0750 && codepoint <= 0x077F) ||
+        (codepoint >= 0x08A0 && codepoint <= 0x08FF) ||
+        (codepoint >= 0xFB50 && codepoint <= 0xFDFF) ||
+        (codepoint >= 0xFE70 && codepoint <= 0xFEFF)) {
+        return "NotoNaskhArabic-Regular.ttf";
+    }
+    if (codepoint >= 0x0700 && codepoint <= 0x074F) {
+        return "NotoSansSyriac-Regular.ttf";
+    }
+    if (codepoint >= 0x0900 && codepoint <= 0x097F) {
+        return "NotoSansDevanagari-Regular.ttf";
+    }
+    if (codepoint >= 0x0980 && codepoint <= 0x09FF) {
+        return "NotoSansBengali-Regular.ttf";
+    }
+    if (codepoint >= 0x0A00 && codepoint <= 0x0A7F) {
+        return "NotoSansGurmukhi-Regular.ttf";
+    }
+    if (codepoint >= 0x0A80 && codepoint <= 0x0AFF) {
+        return "NotoSansGujarati-Regular.ttf";
+    }
+    if (codepoint >= 0x0B00 && codepoint <= 0x0B7F) {
+        return "NotoSansOriya-Regular.ttf";
+    }
+    if (codepoint >= 0x0B80 && codepoint <= 0x0BFF) {
+        return "NotoSansTamil-Regular.ttf";
+    }
+    if (codepoint >= 0x0C00 && codepoint <= 0x0C7F) {
+        return "NotoSansTelugu-Regular.ttf";
+    }
+    if (codepoint >= 0x0C80 && codepoint <= 0x0CFF) {
+        return "NotoSansKannada-Regular.ttf";
+    }
+    if (codepoint >= 0x0D00 && codepoint <= 0x0D7F) {
+        return "NotoSansMalayalam-Regular.ttf";
+    }
+    if (codepoint >= 0x0D80 && codepoint <= 0x0DFF) {
+        return "NotoSansSinhala-Regular.ttf";
+    }
+    if (codepoint >= 0x0E00 && codepoint <= 0x0E7F) {
+        return "NotoSansThai-Regular.ttf";
+    }
+    if (codepoint >= 0x0E80 && codepoint <= 0x0EFF) {
+        return "NotoSansLao-Regular.ttf";
+    }
+    if (codepoint >= 0x1000 && codepoint <= 0x109F) {
+        return "NotoSansMyanmar-Regular.ttf";
+    }
+    if (codepoint >= 0x1780 && codepoint <= 0x17FF) {
+        return "NotoSansKhmer-Regular.ttf";
+    }
+    return NULL;
+}
+
+/* Load (or return the cached) raster shaping face for the bundled TTF named
+ * `file`. Returns NULL when the font is not staged, the shaper is unavailable,
+ * or the layer's font slots are exhausted. Loaded faces persist across frames
+ * and are installed into a font slot, so the dispatcher/binder pick them up on
+ * the frame's rebuild. */
+static struct sdf_shaping_face *sdf_face_load_or_get(struct yetty_yvterm_sdf_layer *layer,
+                                                     const char *file)
+{
+    for (uint32_t i = 0; i < layer->shaping_face_count; i++) {
+        if (strcmp(layer->shaping_faces[i].file, file) == 0) {
+            return layer->shaping_faces[i].font ? &layer->shaping_faces[i] : NULL;
+        }
+    }
+    if (layer->shaping_face_count >= YVTERM_SDF_MAX_SHAPING_FACES || !layer->fonts_dir[0] ||
+        layer->next_font_slot >= YETTY_YRENDER_RS_MAX_CHILDREN - 1u) {
+        return NULL;
+    }
+
+    struct sdf_shaping_face *face = &layer->shaping_faces[layer->shaping_face_count++];
+    snprintf(face->file, sizeof(face->file), "%s", file);
+    face->font = NULL;
+    face->attempted = 1;
+
+    char ttf_path[1024];
+    snprintf(ttf_path, sizeof(ttf_path), "%s/%s", layer->fonts_dir, file);
+    if (!yetty_yplatform_file_exists(ttf_path)) {
+        ydebug("sdf-layer: shaping font not staged: %s", ttf_path);
+        return NULL;
+    }
+    char shader_path[1024];
+    snprintf(shader_path, sizeof(shader_path), "%s/raster-font.wgsl", layer->shaders_dir);
+
+    /* Each shaping face becomes a child resource set of this layer's binder
+     * tree, so it needs a namespace distinct from every other face (and from
+     * the MSDF grid fonts). The font slot it will occupy is unique per layer. */
+    char face_namespace[32];
+    snprintf(face_namespace, sizeof(face_namespace), "shape_slot%u", layer->next_font_slot);
+
+    struct yetty_font_font_result font_res =
+        yetty_yfont_raster_font_create_from_file(ttf_path, shader_path, 48.0f, face_namespace);
+    if (YETTY_IS_ERR(font_res)) {
+        ydebug("sdf-layer: shaping face load failed (%s): %s", file, font_res.error.msg);
+        yetty_ycore_error_destroy(font_res.error);
+        return NULL;
+    }
+    if (!font_res.value->ops->shape_run || !font_res.value->ops->get_glyph_index_by_gid) {
+        font_res.value->ops->destroy(font_res.value);
+        return NULL; /* no shaper in this build — grid keeps the run */
+    }
+
+    uint32_t slot = layer->next_font_slot;
+    struct yetty_ycore_void_result set_res = sdf_set_font(layer, slot, font_res.value);
+    if (YETTY_IS_ERR(set_res)) {
+        yetty_ycore_error_destroy(set_res.error);
+        font_res.value->ops->destroy(font_res.value);
+        return NULL;
+    }
+    layer->next_font_slot = slot + 1u;
+    face->font = font_res.value;
+    face->slot = slot;
+    ydebug("sdf-layer: installed shaping face %s -> slot %u", file, slot);
+    return face;
+}
+
+/* Get (loading on first use) the raster shaping face for a complex-script run
+ * beginning with `codepoint`. NULL when the script is not shaped. */
+static struct sdf_shaping_face *sdf_shaping_face_for(struct yetty_yvterm_sdf_layer *layer,
+                                                     uint32_t codepoint)
+{
+    const char *file = shaping_font_file_for_codepoint(codepoint);
+    if (!file) {
+        return NULL;
+    }
+    return sdf_face_load_or_get(layer, file);
+}
+
+/* The bundled programming-ligature face (Fira Code), loaded on the first
+ * ligature seen. Staged unconditionally in assets/fonts, so it is present in
+ * any build that defines YETTY_ENABLE_LIB_HARFBUZZ. */
+static struct sdf_shaping_face *sdf_ligature_face(struct yetty_yvterm_sdf_layer *layer)
+{
+    return sdf_face_load_or_get(layer, "FiraCode-Regular.ttf");
+}
+
+/* Scan one terminal row's cells for complex-script runs and emit shaped glyphs
+ * for each over the cells' positions. The grid suppresses those cells' glyphs
+ * (vterm_pack_line), so this is the only glyph drawn there. Called per window
+ * row during Pass 2, so cur_rolling_row already anchors the row for scroll. */
+static struct yetty_ycore_void_result shape_row_cells(struct yetty_yvterm_sdf_layer *layer,
+                                                      struct yetty_yclass_object *grid_obj,
+                                                      uint32_t slot, float cell_width,
+                                                      float cell_height, uint32_t cols)
+{
+    struct yetty_yvterm_text_cell_const_ptr_result cells_res =
+        yetty_yvterm_grid_slot_cells(grid_obj, slot);
+    if (YETTY_IS_ERR(cells_res)) {
+        yetty_ycore_error_destroy(cells_res.error);
         return YETTY_OK_VOID();
     }
-    uint32_t glyph_count = shape_res.value;
-
-    float cursor_x = *cursor_x_ptr;
-    for (uint32_t gi = 0; gi < glyph_count; gi++) {
-        struct uint32_result slot_res = font->ops->get_glyph_index_by_gid(font, shaped[gi].gid);
-        if (YETTY_IS_ERR(slot_res)) {
-            yetty_ycore_error_destroy(slot_res.error);
-            cursor_x += shaped[gi].x_advance * scale + span->char_spacing;
-            continue;
-        }
-        uint32_t glyph_index = slot_res.value;
-
-        struct yetty_yrender_gpu_resource_set_result fresh_rs_result =
-            font->ops->get_gpu_resource_set(font);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, fresh_rs_result, "sdf-layer: shaped run font rs");
-        const struct yetty_yrender_gpu_resource_set *fresh_rs = fresh_rs_result.value;
-        if (fresh_rs->buffer_count == 0 || !fresh_rs->buffers[0].data) {
-            return YETTY_ERR(yetty_ycore_void, "sdf-layer: shaped run font has no glyph metadata");
-        }
-        const float *meta = (const float *)fresh_rs->buffers[0].data;
-        uint32_t meta_count = (uint32_t)(fresh_rs->buffers[0].size / (6u * sizeof(float)));
-        if (glyph_index >= meta_count) {
-            cursor_x += shaped[gi].x_advance * scale + span->char_spacing;
-            continue;
-        }
-        const float *glyph_meta = meta + glyph_index * 6u;
-        float size_x = glyph_meta[0];
-        float size_y = glyph_meta[1];
-        float bearing_x = glyph_meta[2];
-        float bearing_y = glyph_meta[3];
-
-        if (size_x > 0.0f && size_y > 0.0f) {
-            float glyph_x = cursor_x + (bearing_x + shaped[gi].x_offset) * scale;
-            float glyph_y = span->y - (bearing_y + shaped[gi].y_offset) * scale;
-
-            uint32_t glyph_record[7];
-            glyph_record[0] = YVTERM_SDF_GLYPH_TYPE;
-            glyph_record[1] = span->layer;
-            memcpy(&glyph_record[2], &glyph_x, sizeof(float));
-            memcpy(&glyph_record[3], &glyph_y, sizeof(float));
-            memcpy(&glyph_record[4], &span->font_size, sizeof(float));
-            glyph_record[5] = (glyph_index & 0xFFFFu) | ((slot + 1u) << 16);
-            glyph_record[6] = span->color;
-
-            struct yetty_ycore_void_result ir = index_record(layer, glyph_record, 7u);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, ir, "sdf-layer: shaped run index glyph");
-        }
-
-        cursor_x += shaped[gi].x_advance * scale + span->char_spacing;
+    const struct yetty_yvterm_text_cell *cells = cells_res.value;
+    if (!cells) {
+        return YETTY_OK_VOID();
     }
-    *cursor_x_ptr = cursor_x;
+
+    uint32_t col = 0;
+    while (col < cols) {
+        uint32_t codepoint = cells[col].codepoint;
+        enum yetty_yfont_shaping_script script =
+            codepoint ? yetty_yfont_shaping_script_for_codepoint(codepoint)
+                      : YETTY_YFONT_SHAPING_NONE;
+        if (script == YETTY_YFONT_SHAPING_NONE) {
+            col++;
+            continue;
+        }
+
+        struct sdf_shaping_face *face = sdf_shaping_face_for(layer, codepoint);
+
+        /* Gather the maximal same-script run's codepoints (base + marks). */
+        enum { CELL_RUN_MAX = 256 };
+        uint32_t run_codepoints[CELL_RUN_MAX];
+        size_t run_count = 0;
+        uint32_t run_start = col;
+        while (col < cols && run_count < CELL_RUN_MAX) {
+            uint32_t cell_cp = cells[col].codepoint;
+            if (!cell_cp || yetty_yfont_shaping_script_for_codepoint(cell_cp) != script) {
+                break;
+            }
+            if (cells[col].width == 0) {
+                col++; /* spill cell of a wide glyph — no own codepoint */
+                continue;
+            }
+            run_codepoints[run_count++] = cell_cp;
+            for (uint8_t m = 0; m < cells[col].mark_count && run_count < CELL_RUN_MAX; m++) {
+                run_codepoints[run_count++] = cells[col].marks[m];
+            }
+            col++;
+        }
+
+        if (!face || run_count == 0) {
+            continue; /* no face → grid still draws the run (not suppressed) */
+        }
+
+        struct sdf_shaped_run_style style = {
+            .layer_id = 0u,
+            .color = 0xFFFFFFFFu, /* white; per-cell fg colour is a follow-up */
+            .font_size = cell_height,
+            .base_size = face->font->ops->get_base_size(face->font),
+            .char_spacing = 0.0f,
+            .baseline_y = cell_height * 0.80f,
+        };
+        float cursor_x = (float)run_start * cell_width;
+        struct yetty_ycore_void_result er = emit_shaped_glyphs(
+            layer, face->font, face->slot, run_codepoints, run_count, &style, &cursor_x);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "sdf-layer: shape row cells");
+    }
     return YETTY_OK_VOID();
 }
+
+/* Scan one terminal row's cells for programming-ligature spans (=>, !=, ===)
+ * and draw each as a shaped glyph over its cells with the Fira Code face. The
+ * grid suppresses the same spans (vterm_pack_line calls the identical
+ * yetty_yvterm_ligature_run_length), so this is the only glyph drawn there.
+ * Complex-script cells never match the ASCII-only ligature table, so the two
+ * shaping passes cover disjoint cells. */
+static struct yetty_ycore_void_result shape_row_ligatures(struct yetty_yvterm_sdf_layer *layer,
+                                                          struct yetty_yclass_object *grid_obj,
+                                                          uint32_t slot, float cell_width,
+                                                          float cell_height, uint32_t cols)
+{
+    struct yetty_yvterm_text_cell_const_ptr_result cells_res =
+        yetty_yvterm_grid_slot_cells(grid_obj, slot);
+    if (YETTY_IS_ERR(cells_res)) {
+        yetty_ycore_error_destroy(cells_res.error);
+        return YETTY_OK_VOID();
+    }
+    const struct yetty_yvterm_text_cell *cells = cells_res.value;
+    if (!cells) {
+        return YETTY_OK_VOID();
+    }
+
+    struct sdf_shaping_face *face = NULL; /* loaded lazily on the first ligature */
+
+    uint32_t col = 0;
+    while (col < cols) {
+        size_t ligature_len = yetty_yvterm_ligature_run_length(cells, cols, col);
+        if (ligature_len < 2u) {
+            col++;
+            continue;
+        }
+
+        if (!face) {
+            face = sdf_ligature_face(layer);
+        }
+        if (!face) {
+            /* Ligature font unavailable this frame — the grid already suppressed
+             * these cells, so nothing more to try; skip past the span. */
+            col += (uint32_t)ligature_len;
+            continue;
+        }
+
+        uint32_t run_codepoints[YETTY_YFONT_LIGATURE_MAX_LEN];
+        for (size_t offset = 0; offset < ligature_len; offset++) {
+            run_codepoints[offset] = cells[col + offset].codepoint;
+        }
+
+        /* Scale the monospace ligature face so one character advance equals the
+         * grid cell width: the ligature's own advance then spans exactly its
+         * cells, and any non-ligated fallback glyphs stay cell-aligned too. */
+        float base_size = face->font->ops->get_base_size(face->font);
+        float advance_base = base_size * 0.6f;
+        struct float_result adv_res =
+            face->font->ops->get_advance(face->font, (uint32_t)'M', base_size);
+        if (YETTY_IS_OK(adv_res) && adv_res.value > 0.0f) {
+            advance_base = adv_res.value;
+        }
+        float font_size = cell_width * base_size / advance_base;
+
+        struct sdf_shaped_run_style style = {
+            .layer_id = 0u,
+            .color = (cells[col].fg & 0x00FFFFFFu) | 0xFF000000u,
+            .font_size = font_size,
+            .base_size = base_size,
+            .char_spacing = 0.0f,
+            .baseline_y = cell_height * 0.75f,
+        };
+        float cursor_x = (float)col * cell_width;
+        struct yetty_ycore_void_result er = emit_shaped_glyphs(
+            layer, face->font, face->slot, run_codepoints, ligature_len, &style, &cursor_x);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "sdf-layer: shape row ligatures");
+
+        col += (uint32_t)ligature_len;
+    }
+    return YETTY_OK_VOID();
+}
+#endif /* YETTY_ENABLE_LIB_HARFBUZZ */
 
 /* Expand a TEXT_DRAWABLE_LIST into one GLYPH record per codepoint, anchored at
  * cur_rolling_row, and index each. Mirrors ygrid's expand_text_span. */
@@ -861,7 +1210,7 @@ static struct yetty_ycore_void_result expand_text_span(
         if (script != YETTY_YFONT_SHAPING_NONE && font->ops->shape_run &&
             font->ops->get_glyph_index_by_gid) {
             struct yetty_ycore_void_result shaped_res =
-                expand_shaped_run(layer, span, font, slot, scale, script, &cursor, end, &cursor_x);
+                expand_shaped_run(layer, span, font, slot, script, &cursor, end, &cursor_x);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, shaped_res, "sdf-layer: shaped run");
             continue;
         }
@@ -1063,6 +1412,8 @@ struct yetty_yvterm_sdf_layer_ptr_result yetty_yvterm_sdf_layer_create(
      * charts, diagrams, …) expand into glyphs instead of being dropped. */
     const char *fonts_dir =
         context->runtime->config->ops->get_string(context->runtime->config, "paths/fonts", "");
+    /* Remember the TTF dir so complex-script shaping faces load on demand. */
+    snprintf(layer->fonts_dir, sizeof(layer->fonts_dir), "%s", fonts_dir ? fonts_dir : "");
     struct yetty_ycore_void_result df = sdf_install_default_font(layer, fonts_dir);
     if (YETTY_IS_ERR(df)) {
         ydebug("sdf-layer: default font install failed: %s", df.error.msg);
@@ -1101,6 +1452,14 @@ void yetty_yvterm_sdf_layer_destroy(struct yetty_yvterm_sdf_layer *layer)
      * fonts' resource sets as children. */
     if (layer->font_cache) {
         yetty_yfont_cache_destroy(layer->font_cache);
+    }
+    /* Complex-script shaping faces are layer-owned (created directly, not via
+     * the cache). Free them after the binder that referenced their rs. Count is
+     * 0 in a build without the shaper, so this is a no-op there. */
+    for (uint32_t i = 0; i < layer->shaping_face_count; i++) {
+        if (layer->shaping_faces[i].font) {
+            layer->shaping_faces[i].font->ops->destroy(layer->shaping_faces[i].font);
+        }
     }
     size_t cell_count = (size_t)layer->cell_cols * (size_t)layer->cell_rows;
     for (size_t i = 0; i < cell_count; ++i) {
@@ -1196,9 +1555,6 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
             yetty_yvterm_grid_slot_primitive_count(grid_obj, slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_count_res, "sdf-layer: slot primitive count");
         uint32_t prim_count = prim_count_res.value;
-        if (prim_count == 0) {
-            continue;
-        }
         struct yetty_ycore_uint32_result span_res = yetty_yvterm_grid_slot_span(grid_obj, slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, span_res, "sdf-layer: slot span");
         uint32_t span = span_res.value;
@@ -1215,6 +1571,18 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
             struct yetty_ycore_void_result dr = dispatch_record(layer, words, word_count);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "sdf-layer: dispatch_record");
         }
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+        /* Shape any complex-script runs in this row's terminal cells. The grid
+         * suppresses those cells' own glyphs, so this draws them shaped. */
+        struct yetty_ycore_void_result shape_res =
+            shape_row_cells(layer, grid_obj, slot, cell_width, cell_height, cols);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, shape_res, "sdf-layer: shape row cells");
+        /* Draw programming ligatures (=>, !=, ===) for this row's cells; the
+         * grid suppresses the same spans (identical ligature-run decision). */
+        struct yetty_ycore_void_result lig_res =
+            shape_row_ligatures(layer, grid_obj, slot, cell_width, cell_height, cols);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, lig_res, "sdf-layer: shape row ligatures");
+#endif
     }
     ydebug("sdf-layer: render prim_count=%u font_count=%u rows=%u cols=%u", layer->prim_count,
            layer->font_count, rows, cols);
