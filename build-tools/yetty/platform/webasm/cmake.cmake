@@ -101,7 +101,7 @@ target_compile_definitions(yetty PRIVATE
 
 target_link_options(yetty PRIVATE
     -sUSE_GLFW=3
-    --use-port=emdawnwebgpu
+    --use-port=${YETTY_EMDAWNWEBGPU_PORT}
     -sASYNCIFY
     -sASYNCIFY_STACK_SIZE=65536
     # yfs lazy assets (docs/yfs.md phase 2): the preload shim wraps the
@@ -147,7 +147,9 @@ target_link_options(yetty PRIVATE
 # download of trees a session rarely touches. The subtrees are added
 # to the stage-yetty-yfs.py invocation below when the feature is on.
 
-target_compile_options(yetty PRIVATE --use-port=emdawnwebgpu -fexceptions)
+# --use-port for emdawnwebgpu is inherited at compile from the webgpu INTERFACE
+# target; repeating it here would register the external port twice.
+target_compile_options(yetty PRIVATE -fexceptions)
 target_link_options(yetty PRIVATE -fexceptions)
 set_target_properties(yetty PROPERTIES SUFFIX ".js")
 
@@ -254,11 +256,13 @@ target_compile_definitions(ygreeter PRIVATE
     YETTY_SHADERS_DIR="/assets/shaders"
 )
 
-target_compile_options(ygreeter PRIVATE --use-port=emdawnwebgpu -fexceptions)
+# --use-port inherited at compile from the webgpu INTERFACE target (avoids the
+# duplicate-port-name error from registering the external port twice).
+target_compile_options(ygreeter PRIVATE -fexceptions)
 
 target_link_options(ygreeter PRIVATE
     -sUSE_GLFW=3
-    --use-port=emdawnwebgpu
+    --use-port=${YETTY_EMDAWNWEBGPU_PORT}
     -sASYNCIFY
     -sASYNCIFY_STACK_SIZE=65536
     -sSTACK_SIZE=1048576
