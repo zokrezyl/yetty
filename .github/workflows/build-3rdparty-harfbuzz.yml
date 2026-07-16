@@ -1,0 +1,119 @@
+name: Build 3rdparty — harfbuzz
+
+on:
+  push:
+    tags: ['lib-harfbuzz-*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag:     ${{ steps.read.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          set -euo pipefail
+          V="$(tr -d '[:space:]' < build-tools/3rdparty/harfbuzz/version)"
+          [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            REF="${GITHUB_REF#refs/tags/}"
+            EXPECT="lib-harfbuzz-$V"
+            if [ "$REF" != "$EXPECT" ]; then
+              echo "tag $REF does not match version file ($EXPECT)" >&2
+              exit 1
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=lib-harfbuzz-$V" >> "$GITHUB_OUTPUT"
+
+  build-linux-cross:
+    needs: resolve
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux-x86_64, linux-aarch64, linux-riscv64, android-arm64-v8a, android-x86_64, webasm, webasm-mt]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with: { extra-conf: "experimental-features = nix-command flakes" }
+      - run: mkdir -p out
+      - run: TARGET_PLATFORM="${{ matrix.target }}" OUTPUT_DIR="$PWD/out" ./build-tools/3rdparty/harfbuzz/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/harfbuzz-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-darwin-arm64:
+    needs: resolve
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix: { target: [macos-arm64, ios-arm64, tvos-arm64] }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with: { extra-conf: "experimental-features = nix-command flakes" }
+      - run: mkdir -p out
+      - run: TARGET_PLATFORM="${{ matrix.target }}" OUTPUT_DIR="$PWD/out" ./build-tools/3rdparty/harfbuzz/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/harfbuzz-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-darwin-x86_64:
+    needs: resolve
+    runs-on: macos-15-intel
+    strategy:
+      fail-fast: false
+      matrix: { target: [macos-x86_64, ios-x86_64, tvos-x86_64] }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with: { extra-conf: "experimental-features = nix-command flakes" }
+      - run: mkdir -p out
+      - run: TARGET_PLATFORM="${{ matrix.target }}" OUTPUT_DIR="$PWD/out" ./build-tools/3rdparty/harfbuzz/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/harfbuzz-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  # Windows: native MSVC under vcvarsall x64. Every lib that links into
+  # yetty.exe needs MSVC ABI.
+  build-windows:
+    needs: resolve
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - windows-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build harfbuzz for ${{ matrix.target }}
+        shell: cmd
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VS_INSTALL_DIR=%%i"
+          if not defined VS_INSTALL_DIR (echo vswhere: no Visual Studio with the VC x64 toolchain found & exit /b 1)
+          call "%VS_INSTALL_DIR%\VC\Auxiliary\Build\vcvarsall.bat" x64
+          if errorlevel 1 exit /b 1
+
+          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/harfbuzz/build.sh"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/harfbuzz-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
