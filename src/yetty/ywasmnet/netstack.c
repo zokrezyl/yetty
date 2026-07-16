@@ -142,7 +142,8 @@ static EM_BOOL netstack_on_message(int event_type, const EmscriptenWebSocketMess
     }
     struct pbuf *frame = pbuf_alloc(PBUF_RAW, (u16_t)event->numBytes, PBUF_POOL);
     if (!frame) {
-        ywarn("ywasmnet: out of pbufs, dropping inbound frame (%u bytes)", (unsigned)event->numBytes);
+        ywarn("ywasmnet: out of pbufs, dropping inbound frame (%u bytes)",
+              (unsigned)event->numBytes);
         return EM_TRUE;
     }
     pbuf_take(frame, event->data, (u16_t)event->numBytes);
@@ -169,7 +170,8 @@ static EM_BOOL netstack_on_close(int event_type, const EmscriptenWebSocketCloseE
 {
     (void)event_type;
     struct yetty_ywasmnet_netstack *netstack = user_data;
-    yinfo("ywasmnet: relay disconnected (code=%d clean=%d)", (int)event->code, (int)event->wasClean);
+    yinfo("ywasmnet: relay disconnected (code=%d clean=%d)", (int)event->code,
+          (int)event->wasClean);
     netstack->link_up = 0;
     netif_set_link_down(&netstack->netif);
     return EM_TRUE;
@@ -192,7 +194,8 @@ struct yetty_ywasmnet_netstack_ptr_result yetty_ywasmnet_netstack_create(const c
         return YETTY_ERR(yetty_ywasmnet_netstack_ptr, "ywasmnet: relay url required");
     }
     if (!emscripten_websocket_is_supported()) {
-        return YETTY_ERR(yetty_ywasmnet_netstack_ptr, "ywasmnet: WebSocket unsupported in this browser");
+        return YETTY_ERR(yetty_ywasmnet_netstack_ptr,
+                         "ywasmnet: WebSocket unsupported in this browser");
     }
 
     struct yetty_ywasmnet_netstack *netstack = calloc(1, sizeof(*netstack));

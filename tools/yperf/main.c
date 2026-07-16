@@ -213,8 +213,9 @@ static struct yetty_ycore_void_result perf_record_capture(char **record_argv, in
     struct stat st;
     if (stat(path_template, &st) != 0 || st.st_size == 0) {
         unlink(path_template);
-        return YETTY_ERR(yetty_ycore_void,
-                         "perf captured no data (try sudo, or sysctl kernel.perf_event_paranoid=1)");
+        return YETTY_ERR(
+            yetty_ycore_void,
+            "perf captured no data (try sudo, or sysctl kernel.perf_event_paranoid=1)");
     }
     char *path = strdup(path_template);
     if (!path) {
