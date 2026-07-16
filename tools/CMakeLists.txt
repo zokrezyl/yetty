@@ -94,6 +94,17 @@ if(YETTY_ENABLE_TOOL_YNET)
     add_subdirectory(ynet)
 endif()
 
+if(YETTY_ENABLE_TOOL_YDU)
+    add_subdirectory(ydu)
+endif()
+
+# yperf links the yetty_yflame static lib, which only exists when
+# FEATURE_YFLAME is ON — gate on both so a FEATURE-off build doesn't try to
+# link a non-existent target.
+if(YETTY_ENABLE_TOOL_YPERF AND YETTY_ENABLE_FEATURE_YFLAME)
+    add_subdirectory(yperf)
+endif()
+
 # ccc is POSIX-only (fork/execl child spawn, termios raw mode, poll,
 # ioctl): tvOS prohibits fork outright and Windows lacks the headers.
 # Linux-only for the moment — macOS likely works but is unverified.

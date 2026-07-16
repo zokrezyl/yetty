@@ -70,6 +70,29 @@ struct yetty_ycore_void_result yetty_yflame_reset(struct yetty_yclass_object *ob
 /* set_highlight: mark a node as hovered (-1 clears) for the next render. */
 struct yetty_ycore_void_result yetty_yflame_set_highlight(struct yetty_yclass_object *obj,
                                                           int32_t node_id);
+/* highlight_name: paint every frame whose name contains `name` (case-insensitive)
+ * magenta — drives both free-text search and the symbol-table cross-highlight.
+ * NULL / zero-length clears the highlight. */
+struct yetty_ycore_void_result yetty_yflame_highlight_name(struct yetty_yclass_object *obj,
+                                                           const char *name, size_t len);
+/* focus_name: zoom so the heaviest frame whose name exactly equals `name` fills
+ * the width. Used to jump the flame to a symbol picked in the table. */
+struct yetty_ycore_void_result yetty_yflame_focus_name(struct yetty_yclass_object *obj,
+                                                       const char *name, size_t len);
+/* set_baseline: load a second folded profile as a diff baseline; frames then
+ * colour by the delta of their sample fraction (red = grew, blue = shrank).
+ * NULL / zero-length clears diff mode. Call after parse(). */
+struct yetty_ycore_void_result yetty_yflame_set_baseline(struct yetty_yclass_object *obj,
+                                                         const char *folded, size_t len);
+/* node_name: borrowed name of the node with this id (valid until the next
+ * parse), or "" for an invalid id — used to build hover detail. */
+struct yetty_ycore_const_char_ptr_result yetty_yflame_node_name(struct yetty_yclass_object *obj,
+                                                                int32_t id);
+/* node_value: total samples passing through the node with this id (0 if bad). */
+struct yetty_ycore_uint64_result yetty_yflame_node_value(struct yetty_yclass_object *obj,
+                                                         int32_t id);
+/* root_value: total samples in the whole profile — the percent denominator. */
+struct yetty_ycore_uint64_result yetty_yflame_root_value(struct yetty_yclass_object *obj);
 /* destroy: free the tree, the node index, and the object. */
 struct yetty_ycore_void_result yetty_yflame_destroy(struct yetty_yclass_object *obj);
 
@@ -88,6 +111,18 @@ typedef struct yetty_ycore_void_result (*yetty_yflame_focus_parent_fn)(
 typedef struct yetty_ycore_void_result (*yetty_yflame_reset_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yflame_set_highlight_fn)(
     struct yetty_yclass_object *, int32_t);
+typedef struct yetty_ycore_void_result (*yetty_yflame_highlight_name_fn)(
+    struct yetty_yclass_object *, const char *, size_t);
+typedef struct yetty_ycore_void_result (*yetty_yflame_focus_name_fn)(struct yetty_yclass_object *,
+                                                                     const char *, size_t);
+typedef struct yetty_ycore_void_result (*yetty_yflame_set_baseline_fn)(struct yetty_yclass_object *,
+                                                                       const char *, size_t);
+typedef struct yetty_ycore_const_char_ptr_result (*yetty_yflame_node_name_fn)(
+    struct yetty_yclass_object *, int32_t);
+typedef struct yetty_ycore_uint64_result (*yetty_yflame_node_value_fn)(struct yetty_yclass_object *,
+                                                                       int32_t);
+typedef struct yetty_ycore_uint64_result (*yetty_yflame_root_value_fn)(
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yflame_destroy_fn)(struct yetty_yclass_object *);
 
 struct yetty_yclass_object_ptr_result yetty_yflame_flame_create(struct yetty_yclass_ctx *ctx);

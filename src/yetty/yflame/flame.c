@@ -80,6 +80,10 @@ struct yflame_frame {
 
     uint32_t id; /* preorder index; the public node handle */
 
+    /* Diff baseline: samples for this exact root→node path in the baseline
+     * profile (0 if the path is absent there, or no baseline is loaded). */
+    uint64_t baseline_value;
+
     /* Filled in by the layout pass (relative to the current focus). */
     float x_start;
     float x_end;
@@ -106,6 +110,15 @@ struct YETTY_ANNOTATE("class@yflame:flame")
     /* Interaction state. */
     int32_t focus_id;     /* subtree shown full-width; 0 = root */
     int32_t highlight_id; /* hovered node, or -1 */
+
+    /* Search / cross-highlight: every frame whose name contains this substring
+     * (case-insensitive) is painted magenta. NULL = nothing highlighted. */
+    char *highlight_name;
+
+    /* Diff mode: when set, frames colour by the delta of their sample fraction
+     * against a baseline profile (loaded via set_baseline). */
+    int has_baseline;
+    uint64_t baseline_total; /* root sample count of the baseline profile */
 
     /* Last layout (of the focus subtree). */
     uint32_t max_depth;
@@ -256,14 +269,17 @@ static struct yetty_ycore_void_result parse_folded(const char *input, size_t len
             continue;
         }
 
-        size_t stack_end = space - 1;
+        /* frames_end is the index of the single space separating the stack from
+         * its count — the exclusive end of the frames region. Treating it as a
+         * delimiter (like ';') keeps the trailing space out of the leaf frame's
+         * name, so exact-name matches (focus_name) work on leaves too. */
+        size_t frames_end = space - 1;
         root->value += count;
         struct yflame_frame *node = root;
         size_t frame_start = line_start;
-        for (size_t i = line_start; i <= stack_end; i++) {
-            int at_end = (i == stack_end);
-            if (at_end || input[i] == ';') {
-                size_t frame_len = (at_end ? i + 1 : i) - frame_start;
+        for (size_t i = line_start; i <= frames_end; i++) {
+            if (i == frames_end || input[i] == ';') {
+                size_t frame_len = i - frame_start;
                 if (frame_len > 0) {
                     struct yflame_frame *child = frame_child(node, input + frame_start, frame_len);
                     if (!child) {
@@ -397,6 +413,105 @@ static uint32_t frame_color(const char *name, uint64_t value, uint64_t root_valu
     return color_abgr((uint32_t)r, (uint32_t)g, (uint32_t)b);
 }
 
+/* Differential colour for diff mode: red where the frame's sample fraction
+ * grew vs the baseline, blue where it shrank, neutral grey when unchanged.
+ * `total` / `base_total` are the whole-profile sample counts of the current
+ * and baseline captures, so equal-weight frames land on grey regardless of
+ * absolute sample counts. */
+static uint32_t frame_color_diff(uint64_t value, uint64_t total, uint64_t base_value,
+                                 uint64_t base_total)
+{
+    double cur = total ? (double)value / (double)total : 0.0;
+    double base = base_total ? (double)base_value / (double)base_total : 0.0;
+    double delta = cur - base;
+    double denom = cur > base ? cur : base;
+    double norm = denom > 0.0 ? delta / denom : 0.0; /* [-1, 1] */
+    if (norm > 1.0) {
+        norm = 1.0;
+    }
+    if (norm < -1.0) {
+        norm = -1.0;
+    }
+    float neutral_r = 118.0f, neutral_g = 128.0f, neutral_b = 128.0f;
+    if (norm >= 0.0) {
+        float t = (float)norm; /* toward red #D6463D (214,70,61) */
+        return color_abgr((uint32_t)(neutral_r + t * (214.0f - neutral_r)),
+                          (uint32_t)(neutral_g + t * (70.0f - neutral_g)),
+                          (uint32_t)(neutral_b + t * (61.0f - neutral_b)));
+    }
+    float t = (float)(-norm); /* toward blue #3D82D6 (61,130,214) */
+    return color_abgr((uint32_t)(neutral_r + t * (61.0f - neutral_r)),
+                      (uint32_t)(neutral_g + t * (130.0f - neutral_g)),
+                      (uint32_t)(neutral_b + t * (214.0f - neutral_b)));
+}
+
+static char ascii_lower(char c)
+{
+    return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+}
+
+/* Case-insensitive: does `name` contain `needle` anywhere? */
+static int name_matches(const char *name, const char *needle)
+{
+    if (!needle || !needle[0]) {
+        return 0;
+    }
+    size_t needle_len = strlen(needle);
+    for (const char *cursor = name; *cursor; cursor++) {
+        size_t i = 0;
+        while (i < needle_len && cursor[i] && ascii_lower(cursor[i]) == ascii_lower(needle[i])) {
+            i++;
+        }
+        if (i == needle_len) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Exact-name child lookup (non-creating; children are name-sorted). */
+static const struct yflame_frame *frame_lookup_child(const struct yflame_frame *parent,
+                                                     const char *name)
+{
+    for (size_t i = 0; i < parent->child_count; i++) {
+        if (strcmp(parent->children[i]->name, name) == 0) {
+            return parent->children[i];
+        }
+    }
+    return NULL;
+}
+
+/* Copy baseline sample weight into the current tree, matching path by path. */
+static void baseline_apply(struct yflame_frame *cur, const struct yflame_frame *base)
+{
+    cur->baseline_value = base ? base->value : 0u;
+    for (size_t i = 0; i < cur->child_count; i++) {
+        const struct yflame_frame *base_child =
+            base ? frame_lookup_child(base, cur->children[i]->name) : NULL;
+        baseline_apply(cur->children[i], base_child);
+    }
+}
+
+/* Heaviest frame whose name exactly equals `name`, anywhere in the tree. */
+static void frame_find_heaviest(struct yflame_frame *node, const char *name,
+                                struct yflame_frame **best)
+{
+    if (strcmp(node->name, name) == 0 && (!*best || node->value > (*best)->value)) {
+        *best = node;
+    }
+    for (size_t i = 0; i < node->child_count; i++) {
+        frame_find_heaviest(node->children[i], name, best);
+    }
+}
+
+static struct yflame_frame *flame_node_by_id(struct yetty_yflame_flame *flame, int32_t id)
+{
+    if (!flame->nodes || id < 0 || (uint32_t)id >= flame->node_count) {
+        return NULL;
+    }
+    return flame->nodes[id];
+}
+
 /* Back `len` off any trailing UTF-8 continuation byte. */
 static size_t utf8_clamp(const char *text, size_t len)
 {
@@ -445,13 +560,26 @@ static struct yetty_ycore_void_result emit(struct yetty_ydraw_drawable_list *buf
             .half_height = half_h,
             .corner_radius = 2.0f,
         };
-        /* Hovered box gets a bright-mint outline (BRAND_ACCENT_BRIGHT). */
-        uint32_t stroke_color = highlighted ? 0xFFA5C574u : 0u;
-        float stroke_width = highlighted ? 2.0f : 0.0f;
+        /* Fill: a search / cross-highlight match wins (magenta), else the diff
+         * delta colour in baseline mode, else the mint→red hotness shade. */
         uint64_t root_value = flame->root ? flame->root->value : node->value;
+        uint32_t fill_color;
+        int matched = flame->highlight_name && name_matches(node->name, flame->highlight_name);
+        if (matched) {
+            fill_color = color_abgr(214, 70, 190); /* magenta search highlight */
+        } else if (flame->has_baseline) {
+            fill_color = frame_color_diff(node->value, root_value, node->baseline_value,
+                                          flame->baseline_total);
+        } else {
+            fill_color = frame_color(node->name, node->value, root_value);
+        }
+        /* Hovered box gets a bright-mint outline (BRAND_ACCENT_BRIGHT); a search
+         * match without hover still gets a thin magenta outline so lone matches
+         * are unmistakable. */
+        uint32_t stroke_color = highlighted ? 0xFFA5C574u : (matched ? 0xFFBE46D6u : 0u);
+        float stroke_width = highlighted ? 2.0f : (matched ? 1.5f : 0.0f);
         struct yetty_ycore_void_result box_result = yetty_ydraw_drawable_list_add_cmd_add_box(
-            buf, /*id=*/0, /*z_order=*/(*z)++, frame_color(node->name, node->value, root_value),
-            stroke_color, stroke_width, &geom);
+            buf, /*id=*/0, /*z_order=*/(*z)++, fill_color, stroke_color, stroke_width, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, box_result, "yflame: add box");
 
         if (labels) {
@@ -640,6 +768,11 @@ static struct yetty_ycore_void_result flame_parse(struct yetty_yclass_object *ob
     flame->node_count = node_count;
     flame->focus_id = 0;
     flame->highlight_id = -1;
+    /* A fresh tree invalidates the old highlight substring and diff baseline. */
+    free(flame->highlight_name);
+    flame->highlight_name = NULL;
+    flame->has_baseline = 0;
+    flame->baseline_total = 0;
     return YETTY_OK_VOID();
 }
 
@@ -801,6 +934,137 @@ static struct yetty_ycore_void_result flame_set_highlight(struct yetty_yclass_ob
     return YETTY_OK_VOID();
 }
 
+/* highlight_name: paint every frame whose name contains `name` (case-insensitive)
+ * magenta — drives both free-text search and the symbol-table cross-highlight.
+ * NULL / zero-length clears the highlight. */
+YETTY_ANNOTATE("virtual@yflame:flame:highlight_name")
+YETTY_ANNOTATE("local@yflame:highlight_name")
+static struct yetty_ycore_void_result flame_highlight_name(struct yetty_yclass_object *obj,
+                                                           const char *name, size_t len)
+{
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame highlight_name: from_obj");
+    struct yetty_yflame_flame *flame = flame_r.value;
+    free(flame->highlight_name);
+    flame->highlight_name = NULL;
+    if (name && len > 0) {
+        char *copy = malloc(len + 1);
+        if (!copy) {
+            return YETTY_ERR(yetty_ycore_void, "yflame highlight_name: out of memory");
+        }
+        memcpy(copy, name, len);
+        copy[len] = '\0';
+        flame->highlight_name = copy;
+    }
+    return YETTY_OK_VOID();
+}
+
+/* focus_name: zoom so the heaviest frame whose name exactly equals `name` fills
+ * the width. Used to jump the flame to a symbol picked in the table. */
+YETTY_ANNOTATE("virtual@yflame:flame:focus_name")
+YETTY_ANNOTATE("local@yflame:focus_name")
+static struct yetty_ycore_void_result flame_focus_name(struct yetty_yclass_object *obj,
+                                                       const char *name, size_t len)
+{
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame focus_name: from_obj");
+    struct yetty_yflame_flame *flame = flame_r.value;
+    if (!flame->root || !name || len == 0) {
+        return YETTY_OK_VOID();
+    }
+    char stack_needle[256];
+    char *needle = stack_needle;
+    if (len + 1 > sizeof(stack_needle)) {
+        needle = malloc(len + 1);
+        if (!needle) {
+            return YETTY_ERR(yetty_ycore_void, "yflame focus_name: out of memory");
+        }
+    }
+    memcpy(needle, name, len);
+    needle[len] = '\0';
+    struct yflame_frame *best = NULL;
+    frame_find_heaviest(flame->root, needle, &best);
+    if (needle != stack_needle) {
+        free(needle);
+    }
+    if (best) {
+        flame->focus_id = (int32_t)best->id;
+    }
+    return YETTY_OK_VOID();
+}
+
+/* set_baseline: load a second folded profile as a diff baseline; frames then
+ * colour by the delta of their sample fraction (red = grew, blue = shrank).
+ * NULL / zero-length clears diff mode. Call after parse(). */
+YETTY_ANNOTATE("virtual@yflame:flame:set_baseline")
+YETTY_ANNOTATE("local@yflame:set_baseline")
+static struct yetty_ycore_void_result flame_set_baseline(struct yetty_yclass_object *obj,
+                                                         const char *folded, size_t len)
+{
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame set_baseline: from_obj");
+    struct yetty_yflame_flame *flame = flame_r.value;
+    if (!flame->root) {
+        return YETTY_ERR(yetty_ycore_void, "yflame set_baseline: nothing parsed");
+    }
+    if (!folded || len == 0) {
+        flame->has_baseline = 0;
+        flame->baseline_total = 0;
+        return YETTY_OK_VOID();
+    }
+    struct yflame_frame *base_root = frame_create("all", 3);
+    if (!base_root) {
+        return YETTY_ERR(yetty_ycore_void, "yflame set_baseline: out of memory");
+    }
+    struct yetty_ycore_void_result parsed = parse_folded(folded, len, base_root);
+    if (YETTY_IS_ERR(parsed)) {
+        frame_destroy(base_root);
+        return YETTY_ERR(yetty_ycore_void, "yflame set_baseline: parse baseline", parsed);
+    }
+    frame_sort(base_root);
+    baseline_apply(flame->root, base_root);
+    flame->baseline_total = base_root->value;
+    flame->has_baseline = 1;
+    frame_destroy(base_root);
+    return YETTY_OK_VOID();
+}
+
+/* node_name: borrowed name of the node with this id (valid until the next
+ * parse), or "" for an invalid id — used to build hover detail. */
+YETTY_ANNOTATE("virtual@yflame:flame:node_name")
+YETTY_ANNOTATE("local@yflame:node_name")
+static struct yetty_ycore_const_char_ptr_result flame_node_name(struct yetty_yclass_object *obj,
+                                                                int32_t id)
+{
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, flame_r, "yflame node_name: from_obj");
+    struct yflame_frame *node = flame_node_by_id(flame_r.value, id);
+    return YETTY_OK(yetty_ycore_const_char_ptr, node ? node->name : "");
+}
+
+/* node_value: total samples passing through the node with this id (0 if bad). */
+YETTY_ANNOTATE("virtual@yflame:flame:node_value")
+YETTY_ANNOTATE("local@yflame:node_value")
+static struct yetty_ycore_uint64_result flame_node_value(struct yetty_yclass_object *obj,
+                                                         int32_t id)
+{
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, flame_r, "yflame node_value: from_obj");
+    struct yflame_frame *node = flame_node_by_id(flame_r.value, id);
+    return YETTY_OK(yetty_ycore_uint64, node ? node->value : 0u);
+}
+
+/* root_value: total samples in the whole profile — the percent denominator. */
+YETTY_ANNOTATE("virtual@yflame:flame:root_value")
+YETTY_ANNOTATE("local@yflame:root_value")
+static struct yetty_ycore_uint64_result flame_root_value(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, flame_r, "yflame root_value: from_obj");
+    struct yetty_yflame_flame *flame = flame_r.value;
+    return YETTY_OK(yetty_ycore_uint64, flame->root ? flame->root->value : 0u);
+}
+
 /* destroy: free the tree, the node index, and the object. */
 YETTY_ANNOTATE("virtual@yflame:flame:destroy")
 YETTY_ANNOTATE("local@yflame:destroy")
@@ -813,8 +1077,10 @@ static struct yetty_ycore_void_result flame_obj_destroy(struct yetty_yclass_obje
         struct yetty_yflame_flame *flame = flame_r.value;
         frame_destroy(flame->root);
         free(flame->nodes);
+        free(flame->highlight_name);
         flame->root = NULL;
         flame->nodes = NULL;
+        flame->highlight_name = NULL;
         flame->node_count = 0;
     }
     return yetty_yclass_object_free(obj);

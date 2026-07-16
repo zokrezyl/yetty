@@ -24,6 +24,8 @@ set(YETTY_ENABLE_TOOL_YLESS OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_TOOL_YGREETER OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_TOOL_YINSTALL OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_TOOL_YTOP     OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_TOOL_YDU      OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_TOOL_YPERF    OFF CACHE BOOL "" FORCE)
 
 # yhello opens its own GLFW desktop window; its standalone bootstrap pulls in
 # yplatform/yplatform/glfw.c, which needs GLFW (OFF here — UIKit owns the

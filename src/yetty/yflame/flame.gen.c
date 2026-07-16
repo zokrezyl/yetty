@@ -10,7 +10,9 @@
 #include <stdlib.h> /* calloc/free for proxy + buffer marshalling */
 #include <string.h> /* memcpy/strcmp/strlen */
 
+struct yetty_ycore_const_char_ptr_result;
 struct yetty_ycore_int_result;
+struct yetty_ycore_uint64_result;
 struct yetty_ycore_void_result;
 struct yetty_ydraw_drawable_list_result;
 struct yetty_ycore_void_result yetty_yflame_configure(struct yetty_yclass_object *obj, float width,
@@ -26,6 +28,17 @@ struct yetty_ycore_void_result yetty_yflame_focus_parent(struct yetty_yclass_obj
 struct yetty_ycore_void_result yetty_yflame_reset(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yflame_set_highlight(struct yetty_yclass_object *obj,
                                                           int32_t node_id);
+struct yetty_ycore_void_result yetty_yflame_highlight_name(struct yetty_yclass_object *obj,
+                                                           const char *name, size_t len);
+struct yetty_ycore_void_result yetty_yflame_focus_name(struct yetty_yclass_object *obj,
+                                                       const char *name, size_t len);
+struct yetty_ycore_void_result yetty_yflame_set_baseline(struct yetty_yclass_object *obj,
+                                                         const char *folded, size_t len);
+struct yetty_ycore_const_char_ptr_result yetty_yflame_node_name(struct yetty_yclass_object *obj,
+                                                                int32_t id);
+struct yetty_ycore_uint64_result yetty_yflame_node_value(struct yetty_yclass_object *obj,
+                                                         int32_t id);
+struct yetty_ycore_uint64_result yetty_yflame_root_value(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yflame_destroy(struct yetty_yclass_object *obj);
 typedef struct yetty_ycore_void_result (*yetty_yflame_configure_fn)(struct yetty_yclass_object *,
                                                                     float, float, float, uint32_t);
@@ -42,6 +55,18 @@ typedef struct yetty_ycore_void_result (*yetty_yflame_focus_parent_fn)(
 typedef struct yetty_ycore_void_result (*yetty_yflame_reset_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yflame_set_highlight_fn)(
     struct yetty_yclass_object *, int32_t);
+typedef struct yetty_ycore_void_result (*yetty_yflame_highlight_name_fn)(
+    struct yetty_yclass_object *, const char *, size_t);
+typedef struct yetty_ycore_void_result (*yetty_yflame_focus_name_fn)(struct yetty_yclass_object *,
+                                                                     const char *, size_t);
+typedef struct yetty_ycore_void_result (*yetty_yflame_set_baseline_fn)(struct yetty_yclass_object *,
+                                                                       const char *, size_t);
+typedef struct yetty_ycore_const_char_ptr_result (*yetty_yflame_node_name_fn)(
+    struct yetty_yclass_object *, int32_t);
+typedef struct yetty_ycore_uint64_result (*yetty_yflame_node_value_fn)(struct yetty_yclass_object *,
+                                                                       int32_t);
+typedef struct yetty_ycore_uint64_result (*yetty_yflame_root_value_fn)(
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yflame_destroy_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
@@ -62,6 +87,23 @@ static yetty_yflame_reset_fn yetty_yflame_flame_yetty_yflame_reset_check = flame
 YETTY_MAYBE_UNUSED
 static yetty_yflame_set_highlight_fn yetty_yflame_flame_yetty_yflame_set_highlight_check =
     flame_set_highlight;
+YETTY_MAYBE_UNUSED
+static yetty_yflame_highlight_name_fn yetty_yflame_flame_yetty_yflame_highlight_name_check =
+    flame_highlight_name;
+YETTY_MAYBE_UNUSED
+static yetty_yflame_focus_name_fn yetty_yflame_flame_yetty_yflame_focus_name_check =
+    flame_focus_name;
+YETTY_MAYBE_UNUSED
+static yetty_yflame_set_baseline_fn yetty_yflame_flame_yetty_yflame_set_baseline_check =
+    flame_set_baseline;
+YETTY_MAYBE_UNUSED
+static yetty_yflame_node_name_fn yetty_yflame_flame_yetty_yflame_node_name_check = flame_node_name;
+YETTY_MAYBE_UNUSED
+static yetty_yflame_node_value_fn yetty_yflame_flame_yetty_yflame_node_value_check =
+    flame_node_value;
+YETTY_MAYBE_UNUSED
+static yetty_yflame_root_value_fn yetty_yflame_flame_yetty_yflame_root_value_check =
+    flame_root_value;
 YETTY_MAYBE_UNUSED
 static yetty_yflame_destroy_fn yetty_yflame_flame_yetty_yflame_destroy_check = flame_obj_destroy;
 
@@ -96,6 +138,18 @@ struct yetty_yclass_ptr_result yetty_yflame_flame_class_get(void)
          (yetty_yclass_impl_t)flame_reset},
         {"yetty_yflame", "set_highlight", (yetty_yclass_method_id_t)yetty_yflame_set_highlight,
          (yetty_yclass_impl_t)flame_set_highlight},
+        {"yetty_yflame", "highlight_name", (yetty_yclass_method_id_t)yetty_yflame_highlight_name,
+         (yetty_yclass_impl_t)flame_highlight_name},
+        {"yetty_yflame", "focus_name", (yetty_yclass_method_id_t)yetty_yflame_focus_name,
+         (yetty_yclass_impl_t)flame_focus_name},
+        {"yetty_yflame", "set_baseline", (yetty_yclass_method_id_t)yetty_yflame_set_baseline,
+         (yetty_yclass_impl_t)flame_set_baseline},
+        {"yetty_yflame", "node_name", (yetty_yclass_method_id_t)yetty_yflame_node_name,
+         (yetty_yclass_impl_t)flame_node_name},
+        {"yetty_yflame", "node_value", (yetty_yclass_method_id_t)yetty_yflame_node_value,
+         (yetty_yclass_impl_t)flame_node_value},
+        {"yetty_yflame", "root_value", (yetty_yclass_method_id_t)yetty_yflame_root_value,
+         (yetty_yclass_impl_t)flame_root_value},
         {"yetty_yflame", "destroy", (yetty_yclass_method_id_t)yetty_yflame_destroy,
          (yetty_yclass_impl_t)flame_obj_destroy},
     };
@@ -359,6 +413,173 @@ struct yetty_ycore_void_result yetty_yflame_set_highlight(struct yetty_yclass_ob
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yflame_set_highlight: dispatch_lookup failed");
     return ((yetty_yflame_set_highlight_fn)dispatch_impl_r.value)(obj, node_id);
+}
+
+struct yetty_ycore_void_result yetty_yflame_highlight_name(struct yetty_yclass_object *obj,
+                                                           const char *name, size_t len)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_yflame", (yetty_yclass_method_id_t)yetty_yflame_highlight_name);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_yflame_highlight_name: method_slot_get failed", method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yflame_highlight_name: NULL object");
+    }
+
+    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                        "yetty_yflame_highlight_name: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                        "yetty_yflame_highlight_name: dispatch_lookup failed");
+    return ((yetty_yflame_highlight_name_fn)dispatch_impl_r.value)(obj, name, len);
+}
+
+struct yetty_ycore_void_result yetty_yflame_focus_name(struct yetty_yclass_object *obj,
+                                                       const char *name, size_t len)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_yflame", (yetty_yclass_method_id_t)yetty_yflame_focus_name);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_void, "yetty_yflame_focus_name: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yflame_focus_name: NULL object");
+    }
+
+    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                        "yetty_yflame_focus_name: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                        "yetty_yflame_focus_name: dispatch_lookup failed");
+    return ((yetty_yflame_focus_name_fn)dispatch_impl_r.value)(obj, name, len);
+}
+
+struct yetty_ycore_void_result yetty_yflame_set_baseline(struct yetty_yclass_object *obj,
+                                                         const char *folded, size_t len)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_yflame", (yetty_yclass_method_id_t)yetty_yflame_set_baseline);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_void, "yetty_yflame_set_baseline: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yflame_set_baseline: NULL object");
+    }
+
+    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                        "yetty_yflame_set_baseline: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                        "yetty_yflame_set_baseline: dispatch_lookup failed");
+    return ((yetty_yflame_set_baseline_fn)dispatch_impl_r.value)(obj, folded, len);
+}
+
+struct yetty_ycore_const_char_ptr_result yetty_yflame_node_name(struct yetty_yclass_object *obj,
+                                                                int32_t id)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_yflame", (yetty_yclass_method_id_t)yetty_yflame_node_name);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_const_char_ptr,
+                             "yetty_yflame_node_name: method_slot_get failed", method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_yflame_node_name: NULL object");
+    }
+
+    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, object_class_r,
+                        "yetty_yflame_node_name: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, dispatch_impl_r,
+                        "yetty_yflame_node_name: dispatch_lookup failed");
+    return ((yetty_yflame_node_name_fn)dispatch_impl_r.value)(obj, id);
+}
+
+struct yetty_ycore_uint64_result yetty_yflame_node_value(struct yetty_yclass_object *obj,
+                                                         int32_t id)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_yflame", (yetty_yclass_method_id_t)yetty_yflame_node_value);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_uint64, "yetty_yflame_node_value: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_uint64, "yetty_yflame_node_value: NULL object");
+    }
+
+    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, object_class_r,
+                        "yetty_yflame_node_value: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, dispatch_impl_r,
+                        "yetty_yflame_node_value: dispatch_lookup failed");
+    return ((yetty_yflame_node_value_fn)dispatch_impl_r.value)(obj, id);
+}
+
+struct yetty_ycore_uint64_result yetty_yflame_root_value(struct yetty_yclass_object *obj)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_yflame", (yetty_yclass_method_id_t)yetty_yflame_root_value);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_uint64, "yetty_yflame_root_value: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_uint64, "yetty_yflame_root_value: NULL object");
+    }
+
+    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, object_class_r,
+                        "yetty_yflame_root_value: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, dispatch_impl_r,
+                        "yetty_yflame_root_value: dispatch_lookup failed");
+    return ((yetty_yflame_root_value_fn)dispatch_impl_r.value)(obj);
 }
 
 struct yetty_ycore_void_result yetty_yflame_destroy(struct yetty_yclass_object *obj)
