@@ -59,14 +59,14 @@ struct yetty_ycore_void_result yetty_demoygui_43_tree_showcase_register(void);
 struct yetty_ycore_void_result yetty_demoygui_44_textinput_register(void);
 struct yetty_ycore_void_result yetty_demoygui_register(void);
 
-
 /* ---- demoygui: explicit yclass-RPC hook registration ------------- */
 
 struct yetty_ycore_void_result yetty_demoygui_register(void)
 {
     static bool registered = false;
-    if (registered)
+    if (registered) {
         return YETTY_OK_VOID();
+    }
 
     {
         /* Submodule aggregator is always compiled into the same
@@ -317,8 +317,9 @@ struct yetty_ycore_void_result yetty_demoygui_register(void)
         /* Submodule aggregator is always compiled into the same
          * library, so this strong call is always resolved. */
         struct yetty_ycore_void_result sub_r = yetty_demoygui_35_collapsing_header_open_register();
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_r,
-                            "yetty_demoygui_register: submodule demoygui_35_collapsing_header_open");
+        YETTY_RETURN_IF_ERR(
+            yetty_ycore_void, sub_r,
+            "yetty_demoygui_register: submodule demoygui_35_collapsing_header_open");
     }
     {
         /* Submodule aggregator is always compiled into the same

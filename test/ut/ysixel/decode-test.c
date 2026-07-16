@@ -75,21 +75,20 @@ static void test_high_bit_and_gaps(struct ytest *test)
  * different colour. Result is 4 x 12 with a clean colour split at row 6. */
 static void test_bands_and_rle(struct ytest *test)
 {
-    const char *payload =
-        "#0;2;100;0;0" /* red */
-        "#1;2;0;0;100" /* blue */
-        "#0!4~"        /* band 0: 4 cols, all six pixels */
-        "-"            /* next band */
-        "#1!4~";       /* band 1: 4 cols, all six pixels */
+    const char *payload = "#0;2;100;0;0" /* red */
+                          "#1;2;0;0;100" /* blue */
+                          "#0!4~"        /* band 0: 4 cols, all six pixels */
+                          "-"            /* next band */
+                          "#1!4~";       /* band 1: 4 cols, all six pixels */
     struct yetty_ysixel_image_result res = yetty_ysixel_decode(payload, strlen(payload));
     YTEST_REQUIRE_OK(test, res);
     struct yetty_ysixel_image image = res.value;
     YTEST_CHECK_EQ_INT(test, image.width, 4);
     YTEST_CHECK_EQ_INT(test, image.height, 12);
-    check_rgba(test, &image, 0, 0, 255, 0, 0, 255);   /* top-left red */
-    check_rgba(test, &image, 3, 5, 255, 0, 0, 255);   /* band 0 bottom-right red */
-    check_rgba(test, &image, 0, 6, 0, 0, 255, 255);   /* band 1 top blue */
-    check_rgba(test, &image, 3, 11, 0, 0, 255, 255);  /* band 1 bottom-right blue */
+    check_rgba(test, &image, 0, 0, 255, 0, 0, 255);  /* top-left red */
+    check_rgba(test, &image, 3, 5, 255, 0, 0, 255);  /* band 0 bottom-right red */
+    check_rgba(test, &image, 0, 6, 0, 0, 255, 255);  /* band 1 top blue */
+    check_rgba(test, &image, 3, 11, 0, 0, 255, 255); /* band 1 bottom-right blue */
     yetty_ysixel_image_destroy(&image);
 }
 
@@ -97,12 +96,11 @@ static void test_bands_and_rle(struct ytest *test)
  * second colour can overpaint. The last write wins at the overlapping column. */
 static void test_carriage_return_overpaint(struct ytest *test)
 {
-    const char *payload =
-        "#0;2;100;0;0" /* red */
-        "#1;2;0;100;0" /* green */
-        "#0!4~"        /* fill 4 cols red */
-        "$"            /* back to column 0 */
-        "#1~";         /* overpaint column 0 green */
+    const char *payload = "#0;2;100;0;0" /* red */
+                          "#1;2;0;100;0" /* green */
+                          "#0!4~"        /* fill 4 cols red */
+                          "$"            /* back to column 0 */
+                          "#1~";         /* overpaint column 0 green */
     struct yetty_ysixel_image_result res = yetty_ysixel_decode(payload, strlen(payload));
     YTEST_REQUIRE_OK(test, res);
     struct yetty_ysixel_image image = res.value;

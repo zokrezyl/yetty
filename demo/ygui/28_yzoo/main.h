@@ -31,8 +31,10 @@ struct yetty_demoygui_28_yzoo_ptr_result {
         struct yetty_ycore_error error;
     };
 };
-struct yetty_demoygui_28_yzoo_ptr_result yetty_demoygui_28_yzoo_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_demoygui_28_yzoo_to(struct yetty_demoygui_28_yzoo *data);
+struct yetty_demoygui_28_yzoo_ptr_result yetty_demoygui_28_yzoo_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_demoygui_28_yzoo_to(
+    struct yetty_demoygui_28_yzoo *data);
 
 struct yetty_yclass_object_ptr_result yetty_demoygui_28_yzoo_create(struct yetty_yclass_ctx *ctx);
 

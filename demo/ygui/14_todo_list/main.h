@@ -31,10 +31,13 @@ struct yetty_demoygui_14_todo_list_ptr_result {
         struct yetty_ycore_error error;
     };
 };
-struct yetty_demoygui_14_todo_list_ptr_result yetty_demoygui_14_todo_list_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_demoygui_14_todo_list_to(struct yetty_demoygui_14_todo_list *data);
+struct yetty_demoygui_14_todo_list_ptr_result yetty_demoygui_14_todo_list_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_demoygui_14_todo_list_to(
+    struct yetty_demoygui_14_todo_list *data);
 
-struct yetty_yclass_object_ptr_result yetty_demoygui_14_todo_list_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_demoygui_14_todo_list_create(
+    struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_demoygui_register(void);
 
