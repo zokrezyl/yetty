@@ -883,6 +883,22 @@ static void run_collected_scripts(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
     free(collect.items);
 }
 
+/* Update document.readyState (plain data property on the document object). */
+static void js_doc_set_ready_state(struct yetty_ylexbor *r, const char *ready_state)
+{
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    if (ctx == NULL) {
+        return;
+    }
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue doc = JS_GetPropertyStr(ctx, global, "document");
+    if (JS_IsObject(doc)) {
+        JS_SetPropertyStr(ctx, doc, "readyState", JS_NewString(ctx, ready_state));
+    }
+    JS_FreeValue(ctx, doc);
+    JS_FreeValue(ctx, global);
+}
+
 struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(struct yetty_ylexbor *r)
 {
     return yetty_ylexbor_js_run_all_scripts(r);
@@ -899,13 +915,57 @@ struct yetty_ycore_void_result yetty_ylexbor_js_run_all_scripts(struct yetty_yle
         return ir;
     }
 
+    /* Investigation prelude (YBROWSER_PRELUDE=<file>): evaluate a JS file in the
+     * page context after the environment is initialised but before any page
+     * script runs. Lets an investigator install probes (e.g. an event-timeline
+     * logger) that observe the very first boot navigation. Env-gated; no effect
+     * unless the variable points at a readable file. */
+    {
+        const char *prelude_path = getenv("YBROWSER_PRELUDE");
+        if (prelude_path != NULL) {
+            FILE *prelude_file = fopen(prelude_path, "rb");
+            if (prelude_file != NULL) {
+                fseek(prelude_file, 0, SEEK_END);
+                long prelude_len = ftell(prelude_file);
+                fseek(prelude_file, 0, SEEK_SET);
+                if (prelude_len > 0) {
+                    char *prelude_src = calloc(1, (size_t)prelude_len + 1);
+                    if (prelude_src != NULL &&
+                        fread(prelude_src, 1, (size_t)prelude_len, prelude_file) > 0) {
+                        JSContext *prelude_ctx = (JSContext *)r->js_ctx;
+                        JSValue prelude_val = JS_Eval(prelude_ctx, prelude_src,
+                                                      strlen(prelude_src), "<prelude>",
+                                                      JS_EVAL_TYPE_GLOBAL);
+                        if (JS_IsException(prelude_val)) {
+                            JSValue exc = JS_GetException(prelude_ctx);
+                            const char *exc_s = JS_ToCString(prelude_ctx, exc);
+                            fprintf(stderr, "prelude: ERR %s\n", exc_s ? exc_s : "(unknown)");
+                            JS_FreeCString(prelude_ctx, exc_s);
+                            JS_FreeValue(prelude_ctx, exc);
+                        }
+                        JS_FreeValue(prelude_ctx, prelude_val);
+                    }
+                    free(prelude_src);
+                }
+                fclose(prelude_file);
+            }
+        }
+    }
+
     run_collected_scripts(r, (JSContext *)r->js_ctx, lxb_dom_interface_node(r->document));
 
-    /* Fire DOMContentLoaded + load on document — many SPAs gate boot
-	 * on these. We synthesise both right after script execution
-	 * because the parse is already complete by the time we get
-	 * here. */
+    /* Document readiness sequence, matching browser order:
+	 *   readyState=interactive → readystatechange → DOMContentLoaded →
+	 *   readyState=complete → readystatechange → load.
+	 * readyState is "loading" for the whole script pass above, so a
+	 * framework that defers a boot walk to readystatechange (rather than
+	 * running it against the half-built page) gets the same timing it
+	 * gets in a browser. */
+    js_doc_set_ready_state(r, "interactive");
+    yetty_ylexbor_js_dispatch_event_type(r, "readystatechange", NULL);
     yetty_ylexbor_js_dispatch_event_type(r, "DOMContentLoaded", NULL);
+    js_doc_set_ready_state(r, "complete");
+    yetty_ylexbor_js_dispatch_event_type(r, "readystatechange", NULL);
     yetty_ylexbor_js_dispatch_event_type(r, "load", NULL);
     yetty_ylexbor_js_drain_jobs(r);
 

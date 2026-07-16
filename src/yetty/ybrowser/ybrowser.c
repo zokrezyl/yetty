@@ -299,6 +299,8 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_
 
     r->viewport_w = cfg && cfg->viewport_width > 0 ? cfg->viewport_width : 1024;
     r->viewport_h = cfg && cfg->viewport_height > 0 ? cfg->viewport_height : 768;
+    ydebug("viewport init: config=%dx%d -> %dx%d", cfg ? cfg->viewport_width : -1,
+           cfg ? cfg->viewport_height : -1, r->viewport_w, r->viewport_h);
     r->default_font_size = cfg && cfg->default_font_size > 0 ? cfg->default_font_size : 16.0f;
 
     r->document = lxb_html_document_create();
@@ -1312,6 +1314,7 @@ struct yetty_ycore_void_result yetty_ylexbor_set_viewport(struct yetty_ylexbor *
     }
     r->viewport_w = width > 0 ? width : r->viewport_w;
     r->viewport_h = height > 0 ? height : r->viewport_h;
+    ydebug("viewport set: req=%dx%d -> %dx%d", width, height, r->viewport_w, r->viewport_h);
     if (r->boxes.size > 0) {
         struct yetty_ycore_void_result lr = yetty_ylexbor_layout(r);
         if (YETTY_IS_ERR(lr)) {
@@ -1340,22 +1343,54 @@ int yetty_ylexbor_dom_dirty(const struct yetty_ylexbor *r)
     return r ? r->dom_dirty : 0;
 }
 
-/* Re-resolve box tree + layout from the (possibly mutated) DOM.
- * Used by the host after a JS turn that flipped r->dom_dirty, OR
- * directly after a viewport change. */
+/* Rebuild the box tree + run layout from the (possibly mutated) DOM. This is
+ * the pure style/layout flush with NO side effects beyond r->boxes: it does not
+ * resolve iframes, fetch, or touch child engines. Layout-dependent geometry
+ * getters (clientWidth/getBoundingClientRect) call this as a CSSOM forced-layout
+ * point, so it must stay free of unrelated frame/network/DOM work.
+ *
+ * Sets r->layout_in_progress across the box-build/layout. The layout-dependent
+ * geometry getters check that flag before forcing a synchronous flush, so a
+ * geometry read reached from inside this pass skips re-flushing and returns the
+ * in-progress layout rather than recursing (the flag is a shared layout-state
+ * signal, not a lock — it does not reject reentrant non-geometry callers). On
+ * failure the dirty flag is restored so a transient box-build/layout error does
+ * not permanently suppress the next relayout attempt. */
+struct yetty_ycore_void_result yetty_ylexbor_relayout_boxes_and_layout(struct yetty_ylexbor *r)
+{
+    if (r == NULL) {
+        return YETTY_ERR(yetty_ycore_void, "null");
+    }
+    r->layout_in_progress = 1;
+    r->dom_dirty = 0;
+    struct yetty_ycore_void_result br = yetty_ylexbor_box_build(r);
+    if (YETTY_IS_ERR(br)) {
+        r->dom_dirty = 1;
+        r->layout_in_progress = 0;
+        return br;
+    }
+    struct yetty_ycore_void_result lr = yetty_ylexbor_layout(r);
+    if (YETTY_IS_ERR(lr)) {
+        r->dom_dirty = 1;
+        r->layout_in_progress = 0;
+        return lr;
+    }
+    r->layout_in_progress = 0;
+    return YETTY_OK_VOID();
+}
+
+/* Re-resolve box tree + layout from the (possibly mutated) DOM, then resolve
+ * iframes. Used by the host after a JS turn that flipped r->dom_dirty, OR
+ * directly after a viewport change. iframe resolution runs only on this host
+ * path — never from a geometry getter. */
 struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r)
 {
     if (r == NULL) {
         return YETTY_ERR(yetty_ycore_void, "null");
     }
-    r->dom_dirty = 0;
-    struct yetty_ycore_void_result br = yetty_ylexbor_box_build(r);
-    if (YETTY_IS_ERR(br)) {
-        return br;
-    }
-    struct yetty_ycore_void_result lr = yetty_ylexbor_layout(r);
-    if (YETTY_IS_ERR(lr)) {
-        return lr;
+    struct yetty_ycore_void_result res = yetty_ylexbor_relayout_boxes_and_layout(r);
+    if (YETTY_IS_ERR(res)) {
+        return res;
     }
     (void)resolve_iframes(r);
     return YETTY_OK_VOID();

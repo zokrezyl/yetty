@@ -1,0 +1,44 @@
+<!doctype html><meta charset=utf-8>
+<title>Polymer nested-template preparation: createDocumentFragment() then append the nested
+template's content, then importNode() the result — must yield a real fragment (nodeType 11)
+whose first child is the card element directly, with NO wrapper &lt;div&gt;. This is the exact
+sequence Polymer 2 runs for dom-if/dom-repeat (_parseTemplateNestedTemplate); a fake-element
+fragment leaves a &lt;div&gt; wrapper that shifts the node indices the stamping walk depends on,
+which can prevent Polymer's stamping walk from materializing repeated instances and is a primary
+candidate for the missing feed cards. The box grows only when the rewrap/import is
+fragment-correct.</title>
+<style>body{margin:0}</style>
+<template id="outer"><template is="dom-repeat"><x-card></x-card></template></template>
+<div data-test="stamp" data-expect="0,0,800,40" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var ok = true;
+
+var outer = document.getElementById("outer");
+var nested = outer.content.querySelector("template");
+ok = check(!!nested, "nested dom-repeat template found in outer.content") && ok;
+
+/* Polymer uses N.content.ownerDocument.createDocumentFragment(), so exercise that exact path. */
+var owner = nested && nested.content ? nested.content.ownerDocument : null;
+ok = check(!!owner, "nested.content.ownerDocument present") && ok;
+
+var info = (owner || document).createDocumentFragment();
+ok = check(info.nodeType === 11, "prepared fragment nodeType===11 got " + info.nodeType) && ok;
+info.appendChild(nested.content);                 /* moves <x-card> into the fragment */
+var stamped = document.importNode(info, true);    /* _stampTemplate's importNode(b.content, true) */
+
+ok = check(stamped.nodeType === 11, "stamped root nodeType===11 got " + stamped.nodeType) && ok;
+ok = check(stamped.firstChild && stamped.firstChild.localName === "x-card",
+           "stamped firstChild is <x-card> directly, no <div> wrapper (got " +
+           (stamped.firstChild && stamped.firstChild.localName) + ")") && ok;
+ok = check(stamped.firstChild && stamped.firstChild.parentNode === stamped,
+           "stamped card's parentNode is the stamped fragment") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="stamp"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

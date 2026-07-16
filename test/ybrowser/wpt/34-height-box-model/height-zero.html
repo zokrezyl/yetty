@@ -1,0 +1,47 @@
+<!doctype html><meta charset=utf-8>
+<title>An explicit height:0 is treated as a definite zero height, NOT as auto (content-driven). For
+content-box the used border box is padding+border and clientHeight is the padding; for border-box
+the used border box and clientHeight clamp to zero. An oversized overflow:visible child does not
+enlarge a height:0 box. The gate grows only when all three hold.</title>
+<style>body{margin:0}</style>
+<div data-test="height-zero" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+function mk(style, parent){
+  var el = document.createElement('div');
+  el.setAttribute('style', style + ';display:block');
+  (parent || sandbox).appendChild(el);
+  return el;
+}
+function m3(el){ var r = el.getBoundingClientRect(); return [el.offsetHeight, el.clientHeight, Math.round(r.height)]; }
+function eq3(el, oh, ch, rh, label){
+  var g = m3(el);
+  return check(g[0] === oh && g[1] === ch && g[2] === rh,
+               label + " -> off/client/rect = " + g[0] + "/" + g[1] + "/" + g[2] +
+               " (want " + oh + "/" + ch + "/" + rh + ")");
+}
+var ok = true;
+
+/* 9a. content-box height:0 + P40 + B20 -> border box 60, padding box (client) 40 */
+var z1 = mk('box-sizing:content-box;height:0;padding-top:20px;padding-bottom:20px;border-top:10px solid #333;border-bottom:10px solid #333;margin:0');
+ok = eq3(z1, 60, 40, 60, "9a content-box height:0 + P40 + B20") && ok;
+
+/* 9b. border-box height:0 + P40 + B20 -> used border box 0, client clamps to 0 */
+var z2 = mk('box-sizing:border-box;height:0;padding-top:20px;padding-bottom:20px;border-top:10px solid #333;border-bottom:10px solid #333;margin:0');
+ok = eq3(z2, 0, 0, 0, "9b border-box height:0 clamps to 0") && ok;
+
+/* 9c. height:0 (content-box, no pad/border) with an oversized overflow:visible child stays 0 */
+var z3 = mk('box-sizing:content-box;height:0;overflow:visible;margin:0');
+mk('height:100px;margin:0', z3);
+ok = check(z3.offsetHeight === 0, "9c height:0 + oversized child: offsetHeight=" + z3.offsetHeight + " (want 0, not 100 = treated as auto)") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="height-zero"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

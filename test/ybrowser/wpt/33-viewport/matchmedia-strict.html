@@ -1,0 +1,76 @@
+<!doctype html><meta charset=utf-8>
+<title>matchMedia() is a strict evaluator against the live viewport: width/height range features and
+the screen/all media types match; unknown media types (speech/garbage), not-screen, malformed
+syntax, unsupported features and non-px units do NOT match (no guessing). MediaQueryList.matches is
+a live accessor, not a frozen boolean. Harness viewport is 800px wide. The box grows only when
+every case holds.</title>
+<style>body{margin:0}</style>
+<div data-test="matchmedia-strict" data-expect="0,0,800,40" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+function m(q){ return window.matchMedia(q).matches; }
+var ok = true;
+
+/* --- positive: width/height ranges against the 800px viewport --- */
+ok = check(m('(min-width: 799px)') === true,  "(min-width:799px) matches") && ok;
+ok = check(m('(min-width: 800px)') === true,  "(min-width:800px) matches (inclusive)") && ok;
+ok = check(m('(min-width: 801px)') === false, "(min-width:801px) no match") && ok;
+ok = check(m('(max-width: 800px)') === true,  "(max-width:800px) matches") && ok;
+ok = check(m('(max-width: 799px)') === false, "(max-width:799px) no match") && ok;
+ok = check(m('screen and (min-width: 700px)') === true,  "screen and (min-width:700px) matches") && ok;
+ok = check(m('screen and (min-width: 900px)') === false, "screen and (min-width:900px) no match") && ok;
+ok = check(m('(min-width: 700px), (min-width: 5000px)') === true, "comma OR matches on first part") && ok;
+
+/* --- media types --- */
+ok = check(m('screen') === true,  "screen matches") && ok;
+ok = check(m('all') === true,     "all matches") && ok;
+ok = check(m('') === true,        "empty query matches (== all)") && ok;
+ok = check(m('print') === false,  "print does not match (we are screen)") && ok;
+ok = check(m('not print') === true, "not print matches (we are screen)") && ok;
+
+/* --- negatives the strict parser must reject (no guessing) --- */
+ok = check(m('speech') === false,   "unknown media type 'speech' no match") && ok;
+ok = check(m('garbage') === false,  "unknown media type 'garbage' no match") && ok;
+ok = check(m('not screen') === false, "'not screen' no match on a screen") && ok;
+ok = check(m('(malformed') === false, "unbalanced parens no match") && ok;
+ok = check(m('(min-width: 50em)') === false, "non-px unit (em) no match, not treated as px") && ok;
+ok = check(m('(min-width: 50garbage)') === false, "garbage unit no match") && ok;
+ok = check(m('(min-width: 700px) and (max-width: 750px)') === false, "conjunction both must hold") && ok;
+ok = check(m('(unsupported-feature: 5)') === false, "unmodelled feature no match") && ok;
+ok = check(m('(width >= 700px)') === false, "MQ4 range syntax rejected (not guessed true)") && ok;
+ok = check(m('not') === false, "dangling 'not' no match") && ok;
+
+/* --- fractional thresholds: compared as floats, not rounded to int --- */
+ok = check(m('(min-width: 799.5px)') === true,  "(min-width:799.5px) matches at 800") && ok;
+ok = check(m('(min-width: 800.5px)') === false, "(min-width:800.5px) no match at 800 (not floored to 800)") && ok;
+ok = check(m('(max-width: 800.5px)') === true,  "(max-width:800.5px) matches at 800") && ok;
+ok = check(m('(max-width: 799.5px)') === false, "(max-width:799.5px) no match at 800") && ok;
+ok = check(m('(min-width: .5px)') === true,  "fractional .5px accepted and matches") && ok;
+ok = check(m('(min-width: .px)') === false,  "digitless '.px' rejected") && ok;
+ok = check(m('(min-width: px)') === false,   "digitless 'px' rejected") && ok;
+
+/* --- conjunction placement: no missing/leading/trailing/repeated `and` --- */
+ok = check(m('screen (min-width: 1px)') === false, "missing 'and' (adjacency) no match") && ok;
+ok = check(m('and (min-width: 1px)') === false,    "leading 'and' no match") && ok;
+ok = check(m('screen and') === false,              "trailing 'and' no match") && ok;
+ok = check(m('screen and and (min-width: 1px)') === false, "repeated 'and' no match") && ok;
+ok = check(m('screen and (min-width: 700px)') === true, "well-formed 'and' still matches") && ok;
+
+/* --- overlong query part is rejected, NOT truncated to a matching prefix --- */
+var overlong = '(min-width: 700px)' + new Array(493 + 1).join(' ') + 'zzz'; /* 18+493+3 = 514 > 512 */
+ok = check(m(overlong) === false, "overlong query rejected, not truncated to matching prefix (len " + overlong.length + ")") && ok;
+
+/* --- MediaQueryList.matches is a LIVE accessor, not a frozen data property --- */
+var mq = window.matchMedia('(min-width: 400px)');
+var desc = Object.getOwnPropertyDescriptor(mq, 'matches');
+ok = check(desc && typeof desc.get === 'function', "matches is a getter (live), not a stored boolean") && ok;
+ok = check(mq.matches === true, "live matches reads true at 800px for (min-width:400px)") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="matchmedia-strict"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

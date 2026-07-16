@@ -50,6 +50,7 @@
 
 #include <stdatomic.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -2699,16 +2700,315 @@ static JSValue js_doc_cookie_set(JSContext *ctx, JSValueConst this_val, JSValueC
  * shapes.
  * ===========================================================================*/
 
+/* -------- matchMedia: a minimal but STRICT media-query evaluator --------
+ * We evaluate width/height range features and the screen/all media types
+ * against the live viewport. Anything we do not model (color-scheme, resolution,
+ * orientation, hover, non-px units, MQ4 `<` / `>` range syntax) makes the query
+ * NON-matching rather than being guessed at. Invalid syntax (unbalanced parens,
+ * dangling not/only, two media types) is likewise a non-match. The CSS cascade
+ * itself uses libcss's own evaluator against the same viewport. */
+
+/* Parse a media-feature length in [s,e): optional spaces, a non-negative
+ * number, optional spaces, then "px" — or a unitless 0. The whole range must be
+ * consumed; any other unit (em/rem/vw/%) or trailing garbage is rejected so an
+ * unsupported unit is NOT silently treated as pixels. */
+static bool media_parse_px(const char *s, const char *e, float *out)
+{
+    while (s < e && isspace((unsigned char)*s)) {
+        s++;
+    }
+    const char *num_start = s;
+    bool any_digit = false;
+    while (s < e && isdigit((unsigned char)*s)) {
+        s++;
+        any_digit = true;
+    }
+    if (s < e && *s == '.') {
+        s++;
+        while (s < e && isdigit((unsigned char)*s)) {
+            s++;
+            any_digit = true;
+        }
+    }
+    /* Require at least one digit so ".", ".px", and "px" are rejected rather
+     * than parsed as 0. Accepts 0, 0.0, .5px, 1.5px. */
+    if (!any_digit) {
+        return false;
+    }
+    size_t nlen = (size_t)(s - num_start);
+    if (nlen >= 64) {
+        return false;
+    }
+    char numbuf[64];
+    memcpy(numbuf, num_start, nlen);
+    numbuf[nlen] = '\0';
+    float value = (float)atof(numbuf);
+    while (s < e && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (s == e) {
+        /* unitless — only 0 is a valid length */
+        if (value != 0.0f) {
+            return false;
+        }
+        *out = 0.0f;
+        return true;
+    }
+    if (e - s >= 2 && s[0] == 'p' && s[1] == 'x') {
+        s += 2;
+        while (s < e && isspace((unsigned char)*s)) {
+            s++;
+        }
+        if (s != e) {
+            return false;
+        }
+        *out = value;
+        return true;
+    }
+    return false;
+}
+
+/* Evaluate one "(name: value)" feature (inner = text between the parens). Sets
+ * *invalid on a structural error: no colon (bare/range syntax), a value that is
+ * not a valid px length, or a feature we do not model. */
+static bool media_eval_feature(const char *inner, size_t len, int vw, int vh, bool *invalid)
+{
+    const char *e = inner + len;
+    const char *colon = memchr(inner, ':', len);
+    if (!colon) {
+        *invalid = true; /* range syntax or a boolean feature we don't support */
+        return false;
+    }
+    const char *name_s = inner, *name_e = colon;
+    while (name_s < name_e && isspace((unsigned char)*name_s)) {
+        name_s++;
+    }
+    while (name_e > name_s && isspace((unsigned char)name_e[-1])) {
+        name_e--;
+    }
+    size_t nlen = (size_t)(name_e - name_s);
+    float px = 0.0f;
+    if (!media_parse_px(colon + 1, e, &px)) {
+        *invalid = true;
+        return false;
+    }
+    /* Compare against the parsed float directly so a fractional threshold like
+     * (min-width: 800.9px) does not round down to 800 and mis-match at 800px. */
+    if (nlen == 9 && !memcmp(name_s, "min-width", 9)) {
+        return (float)vw >= px;
+    }
+    if (nlen == 9 && !memcmp(name_s, "max-width", 9)) {
+        return (float)vw <= px;
+    }
+    if (nlen == 5 && !memcmp(name_s, "width", 5)) {
+        return (float)vw == px;
+    }
+    if (nlen == 10 && !memcmp(name_s, "min-height", 10)) {
+        return (float)vh >= px;
+    }
+    if (nlen == 10 && !memcmp(name_s, "max-height", 10)) {
+        return (float)vh <= px;
+    }
+    if (nlen == 6 && !memcmp(name_s, "height", 6)) {
+        return (float)vh == px;
+    }
+    *invalid = true; /* feature we don't model */
+    return false;
+}
+
+/* Evaluate one comma-separated media-query part. Grammar handled:
+ *   [only|not]? <type>? [and (feature)]*  |  (feature) [and (feature)]*
+ * Matching media types: screen, all. print/speech/unknown do not match. `not`
+ * negates a well-formed result. A structural error (unbalanced parens, unknown
+ * feature, bad unit, two media types, dangling not/only) is a non-match
+ * regardless of `not`. */
+static bool media_query_part_matches(const char *part, size_t len, int vw, int vh)
+{
+    /* Reject an overlong part rather than truncating — a truncated matching
+     * prefix could turn an invalid/non-matching query into a matching one. */
+    char buf[512];
+    if (len >= sizeof(buf)) {
+        return false;
+    }
+    for (size_t i = 0; i < len; i++) {
+        buf[i] = (char)tolower((unsigned char)part[i]);
+    }
+    buf[len] = '\0';
+
+    char *s = buf, *e = buf + strlen(buf);
+    while (s < e && isspace((unsigned char)*s)) {
+        s++;
+    }
+    while (e > s && isspace((unsigned char)e[-1])) {
+        e--;
+    }
+    *e = '\0';
+    if (s == e) {
+        return true; /* empty query == all */
+    }
+
+    int depth = 0;
+    for (char *p = s; p < e; p++) {
+        if (*p == '(') {
+            depth++;
+        } else if (*p == ')') {
+            if (--depth < 0) {
+                return false; /* unbalanced */
+            }
+        }
+    }
+    if (depth != 0) {
+        return false;
+    }
+
+    bool negate = false;
+    if ((size_t)(e - s) > 3 && !memcmp(s, "not", 3) && isspace((unsigned char)s[3])) {
+        negate = true;
+        s += 3;
+    } else if ((size_t)(e - s) > 4 && !memcmp(s, "only", 4) && isspace((unsigned char)s[4])) {
+        s += 4;
+    }
+    while (s < e && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (s == e) {
+        return false; /* dangling not/only */
+    }
+
+    /* Conjunction grammar enforced with a small state machine:
+     *   EXPECT_PRIMARY : first token — a media type OR a feature;
+     *   EXPECT_AND     : after a type/feature — only `and` or end is valid;
+     *   EXPECT_FEATURE : after `and` — only a feature is valid (no type, no
+     *                    repeated `and`, no end).
+     * Rejects missing / leading / trailing / repeated `and` and bare adjacency. */
+    enum { EXPECT_PRIMARY, EXPECT_AND, EXPECT_FEATURE } state = EXPECT_PRIMARY;
+    bool result = true;
+    char *p = s;
+    while (p < e) {
+        while (p < e && isspace((unsigned char)*p)) {
+            p++;
+        }
+        if (p >= e) {
+            break;
+        }
+        if (*p == '(') {
+            if (state != EXPECT_PRIMARY && state != EXPECT_FEATURE) {
+                return false; /* feature with no preceding `and` */
+            }
+            char *q = p;
+            int d = 0;
+            for (; q < e; q++) {
+                if (*q == '(') {
+                    d++;
+                } else if (*q == ')') {
+                    if (--d == 0) {
+                        q++;
+                        break;
+                    }
+                }
+            }
+            bool invalid = false;
+            bool feature_matches =
+                media_eval_feature(p + 1, (size_t)((q - 1) - (p + 1)), vw, vh, &invalid);
+            if (invalid) {
+                return false;
+            }
+            result = result && feature_matches;
+            state = EXPECT_AND;
+            p = q;
+        } else {
+            char *q = p;
+            while (q < e && !isspace((unsigned char)*q) && *q != '(') {
+                q++;
+            }
+            size_t tlen = (size_t)(q - p);
+            if (tlen == 3 && !memcmp(p, "and", 3)) {
+                if (state != EXPECT_AND) {
+                    return false; /* leading or repeated `and` */
+                }
+                state = EXPECT_FEATURE;
+            } else {
+                /* a bare media type — only valid as the first primary token */
+                if (state != EXPECT_PRIMARY) {
+                    return false; /* type after `and`, or a second media type */
+                }
+                bool type_ok = (tlen == 6 && !memcmp(p, "screen", 6)) ||
+                               (tlen == 3 && !memcmp(p, "all", 3));
+                result = result && type_ok;
+                state = EXPECT_AND;
+            }
+            p = q;
+        }
+    }
+    if (state == EXPECT_FEATURE) {
+        return false; /* trailing `and` */
+    }
+    return negate ? !result : result;
+}
+
+static bool media_query_matches(const char *query, int vw, int vh)
+{
+    if (query == NULL) {
+        return false;
+    }
+    /* Always evaluate at least one part so an empty query string (a valid list
+     * that means `all`) matches rather than being skipped by a `while (*part)`. */
+    const char *part = query;
+    for (;;) {
+        const char *comma = strchr(part, ',');
+        size_t len = comma ? (size_t)(comma - part) : strlen(part);
+        if (media_query_part_matches(part, len, vw, vh)) {
+            return true; /* comma = OR */
+        }
+        if (!comma) {
+            break;
+        }
+        part = comma + 1;
+    }
+    return false;
+}
+
+/* Live MediaQueryList.matches: re-evaluates the stored `media` string against
+ * the CURRENT viewport on every read, so a set_viewport() is reflected on the
+ * same object without recreating it. */
+static JSValue js_mql_matches_get(JSContext *ctx, JSValueConst this_val)
+{
+    JSValue mediav = JS_GetPropertyStr(ctx, this_val, "media");
+    const char *query = JS_ToCString(ctx, mediav);
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    int vw = r ? r->viewport_w : 1024;
+    int vh = r ? r->viewport_h : 768;
+    bool matches = query ? media_query_matches(query, vw, vh) : false;
+    if (query) {
+        JS_FreeCString(ctx, query);
+    }
+    JS_FreeValue(ctx, mediav);
+    return JS_NewBool(ctx, matches);
+}
+
+static void define_getter(JSContext *ctx, JSValue obj, const char *name,
+                          JSValue (*getter)(JSContext *, JSValueConst));
+
 static JSValue js_matchMedia(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     (void)this_val;
-    (void)argc;
-    (void)argv;
-    const char *def = "({ matches: false, media: '', "
-                      "   addEventListener: ()=>{}, removeEventListener: ()=>{}, "
-                      "   addListener: ()=>{}, removeListener: ()=>{}, "
-                      "   dispatchEvent: ()=>false, onchange: null })";
-    return JS_Eval(ctx, def, strlen(def), "<matchMedia>", JS_EVAL_TYPE_GLOBAL);
+    const char *query = (argc >= 1) ? JS_ToCString(ctx, argv[0]) : NULL;
+    /* MediaQueryList with a LIVE `matches` getter — re-reads the stored query
+     * against the current r->viewport_w/h on each access, so a set_viewport() is
+     * reflected on the same object. Change-event dispatch (onchange /
+     * addEventListener('change')) is not yet wired; listeners stay no-ops. */
+    const char *def = "({ media:'', addEventListener:()=>{}, removeEventListener:()=>{}, "
+                      "addListener:()=>{}, removeListener:()=>{}, dispatchEvent:()=>false, "
+                      "onchange:null })";
+    JSValue mql = JS_Eval(ctx, def, strlen(def), "<matchMedia>", JS_EVAL_TYPE_GLOBAL);
+    if (!JS_IsException(mql)) {
+        JS_SetPropertyStr(ctx, mql, "media", JS_NewString(ctx, query ? query : ""));
+        define_getter(ctx, mql, "matches", js_mql_matches_get);
+    }
+    if (query) {
+        JS_FreeCString(ctx, query);
+    }
+    return mql;
 }
 
 static JSValue js_getComputedStyle(JSContext *ctx, JSValueConst this_val, int argc,
@@ -2795,6 +3095,40 @@ static void install_global_fn(JSContext *ctx, JSValue global, const char *name, 
     JS_SetPropertyStr(ctx, global, name, JS_NewCFunction(ctx, fn, name, argc));
 }
 
+/* window.innerWidth/innerHeight (and outerWidth/Height, which for a chromeless
+ * embedded viewport are identical) report the LIVE engine viewport, so a later
+ * yetty_ylexbor_set_viewport() is reflected without re-running any prelude. This
+ * keeps the JS window viewport coherent with the libcss/media viewport and
+ * documentElement.clientWidth — all derived from the one r->viewport_w/h. */
+static JSValue js_window_inner_width_get(JSContext *ctx, JSValueConst this_val)
+{
+    (void)this_val;
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    return JS_NewInt32(ctx, r ? r->viewport_w : 1024);
+}
+
+static JSValue js_window_inner_height_get(JSContext *ctx, JSValueConst this_val)
+{
+    (void)this_val;
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    return JS_NewInt32(ctx, r ? r->viewport_h : 768);
+}
+
+/* Define an accessor (getter-only) property on obj. globalThis rejects
+ * JS_SetPropertyFunctionList (see install_global_fn), so live window/screen
+ * metrics are installed one at a time this way. */
+static void define_getter(JSContext *ctx, JSValue obj, const char *name,
+                          JSValue (*getter)(JSContext *, JSValueConst))
+{
+    JSAtom atom = JS_NewAtom(ctx, name);
+    /* JS_NewCFunction2 reinterprets the callback per its cproto (JS_CFUNC_getter
+     * => JSValue(*)(JSContext*, JSValueConst)); cast through the generic type. */
+    JSValue getter_fn = JS_NewCFunction2(ctx, (JSCFunction *)getter, name, 0, JS_CFUNC_getter, 0);
+    JS_DefinePropertyGetSet(ctx, obj, atom, getter_fn, JS_UNDEFINED,
+                            JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE);
+    JS_FreeAtom(ctx, atom);
+}
+
 void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 {
     JSContext *ctx = (JSContext *)r->js_ctx;
@@ -2813,6 +3147,24 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
     install_global_fn(ctx, global, "fetch", js_fetch, 1);
     install_global_fn(ctx, global, "matchMedia", js_matchMedia, 1);
     install_global_fn(ctx, global, "getComputedStyle", js_getComputedStyle, 1);
+
+    /* Live window viewport metrics (replaces the old hardcoded 1024/768 in the
+     * stubs prelude) — always reflect r->viewport_w/h. */
+    define_getter(ctx, global, "innerWidth", js_window_inner_width_get);
+    define_getter(ctx, global, "innerHeight", js_window_inner_height_get);
+    define_getter(ctx, global, "outerWidth", js_window_inner_width_get);
+    define_getter(ctx, global, "outerHeight", js_window_inner_height_get);
+
+    /* screen — no separate physical screen for a chromeless embed, so track the
+     * viewport too (coherent with innerWidth rather than a stale 1024/768). */
+    JSValue screen = JS_NewObject(ctx);
+    define_getter(ctx, screen, "width", js_window_inner_width_get);
+    define_getter(ctx, screen, "height", js_window_inner_height_get);
+    define_getter(ctx, screen, "availWidth", js_window_inner_width_get);
+    define_getter(ctx, screen, "availHeight", js_window_inner_height_get);
+    JS_SetPropertyStr(ctx, screen, "colorDepth", JS_NewInt32(ctx, 24));
+    JS_SetPropertyStr(ctx, screen, "pixelDepth", JS_NewInt32(ctx, 24));
+    JS_SetPropertyStr(ctx, global, "screen", screen);
 
     /* navigator */
     JSValue nav = JS_NewObject(ctx);
@@ -2944,8 +3296,14 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
                                           JS_CFUNC_setter, 0);
         JS_DefinePropertyGetSet(ctx, doc, atom, getter, setter, JS_PROP_CONFIGURABLE);
         JS_FreeAtom(ctx, atom);
-        /* Also: document.readyState */
-        JS_SetPropertyStr(ctx, doc, "readyState", JS_NewString(ctx, "complete"));
+        /* document.readyState starts at "loading": page scripts run while the
+		 * document is still loading, and frameworks branch on this — e.g. a
+		 * boot pass that runs immediately when readyState is already
+		 * "complete" but otherwise DEFERS to a readystatechange listener so
+		 * it sees the fully-built app. The script runner advances the state
+		 * to interactive/complete (firing readystatechange) after the script
+		 * pass — see yetty_ylexbor_js_run_all_scripts. */
+        JS_SetPropertyStr(ctx, doc, "readyState", JS_NewString(ctx, "loading"));
         /* document.URL / location */
         JS_SetPropertyStr(ctx, doc, "URL", JS_NewString(ctx, href));
         JS_SetPropertyStr(ctx, doc, "documentURI", JS_NewString(ctx, href));
@@ -3290,19 +3648,93 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "};\n"
         "})(globalThis);\n"
         "globalThis.Event = function(t, init){ this.type=t; this.bubbles=!!(init&&init.bubbles); "
-        "this.cancelable=!!(init&&init.cancelable); this.defaultPrevented=false; "
-        "this.preventDefault=()=>{this.defaultPrevented=true;}; this.stopPropagation=()=>{}; "
-        "this.stopImmediatePropagation=()=>{}; };"
-        "globalThis.CustomEvent = function(t, init){ globalThis.Event.call(this,t,init); "
-        "this.detail = init? init.detail : null; };"
-        "globalThis.MessageEvent = function(t, init){ globalThis.Event.call(this,t,init); "
-        "this.data = init?init.data:null; this.origin = init?init.origin||'':''; };"
-        "globalThis.MutationObserver = function(cb){ this.observe=()=>{}; this.disconnect=()=>{}; "
-        "this.takeRecords=()=>[]; };"
-        "globalThis.IntersectionObserver = function(cb){ this.observe=()=>{}; "
-        "this.unobserve=()=>{}; this.disconnect=()=>{}; this.takeRecords=()=>[]; };"
-        "globalThis.ResizeObserver = function(cb){ this.observe=()=>{}; this.unobserve=()=>{}; "
-        "this.disconnect=()=>{}; };"
+        "this.cancelable=!!(init&&init.cancelable); this.composed=!!(init&&init.composed); "
+        "this.defaultPrevented=false; "
+        "this.preventDefault=()=>{this.defaultPrevented=true;}; "
+        /* Propagation flags read by the dispatchEvent bubbling walk. */
+        "this.stopPropagation=()=>{this.__propagationStopped=true;}; "
+        "this.stopImmediatePropagation=()=>{this.__propagationStopped=true;"
+        "this.__immediateStopped=true;}; };"
+        /* CustomEvent/MessageEvent must CAPTURE the base Event constructor at
+		 * definition time. Shadow-DOM polyfills wrap globalThis.Event with a
+		 * function that ignores `this` and returns a fresh object — a dynamic
+		 * `globalThis.Event.call(this, …)` inside these subclasses then
+		 * initializes nothing, leaving every instance without a .type, and
+		 * every dispatched event silently matches zero listeners. */
+        "globalThis.CustomEvent = (function(BaseEvent){ return function(t, init){ "
+        "BaseEvent.call(this,t,init); "
+        "this.detail = init? init.detail : null; }; })(globalThis.Event);"
+        "globalThis.MessageEvent = (function(BaseEvent){ return function(t, init){ "
+        "BaseEvent.call(this,t,init); "
+        "this.data = init?init.data:null; this.origin = init?init.origin||'':''; }; "
+        "})(globalThis.Event);"
+        /* MutationObserver is a real implementation installed by dom_install
+		 * (js_dom_install runs first); do NOT stub it here or the working one
+		 * gets clobbered by a no-op. */
+        /* A real-enough IntersectionObserver. Lazy-loaders gate content on
+			 * isIntersecting=true — most importantly YouTube thumbnails: yt-image sets
+			 * the <img> src only from an IntersectionObserver "viewport entered"
+			 * callback (jet()->eLO()->observe()); a no-op stub leaves every thumbnail
+			 * blank. We report isIntersecting=true ONLY for elements that have a real
+			 * laid-out size AND fall inside the viewport (+rootMargin), re-checking a
+			 * few times to catch elements laid out after observe(), then giving up.
+			 * Requiring real size is what keeps off-screen / not-yet-laid-out lazy
+			 * content (e.g. GitHub's below-the-fold images) from all reporting visible
+			 * and flooding the loader. */
+        "globalThis.IntersectionObserver = function(cb, opts){ var self=this; var margin=0;"
+        "  try{ if(opts&&opts.rootMargin){ var mm=(''+opts.rootMargin).match(/-?\\d+/);"
+        "    if(mm) margin=Math.abs(parseInt(mm[0],10)); } }catch(e){}"
+        "  var watched=[]; var ticking=false;"
+        "  var rectOf=function(el){ try{ return el.getBoundingClientRect(); }"
+        "    catch(e){ return {top:0,left:0,right:0,bottom:0,width:0,height:0}; } };"
+        "  var fire=function(el, rc, vis){ var vw=window.innerWidth||1280, vh=window.innerHeight||800;"
+        "    cb([{ target: el, isIntersecting: vis, intersectionRatio: vis?1:0,"
+        "          boundingClientRect: rc, intersectionRect: rc,"
+        "          rootBounds: {top:0,left:0,right:vw,bottom:vh,width:vw,height:vh}, time: 0 }], self); };"
+        "  var check=function(){ ticking=false; var vw=window.innerWidth||1280, vh=window.innerHeight||800;"
+        "    for(var i=watched.length-1;i>=0;i--){ var w=watched[i]; w.n++;"
+        "      var rc=rectOf(w.el);"
+        "      var vis=(rc.width>0)&&(rc.height>0)&&(rc.bottom>=-margin)&&(rc.top<=vh+margin)"
+        "        &&(rc.right>=-margin)&&(rc.left<=vw+margin);"
+        "      if(vis){ fire(w.el, rc, true); watched.splice(i,1); }"
+        "      else if(w.n>=8){ watched.splice(i,1); } }"
+        "    if(watched.length && !ticking){ ticking=true; setTimeout(check, 250); } };"
+        "  this.observe=function(el){ if(!el) return; watched.push({el:el, n:0});"
+        "    if(!ticking){ ticking=true; setTimeout(check, 50); } };"
+        "  this.unobserve=function(el){ for(var i=0;i<watched.length;i++){ if(watched[i].el===el){ watched.splice(i,1); break; } } };"
+        "  this.disconnect=function(){ watched.length=0; };"
+        "  this.takeRecords=function(){ return []; }; };"
+        /* Real ResizeObserver delivery. Responsive components (YouTube's
+		 * ytd-rich-grid-renderer) read clientWidth at dataChanged — before the
+		 * first layout gives a nonzero box — and depend on a post-layout resize
+		 * notification to retry. A no-op stub strands them at containerWidth=0
+		 * forever. Delivery is async (a re-check timer, never synchronous from
+		 * observe(), never re-entering the layout pass), compares each target's
+		 * border box against its last-reported size, batches all changed targets
+		 * into one callback per observer, and isolates callback exceptions. This
+		 * mirrors the IntersectionObserver re-check loop above. */
+        "globalThis.ResizeObserver = function(cb){"
+        "  var self=this; var watched=[]; var ticking=false;"
+        "  var boxOf=function(el){ try{ var r=el.getBoundingClientRect(); return {w:r.width,h:r.height}; }"
+        "    catch(e){ return {w:0,h:0}; } };"
+        "  var check=function(){ ticking=false; var changed=[];"
+        "    for(var i=0;i<watched.length;i++){ var wt=watched[i]; var b=boxOf(wt.el);"
+        "      if(b.w!==wt.w || b.h!==wt.h){ wt.w=b.w; wt.h=b.h;"
+        "        if(globalThis.__RO_DEBUG){try{console.log('[RO] fire <'+(wt.el&&wt.el.tagName)+'> '+b.w+'x'+b.h);}catch(_){}}"
+        "        changed.push({target: wt.el,"
+        "          contentRect:{x:0,y:0,top:0,left:0,width:b.w,height:b.h,right:b.w,bottom:b.h},"
+        "          borderBoxSize:[{inlineSize:b.w,blockSize:b.h}],"
+        "          contentBoxSize:[{inlineSize:b.w,blockSize:b.h}]}); } }"
+        "    if(changed.length){ try{ cb(changed, self); }"
+        "      catch(e){ try{console.error('[RO] callback', (e&&e.name||'Error')+': '+(e&&e.message));}catch(_){}} }"
+        "    if(watched.length && !ticking){ ticking=true; setTimeout(check, 300); } };"
+        "  this.observe=function(el){ if(!el) return;"
+        "    for(var i=0;i<watched.length;i++){ if(watched[i].el===el) return; }"
+        "    watched.push({el:el, w:-1, h:-1});"
+        "    if(globalThis.__RO_DEBUG){try{var dr=boxOf(el);console.log('[RO] observe <'+(el&&el.tagName)+'> '+dr.w+'x'+dr.h);}catch(_){}}"
+        "    if(!ticking){ ticking=true; setTimeout(check, 50); } };"
+        "  this.unobserve=function(el){ for(var i=0;i<watched.length;i++){ if(watched[i].el===el){ watched.splice(i,1); break; } } };"
+        "  this.disconnect=function(){ watched.length=0; }; };"
         "globalThis.PerformanceObserver = function(cb){ this.observe=()=>{}; "
         "this.disconnect=()=>{}; this.takeRecords=()=>[]; };"
         "globalThis.performance = { now: () => Date.now(), mark: ()=>{}, measure: ()=>{}, "
@@ -3313,13 +3745,11 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.confirm = () => false;"
         "globalThis.prompt = () => null;"
         "globalThis.devicePixelRatio = 1;"
-        "globalThis.innerWidth  = "
-        "1024;"
-        "globalThis.innerHeight = "
-        "768;"
-        "globalThis.outerWidth  = 1024; globalThis.outerHeight = 768;"
-        "globalThis.screen      = { width:1024, height:768, availWidth:1024, availHeight:768, "
-        "colorDepth:24, pixelDepth:24 };"
+        /* innerWidth/innerHeight/outerWidth/outerHeight and screen.{width,height,
+         * availWidth,availHeight} are installed from C as LIVE getters over the
+         * engine viewport (r->viewport_w/h) in yetty_ylexbor_js_web_install — do
+         * NOT assign them here or a later set_viewport() would be masked by these
+         * stale constants (and the assignment would clobber the getters). */
         /* EventTarget — base class many libs `class X extends
 		 * EventTarget` against. Mirrors addEventListener etc. */
         /* dom_install already wired a real EventTarget whose prototype carries
@@ -3448,10 +3878,73 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.HTMLTimeElement   = function(){};"
         "globalThis.HTMLDataElement   = function(){};"
         "globalThis.HTMLUnknownElement= function(){};"
-        "globalThis.MessageChannel = function(){ const port = { postMessage:()=>{}, "
-        "onmessage:null, start:()=>{}, close:()=>{}, addEventListener:()=>{}, "
-        "removeEventListener:()=>{} }; this.port1=port; this.port2=port; };"
+        /* MessageChannel — a REAL entangled port pair with async delivery.
+		 * Task schedulers (e.g. YouTube's scheduler.js) pump their macrotask
+		 * queue through a MessageChannel port; a silent no-op stub swallows
+		 * every scheduled task — fetch continuations, SPA navigation — with
+		 * no error anywhere. Delivery order: onmessage first, then
+		 * addEventListener('message') listeners. Messages posted before the
+		 * port is started queue up; assigning onmessage auto-starts (spec). */
+        "(function(){"
+        "function deliver(port){"
+        "  if(!port._started||port._closed)return;"
+        "  while(port._queue.length){"
+        "    var data=port._queue.shift();"
+        "    var ev={type:'message',data:data,origin:'',ports:[],source:null,"
+        "      target:port,currentTarget:port,bubbles:false,cancelable:false,"
+        "      stopPropagation:function(){},stopImmediatePropagation:function(){},"
+        "      preventDefault:function(){}};"
+        "    try{ if(typeof port._onmessage==='function') port._onmessage(ev); }"
+        "    catch(e){ try{console.error('MessagePort onmessage:',e&&e.message);}catch(_){}}"
+        "    for(var i=0;i<port._listeners.length;i++){"
+        "      try{ port._listeners[i].call(port,ev); }"
+        "      catch(e){ try{console.error('MessagePort listener:',e&&e.message);}catch(_){}}"
+        "    }"
+        "  }"
+        "}"
+        "function makePort(){"
+        "  var port={_peer:null,_queue:[],_listeners:[],_onmessage:null,"
+        "    _started:false,_closed:false,onmessageerror:null,"
+        "    start:function(){ this._started=true; var p=this;"
+        "      setTimeout(function(){deliver(p);},0); },"
+        "    close:function(){ this._closed=true; },"
+        "    addEventListener:function(t,f){"
+        "      if(t==='message'&&typeof f==='function') this._listeners.push(f); },"
+        "    removeEventListener:function(t,f){"
+        "      var i=this._listeners.indexOf(f); if(i>=0)this._listeners.splice(i,1); },"
+        "    postMessage:function(data){"
+        "      var peer=this._peer;"
+        "      if(!peer||peer._closed)return;"
+        "      peer._queue.push(data);"
+        "      setTimeout(function(){deliver(peer);},0); }};"
+        "  Object.defineProperty(port,'onmessage',{"
+        "    get:function(){return this._onmessage;},"
+        "    set:function(f){ this._onmessage=f; this.start(); }});"
+        "  return port;"
+        "}"
+        "globalThis.MessageChannel=function(){"
+        "  this.port1=makePort(); this.port2=makePort();"
+        "  this.port1._peer=this.port2; this.port2._peer=this.port1;"
+        "};"
+        "})();"
         "globalThis.MessagePort   = function(){};"
+        /* window.postMessage — async 'message' event at the window itself
+		 * (the same-window mailbox pattern; also a scheduler macrotask
+		 * primitive). window.onmessage fires first, then the registered
+		 * 'message' listeners via the normal window dispatch path. */
+        "globalThis.postMessage = function(data,origin){"
+        "  setTimeout(function(){"
+        "    var ev={type:'message',data:data,"
+        "      origin:(globalThis.location&&globalThis.location.origin)||'',"
+        "      source:globalThis,ports:[],bubbles:false,cancelable:false,"
+        "      target:globalThis,currentTarget:globalThis,"
+        "      stopPropagation:function(){},stopImmediatePropagation:function(){},"
+        "      preventDefault:function(){}};"
+        "    try{ if(typeof globalThis.onmessage==='function') globalThis.onmessage(ev); }"
+        "    catch(e){ try{console.error('window.onmessage:',e&&e.message);}catch(_){}}"
+        "    try{ globalThis.dispatchEvent(ev); }catch(e){}"
+        "  },0);"
+        "};"
         "globalThis.Worklet       = function(){ this.addModule=()=>Promise.resolve(); };"
         "globalThis.LinkPreloadManager = function(){};"
         /* NodeFilter constants — the Shady-DOM (webcomponents) polyfill and DOM
@@ -3525,7 +4018,10 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.SVGSVGElement     = function(){};"
         "globalThis.MathMLElement     = function(){};"
         "globalThis.ShadowRoot        = function(){};"
-        "globalThis.DocumentFragment  = function(){};"
+        /* DocumentFragment is installed by the DOM layer with a real prototype
+		 * chained on Node.prototype (so fragments are not `instanceof Element`);
+		 * keep that if present and only stub it when the DOM layer is absent. */
+        "globalThis.DocumentFragment  = globalThis.DocumentFragment || function(){};"
         "globalThis.Text              = function(){};"
         "globalThis.Comment           = function(){};"
         /* Rest of the Node hierarchy. The Shady-DOM polyfill and kevlar iterate
@@ -3758,6 +4254,16 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "    if(ep && globalThis.HTMLElement && globalThis.HTMLElement.prototype)"
         "      Object.setPrototypeOf(globalThis.HTMLElement.prototype, ep);"
         "  }catch(e){} };"
+        /* connectedCallback fires once per element, only while it is in the
+		 * document tree. Kept separate from upgrade() so an element created
+		 * detached and inserted later connects at insertion time, matching the
+		 * custom-element-reaction lifecycle every web-component framework
+		 * relies on. */
+        "  const connectIfNeeded=(el)=>{ if(el.__ceConnected)return;"
+        "    if(el.isConnected!==true)return; el.__ceConnected=true;"
+        "    try{ if(typeof el.connectedCallback==='function') el.connectedCallback(); }"
+        "    catch(e){ try{console.error('ce connect <'+(el&&el.tagName)+'>', (e&&e.name||'Error')+': '+(e&&e.message),"
+        "      '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- '));}catch(_){}} };"
         "  const upgrade=(el,c)=>{ try{ if(el.__ceUpgraded)return; el.__ceUpgraded=true;"
         "    Object.setPrototypeOf(el,c.prototype);"
         /* Run the real constructor with `el` as `this` (brands private fields)
@@ -3766,66 +4272,68 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "    try{ Reflect.construct(c,[],c); }"
         "    finally{ if(globalThis.__ceStack[globalThis.__ceStack.length-1]===el)"
         "             globalThis.__ceStack.pop(); }"
-        "    if(typeof el.connectedCallback==='function') el.connectedCallback();"
+        "    connectIfNeeded(el);"
         "  }catch(e){ try{console.error('ce upgrade <'+(el&&el.tagName)+'>',"
-        "    e&&e.message, '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- "
+        "    (e&&e.name||'Error')+': '+(e&&e.message), '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- "
         "'));}catch(_){}} };"
+        /* Upgrade a raw defined element, or connect one already upgraded. */
+        "  const upgradeOrConnect=(el)=>{ if(!el||el.nodeType!==1)return;"
+        "    var tag=el.tagName?(''+el.tagName).toLowerCase():''; if(tag.indexOf('-')<=0)return;"
+        "    var c=m[tag]; if(!c)return;"
+        "    if(!el.__ceUpgraded) upgrade(el,c); else connectIfNeeded(el); };"
+        /* Collect matching elements by a manual deep walk. querySelectorAll skips
+			 * DocumentFragment children, but a framework stamps a component's
+			 * template into a fragment that becomes the host's child; a renderer
+			 * defined AFTER it was stamped must still be upgraded retroactively, and
+			 * an insertion of fragment-nested content must connect its descendants.
+			 * Descend into element (1) and document-fragment (11) children plus any
+			 * shadow root; `tag==='*'` matches every element. A <template>'s content
+			 * is reached via `.content`, not childNodes, so inert template contents
+			 * are correctly left un-upgraded. */
+        "  const deepEls=(root,tag)=>{ var out=[], seen=new Set(), st=[root];"
+        "    while(st.length){ var el=st.pop(); if(!el||seen.has(el))continue; seen.add(el);"
+        "      if(el.nodeType===1 && el.tagName && (tag==='*' || (''+el.tagName).toLowerCase()===tag)) out.push(el);"
+        "      var kids=el.childNodes; if(kids){ for(var i=0;i<kids.length;i++){ var k=kids[i];"
+        "        if(k&&(k.nodeType===1||k.nodeType===11)) st.push(k); } }"
+        "      if(el.shadowRoot&&el.shadowRoot.childNodes){ var sr=el.shadowRoot.childNodes;"
+        "        for(var j=0;j<sr.length;j++){ var s=sr[j]; if(s&&(s.nodeType===1||s.nodeType===11)) st.push(s); } } }"
+        "    return out; };"
         "  this.define=(n,c)=>{ m[n]=c; chain();"
-        "    try{ globalThis.ybPageTokenShim && globalThis.ybPageTokenShim(); }catch(e){}"
-        "    try{ var els=document.querySelectorAll(n); for(var i=0;i<els.length;i++) "
-        "upgrade(els[i],c);"
+        /* Arm synchronous custom-element reactions in the DOM insertion paths
+			 * the first time any element is defined. */
+        "    try{ globalThis.__ceActivate && globalThis.__ceActivate(); }catch(e){}"
+        /* Upgrade + connect any element of this tag already in the tree.
+		 * attachShadow delegates to the host, so shadow-stamped content is
+		 * the host's real children and querySelectorAll reaches it. */
+        "    try{ var els=deepEls(document.documentElement,n); for(var i=0;i<els.length;i++)"
+        "      upgradeOrConnect(els[i]);"
         "    }catch(e){}"
         "    if(defers[n]){ defers[n].forEach(r=>r()); delete defers[n]; } };"
         "  this.get=n=>m[n];"
         "  this.whenDefined=n=>{ if(m[n])return Promise.resolve(m[n]);"
         "    return new Promise(res=>{ (defers[n]=defers[n]||[]).push(()=>res(m[n])); }); };"
-        "  this.upgrade=root=>{ for(var n in m){ try{ var els=(root||document).querySelectorAll(n);"
-        "    for(var i=0;i<els.length;i++) upgrade(els[i],m[n]); }catch(e){} } }; };"
-        /* Boot-ordering shim: some Polymer apps resolve a per-page
-         * dependency-injection token inside an element's ready() observer,
-         * before the page element that provides it has been stamped — an
-         * ordering that throws a non-optional injector error and aborts the
-         * whole app upgrade. Seed a benign placeholder so ready() completes;
-         * the real page element overrides the provider moments later. The
-         * token is located by its .name, so this does not depend on the app's
-         * minified identifiers. */
-        "globalThis.ybPageTokenShim=function(){"
-        "  try{ var ns=globalThis.default_kevlar_base;"
-        "    if(!ns||globalThis.ybPageTokenSeeded)return;"
-        /* Locate the PAGE_TOKEN injection token by its .name (the token class
-         * stores the name verbatim), so the app's minified export name does
-         * not matter. */
-        "    var tok=null,k; for(k in ns){ try{ var v=ns[k];"
-        "      if(v && typeof v==='object' && v.name==='PAGE_TOKEN'){ tok=v; break; } }catch(e){} }"
-        "    if(!tok)return;"
-        /* Locate the injector singleton accessor(s) without depending on the
-         * minified name: it is a zero-arg function whose body lazily builds a
-         * singleton and returns it — `X||(X=new Y);return X`, the SAME
-         * identifier assigned and returned (backreference). Only functions
-         * matching that exact source shape are invoked (avoids calling
-         * arbitrary side-effecting functions), then shape-checked for the
-         * injector surface. There can be more than one injector; seed every
-         * candidate so whichever one the app's observer resolves against has
-         * the provider. */
-        "    var page={getScrollTop:function(){return 0;},scrollToTop:function(){},"
-        "      getScrollableElement:function(){return document.body;},"
-        "      getPageScrollingElement:function(){return document.body;},"
-        "      getContentContainer:function(){return document.body;}};"
-        "    var stub={getCurrentPage:function(){return page;}};"
-        "    var singleton=/(\\w+)\\|\\|\\(\\1=new \\w+\\);return \\1/, seeded=0;"
-        "    for(k in ns){ try{ var f=ns[k];"
-        "      if(typeof f==='function' && f.length===0){"
-        "        var src=Function.prototype.toString.call(f);"
-        "        if(src.length<200 && singleton.test(src)){"
-        "          var candidate=f();"
-        "          if(candidate && typeof candidate.addProvider==='function' && candidate.providers"
-        "             && typeof candidate.providers.has==='function' && typeof candidate.resolve==='function'){"
-        "            if(!candidate.providers.has(tok)) candidate.addProvider({provide:tok,useValue:stub});"
-        "            seeded++; } } } }catch(e){} }"
-        "    if(seeded>0) globalThis.ybPageTokenSeeded=true;"
-        "  }catch(e){}"
-        "};"
+        "  this.upgrade=root=>{ var base=root||document.documentElement;"
+        "    for(var n in m){ try{ var els=deepEls(base,n);"
+        "    for(var i=0;i<els.length;i++) upgradeOrConnect(els[i]); }catch(e){} } };"
+        /* Connect every defined custom element in a freshly-inserted subtree,
+		 * in tree order. Driven by the reaction observer below on each
+		 * insertion. */
+        "  this.__connectSubtree=(node)=>{ try{"
+        "    var all=deepEls(node,'*'); for(var i=0;i<all.length;i++) upgradeOrConnect(all[i]);"
+        "  }catch(e){ try{console.error('ce subtree <'+(node&&(node.tagName||node.nodeName))+'> nt='+(node&&node.nodeType),"
+        "    (e&&e.name||'Error')+': '+(e&&e.message), '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- '));}catch(_){}} };"
+        "  this.__disconnectSubtree=(node)=>{ try{"
+        "    var visit=(el)=>{ if(el&&el.nodeType===1&&el.__ceConnected){ el.__ceConnected=false;"
+        "      try{ if(typeof el.disconnectedCallback==='function') el.disconnectedCallback(); }"
+        "      catch(e){} } };"
+        "    var all=deepEls(node,'*'); for(var i=0;i<all.length;i++) visit(all[i]);"
+        "  }catch(e){} }; };"
         "globalThis.customElements = new globalThis.CustomElementRegistry();"
+        /* Custom-element reactions are driven synchronously from the DOM
+		 * insertion primitives (see ce_react_connect in the dom layer): on every
+		 * insertion into the live document the inserted subtree is handed to
+		 * __connectSubtree, so connectedCallback fires in-line with template
+		 * stamping -- the ordering Polymer/Lit/Stencil require. */
         "globalThis.Image       = function(){ this.src=''; this.onload=null; this.onerror=null; "
         "this.addEventListener=()=>{}; };"
         "globalThis.FileReader  = function(){ this.readAsText=()=>{}; this.readAsDataURL=()=>{}; "

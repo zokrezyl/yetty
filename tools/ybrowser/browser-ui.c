@@ -3085,6 +3085,11 @@ struct YETTY_ANNOTATE("class@ybrowser:app") YETTY_ANNOTATE("parent@yapp:app") ye
     size_t prefetch_len;
     char *prefetch_eff;   /* effective URL after redirects (owned) */
     char *prefetch_ctype; /* response Content-Type (owned), or NULL */
+
+    /* Debug-eval hook (YBROWSER_DEBUG_EVAL=<file>): when the file's mtime
+     * changes, its contents are evaluated in the active page and the result
+     * is printed to stderr. Diagnostic channel for live-page introspection. */
+    long debug_eval_mtime;
 };
 
 /* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
@@ -3177,6 +3182,38 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         /* Per-frame browser work: pump JS timers, re-render the active
 		 * tab into the embed when needed. */
         int pump_wait = pump_active(&s->app);
+        /* Debug-eval hook: re-evaluate the YBROWSER_DEBUG_EVAL file in the
+         * active page whenever its mtime changes (live introspection). */
+        {
+            const char *eval_path = getenv("YBROWSER_DEBUG_EVAL");
+            struct stat eval_stat;
+            if (eval_path != NULL && stat(eval_path, &eval_stat) == 0 &&
+                (long)eval_stat.st_mtime != s->debug_eval_mtime) {
+                s->debug_eval_mtime = (long)eval_stat.st_mtime;
+                FILE *eval_file = fopen(eval_path, "rb");
+                if (eval_file != NULL) {
+                    char *eval_src = calloc(1, (size_t)eval_stat.st_size + 1);
+                    if (eval_src != NULL &&
+                        fread(eval_src, 1, (size_t)eval_stat.st_size, eval_file) > 0) {
+                        struct tab *eval_tab = &s->app.tabs[s->app.active];
+                        if (eval_tab->engine != NULL) {
+                            struct yetty_ycore_char_ptr_result eval_res =
+                                yetty_ylexbor_eval_js(eval_tab->engine, eval_src);
+                            if (YETTY_IS_OK(eval_res)) {
+                                fprintf(stderr, "debug-eval: %s\n",
+                                        eval_res.value ? eval_res.value : "(null)");
+                                free(eval_res.value);
+                            } else {
+                                fprintf(stderr, "debug-eval: ERR %s\n", eval_res.error.msg);
+                                yetty_ycore_error_destroy(eval_res.error);
+                            }
+                        }
+                    }
+                    free(eval_src);
+                    fclose(eval_file);
+                }
+            }
+        }
         /* Present only when this tick actually changed something visible. The
          * frame timer wakes us ~60fps to keep page JS timers/rAF/idle callbacks
          * running, but a static page must not re-clear/render/present every

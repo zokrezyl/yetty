@@ -643,15 +643,41 @@ bool yetty_ylexbor_box_clipped_out(const struct yetty_ylexbor *r, uint32_t idx)
 	 * overflow:hidden strip). We have no per-pixel scissor, so a box merely
 	 * straddling the edge is kept, not partially clipped. Parent indices are
 	 * strictly smaller (tree-order allocation), so the walk always terminates. */
+    /* Positioning matters: overflow clipping only applies from an ancestor on the
+     * box's containing-block chain. An `absolute` box is clipped by its containing
+     * block (nearest positioned ancestor) and above — NOT by intervening static
+     * ancestors; a `fixed` box escapes to the viewport and is clipped by no in-flow
+     * ancestor. YouTube's `ytd-app` is position:absolute inside a
+     * `body{overflow:hidden}` that collapses to ~24px (ytd-app is out of flow);
+     * without this, body wrongly clipped away the whole results page. `esc` tracks
+     * the effective positioning of the subtree we came up through. */
+    uint8_t esc = b->position;
     uint32_t cur = b->parent;
     while (true) {
         const struct yetty_ylexbor_box *anc = &r->boxes.data[cur];
-        if (cur != idx && anc->clip_overflow && anc->w > 0.0f && anc->h > 0.0f) {
+        bool skip = false;
+        if (esc == YL_POS_FIXED) {
+            skip = true; /* fixed: only the viewport clips it (no transform CB modelled) */
+        } else if (esc == YL_POS_ABSOLUTE && anc->position == YL_POS_STATIC) {
+            skip = true; /* absolute: static ancestors below its CB do not clip */
+        }
+        if (!skip && cur != idx && anc->clip_overflow && anc->w > 0.0f && anc->h > 0.0f) {
             const float slack = 0.5f;
             if (b->x >= anc->x + anc->w - slack || b->x + b->w <= anc->x + slack ||
                 b->y >= anc->y + anc->h - slack || b->y + b->h <= anc->y + slack) {
                 return true;
             }
+        }
+        /* Advance the escape mode for the next ancestor: a fixed subtree stays
+			 * fixed; an absolute box keeps hunting through static ancestors until its
+			 * positioned containing block, after which (and in the normal case) the
+			 * subtree adopts this ancestor's own positioning. */
+        if (esc == YL_POS_FIXED) {
+            esc = YL_POS_FIXED;
+        } else if (esc == YL_POS_ABSOLUTE && anc->position == YL_POS_STATIC) {
+            esc = YL_POS_ABSOLUTE;
+        } else {
+            esc = anc->position;
         }
         if (cur == 0) {
             break;

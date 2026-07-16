@@ -873,6 +873,15 @@ struct yetty_ylexbor {
     int defer_scripts;
     int dom_dirty; /* JS mutated the DOM — host should
 	                            * relayout. */
+    /* Set while a box-build + layout pass is running (see
+     * yetty_ylexbor_relayout_boxes_and_layout). The layout-dependent geometry
+     * getters (clientWidth/offsetWidth/getBoundingClientRect) check this before
+     * forcing a synchronous flush and skip the flush when a layout is already
+     * in progress, so a geometry read reached from inside box-build/layout
+     * returns the in-progress layout instead of recursing. This is a shared
+     * layout-state signal, not a lock: relayout_boxes_and_layout sets/clears it
+     * but does not itself reject a reentrant non-geometry caller. */
+    int layout_in_progress;
 
     int viewport_w, viewport_h;
     float default_font_size;
@@ -1571,7 +1580,14 @@ void yetty_ybrowser_loader_cache_put_pixels(struct yetty_ybrowser_loader *loader
  * → paint if set. */
 int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y);
 
-/* Re-resolve box tree + layout from the (possibly mutated) DOM. */
+/* Re-resolve box tree + layout from the (possibly mutated) DOM, then resolve
+ * iframes. Host relayout entry point. */
 struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r);
+
+/* Box-build + layout only — the pure style/layout flush with no iframe
+ * resolution or other side effects. Used as a CSSOM forced-layout point by
+ * layout-dependent geometry getters. Guards r->layout_in_progress; restores
+ * r->dom_dirty on failure. */
+struct yetty_ycore_void_result yetty_ylexbor_relayout_boxes_and_layout(struct yetty_ylexbor *r);
 
 #endif

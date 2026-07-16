@@ -1,0 +1,81 @@
+<!doctype html><meta charset=utf-8>
+<title>document.createDocumentFragment() returns a real DocumentFragment, not a &lt;div&gt;
+(nodeType 11, appending moves children and empties the fragment, importNode preserves the
+fragment type). A fake-element fragment silently corrupts any framework that rewraps parsed
+template content through this API before stamping — the box only reaches its expected height
+when every fragment-semantics assertion holds.</title>
+<style>body{margin:0}</style>
+<template id="ft-tpl"><x-a></x-a><x-b></x-b></template>
+<div data-test="frag-semantics" data-expect="0,0,800,40" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var ok = true;
+
+/* --- first-touch independence: a fragment reached through a generic DOM
+ * getter (template.content), NOT the direct createDocumentFragment variable,
+ * must still have DocumentFragment identity. Internal wrap paths (wrap_element
+ * casts) must not make identity depend on which entry point touches the node
+ * first. This block runs before any createDocumentFragment call. --- */
+var ftContent = document.getElementById("ft-tpl").content;
+ok = check(ftContent.nodeType === 11, "template.content nodeType===11 got " + ftContent.nodeType) && ok;
+ok = check(!(ftContent instanceof Element), "template.content NOT instanceof Element") && ok;
+ok = check(ftContent instanceof DocumentFragment, "template.content instanceof DocumentFragment") && ok;
+ok = check(typeof ftContent.querySelector === "function" &&
+           ftContent.querySelector("x-b") && ftContent.querySelector("x-b").localName === "x-b",
+           "template.content querySelector works") && ok;
+
+/* --- identity / type --- */
+var f = document.createDocumentFragment();
+ok = check(f.nodeType === 11, "nodeType===11 got " + f.nodeType) && ok;
+ok = check(f.nodeName === "#document-fragment", "nodeName got " + f.nodeName) && ok;
+/* Interface identity: a fragment is a Node and a DocumentFragment, but NOT an
+ * Element. The single element-class wrapper otherwise makes a real-typed
+ * fragment `instanceof Element`, and frameworks branch on that (kevlar walks
+ * stamped content with `x instanceof Element` checks), which corrupts stamping. */
+ok = check(!(f instanceof Element), "fragment is NOT instanceof Element") && ok;
+ok = check(f instanceof Node, "fragment is instanceof Node") && ok;
+ok = check(f instanceof DocumentFragment, "fragment is instanceof DocumentFragment") && ok;
+ok = check(Object.getPrototypeOf(f) === DocumentFragment.prototype,
+           "fragment proto === DocumentFragment.prototype") && ok;
+
+/* --- move-children insertion + emptying --- */
+var a = document.createElement("x-a"), b = document.createElement("x-b");
+f.appendChild(a); f.appendChild(b);
+ok = check(f.childNodes.length === 2, "frag holds 2 children got " + f.childNodes.length) && ok;
+var host = document.createElement("div");     /* detached scratch — children move regardless */
+host.appendChild(f);
+ok = check(host.children.length === 2, "children moved got " + host.children.length) && ok;
+ok = check(host.children[0] && host.children[0].localName === "x-a" &&
+           host.children[1] && host.children[1].localName === "x-b",
+           "child order preserved (x-a,x-b)") && ok;
+ok = check(f.childNodes.length === 0, "frag emptied got " + f.childNodes.length) && ok;
+ok = check(f.parentNode === null, "frag parentless got " + f.parentNode) && ok;
+
+/* --- deep importNode preserves fragment type + distinct identity + ownership --- */
+var src = document.createDocumentFragment();
+src.appendChild(document.createElement("x-c"));
+var imp = document.importNode(src, true);
+ok = check(imp.nodeType === 11, "importNode(frag) nodeType===11 got " + imp.nodeType) && ok;
+ok = check(imp !== src, "imported fragment is a distinct identity from source") && ok;
+ok = check(imp.firstChild && imp.firstChild.parentNode === imp,
+           "imported child's parentNode is the imported fragment") && ok;
+ok = check(imp.ownerDocument === document, "imported fragment shares ownerDocument") && ok;
+ok = check(imp.firstChild === imp.firstChild, "repeated child access returns a stable wrapper") && ok;
+
+/* --- inserting the imported fragment empties it and preserves order --- */
+var sink = document.createElement("div");
+imp.appendChild(document.createElement("x-d"));   /* imp now: x-c, x-d */
+var expectFirst = imp.firstChild, expectLast = imp.lastChild;
+sink.appendChild(imp);
+ok = check(imp.childNodes.length === 0, "imported frag emptied after insert got " + imp.childNodes.length) && ok;
+ok = check(sink.firstChild === expectFirst && sink.lastChild === expectLast,
+           "inserted children keep order and identity") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="frag-semantics"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

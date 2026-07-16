@@ -85,3 +85,9 @@ Env: `YBROWSER=<path>` (default `build-desktop-ytrace-release/...`),
 - flex `gap` / `column-gap` (was ignored).
 - absolute child `bottom`/`right` insets against a parent with an explicit
   height (containing-block height was taken as the in-flow content height = 0).
+- `document.createDocumentFragment()` returned a `<div>` instead of a real
+  `DocumentFragment` (wrong `nodeType`, and appending it inserted the wrapper
+  element rather than moving its children) — this corrupted any framework that
+  rewraps parsed template content through the API before stamping (Polymer's
+  nested `dom-if`/`dom-repeat` prep). Now returns a real fragment. Pinned by
+  `31-document-fragment/` (generic semantics + the exact Polymer rewrap/import).

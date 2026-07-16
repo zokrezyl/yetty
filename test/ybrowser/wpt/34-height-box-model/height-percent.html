@@ -1,0 +1,45 @@
+<!doctype html><meta charset=utf-8>
+<title>A resolved percentage height honors the child's own box-sizing: it resolves against the
+parent's content-box height, then a content-box child adds padding+border to reach the used border
+box while a border-box child treats the resolved value AS the border box. Parent content height is
+200px. The gate grows only when both hold.</title>
+<style>body{margin:0}</style>
+<div data-test="height-percent" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+function mk(style, parent){
+  var el = document.createElement('div');
+  el.setAttribute('style', style + ';display:block');
+  (parent || sandbox).appendChild(el);
+  return el;
+}
+function m3(el){ var r = el.getBoundingClientRect(); return [el.offsetHeight, el.clientHeight, Math.round(r.height)]; }
+function eq3(el, oh, ch, rh, label){
+  var g = m3(el);
+  return check(g[0] === oh && g[1] === ch && g[2] === rh,
+               label + " -> off/client/rect = " + g[0] + "/" + g[1] + "/" + g[2] +
+               " (want " + oh + "/" + ch + "/" + rh + ")");
+}
+var ok = true;
+
+/* 7a. content-box 50% of parent content 200 = content 100; +P20 +B10 -> 130 border box */
+var p1parent = mk('box-sizing:content-box;height:200px;margin:0');
+var p1child = mk('box-sizing:content-box;height:50%;padding-top:10px;padding-bottom:10px;border-top:5px solid #333;border-bottom:5px solid #333;margin:0', p1parent);
+ok = eq3(p1child, 130, 120, 130, "7a content-box 50% + P20 + B10") && ok;
+
+/* 7b. border-box 50% of parent content 200 = border box 100 directly;
+       client = 100 - 10 borders = 90; content = 100 - 20 - 10 = 70 */
+var p2parent = mk('box-sizing:content-box;height:200px;margin:0');
+var p2child = mk('box-sizing:border-box;height:50%;padding-top:10px;padding-bottom:10px;border-top:5px solid #333;border-bottom:5px solid #333;margin:0', p2parent);
+ok = eq3(p2child, 100, 90, 100, "7b border-box 50% (resolved is the border box)") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="height-percent"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>
