@@ -65,6 +65,17 @@ struct yetty_yfont_ms_font_ops {
     struct uint32_result (*get_glyph_index_styled)(struct yetty_yfont_ms_font *self,
                                                    uint32_t codepoint,
                                                    enum yetty_yfont_ms_style style);
+    /* Cluster lookup — resolve a base codepoint plus its combining marks to a
+     * single atlas slot with the marks composited over the base. Optional:
+     * left NULL by backends that cannot composite (the MSDF backend bakes
+     * SDFs offline and has no live rasterizer), in which case callers fall
+     * back to get_glyph_index_styled on the base codepoint and the marks are
+     * dropped. Interim rendering: correct for stacking diacritics; Arabic
+     * joining and Indic reordering still need a shaper. */
+    struct uint32_result (*get_glyph_index_cluster)(struct yetty_yfont_ms_font *self,
+                                                    uint32_t codepoint, const uint32_t *marks,
+                                                    uint8_t mark_count,
+                                                    enum yetty_yfont_ms_style style);
     /* Inverse of get_glyph_index — given an atlas glyph index that the
      * font previously handed out, recover the codepoint that produced it.
      * Used by selection / clipboard so cells (which store glyph_index,

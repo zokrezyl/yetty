@@ -723,6 +723,104 @@ static uint32_t decode_utf8(const uint8_t **cursor_ptr, const uint8_t *end)
     return codepoint;
 }
 
+/* Shape a maximal run of one complex script starting at *cursor_ptr and emit
+ * its shaped glyphs as free-position glyph records. Advances *cursor_ptr past
+ * the run and *cursor_x_ptr by the run's total advance. Pen offsets/advances
+ * come from the shaper (base_size pixels); each shaped glyph id resolves to an
+ * atlas slot through the (glyph_id, face) path. HarfBuzz emits glyphs in visual
+ * order for both LTR and RTL runs, so a simple left-to-right pen walk lays the
+ * run out correctly regardless of direction. */
+static struct yetty_ycore_void_result expand_shaped_run(
+    struct yetty_yvterm_sdf_layer *layer, const struct yetty_ydraw_text_drawable_list_view *span,
+    struct yetty_yfont_font *font, uint32_t slot, float scale,
+    enum yetty_yfont_shaping_script script, const uint8_t **cursor_ptr, const uint8_t *end,
+    float *cursor_x_ptr)
+{
+    /* A single shaped run rarely exceeds a line; a longer contiguous run is
+     * shaped in chunks (losing only cross-chunk joining at the boundary). */
+    enum { SHAPE_RUN_MAX = 256 };
+    uint32_t run_codepoints[SHAPE_RUN_MAX];
+    size_t run_count = 0;
+
+    const uint8_t *cursor = *cursor_ptr;
+    while (cursor < end && run_count < SHAPE_RUN_MAX) {
+        const uint8_t *save = cursor;
+        uint32_t codepoint = decode_utf8(&cursor, end);
+        if (codepoint == 0) {
+            cursor = save;
+            break;
+        }
+        if (yetty_yfont_shaping_script_for_codepoint(codepoint) != script) {
+            cursor = save; /* run ended — leave this codepoint for the caller */
+            break;
+        }
+        run_codepoints[run_count++] = codepoint;
+    }
+    *cursor_ptr = cursor;
+
+    struct yetty_yfont_shaped_glyph shaped[SHAPE_RUN_MAX];
+    struct uint32_result shape_res =
+        font->ops->shape_run(font, run_codepoints, run_count, shaped, SHAPE_RUN_MAX);
+    if (YETTY_IS_ERR(shape_res)) {
+        /* Skip this run rather than abort the whole span; cursor already moved
+         * past it. */
+        yetty_ycore_error_destroy(shape_res.error);
+        return YETTY_OK_VOID();
+    }
+    uint32_t glyph_count = shape_res.value;
+
+    float cursor_x = *cursor_x_ptr;
+    for (uint32_t gi = 0; gi < glyph_count; gi++) {
+        struct uint32_result slot_res = font->ops->get_glyph_index_by_gid(font, shaped[gi].gid);
+        if (YETTY_IS_ERR(slot_res)) {
+            yetty_ycore_error_destroy(slot_res.error);
+            cursor_x += shaped[gi].x_advance * scale + span->char_spacing;
+            continue;
+        }
+        uint32_t glyph_index = slot_res.value;
+
+        struct yetty_yrender_gpu_resource_set_result fresh_rs_result =
+            font->ops->get_gpu_resource_set(font);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fresh_rs_result, "sdf-layer: shaped run font rs");
+        const struct yetty_yrender_gpu_resource_set *fresh_rs = fresh_rs_result.value;
+        if (fresh_rs->buffer_count == 0 || !fresh_rs->buffers[0].data) {
+            return YETTY_ERR(yetty_ycore_void, "sdf-layer: shaped run font has no glyph metadata");
+        }
+        const float *meta = (const float *)fresh_rs->buffers[0].data;
+        uint32_t meta_count = (uint32_t)(fresh_rs->buffers[0].size / (6u * sizeof(float)));
+        if (glyph_index >= meta_count) {
+            cursor_x += shaped[gi].x_advance * scale + span->char_spacing;
+            continue;
+        }
+        const float *glyph_meta = meta + glyph_index * 6u;
+        float size_x = glyph_meta[0];
+        float size_y = glyph_meta[1];
+        float bearing_x = glyph_meta[2];
+        float bearing_y = glyph_meta[3];
+
+        if (size_x > 0.0f && size_y > 0.0f) {
+            float glyph_x = cursor_x + (bearing_x + shaped[gi].x_offset) * scale;
+            float glyph_y = span->y - (bearing_y + shaped[gi].y_offset) * scale;
+
+            uint32_t glyph_record[7];
+            glyph_record[0] = YVTERM_SDF_GLYPH_TYPE;
+            glyph_record[1] = span->layer;
+            memcpy(&glyph_record[2], &glyph_x, sizeof(float));
+            memcpy(&glyph_record[3], &glyph_y, sizeof(float));
+            memcpy(&glyph_record[4], &span->font_size, sizeof(float));
+            glyph_record[5] = (glyph_index & 0xFFFFu) | ((slot + 1u) << 16);
+            glyph_record[6] = span->color;
+
+            struct yetty_ycore_void_result ir = index_record(layer, glyph_record, 7u);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, ir, "sdf-layer: shaped run index glyph");
+        }
+
+        cursor_x += shaped[gi].x_advance * scale + span->char_spacing;
+    }
+    *cursor_x_ptr = cursor_x;
+    return YETTY_OK_VOID();
+}
+
 /* Expand a TEXT_DRAWABLE_LIST into one GLYPH record per codepoint, anchored at
  * cur_rolling_row, and index each. Mirrors ygrid's expand_text_span. */
 static struct yetty_ycore_void_result expand_text_span(
@@ -747,10 +845,29 @@ static struct yetty_ycore_void_result expand_text_span(
     const uint8_t *cursor = (const uint8_t *)span->text;
     const uint8_t *end = cursor + span->text_len;
     while (cursor < end) {
-        uint32_t codepoint = decode_utf8(&cursor, end);
+        /* Peek the next codepoint to classify it without consuming. */
+        const uint8_t *peek = cursor;
+        uint32_t codepoint = decode_utf8(&peek, end);
         if (codepoint == 0) {
             break;
         }
+
+        /* Complex-script run: hand a maximal same-class run to the shaper and
+         * emit its shaped glyphs (contextual joining, reordering, mark
+         * positioning) through the same free-position glyph records. Falls back
+         * to the per-codepoint path when the backend has no shaper (NULL op). */
+        enum yetty_yfont_shaping_script script =
+            yetty_yfont_shaping_script_for_codepoint(codepoint);
+        if (script != YETTY_YFONT_SHAPING_NONE && font->ops->shape_run &&
+            font->ops->get_glyph_index_by_gid) {
+            struct yetty_ycore_void_result shaped_res =
+                expand_shaped_run(layer, span, font, slot, scale, script, &cursor, end, &cursor_x);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, shaped_res, "sdf-layer: shaped run");
+            continue;
+        }
+
+        /* Simple codepoint: consume it and take the fast per-glyph path. */
+        cursor = peek;
         struct uint32_result glyph_idx_result = font->ops->get_glyph_index(font, codepoint);
         if (YETTY_IS_ERR(glyph_idx_result)) {
             yetty_ycore_error_destroy(glyph_idx_result.error);

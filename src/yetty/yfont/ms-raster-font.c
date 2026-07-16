@@ -55,6 +55,21 @@ struct yetty_yfont_codepoint_slot {
     uint32_t slot;
 };
 
+/* Upper bound on combining marks composited into one cluster slot. Matches
+ * the grapheme-cluster capacity the terminal model captures per cell
+ * (libvterm's VTERM_MAX_CHARS_PER_CELL minus the base). */
+#define RASTER_FONT_MAX_MARKS 5
+
+/* Cache entry for a composited base+marks cluster. The atlas slot holds the
+ * base with each combining mark stacked over it; the key is the whole cluster
+ * so identical clusters (very common in running text) reuse one slot. */
+struct yetty_yfont_cluster_slot {
+    uint32_t codepoint;
+    uint32_t marks[RASTER_FONT_MAX_MARKS];
+    uint8_t mark_count;
+    uint32_t slot;
+};
+
 struct yetty_yfont_raster_font {
     struct yetty_yfont_ms_font base;
 
@@ -99,6 +114,12 @@ struct yetty_yfont_raster_font {
     size_t codepoint_slots_count[4];
     size_t codepoint_slots_capacity[4];
 
+    /* Composited base+marks clusters, keyed on the whole cluster (per style).
+     * Separate from codepoint_slots so the common no-marks path is untouched. */
+    struct yetty_yfont_cluster_slot *cluster_slots[4];
+    size_t cluster_slots_count[4];
+    size_t cluster_slots_capacity[4];
+
     int dirty;
 };
 
@@ -126,12 +147,27 @@ static struct yetty_yrender_gpu_resource_set_result raster_font_get_gpu_resource
 static void raster_font_update_font_size(struct yetty_yfont_raster_font *font);
 static void raster_font_rasterize_all(struct yetty_yfont_raster_font *font);
 static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uint32_t codepoint,
+                                       const uint32_t *marks, uint8_t mark_count,
                                        enum yetty_yfont_ms_style style);
+static struct uint32_result raster_font_get_glyph_index_cluster(struct yetty_yfont_ms_font *self,
+                                                                uint32_t codepoint,
+                                                                const uint32_t *marks,
+                                                                uint8_t mark_count,
+                                                                enum yetty_yfont_ms_style style);
 static void raster_font_cleanup(struct yetty_yfont_raster_font *font);
 static uint32_t raster_font_lookup_slot(struct yetty_yfont_raster_font *font, int style_idx,
                                         uint32_t codepoint);
 static void raster_font_add_slot(struct yetty_yfont_raster_font *font, int style_idx,
                                  uint32_t codepoint, uint32_t slot);
+static uint32_t raster_font_lookup_cluster(struct yetty_yfont_raster_font *font, int style_idx,
+                                           uint32_t codepoint, const uint32_t *marks,
+                                           uint8_t mark_count);
+static void raster_font_add_cluster(struct yetty_yfont_raster_font *font, int style_idx,
+                                    uint32_t codepoint, const uint32_t *marks, uint8_t mark_count,
+                                    uint32_t slot);
+static int raster_font_resolve_face_glyph(struct yetty_yfont_raster_font *font, uint32_t codepoint,
+                                          enum yetty_yfont_ms_style style, FT_Face *out_face,
+                                          FT_UInt *out_index);
 static void raster_font_grow_atlas(struct yetty_yfont_raster_font *font);
 
 static struct yetty_ycore_void_result raster_font_set_cell_size(
@@ -143,6 +179,7 @@ static const struct yetty_yfont_ms_font_ops raster_font_ops = {
     .set_cell_size = raster_font_set_cell_size,
     .get_glyph_index = raster_font_get_glyph_index,
     .get_glyph_index_styled = raster_font_get_glyph_index_styled,
+    .get_glyph_index_cluster = raster_font_get_glyph_index_cluster,
     .get_codepoint = raster_font_get_codepoint,
     .resize = raster_font_resize,
     .load_glyphs = raster_font_load_glyphs,
@@ -191,6 +228,111 @@ static void raster_font_add_slot(struct yetty_yfont_raster_font *font, int style
     font->codepoint_slots[style_idx][font->codepoint_slots_count[style_idx]].codepoint = codepoint;
     font->codepoint_slots[style_idx][font->codepoint_slots_count[style_idx]].slot = slot;
     font->codepoint_slots_count[style_idx]++;
+}
+
+static int cluster_slot_matches(const struct yetty_yfont_cluster_slot *entry, uint32_t codepoint,
+                                const uint32_t *marks, uint8_t mark_count)
+{
+    if (entry->codepoint != codepoint || entry->mark_count != mark_count) {
+        return 0;
+    }
+    for (uint8_t i = 0; i < mark_count; i++) {
+        if (entry->marks[i] != marks[i]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static uint32_t raster_font_lookup_cluster(struct yetty_yfont_raster_font *font, int style_idx,
+                                           uint32_t codepoint, const uint32_t *marks,
+                                           uint8_t mark_count)
+{
+    for (size_t i = 0; i < font->cluster_slots_count[style_idx]; i++) {
+        if (cluster_slot_matches(&font->cluster_slots[style_idx][i], codepoint, marks,
+                                 mark_count)) {
+            return font->cluster_slots[style_idx][i].slot;
+        }
+    }
+    return UINT32_MAX;
+}
+
+static void raster_font_add_cluster(struct yetty_yfont_raster_font *font, int style_idx,
+                                    uint32_t codepoint, const uint32_t *marks, uint8_t mark_count,
+                                    uint32_t slot)
+{
+    if (mark_count > RASTER_FONT_MAX_MARKS) {
+        mark_count = RASTER_FONT_MAX_MARKS;
+    }
+    for (size_t i = 0; i < font->cluster_slots_count[style_idx]; i++) {
+        if (cluster_slot_matches(&font->cluster_slots[style_idx][i], codepoint, marks,
+                                 mark_count)) {
+            font->cluster_slots[style_idx][i].slot = slot;
+            return;
+        }
+    }
+
+    if (font->cluster_slots_count[style_idx] >= font->cluster_slots_capacity[style_idx]) {
+        font->cluster_slots_capacity[style_idx] =
+            font->cluster_slots_capacity[style_idx] ? font->cluster_slots_capacity[style_idx] * 2
+                                                    : 64;
+        font->cluster_slots[style_idx] =
+            realloc(font->cluster_slots[style_idx],
+                    font->cluster_slots_capacity[style_idx] *
+                        sizeof(struct yetty_yfont_cluster_slot));
+    }
+
+    struct yetty_yfont_cluster_slot *entry =
+        &font->cluster_slots[style_idx][font->cluster_slots_count[style_idx]];
+    entry->codepoint = codepoint;
+    entry->mark_count = mark_count;
+    for (uint8_t i = 0; i < mark_count; i++) {
+        entry->marks[i] = marks[i];
+    }
+    entry->slot = slot;
+    font->cluster_slots_count[style_idx]++;
+}
+
+/* Resolve a codepoint to a (face, glyph index) pair: the requested style face
+ * first, then the Regular face, then the fallback chain — the same order the
+ * base rasterization uses. Returns 0 when no face covers the codepoint. */
+static int raster_font_resolve_face_glyph(struct yetty_yfont_raster_font *font, uint32_t codepoint,
+                                          enum yetty_yfont_ms_style style, FT_Face *out_face,
+                                          FT_UInt *out_index)
+{
+    FT_Face face = font->ft_faces[(int)style];
+    if (!face) {
+        face = font->ft_faces[YETTY_YFONT_MS_STYLE_REGULAR];
+    }
+    if (!face) {
+        return 0;
+    }
+    FT_UInt glyph_index = FT_Get_Char_Index(face, codepoint);
+    if (glyph_index == 0 && face != font->ft_faces[YETTY_YFONT_MS_STYLE_REGULAR] &&
+        font->ft_faces[YETTY_YFONT_MS_STYLE_REGULAR]) {
+        FT_Face regular = font->ft_faces[YETTY_YFONT_MS_STYLE_REGULAR];
+        FT_UInt regular_index = FT_Get_Char_Index(regular, codepoint);
+        if (regular_index != 0) {
+            face = regular;
+            glyph_index = regular_index;
+        }
+    }
+    if (glyph_index == 0) {
+        for (size_t i = 0; i < font->fallback_count; i++) {
+            FT_UInt fallback_index = FT_Get_Char_Index(font->fallback_faces[i], codepoint);
+            if (fallback_index != 0) {
+                face = font->fallback_faces[i];
+                glyph_index = fallback_index;
+                break;
+            }
+        }
+    }
+    if (glyph_index == 0) {
+        return 0;
+    }
+    *out_face = face;
+    *out_index = glyph_index;
+    return 1;
 }
 
 /* Apply the font's current pixel size to one face: scalable faces get the
@@ -424,18 +566,21 @@ static void raster_font_grow_atlas(struct yetty_yfont_raster_font *font)
 }
 
 static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uint32_t codepoint,
+                                       const uint32_t *marks, uint8_t mark_count,
                                        enum yetty_yfont_ms_style style)
 {
     int face_idx = (int)style;
     FT_Face face = font->ft_faces[face_idx];
 
-    ydebug("rasterize ENTER: cp=U+%04X style=%d face=%p", codepoint, (int)style, (void *)face);
+    ydebug("rasterize ENTER: cp=U+%04X marks=%u style=%d face=%p", codepoint, (unsigned)mark_count,
+           (int)style, (void *)face);
 
     /* Fallback to Regular if this face not available */
     if (!face) {
         ydebug("rasterize: face[%d] NULL, fallback or fail (style=%d)", face_idx, (int)style);
         if (style != YETTY_YFONT_MS_STYLE_REGULAR) {
-            return raster_font_rasterize_glyph(font, codepoint, YETTY_YFONT_MS_STYLE_REGULAR);
+            return raster_font_rasterize_glyph(font, codepoint, marks, mark_count,
+                                               YETTY_YFONT_MS_STYLE_REGULAR);
         }
         return 0;
     }
@@ -446,7 +591,8 @@ static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uin
     if (glyph_index == 0) {
         /* Fallback to Regular if glyph not in this face */
         if (style != YETTY_YFONT_MS_STYLE_REGULAR) {
-            return raster_font_rasterize_glyph(font, codepoint, YETTY_YFONT_MS_STYLE_REGULAR);
+            return raster_font_rasterize_glyph(font, codepoint, marks, mark_count,
+                                               YETTY_YFONT_MS_STYLE_REGULAR);
         }
         /* Walk the fallback chain — first face that covers the codepoint wins. */
         for (size_t i = 0; i < font->fallback_count; i++) {
@@ -497,7 +643,10 @@ static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uin
 
     struct yetty_yfont_raster_glyph_uv *uvs = FONT_UVS(font);
 
-    if (bitmap->width == 0 || bitmap->rows == 0) {
+    /* An empty base with no marks is a real (blank) slot. With marks present
+     * we fall through and composite them over the (cleared) slot even when the
+     * base contributes no pixels. */
+    if ((bitmap->width == 0 || bitmap->rows == 0) && mark_count == 0) {
         uvs[slot_idx].uv_x = -1.0f;
         uvs[slot_idx].uv_y = -1.0f;
         uvs[slot_idx].width_cells = 1.0f;
@@ -703,7 +852,11 @@ static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uin
     uvs[slot_idx].uv_x = (float)(atlas_x + RASTER_FONT_ATLAS_PADDING) / (float)aw;
     uvs[slot_idx].uv_y = (float)(atlas_y + RASTER_FONT_ATLAS_PADDING) / (float)ah;
     uvs[slot_idx].width_cells = (float)width_cells;
-    raster_font_add_slot(font, style_idx, codepoint, slot_idx);
+    if (mark_count > 0) {
+        raster_font_add_cluster(font, style_idx, codepoint, marks, mark_count, slot_idx);
+    } else {
+        raster_font_add_slot(font, style_idx, codepoint, slot_idx);
+    }
 
     /* Sample a few pixel values from the bitmap */
     uint8_t sample_vals[4] = {0};
@@ -717,6 +870,92 @@ static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uin
            codepoint, slot_idx, glyph_w, glyph_h, bitmap->pixel_mode, bearing_x, bearing_y,
            offset_x, offset_y, atlas_x, atlas_y, uvs[slot_idx].uv_x, uvs[slot_idx].uv_y,
            sample_vals[0], sample_vals[1], sample_vals[2], sample_vals[3]);
+
+    /* Interim combining-mark rendering: stack each captured mark over the base
+     * within this same slot. A mark carries its own FreeType bearing, which
+     * positions it relative to the pen origin the base was drawn from, so we
+     * render each and max-blend its coverage into the cell. Correct for
+     * stacking diacritics (Latin/Greek/Cyrillic/Hebrew/Vietnamese); Arabic
+     * joining and Indic reordering need a shaper. The base bitmap has already
+     * been consumed above, so re-loading faces here is safe. Skipped for BGRA
+     * colour strikes (emoji), whose clusters are handled by presentation
+     * selectors rather than stacked marks. */
+    if (mark_count > 0 && !(font->color_mode && bitmap->pixel_mode == FT_PIXEL_MODE_BGRA)) {
+        for (uint8_t mark_idx = 0; mark_idx < mark_count && mark_idx < RASTER_FONT_MAX_MARKS;
+             mark_idx++) {
+            FT_Face mark_face = NULL;
+            FT_UInt mark_glyph = 0;
+            if (!raster_font_resolve_face_glyph(font, marks[mark_idx], style, &mark_face,
+                                                &mark_glyph)) {
+                continue;
+            }
+            if (FT_Load_Glyph(mark_face, mark_glyph, FT_LOAD_RENDER)) {
+                continue;
+            }
+            FT_GlyphSlot mark_slot = mark_face->glyph;
+            FT_Bitmap *mark_bitmap = &mark_slot->bitmap;
+            /* Only grayscale marks composite cleanly into the coverage atlas. */
+            if (mark_bitmap->pixel_mode != FT_PIXEL_MODE_GRAY || mark_bitmap->width == 0 ||
+                mark_bitmap->rows == 0) {
+                continue;
+            }
+            int mark_w = (int)mark_bitmap->width;
+            int mark_h = (int)mark_bitmap->rows;
+
+            int mark_off_x = mark_slot->bitmap_left + RASTER_FONT_ATLAS_PADDING;
+            if (mark_off_x < RASTER_FONT_ATLAS_PADDING) {
+                mark_off_x = RASTER_FONT_ATLAS_PADDING;
+            }
+            if (mark_off_x > (int)(glyph_width - (uint32_t)mark_w - RASTER_FONT_ATLAS_PADDING)) {
+                mark_off_x = (int)(glyph_width - (uint32_t)mark_w - RASTER_FONT_ATLAS_PADDING);
+            }
+            if (mark_off_x < RASTER_FONT_ATLAS_PADDING) {
+                mark_off_x = RASTER_FONT_ATLAS_PADDING;
+            }
+
+            int mark_off_y = font->baseline - mark_slot->bitmap_top + RASTER_FONT_ATLAS_PADDING;
+            if (mark_off_y < RASTER_FONT_ATLAS_PADDING) {
+                mark_off_y = RASTER_FONT_ATLAS_PADDING;
+            }
+            if (mark_off_y > (int)(glyph_height - (uint32_t)mark_h - RASTER_FONT_ATLAS_PADDING)) {
+                mark_off_y = (int)(glyph_height - (uint32_t)mark_h - RASTER_FONT_ATLAS_PADDING);
+            }
+            if (mark_off_y < RASTER_FONT_ATLAS_PADDING) {
+                mark_off_y = RASTER_FONT_ATLAS_PADDING;
+            }
+
+            for (int y = 0; y < mark_h; y++) {
+                if (mark_off_y + y >= (int)glyph_height) {
+                    break;
+                }
+                for (int x = 0; x < mark_w; x++) {
+                    if (mark_off_x + x >= (int)glyph_width) {
+                        break;
+                    }
+                    uint8_t src = mark_bitmap->buffer[y * mark_bitmap->pitch + x];
+                    if (src == 0) {
+                        continue;
+                    }
+                    uint32_t dst_idx = (atlas_y + (uint32_t)mark_off_y + (uint32_t)y) * aw +
+                                       (atlas_x + (uint32_t)mark_off_x + (uint32_t)x);
+                    if (dst_idx >= atlas_size) {
+                        continue;
+                    }
+                    if (font->color_mode) {
+                        uint8_t *dst = pixels + (size_t)dst_idx * 4u;
+                        if (src > dst[3]) {
+                            dst[0] = 255u;
+                            dst[1] = 255u;
+                            dst[2] = 255u;
+                            dst[3] = src;
+                        }
+                    } else if (src > pixels[dst_idx]) {
+                        pixels[dst_idx] = src;
+                    }
+                }
+            }
+        }
+    }
 
     font->shelf_x = atlas_x + glyph_width + RASTER_FONT_ATLAS_PADDING;
     if (glyph_height > font->shelf_height) {
@@ -749,6 +988,7 @@ static void raster_font_rasterize_all(struct yetty_yfont_raster_font *font)
 
     for (int i = 0; i < 4; i++) {
         font->codepoint_slots_count[i] = 0;
+        font->cluster_slots_count[i] = 0; /* stale cluster slots die with the atlas */
         raster_font_add_slot(font, i, 0x20, 0); /* Map space to slot 0 */
     }
 
@@ -758,7 +998,7 @@ static void raster_font_rasterize_all(struct yetty_yfont_raster_font *font)
             if (cp == 0x20) {
                 continue; /* space already reserved */
             }
-            if (!raster_font_rasterize_glyph(font, cp, (enum yetty_yfont_ms_style)s)) {
+            if (!raster_font_rasterize_glyph(font, cp, NULL, 0, (enum yetty_yfont_ms_style)s)) {
                 ywarn("Failed to re-rasterize glyph U+%04X style %d", cp, s);
             }
         }
@@ -795,6 +1035,8 @@ static void raster_font_cleanup(struct yetty_yfont_raster_font *font)
     for (int i = 0; i < 4; i++) {
         free(font->codepoint_slots[i]);
         font->codepoint_slots[i] = NULL;
+        free(font->cluster_slots[i]);
+        font->cluster_slots[i] = NULL;
     }
 }
 
@@ -1092,7 +1334,7 @@ static struct uint32_result raster_font_get_glyph_index_styled(struct yetty_yfon
         return YETTY_OK(uint32, slot);
     }
 
-    if (raster_font_rasterize_glyph(font, codepoint, (enum yetty_yfont_ms_style)style)) {
+    if (raster_font_rasterize_glyph(font, codepoint, NULL, 0, (enum yetty_yfont_ms_style)style)) {
         slot = raster_font_lookup_slot(font, style_idx, codepoint);
         if (slot != UINT32_MAX) {
             return YETTY_OK(uint32, slot);
@@ -1104,6 +1346,46 @@ static struct uint32_result raster_font_get_glyph_index_styled(struct yetty_yfon
     }
 
     return YETTY_ERR(uint32, "glyph not found");
+}
+
+static struct uint32_result raster_font_get_glyph_index_cluster(struct yetty_yfont_ms_font *self,
+                                                                uint32_t codepoint,
+                                                                const uint32_t *marks,
+                                                                uint8_t mark_count,
+                                                                enum yetty_yfont_ms_style style)
+{
+    /* No marks → the plain per-codepoint slot; keeps the common path off the
+     * cluster cache entirely. */
+    if (mark_count == 0 || marks == NULL) {
+        return raster_font_get_glyph_index_styled(self, codepoint, style);
+    }
+
+    struct yetty_yfont_raster_font *font = container_of(self, struct yetty_yfont_raster_font, base);
+    if (mark_count > RASTER_FONT_MAX_MARKS) {
+        mark_count = RASTER_FONT_MAX_MARKS;
+    }
+
+    int style_idx = (int)style;
+    uint32_t slot = raster_font_lookup_cluster(font, style_idx, codepoint, marks, mark_count);
+    if (slot != UINT32_MAX) {
+        return YETTY_OK(uint32, slot);
+    }
+
+    if (raster_font_rasterize_glyph(font, codepoint, marks, mark_count, style)) {
+        slot = raster_font_lookup_cluster(font, style_idx, codepoint, marks, mark_count);
+        if (slot != UINT32_MAX) {
+            return YETTY_OK(uint32, slot);
+        }
+    }
+
+    /* The styled face may have resolved the base under Regular; look there. */
+    if (style != YETTY_YFONT_MS_STYLE_REGULAR) {
+        return raster_font_get_glyph_index_cluster(self, codepoint, marks, mark_count,
+                                                   YETTY_YFONT_MS_STYLE_REGULAR);
+    }
+
+    /* Last resort: the bare base glyph rather than nothing (marks dropped). */
+    return raster_font_get_glyph_index_styled(self, codepoint, style);
 }
 
 /* Inverse — scan the per-style codepoint_slots arrays for a slot match.
@@ -1187,7 +1469,7 @@ static struct yetty_ycore_void_result raster_font_load_glyphs(struct yetty_yfont
                 continue;
             }
 
-            if (!raster_font_rasterize_glyph(font, codepoint, style)) {
+            if (!raster_font_rasterize_glyph(font, codepoint, NULL, 0, style)) {
                 /* Not a warning for non-Regular - fallback handles it */
                 if (style == YETTY_YFONT_MS_STYLE_REGULAR) {
                     ywarn("Failed to rasterize glyph for U+%04X", codepoint);

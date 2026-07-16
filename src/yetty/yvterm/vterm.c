@@ -654,13 +654,22 @@ static uint32_t vterm_face_for_codepoint(const struct yetty_yvterm_vterm *vterm,
  * style. The styled lookup lazy-loads the (style, codepoint) slot on demand,
  * falling back to the Regular face when a bold/italic variant is absent. */
 static uint32_t vterm_resolve_glyph(struct yetty_yvterm_vterm *vterm, uint32_t face_index,
-                                    uint32_t codepoint, enum yetty_yfont_ms_style style)
+                                    uint32_t codepoint, const uint32_t *marks, uint8_t mark_count,
+                                    enum yetty_yfont_ms_style style)
 {
     struct yetty_yfont_ms_font *font = vterm->faces[face_index].font;
     if (!font || codepoint == 0) {
         return 0;
     }
-    struct uint32_result gi = font->ops->get_glyph_index_styled(font, codepoint, style);
+    /* A cluster with combining marks resolves to a composited slot when the
+     * backend supports it (raster); otherwise the marks are dropped and only
+     * the base glyph is drawn (MSDF has no live rasterizer). */
+    struct uint32_result gi;
+    if (mark_count > 0 && font->ops->get_glyph_index_cluster) {
+        gi = font->ops->get_glyph_index_cluster(font, codepoint, marks, mark_count, style);
+    } else {
+        gi = font->ops->get_glyph_index_styled(font, codepoint, style);
+    }
     if (YETTY_IS_OK(gi)) {
         return gi.value;
     }
@@ -702,14 +711,50 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm,
                 glyph = 0u;
             } else {
                 face = vterm_face_for_codepoint(vterm, cell->codepoint);
-                glyph = vterm_resolve_glyph(vterm, face, cell->codepoint,
-                                            vterm_cell_style(cell->attrs));
+                glyph = vterm_resolve_glyph(vterm, face, cell->codepoint, cell->marks,
+                                            cell->mark_count, vterm_cell_style(cell->attrs));
                 /* A range face that cannot supply the glyph falls back to the
                  * base font rather than leaving the cell blank. */
                 if (glyph == 0u && face != 0u) {
                     face = 0u;
-                    glyph = vterm_resolve_glyph(vterm, 0u, cell->codepoint,
-                                                vterm_cell_style(cell->attrs));
+                    glyph = vterm_resolve_glyph(vterm, 0u, cell->codepoint, cell->marks,
+                                                cell->mark_count, vterm_cell_style(cell->attrs));
+                }
+                /* Interim combining-mark rendering only composites on a raster
+                 * (FreeType) face. When the resolved face is MSDF — which has no
+                 * live rasterizer and drops the marks — re-resolve the cluster
+                 * against a raster face whose fallback chain covers the base,
+                 * preferring one that also covers the marks (a mono fallback
+                 * such as the wide "Noto*" glob) over one that only has the base
+                 * (e.g. a CJK face's Latin block, which lacks most diacritics).
+                 * Rare (most accented text arrives precomposed), so the extra
+                 * coverage probes cost nothing in practice. */
+                if (cell->mark_count > 0u &&
+                    vterm->faces[face].method != YVTERM_FONT_METHOD_RASTER &&
+                    vterm->faces[face].method != YVTERM_FONT_METHOD_RASTER_COLOR) {
+                    enum yetty_yfont_ms_style mark_style = vterm_cell_style(cell->attrs);
+                    uint32_t chosen_face = 0u;
+                    int chosen_found = 0;
+                    for (uint32_t raster_face = 0u; raster_face < vterm->face_count; ++raster_face) {
+                        if (vterm->faces[raster_face].method != YVTERM_FONT_METHOD_RASTER) {
+                            continue;
+                        }
+                        if (vterm_resolve_glyph(vterm, raster_face, cell->codepoint, NULL, 0u,
+                                                mark_style) == 0u) {
+                            continue; /* this face lacks the base glyph */
+                        }
+                        chosen_face = raster_face;
+                        chosen_found = 1;
+                        if (vterm_resolve_glyph(vterm, raster_face, cell->marks[0], NULL, 0u,
+                                                mark_style) != 0u) {
+                            break; /* covers base AND marks — the best fit */
+                        }
+                    }
+                    if (chosen_found) {
+                        glyph = vterm_resolve_glyph(vterm, chosen_face, cell->codepoint,
+                                                    cell->marks, cell->mark_count, mark_style);
+                        face = chosen_face;
+                    }
                 }
                 /* No face (nor its fallback chain) has this printable, spacing
                  * codepoint: draw a visible notdef box instead of a blank cell.

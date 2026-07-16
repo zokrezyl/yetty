@@ -31,6 +31,37 @@ enum yetty_yfont_style {
 
 YETTY_YRESULT_DECLARE(yetty_font_font, struct yetty_yfont_font *);
 
+/*
+ * Complex-script shaping support.
+ *
+ * Scripts whose correct rendering needs OpenType shaping (contextual joining,
+ * glyph reordering, conjunct formation, mark positioning) rather than the
+ * one-codepoint-one-glyph model. A run of same-class codepoints is handed to
+ * the shaper as a unit. YETTY_YFONT_SHAPING_NONE codepoints stay on the fast
+ * per-codepoint path.
+ */
+enum yetty_yfont_shaping_script {
+    YETTY_YFONT_SHAPING_NONE = 0,
+    YETTY_YFONT_SHAPING_ARABIC,  /* Arabic + Syriac + Thaana + N'Ko: cursive joining */
+    YETTY_YFONT_SHAPING_INDIC,   /* Devanagari..Malayalam, Sinhala: reorder + conjuncts */
+    YETTY_YFONT_SHAPING_BRAHMIC, /* Thai, Lao, Khmer, Myanmar, Tibetan: mark positioning */
+};
+
+/* Classify a codepoint for run detection. HarfBuzz-free — always available,
+ * so callers can detect shaping runs even in builds without the shaper. */
+enum yetty_yfont_shaping_script yetty_yfont_shaping_script_for_codepoint(uint32_t codepoint);
+
+/* One shaped output glyph. Positions are in pixels at the font's base_size,
+ * matching struct yetty_yfont_glyph_meta_gpu conventions, so the ydraw
+ * free-position path can place them directly and scale by font_size/base_size. */
+struct yetty_yfont_shaped_glyph {
+    uint32_t gid;        /* OpenType glyph id in this face — feed to get_glyph_index_by_gid */
+    float x_offset;      /* GPOS x offset from the pen, px at base_size */
+    float y_offset;      /* GPOS y offset from the pen, px at base_size (up positive) */
+    float x_advance;     /* horizontal advance, px at base_size */
+    uint32_t cluster;    /* source codepoint index within the run */
+};
+
 /* Font ops */
 struct yetty_yfont_font_ops {
     void (*destroy)(struct yetty_yfont_font *self);
@@ -40,6 +71,22 @@ struct yetty_yfont_font_ops {
     struct uint32_result (*get_glyph_index_styled)(struct yetty_yfont_font *self,
                                                    uint32_t codepoint,
                                                    enum yetty_yfont_style style);
+    /* Resolve an OpenType glyph id (from the shaper) to an atlas slot,
+     * rasterizing by glyph index rather than by codepoint. This is the
+     * (glyph_id, face) atlas key: the face is this font object, so the key
+     * reduces to the gid. Optional — NULL when the backend has no live
+     * rasterizer (MSDF/CDB is codepoint-keyed and cannot render arbitrary
+     * gids). */
+    struct uint32_result (*get_glyph_index_by_gid)(struct yetty_yfont_font *self, uint32_t gid);
+    /* Shape a run of codepoints belonging to one script/direction using the
+     * face's OpenType tables. Script, direction and language are inferred from
+     * the run content. Writes up to out_cap shaped glyphs into out and returns
+     * the count actually produced (may differ from count: ligatures reduce it,
+     * decompositions raise it). Optional — NULL when the backend has no
+     * shaper (build without HarfBuzz, or a non-FreeType backend). */
+    struct uint32_result (*shape_run)(struct yetty_yfont_font *self, const uint32_t *codepoints,
+                                      size_t count, struct yetty_yfont_shaped_glyph *out,
+                                      size_t out_cap);
     /* Inverse of get_glyph_index — given an atlas glyph index the font
      * previously handed out, recover the codepoint that produced it.
      * Used by selection / clipboard so glyph prims (which store

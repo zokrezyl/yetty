@@ -70,6 +70,12 @@ if(TARGET yetty_vnc)
     add_subdirectory(ut/yvnc)
 endif()
 
+# yfont — complex-script shaping (HarfBuzz). Only meaningful when the shaper is
+# built in; the test self-skips when the Noto fonts are not staged.
+if(YETTY_ENABLE_LIB_HARFBUZZ AND TARGET yetty_yfont_core)
+    add_subdirectory(ut/yfont)
+endif()
+
 # Parser/render modules — gated on their feature flag (which controls the target).
 if(YETTY_ENABLE_FEATURE_YPDF AND TARGET yetty_ypdf)
     add_subdirectory(ut/ypdf)
