@@ -4,7 +4,7 @@
  * single-threaded wasm build, so lwIP runs entirely from the browser
  * event loop: inbound ethernet frames from the relay WebSocket feed
  * netif->input(), a periodic tick calls sys_check_timeouts(), and the
- * tcp_* raw callbacks drive each connection. See src/yetty/ynet/.
+ * tcp_* raw callbacks drive each connection. See src/yetty/ywasmnet/.
  *
  * IPv4 only (the relays we target hand out v4 via DHCP); DHCP + DNS on
  * so the stack auto-configures and can dial hosts by name.
@@ -20,7 +20,7 @@
  * archives link into one wasm module, so wasm-ld sees duplicate
  * symbols. We rename lwIP's eight colliding symbols to lwip_*: this
  * header is included by every lwIP source (via lwip/opt.h) AND by our
- * ynet sources (via the lwIP public headers), so the definitions,
+ * ywasmnet sources (via the lwIP public headers), so the definitions,
  * lwIP's internal references, and our call sites all rename together.
  * slirp keeps the original names — it never includes lwipopts.h. */
 #define icmp_input lwip_icmp_input

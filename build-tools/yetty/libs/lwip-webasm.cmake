@@ -7,14 +7,14 @@
 #
 # Exposed target: `lwip_webasm` — STATIC lib (lwIP core + IPv4 + netif:
 # TCP/UDP/ARP/DHCP/DNS). The port (lwipopts.h, arch/cc.h) lives in the
-# repo at src/yetty/ynet/lwip-port/; sys_now()/lwip_port_rand() are
-# provided by src/yetty/ynet/lwip-port.c (compiled with the ynet module,
-# resolved at final link).
+# repo at src/yetty/ywasmnet/lwip-port/; sys_now()/lwip_port_rand() are
+# provided by src/yetty/ywasmnet/lwip-port.c (compiled with the ywasmnet
+# module, resolved at final link).
 
 include_guard(GLOBAL)
 include(FetchContent)
 
-set(_LWIP_PORT_DIR ${YETTY_ROOT}/src/yetty/ynet/lwip-port)
+set(_LWIP_PORT_DIR ${YETTY_ROOT}/src/yetty/ywasmnet/lwip-port)
 
 FetchContent_Declare(lwip
     URL https://github.com/lwip-tcpip/lwip/archive/refs/tags/STABLE-2_2_0_RELEASE.tar.gz

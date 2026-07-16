@@ -1,6 +1,6 @@
-# ynet — in-browser userspace TCP/IP stack (lwIP over an L2 relay)
+# ywasmnet — in-browser userspace TCP/IP stack (lwIP over an L2 relay)
 
-`ynet` gives the webasm build real TCP connectivity with no VM: lwIP runs
+`ywasmnet` gives the webasm build real TCP connectivity with no VM: lwIP runs
 in `NO_SYS` mode inside the wasm process, and its "wire" is a single
 WebSocket to an L2 frame relay (jor1k/jslinux-style — wsnic, libslirp, or
 a public relay) where each binary message is one raw ethernet frame. lwIP
@@ -20,7 +20,7 @@ telnet-pty / ssh-websocket-pty
 
 ## How it works
 
-- `yetty_ynet_netstack_create(relay_url)` runs `lwip_init()`, adds an
+- `yetty_ywasmnet_netstack_create(relay_url)` runs `lwip_init()`, adds an
   ethernet `netif` with a locally-administered random MAC, opens the relay
   WebSocket, and starts a 50 ms `emscripten_set_interval` tick that drives
   `sys_check_timeouts()`. It returns immediately.
@@ -29,7 +29,7 @@ telnet-pty / ssh-websocket-pty
   (`ethernet_input`); `netif->linkoutput` flattens the pbuf chain and
   sends one binary message (frames capped at 1600 bytes).
 - The netif status callback logs the DHCP lease (ip/gw/mask/dns) when it
-  binds; `yetty_ynet_netstack_is_ready()` reports the bound state.
+  binds; `yetty_ywasmnet_netstack_is_ready()` reports the bound state.
 - Everything runs on the browser main thread (single-threaded build), so
   lwIP's raw API is never entered re-entrantly and no locking exists.
 - One netstack per wasm instance — lwIP itself is a global singleton, and
@@ -39,11 +39,11 @@ telnet-pty / ssh-websocket-pty
 ## Public API
 
 ```c
-YETTY_YRESULT_DECLARE(yetty_ynet_netstack_ptr, struct yetty_ynet_netstack *);
+YETTY_YRESULT_DECLARE(yetty_ywasmnet_netstack_ptr, struct yetty_ywasmnet_netstack *);
 
-struct yetty_ynet_netstack_ptr_result yetty_ynet_netstack_create(const char *relay_url);
-int  yetty_ynet_netstack_is_ready(const struct yetty_ynet_netstack *netstack);
-void yetty_ynet_netstack_destroy(struct yetty_ynet_netstack *netstack);
+struct yetty_ywasmnet_netstack_ptr_result yetty_ywasmnet_netstack_create(const char *relay_url);
+int  yetty_ywasmnet_netstack_is_ready(const struct yetty_ywasmnet_netstack *netstack);
+void yetty_ywasmnet_netstack_destroy(struct yetty_ywasmnet_netstack *netstack);
 ```
 
 ## File map
@@ -63,7 +63,7 @@ platform.
 
 ## Status
 
-`yetty_ynet_netstack_create` currently has **no in-tree caller**. The
+`yetty_ywasmnet_netstack_create` currently has **no in-tree caller**. The
 bring-up call lived in the deleted `yinit/webasm.c` bootstrap (replaced by
 the yplatform app-injection entry, `../yplatform/ymain/webasm.c`) and was
 not re-homed. The `--net-relay <ws-url>` flag is still parsed

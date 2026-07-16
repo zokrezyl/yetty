@@ -53,7 +53,7 @@ transport's asynchronous callbacks.
 
 The transport carries the *encrypted* stream — with the websocket backend
 the server side is a dumb ws↔TCP bridge to `sshd:22` that never sees
-plaintext; with the lwip backend ([`ynet`](../ynet/README.md) relay) the
+plaintext; with the lwip backend ([`ywasmnet`](../ywasmnet/README.md) relay) the
 browser dials the real `sshd` itself. v1 limits, logged at runtime:
 password auth only, and the host key is fingerprint-logged (SHA256) but
 not verified against a known-hosts store.
