@@ -86,9 +86,12 @@ if(YETTY_ENABLE_TOOL_YTOP)
     add_subdirectory(ytop)
 endif()
 
-# yetty_ygit only exists on desktop (see the ygit desktop gate in
-# src/yetty/CMakeLists.txt) — gate on the target so non-desktop builds skip it.
-if(YETTY_ENABLE_TOOL_YGIT AND TARGET yetty_ygit)
+# yetty_ygit (the reusable component) only exists on desktop — gate on the
+# target so non-desktop builds skip the tool. The CLI is POSIX-TTY: main.c/
+# render.c use sys/ioctl.h + unistd.h (absent on Windows) and link yetty_ycat,
+# so it builds on linux + macOS but not Windows. Mirrors the yai gate.
+if(YETTY_ENABLE_TOOL_YGIT AND TARGET yetty_ygit
+   AND (YETTY_PLATFORM STREQUAL "linux" OR YETTY_PLATFORM STREQUAL "macos"))
     add_subdirectory(ygit)
 endif()
 
