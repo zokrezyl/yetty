@@ -52,10 +52,13 @@ if(WIN32)
 else()
     target_link_libraries(libgit2 INTERFACE Threads::Threads)
     if(APPLE)
-        # macOS links the system zlib: libgit2 1.8.4's bundled zlib doesn't
-        # compile against recent macOS SDKs, so the prebuilt is built with
-        # -DUSE_BUNDLED_ZLIB=OFF (see build-tools/3rdparty/libgit2/_build.sh).
-        target_link_libraries(libgit2 INTERFACE z)
+        # macOS links two system libraries the archive depends on:
+        #  - z:     libgit2 1.8.4's bundled zlib doesn't compile against recent
+        #           macOS SDKs, so the prebuilt is built with -DUSE_BUNDLED_ZLIB=OFF
+        #           (see build-tools/3rdparty/libgit2/_build.sh).
+        #  - iconv: libgit2 enables USE_ICONV on Darwin for HFS+ path
+        #           precompose/decompose (git_fs_path_iconv). Both ship in the SDK.
+        target_link_libraries(libgit2 INTERFACE z iconv)
     else()
         target_link_libraries(libgit2 INTERFACE rt)  # glibc clock_gettime; not on macOS
     endif()
