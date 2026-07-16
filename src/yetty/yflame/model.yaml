@@ -111,6 +111,94 @@ methods:
     local: true
     oneway: false
     return_payload_type: null
+  - slot: highlight_name
+    domain: yflame
+    owning_class: flame
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+      - name: len
+        type: size_t
+    doc: "/* highlight_name: paint every frame whose name contains `name` (case-insensitive)
+ * magenta — drives both free-text search and the symbol-table cross-highlight.
+ * NULL / zero-length clears the highlight. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: focus_name
+    domain: yflame
+    owning_class: flame
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+      - name: len
+        type: size_t
+    doc: "/* focus_name: zoom so the heaviest frame whose name exactly equals `name` fills
+ * the width. Used to jump the flame to a symbol picked in the table. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_baseline
+    domain: yflame
+    owning_class: flame
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: folded
+        type: "const char *"
+      - name: len
+        type: size_t
+    doc: "/* set_baseline: load a second folded profile as a diff baseline; frames then
+ * colour by the delta of their sample fraction (red = grew, blue = shrank).
+ * NULL / zero-length clears diff mode. Call after parse(). */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: node_name
+    domain: yflame
+    owning_class: flame
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: int32_t
+    doc: "/* node_name: borrowed name of the node with this id (valid until the next
+ * parse), or \"\" for an invalid id — used to build hover detail. */"
+    local: true
+    oneway: false
+    return_payload_type: "const char *"
+  - slot: node_value
+    domain: yflame
+    owning_class: flame
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: int32_t
+    doc: "/* node_value: total samples passing through the node with this id (0 if bad). */"
+    local: true
+    oneway: false
+    return_payload_type: uint64_t
+  - slot: root_value
+    domain: yflame
+    owning_class: flame
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* root_value: total samples in the whole profile — the percent denominator. */"
+    local: true
+    oneway: false
+    return_payload_type: uint64_t
   - slot: destroy
     domain: yflame
     owning_class: flame
@@ -168,6 +256,18 @@ classes:
         type: int32_t
         get: false
         set: false
+      - name: highlight_name
+        type: "char *"
+        get: false
+        set: false
+      - name: has_baseline
+        type: int
+        get: false
+        set: false
+      - name: baseline_total
+        type: uint64_t
+        get: false
+        set: false
       - name: max_depth
         type: uint32_t
         get: false
@@ -201,6 +301,24 @@ classes:
       - slot: set_highlight
         slot_domain: yflame
         impl: flame_set_highlight
+      - slot: highlight_name
+        slot_domain: yflame
+        impl: flame_highlight_name
+      - slot: focus_name
+        slot_domain: yflame
+        impl: flame_focus_name
+      - slot: set_baseline
+        slot_domain: yflame
+        impl: flame_set_baseline
+      - slot: node_name
+        slot_domain: yflame
+        impl: flame_node_name
+      - slot: node_value
+        slot_domain: yflame
+        impl: flame_node_value
+      - slot: root_value
+        slot_domain: yflame
+        impl: flame_root_value
       - slot: destroy
         slot_domain: yflame
         impl: flame_obj_destroy
@@ -237,6 +355,18 @@ types:
             type: "struct yetty_yclass_object *"
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_ycore_const_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const char *"
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ycore_error
     kind: struct
     fields:
@@ -260,6 +390,18 @@ types:
         fields:
           - name: value
             type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_uint64_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: uint64_t
           - name: error
             type: struct yetty_ycore_error
   - name: yetty_ycore_void_result

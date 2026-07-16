@@ -3300,8 +3300,12 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             YETTY_RETURN_IF_ERR(yetty_ycore_int, xr,
                                 "terminal_view_on_event: scrollback_exit failed");
         }
-        /* See KEY_DOWN: focused figure consumes the codepoint. */
-        {
+        /* See KEY_DOWN: a click-focused figure consumes the codepoint — but only
+         * when the pane app did NOT subscribe for keyboard (DEC ?1502). A
+         * key-subscribed app reads every keystroke from its own PTY (on_char
+         * below), so routing a structured copy to the focused figure here would
+         * steal printable keys from the app the moment a figure gained focus. */
+        if (!terminal->key_subscribed) {
             struct yetty_ycore_int_result ckr = terminal_emit_figure_key(
                 terminal, YETTY_YMGUI_INPUT_KEY_CHAR, -1, event->chr.mods, event->chr.codepoint);
             if (YETTY_IS_ERR(ckr)) {
