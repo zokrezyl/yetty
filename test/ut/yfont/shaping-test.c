@@ -79,7 +79,7 @@ static void test_arabic_joining(struct ytest *test)
     }
 
     struct yetty_font_font_result font_res =
-        yetty_yfont_raster_font_create_from_file(path, NULL, 32.0f);
+        yetty_yfont_raster_font_create_from_file(path, NULL, 32.0f, NULL);
     YTEST_REQUIRE_OK(test, font_res);
     struct yetty_yfont_font *font = font_res.value;
 
@@ -135,7 +135,7 @@ static void test_devanagari_reordering(struct ytest *test)
     }
 
     struct yetty_font_font_result font_res =
-        yetty_yfont_raster_font_create_from_file(path, NULL, 32.0f);
+        yetty_yfont_raster_font_create_from_file(path, NULL, 32.0f, NULL);
     YTEST_REQUIRE_OK(test, font_res);
     struct yetty_yfont_font *font = font_res.value;
     YTEST_REQUIRE_NOT_NULL(test, (void *)font->ops->shape_run);

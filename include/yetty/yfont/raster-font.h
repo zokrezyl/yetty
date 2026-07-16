@@ -29,12 +29,18 @@ extern "C" {
 
 /* Load from TTF file path.
  * base_size: pixel size the atlas rasterizes at; measurement is base-size
- * independent (scales with the requested font_size). */
+ * independent (scales with the requested font_size).
+ * namespace: identifier folded into the GPU resource-set namespace so that
+ * several raster faces can coexist as children of one binder tree without
+ * their generated uniforms/functions colliding. Pass NULL for the default
+ * (fine for single-face or metrics-only use). */
 struct yetty_font_font_result yetty_yfont_raster_font_create_from_file(const char *ttf_path,
                                                                        const char *shader_path,
-                                                                       float base_size);
+                                                                       float base_size,
+                                                                       const char *namespace);
 
-/* Load from TTF bytes held in memory. name is used only for diagnostics. */
+/* Load from TTF bytes held in memory. name is folded into the GPU resource-set
+ * namespace (see create_from_file) so multiple embedded faces stay distinct. */
 struct yetty_font_font_result yetty_yfont_raster_font_create_from_data(const uint8_t *ttf_data,
                                                                        size_t ttf_size,
                                                                        const char *name,

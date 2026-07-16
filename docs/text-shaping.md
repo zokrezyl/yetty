@@ -5,14 +5,19 @@ render Arabic, Indic (Devanagari, Bengali, Tamil, …) and Thai *correctly* in
 yetty, now that the bundled-font coverage has landed. This document records the
 decision, the measured numbers behind it, and the follow-up implementation work.
 
-Status: **adopted — Phase 0 done; Phase 1 shaping engine + ydraw render path
-landed and demonstrated.** The HarfBuzz dependency is integrated for every
-platform (desktop/android/ios/webasm build all validated), the shaper + atlas
-re-key + the free-position render path are implemented and unit-tested, and the
-Arabic-joining / Devanagari-reordering spike is rendered correctly (see the end
-of Phase 1 below). The remaining work is routing *terminal-typed* complex runs
-through the same path (grid suppression + per-script shaping faces on the
-sdf-layer); the exact hook points are recorded below. Measured numbers follow.
+Status: **adopted — Phase 0 done; Phase 1 complete (shaping engine + ydraw
+render path + terminal-grid routing all landed and demonstrated live); Phase 2
+done (programming ligatures via the same suppress-then-shape path).** The
+HarfBuzz dependency is integrated for every platform
+(desktop/android/ios/webasm build all validated), the shaper + atlas re-key +
+the free-position render path are implemented and unit-tested, and complex text
+**typed at the shell renders shaped live** in the terminal: Arabic cursive
+joining + harakat, Devanagari/Bengali reordering + conjuncts, Tamil split vowel
+signs, and Thai stacked vowel/tone marks were all verified end-to-end (grid
+suppression in `vterm_pack_line` + per-script shaping faces installed on the
+sdf-layer, each with a unique resource-set namespace so several faces coexist in
+one binder tree). Per-language demos live in `demo/scripts/harfbuzz/`. Measured
+numbers follow.
 
 ## The problem
 
@@ -135,14 +140,15 @@ for every platform including webasm and android. Notably:
   `shared.cmake`.
 - HarfBuzz is C++; the project already links C++ (Dawn/WebGPU), so no new
   toolchain surface. Android C++ via `c++_static` is already how openh264 ships.
-- **WebASM was the one real risk — now cleared at the build level.** webasm
-  disables its other C++ prebuilts over an emcc ABI mismatch, but HarfBuzz is
+- **WebASM was the one real risk — now cleared end to end.** webasm disables
+  its other C++ prebuilts over an emcc ABI mismatch, but HarfBuzz is
   pure-compute (no threads, no POSIX file I/O) and patterns after FreeType
   (which does build for wasm). Built in the emcc pipeline (non-mt variant, no
   `-pthread`) it produces a relocatable-wasm object with the shaping symbols
-  defined — the exact format `wasm-ld` links into `yetty.wasm`. The final
-  in-binary link is deferred only because no `hb_*` call reaches the wasm build
-  until the terminal-grid routing lands.
+  defined — the exact format `wasm-ld` links into `yetty.wasm`. The full
+  in-binary link is now proven on all three targets built locally: desktop
+  (linux-x86_64), the complete `yetty.wasm`, and android arm64-v8a (its
+  `libyetty.so` exports `hb_shape` / `hb_buffer_create`).
 
 **Runtime (bounded by a shape cache).** Only complex-script runs need shaping;
 Latin / CJK / emoji stay on the fast per-codepoint path. Shaped lines are cached
@@ -188,7 +194,8 @@ Phasing:
   glyphs still drop marks — hence the raster re-resolve), and a mark that
   overhangs the base cell is clamped into the slot rather than spilling.
 - **Phase 1 — HarfBuzz for complex scripts via the ydraw free-position path.
-  Shaping engine + render path DONE; terminal-grid routing REMAINS.** Landed:
+  DONE (shaping engine + render path + terminal-grid routing, all live).**
+  Landed:
   - The HarfBuzz dependency (minimal static build, no ICU/glib/Graphite,
     built-in `hb-ucd`), fetched as a prebuilt tarball per platform
     (`build-tools/3rdparty/harfbuzz/`, `build-tools/yetty/libs/harfbuzz.cmake`,
@@ -225,23 +232,54 @@ Phasing:
     correctly joined cursive run and "हिन्दी" with the reordered i-matra + the
     न्द conjunct. That canvas is the Phase 1 acceptance spike. (#616)
 
-  Remaining for terminal-typed complex text (typing Arabic at the shell): the
-  terminal grid renders cells through `vterm_pack_line` + the grid shader, NOT
-  through the sdf-layer that owns the shaping render path. To route a terminal
-  run through it: (1) `vterm_pack_line` sets `words[0]=0` for the run's covered
-  cells so the grid draws only their background (the existing shader-glyph-cell
-  precedent), and (2) the sdf-layer, in its per-window-row Pass 2, scans that
-  row's cells for complex runs and calls `expand_shaped_run` against a
-  per-script raster shaping face loaded into `layer->fonts[]` (the sdf-layer
-  currently holds only the MSDF default + ycat wire fonts, none covering the
-  complex scripts, so it needs a small per-script face loader). The per-line
-  shape cache is then the line's own primitive/scan result, invalidated on line
-  edit; the O(1) rolling-row scroll already preserves it.
-- **Phase 2 — optional: programming ligatures / contextual Latin on the main
-  grid** (Fira Code `=>`, `!=`, …). Only if there is demand; this is the largest
-  rework because it needs the terminal cell format/shader to carry ligature-span
-  info (kitty-style cell mapping). Explicitly out of scope for the initial
-  adoption.
+  - Terminal-grid routing (typing Arabic/Indic/Thai at the shell) — DONE.
+    The terminal grid renders cells through `vterm_pack_line` + the grid
+    shader, NOT through the sdf-layer that owns the shaping render path, so the
+    run is handed across in two halves: (1) `vterm_pack_line` sets the grid
+    glyph to 0 for any cell whose codepoint classifies as a complex script
+    (`yetty_yfont_shaping_script_for_codepoint`), so the grid draws only that
+    cell's background — the existing shader-glyph-cell precedent; and (2) the
+    sdf-layer, in its per-window-row Pass 2, scans each row's cells for complex
+    runs (`shape_row_cells`) and shapes them through `emit_shaped_glyphs`
+    against a per-script raster shaping face lazily loaded by
+    `sdf_shaping_face_for` (mapping codepoint ranges → bundled Noto TTFs). Each
+    face is installed into its own font slot with a **unique resource-set
+    namespace** (`shape_slot<N>`), which is essential: the binder merges every
+    face's WGSL into one module via the `__NS__` substitution token, so two
+    faces sharing a namespace would collide on `<ns>_texture_region` /
+    `<ns>_glyph_sample`. `raster-font.wgsl` was rewritten to use `__NS__`
+    throughout (it had hard-coded `font_`/`raster_font_` prefixes and assumed it
+    owned the whole R8 atlas — a latent bug, since raster faces had never been
+    bound before) and now samples its slice of the shared packed atlas via the
+    binder-supplied `__NS___texture_region` vec4, exactly like `msdf-font.wgsl`.
+    The rolling-row scroll anchors each shaped row for O(1) scroll. Verified
+    live for all five families via `demo/scripts/harfbuzz/`.
+- **Phase 2 — programming ligatures (Fira Code `=>`, `!=`, `===`, …) — DONE.**
+  Rather than extend the grid cell format/shader to carry arbitrary-width
+  ligature spans (the grid glyph sampler hard-clips each glyph to its cell and
+  supports only a fixed 2-cell wide-glyph spill), ligatures reuse the same
+  suppress-then-redraw machinery as complex scripts: the covered cells are
+  suppressed on the grid and the ligature is drawn as one shaped glyph through
+  the SDF free-position path against a bundled ligature face. Details:
+  - A HarfBuzz-free, deterministic ligature table (`yfont/ligature.c`,
+    `yetty_yfont_ligature_length_at`) — punctuation-only, so it never fires on
+    ordinary words/numbers. A shared cell-level wrapper
+    (`yvterm/ligature-cells.h`, `yetty_yvterm_ligature_run_length`) combines it
+    with a shapeability check (single-width, unconcealed, mark-free cells).
+  - `vterm_pack_line` suppresses a ligature span's grid glyphs; the SDF layer's
+    `shape_row_ligatures` shapes the same span (both call the shared wrapper, so
+    they cover identical cells with no cross-talk) against the bundled Fira Code
+    face (`assets/fonts/FiraCode-Regular.ttf`, SIL OFL), loaded via the same
+    `sdf_face_load_or_get` as the complex-script faces.
+  - The face is width-scaled (`get_advance` → `font_size = cell_width·base/adv`)
+    so one character advance equals the grid cell, making a ligature span its
+    cells exactly and keeping following grid text cell-aligned. The ASCII-only
+    ligature table never overlaps the complex-script codepoint ranges, so the
+    two shaping passes are disjoint. Verified live via
+    `demo/scripts/harfbuzz/ligatures.sh`; table pinned by `yfont_ligature` test.
+  - Gated on `YETTY_ENABLE_LIB_HARFBUZZ` like the rest of the track (now ON by
+    default, so ligatures are on for every build). A runtime on/off config key
+    to let users disable them is a follow-up.
 
 If Phase 1's webasm spike fails to link, the fallback is to gate
 `YETTY_ENABLE_LIB_HARFBUZZ` OFF on webasm (complex scripts fall back to the
@@ -257,17 +295,25 @@ override.
 2. **HarfBuzz dependency integration** — DONE. `build-tools/3rdparty/harfbuzz`
    + `libs/harfbuzz.cmake` + CI matrix + `YETTY_ENABLE_LIB_HARFBUZZ` option;
    minimal static build (no ICU/glib/Graphite), standalone FT coupling. (#615)
-3. **Complex-script shaping via the ydraw free-position path** — shaping engine
-   + render path DONE, terminal-grid routing remains (see Phase 1 above).
-   Arabic/Indic/Thai run detection → HarfBuzz → `expand_text_span` shaped
-   emission, with the atlas `(glyph_id, face)` re-key. The Arabic + Devanagari
-   spike renders correctly (`shaping-render-test.c`). (#616)
-4. **WebASM HarfBuzz build spike** — build validated: HarfBuzz compiles under
-   emcc (non-mt, no `-pthread`) to a relocatable-wasm object with
-   `hb_shape_full` / `hb_buffer_create` defined — the format `wasm-ld` consumes
-   for `yetty.wasm`. The full `yetty.wasm` link lands with the terminal-grid
-   routing (nothing calls `hb_*` in the wasm build until then). (#617)
-5. **(Stretch) Programming-ligature shaping on the terminal grid** — kitty-style
-   shaped-glyph→cell mapping; requires the terminal cell GPU format to carry
-   ligature spans. (Phase 2, demand-gated — out of scope for the initial
-   adoption per the issue.) (#618)
+3. **Complex-script shaping via the ydraw free-position path** — DONE, incl.
+   terminal-grid routing (see Phase 1 above). Arabic/Indic/Thai run detection →
+   HarfBuzz → shaped emission, with the atlas `(glyph_id, face)` re-key; grid
+   suppression in `vterm_pack_line` + per-script shaping faces on the sdf-layer
+   (`shape_row_cells` / `sdf_shaping_face_for`, each face uniquely namespaced).
+   Complex text typed at the shell renders shaped live for all five families;
+   verified via `demo/scripts/harfbuzz/` and the render unit test. (#616)
+4. **WebASM HarfBuzz build** — DONE. HarfBuzz compiles under emcc (non-mt, no
+   `-pthread`) and the full `yetty.wasm` links it in (the earlier spike only
+   proved the relocatable object). `YETTY_ENABLE_LIB_HARFBUZZ` now defaults ON
+   for every target — prebuilt tarballs for desktop/webasm/android/ios/macos/
+   windows are published in the `lib-harfbuzz-8.5.0-1` release, so the
+   cache-first fetch resolves everywhere. Desktop, `yetty.wasm`, and android
+   arm64-v8a were all built locally with it on. (#617)
+5. **Programming-ligature shaping on the terminal grid** — DONE (Phase 2). The
+   grid glyph sampler hard-clips glyphs to their cell, so instead of widening
+   the cell format, ligature spans are suppressed on the grid and drawn as one
+   shaped glyph via the SDF free-position path against a bundled Fira Code face
+   (`yfont/ligature.c` table + `yvterm/ligature-cells.h` shared decision +
+   `shape_row_ligatures`). Width-scaled to the cell so spans align. Verified
+   live (`demo/scripts/harfbuzz/ligatures.sh`); table pinned by the
+   `yfont_ligature` test. (#618)

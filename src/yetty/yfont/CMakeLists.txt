@@ -50,6 +50,9 @@ add_library(yetty_yfont_core STATIC
     # Codepoint -> shaping-script classification for complex-script run
     # detection. HarfBuzz-free — always compiled.
     shaping-script.c
+    # Programming-ligature detection table (=>, !=, ===). HarfBuzz-free —
+    # shared by the grid suppression pass and the SDF shaping pass.
+    ligature.c
     font-cache.c
 )
 

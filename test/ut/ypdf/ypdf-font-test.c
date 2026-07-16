@@ -32,7 +32,7 @@
 int main(void)
 {
     struct yetty_font_font_result fr =
-        yetty_yfont_raster_font_create_from_file(YPDF_TEST_TTF, NULL, 32.0f);
+        yetty_yfont_raster_font_create_from_file(YPDF_TEST_TTF, NULL, 32.0f, NULL);
     if (YETTY_IS_ERR(fr)) {
         fprintf(stderr, "skipping: raster_font from '%s' failed: %s\n", YPDF_TEST_TTF,
                 fr.error.msg);

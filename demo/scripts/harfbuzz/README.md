@@ -1,60 +1,50 @@
-# HarfBuzz complex-script shaping demos
+# HarfBuzz shaping demos
 
-Sample text for the scripts that need OpenType shaping to render correctly:
-cursive joining (Arabic), glyph reordering + conjuncts (Indic), and stacked
-above/below marks (Thai and the rest of the Brahmic family). Each script echoes
-canonical words with a romanization and a note on the shaping behaviour it
-exercises.
+Sample text for everything that needs OpenType shaping to render correctly:
+cursive joining (Arabic), glyph reordering + conjuncts (Indic), stacked
+above/below marks (Thai and the rest of the Brahmic family), and programming
+ligatures (Fira Code). Each script echoes canonical samples with a note on the
+shaping behaviour it exercises.
 
-One script per script-family:
+| Script            | Family    | What it exercises                                          |
+|-------------------|-----------|------------------------------------------------------------|
+| `arabic.sh`       | Arabic    | Cursive joining (isolated/initial/medial/final), RTL, harakat |
+| `devanagari.sh`   | Indic     | Pre-base matra reordering, virama conjuncts, i/ī vowel signs |
+| `bengali.sh`      | Indic     | Reordering, conjuncts, the reph                            |
+| `tamil.sh`        | Indic     | Two-part vowel signs that wrap the consonant               |
+| `thai.sh`         | Brahmic   | Stacked above/below vowels + tone marks, no word spaces    |
+| `ligatures.sh`    | Latin ops | Programming ligatures (`=>`, `!=`, `===`, `->`, `\|>`, …)   |
 
-| Script            | Family   | What it exercises                                          |
-|-------------------|----------|------------------------------------------------------------|
-| `arabic.sh`       | Arabic   | Cursive joining (isolated/initial/medial/final), RTL, harakat |
-| `devanagari.sh`   | Indic    | Pre-base matra reordering, virama conjuncts, i/ī vowel signs |
-| `bengali.sh`      | Indic    | Reordering, conjuncts, the reph                            |
-| `tamil.sh`        | Indic    | Two-part vowel signs that wrap the consonant               |
-| `thai.sh`         | Brahmic  | Stacked above/below vowels + tone marks, no word spaces    |
-
-Run one, or `all.sh` for the set:
+Run one, or `all.sh` for the complex-script set:
 
 ```sh
 ./build-desktop-ytrace-release/yetty -e demo/scripts/harfbuzz/arabic.sh
-./build-desktop-ytrace-release/yetty -e demo/scripts/harfbuzz/all.sh
+./build-desktop-ytrace-release/yetty -e demo/scripts/harfbuzz/ligatures.sh
 ```
 
-## What renders today vs. what needs the grid routing
+## How it renders
 
-Shaping is implemented in the **ydraw free-position path** (`sdf-layer.c`
-`expand_text_span`): a run of complex-script codepoints is handed to HarfBuzz,
-and the shaped glyphs are placed by advance + GPOS offset. It is gated behind
-`YETTY_ENABLE_LIB_HARFBUZZ` (off by default) — build with it on to exercise the
-path:
+Shaping is gated behind `YETTY_ENABLE_LIB_HARFBUZZ` (off by default) — build it
+on to exercise the path:
 
 ```sh
 cmake -B build-desktop-ytrace-release -DYETTY_ENABLE_LIB_HARFBUZZ=ON
 make build-desktop-ytrace-release
 ```
 
-These scripts `echo` their samples, so the text arrives on the **terminal
-grid**, which is a separate render path. Today the grid:
+Text echoed by these scripts arrives on the **terminal grid**, which cannot
+shape (one codepoint → one glyph, each hard-clipped to its cell). So the shaped
+runs are handed off to the **ydraw free-position path**: `vterm_pack_line`
+suppresses the covered grid cells and the SDF layer (`sdf-layer.c`,
+`shape_row_cells` for complex scripts, `shape_row_ligatures` for ligatures)
+re-draws them as HarfBuzz-shaped glyphs placed by advance + GPOS offset, on top
+of the grid. Complex-script runs use the matching bundled Noto face; ligatures
+use the bundled Fira Code face. Ordinary text stays on the crisp MSDF grid.
 
-- **positions combining marks** (Arabic harakat, Thai/Indic vowel signs stack on
-  their base) — this part is live;
-- does **not** yet apply joining, reordering, or conjunct formation — that needs
-  the grid run to be routed through the shaping path (tracked separately). Until
-  then, echoed Arabic shows disconnected isolated letters and echoed Devanagari
-  keeps the typed (unreordered) glyph order.
+With the gate on, all of it renders **live** — type or `echo` the samples and
+the joining/reordering/marks/ligatures appear as drawn.
 
-To see the **fully shaped** output right now, render it through the shaping
-pipeline directly. The `yfont_shaping_render` test shapes and rasterizes real
-runs and dumps a canvas:
-
-```sh
-YFONT_SHAPING_DUMP=tmp/shaped.ppm \
-  ./build-desktop-ytrace-release/test/ut/yfont/yfont_shaping_render-test
-# then view tmp/shaped.ppm (Arabic العربية joined, Devanagari हिन्दी reordered)
-```
-
-The `yfont_shaping` unit test asserts the same behaviour headlessly (Arabic
-contextual joining, Devanagari reordering, the glyph-id atlas).
+The headless tests pin the same behaviour: `yfont_shaping` (Arabic joining,
+Devanagari reordering, glyph-id atlas), `yfont_shaping_render` (full
+shape→atlas→rasterize→composite; `YFONT_SHAPING_DUMP=tmp/shaped.ppm` dumps a
+canvas), and `yfont_ligature` (the ligature table).
