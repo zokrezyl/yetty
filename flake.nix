@@ -114,6 +114,7 @@
           zlib
           openssl
           brotli  # For asset compression in incbin
+          libpcap  # ynet packet capture (BSD-3-Clause)
 
           # Static libraries (referenced via *_STATIC_LIB env vars, not linked globally)
           zlib.static

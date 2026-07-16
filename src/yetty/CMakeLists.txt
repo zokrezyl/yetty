@@ -329,6 +329,12 @@ if(YETTY_ENABLE_FEATURE_YMAP AND YETTY_ENABLE_FEATURE_YIMAGE
     add_subdirectory(ymap)
 endif()
 
+# ynet — network capture module (yclass capture model + libpcap reader +
+# protocol dissectors). Self-skips inside its CMakeLists when libpcap is absent.
+if(YETTY_ENABLE_FEATURE_YNET)
+    add_subdirectory(ynet)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YMESH)
     add_subdirectory(ymesh)
 endif()
