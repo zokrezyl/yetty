@@ -68,17 +68,17 @@ jobs:
 
   build-linux-aarch64:
     needs: resolve
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install build deps
-        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config
+      - name: Install aarch64 cross toolchain + build deps
+        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake ninja-build pkg-config
       - run: mkdir -p out
       - run: |
           TARGET_PLATFORM="linux-aarch64" \
           OUTPUT_DIR="$PWD/out" \
           USE_NIX=0 \
-          CROSS_PREFIX="" \
+          CROSS_PREFIX="aarch64-linux-gnu-" \
           ./build-tools/3rdparty/libgit2/build.sh
       - uses: softprops/action-gh-release@v2
         with:
