@@ -74,7 +74,11 @@ CMAKE_PARALLEL := $(if $(PARALLEL_JOBS),--parallel $(PARALLEL_JOBS),--parallel)
 #   - Windows (MSVC):        ✗ not supported (use sccache instead)
 USE_DISTCC ?= 0
 USE_CCACHE ?= 0
-DISTCC_HOSTS ?= localhost 192.168.1.10
+# @nixem-remote-yetty-build uses distcc's SSH transport: the `@` prefix
+# tells distcc to reach the host over ssh, resolving host/port/user/identity
+# from ~/.ssh/config. That alias enables ControlMaster, so all the per-job
+# ssh connections share one persistent master instead of re-handshaking.
+DISTCC_HOSTS ?= @nixem-remote-yetty-build
 export DISTCC_HOSTS
 
 # Android builds run on the plain host toolchain — no nix.
