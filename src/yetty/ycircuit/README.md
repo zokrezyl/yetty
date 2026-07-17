@@ -90,4 +90,4 @@ downward, so `v`/`r90` turns the `+x` pin axis to point down).
 `render()` → drawable list (caller owns), `hit_test(x, y)` → element id,
 `set_highlight(id)` (−1 clears), `destroy()`. The exposed
 `yetty_ycircuit_emit_osc(list, fd)` serializes a rendered list as a
-YDRAW_BIN OSC envelope for CLI / binding front-ends.
+YDRAW_BIN DCS envelope for CLI / binding front-ends.

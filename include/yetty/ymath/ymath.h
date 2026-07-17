@@ -41,8 +41,8 @@ struct yetty_ymath_render_config {
 struct yetty_ydraw_drawable_list_result yetty_ymath_render(
     const char *source, size_t source_len, const struct yetty_ymath_render_config *config);
 
-/* OSC envelope emit (YETTY_DCS_YDRAW_BIN) — same wire as ycat/yplot. */
-struct yetty_ycore_size_result yetty_ymath_osc_emit(const struct yetty_ydraw_drawable_list *list,
+/* DCS envelope emit (YETTY_DCS_YDRAW_BIN) — same wire as ycat/yplot. */
+struct yetty_ycore_size_result yetty_ymath_dcs_emit(const struct yetty_ydraw_drawable_list *list,
                                                     FILE *out);
 
 #ifdef __cplusplus

@@ -179,7 +179,7 @@ static void generate_frame(float *out, int n, double t0, double sample_rate, dou
     }
 }
 
-/* Serialize a drawable_list and ship it as a YDRAW_SCENE_BIN OSC envelope on
+/* Serialize a drawable_list and ship it as a YDRAW_SCENE_BIN DCS envelope on
  * stdout. */
 static struct yetty_ycore_void_result emit_scene_bin(const struct yetty_ydraw_drawable_list *dl)
 {

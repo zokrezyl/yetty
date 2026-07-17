@@ -41,8 +41,9 @@ int main(void)
 
     struct yetty_yclass_ctx ctx = {0};
     struct yetty_yclass_object_ptr_result nb_r = yetty_ynotebook_notebook_create(&ctx);
-    if (YETTY_IS_ERR(nb_r))
+    if (YETTY_IS_ERR(nb_r)) {
         return 1;
+    }
     struct yetty_yclass_object *notebook = nb_r.value;
     CHECK(YETTY_IS_OK(yetty_ynotebook_notebook_load_text(notebook, NOTEBOOK)), "load notebook");
 
@@ -52,7 +53,8 @@ int main(void)
 
     /* two stdout streams coalesce into one output */
     yetty_ynotebook_cell_apply_message(cell, "stream", "{\"name\":\"stdout\",\"text\":\"Hello \"}");
-    yetty_ynotebook_cell_apply_message(cell, "stream", "{\"name\":\"stdout\",\"text\":\"world\\n\"}");
+    yetty_ynotebook_cell_apply_message(cell, "stream",
+                                       "{\"name\":\"stdout\",\"text\":\"world\\n\"}");
     CHECK(out_count(cell) == 1, "streams coalesced to one output");
     {
         struct yetty_yclass_object_ptr_result o0 = yetty_ynotebook_cell_output_at(cell, 0);
@@ -60,8 +62,9 @@ int main(void)
         CHECK(YETTY_IS_OK(t) && strcmp(t.value, "stream") == 0, "output 0 is stream");
         struct yetty_ycore_char_ptr_result txt = yetty_ynotebook_output_text(o0.value);
         CHECK(YETTY_IS_OK(txt) && strcmp(txt.value, "Hello world\n") == 0, "stream text coalesced");
-        if (YETTY_IS_OK(txt))
+        if (YETTY_IS_OK(txt)) {
             free(txt.value);
+        }
     }
 
     /* a rich execute_result appends a second output with a mime bundle */
@@ -86,26 +89,30 @@ int main(void)
     CHECK(out_count(cell) == 0, "clear_output(wait=false) cleared immediately");
 
     /* clear_output(wait=true) defers until the next output */
-    yetty_ynotebook_cell_apply_message(cell, "stream", "{\"name\":\"stdout\",\"text\":\"again\\n\"}");
+    yetty_ynotebook_cell_apply_message(cell, "stream",
+                                       "{\"name\":\"stdout\",\"text\":\"again\\n\"}");
     CHECK(out_count(cell) == 1, "one output before deferred clear");
     yetty_ynotebook_cell_apply_message(cell, "clear_output", "{\"wait\":true}");
     CHECK(out_count(cell) == 1, "deferred clear does not clear yet");
-    yetty_ynotebook_cell_apply_message(cell, "stream", "{\"name\":\"stdout\",\"text\":\"fresh\\n\"}");
+    yetty_ynotebook_cell_apply_message(cell, "stream",
+                                       "{\"name\":\"stdout\",\"text\":\"fresh\\n\"}");
     CHECK(out_count(cell) == 1, "deferred clear fired then appended");
     {
         struct yetty_yclass_object_ptr_result o0 = yetty_ynotebook_cell_output_at(cell, 0);
         struct yetty_ycore_char_ptr_result txt = yetty_ynotebook_output_text(o0.value);
         CHECK(YETTY_IS_OK(txt) && strcmp(txt.value, "fresh\n") == 0,
               "post-clear stream is not coalesced with the cleared one");
-        if (YETTY_IS_OK(txt))
+        if (YETTY_IS_OK(txt)) {
             free(txt.value);
+        }
     }
 
     /* mutation persists through serialization */
     struct yetty_ycore_char_ptr_result text_r = yetty_ynotebook_notebook_to_text(notebook);
     CHECK(YETTY_IS_OK(text_r), "serialize after routing");
-    if (YETTY_IS_OK(text_r))
+    if (YETTY_IS_OK(text_r)) {
         free(text_r.value);
+    }
 
     yetty_ynotebook_notebook_destroy(notebook);
 

@@ -1,7 +1,7 @@
 /*
  * ymesh.c — public API: load a mesh (GLB / PLY / STL / OBJ — content
  * sniffed by ymesh-load.c), serialize to the ymesh wire format, attach to
- * a fresh ydraw buffer, emit via OSC.
+ * a fresh ydraw buffer, emit via DCS.
  *
  * See include/yetty/ymesh/ymesh.h for the wire format. Hand-written (not
  * schema-generated) because ymesh's GPU pipeline uses a real vertex layout
@@ -204,18 +204,18 @@ struct yetty_ydraw_drawable_list_result yetty_ymesh_render_path(
     return r;
 }
 
-struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(
+struct yetty_ycore_size_result yetty_ymesh_dcs_bin_emit(
     const struct yetty_ydraw_drawable_list *buffer, FILE *out)
 {
     if (!buffer || !out) {
-        return YETTY_ERR(yetty_ycore_size, "ymesh_osc_bin_emit: NULL buffer or out");
+        return YETTY_ERR(yetty_ycore_size, "ymesh_dcs_bin_emit: NULL buffer or out");
     }
 
     const uint8_t *raw = NULL;
     size_t raw_size =
         yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
     if (raw_size == 0 || !raw) {
-        return YETTY_ERR(yetty_ycore_size, "ymesh_osc_bin_emit: empty serialize");
+        return YETTY_ERR(yetty_ycore_size, "ymesh_dcs_bin_emit: empty serialize");
     }
 
     struct yetty_yface_bin_meta meta = {
@@ -231,7 +231,7 @@ struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(
         YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
-        return YETTY_ERR(yetty_ycore_size, "ymesh_osc_bin_emit: yface_emit failed", r);
+        return YETTY_ERR(yetty_ycore_size, "ymesh_dcs_bin_emit: yface_emit failed", r);
     }
 
     size_t written = 0;

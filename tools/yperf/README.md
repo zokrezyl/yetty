@@ -115,7 +115,7 @@ Feature-complete against issue #627:
 - **CPU / sample timeline** — a bucketed sample-rate strip above the flame,
   extracted from `perf script` timestamps (absent for untimestamped folded input).
 - **Scrollback figure emit** — `--emit` renders the (optionally `--focus`ed)
-  flame as a `YDRAW_BIN` OSC envelope that renders inline when run in a pane.
+  flame as a `YDRAW_BIN` DCS envelope that renders inline when run in a pane.
 - Synchronized **top-symbol table** (self / self% / total / total%) with
   keyboard navigation and sort by self / total / name.
 - `--print` headless mode (consumption mode 3) — verified against `du`-style

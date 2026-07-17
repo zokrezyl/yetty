@@ -273,13 +273,12 @@ static void raster_font_add_cluster(struct yetty_yfont_raster_font *font, int st
     }
 
     if (font->cluster_slots_count[style_idx] >= font->cluster_slots_capacity[style_idx]) {
-        font->cluster_slots_capacity[style_idx] =
-            font->cluster_slots_capacity[style_idx] ? font->cluster_slots_capacity[style_idx] * 2
-                                                    : 64;
+        font->cluster_slots_capacity[style_idx] = font->cluster_slots_capacity[style_idx]
+                                                      ? font->cluster_slots_capacity[style_idx] * 2
+                                                      : 64;
         font->cluster_slots[style_idx] =
-            realloc(font->cluster_slots[style_idx],
-                    font->cluster_slots_capacity[style_idx] *
-                        sizeof(struct yetty_yfont_cluster_slot));
+            realloc(font->cluster_slots[style_idx], font->cluster_slots_capacity[style_idx] *
+                                                        sizeof(struct yetty_yfont_cluster_slot));
     }
 
     struct yetty_yfont_cluster_slot *entry =
@@ -988,7 +987,7 @@ static void raster_font_rasterize_all(struct yetty_yfont_raster_font *font)
 
     for (int i = 0; i < 4; i++) {
         font->codepoint_slots_count[i] = 0;
-        font->cluster_slots_count[i] = 0; /* stale cluster slots die with the atlas */
+        font->cluster_slots_count[i] = 0;       /* stale cluster slots die with the atlas */
         raster_font_add_slot(font, i, 0x20, 0); /* Map space to slot 0 */
     }
 

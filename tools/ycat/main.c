@@ -6,8 +6,9 @@
  *   2. detect the type via libmagic + extension
  *   3. dispatch to a handler that returns a ydraw-core buffer (markdown,
  *      PDF for now — registry is open for more)
- *   4. emit an OSC 666674 sequence to stdout carrying the base64-encoded
- *      ydraw primitive bytes (consumed by the ydraw scrolling layer)
+ *   4. emit a DCS YDRAW_BIN (600001) envelope to stdout carrying the
+ *      base64-encoded ydraw primitive bytes (consumed by the ydraw
+ *      scrolling layer)
  *
  * The DCS envelopes are emitted the same way for every host terminal: a
  * yetty renders them, every other terminal discards them. ycat does not
@@ -202,8 +203,8 @@ static int write_all_stdout(const uint8_t *data, size_t len)
 }
 
 /*=============================================================================
- * Streaming-handler bridge: wraps yetty_ycat_osc_bin_emit so multi-
- * envelope handlers (pdf, markdown) can ship one OSC per envelope to
+ * Streaming-handler bridge: wraps yetty_ycat_dcs_bin_emit so multi-
+ * envelope handlers (pdf, markdown) can ship one DCS per envelope to
  * stdout without each handler depending on ycat tool internals.
  *===========================================================================*/
 
@@ -216,9 +217,9 @@ static struct yetty_ycore_void_result emit_to_stdout(
     void *ud, const struct yetty_ydraw_drawable_list *envelope)
 {
     struct emit_to_stdout_ctx *ec = ud;
-    struct yetty_ycore_size_result r = yetty_ycat_osc_bin_emit(envelope, ec->out);
+    struct yetty_ycore_size_result r = yetty_ycat_dcs_bin_emit(envelope, ec->out);
     if (YETTY_IS_ERR(r)) {
-        return YETTY_ERR(yetty_ycore_void, "osc_bin_emit failed", r);
+        return YETTY_ERR(yetty_ycore_void, "dcs_bin_emit failed", r);
     }
     ec->total += r.value;
     return YETTY_OK_VOID();
@@ -308,7 +309,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
             free(url_mime);
             return -1;
         }
-        struct yetty_ycore_size_result em_r = yetty_ycat_osc_bin_emit(r.value, stdout);
+        struct yetty_ycore_size_result em_r = yetty_ycat_dcs_bin_emit(r.value, stdout);
         yetty_ydraw_drawable_list_destroy(r.value);
         byte_buf_free(&buf);
         free(url_mime);
@@ -358,7 +359,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
     if (fn) {
         struct yetty_ydraw_drawable_list_result r = fn(buf.data, buf.len, path_hint, &cfg);
         if (YETTY_IS_OK(r)) {
-            struct yetty_ycore_size_result em_r = yetty_ycat_osc_bin_emit(r.value, stdout);
+            struct yetty_ycore_size_result em_r = yetty_ycat_dcs_bin_emit(r.value, stdout);
             yetty_ydraw_drawable_list_destroy(r.value);
             byte_buf_free(&buf);
             free(url_mime);
@@ -375,7 +376,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
         struct yetty_ydraw_drawable_list_result r =
             yetty_ycat_ts_render(buf.data, buf.len, grammar, &cfg);
         if (YETTY_IS_OK(r)) {
-            struct yetty_ycore_size_result em_r = yetty_ycat_osc_bin_emit(r.value, stdout);
+            struct yetty_ycore_size_result em_r = yetty_ycat_dcs_bin_emit(r.value, stdout);
             yetty_ydraw_drawable_list_destroy(r.value);
             byte_buf_free(&buf);
             free(url_mime);

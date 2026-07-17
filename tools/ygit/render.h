@@ -2,7 +2,7 @@
  *
  * Inside yetty: detect the format and draw it as an inline figure (Markdown,
  * SVG, image, PDF, chart, …) or as syntax-highlighted source — reusing ycat's
- * handler registry and OSC envelope encoder. On a plain terminal: emit
+ * handler registry and DCS envelope encoder. On a plain terminal: emit
  * 24-bit-coloured source, or advise for binary content.
  */
 

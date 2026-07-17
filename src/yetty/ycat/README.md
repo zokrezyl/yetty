@@ -2,7 +2,7 @@
 
 `ycat` detects the type of a byte buffer (libmagic + extension + content
 sniffing) and dispatches to a handler that turns the bytes into a ydraw
-buffer, which the caller wraps in a `YETTY_DCS_YDRAW_BIN` (600001) OSC
+buffer, which the caller wraps in a `YETTY_DCS_YDRAW_BIN` (600001) DCS
 envelope for a running yetty's ydraw scrolling layer. Plain text / unknown
 input passes through unchanged. It is the library behind the `ycat` CLI
 (`tools/ycat`) and the `yless` pager (`tools/yless`).
@@ -63,15 +63,15 @@ struct yetty_ycat_config config = {
     .cell_width = 10, .cell_height = 20, .width_cells = 80, .height_cells = 25 };
 struct yetty_ydraw_drawable_list_result r =
     yetty_ycat_render(bytes, len, path, &config);      /* detect → render */
-yetty_ycat_osc_bin_emit(r.value, stdout);              /* LZ4F + base64 envelope */
+yetty_ycat_dcs_bin_emit(r.value, stdout);              /* LZ4F + base64 envelope */
 
 /* URLs: */
 if (yetty_ycat_is_url(arg))
     yetty_ycat_fetch_url(arg, &bytes, &len, &content_type);  /* libcurl */
 ```
 
-`osc.c` serialises the buffer (`yetty_ydraw_drawable_list_serialize`) and
-hands it to yface for LZ4F compression + base64 + envelope framing.
+`dcs.c` serialises the buffer (`yetty_ydraw_drawable_list_serialize`) and
+hands it to yface for LZ4F compression + base64 + DCS envelope framing.
 
 ## Layout of the module
 
@@ -80,7 +80,7 @@ hands it to yface for LZ4F compression + base64 + envelope framing.
 | `ycat.c` | type registry, name mapping, dispatch (`yetty_ycat_render`) |
 | `detect.c` | libmagic / extension / content-sniff detection |
 | `handler-*.c` | per-type renderers (table above) |
-| `osc.c` | `YDRAW_BIN` envelope writer |
+| `dcs.c` | `YDRAW_BIN` DCS envelope writer |
 | `fetch.c` | libcurl URL fetch |
 | `ts-grammars.c` / `ts-highlight.c` | tree-sitter grammar table + highlighter |
 

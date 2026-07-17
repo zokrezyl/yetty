@@ -66,7 +66,7 @@ per-language Messages file are baked in via
 ## Consumers
 
 - **`tools/ynetsurf`** — the CLI browser. One-shot mode (`--once`, or
-  non-TTY stdio) navigates, redraws, and emits a single `YDRAW_BIN` OSC
+  non-TTY stdio) navigates, redraws, and emits a single `YDRAW_BIN` DCS
   envelope, like the other emitter tools (ycat, yplot). Interactive mode
   sits in a `select()` loop over libcurl's fdset, the NetSurf scheduler
   deadline, and stdin (yface splits inbound OSC envelopes from raw

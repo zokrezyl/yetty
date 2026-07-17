@@ -3492,7 +3492,7 @@ static int run_client_mode(void)
 
     /* The connection's transport is the sole owner of STDIN/STDOUT (or of the
      * side-channel fd pair when YETTY_YWIRE_SIDE_CHANNEL is set). Raw mode runs
-     * BEFORE any write — otherwise the first OSC envelope we emit gets echoed
+     * BEFORE any write — otherwise the first DCS envelope we emit gets echoed
      * back by the slave tty driver and ends up rendered as visible "^[" text
      * in the host yetty's display. destroy restores the termios. */
     struct yetty_yclass_transport_pty_ptr_result tr =

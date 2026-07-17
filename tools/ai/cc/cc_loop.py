@@ -11,7 +11,7 @@ Two independent rendering paths reach yetty (both rely on this process running
 
   1. Agent-drawn figures — the sub-`claude` is given the `yetty` MCP server,
      whose tools (draw_svg, draw_diagram, draw_plot, draw_markdown, show_file)
-     write the OSC 600001 envelope straight to /dev/tty. We just allow them;
+     write the DCS 600001 envelope straight to /dev/tty. We just allow them;
      the figures land inline in our screen with zero work here.
 
   2. Loop-rendered answers — each completed assistant turn is written to a

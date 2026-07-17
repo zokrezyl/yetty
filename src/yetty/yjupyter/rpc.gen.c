@@ -22,12 +22,15 @@ struct yetty_ycore_void_result yetty_yjupyter_register(void);
 
 static struct yetty_yclass_ptr_result yetty_yjupyter_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "yetty_yjupyter_client") == 0)
+    if (strcmp(name, "yetty_yjupyter_client") == 0) {
         return yetty_yjupyter_client_class_get();
-    if (strcmp(name, "yetty_yjupyter_message") == 0)
+    }
+    if (strcmp(name, "yetty_yjupyter_message") == 0) {
         return yetty_yjupyter_message_class_get();
-    if (strcmp(name, "yetty_yjupyter_session") == 0)
+    }
+    if (strcmp(name, "yetty_yjupyter_session") == 0) {
         return yetty_yjupyter_session_class_get();
+    }
     /* "Not mine": OK with NULL value -- yetty_yclass_by_name walks to next hook. */
     return YETTY_OK(yetty_yclass_ptr, NULL);
 }
@@ -37,8 +40,9 @@ static struct yetty_yclass_ptr_result yetty_yjupyter_accessor_lookup(const char 
 struct yetty_ycore_void_result yetty_yjupyter_register(void)
 {
     static bool registered = false;
-    if (registered)
+    if (registered) {
         return YETTY_OK_VOID();
+    }
 
     struct yetty_ycore_void_result add_accessor_r =
         yetty_yclass_add_accessor_lookup(yetty_yjupyter_accessor_lookup);

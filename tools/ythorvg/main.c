@@ -1,10 +1,10 @@
 /*
  * yetty-ythorvg - Render SVG/Lottie via ThorVG into a ydraw buffer,
- * emit the result as a ydraw OSC sequence on stdout.
+ * emit the result as a ydraw DCS sequence on stdout.
  *
  * Usage: yetty-ythorvg [options] <input-file>
  *
- * Consumers embed the output in a terminal that speaks ydraw OSC, e.g.:
+ * Consumers embed the output in a terminal that speaks ydraw DCS, e.g.:
  *   yetty-ythorvg logo.svg
  *   yetty-ythorvg --lottie anim.json --frame 12
  */
@@ -30,7 +30,7 @@ static void usage(const char *prog)
             "  --frame N        Render frame N of a Lottie animation (default: 0)\n"
             "  -w, --width N    Target viewport width in pixels (default: 800)\n"
             "  -h, --height N   Target viewport height in pixels (default: 600)\n"
-            "      --clear      Emit an OSC clear sequence before the content\n"
+            "      --clear      Emit a DCS clear sequence before the content\n"
             "  -v, --verbose    Print stats to stderr\n"
             "      --help       Show this message\n",
             prog);
@@ -174,7 +174,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* OSC: ESC ] 600001 ; <b64(bin meta)> ; <base64(LZ4F(framed))> ESC \ */
+    /* DCS: ESC P 600001 ; <b64(bin meta)> ; <base64(LZ4F(framed))> ESC \ */
     struct yetty_yface_bin_meta meta = {
         .magic = YETTY_YFACE_BIN_MAGIC,
         .version = YETTY_YFACE_BIN_VERSION,

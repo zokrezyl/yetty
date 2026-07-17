@@ -1,8 +1,10 @@
 /*
- * osc.c - OSC envelope writer for ydraw binary buffers.
+ * dcs.c - DCS envelope writer for ydraw binary buffers.
  *
- * Wire format (consumed by yterm/ydraw-layer.c):
- *   ESC ] 600001 ; <b64(yetty_yface_bin_meta)> ; <base64(LZ4F(payload))> ESC \
+ * Content (bulk ydraw payloads) rides on DCS, not OSC — OSC is reserved for
+ * short control/report traffic (mouse / resize / focus / key). Wire format
+ * (consumed by yterm/ydraw-layer.c):
+ *   ESC P 600001 <final> <b64(yetty_yface_bin_meta)> ; <base64(LZ4F(payload))> ESC \
  *
  * The payload is the magic-tagged blob produced by
  * yetty_ydraw_drawable_list_serialize() — prims + text_spans + scene_bounds.
@@ -19,18 +21,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(
+struct yetty_ycore_size_result yetty_ycat_dcs_bin_emit(
     const struct yetty_ydraw_drawable_list *buffer, FILE *out)
 {
     if (!buffer || !out) {
-        return YETTY_ERR(yetty_ycore_size, "yetty_ycat_osc_bin_emit: NULL buffer or out");
+        return YETTY_ERR(yetty_ycore_size, "yetty_ycat_dcs_bin_emit: NULL buffer or out");
     }
 
     const uint8_t *raw_bytes = NULL;
     size_t raw_size =
         yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw_bytes);
     if (raw_size == 0 || !raw_bytes) {
-        return YETTY_ERR(yetty_ycore_size, "yetty_ycat_osc_bin_emit: serialize empty");
+        return YETTY_ERR(yetty_ycore_size, "yetty_ycat_dcs_bin_emit: serialize empty");
     }
 
     struct yetty_yface_bin_meta meta = {
@@ -46,7 +48,7 @@ struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(
         YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw_bytes, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
-        return YETTY_ERR(yetty_ycore_size, "yetty_ycat_osc_bin_emit: yface_emit failed", r);
+        return YETTY_ERR(yetty_ycore_size, "yetty_ycat_dcs_bin_emit: yface_emit failed", r);
     }
 
     size_t written = 0;

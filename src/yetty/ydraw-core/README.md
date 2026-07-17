@@ -93,5 +93,5 @@ uses `../ydraw-factory/composite-factory.h` instead.
 - [ydraw](../ydraw/README.md) — buffer layout, rolling-row scrolling, canvas.
 - [ydraw-factory](../ydraw-factory/README.md) — the GPU-side composite runtime.
 - [ydraw-gen](../ydraw-gen/README.md) — generates composite serializers.
-- [ywire](../ywire/README.md) — OSC envelopes and the wire statemachine.
+- [ywire](../ywire/README.md) — DCS envelopes and the wire statemachine.
 - [GPU resource binding](../../../docs/gpu-resource-binding.md).

@@ -29,11 +29,11 @@ struct ygit_emit_ctx {
     size_t total;
 };
 
-static struct yetty_ycore_void_result ygit_emit_envelope(void *user_data,
-                                                         const struct yetty_ydraw_drawable_list *env)
+static struct yetty_ycore_void_result ygit_emit_envelope(
+    void *user_data, const struct yetty_ydraw_drawable_list *env)
 {
     struct ygit_emit_ctx *ctx = user_data;
-    struct yetty_ycore_size_result emit_res = yetty_ycat_osc_bin_emit(env, ctx->out);
+    struct yetty_ycore_size_result emit_res = yetty_ycat_dcs_bin_emit(env, ctx->out);
     if (YETTY_IS_ERR(emit_res)) {
         return YETTY_ERR(yetty_ycore_void, "ygit view: envelope emit failed", emit_res);
     }
@@ -44,7 +44,7 @@ static struct yetty_ycore_void_result ygit_emit_envelope(void *user_data,
 /* Emit one already-rendered buffer, then destroy it. Returns 0 on success. */
 static int ygit_emit_buffer(struct yetty_ydraw_drawable_list *buffer)
 {
-    struct yetty_ycore_size_result emit_res = yetty_ycat_osc_bin_emit(buffer, stdout);
+    struct yetty_ycore_size_result emit_res = yetty_ycat_dcs_bin_emit(buffer, stdout);
     yetty_ydraw_drawable_list_destroy(buffer);
     if (YETTY_IS_ERR(emit_res)) {
         yetty_ycore_error_print(stderr, "ygit view", emit_res.error);
@@ -96,8 +96,7 @@ int ygit_render_blob(const unsigned char *bytes, size_t len, const char *name, i
         /* Single-shot rich handlers: image, SVG, chart, mermaid, … */
         yetty_ycat_handler_fn handler = yetty_ycat_get_handler(type);
         if (handler) {
-            struct yetty_ydraw_drawable_list_result render_res =
-                handler(bytes, len, name, &config);
+            struct yetty_ydraw_drawable_list_result render_res = handler(bytes, len, name, &config);
             if (YETTY_IS_ERR(render_res)) {
                 yetty_ycore_error_print(stderr, "ygit view", render_res.error);
                 yetty_ycore_error_destroy(render_res.error);
@@ -178,8 +177,15 @@ static struct ygit_diff_style ygit_diff_style_get(void)
             .colored = 1,
         };
     }
-    return (struct ygit_diff_style){.header = "", .hunk = "", .add = "", .del = "", .dim = "",
-                                    .add_bg = "", .del_bg = "", .reset = "", .colored = 0};
+    return (struct ygit_diff_style){.header = "",
+                                    .hunk = "",
+                                    .add = "",
+                                    .del = "",
+                                    .dim = "",
+                                    .add_bg = "",
+                                    .del_bg = "",
+                                    .reset = "",
+                                    .colored = 0};
 }
 
 /* A file type worth drawing as a before/after figure rather than diffing as
@@ -422,8 +428,8 @@ int ygit_render_diff(const struct yetty_ygit_diff *diff, int width_cells)
              * there is nothing textual to show. */
             const unsigned char *probe = file->new_data ? file->new_data : file->old_data;
             size_t probe_len = file->new_data ? file->new_size : file->old_size;
-            enum yetty_ycat_type type = probe ? yetty_ycat_detect(probe, probe_len, base)
-                                              : YETTY_YCAT_TYPE_UNKNOWN;
+            enum yetty_ycat_type type =
+                probe ? yetty_ycat_detect(probe, probe_len, base) : YETTY_YCAT_TYPE_UNKNOWN;
             if (probe && ygit_type_is_visual(type)) {
                 status |= ygit_render_visual_diff(file, base, width_cells, &style);
             } else {
@@ -567,8 +573,8 @@ static int ygit_fig_row_occupied(const struct yetty_ygit_graph_row *row, int lan
 
 /* Lane segments between row i and row i+1. */
 static int ygit_fig_draw_edges(struct yetty_ydraw_drawable_list *buf,
-                               const struct yetty_ygit_log *log, const struct yetty_ygit_graph *graph,
-                               size_t upper)
+                               const struct yetty_ygit_log *log,
+                               const struct yetty_ygit_graph *graph, size_t upper)
 {
     const struct yetty_ygit_graph_row *top = &graph->rows[upper];
     const struct yetty_ygit_graph_row *bottom = &graph->rows[upper + 1];
@@ -582,7 +588,7 @@ static int ygit_fig_draw_edges(struct yetty_ydraw_drawable_list *buf,
         if (in_top && in_bottom) {
             /* Lane continues straight down its column. */
             if (ygit_fig_segment(buf, ygit_fig_lane_x(lane), y_top, ygit_fig_lane_x(lane), y_bottom,
-                                  ygit_fig_lane_color(lane)) < 0) {
+                                 ygit_fig_lane_color(lane)) < 0) {
                 return -1;
             }
         } else if (in_top && !in_bottom) {
@@ -592,13 +598,13 @@ static int ygit_fig_draw_edges(struct yetty_ydraw_drawable_list *buf,
                 continue;
             }
             if (ygit_fig_segment(buf, ygit_fig_lane_x(lane), y_top, ygit_fig_lane_x(bottom->column),
-                                  y_bottom, ygit_fig_lane_color(lane)) < 0) {
+                                 y_bottom, ygit_fig_lane_color(lane)) < 0) {
                 return -1;
             }
         } else if (!in_top && in_bottom) {
             /* Lane opened by the upper commit (a merge's extra parent). */
             if (ygit_fig_segment(buf, ygit_fig_lane_x(top->column), y_top, ygit_fig_lane_x(lane),
-                                  y_bottom, ygit_fig_lane_color(lane)) < 0) {
+                                 y_bottom, ygit_fig_lane_color(lane)) < 0) {
                 return -1;
             }
         }
@@ -654,7 +660,8 @@ static struct yetty_ydraw_drawable_list_result ygit_build_graph_figure(
         }
 
         float baseline = YGIT_FIG_MARGIN_Y + (float)index * YGIT_FIG_ROW_H;
-        float x = ygit_fig_text(buf, text_x, baseline, commit->abbrev_hash, YGIT_FIG_HASH, &text_err);
+        float x =
+            ygit_fig_text(buf, text_x, baseline, commit->abbrev_hash, YGIT_FIG_HASH, &text_err);
         x += YGIT_FIG_ADVANCE;
         for (size_t ref = 0; ref < commit->ref_count; ref++) {
             char label[128];

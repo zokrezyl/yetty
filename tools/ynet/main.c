@@ -32,7 +32,7 @@ static void print_usage(const char *program)
             "  %s -h | --help               this help\n"
             "\n"
             "The default renders a GPU topology figure into the yetty pane (run inside\n"
-            "yetty, or via `yetty -e`); emitting it to a plain terminal prints raw OSC\n"
+            "yetty, or via `yetty -e`); emitting it to a plain terminal prints raw DCS\n"
             "bytes. --dump is the plain-text fallback. Offline reading only in this build\n"
             "(no root); live capture and the interactive pane land in later milestones.\n",
             program, program, program);
@@ -100,7 +100,7 @@ static int dump_capture(struct yetty_yclass_object *capture, const char *path)
 }
 
 /* Render the flow topology as a ydraw figure and ship it to stdout as a
- * YDRAW_BIN OSC envelope — renders inline in the yetty pane. */
+ * YDRAW_BIN DCS envelope — renders inline in the yetty pane. */
 static int render_figure(struct yetty_yclass_object *capture)
 {
     struct yetty_ydraw_drawable_list_result render_result = yetty_ynet_render(capture, 0, 0);

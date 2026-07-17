@@ -1433,25 +1433,25 @@ struct yetty_ydraw_drawable_list_result yetty_yecho_render_string(
 }
 
 /*=============================================================================
- * OSC emission — wraps the buffer in a YDRAW_BIN envelope (mirror of
- * yetty_ycat_osc_bin_emit; we replicate it here so the yecho lib doesn't
+ * DCS emission — wraps the buffer in a YDRAW_BIN envelope (mirror of
+ * yetty_ycat_dcs_bin_emit; we replicate it here so the yecho lib doesn't
  * pull the whole ycat target into thin clients).
  *===========================================================================*/
 
 #include <yetty/yface/yface.h>
 #include <yetty/yterminal/dcs-codes.h> /* YETTY_DCS_YDRAW_BIN */
 
-struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(
+struct yetty_ycore_size_result yetty_yecho_dcs_bin_emit(
     const struct yetty_ydraw_drawable_list *buffer, FILE *out)
 {
     if (!buffer || !out) {
-        return YETTY_ERR(yetty_ycore_size, "yetty_yecho_osc_bin_emit: NULL buffer or out");
+        return YETTY_ERR(yetty_ycore_size, "yetty_yecho_dcs_bin_emit: NULL buffer or out");
     }
     const uint8_t *raw = NULL;
     size_t raw_size =
         yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
     if (raw_size == 0 || !raw) {
-        return YETTY_ERR(yetty_ycore_size, "yetty_yecho_osc_bin_emit: empty serialize");
+        return YETTY_ERR(yetty_ycore_size, "yetty_yecho_dcs_bin_emit: empty serialize");
     }
 
     struct yetty_yface_bin_meta meta = {
@@ -1467,7 +1467,7 @@ struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(
         YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
-        return YETTY_ERR(yetty_ycore_size, "yetty_yecho_osc_bin_emit: yface_emit failed", r);
+        return YETTY_ERR(yetty_ycore_size, "yetty_yecho_dcs_bin_emit: yface_emit failed", r);
     }
     size_t written = 0;
     if (envelope.size > 0) {

@@ -10,7 +10,7 @@
 //   Instance         = per-primitive, holds buffer data copy, render(target, x, y)
 //
 // Anything in this header pulls in <webgpu/webgpu.h> and the GPU resource
-// types — keep client-only code (OSC emit, YAML, wire serialize) on the
+// types — keep client-only code (DCS emit, YAML, wire serialize) on the
 // ydraw-core side.
 //
 // See docs/ydraw.md for full documentation.

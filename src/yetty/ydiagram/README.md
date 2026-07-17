@@ -77,7 +77,7 @@ cat-like inline flow at the cursor (what ycat wants).
 
 ## Consumers
 
-- **CLI** — `tools/ydiagram` emits an OSC `YDRAW_BIN` envelope (or a raw
+- **CLI** — `tools/ydiagram` emits a DCS `YDRAW_BIN` envelope (or a raw
   buffer with `-o`); it measures text with a real MSDF font so boxes fit.
 - [`ycat`](../ycat/README.md) — `.mmd`/Mermaid content detected in
   `detect.c`, rendered by `handler-mermaid.c`.

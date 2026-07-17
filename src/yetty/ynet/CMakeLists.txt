@@ -48,7 +48,7 @@ target_include_directories(yetty_ynet PRIVATE ${YETTY_ROOT}/src ${PCAP_INCLUDE_D
 target_link_libraries(yetty_ynet PUBLIC
     yetty_ycore
     yetty_yclass
-    yetty_yface       # YDRAW_BIN OSC envelope encoder (topology figure)
+    yetty_yface       # YDRAW_BIN DCS envelope encoder (topology figure)
     yetty_ydraw_core  # drawable-list builder
     yetty_ysdf        # SDF primitives (nodes/edges)
 )

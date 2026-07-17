@@ -13,7 +13,7 @@ openh264 ([`yvcodec`](../yvcodec/README.md)) and libopus
 
 | target | contents | gating |
 |--------|----------|--------|
-| `yetty_yvideo_core` | wire serializer, OSC emit, MP4 demux — `yvideo.c`, `yvideo-gen-wire.c`, `yvideo-mp4.c` | always; minimp4 optional (`YETTY_ENABLE_LIB_MINIMP4`, stubs return ERR without it) |
+| `yetty_yvideo_core` | wire serializer, DCS emit, MP4 demux — `yvideo.c`, `yvideo-gen-wire.c`, `yvideo-mp4.c` | always; minimp4 optional (`YETTY_ENABLE_LIB_MINIMP4`, stubs return ERR without it) |
 | `yetty_yvideo` | generated factory + hand-written lifecycle hooks — `yvideo-gen.c`, `yvideo-hooks.c` | `YETTY_ENABLE_LIB_WEBGPU` + `YETTY_ENABLE_LIB_OPENH264`; audio further gated on `YETTY_ENABLE_FEATURE_YACODEC` + libopus + miniaudio |
 
 ## Wire model
@@ -62,7 +62,7 @@ struct yetty_ydraw_drawable_list_result list_res =
 /* Or feed raw Annex-B NAL bytes (+ optional audio packets) directly: */
 list_res = yetty_yvideo_render(nal_bytes, nal_len, audio_bytes, audio_len, &config);
 
-yetty_yvideo_osc_bin_emit(list_res.value, stdout);
+yetty_yvideo_dcs_bin_emit(list_res.value, stdout);
 yetty_ydraw_drawable_list_destroy(list_res.value);
 ```
 
@@ -74,7 +74,7 @@ reference driver.
 
 | file | role |
 |------|------|
-| `yvideo.c` | hand-written: config → wire serialize → drawable list, OSC emit |
+| `yvideo.c` | hand-written: config → wire serialize → drawable list, DCS emit |
 | `yvideo-mp4.c` | hand-written: minimp4 demux, AVCC→Annex-B, SPS dimension parse (sender-side) |
 | `yvideo.yaml` | composite schema — uniforms/buffers/texture layout, `hooks: true` |
 | `yvideo-gen-wire.c` | generated wire serializer (CPU-only) |
@@ -96,7 +96,7 @@ demux runs sender-side (moving it server-side is tracked in `yvideo-mp4.h`).
 
 ## Consumers
 
-- `tools/yvideo` — CLI sender (`yvideo clip.mp4` → OSC envelope on stdout).
+- `tools/yvideo` — CLI sender (`yvideo clip.mp4` → DCS envelope on stdout).
 - [`ycat`](../ycat/README.md) — `handler-video.c` for video files.
 - [`ygui`](../ygui/README.md) — the `widgets/yvideo.c` figure widget.
 - `demo/yvideo/video-source.c` — streaming CMD_UPDATE reference driver.

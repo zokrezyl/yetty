@@ -12,7 +12,7 @@ yetty renders rich figures (markdown, mermaid diagrams, data charts, images,
 SVG, PDF, LilyPond music scores, syntax-highlighted code) when a program prints
 an OSC envelope
 
-    ESC ] 600001 ; <base64 args> ; <base64 body> ESC \\
+    ESC P 600001 ; <base64 args> ; <base64 body> ESC \\
 
 to the terminal. The `ycat` tool already produces that envelope. This MCP
 server is a thin wrapper: each tool runs `ycat` (telling it it's inside

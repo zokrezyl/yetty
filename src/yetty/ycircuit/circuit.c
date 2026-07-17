@@ -1880,7 +1880,7 @@ static struct yetty_ycore_void_result circuit_obj_destroy(struct yetty_yclass_ob
 }
 
 /*=============================================================================
- * One-shot helper — serialize a rendered drawable list as a YDRAW_BIN OSC
+ * One-shot helper — serialize a rendered drawable list as a YDRAW_BIN DCS
  * envelope (the ycat / scrolling-layer path). Exposed for CLI / binding
  * front-ends.
  *===========================================================================*/

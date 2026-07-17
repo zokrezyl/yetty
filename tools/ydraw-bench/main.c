@@ -1,4 +1,4 @@
-// ydraw-bench: Generate random SDF primitives as binary OSC sequence
+// ydraw-bench: Generate random SDF primitives as binary DCS sequence
 // Outputs raw binary format (not YAML) for performance benchmarking
 
 #include <stdint.h>
@@ -408,7 +408,7 @@ int main(int argc, char **argv)
             raw_bytes = total_words * sizeof(float);
         }
 
-        // OSC sequence via yface: ESC ] 600001 ; <b64(meta)> ; <b64(LZ4F(bytes))> ST
+        // DCS sequence via yface: ESC P 600001 ; <b64(meta)> ; <b64(LZ4F(bytes))> ST
         struct yetty_yface_bin_meta meta = {
             .magic = YETTY_YFACE_BIN_MAGIC,
             .version = YETTY_YFACE_BIN_VERSION,

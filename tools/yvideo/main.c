@@ -1,6 +1,6 @@
 /*
- * yvideo — emit a yvideo OSC envelope stream for a raw H.264 Annex-B
- * file. Inside a yetty terminal the OSC envelopes ride the ydraw
+ * yvideo — emit a yvideo DCS envelope stream for a raw H.264 Annex-B
+ * file. Inside a yetty terminal the DCS envelopes ride the ydraw
  * (YDRAW_BIN) record path, which mints a yvideo composite and decodes it
  * via openh264, rendering frames as they arrive. Outside a yetty terminal
  * the bytes are still printed
@@ -428,7 +428,7 @@ static int demux_mp4_to_annexb(const uint8_t *mp4_data, size_t mp4_size, uint8_t
 }
 
 /*---------------------------------------------------------------------------
- * OSC envelope plumbing — mirrors demo/yvideo/video-source.c (the wire
+ * DCS envelope plumbing — mirrors demo/yvideo/video-source.c (the wire
  * shape is identical; this is the polished CLI on top).
  *-------------------------------------------------------------------------*/
 
@@ -452,7 +452,7 @@ static void usage(FILE *out, const char *prog)
     fprintf(out,
             "Usage: %s [options] <file.h264>\n"
             "\n"
-            "Emit a yvideo OSC envelope stream for the given H.264 Annex-B\n"
+            "Emit a yvideo DCS envelope stream for the given H.264 Annex-B\n"
             "byte stream. INIT envelope wraps the first chunk in CMD_GROUP(id);\n"
             "subsequent chunks ship as CMD_UPDATE envelopes targeting that id.\n"
             "Video dimensions are taken from the first SPS NAL — they MUST\n"

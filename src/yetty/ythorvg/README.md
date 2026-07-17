@@ -70,7 +70,7 @@ effects, two-colour gradient approximation.
 ## Consumers
 
 - **tools/ythorvg** — CLI: renders an SVG or Lottie frame and emits the
-  buffer as a `YETTY_DCS_YDRAW_BIN` OSC sequence (`--lottie --frame N`,
+  buffer as a `YETTY_DCS_YDRAW_BIN` sequence (`--lottie --frame N`,
   `--clear`, `-w/-h`).
 
 Note: ycat does **not** route through ythorvg — its SVG and Lottie handlers

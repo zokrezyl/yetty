@@ -11,11 +11,11 @@ extern "C" {
  * Reroute stderr to a log file when it shares the same kernel object
  * as stdout — i.e. both fds point at the same PTY slave.
  *
- * Motivation: tools like ygreeter, yplot, ymesh, ycat emit OSC composite
+ * Motivation: tools like ygreeter, yplot, ymesh, ycat emit DCS composite
  * envelopes through stdout to a parent yetty. When the user runs
  * `yetty -e ./ytool`, the child inherits a shared PTY slave for stdout
  * and stderr; any diagnostic emitted on stderr lands in the same byte
- * stream and corrupts the OSC envelope parser in the parent. Detect
+ * stream and corrupts the DCS envelope parser in the parent. Detect
  * that case at startup and redirect stderr to a per-pid log file under
  * the runtime dir, leaving stdout clean.
  *

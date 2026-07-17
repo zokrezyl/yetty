@@ -3,7 +3,7 @@
 Render [flame graphs](https://www.brendangregg.com/flamegraphs.html) inline in
 a yetty session. Two pieces:
 
-- **`yflame`** — a small C tool: folded stacks in, a flame-graph OSC envelope
+- **`yflame`** — a small C tool: folded stacks in, a flame-graph DCS envelope
   out.
 - **`yflame.sh`** — a friendly wrapper that records with `perf`, collapses the
   stacks, and renders, in one command.
@@ -69,7 +69,7 @@ spikes are deep call chains.
 
 ## The `yflame` tool (low level)
 
-Reads folded stacks from a file or stdin, writes a `YDRAW_BIN` OSC envelope
+Reads folded stacks from a file or stdin, writes a `YDRAW_BIN` DCS envelope
 (DCS `600001`) to stdout.
 
 ```
@@ -156,7 +156,7 @@ Handles record → `perf script` → collapse → render so you don't have to.
 | `--dry-run` | print the pipeline without running it |
 | `-h, --help` | usage |
 
-Without `--view`, the graph's OSC envelope is written to **stdout**, so it
+Without `--view`, the graph's DCS envelope is written to **stdout**, so it
 renders inline when the script runs inside a yetty session (`yetty -e '…'`).
 With `--view`, stdout is not used for the picture — a dedicated viewer yetty
 is launched instead.
@@ -164,7 +164,7 @@ is launched instead.
 ### Design notes
 
 - **Status on stderr, picture on stdout.** All progress messages go to stderr,
-  so the OSC envelope on stdout stays clean and renders correctly when piped or
+  so the DCS envelope on stdout stays clean and renders correctly when piped or
   run under `yetty -e`.
 - **Built-in collapser.** A small, original `awk` collapser turns `perf script`
   output into folded stacks, so the common case needs no external Perl script.

@@ -48,9 +48,9 @@ struct yjupyter_pending {
 };
 
 struct YETTY_ANNOTATE("class@yjupyter:session") yetty_yjupyter_session {
-    char *session_id;              /* owned */
+    char *session_id; /* owned */
     unsigned long long msg_counter;
-    char *kernel_state;            /* owned; "unknown"/"starting"/"idle"/"busy"/"dead" */
+    char *kernel_state;               /* owned; "unknown"/"starting"/"idle"/"busy"/"dead" */
     struct yjupyter_pending *pending; /* owned vector: request msg_id -> tag */
     size_t pending_count;
     size_t pending_cap;
@@ -97,11 +97,13 @@ static const char *mobj_str(yyjson_mut_val *obj, const char *key)
 /* Parse `json_text` (or "{}" when empty) and deep-copy the value into `doc`. */
 static yyjson_mut_val *parse_into(yyjson_mut_doc *doc, const char *json_text)
 {
-    if (!json_text || !json_text[0])
+    if (!json_text || !json_text[0]) {
         return yyjson_mut_obj(doc);
+    }
     yyjson_doc *parsed = yyjson_read(json_text, strlen(json_text), 0);
-    if (!parsed)
+    if (!parsed) {
         return yyjson_mut_obj(doc);
+    }
     yyjson_mut_val *copy = yyjson_val_mut_copy(doc, yyjson_doc_get_root(parsed));
     yyjson_doc_free(parsed);
     return copy ? copy : yyjson_mut_obj(doc);
@@ -116,18 +118,20 @@ static yyjson_mut_val *parse_into(yyjson_mut_doc *doc, const char *json_text)
  * `parent_msg_id` is "" for an originating request. Replaces any prior content. */
 YETTY_ANNOTATE("virtual@yjupyter:message:message_build")
 YETTY_ANNOTATE("local@yjupyter:message_build")
-static struct yetty_ycore_void_result
-message_build(struct yetty_yclass_object *obj, const char *msg_type, const char *channel,
-              const char *session_id, const char *msg_id, const char *parent_msg_id,
-              const char *content_json)
+static struct yetty_ycore_void_result message_build(struct yetty_yclass_object *obj,
+                                                    const char *msg_type, const char *channel,
+                                                    const char *session_id, const char *msg_id,
+                                                    const char *parent_msg_id,
+                                                    const char *content_json)
 {
     struct yetty_yclass_void_ptr_result message_r = message_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, message_r, "message_build: from_obj");
     struct yetty_yjupyter_message *message = message_r.value;
 
     yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
-    if (!doc)
+    if (!doc) {
         return YETTY_ERR(yetty_ycore_void, "message_build: doc alloc failed");
+    }
     yyjson_mut_val *root = yyjson_mut_obj(doc);
     yyjson_mut_val *header = yyjson_mut_obj(doc);
     yyjson_mut_val *parent = yyjson_mut_obj(doc);
@@ -143,8 +147,9 @@ message_build(struct yetty_yclass_object *obj, const char *msg_type, const char 
     yyjson_mut_obj_add_strcpy(doc, header, "username", "yetty");
     yyjson_mut_obj_add_strcpy(doc, header, "msg_type", msg_type ? msg_type : "");
     yyjson_mut_obj_add_strcpy(doc, header, "version", "5.3");
-    if (parent_msg_id && parent_msg_id[0])
+    if (parent_msg_id && parent_msg_id[0]) {
         yyjson_mut_obj_add_strcpy(doc, parent, "msg_id", parent_msg_id);
+    }
 
     yyjson_mut_obj_add_val(doc, root, "header", header);
     yyjson_mut_obj_add_val(doc, root, "parent_header", parent);
@@ -153,8 +158,9 @@ message_build(struct yetty_yclass_object *obj, const char *msg_type, const char 
     yyjson_mut_obj_add_strcpy(doc, root, "channel", channel ? channel : "shell");
     yyjson_mut_doc_set_root(doc, root);
 
-    if (message->doc)
+    if (message->doc) {
         yyjson_mut_doc_free(message->doc);
+    }
     message->doc = doc;
     message->root = root;
     return YETTY_OK_VOID();
@@ -169,24 +175,28 @@ static struct yetty_ycore_void_result message_from_wire(struct yetty_yclass_obje
     struct yetty_yclass_void_ptr_result message_r = message_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, message_r, "message_from_wire: from_obj");
     struct yetty_yjupyter_message *message = message_r.value;
-    if (!json)
+    if (!json) {
         return YETTY_ERR(yetty_ycore_void, "message_from_wire: NULL json");
+    }
 
     yyjson_doc *parsed = yyjson_read(json, strlen(json), 0);
-    if (!parsed)
+    if (!parsed) {
         return YETTY_ERR(yetty_ycore_void, "message_from_wire: parse failed");
+    }
     yyjson_mut_doc *doc = yyjson_doc_mut_copy(parsed, NULL);
     yyjson_doc_free(parsed);
-    if (!doc)
+    if (!doc) {
         return YETTY_ERR(yetty_ycore_void, "message_from_wire: mutable copy failed");
+    }
     yyjson_mut_val *root = yyjson_mut_doc_get_root(doc);
     if (!root || !yyjson_mut_is_obj(root)) {
         yyjson_mut_doc_free(doc);
         return YETTY_ERR(yetty_ycore_void, "message_from_wire: frame is not an object");
     }
 
-    if (message->doc)
+    if (message->doc) {
         yyjson_mut_doc_free(message->doc);
+    }
     message->doc = doc;
     message->root = root;
     return YETTY_OK_VOID();
@@ -200,11 +210,13 @@ static struct yetty_ycore_char_ptr_result message_to_wire(struct yetty_yclass_ob
     struct yetty_yclass_void_ptr_result message_r = message_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, message_r, "message_to_wire: from_obj");
     struct yetty_yjupyter_message *message = message_r.value;
-    if (!message->doc)
+    if (!message->doc) {
         return YETTY_ERR(yetty_ycore_char_ptr, "message_to_wire: empty message");
+    }
     char *text = yyjson_mut_write(message->doc, 0, NULL);
-    if (!text)
+    if (!text) {
         return YETTY_ERR(yetty_ycore_char_ptr, "message_to_wire: write failed");
+    }
     return YETTY_OK(yetty_ycore_char_ptr, text);
 }
 
@@ -233,8 +245,8 @@ static struct yetty_ycore_const_char_ptr_result message_msg_id(struct yetty_ycla
 
 YETTY_ANNOTATE("virtual@yjupyter:message:message_parent_msg_id")
 YETTY_ANNOTATE("local@yjupyter:message_parent_msg_id")
-static struct yetty_ycore_const_char_ptr_result
-message_parent_msg_id(struct yetty_yclass_object *obj)
+static struct yetty_ycore_const_char_ptr_result message_parent_msg_id(
+    struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_void_ptr_result message_r = message_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, message_r, "message_parent_msg_id: from_obj");
@@ -275,10 +287,12 @@ static struct yetty_ycore_char_ptr_result message_content_json(struct yetty_ycla
     struct yetty_yjupyter_message *message = message_r.value;
     yyjson_mut_val *content = mobj_get(message->root, "content");
     char *text = content ? yyjson_mut_val_write(content, 0, NULL) : NULL;
-    if (!text)
+    if (!text) {
         text = strdup("{}");
-    if (!text)
+    }
+    if (!text) {
         return YETTY_ERR(yetty_ycore_char_ptr, "message_content_json: alloc failed");
+    }
     return YETTY_OK(yetty_ycore_char_ptr, text);
 }
 
@@ -286,16 +300,17 @@ static struct yetty_ycore_char_ptr_result message_content_json(struct yetty_ycla
  * "name", "execution_state", "ename", "status"); owned, "" when absent. */
 YETTY_ANNOTATE("virtual@yjupyter:message:message_content_string")
 YETTY_ANNOTATE("local@yjupyter:message_content_string")
-static struct yetty_ycore_char_ptr_result
-message_content_string(struct yetty_yclass_object *obj, const char *key)
+static struct yetty_ycore_char_ptr_result message_content_string(struct yetty_yclass_object *obj,
+                                                                 const char *key)
 {
     struct yetty_yclass_void_ptr_result message_r = message_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, message_r, "message_content_string: from_obj");
     struct yetty_yjupyter_message *message = message_r.value;
     const char *value = mobj_str(mobj_get(message->root, "content"), key);
     char *out = strdup(value ? value : "");
-    if (!out)
+    if (!out) {
         return YETTY_ERR(yetty_ycore_char_ptr, "message_content_string: alloc failed");
+    }
     return YETTY_OK(yetty_ycore_char_ptr, out);
 }
 
@@ -310,8 +325,9 @@ static struct yetty_ycore_int_result message_content_int(struct yetty_yclass_obj
     YETTY_RETURN_IF_ERR(yetty_ycore_int, message_r, "message_content_int: from_obj");
     struct yetty_yjupyter_message *message = message_r.value;
     yyjson_mut_val *value = mobj_get(mobj_get(message->root, "content"), key);
-    if (value && yyjson_mut_is_int(value))
+    if (value && yyjson_mut_is_int(value)) {
         return YETTY_OK(yetty_ycore_int, (int)yyjson_mut_get_sint(value));
+    }
     return YETTY_OK(yetty_ycore_int, -1);
 }
 
@@ -319,13 +335,15 @@ YETTY_ANNOTATE("virtual@yjupyter:message:message_destroy")
 YETTY_ANNOTATE("local@yjupyter:message_destroy")
 static struct yetty_ycore_void_result message_destroy(struct yetty_yclass_object *obj)
 {
-    if (!obj)
+    if (!obj) {
         return YETTY_OK_VOID();
+    }
     struct yetty_yclass_void_ptr_result message_r = message_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, message_r, "message_destroy: from_obj");
     struct yetty_yjupyter_message *message = message_r.value;
-    if (message->doc)
+    if (message->doc) {
         yyjson_mut_doc_free(message->doc);
+    }
     message->doc = NULL;
     message->root = NULL;
     return yetty_yclass_object_free(obj);
@@ -340,10 +358,10 @@ static struct yetty_ycore_void_result session_record(struct yetty_yjupyter_sessi
 {
     if (session->pending_count == session->pending_cap) {
         size_t new_cap = session->pending_cap ? session->pending_cap * 2 : 8;
-        struct yjupyter_pending *grown =
-            realloc(session->pending, new_cap * sizeof(*grown));
-        if (!grown)
+        struct yjupyter_pending *grown = realloc(session->pending, new_cap * sizeof(*grown));
+        if (!grown) {
             return YETTY_ERR(yetty_ycore_void, "session_record: pending grow failed");
+        }
         session->pending = grown;
         session->pending_cap = new_cap;
     }
@@ -374,8 +392,9 @@ static struct yetty_ycore_void_result session_init(struct yetty_yclass_object *o
     struct yetty_yclass_void_ptr_result session_r = session_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, session_r, "session_init: from_obj");
     struct yetty_yjupyter_session *session = session_r.value;
-    if (!session_id || !session_id[0])
+    if (!session_id || !session_id[0]) {
         return YETTY_ERR(yetty_ycore_void, "session_init: empty session id");
+    }
 
     char *id = strdup(session_id);
     char *state = strdup("unknown");
@@ -404,7 +423,8 @@ static struct yetty_ycore_const_char_ptr_result session_id(struct yetty_yclass_o
 
 YETTY_ANNOTATE("virtual@yjupyter:session:session_kernel_state")
 YETTY_ANNOTATE("local@yjupyter:session_kernel_state")
-static struct yetty_ycore_const_char_ptr_result session_kernel_state(struct yetty_yclass_object *obj)
+static struct yetty_ycore_const_char_ptr_result session_kernel_state(
+    struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_void_ptr_result session_r = session_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, session_r, "session_kernel_state: from_obj");
@@ -419,15 +439,18 @@ static struct yetty_ycore_const_char_ptr_result session_kernel_state(struct yett
  * tag_for(). Returns a message object the caller owns (destroy it). */
 YETTY_ANNOTATE("virtual@yjupyter:session:session_new_request")
 YETTY_ANNOTATE("local@yjupyter:session_new_request")
-static struct yetty_yclass_object_ptr_result
-session_new_request(struct yetty_yclass_object *obj, const char *msg_type, const char *channel,
-                    const char *content_json, const char *tag)
+static struct yetty_yclass_object_ptr_result session_new_request(struct yetty_yclass_object *obj,
+                                                                 const char *msg_type,
+                                                                 const char *channel,
+                                                                 const char *content_json,
+                                                                 const char *tag)
 {
     struct yetty_yclass_void_ptr_result session_r = session_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, session_r, "session_new_request: from_obj");
     struct yetty_yjupyter_session *session = session_r.value;
-    if (!session->session_id)
+    if (!session->session_id) {
         return YETTY_ERR(yetty_yclass_object_ptr, "session_new_request: session not initialized");
+    }
 
     char msg_id[320];
     snprintf(msg_id, sizeof(msg_id), "%s_%llu", session->session_id, session->msg_counter++);
@@ -448,7 +471,8 @@ session_new_request(struct yetty_yclass_object *obj, const char *msg_type, const
         struct yetty_ycore_void_result record_r = session_record(session, msg_id, tag);
         if (YETTY_IS_ERR(record_r)) {
             message_destroy(message);
-            return YETTY_ERR(yetty_yclass_object_ptr, "session_new_request: record failed", record_r);
+            return YETTY_ERR(yetty_yclass_object_ptr, "session_new_request: record failed",
+                             record_r);
         }
     }
     return YETTY_OK(yetty_yclass_object_ptr, message);
@@ -498,16 +522,17 @@ static struct yetty_yclass_object_ptr_result session_handle_wire(struct yetty_yc
  * request. */
 YETTY_ANNOTATE("virtual@yjupyter:session:session_tag_for")
 YETTY_ANNOTATE("local@yjupyter:session_tag_for")
-static struct yetty_ycore_const_char_ptr_result
-session_tag_for(struct yetty_yclass_object *obj, const char *parent_msg_id)
+static struct yetty_ycore_const_char_ptr_result session_tag_for(struct yetty_yclass_object *obj,
+                                                                const char *parent_msg_id)
 {
     struct yetty_yclass_void_ptr_result session_r = session_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, session_r, "session_tag_for: from_obj");
     struct yetty_yjupyter_session *session = session_r.value;
     if (parent_msg_id && parent_msg_id[0]) {
         for (size_t i = 0; i < session->pending_count; i++) {
-            if (strcmp(session->pending[i].msg_id, parent_msg_id) == 0)
+            if (strcmp(session->pending[i].msg_id, parent_msg_id) == 0) {
                 return YETTY_OK(yetty_ycore_const_char_ptr, session->pending[i].tag);
+            }
         }
     }
     return YETTY_OK(yetty_ycore_const_char_ptr, "");
@@ -517,8 +542,9 @@ YETTY_ANNOTATE("virtual@yjupyter:session:session_destroy")
 YETTY_ANNOTATE("local@yjupyter:session_destroy")
 static struct yetty_ycore_void_result session_destroy(struct yetty_yclass_object *obj)
 {
-    if (!obj)
+    if (!obj) {
         return YETTY_OK_VOID();
+    }
     struct yetty_yclass_void_ptr_result session_r = session_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, session_r, "session_destroy: from_obj");
     struct yetty_yjupyter_session *session = session_r.value;

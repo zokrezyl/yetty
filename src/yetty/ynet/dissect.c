@@ -18,9 +18,9 @@
 /* libpcap DLT_* link types we understand. Defined locally so this TU needs no
  * pcap.h; the values are the stable libpcap constants. */
 enum {
-    YNET_DLT_NULL = 0,       /* BSD loopback: 4-byte host-order address family */
-    YNET_DLT_EN10MB = 1,     /* Ethernet II */
-    YNET_DLT_RAW_BSD = 12,   /* raw IP (BSD numbering) */
+    YNET_DLT_NULL = 0,        /* BSD loopback: 4-byte host-order address family */
+    YNET_DLT_EN10MB = 1,      /* Ethernet II */
+    YNET_DLT_RAW_BSD = 12,    /* raw IP (BSD numbering) */
     YNET_DLT_RAW_LINUX = 101, /* raw IP (Linux numbering) */
     YNET_DLT_LINUX_SLL = 113, /* Linux "cooked" capture (tcpdump -i any) */
 };
@@ -56,7 +56,7 @@ static uint32_t read_be32(const uint8_t *bytes)
  *===========================================================================*/
 
 static struct ynet_layer *layer_begin(struct ynet_dissection *out, uint32_t offset,
-                                       const char *title)
+                                      const char *title)
 {
     if (out->layer_count >= YNET_MAX_LAYERS) {
         return NULL;
@@ -113,8 +113,8 @@ void ynet_format_address(enum ynet_addr_family family, const uint8_t *addr, char
     } else if (family == YNET_AF_INET6) {
         /* Full (non-compressed) form — unambiguous and enough for M1. */
         snprintf(buf, buf_size, "%x:%x:%x:%x:%x:%x:%x:%x", read_be16(addr + 0), read_be16(addr + 2),
-                 read_be16(addr + 4), read_be16(addr + 6), read_be16(addr + 8), read_be16(addr + 10),
-                 read_be16(addr + 12), read_be16(addr + 14));
+                 read_be16(addr + 4), read_be16(addr + 6), read_be16(addr + 8),
+                 read_be16(addr + 10), read_be16(addr + 12), read_be16(addr + 14));
     } else {
         buf[0] = '\0';
     }
@@ -131,7 +131,7 @@ static void format_mac(const uint8_t *mac, char *buf, size_t buf_size)
  *===========================================================================*/
 
 static void set_endpoints_with_ports(struct ynet_dissection *out, uint16_t src_port,
-                                      uint16_t dst_port)
+                                     uint16_t dst_port)
 {
     char address[YNET_ENDPOINT_MAX];
     /* IPv6 colons collide with the port separator — bracket the address, as
@@ -188,15 +188,14 @@ static void tcp_flags_string(uint8_t flags, char *buf, size_t buf_size)
         uint8_t bit;
         const char *name;
     } table[] = {
-        {0x01, "FIN"}, {0x02, "SYN"}, {0x04, "RST"},
-        {0x08, "PSH"}, {0x10, "ACK"}, {0x20, "URG"},
+        {0x01, "FIN"}, {0x02, "SYN"}, {0x04, "RST"}, {0x08, "PSH"}, {0x10, "ACK"}, {0x20, "URG"},
     };
     buf[0] = '\0';
     size_t used = 0;
     for (size_t index = 0; index < sizeof(table) / sizeof(table[0]); index++) {
         if (flags & table[index].bit) {
-            int written = snprintf(buf + used, buf_size - used, "%s%s", used ? ", " : "",
-                                   table[index].name);
+            int written =
+                snprintf(buf + used, buf_size - used, "%s%s", used ? ", " : "", table[index].name);
             if (written > 0) {
                 used += (size_t)written;
             }
@@ -242,9 +241,9 @@ static void dissect_tcp(const uint8_t *data, uint32_t len, uint32_t offset,
     snprintf(out->protocol, sizeof(out->protocol), "TCP");
     set_endpoints_with_ports(out, src_port, dst_port);
     if (flags & 0x10) { /* ACK present → show Ack= */
-        snprintf(out->info, sizeof(out->info), "%u \xE2\x86\x92 %u [%s] Seq=%u Ack=%u Win=%u Len=%u",
-                 src_port, dst_port, flags_str[0] ? flags_str : "none", seq, ack, window,
-                 payload_len);
+        snprintf(out->info, sizeof(out->info),
+                 "%u \xE2\x86\x92 %u [%s] Seq=%u Ack=%u Win=%u Len=%u", src_port, dst_port,
+                 flags_str[0] ? flags_str : "none", seq, ack, window, payload_len);
     } else {
         snprintf(out->info, sizeof(out->info), "%u \xE2\x86\x92 %u [%s] Seq=%u Win=%u Len=%u",
                  src_port, dst_port, flags_str[0] ? flags_str : "none", seq, window, payload_len);
@@ -269,27 +268,51 @@ static void dissect_icmp(const uint8_t *data, uint32_t len, uint32_t offset, int
     const char *description = "";
     if (!is_v6) {
         switch (type) {
-        case 0: description = "Echo (ping) reply"; break;
-        case 3: description = "Destination unreachable"; break;
-        case 8: description = "Echo (ping) request"; break;
-        case 11: description = "Time-to-live exceeded"; break;
-        default: description = "ICMP"; break;
+        case 0:
+            description = "Echo (ping) reply";
+            break;
+        case 3:
+            description = "Destination unreachable";
+            break;
+        case 8:
+            description = "Echo (ping) request";
+            break;
+        case 11:
+            description = "Time-to-live exceeded";
+            break;
+        default:
+            description = "ICMP";
+            break;
         }
     } else {
         switch (type) {
-        case 128: description = "Echo (ping) request"; break;
-        case 129: description = "Echo (ping) reply"; break;
-        case 133: description = "Router solicitation"; break;
-        case 134: description = "Router advertisement"; break;
-        case 135: description = "Neighbor solicitation"; break;
-        case 136: description = "Neighbor advertisement"; break;
-        default: description = "ICMPv6"; break;
+        case 128:
+            description = "Echo (ping) request";
+            break;
+        case 129:
+            description = "Echo (ping) reply";
+            break;
+        case 133:
+            description = "Router solicitation";
+            break;
+        case 134:
+            description = "Router advertisement";
+            break;
+        case 135:
+            description = "Neighbor solicitation";
+            break;
+        case 136:
+            description = "Neighbor advertisement";
+            break;
+        default:
+            description = "ICMPv6";
+            break;
         }
     }
 
-    struct ynet_layer *layer =
-        layer_begin(out, offset, is_v6 ? "Internet Control Message Protocol v6"
-                                       : "Internet Control Message Protocol");
+    struct ynet_layer *layer = layer_begin(out, offset,
+                                           is_v6 ? "Internet Control Message Protocol v6"
+                                                 : "Internet Control Message Protocol");
     field_add_uint(layer, "Type", offset, 1, type);
     field_add_uint(layer, "Code", offset + 1, 1, code);
     field_add_uint(layer, "Checksum", offset + 2, 2, read_be16(data + offset + 2));
@@ -342,17 +365,28 @@ static int dns_read_name(const uint8_t *data, uint32_t len, uint32_t pos, char *
 static const char *dns_type_name(uint16_t type)
 {
     switch (type) {
-    case 1: return "A";
-    case 2: return "NS";
-    case 5: return "CNAME";
-    case 6: return "SOA";
-    case 12: return "PTR";
-    case 15: return "MX";
-    case 16: return "TXT";
-    case 28: return "AAAA";
-    case 33: return "SRV";
-    case 255: return "ANY";
-    default: return "?";
+    case 1:
+        return "A";
+    case 2:
+        return "NS";
+    case 5:
+        return "CNAME";
+    case 6:
+        return "SOA";
+    case 12:
+        return "PTR";
+    case 15:
+        return "MX";
+    case 16:
+        return "TXT";
+    case 28:
+        return "AAAA";
+    case 33:
+        return "SRV";
+    case 255:
+        return "ANY";
+    default:
+        return "?";
     }
 }
 
@@ -420,11 +454,20 @@ static void dispatch_l4(const uint8_t *data, uint32_t len, uint32_t offset, uint
 {
     out->ip_protocol = protocol;
     switch (protocol) {
-    case YNET_IP_PROTO_TCP: dissect_tcp(data, len, offset, out); break;
-    case YNET_IP_PROTO_UDP: dissect_udp(data, len, offset, out); break;
-    case YNET_IP_PROTO_ICMP: dissect_icmp(data, len, offset, 0, out); break;
-    case YNET_IP_PROTO_ICMPV6: dissect_icmp(data, len, offset, 1, out); break;
-    default: break;
+    case YNET_IP_PROTO_TCP:
+        dissect_tcp(data, len, offset, out);
+        break;
+    case YNET_IP_PROTO_UDP:
+        dissect_udp(data, len, offset, out);
+        break;
+    case YNET_IP_PROTO_ICMP:
+        dissect_icmp(data, len, offset, 0, out);
+        break;
+    case YNET_IP_PROTO_ICMPV6:
+        dissect_icmp(data, len, offset, 1, out);
+        break;
+    default:
+        break;
     }
 }
 
@@ -531,10 +574,17 @@ static void dissect_ethertype(const uint8_t *data, uint32_t len, uint32_t offset
                               uint16_t ethertype, struct ynet_dissection *out)
 {
     switch (ethertype) {
-    case YNET_ETHERTYPE_IPV4: dissect_ipv4(data, len, offset, out); break;
-    case YNET_ETHERTYPE_IPV6: dissect_ipv6(data, len, offset, out); break;
-    case YNET_ETHERTYPE_ARP: dissect_arp(data, len, offset, out); break;
-    default: break;
+    case YNET_ETHERTYPE_IPV4:
+        dissect_ipv4(data, len, offset, out);
+        break;
+    case YNET_ETHERTYPE_IPV6:
+        dissect_ipv6(data, len, offset, out);
+        break;
+    case YNET_ETHERTYPE_ARP:
+        dissect_arp(data, len, offset, out);
+        break;
+    default:
+        break;
     }
 }
 
@@ -626,11 +676,19 @@ void ynet_dissect(const uint8_t *data, uint32_t len, int linktype, struct ynet_d
     }
 
     switch (linktype) {
-    case YNET_DLT_EN10MB: dissect_ethernet(data, len, out); break;
-    case YNET_DLT_LINUX_SLL: dissect_linux_sll(data, len, out); break;
-    case YNET_DLT_NULL: dissect_null_loopback(data, len, out); break;
+    case YNET_DLT_EN10MB:
+        dissect_ethernet(data, len, out);
+        break;
+    case YNET_DLT_LINUX_SLL:
+        dissect_linux_sll(data, len, out);
+        break;
+    case YNET_DLT_NULL:
+        dissect_null_loopback(data, len, out);
+        break;
     case YNET_DLT_RAW_BSD:
-    case YNET_DLT_RAW_LINUX: dissect_raw_ip(data, len, out); break;
+    case YNET_DLT_RAW_LINUX:
+        dissect_raw_ip(data, len, out);
+        break;
     default:
         /* Unknown link type: still show the frame exists. */
         layer_begin(out, 0, "Unknown link-layer");

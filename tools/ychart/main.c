@@ -1,6 +1,6 @@
 /*
  * ychart — render a data file (CSV / JSON / YAML) into a ydraw buffer and
- * emit an OSC YDRAW_BIN envelope on stdout so a running yetty ydraw pane
+ * emit a DCS YDRAW_BIN envelope on stdout so a running yetty ydraw pane
  * draws the chart. Pure one-shot: parse → render → emit → exit.
  *
  * Text width comes from a real MSDF font (yetty_yfont_msdf_font) so axis,
@@ -8,12 +8,12 @@
  * Without that, layout falls back to a crude `0.6 * font_size * char_count`
  * heuristic.
  *
- * Wire: a single OSC YDRAW_BIN envelope. The buffer's first prim is CMD_ZERO
+ * Wire: a single DCS YDRAW_BIN envelope. The buffer's first prim is CMD_ZERO
  * (added by the renderer), which clears the canvas + resets the cursor on
  * decode.
  *
- *   ychart <file.csv|.json|.yaml|.chart>   # OSC envelope to stdout (default)
- *   ychart -o <file>                       # raw serialized buffer, no OSC
+ *   ychart <file.csv|.json|.yaml|.chart>   # DCS envelope to stdout (default)
+ *   ychart -o <file>                       # raw serialized buffer, no DCS
  *   ychart -                               # read data from stdin
  *   ychart --type pie <file>               # force a chart kind
  *   ychart --width 1000 --height 600 ...   # override the canvas size
@@ -161,7 +161,7 @@ static int emit_envelope(FILE *out, int osc_code, int compressed, const void *ar
     return rc;
 }
 
-static int emit_osc_bin(FILE *out, struct yetty_ydraw_drawable_list *buf)
+static int emit_dcs_bin(FILE *out, struct yetty_ydraw_drawable_list *buf)
 {
     const uint8_t *raw = NULL;
     size_t size = yetty_ydraw_drawable_list_serialize(buf, &raw);
@@ -245,7 +245,7 @@ static void usage(const char *prog)
     fprintf(stderr,
             "Usage: %s [options] <file.csv|.json|.yaml|.chart | ->\n"
             "\n"
-            "Emits an OSC YDRAW_BIN envelope on stdout for a running yetty\n"
+            "Emits a DCS YDRAW_BIN envelope on stdout for a running yetty\n"
             "ydraw pane. Text sizing uses real MSDF glyph widths.\n"
             "\n"
             "Options:\n"
@@ -253,7 +253,7 @@ static void usage(const char *prog)
             "                        pie donut radar treemap sankey (default: auto).\n"
             "  --width <px>          Canvas width  (default 900).\n"
             "  --height <px>         Canvas height (default 540).\n"
-            "  -o <file>             Write raw serialized ydraw buffer (no OSC).\n"
+            "  -o <file>             Write raw serialized ydraw buffer (no DCS).\n"
             "  --font-cdb <path>     Override the MSDF CDB used for measurement.\n"
             "  --font-shader <path>  Override the msdf-font.wgsl shader path.\n"
             "  --no-font             Skip MSDF font; use the heuristic fallback.\n"
@@ -387,7 +387,7 @@ int main(int argc, char **argv)
             }
         }
     } else {
-        rc = emit_osc_bin(stdout, br.value);
+        rc = emit_dcs_bin(stdout, br.value);
         fflush(stdout);
     }
 

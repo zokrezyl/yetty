@@ -9,7 +9,7 @@
  *   caller supplies H.264 NAL bytes (raw file or in-memory buffer)
  *   yetty_yvideo_uniforms_serialize(uniforms, nal_stream) → wire bytes
  *   wrap in CMD_GROUP(id) + the prim                       → drawable_list
- *   yetty_yvideo_osc_bin_emit(...)                         → OSC envelope
+ *   yetty_yvideo_dcs_bin_emit(...)                         → DCS envelope
  *
  * The figure is STATEFUL on the receiving terminal — once the INIT
  * envelope creates the instance, sender can stream more NAL bytes via
@@ -102,9 +102,9 @@ struct yetty_ydraw_drawable_list_result yetty_yvideo_render(
     const uint8_t *nal_bytes, size_t nal_len, const uint8_t *audio_bytes, size_t audio_len,
     const struct yetty_yvideo_render_config *config);
 
-/* OSC envelope (YETTY_DCS_YDRAW_BIN, same wire format as ycat / yecho).
+/* DCS envelope (YETTY_DCS_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
-struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(
+struct yetty_ycore_size_result yetty_yvideo_dcs_bin_emit(
     const struct yetty_ydraw_drawable_list *buffer, FILE *out);
 
 #ifdef __cplusplus

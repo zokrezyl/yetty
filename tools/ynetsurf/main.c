@@ -2,9 +2,8 @@
  * ynetsurf — NetSurf 3.11 browser tool, two operating modes:
  *
  *   ONE-SHOT (--once, or non-TTY stdout/stdin):
- *     navigate URL, wait, redraw, emit one OSC envelope (or raw ydraw
- *     bytes with --raw), exit. Same shape as the rest of yetty's emitter
- *     tools (ycat, yecho, yplot, ymarkdown).
+ *     navigate URL, wait, redraw, emit one DCS envelope, exit. Same shape
+ *     as the rest of yetty's emitter tools (ycat, yecho, yplot, ymarkdown).
  *
  *   INTERACTIVE (default when stdin + stdout are both TTYs):
  *     after the first render, sit in a select() loop driving:
@@ -13,8 +12,8 @@
  *       - stdin (keyboard + any inbound OSC envelopes from yterm)
  *     yface owns stdin parsing: it splits OSC envelopes from raw bytes,
  *     calls on_osc(...) for each envelope and on_raw(...) for the bytes
- *     between. After any input, re-render: emit OSC 600000 (ydraw clear)
- *     followed by OSC 600001 (bin) so the receiving ydraw-layer replaces
+ *     between. After any input, re-render: emit DCS 600000 (ydraw clear)
+ *     followed by DCS 600001 (bin) so the receiving ydraw-layer replaces
  *     instead of accumulates primitives. Quit on Ctrl-C, EOF, or SIGTERM.
  *
  *   Notes on input plumbing:
@@ -54,12 +53,12 @@
  * Output side — clear+bin re-render, single-shot emit.
  * ===========================================================================*/
 
-static int emit_envelope(int osc_code, int compressed, const void *args, size_t args_len,
+static int emit_envelope(int wire_code, int compressed, const void *args, size_t args_len,
                          const void *body, size_t body_len)
 {
     struct yetty_ycore_buffer env = {0};
     struct yetty_ycore_void_result r =
-        yetty_yface_emit(osc_code, compressed, args, args_len, body, body_len, &env);
+        yetty_yface_emit(wire_code, compressed, args, args_len, body, body_len, &env);
     int rc = 0;
     if (YETTY_IS_OK(r) && env.size > 0) {
         fwrite(env.data, 1, env.size, stdout);
@@ -70,7 +69,7 @@ static int emit_envelope(int osc_code, int compressed, const void *args, size_t 
     return rc;
 }
 
-static int emit_bin_osc(const uint8_t *bytes, size_t blen)
+static int emit_bin_dcs(const uint8_t *bytes, size_t blen)
 {
     struct yetty_yface_bin_meta meta = {
         .magic = YETTY_YFACE_BIN_MAGIC,
@@ -101,7 +100,7 @@ static int redraw_and_push(struct yetty_ynetsurf *ns)
         const uint8_t *bytes = NULL;
         size_t blen = yetty_ydraw_drawable_list_serialize(buf, &bytes);
         (void)emit_envelope(YETTY_DCS_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
-        (void)emit_bin_osc(bytes, blen);
+        (void)emit_bin_dcs(bytes, blen);
         fflush(stdout);
         rc = 0;
     }
@@ -623,18 +622,13 @@ int main(int argc, char **argv)
 	 * one-shot even from a TTY (for scripting); --interactive forces it
 	 * even when stdin/stdout aren't TTYs (rare). */
     int interactive = isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
-    int osc = isatty(STDOUT_FILENO) ? 1 : 0;
     int width = 1024, height = 768;
     const char *url = NULL;
     int wait_ms = 4000;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
-        if (!strcmp(a, "--osc")) {
-            osc = 1;
-        } else if (!strcmp(a, "--raw")) {
-            osc = 0;
-        } else if (!strcmp(a, "--once")) {
+        if (!strcmp(a, "--once")) {
             interactive = 0;
         } else if (!strcmp(a, "--interactive")) {
             interactive = 1;
@@ -651,12 +645,11 @@ int main(int argc, char **argv)
 
     if (url == NULL) {
         fprintf(stderr,
-                "usage: %s [--once|--interactive] [--osc|--raw]\n"
+                "usage: %s [--once|--interactive]\n"
                 "            [-w W] [-H H] [--wait MS] <url>\n"
                 "\n"
                 "  default: interactive when stdin+stdout are TTYs,\n"
-                "           one-shot otherwise. --osc/--raw apply only\n"
-                "           in one-shot mode (interactive always uses OSC).\n",
+                "           one-shot otherwise.\n",
                 argv[0]);
         return 2;
     }
@@ -705,11 +698,7 @@ int main(int argc, char **argv)
         }
         const uint8_t *bytes = NULL;
         size_t blen = yetty_ydraw_drawable_list_serialize(buf, &bytes);
-        if (osc) {
-            (void)emit_bin_osc(bytes, blen);
-        } else {
-            fwrite(bytes, 1, blen, stdout);
-        }
+        (void)emit_bin_dcs(bytes, blen);
         fflush(stdout);
         yetty_ydraw_drawable_list_destroy(buf);
         rc = 0;

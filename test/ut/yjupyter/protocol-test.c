@@ -44,8 +44,9 @@ int main(void)
     struct yetty_yclass_ctx ctx = {0};
     struct yetty_yclass_object_ptr_result session_r = yetty_yjupyter_session_create(&ctx);
     CHECK(YETTY_IS_OK(session_r), "session create");
-    if (YETTY_IS_ERR(session_r))
+    if (YETTY_IS_ERR(session_r)) {
         return 1;
+    }
     struct yetty_yclass_object *session = session_r.value;
 
     struct yetty_ycore_void_result init_r = yetty_yjupyter_session_init(session, "sess-1");
@@ -66,10 +67,12 @@ int main(void)
     CHECK(YETTY_IS_OK(rchan) && strcmp(rchan.value, "shell") == 0, "request channel");
     struct yetty_ycore_const_char_ptr_result rsess = yetty_yjupyter_message_session(request);
     CHECK(YETTY_IS_OK(rsess) && strcmp(rsess.value, "sess-1") == 0, "request session");
-    struct yetty_ycore_char_ptr_result rcode = yetty_yjupyter_message_content_string(request, "code");
+    struct yetty_ycore_char_ptr_result rcode =
+        yetty_yjupyter_message_content_string(request, "code");
     CHECK(YETTY_IS_OK(rcode) && strcmp(rcode.value, "1+1") == 0, "request content code");
-    if (YETTY_IS_OK(rcode))
+    if (YETTY_IS_OK(rcode)) {
         free(rcode.value);
+    }
 
     /* capture the request msg_id (borrowed -> copy before further calls) */
     struct yetty_ycore_const_char_ptr_result rid = yetty_yjupyter_message_msg_id(request);
@@ -83,7 +86,8 @@ int main(void)
     if (YETTY_IS_OK(wire_r)) {
         struct yetty_yclass_object_ptr_result decoded_r = yetty_yjupyter_message_create(&ctx);
         struct yetty_yclass_object *decoded = decoded_r.value;
-        struct yetty_ycore_void_result from_r = yetty_yjupyter_message_from_wire(decoded, wire_r.value);
+        struct yetty_ycore_void_result from_r =
+            yetty_yjupyter_message_from_wire(decoded, wire_r.value);
         CHECK(YETTY_IS_OK(from_r), "decode from_wire");
         struct yetty_ycore_const_char_ptr_result dtype = yetty_yjupyter_message_msg_type(decoded);
         CHECK(YETTY_IS_OK(dtype) && strcmp(dtype.value, "execute_request") == 0,
@@ -98,7 +102,8 @@ int main(void)
 
     /* ---- IOPub status: busy (parent = our request) ---- */
     make_frame(frame, sizeof(frame), "status", "iopub", req_id, "{\"execution_state\":\"busy\"}");
-    struct yetty_yclass_object_ptr_result busy_r = yetty_yjupyter_session_handle_wire(session, frame);
+    struct yetty_yclass_object_ptr_result busy_r =
+        yetty_yjupyter_session_handle_wire(session, frame);
     CHECK(YETTY_IS_OK(busy_r), "handle status busy");
     struct yetty_ycore_const_char_ptr_result state1 = yetty_yjupyter_session_kernel_state(session);
     CHECK(YETTY_IS_OK(state1) && strcmp(state1.value, "busy") == 0, "kernel state busy");
@@ -114,15 +119,18 @@ int main(void)
     /* ---- shell execute_reply (parent = our request) ---- */
     make_frame(frame, sizeof(frame), "execute_reply", "shell", req_id,
                "{\"status\":\"ok\",\"execution_count\":1}");
-    struct yetty_yclass_object_ptr_result reply_r = yetty_yjupyter_session_handle_wire(session, frame);
+    struct yetty_yclass_object_ptr_result reply_r =
+        yetty_yjupyter_session_handle_wire(session, frame);
     CHECK(YETTY_IS_OK(reply_r), "handle execute_reply");
-    struct yetty_ycore_int_result ec = yetty_yjupyter_message_content_int(reply_r.value, "execution_count");
+    struct yetty_ycore_int_result ec =
+        yetty_yjupyter_message_content_int(reply_r.value, "execution_count");
     CHECK(YETTY_IS_OK(ec) && ec.value == 1, "reply execution_count == 1");
     yetty_yjupyter_message_destroy(reply_r.value);
 
     /* ---- IOPub status: idle ---- */
     make_frame(frame, sizeof(frame), "status", "iopub", req_id, "{\"execution_state\":\"idle\"}");
-    struct yetty_yclass_object_ptr_result idle_r = yetty_yjupyter_session_handle_wire(session, frame);
+    struct yetty_yclass_object_ptr_result idle_r =
+        yetty_yjupyter_session_handle_wire(session, frame);
     CHECK(YETTY_IS_OK(idle_r), "handle status idle");
     struct yetty_ycore_const_char_ptr_result state2 = yetty_yjupyter_session_kernel_state(session);
     CHECK(YETTY_IS_OK(state2) && strcmp(state2.value, "idle") == 0, "kernel state idle");

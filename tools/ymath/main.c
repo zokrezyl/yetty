@@ -6,7 +6,7 @@
  *   ymath --size 36 '\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}'
  *   ymath -f equation.tex
  *
- * Emits a YDRAW_BIN OSC envelope (same wire as ycat / yplot).
+ * Emits a YDRAW_BIN DCS envelope (same wire as ycat / yplot).
  */
 
 #include <yetty/ymath/ymath.h>
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
     }
 
     int exit_code = 0;
-    struct yetty_ycore_size_result emit_res = yetty_ymath_osc_emit(render_res.value, stdout);
+    struct yetty_ycore_size_result emit_res = yetty_ymath_dcs_emit(render_res.value, stdout);
     yetty_ydraw_drawable_list_destroy(render_res.value);
     if (YETTY_IS_ERR(emit_res)) {
         fprintf(stderr, "ymath: emit failed: %s\n", emit_res.error.msg);

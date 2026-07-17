@@ -125,10 +125,10 @@ struct yetty_ygit_diff_hunk {
  * textual diff for source/text files; binary files have is_binary set and no
  * hunks. */
 struct yetty_ygit_diff_file {
-    char *old_path;         /* pre-image path, NULL for an added file */
-    char *new_path;         /* post-image path, NULL for a deleted file */
-    char status;            /* 'A' add, 'M' modify, 'D' delete, 'R' rename, 'C' copy, 'T' typechange */
-    int is_binary;          /* 1 when the delta is binary (no text hunks) */
+    char *old_path; /* pre-image path, NULL for an added file */
+    char *new_path; /* post-image path, NULL for a deleted file */
+    char status;    /* 'A' add, 'M' modify, 'D' delete, 'R' rename, 'C' copy, 'T' typechange */
+    int is_binary;  /* 1 when the delta is binary (no text hunks) */
     unsigned char *old_data; /* pre-image bytes, owned; NULL when absent */
     size_t old_size;
     unsigned char *new_data; /* post-image bytes, owned; NULL when absent */

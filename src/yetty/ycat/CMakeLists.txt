@@ -7,7 +7,7 @@ set(YCAT_SOURCES
     handler-pdf.c
     handler-image.c
     handler-svg.c
-    osc.c
+    dcs.c
     fetch.c
     ts-grammars.c
     ts-highlight.c

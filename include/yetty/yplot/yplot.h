@@ -180,9 +180,9 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_program(
     const uint32_t *program, uint32_t program_words,
     const struct yetty_yplot_render_config *config);
 
-/* OSC envelope (YETTY_DCS_YDRAW_BIN, same wire format as ycat / yecho).
+/* DCS envelope (YETTY_DCS_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
-struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(
+struct yetty_ycore_size_result yetty_yplot_dcs_bin_emit(
     const struct yetty_ydraw_drawable_list *buffer, FILE *out);
 
 #ifdef __cplusplus

@@ -1,7 +1,7 @@
 #!/bin/bash
 # ydiagram — full gallery. Renders every Mermaid asset in demo/assets/ydiagram/
 # once: the five diagram families (flowchart, state, ER, sequence, subgraphs)
-# plus the node-shape catalogue. Each emits an OSC YDRAW_BIN envelope that
+# plus the node-shape catalogue. Each emits an DCS YDRAW_BIN envelope that
 # scrolls into the host yetty ydraw layer.
 #
 # Usage (from inside yetty):

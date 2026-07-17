@@ -1,6 +1,6 @@
 #!/bin/bash
 # ydiagram — basic showcase. Runs the standalone ydiagram tool on a few Mermaid
-# diagram assets in demo/assets/ydiagram/ and lets the OSC YDRAW_BIN envelopes
+# diagram assets in demo/assets/ydiagram/ and lets the DCS YDRAW_BIN envelopes
 # scroll into the ydraw layer of the host yetty terminal. Box sizing uses real
 # MSDF glyph widths.
 #

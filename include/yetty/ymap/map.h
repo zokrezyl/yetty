@@ -134,7 +134,7 @@ uint32_t yetty_ymap_provider_count(void);
 struct yetty_ycore_void_result yetty_ymap_provider_info(uint32_t index, const char **out_name,
                                                         const char **out_attribution,
                                                         uint32_t *out_max_zoom, int *out_is_vector);
-/* One-shot helper — serialize a rendered drawable list as a YDRAW_BIN OSC
+/* One-shot helper — serialize a rendered drawable list as a YDRAW_BIN DCS
  * envelope (the ycat/scrolling path). Exposed as a free function for CLIs. */
 struct yetty_ycore_void_result yetty_ymap_emit_osc(const struct yetty_ydraw_drawable_list *list,
                                                    int fd);

@@ -142,9 +142,9 @@ static int ygit_cmd_status(struct yetty_yclass_object *repo, const struct ygit_s
 static int ygit_cmd_log(struct yetty_yclass_object *repo, const char *revision, int max_count,
                         int all_refs, const struct ygit_style *style)
 {
-    struct yetty_ygit_log_ptr_result log_res =
-        all_refs ? yetty_ygit_repo_log_all(repo, max_count)
-                 : yetty_ygit_repo_log(repo, revision, max_count);
+    struct yetty_ygit_log_ptr_result log_res = all_refs
+                                                   ? yetty_ygit_repo_log_all(repo, max_count)
+                                                   : yetty_ygit_repo_log(repo, revision, max_count);
     if (YETTY_IS_ERR(log_res)) {
         ygit_report_error(log_res.error);
         return 1;
@@ -169,9 +169,9 @@ static int ygit_cmd_log(struct yetty_yclass_object *repo, const char *revision, 
 static int ygit_cmd_graph(struct yetty_yclass_object *repo, const char *revision, int max_count,
                           int all_refs, const struct ygit_style *style)
 {
-    struct yetty_ygit_log_ptr_result log_res =
-        all_refs ? yetty_ygit_repo_log_all(repo, max_count)
-                 : yetty_ygit_repo_log(repo, revision, max_count);
+    struct yetty_ygit_log_ptr_result log_res = all_refs
+                                                   ? yetty_ygit_repo_log_all(repo, max_count)
+                                                   : yetty_ygit_repo_log(repo, revision, max_count);
     if (YETTY_IS_ERR(log_res)) {
         ygit_report_error(log_res.error);
         return 1;

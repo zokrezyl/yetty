@@ -94,7 +94,7 @@ extern "C" {
  *
  * Empty payload. Use at the start of every full-redraw frame buffer in
  * GUI / fullscreen producers (ygui sends one CMD_ZERO + the new prims per
- * frame, eliminating the separate YDRAW_CLEAR OSC envelope). */
+ * frame, eliminating the separate YDRAW_CLEAR DCS envelope). */
 #define YETTY_YDRAW_CMD_ZERO 0x00000000u
 
 /* CMD_DELETE: remove the entity / addressable drawable named by `id`.
