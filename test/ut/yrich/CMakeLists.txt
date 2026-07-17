@@ -32,3 +32,13 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract
     TIMEOUT 30)
+
+# Semantic command + remappable modal keymap (foundation #6): default/vi
+# bindings resolve, modes isolate, bindings remap/unbind, command<->name.
+yetty_add_c_test(
+    NAME    yrich_keymap
+    SOURCES keymap-test.c
+    LIBS    yetty_yrich
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract
+    TIMEOUT 30)

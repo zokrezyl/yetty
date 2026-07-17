@@ -29,9 +29,11 @@
 #include <yetty/yrich/element.h>
 
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/yfont/font.h> /* metrics-only glyph advances for proportional layout */
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
+#include <stdio.h> /* snprintf for list markers */
 #include <stdlib.h>
 #include <string.h>
 
@@ -78,7 +80,17 @@ struct YETTY_ANNOTATE("class@yrich:paragraph") YETTY_ANNOTATE("parent@yrich:elem
     float line_height;
     uint32_t halign; /* enum yetty_yrich_halign */
 
+    /* Lists: 0 none, 1 bullet, 2 numbered. list_ordinal is computed during
+     * relayout (the position among consecutive numbered siblings). */
+    uint32_t list_kind;
+    int list_ordinal;
+
+    /* Metrics-only font for proportional layout; NULL falls back to the fixed
+     * 0.6-em advance. Set from the owning ydoc during relayout. */
+    const struct yetty_yfont_font *metrics_font;
+
     int editing;
+    int selected; /* render-time: part of a document-wide selection (select-all) */
     int32_t cursor_pos;
     int32_t sel_start;
     int32_t sel_end;
@@ -97,27 +109,52 @@ struct paragraph_line {
     size_t next;  /* where the following line starts (separator consumed) */
 };
 
+enum ydoc_list_kind {
+    YDOC_LIST_NONE = 0,
+    YDOC_LIST_BULLET = 1,
+    YDOC_LIST_NUMBERED = 2,
+};
+
+/* Left indent (px) applied to a list paragraph's text, leaving room for the
+ * bullet/number marker drawn in the gutter. */
+#define YDOC_LIST_INDENT 26.0f
+
 static float paragraph_char_width(const struct yetty_yrich_paragraph *paragraph)
 {
     return paragraph->style.font_size * 0.6f;
 }
 
-static size_t paragraph_max_cols(const struct yetty_yrich_paragraph *paragraph)
+/* Pixel width of the byte range [from, to) using the paragraph's metrics font;
+ * falls back to the fixed 0.6-em advance when no font is attached, so wrap,
+ * caret, render and hit-test stay self-consistent either way. */
+static float paragraph_measure(const struct yetty_yrich_paragraph *paragraph, size_t from,
+                               size_t to)
 {
-    float char_width = paragraph_char_width(paragraph);
-    if (char_width <= 0.0f || paragraph->bounds.w <= char_width) {
-        return 1;
+    if (to > paragraph->text_len) {
+        to = paragraph->text_len;
     }
-    return (size_t)(paragraph->bounds.w / char_width);
+    if (to <= from) {
+        return 0.0f;
+    }
+    if (paragraph->metrics_font && paragraph->metrics_font->ops &&
+        paragraph->metrics_font->ops->measure_text) {
+        struct float_result width = paragraph->metrics_font->ops->measure_text(
+            (struct yetty_yfont_font *)paragraph->metrics_font, paragraph->text + from, to - from,
+            paragraph->style.font_size);
+        if (!YETTY_IS_ERR(width)) {
+            return width.value;
+        }
+    }
+    return (float)(to - from) * paragraph_char_width(paragraph);
 }
 
 /* Compute the line starting at `start` — greedy break at the last space
  * that fits, hard break when a word exceeds the width, explicit '\n'
- * always ends a line. */
+ * always ends a line. Width is measured in pixels (proportional). */
 static void paragraph_line_from(const struct yetty_yrich_paragraph *paragraph, size_t start,
                                 struct paragraph_line *out_line)
 {
-    size_t max_cols = paragraph_max_cols(paragraph);
+    float max_width = paragraph->bounds.w;
     size_t len = paragraph->text_len;
     const char *text = paragraph->text;
     size_t pos = start;
@@ -131,7 +168,9 @@ static void paragraph_line_from(const struct yetty_yrich_paragraph *paragraph, s
             out_line->next = pos + 1;
             return;
         }
-        if (pos - start >= max_cols) {
+        /* Break when the glyph at `pos` would overflow the box; always keep at
+         * least one character per line to guarantee progress. */
+        if (pos > start && paragraph_measure(paragraph, start, pos + 1) > max_width) {
             if (have_space && last_space > start) {
                 out_line->start = start;
                 out_line->end = last_space;
@@ -226,6 +265,8 @@ static int caret_place_visitor(const struct paragraph_line *line, size_t line_in
                 place->index >= line->end ? line->end - line->start : place->index - line->start;
             place->line_index = line_index;
             place->column = column;
+            place->line_start = line->start;
+            place->line_len = line->end - line->start;
             place->found = 1;
             if (place->index < line->next) {
                 return 1;
@@ -318,9 +359,10 @@ static void paragraph_line_at(const struct yetty_yrich_paragraph *paragraph, siz
 }
 
 /* Horizontal offset of a line inside the paragraph box per alignment. */
-static float paragraph_line_x_offset(const struct yetty_yrich_paragraph *paragraph, size_t line_len)
+static float paragraph_line_x_offset(const struct yetty_yrich_paragraph *paragraph,
+                                     size_t line_start, size_t line_end)
 {
-    float text_width = (float)line_len * paragraph_char_width(paragraph);
+    float text_width = paragraph_measure(paragraph, line_start, line_end);
     float slack = paragraph->bounds.w - text_width;
     if (slack <= 0.0f) {
         return 0.0f;
@@ -568,14 +610,22 @@ static int32_t paragraph_caret_from_point(const struct yetty_yrich_paragraph *pa
     }
     struct paragraph_line line;
     paragraph_line_at(paragraph, (size_t)line_index, &line);
-    float line_offset = paragraph_line_x_offset(paragraph, line.end - line.start);
-    float char_width = paragraph_char_width(paragraph);
+    float line_offset = paragraph_line_x_offset(paragraph, line.start, line.end);
     float relative_x = x - paragraph->bounds.x - line_offset;
-    long column = char_width > 0.0f ? (long)((relative_x + char_width * 0.5f) / char_width) : 0;
-    if (column < 0) {
-        column = 0;
+    if (relative_x <= 0.0f) {
+        return paragraph_caret_at(paragraph, (size_t)line_index, 0);
     }
-    return paragraph_caret_at(paragraph, (size_t)line_index, (size_t)column);
+    /* Walk the line's glyphs, choosing the boundary nearest the click. */
+    size_t column = 0;
+    for (size_t byte = line.start; byte < line.end; byte++) {
+        float left = paragraph_measure(paragraph, line.start, byte);
+        float right = paragraph_measure(paragraph, line.start, byte + 1);
+        if (relative_x < (left + right) * 0.5f) {
+            break;
+        }
+        column = byte + 1 - line.start;
+    }
+    return paragraph_caret_at(paragraph, (size_t)line_index, column);
 }
 
 YETTY_ANNOTATE("override@yrich:paragraph:constructor")
@@ -676,14 +726,14 @@ static int paragraph_render_line_visitor(const struct paragraph_line *line, size
 {
     struct paragraph_render_pass *pass = userdata;
     const struct yetty_yrich_paragraph *paragraph = pass->paragraph;
-    float char_width = paragraph_char_width(paragraph);
     float line_top = paragraph->bounds.y + (float)line_index * paragraph->line_height;
     float baseline = line_top + paragraph->style.font_size;
-    size_t line_len = line->end - line->start;
-    float line_left = paragraph->bounds.x + paragraph_line_x_offset(paragraph, line_len);
+    float line_left =
+        paragraph->bounds.x + paragraph_line_x_offset(paragraph, line->start, line->end);
 
-    /* Selection wash behind the text. */
-    if (paragraph->editing && paragraph->sel_start != paragraph->sel_end) {
+    /* Selection wash behind the text — for the editing paragraph's own range,
+     * or any paragraph caught in a document-wide selection. */
+    if ((paragraph->editing || paragraph->selected) && paragraph->sel_start != paragraph->sel_end) {
         int32_t selection_lo =
             paragraph->sel_start < paragraph->sel_end ? paragraph->sel_start : paragraph->sel_end;
         int32_t selection_hi =
@@ -691,8 +741,8 @@ static int paragraph_render_line_visitor(const struct paragraph_line *line, size
         size_t overlap_lo = (size_t)selection_lo > line->start ? (size_t)selection_lo : line->start;
         size_t overlap_hi = (size_t)selection_hi < line->end ? (size_t)selection_hi : line->end;
         if (overlap_lo < overlap_hi) {
-            float x0 = line_left + (float)(overlap_lo - line->start) * char_width;
-            float x1 = line_left + (float)(overlap_hi - line->start) * char_width;
+            float x0 = line_left + paragraph_measure(paragraph, line->start, overlap_lo);
+            float x1 = line_left + paragraph_measure(paragraph, line->start, overlap_hi);
             struct yetty_ysdf_box wash = {
                 .center_x = (x0 + x1) * 0.5f,
                 .center_y = line_top + paragraph->line_height * 0.5f,
@@ -721,8 +771,8 @@ static int paragraph_render_line_visitor(const struct paragraph_line *line, size
             segment_end++;
         }
         size_t segment_len = segment_end - segment_start;
-        float segment_x = line_left + (float)(segment_start - line->start) * char_width;
-        float segment_end_x = segment_x + (float)segment_len * char_width;
+        float segment_x = line_left + paragraph_measure(paragraph, line->start, segment_start);
+        float segment_end_x = line_left + paragraph_measure(paragraph, line->start, segment_end);
 
         struct yetty_ycore_buffer text = {
             .data = (uint8_t *)(paragraph->text + segment_start),
@@ -792,6 +842,34 @@ static struct yetty_ycore_void_result paragraph_render(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "paragraph_render: data_get");
     struct yetty_yrich_paragraph *paragraph = data_res.value;
 
+    /* List marker in the gutter (bullet or "N."). */
+    if (paragraph->list_kind != YDOC_LIST_NONE) {
+        char marker[16];
+        size_t marker_len;
+        if (paragraph->list_kind == YDOC_LIST_NUMBERED) {
+            int written = snprintf(marker, sizeof(marker), "%d.", paragraph->list_ordinal);
+            marker_len = written > 0 ? (size_t)written : 0;
+        } else {
+            marker[0] = (char)0xE2;
+            marker[1] = (char)0x80;
+            marker[2] = (char)0xA2; /* U+2022 BULLET */
+            marker_len = 3;
+        }
+        if (marker_len > 0) {
+            struct yetty_ycore_buffer marker_buf = {
+                .data = (uint8_t *)marker,
+                .size = marker_len,
+                .capacity = sizeof(marker),
+            };
+            float marker_x = paragraph->bounds.x - YDOC_LIST_INDENT + 6.0f;
+            float marker_baseline = paragraph->bounds.y + paragraph->style.font_size;
+            struct yetty_ycore_void_result marker_res = yetty_ydraw_drawable_list_add_text(
+                drawable_list, marker_x, marker_baseline, &marker_buf, paragraph->style.font_size,
+                paragraph->style.color, layer + 1, paragraph->style.font_id, 0.0f);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, marker_res, "paragraph_render: list marker");
+        }
+    }
+
     struct paragraph_render_pass pass = {
         .paragraph = paragraph,
         .drawable_list = drawable_list,
@@ -805,8 +883,11 @@ static struct yetty_ycore_void_result paragraph_render(
     if (paragraph->editing) {
         struct caret_place place;
         paragraph_caret_place(paragraph, paragraph->cursor_pos, &place);
-        float caret_x = paragraph->bounds.x + paragraph_line_x_offset(paragraph, place.line_len) +
-                        (float)place.column * paragraph_char_width(paragraph);
+        float caret_x =
+            paragraph->bounds.x +
+            paragraph_line_x_offset(paragraph, place.line_start,
+                                    place.line_start + place.line_len) +
+            paragraph_measure(paragraph, place.line_start, place.line_start + place.column);
         float caret_top = paragraph->bounds.y + (float)place.line_index * paragraph->line_height;
         struct yetty_ysdf_segment caret = {
             .start_x = caret_x,
@@ -1083,6 +1164,12 @@ struct YETTY_ANNOTATE("class@yrich:ydoc") YETTY_ANNOTATE("include@yetty/yrich/yr
 
     /* Where File > Save writes — owned, may be NULL (untitled). */
     char *source_path;
+
+    /* Metrics-only font propagated to paragraphs for proportional layout. */
+    const struct yetty_yfont_font *metrics_font;
+
+    /* Document-wide selection (Ctrl+A). Cleared by any caret placement/edit. */
+    int select_all;
 };
 
 YETTY_ANNOTATE("override@yrich:ydoc:constructor")
@@ -1376,18 +1463,49 @@ static struct yetty_ycore_void_result ydoc_relayout(struct yetty_yrich_ydoc *ydo
         content_width = 8.0f;
     }
     float y = ydoc->margin;
+    int numbered_run = 0; /* running ordinal for consecutive numbered items */
     for (size_t i = 0; i < ydoc->paragraph_count; i++) {
         struct yetty_yrich_paragraph_ptr_result paragraph_res =
             yetty_yrich_paragraph_from(ydoc->paragraphs[i]);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, paragraph_res, "ydoc_relayout: paragraph");
         struct yetty_yrich_paragraph *paragraph = paragraph_res.value;
-        paragraph->bounds.x = ydoc->margin;
-        paragraph->bounds.w = content_width;
+        paragraph->metrics_font = ydoc->metrics_font;
+        /* Numbered-list ordinals reset when the run of numbered items breaks. */
+        if (paragraph->list_kind == YDOC_LIST_NUMBERED) {
+            paragraph->list_ordinal = ++numbered_run;
+        } else {
+            numbered_run = 0;
+            paragraph->list_ordinal = 0;
+        }
+        float indent = paragraph->list_kind != YDOC_LIST_NONE ? YDOC_LIST_INDENT : 0.0f;
+        /* Project a document-wide selection onto each paragraph so the existing
+         * per-paragraph wash paints it. */
+        if (ydoc->select_all) {
+            paragraph->selected = 1;
+            paragraph->sel_start = 0;
+            paragraph->sel_end = (int32_t)paragraph->text_len;
+        } else {
+            paragraph->selected = 0;
+        }
+        paragraph->bounds.x = ydoc->margin + indent;
+        paragraph->bounds.w = content_width - indent;
         paragraph->bounds.y = y;
         paragraph_recompute_height(paragraph);
         y += paragraph->bounds.h;
     }
     return YETTY_OK_VOID();
+}
+
+/* Attach a metrics-only font used for proportional layout (wrap, caret, render,
+ * hit-test). Passing NULL reverts to the fixed 0.6-em fallback. Exported;
+ * the app wires it from its loaded font after building the editor. */
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_metrics_font(
+    struct yetty_yclass_object *obj, const struct yetty_yfont_font *font)
+{
+    struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_set_metrics_font: data_get");
+    data_res.value->metrics_font = font;
+    return ydoc_relayout(data_res.value);
 }
 
 /* The paragraph holding the caret, resolved from the document selection. */
@@ -1464,6 +1582,11 @@ static struct yetty_ycore_void_result ydoc_set_caret(struct yetty_yclass_object 
                                                      struct yetty_yclass_object *paragraph_obj,
                                                      int32_t anchor, int32_t caret)
 {
+    /* Placing a caret collapses any document-wide selection. */
+    struct yetty_yrich_ydoc_ptr_result clear_res = yetty_yrich_ydoc_from(obj);
+    if (!YETTY_IS_ERR(clear_res)) {
+        clear_res.value->select_all = 0;
+    }
     struct yetty_yrich_selection_ptr_result selection_res = yetty_yrich_document_selection(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, selection_res, "ydoc_set_caret: selection");
     struct yetty_yrich_selection *selection = selection_res.value;
@@ -1914,12 +2037,14 @@ static struct yetty_ycore_void_result ydoc_on_key_down(struct yetty_yclass_objec
             return yetty_yrich_document_undo(obj);
         case YETTY_YRICH_KEY_Y:
             return yetty_yrich_document_redo(obj);
-        case YETTY_YRICH_KEY_A:
-            if (have_active) {
-                return ydoc_set_caret(obj, active.paragraph_obj, 0,
-                                      (int32_t)active.paragraph->text_len);
-            }
-            return YETTY_OK_VOID();
+        case YETTY_YRICH_KEY_A: {
+            /* Select the whole document (all paragraphs), not just the current
+             * one. Projected onto each paragraph's wash at relayout. */
+            data_res.value->select_all = 1;
+            struct yetty_ycore_void_result relayout_res = ydoc_relayout(data_res.value);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, relayout_res, "ydoc: select-all relayout");
+            return yetty_yrich_document_mark_dirty(obj);
+        }
         case YETTY_YRICH_KEY_B:
             return ydoc_toggle_format_impl(obj, YETTY_YRICH_FMT_BOLD);
         case YETTY_YRICH_KEY_I:
@@ -2101,10 +2226,51 @@ static struct yetty_ycore_void_result ydoc_on_mouse_double_click(struct yetty_yc
 /* Selected text as a fresh heap string (caller frees). NULL when the
  * selection is empty or not a text selection. */
 YETTY_ANNOTATE("expose")
+/* Concatenate every paragraph's text, joined by newlines (document-wide
+ * selection copy). Returns a malloc'd string, or NULL on allocation failure. */
+static char *ydoc_all_text(struct yetty_yrich_ydoc *ydoc)
+{
+    size_t total = 0;
+    for (size_t i = 0; i < ydoc->paragraph_count; i++) {
+        struct yetty_yrich_paragraph_ptr_result paragraph_res =
+            yetty_yrich_paragraph_from(ydoc->paragraphs[i]);
+        if (YETTY_IS_ERR(paragraph_res)) {
+            return NULL;
+        }
+        total += paragraph_res.value->text_len;
+        if (i + 1 < ydoc->paragraph_count) {
+            total += 1; /* newline separator */
+        }
+    }
+    char *out = malloc(total + 1);
+    if (!out) {
+        return NULL;
+    }
+    size_t offset = 0;
+    for (size_t i = 0; i < ydoc->paragraph_count; i++) {
+        struct yetty_yrich_paragraph_ptr_result paragraph_res =
+            yetty_yrich_paragraph_from(ydoc->paragraphs[i]);
+        if (YETTY_IS_ERR(paragraph_res)) {
+            free(out);
+            return NULL;
+        }
+        memcpy(out + offset, paragraph_res.value->text, paragraph_res.value->text_len);
+        offset += paragraph_res.value->text_len;
+        if (i + 1 < ydoc->paragraph_count) {
+            out[offset++] = '\n';
+        }
+    }
+    out[offset] = '\0';
+    return out;
+}
+
 struct yetty_ycore_char_ptr_result yetty_yrich_ydoc_selection_text(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, data_res, "ydoc_selection_text: data_get");
+    if (data_res.value->select_all) {
+        return YETTY_OK(yetty_ycore_char_ptr, ydoc_all_text(data_res.value));
+    }
     struct ydoc_active_paragraph active;
     struct yetty_ycore_int_result active_res =
         ydoc_active_paragraph_get(obj, data_res.value, &active);
@@ -2227,6 +2393,173 @@ static struct yetty_ycore_void_result ydoc_render(struct yetty_yclass_object *ob
 }
 
 /*---------------------------------------------------------------------------
+ * Undoable formatting — snapshot command.
+ *
+ * Formatting (bold/italic/underline/strike, colour, alignment, heading,
+ * font-size) mutates a paragraph's runs + base style in ways the fine-grained
+ * op model can't invert precisely (the smart-toggle is not self-inverse over a
+ * mixed range). So each formatting action captures the paragraph's full
+ * formatting state before and after, and undo/redo restore those snapshots
+ * exactly. Structural identity is by element id, so undo survives reordering.
+ *-------------------------------------------------------------------------*/
+
+struct ydoc_format_snapshot {
+    struct yetty_yrich_text_style style;
+    float line_height;
+    uint32_t halign;
+    uint32_t list_kind;
+    struct yetty_yrich_text_run *runs; /* deep copy; owned */
+    size_t run_count;
+};
+
+/* Deep-copy the formatting-relevant state of `paragraph` into `snapshot`.
+ * Returns 0 on allocation failure. */
+static int ydoc_format_snapshot_capture(struct ydoc_format_snapshot *snapshot,
+                                        const struct yetty_yrich_paragraph *paragraph)
+{
+    snapshot->style = paragraph->style;
+    snapshot->line_height = paragraph->line_height;
+    snapshot->halign = paragraph->halign;
+    snapshot->list_kind = paragraph->list_kind;
+    snapshot->run_count = paragraph->run_count;
+    snapshot->runs = NULL;
+    if (paragraph->run_count > 0) {
+        snapshot->runs = malloc(paragraph->run_count * sizeof(*snapshot->runs));
+        if (!snapshot->runs) {
+            return 0;
+        }
+        memcpy(snapshot->runs, paragraph->runs, paragraph->run_count * sizeof(*snapshot->runs));
+    }
+    return 1;
+}
+
+static struct yetty_ycore_void_result ydoc_format_snapshot_restore(
+    const struct ydoc_format_snapshot *snapshot, struct yetty_yrich_paragraph *paragraph)
+{
+    struct yetty_yrich_text_run *new_runs = NULL;
+    if (snapshot->run_count > 0) {
+        new_runs = malloc(snapshot->run_count * sizeof(*new_runs));
+        if (!new_runs) {
+            return YETTY_ERR(yetty_ycore_void, "format restore: runs alloc failed");
+        }
+        memcpy(new_runs, snapshot->runs, snapshot->run_count * sizeof(*new_runs));
+    }
+    free(paragraph->runs);
+    paragraph->runs = new_runs;
+    paragraph->run_count = snapshot->run_count;
+    paragraph->run_capacity = snapshot->run_count;
+    paragraph->style = snapshot->style;
+    paragraph->line_height = snapshot->line_height;
+    paragraph->halign = snapshot->halign;
+    paragraph->list_kind = snapshot->list_kind;
+    return YETTY_OK_VOID();
+}
+
+/* The undoable command. `base` first so a base pointer == the container. */
+struct ydoc_format_command {
+    struct yetty_yrich_command base;
+    yetty_yrich_element_id paragraph_id;
+    struct ydoc_format_snapshot before;
+    struct ydoc_format_snapshot after;
+};
+
+static struct yetty_ycore_void_result ydoc_format_command_apply(
+    struct yetty_yclass_object *doc_obj, yetty_yrich_element_id paragraph_id,
+    const struct ydoc_format_snapshot *snapshot)
+{
+    struct yetty_yclass_object_ptr_result target_res =
+        yetty_yrich_document_find(doc_obj, paragraph_id);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, target_res, "format apply: find");
+    if (!target_res.value) {
+        return YETTY_ERR(yetty_ycore_void, "format apply: paragraph gone");
+    }
+    struct yetty_yrich_paragraph_ptr_result paragraph_res =
+        yetty_yrich_paragraph_from(target_res.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, paragraph_res, "format apply: paragraph data");
+    struct yetty_ycore_void_result restore_res =
+        ydoc_format_snapshot_restore(snapshot, paragraph_res.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, restore_res, "format apply: restore");
+    struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(doc_obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "format apply: ydoc data");
+    struct yetty_ycore_void_result relayout_res = ydoc_relayout(data_res.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, relayout_res, "format apply: relayout");
+    return yetty_yrich_document_mark_dirty(doc_obj);
+}
+
+static struct yetty_ycore_void_result ydoc_format_command_execute(
+    struct yetty_yrich_command *self, struct yetty_yclass_object *doc_obj)
+{
+    struct ydoc_format_command *cmd = (struct ydoc_format_command *)self;
+    return ydoc_format_command_apply(doc_obj, cmd->paragraph_id, &cmd->after);
+}
+
+static struct yetty_ycore_void_result ydoc_format_command_undo(struct yetty_yrich_command *self,
+                                                               struct yetty_yclass_object *doc_obj)
+{
+    struct ydoc_format_command *cmd = (struct ydoc_format_command *)self;
+    return ydoc_format_command_apply(doc_obj, cmd->paragraph_id, &cmd->before);
+}
+
+static struct yetty_ycore_void_result ydoc_format_command_redo(struct yetty_yrich_command *self,
+                                                               struct yetty_yclass_object *doc_obj)
+{
+    struct ydoc_format_command *cmd = (struct ydoc_format_command *)self;
+    return ydoc_format_command_apply(doc_obj, cmd->paragraph_id, &cmd->after);
+}
+
+static void ydoc_format_command_destroy(struct yetty_yrich_command *self)
+{
+    struct ydoc_format_command *cmd = (struct ydoc_format_command *)self;
+    free(cmd->before.runs);
+    free(cmd->after.runs);
+    free(cmd);
+}
+
+static const struct yetty_yrich_command_ops *ydoc_format_command_ops(void)
+{
+    static const struct yetty_yrich_command_ops ops = {
+        .destroy = ydoc_format_command_destroy,
+        .execute = ydoc_format_command_execute,
+        .undo = ydoc_format_command_undo,
+        .redo = ydoc_format_command_redo,
+    };
+    return &ops;
+}
+
+/* Take ownership of both snapshots and run the change as one undo step. */
+static struct yetty_ycore_void_result ydoc_push_format_command(struct yetty_yclass_object *obj,
+                                                               yetty_yrich_element_id paragraph_id,
+                                                               struct ydoc_format_snapshot *before,
+                                                               struct ydoc_format_snapshot *after)
+{
+    struct ydoc_format_command *cmd = calloc(1, sizeof(*cmd));
+    if (!cmd) {
+        free(before->runs);
+        free(after->runs);
+        return YETTY_ERR(yetty_ycore_void, "format command: alloc failed");
+    }
+    cmd->base.ops = ydoc_format_command_ops();
+    cmd->paragraph_id = paragraph_id;
+    cmd->before = *before; /* ownership moves into the command */
+    cmd->after = *after;
+    return yetty_yrich_document_execute(obj, &cmd->base);
+}
+
+/* Capture the paragraph's post-change state and push the undoable command;
+ * takes ownership of `before` (frees it on the error path). */
+static struct yetty_ycore_void_result ydoc_format_commit(struct yetty_yclass_object *obj,
+                                                         const struct ydoc_active_paragraph *active,
+                                                         struct ydoc_format_snapshot *before)
+{
+    struct ydoc_format_snapshot after;
+    if (!ydoc_format_snapshot_capture(&after, active->paragraph)) {
+        free(before->runs);
+        return YETTY_ERR(yetty_ycore_void, "format commit: snapshot after failed");
+    }
+    return ydoc_push_format_command(obj, active->id, before, &after);
+}
+
+/*---------------------------------------------------------------------------
  * Formatting slots — wire-marshallable (scalars only).
  *-------------------------------------------------------------------------*/
 
@@ -2243,6 +2576,10 @@ static struct yetty_ycore_void_result ydoc_toggle_format_impl(struct yetty_yclas
     if (!active_res.value) {
         return YETTY_OK_VOID();
     }
+    struct ydoc_format_snapshot before;
+    if (!ydoc_format_snapshot_capture(&before, active.paragraph)) {
+        return YETTY_ERR(yetty_ycore_void, "ydoc_toggle_format: snapshot before");
+    }
     int32_t selection_lo = active.anchor < active.caret ? active.anchor : active.caret;
     int32_t selection_hi = active.anchor < active.caret ? active.caret : active.anchor;
     struct yetty_ycore_void_result apply_res;
@@ -2258,8 +2595,11 @@ static struct yetty_ycore_void_result ydoc_toggle_format_impl(struct yetty_yclas
         active.paragraph->style.format ^= format_flag;
         apply_res = YETTY_OK_VOID();
     }
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "ydoc_toggle_format: apply");
-    return yetty_yrich_document_mark_dirty(obj);
+    if (YETTY_IS_ERR(apply_res)) {
+        free(before.runs);
+        return YETTY_ERR(yetty_ycore_void, "ydoc_toggle_format: apply", apply_res);
+    }
+    return ydoc_format_commit(obj, &active, &before);
 }
 
 /* Text colour — selection-scoped like toggle_format, absolute (no toggle). */
@@ -2276,6 +2616,10 @@ static struct yetty_ycore_void_result ydoc_set_text_color_impl(struct yetty_ycla
     if (!active_res.value) {
         return YETTY_OK_VOID();
     }
+    struct ydoc_format_snapshot before;
+    if (!ydoc_format_snapshot_capture(&before, active.paragraph)) {
+        return YETTY_ERR(yetty_ycore_void, "ydoc_set_text_color: snapshot before");
+    }
     int32_t selection_lo = active.anchor < active.caret ? active.anchor : active.caret;
     int32_t selection_hi = active.anchor < active.caret ? active.caret : active.anchor;
     struct yetty_ycore_void_result apply_res;
@@ -2289,8 +2633,11 @@ static struct yetty_ycore_void_result ydoc_set_text_color_impl(struct yetty_ycla
         active.paragraph->style.color = color;
         apply_res = YETTY_OK_VOID();
     }
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "ydoc_set_text_color: apply");
-    return yetty_yrich_document_mark_dirty(obj);
+    if (YETTY_IS_ERR(apply_res)) {
+        free(before.runs);
+        return YETTY_ERR(yetty_ycore_void, "ydoc_set_text_color: apply", apply_res);
+    }
+    return ydoc_format_commit(obj, &active, &before);
 }
 
 /* Paragraph alignment (enum yetty_yrich_halign). */
@@ -2307,8 +2654,12 @@ static struct yetty_ycore_void_result ydoc_set_alignment_impl(struct yetty_yclas
     if (!active_res.value) {
         return YETTY_OK_VOID();
     }
+    struct ydoc_format_snapshot before;
+    if (!ydoc_format_snapshot_capture(&before, active.paragraph)) {
+        return YETTY_ERR(yetty_ycore_void, "ydoc_set_alignment: snapshot before");
+    }
     active.paragraph->halign = halign;
-    return yetty_yrich_document_mark_dirty(obj);
+    return ydoc_format_commit(obj, &active, &before);
 }
 
 /* Heading levels — 0 = normal text, 1..3 = headings (size + bold base). */
@@ -2324,6 +2675,10 @@ static struct yetty_ycore_void_result ydoc_set_heading_impl(struct yetty_yclass_
     YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "ydoc: active paragraph");
     if (!active_res.value) {
         return YETTY_OK_VOID();
+    }
+    struct ydoc_format_snapshot before;
+    if (!ydoc_format_snapshot_capture(&before, active.paragraph)) {
+        return YETTY_ERR(yetty_ycore_void, "ydoc_set_heading: snapshot before");
     }
     float font_size;
     switch (level) {
@@ -2347,9 +2702,7 @@ static struct yetty_ycore_void_result ydoc_set_heading_impl(struct yetty_yclass_
     } else {
         active.paragraph->style.format &= ~(uint32_t)YETTY_YRICH_FMT_BOLD;
     }
-    struct yetty_ycore_void_result relayout_res = ydoc_relayout(data_res.value);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, relayout_res, "ydoc_set_heading: relayout");
-    return yetty_yrich_document_mark_dirty(obj);
+    return ydoc_format_commit(obj, &active, &before);
 }
 
 YETTY_ANNOTATE("virtual@yrich:ydoc:ydoc_change_font_size")
@@ -2365,6 +2718,10 @@ static struct yetty_ycore_void_result ydoc_change_font_size_impl(struct yetty_yc
     if (!active_res.value) {
         return YETTY_OK_VOID();
     }
+    struct ydoc_format_snapshot before;
+    if (!ydoc_format_snapshot_capture(&before, active.paragraph)) {
+        return YETTY_ERR(yetty_ycore_void, "ydoc_change_font_size: snapshot before");
+    }
     float font_size = active.paragraph->style.font_size + delta;
     if (font_size < 6.0f) {
         font_size = 6.0f;
@@ -2374,9 +2731,30 @@ static struct yetty_ycore_void_result ydoc_change_font_size_impl(struct yetty_yc
     }
     active.paragraph->style.font_size = font_size;
     active.paragraph->line_height = font_size * 1.4f;
-    struct yetty_ycore_void_result relayout_res = ydoc_relayout(data_res.value);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, relayout_res, "ydoc_change_font_size: relayout");
-    return yetty_yrich_document_mark_dirty(obj);
+    return ydoc_format_commit(obj, &active, &before);
+}
+
+/* Toggle the active paragraph's list kind (1=bullet, 2=numbered); re-applying
+ * the same kind clears it. Undoable. Exported; dispatched from the command
+ * layer. */
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_list(struct yetty_yclass_object *obj,
+                                                         uint32_t kind)
+{
+    struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_set_list: data_get");
+    struct ydoc_active_paragraph active;
+    struct yetty_ycore_int_result active_res =
+        ydoc_active_paragraph_get(obj, data_res.value, &active);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "ydoc_set_list: active paragraph");
+    if (!active_res.value) {
+        return YETTY_OK_VOID();
+    }
+    struct ydoc_format_snapshot before;
+    if (!ydoc_format_snapshot_capture(&before, active.paragraph)) {
+        return YETTY_ERR(yetty_ycore_void, "ydoc_set_list: snapshot before");
+    }
+    active.paragraph->list_kind = (active.paragraph->list_kind == kind) ? YDOC_LIST_NONE : kind;
+    return ydoc_format_commit(obj, &active, &before);
 }
 
 /*---------------------------------------------------------------------------

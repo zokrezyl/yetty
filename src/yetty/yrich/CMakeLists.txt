@@ -23,6 +23,7 @@ add_library(yetty_yrich STATIC
     yrich-selection.c
     yrich-operation.c
     yrich-command.c
+    yrich-keymap.c
     yrich-yaml.c
 )
 
@@ -36,6 +37,7 @@ target_link_libraries(yetty_yrich PUBLIC
     yetty_yclass
     yetty_ydraw_core
     yetty_ysdf
+    yetty_yfont_core
     yaml
 )
 

@@ -134,10 +134,13 @@ static size_t yrich_view_prim_size(const uint32_t *prim, size_t remaining)
     return s <= remaining ? s : 0;
 }
 
-/* Recolour every TEXT_DRAWABLE_LIST in the freshly-rendered buffer to `color`. The
- * yrich model bakes a fixed (near-black) colour into each text run; this
- * makes content legible against the themed background. TEXT_DRAWABLE_LIST wire
- * layout (text-drawable-list.h): word[6] is the packed colour. */
+/* Retint only the text runs that carry the model's DEFAULT colour, so default
+ * body text stays legible against the themed background — while any colour the
+ * user explicitly set (red/green/blue via the toolbar, or a per-run colour)
+ * is preserved and shown as authored. The yrich model default is opaque black
+ * (YETTY_YRICH_COLOR_BLACK == 0xFF000000). TEXT_DRAWABLE_LIST wire layout
+ * (text-drawable-list.h): word[6] is the packed colour. */
+#define YRICH_VIEW_MODEL_DEFAULT_TEXT_COLOR 0xFF000000u
 static void yrich_view_retint_text(struct yetty_ydraw_drawable_list *buf, uint32_t color)
 {
     uint8_t *data = (uint8_t *)yetty_ydraw_drawable_list_data(buf);
@@ -153,7 +156,7 @@ static void yrich_view_retint_text(struct yetty_ydraw_drawable_list *buf, uint32
             break;
         }
         if (YRICH_VIEW_TYPE_BASE(prim[0]) == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST &&
-            s >= 7 * sizeof(uint32_t)) {
+            s >= 7 * sizeof(uint32_t) && prim[6] == YRICH_VIEW_MODEL_DEFAULT_TEXT_COLOR) {
             prim[6] = color;
         }
         off += s;

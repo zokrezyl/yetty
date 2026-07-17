@@ -39,7 +39,10 @@
 #include <yetty/yrich/yrich-shell.h>
 #include <yetty/yrich/yrich-types.h>
 
+#include <yetty/yrich/document.h> /* document_undo / document_redo */
 #include <yetty/yrich/ydoc.h>
+#include <yetty/yrich/yrich-keymap.h> /* semantic commands + remappable modal keymap */
+#include <yetty/yrich/yrich-yaml.h>   /* ydoc save */
 #include <yetty/yetty/yetty.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -62,6 +65,9 @@ struct YETTY_ANNOTATE("class@yrich:app") YETTY_ANNOTATE("parent@yapp:app") yetty
     enum yetty_yrich_app_kind kind;
     struct yetty_yclass_object *doc;         /* borrowed until handed to the view */
     struct yetty_yclass_object *editor_view; /* the yrich_view — keyboard target */
+
+    struct yetty_yrich_keymap keymap; /* semantic command bindings, remappable */
+    enum yetty_yrich_edit_mode mode;  /* active input mode (default / vi normal/insert) */
 
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
@@ -91,6 +97,12 @@ struct yetty_yclass_object_ptr_result yetty_yrich_app_create(struct yetty_yclass
  * drives the platform sequence directly rather than via the shared ymain entry. */
 struct yetty_ycore_void_result yetty_yplatform_register(void);
 struct yetty_ycore_void_result yetty_yapp_register(void);
+/* Proportional-layout metrics font setter (exported from ydoc.c). */
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_metrics_font(
+    struct yetty_yclass_object *obj, const struct yetty_yfont_font *font);
+/* List toggle (1=bullet, 2=numbered), exported from ydoc.c. */
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_list(struct yetty_yclass_object *obj,
+                                                         uint32_t kind);
 struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_platform_create(
     struct yetty_yclass_ctx *ctx);
 struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
@@ -135,6 +147,12 @@ static struct yetty_ycore_void_result build_editor(struct yetty_yrich_app *app)
     struct yetty_ycore_void_result dr =
         yetty_ygui_yrich_view_set_document(editor.view, app->doc, 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "build_editor: set_document");
+    /* Give the document a metrics font so layout uses real proportional glyph
+     * advances instead of a fixed monospace approximation. */
+    if (app->kind == YETTY_YRICH_APP_YDOC && app->font) {
+        struct yetty_ycore_void_result mf = yetty_yrich_ydoc_set_metrics_font(app->doc, app->font);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, mf, "build_editor: metrics font");
+    }
     app->doc = NULL;
     app->editor_view = editor.view;
     return yetty_yrich_editor_refresh(&editor);
@@ -295,6 +313,155 @@ static struct yetty_ycore_void_result handle_clipboard_chord(struct yetty_yrich_
     return YETTY_OK_VOID();
 }
 
+/* Save the active document to its source path (or a default name). */
+static struct yetty_ycore_void_result handle_save(struct yetty_yrich_app *app)
+{
+    if (!app->editor_view) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_yclass_object_ptr_result doc_res =
+        yetty_ygui_yrich_view_document(app->editor_view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "handle_save: document");
+    struct yetty_yclass_object *doc = doc_res.value;
+    if (!doc) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_const_char_ptr_result path_res = yetty_yrich_ydoc_source_path(doc);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, path_res, "handle_save: source path");
+    const char *path = path_res.value ? path_res.value : "untitled.ydoc.yaml";
+    return yetty_yrich_ydoc_save_yaml_file(doc, path);
+}
+
+/* Execute a semantic editor command. This is the single sink for every action,
+ * whether it originated from a key (via the keymap), a menu, the toolbar, or
+ * (later) a script. Keeping behaviour here — never in the key handler — is what
+ * lets keys be remapped and modes (vi) be layered on freely. */
+static struct yetty_ycore_void_result dispatch_command(struct yetty_yrich_app *app,
+                                                       enum yetty_yrich_command_id command)
+{
+    if (!app->editor_view) {
+        return YETTY_OK_VOID();
+    }
+    /* Mode switches and app-level commands first — they need no document. */
+    switch (command) {
+    case YETTY_YRICH_CMD_MODE_DEFAULT:
+        app->mode = YETTY_YRICH_MODE_DEFAULT;
+        return YETTY_OK_VOID();
+    case YETTY_YRICH_CMD_MODE_VI_NORMAL:
+        app->mode = YETTY_YRICH_MODE_VI_NORMAL;
+        return YETTY_OK_VOID();
+    case YETTY_YRICH_CMD_MODE_VI_INSERT:
+        app->mode = YETTY_YRICH_MODE_VI_INSERT;
+        return YETTY_OK_VOID();
+    case YETTY_YRICH_CMD_SAVE:
+        return handle_save(app);
+    case YETTY_YRICH_CMD_COPY:
+        return handle_clipboard_chord(app, 67 /* C */);
+    case YETTY_YRICH_CMD_CUT:
+        return handle_clipboard_chord(app, 88 /* X */);
+    case YETTY_YRICH_CMD_PASTE:
+        return handle_clipboard_chord(app, 86 /* V */);
+    default:
+        break;
+    }
+
+    struct yetty_yclass_object_ptr_result doc_res =
+        yetty_ygui_yrich_view_document(app->editor_view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "dispatch_command: document");
+    struct yetty_yclass_object *doc = doc_res.value;
+    if (!doc) {
+        return YETTY_OK_VOID();
+    }
+
+    struct yetty_ycore_void_result action = YETTY_OK_VOID();
+    switch (command) {
+    case YETTY_YRICH_CMD_UNDO:
+        action = yetty_yrich_document_undo(doc);
+        break;
+    case YETTY_YRICH_CMD_REDO:
+        action = yetty_yrich_document_redo(doc);
+        break;
+    case YETTY_YRICH_CMD_TOGGLE_BOLD:
+        action = yetty_yrich_ydoc_toggle_format(doc, YETTY_YRICH_FMT_BOLD);
+        break;
+    case YETTY_YRICH_CMD_TOGGLE_ITALIC:
+        action = yetty_yrich_ydoc_toggle_format(doc, YETTY_YRICH_FMT_ITALIC);
+        break;
+    case YETTY_YRICH_CMD_TOGGLE_UNDERLINE:
+        action = yetty_yrich_ydoc_toggle_format(doc, YETTY_YRICH_FMT_UNDERLINE);
+        break;
+    case YETTY_YRICH_CMD_TOGGLE_STRIKE:
+        action = yetty_yrich_ydoc_toggle_format(doc, YETTY_YRICH_FMT_STRIKE);
+        break;
+    case YETTY_YRICH_CMD_ALIGN_LEFT:
+        action = yetty_yrich_ydoc_set_alignment(doc, YETTY_YRICH_HALIGN_LEFT);
+        break;
+    case YETTY_YRICH_CMD_ALIGN_CENTER:
+        action = yetty_yrich_ydoc_set_alignment(doc, YETTY_YRICH_HALIGN_CENTER);
+        break;
+    case YETTY_YRICH_CMD_ALIGN_RIGHT:
+        action = yetty_yrich_ydoc_set_alignment(doc, YETTY_YRICH_HALIGN_RIGHT);
+        break;
+    case YETTY_YRICH_CMD_HEADING_NORMAL:
+        action = yetty_yrich_ydoc_set_heading(doc, 0);
+        break;
+    case YETTY_YRICH_CMD_HEADING_1:
+        action = yetty_yrich_ydoc_set_heading(doc, 1);
+        break;
+    case YETTY_YRICH_CMD_HEADING_2:
+        action = yetty_yrich_ydoc_set_heading(doc, 2);
+        break;
+    case YETTY_YRICH_CMD_HEADING_3:
+        action = yetty_yrich_ydoc_set_heading(doc, 3);
+        break;
+    case YETTY_YRICH_CMD_FONT_LARGER:
+        action = yetty_yrich_ydoc_change_font_size(doc, 2.0f);
+        break;
+    case YETTY_YRICH_CMD_FONT_SMALLER:
+        action = yetty_yrich_ydoc_change_font_size(doc, -2.0f);
+        break;
+    case YETTY_YRICH_CMD_ADD_PARAGRAPH: {
+        struct yetty_yclass_object_ptr_result para = yetty_yrich_ydoc_add_paragraph(doc, "", 0);
+        if (YETTY_IS_ERR(para)) {
+            action = YETTY_ERR(yetty_ycore_void, "dispatch_command: add_paragraph", para);
+        }
+        break;
+    }
+    case YETTY_YRICH_CMD_LIST_BULLET:
+        action = yetty_yrich_ydoc_set_list(doc, 1);
+        break;
+    case YETTY_YRICH_CMD_LIST_NUMBERED:
+        action = yetty_yrich_ydoc_set_list(doc, 2);
+        break;
+    case YETTY_YRICH_CMD_SELECT_ALL:
+        action = yetty_ygui_yrich_view_feed_key(app->editor_view, YETTY_YRICH_KEY_A,
+                                                YETTY_YRICH_MOD_CTRL);
+        break;
+    case YETTY_YRICH_CMD_CARET_LEFT:
+        action = yetty_ygui_yrich_view_feed_key(app->editor_view, YETTY_YRICH_KEY_LEFT, 0);
+        break;
+    case YETTY_YRICH_CMD_CARET_RIGHT:
+        action = yetty_ygui_yrich_view_feed_key(app->editor_view, YETTY_YRICH_KEY_RIGHT, 0);
+        break;
+    case YETTY_YRICH_CMD_CARET_UP:
+        action = yetty_ygui_yrich_view_feed_key(app->editor_view, YETTY_YRICH_KEY_UP, 0);
+        break;
+    case YETTY_YRICH_CMD_CARET_DOWN:
+        action = yetty_ygui_yrich_view_feed_key(app->editor_view, YETTY_YRICH_KEY_DOWN, 0);
+        break;
+    case YETTY_YRICH_CMD_CARET_LINE_START:
+        action = yetty_ygui_yrich_view_feed_key(app->editor_view, YETTY_YRICH_KEY_HOME, 0);
+        break;
+    case YETTY_YRICH_CMD_CARET_LINE_END:
+        action = yetty_ygui_yrich_view_feed_key(app->editor_view, YETTY_YRICH_KEY_END, 0);
+        break;
+    default:
+        return YETTY_OK_VOID();
+    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, action, "dispatch_command: action failed");
+    return refit_and_push(app);
+}
+
 static struct yetty_ycore_void_result handle_event(struct yetty_yrich_app *app,
                                                    const struct yetty_yui_event *ev)
 {
@@ -356,28 +523,45 @@ static struct yetty_ycore_void_result handle_event(struct yetty_yrich_app *app,
         return YETTY_OK_VOID();
     }
     case YETTY_YCORE_KEY_DOWN: {
-        /* Esc quits; everything else feeds the editor view (the window
-         * close button is the regular exit path). */
-        if (ev->key.key == 256) {
-            app->quit = 1;
-            return YETTY_OK_VOID();
-        }
         if (!app->editor_view) {
+            if (ev->key.key == 256) { /* Esc still exits when there's no editor */
+                app->quit = 1;
+            }
             return YETTY_OK_VOID();
         }
         uint32_t mods = glfw_mods_to_yrich(ev->key.mods);
-        /* Clipboard chords — handled at the app level, where the platform
-         * clipboard manager lives. C=67 X=88 V=86 (GLFW codes). */
-        if ((mods & YETTY_YRICH_MOD_CTRL) &&
-            (ev->key.key == 67 || ev->key.key == 88 || ev->key.key == 86)) {
-            return handle_clipboard_chord(app, ev->key.key);
-        }
         uint32_t key = glfw_key_to_yrich(ev->key.key, mods);
-        if (key == YETTY_YRICH_KEY_UNKNOWN) {
+        if (ev->key.key == 256) { /* GLFW_KEY_ESCAPE */
+            key = YETTY_YRICH_KEY_ESCAPE;
+        }
+        /* In vi modes, bare (unmodified) letters are commands — motions, mode
+         * switches — but glfw_key_to_yrich only maps letters under Ctrl/Alt, so
+         * map them here for the keymap lookup. */
+        if (key == YETTY_YRICH_KEY_UNKNOWN && app->mode != YETTY_YRICH_MODE_DEFAULT &&
+            ev->key.key >= 65 && ev->key.key <= 90) {
+            key = YETTY_YRICH_KEY_A + (uint32_t)(ev->key.key - 65);
+        }
+
+        /* Keymap indirection: resolve (mode, key, mods) to a semantic command
+         * and dispatch it. No shortcut is ever hardwired to an action here. */
+        enum yetty_yrich_command_id command =
+            yetty_yrich_keymap_lookup(&app->keymap, app->mode, (enum yetty_yrich_key)key, mods);
+        if (command != YETTY_YRICH_CMD_NONE) {
+            return dispatch_command(app, command);
+        }
+
+        /* Unbound Escape keeps the legacy "quit" behaviour. */
+        if (key == YETTY_YRICH_KEY_ESCAPE) {
+            app->quit = 1;
+            return YETTY_OK_VOID();
+        }
+        /* No binding: vi-normal swallows the key (no raw editing); text-entry
+         * modes feed it to the editor for caret/edit handling. */
+        if (app->mode == YETTY_YRICH_MODE_VI_NORMAL || key == YETTY_YRICH_KEY_UNKNOWN) {
             return YETTY_OK_VOID();
         }
         struct yetty_ycore_void_result key_res =
-            yetty_ygui_yrich_view_feed_key(app->editor_view, key, mods);
+            yetty_ygui_yrich_view_feed_key(app->editor_view, (enum yetty_yrich_key)key, mods);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, key_res, "yrich: feed key");
         return refit_and_push(app);
     }
@@ -407,6 +591,11 @@ static struct yetty_ycore_void_result handle_event(struct yetty_yrich_app *app,
     }
     case YETTY_YCORE_CHAR: {
         if (!app->editor_view) {
+            return YETTY_OK_VOID();
+        }
+        /* In vi-normal mode, characters are commands (dispatched from KEY_DOWN),
+         * never inserted as text. */
+        if (app->mode == YETTY_YRICH_MODE_VI_NORMAL) {
             return YETTY_OK_VOID();
         }
         /* Characters arriving with Ctrl/Alt are shortcut echoes, not text. */
@@ -491,6 +680,13 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
     app->ctx.runtime = app->yrt;
     app->ctx.pty_factory = NULL;
     app->ctx.event_loop = app->yrt->event_loop;
+
+    /* Semantic command bindings — the default (desktop) + vi keymaps. Keys are
+     * resolved to commands through this, never hardwired. */
+    yetty_yrich_keymap_init(&app->keymap);
+    app->mode = YETTY_YRICH_MODE_DEFAULT;
+    struct yetty_ycore_void_result keymap_res = yetty_yrich_keymap_load_defaults(&app->keymap);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, keymap_res, "yrich_app_init: keymap defaults");
 
     app->surface = gpu->surface;
     app->surface_w = gpu->surface_width;
@@ -659,6 +855,7 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
         app->font->ops->destroy(app->font);
         app->font = NULL;
     }
+    yetty_yrich_keymap_clear(&app->keymap);
     destroy_safe(yetty_yframework_destroy(app->yrt));
     app->yrt = NULL;
     return YETTY_OK_VOID();
