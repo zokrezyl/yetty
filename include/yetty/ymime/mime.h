@@ -5,7 +5,7 @@
  * ymime - file-type detection + the DCS file-envelope prologue codec.
  *
  * Shared by the terminal (receive side of YETTY_DCS_MIME_FILE) and thin
- * clients (ycat --raw). Pure classification over a byte window plus two
+ * clients (ycat --text). Pure classification over a byte window plus two
  * optional hints — a declared MIME string and a filename. Deliberately
  * self-contained: no libmagic, no renderer-module can_parse callbacks, so
  * the terminal can link it without dragging in client-side handler stacks.

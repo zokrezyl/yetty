@@ -89,9 +89,11 @@ Public header: `include/yetty/ycat/ycat.h`. Gated by
 
 ## Consumers
 
-- **tools/ycat** — the CLI: reads files/stdin/URLs, emits envelopes when
-  inside a yetty terminal, passes bytes through otherwise (`--raw`, `--ts`,
-  `--card <type>`).
+- **tools/ycat** — the CLI: reads files/stdin/URLs and always emits the DCS
+  envelopes (a yetty renders them; other terminals discard them — it does not
+  probe `TERM_PROGRAM`). `--text` forces plain-text pass-through instead
+  (`--raw` is a deprecated alias); `--ts` and `--card <type>` steer the
+  dispatch.
 - **tools/yless** — pager that reuses ycat's detection/rendering but ships
   the content once into a server-side scrollable yview figure instead of the
   scrollback.
