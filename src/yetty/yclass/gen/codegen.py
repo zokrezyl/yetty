@@ -2448,14 +2448,16 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
             f"{qualified_class(c)}_create(struct yetty_yclass_ctx *ctx);\n"
             + emit_create_fn(c, model, module) + "\n"
             for c in regular_in_stem)
-        # If the module owns a `constructor` slot, each factory's local branch
-        # calls its public stub yetty_<module>_constructor. That stub is owned by
-        # (and defined in) another class's stem, so forward-declare it here for
-        # the factories above.
-        module_has_ctor = any(
-            m["domain"] == module and m["slot"] == "constructor"
-            for m in model.get("methods", []))
-        if regular_in_stem and module_has_ctor:
+        # If any factory in this stem calls the module's constructor stub
+        # yetty_<module>_constructor (i.e. a regular class here carries the
+        # constructor slot in its resolved dispatch), forward-declare it — the
+        # stub is owned by (and defined in) another class's stem. Gate on the
+        # same per-class condition emit_create_fn uses, so a stem whose classes
+        # have no constructor slot (e.g. yrich:app) emits no dangling decl.
+        stem_calls_ctor = any(
+            op["slot_domain"] == module and op["slot"] == "constructor"
+            for c in regular_in_stem for op in c["ops"])
+        if regular_in_stem and stem_calls_ctor:
             create_block = (
                 "struct yetty_ycore_void_result "
                 f"yetty_{module}_constructor(struct yetty_yclass_object *obj);\n"
@@ -2670,17 +2672,22 @@ size_t {slot}_skel(const void *body, size_t body_len,
 def emit_create_fn(cls: dict, model: dict, module: str) -> str:
     """Per-class factory. ctx decides; caller is location-agnostic.
 
-    If the module declares a `constructor` slot (any class in the
-    module overrides `<module>:<class>:constructor`), the factory's
-    local branch invokes that slot automatically after allocating —
-    so the returned object is fully constructed in one call. No
-    separate _init step; the caller-side flow is identical
-    regardless of whether the class has a constructor or not."""
+    If *this class* carries the module's `constructor` slot in its
+    resolved dispatch (its own override, or one inherited from a
+    same-module ancestor), the factory's local branch invokes that
+    slot automatically after allocating — so the returned object is
+    fully constructed in one call. No separate _init step.
+
+    The check is per-class, not per-module: a class that lives in the
+    module but inherits from a foreign-module parent (e.g. yrich:app,
+    parented on yapp:app) and defines no constructor has no such slot
+    in its dispatch table, so it must NOT emit the auto-call — doing so
+    would dispatch into an empty slice and fail at runtime."""
     accessor = cls["accessor"]
     qname = qualified_class(cls)
     has_constructor = any(
-        m["domain"] == module and m["slot"] == "constructor"
-        for m in model.get("methods", [])
+        op["slot_domain"] == module and op["slot"] == "constructor"
+        for op in cls["ops"]
     )
     if has_constructor:
         ctor_call = f"""\

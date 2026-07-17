@@ -26,6 +26,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Atomic save uses a durable flush + atomic replace; the primitives differ
+ * on Windows vs POSIX (emscripten/android/macOS/Linux all take the POSIX
+ * branch). */
+#if defined(_WIN32)
+#include <io.h>      /* _commit, _fileno */
+#include <windows.h> /* MoveFileExA */
+#else
+#include <unistd.h> /* fsync */
+#endif
+
 /*=============================================================================
  * Common helpers
  *===========================================================================*/
@@ -751,14 +761,29 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_save_yaml_file(struct yetty_ycla
     struct yetty_ycore_size_result count_res = yetty_yrich_ydoc_paragraph_count(doc_obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, count_res, "ydoc save: paragraph_count");
 
-    FILE *file = fopen(path, "wb");
+    /* Atomic save: write to a sibling temp file, flush + fsync it, then
+     * atomically rename over the destination. A crash, disk error, or emit
+     * failure therefore never truncates an existing document — the original
+     * file survives untouched. */
+    size_t path_len = strlen(path);
+    char *tmp_path = malloc(path_len + 5); /* ".tmp" + NUL */
+    if (!tmp_path) {
+        return YETTY_ERR(yetty_ycore_void, "ydoc save: temp path alloc failed");
+    }
+    memcpy(tmp_path, path, path_len);
+    memcpy(tmp_path + path_len, ".tmp", 5);
+
+    FILE *file = fopen(tmp_path, "wb");
     if (!file) {
-        return YETTY_ERR(yetty_ycore_void, "ydoc save: cannot open file for writing");
+        free(tmp_path);
+        return YETTY_ERR(yetty_ycore_void, "ydoc save: cannot open temp file for writing");
     }
 
     struct yaml_emitter_s emitter;
     if (!yaml_emitter_initialize(&emitter)) {
         fclose(file);
+        remove(tmp_path);
+        free(tmp_path);
         return YETTY_ERR(yetty_ycore_void, "ydoc save: emitter init failed");
     }
     yaml_emitter_set_output_file(&emitter, file);
@@ -883,12 +908,49 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_save_yaml_file(struct yetty_ycla
     }
 
     yaml_emitter_delete(&emitter);
-    if (fclose(file) != 0) {
-        return YETTY_ERR(yetty_ycore_void, "ydoc save: close failed");
+
+    /* Durably flush the temp file before the rename so a crash between
+     * rename and writeback cannot leave a zero-length document. */
+    if (ok && fflush(file) != 0) {
+        ok = 0;
     }
+    if (ok) {
+#if defined(_WIN32)
+        if (_commit(_fileno(file)) != 0) {
+            ok = 0;
+        }
+#else
+        if (fsync(fileno(file)) != 0) {
+            ok = 0;
+        }
+#endif
+    }
+    if (fclose(file) != 0) {
+        ok = 0;
+    }
+
     if (!ok) {
+        /* Emit/flush failed — discard the temp; the destination is untouched. */
+        remove(tmp_path);
+        free(tmp_path);
         return YETTY_ERR(yetty_ycore_void, "ydoc save: yaml emit failed");
     }
+
+    /* Atomically replace the destination with the fully-written temp. */
+#if defined(_WIN32)
+    if (!MoveFileExA(tmp_path, path, MOVEFILE_REPLACE_EXISTING)) {
+        remove(tmp_path);
+        free(tmp_path);
+        return YETTY_ERR(yetty_ycore_void, "ydoc save: atomic replace failed");
+    }
+#else
+    if (rename(tmp_path, path) != 0) {
+        remove(tmp_path);
+        free(tmp_path);
+        return YETTY_ERR(yetty_ycore_void, "ydoc save: atomic rename failed");
+    }
+#endif
+    free(tmp_path);
     return YETTY_OK_VOID();
 }
 

@@ -80,7 +80,6 @@ struct yetty_yclass_object_ptr_result yetty_yrich_app_to(struct yetty_yrich_app 
                     (struct yetty_yclass_object *)((char *)data - offset_r.value));
 }
 
-struct yetty_ycore_void_result yetty_yrich_constructor(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_yrich_app_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_yrich_app_create(struct yetty_yclass_ctx *ctx)
 {
@@ -100,15 +99,6 @@ struct yetty_yclass_object_ptr_result yetty_yrich_app_create(struct yetty_yclass
         struct yetty_yclass_object_ptr_result alloc_r = yetty_yclass_object_alloc(klass);
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
-        }
-        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(alloc_r.value);
-        if (YETTY_IS_ERR(ctor_r)) {
-            struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
-            if (YETTY_IS_ERR(free_r)) {
-                yetty_ycore_error_destroy(free_r.error);
-            }
-            return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yrich_app_create: constructor failed",
-                             ctor_r);
         }
         return alloc_r;
     }

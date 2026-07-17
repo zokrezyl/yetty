@@ -141,7 +141,7 @@ static bool op_command_can_merge_with(const struct yetty_yrich_command *self,
     return next->u.text_insert.position == last->u.text_insert.position + (int32_t)last_len;
 }
 
-static void op_command_merge_with(struct yetty_yrich_command *self,
+static bool op_command_merge_with(struct yetty_yrich_command *self,
                                   struct yetty_yrich_command *other)
 {
     struct yetty_yrich_operation *last = self->recorded[self->recorded_count - 1];
@@ -150,14 +150,14 @@ static void op_command_merge_with(struct yetty_yrich_command *self,
     size_t next_len = strlen(next->u.text_insert.text);
     char *merged = realloc(last->u.text_insert.text, last_len + next_len + 1);
     if (!merged) {
-        /* Best-effort: leave the commands unmerged-looking; the caller
-		 * destroys `other` either way, so just keep the receiver as-is.
-		 * The donor's op stays with the donor and dies with it — the
-		 * keystroke was already applied to the document. */
-        return;
+        /* Could not coalesce. Report failure so the caller keeps `other`
+         * as its own undo entry — the receiver is left untouched and the
+         * already-applied keystroke stays undoable. */
+        return false;
     }
     memcpy(merged + last_len, next->u.text_insert.text, next_len + 1);
     last->u.text_insert.text = merged;
+    return true;
 }
 
 static const struct yetty_yrich_command_ops *op_command_ops(void)
@@ -270,12 +270,14 @@ struct yetty_ycore_void_result yetty_yrich_history_execute(struct yetty_yrich_hi
 
     clear_redo(h);
 
-    /* Try to merge with the top of the undo stack. */
+    /* Try to merge with the top of the undo stack. If the merge is declined
+     * or cannot complete (e.g. an allocation failure inside merge_with), fall
+     * through and push `cmd` as its own undo entry — never drop an
+     * already-applied edit from history. */
     if (h->undo_count > 0 && cmd->ops->can_merge_with) {
         struct yetty_yrich_command *top = h->undo_stack[h->undo_count - 1];
         if (top->ops->can_merge_with && top->ops->can_merge_with(top, cmd) &&
-            top->ops->merge_with) {
-            top->ops->merge_with(top, cmd);
+            top->ops->merge_with && top->ops->merge_with(top, cmd)) {
             yetty_yrich_command_destroy(cmd);
             return YETTY_OK_VOID();
         }
@@ -315,20 +317,30 @@ struct yetty_ycore_void_result yetty_yrich_history_undo(struct yetty_yrich_histo
         undo_res = yetty_yrich_command_default_undo(cmd, doc_obj);
     }
 
+    if (YETTY_IS_ERR(undo_res)) {
+        /* Application failed — leave the command on its original (undo)
+         * stack so model and history stay consistent; do NOT move it to
+         * the redo stack. */
+        struct yetty_ycore_void_result restore =
+            push(&h->undo_stack, &h->undo_count, &h->undo_capacity, cmd);
+        if (YETTY_IS_ERR(restore)) {
+            /* Cannot restore (alloc failure) — destroy to avoid a leak; the
+             * apply error remains the primary failure. */
+            yetty_yrich_command_destroy(cmd);
+            yetty_ycore_error_destroy(restore.error);
+        }
+        return undo_res;
+    }
+
+    /* Success — move the command onto the redo stack. */
     struct yetty_ycore_void_result push_res =
         push(&h->redo_stack, &h->redo_count, &h->redo_capacity, cmd);
     if (YETTY_IS_ERR(push_res)) {
-        /* On alloc failure, drop the command rather than leak. The undo
-         * error (if any) stays the primary failure. */
         yetty_yrich_command_destroy(cmd);
-        if (YETTY_IS_ERR(undo_res)) {
-            yetty_ycore_error_destroy(push_res.error);
-            return undo_res;
-        }
         return YETTY_ERR(yetty_ycore_void, "history_undo: redo-stack push failed", push_res);
     }
 
-    return undo_res;
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_yrich_history_redo(struct yetty_yrich_history *h,
@@ -349,16 +361,26 @@ struct yetty_ycore_void_result yetty_yrich_history_redo(struct yetty_yrich_histo
         redo_res = yetty_yrich_command_default_redo(cmd, doc_obj);
     }
 
+    if (YETTY_IS_ERR(redo_res)) {
+        /* Application failed — leave the command on its original (redo)
+         * stack so model and history stay consistent; do NOT move it to
+         * the undo stack. */
+        struct yetty_ycore_void_result restore =
+            push(&h->redo_stack, &h->redo_count, &h->redo_capacity, cmd);
+        if (YETTY_IS_ERR(restore)) {
+            yetty_yrich_command_destroy(cmd);
+            yetty_ycore_error_destroy(restore.error);
+        }
+        return redo_res;
+    }
+
+    /* Success — move the command onto the undo stack. */
     struct yetty_ycore_void_result push_res =
         push(&h->undo_stack, &h->undo_count, &h->undo_capacity, cmd);
     if (YETTY_IS_ERR(push_res)) {
         yetty_yrich_command_destroy(cmd);
-        if (YETTY_IS_ERR(redo_res)) {
-            yetty_ycore_error_destroy(push_res.error);
-            return redo_res;
-        }
         return YETTY_ERR(yetty_ycore_void, "history_redo: undo-stack push failed", push_res);
     }
 
-    return redo_res;
+    return YETTY_OK_VOID();
 }
