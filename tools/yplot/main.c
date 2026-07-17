@@ -1,7 +1,7 @@
 /*
- * yplot — emit a yplot composite OSC envelope for a function expression.
+ * yplot — emit a yplot composite DCS envelope for a function expression.
  *
- * Inside a yetty terminal the OSC is routed to the ydraw scrolling layer,
+ * Inside a yetty terminal the DCS is routed to the ydraw scrolling layer,
  * which renders the plot via the yplot pipeline. Outside a yetty terminal
  * the bytes are still printed (mostly garbage on a vt100), so the typical
  * usage is `yetty -e 'yplot ...'` or invocation from a script running in
@@ -68,7 +68,7 @@ static void usage(FILE *out, const char *prog)
     fprintf(out,
             "Usage: %s [options] <expression> [<expression> ...]\n"
             "\n"
-            "Emit a YPlot OSC envelope (YETTY_DCS_YDRAW_BIN, 600001) consumed\n"
+            "Emit a YPlot DCS envelope (YETTY_DCS_YDRAW_BIN, 600001) consumed\n"
             "by the yetty ydraw scrolling layer.\n"
             "\n"
             "Multi-function syntax (yexpr-plot):\n"
@@ -611,10 +611,10 @@ int main(int argc, char **argv)
     }
 
     int rc = 0;
-    struct yetty_ycore_size_result wr = yetty_yplot_osc_bin_emit(rr.value, stdout);
+    struct yetty_ycore_size_result wr = yetty_yplot_dcs_bin_emit(rr.value, stdout);
     yetty_ydraw_drawable_list_destroy(rr.value);
     if (YETTY_IS_ERR(wr)) {
-        fprintf(stderr, "yplot: OSC emit failed: %s\n", wr.error.msg);
+        fprintf(stderr, "yplot: DCS emit failed: %s\n", wr.error.msg);
         for (const struct yetty_ycore_error *e = wr.error.cause; e; e = e->cause) {
             fprintf(stderr, "  caused by: %s\n", e->msg);
         }

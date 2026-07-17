@@ -33,7 +33,7 @@ custom shader, no GPU code.
 ## Pipeline
 
 ```
-folded text  →  call tree  →  recursive layout  →  ydraw boxes + labels  →  YDRAW_BIN OSC
+folded text  →  call tree  →  recursive layout  →  ydraw boxes + labels  →  YDRAW_BIN DCS
    parse          dedup          x by samples,        SDF box per frame      yface envelope
                                  y by depth           + truncated label
 ```

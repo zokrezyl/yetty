@@ -953,7 +953,7 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
 
     /* 3D uniform buffer — populated once. The camera state is baked here
      * from the wire-supplied azimuth/elev/dist/pan; the interactive
-     * viewer drives changes by emitting OSC clear+bin with new wire
+     * viewer drives changes by emitting DCS clear+bin with new wire
      * bytes, which destroys this instance and creates a fresh one. */
     struct ymesh_3d_uniforms uniforms_3d = {0};
     float aspect = (float)d->off_w / (float)d->off_h;

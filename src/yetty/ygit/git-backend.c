@@ -1016,7 +1016,8 @@ static int ygit_collect_hunks(git_patch *patch, struct yetty_ygit_diff_file *fil
 
 static struct yetty_ygit_diff_ptr_result diff_impl(const char *repo_path, const char *revision)
 {
-    struct yetty_ygit_diff_ptr_result result = YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: unreached");
+    struct yetty_ygit_diff_ptr_result result =
+        YETTY_ERR(yetty_ygit_diff_ptr, "ygit diff: unreached");
     git_repository *repo = NULL;
     git_object *object = NULL;
     git_object *commit_object = NULL;

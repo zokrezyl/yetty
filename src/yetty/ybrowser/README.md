@@ -102,7 +102,7 @@ provenance — the interface all geometry oracles consume), `--dump-geo`
 analogue of Chrome's --dump-dom), `--dump-wpt` (check-layout-th
 expected-vs-actual),
 `--once`, `--interactive`, `--no-ui`, `--record <file>`, `-w`/`-H`,
-`--font-size`, `--osc`/`--raw`.
+`--font-size`. One-shot mode always emits the DCS envelope.
 
 Env: `YBROWSER_PROFILE` (stderr load-timeline profiler), `YBROWSER_NO_JS`,
 `YBROWSER_NO_IFRAMES`, `YBROWSER_JS_CONSOLE`, `YBROWSER_SYNC_NAV`,

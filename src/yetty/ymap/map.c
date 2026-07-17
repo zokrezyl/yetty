@@ -798,7 +798,7 @@ struct yetty_ycore_void_result yetty_ymap_provider_info(uint32_t index, const ch
     return YETTY_OK_VOID();
 }
 
-/* One-shot helper — serialize a rendered drawable list as a YDRAW_BIN OSC
+/* One-shot helper — serialize a rendered drawable list as a YDRAW_BIN DCS
  * envelope (the ycat/scrolling path). Exposed as a free function for CLIs. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ymap_emit_osc(const struct yetty_ydraw_drawable_list *list,

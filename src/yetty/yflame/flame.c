@@ -1087,7 +1087,7 @@ static struct yetty_ycore_void_result flame_obj_destroy(struct yetty_yclass_obje
 }
 
 /*=============================================================================
- * One-shot helper — serialize a rendered drawable list as a YDRAW_BIN OSC
+ * One-shot helper — serialize a rendered drawable list as a YDRAW_BIN DCS
  * envelope (the ycat/scrolling path). Exposed as a free function for the CLI.
  *===========================================================================*/
 

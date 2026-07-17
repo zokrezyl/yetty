@@ -3,7 +3,7 @@
 # as a GPU *topology figure* in the host yetty pane: hosts are nodes on a ring,
 # each conversation an edge coloured by transport protocol and thickened by
 # traffic, node size by degree. This is the payoff a plain packet table cannot
-# express — the figure ships to the pane as a YDRAW_BIN OSC envelope (the same
+# express — the figure ships to the pane as a YDRAW_BIN DCS envelope (the same
 # path ycat / yflame use).
 #
 # Usage — run inside a real yetty window so the figure renders:

@@ -6,7 +6,7 @@
 #include <yetty/yfont/shader-glyph.h>
 
 /* In-process markdown → YDRAW_BIN: yai renders the answer with the same
- * ymarkdown library ycat uses and frames it as a YDRAW_BIN OSC envelope
+ * ymarkdown library ycat uses and frames it as a YDRAW_BIN DCS envelope
  * itself, instead of shelling out to the ycat binary. The terminal anchors
  * the drawable-list's text records to the cursor's grid line, so the rich
  * block scrolls with the conversation text. */
@@ -1143,7 +1143,7 @@ static struct yetty_ycore_void_result write_figure_envelope(const unsigned char 
 }
 
 /* Run `ycat -w <cols> -c <kind> <path>` with TERM_PROGRAM=yetty and
- * capture its stdout — the OSC figure envelope — into a malloc'd buffer.
+ * capture its stdout — the DCS figure envelope — into a malloc'd buffer.
  * yai is the single PTY writer, so the child's stdout is captured here
  * (a pipe), never written to the tty directly. Value 1 with out and
  * out_len set on success; value 0 when ycat is absent or produced
@@ -1242,7 +1242,7 @@ static struct yetty_ycore_int_result render_markdown_buffer(struct yai_renderer 
                                                             const char *bytes, size_t len)
 {
     /* Render the answer to a ydraw drawable list in-process — the same
-     * yetty_ymarkdown path ycat drives — and frame it as a YDRAW_BIN OSC
+     * yetty_ymarkdown path ycat drives — and frame it as a YDRAW_BIN DCS
      * envelope ourselves (no ycat subprocess). The terminal ingests the
      * envelope at the cursor's grid line and reserves rows with real
      * newlines, so the rich text scrolls with the conversation. Cell metrics
@@ -1263,7 +1263,7 @@ static struct yetty_ycore_int_result render_markdown_buffer(struct yai_renderer 
     struct yetty_ydraw_drawable_list *drawables = render_res.value.buffer;
 
     /* Serialize + frame as a YDRAW_BIN envelope (mirrors
-     * yetty_ycat_osc_bin_emit, writing through yai's non-blocking PTY
+     * yetty_ycat_dcs_bin_emit, writing through yai's non-blocking PTY
      * writer). */
     const uint8_t *raw_bytes = NULL;
     size_t raw_size = yetty_ydraw_drawable_list_serialize(drawables, &raw_bytes);

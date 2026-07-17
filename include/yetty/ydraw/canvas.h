@@ -94,7 +94,7 @@ struct yetty_ydraw_canvas_ops {
     struct yetty_ycore_pixel_size (*get_cell_size)(const struct yetty_ydraw_canvas *canvas);
     struct yetty_ycore_grid_size (*get_grid_size)(const struct yetty_ydraw_canvas *canvas);
 
-    /* OSC ingestion. */
+    /* DCS ingestion. */
     struct yetty_ycore_void_result (*process_input)(struct yetty_ydraw_canvas *canvas,
                                                     struct yetty_ywire_wire_statemachine *sm);
 

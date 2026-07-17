@@ -3,8 +3,9 @@
  * QuickJS), with two operating modes:
  *
  *   ONE-SHOT (--once, or non-TTY stdout):
- *     read HTML, lay out, emit one ydraw OSC envelope to stdout, exit.
- *     Used to pipe HTML into yetty (legacy OSC mode):
+ *     read HTML, lay out, emit one ydraw DCS envelope to stdout, exit.
+ *     Used to pipe HTML into yetty — a yetty renders the envelope, every
+ *     other terminal discards it:
  *         echo '<h1>hi</h1>' | ./ybrowser --once
  *
  *   INTERACTIVE (default when stdin + stdout are TTYs):
@@ -216,12 +217,12 @@ char *ybrowser_slurp_file(struct yetty_ybrowser_loader *loader, const char *path
  * One-shot output — yface emit helpers.
  * ===========================================================================*/
 
-static int emit_envelope(int osc_code, int compressed, const void *args, size_t args_len,
+static int emit_envelope(int wire_code, int compressed, const void *args, size_t args_len,
                          const void *body, size_t body_len)
 {
     struct yetty_ycore_buffer env = {0};
     struct yetty_ycore_void_result r =
-        yetty_yface_emit(osc_code, compressed, args, args_len, body, body_len, &env);
+        yetty_yface_emit(wire_code, compressed, args, args_len, body, body_len, &env);
     int rc = 0;
     if (YETTY_IS_OK(r) && env.size > 0) {
         fwrite(env.data, 1, env.size, stdout);
@@ -232,7 +233,7 @@ static int emit_envelope(int osc_code, int compressed, const void *args, size_t 
     return rc;
 }
 
-static int emit_bin_osc(const uint8_t *bytes, size_t blen)
+static int emit_bin_dcs(const uint8_t *bytes, size_t blen)
 {
     struct yetty_yface_bin_meta meta = {
         .magic = YETTY_YFACE_BIN_MAGIC,
@@ -293,7 +294,7 @@ static int parse_float_arg(const char *flag, const char *text, float min_value, 
 static void usage(const char *argv0)
 {
     fprintf(stderr,
-            "usage: %s [--once|--interactive] [--osc|--raw] [--no-ui]\n"
+            "usage: %s [--once|--interactive] [--no-ui]\n"
             "            [--record FILE] [-w W] [-H H] [--font-size PX]\n"
             "            [<file>|<url>|-]\n"
             "\n"
@@ -306,10 +307,9 @@ static void usage(const char *argv0)
             "  --record FILE (standalone): record the run to an mp4 (the core\n"
             "  yframework/yvnc recorder; captures the GPU output directly).\n"
             "\n"
-            "  --once (legacy OSC mode; default when stdout is not a TTY):\n"
+            "  --once (default when stdout is not a TTY):\n"
             "  read HTML from <file> (or '-' / no arg = stdin) or a url, render\n"
-            "  it, and emit one ydraw OSC envelope on stdout (raw YPB1 bytes\n"
-            "  with --raw), then exit.\n",
+            "  it, and emit one ydraw DCS envelope on stdout, then exit.\n",
             argv0);
 }
 
@@ -353,7 +353,6 @@ static int probe_terminal_size(int *w_out, int *h_out)
 int main(int argc, char **argv)
 {
     int interactive = isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
-    int osc = isatty(STDOUT_FILENO) ? 1 : 0;
     /* Detect the viewport from the terminal. -w / -H still override. */
     int width = 1024, height = 768;
     int term_w = 0, term_h = 0;
@@ -387,9 +386,7 @@ int main(int argc, char **argv)
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
-        if (!strcmp(a, "--osc")) {
-            osc = 1;
-        } else if (!strcmp(a, "--dump-boxes")) {
+        if (!strcmp(a, "--dump-boxes")) {
             dump_boxes = 1;
             interactive = 0;
         } else if (!strcmp(a, "--dump-geo")) {
@@ -401,8 +398,6 @@ int main(int argc, char **argv)
         } else if (!strcmp(a, "--dump-wpt")) {
             dump_wpt = 1;
             interactive = 0;
-        } else if (!strcmp(a, "--raw")) {
-            osc = 0;
         } else if (!strcmp(a, "--once")) {
             interactive = 0;
         } else if (!strcmp(a, "--interactive")) {
@@ -452,13 +447,13 @@ int main(int argc, char **argv)
         }
     }
 
-    /* OSC mode shares the PTY between the DCS envelope stream (stdout)
-	 * and diagnostics (stderr). An unbuffered stderr write can split an
-	 * envelope mid-frame and spill raw escape bytes into the host
-	 * terminal (a failed navigation's "HTTP 403" line was enough). When
-	 * stderr still points at that same terminal, silence it; an explicit
-	 * `2>file` redirection keeps trace/profile output working. */
-    if (osc && isatty(STDERR_FILENO)) {
+    /* When the DCS envelope stream (stdout) and diagnostics (stderr) share
+	 * the same terminal, an unbuffered stderr write can split an envelope
+	 * mid-frame and spill raw escape bytes into the host terminal (a failed
+	 * navigation's "HTTP 403" line was enough). Silence stderr only in that
+	 * case; an explicit `2>file` redirection keeps trace/profile output
+	 * working, and a piped stdout leaves stderr diagnostics intact. */
+    if (isatty(STDOUT_FILENO) && isatty(STDERR_FILENO)) {
         (void)freopen("/dev/null", "w", stderr);
     }
 
@@ -491,7 +486,7 @@ int main(int argc, char **argv)
         return ybrowser_ui_run(path, width, height, font_size);
     }
 
-    /* ---- One-shot: render the page and emit one OSC envelope. ---- */
+    /* ---- One-shot: render the page and emit one DCS envelope. ---- */
     const char *src = path ? path : "-";
     if (ybrowser_looks_like_url(src)) {
         curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -540,11 +535,7 @@ int main(int argc, char **argv)
         }
         const uint8_t *svg_bytes = NULL;
         size_t svg_blen = yetty_ydraw_drawable_list_serialize(svg_res.value.buffer, &svg_bytes);
-        if (osc) {
-            (void)emit_bin_osc(svg_bytes, svg_blen);
-        } else {
-            fwrite(svg_bytes, 1, svg_blen, stdout);
-        }
+        (void)emit_bin_dcs(svg_bytes, svg_blen);
         fflush(stdout);
         yetty_ydraw_drawable_list_destroy(svg_res.value.buffer);
         (void)yetty_ybrowser_loader_destroy(loader);
@@ -797,11 +788,7 @@ int main(int argc, char **argv)
     }
     const uint8_t *bytes = NULL;
     size_t blen = yetty_ydraw_drawable_list_serialize(buf, &bytes);
-    if (osc) {
-        (void)emit_bin_osc(bytes, blen);
-    } else {
-        fwrite(bytes, 1, blen, stdout);
-    }
+    (void)emit_bin_dcs(bytes, blen);
     fflush(stdout);
     yetty_ydraw_drawable_list_destroy(buf);
 

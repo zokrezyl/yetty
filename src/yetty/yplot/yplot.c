@@ -1221,17 +1221,17 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_program(
     return yplot_emit_prim(&u, &bufs, NULL, 0, config);
 }
 
-struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(
+struct yetty_ycore_size_result yetty_yplot_dcs_bin_emit(
     const struct yetty_ydraw_drawable_list *buffer, FILE *out)
 {
     if (!buffer || !out) {
-        return YETTY_ERR(yetty_ycore_size, "yplot_osc_bin_emit: NULL buffer or out");
+        return YETTY_ERR(yetty_ycore_size, "yplot_dcs_bin_emit: NULL buffer or out");
     }
     const uint8_t *raw = NULL;
     size_t raw_size =
         yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
     if (raw_size == 0 || !raw) {
-        return YETTY_ERR(yetty_ycore_size, "yplot_osc_bin_emit: empty serialize");
+        return YETTY_ERR(yetty_ycore_size, "yplot_dcs_bin_emit: empty serialize");
     }
 
     struct yetty_yface_bin_meta meta = {
@@ -1247,7 +1247,7 @@ struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(
         YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
-        return YETTY_ERR(yetty_ycore_size, "yplot_osc_bin_emit: yface_emit failed", r);
+        return YETTY_ERR(yetty_ycore_size, "yplot_dcs_bin_emit: yface_emit failed", r);
     }
 
     size_t written = 0;

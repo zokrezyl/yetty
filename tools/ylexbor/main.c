@@ -1,12 +1,12 @@
 /*
- * ylexbor-demo — render HTML via the ylexbor lib, emit ydraw OSC.
+ * ylexbor-demo — render HTML via the ylexbor lib, emit ydraw DCS.
  *
  * Two operating modes (same shape ynetsurf uses):
  *
  *   ONE-SHOT (--once, or non-TTY stdout):
- *     read HTML, lay out, emit one OSC envelope to stdout, exit.
- *     Used to pipe HTML into yetty:
- *         echo '<h1>hi</h1>' | ./ylexbor-demo --osc
+ *     read HTML, lay out, emit one DCS envelope to stdout, exit. A yetty
+ *     renders the envelope; every other terminal discards it.
+ *         echo '<h1>hi</h1>' | ./ylexbor-demo --once
  *
  *   INTERACTIVE (default when stdin + stdout are TTYs):
  *     subscribe to terminal-wide input via YETTY_OSC_CS_CLIENT_INPUT_SUB,
@@ -178,12 +178,12 @@ static char *slurp_file(const char *path, size_t *out_len)
  * Output — yface emit helpers (clone of ynetsurf's pattern).
  * ===========================================================================*/
 
-static int emit_envelope(int osc_code, int compressed, const void *args, size_t args_len,
+static int emit_envelope(int wire_code, int compressed, const void *args, size_t args_len,
                          const void *body, size_t body_len)
 {
     struct yetty_ycore_buffer env = {0};
     struct yetty_ycore_void_result r =
-        yetty_yface_emit(osc_code, compressed, args, args_len, body, body_len, &env);
+        yetty_yface_emit(wire_code, compressed, args, args_len, body, body_len, &env);
     int rc = 0;
     if (YETTY_IS_OK(r) && env.size > 0) {
         fwrite(env.data, 1, env.size, stdout);
@@ -194,7 +194,7 @@ static int emit_envelope(int osc_code, int compressed, const void *args, size_t 
     return rc;
 }
 
-static int emit_bin_osc(const uint8_t *bytes, size_t blen)
+static int emit_bin_dcs(const uint8_t *bytes, size_t blen)
 {
     struct yetty_yface_bin_meta meta = {
         .magic = YETTY_YFACE_BIN_MAGIC,
@@ -221,7 +221,7 @@ static int redraw_and_push(struct yetty_ylexbor *yl)
         const uint8_t *bytes = NULL;
         size_t blen = yetty_ydraw_drawable_list_serialize(buf, &bytes);
         (void)emit_envelope(YETTY_DCS_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
-        (void)emit_bin_osc(bytes, blen);
+        (void)emit_bin_dcs(bytes, blen);
         fflush(stdout);
         rc = 0;
     }
@@ -426,12 +426,12 @@ static int interactive_loop(struct yetty_ylexbor *yl)
 static void usage(const char *argv0)
 {
     fprintf(stderr,
-            "usage: %s [--once|--interactive] [--osc|--raw]\n"
+            "usage: %s [--once|--interactive]\n"
             "            [-w W] [-H H] [--font-size PX] [<file>|-]\n"
             "\n"
             "  Reads HTML from <file> (or '-' / no arg = stdin), renders\n"
             "  via lexbor + ylexbor's block-flow layout, emits a ydraw\n"
-            "  OSC envelope on stdout (or raw YPB1 bytes with --raw).\n"
+            "  DCS envelope on stdout.\n"
             "\n"
             "  default mode: interactive when stdin+stdout are TTYs,\n"
             "                one-shot otherwise.\n",
@@ -478,7 +478,6 @@ static int probe_terminal_size(int *w_out, int *h_out)
 int main(int argc, char **argv)
 {
     int interactive = isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
-    int osc = isatty(STDOUT_FILENO) ? 1 : 0;
     /* Detect the viewport from the terminal. -w / -H still override. */
     int width = 1024, height = 768;
     int term_w = 0, term_h = 0;
@@ -492,11 +491,7 @@ int main(int argc, char **argv)
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
-        if (!strcmp(a, "--osc")) {
-            osc = 1;
-        } else if (!strcmp(a, "--raw")) {
-            osc = 0;
-        } else if (!strcmp(a, "--once")) {
+        if (!strcmp(a, "--once")) {
             interactive = 0;
         } else if (!strcmp(a, "--interactive")) {
             interactive = 1;
@@ -621,11 +616,7 @@ int main(int argc, char **argv)
         }
         const uint8_t *bytes = NULL;
         size_t blen = yetty_ydraw_drawable_list_serialize(buf, &bytes);
-        if (osc) {
-            (void)emit_bin_osc(bytes, blen);
-        } else {
-            fwrite(bytes, 1, blen, stdout);
-        }
+        (void)emit_bin_dcs(bytes, blen);
         fflush(stdout);
         yetty_ydraw_drawable_list_destroy(buf);
         rc = 0;

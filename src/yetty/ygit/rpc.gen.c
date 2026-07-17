@@ -22,15 +22,19 @@ struct yetty_ycore_void_result yetty_ygit_register(void);
 
 static struct yetty_yclass_ptr_result yetty_ygit_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "yetty_ygit_repo") == 0)
+    if (strcmp(name, "yetty_ygit_repo") == 0) {
         return yetty_ygit_repo_class_get();
+    }
     /* "Not mine": OK with NULL value -- yetty_yclass_by_name walks to next hook. */
     return YETTY_OK(yetty_yclass_ptr, NULL);
 }
 
 /* ---- ygit: slot -> skel, name-keyed static data --------------- */
 
-struct yetty_ygit_skel_row { const char *name; yetty_yclass_rpc_skel_fn fn; };
+struct yetty_ygit_skel_row {
+    const char *name;
+    yetty_yclass_rpc_skel_fn fn;
+};
 
 static const struct yetty_ygit_skel_row yetty_ygit_skel_rows[] = {
     {"yetty_ygit_constructor", yetty_ygit_constructor_skel},
@@ -43,12 +47,16 @@ YETTY_EXTERNAL_CALLBACK
 static yetty_yclass_rpc_skel_fn yetty_ygit_skel_lookup(yetty_yclass_method_slot slot)
 {
     struct yetty_yclass_const_char_ptr_result slot_name_r = yetty_yclass_method_slot_name(slot);
-    if (YETTY_IS_ERR(slot_name_r)) { yetty_ycore_error_destroy(slot_name_r.error); return NULL; }
+    if (YETTY_IS_ERR(slot_name_r)) {
+        yetty_ycore_error_destroy(slot_name_r.error);
+        return NULL;
+    }
     const char *name = slot_name_r.value;
-    for (size_t i = 0;
-         i < sizeof(yetty_ygit_skel_rows) / sizeof(yetty_ygit_skel_rows[0]); ++i)
-        if (strcmp(yetty_ygit_skel_rows[i].name, name) == 0)
+    for (size_t i = 0; i < sizeof(yetty_ygit_skel_rows) / sizeof(yetty_ygit_skel_rows[0]); ++i) {
+        if (strcmp(yetty_ygit_skel_rows[i].name, name) == 0) {
             return yetty_ygit_skel_rows[i].fn;
+        }
+    }
     return NULL;
 }
 
@@ -57,8 +65,9 @@ static yetty_yclass_rpc_skel_fn yetty_ygit_skel_lookup(yetty_yclass_method_slot 
 struct yetty_ycore_void_result yetty_ygit_register(void)
 {
     static bool registered = false;
-    if (registered)
+    if (registered) {
         return YETTY_OK_VOID();
+    }
 
     struct yetty_ycore_void_result add_accessor_r =
         yetty_yclass_add_accessor_lookup(yetty_ygit_accessor_lookup);

@@ -382,7 +382,7 @@ exposed:
         type: "const struct yetty_ydraw_drawable_list *"
       - name: fd
         type: int
-    doc: "/* One-shot helper — serialize a rendered drawable list as a YDRAW_BIN OSC
+    doc: "/* One-shot helper — serialize a rendered drawable list as a YDRAW_BIN DCS
  * envelope (the ycat/scrolling path). Exposed as a free function for CLIs. */"
 types:
   - name: yetty_yclass_object_ptr_result

@@ -4,7 +4,7 @@ Pure C implementation of ydraw for FFI support with other programming languages.
 
 ## Example: Circle Rendering with Scrolling
 
-**INPUT (from user via OSC command):**
+**INPUT (from user via DCS command):**
 - cursor is at visible row 5
 - cy = 30 (relative to cursor row top)
 - radius = 25

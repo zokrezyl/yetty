@@ -105,7 +105,7 @@ static struct yetty_ycore_void_result emit_update_envelope(const uint32_t *paylo
         return YETTY_ERR(yetty_ycore_void, "yplot-stream: add_cmd_update", add_res);
     }
 
-    struct yetty_ycore_size_result emit_res = yetty_yplot_osc_bin_emit(list_res.value, stdout);
+    struct yetty_ycore_size_result emit_res = yetty_yplot_dcs_bin_emit(list_res.value, stdout);
     yetty_ydraw_drawable_list_destroy(list_res.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "yplot-stream: emit update");
     fflush(stdout);
@@ -194,7 +194,7 @@ int main(int argc, char **argv)
         yetty_ycore_error_destroy(init_res.error);
         return 1;
     }
-    struct yetty_ycore_size_result init_emit = yetty_yplot_osc_bin_emit(init_res.value, stdout);
+    struct yetty_ycore_size_result init_emit = yetty_yplot_dcs_bin_emit(init_res.value, stdout);
     yetty_ydraw_drawable_list_destroy(init_res.value);
     if (YETTY_IS_ERR(init_emit)) {
         fprintf(stderr, "yplot-stream: init emit failed: %s\n", init_emit.error.msg);

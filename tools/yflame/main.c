@@ -1,9 +1,9 @@
 /*
- * yflame — emit a flame-graph OSC envelope from folded-stack input.
+ * yflame — emit a flame-graph DCS envelope from folded-stack input.
  *
  * Reads the "folded" format (Brendan Gregg / stackcollapse-* lingua franca:
  * one `frame1;frame2;frame3 <count>` line per collapsed stack) from a file or
- * stdin, and writes a YDRAW_BIN OSC envelope (the ydraw scrolling layer
+ * stdin, and writes a YDRAW_BIN DCS envelope (the ydraw scrolling layer
  * renders it as boxes + labels). yflame parses no profiler binary format and
  * bundles no profiler code — the standard pipeline is:
  *
@@ -250,7 +250,7 @@ int main(int argc, char **argv)
     struct yetty_ycore_void_result wr = yetty_yflame_emit_osc(rr.value, YFLAME_STDOUT_FD);
     yetty_ydraw_drawable_list_destroy(rr.value);
     if (YETTY_IS_ERR(wr)) {
-        fprintf(stderr, "yflame: OSC emit failed: %s\n", wr.error.msg);
+        fprintf(stderr, "yflame: DCS emit failed: %s\n", wr.error.msg);
         for (const struct yetty_ycore_error *e = wr.error.cause; e; e = e->cause) {
             fprintf(stderr, "  caused by: %s\n", e->msg);
         }

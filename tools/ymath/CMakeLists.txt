@@ -1,4 +1,4 @@
-# ymath tool — TeX-subset math → YDRAW_BIN OSC envelope. Same link shape
+# ymath tool — TeX-subset math → YDRAW_BIN DCS envelope. Same link shape
 # as tools/yplot.
 
 add_executable(ymath

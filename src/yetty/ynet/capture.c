@@ -157,11 +157,16 @@ static struct ynet_packet_record *records_push(struct yetty_ynet_capture *captur
 static const char *proto_label(uint8_t ip_protocol)
 {
     switch (ip_protocol) {
-    case 6: return "TCP";
-    case 17: return "UDP";
-    case 1: return "ICMP";
-    case 58: return "ICMPv6";
-    default: return "IP";
+    case 6:
+        return "TCP";
+    case 17:
+        return "UDP";
+    case 1:
+        return "ICMP";
+    case 58:
+        return "ICMPv6";
+    default:
+        return "IP";
     }
 }
 
@@ -177,13 +182,14 @@ static void flow_render_summary(struct ynet_flow *flow)
         const char *close = flow->family == YNET_AF_INET6 ? "]" : "";
         snprintf(flow->summary, sizeof(flow->summary),
                  "%-5s %s%s%s:%u \xE2\x86\x94 %s%s%s:%u  %llu pkts, %llu bytes",
-                 proto_label(flow->ip_protocol), open, address_a, close, flow->endpoint_a_port, open,
-                 address_b, close, flow->endpoint_b_port, (unsigned long long)flow->packet_count,
-                 (unsigned long long)flow->byte_count);
-    } else {
-        snprintf(flow->summary, sizeof(flow->summary), "%-5s %s \xE2\x86\x94 %s  %llu pkts, %llu bytes",
-                 proto_label(flow->ip_protocol), address_a, address_b,
+                 proto_label(flow->ip_protocol), open, address_a, close, flow->endpoint_a_port,
+                 open, address_b, close, flow->endpoint_b_port,
                  (unsigned long long)flow->packet_count, (unsigned long long)flow->byte_count);
+    } else {
+        snprintf(flow->summary, sizeof(flow->summary),
+                 "%-5s %s \xE2\x86\x94 %s  %llu pkts, %llu bytes", proto_label(flow->ip_protocol),
+                 address_a, address_b, (unsigned long long)flow->packet_count,
+                 (unsigned long long)flow->byte_count);
     }
 }
 
@@ -517,7 +523,7 @@ static struct yetty_ycore_const_char_ptr_result capture_flow_summary(
  * Renders the capture's conversations as a host/edge graph: hosts on a ring,
  * each conversation an edge coloured by transport protocol and thickened by
  * traffic, node size by degree. Produced as a ydraw drawable list that the tool
- * ships to the pane as a YDRAW_BIN OSC figure (the same path ycat / yflame use).
+ * ships to the pane as a YDRAW_BIN DCS figure (the same path ycat / yflame use).
  * This is the visual payoff a plain packet table cannot express.
  *===========================================================================*/
 
@@ -543,11 +549,15 @@ static uint32_t pack_rgba(uint8_t red, uint8_t green, uint8_t blue)
 static uint32_t proto_edge_color(uint8_t ip_protocol)
 {
     switch (ip_protocol) {
-    case 6: return pack_rgba(107, 168, 146);  /* TCP  — brand mint */
-    case 17: return pack_rgba(107, 150, 197); /* UDP  — cool blue  */
+    case 6:
+        return pack_rgba(107, 168, 146); /* TCP  — brand mint */
+    case 17:
+        return pack_rgba(107, 150, 197); /* UDP  — cool blue  */
     case 1:
-    case 58: return pack_rgba(206, 160, 90); /* ICMP — amber */
-    default: return pack_rgba(128, 134, 134);
+    case 58:
+        return pack_rgba(206, 160, 90); /* ICMP — amber */
+    default:
+        return pack_rgba(128, 134, 134);
     }
 }
 
@@ -644,8 +654,8 @@ static struct yetty_ycore_void_result topo_build(struct yetty_ydraw_drawable_lis
     /* Nodes (z=2) + labels (z=3). */
     for (uint32_t index = 0; index < host_count; index++) {
         struct yetty_ysdf_circle node = {hosts[index].x, hosts[index].y, hosts[index].radius};
-        step = yetty_ydraw_drawable_list_add_cmd_add_circle(
-            list, 0, 2, pack_rgba(30, 38, 44), pack_rgba(116, 197, 165), 2.0f, &node);
+        step = yetty_ydraw_drawable_list_add_cmd_add_circle(list, 0, 2, pack_rgba(30, 38, 44),
+                                                            pack_rgba(116, 197, 165), 2.0f, &node);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, step, "topo: node");
 
         char label[YNET_ENDPOINT_MAX];
@@ -718,7 +728,8 @@ static struct yetty_ydraw_drawable_list_result capture_render(struct yetty_yclas
         yetty_ydraw_drawable_list_config_buffer_create(&config);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, list_result, "render: list create");
 
-    struct yetty_ycore_void_result built = topo_build(list_result.value, capture, canvas_w, canvas_h);
+    struct yetty_ycore_void_result built =
+        topo_build(list_result.value, capture, canvas_w, canvas_h);
     if (YETTY_IS_ERR(built)) {
         yetty_ydraw_drawable_list_destroy(list_result.value);
         return YETTY_ERR(yetty_ydraw_drawable_list, "render: build topology", built);
@@ -726,7 +737,7 @@ static struct yetty_ydraw_drawable_list_result capture_render(struct yetty_yclas
     return list_result;
 }
 
-/* Serialize a rendered drawable list as a YDRAW_BIN OSC envelope on `fd` — the
+/* Serialize a rendered drawable list as a YDRAW_BIN DCS envelope on `fd` — the
  * scrolling-layer figure path (mirrors yflame's emit_osc). */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ynet_emit_osc(const struct yetty_ydraw_drawable_list *list,

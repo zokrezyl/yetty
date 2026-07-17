@@ -4,7 +4,7 @@
 # yecho parses {plot; w=...; h=...; xrange=lo..hi; yrange=lo..hi:
 #                f=expr; g=expr; @f.color=#hex}
 # and emits a yplot composite (yfsvm-compiled bytecode + uniforms)
-# in the same OSC 600001 ydraw envelope used by ycat / ymarkdown / ypdf.
+# in the same DCS 600001 ydraw envelope used by ycat / ymarkdown / ypdf.
 #
 # Run inside yetty:  ./build-desktop-ytrace-release/yetty -e demo/scripts/yecho/plot.sh
 

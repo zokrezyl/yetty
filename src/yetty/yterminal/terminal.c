@@ -2257,7 +2257,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     ydebug("terminal_create: content grid figure created");
 
     /* Register the grid's wire handlers: text grid as the default
-     * (raw-passthrough) sink, ydraw canvas for the YDRAW OSC codes. */
+     * (raw-passthrough) sink, ydraw canvas for the YDRAW DCS codes. */
     struct yetty_ycore_void_result rr =
         yetty_yvterm_vterm_register_wire(terminal->grid, terminal->sm);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: grid register_wire failed");

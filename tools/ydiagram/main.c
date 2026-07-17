@@ -1,6 +1,6 @@
 /*
  * ydiagram — render a diagram file (Mermaid) into a ydraw buffer and emit
- * an OSC YDRAW_BIN envelope on stdout so a running yetty ydraw pane
+ * a DCS YDRAW_BIN envelope on stdout so a running yetty ydraw pane
  * redraws it. Pure one-shot: parse → layout → render → emit → exit.
  *
  * Text width comes from a real MSDF font (yetty_yfont_msdf_font) so node
@@ -9,12 +9,12 @@
  * char_count` heuristic and boxes are too tight (clipped labels) or too
  * loose (whitespace).
  *
- * Wire: a single OSC 600001 envelope. The buffer's first prim is CMD_ZERO
+ * Wire: a single DCS 600001 envelope. The buffer's first prim is CMD_ZERO
  * (added by the renderer), which clears the canvas + resets the cursor on
- * decode — replacing the obsolete separate OSC 600000 CLEAR envelope.
+ * decode — replacing the obsolete separate DCS 600000 CLEAR envelope.
  *
- *   ydiagram <file.mmd>      # OSC envelope to stdout (default)
- *   ydiagram -o <file>       # raw serialized buffer, no OSC framing
+ *   ydiagram <file.mmd>      # DCS envelope to stdout (default)
+ *   ydiagram -o <file>       # raw serialized buffer, no DCS framing
  *   ydiagram -               # read Mermaid from stdin
  *   ydiagram --font-cdb <p>  # override the MSDF CDB used for measurement
  *   ydiagram --font-shader <p>
@@ -172,7 +172,7 @@ static int emit_envelope(FILE *out, int osc_code, int compressed, const void *ar
     return rc;
 }
 
-static int emit_osc_bin(FILE *out, struct yetty_ydraw_drawable_list *buf)
+static int emit_dcs_bin(FILE *out, struct yetty_ydraw_drawable_list *buf)
 {
     const uint8_t *raw = NULL;
     size_t size = yetty_ydraw_drawable_list_serialize(buf, &raw);
@@ -256,11 +256,11 @@ static void usage(const char *prog)
     fprintf(stderr,
             "Usage: %s [options] <file.mmd | ->\n"
             "\n"
-            "Emits an OSC YDRAW_BIN envelope on stdout for a running yetty\n"
+            "Emits a DCS YDRAW_BIN envelope on stdout for a running yetty\n"
             "ydraw pane. Box sizing uses real MSDF glyph widths.\n"
             "\n"
             "Options:\n"
-            "  -o <file>             Write raw serialized ydraw buffer (no OSC).\n"
+            "  -o <file>             Write raw serialized ydraw buffer (no DCS).\n"
             "  --font-cdb <path>     Override the MSDF CDB used for measurement.\n"
             "  --font-shader <path>  Override the msdf-font.wgsl shader path.\n"
             "  --no-font             Skip MSDF font; use the heuristic fallback.\n"
@@ -364,7 +364,7 @@ int main(int argc, char **argv)
             }
         }
     } else {
-        rc = emit_osc_bin(stdout, br.value);
+        rc = emit_dcs_bin(stdout, br.value);
         fflush(stdout);
     }
 

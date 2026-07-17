@@ -32,8 +32,9 @@ static size_t index_of(struct yetty_yclass_object *bundle, size_t count, const c
     for (size_t i = 0; i < count; i++) {
         struct yetty_ycore_const_char_ptr_result mime_r =
             yetty_ynotebook_mime_bundle_mime_at(bundle, i);
-        if (YETTY_IS_OK(mime_r) && strcmp(mime_r.value, mime) == 0)
+        if (YETTY_IS_OK(mime_r) && strcmp(mime_r.value, mime) == 0) {
             return i;
+        }
     }
     return (size_t)-1;
 }
@@ -53,8 +54,9 @@ int main(void)
     struct yetty_yclass_ctx ctx = {0};
     struct yetty_yclass_object_ptr_result obj_r = yetty_ynotebook_mime_bundle_create(&ctx);
     CHECK(YETTY_IS_OK(obj_r), "bundle create");
-    if (YETTY_IS_ERR(obj_r))
+    if (YETTY_IS_ERR(obj_r)) {
         return 1;
+    }
     struct yetty_yclass_object *bundle = obj_r.value;
 
     /* text/plain: single string; text/html: list-of-lines; image/png: base64

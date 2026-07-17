@@ -699,17 +699,17 @@ struct yetty_ydraw_drawable_list_result yetty_ymath_render(
     return list_res;
 }
 
-struct yetty_ycore_size_result yetty_ymath_osc_emit(const struct yetty_ydraw_drawable_list *list,
+struct yetty_ycore_size_result yetty_ymath_dcs_emit(const struct yetty_ydraw_drawable_list *list,
                                                     FILE *out)
 {
     if (!list || !out) {
-        return YETTY_ERR(yetty_ycore_size, "ymath_osc_emit: NULL list or out");
+        return YETTY_ERR(yetty_ycore_size, "ymath_dcs_emit: NULL list or out");
     }
     const uint8_t *raw = NULL;
     size_t raw_size =
         yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)list, &raw);
     if (raw_size == 0 || !raw) {
-        return YETTY_ERR(yetty_ycore_size, "ymath_osc_emit: empty serialize");
+        return YETTY_ERR(yetty_ycore_size, "ymath_dcs_emit: empty serialize");
     }
     struct yetty_yface_bin_meta meta = {
         .magic = YETTY_YFACE_BIN_MAGIC,
@@ -724,7 +724,7 @@ struct yetty_ycore_size_result yetty_ymath_osc_emit(const struct yetty_ydraw_dra
         YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(emit_res)) {
         yetty_ycore_buffer_destroy(&envelope);
-        return YETTY_ERR(yetty_ycore_size, "ymath_osc_emit: yface_emit failed", emit_res);
+        return YETTY_ERR(yetty_ycore_size, "ymath_dcs_emit: yface_emit failed", emit_res);
     }
     size_t written = 0;
     if (envelope.size > 0) {

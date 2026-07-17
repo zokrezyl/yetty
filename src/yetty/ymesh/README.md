@@ -22,7 +22,7 @@ color attribute (follow-up in #596).
 
 | target | contents | deps |
 |--------|----------|------|
-| `yetty_ymesh_core` | `.glb` decode (cgltf), wire serialisation, OSC emit | `cgltf`, `ydraw-core`, `yface` — no GPU |
+| `yetty_ymesh_core` | `.glb` decode (cgltf), wire serialisation, DCS emit | `cgltf`, `ydraw-core`, `yface` — no GPU |
 | `yetty_ymesh` | concrete composite factory + WGSL shaders (incbin) | `ymesh_core`, `ydraw-factory`, `yrender`, Dawn (gated on `YETTY_ENABLE_LIB_WEBGPU`) |
 
 ## Client side (`ymesh.c`, `ymesh-glb.c`)
@@ -30,7 +30,7 @@ color attribute (follow-up in #596).
 `yetty_ymesh_glb_parse` extracts the FIRST mesh's FIRST primitive: POSITION +
 NORMAL streams, the index buffer, and the bounding box. `yetty_ymesh_render`
 serialises one prim with type id `YETTY_YMESH_TYPE_ID` (0x80000005) into a
-fresh ydraw buffer; `yetty_ymesh_osc_bin_emit` wraps it in the
+fresh ydraw buffer; `yetty_ymesh_dcs_bin_emit` wraps it in the
 `YETTY_DCS_YDRAW_BIN` envelope. The serializer is hand-written (not
 schema-generated) because the pipeline needs a real vertex layout, an index
 buffer, and a depth attachment — none of which the fullscreen-quad schema
@@ -60,7 +60,7 @@ fields and re-derived when the wire bytes change (interactive viewer).
 struct yetty_ymesh_render_config config = { .mode = YETTY_YMESH_MODE_SOLID };
 struct yetty_ydraw_drawable_list_result r =
     yetty_ymesh_render_path("model.glb", &config);
-yetty_ymesh_osc_bin_emit(r.value, stdout);
+yetty_ymesh_dcs_bin_emit(r.value, stdout);
 /* server side: yetty_ymesh_factory_create() / _destroy (ymesh-gen.h) */
 ```
 
@@ -68,7 +68,7 @@ yetty_ymesh_osc_bin_emit(r.value, stdout);
 
 | file | role |
 |------|------|
-| `ymesh.c` | wire serialisation, buffer attach, OSC emit |
+| `ymesh.c` | wire serialisation, buffer attach, DCS emit |
 | `ymesh-glb.c` | minimal cgltf wrapper → host-side mesh |
 | `ymesh-gen.c` | concrete factory: raw-WebGPU 3D + blit passes |
 | `ymesh.wgsl` / `ymesh-blit.wgsl` | shaders (embedded via incbin) |

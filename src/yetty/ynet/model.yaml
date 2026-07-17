@@ -186,7 +186,7 @@ classes:
     domain: ynet
     accessor: yetty_ynet_capture_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    source_file: src/yetty/ynet/capture.c
     parent: null
     mixins: []
     data: struct yetty_ynet_capture
@@ -292,7 +292,7 @@ classes:
         impl: capture_destroy
     doc: null
 exposed:
-  - source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+  - source_file: src/yetty/ynet/capture.c
     name: yetty_ynet_emit_osc
     return_type: struct yetty_ycore_void_result
     args:
@@ -300,7 +300,7 @@ exposed:
         type: "const struct yetty_ydraw_drawable_list *"
       - name: fd
         type: int
-    doc: "/* Serialize a rendered drawable list as a YDRAW_BIN OSC envelope on `fd` — the
+    doc: "/* Serialize a rendered drawable list as a YDRAW_BIN DCS envelope on `fd` — the
  * scrolling-layer figure path (mirrors yflame's emit_osc). */"
 types:
   - name: yetty_yclass_object_ptr_result
@@ -401,28 +401,28 @@ types:
           - name: error
             type: struct yetty_ycore_error
 local_types:
-  ynet_packet_summary: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
-  ynet_packet_record: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
-  ynet_flow: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
-  yetty_ynet_capture: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
-  yetty_ynet_capture_ptr_result: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
-  ynet_topo_host: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+  ynet_packet_summary: src/yetty/ynet/capture.c
+  ynet_packet_record: src/yetty/ynet/capture.c
+  ynet_flow: src/yetty/ynet/capture.c
+  yetty_ynet_capture: src/yetty/ynet/capture.c
+  yetty_ynet_capture_ptr_result: src/yetty/ynet/capture.c
+  ynet_topo_host: src/yetty/ynet/capture.c
 local_typedefs:
   __int128_t:
-    source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    source_file: src/yetty/ynet/capture.c
     text: typedef __int128 __int128_t;
   __uint128_t:
-    source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    source_file: src/yetty/ynet/capture.c
     text: typedef unsigned __int128 __uint128_t;
   __NSConstantString:
-    source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    source_file: src/yetty/ynet/capture.c
     text: typedef struct __NSConstantString_tag __NSConstantString;
   __builtin_ms_va_list:
-    source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    source_file: src/yetty/ynet/capture.c
     text: "typedef char *__builtin_ms_va_list;"
   __builtin_va_list:
-    source_file: /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c
+    source_file: src/yetty/ynet/capture.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
 includes:
-  /home/misi/work/my/yetty-ynet/src/yetty/ynet/capture.c:
+  src/yetty/ynet/capture.c:
     - yetty/ydraw-core/drawable-list.h

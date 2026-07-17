@@ -7,8 +7,8 @@
  * Detects the type of a byte buffer (libmagic + extension fallback) and
  * dispatches to a handler that turns the bytes into a ydraw-core buffer.
  * The caller then either:
- *   - base64-encodes the ydraw primitives and emits an OSC 666674 sequence
- *     (yetty_ycat_osc_bin_emit), so a running yetty terminal picks it up
+ *   - base64-encodes the ydraw primitives and emits a DCS YDRAW_BIN envelope
+ *     (yetty_ycat_dcs_bin_emit), so a running yetty terminal picks it up
  *     and routes to its ydraw scrolling layer, or
  *   - for plain-text / unknown input, passes the bytes through unchanged.
  *
@@ -140,7 +140,7 @@ int yetty_ycat_register_handler_streaming(enum yetty_ycat_type type,
 const char *yetty_ycat_grammar_lookup(const char *mime, const char *path);
 
 /* Parse bytes with `grammar_name`, emit coloured spans into a fresh ydraw
- * buffer. Useful when targeting a yetty terminal (via the OSC envelope). */
+ * buffer. Useful when targeting a yetty terminal (via the DCS envelope). */
 struct yetty_ydraw_drawable_list_result yetty_ycat_ts_render(
     const uint8_t *bytes, size_t len, const char *grammar_name,
     const struct yetty_ycat_config *config);
@@ -162,13 +162,13 @@ int yetty_ycat_is_url(const char *s);
 int yetty_ycat_fetch_url(const char *url, uint8_t **out, size_t *out_len, char **content_type_out);
 
 /*=============================================================================
- * OSC emission
+ * DCS emission
  *===========================================================================*/
 
-/* Emit an OSC 666674 (YDRAW_SCROLL) sequence wrapping the buffer's primitive
+/* Emit a DCS YETTY_DCS_YDRAW_BIN envelope wrapping the buffer's primitive
  * bytes (base64-encoded, `--bin` format) to `out`. Returns number of bytes
  * written, 0 on failure. */
-struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(
+struct yetty_ycore_size_result yetty_ycat_dcs_bin_emit(
     const struct yetty_ydraw_drawable_list *buffer, FILE *out);
 
 #ifdef __cplusplus

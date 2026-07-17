@@ -1,9 +1,9 @@
 /*
- * yetty-ylottie — render a Lottie (Bodymovin) animation to ydraw OSC.
+ * yetty-ylottie — render a Lottie (Bodymovin) animation to ydraw DCS.
  *
  * Unlike ycat (which renders a single still frame), this tool PLAYS the whole
  * animation: it walks every frame from the composition in-point to its
- * out-point, emitting an OSC clear + ydraw-bin envelope per frame, paced at
+ * out-point, emitting a DCS clear + ydraw-bin envelope per frame, paced at
  * the composition frame rate. Run it inside a yetty terminal to watch it move:
  *
  *   yetty-ylottie anim.json                 # play once, real time
@@ -42,7 +42,7 @@ static void usage(const char *prog)
 {
     fprintf(stderr,
             "Usage: %s [options] <file.json>\n"
-            "Play a Lottie animation as ydraw OSC (run inside a yetty terminal).\n"
+            "Play a Lottie animation as ydraw DCS (run inside a yetty terminal).\n"
             "\n"
             "Options:\n"
             "  -w, --width N    width in terminal cells (default: 80)\n"
@@ -58,7 +58,7 @@ static void usage(const char *prog)
             prog);
 }
 
-/* Emit an OSC clear so the previous frame's primitives are wiped. */
+/* Emit a DCS clear so the previous frame's primitives are wiped. */
 static void emit_clear(void)
 {
     printf("\033P%uy;\033\\", YETTY_DCS_YDRAW_CLEAR);

@@ -4,7 +4,7 @@
 glyphs, and `{attrs: content}` styled blocks — and renders it into a
 ydraw buffer. It is strictly client-side (never linked into the yetty
 process); the `tools/yecho` CLI is its frontend, emitting the same
-`YETTY_DCS_YDRAW_BIN` OSC envelope ycat uses.
+`YETTY_DCS_YDRAW_BIN` envelope ycat uses.
 
 ## Grammar
 
@@ -47,7 +47,7 @@ struct yetty_yecho_render_config config = {
     .font_size = 0 /* → cell_height */, .line_spacing = 0 /* → 1.2 */ };
 struct yetty_ydraw_drawable_list_result r =
     yetty_yecho_render_string(input, len, &config);   /* parse + render */
-yetty_yecho_osc_bin_emit(r.value, stdout);
+yetty_yecho_dcs_bin_emit(r.value, stdout);
 yetty_ydraw_drawable_list_destroy(r.value);
 ```
 
@@ -55,7 +55,7 @@ yetty_ydraw_drawable_list_destroy(r.value);
 
 | file | role |
 |------|------|
-| `yecho.c` | the whole parser + renderer (spans, attrs, glyph resolution, plot/video composite emission, OSC emit) |
+| `yecho.c` | the whole parser + renderer (spans, attrs, glyph resolution, plot/video composite emission, DCS emit) |
 
 Public header: `include/yetty/yecho/yecho.h`. Deps: `ycore`, `ydraw-core`,
 `ysdf`, `yfont_shader_glyph`, `yface`, `yplot_core` (pulls yfsvm + yexpr;
@@ -63,9 +63,9 @@ no GPU), optionally `yvideo_core`. Gated by `YETTY_ENABLE_FEATURE_YECHO`.
 
 ## Consumers
 
-- **tools/yecho** — the CLI. Inside a yetty terminal it emits the OSC
-  envelope; outside it falls back to raw pass-through (`--osc` / `--raw`
-  force either; `--list-glyphs` dumps the shader-glyph registry).
+- **tools/yecho** — the CLI. Always renders the input and emits the DCS
+  envelope (a yetty renders it; every other terminal discards it — it does
+  not probe TERM_PROGRAM). `--list-glyphs` dumps the shader-glyph registry.
 
 ## Related
 

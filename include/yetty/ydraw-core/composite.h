@@ -1,6 +1,6 @@
 // YDraw Complex Primitive Types - Wire Format
 //
-// Pure data layout for composites traveling over the OSC wire:
+// Pure data layout for composites traveling over the DCS wire:
 //   - struct figure (type + payload_size + FAM data)
 //   - type-id ranges (simple SDF / drawable-list entry / complex)
 //   - helpers that operate on raw bytes (is_complex_type, size, aabb, handler)

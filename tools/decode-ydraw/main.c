@@ -1,5 +1,5 @@
 /*
- * decode-ydraw — diagnostic tool that takes the OSC stream emitted by a
+ * decode-ydraw — diagnostic tool that takes the DCS stream emitted by a
  * ydraw producer (ycat, ygreeter, ygui apps) and decodes it via yface,
  * printing what's inside.
  *
@@ -11,14 +11,14 @@
  *   Interpose mode (--interpose / -t):
  *     PRODUCER | decode-ydraw --interpose -o decoded.log | CONSUMER
  *       — bytes flow through unchanged on stdout (so the consumer still
- *         sees the real OSC stream), and the decoded view is teed into
+ *         sees the real DCS stream), and the decoded view is teed into
  *         the -o file.
  *
  * Decoded output goes to stderr by default; pass -o FILE to redirect it
- * so the OSC stream on stdout stays clean for piping.
+ * so the DCS stream on stdout stays clean for piping.
  *
  * What this prints for each envelope:
- *   - OSC code
+ *   - DCS code
  *   - args meta (magic / version / compressed / raw_size)
  *   - decoded payload size + first bytes (so the ydraw magic is visible)
  *   - every wire command in the payload:
@@ -378,7 +378,7 @@ static int decode_envelope(struct yetty_yface *y, const char *body, size_t body_
     }
     char code_str[20] = {0};
     memcpy(code_str, body, code_len);
-    int osc_code = atoi(code_str);
+    int dcs_code = atoi(code_str);
 
     const char *after_code = body + code_len + 1;
     size_t after_code_len = body_len - code_len - 1;
@@ -391,7 +391,7 @@ static int decode_envelope(struct yetty_yface *y, const char *body, size_t body_
     const char *payload = semi2 + 1;
     size_t payload_len = after_code_len - args_len - 1;
 
-    out("  osc code: %d  (args b64=%zu  payload b64=%zu)\n", osc_code, args_len, payload_len);
+    out("  dcs code: %d  (args b64=%zu  payload b64=%zu)\n", dcs_code, args_len, payload_len);
 
     /* Decode args. */
     int compressed = 0;
@@ -510,7 +510,7 @@ static int splitter_grow(struct splitter *s, size_t need)
 
 /* Feed more bytes; consume any complete envelopes that have arrived.
  * Bytes before the first envelope are silently kept as-is (the stream
- * may carry non-ydraw output — yetty receives a mix of OSC + regular
+ * may carry non-ydraw output — yetty receives a mix of DCS + regular
  * terminal text). On exit `s->buf` retains only the unconsumed tail. */
 static void splitter_consume(struct splitter *s)
 {
@@ -615,7 +615,7 @@ static int run_interpose(void)
     struct splitter s;
     splitter_init(&s, y);
 
-    /* OSC byte streams are binary — keep CR/LF unchanged on Windows. */
+    /* DCS byte streams are binary — keep CR/LF unchanged on Windows. */
     yetty_yplatform_tty_binary_io();
     /* Unbuffered passthrough so the downstream consumer sees bytes as
      * they arrive (matches the original raw write(STDOUT_FILENO, …)). */
@@ -663,7 +663,7 @@ static void print_help(const char *prog)
             "       %s --interpose [-o FILE]       # pipe through, decode to FILE\n"
             "       %s -h | --help\n"
             "\n"
-            "Decode the OSC envelopes emitted by a ydraw producer (ycat,\n"
+            "Decode the DCS envelopes emitted by a ydraw producer (ycat,\n"
             "ygreeter, ygui apps, ...).\n"
             "\n"
             "Capture mode (default):\n"
@@ -685,7 +685,7 @@ static void print_help(const char *prog)
             "  -h, --help           show this message\n"
             "\n"
             "Decoded output contains:\n"
-            "  - OSC code\n"
+            "  - DCS code\n"
             "  - args meta (magic, version, compression flag, raw size)\n"
             "  - decoded payload size + first 16 bytes (so the `YPB1` magic\n"
             "    is directly visible)\n"

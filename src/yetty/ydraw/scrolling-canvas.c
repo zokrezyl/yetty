@@ -1271,7 +1271,7 @@ static struct uint32_result expand_text_drawable_list_to_glyphs(
 }
 
 /*===========================================================================
- * Process input — streaming OSC ingestion
+ * Process input — streaming DCS ingestion
  *===========================================================================*/
 
 static struct yetty_ycore_void_result scrolling_clear(struct yetty_ydraw_canvas *base)

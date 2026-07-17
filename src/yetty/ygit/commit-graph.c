@@ -189,7 +189,8 @@ struct yetty_ygit_graph_ptr_result yetty_ygit_graph_build(struct yetty_ygit_log 
                     result = YETTY_ERR(yetty_ygit_graph_ptr, "ygit graph: out of memory");
                     goto cleanup;
                 }
-                lanes.waiting[branch_column] = ygit_graph_strdup(commit->parent_hashes[parent_index]);
+                lanes.waiting[branch_column] =
+                    ygit_graph_strdup(commit->parent_hashes[parent_index]);
                 if (!lanes.waiting[branch_column]) {
                     result = YETTY_ERR(yetty_ygit_graph_ptr, "ygit graph: out of memory");
                     goto cleanup;

@@ -5,7 +5,7 @@
  * subset. The shader is compiled to yfsvm bytecode IN-PROCESS via the embedded
  * libpython-free CPython parser (yetty_cpython) + the yfsvm codegen
  * (yetty_yfspy_compile) — no subprocess, no CPython runtime. yfspy wraps the
- * bytecode in a yplot prim and emits the OSC envelope (YETTY_DCS_YDRAW_BIN)
+ * bytecode in a yplot prim and emits the DCS envelope (YETTY_DCS_YDRAW_BIN)
  * the yetty ydraw scrolling layer renders.
  *
  * The shader's first `def` becomes function 0 (the rendered curve / field);
@@ -53,7 +53,7 @@ static void usage(FILE *out, const char *prog)
             "Usage: %s [options] <shader.py>\n"
             "       %s [options] --bytecode <file|->\n"
             "\n"
-            "Compile a Python-subset yfsvm shader and emit a yplot OSC envelope\n"
+            "Compile a Python-subset yfsvm shader and emit a yplot DCS envelope\n"
             "(YETTY_DCS_YDRAW_BIN, 600001) consumed by the yetty ydraw layer.\n"
             "\n"
             "Options:\n"
@@ -383,10 +383,10 @@ int main(int argc, char **argv)
     }
 
     int rc = 0;
-    struct yetty_ycore_size_result wr = yetty_yplot_osc_bin_emit(rr.value, stdout);
+    struct yetty_ycore_size_result wr = yetty_yplot_dcs_bin_emit(rr.value, stdout);
     yetty_ydraw_drawable_list_destroy(rr.value);
     if (YETTY_IS_ERR(wr)) {
-        fprintf(stderr, "yfspy: OSC emit failed: %s\n", wr.error.msg);
+        fprintf(stderr, "yfspy: DCS emit failed: %s\n", wr.error.msg);
         for (const struct yetty_ycore_error *cause = wr.error.cause; cause; cause = cause->cause) {
             fprintf(stderr, "  caused by: %s\n", cause->msg);
         }

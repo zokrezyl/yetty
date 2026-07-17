@@ -15,8 +15,8 @@ description: Image primitive — atlas-sampled RGBA8 texture inside an AABB
 # yimage has no shader-side custom code (no yfsvm, no other libraries).
 # libraries: []
 
-# yimage is fed via the C/OSC pipeline (yetty_yimage_render +
-# yetty_yimage_osc_bin_emit, mirroring yplot). YAML scene support can be
+# yimage is fed via the C/DCS pipeline (yetty_yimage_render +
+# yetty_yimage_dcs_bin_emit, mirroring yplot). YAML scene support can be
 # added later with a hand-written or generator-extended parser.
 yaml_factory: none
 

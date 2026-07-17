@@ -3,7 +3,7 @@
 yimage decodes a raster image (any format stb_image handles: PNG, JPEG, GIF,
 BMP, TGA, …) into RGBA8 pixels and packs them into one `yimage` composite
 primitive (type id `0x80000004`) inside a ydraw drawable list. Sender side,
-the list ships as an OSC `YDRAW_BIN` envelope (via [`yface`](../yface/README.md));
+the list ships as a DCS `YDRAW_BIN` envelope (via [`yface`](../yface/README.md));
 receiver side, a pre-compiled factory routes the pixels into the shared RGBA8
 atlas and the shader samples the atlas region with hardware bilinear
 filtering. The composite model (factory / instance / binder) is described in
@@ -13,7 +13,7 @@ filtering. The composite model (factory / instance / binder) is described in
 
 | target | contents | GPU |
 |--------|----------|-----|
-| `yetty_yimage_core` | decode (stb_image), wire serializer, OSC emit — `yimage.c`, `yimage-gen-wire.c` | none — links from client tools and cross-targets |
+| `yetty_yimage_core` | decode (stb_image), wire serializer, DCS emit — `yimage.c`, `yimage-gen-wire.c` | none — links from client tools and cross-targets |
 | `yetty_yimage` | concrete factory + per-instance render — `yimage-gen.c` | Dawn / WebGPU (gated on `YETTY_ENABLE_LIB_WEBGPU`) |
 
 ## Generated files
@@ -36,7 +36,7 @@ struct yetty_yimage_render_config config = {.bounds_w = 320.0f}; /* 0 = source s
 struct yetty_ydraw_drawable_list_result list_res =
     yetty_yimage_render(bytes, len, &config);          /* or yetty_yimage_render_path() */
 
-yetty_yimage_osc_bin_emit(list_res.value, stdout);     /* OSC YDRAW_BIN envelope */
+yetty_yimage_dcs_bin_emit(list_res.value, stdout);     /* DCS YDRAW_BIN envelope */
 yetty_ydraw_drawable_list_destroy(list_res.value);
 ```
 
@@ -57,7 +57,7 @@ them with the post-scroll screen position at render time.
 
 | file | role |
 |------|------|
-| `yimage.c` | hand-written glue: decode → serialize → drawable list, OSC emit |
+| `yimage.c` | hand-written glue: decode → serialize → drawable list, DCS emit |
 | `yimage.yaml` | composite schema — source of truth for every `*-gen*` file |
 | `yimage-gen-wire.c` | generated wire serializer (CPU-only) |
 | `yimage-gen.c` | generated factory: shared pipeline, per-instance resource set/binder |

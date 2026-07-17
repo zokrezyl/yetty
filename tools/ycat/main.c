@@ -6,18 +6,23 @@
  *   2. detect the type via libmagic + extension
  *   3. dispatch to a handler that returns a ydraw-core buffer (markdown,
  *      PDF for now — registry is open for more)
- *   4. emit an OSC 666674 sequence to stdout carrying the base64-encoded
- *      ydraw primitive bytes (consumed by the ydraw scrolling layer)
+ *   4. emit a DCS YDRAW_BIN (600001) envelope to stdout carrying the
+ *      base64-encoded ydraw primitive bytes (consumed by the ydraw
+ *      scrolling layer)
+ *
+ * The DCS envelopes are emitted the same way for every host terminal: a
+ * yetty renders them, every other terminal discards them. ycat does not
+ * probe TERM_PROGRAM to decide.
  *
  * If the handler dispatch yields no buffer (TEXT / UNKNOWN) the bytes are
- * streamed through unchanged. --raw forces pass-through regardless.
+ * streamed through unchanged. --text forces plain-text pass-through
+ * regardless.
  *
  * Runs pure C. Args via <yetty/yplatform/getopt.h> (vendored NetBSD getopt,
  * works on Windows too).
  */
 
 #include <yetty/ycat/ycat.h>
-#include <yetty/ycore/terminal-detect.h>
 
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/result.h>
@@ -51,7 +56,7 @@ struct ycat_opts {
     int width_cells;
     int height_cells;
     bool absolute;
-    bool raw;
+    bool text;              /* --text : force plain-text output (no DCS) */
     bool force_ts;          /* --ts : force tree-sitter path */
     const char *force_type; /* name from --card/--type; NULL = autodetect */
     int sleep_after_ms;     /* --sleep-after: sleep N ms before exit
@@ -72,27 +77,21 @@ static int terminal_columns(void)
     return 80;
 }
 
-/* Detect whether ycat is running inside a yetty terminal (directly or via
- * tmux). See <yetty/ycore/terminal-detect.h>. */
-static bool in_yetty_terminal(void)
-{
-    return yetty_running_under_yetty() != 0;
-}
-
 static void usage(FILE *out, const char *prog)
 {
     fprintf(out,
             "Usage: %s [options] [file|url|-]...\n"
             "\n"
-            "  Dispatch (TERM_PROGRAM=yetty distinguishes the two columns):\n"
+            "  ycat emits the same DCS envelopes for every terminal — a yetty\n"
+            "  renders them; every other terminal discards them. Use --text\n"
+            "  when you want plain text out. TERM_PROGRAM is never consulted.\n"
             "\n"
-            "    flags       │ in yetty                    │ non-yetty\n"
-            "    ────────────┼─────────────────────────────┼─────────────\n"
-            "    (none)      │ ydraw handler → OSC,       │ tree-sitter\n"
-            "                │  else ts → OSC, else raw    │  → SGR, else raw\n"
-            "    --raw       │ raw bytes                   │ raw bytes\n"
-            "    --ts        │ ts → OSC                    │ ts → SGR\n"
-            "    --ts --raw  │ ts → SGR                    │ ts → SGR\n"
+            "    flags        │ output\n"
+            "    ─────────────┼───────────────────────────────────────────\n"
+            "    (none)       │ ydraw handler → DCS; else ts → DCS; else raw\n"
+            "    --text       │ raw bytes (plain cat)\n"
+            "    --ts         │ ts → DCS\n"
+            "    --ts --text  │ ts → SGR (24-bit colour, any terminal)\n"
             "\n"
             "  URL inputs (http://, https://) are fetched via libcurl.\n"
             "\n"
@@ -102,7 +101,8 @@ static void usage(FILE *out, const char *prog)
             "  -x, --x=N            x origin (default: 0)\n"
             "  -y, --y=N            y origin (default: 0)\n"
             "  -a, --absolute       absolute positioning (default: relative)\n"
-            "  -r, --raw            plain cat (no rendering)\n"
+            "  -r, --text           plain text output, no DCS rendering\n"
+            "                       (--raw is a deprecated alias)\n"
             "  -t, --ts             force tree-sitter path (even for md/pdf)\n"
             "  -c, --card=TYPE      force handler: markdown, pdf, image, svg,\n"
             "                       mermaid, music (lilypond), shadertoy (wgsl),\n"
@@ -203,8 +203,8 @@ static int write_all_stdout(const uint8_t *data, size_t len)
 }
 
 /*=============================================================================
- * Streaming-handler bridge: wraps yetty_ycat_osc_bin_emit so multi-
- * envelope handlers (pdf, markdown) can ship one OSC per envelope to
+ * Streaming-handler bridge: wraps yetty_ycat_dcs_bin_emit so multi-
+ * envelope handlers (pdf, markdown) can ship one DCS per envelope to
  * stdout without each handler depending on ycat tool internals.
  *===========================================================================*/
 
@@ -217,9 +217,9 @@ static struct yetty_ycore_void_result emit_to_stdout(
     void *ud, const struct yetty_ydraw_drawable_list *envelope)
 {
     struct emit_to_stdout_ctx *ec = ud;
-    struct yetty_ycore_size_result r = yetty_ycat_osc_bin_emit(envelope, ec->out);
+    struct yetty_ycore_size_result r = yetty_ycat_dcs_bin_emit(envelope, ec->out);
     if (YETTY_IS_ERR(r)) {
-        return YETTY_ERR(yetty_ycore_void, "osc_bin_emit failed", r);
+        return YETTY_ERR(yetty_ycore_void, "dcs_bin_emit failed", r);
     }
     ec->total += r.value;
     return YETTY_OK_VOID();
@@ -254,22 +254,20 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
     }
 
     /*---------------------------------------------------------------
-	 * Dispatch matrix (see `ycat --help`):
+	 * Dispatch matrix (see `ycat --help`). The host terminal is never
+	 * probed: DCS envelopes go out the same way everywhere, and a
+	 * non-yetty terminal simply discards them.
 	 *
-	 *   flags          │ in yetty                     │ non-yetty
-	 *   ───────────────┼──────────────────────────────┼──────────────
-	 *   (none)         │ ydraw handler → OSC;         │ ts → SGR;
-	 *                  │  else ts → OSC;               │  else raw.
-	 *                  │  else raw.                    │
-	 *   --raw          │ raw bytes                    │ raw bytes
-	 *   --ts           │ ts → OSC                     │ ts → SGR
-	 *   --ts --raw     │ ts → SGR                     │ ts → SGR
+	 *   flags          │ output
+	 *   ───────────────┼───────────────────────────────────────────
+	 *   (none)         │ ydraw handler → DCS; else ts → DCS; else raw.
+	 *   --text         │ raw bytes (plain cat).
+	 *   --ts           │ ts → DCS.
+	 *   --ts --text    │ ts → SGR (24-bit colour, any terminal).
 	 *-------------------------------------------------------------*/
 
-    const bool in_yetty = in_yetty_terminal();
-
-    /* --raw (without --ts): just passthrough. */
-    if (opts->raw && !opts->force_ts) {
+    /* --text (without --ts): just passthrough. */
+    if (opts->text && !opts->force_ts) {
         rc = write_all_stdout(buf.data, buf.len);
         byte_buf_free(&buf);
         free(url_mime);
@@ -286,8 +284,8 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
     /* Resolve the tree-sitter grammar once — used by several branches. */
     const char *grammar = yetty_ycat_grammar_lookup(url_mime, path_hint);
 
-    /* --ts: force tree-sitter. Output is SGR when --raw is also set OR when
-	 * not inside a yetty terminal; OSC otherwise. */
+    /* --ts: force tree-sitter. Output is SGR text when --text is also set;
+	 * a DCS envelope otherwise. */
     if (opts->force_ts) {
         if (!grammar) {
             fprintf(stderr, "ycat: %s: --ts requested but no grammar for this file\n", arg);
@@ -296,8 +294,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
             return -1;
         }
 
-        const bool sgr = opts->raw || !in_yetty;
-        if (sgr) {
+        if (opts->text) {
             int er = yetty_ycat_ts_emit_sgr(buf.data, buf.len, grammar, stdout);
             byte_buf_free(&buf);
             free(url_mime);
@@ -312,7 +309,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
             free(url_mime);
             return -1;
         }
-        struct yetty_ycore_size_result em_r = yetty_ycat_osc_bin_emit(r.value, stdout);
+        struct yetty_ycore_size_result em_r = yetty_ycat_dcs_bin_emit(r.value, stdout);
         yetty_ydraw_drawable_list_destroy(r.value);
         byte_buf_free(&buf);
         free(url_mime);
@@ -323,7 +320,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
         return em_r.value > 0 ? 0 : -1;
     }
 
-    /* Default path (no --ts, no --raw-alone). */
+    /* Default path (no --ts, no --text-alone): rich DCS output. */
 
     enum yetty_ycat_type type;
     if (opts->force_type) {
@@ -337,69 +334,57 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
         type = yetty_ycat_detect(buf.data, buf.len, path_hint);
     }
 
-    /* Inside a yetty terminal: try the dedicated ydraw handler first,
-	 * then ts → OSC, then raw. Multi-envelope formats (pdf, markdown)
-	 * register a streaming handler; single-shot formats (image, svg,
-	 * mermaid) register a legacy one. We try streaming first. */
-    if (in_yetty) {
-        yetty_ycat_handler_streaming_fn sfn = yetty_ycat_get_handler_streaming(type);
-        if (sfn) {
-            struct emit_to_stdout_ctx ec = {.out = stdout, .total = 0};
-            struct yetty_ycore_void_result sr =
-                sfn(buf.data, buf.len, path_hint, &cfg, emit_to_stdout, &ec);
-            if (YETTY_IS_OK(sr)) {
-                byte_buf_free(&buf);
-                free(url_mime);
-                return ec.total > 0 ? 0 : -1;
-            }
-            fprintf(stderr, "ycat: %s: streaming handler failed (%s), trying tree-sitter\n", arg,
-                    sr.error.msg);
-            yetty_ycore_error_destroy(sr.error);
-            /* fall through to ts → OSC */
+    /* Try the dedicated ydraw handler first, then ts → DCS, then raw.
+	 * Multi-envelope formats (pdf, markdown) register a streaming handler;
+	 * single-shot formats (image, svg, mermaid) register a legacy one. We
+	 * try streaming first. The DCS envelopes are emitted regardless of the
+	 * host terminal — a non-yetty terminal discards them. */
+    yetty_ycat_handler_streaming_fn sfn = yetty_ycat_get_handler_streaming(type);
+    if (sfn) {
+        struct emit_to_stdout_ctx ec = {.out = stdout, .total = 0};
+        struct yetty_ycore_void_result sr =
+            sfn(buf.data, buf.len, path_hint, &cfg, emit_to_stdout, &ec);
+        if (YETTY_IS_OK(sr)) {
+            byte_buf_free(&buf);
+            free(url_mime);
+            return ec.total > 0 ? 0 : -1;
         }
+        fprintf(stderr, "ycat: %s: streaming handler failed (%s), trying tree-sitter\n", arg,
+                sr.error.msg);
+        yetty_ycore_error_destroy(sr.error);
+        /* fall through to ts → DCS */
+    }
 
-        yetty_ycat_handler_fn fn = yetty_ycat_get_handler(type);
-        if (fn) {
-            struct yetty_ydraw_drawable_list_result r = fn(buf.data, buf.len, path_hint, &cfg);
-            if (YETTY_IS_OK(r)) {
-                struct yetty_ycore_size_result em_r = yetty_ycat_osc_bin_emit(r.value, stdout);
-                yetty_ydraw_drawable_list_destroy(r.value);
-                byte_buf_free(&buf);
-                free(url_mime);
-                if (YETTY_IS_ERR(em_r)) {
-                    yetty_ycore_error_destroy(em_r.error);
-                    return -1;
-                }
-                return em_r.value > 0 ? 0 : -1;
+    yetty_ycat_handler_fn fn = yetty_ycat_get_handler(type);
+    if (fn) {
+        struct yetty_ydraw_drawable_list_result r = fn(buf.data, buf.len, path_hint, &cfg);
+        if (YETTY_IS_OK(r)) {
+            struct yetty_ycore_size_result em_r = yetty_ycat_dcs_bin_emit(r.value, stdout);
+            yetty_ydraw_drawable_list_destroy(r.value);
+            byte_buf_free(&buf);
+            free(url_mime);
+            if (YETTY_IS_ERR(em_r)) {
+                yetty_ycore_error_destroy(em_r.error);
+                return -1;
             }
-            fprintf(stderr, "ycat: %s: ydraw handler failed (%s), trying tree-sitter\n", arg,
-                    r.error.msg);
+            return em_r.value > 0 ? 0 : -1;
         }
-        if (grammar) {
-            struct yetty_ydraw_drawable_list_result r =
-                yetty_ycat_ts_render(buf.data, buf.len, grammar, &cfg);
-            if (YETTY_IS_OK(r)) {
-                struct yetty_ycore_size_result em_r = yetty_ycat_osc_bin_emit(r.value, stdout);
-                yetty_ydraw_drawable_list_destroy(r.value);
-                byte_buf_free(&buf);
-                free(url_mime);
-                if (YETTY_IS_ERR(em_r)) {
-                    yetty_ycore_error_destroy(em_r.error);
-                    return -1;
-                }
-                return em_r.value > 0 ? 0 : -1;
+        fprintf(stderr, "ycat: %s: ydraw handler failed (%s), trying tree-sitter\n", arg,
+                r.error.msg);
+    }
+    if (grammar) {
+        struct yetty_ydraw_drawable_list_result r =
+            yetty_ycat_ts_render(buf.data, buf.len, grammar, &cfg);
+        if (YETTY_IS_OK(r)) {
+            struct yetty_ycore_size_result em_r = yetty_ycat_dcs_bin_emit(r.value, stdout);
+            yetty_ydraw_drawable_list_destroy(r.value);
+            byte_buf_free(&buf);
+            free(url_mime);
+            if (YETTY_IS_ERR(em_r)) {
+                yetty_ycore_error_destroy(em_r.error);
+                return -1;
             }
-        }
-    } else {
-        /* Non-yetty terminal: only tree-sitter has anything useful to
-		 * show, since OSC payloads are invisible here. */
-        if (grammar) {
-            int er = yetty_ycat_ts_emit_sgr(buf.data, buf.len, grammar, stdout);
-            if (er == 0) {
-                byte_buf_free(&buf);
-                free(url_mime);
-                return 0;
-            }
+            return em_r.value > 0 ? 0 : -1;
         }
     }
 
@@ -426,7 +411,7 @@ int main(int argc, char **argv)
         .width_cells = 0,
         .height_cells = 0,
         .absolute = false,
-        .raw = false,
+        .text = false,
         .force_type = NULL,
         .sleep_after_ms = 0,
     };
@@ -437,7 +422,8 @@ int main(int argc, char **argv)
         {"x", required_argument, NULL, 'x'},
         {"y", required_argument, NULL, 'y'},
         {"absolute", no_argument, NULL, 'a'},
-        {"raw", no_argument, NULL, 'r'},
+        {"text", no_argument, NULL, 'r'},
+        {"raw", no_argument, NULL, 'r'}, /* deprecated alias for --text */
         {"ts", no_argument, NULL, 't'},
         {"card", required_argument, NULL, 'c'},
         {"type", required_argument, NULL, 'c'},
@@ -465,7 +451,7 @@ int main(int argc, char **argv)
             opts.absolute = true;
             break;
         case 'r':
-            opts.raw = true;
+            opts.text = true;
             break;
         case 't':
             opts.force_ts = true;

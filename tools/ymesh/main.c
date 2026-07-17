@@ -1,10 +1,10 @@
 /*
- * ymesh — emit a ymesh composite OSC envelope for a glTF 2.0 (.glb) file.
+ * ymesh — emit a ymesh composite DCS envelope for a glTF 2.0 (.glb) file.
  *
  * Two operating modes (mirroring ynetsurf):
  *
  *   ONE-SHOT (default when stdout isn't a TTY, or with --once):
- *     parse the .glb, emit one OSC envelope, exit. Same shape as yplot,
+ *     parse the .glb, emit one DCS envelope, exit. Same shape as yplot,
  *     yimage, ynetsurf --once.
  *
  *   INTERACTIVE (default when stdin + stdout are both TTYs, or with -i):
@@ -19,7 +19,7 @@
  *       - F              → frame all (reset camera)
  *       - R              → reset rotation only
  *       - Q / ESC / ^C   → quit
- *     On any state change re-emit OSC 600000 (ydraw clear) + OSC 600001
+ *     On any state change re-emit DCS 600000 (ydraw clear) + DCS 600001
  *     (bin) so the receiving ydraw-layer replaces instead of stacks.
  */
 
@@ -121,7 +121,7 @@ static void state_reset_camera(struct ev_state *st)
 
 /*=============================================================================
  * Render: build a fresh ydraw buffer from the cached .glb + current camera,
- * emit OSC clear + bin so the receiving layer replaces instead of stacks.
+ * emit DCS clear + bin so the receiving layer replaces instead of stacks.
  *===========================================================================*/
 
 static int redraw_and_push(struct ev_state *st)
@@ -443,7 +443,7 @@ static int oneshot(const char *path, float bounds_w, float bounds_h)
         fprintf(stderr, "ymesh: %s\n", br.error.msg);
         return 1;
     }
-    struct yetty_ycore_size_result sr = yetty_ymesh_osc_bin_emit(br.value, stdout);
+    struct yetty_ycore_size_result sr = yetty_ymesh_dcs_bin_emit(br.value, stdout);
     yetty_ydraw_drawable_list_destroy(br.value);
     if (YETTY_IS_ERR(sr)) {
         fprintf(stderr, "ymesh: emit failed: %s\n", sr.error.msg);

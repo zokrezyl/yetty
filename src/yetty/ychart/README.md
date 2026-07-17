@@ -3,7 +3,7 @@
 `ychart` turns tabular / flow data (CSV, TSV, JSON, YAML) into a ydraw
 buffer of SDF shape and MSDF text primitives, the same way
 [`ydiagram`](../ydiagram) turns Mermaid text into one. The buffer is handed
-to a yetty pane (over the OSC `YDRAW_BIN` envelope) or to a ygui widget.
+to a yetty pane (over the DCS `YDRAW_BIN` envelope) or to a ygui widget.
 
 It is pure C and depends only on `ycore`, `ydraw-core`, and `ysdf` — no
 platform-specific code.
@@ -112,7 +112,7 @@ Or compose the layers directly: build a `struct yetty_ychart_chart`
 
 ## Consumers
 
-- **CLI** — `tools/ychart` emits an OSC `YDRAW_BIN` envelope (or, with
+- **CLI** — `tools/ychart` emits a DCS `YDRAW_BIN` envelope (or, with
   `-o`, a raw serialized buffer). `ychart --type pie data.csv`.
 - **ycat** — `.chart` / `.ychart` files, or any CSV/JSON/YAML carrying a
   chart marker, are detected and drawn inline (handler `handler-chart.c`,

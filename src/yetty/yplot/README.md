@@ -49,7 +49,7 @@ Full example:
 
 ### Data Flow (Existing)
 ```
-yetty-client → OSC sequence → plot figure → buffer upload → shader renders
+yetty-client → DCS sequence → plot figure → buffer upload → shader renders
                               (parse CSV)   (storage buf)   (sample buffer)
 ```
 
@@ -64,7 +64,7 @@ The plot shader (`0x0001-plot.wgsl`) currently:
 
 ### New Data Flow
 ```
-yetty-client → OSC sequence → plot figure → yexpr → yfsvm → GPU renders
+yetty-client → DCS sequence → plot figure → yexpr → yfsvm → GPU renders
                (expression)   (parse)       (AST)   (bytecode)  (evaluate)
 ```
 

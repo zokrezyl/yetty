@@ -2,7 +2,7 @@
  * ymap - render a slippy map into a yetty terminal.
  *
  * Downloads the slippy tiles covering a lat/lon-centered viewport,
- * composites them, and emits one YDRAW_BIN OSC envelope to stdout — the
+ * composites them, and emits one YDRAW_BIN DCS envelope to stdout — the
  * map lands in the scrolling rich grid at the cursor, like a ycat image.
  * Prints the OpenStreetMap attribution line under the map (required by
  * the OSM tile usage policy).

@@ -115,7 +115,7 @@ surface), the justified exception to the yclass-first default.
 `ymime` already exists in the tree as Yetty's file-type detector and DCS
 file-envelope prologue codec: a deliberately leaf library (`ycore` only, no
 libmagic, no renderer callbacks) so the terminal and thin clients such as
-`ycat --raw` can link it without pulling in a renderer stack. The notebook
+`ycat --text` can link it without pulling in a renderer stack. The notebook
 design **extends this module in place** rather than creating a second module of
 the same name.
 
@@ -180,7 +180,7 @@ result. Because it instantiates native figures, it depends on every renderer it
 can produce (`ymarkdown`, `yimage`, `ysvg`, `ypdf`, `ygui`, `ybrowser`, …) and
 therefore sits at the top of the dependency graph — a separate library from leaf
 `ymime`, not part of it. Merging the two would force the terminal and
-`ycat --raw` to link the whole renderer stack, which is exactly what leaf
+`ycat --text` to link the whole renderer stack, which is exactly what leaf
 `ymime` was built to avoid.
 
 Responsibilities:
@@ -225,7 +225,7 @@ JSON key order.
 The API should be usable by `ycat`, notebook output, object inspectors, and
 future rich terminal tools. `ycat`'s existing per-type handler dispatch is the
 same "pick a renderer for a detected type" problem over a one-entry bundle and
-may migrate onto `yrender-mime` later; the `ycat --raw` thin path keeps linking
+may migrate onto `yrender-mime` later; the `ycat --text` thin path keeps linking
 leaf `ymime` alone.
 
 ### `yjupyter`

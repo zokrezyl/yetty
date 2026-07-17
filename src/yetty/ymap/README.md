@@ -67,7 +67,7 @@ only to pick a default map center).
 
 ## Consumers
 
-- **`tools/ymap`** — one-shot mode emits a single `YDRAW_BIN` OSC envelope
+- **`tools/ymap`** — one-shot mode emits a single `YDRAW_BIN` DCS envelope
   (map lands at the cursor and scrolls like a ycat image) and prints the
   attribution line; interactive mode (`interactive.c`) ships the map as a
   positioned server figure via yview over yclass-RPC and re-renders on

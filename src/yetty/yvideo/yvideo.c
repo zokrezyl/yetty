@@ -130,17 +130,17 @@ struct yetty_ydraw_drawable_list_result yetty_yvideo_render(
     return YETTY_OK(yetty_ydraw_drawable_list, br.value);
 }
 
-struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(
+struct yetty_ycore_size_result yetty_yvideo_dcs_bin_emit(
     const struct yetty_ydraw_drawable_list *buffer, FILE *out)
 {
     if (!buffer || !out) {
-        return YETTY_ERR(yetty_ycore_size, "yvideo_osc_bin_emit: NULL buffer or out");
+        return YETTY_ERR(yetty_ycore_size, "yvideo_dcs_bin_emit: NULL buffer or out");
     }
     const uint8_t *raw = NULL;
     size_t raw_size =
         yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)buffer, &raw);
     if (raw_size == 0 || !raw) {
-        return YETTY_ERR(yetty_ycore_size, "yvideo_osc_bin_emit: empty serialize");
+        return YETTY_ERR(yetty_ycore_size, "yvideo_dcs_bin_emit: empty serialize");
     }
 
     struct yetty_yface_bin_meta meta = {
@@ -156,7 +156,7 @@ struct yetty_ycore_size_result yetty_yvideo_osc_bin_emit(
         YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
-        return YETTY_ERR(yetty_ycore_size, "yvideo_osc_bin_emit: yface_emit failed", r);
+        return YETTY_ERR(yetty_ycore_size, "yvideo_dcs_bin_emit: yface_emit failed", r);
     }
     size_t written = 0;
     if (envelope.size > 0) {

@@ -1,11 +1,10 @@
 /*
  * yecho - echo text with embedded glyphs and styled blocks.
  *
- * Inside a yetty terminal, the parsed input is rendered into a ydraw-core
- * buffer and emitted as a YETTY_DCS_YDRAW_BIN sequence (same wire format
- * ycat uses). Outside a yetty terminal there's nothing meaningful to do
- * with rich content; we fall back to writing the raw input through —
- * unless --osc is forced.
+ * The parsed input is rendered into a ydraw-core buffer and emitted as a
+ * YETTY_DCS_YDRAW_BIN sequence (same wire format ycat uses). The DCS
+ * envelope goes out the same way for every host terminal: a yetty renders
+ * it, every other terminal discards it. yecho does not probe TERM_PROGRAM.
  */
 
 #include <yetty/yecho/yecho.h>
@@ -13,7 +12,6 @@
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ycore/terminal-detect.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -36,8 +34,6 @@
 struct yecho_opts {
     bool no_newline;
     bool list_glyphs;
-    bool force_osc;
-    bool force_raw;
     int width_cells;
     int height_cells;
     float font_size;
@@ -52,11 +48,6 @@ static int terminal_columns(void)
     }
 #endif
     return 80;
-}
-
-static bool in_yetty_terminal(void)
-{
-    return yetty_running_under_yetty() != 0;
 }
 
 static void usage(FILE *out, const char *prog)
@@ -76,9 +67,8 @@ static void usage(FILE *out, const char *prog)
             "  bg=#RRGGBB      background color\n"
             "  style=bold      bold | italic | underline (combinable with '|')\n"
             "\n"
-            "Inside a yetty terminal, the input is rendered to a ydraw buffer\n"
-            "and emitted via OSC 600001 (YDRAW_BIN). Otherwise the raw input\n"
-            "is written through.\n"
+            "The input is rendered to a ydraw buffer and emitted via DCS 600001\n"
+            "(YDRAW_BIN) — a yetty renders it, every other terminal discards it.\n"
             "\n"
             "Options:\n"
             "  -w, --width=N        layout width in cells (default: term cols)\n"
@@ -86,8 +76,6 @@ static void usage(FILE *out, const char *prog)
             "      --font-size=F    text size in pixels (default: 16)\n"
             "  -n                   no trailing newline\n"
             "  -l, --list           list available glyphs and exit\n"
-            "      --osc            force OSC emission even outside a yetty terminal\n"
-            "  -r, --raw            force raw passthrough (no rendering)\n"
             "  -h, --help           show this help\n"
             "\n"
             "  Use '-' or no args to read from stdin.\n",
@@ -143,7 +131,6 @@ static int read_all_stdin(char **out, size_t *out_len)
 
 enum {
     OPT_FONT_SIZE = 1000,
-    OPT_OSC,
 };
 
 int main(int argc, char **argv)
@@ -155,14 +142,12 @@ int main(int argc, char **argv)
         {"height", required_argument, NULL, 'H'},
         {"font-size", required_argument, NULL, OPT_FONT_SIZE},
         {"list", no_argument, NULL, 'l'},
-        {"osc", no_argument, NULL, OPT_OSC},
-        {"raw", no_argument, NULL, 'r'},
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0},
     };
 
     int c;
-    while ((c = yetty_yplatform_getopt_long(argc, argv, "w:H:nlrh", long_opts, NULL)) != -1) {
+    while ((c = yetty_yplatform_getopt_long(argc, argv, "w:H:nlh", long_opts, NULL)) != -1) {
         switch (c) {
         case 'w':
             opts.width_cells = atoi(yetty_yplatform_optarg);
@@ -178,12 +163,6 @@ int main(int argc, char **argv)
             break;
         case 'l':
             opts.list_glyphs = true;
-            break;
-        case OPT_OSC:
-            opts.force_osc = true;
-            break;
-        case 'r':
-            opts.force_raw = true;
             break;
         case 'h':
             usage(stdout, argv[0]);
@@ -232,45 +211,35 @@ int main(int argc, char **argv)
     }
 
     int rc = 0;
-    const bool emit_osc = opts.force_osc || (in_yetty_terminal() && !opts.force_raw);
-
-    if (emit_osc) {
-        if (opts.width_cells == 0) {
-            opts.width_cells = terminal_columns();
+    if (opts.width_cells == 0) {
+        opts.width_cells = terminal_columns();
+    }
+    struct yetty_yecho_render_config cfg = {
+        .cell_width = 8,
+        .cell_height = 16,
+        .width_cells = (uint32_t)opts.width_cells,
+        .font_size = opts.font_size,
+        .default_fg = 0,
+        .line_spacing = 0,
+    };
+    struct yetty_ydraw_drawable_list_result r = yetty_yecho_render_string(input, input_len, &cfg);
+    if (YETTY_IS_ERR(r)) {
+        fprintf(stderr, "yecho: render failed: %s\n", r.error.msg);
+        for (const struct yetty_ycore_error *e = r.error.cause; e; e = e->cause) {
+            fprintf(stderr, "  caused by: %s\n", e->msg);
         }
-        struct yetty_yecho_render_config cfg = {
-            .cell_width = 8,
-            .cell_height = 16,
-            .width_cells = (uint32_t)opts.width_cells,
-            .font_size = opts.font_size,
-            .default_fg = 0,
-            .line_spacing = 0,
-        };
-        struct yetty_ydraw_drawable_list_result r =
-            yetty_yecho_render_string(input, input_len, &cfg);
-        if (YETTY_IS_ERR(r)) {
-            fprintf(stderr, "yecho: render failed: %s\n", r.error.msg);
-            for (const struct yetty_ycore_error *e = r.error.cause; e; e = e->cause) {
+        yetty_ycore_error_destroy(r.error);
+        rc = 1;
+    } else {
+        struct yetty_ycore_size_result wr = yetty_yecho_dcs_bin_emit(r.value, stdout);
+        yetty_ydraw_drawable_list_destroy(r.value);
+        if (YETTY_IS_ERR(wr)) {
+            fprintf(stderr, "yecho: DCS emit failed: %s\n", wr.error.msg);
+            for (const struct yetty_ycore_error *e = wr.error.cause; e; e = e->cause) {
                 fprintf(stderr, "  caused by: %s\n", e->msg);
             }
-            yetty_ycore_error_destroy(r.error);
+            yetty_ycore_error_destroy(wr.error);
             rc = 1;
-        } else {
-            struct yetty_ycore_size_result wr = yetty_yecho_osc_bin_emit(r.value, stdout);
-            yetty_ydraw_drawable_list_destroy(r.value);
-            if (YETTY_IS_ERR(wr)) {
-                fprintf(stderr, "yecho: OSC emit failed: %s\n", wr.error.msg);
-                for (const struct yetty_ycore_error *e = wr.error.cause; e; e = e->cause) {
-                    fprintf(stderr, "  caused by: %s\n", e->msg);
-                }
-                yetty_ycore_error_destroy(wr.error);
-                rc = 1;
-            }
-        }
-    } else {
-        /* Raw passthrough. */
-        if (input_len > 0) {
-            fwrite(input, 1, input_len, stdout);
         }
     }
 

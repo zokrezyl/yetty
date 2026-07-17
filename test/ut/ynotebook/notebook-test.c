@@ -52,8 +52,9 @@ static const char *INPUT =
 static int emitted_has(const char *text, const char *key, const char *value)
 {
     yyjson_doc *doc = yyjson_read(text, strlen(text), 0);
-    if (!doc)
+    if (!doc) {
         return 0;
+    }
     yyjson_val *field = yyjson_obj_get(yyjson_doc_get_root(doc), key);
     int ok = field && yyjson_is_str(field) && strcmp(yyjson_get_str(field), value) == 0;
     yyjson_doc_free(doc);
@@ -68,8 +69,9 @@ int main(void)
     struct yetty_yclass_ctx ctx = {0};
     struct yetty_yclass_object_ptr_result nb_r = yetty_ynotebook_notebook_create(&ctx);
     CHECK(YETTY_IS_OK(nb_r), "notebook create");
-    if (YETTY_IS_ERR(nb_r))
+    if (YETTY_IS_ERR(nb_r)) {
         return 1;
+    }
     struct yetty_yclass_object *notebook = nb_r.value;
 
     struct yetty_ycore_void_result load_r = yetty_ynotebook_notebook_load_text(notebook, INPUT);
@@ -91,8 +93,9 @@ int main(void)
     CHECK(YETTY_IS_OK(c0type) && strcmp(c0type.value, "markdown") == 0, "cell 0 is markdown");
     struct yetty_ycore_char_ptr_result c0src = yetty_ynotebook_cell_source(cell0);
     CHECK(YETTY_IS_OK(c0src) && strcmp(c0src.value, "# Title\nbody") == 0, "cell 0 source joined");
-    if (YETTY_IS_OK(c0src))
+    if (YETTY_IS_OK(c0src)) {
         free(c0src.value);
+    }
 
     /* ---- cell 1: code with outputs ---- */
     struct yetty_yclass_object_ptr_result cell1_r = yetty_ynotebook_notebook_cell_at(notebook, 1);
@@ -111,8 +114,9 @@ int main(void)
     CHECK(YETTY_IS_OK(o0name) && strcmp(o0name.value, "stdout") == 0, "output 0 stream stdout");
     struct yetty_ycore_char_ptr_result o0text = yetty_ynotebook_output_text(out0);
     CHECK(YETTY_IS_OK(o0text) && strcmp(o0text.value, "hi\n") == 0, "output 0 stream text");
-    if (YETTY_IS_OK(o0text))
+    if (YETTY_IS_OK(o0text)) {
         free(o0text.value);
+    }
 
     /* output 1: execute_result with a mime bundle */
     struct yetty_yclass_object_ptr_result out1_r = yetty_ynotebook_cell_output_at(cell1, 1);
@@ -163,8 +167,9 @@ int main(void)
     struct yetty_ycore_char_ptr_result c0src2 = yetty_ynotebook_cell_source(cell0);
     CHECK(YETTY_IS_OK(c0src2) && strcmp(c0src2.value, "changed source") == 0,
           "cell source updated");
-    if (YETTY_IS_OK(c0src2))
+    if (YETTY_IS_OK(c0src2)) {
         free(c0src2.value);
+    }
 
     /* ---- save_file / load_file round-trip ---- */
     const char *path = "ynotebook-save-roundtrip.ipynb";
@@ -176,8 +181,7 @@ int main(void)
         struct yetty_ycore_void_result load2_r =
             yetty_ynotebook_notebook_load_file(notebook2, path);
         CHECK(YETTY_IS_OK(load2_r), "notebook load_file");
-        struct yetty_ycore_size_result cells2_r =
-            yetty_ynotebook_notebook_cell_count(notebook2);
+        struct yetty_ycore_size_result cells2_r = yetty_ynotebook_notebook_cell_count(notebook2);
         CHECK(YETTY_IS_OK(cells2_r) && cells2_r.value == 2, "reloaded notebook has two cells");
         yetty_ynotebook_notebook_destroy(notebook2);
         remove(path);
