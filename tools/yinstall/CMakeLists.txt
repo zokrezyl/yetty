@@ -373,3 +373,25 @@ if(_yinstall_exes)
 else()
     message(WARNING "yinstall: no embeddable executables found in this configuration")
 endif()
+
+# ---------------------------------------------------------------------
+# macOS x86_64 linker workaround.
+#
+# yinstall carries the whole product — every executable (brotli-compressed)
+# plus all data/qemu/rootfs/greeter/demo assets — as an embedded incbin
+# payload, making this the single largest link in the build. Apple's new
+# linker (ld-prime) segfaults on this link on the x86_64 target specifically
+# (Apple clang 17 / Xcode 16.4 on the Intel runner); the arm64 build links the
+# identical payload without issue, so this is an ld-prime x86_64 defect, not a
+# size limit. Fall back to the classic Apple linker for this one target on
+# x86_64, where the same payload links cleanly. Probe for the flag first so a
+# future toolchain that drops -ld_classic degrades to the default linker rather
+# than hard-erroring on an unknown option.
+if(APPLE AND (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"
+              OR CMAKE_OSX_ARCHITECTURES MATCHES "x86_64"))
+    include(CheckLinkerFlag)
+    check_linker_flag(C "-Wl,-ld_classic" YETTY_YINSTALL_HAS_LD_CLASSIC)
+    if(YETTY_YINSTALL_HAS_LD_CLASSIC)
+        target_link_options(yinstall PRIVATE "-Wl,-ld_classic")
+    endif()
+endif()
