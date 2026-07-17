@@ -961,8 +961,11 @@ static const char *claude_permission_cli_mode(const char *mode)
     if (mode && strcmp(mode, "bypass") == 0) {
         return "bypassPermissions";
     }
-    if (mode && strcmp(mode, "default") == 0) {
-        return "manual";
+    /* The CLI's interactive ask-mode is named "default"; yai's UI name for
+     * it is "manual". Older persisted configs may already store "default".
+     * Map both to the CLI's current spelling. */
+    if (mode && (strcmp(mode, "manual") == 0 || strcmp(mode, "default") == 0)) {
+        return "default";
     }
     return mode;
 }
