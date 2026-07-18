@@ -65,6 +65,14 @@ struct yetty_ydraw_composite_factory;
  *                  the v1 behaviour. */
 struct yetty_ygrid_factory_args {
     struct yetty_yfont_font *default_font;
+    /* Optional styled faces registered at font slots 1/2/3 (bold, italic,
+     * bold-italic) so producers that emit those font_ids get real styled
+     * glyphs. NULL leaves the slot unregistered (glyphs referencing it are
+     * dropped, so producers must only emit a styled font_id when its face is
+     * present). default_font is slot 0. */
+    struct yetty_yfont_font *bold_font;
+    struct yetty_yfont_font *italic_font;
+    struct yetty_yfont_font *bold_italic_font;
     struct yetty_ydraw_composite_factory *composite_factory;
     /* Coordinate mode for producer-kind figures (yplot/yimage/yvideo …)
      * minted via register_factory_for_kind. 0 (default) = local: content

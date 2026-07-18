@@ -460,6 +460,63 @@ methods:
     local: false
     oneway: false
     return_payload_type: null
+  - slot: ydoc_set_line_spacing
+    domain: yrich
+    owning_class: ydoc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: spacing
+        type: float
+    doc: "/* Line-spacing multiplier for the active paragraph (document-wide under
+ * select-all): 1.0 single, 1.5, 2.0 double. Recomputes line_height and is
+ * fully undoable. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: ydoc_adjust_indent
+    domain: yrich
+    owning_class: ydoc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: direction
+        type: int32_t
+    doc: "/* Shift the active paragraph's left indent by one step (positive = increase,
+ * negative = decrease; clamped at 0). Document-wide under select-all; undoable. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: ydoc_set_highlight
+    domain: yrich
+    owning_class: ydoc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bg_color
+        type: uint32_t
+    doc: "/* Highlight (background) color for the selection — 0 clears it. Applies to the
+ * selected range, else the whole active paragraph; document-wide under
+ * select-all. Fully undoable via the format snapshot. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: ydoc_clear_format
+    domain: yrich
+    owning_class: ydoc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Clear character formatting (bold/italic/underline/strike, text color, and
+ * highlight) from the selection — the whole active paragraph if the caret is
+ * collapsed, document-wide under select-all. Fully undoable. */"
+    local: false
+    oneway: false
+    return_payload_type: null
   - slot: ydoc_set_heading
     domain: yrich
     owning_class: ydoc
@@ -483,6 +540,20 @@ methods:
       - name: delta
         type: float
     doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: ydoc_set_font_size
+    domain: yrich
+    owning_class: ydoc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: size
+        type: float
+    doc: "/* Set an absolute font size on the selection (per-run), the whole active
+ * paragraph if collapsed, or document-wide under select-all. Undoable. */"
     local: false
     oneway: false
     return_payload_type: null
@@ -512,6 +583,14 @@ classes:
         set: false
       - name: editor_view
         type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: keymap
+        type: struct yetty_yrich_keymap
+        get: false
+        set: false
+      - name: mode
+        type: enum yetty_yrich_edit_mode
         get: false
         set: false
       - name: ctx
@@ -547,6 +626,18 @@ classes:
         get: false
         set: false
       - name: font
+        type: "struct yetty_yfont_font *"
+        get: false
+        set: false
+      - name: font_bold
+        type: "struct yetty_yfont_font *"
+        get: false
+        set: false
+      - name: font_italic
+        type: "struct yetty_yfont_font *"
+        get: false
+        set: false
+      - name: font_bold_italic
         type: "struct yetty_yfont_font *"
         get: false
         set: false
@@ -1166,11 +1257,87 @@ classes:
         type: float
         get: false
         set: false
+      - name: line_spacing
+        type: float
+        get: false
+        set: false
+      - name: indent
+        type: float
+        get: false
+        set: false
+      - name: space_before
+        type: float
+        get: false
+        set: false
+      - name: space_after
+        type: float
+        get: false
+        set: false
+      - name: heading_level
+        type: uint32_t
+        get: false
+        set: false
       - name: halign
         type: uint32_t
         get: false
         set: false
+      - name: list_kind
+        type: uint32_t
+        get: false
+        set: false
+      - name: list_ordinal
+        type: int
+        get: false
+        set: false
+      - name: list_checked
+        type: int
+        get: false
+        set: false
+      - name: list_level
+        type: uint32_t
+        get: false
+        set: false
+      - name: block_kind
+        type: uint32_t
+        get: false
+        set: false
+      - name: table_rows
+        type: uint32_t
+        get: false
+        set: false
+      - name: table_cols
+        type: uint32_t
+        get: false
+        set: false
+      - name: table_cells
+        type: "char **"
+        get: false
+        set: false
+      - name: table_active_cell
+        type: int32_t
+        get: false
+        set: false
+      - name: bookmark
+        type: "char *"
+        get: false
+        set: false
+      - name: metrics_font
+        type: "const struct yetty_yfont_font *"
+        get: false
+        set: false
+      - name: show_nonprinting
+        type: int
+        get: false
+        set: false
+      - name: styled_font_mask
+        type: uint32_t
+        get: false
+        set: false
       - name: editing
+        type: int
+        get: false
+        set: false
+      - name: selected
         type: int
         get: false
         set: false
@@ -1310,6 +1477,82 @@ classes:
         type: "char *"
         get: false
         set: false
+      - name: links
+        type: "struct ydoc_link_entry *"
+        get: false
+        set: false
+      - name: link_count
+        type: size_t
+        get: false
+        set: false
+      - name: link_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: next_link_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: metrics_font
+        type: "const struct yetty_yfont_font *"
+        get: false
+        set: false
+      - name: select_all
+        type: int
+        get: false
+        set: false
+      - name: show_nonprinting
+        type: int
+        get: false
+        set: false
+      - name: styled_font_mask
+        type: uint32_t
+        get: false
+        set: false
+      - name: paint_style
+        type: struct yetty_yrich_text_style
+        get: false
+        set: false
+      - name: paint_has
+        type: int
+        get: false
+        set: false
+      - name: sel_span_active
+        type: int
+        get: false
+        set: false
+      - name: sel_span_lo
+        type: size_t
+        get: false
+        set: false
+      - name: sel_span_hi
+        type: size_t
+        get: false
+        set: false
+      - name: sel_span_lo_off
+        type: int32_t
+        get: false
+        set: false
+      - name: sel_span_hi_off
+        type: int32_t
+        get: false
+        set: false
+      - name: sel_word_drag
+        type: int
+        get: false
+        set: false
+      - name: sel_word_anchor_index
+        type: size_t
+        get: false
+        set: false
+      - name: sel_word_anchor_lo
+        type: int32_t
+        get: false
+        set: false
+      - name: sel_word_anchor_hi
+        type: int32_t
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: yrich
@@ -1353,12 +1596,27 @@ classes:
       - slot: ydoc_set_alignment
         slot_domain: yrich
         impl: ydoc_set_alignment_impl
+      - slot: ydoc_set_line_spacing
+        slot_domain: yrich
+        impl: ydoc_set_line_spacing_impl
+      - slot: ydoc_adjust_indent
+        slot_domain: yrich
+        impl: ydoc_adjust_indent_impl
+      - slot: ydoc_set_highlight
+        slot_domain: yrich
+        impl: ydoc_set_highlight_impl
+      - slot: ydoc_clear_format
+        slot_domain: yrich
+        impl: ydoc_clear_format_impl
       - slot: ydoc_set_heading
         slot_domain: yrich
         impl: ydoc_set_heading_impl
       - slot: ydoc_change_font_size
         slot_domain: yrich
         impl: ydoc_change_font_size_impl
+      - slot: ydoc_set_font_size
+        slot_domain: yrich
+        impl: ydoc_set_font_size_impl
     doc: null
 exposed:
   - source_file: src/yetty/yrich/document.c
@@ -1908,13 +2166,305 @@ exposed:
         type: float
     doc: null
   - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_set_styled_font_mask
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: mask
+        type: uint32_t
+    doc: "/* Declare which styled faces the render ygrid has registered, as a bitmask
+ * (bit 0 = bold at font slot 1, bit 1 = italic at slot 2, bit 2 = bold-italic at
+ * slot 3). The host calls this after wiring the styled fonts so ydoc renders
+ * bold/italic runs with the real face instead of the synthetic-bold fallback. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_toggle_nonprinting
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Toggle the space-middot / paragraph-pilcrow marks (a view preference, not
+ * document content). Exposed; wired to Format > Show nonprinting characters. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_insert_horizontal_rule
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Insert a horizontal-rule divider at the caret. Exposed; Insert > Horizontal
+ * rule dispatches here. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_insert_page_break
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Insert a page-break marker at the caret. Exposed; Insert > Page break
+ * dispatches here. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_insert_table
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+    doc: "/* Insert a rows x cols table after the caret, leaving the caret on a fresh
+ * text line below it. Cells start empty; click a cell to edit it. Structural,
+ * direct (not undoable). Exposed; Insert > Table dispatches here. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_insert_toc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Insert a table of contents at the caret: a \"Contents\" heading followed by
+ * one indented entry per heading in the document (a static snapshot, like a
+ * word processor's non-updating TOC). Structural, direct. Exposed. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_table_edit
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: op
+        type: uint32_t
+    doc: "/* Insert/delete a row or column around the active cell of the active table.
+ * `op` is enum ydoc_table_op. Direct (not undoable). Exposed; the Insert menu
+ * dispatches here. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: ydoc_all_text
+    return_type: "char *"
+    args:
+      - name: ydoc
+        type: "struct yetty_yrich_ydoc *"
+    doc: "/* Selected text as a fresh heap string (caller frees). NULL when the
+ * selection is empty or not a text selection. */"
+  - source_file: src/yetty/yrich/ydoc.c
     name: yetty_yrich_ydoc_selection_text
     return_type: struct yetty_ycore_char_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-    doc: "/* Selected text as a fresh heap string (caller frees). NULL when the
- * selection is empty or not a text selection. */"
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_word_count
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_words
+        type: "uint32_t *"
+      - name: out_chars
+        type: "uint32_t *"
+      - name: out_chars_no_spaces
+        type: "uint32_t *"
+      - name: out_paragraphs
+        type: "uint32_t *"
+    doc: "/* Document statistics: codepoints, codepoints excluding whitespace,
+ * whitespace-delimited words, and text paragraphs (dividers excluded). Any out
+ * pointer may be NULL. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_find_next
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: query
+        type: "const char *"
+    doc: "/* Select the next occurrence of `query` at or after the current selection end,
+ * wrapping once to the top (case-insensitive). Returns 1 if found. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_find_prev
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: query
+        type: "const char *"
+    doc: "/* Select the previous occurrence of `query` before the current selection start,
+ * wrapping once to the bottom (case-insensitive). Returns 1 if found. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_replace_all
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: query
+        type: "const char *"
+      - name: replacement
+        type: "const char *"
+    doc: "/* Replace every occurrence of `query` with `replacement` across all text
+ * paragraphs as ONE undoable command. Returns the number replaced. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_set_space_before
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: px
+        type: float
+    doc: "/* Extra vertical gap above the paragraph, in px (0 removes it). Undoable. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_set_space_after
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: px
+        type: float
+    doc: "/* Extra vertical gap below the paragraph, in px (0 removes it). Undoable. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_change_list_level
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: direction
+        type: int32_t
+    doc: "/* Nest a list item one level deeper (direction > 0) or shallower (<= 0);
+ * no-op on non-list paragraphs. Undoable. Wired to Tab / Shift+Tab. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_copy_format
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Capture the character style at the caret into the paint-format clipboard. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_paint_format
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Apply the paint-format clipboard to the selection (or the whole active
+ * paragraph when the selection is collapsed). Undoable. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_set_link
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: url
+        type: "const char *"
+    doc: "/* Make the current selection (or the word at the caret when collapsed) a
+ * hyperlink to `url`. The URL is interned in the doc link table. Undoable. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_remove_link
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Remove the hyperlink covering the selection, or the whole link span at the
+ * caret when collapsed. No-op when there is no link. Undoable. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_link_at_caret
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* URL of the hyperlink at the caret, or NULL when there is none. The pointer is
+ * owned by the document link table (valid until the link is changed/removed or
+ * the document is destroyed) — callers must not free it. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_link_url
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: link_id
+        type: uint32_t
+    doc: "/* URL for `link_id` in this document's link table (NULL if 0 or unknown).
+ * Serializer side — resolves the id a run carries back to its URL. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_apply_run_link
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: paragraph_obj
+        type: "struct yetty_yclass_object *"
+      - name: start
+        type: int32_t
+      - name: end
+        type: int32_t
+      - name: url
+        type: "const char *"
+    doc: "/* Loader helper: intern `url` and stamp it as the hyperlink over [start, end) of
+ * `paragraph_obj` (which must belong to this document). Not undoable — used only
+ * while rebuilding a document from serialized form. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_set_bookmark
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+    doc: "/* Name (or clear, with NULL/empty) the bookmark on the caret-holding paragraph.
+ * Direct, not undoable — matching the other structural markers. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_set_list
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: kind
+        type: uint32_t
+    doc: "/* Toggle the active paragraph's list kind (1=bullet, 2=numbered, 3=checklist);
+ * re-applying the same kind clears it. Undoable. Exported; dispatched from
+ * the command layer. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_toggle_checked
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Toggle the active checklist paragraph's checkbox. A no-op (no undo entry)
+ * when the active paragraph is not a checklist item. Undoable. Exported;
+ * dispatched from the command layer and the gutter click. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_place_caret
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: paragraph_index
+        type: int32_t
+      - name: position
+        type: int32_t
+    doc: "/* Place the caret (a collapsed text selection) at byte `position` of the
+ * paragraph at `paragraph_index`, clamped to its text. The programmatic
+ * counterpart of a mouse click — used by tests, scripting, and bindings. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_goto_bookmark
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+    doc: "/* Place the caret at the start of the paragraph carrying bookmark `name`.
+ * Returns 1 when a match was found and navigated, 0 when no bookmark matches. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_select_range
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: anchor_paragraph
+        type: int32_t
+      - name: anchor_offset
+        type: int32_t
+      - name: focus_paragraph
+        type: int32_t
+      - name: focus_offset
+        type: int32_t
+    doc: "/* Select from (anchor_paragraph, anchor_offset) to (focus_paragraph,
+ * focus_offset) — the programmatic counterpart of a cross-paragraph drag.
+ * Offsets are clamped; equal paragraphs give a single-paragraph selection. */"
   - source_file: src/yetty/yrich/ydoc.c
     name: yetty_yrich_ydoc_clear
     return_type: struct yetty_ycore_void_result
@@ -1982,6 +2532,55 @@ exposed:
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_line_spacing
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_line_spacing
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: spacing
+        type: float
+    doc: "/* Loader-side setter: set the multiplier and recompute line_height. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_indent
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_heading_level
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_heading_level
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: level
+        type: uint32_t
+    doc: "/* Loader-side: set the semantic level only. The visual (font size, bold) is
+ * serialized independently and already restored from fontSize/format. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_indent
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: indent
+        type: float
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
     name: yetty_yrich_paragraph_color
     return_type: struct yetty_ycore_uint32_result
     args:
@@ -2012,6 +2611,150 @@ exposed:
         type: uint32_t
     doc: null
   - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_list_kind
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* List kind (0 none, 1 bullet, 2 numbered, 3 checklist) + the checklist
+ * checkbox state — loader/saver side; editing goes through ydoc_set_list
+ * and ydoc_toggle_checked. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_list_kind
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: list_kind
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_list_checked
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_list_checked
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: checked
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_block_kind
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Block kind (0 text, 1 horizontal-rule divider) — loader/saver side. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_block_kind
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: block_kind
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_table_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_rows
+        type: "uint32_t *"
+      - name: out_cols
+        type: "uint32_t *"
+    doc: "/* Table dimensions/cells — loader/saver side; editing is via the ydoc. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_table
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+    doc: "/* Allocate the cell grid (clears any prior one). block_kind is set to table. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_table_cell
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_table_cell
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_space_before
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Paragraph spacing (px above/below) + list nesting level — loader/saver side. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_space_before
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: px
+        type: float
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_space_after
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_space_after
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: px
+        type: float
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_list_level
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_list_level
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: level
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/yrich/ydoc.c
     name: yetty_yrich_paragraph_run_count
     return_type: struct yetty_ycore_size_result
     args:
@@ -2034,7 +2777,37 @@ exposed:
         type: "uint32_t *"
       - name: out_color
         type: "uint32_t *"
+      - name: out_bg_color
+        type: "uint32_t *"
+      - name: out_font_size
+        type: "float *"
     doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_run_link_id
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: size_t
+    doc: "/* Hyperlink id of run `index` (0 = no link); resolves to a URL via the owning
+ * ydoc's link table. Serializer side. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_bookmark
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+    doc: "/* Name the bookmark anchored at this paragraph (NULL/empty clears it). */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_bookmark
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Bookmark name anchoring this paragraph, or NULL when none. */"
   - source_file: src/yetty/yrich/ydoc.c
     name: yetty_yrich_paragraph_add_run
     return_type: struct yetty_ycore_void_result
@@ -2049,6 +2822,10 @@ exposed:
         type: uint32_t
       - name: color
         type: uint32_t
+      - name: bg_color
+        type: uint32_t
+      - name: font_size
+        type: float
     doc: "/* Append one styled run — loader-side; ranges must arrive sorted and
  * non-overlapping (the writer emits them that way). */"
 types:
@@ -2184,6 +2961,12 @@ types:
     fields:
       - name: default_font
         type: "struct yetty_yfont_font *"
+      - name: bold_font
+        type: "struct yetty_yfont_font *"
+      - name: italic_font
+        type: "struct yetty_yfont_font *"
+      - name: bold_italic_font
+        type: "struct yetty_yfont_font *"
       - name: composite_factory
         type: "struct yetty_ydraw_composite_factory *"
       - name: absolute_coords
@@ -2244,6 +3027,17 @@ types:
             type: "struct yetty_ydraw_drawable_list *"
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_yrich_edit_mode
+    kind: enum
+    values:
+      - name: YETTY_YRICH_MODE_DEFAULT
+        value: 0
+      - name: YETTY_YRICH_MODE_VI_NORMAL
+        value: 1
+      - name: YETTY_YRICH_MODE_VI_INSERT
+        value: 2
+      - name: YETTY_YRICH_MODE_COUNT
+        value: 3
   - name: yetty_yrich_element_id_result
     kind: result
     fields:
@@ -2272,6 +3066,15 @@ types:
       - name: redo_capacity
         type: size_t
       - name: max_size
+        type: size_t
+  - name: yetty_yrich_keymap
+    kind: struct
+    fields:
+      - name: bindings
+        type: "struct yetty_yrich_keybinding *"
+      - name: count
+        type: size_t
+      - name: capacity
         type: size_t
   - name: yetty_yrich_op_log
     kind: struct
@@ -2356,6 +3159,8 @@ types:
         type: yetty_yrich_element_id
       - name: start
         type: int32_t
+      - name: focus_element_id
+        type: yetty_yrich_element_id
       - name: end
         type: int32_t
   - name: yetty_yrich_slide_ptr_result
@@ -2407,14 +3212,26 @@ local_types:
   yetty_yrich_inline_image_ptr_result: src/yetty/yrich/ydoc.c
   yetty_yrich_paragraph: src/yetty/yrich/ydoc.c
   paragraph_line: src/yetty/yrich/ydoc.c
+  ydoc_list_kind: src/yetty/yrich/ydoc.c
+  ydoc_block_kind: src/yetty/yrich/ydoc.c
+  ydoc_font_slot: src/yetty/yrich/ydoc.c
+  ydoc_styled_font_bit: src/yetty/yrich/ydoc.c
   caret_place: src/yetty/yrich/ydoc.c
   caret_target: src/yetty/yrich/ydoc.c
   line_lookup: src/yetty/yrich/ydoc.c
+  line_metrics: src/yetty/yrich/ydoc.c
   char_attrs: src/yetty/yrich/ydoc.c
   paragraph_render_pass: src/yetty/yrich/ydoc.c
   yetty_yrich_inline_image: src/yetty/yrich/ydoc.c
   yetty_yrich_ydoc: src/yetty/yrich/ydoc.c
+  ydoc_link_entry: src/yetty/yrich/ydoc.c
   ydoc_active_paragraph: src/yetty/yrich/ydoc.c
+  toc_entry: src/yetty/yrich/ydoc.c
+  ydoc_table_op: src/yetty/yrich/ydoc.c
+  ydoc_format_snapshot: src/yetty/yrich/ydoc.c
+  ydoc_format_entry: src/yetty/yrich/ydoc.c
+  ydoc_format_command: src/yetty/yrich/ydoc.c
+  ydoc_fmt_kind: src/yetty/yrich/ydoc.c
 local_typedefs:
   __int128_t:
     source_file: src/yetty/yrich/app.c

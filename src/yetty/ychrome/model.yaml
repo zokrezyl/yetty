@@ -232,6 +232,16 @@ exposed:
     doc: "/* Current window-control button under the pointer (1=minimize, 2=maximize,
  * 3=close; 0=none). Hosts poll this after forwarding an event and re-paint the
  * caption when it changes, so the hover highlight tracks the pointer. */"
+  - source_file: src/yetty/ychrome/chrome.c
+    name: yetty_ychrome_in_gesture
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* 1 while a caption-drag or edge-resize gesture is live. Hosts that route
+ * pointer events UI-first (per the header contract above) still hand chrome
+ * the whole stream while this is set, so a live gesture cannot be stolen by
+ * widgets the pointer happens to cross. */"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

@@ -157,6 +157,325 @@ An editing feature is complete only when:
 
 ---
 
+## 8b. Implementation progress log
+
+Landed increments (each meets the §8 Definition of Done unless noted):
+
+- **Command/input plumbing (Phase 0 substrate):** semantic command registry +
+  remappable modal keymap (default / vi-normal / vi-insert); the toolbar,
+  menubar, and key chords all dispatch the same commands. Fixed the ygui
+  `clickable` mixin so `widget_subscribe(CLICK)` fires (the entire toolbar was
+  previously dead). Menus are mutually exclusive and dismiss on click-outside.
+- **Document-wide select-all** + whole-document formatting as one undoable step.
+- **Highlight (per-run background color)** — Phase 1. Model (`char_attrs.bg_color`
+  threaded through run compress/decompress + snapshots), render wash, Format-menu
+  entries (yellow/green/pink/none), atomic + undoable, YAML `bg` round-trip,
+  focused test.
+- **Clear formatting** — Phase 1. Strips format flags + text color + highlight
+  over the selection / whole paragraph / document; atomic, undoable, tested.
+- **Superscript / subscript** — Phase 1. Render at a raised/lowered baseline +
+  smaller glyphs; format flags already existed so undo + serialization are free.
+- **Line spacing** — Phase 1. Per-paragraph multiplier (Single / 1.5 / Double),
+  single `YDOC_DEFAULT_LINE_SPACING` constant (killed the scattered `1.4f`
+  magic), undoable, `lineSpacing` YAML round-trip, tested.
+- **Indent (Increase / Decrease)** — Phase 1. Per-paragraph left indent
+  (`YDOC_INDENT_STEP`), re-wraps content, undoable, `indent` YAML round-trip.
+- **Semantic heading level** — Phase 1. `heading_level` field (0..6) stored on
+  the paragraph (was faked as size+bold only), undoable, `heading` YAML round-
+  trip; enables a real outline/TOC later.
+- **Per-run font size** — Phase 0 foundation #2. `char_attrs.font_size` threaded
+  through the run compress/decompress; `paragraph_measure` sums per-font-size
+  slices so wrap/caret/hit-test/render all agree; line height fits the tallest
+  run; A+/A- resize the selected run(s) (mixed sizes in one paragraph);
+  undoable; `fs` per-run YAML round-trip. (This is the "real measured text"
+  substrate — advances are now per-run, not one paragraph-uniform size.)
+- **Font-size presets** — Phase 1. `ydoc_set_font_size` (absolute) + Format-menu
+  Size 12/16/20/28, applied per-run to the selection; complements A+/A-.
+- **Lists (bullet / numbered)** — Phase 1. Per-paragraph `list_kind` +
+  relayout-computed ordinal, gutter markers, `ydoc_set_list` (re-apply clears),
+  undoable, Format-menu entries, `list` YAML round-trip (the YAML coverage
+  landed after the initial increment — the cross-phase persistence rule was
+  briefly violated and is now closed), tested.
+- **Justify alignment** — Phase 1. `YETTY_YRICH_HALIGN_JUSTIFY`; soft-wrapped
+  lines distribute slack across their spaces via per-line `line_metrics`
+  (`x_offset` + `space_extra`), and render, selection wash, caret placement,
+  and hit-testing all derive x positions from one shared prefix-width helper
+  so they agree (§8 DoD 4). Lines ended by '\n' and the final line keep their
+  natural width. Command `para.align_justify`, Ctrl+Shift+J (plus
+  Ctrl+Shift+L/E/R for the other alignments), Format-menu entry, YAML `align`
+  round-trip (numeric enum), undoable, tested.
+- **Standalone menu clicks un-eaten by window chrome** (bug fix). The ychrome
+  caption strip (34px) overlaps the menubar row, and the standalone event loop
+  fed chrome BEFORE ygui, so no menu could open in standalone mode (terminal
+  mode was unaffected). Rerouted per the ychrome contract: UI first, chrome
+  fallback; chrome keeps the stream for motion and while a caption-drag /
+  edge-resize gesture is live (`yetty_ychrome_host_in_gesture`).
+- **Checklist** — Phase 1. `list_kind` 3 + per-paragraph `list_checked`;
+  SDF-drawn checkbox in the gutter (outlined box, tick when checked — no glyph
+  coverage needed); checked items render struck through; `ydoc_toggle_checked`
+  (undoable; no-op with no history entry on non-checklist paragraphs);
+  clearing the list kind resets the checked state; gutter click toggles the
+  checkbox; commands `para.list_checklist` / `para.check_toggle`, Format-menu
+  entries, `list`/`checked` YAML round-trip, tested.
+
+- **Cross-paragraph text selection** — Phase 0 foundation #5 (user-visible
+  core). `selection_text` gained a `focus_element_id` (anchor and focus may
+  sit in different paragraphs); the ydoc projects the span onto per-paragraph
+  washes during relayout (same mechanism as select-all). Drag and shift-click
+  extend across paragraphs; copy concatenates the covered slices
+  newline-separated; Backspace/Delete/Enter/typing replace the span (covered
+  text removed, boundary paragraphs merged, caret at the collapse point);
+  every character/paragraph formatting action applies to the covered ranges
+  of all spanned paragraphs as ONE undoable command. Programmatic API:
+  `ydoc_select_range(anchor_para, anchor_off, focus_para, focus_off)` +
+  `ydoc_place_caret`. Known gaps, deliberately deferred: span deletion is not
+  undoable (structural remove/merge still has no inverse op — same as
+  split/merge), shift+arrow keys extend within the focus paragraph only (they
+  do not yet grow the span), and merged paragraphs keep only the surviving
+  paragraph's run formatting.
+
+- **Double-click word select + word-granularity drag** — Phase 4 editing
+  polish, pulled forward. Double-click selects the whole token under the
+  pointer (`paragraph_word_extent`: the word, or the punctuation/whitespace
+  run) and *arms* a word-drag: while held, dragging keeps the anchor word
+  wholly covered and snaps the focus end to whole-word boundaries — forward,
+  backward past the anchor, and across paragraphs — exactly like every desktop
+  editor. A fresh single click disarms it (back to character granularity).
+  Wired the platform's double-click event through the app (UI-first, chrome
+  fallback) and a new `yrich_view` `feed_double_click` (it was previously
+  unwired — the doc-layer handler existed but nothing called it). Tested
+  (word select, forward/backward/cross-paragraph word extension, disarm) and
+  verified live.
+
+- **Insert menu — Horizontal rule + Special characters** — Phase 2 (insert
+  objects), first increment. New **Insert** menubar menu. **Horizontal rule**
+  is a canonical block: `paragraph.block_kind` (0 text / 1 divider), rendered
+  as a full-width SDF line, fixed-height box, never a caret target (mouse-down
+  redirects to the nearest text line; typing on one is ignored). Insert splits
+  the line at the caret ([head][rule][tail], caret to the tail); Backspace at a
+  line start / Delete at a line end removes an adjacent rule outright.
+  `block` YAML round-trip; snapshot-preserved. Structural insert/delete is
+  direct (not undoable — matches split/merge until the invertible-op
+  foundation). **Special characters** (em-dash, arrow, bullet, check,
+  copyright, degree, euro, multiply, ellipsis) insert at the caret through the
+  normal undoable text-input path. Command `insert.horizontal_rule`; tested
+  (insert/delete + `block` round-trip) and verified live (menu, rule render,
+  glyph insertion). Still deferred in Phase 2: real image decode/atlas/render
+  (placeholder only), tables, equations, bookmarks.
+
+- **Paragraph spacing (space before/after)** — Phase 1. Per-paragraph
+  `space_before`/`space_after` px gaps added around the box in relayout;
+  snapshot-undoable; `spaceBefore`/`spaceAfter` YAML round-trip; Format-menu
+  "Add space before/after paragraph" + "Remove"; tested (set + undo).
+- **List nesting (multilevel)** — Phase 1. Per-paragraph `list_level` (0..7);
+  **Tab / Shift+Tab** on a list item nests deeper/shallower (undoable), Tab
+  elsewhere still inserts spaces. Layout indents by `LIST_INDENT*(level+1)`;
+  bullet glyph cycles •→◦→▪ by depth; numbered ordinals use a per-level counter
+  stack so sub-lists restart at 1 while the parent level keeps counting
+  (verified: 1.First / 1.Sub A / 2.Sub B / 2.Second). `listLevel` YAML
+  round-trip; tested (nest in/out + undo + non-list no-op) and verified live.
+
+- **Word count / document statistics** — Phase 4. `ydoc_word_count` (codepoints,
+  codepoints excluding whitespace, whitespace-delimited words, text paragraphs;
+  dividers excluded), shown live on the status-bar right side, refreshed on every
+  edit (gated on the doc's exact ydoc class, since `editor_refresh` passes an
+  empty kind string). The status line reads "N words  M chars (K no spaces)
+  P paras" — matching the Google Docs word-count dialog's "characters excluding
+  spaces". Tested (counts + the no-spaces figure is positive and ≤ total).
+- **Find & replace** — Phase 4. Engine: `ydoc_find_next(query)` selects the next
+  match from the caret, wrapping once; `ydoc_replace_all(query, replacement)`
+  replaces every occurrence across paragraphs as ONE undoable op-command
+  (delete+insert per match, recorded right-to-left so offsets stay valid).
+  "Find next (selection)" wired into the Edit menu (query = current selection,
+  no text-input widget needed) — verified live cycling matches across
+  paragraphs. Tested (count/find/replace-all + single undo). Still open: a
+  find/replace BAR with text-input fields for arbitrary queries + replace UI
+  (the `textinput` widget exists; needs focus/key routing).
+
+- **Import/export: plain text + Markdown** — Phase 5 (compatibility layers).
+  New `yrich-export.c`/`.h` (plain C over the public API, no model internals).
+  **Export**: text (one paragraph per line) and Markdown (`#`..`######`
+  headings, `- `/`1. ` lists indented by nesting level, `- [ ]`/`- [x]`
+  checklists, `---` rules, inline `**bold**` / `_italic_` / `~~strike~~` from
+  style runs) via File-menu "Export as Markdown / text" (writes next to the
+  source path). **Import**: text and Markdown into a fresh ydoc; the `ydoc`
+  tool picks the reader by extension (`.md`/`.markdown`/`.txt` vs native
+  YAML). Tested (export→import round-trip preserving heading level, nested
+  list kind/level, checklist checked, rule block, and a bold run) and verified
+  live — a hand-written `.md` opened with a heading, 3-level nested bullets, a
+  numbered list, checklists with checked state, a rule, and bold text. Still
+  deferred in Phase 5: PDF (via pdfio+ydraw), ODT/RTF, and .docx; import UI to
+  replace the live document in-editor (currently open-by-arg only).
+
+- **Import/export: HTML** — Phase 5 (compatibility layer). Same `yrich-export.c`
+  path. **Export** (`yetty_yrich_ydoc_export_html_file`): a
+  `<!DOCTYPE html><body>` wrapper, `<h1>`..`<h6>` for headings, `<p>` for body,
+  `<hr>` for rules, inline `<b>`/`<i>`/`<s>` driven by style-run transitions,
+  with `&amp;`/`&lt;`/`&gt;` escaping. File-menu "Export as HTML" writes next to
+  the source path. **Import** (`yetty_yrich_ydoc_import_html_file`): a small tag
+  scanner that pairs each block tag with its *matching* close (`</p>`/`</hN>`,
+  skipping inline `</b>` etc.), decodes `&lt;`/`&gt;`/`&amp;`/`&quot;`, and turns
+  `<b>`/`<strong>`, `<i>`/`<em>`, `<s>`/`<strike>`/`<del>` into runs; the `ydoc`
+  tool opens `.html`/`.htm` by extension. Tested (round-trip preserving H3, a
+  `<hr>` block, a bold run, and a `<`-in-text entity). Not a full HTML parser —
+  the subset export emits.
+
+- **Import/export: RTF** — Phase 5 (compatibility layer; the RTF slice of the
+  ODT/RTF/DOCX item). Same `yrich-export.c` path, no model changes. **Export**
+  (`yetty_yrich_ydoc_export_rtf_file`): `{\rtf1\ansi}` with a font table and a
+  stylesheet (`\s1`..`\s6` heading styles), `\pard\sN\fsN` per paragraph
+  (heading level carried by the style ref, visual size by `\fs`), a
+  `\pard\brdrb\brdrs` bottom-border paragraph for horizontal rules, inline
+  `\b`/`\i`/`\strike` from style runs, and `\`/`{`/`}` escaping. File-menu
+  "Export as RTF" writes next to the source path. **Import**
+  (`yetty_yrich_ydoc_import_rtf_file`): a control-word state machine — a group
+  brace stack for format push/pop, whole-group skipping of destination groups
+  (`\fonttbl`/`\colortbl`/`\stylesheet`/`\info`/`\*`/…), `\'xx` hex + `\\`/`\{`/
+  `\}` literal decoding, `\sN`→heading, `\brdrb`→rule, `\par`→paragraph flush.
+  The `ydoc` tool opens `.rtf` by extension. Tested (round-trip preserving H2, a
+  `\brdrb` rule block, a bold run, and a literal-brace `{`-in-text escape). Still
+  deferred in Phase 5: ODT and .docx (zip+XML containers), PDF (pdfio+ydraw).
+
+- **Schema version + migration hook** — Phase 0 framework. The saver now emits a
+  `version: 1` key (`YETTY_YRICH_YDOC_SCHEMA_VERSION`) ahead of `pageWidth`; the
+  loader parses `version`, accepts a missing key as legacy v0, and rejects any
+  document whose version exceeds the current build (with a `migrate_ydoc_document()`
+  seam documented for future upgrades). Tested (saved file carries `version`, a
+  legacy no-version file still loads, a version-999 file is rejected).
+
+- **Nonprinting characters display** — Phase 4. Insert-menu "Show nonprinting
+  chars" toggles `ydoc->show_nonprinting` (a view preference, not persisted);
+  render draws a font-independent SDF dot centred in every space and a small
+  bar at each paragraph end. Verified live. (Font-glyph middots via `add_text`
+  did NOT render — the MSDF face lacks U+00B7/U+00B6 coverage — so the marks
+  are SDF boxes.)
+
+- **Tables** — Phase 2. `block_kind` 2: a rows×cols grid of owned cell strings
+  on the paragraph. Rendered as SDF grid lines + per-cell text with an
+  active-cell wash; height = rows × cell height. **Insert menu** → Table
+  2×2 / 3×3 / 3×2 (inserts after the caret + a trailing text line). Clicking a
+  cell selects it (`table_cell_at_point`); typing appends to the active cell,
+  Backspace deletes a codepoint, Tab advances to the next cell (wrapping).
+  YAML round-trip (`tableRows`/`tableCols`/`cells` sequence) — tested; rendered
+  + cell-select verified live (a 3×3 loaded from YAML). Cell edits are direct
+  (not undoable yet).
+- **Table row/column insert & delete** — Phase 2. Insert-menu "Table: insert
+  row / insert column / delete row / delete column" operate around the active
+  cell (`table_grid_edit` moves cell strings by pointer, rebuilds the grid,
+  clamps the active cell). Tested with cell-content assertions (A|_|B shift on
+  insert-col, A removed on delete-col) — the content check caught an
+  out-of-bounds column-placement write the dimensions-only check had missed;
+  fixed. Verified live (insert column preserves the shifted data). Next table
+  increments: cell merge/split and per-cell formatting.
+- **Table of contents** — Phase 3 (outline/navigation). Insert-menu "Table of
+  contents" collects every heading (text + level) in document order and inserts
+  a bold "Contents" title followed by one entry per heading, indented by level.
+  A static snapshot (like a word processor's non-updating TOC). Tested (entry
+  order + count) and verified live (Introduction/Conclusion flush, Background
+  one indent, History two). Live document-outline pane is the follow-up.
+- **Bookmarks** — Phase 2. A per-paragraph owned `bookmark` name (freed in the
+  paragraph destructor). API: `paragraph_set_bookmark`/`paragraph_bookmark`,
+  the caret-level `ydoc_set_bookmark(name)` (direct, like the other structural
+  markers), and `ydoc_goto_bookmark(name)` which places the caret at the start
+  of the matching paragraph (returns 1 hit / 0 miss). YAML round-trip via a
+  per-paragraph `bookmark:` key. Insert menu → "Bookmark (from selection)"
+  (name = selected text, the no-text-input path); Edit menu → "Go to bookmark
+  (selection)". Tested (save→reload preserves the bookmark; goto hits the right
+  paragraph and misses a bogus name cleanly). Follow-up: link-targets-bookmark
+  (a hyperlink whose destination is a bookmark rather than a URL) and a
+  bookmark-name editor, both gated on the text-input popup.
+- **Semantic headings H1–H6 + Title / Subtitle named styles** — Phase 1.
+  Extended the heading apply to distinct sizes for levels 1–6 (was 1–3), plus
+  Title (level 7, largest) and Subtitle (level 8, muted, not bold). Styles menu
+  gained Heading 4/5/6 and Title/Subtitle; the TOC includes only H1–H6 (Title/
+  Subtitle are not outline entries). Undoable + `heading` YAML round-trip via
+  the existing path.
+- **Page break** — Phase 3 prep. `block_kind` 3: a non-caret-target marker
+  rendered as a dashed line in a taller gap, sharing the divider's mouse-
+  redirect / typing-ignore / Backspace-Delete-adjacent-removal machinery
+  (generalized to `ydoc_block_is_rule_like`). Insert-menu "Page break"; `block`
+  YAML round-trip (no extra code — the block field already serializes). Tested.
+  Real pagination (content actually flowing to a new page) is Phase 3.
+- **Paint format (format painter)** — Phase 4. `ydoc_copy_format` captures the
+  character style (format flags + colour + highlight + size) at the caret into
+  a paint clipboard on the ydoc; `ydoc_paint_format` overwrites the selection's
+  style (or the whole active paragraph when collapsed) via a new
+  `paragraph_apply_style_range`, undoably. Format menu "Copy formatting" /
+  "Paint formatting". Tested (copy bold from one word, paint onto another,
+  undo reverts).
+- **Wider text-colour palette** — Phase 1. Format menu text colours expanded to
+  default/red/orange/green/teal/blue/purple/gray (was 4). (An interactive
+  colour-picker popup is still open — the ygui `colorpicker` widget lacks a
+  change-callback in its header, so it needs event wiring first.)
+- **Auto-linked URLs** — Phase 1 (links, first increment). `paragraph_url_at`
+  detects `http://` / `https://` / `www.` tokens at word boundaries; render
+  overdraws them in brand accent blue with an underline. Verified live
+  (URLs styled, surrounding words and plain text untouched, no mid-word false
+  matches).
+- **Editable hyperlinks** — Phase 1 (links, core increment). A `link_id` now
+  rides the per-character attribute engine (`struct char_attrs` +
+  `struct yetty_yrich_text_run`), so links split/merge/shift across every text
+  edit exactly like formatting — no separate bookkeeping. The ydoc owns a
+  runtime link table (`id → owned URL`, interning dedups); ids are never
+  serialized — YAML denormalizes the URL onto each run (`link:`) and re-interns
+  on load. API (all undoable via the format snapshot): `ydoc_set_link(url)` over
+  the selection or the word at the caret; `ydoc_remove_link()` clears the whole
+  link span at the caret (or the selection); `ydoc_link_at_caret()` resolves the
+  URL for click/UI. Loader/serializer helpers: `paragraph_run_link_id`,
+  `ydoc_link_url`, `ydoc_apply_run_link`. Render paints linked runs in the brand
+  link colour with an underline (segments already break on `link_id`). Insert
+  menu → "Link (from selection)" (URL = selected text — the no-text-input path)
+  and "Remove link". Tested: set-link over a selection, run/id/URL query,
+  `link_at_caret`, YAML save→reload preserving the URL, and remove-link; the full
+  76-test headless suite confirms the shared run-engine change did not regress
+  formatting/edit. Still open: a link editor for a URL distinct from the display
+  text (needs the text-input popup, same blocker as the find/replace bar), and
+  click-to-open (needs pointer hit-testing + a platform URL-open facility).
+- **Find hardening** — Phase 4. Find is now case-insensitive (`ydoc_ci_equal`),
+  replace-all matches case-insensitively too, and `ydoc_find_prev` selects the
+  previous match (wrapping); "Find previous (selection)" wired into the Edit
+  menu. Tested (case-insensitive hit + find-previous).
+- **Keyboard-shortcut parity** — Phase 4. Added digit keys (`KEY_0..9`) to the
+  key enum + GLFW mapping under Ctrl/Alt, and default bindings: **Ctrl+Alt+0..3**
+  → Normal/Heading 1-3, **Ctrl+Shift+7/8/9** → numbered/bulleted/checklist. Tested
+  via the keymap lookup.
+- **Table cell keyboard navigation** — Phase 2. Arrow keys move the active cell
+  (Left/Right wrap linearly; Up/Down move by a column and wrap), alongside the
+  existing Tab-advances-cell. Self-contained in the key handler.
+- **PageUp / PageDown caret movement** — Phase 4 (noted gap). The caret jumps
+  `YDOC_PAGE_STEP_LINES` (10) visual lines up/down by stepping the vertical-
+  motion primitive, crossing paragraph boundaries. Tested (PageDown lands the
+  caret ~10 single-line paragraphs down).
+
+Still open in Phase 1: per-run font FAMILY, interactive color picker, rich
+clipboard, list nesting (multilevel), named paragraph styles, tab stops,
+paragraph space-before/after. (Links and italic/bold-face render are now done —
+see below.)
+
+- **Real bold + italic + bold-italic glyphs** — Phase 1 (done, verified live).
+  Earlier notes wrongly blamed a "missing italic MSDF face"; the faces are
+  committed (`assets/fonts/DejaVuSansMNerdFontMono-Oblique.ttf` / `-BoldOblique.ttf`)
+  and their atlases ship (`3rdparty/fonts/…-Oblique.cdb`, `-BoldOblique.cdb`).
+  The real gap was wiring, now closed via the four-`font_id` approach (no
+  shared-primitive change): the drawable-list already resolves `font_id` →
+  face by ygrid font slot, so (1) `struct yetty_ygrid_factory_args` gained
+  `bold_font`/`italic_font`/`bold_italic_font`, registered at slots 1/2/3 in
+  `ygrid_factory_impl`; (2) the yrich app builds three extra MSDF fonts from
+  the `-Bold.cdb`/`-Oblique.cdb`/`-BoldOblique.cdb` atlases (best-effort — a
+  missing face just falls back) and passes them in the factory args; (3) the app
+  tells the document which faces loaded via
+  `yetty_yrich_ydoc_set_styled_font_mask`, mirrored to paragraphs during
+  relayout; (4) `paragraph_render` picks the styled slot per run from the format
+  flags + mask, using the real bold face (dropping the synthetic sub-pixel bold)
+  and the real italic slant, with graceful fallback when a face is absent.
+  DejaVu Sans Mono is monospace so all four faces share advances — caret /
+  hit-test stay aligned even though measurement still uses the Regular metrics
+  font. Verified live: a doc with BOLD / ITALIC / BOLD-ITALIC runs renders heavy,
+  slanted, and heavy-slanted respectively (screenshot). Caveat: this takes
+  effect in the **standalone** yrich window (its own ygrid). The in-terminal
+  (figure-over-RPC) path renders through the host yetty's ygrid, which registers
+  only the Regular slot — wiring the styled faces there is the follow-up.
+
 ## 9. Feature classification (exhaustive) — the completion measure
 
 Every editor-facing Google Docs capability is classified as Included (with target phase), Deferred, or Excluded, so "nothing more, nothing less" is verifiable. Percentages are intentionally avoided; completion is measured against this checklist.

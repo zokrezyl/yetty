@@ -13,7 +13,9 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/framework-defs.h>
 #include <yetty/ygui/widget.h>
+#include <yetty/yfigure/registry.h>
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -434,6 +436,14 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_open_at(struct yetty_yclass
     struct yetty_ygui_popup_menu *d = d_dr.value;
     d->open = 1;
     d->hover_index = -1;
+    /* Promote the open menu to its own figure in the MENU z-band so it composites
+     * ABOVE sibling content figures (e.g. a scrollarea/document). As inline chrome
+     * it would be painted into the parent ygrid and then occluded by any nested
+     * figure drawn over the chrome. A closed menu has a zero rect and is skipped
+     * (hidden) by the emit walk. */
+    struct yetty_ycore_void_result mf =
+        yetty_ygui_widget_make_figure(obj, yetty_yfigure_kind_token("ygrid"), YETTY_YGUI_Z_MENU);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mf, "popup_menu_open_at: make_figure");
     struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "popup_menu_open_at: layout_get");
     struct yetty_ygui_layout l = *layout_res.value;

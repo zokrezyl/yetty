@@ -127,6 +127,9 @@ struct yetty_yrich_text_run {
     int32_t start;
     int32_t end;
     struct yetty_yrich_text_style style;
+    /* Hyperlink target id (0 = none); resolves to a URL in the owning ydoc's
+     * link table. Runs split on link boundaries so a link is a maximal span. */
+    uint32_t link_id;
 };
 
 /*=============================================================================
@@ -169,6 +172,7 @@ enum yetty_yrich_halign {
     YETTY_YRICH_HALIGN_LEFT,
     YETTY_YRICH_HALIGN_CENTER,
     YETTY_YRICH_HALIGN_RIGHT,
+    YETTY_YRICH_HALIGN_JUSTIFY,
 };
 
 enum yetty_yrich_valign {
@@ -277,6 +281,17 @@ enum yetty_yrich_key {
     YETTY_YRICH_KEY_F10,
     YETTY_YRICH_KEY_F11,
     YETTY_YRICH_KEY_F12,
+    /* Digit keys (kept contiguous so KEY_0 + n works). */
+    YETTY_YRICH_KEY_0,
+    YETTY_YRICH_KEY_1,
+    YETTY_YRICH_KEY_2,
+    YETTY_YRICH_KEY_3,
+    YETTY_YRICH_KEY_4,
+    YETTY_YRICH_KEY_5,
+    YETTY_YRICH_KEY_6,
+    YETTY_YRICH_KEY_7,
+    YETTY_YRICH_KEY_8,
+    YETTY_YRICH_KEY_9,
 };
 
 #ifdef __cplusplus

@@ -476,7 +476,10 @@ struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
 
     struct yetty_ycdb_reader_result cdb_res = yetty_ycdb_reader_open(cdb_path);
     if (YETTY_IS_ERR(cdb_res)) {
-        yerror("msdf_font: cannot open glyph cdb: %s", cdb_path);
+        /* Recoverable at the call site: callers fall back to another font (or the
+         * face is regenerated on the GPU elsewhere). Warn, don't error — the
+         * error is also returned in the Result for the caller to surface. */
+        ywarn("msdf_font: cannot open glyph cdb: %s", cdb_path);
         free(shader_res.value.data);
         return YETTY_ERR(yetty_font_font, "msdf font: cannot open glyph cdb", cdb_res);
     }

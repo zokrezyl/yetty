@@ -1232,6 +1232,68 @@ static struct yetty_yfont_ms_padding vterm_font_padding_from_config(
     return padding;
 }
 
+/* Resolve the MSDF CDB path for a font `name`, generating the CDB on the GPU
+ * when no prebaked file ships for it. Resolution order:
+ *
+ *   1. Prebaked  <fonts_dir>/../msdf-fonts/<name>-Regular.cdb  (shipped) —
+ *      used as-is when present.
+ *   2. Cache     <cache_dir>/msdf-fonts/<name>-Regular.cdb — reused when a
+ *      previous run already generated it.
+ *   3. Generate  the cache CDB from <fonts_dir>/<name>-Regular.ttf with the
+ *      shared WebGPU compute-shader MSDF generator (runtime->gpu.msdf_generator),
+ *      then use it.
+ *
+ * On success writes the usable CDB path into cdb_path_out and returns OK.
+ * Returns an error when no CDB can be produced (config/runtime unavailable,
+ * no source TTF, no generator, or the generation itself failed); callers fall
+ * back to the base font. Used by both the base face and the range faces so the
+ * two share one resolution + generation policy. */
+static struct yetty_ycore_void_result vterm_resolve_msdf_cdb(
+    struct yetty_yvterm_vterm *vterm, struct yetty_yconfig_config *config, const char *name,
+    const char *fonts_dir, char *cdb_path_out, size_t cdb_path_cap)
+{
+    snprintf(cdb_path_out, cdb_path_cap, "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir, name);
+    if (yetty_yplatform_file_exists(cdb_path_out)) {
+        return YETTY_OK_VOID();
+    }
+
+    /* No prebaked CDB — generate one from the face's TTF into the cache dir. */
+    if (!config || !vterm->runtime) {
+        return YETTY_ERR(yetty_ycore_void, "no prebaked CDB and no config/runtime to generate one");
+    }
+    const char *cache_dir = config->ops->get_string(config, "paths/cache", "");
+    char ttf_path[768];
+    snprintf(ttf_path, sizeof(ttf_path), "%s/%s-Regular.ttf", fonts_dir, name);
+    if (!cache_dir[0] || !yetty_yplatform_file_exists(ttf_path)) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "font has neither a prebaked CDB nor a TTF to build one");
+    }
+
+    char cache_fonts_dir[768];
+    snprintf(cache_fonts_dir, sizeof(cache_fonts_dir), "%s/msdf-fonts", cache_dir);
+    snprintf(cdb_path_out, cdb_path_cap, "%s/%s-Regular.cdb", cache_fonts_dir, name);
+    if (yetty_yplatform_file_exists(cdb_path_out)) {
+        return YETTY_OK_VOID();
+    }
+
+    struct yetty_ymsdf_generator *generator = vterm->runtime->gpu.msdf_generator;
+    if (!generator) {
+        return YETTY_ERR(yetty_ycore_void, "no MSDF generator available");
+    }
+    yetty_yplatform_mkdir_p(cache_fonts_dir);
+    struct yetty_ymsdf_generator_config gen = {
+        .ttf_path = ttf_path,
+        .cdb_path = cdb_path_out,
+        .font_size = 32.0f,
+        .pixel_range = 4.0f,
+    };
+    struct yetty_ycore_void_result gen_res = generator->ops->generate(generator, &gen);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gen_res, "GPU MSDF CDB generation failed");
+    ydebug("vterm: generated CDB '%s' for font '%s' via %s generator", cdb_path_out, name,
+           generator->ops->name(generator));
+    return YETTY_OK_VOID();
+}
+
 /* Find an existing face for (name, method) or create it. Returns the face
  * index, or 0 (the base font) when the face can't be created or the face
  * table is full — the range then simply renders with the base font. */
@@ -1265,47 +1327,18 @@ static uint32_t vterm_face_find_or_create(struct yetty_yvterm_vterm *vterm,
         font_res = yetty_yfont_ms_raster_font_create_named(config, name, cell.value.width,
                                                            cell.value.height);
     } else {
-        /* Prebaked CDB next to the bundled fonts wins; otherwise generate one
-         * at runtime from the face's TTF into the cache dir with the shared
-         * GPU MSDF generator (same parameters as the ydraw blob-font path). */
+        /* Prebaked CDB next to the bundled fonts wins; otherwise the shared
+         * resolver generates one on the GPU from the face's TTF into the cache
+         * dir (same policy as the base face). */
         char cdb_path[768];
         char font_shader_path[768];
-        snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir, name);
-        if (!yetty_yplatform_file_exists(cdb_path)) {
-            const char *cache_dir = config->ops->get_string(config, "paths/cache", "");
-            char ttf_path[768];
-            snprintf(ttf_path, sizeof(ttf_path), "%s/%s-Regular.ttf", fonts_dir, name);
-            if (!cache_dir[0] || !yetty_yplatform_file_exists(ttf_path)) {
-                ywarn("vterm: range font '%s' has neither a CDB nor a TTF (%s) — "
-                      "falling back to the base font",
-                      name, ttf_path);
-                return 0;
-            }
-            char cache_fonts_dir[768];
-            snprintf(cache_fonts_dir, sizeof(cache_fonts_dir), "%s/msdf-fonts", cache_dir);
-            snprintf(cdb_path, sizeof(cdb_path), "%s/%s-Regular.cdb", cache_fonts_dir, name);
-            if (!yetty_yplatform_file_exists(cdb_path)) {
-                struct yetty_ymsdf_generator *generator = vterm->runtime->gpu.msdf_generator;
-                if (!generator) {
-                    ywarn("vterm: no MSDF generator — range font '%s' falls back", name);
-                    return 0;
-                }
-                yetty_yplatform_mkdir_p(cache_fonts_dir);
-                struct yetty_ymsdf_generator_config gen = {0};
-                gen.ttf_path = ttf_path;
-                gen.cdb_path = cdb_path;
-                gen.font_size = 32.0f;
-                gen.pixel_range = 4.0f;
-                struct yetty_ycore_void_result gen_res = generator->ops->generate(generator, &gen);
-                if (YETTY_IS_ERR(gen_res)) {
-                    ywarn("vterm: MSDF generation for range font '%s' failed: %s — "
-                          "falling back to the base font",
-                          name, gen_res.error.msg);
-                    yetty_ycore_error_destroy(gen_res.error);
-                    return 0;
-                }
-                ydebug("vterm: generated CDB '%s' for range font '%s'", cdb_path, name);
-            }
+        struct yetty_ycore_void_result cdb_res =
+            vterm_resolve_msdf_cdb(vterm, config, name, fonts_dir, cdb_path, sizeof(cdb_path));
+        if (YETTY_IS_ERR(cdb_res)) {
+            ywarn("vterm: range font '%s' has no usable CDB (%s) — falling back to the base font",
+                  name, cdb_res.error.msg);
+            yetty_ycore_error_destroy(cdb_res.error);
+            return 0;
         }
         snprintf(font_shader_path, sizeof(font_shader_path), "%s/ms-msdf-font.wgsl", shaders_dir);
         /* Same padding as the base face — range faces must share the cell
@@ -1449,8 +1482,16 @@ static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *
     } else {
         char cdb_path[768];
         char font_shader_path[768];
-        snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir,
-                 font_family);
+        /* Prebaked CDB wins; otherwise generate it on the GPU from the family's
+         * TTF, so a configured font that ships no baked atlas still renders
+         * rather than failing base-font creation. */
+        struct yetty_ycore_void_result cdb_res = vterm_resolve_msdf_cdb(
+            vterm, config, font_family, fonts_dir, cdb_path, sizeof(cdb_path));
+        if (YETTY_IS_ERR(cdb_res)) {
+            ywarn("vterm: base font '%s' has no usable CDB: %s", font_family, cdb_res.error.msg);
+            yetty_ycore_error_destroy(cdb_res.error);
+            return YETTY_OK_VOID();
+        }
         snprintf(font_shader_path, sizeof(font_shader_path), "%s/ms-msdf-font.wgsl", shaders_dir);
         font_res = yetty_yfont_ms_msdf_font_create(cdb_path, font_shader_path, font_size, padding);
         base_method = YVTERM_FONT_METHOD_MSDF;

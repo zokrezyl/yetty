@@ -104,6 +104,8 @@ struct yetty_ycore_void_result yetty_yrich_keymap_load_defaults(struct yetty_yri
     static const struct yetty_yrich_keybinding defaults[] = {
         /* --- default mode: conventional desktop shortcuts --- */
         {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_S, YETTY_YRICH_MOD_CTRL, YETTY_YRICH_CMD_SAVE},
+        {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_Q, YETTY_YRICH_MOD_CTRL, YETTY_YRICH_CMD_QUIT},
+        {YETTY_YRICH_MODE_VI_NORMAL, YETTY_YRICH_KEY_Q, YETTY_YRICH_MOD_CTRL, YETTY_YRICH_CMD_QUIT},
         {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_Z, YETTY_YRICH_MOD_CTRL, YETTY_YRICH_CMD_UNDO},
         {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_Z, YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_SHIFT,
          YETTY_YRICH_CMD_REDO},
@@ -119,6 +121,31 @@ struct yetty_ycore_void_result yetty_yrich_keymap_load_defaults(struct yetty_yri
         {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_C, YETTY_YRICH_MOD_CTRL, YETTY_YRICH_CMD_COPY},
         {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_X, YETTY_YRICH_MOD_CTRL, YETTY_YRICH_CMD_CUT},
         {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_V, YETTY_YRICH_MOD_CTRL, YETTY_YRICH_CMD_PASTE},
+        /* Alignment — the conventional word-processor chords. */
+        {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_L, YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_SHIFT,
+         YETTY_YRICH_CMD_ALIGN_LEFT},
+        {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_E, YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_SHIFT,
+         YETTY_YRICH_CMD_ALIGN_CENTER},
+        {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_R, YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_SHIFT,
+         YETTY_YRICH_CMD_ALIGN_RIGHT},
+        {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_J, YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_SHIFT,
+         YETTY_YRICH_CMD_ALIGN_JUSTIFY},
+        /* Headings — Ctrl+Alt+0..3 (Google Docs parity). */
+        {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_0, YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_ALT,
+         YETTY_YRICH_CMD_HEADING_NORMAL},
+        {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_1, YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_ALT,
+         YETTY_YRICH_CMD_HEADING_1},
+        {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_2, YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_ALT,
+         YETTY_YRICH_CMD_HEADING_2},
+        {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_3, YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_ALT,
+         YETTY_YRICH_CMD_HEADING_3},
+        /* Lists — Ctrl+Shift+7 numbered / 8 bulleted / 9 checklist. */
+        {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_7, YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_SHIFT,
+         YETTY_YRICH_CMD_LIST_NUMBERED},
+        {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_8, YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_SHIFT,
+         YETTY_YRICH_CMD_LIST_BULLET},
+        {YETTY_YRICH_MODE_DEFAULT, YETTY_YRICH_KEY_9, YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_SHIFT,
+         YETTY_YRICH_CMD_LIST_CHECKLIST},
 
         /* --- vi-normal: motions + mode switches (substrate; extend later) --- */
         {YETTY_YRICH_MODE_VI_NORMAL, YETTY_YRICH_KEY_H, 0, YETTY_YRICH_CMD_CARET_LEFT},
@@ -150,6 +177,7 @@ static const struct command_name_entry *command_name_table(size_t *count_out)
 {
     static const struct command_name_entry table[] = {
         {YETTY_YRICH_CMD_SAVE, "doc.save"},
+        {YETTY_YRICH_CMD_QUIT, "app.quit"},
         {YETTY_YRICH_CMD_UNDO, "edit.undo"},
         {YETTY_YRICH_CMD_REDO, "edit.redo"},
         {YETTY_YRICH_CMD_TOGGLE_BOLD, "format.bold"},
@@ -159,6 +187,7 @@ static const struct command_name_entry *command_name_table(size_t *count_out)
         {YETTY_YRICH_CMD_ALIGN_LEFT, "para.align_left"},
         {YETTY_YRICH_CMD_ALIGN_CENTER, "para.align_center"},
         {YETTY_YRICH_CMD_ALIGN_RIGHT, "para.align_right"},
+        {YETTY_YRICH_CMD_ALIGN_JUSTIFY, "para.align_justify"},
         {YETTY_YRICH_CMD_HEADING_NORMAL, "para.heading_normal"},
         {YETTY_YRICH_CMD_HEADING_1, "para.heading_1"},
         {YETTY_YRICH_CMD_HEADING_2, "para.heading_2"},
@@ -168,6 +197,9 @@ static const struct command_name_entry *command_name_table(size_t *count_out)
         {YETTY_YRICH_CMD_ADD_PARAGRAPH, "doc.add_paragraph"},
         {YETTY_YRICH_CMD_LIST_BULLET, "para.list_bullet"},
         {YETTY_YRICH_CMD_LIST_NUMBERED, "para.list_numbered"},
+        {YETTY_YRICH_CMD_LIST_CHECKLIST, "para.list_checklist"},
+        {YETTY_YRICH_CMD_CHECK_TOGGLE, "para.check_toggle"},
+        {YETTY_YRICH_CMD_INSERT_HRULE, "insert.horizontal_rule"},
         {YETTY_YRICH_CMD_SELECT_ALL, "edit.select_all"},
         {YETTY_YRICH_CMD_COPY, "edit.copy"},
         {YETTY_YRICH_CMD_CUT, "edit.cut"},

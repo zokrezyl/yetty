@@ -51,8 +51,13 @@ size_t yetty_yrich_spreadsheet_set_cell_value_skel(const void *, size_t, void *,
 size_t yetty_yrich_ydoc_toggle_format_skel(const void *, size_t, void *, size_t);
 size_t yetty_yrich_ydoc_set_text_color_skel(const void *, size_t, void *, size_t);
 size_t yetty_yrich_ydoc_set_alignment_skel(const void *, size_t, void *, size_t);
+size_t yetty_yrich_ydoc_set_line_spacing_skel(const void *, size_t, void *, size_t);
+size_t yetty_yrich_ydoc_adjust_indent_skel(const void *, size_t, void *, size_t);
+size_t yetty_yrich_ydoc_set_highlight_skel(const void *, size_t, void *, size_t);
+size_t yetty_yrich_ydoc_clear_format_skel(const void *, size_t, void *, size_t);
 size_t yetty_yrich_ydoc_set_heading_skel(const void *, size_t, void *, size_t);
 size_t yetty_yrich_ydoc_change_font_size_skel(const void *, size_t, void *, size_t);
+size_t yetty_yrich_ydoc_set_font_size_skel(const void *, size_t, void *, size_t);
 struct yetty_ycore_void_result yetty_yrich_register(void);
 
 /* ---- yrich: class name -> accessor (lazy) ---------------------- */
@@ -129,8 +134,13 @@ static const struct yetty_yrich_skel_row yetty_yrich_skel_rows[] = {
     {"yetty_yrich_ydoc_toggle_format", yetty_yrich_ydoc_toggle_format_skel},
     {"yetty_yrich_ydoc_set_text_color", yetty_yrich_ydoc_set_text_color_skel},
     {"yetty_yrich_ydoc_set_alignment", yetty_yrich_ydoc_set_alignment_skel},
+    {"yetty_yrich_ydoc_set_line_spacing", yetty_yrich_ydoc_set_line_spacing_skel},
+    {"yetty_yrich_ydoc_adjust_indent", yetty_yrich_ydoc_adjust_indent_skel},
+    {"yetty_yrich_ydoc_set_highlight", yetty_yrich_ydoc_set_highlight_skel},
+    {"yetty_yrich_ydoc_clear_format", yetty_yrich_ydoc_clear_format_skel},
     {"yetty_yrich_ydoc_set_heading", yetty_yrich_ydoc_set_heading_skel},
     {"yetty_yrich_ydoc_change_font_size", yetty_yrich_ydoc_change_font_size_skel},
+    {"yetty_yrich_ydoc_set_font_size", yetty_yrich_ydoc_set_font_size_skel},
 };
 
 /* Signature dictated by the skel-lookup hook contract; a miss is absorbed

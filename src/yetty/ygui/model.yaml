@@ -4832,6 +4832,22 @@ exposed:
       - name: len
         type: size_t
     doc: null
+  - source_file: src/yetty/ygui/widgets/yrich_view.c
+    name: yetty_ygui_yrich_view_feed_double_click
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: int
+    doc: "/* Forward a double-click at framework-space (x,y) to the document (word
+ * select + word-drag arming). Returns 1 if the point was inside the view and
+ * the click was consumed, 0 otherwise — the platform delivers double-click
+ * separately from the press/motion path, so the host routes it here. */"
   - source_file: src/yetty/ygui/widgets/yshadertoy.c
     name: yetty_ygui_yshadertoy_set_source
     return_type: struct yetty_ycore_void_result

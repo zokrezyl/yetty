@@ -96,6 +96,11 @@ struct yetty_yclass_object *yetty_ychrome_host_chrome(struct yetty_ychrome_host 
 struct yetty_ycore_int_result yetty_ychrome_host_handle_event(struct yetty_ychrome_host *host,
                                                               const struct yetty_yui_event *event);
 
+/* 1 while a caption-drag or edge-resize gesture is live. Apps routing pointer
+ * events UI-first must still give chrome the whole stream while this is set,
+ * so a live gesture cannot be stolen by widgets the pointer crosses. */
+struct yetty_ycore_int_result yetty_ychrome_host_in_gesture(struct yetty_ychrome_host *host);
+
 /* Update the window size: re-sizes the engine's edge bands and repositions +
  * repaints the caption figure. Call on every resize. */
 struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_host *host,

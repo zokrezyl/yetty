@@ -26,6 +26,8 @@
 #include <yetty/ygui/mixins/draggable.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widget.h>
+#include <yetty/ygui/widgets/menubar.h>
+#include <yetty/ygui/widgets/popup_menu.h>
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
@@ -911,6 +913,74 @@ static struct yetty_yclass_object_ptr_result hit_test(struct yetty_yclass_object
     return YETTY_OK(yetty_yclass_object_ptr, deepest);
 }
 
+/* True if `target` (or any ancestor) is a menubar. A press on a menubar trigger
+ * manages its own menu open/close (mutual-exclusive toggle), so the generic
+ * click-outside dismissal below must skip it — otherwise the just-opened menu
+ * would be closed again in the same click. */
+/* Exact class identity — `_from`/object_data is a downcast that succeeds on any
+ * widget (returns a garbage slice), so it can't be used as a type test. The
+ * object's minted class pointer can. */
+static int object_class_is(struct yetty_yclass_object *obj, struct yetty_yclass_object *class_obj)
+{
+    struct yetty_yclass_ptr_result class_res = yetty_yclass_object_class(obj);
+    if (YETTY_IS_ERR(class_res)) {
+        yetty_ycore_error_destroy(class_res.error);
+        return 0;
+    }
+    return (struct yetty_yclass_object *)class_res.value == class_obj;
+}
+
+static struct yetty_ycore_int_result press_hit_menubar(struct yetty_yclass_object *target)
+{
+    struct yetty_yclass_ptr_result menubar_class = yetty_ygui_menubar_class_get();
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, menubar_class, "press_hit_menubar: menubar class");
+    for (struct yetty_yclass_object *ancestor = target; ancestor;) {
+        if (object_class_is(ancestor, (struct yetty_yclass_object *)menubar_class.value)) {
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        struct yetty_yclass_object_ptr_result parent_res = yetty_ygui_widget_parent(ancestor);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, parent_res, "press_hit_menubar: parent");
+        ancestor = parent_res.value;
+    }
+    return YETTY_OK(yetty_ycore_int, 0);
+}
+
+/* Close every open popup_menu in `node`'s subtree whose rect does NOT contain
+ * (x,y) — i.e. dismiss menus the user clicked away from. A click inside an open
+ * menu keeps it open (its own on_press handles the item / drill). */
+static struct yetty_ycore_void_result close_menus_clicked_outside(struct yetty_yclass_object *node,
+                                                                  float x, float y)
+{
+    if (!node) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_yclass_ptr_result menu_class = yetty_ygui_popup_menu_class_get();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, menu_class, "close_menus_clicked_outside: menu class");
+    if (object_class_is(node, (struct yetty_yclass_object *)menu_class.value)) {
+        struct yetty_ycore_int_result open_res = yetty_ygui_popup_menu_is_open(node);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, open_res, "close_menus_clicked_outside: is_open");
+        if (open_res.value) {
+            struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(node);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "close_menus_clicked_outside: rect");
+            if (!rect_contains(rect_res.value, x, y)) {
+                struct yetty_ycore_void_result close_res = yetty_ygui_popup_menu_close(node);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, close_res,
+                                    "close_menus_clicked_outside: close");
+            }
+        }
+    }
+    struct yetty_yclass_object_ptr_result child_res = yetty_ygui_widget_first_child(node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res, "close_menus_clicked_outside: first_child");
+    for (struct yetty_yclass_object *child = child_res.value; child;) {
+        struct yetty_ycore_void_result walk_res = close_menus_clicked_outside(child, x, y);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, walk_res, "close_menus_clicked_outside: child");
+        struct yetty_yclass_object_ptr_result next_res = yetty_ygui_widget_next_sibling(child);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, next_res, "close_menus_clicked_outside: next");
+        child = next_res.value;
+    }
+    return YETTY_OK_VOID();
+}
+
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_button(
     struct yetty_yclass_object *obj, float x, float y, int button, int pressed, int mods)
@@ -953,6 +1023,19 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_button(
             YETTY_RETURN_IF_ERR(yetty_ycore_int, parent_res,
                                 "yetty_ygui_framework_feed_mouse_button: parent");
             a = parent_res.value;
+        }
+        /* Click-outside-to-dismiss: unless the press landed on a menubar trigger
+         * (which toggles its own menu), close any open menu the user clicked away
+         * from. Runs before dispatch so a press in the document both dismisses the
+         * menu and still places the caret. */
+        struct yetty_ycore_int_result menubar_hit_res = press_hit_menubar(target);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, menubar_hit_res,
+                            "yetty_ygui_framework_feed_mouse_button: press_hit_menubar");
+        if (!menubar_hit_res.value) {
+            struct yetty_ycore_void_result dismiss_res =
+                close_menus_clicked_outside(framework->root, x, y);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, dismiss_res,
+                                "yetty_ygui_framework_feed_mouse_button: dismiss menus");
         }
     } else {
         /* Release goes to the capture target (if any) so the widget that

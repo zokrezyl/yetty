@@ -163,6 +163,12 @@ types:
     fields:
       - name: default_font
         type: "struct yetty_yfont_font *"
+      - name: bold_font
+        type: "struct yetty_yfont_font *"
+      - name: italic_font
+        type: "struct yetty_yfont_font *"
+      - name: bold_italic_font
+        type: "struct yetty_yfont_font *"
       - name: composite_factory
         type: "struct yetty_ydraw_composite_factory *"
       - name: absolute_coords

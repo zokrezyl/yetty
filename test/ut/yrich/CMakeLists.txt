@@ -42,3 +42,13 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract
     TIMEOUT 30)
+
+# Document-wide formatting (select-all): Ctrl+B/heading over a select-all must
+# apply to EVERY paragraph as one undoable command.
+yetty_add_c_test(
+    NAME    yrich_format
+    SOURCES format-test.c
+    LIBS    yetty_yrich
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract
+    TIMEOUT 30)

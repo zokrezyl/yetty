@@ -514,4 +514,37 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_ycla
     return yetty_ygui_widget_set_dirty(obj);
 }
 
+/* Forward a double-click at framework-space (x,y) to the document (word
+ * select + word-drag arming). Returns 1 if the point was inside the view and
+ * the click was consumed, 0 otherwise — the platform delivers double-click
+ * separately from the press/motion path, so the host routes it here. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ygui_yrich_view_feed_double_click(
+    struct yetty_yclass_object *obj, float x, float y, int button)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_int, "yrich_view_feed_double_click: NULL obj");
+    }
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_yrich_view_feed_double_click: data_get");
+    struct yetty_ygui_yrich_view *d = d_dr.value;
+    if (!d->doc) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "yrich_view_feed_double_click: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
+    if (x < r.min.x || x >= r.max.x || y < r.min.y || y >= r.max.y) {
+        return YETTY_OK(yetty_ycore_int, 0); /* outside the document view */
+    }
+    float dx = x - r.min.x;
+    float dy = y - r.min.y;
+    struct yetty_ycore_void_result dbl_res =
+        yetty_yrich_document_on_mouse_double_click(d->doc, dx, dy, (uint32_t)button, 0u);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, dbl_res, "yrich_view_feed_double_click: dispatch");
+    struct yetty_ycore_void_result dirty_res = yetty_ygui_widget_set_dirty(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, dirty_res, "yrich_view_feed_double_click: dirty");
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
 #include "yrich_view.gen.c"

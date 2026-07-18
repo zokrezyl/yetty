@@ -36,6 +36,12 @@
 #include <unistd.h> /* fsync */
 #endif
 
+/* Native `.ydoc.yaml` schema version. Bump when the on-disk format changes
+ * incompatibly and add a migration step in migrate_ydoc_document(). A file with
+ * no `version` key is treated as version 0 (pre-versioning); a version newer
+ * than this is rejected as an unsupported future format. */
+#define YETTY_YRICH_YDOC_SCHEMA_VERSION 1u
+
 /*=============================================================================
  * Common helpers
  *===========================================================================*/
@@ -256,9 +262,12 @@ struct parsed_run {
     int32_t end;
     uint32_t format;
     uint32_t color;
+    uint32_t bg_color;
+    float font_size;
+    char *link; /* owned hyperlink URL, or NULL; applied after the run is added */
 };
 
-/* Parse one run mapping {start, end, format, color}. */
+/* Parse one run mapping {start, end, format, color, bg, fs, link}. */
 static struct yetty_ycore_void_result parse_paragraph_run(struct yaml_parser_s *p,
                                                           struct parsed_run *out_run)
 {
@@ -279,6 +288,9 @@ static struct yetty_ycore_void_result parse_paragraph_run(struct yaml_parser_s *
         bool key_end = scalar_eq(&ev, "end");
         bool key_format = scalar_eq(&ev, "format");
         bool key_color = scalar_eq(&ev, "color");
+        bool key_bg = scalar_eq(&ev, "bg");
+        bool key_fs = scalar_eq(&ev, "fs");
+        bool key_link = scalar_eq(&ev, "link");
         yaml_event_delete(&ev);
 
         ev_res = next_event(p, &ev);
@@ -296,10 +308,30 @@ static struct yetty_ycore_void_result parse_paragraph_run(struct yaml_parser_s *
                     out_run->color = parse_color_argb(raw);
                     free(raw);
                 }
+            } else if (key_bg) {
+                char *raw = scalar_dup(&ev);
+                if (raw) {
+                    out_run->bg_color = parse_color_argb(raw);
+                    free(raw);
+                }
+            } else if (key_fs) {
+                out_run->font_size = (float)scalar_to_d(&ev);
+            } else if (key_link) {
+                free(out_run->link);
+                out_run->link = scalar_dup(&ev);
             }
         }
         yaml_event_delete(&ev);
     }
+}
+
+/* Free a parsed-run array along with each run's owned link URL. */
+static void free_parsed_runs(struct parsed_run *runs, size_t count)
+{
+    for (size_t i = 0; i < count; i++) {
+        free(runs[i].link);
+    }
+    free(runs);
 }
 
 /* Parse one paragraph mapping: text, fontSize, color, format, align and
@@ -310,13 +342,29 @@ static struct yetty_ycore_void_result parse_ydoc_paragraph(struct yaml_parser_s 
     char *text = NULL;
     size_t text_len = 0;
     float font_size = 0.0f;
+    float line_spacing = 0.0f; /* 0 = not present in the file */
+    float indent = 0.0f;
+    int have_indent = 0;
+    uint32_t heading_level = 0;
+    uint32_t list_kind = 0;
+    uint32_t list_checked = 0;
+    uint32_t block_kind = 0;
+    uint32_t list_level = 0;
+    float space_before = 0.0f;
+    float space_after = 0.0f;
     uint32_t color = 0;
     uint32_t format = 0;
     uint32_t align = 0;
     int have_align = 0;
+    char *bookmark = NULL;
     struct parsed_run *runs = NULL;
     size_t run_count = 0;
     size_t run_capacity = 0;
+    uint32_t table_rows = 0;
+    uint32_t table_cols = 0;
+    char **cells = NULL;
+    size_t cell_count = 0;
+    size_t cell_capacity = 0;
     struct yetty_ycore_void_result fail_res;
 
     yaml_event_t ev;
@@ -340,8 +388,70 @@ static struct yetty_ycore_void_result parse_ydoc_paragraph(struct yaml_parser_s 
         bool key_col = scalar_eq(&ev, "color");
         bool key_fmt = scalar_eq(&ev, "format");
         bool key_align = scalar_eq(&ev, "align");
+        bool key_spacing = scalar_eq(&ev, "lineSpacing");
+        bool key_indent = scalar_eq(&ev, "indent");
+        bool key_heading = scalar_eq(&ev, "heading");
+        bool key_list = scalar_eq(&ev, "list");
+        bool key_checked = scalar_eq(&ev, "checked");
+        bool key_block = scalar_eq(&ev, "block");
+        bool key_list_level = scalar_eq(&ev, "listLevel");
+        bool key_space_before = scalar_eq(&ev, "spaceBefore");
+        bool key_space_after = scalar_eq(&ev, "spaceAfter");
+        bool key_table_rows = scalar_eq(&ev, "tableRows");
+        bool key_table_cols = scalar_eq(&ev, "tableCols");
+        bool key_bookmark = scalar_eq(&ev, "bookmark");
+        bool key_cells = scalar_eq(&ev, "cells");
         bool key_runs = scalar_eq(&ev, "runs");
         yaml_event_delete(&ev);
+
+        if (key_cells) {
+            ev_res = next_event(p, &ev);
+            if (YETTY_IS_ERR(ev_res)) {
+                fail_res = YETTY_ERR(yetty_ycore_void, "yrich yaml: cells read failed", ev_res);
+                goto err;
+            }
+            if (ev.type != YAML_SEQUENCE_START_EVENT) {
+                yaml_event_delete(&ev);
+                fail_res = YETTY_ERR(yetty_ycore_void, "yrich yaml: cells expected sequence");
+                goto err;
+            }
+            yaml_event_delete(&ev);
+            for (;;) {
+                ev_res = next_event(p, &ev);
+                if (YETTY_IS_ERR(ev_res)) {
+                    fail_res = YETTY_ERR(yetty_ycore_void, "yrich yaml: cells read failed", ev_res);
+                    goto err;
+                }
+                if (ev.type == YAML_SEQUENCE_END_EVENT) {
+                    yaml_event_delete(&ev);
+                    break;
+                }
+                if (ev.type != YAML_SCALAR_EVENT) {
+                    yaml_event_delete(&ev);
+                    fail_res = YETTY_ERR(yetty_ycore_void, "yrich yaml: cell expected scalar");
+                    goto err;
+                }
+                if (cell_count == cell_capacity) {
+                    size_t new_cap = cell_capacity ? cell_capacity * 2 : 8;
+                    char **grown = realloc(cells, new_cap * sizeof(*cells));
+                    if (!grown) {
+                        yaml_event_delete(&ev);
+                        fail_res = YETTY_ERR(yetty_ycore_void, "yrich yaml: cells grow failed");
+                        goto err;
+                    }
+                    cells = grown;
+                    cell_capacity = new_cap;
+                }
+                cells[cell_count] = scalar_dup(&ev);
+                yaml_event_delete(&ev);
+                if (!cells[cell_count]) {
+                    fail_res = YETTY_ERR(yetty_ycore_void, "yrich yaml: cell dup failed");
+                    goto err;
+                }
+                cell_count++;
+            }
+            continue;
+        }
 
         if (key_runs) {
             ev_res = next_event(p, &ev);
@@ -383,6 +493,10 @@ static struct yetty_ycore_void_result parse_ydoc_paragraph(struct yaml_parser_s 
                 }
                 struct yetty_ycore_void_result run_res = parse_paragraph_run(p, &runs[run_count]);
                 if (YETTY_IS_ERR(run_res)) {
+                    /* The partial run at [run_count] is not yet counted; free its
+                     * link so free_parsed_runs (which frees only [0,run_count))
+                     * does not leak it. */
+                    free(runs[run_count].link);
                     fail_res = YETTY_ERR(yetty_ycore_void, "yrich yaml: run parse failed", run_res);
                     goto err;
                 }
@@ -420,6 +534,32 @@ static struct yetty_ycore_void_result parse_ydoc_paragraph(struct yaml_parser_s 
         } else if (key_align && ev.type == YAML_SCALAR_EVENT) {
             align = (uint32_t)scalar_to_l(&ev);
             have_align = 1;
+        } else if (key_spacing && ev.type == YAML_SCALAR_EVENT) {
+            line_spacing = (float)scalar_to_d(&ev);
+        } else if (key_indent && ev.type == YAML_SCALAR_EVENT) {
+            indent = (float)scalar_to_d(&ev);
+            have_indent = 1;
+        } else if (key_heading && ev.type == YAML_SCALAR_EVENT) {
+            heading_level = (uint32_t)scalar_to_l(&ev);
+        } else if (key_list && ev.type == YAML_SCALAR_EVENT) {
+            list_kind = (uint32_t)scalar_to_l(&ev);
+        } else if (key_checked && ev.type == YAML_SCALAR_EVENT) {
+            list_checked = (uint32_t)scalar_to_l(&ev);
+        } else if (key_block && ev.type == YAML_SCALAR_EVENT) {
+            block_kind = (uint32_t)scalar_to_l(&ev);
+        } else if (key_list_level && ev.type == YAML_SCALAR_EVENT) {
+            list_level = (uint32_t)scalar_to_l(&ev);
+        } else if (key_space_before && ev.type == YAML_SCALAR_EVENT) {
+            space_before = (float)scalar_to_d(&ev);
+        } else if (key_space_after && ev.type == YAML_SCALAR_EVENT) {
+            space_after = (float)scalar_to_d(&ev);
+        } else if (key_table_rows && ev.type == YAML_SCALAR_EVENT) {
+            table_rows = (uint32_t)scalar_to_l(&ev);
+        } else if (key_table_cols && ev.type == YAML_SCALAR_EVENT) {
+            table_cols = (uint32_t)scalar_to_l(&ev);
+        } else if (key_bookmark && ev.type == YAML_SCALAR_EVENT) {
+            free(bookmark);
+            bookmark = scalar_dup(&ev);
         } else if (ev.type == YAML_MAPPING_START_EVENT || ev.type == YAML_SEQUENCE_START_EVENT) {
             yaml_event_delete(&ev);
             struct yetty_ycore_void_result skip_res = skip_collection_body(p);
@@ -438,14 +578,106 @@ static struct yetty_ycore_void_result parse_ydoc_paragraph(struct yaml_parser_s 
     free(text);
     text = NULL;
     if (YETTY_IS_ERR(paragraph_res)) {
-        free(runs);
+        free(bookmark);
+        free_parsed_runs(runs, run_count);
         return YETTY_ERR(yetty_ycore_void, "yrich yaml: add_paragraph failed", paragraph_res);
     }
     struct yetty_yclass_object *paragraph_obj = paragraph_res.value;
+    /* Apply and release the bookmark immediately so later error returns cannot
+     * leak it. */
+    if (bookmark) {
+        struct yetty_ycore_void_result bm_res =
+            yetty_yrich_paragraph_set_bookmark(paragraph_obj, bookmark);
+        free(bookmark);
+        bookmark = NULL;
+        if (YETTY_IS_ERR(bm_res)) {
+            free_parsed_runs(runs, run_count);
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: set_bookmark failed", bm_res);
+        }
+    }
     if (font_size > 0.0f) {
         struct yetty_ycore_void_result font_res =
             yetty_yrich_paragraph_set_font_size(paragraph_obj, font_size);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, font_res, "yrich yaml: set_font_size failed");
+    }
+    /* After font size — set_line_spacing recomputes line_height from font_size. */
+    if (line_spacing > 0.0f) {
+        struct yetty_ycore_void_result spacing_res =
+            yetty_yrich_paragraph_set_line_spacing(paragraph_obj, line_spacing);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, spacing_res, "yrich yaml: set_line_spacing failed");
+    }
+    if (have_indent) {
+        struct yetty_ycore_void_result indent_res =
+            yetty_yrich_paragraph_set_indent(paragraph_obj, indent);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, indent_res, "yrich yaml: set_indent failed");
+    }
+    if (heading_level > 0) {
+        struct yetty_ycore_void_result heading_res =
+            yetty_yrich_paragraph_set_heading_level(paragraph_obj, heading_level);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, heading_res, "yrich yaml: set_heading_level failed");
+    }
+    if (list_kind > 0) {
+        struct yetty_ycore_void_result list_res =
+            yetty_yrich_paragraph_set_list_kind(paragraph_obj, list_kind);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, list_res, "yrich yaml: set_list_kind failed");
+        if (list_checked) {
+            struct yetty_ycore_void_result checked_res =
+                yetty_yrich_paragraph_set_list_checked(paragraph_obj, list_checked);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, checked_res,
+                                "yrich yaml: set_list_checked failed");
+        }
+    }
+    if (block_kind > 0) {
+        struct yetty_ycore_void_result block_res =
+            yetty_yrich_paragraph_set_block_kind(paragraph_obj, block_kind);
+        if (YETTY_IS_ERR(block_res)) {
+            for (size_t i = 0; i < cell_count; i++) {
+                free(cells[i]);
+            }
+            free(cells);
+            free_parsed_runs(runs, run_count);
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: set_block_kind failed", block_res);
+        }
+    }
+    if (block_kind == 2 && table_rows > 0 && table_cols > 0) {
+        struct yetty_ycore_void_result table_res =
+            yetty_yrich_paragraph_set_table(paragraph_obj, table_rows, table_cols);
+        if (!YETTY_IS_ERR(table_res)) {
+            for (uint32_t r = 0; r < table_rows; r++) {
+                for (uint32_t c = 0; c < table_cols; c++) {
+                    size_t flat = (size_t)r * table_cols + c;
+                    const char *text = flat < cell_count ? cells[flat] : NULL;
+                    struct yetty_ycore_void_result cell_res =
+                        yetty_yrich_paragraph_set_table_cell(paragraph_obj, r, c, text);
+                    if (YETTY_IS_ERR(cell_res)) {
+                        yetty_ycore_error_destroy(cell_res.error);
+                    }
+                }
+            }
+        } else {
+            yetty_ycore_error_destroy(table_res.error);
+        }
+    }
+    for (size_t i = 0; i < cell_count; i++) {
+        free(cells[i]);
+    }
+    free(cells);
+    cells = NULL;
+    cell_count = 0;
+    if (list_level > 0) {
+        struct yetty_ycore_void_result level_res =
+            yetty_yrich_paragraph_set_list_level(paragraph_obj, list_level);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, level_res, "yrich yaml: set_list_level failed");
+    }
+    if (space_before > 0.0f) {
+        struct yetty_ycore_void_result before_res =
+            yetty_yrich_paragraph_set_space_before(paragraph_obj, space_before);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, before_res, "yrich yaml: set_space_before failed");
+    }
+    if (space_after > 0.0f) {
+        struct yetty_ycore_void_result after_res =
+            yetty_yrich_paragraph_set_space_after(paragraph_obj, space_after);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, after_res, "yrich yaml: set_space_after failed");
     }
     if (color) {
         struct yetty_ycore_void_result color_res =
@@ -456,7 +688,7 @@ static struct yetty_ycore_void_result parse_ydoc_paragraph(struct yaml_parser_s 
         struct yetty_ycore_void_result format_res =
             yetty_yrich_paragraph_set_format(paragraph_obj, format);
         if (YETTY_IS_ERR(format_res)) {
-            free(runs);
+            free_parsed_runs(runs, run_count);
             return YETTY_ERR(yetty_ycore_void, "yrich yaml: set_format failed", format_res);
         }
     }
@@ -464,24 +696,43 @@ static struct yetty_ycore_void_result parse_ydoc_paragraph(struct yaml_parser_s 
         struct yetty_ycore_void_result align_res =
             yetty_yrich_paragraph_set_alignment(paragraph_obj, align);
         if (YETTY_IS_ERR(align_res)) {
-            free(runs);
+            free_parsed_runs(runs, run_count);
             return YETTY_ERR(yetty_ycore_void, "yrich yaml: set_alignment failed", align_res);
         }
     }
     for (size_t i = 0; i < run_count; i++) {
-        struct yetty_ycore_void_result run_res = yetty_yrich_paragraph_add_run(
-            paragraph_obj, runs[i].start, runs[i].end, runs[i].format, runs[i].color);
+        struct yetty_ycore_void_result run_res =
+            yetty_yrich_paragraph_add_run(paragraph_obj, runs[i].start, runs[i].end, runs[i].format,
+                                          runs[i].color, runs[i].bg_color, runs[i].font_size);
         if (YETTY_IS_ERR(run_res)) {
-            free(runs);
+            free_parsed_runs(runs, run_count);
             return YETTY_ERR(yetty_ycore_void, "yrich yaml: add_run failed", run_res);
         }
     }
-    free(runs);
+    /* Hyperlinks are applied after the runs exist: interning the URL in the
+     * document link table and stamping the run's byte span. */
+    for (size_t i = 0; i < run_count; i++) {
+        if (!runs[i].link || runs[i].link[0] == '\0') {
+            continue;
+        }
+        struct yetty_ycore_void_result link_res = yetty_yrich_ydoc_apply_run_link(
+            doc_obj, paragraph_obj, runs[i].start, runs[i].end, runs[i].link);
+        if (YETTY_IS_ERR(link_res)) {
+            free_parsed_runs(runs, run_count);
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: apply_run_link failed", link_res);
+        }
+    }
+    free_parsed_runs(runs, run_count);
     return YETTY_OK_VOID();
 
 err:
     free(text);
-    free(runs);
+    free(bookmark);
+    free_parsed_runs(runs, run_count);
+    for (size_t i = 0; i < cell_count; i++) {
+        free(cells[i]);
+    }
+    free(cells);
     return fail_res;
 }
 
@@ -541,6 +792,7 @@ static struct yetty_ycore_void_result parse_ydoc_document(struct yaml_parser_s *
         }
         bool key_pw = scalar_eq(&ev, "pageWidth");
         bool key_mg = scalar_eq(&ev, "margin");
+        bool key_version = scalar_eq(&ev, "version");
         bool key_pp = scalar_eq(&ev, "paragraphs");
         yaml_event_delete(&ev);
 
@@ -553,7 +805,17 @@ static struct yetty_ycore_void_result parse_ydoc_document(struct yaml_parser_s *
         }
         ev_res = next_event(p, &ev);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ev_res, "yrich yaml: document read failed");
-        if (key_pw && ev.type == YAML_SCALAR_EVENT) {
+        if (key_version && ev.type == YAML_SCALAR_EVENT) {
+            uint32_t version = (uint32_t)scalar_to_l(&ev);
+            if (version > YETTY_YRICH_YDOC_SCHEMA_VERSION) {
+                yaml_event_delete(&ev);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "yrich yaml: document schema version is newer than supported");
+            }
+            /* version < current: no incompatible change yet, so the load is a
+             * no-op migration. Future bumps add cases in
+             * migrate_ydoc_document(). */
+        } else if (key_pw && ev.type == YAML_SCALAR_EVENT) {
             struct yetty_ycore_void_result width_res =
                 yetty_yrich_ydoc_set_page_width(doc_obj, (float)scalar_to_d(&ev));
             if (YETTY_IS_ERR(width_res)) {
@@ -797,6 +1059,7 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_save_yaml_file(struct yetty_ycla
     ok = ok && emit_mapping_start(&emitter);
     ok = ok && emit_plain_scalar(&emitter, "document");
     ok = ok && emit_mapping_start(&emitter);
+    ok = ok && emit_key_uint(&emitter, "version", YETTY_YRICH_YDOC_SCHEMA_VERSION);
     ok = ok && emit_key_float(&emitter, "pageWidth", page_width_res.value);
     ok = ok && emit_key_float(&emitter, "margin", margin_res.value);
     ok = ok && emit_plain_scalar(&emitter, "paragraphs");
@@ -858,6 +1121,121 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_save_yaml_file(struct yetty_ycla
         } else {
             ok = ok && emit_key_uint(&emitter, "align", align_res.value);
         }
+        struct yetty_ycore_float_result spacing_res =
+            yetty_yrich_paragraph_line_spacing(paragraph_obj);
+        if (YETTY_IS_ERR(spacing_res)) {
+            yetty_ycore_error_destroy(spacing_res.error);
+            ok = 0;
+        } else {
+            ok = ok && emit_key_float(&emitter, "lineSpacing", spacing_res.value);
+        }
+        struct yetty_ycore_float_result indent_res = yetty_yrich_paragraph_indent(paragraph_obj);
+        if (YETTY_IS_ERR(indent_res)) {
+            yetty_ycore_error_destroy(indent_res.error);
+            ok = 0;
+        } else if (indent_res.value > 0.0f) {
+            ok = ok && emit_key_float(&emitter, "indent", indent_res.value);
+        }
+        struct yetty_ycore_uint32_result heading_res =
+            yetty_yrich_paragraph_heading_level(paragraph_obj);
+        if (YETTY_IS_ERR(heading_res)) {
+            yetty_ycore_error_destroy(heading_res.error);
+            ok = 0;
+        } else if (heading_res.value > 0) {
+            ok = ok && emit_key_uint(&emitter, "heading", heading_res.value);
+        }
+        struct yetty_ycore_uint32_result list_kind_res =
+            yetty_yrich_paragraph_list_kind(paragraph_obj);
+        if (YETTY_IS_ERR(list_kind_res)) {
+            yetty_ycore_error_destroy(list_kind_res.error);
+            ok = 0;
+        } else if (list_kind_res.value > 0) {
+            ok = ok && emit_key_uint(&emitter, "list", list_kind_res.value);
+            struct yetty_ycore_uint32_result checked_res =
+                yetty_yrich_paragraph_list_checked(paragraph_obj);
+            if (YETTY_IS_ERR(checked_res)) {
+                yetty_ycore_error_destroy(checked_res.error);
+                ok = 0;
+            } else if (checked_res.value) {
+                ok = ok && emit_key_uint(&emitter, "checked", checked_res.value);
+            }
+        }
+        struct yetty_ycore_uint32_result block_kind_res =
+            yetty_yrich_paragraph_block_kind(paragraph_obj);
+        if (YETTY_IS_ERR(block_kind_res)) {
+            yetty_ycore_error_destroy(block_kind_res.error);
+            ok = 0;
+        } else if (block_kind_res.value > 0) {
+            ok = ok && emit_key_uint(&emitter, "block", block_kind_res.value);
+            if (block_kind_res.value == 2) {
+                uint32_t rows = 0;
+                uint32_t cols = 0;
+                struct yetty_ycore_void_result size_res =
+                    yetty_yrich_paragraph_table_size(paragraph_obj, &rows, &cols);
+                if (YETTY_IS_ERR(size_res)) {
+                    yetty_ycore_error_destroy(size_res.error);
+                    ok = 0;
+                } else {
+                    ok = ok && emit_key_uint(&emitter, "tableRows", rows);
+                    ok = ok && emit_key_uint(&emitter, "tableCols", cols);
+                    ok = ok && emit_plain_scalar(&emitter, "cells");
+                    if (ok) {
+                        ok = yaml_sequence_start_event_initialize(&event, NULL, NULL, 1,
+                                                                  YAML_BLOCK_SEQUENCE_STYLE) &&
+                             emit_event(&emitter, &event);
+                    }
+                    for (uint32_t r = 0; ok && r < rows; r++) {
+                        for (uint32_t c = 0; ok && c < cols; c++) {
+                            struct yetty_ycore_const_char_ptr_result cell_res =
+                                yetty_yrich_paragraph_table_cell(paragraph_obj, r, c);
+                            const char *cell = "";
+                            if (YETTY_IS_OK(cell_res) && cell_res.value) {
+                                cell = cell_res.value;
+                            } else if (YETTY_IS_ERR(cell_res)) {
+                                yetty_ycore_error_destroy(cell_res.error);
+                            }
+                            ok = ok && emit_quoted_scalar(&emitter, cell, strlen(cell));
+                        }
+                    }
+                    if (ok) {
+                        ok = yaml_sequence_end_event_initialize(&event) &&
+                             emit_event(&emitter, &event);
+                    }
+                }
+            }
+        }
+        struct yetty_ycore_float_result space_before_res =
+            yetty_yrich_paragraph_space_before(paragraph_obj);
+        if (YETTY_IS_ERR(space_before_res)) {
+            yetty_ycore_error_destroy(space_before_res.error);
+            ok = 0;
+        } else if (space_before_res.value > 0.0f) {
+            ok = ok && emit_key_float(&emitter, "spaceBefore", space_before_res.value);
+        }
+        struct yetty_ycore_float_result space_after_res =
+            yetty_yrich_paragraph_space_after(paragraph_obj);
+        if (YETTY_IS_ERR(space_after_res)) {
+            yetty_ycore_error_destroy(space_after_res.error);
+            ok = 0;
+        } else if (space_after_res.value > 0.0f) {
+            ok = ok && emit_key_float(&emitter, "spaceAfter", space_after_res.value);
+        }
+        struct yetty_ycore_uint32_result list_level_res =
+            yetty_yrich_paragraph_list_level(paragraph_obj);
+        if (YETTY_IS_ERR(list_level_res)) {
+            yetty_ycore_error_destroy(list_level_res.error);
+            ok = 0;
+        } else if (list_level_res.value > 0) {
+            ok = ok && emit_key_uint(&emitter, "listLevel", list_level_res.value);
+        }
+        struct yetty_ycore_const_char_ptr_result bookmark_res =
+            yetty_yrich_paragraph_bookmark(paragraph_obj);
+        if (YETTY_IS_ERR(bookmark_res)) {
+            yetty_ycore_error_destroy(bookmark_res.error);
+        } else if (bookmark_res.value && bookmark_res.value[0] != '\0') {
+            ok = ok && emit_plain_scalar(&emitter, "bookmark") &&
+                 emit_quoted_scalar(&emitter, bookmark_res.value, strlen(bookmark_res.value));
+        }
         struct yetty_ycore_size_result run_count_res =
             yetty_yrich_paragraph_run_count(paragraph_obj);
         if (YETTY_IS_ERR(run_count_res)) {
@@ -875,8 +1253,11 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_save_yaml_file(struct yetty_ycla
                 int32_t run_end = 0;
                 uint32_t run_format = 0;
                 uint32_t run_color = 0;
-                struct yetty_ycore_void_result run_res = yetty_yrich_paragraph_run_get(
-                    paragraph_obj, run_index, &run_start, &run_end, &run_format, &run_color);
+                uint32_t run_bg = 0;
+                float run_fs = 0.0f;
+                struct yetty_ycore_void_result run_res =
+                    yetty_yrich_paragraph_run_get(paragraph_obj, run_index, &run_start, &run_end,
+                                                  &run_format, &run_color, &run_bg, &run_fs);
                 if (YETTY_IS_ERR(run_res)) {
                     yetty_ycore_error_destroy(run_res.error);
                     ok = 0;
@@ -887,6 +1268,28 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_save_yaml_file(struct yetty_ycla
                 ok = ok && emit_key_uint(&emitter, "end", (uint32_t)run_end);
                 ok = ok && emit_key_uint(&emitter, "format", run_format);
                 ok = ok && emit_key_color(&emitter, "color", run_color);
+                if (run_bg != YETTY_YRICH_COLOR_TRANSPARENT) {
+                    ok = ok && emit_key_color(&emitter, "bg", run_bg);
+                }
+                if (run_fs > 0.0f) {
+                    ok = ok && emit_key_float(&emitter, "fs", run_fs);
+                }
+                /* Hyperlink: denormalize the run's link id to its URL (the id
+                 * table itself is runtime-only and never serialized). */
+                struct yetty_ycore_uint32_result link_id_res =
+                    yetty_yrich_paragraph_run_link_id(paragraph_obj, run_index);
+                if (YETTY_IS_ERR(link_id_res)) {
+                    yetty_ycore_error_destroy(link_id_res.error);
+                } else if (link_id_res.value != 0) {
+                    struct yetty_ycore_const_char_ptr_result url_res =
+                        yetty_yrich_ydoc_link_url(doc_obj, link_id_res.value);
+                    if (YETTY_IS_ERR(url_res)) {
+                        yetty_ycore_error_destroy(url_res.error);
+                    } else if (url_res.value) {
+                        ok = ok && emit_plain_scalar(&emitter, "link") &&
+                             emit_quoted_scalar(&emitter, url_res.value, strlen(url_res.value));
+                    }
+                }
                 ok = ok && emit_mapping_end(&emitter);
             }
             if (ok) {

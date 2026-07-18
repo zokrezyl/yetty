@@ -387,6 +387,9 @@ struct yetty_yfigure_registry;
 
 struct yetty_ygrid_factory_args {
     struct yetty_yfont_font *default_font;
+    struct yetty_yfont_font *bold_font;
+    struct yetty_yfont_font *italic_font;
+    struct yetty_yfont_font *bold_italic_font;
     struct yetty_ydraw_composite_factory *composite_factory;
     /* See ygrid.h — must stay in sync with the public copy. */
     int absolute_coords;
@@ -3149,6 +3152,21 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory_impl(
                 yetty_ygrid_set_font(gr.value, 0u, args->default_font);
             if (YETTY_IS_ERR(fr)) {
                 ydebug("ygrid_factory: set_font(slot 0) failed: %s", fr.error.msg);
+                yetty_ycore_error_destroy(fr.error);
+            }
+        }
+        /* Optional styled faces at slots 1/2/3 (bold, italic, bold-italic). */
+        const struct yetty_yfont_font *styled[3] = {args->bold_font, args->italic_font,
+                                                    args->bold_italic_font};
+        for (uint32_t style_index = 0; style_index < 3u; style_index++) {
+            if (!styled[style_index]) {
+                continue;
+            }
+            struct yetty_ycore_void_result fr = yetty_ygrid_set_font(
+                gr.value, style_index + 1u, (struct yetty_yfont_font *)styled[style_index]);
+            if (YETTY_IS_ERR(fr)) {
+                ydebug("ygrid_factory: set_font(styled slot %u) failed: %s", style_index + 1u,
+                       fr.error.msg);
                 yetty_ycore_error_destroy(fr.error);
             }
         }

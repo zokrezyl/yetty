@@ -39,9 +39,13 @@ struct yetty_yrich_selection_cells {
 };
 
 struct yetty_yrich_selection_text {
-    yetty_yrich_element_id element_id;
-    int32_t start;
-    int32_t end;
+    yetty_yrich_element_id element_id; /* anchor paragraph */
+    int32_t start;                     /* anchor offset within it */
+    /* Focus (caret) end. Equal to element_id for a selection contained in one
+     * paragraph; a differing id means the selection spans paragraphs from the
+     * anchor to the focus in document order. */
+    yetty_yrich_element_id focus_element_id;
+    int32_t end; /* focus offset within focus_element_id's paragraph */
 };
 
 struct yetty_yrich_selection {
@@ -82,6 +86,12 @@ void yetty_yrich_selection_select_cell(struct yetty_yrich_selection *s,
 void yetty_yrich_selection_select_text(struct yetty_yrich_selection *s,
                                        yetty_yrich_element_id element_id, int32_t start,
                                        int32_t end);
+
+/* Text selection spanning paragraphs: anchor stays at (anchor_id, start),
+ * the focus caret sits at (focus_id, end). */
+void yetty_yrich_selection_select_text_range(struct yetty_yrich_selection *s,
+                                             yetty_yrich_element_id anchor_id, int32_t start,
+                                             yetty_yrich_element_id focus_id, int32_t end);
 
 void yetty_yrich_selection_set_cursor(struct yetty_yrich_selection *s,
                                       yetty_yrich_element_id element_id, int32_t position);
