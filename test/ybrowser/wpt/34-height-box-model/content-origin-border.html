@@ -1,0 +1,98 @@
+<!doctype html><meta charset=utf-8>
+<title>In-flow content starts at the box's OWN border + padding edge (origin is the border-box outer
+origin; content origin = origin + border + padding), on BOTH axes and across block, flex, grid,
+table-cell, float and (as the in-flow counterpart of) an absolute container. This is placement only:
+the used content width and the padding-box return are UNCHANGED — a box's offsetHeight/clientHeight
+must not gain the border again (no double count). Asymmetric borders (l/t/r/b = 4/10/6/8) and padding
+(t/r/b/l = 7/9/11/5) make a stray single/double subtraction visible. An absolute top:0/left:0 child
+sits at the ancestor PADDING edge (origin+border) while the first in-flow child begins a further
+padding lower, proving the two coordinate spaces are distinct. Flex-wrap runs multi-line so its
+compensated return is exercised. The gate grows to 40 only when every assert holds. Viewport 800.</title>
+<style>body{margin:0}</style>
+<div data-test="content-origin-border" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+/* border l/t/r/b = 4/10/6/8 ; padding t/r/b/l = 7/9/11/5. Content offset from border-box top-left is
+   (border_left+pad_left, border_top+pad_top) = (9, 17); right/bottom insets are (6+9)=15 / (8+11)=19. */
+var BP = 'border-left:4px solid #333;border-top:10px solid #333;border-right:6px solid #333;' +
+         'border-bottom:8px solid #333;padding:7px 9px 11px 5px';
+function mk(tag, style, parent){ var el = document.createElement(tag); el.setAttribute('style', style); parent.appendChild(el); return el; }
+function dL(el, cb){ return Math.round(el.getBoundingClientRect().left - cb.getBoundingClientRect().left); }
+function dT(el, cb){ return Math.round(el.getBoundingClientRect().top - cb.getBoundingClientRect().top); }
+function dRins(cb, el){ return Math.round(cb.getBoundingClientRect().right - el.getBoundingClientRect().right); }
+function dBfromTop(el, cb){ return Math.round(el.getBoundingClientRect().bottom - cb.getBoundingClientRect().top); }
+var ok = true;
+
+/* 1. ordinary block, asymmetric borders/padding, TWO children (sibling flow); assert all four content
+      edges AND the container's pinned padding-box/border-box metrics (placement-only: size unchanged). */
+var c1 = mk('div', 'box-sizing:content-box;width:300px;margin:0;' + BP, sandbox);
+var c1a = mk('div', 'height:50px', c1);
+var c1b = mk('div', 'height:30px', c1);
+ok = check(dL(c1a, c1) === 9 && dT(c1a, c1) === 17, "1 first child at border+padding (9,17): " + dL(c1a, c1) + "," + dT(c1a, c1)) && ok;
+ok = check(c1a.offsetWidth === 300, "1 child width UNCHANGED = content 300: " + c1a.offsetWidth) && ok;
+ok = check(dRins(c1, c1a) === 15, "1 child right content edge inset = border+pad 15: " + dRins(c1, c1a)) && ok;
+ok = check(dT(c1b, c1) === 67, "1 sibling flow: second child top = 17+50 = 67: " + dT(c1b, c1)) && ok;
+ok = check(dBfromTop(c1b, c1) === 97, "1 second child bottom = 67+30 = 97: " + dBfromTop(c1b, c1)) && ok;
+ok = check(c1.offsetHeight === 116 && c1.clientHeight === 98,
+           "1 CB metrics off/client = " + c1.offsetHeight + "/" + c1.clientHeight + " (want 116/98, no border double-count)") && ok;
+
+/* 2. nested bordered blocks: grandchild offset = sum of BOTH border+padding, no double count.
+      inner border-left:3/pad-left:2 (=5), border-top:6/pad-top:8 (=14). */
+var o2 = mk('div', 'box-sizing:content-box;width:300px;margin:0;' + BP, sandbox);
+var in2 = mk('div', 'box-sizing:content-box;width:200px;border-left:3px solid #333;border-top:6px solid #333;padding:8px 0 0 2px', o2);
+var gc2 = mk('div', 'height:10px', in2);
+ok = check(dL(in2, o2) === 9 && dT(in2, o2) === 17, "2 inner at outer border+pad (9,17): " + dL(in2, o2) + "," + dT(in2, o2)) && ok;
+ok = check(dL(gc2, o2) === 14 && dT(gc2, o2) === 31, "2 grandchild double offset (9+5,17+14)=(14,31): " + dL(gc2, o2) + "," + dT(gc2, o2)) && ok;
+
+/* 3. bordered flex / grid / table-cell containers: first child at border+padding. */
+var fx = mk('div', 'display:flex;box-sizing:content-box;width:300px;margin:0;' + BP, sandbox);
+var fxi = mk('div', 'width:40px;height:20px', fx);
+ok = check(dL(fxi, fx) === 9 && dT(fxi, fx) === 17, "3 flex item at border+pad (9,17): " + dL(fxi, fx) + "," + dT(fxi, fx)) && ok;
+var gd = mk('div', 'display:grid;grid-template-columns:100px;box-sizing:content-box;width:300px;margin:0;' + BP, sandbox);
+var gdi = mk('div', 'height:20px', gd);
+ok = check(dL(gdi, gd) === 9 && dT(gdi, gd) === 17, "3 grid item at border+pad (9,17): " + dL(gdi, gd) + "," + dT(gdi, gd)) && ok;
+var tw = mk('div', 'margin:0', sandbox);
+tw.innerHTML = "<table style='border-collapse:separate;border-spacing:0;margin:0'><tr>" +
+  "<td id='tdc' style='border-left:4px solid #333;border-top:10px solid #333;padding:7px 0 0 5px'>" +
+  "<div id='tdchild' style='height:20px'></div></td></tr></table>";
+var tdc = document.getElementById('tdc'), tdchild = document.getElementById('tdchild');
+ok = check(dL(tdchild, tdc) === 9 && dT(tdchild, tdc) === 17, "3 table-cell child at border+pad (9,17): " + dL(tdchild, tdc) + "," + dT(tdchild, tdc)) && ok;
+
+/* 4. bordered FLOAT container with a nested child. */
+var fw4 = mk('div', 'margin:0', sandbox);
+var flc = mk('div', 'float:left;box-sizing:content-box;width:100px;' + BP, fw4);
+var flchild = mk('div', 'height:20px', flc);
+ok = check(dL(flchild, flc) === 9 && dT(flchild, flc) === 17, "4 float child at border+pad (9,17): " + dL(flchild, flc) + "," + dT(flchild, flc)) && ok;
+
+/* 6. distinct coordinate spaces: absolute top:0/left:0 sits at the ancestor PADDING edge
+      (origin+border = 10,4) while the first in-flow child begins a further padding lower (17,9). */
+var pc = mk('div', 'position:relative;box-sizing:content-box;width:200px;height:100px;margin:0;' + BP, sandbox);
+var pcAbs = mk('div', 'position:absolute;top:0;left:0;width:20px;height:20px', pc);
+var pcFlow = mk('div', 'height:20px', pc);
+ok = check(dT(pcAbs, pc) === 10 && dL(pcAbs, pc) === 4, "6 abspos top:0/left:0 at PADDING edge (10,4): " + dT(pcAbs, pc) + "," + dL(pcAbs, pc)) && ok;
+ok = check(dT(pcFlow, pc) === 17 && dL(pcFlow, pc) === 9, "6 in-flow child at border+padding (17,9), distinct from abspos: " + dT(pcFlow, pc) + "," + dL(pcFlow, pc)) && ok;
+
+/* 7. border-box height:0 container: child still at border+padding, coordinates non-negative. */
+var zc = mk('div', 'box-sizing:border-box;height:0;width:200px;margin:0;' + BP, sandbox);
+var zchild = mk('div', 'height:10px', zc);
+ok = check(dL(zchild, zc) === 9 && dT(zchild, zc) === 17, "7 zero-height CB child at border+pad (9,17), non-negative: " + dL(zchild, zc) + "," + dT(zchild, zc)) && ok;
+
+/* 8. flex-wrap MULTI-LINE (exercises the compensated flex-wrap return): two 60px items in a 100px
+      content width wrap to 2 lines (heights 20 + 25 = 45); padding box = 7+45+11 = 63, border box =
+      63+10+8 = 81. offsetHeight must be 81, NOT 91 (border_top not double-counted in the wrap return). */
+var fwr = mk('div', 'display:flex;flex-wrap:wrap;box-sizing:content-box;width:100px;margin:0;' + BP, sandbox);
+mk('div', 'width:60px;height:20px;flex-shrink:0', fwr);
+mk('div', 'width:60px;height:25px;flex-shrink:0', fwr);
+ok = check(fwr.offsetHeight === 81 && fwr.clientHeight === 63,
+           "8 flex-wrap 2-line off/client = " + fwr.offsetHeight + "/" + fwr.clientHeight + " (want 81/63)") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="content-origin-border"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

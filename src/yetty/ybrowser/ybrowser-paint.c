@@ -1432,6 +1432,99 @@ static struct yetty_ylexbor_svg_inline_entry *svg_inline_scene_get(struct yetty_
     return entry;
 }
 
+/* Rendered scene for an iron-iconset icon (<yt-icon icon="set:name">). Its
+ * glyph is a document-level <g id="name"> inside <iron-iconset-svg name="set">;
+ * the live web component never copies it here, so we synthesize a standalone
+ * <svg viewBox="0 0 size size" fill="currentColor"> wrapping that <g> and hand
+ * it to the same ysvg path (cached per element, alongside inline <svg>). The
+ * currentColor rewrite mirrors svg_inline_scene_get so a monochrome glyph
+ * inherits the icon's CSS color; a glyph with no fill defaults to black, which
+ * is already correct for a dark icon on a light chrome. */
+static struct yetty_ylexbor_svg_inline_entry *svg_icon_scene_get(struct yetty_ylexbor *r,
+                                                                 lxb_dom_element_t *element,
+                                                                 uint32_t inherited_rgba,
+                                                                 float inherited_font_px)
+{
+    for (int i = 0; i < r->svg_inline_count; i++) {
+        if (r->svg_inline_cache[i].element == (const void *)element) {
+            return &r->svg_inline_cache[i];
+        }
+    }
+    if (r->svg_inline_count == r->svg_inline_cap) {
+        int new_cap = r->svg_inline_cap ? r->svg_inline_cap * 2 : 8;
+        struct yetty_ylexbor_svg_inline_entry *grown =
+            realloc(r->svg_inline_cache, (size_t)new_cap * sizeof(*grown));
+        if (!grown) {
+            return NULL;
+        }
+        r->svg_inline_cache = grown;
+        r->svg_inline_cap = new_cap;
+    }
+    struct yetty_ylexbor_svg_inline_entry *entry = &r->svg_inline_cache[r->svg_inline_count++];
+    memset(entry, 0, sizeof(*entry));
+    entry->element = element;
+
+    float view_size = 24.0f;
+    lxb_dom_element_t *glyph = yetty_ylexbor_icon_resolve(r, element, &view_size);
+    if (!glyph) {
+        return entry; /* unresolved icon → empty scene, painted as nothing */
+    }
+    struct svg_serialize_sink sink = {0};
+    lxb_status_t serialize_status =
+        lxb_html_serialize_tree_cb(lxb_dom_interface_node(glyph), svg_serialize_append, &sink);
+    if (serialize_status != LXB_STATUS_OK || sink.failed || !sink.data || sink.len == 0) {
+        free(sink.data);
+        return entry;
+    }
+    char header[160];
+    int header_len = snprintf(header, sizeof(header),
+                              "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 %g %g\" "
+                              "fill=\"currentColor\">",
+                              (double)view_size, (double)view_size);
+    const char *footer = "</svg>";
+    size_t footer_len = strlen(footer);
+    size_t doc_len = (size_t)header_len + sink.len + footer_len;
+    char *doc = malloc(doc_len + 1);
+    if (!doc) {
+        free(sink.data);
+        return entry;
+    }
+    memcpy(doc, header, (size_t)header_len);
+    memcpy(doc + header_len, sink.data, sink.len);
+    memcpy(doc + header_len + sink.len, footer, footer_len);
+    doc[doc_len] = '\0';
+    free(sink.data);
+
+    /* Resolve currentColor against the icon's inherited CSS color — the
+     * "#rrggbb" replacement (7 bytes) always fits where "currentColor" (12)
+     * stood, so the rewrite shrinks in place. */
+    {
+        char resolved_color[8];
+        snprintf(resolved_color, sizeof(resolved_color), "#%02x%02x%02x",
+                 (inherited_rgba >> 24) & 0xff, (inherited_rgba >> 16) & 0xff,
+                 (inherited_rgba >> 8) & 0xff);
+        size_t write_pos = 0;
+        for (size_t read_pos = 0; read_pos < doc_len;) {
+            if (read_pos + 12 <= doc_len && strncasecmp(doc + read_pos, "currentColor", 12) == 0) {
+                memcpy(doc + write_pos, resolved_color, 7);
+                write_pos += 7;
+                read_pos += 12;
+            } else {
+                doc[write_pos++] = doc[read_pos++];
+            }
+        }
+        doc_len = write_pos;
+        doc[doc_len] = '\0';
+    }
+    yetty_ylexbor_svg_parse_preserve_aspect(doc, doc_len, &entry->par_align_x, &entry->par_align_y,
+                                            &entry->par_mode);
+    (void)yetty_ylexbor_svg_scene_render(r, doc, doc_len, inherited_font_px, &entry->scene,
+                                         &entry->min_x, &entry->min_y, &entry->w, &entry->h,
+                                         &entry->links, &entry->link_count);
+    free(doc);
+    return entry;
+}
+
 /* Emit the drawable prims for one YL_BOX_INLINE_IMAGE box into `buf`,
  * advancing `*z`. `ox`/`oy` translate every emitted coordinate: the full
  * paint passes (0, 0) (the embed adds the widget offset later), while the
@@ -1462,7 +1555,26 @@ static void emit_image_box_prims(struct yetty_ylexbor *r, struct yetty_ylexbor_b
         }
         return;
     }
+    /* iron-iconset icon (<yt-icon>/<iron-icon icon="set:name">): resolve the
+     * document iconset glyph and merge its synthesized svg scene. */
+    if (b->element != NULL) {
+        const char *icon_set = NULL, *icon_name = NULL;
+        size_t icon_set_len = 0, icon_name_len = 0;
+        if (yetty_ylexbor_icon_element_ref(b->element, &icon_set, &icon_set_len, &icon_name,
+                                           &icon_name_len)) {
+            uint32_t inherited_rgba = ((uint32_t)b->fg.r << 24) | ((uint32_t)b->fg.g << 16) |
+                                      ((uint32_t)b->fg.b << 8) | (uint32_t)b->fg.a;
+            struct yetty_ylexbor_svg_inline_entry *icon =
+                svg_icon_scene_get(r, b->element, inherited_rgba, b->font_size);
+            if (icon && icon->scene) {
+                svg_scene_merge(buf, icon->scene, icon->min_x, icon->min_y, icon->w, icon->h, px, py,
+                                b->w, b->h, icon->par_align_x, icon->par_align_y, icon->par_mode, z);
+            }
+            return;
+        }
+    }
     char *url = yetty_ylexbor_img_pick_url(r, b->element);
+    bool had_source = (url != NULL);
     struct yetty_ylexbor_img_cache_entry *cached = NULL;
     if (url) {
         cached = yetty_ylexbor_img_cache_get_or_load(r, url);
@@ -1477,9 +1589,19 @@ static void emit_image_box_prims(struct yetty_ylexbor *r, struct yetty_ylexbor_b
         return;
     }
 
+    /* A source-less <img> (empty `src`, no srcset/data-*) draws NOTHING in a
+     * real browser — not a grey placeholder. YouTube's masthead ships one such
+     * <img> inside its <ytd-yoodle-renderer> (the holiday-doodle slot, empty on
+     * ordinary days); painting a placeholder there put a grey block between the
+     * logo copies. The grey placeholder is still correct for an image that HAD
+     * a source but failed/loaded — that preserves page geometry. */
+    if (!had_source) {
+        return;
+    }
+
     if (!cached || cached->failed || !cached->pixels) {
-        /* Fetch/decode failed (or no src) — fall back to the grey placeholder
-         * so at least the page geometry is preserved. */
+        /* Fetch/decode failed — fall back to the grey placeholder so at least
+         * the page geometry is preserved. */
         struct yetty_ysdf_box box = {
             .center_x = px + b->w * 0.5f,
             .center_y = py + b->h * 0.5f,
@@ -1940,6 +2062,47 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                 stack_build_key(r, i, paint_order[i].key, &paint_order[i].pairs);
             }
             qsort(paint_order, r->boxes.size, sizeof(*paint_order), paint_slot_cmp);
+        }
+    }
+
+    /* Canvas background: per CSS the root element's background — or, when the
+	 * root is transparent, the body's (CSS background propagation) — fills the
+	 * whole VIEWPORT, not just the content box. A page shorter than the viewport
+	 * would otherwise leave the region below the content painted with the frame
+	 * clear color (black) instead of the page background (YouTube's homepage: a
+	 * white page ~610px tall in a 935px window left a black band below). Emit it
+	 * first (lowest z), behind every box, covering max(viewport, content). */
+    if (r->boxes.size > 0) {
+        struct yetty_ylexbor_color canvas_bg = r->boxes.data[0].bg;
+        if (canvas_bg.a == 0) {
+            for (uint32_t i = 0; i < r->boxes.size; i++) {
+                const struct yetty_ylexbor_box *body = &r->boxes.data[i];
+                if (body->element != NULL && body->element->node.local_name == LXB_TAG_BODY) {
+                    canvas_bg = body->bg;
+                    break;
+                }
+            }
+        }
+        if (canvas_bg.a != 0) {
+            float viewport_w = (float)r->viewport_w;
+            float viewport_h = (float)r->viewport_h;
+            float root_h = r->boxes.data[0].h;
+            float fill_h = viewport_h > root_h ? viewport_h : root_h;
+            struct yetty_ysdf_box canvas = {
+                .center_x = viewport_w * 0.5f,
+                .center_y = fill_h * 0.5f,
+                .half_width = viewport_w * 0.5f,
+                .half_height = fill_h * 0.5f,
+                .corner_radius = 0.0f,
+            };
+            (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(canvas_bg), 0, 0,
+                                                            &canvas);
+            if (viewport_w > scene_max_x) {
+                scene_max_x = viewport_w;
+            }
+            if (fill_h > scene_max_y) {
+                scene_max_y = fill_h;
+            }
         }
     }
 

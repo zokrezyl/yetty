@@ -129,10 +129,10 @@ static const struct yl_default_style *default_for(lxb_tag_id_t tag)
      * its math markup). We hide the subtrees outright until we render
      * them properly. <svg> is NOT here: it gets a replaced box (sized
      * from CSS/attrs/viewBox, subtree never walked) so icon/logo
-     * layout reserves the right space. <video> is NOT here either —
-     * it gets a replaced box so media frames keep their shape. */
+     * layout reserves the right space. */
     case LXB_TAG_MATH:
     case LXB_TAG_AUDIO:
+    case LXB_TAG_VIDEO:
     case LXB_TAG_OBJECT:
     case LXB_TAG_EMBED:
     case LXB_TAG_CANVAS:
@@ -977,7 +977,213 @@ static int is_display_none(lxb_dom_element_t *el)
     if (h) {
         return 1;
     }
+    /* `hide-lottie`: the doodle/animation slot marks itself with this attribute
+     * on ordinary days (no active animation). The matching `[hide-lottie]{
+     * display:none}` rule ships as per-component scoped CSS that our cascade
+     * never receives, so the slot's empty picture + fallback logo would paint —
+     * duplicating the real masthead logo. Honour the attribute directly. */
+    size_t ll = 0;
+    const lxb_char_t *lottie =
+        lxb_dom_element_get_attribute(el, (const lxb_char_t *)"hide-lottie", 11, &ll);
+    if (lottie) {
+        return 1;
+    }
     return 0;
+}
+
+/* --- iron-iconset icon support (see ybrowser-internal.h) -------------------*/
+
+bool yetty_ylexbor_icon_element_ref(lxb_dom_element_t *el, const char **out_set,
+                                    size_t *out_set_len, const char **out_name,
+                                    size_t *out_name_len)
+{
+    if (!el) {
+        return false;
+    }
+    /* Only <yt-icon> / <iron-icon> carry an iconset reference we resolve.
+     * Any other element keeps its normal box treatment. */
+    size_t tag_len = 0;
+    const lxb_char_t *tag = lxb_dom_element_local_name(el, &tag_len);
+    if (!tag) {
+        return false;
+    }
+    bool is_icon_tag = (tag_len == 7 && memcmp(tag, "yt-icon", 7) == 0) ||
+                       (tag_len == 9 && memcmp(tag, "iron-icon", 9) == 0);
+    if (!is_icon_tag) {
+        return false;
+    }
+    size_t icon_len = 0;
+    const lxb_char_t *icon =
+        lxb_dom_element_get_attribute(el, (const lxb_char_t *)"icon", 4, &icon_len);
+    if (!icon || icon_len == 0) {
+        return false;
+    }
+    const char *value = (const char *)icon;
+    const char *colon = memchr(value, ':', icon_len);
+    if (colon) {
+        *out_set = value;
+        *out_set_len = (size_t)(colon - value);
+        *out_name = colon + 1;
+        *out_name_len = icon_len - *out_set_len - 1;
+    } else {
+        /* Bare name → the default iron iconset "icons". */
+        *out_set = "icons";
+        *out_set_len = 5;
+        *out_name = value;
+        *out_name_len = icon_len;
+    }
+    return *out_name_len > 0;
+}
+
+/* Depth-first search under `root` (inclusive of `root`'s sibling list) for
+ * the first element whose local name and attribute value both match. */
+static lxb_dom_element_t *dom_find_by_tag_attr(lxb_dom_node_t *root, const char *tag,
+                                               size_t tag_len, const char *attr, size_t attr_len,
+                                               const char *val, size_t val_len)
+{
+    for (lxb_dom_node_t *node = root; node != NULL; node = node->next) {
+        if (node->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+            lxb_dom_element_t *element = lxb_dom_interface_element(node);
+            size_t name_len = 0;
+            const lxb_char_t *name = lxb_dom_element_local_name(element, &name_len);
+            if (name && name_len == tag_len && memcmp(name, tag, tag_len) == 0) {
+                size_t got_len = 0;
+                const lxb_char_t *got = lxb_dom_element_get_attribute(
+                    element, (const lxb_char_t *)attr, attr_len, &got_len);
+                if (got && got_len == val_len && memcmp(got, val, val_len) == 0) {
+                    return element;
+                }
+            }
+        }
+        if (node->first_child) {
+            lxb_dom_element_t *found = dom_find_by_tag_attr(node->first_child, tag, tag_len, attr,
+                                                            attr_len, val, val_len);
+            if (found) {
+                return found;
+            }
+        }
+    }
+    return NULL;
+}
+
+/* Depth-first search under `root` for the first element with id == `id`. */
+static lxb_dom_element_t *dom_find_by_id(lxb_dom_node_t *root, const char *id, size_t id_len)
+{
+    for (lxb_dom_node_t *node = root; node != NULL; node = node->next) {
+        if (node->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+            lxb_dom_element_t *element = lxb_dom_interface_element(node);
+            size_t got_len = 0;
+            const lxb_char_t *got =
+                lxb_dom_element_get_attribute(element, (const lxb_char_t *)"id", 2, &got_len);
+            if (got && got_len == id_len && memcmp(got, id, id_len) == 0) {
+                return element;
+            }
+        }
+        if (node->first_child) {
+            lxb_dom_element_t *found = dom_find_by_id(node->first_child, id, id_len);
+            if (found) {
+                return found;
+            }
+        }
+    }
+    return NULL;
+}
+
+static bool dom_element_is(lxb_dom_element_t *element, const char *tag, size_t tag_len)
+{
+    size_t name_len = 0;
+    const lxb_char_t *name = lxb_dom_element_local_name(element, &name_len);
+    return name && name_len == tag_len && memcmp(name, tag, tag_len) == 0;
+}
+
+/* Search every <iron-iconset-svg> under `root` for a glyph with id == `name`,
+ * returning the first hit. Used as a fallback when the *named* iconset is
+ * present but empty — which is exactly what happens to YouTube's `yt-icons`
+ * set, whose glyphs are registered by page JS we don't fully run, while the
+ * canonical glyph still lives in another (e.g. Polymer's core `icons`) set.
+ * Scoped to iconsets so a page-content element that happens to share the id
+ * (a random <g id="menu"> in body) can never be mistaken for a glyph. */
+static lxb_dom_element_t *dom_find_glyph_in_iconsets(lxb_dom_node_t *root, const char *name,
+                                                     size_t name_len)
+{
+    for (lxb_dom_node_t *node = root; node != NULL; node = node->next) {
+        if (node->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+            lxb_dom_element_t *element = lxb_dom_interface_element(node);
+            if (dom_element_is(element, "iron-iconset-svg", 16)) {
+                lxb_dom_element_t *glyph = dom_find_by_id(node->first_child, name, name_len);
+                if (glyph) {
+                    return glyph;
+                }
+                continue; /* already searched this iconset's subtree */
+            }
+        }
+        if (node->first_child) {
+            lxb_dom_element_t *found = dom_find_glyph_in_iconsets(node->first_child, name, name_len);
+            if (found) {
+                return found;
+            }
+        }
+    }
+    return NULL;
+}
+
+/* iconset `size` attribute of the nearest <iron-iconset-svg> ancestor of a
+ * resolved glyph (default 24 = the iron-icon convention). */
+static float iconset_size_of(lxb_dom_element_t *glyph)
+{
+    for (lxb_dom_node_t *node = lxb_dom_interface_node(glyph)->parent; node != NULL;
+         node = node->parent) {
+        if (node->type == LXB_DOM_NODE_TYPE_ELEMENT &&
+            dom_element_is(lxb_dom_interface_element(node), "iron-iconset-svg", 16)) {
+            size_t size_len = 0;
+            const lxb_char_t *size_attr = lxb_dom_element_get_attribute(
+                lxb_dom_interface_element(node), (const lxb_char_t *)"size", 4, &size_len);
+            if (size_attr && size_len > 0) {
+                float parsed = (float)atof((const char *)size_attr);
+                if (parsed > 0.0f) {
+                    return parsed;
+                }
+            }
+            return 24.0f;
+        }
+    }
+    return 24.0f;
+}
+
+lxb_dom_element_t *yetty_ylexbor_icon_resolve(struct yetty_ylexbor *r, lxb_dom_element_t *icon_el,
+                                              float *out_view_size)
+{
+    if (out_view_size) {
+        *out_view_size = 24.0f;
+    }
+    if (!r || !r->document) {
+        return NULL;
+    }
+    const char *set = NULL, *name = NULL;
+    size_t set_len = 0, name_len = 0;
+    if (!yetty_ylexbor_icon_element_ref(icon_el, &set, &set_len, &name, &name_len)) {
+        return NULL;
+    }
+    lxb_dom_node_t *doc_node = lxb_dom_interface_node(r->document);
+    /* Prefer the named iconset; fall back to any populated iconset carrying
+     * the glyph (the named set may exist but be empty — see the fallback's
+     * comment). The glyph is the <g id="name"> (or <svg id="name">) inside. */
+    lxb_dom_element_t *glyph = NULL;
+    lxb_dom_element_t *iconset =
+        dom_find_by_tag_attr(doc_node, "iron-iconset-svg", 16, "name", 4, set, set_len);
+    if (iconset) {
+        glyph = dom_find_by_id(lxb_dom_interface_node(iconset)->first_child, name, name_len);
+    }
+    if (!glyph) {
+        glyph = dom_find_glyph_in_iconsets(doc_node, name, name_len);
+    }
+    if (!glyph) {
+        return NULL;
+    }
+    if (out_view_size) {
+        *out_view_size = iconset_size_of(glyph);
+    }
+    return glyph;
 }
 
 /* Pull the *computed* CSS for `el` (cascade result of all matching
@@ -1299,7 +1505,16 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
         /* <img> and <svg> are replaced elements — even when CSS (or the
 		 * blockification above) says otherwise, they route to the
 		 * replaced-box branch below rather than recursing as content. */
-        if (child->local_name == LXB_TAG_IMG || child->local_name == LXB_TAG_SVG) {
+        /* An <yt-icon>/<iron-icon icon="set:name"> is a replaced element too:
+         * its glyph is a document iron-iconset <g>, resolved and painted like
+         * an inline <svg> (see the SVG branch below). Detect once here so the
+         * disp override and the replaced branch agree. */
+        const char *icon_set = NULL, *icon_name = NULL;
+        size_t icon_set_len = 0, icon_name_len = 0;
+        bool is_icon_el = yetty_ylexbor_icon_element_ref(el, &icon_set, &icon_set_len, &icon_name,
+                                                         &icon_name_len);
+
+        if (child->local_name == LXB_TAG_IMG || child->local_name == LXB_TAG_SVG || is_icon_el) {
             effective_disp = YL_DISP_INLINE;
         }
 
@@ -1400,20 +1615,12 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         b->font_italic = italic;
                         s.font_italic = italic;
                     }
-                    /* Per-family advance override, inherited via the style
-					 * state so the flushed inline-text boxes measure with it
-					 * too. Ahem (the WPT test font): every glyph exactly 1em.
-					 * Monospace families: 0.602em — DejaVu Sans Mono /
-					 * Liberation Mono, what Chrome on Linux uses for
-					 * `monospace`. Everything else keeps the proportional
-					 * default (glyph_advance 0). */
-                    {
-                        int font_class = yetty_ybrowser_libcss_font_advance_class(cs);
-                        if (font_class == 1) {
-                            s.glyph_advance = 1.0f;
-                        } else if (font_class == 2) {
-                            s.glyph_advance = 0.602f;
-                        }
+                    /* `font-family: Ahem` (the WPT test font) — every glyph is
+					 * exactly 1em wide, so use advance ratio 1.0 for exact text
+					 * geometry. Inherited via the style state so the flushed
+					 * inline-text boxes measure with it too. */
+                    if (yetty_ybrowser_libcss_font_is_ahem(cs)) {
+                        s.glyph_advance = 1.0f;
                     }
                     b->glyph_advance = s.glyph_advance;
                     b->border_box = yetty_ybrowser_libcss_box_sizing(cs) != 0;
@@ -1479,6 +1686,12 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                                ? s.font_size * 30.0f
                                                : s.font_size * 10.6f;
                         }
+                        /* INVARIANT: css_height_set is deliberately NOT raised
+                         * for this intrinsic size. It is engine-supplied OUTER
+                         * geometry, not an author box-sizing height; layout keys
+                         * on `css_height > 0 && !css_height_set` to keep it
+                         * as-is and must never route it through the border-box
+                         * height conversion (used_border_box_height_from_spec). */
                         if (b->css_height == 0.0f) {
                             b->css_height = child->local_name == LXB_TAG_TEXTAREA
                                                 ? s.font_size * 4.5f
@@ -1986,11 +2199,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     /* `position` + insets. RELATIVE shifts the box (and its
 					 * subtree) by the insets after normal-flow placement;
 					 * ABSOLUTE/FIXED pull it out of flow and place it against
-					 * a containing block. STICKY collapses to RELATIVE for
-					 * containing-block purposes, but its insets are scroll
-					 * constraints, not offsets — at rest (scroll 0) a sticky
-					 * box renders at its normal flow position, so its insets
-					 * are NOT recorded. */
+					 * a containing block. STICKY collapses to RELATIVE. */
                     {
                         int visibility = yetty_ybrowser_libcss_visibility(cs);
                         s.vis_hidden = visibility == CSS_VISIBILITY_HIDDEN ||
@@ -2012,7 +2221,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     } else {
                         b->position = YL_POS_STATIC;
                     }
-                    if (b->position != YL_POS_STATIC && pos != CSS_POSITION_STICKY) {
+                    if (b->position != YL_POS_STATIC) {
                         float inset = 0.0f;
                         float *inset_field[4] = {&b->pos_top, &b->pos_right, &b->pos_bottom,
                                                  &b->pos_left};
@@ -2298,13 +2507,9 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 ib->element = el;
                 /* Inherited style flows into the replaced element — the
 				 * SVG path resolves `currentColor` against fg and seeds
-				 * its default font-size from font_size. Opacity and
-				 * visibility fold down like any other box: an image inside
-				 * an opacity:0 subtree must not paint. */
+				 * its default font-size from font_size. */
                 ib->fg = s.fg;
                 ib->font_size = s.font_size;
-                ib->opacity = s.opacity;
-                ib->vis_hidden = s.vis_hidden;
 
                 /* HTML width/height attrs (in px) take priority
 				 * — the spec calls these the "presentation
@@ -2480,8 +2685,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     parse_html_dimension_attr((const char *)iframe_aw, iframe_alen, &definite_w,
                                               &pct_w);
                 }
-                const lxb_char_t *iframe_ah = lxb_dom_element_get_attribute(
-                    el, (const lxb_char_t *)"height", 6, &iframe_alen);
+                const lxb_char_t *iframe_ah =
+                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"height", 6, &iframe_alen);
                 if (iframe_ah && iframe_alen > 0) {
                     parse_html_dimension_attr((const char *)iframe_ah, iframe_alen, &definite_h,
                                               &pct_h);
@@ -2506,7 +2711,6 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             px > 0.0f) {
                             definite_h = px;
                         }
-                        yetty_ybrowser_libcss_release(iframe_cs);
                     }
                 }
                 /* Definite px wins; else a percentage attr fills the parent
@@ -2522,86 +2726,16 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 link_child(r, parent_idx, iframe_idx);
                 continue;
             }
-            if (child->local_name == LXB_TAG_VIDEO) {
-                /* <video> is a replaced element for layout: reserve its box
-                 * from the width/height presentation attrs, CSS pixel sizes,
-                 * or the CSS replaced default 300x150 (playback itself is a
-                 * separate concern — without the box, hero media frames
-                 * collapse and the whole section mis-stacks). */
-                struct yetty_ycore_void_result flush_res =
-                    flush_inline(r, parent_style, parent_idx, inline_collect);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "walk: flush before video");
-                uint32_t vidx;
-                struct yetty_ycore_void_result alloc_res = box_alloc(r, &vidx);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, alloc_res, "walk: box_alloc video");
-                struct yetty_ylexbor_box *video_box = &r->boxes.data[vidx];
-                video_box->kind = YL_BOX_INLINE_IMAGE;
-                video_box->element = el;
-                video_box->fg = s.fg;
-                video_box->font_size = s.font_size;
-                video_box->opacity = s.opacity;
-                video_box->vis_hidden = s.vis_hidden;
-
-                float attr_w = 0.0f, attr_h = 0.0f;
-                size_t alen = 0;
-                const lxb_char_t *aw =
-                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"width", 5, &alen);
-                if (aw && alen > 0) {
-                    attr_w = (float)atof((const char *)aw);
-                }
-                const lxb_char_t *ah =
-                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"height", 6, &alen);
-                if (ah && alen > 0) {
-                    attr_h = (float)atof((const char *)ah);
-                }
-                float css_w = 0.0f, css_h = 0.0f;
-                {
-                    size_t vstylen = 0;
-                    const lxb_char_t *vstyle =
-                        lxb_dom_element_get_attribute(el, (const lxb_char_t *)"style", 5, &vstylen);
-                    css_computed_style *video_cs = yetty_ybrowser_libcss_select(
-                        r, el, (const char *)vstyle, vstyle ? vstylen : 0);
-                    video_box = &r->boxes.data[vidx];
-                    if (video_cs) {
-                        float px = 0.0f;
-                        float pct_basis_video = s.font_size * 16.0f;
-                        if (yetty_ybrowser_libcss_width(r, video_cs, s.font_size, pct_basis_video,
-                                                        &px) &&
-                            px > 0.0f) {
-                            css_w = px;
-                        }
-                        if (yetty_ybrowser_libcss_height(r, video_cs, s.font_size, pct_basis_video,
-                                                         &px) &&
-                            px > 0.0f) {
-                            css_h = px;
-                        }
-                        yetty_ybrowser_libcss_release(video_cs);
-                        video_box = &r->boxes.data[vidx];
-                    }
-                }
-                float box_w = css_w > 0.0f ? css_w : attr_w;
-                float box_h = css_h > 0.0f ? css_h : attr_h;
-                if (box_w > 0.0f && box_h <= 0.0f) {
-                    box_h = box_w * 0.5f; /* the 300x150 replaced default's 2:1 */
-                } else if (box_h > 0.0f && box_w <= 0.0f) {
-                    box_w = box_h * 2.0f;
-                } else if (box_w <= 0.0f && box_h <= 0.0f) {
-                    box_w = 300.0f;
-                    box_h = 150.0f;
-                }
-                video_box->w = box_w;
-                video_box->h = box_h;
-                link_child(r, parent_idx, vidx);
-                continue;
-            }
-            if (child->local_name == LXB_TAG_SVG) {
-                /* Inline <svg> is a replaced element for layout: a box
-                 * sized from CSS, its width/height attributes, or the
-                 * viewBox — and its vector subtree is NOT walked
-                 * (<path>/<title> are not layout content; the svg <title>
-                 * otherwise leaks into the text run). Painting the vector
-                 * is a separate concern — reserving the right space fixes
-                 * toolbar/logo/icon layout. */
+            if (child->local_name == LXB_TAG_SVG || is_icon_el) {
+                /* Inline <svg> (and iron-iconset <yt-icon>/<iron-icon>) is a
+                 * replaced element for layout: a box sized from CSS, its
+                 * width/height attributes, or the viewBox — and its vector
+                 * subtree is NOT walked (<path>/<title> are not layout content;
+                 * the svg <title> otherwise leaks into the text run). Painting
+                 * the vector is a separate concern — reserving the right space
+                 * fixes toolbar/logo/icon layout. An icon has no width/height/
+                 * viewBox attrs of its own: its intrinsic square comes from the
+                 * resolved iconset `size`. */
                 struct yetty_ycore_void_result flush_res =
                     flush_inline(r, parent_style, parent_idx, inline_collect);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "walk: flush before svg");
@@ -2613,35 +2747,43 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 svg_box->element = el;
                 svg_box->fg = s.fg;
                 svg_box->font_size = s.font_size;
-                svg_box->opacity = s.opacity;
-                svg_box->vis_hidden = s.vis_hidden;
 
                 float attr_w = 0.0f, attr_h = 0.0f;
-                size_t alen = 0;
-                const lxb_char_t *aw =
-                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"width", 5, &alen);
-                if (aw && alen > 0) {
-                    attr_w = (float)atof((const char *)aw);
-                }
-                const lxb_char_t *ah =
-                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"height", 6, &alen);
-                if (ah && alen > 0) {
-                    attr_h = (float)atof((const char *)ah);
-                }
                 float view_w = 0.0f, view_h = 0.0f;
-                const lxb_char_t *vb =
-                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"viewBox", 7, &alen);
-                if (vb && alen > 0) {
-                    float view_min_x = 0.0f, view_min_y = 0.0f;
-                    if (sscanf((const char *)vb, "%f %f %f %f", &view_min_x, &view_min_y, &view_w,
-                               &view_h) != 4) {
-                        view_w = 0.0f;
-                        view_h = 0.0f;
+                size_t alen = 0;
+                if (is_icon_el) {
+                    /* Intrinsic square = iconset viewBox side (default 24).
+                     * The doc walk to the iconset is skipped when absent — the
+                     * painter re-resolves and caches; here we only need a size
+                     * for the aspect fallback below. */
+                    float icon_view = 24.0f;
+                    (void)yetty_ylexbor_icon_resolve(r, el, &icon_view);
+                    view_w = icon_view;
+                    view_h = icon_view;
+                } else {
+                    const lxb_char_t *aw =
+                        lxb_dom_element_get_attribute(el, (const lxb_char_t *)"width", 5, &alen);
+                    if (aw && alen > 0) {
+                        attr_w = (float)atof((const char *)aw);
+                    }
+                    const lxb_char_t *ah =
+                        lxb_dom_element_get_attribute(el, (const lxb_char_t *)"height", 6, &alen);
+                    if (ah && alen > 0) {
+                        attr_h = (float)atof((const char *)ah);
+                    }
+                    const lxb_char_t *vb =
+                        lxb_dom_element_get_attribute(el, (const lxb_char_t *)"viewBox", 7, &alen);
+                    if (vb && alen > 0) {
+                        float view_min_x = 0.0f, view_min_y = 0.0f;
+                        if (sscanf((const char *)vb, "%f %f %f %f", &view_min_x, &view_min_y, &view_w,
+                                   &view_h) != 4) {
+                            view_w = 0.0f;
+                            view_h = 0.0f;
+                        }
                     }
                 }
 
                 float css_w = 0.0f, css_h = 0.0f;
-                float css_max_w = 0.0f, css_max_h = 0.0f;
                 {
                     size_t svg_istylen = 0;
                     const lxb_char_t *svg_istyle = lxb_dom_element_get_attribute(
@@ -2662,19 +2804,6 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                                          &px) &&
                             px > 0.0f) {
                             css_h = px;
-                        }
-                        /* Pixel max-width/-height cap the replaced box below
-                         * (aspect-preserving). Percent maxima (negative) need
-                         * a containing block and stay a layout concern. */
-                        if (yetty_ybrowser_libcss_max_width(r, svg_cs, s.font_size, pct_basis_svg,
-                                                            &px) &&
-                            px > 0.0f) {
-                            css_max_w = px;
-                        }
-                        if (yetty_ybrowser_libcss_max_height(r, svg_cs, s.font_size, pct_basis_svg,
-                                                             &px) &&
-                            px > 0.0f) {
-                            css_max_h = px;
                         }
                         /* The element's computed `color` (cascade-resolved,
 					 * so plain inheritance already flowed through it)
@@ -2728,17 +2857,6 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 					 * hurts more than an undersized one.) */
                     box_w = view_w > 0.0f ? view_w : 24.0f;
                     box_h = view_h > 0.0f ? view_h : 24.0f;
-                }
-                /* `max-width:16px` icon caps (github NavLink) — the markup
-                 * width attribute says 24 but the media-gated CSS clamps the
-                 * rendered icon; scale the other axis to keep the aspect. */
-                if (css_max_w > 0.0f && box_w > css_max_w) {
-                    box_h *= css_max_w / box_w;
-                    box_w = css_max_w;
-                }
-                if (css_max_h > 0.0f && box_h > css_max_h) {
-                    box_w *= css_max_h / box_h;
-                    box_h = css_max_h;
                 }
                 svg_box->w = box_w;
                 svg_box->h = box_h;
@@ -2879,10 +2997,6 @@ struct yetty_ycore_void_result yetty_ylexbor_box_build(struct yetty_ylexbor *r)
         }
     }
     r->boxes.size = 0;
-    /* The dropped boxes were the only consumers of arena text (b->text,
-	 * marker_text, grid names) — release it, or every relayout duplicates
-	 * all page text again (unbounded growth on timer-driven pages). */
-    yetty_ylexbor_arena_reset(r);
 
     /* Root box wraps the whole viewport. */
     uint32_t root_idx;

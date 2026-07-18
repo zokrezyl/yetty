@@ -1,0 +1,118 @@
+<!doctype html><meta charset=utf-8>
+<title>Table cells carry a USED BORDER-BOX height on box->h like blocks/flex/grid items: offsetHeight
+= border box, clientHeight = border box minus vertical borders, getBoundingClientRect().height agrees.
+CSS height on a cell is a MINIMUM, not a fixed height: an explicit height (content-box or border-box,
+box-sizing honored) raises the cell to at least that border box, but taller content always wins — an
+explicit small height, or height:0, must NOT collapse the cell below its content. A row's height is
+the max cell border box; shorter cells equalize to it with NO double border. A multi-row table's
+padding-box height is the sum of its row heights (this engine does not implement border-spacing /
+border-collapse). An unresolved percentage height stays auto (indefinite row track). The gate grows
+to 40 only when every assert holds. Harness viewport 800px wide.</title>
+<style>body{margin:0}</style>
+<div data-test="table-height" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+/* 20px total vertical border unless a test overrides it. */
+var B = "border-top:10px solid #333;border-bottom:10px solid #333";
+function tbl(inner){
+  var d = document.createElement('div');
+  d.setAttribute('style', 'display:block;margin:0');
+  d.innerHTML = "<table style='border-collapse:separate;border-spacing:0;margin:0;padding:0;border:0'>" +
+                inner + "</table>";
+  sandbox.appendChild(d);
+  return d;
+}
+function cell(id){ return document.getElementById(id); }
+function m3(el){ var r = el.getBoundingClientRect(); return [el.offsetHeight, el.clientHeight, Math.round(r.height)]; }
+function eq3(el, oh, ch, rh, label){
+  var g = m3(el);
+  return check(g[0] === oh && g[1] === ch && g[2] === rh,
+               label + " -> off/client/rect = " + g[0] + "/" + g[1] + "/" + g[2] +
+               " (want " + oh + "/" + ch + "/" + rh + ")");
+}
+var ok = true;
+
+/* 1. content-box explicit height LARGER than content -> H+P+B minimum wins.
+      spec 50 + pad 10 + border 20 = 80; content 20 + 10 + 20 = 50; 80 >= 50 -> 80 (css). */
+tbl("<tr><td id='t1' style='box-sizing:content-box;height:50px;padding:5px 0;" + B +
+    "'><div style='height:20px'></div></td></tr>");
+ok = eq3(cell('t1'), 80, 60, 80, "1 content-box height>content: H+P+B min wins") && ok;
+ok = check(cell('t1').parentNode.offsetHeight === 80,
+           "1 single-cell row = cell border-box 80: " + cell('t1').parentNode.offsetHeight) && ok;
+
+/* 2. border-box explicit height larger than content -> H wins, no double-add. */
+tbl("<tr><td id='t2' style='box-sizing:border-box;height:80px;padding:5px 0;" + B +
+    "'><div style='height:20px'></div></td></tr>");
+ok = eq3(cell('t2'), 80, 60, 80, "2 border-box height>content: H wins, no double-add") && ok;
+
+/* 3. height:0 with nonempty content, content-box AND border-box -> content outer wins;
+      it must NOT become P+B or zero. content 30 + 10 + 20 = 60. */
+tbl("<tr><td id='t3a' style='box-sizing:content-box;height:0;padding:5px 0;" + B +
+    "'><div style='height:30px'></div></td></tr>");
+ok = eq3(cell('t3a'), 60, 40, 60, "3a height:0 content-box w/content -> content outer 60 (not P+B)") && ok;
+tbl("<tr><td id='t3b' style='box-sizing:border-box;height:0;padding:5px 0;" + B +
+    "'><div style='height:30px'></div></td></tr>");
+ok = eq3(cell('t3b'), 60, 40, 60, "3b height:0 border-box w/content -> content outer 60 (not zero)") && ok;
+
+/* 4. explicit height smaller than tall content -> content outer height wins.
+      spec 10 + 10 + 20 = 40; content 40 + 10 + 20 = 70; 40 < 70 -> 70 (content). */
+tbl("<tr><td id='t4' style='box-sizing:content-box;height:10px;padding:5px 0;" + B +
+    "'><div style='height:40px'></div></td></tr>");
+ok = eq3(cell('t4'), 70, 50, 70, "4 explicit height < tall content -> content outer wins") && ok;
+
+/* 5. empty/minimal-content height:0 with explicit padding/borders -> natural padding+border outer
+      size retained (30), NOT collapsed to zero. content 0 + 10 + 20 = 30 == spec 0 + 10 + 20 -> 30. */
+tbl("<tr><td id='t5' style='box-sizing:content-box;height:0;padding:5px 0;" + B + "'></td></tr>");
+ok = eq3(cell('t5'), 30, 10, 30, "5 empty height:0 -> natural pad+border 30 retained (not collapsed)") && ok;
+
+/* 6. auto cell -> content + P + B. content 25 + 10 + 20 = 55. */
+tbl("<tr><td id='t6' style='box-sizing:content-box;padding:5px 0;" + B +
+    "'><div style='height:25px'></div></td></tr>");
+ok = eq3(cell('t6'), 55, 35, 55, "6 auto cell -> content+P+B = 55") && ok;
+
+/* 7. two cells, one taller -> row height is the max cell border box (80); the shorter cell equalizes
+      to that border-box row height with NO re-added border (clientHeight 80-20 = 60). */
+tbl("<tr><td id='t7a' style='box-sizing:content-box;padding:0;" + B + "'><div style='height:30px'></div></td>" +
+        "<td id='t7b' style='box-sizing:content-box;padding:0;" + B + "'><div style='height:60px'></div></td></tr>");
+ok = check(cell('t7b').offsetHeight === 80, "7 taller cell border-box 80: " + cell('t7b').offsetHeight) && ok;
+ok = check(cell('t7a').offsetHeight === 80, "7 shorter cell equalizes to row 80: " + cell('t7a').offsetHeight) && ok;
+ok = check(cell('t7a').clientHeight === 60,
+           "7 equalized cell clientHeight = 80-20 borders (no double): " + cell('t7a').clientHeight) && ok;
+ok = check(cell('t7a').parentNode.offsetHeight === 80,
+           "7 row height = 80: " + cell('t7a').parentNode.offsetHeight) && ok;
+
+/* 8. asymmetric borders (10 top / 4 bottom) + padding (8/8) -> assert offset/client/rect and both
+      row edges. content 30 + pad 16 + border 14 = 60; clientHeight 60 - 14 = 46. */
+tbl("<tr><td id='t8' style='box-sizing:content-box;padding:8px 0;" +
+    "border-top:10px solid #333;border-bottom:4px solid #333'><div style='height:30px'></div></td></tr>");
+ok = eq3(cell('t8'), 60, 46, 60, "8 asymmetric borders/padding") && ok;
+var r8 = cell('t8').parentNode.getBoundingClientRect(), c8 = cell('t8').getBoundingClientRect();
+ok = check(Math.round(c8.top - r8.top) === 0, "8 cell top at row top: " + Math.round(c8.top - r8.top)) && ok;
+ok = check(Math.round(c8.bottom - r8.top) === 60,
+           "8 cell bottom at row bottom 60: " + Math.round(c8.bottom - r8.top)) && ok;
+
+/* 9. multi-row table -> table padding-box height is the sum of row heights (40 + 50 = 90) under the
+      engine's unimplemented-spacing model. */
+var d9 = tbl("<tr><td id='t9a' style='padding:0;" + B + "'><div style='height:20px'></div></td></tr>" +
+             "<tr><td id='t9b' style='padding:0;" + B + "'><div style='height:30px'></div></td></tr>");
+ok = check(cell('t9a').parentNode.offsetHeight === 40, "9 row1 = 40: " + cell('t9a').parentNode.offsetHeight) && ok;
+ok = check(cell('t9b').parentNode.offsetHeight === 50, "9 row2 = 50: " + cell('t9b').parentNode.offsetHeight) && ok;
+ok = check(d9.querySelector('table').offsetHeight === 90,
+           "9 table height = sum of rows 90: " + d9.querySelector('table').offsetHeight) && ok;
+
+/* 10. unresolved percentage height -> behaves as auto (indefinite row track, documented limitation).
+       content 25 + border 20 = 45; the 50% is ignored. */
+tbl("<tr><td id='t10' style='box-sizing:content-box;height:50%;padding:0;" + B +
+    "'><div style='height:25px'></div></td></tr>");
+ok = eq3(cell('t10'), 45, 25, 45, "10 percentage height -> auto (documented limitation)") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="table-height"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

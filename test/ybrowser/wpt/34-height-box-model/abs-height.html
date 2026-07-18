@@ -1,0 +1,116 @@
+<!doctype html><meta charset=utf-8>
+<title>Absolutely-positioned boxes carry a USED BORDER-BOX height on box->h like every other mode:
+offsetHeight = border box, clientHeight = border box minus vertical borders, rect height agrees.
+box-sizing is honored on explicit AND percentage heights; an explicit height:0 is a definite zero
+(content-box = P+B, border-box = 0), NOT auto content. An auto height adds the box's own border. A
+percentage resolves against the DEFINITE containing-block (padding box) height. top+height and
+bottom+height place the border box correctly (bottom anchoring proves the height is border-box);
+top+bottom+auto stretches to the inset gap (clamped at 0 when over-constrained); top+bottom+definite
+height is over-constrained so bottom is ignored (horizontal-tb). An abspos box neither advances flow
+siblings nor inflates an auto-height containing block. Nested abspos resolve against their own
+positioned ancestor; fixed resolves against the viewport. Containing blocks here are zero-border so
+they isolate the item's own height. The gate grows to 40 only when every assert holds. Viewport 800.</title>
+<style>body{margin:0}</style>
+<div data-test="abs-height" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+var B = "border-top:10px solid #333;border-bottom:10px solid #333"; /* 20px vertical border */
+function mk(tag, style, parent){
+  var el = document.createElement(tag);
+  el.setAttribute('style', style);
+  parent.appendChild(el);
+  return el;
+}
+/* A zero-border, zero-padding position:relative containing block. */
+function rel(style){ return mk('div', 'position:relative;margin:0;padding:0;border:0;' + style, sandbox); }
+function m3(el){ var r = el.getBoundingClientRect(); return [el.offsetHeight, el.clientHeight, Math.round(r.height)]; }
+function eq3(el, oh, ch, rh, label){
+  var g = m3(el);
+  return check(g[0] === oh && g[1] === ch && g[2] === rh,
+               label + " -> off/client/rect = " + g[0] + "/" + g[1] + "/" + g[2] +
+               " (want " + oh + "/" + ch + "/" + rh + ")");
+}
+function relTop(el, cb){ return Math.round(el.getBoundingClientRect().top - cb.getBoundingClientRect().top); }
+function relBottom(el, cb){ return Math.round(el.getBoundingClientRect().bottom - cb.getBoundingClientRect().top); }
+function relLeft(el, cb){ return Math.round(el.getBoundingClientRect().left - cb.getBoundingClientRect().left); }
+var ok = true;
+
+/* CB1: definite 400x200 padding-box (zero border) holds the size/anchor cases. */
+var cb1 = rel('width:400px;height:200px');
+
+/* 1. explicit heights, box-sizing honored, incl. definite zero. */
+var a1a = mk('div', 'position:absolute;top:0;left:0;box-sizing:content-box;height:50px;padding:5px 0;' + B, cb1);
+ok = eq3(a1a, 80, 60, 80, "1a abs content-box height:50 -> H+P+B = 80") && ok;
+var a1b = mk('div', 'position:absolute;top:0;left:100px;box-sizing:border-box;height:80px;padding:5px 0;' + B, cb1);
+ok = eq3(a1b, 80, 60, 80, "1b abs border-box height:80 -> 80, no double-add") && ok;
+var a1c = mk('div', 'position:absolute;top:0;left:200px;box-sizing:content-box;height:0;padding:5px 0;' + B, cb1);
+ok = eq3(a1c, 30, 10, 30, "1c abs content-box height:0 -> definite P+B = 30 (NOT auto)") && ok;
+var a1d = mk('div', 'position:absolute;top:0;left:300px;box-sizing:border-box;height:0;padding:5px 0;' + B, cb1);
+ok = eq3(a1d, 0, 0, 0, "1d abs border-box height:0 -> definite 0") && ok;
+
+/* 2. auto height adds the box's OWN border: content 25 + P 10 + B 20 = 55. */
+var a2 = mk('div', 'position:absolute;top:100px;left:0;box-sizing:content-box;padding:5px 0;' + B, cb1);
+mk('div', 'height:25px', a2);
+ok = eq3(a2, 55, 35, 55, "2 abs auto -> content+P+own-border = 55") && ok;
+
+/* 4a. top + height: border box placed at top inset. used = 40 + B 20 = 60. */
+var a4a = mk('div', 'position:absolute;top:20px;left:0;box-sizing:content-box;height:40px;padding:0;' + B, cb1);
+ok = check(a4a.offsetHeight === 60, "4a top+height offsetHeight = 60: " + a4a.offsetHeight) && ok;
+ok = check(relTop(a4a, cb1) === 20 && relBottom(a4a, cb1) === 80,
+           "4a top:20 -> top/bottom = " + relTop(a4a, cb1) + "/" + relBottom(a4a, cb1) + " (want 20/80)") && ok;
+
+/* 4b. bottom + height: y = cb_y + cb_h - bottom - BORDER-BOX height. Proves the height used in
+      the bottom anchor is border-box (60), not content (40): top would be 110 vs 130. */
+var a4b = mk('div', 'position:absolute;bottom:30px;left:120px;box-sizing:content-box;height:40px;padding:0;' + B, cb1);
+ok = check(a4b.offsetHeight === 60, "4b bottom+height offsetHeight = 60: " + a4b.offsetHeight) && ok;
+ok = check(relTop(a4b, cb1) === 110 && relBottom(a4b, cb1) === 170,
+           "4b bottom:30 border-box anchor -> top/bottom = " + relTop(a4b, cb1) + "/" + relBottom(a4b, cb1) +
+           " (want 110/170)") && ok;
+
+/* 4c. top+bottom+auto -> stretch to the inset gap as a border box: 200-20-20 = 160. */
+var a4c = mk('div', 'position:absolute;top:20px;bottom:20px;left:240px;box-sizing:content-box;padding:0;' + B, cb1);
+ok = eq3(a4c, 160, 140, 160, "4c top+bottom+auto stretch -> 160 border box") && ok;
+ok = check(relTop(a4c, cb1) === 20 && relBottom(a4c, cb1) === 180,
+           "4c stretch edges top/bottom = " + relTop(a4c, cb1) + "/" + relBottom(a4c, cb1) + " (want 20/180)") && ok;
+
+/* 5. over-constrained top+bottom+DEFINITE height -> bottom ignored, top wins (horizontal-tb). */
+var a5 = mk('div', 'position:absolute;top:10px;bottom:10px;left:0;box-sizing:content-box;height:40px;padding:0;' + B, cb1);
+ok = check(a5.offsetHeight === 60, "5 over-constrained definite height wins (not stretched): " + a5.offsetHeight) && ok;
+ok = check(relTop(a5, cb1) === 10, "5 top kept, bottom ignored -> top = " + relTop(a5, cb1) + " (want 10)") && ok;
+
+/* 5b. over-constrained auto stretch (top+bottom > cb_h) -> clamp to 0, no negative geometry. */
+var a5b = mk('div', 'position:absolute;top:120px;bottom:120px;left:360px;padding:0', cb1);
+ok = check(a5b.offsetHeight === 0, "5b over-constrained stretch clamps to 0: " + a5b.offsetHeight) && ok;
+ok = check(relTop(a5b, cb1) === 120, "5b clamped box top = " + relTop(a5b, cb1) + " (want 120)") && ok;
+
+/* 9. an abspos child must NOT inflate an AUTO-height containing block (or advance flow). */
+var cb2 = rel('width:400px');
+mk('div', 'height:30px', cb2);                                   /* the only in-flow child */
+mk('div', 'position:absolute;top:0;left:0;height:500px;width:50px', cb2); /* tall out-of-flow */
+ok = check(cb2.offsetHeight === 30, "9 auto CB height = in-flow only 30, abspos does not inflate: " + cb2.offsetHeight) && ok;
+
+/* 10. nested abspos resolves against its own positioned ancestor's padding box. */
+var cb3 = rel('width:400px;height:200px');
+var nestA = mk('div', 'position:absolute;left:50px;top:40px;width:200px;height:100px;padding:0;border:0', cb3);
+var nestB = mk('div', 'position:absolute;left:10px;top:15px;height:30px;width:50px', nestA);
+ok = check(relTop(nestB, cb3) === 55 && relLeft(nestB, cb3) === 60,
+           "10 nested abspos vs ancestor CB -> top/left = " + relTop(nestB, cb3) + "/" + relLeft(nestB, cb3) +
+           " (want 55/60)") && ok;
+
+/* 10b. fixed resolves against the viewport, absolute against the CB — they must differ here. */
+var fixed = mk('div', 'position:fixed;top:0;left:0;height:20px;width:20px', cb3);
+var absG = mk('div', 'position:absolute;top:0;left:0;height:20px;width:20px', cb3);
+ok = check(Math.round(fixed.getBoundingClientRect().top) === 0, "10b fixed top = viewport 0: " + Math.round(fixed.getBoundingClientRect().top)) && ok;
+ok = check(relTop(absG, cb3) === 0, "10b absolute top = CB padding top (rel 0): " + relTop(absG, cb3)) && ok;
+ok = check(Math.round(cb3.getBoundingClientRect().top) > 0, "10b CB3 is below viewport, so fixed != absolute here: " + Math.round(cb3.getBoundingClientRect().top)) && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="abs-height"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

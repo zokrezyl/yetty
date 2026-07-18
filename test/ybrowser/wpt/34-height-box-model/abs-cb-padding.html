@@ -1,0 +1,104 @@
+<!doctype html><meta charset=utf-8>
+<title>The containing-block height an absolutely-positioned child resolves against (percentage height,
+bottom anchoring, inset:0 stretch) is the ancestor's PADDING-BOX height — its own layout return, which
+already excludes border, so the ancestor's border must not be subtracted again. A DEFINITE ancestor
+height wins exactly (content-box = height+padding, border-box = height-border) and is NOT enlarged by
+overflowing content; an explicit height:0 yields a zero padding box so children resolve against zero,
+not content. An auto-height ancestor uses its natural padding box. Verified for block, flex and grid
+positioned ancestors with ASYMMETRIC borders (10 top / 6 bottom) so a stray single/double border
+subtraction is visible; each case asserts the ancestor's own offset/client metrics AND the child's
+resolved size/edges (edges measured from the padding edge = ancestor border-box top + border-top).
+The gate grows to 40 only when every assert holds. Viewport 800.</title>
+<style>body{margin:0}</style>
+<div data-test="abs-cb-padding" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+/* Asymmetric border 10 top / 6 bottom = 16 vertical; padding 0 keeps the padding box == content box. */
+var CBSTYLE = 'position:relative;width:300px;margin:0;padding:0;border-top:10px solid #333;border-bottom:6px solid #333;';
+function mkcb(display, extra){
+  var cb = document.createElement('div');
+  cb.setAttribute('style', CBSTYLE + (display ? ('display:' + display + ';') : '') + (extra || ''));
+  sandbox.appendChild(cb);
+  return cb;
+}
+function inflow(cb, h){ var d = document.createElement('div'); d.setAttribute('style', 'height:' + h + 'px'); cb.appendChild(d); return d; }
+function absc(cb, style){ var d = document.createElement('div'); d.setAttribute('style', 'position:absolute;' + style); cb.appendChild(d); return d; }
+function relTop(el, cb){ return Math.round(el.getBoundingClientRect().top - cb.getBoundingClientRect().top); }
+function cbm(cb, off, cli, label){ return check(cb.offsetHeight === off && cb.clientHeight === cli,
+  label + " CB off/client = " + cb.offsetHeight + "/" + cb.clientHeight + " (want " + off + "/" + cli + ")"); }
+var ok = true;
+
+/* A. BLOCK auto-height bordered CB: natural padding box = in-flow 100; NO border subtracted.
+      50% child -> 50; bottom-anchored child top = border_top(10) + (100-30) = 80. */
+var cbA = mkcb('', '');
+inflow(cbA, 100);
+var aPct = absc(cbA, 'top:0;left:0;width:20px;height:50%');
+var aBot = absc(cbA, 'bottom:0;left:40px;width:20px;height:30px');
+ok = check(aPct.offsetHeight === 50, "A block auto bordered: 50% of natural padding 100 = 50: " + aPct.offsetHeight) && ok;
+ok = check(relTop(aBot, cbA) === 80, "A bottom anchor top = 10 + (100-30) = 80: " + relTop(aBot, cbA)) && ok;
+ok = cbm(cbA, 116, 100, "A") && ok;
+
+/* B. BLOCK definite content-box CB height:120 -> padding box exactly 120 (content 20 does not shrink,
+      overflow does not grow). 50% -> 60. */
+var cbB = mkcb('', 'height:120px;box-sizing:content-box');
+inflow(cbB, 20);
+var bPct = absc(cbB, 'top:0;left:0;width:20px;height:50%');
+ok = check(bPct.offsetHeight === 60, "B block definite content-box: 50% of exact 120 = 60: " + bPct.offsetHeight) && ok;
+ok = cbm(cbB, 136, 120, "B") && ok;
+
+/* C. BLOCK definite border-box CB height:136 -> padding box = 136-16 = 120. 50% -> 60. */
+var cbC = mkcb('', 'height:136px;box-sizing:border-box');
+var cPct = absc(cbC, 'top:0;left:0;width:20px;height:50%');
+ok = check(cPct.offsetHeight === 60, "C block definite border-box: 50% of (136-16)=120 = 60: " + cPct.offsetHeight) && ok;
+ok = cbm(cbC, 136, 120, "C") && ok;
+
+/* D. BLOCK definite height:0 CB with OVERFLOWING content: padding box = 0; child 50%, inset:0 stretch,
+      and bottom anchor all resolve against ZERO (NOT the natural content 100). */
+var cbD = mkcb('', 'height:0;box-sizing:content-box');
+inflow(cbD, 100);
+var dPct = absc(cbD, 'top:0;left:0;width:20px;height:50%');
+var dStretch = absc(cbD, 'top:0;bottom:0;left:40px;width:20px');
+var dBot = absc(cbD, 'bottom:0;left:80px;width:20px;height:10px');
+ok = check(dPct.offsetHeight === 0, "D height:0 CB w/overflow: 50% resolves against 0 (not content): " + dPct.offsetHeight) && ok;
+ok = check(dStretch.offsetHeight === 0, "D inset:0 stretch against 0 padding box: " + dStretch.offsetHeight) && ok;
+ok = check(relTop(dBot, cbD) === 0, "D bottom anchor against 0 cb_h -> top 0: " + relTop(dBot, cbD)) && ok;
+ok = cbm(cbD, 16, 0, "D") && ok;
+
+/* E. FLEX auto-height bordered CB (exercises the flex/grid abspos helper): natural padding box 100. */
+var cbE = mkcb('flex', '');
+inflow(cbE, 100);
+var ePct = absc(cbE, 'top:0;left:0;width:20px;height:50%');
+ok = check(ePct.offsetHeight === 50, "E flex auto bordered: 50% of natural 100 = 50 (no border subtract): " + ePct.offsetHeight) && ok;
+ok = cbm(cbE, 116, 100, "E") && ok;
+
+/* F. FLEX definite height:0 CB with overflow: padding box 0. */
+var cbF = mkcb('flex', 'height:0;box-sizing:content-box');
+inflow(cbF, 100);
+var fPct = absc(cbF, 'top:0;left:0;width:20px;height:50%');
+ok = check(fPct.offsetHeight === 0, "F flex definite height:0 w/overflow: 50% against 0: " + fPct.offsetHeight) && ok;
+ok = cbm(cbF, 16, 0, "F") && ok;
+
+/* G. GRID definite content-box CB height:120 -> exact padding box 120. */
+var cbG = mkcb('grid', 'height:120px;box-sizing:content-box;grid-template-columns:100px');
+inflow(cbG, 20);
+var gPct = absc(cbG, 'top:0;left:0;width:20px;height:50%');
+ok = check(gPct.offsetHeight === 60, "G grid definite content-box: 50% of 120 = 60: " + gPct.offsetHeight) && ok;
+ok = cbm(cbG, 136, 120, "G") && ok;
+
+/* H. GRID auto-height bordered CB: natural padding box 100. */
+var cbH = mkcb('grid', 'grid-template-columns:100px');
+inflow(cbH, 100);
+var hPct = absc(cbH, 'top:0;left:0;width:20px;height:50%');
+ok = check(hPct.offsetHeight === 50, "H grid auto bordered: 50% of natural 100 = 50: " + hPct.offsetHeight) && ok;
+ok = cbm(cbH, 116, 100, "H") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="abs-cb-padding"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

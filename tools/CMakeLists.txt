@@ -16,6 +16,7 @@ endif()
 
 if(YETTY_ENABLE_TOOL_YCAT)
     add_subdirectory(ycat)
+    add_subdirectory(ywire)
 endif()
 
 if(YETTY_ENABLE_TOOL_YMCAT)

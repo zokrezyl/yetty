@@ -1,0 +1,76 @@
+<!doctype html><meta charset=utf-8>
+<title>A percentage MAIN-axis height on a COLUMN flex item resolves only against a DEFINITE container
+main size (the column container's own author height, including an explicit 0). When the container's
+main size is INDEFINITE (no author height / auto) the percentage behaves as auto -> content, exactly
+like height:auto, and must NOT collapse to 0. An explicit height:0 container stays DEFINITE, so a
+percentage child resolves against 0 (own P+B for content-box) and must NOT expand to content. A row
+control confirms the cross-axis path is untouched. The gate grows only when all five hold. Harness
+viewport 800px wide.</title>
+<style>body{margin:0}</style>
+<div data-test="flex-height-percent-column" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+function mk(style, parent){
+  var el = document.createElement('div');
+  el.setAttribute('style', style);
+  (parent || sandbox).appendChild(el);
+  return el;
+}
+function m3(el){ var r = el.getBoundingClientRect(); return [el.offsetHeight, el.clientHeight, Math.round(r.height)]; }
+function eq3(el, oh, ch, rh, label){
+  var g = m3(el);
+  return check(g[0] === oh && g[1] === ch && g[2] === rh,
+               label + " -> off/client/rect = " + g[0] + "/" + g[1] + "/" + g[2] +
+               " (want " + oh + "/" + ch + "/" + rh + ")");
+}
+var ok = true;
+
+/* 1. INDEFINITE (auto) flex COLUMN + height:100% main-axis item with a 150px content child:
+      the percentage behaves as auto -> content = 150. Must NOT collapse to 0. */
+var p1 = mk('display:flex;flex-direction:column;width:300px;margin:0');
+var p1i = mk('height:100%;margin:0', p1);
+mk('height:150px;margin:0', p1i);
+ok = eq3(p1i, 150, 150, 150, "1 auto column + 100% behaves as auto (content 150)") && ok;
+
+/* 2. DEFINITE (height:200) flex COLUMN + height:100% item: resolves against 200 -> 200. */
+var p2 = mk('display:flex;flex-direction:column;width:300px;height:200px;margin:0');
+var p2i = mk('height:100%;margin:0', p2);
+mk('height:150px;margin:0', p2i);
+ok = eq3(p2i, 200, 200, 200, "2 definite-200 column + 100% resolves to 200") && ok;
+
+/* 3. EXPLICIT height:0 flex COLUMN is still DEFINITE. A content-box height:100% child resolves
+      against 0 content, then adds its own P12 + B6 -> border box 18; client = 18 - borders 6 = 12.
+      Must NOT expand to the 150px child, and must NOT fall to auto. */
+var p3 = mk('display:flex;flex-direction:column;width:300px;height:0;margin:0');
+var p3i = mk('box-sizing:content-box;height:100%;padding:6px 0;border-top:3px solid #333;border-bottom:3px solid #333;margin:0', p3);
+mk('height:150px;margin:0', p3i);
+ok = check(p3.offsetHeight === 0, "3 explicit height:0 column is 0 tall: " + p3.offsetHeight) && ok;
+ok = eq3(p3i, 18, 12, 18, "3 content-box 100% of definite-0 -> own P+B (18), not auto/stretched") && ok;
+
+/* 4. KNOWN GAP: a flex COLUMN whose OWN height is itself a percentage (height:50% of a definite
+      400px grandparent) renders 200 tall, but its resolved used height is not retained, so it is
+      treated as INDEFINITE here -> the height:100% child falls to auto -> content 150 (a real
+      browser fills 200). Pin the current auto behavior; this is the percentage-CB/used-height gap. */
+var gp4 = mk('width:300px;height:400px;margin:0');
+var p4 = mk('display:flex;flex-direction:column;height:50%;margin:0', gp4);
+var p4i = mk('height:100%;margin:0', p4);
+mk('height:150px;margin:0', p4i);
+ok = eq3(p4i, 150, 150, 150, "4 known gap: %-height column -> child auto content 150 (not retained 200)") && ok;
+
+/* 5. ROW control: an INDEFINITE flex ROW + height:100% cross-axis item stretches to the line's
+      content extent (150). The fix is column-main-axis only; the row path must be unchanged. */
+var p5 = mk('display:flex;flex-direction:row;width:300px;margin:0');
+var p5i = mk('height:100%;margin:0', p5);
+mk('height:150px;margin:0', p5i);
+ok = eq3(p5i, 150, 150, 150, "5 row control: cross-axis 100% -> content 150 (unchanged)") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="flex-height-percent-column"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

@@ -1,0 +1,100 @@
+<!doctype html><meta charset=utf-8>
+<title>Grid items carry a USED BORDER-BOX height on box->h like blocks and flex items: offsetHeight =
+border box, clientHeight = padding box, getBoundingClientRect().height agrees; box-sizing is honored;
+an explicit height:0 is a definite zero (content-box = padding+border, border-box = 0) and is PINNED
+— it does NOT stretch to a taller sibling's row; an auto item expands to content+padding+border and
+(default align-items:stretch) fills its row track with a used border box; row/container heights
+account for the border-box item sizes. The gate grows to 40 only when every assert holds. Harness
+viewport 800px wide.</title>
+<style>body{margin:0}</style>
+<div data-test="grid-height" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+function mk(style, parent){
+  var el = document.createElement('div');
+  el.setAttribute('style', style);
+  (parent || sandbox).appendChild(el);
+  return el;
+}
+function m3(el){ var r = el.getBoundingClientRect(); return [el.offsetHeight, el.clientHeight, Math.round(r.height)]; }
+function eq3(el, oh, ch, rh, label){
+  var g = m3(el);
+  return check(g[0] === oh && g[1] === ch && g[2] === rh,
+               label + " -> off/client/rect = " + g[0] + "/" + g[1] + "/" + g[2] +
+               " (want " + oh + "/" + ch + "/" + rh + ")");
+}
+var BORD = 'border-top:10px solid #333;border-bottom:10px solid #333';
+var ok = true;
+
+/* 1. content-box grid item -> border box 90; single-item container = 90 */
+var g1 = mk('display:grid;grid-template-columns:200px;margin:0');
+var g1i = mk('box-sizing:content-box;height:30px;padding:20px 0;' + BORD + ';margin:0', g1);
+ok = eq3(g1i, 90, 70, 90, "1 grid content-box item") && ok;
+ok = check(g1.offsetHeight === 90, "1 grid container = item border-box: " + g1.offsetHeight + " (want 90)") && ok;
+
+/* 2. border-box grid item */
+var g2 = mk('display:grid;grid-template-columns:200px;margin:0');
+var g2i = mk('box-sizing:border-box;height:90px;padding:20px 0;' + BORD + ';margin:0', g2);
+ok = eq3(g2i, 90, 70, 90, "2 grid border-box item") && ok;
+
+/* 3a/3b. explicit height:0 content-box (60) and border-box (0) */
+var g3 = mk('display:grid;grid-template-columns:200px;margin:0');
+var g3i = mk('box-sizing:content-box;height:0;padding:20px 0;' + BORD + ';margin:0', g3);
+ok = eq3(g3i, 60, 40, 60, "3a grid height:0 content-box") && ok;
+var g3b = mk('display:grid;grid-template-columns:200px;margin:0');
+var g3bi = mk('box-sizing:border-box;height:0;padding:20px 0;' + BORD + ';margin:0', g3b);
+ok = eq3(g3bi, 0, 0, 0, "3b grid height:0 border-box") && ok;
+
+/* 4a. explicit height:0 content-box NEXT TO a taller auto sibling in the same row (2 cols):
+       the zero item stays its own border box (60), PINNED — NOT stretched to the row (100) */
+var g4 = mk('display:grid;grid-template-columns:100px 100px;margin:0');
+var g4a = mk('box-sizing:content-box;height:0;padding:20px 0;' + BORD + ';margin:0', g4);
+var g4b = mk('box-sizing:content-box;margin:0', g4);
+mk('height:100px;margin:0', g4b);
+ok = check(g4a.offsetHeight === 60, "4a pinned height:0 content-box stays 60 (not stretched): " + g4a.offsetHeight) && ok;
+ok = check(g4b.offsetHeight === 100, "4a taller auto sibling = 100: " + g4b.offsetHeight) && ok;
+
+/* 4b. explicit height:0 border-box beside taller sibling -> stays 0 (pinned) */
+var g4c = mk('display:grid;grid-template-columns:100px 100px;margin:0');
+var g4ci = mk('box-sizing:border-box;height:0;padding:20px 0;' + BORD + ';margin:0', g4c);
+var g4d = mk('box-sizing:content-box;margin:0', g4c);
+mk('height:100px;margin:0', g4d);
+ok = check(g4ci.offsetHeight === 0, "4b pinned height:0 border-box stays 0 (not stretched): " + g4ci.offsetHeight) && ok;
+
+/* 5. auto item -> content(50) + padding(20) + border(10) = 80 */
+var g5 = mk('display:grid;grid-template-columns:200px;margin:0');
+var g5i = mk('box-sizing:content-box;padding:10px 0;border-top:5px solid #333;border-bottom:5px solid #333;margin:0', g5);
+mk('height:50px;margin:0', g5i);
+ok = eq3(g5i, 80, 70, 80, "5 grid auto item content50+P20+B10") && ok;
+
+/* 6. align-items:stretch, ASYMMETRIC borders (10 top / 4 bottom) + padding: an AUTO item stretches
+      to the row track set by a taller pinned sibling; border-box fills the row; edges coincide */
+var g6 = mk('display:grid;grid-template-columns:100px 100px;margin:0');
+var g6a = mk('box-sizing:content-box;padding:8px 0;border-top:10px solid #333;border-bottom:4px solid #333;margin:0', g6);
+var g6b = mk('box-sizing:content-box;height:100px;margin:0', g6);
+ok = check(g6a.offsetHeight === 100, "6 stretched auto item fills row track: " + g6a.offsetHeight + " (want 100)") && ok;
+ok = check(g6a.clientHeight === 86, "6 stretch clientHeight = 100 - 14 borders: " + g6a.clientHeight + " (want 86)") && ok;
+var cr = g6.getBoundingClientRect(), ar = g6a.getBoundingClientRect();
+ok = check(Math.round(ar.top - cr.top) === 0, "6 stretched item top at grid content top: " + Math.round(ar.top - cr.top)) && ok;
+ok = check(Math.round(ar.bottom - cr.top) === 100, "6 stretched item bottom at row bottom: " + Math.round(ar.bottom - cr.top) + " (want 100)") && ok;
+
+/* 7. explicit-CSS-height image grid item routes through the used-height helper (explicit branch):
+      offsetHeight is the CSS height. (Image box borders are not modeled by this engine — see the
+      documented gap — so no bordered-image assertion here.) */
+var g7 = mk('display:grid;grid-template-columns:200px;margin:0');
+var g7i = document.createElement('img');
+g7i.setAttribute('style', 'width:40px;height:40px;margin:0');
+g7i.setAttribute('src', 'data:,');
+g7.appendChild(g7i);
+ok = check(g7i.offsetHeight === 40, "7 explicit-height image grid item = CSS height: " + g7i.offsetHeight + " (want 40)") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="grid-height"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

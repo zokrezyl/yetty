@@ -464,6 +464,24 @@ static lxb_dom_element_t *unwrap_element(JSContext *ctx, JSValueConst this_val)
     return NULL;
 }
 
+/* Like unwrap_element, but ONLY for element-attribute operations. The element
+ * JS class is shared by Text/Comment/Fragment nodes; lexbor's attribute
+ * accessors read the element-struct attribute fields (first_attr / attr_id /
+ * attr_class) which sit past the end of those smaller node structs, so reading
+ * them is out of bounds and intermittently segfaults on adjacent pool memory.
+ * Non-elements have no attributes: return NULL so the attribute method no-ops
+ * (returns null / false), matching the DOM and the hasAttributes/attributes
+ * guards. Do NOT use this for node-level or CharacterData methods that are valid
+ * on non-elements (they still use unwrap_element / unwrap_node). */
+static lxb_dom_element_t *unwrap_attr_element(JSContext *ctx, JSValueConst this_val)
+{
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    if (!el || lxb_dom_interface_node(el)->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+        return NULL;
+    }
+    return el;
+}
+
 static lxb_html_document_t *unwrap_document(JSContext *ctx, JSValueConst this_val)
 {
     struct js_dom_state *state = dom_state(ctx);
@@ -689,7 +707,7 @@ static JSValue js_el_getAttribute(JSContext *ctx, JSValueConst this_val, int arg
     if (argc < 1) {
         return JS_NULL;
     }
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_NULL;
     }
@@ -728,7 +746,7 @@ static JSValue js_el_setAttribute(JSContext *ctx, JSValueConst this_val, int arg
     if (argc < 2) {
         return JS_UNDEFINED;
     }
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -757,7 +775,7 @@ static JSValue js_el_removeAttribute(JSContext *ctx, JSValueConst this_val, int 
     if (argc < 1) {
         return JS_UNDEFINED;
     }
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -792,7 +810,7 @@ static JSValue js_el_hasAttribute(JSContext *ctx, JSValueConst this_val, int arg
     if (argc < 1) {
         return JS_FALSE;
     }
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_FALSE;
     }
@@ -894,6 +912,40 @@ static void ce_react_connect(JSContext *ctx, lxb_dom_node_t *inserted)
     if (inserted != NULL && node_is_connected(inserted)) {
         ce_react_dispatch(ctx, inserted, "__connectSubtree");
     }
+}
+
+/* Upgrade a freshly-created element in place (document.createElement of a
+ * defined custom tag). Unlike connect, the element is detached, so only the
+ * constructor + observed-attribute reactions run; connectedCallback waits for a
+ * later insertion. Spec "create an element" upgrades synchronously so the
+ * returned object already exposes its methods.
+ *
+ * Takes the ALREADY-WRAPPED element value (not the raw node): the constructor
+ * stamps a template that churns the wrapper cache, so we must upgrade the exact
+ * JS object the caller keeps, not one re-derived from the node afterwards. */
+static void ce_react_upgrade_value(JSContext *ctx, JSValueConst wrapped)
+{
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL || !state->ce_active || JS_IsUndefined(wrapped) || JS_IsNull(wrapped)) {
+        return;
+    }
+    if (state->ce_react_depth > 256) {
+        return;
+    }
+    state->ce_react_depth++;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue registry = JS_GetPropertyStr(ctx, global, "customElements");
+    JSValue fn = JS_GetPropertyStr(ctx, registry, "__upgradeOne");
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue call_argv[1] = {(JSValue)wrapped};
+        JSValue result = JS_Call(ctx, fn, registry, 1, call_argv);
+        /* Per-element reaction exceptions are caught inside __upgradeOne. */
+        JS_FreeValue(ctx, result);
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, registry);
+    JS_FreeValue(ctx, global);
+    state->ce_react_depth--;
 }
 
 /* Fire disconnect reactions for a node just removed from the document tree.
@@ -1609,12 +1661,26 @@ static JSValue js_doc_createElement(JSContext *ctx, JSValueConst this_val, int a
     }
     lxb_dom_element_t *el = lxb_dom_document_create_element(lxb_dom_interface_document(doc),
                                                             (const lxb_char_t *)tag, tlen, NULL);
+    /* A tag containing '-' is a custom-element candidate; if it is defined,
+     * upgrade it now (spec "create an element" is synchronous) so callers that
+     * immediately invoke a method on the result get the real prototype. */
+    bool custom_candidate = memchr(tag, '-', tlen) != NULL;
     JS_FreeCString(ctx, tag);
     if (!el) {
         return JS_NULL;
     }
     mark_dirty(ctx);
-    return wrap_element(ctx, el);
+    /* Wrap FIRST, then upgrade THIS wrapper. Upgrading runs the element's
+     * constructor, which stamps its template — creating many child elements that
+     * churn wrap_element's wrapper cache. If we let the upgrade path re-wrap the
+     * node internally, that first wrapper can be evicted before we return, so the
+     * caller would get a fresh, un-upgraded wrapper. Holding the wrapper across
+     * the upgrade keeps the upgraded object alive and returns exactly it. */
+    JSValue wrapped = wrap_element(ctx, el);
+    if (custom_candidate) {
+        ce_react_upgrade_value(ctx, wrapped);
+    }
+    return wrapped;
 }
 
 /* The XML and XMLNS namespace URIs — used by createElementNS to enforce
@@ -2483,7 +2549,7 @@ static JSValue js_el_tagName_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_id_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_NewString(ctx, "");
     }
@@ -2497,7 +2563,7 @@ static JSValue js_el_id_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_id_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -2513,7 +2579,7 @@ static JSValue js_el_id_set(JSContext *ctx, JSValueConst this_val, JSValueConst 
 
 static JSValue js_el_className_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_NewString(ctx, "");
     }
@@ -2527,7 +2593,7 @@ static JSValue js_el_className_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_className_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -2556,7 +2622,7 @@ static JSValue js_el_className_set(JSContext *ctx, JSValueConst this_val, JSValu
 static JSValue idl_attr_get(JSContext *ctx, JSValueConst this_val, const char *attr, size_t alen,
                             int urlish)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_NewString(ctx, "");
     }
@@ -2587,7 +2653,7 @@ static JSValue idl_attr_get(JSContext *ctx, JSValueConst this_val, const char *a
 static JSValue idl_attr_set(JSContext *ctx, JSValueConst this_val, JSValueConst val,
                             const char *attr, size_t alen)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -2767,6 +2833,54 @@ IDL_ATTR(placeholder, "placeholder", 0)
 IDL_ATTR(method, "method", 0)
 IDL_ATTR(rel, "rel", 0)
 IDL_ATTR(target, "target", 0)
+
+/* `hidden` — the BOOLEAN global HTML attribute, reflected as a property.
+ * IDL_ATTR only handles STRING attributes; hidden is boolean: `el.hidden = true`
+ * must ADD `hidden=""`, `el.hidden = false` must REMOVE it, getter is
+ * attribute-presence. This reflection was MISSING, so frameworks that toggle
+ * visibility via the property (Polymer binds `hidden="[[x]]"` → sets the
+ * property, not the attribute) never actually hid the node — the box builder
+ * hides by the `hidden` ATTRIBUTE. Concretely: YouTube's consent lightbox keeps
+ * its `loading-overlay` / `error-overlay` divs hidden by binding their `hidden`
+ * property; without reflection those overlays painted over the real Accept/Reject
+ * choice, so the consent looked stuck on "Saving your choice / An error occurred". */
+static JSValue js_el_hidden_get(JSContext *ctx, JSValueConst this_val)
+{
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
+    if (!el) {
+        return JS_FALSE;
+    }
+    size_t vlen = 0;
+    const lxb_char_t *v = lxb_dom_element_get_attribute(el, (const lxb_char_t *)"hidden", 6, &vlen);
+    return JS_NewBool(ctx, v != NULL);
+}
+
+static JSValue js_el_hidden_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
+{
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
+    if (!el) {
+        return JS_UNDEFINED;
+    }
+    int on = JS_ToBool(ctx, val);
+    size_t vlen = 0;
+    bool already = lxb_dom_element_get_attribute(el, (const lxb_char_t *)"hidden", 6, &vlen) != NULL;
+    /* Reflect only a real change. Frameworks re-assign `el.hidden = false` on
+     * already-visible nodes every render tick; without this guard each no-op
+     * assignment marked the tree dirty and queued a MutationObserver record. */
+    if ((on > 0) == already) {
+        return JS_UNDEFINED;
+    }
+    char *old_value = mo_capture_attr(ctx, el, "hidden", 6);
+    if (on > 0) {
+        lxb_dom_element_set_attribute(el, (const lxb_char_t *)"hidden", 6, (const lxb_char_t *)"", 0);
+    } else {
+        lxb_dom_element_remove_attribute(el, (const lxb_char_t *)"hidden", 6);
+    }
+    mark_dirty(ctx);
+    dom_mo_notify_attributes(ctx, el, "hidden", 6, old_value);
+    free(old_value);
+    return JS_UNDEFINED;
+}
 
 /* parentElement / firstElementChild / nextElementSibling / children */
 
@@ -3299,7 +3413,7 @@ static int style_set_property(JSContext *ctx, JSValueConst obj, JSAtom prop, JSV
 
 static JSValue js_el_style_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -3789,7 +3903,7 @@ static JSValue js_el_classList_get(JSContext *ctx, JSValueConst this_val)
         JS_CGETSET_DEF("length", js_classlist_length_get, NULL),
         JS_CGETSET_DEF("value", js_classlist_value_get, js_classlist_value_set),
     };
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -4157,6 +4271,124 @@ static JSValue js_el_clientRects_stub(JSContext *ctx, JSValueConst this_val, int
     return JS_NewArray(ctx);
 }
 
+static void computed_set_px(JSContext *ctx, JSValue obj, const char *name, float value)
+{
+    char buf[48];
+    snprintf(buf, sizeof(buf), "%gpx", (double)value);
+    JS_SetPropertyStr(ctx, obj, name, JS_NewString(ctx, buf));
+}
+
+/* window.getComputedStyle(el) — a resolved-value view backed by the element's
+ * laid-out box. The inline-style object is installed as the RESULT'S PROTOTYPE
+ * so the returned declaration still answers getPropertyValue / setProperty /
+ * item / cssText and any inline property that layout does not override — a plain
+ * fresh object would be missing those methods and breaks callers that use them.
+ * On top of that we set the box-derived resolved properties that overlay /
+ * positioning code (iron-fit-behavior, overlay managers) reads: position, the
+ * four inset sides, the four margins/paddings, max-width/height, box-sizing and
+ * z-index. An element with no laid-out box (display:none, disconnected) returns
+ * the pure inline view — a browser likewise returns empty resolved values for an
+ * unrendered element, so no box-derived overrides are added. */
+JSValue yetty_ylexbor_js_getComputedStyle(JSContext *ctx, JSValueConst this_val, int argc,
+                                          JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1) {
+        return JS_NULL;
+    }
+    JSValue inline_style = JS_GetPropertyStr(ctx, argv[0], "style");
+    JSValue out = JS_NewObject(ctx);
+    if (JS_IsObject(inline_style)) {
+        JS_SetPrototype(ctx, out, inline_style);
+    }
+
+    struct yetty_ylexbor *r = runtime_ylex(ctx);
+    lxb_dom_node_t *node = unwrap_node(ctx, argv[0]);
+    const struct yetty_ylexbor_box *box = NULL;
+    if (r != NULL && node != NULL && node->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+        geometry_flush_pending_layout(r);
+        lxb_dom_element_t *el = lxb_dom_interface_element(node);
+        for (uint32_t i = 0; i < r->boxes.size; i++) {
+            if (r->boxes.data[i].element == el) {
+                box = &r->boxes.data[i];
+                break;
+            }
+        }
+    }
+
+    if (box != NULL) {
+        const char *pos = "static";
+        switch (box->position) {
+        case YL_POS_RELATIVE:
+            pos = "relative";
+            break;
+        case YL_POS_ABSOLUTE:
+            pos = "absolute";
+            break;
+        case YL_POS_FIXED:
+            pos = "fixed";
+            break;
+        default:
+            pos = "static";
+            break;
+        }
+        JS_SetPropertyStr(ctx, out, "position", JS_NewString(ctx, pos));
+
+        /* Inset sides resolve to a px value when specified, else `auto`
+         * (0px is a real offset, distinct from auto — hence the mask). */
+        if (box->pos_set_mask & 0x1) {
+            computed_set_px(ctx, out, "top", box->pos_top);
+        } else {
+            JS_SetPropertyStr(ctx, out, "top", JS_NewString(ctx, "auto"));
+        }
+        if (box->pos_set_mask & 0x2) {
+            computed_set_px(ctx, out, "right", box->pos_right);
+        } else {
+            JS_SetPropertyStr(ctx, out, "right", JS_NewString(ctx, "auto"));
+        }
+        if (box->pos_set_mask & 0x4) {
+            computed_set_px(ctx, out, "bottom", box->pos_bottom);
+        } else {
+            JS_SetPropertyStr(ctx, out, "bottom", JS_NewString(ctx, "auto"));
+        }
+        if (box->pos_set_mask & 0x8) {
+            computed_set_px(ctx, out, "left", box->pos_left);
+        } else {
+            JS_SetPropertyStr(ctx, out, "left", JS_NewString(ctx, "auto"));
+        }
+
+        computed_set_px(ctx, out, "marginTop", box->margin_top);
+        computed_set_px(ctx, out, "marginRight", box->margin_right);
+        computed_set_px(ctx, out, "marginBottom", box->margin_bottom);
+        computed_set_px(ctx, out, "marginLeft", box->margin_left);
+
+        computed_set_px(ctx, out, "paddingTop", box->padding_top);
+        computed_set_px(ctx, out, "paddingRight", box->padding_right);
+        computed_set_px(ctx, out, "paddingBottom", box->padding_bottom);
+        computed_set_px(ctx, out, "paddingLeft", box->padding_left);
+
+        if (box->css_max_width > 0.0f) {
+            computed_set_px(ctx, out, "maxWidth", box->css_max_width);
+        } else {
+            JS_SetPropertyStr(ctx, out, "maxWidth", JS_NewString(ctx, "none"));
+        }
+        JS_SetPropertyStr(ctx, out, "maxHeight", JS_NewString(ctx, "none"));
+
+        JS_SetPropertyStr(ctx, out, "boxSizing",
+                          JS_NewString(ctx, box->border_box ? "border-box" : "content-box"));
+
+        if (box->z_index_set) {
+            JS_SetPropertyStr(ctx, out, "zIndex", JS_NewInt32(ctx, box->z_index));
+        } else {
+            JS_SetPropertyStr(ctx, out, "zIndex", JS_NewString(ctx, "auto"));
+        }
+    }
+
+    JS_FreeValue(ctx, inline_style);
+    return out;
+}
+
+
 /* clientWidth/Height + offsetWidth/Height. All four derive from the same
  * laid-out box union getBoundingClientRect() uses (border box), so the box-kind
  * knowledge lives here once rather than being duplicated per getter:
@@ -4458,7 +4690,7 @@ static JSValue js_el_toggleAttr_stub(JSContext *ctx, JSValueConst this_val, int 
     if (argc < 1) {
         return JS_FALSE;
     }
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_FALSE;
     }
@@ -5242,6 +5474,7 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CGETSET_DEF("method", js_el_method_get, js_el_method_set),
         JS_CGETSET_DEF("rel", js_el_rel_get, js_el_rel_set),
         JS_CGETSET_DEF("target", js_el_target_get, js_el_target_set),
+        JS_CGETSET_DEF("hidden", js_el_hidden_get, js_el_hidden_set),
     };
     /* DOM interface prototype CHAIN: element_proto -> node_proto ->
      * event_target_proto. Every node instance points at element_proto, so it

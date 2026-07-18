@@ -35,29 +35,6 @@ struct yetty_ybrowser_libcss {
     /* Back-pointer for callbacks that need viewport metrics / lookups. */
     struct yetty_ylexbor *r;
 
-    /* Class arrays handed to libcss by cb_node_classes during ONE
-	 * css_select_style call. libcss unrefs the strings but never frees
-	 * the ARRAYS (callback keeps ownership), and one select can request
-	 * classes for SEVERAL nodes (style-sharing probes siblings), so a
-	 * single reused buffer would be overwritten mid-select. Each call
-	 * gets its own array, recorded here; yetty_ybrowser_libcss_select
-	 * frees the batch right after css_select_style returns. */
-    lwc_string ***pending_class_arrays;
-    uint32_t pending_class_array_count, pending_class_array_cap;
-
-    /* Per-element libcss node_data store (open-addressing hash keyed by
-	 * the element pointer). libcss hands ownership over via the
-	 * set_libcss_node_data callback and KEEPS USING the data afterwards
-	 * (the parent-bloom path reads node_data->bloom for the rest of the
-	 * select), so it must stay alive; one live entry per element —
-	 * replacing destroys the previous entry. Destroyed wholesale in
-	 * libcss_destroy. */
-    struct yetty_ybrowser_libcss_node_slot {
-        void *node;
-        void *data;
-    } *node_data_slots;
-    size_t node_data_slot_count, node_data_slot_cap;
-
     /* @import recursion state: absolute URLs currently being loaded, so a
 	 * cyclic import (a imports b imports a) terminates instead of looping.
 	 * Bounded — deeper chains are cut off. */
@@ -128,8 +105,6 @@ int yetty_ybrowser_libcss_max_width(struct yetty_ylexbor *r, const css_computed_
                                     float font_size, float pct_basis, float *out_px);
 int yetty_ybrowser_libcss_min_width(struct yetty_ylexbor *r, const css_computed_style *style,
                                     float font_size, float pct_basis, float *out_px);
-int yetty_ybrowser_libcss_max_height(struct yetty_ylexbor *r, const css_computed_style *style,
-                                     float font_size, float pct_basis, float *out_px);
 /* Margin / padding: a percentage value is returned as a ratio (e.g. 0.10
  * for 10%) with *out_pct = true, because percent margins and paddings
  * both resolve against the containing block's content width — which is
@@ -170,10 +145,9 @@ int yetty_ybrowser_libcss_text_align(const css_computed_style *style);
 
 /* Flex direction: returns CSS_FLEX_DIRECTION_* (ROW/COLUMN/...). */
 int yetty_ybrowser_libcss_flex_direction(const css_computed_style *style);
-/* Font advance class from the computed font-family: 0 = proportional
- * (default), 1 = the WPT test font `Ahem` (every glyph exactly 1em),
- * 2 = a monospace family (generic `monospace` or a named mono font). */
-int yetty_ybrowser_libcss_font_advance_class(const css_computed_style *style);
+/* 1 if the computed font-family is the WPT test font `Ahem` (every glyph is
+ * exactly 1em wide — lets text measurement be pixel-exact). */
+int yetty_ybrowser_libcss_font_is_ahem(const css_computed_style *style);
 /* Flex wrap: CSS_FLEX_WRAP_* (NOWRAP/WRAP/WRAP_REVERSE). Read from the cascade
  * so stylesheet `flex-wrap:wrap` (not just inline) is honored. */
 int yetty_ybrowser_libcss_flex_wrap(const css_computed_style *style);

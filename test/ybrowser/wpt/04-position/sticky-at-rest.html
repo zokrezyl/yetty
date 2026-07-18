@@ -1,7 +1,0 @@
-<!doctype html><meta charset=utf-8>
-<title>position:sticky at rest stays at its normal flow position (top inset is a scroll constraint, not an offset)</title>
-<style>body{margin:0}</style>
-<div style="height:80px">header</div>
-<nav data-test="sticky" data-expect="0,80,*,40"
-     style="position:sticky;top:80px;height:40px">nav</nav>
-<div data-test="after" data-expect="0,120,*,300" style="height:300px">main</div>

@@ -1360,19 +1360,15 @@ static void fetch_configure_easy(struct yetty_ybrowser_loader *loader, CURL *eas
 	 * write callback still guards chunked/streamed responses. */
     curl_easy_setopt(easy, CURLOPT_MAXFILESIZE_LARGE, (curl_off_t)FETCH_MAX_RESPONSE);
     curl_easy_setopt(easy, CURLOPT_ACCEPT_ENCODING, "");
-    /* Enable the cookie engine (empty COOKIEFILE = no file, just parse)
-	 * for SUBRESOURCE and API fetches — session-gated image CDNs and
-	 * affinity-routed sheets need the cookies the document's redirect
-	 * chain set (shared across handles via CURL_LOCK_DATA_COOKIE on the
-	 * loader). Deliberately NOT for DOCUMENT navigations: cookie-capable
-	 * page requests make variant-sniffing sites serve their JS-heavy SPA
-	 * shell (news.google.com drops from 1.7 MB of static article markup
-	 * to a 650 KB shell our JS can't boot), while the cookie-less page
-	 * fetch gets the static variant this engine renders well. Revisit
-	 * when the JS surface can boot those shells. */
-    if (request->kind != YETTY_YBROWSER_REQUEST_DOCUMENT) {
-        curl_easy_setopt(easy, CURLOPT_COOKIEFILE, "");
-    }
+    /* Enable the cookie engine (empty COOKIEFILE = no file, just parse) for
+     * ALL requests, including DOCUMENT navigations. The page redirect chain
+     * sets consent/visitor/session cookies (e.g. YouTube SOCS, YSC,
+     * VISITOR_INFO1_LIVE) that the document and its subresources need; without
+     * them sites serve a consent-walled or logged-out-empty variant (the
+     * YouTube homepage feed is empty cookieless). The jar is shared across
+     * handles via CURL_LOCK_DATA_COOKIE on the loader, so cookies set on the
+     * page request are visible to subresource/API fetches too. */
+    curl_easy_setopt(easy, CURLOPT_COOKIEFILE, "");
     curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, fetch_write_cb);
     curl_easy_setopt(easy, CURLOPT_WRITEDATA, transfer);
     curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, fetch_header_cb);
@@ -3011,19 +3007,17 @@ static JSValue js_matchMedia(JSContext *ctx, JSValueConst this_val, int argc, JS
     return mql;
 }
 
+/* Resolved-value computed style lives in ybrowser-js-dom.c, where the laid-out
+ * box vector is reachable. It installs the inline-style declaration as the
+ * result's prototype, so callers still get getPropertyValue/setProperty/cssText
+ * plus every inline property, and layers the box-derived resolved values on top. */
+JSValue yetty_ylexbor_js_getComputedStyle(JSContext *ctx, JSValueConst this_val, int argc,
+                                          JSValueConst *argv);
+
 static JSValue js_getComputedStyle(JSContext *ctx, JSValueConst this_val, int argc,
                                    JSValueConst *argv)
 {
-    (void)this_val;
-    if (argc < 1) {
-        return JS_NULL;
-    }
-    /* Return the same `style` proxy we use for el.style — JS code
-	 * that only reads inline-style values keeps working; reads of
-	 * properties not set in the inline style get "". JS_GetPropertyStr
-	 * already returns an owned reference we transfer to the caller;
-	 * don't JS_DupValue it or the original reference leaks. */
-    return JS_GetPropertyStr(ctx, argv[0], "style");
+    return yetty_ylexbor_js_getComputedStyle(ctx, this_val, argc, argv);
 }
 
 /* ===========================================================================
@@ -3093,6 +3087,39 @@ static void install_global_fn(JSContext *ctx, JSValue global, const char *name, 
                               int argc)
 {
     JS_SetPropertyStr(ctx, global, name, JS_NewCFunction(ctx, fn, name, argc));
+}
+
+/* __ybIngestCSS(cssText): push a CSS string into the live libcss cascade.
+ * Bridges CONSTRUCTABLE STYLESHEETS — `new CSSStyleSheet().replaceSync(css)` +
+ * `document.adoptedStyleSheets = [sheet]` — which modern CSS-in-JS (YouTube's
+ * kevlar: 16 adoptedStyleSheets uses in base.js) applies per component. Our
+ * CSSStyleSheet was a no-op stub, so those rules — including the consent
+ * lightbox's `:host{position:fixed;inset:0}` modal styling — never reached the
+ * cascade and the lightbox collapsed to height 0 (in-flow, not a modal). Shady
+ * DOM scopes these rules by class (`.style-scope.<tag>`), so a document-level
+ * ingest is correct — the selectors self-scope. Marks the tree dirty so the next
+ * relayout applies the new rules. */
+static JSValue js_ingest_css(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1) {
+        return JS_UNDEFINED;
+    }
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    if (r == NULL) {
+        return JS_UNDEFINED;
+    }
+    size_t len = 0;
+    const char *css = JS_ToCStringLen(ctx, &len, argv[0]);
+    if (css != NULL) {
+        struct yetty_ycore_void_result res = yetty_ylexbor_add_css(r, css, len);
+        if (YETTY_IS_ERR(res)) {
+            yetty_ycore_error_destroy(res.error);
+        }
+        r->dom_dirty = 1;
+        JS_FreeCString(ctx, css);
+    }
+    return JS_UNDEFINED;
 }
 
 /* window.innerWidth/innerHeight (and outerWidth/Height, which for a chromeless
@@ -3356,6 +3383,8 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
     JSValue sub = JS_Eval(ctx, subtle, strlen(subtle), "<subtle>", JS_EVAL_TYPE_GLOBAL);
     JS_SetPropertyStr(ctx, cry, "subtle", sub);
     JS_SetPropertyStr(ctx, global, "crypto", cry);
+    /* Constructable-stylesheet bridge (see js_ingest_css). */
+    install_global_fn(ctx, global, "__ybIngestCSS", js_ingest_css, 1);
 
     /* Misc stubs — feature detection rarely actually USES these,
 	 * just checks they exist. */
@@ -4111,7 +4140,28 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.DOMTokenList      = function(){};"
         "globalThis.NamedNodeMap      = function(){};"
         "globalThis.CSSStyleDeclaration= function(){};"
-        "globalThis.CSSStyleSheet     = function(){};"
+        /* Constructable stylesheet: `new CSSStyleSheet(); s.replaceSync(css);
+			 * document.adoptedStyleSheets=[s]`. replace/replaceSync push the CSS
+			 * into the cascade via __ybIngestCSS (see the C side). Without this the
+			 * sheet was inert and adopted component styles never applied. */
+        "globalThis.CSSStyleSheet     = function(){ this._css=''; this.cssRules=[]; this.rules=[]; };"
+        /* Methods on the PROTOTYPE — frameworks feature-detect
+			 * `CSSStyleSheet.prototype.replaceSync` before using constructable
+			 * sheets; instance-only methods fail that check and the site silently
+			 * falls back to a path that never applies the styles here. */
+        "globalThis.CSSStyleSheet.prototype.replaceSync=function(t){ this._css=''+t;"
+        "  try{globalThis.__ybIngestCSS(this._css);}catch(e){} return this; };"
+        "globalThis.CSSStyleSheet.prototype.replace=function(t){ this._css=''+t;"
+        "  try{globalThis.__ybIngestCSS(this._css);}catch(e){} return Promise.resolve(this); };"
+        "globalThis.CSSStyleSheet.prototype.insertRule=function(rule){"
+        "  try{globalThis.__ybIngestCSS(''+rule);}catch(e){} return 0; };"
+        "globalThis.CSSStyleSheet.prototype.deleteRule=function(){};"
+        /* adoptedStyleSheets: a settable array. The CSS is already ingested at
+			 * replaceSync time (class-scoped, so document-level is correct), so the
+			 * assignment itself only needs to not throw and stay iterable for the
+			 * `[...document.adoptedStyleSheets, sheet]` idiom. */
+        "try{ if(globalThis.document && globalThis.document.adoptedStyleSheets===undefined)"
+        "  globalThis.document.adoptedStyleSheets=[]; }catch(e){}"
         "globalThis.CSSRule           = function(){};"
         "globalThis.MediaQueryList    = function(){};"
         "globalThis.Range             = function(){ this.setStart=()=>{}; this.setEnd=()=>{}; "
@@ -4272,6 +4322,19 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "    try{ Reflect.construct(c,[],c); }"
         "    finally{ if(globalThis.__ceStack[globalThis.__ceStack.length-1]===el)"
         "             globalThis.__ceStack.pop(); }"
+        /* Upgrade-algorithm step: enqueue attributeChangedCallback for each
+			 * PRE-EXISTING attribute named in observedAttributes. Parse-time
+			 * attributes never fired a reaction (the element was not yet upgraded),
+			 * so frameworks that deserialize attribute -> property here (Polymer:
+			 * `modal` attr -> modal=true -> withBackdrop -> backdrop) would silently
+			 * drop that config. Runs after the constructor (property system ready)
+			 * and before connectedCallback, per the spec order. */
+        "    try{ var oa=c.observedAttributes;"
+        "      if(oa&&oa.length&&typeof el.attributeChangedCallback==='function'){"
+        "        for(var ai=0;ai<oa.length;ai++){ var an=oa[ai];"
+        "          if(el.hasAttribute&&el.hasAttribute(an)){"
+        "            try{ el.attributeChangedCallback(an,null,el.getAttribute(an),null); }catch(e){}"
+        "          } } } }catch(e){}"
         "    connectIfNeeded(el);"
         "  }catch(e){ try{console.error('ce upgrade <'+(el&&el.tagName)+'>',"
         "    (e&&e.name||'Error')+': '+(e&&e.message), '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- "
@@ -4318,6 +4381,56 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         /* Connect every defined custom element in a freshly-inserted subtree,
 		 * in tree order. Driven by the reaction observer below on each
 		 * insertion. */
+        /* Upgrade a single freshly-created element (document.createElement of a
+			 * defined custom tag). Runs the constructor + observed-attribute
+			 * reactions synchronously so the returned element already carries its
+			 * prototype and methods, as the spec's "create an element" requires;
+			 * connectedCallback still waits for insertion (connectIfNeeded is a
+			 * no-op while detached). Without this a manager that does
+			 * createElement(tag) then calls a method on the result (iron-overlay
+			 * creating its backdrop and calling backdrop.prepare()) hits undefined. */
+        /* createElement of a defined custom tag: install the prototype so the
+			 * returned object exposes its methods immediately (callers routinely
+			 * invoke a method on the result — iron-overlay creating its backdrop
+			 * then calling backdrop.prepare()). We do NOT run the constructor here:
+			 * legacy Polymer runs its full property init in connectedCallback, and
+			 * running the constructor now would make it run TWICE (once here, once at
+			 * connect), the second pass re-creating __data and discarding any property
+			 * the caller set on the detached element (e.g. backdrop.opened=true, which
+			 * then self-removes). Deferring the constructor to insertion keeps a single
+			 * init; properties set pre-connect are preserved via Polymer's __dataProto.
+			 * __ceUpgraded is left unset so the normal connect path upgrades fully. */
+        /* createElement of a defined custom tag. We must expose the element's
+			 * methods immediately (callers invoke them on the detached result — the
+			 * iron-overlay manager creates its backdrop then calls backdrop.prepare()),
+			 * but we must NOT construct the instance here: lazy component systems
+			 * (Polymer under ShadyDOM, YouTube's Wiz wrapper) construct the instance
+			 * again in connectedCallback, and that second construction re-creates the
+			 * element's data store, discarding any property set on the detached element
+			 * (backdrop.opened=true -> reverts to the false default -> the backdrop
+			 * self-removes on attach). So: (1) finalize the CLASS once — a throwaway
+			 * construction publishes the methods + property accessors onto the shared
+			 * prototype; (2) give the returned element that prototype WITHOUT
+			 * constructing it. Its pre-connect property writes land in Polymer's
+			 * __dataProto and are applied by the single connect-time construction. */
+        /* createElement of a defined custom tag: construct the element (so the
+			 * returned object exposes its methods — callers invoke them on the
+			 * detached result, e.g. iron-overlay creating its backdrop then calling
+			 * backdrop.prepare()), then run its ONE-TIME connect init immediately.
+			 * Lazy component systems (Polymer under ShadyDOM / YouTube's Wiz wrapper)
+			 * defer their real initialization to connectedCallback, guarded by an
+			 * internal once-flag. If we don't trigger it now, that init runs at the
+			 * real attach and RE-CREATES the element's data store, discarding any
+			 * property set on the detached element between createElement and insert
+			 * (backdrop.opened=true reverts to false → the backdrop self-removes).
+			 * Running it here consumes the once-flag, so the real attach only
+			 * attaches and pre-insert property writes survive. connectedCallback
+			 * stays reentrant/idempotent by that same once-flag, so firing it twice
+			 * (here + at attach) is safe. */
+        "  this.__upgradeOne=(el)=>{ try{ upgradeOrConnect(el);"
+        "    if(el && el.nodeType===1 && !el.__ybEagerInit){ el.__ybEagerInit=true;"
+        "      try{ if(typeof el.connectedCallback==='function') el.connectedCallback(); }catch(e){} }"
+        "  }catch(e){} };"
         "  this.__connectSubtree=(node)=>{ try{"
         "    var all=deepEls(node,'*'); for(var i=0;i<all.length;i++) upgradeOrConnect(all[i]);"
         "  }catch(e){ try{console.error('ce subtree <'+(node&&(node.tagName||node.nodeName))+'> nt='+(node&&node.nodeType),"
@@ -4336,6 +4449,18 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 		 * stamping -- the ordering Polymer/Lit/Stencil require. */
         "globalThis.Image       = function(){ this.src=''; this.onload=null; this.onerror=null; "
         "this.addEventListener=()=>{}; };"
+        /* Audio: no playback, but the constructor must EXIST. YouTube's
+			 * masthead render constructs `new Audio(...)` mid-stamp; with the
+			 * global missing the ReferenceError was swallowed by the page's
+			 * component-wrapper error handling and the masthead (and everything
+			 * inside it: search box, topbar buttons, consent renderer) silently
+			 * froze at the server-rendered skeleton. */
+        "globalThis.Audio       = function(src){ this.src=src||''; this.volume=1; this.muted=false; "
+        "this.paused=true; this.currentTime=0; this.duration=NaN; this.autoplay=false; "
+        "this.loop=false; this.preload='auto'; this.onload=null; this.onerror=null; "
+        "this.play=()=>Promise.resolve(); this.pause=()=>{}; this.load=()=>{}; "
+        "this.canPlayType=()=>''; this.addEventListener=()=>{}; this.removeEventListener=()=>{}; "
+        "this.dispatchEvent=()=>false; };"
         "globalThis.FileReader  = function(){ this.readAsText=()=>{}; this.readAsDataURL=()=>{}; "
         "this.addEventListener=()=>{}; };"
         "globalThis.FormData    = function(){ const m={}; this.append=(k,v)=>{m[k]=v;}; "
@@ -4360,6 +4485,46 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "() => null; this.addEventListener = (t, fn) => { this['on'+t] = fn; }; };"
         "globalThis.WebSocket = function(){ this.send=()=>{}; this.close=()=>{}; "
         "this.addEventListener=()=>{}; this.readyState=3; };"
+        /* navigator.sendBeacon: fire-and-forget POST that MUST return true. Its
+			 * absence made callers throw `sendBeacon is not a function`; when that
+			 * throw happens inside a framework's swallow-all wrapper (e.g. YouTube's
+			 * consent-save handler) the operation silently "fails" — the consent
+			 * lightbox showed "An error occurred while saving your choice" and never
+			 * dismissed, covering the page. sendBeacon does not expose the response
+			 * to the caller, so best-effort POST + unconditional true is spec-faithful. */
+        "if(globalThis.navigator && !globalThis.navigator.sendBeacon){"
+        "  globalThis.navigator.sendBeacon = function(url, data){"
+        "    try{ globalThis.fetch(url, { method:'POST', keepalive:true,"
+        "      body:(data===undefined||data===null)?undefined:"
+        "        (typeof data==='string'?data:data) }); }catch(e){}"
+        "    return true; }; }"
+        /* HTMLFormElement.submit / requestSubmit: were absent, so a caller doing
+			 * `form.submit()` threw `submit is not a function`. Inside a swallow-all
+			 * framework wrapper (YouTube's consent-save) that throw silently failed
+			 * the save — the consent lightbox stuck on "An error occurred while
+			 * saving your choice" and never dismissed. We can't do a full navigating
+			 * submit (location.assign is a stub), but a best-effort form-encoded
+			 * POST of the named controls to the form's action fires the request
+			 * through the cookie engine (so any Set-Cookie the save relies on, e.g.
+			 * YouTube's SOCS consent cookie, is captured) and, crucially, does not
+			 * throw — so the caller's success path runs. */
+        "(function(){ try{ var ep=Object.getPrototypeOf(document.createElement('form'));"
+        "  if(ep && !ep.submit){"
+        "    var doSubmit=function(form){ try{"
+        "      var action=(form.getAttribute&&form.getAttribute('action'))||globalThis.location.href;"
+        "      var method=((form.getAttribute&&form.getAttribute('method'))||'GET').toUpperCase();"
+        "      var ctrls=form.querySelectorAll?form.querySelectorAll('input,select,textarea'):[];"
+        "      var parts=[]; for(var i=0;i<ctrls.length;i++){ var c=ctrls[i];"
+        "        var name=c.getAttribute&&c.getAttribute('name'); if(!name)continue;"
+        "        var val=(c.value!==undefined&&c.value!==null)?c.value:((c.getAttribute&&c.getAttribute('value'))||'');"
+        "        parts.push(encodeURIComponent(name)+'='+encodeURIComponent(val)); }"
+        "      var body=parts.join('&');"
+        "      if(method==='GET'){ globalThis.fetch(action+(action.indexOf('?')<0?'?':'&')+body,{method:'GET'}); }"
+        "      else{ globalThis.fetch(action,{method:method,"
+        "        headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}); }"
+        "    }catch(e){} };"
+        "    ep.submit=function(){ doSubmit(this); };"
+        "    ep.requestSubmit=function(){ doSubmit(this); }; } }catch(e){} })();"
         "globalThis.HTMLCanvasElement = function(){};"
         "globalThis.OffscreenCanvas = function(){ this.getContext = () => null; };"
         /* requestIdleCallback must hand the callback an IdleDeadline; code that
