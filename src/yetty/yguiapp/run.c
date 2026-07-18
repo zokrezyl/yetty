@@ -518,25 +518,38 @@ static struct yetty_yfont_font *yguiapp_client_measure_font_create(void)
     }
     char cdb_path[768];
     char shader_path[768];
-    snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb",
-             paths_res.value->fonts_dir_buf, "DejaVuSansMNerdFontMono");
+    /* Client side has no GPU generator, but it can still reuse a CDB the server
+     * already generated into the cache (or the installed one). Pass NULL
+     * generator: on a miss the resolver returns quietly and the measure font is
+     * simply unavailable. */
+    struct yetty_ycore_void_result cdb_res = yetty_yfont_msdf_resolve_cdb(
+        NULL, paths_res.value->fonts_dir_buf, paths_res.value->cache_dir_buf,
+        "DejaVuSansMNerdFontMono", "-Regular", cdb_path, sizeof(cdb_path));
     snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl",
              paths_res.value->shaders_dir_buf);
-    struct yetty_font_font_result font_res =
-        yetty_yfont_msdf_font_create(cdb_path, shader_path, "yguiapp_measure");
+
+    struct yetty_yfont_font *font = NULL;
+    if (YETTY_IS_OK(cdb_res)) {
+        struct yetty_font_font_result font_res =
+            yetty_yfont_msdf_font_create(cdb_path, shader_path, "yguiapp_measure");
+        if (YETTY_IS_OK(font_res)) {
+            font = font_res.value;
+            struct yetty_ycore_void_result load = font->ops->load_basic_latin(font);
+            if (YETTY_IS_ERR(load)) {
+                yetty_ycore_error_destroy(load.error);
+            }
+        } else {
+            yetty_ycore_error_destroy(font_res.error);
+        }
+    } else {
+        yetty_ycore_error_destroy(cdb_res.error);
+    }
+
     struct yetty_ycore_void_result paths_destroy = yetty_yplatform_paths_destroy(paths_res.value);
     if (YETTY_IS_ERR(paths_destroy)) {
         yetty_ycore_error_destroy(paths_destroy.error);
     }
-    if (YETTY_IS_ERR(font_res)) {
-        yetty_ycore_error_destroy(font_res.error);
-        return NULL;
-    }
-    struct yetty_ycore_void_result load = font_res.value->ops->load_basic_latin(font_res.value);
-    if (YETTY_IS_ERR(load)) {
-        yetty_ycore_error_destroy(load.error);
-    }
-    return font_res.value;
+    return font;
 }
 
 struct yetty_ycore_void_result yetty_yguiapp_run_terminal(struct yetty_yclass_object *app)

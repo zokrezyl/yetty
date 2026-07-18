@@ -39,18 +39,21 @@ int yetty_yimage_probe_size(const uint8_t *image_bytes, size_t len, int *out_w, 
     return 0;
 }
 
-struct yetty_ydraw_drawable_list_result yetty_yimage_render(
-    const uint8_t *image_bytes, size_t len, const struct yetty_yimage_render_config *config)
+/* Decode `image_bytes` and serialize one yimage complex prim into a malloc'd
+ * buffer (caller frees). Writes the resolved bounds into *out_u so callers can
+ * size a scene. */
+static struct yetty_ycore_void_result yimage_serialize_prim(
+    const uint8_t *image_bytes, size_t len, const struct yetty_yimage_render_config *config,
+    uint8_t **out_prim, size_t *out_size, struct yetty_yimage_uniforms *out_u)
 {
     if (!image_bytes || len == 0) {
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage: image_bytes is NULL/empty");
+        return YETTY_ERR(yetty_ycore_void, "yimage: image_bytes is NULL/empty");
     }
-
     /* Decode via stb_image — force 4-channel RGBA8. */
     int w = 0, h = 0, channels = 0;
     stbi_uc *pixels = stbi_load_from_memory(image_bytes, (int)len, &w, &h, &channels, 4);
     if (!pixels) {
-        return YETTY_ERR(yetty_ydraw_drawable_list, stbi_failure_reason());
+        return YETTY_ERR(yetty_ycore_void, stbi_failure_reason());
     }
 
     /* Resolve config defaults — fall back to source dimensions when caller
@@ -73,7 +76,7 @@ struct yetty_ydraw_drawable_list_result yetty_yimage_render(
     uint8_t *drawable_buf = malloc(required);
     if (!drawable_buf) {
         stbi_image_free(pixels);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage: prim alloc failed");
+        return YETTY_ERR(yetty_ycore_void, "yimage: prim alloc failed");
     }
     struct yetty_ycore_size_result ser =
         yetty_yimage_uniforms_serialize(&u, &bufs, drawable_buf, required);
@@ -82,7 +85,46 @@ struct yetty_ydraw_drawable_list_result yetty_yimage_render(
     stbi_image_free(pixels);
     if (YETTY_IS_ERR(ser)) {
         free(drawable_buf);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage: serialize failed", ser);
+        return YETTY_ERR(yetty_ycore_void, "yimage: serialize failed", ser);
+    }
+    *out_prim = drawable_buf;
+    *out_size = required;
+    if (out_u) {
+        *out_u = u;
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yimage_emit_into(
+    struct yetty_ydraw_drawable_list *buf, const uint8_t *image_bytes, size_t len,
+    const struct yetty_yimage_render_config *config)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "yimage_emit_into: NULL buffer");
+    }
+    uint8_t *prim = NULL;
+    size_t prim_size = 0;
+    struct yetty_ycore_void_result ser =
+        yimage_serialize_prim(image_bytes, len, config, &prim, &prim_size, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ser, "yimage_emit_into: serialize");
+    struct yetty_ydraw_id_result idr = yetty_ydraw_drawable_list_add_prim(buf, prim, prim_size);
+    free(prim);
+    if (YETTY_IS_ERR(idr)) {
+        return YETTY_ERR(yetty_ycore_void, "yimage_emit_into: add_prim", idr);
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ydraw_drawable_list_result yetty_yimage_render(
+    const uint8_t *image_bytes, size_t len, const struct yetty_yimage_render_config *config)
+{
+    uint8_t *prim = NULL;
+    size_t prim_size = 0;
+    struct yetty_yimage_uniforms u = {0};
+    struct yetty_ycore_void_result ser =
+        yimage_serialize_prim(image_bytes, len, config, &prim, &prim_size, &u);
+    if (YETTY_IS_ERR(ser)) {
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yimage_render: serialize", ser);
     }
 
     struct yetty_ydraw_drawable_list_config bcfg = {
@@ -94,13 +136,13 @@ struct yetty_ydraw_drawable_list_result yetty_yimage_render(
     struct yetty_ydraw_drawable_list_result br =
         yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
-        free(drawable_buf);
+        free(prim);
         return YETTY_ERR(yetty_ydraw_drawable_list, "yimage: ydraw buffer create failed", br);
     }
 
     struct yetty_ydraw_id_result idr =
-        yetty_ydraw_drawable_list_add_prim(br.value, drawable_buf, required);
-    free(drawable_buf);
+        yetty_ydraw_drawable_list_add_prim(br.value, prim, prim_size);
+    free(prim);
     if (YETTY_IS_ERR(idr)) {
         yetty_ydraw_drawable_list_destroy(br.value);
         return YETTY_ERR(yetty_ydraw_drawable_list, "yimage: ydraw add_prim failed", idr);

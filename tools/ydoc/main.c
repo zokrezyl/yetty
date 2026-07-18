@@ -19,6 +19,7 @@
 
 #include <yetty/yrich/document.h>
 #include <yetty/yrich/ydoc.h>
+#include <yetty/yrich/yrich-export.h>
 #include <yetty/yrich/yrich-yaml.h>
 
 #include <stdio.h>
@@ -37,9 +38,9 @@ static struct yetty_ycore_void_result seed_demo(struct yetty_yclass_object *doc_
     const char *paras[] = {
         "Welcome to ydoc — a rich text editor.",
         "",
-        "Click in the toolbar to undo / redo or add a paragraph.",
+        "Use the menus to format text, or the toolbar to undo / redo.",
         "",
-        "Press 'q' or Esc to quit.",
+        "Press Ctrl+Q or click the ✕ Quit button to exit.",
     };
     for (size_t i = 0; i < sizeof(paras) / sizeof(paras[0]); i++) {
         struct yetty_yclass_object_ptr_result para_res =
@@ -64,7 +65,23 @@ int main(int argc, char **argv)
 
     struct yetty_yclass_object *doc_obj = NULL;
     if (file_path) {
-        struct yetty_yclass_object_ptr_result load_res = yetty_yrich_ydoc_load_yaml_file(file_path);
+        /* Pick the reader by extension: .md/.markdown and .txt import through
+         * the compatibility layer; everything else is native YAML. */
+        size_t path_len = strlen(file_path);
+        struct yetty_yclass_object_ptr_result load_res;
+        if ((path_len > 3 && strcmp(file_path + path_len - 3, ".md") == 0) ||
+            (path_len > 9 && strcmp(file_path + path_len - 9, ".markdown") == 0)) {
+            load_res = yetty_yrich_ydoc_import_markdown_file(file_path);
+        } else if (path_len > 4 && strcmp(file_path + path_len - 4, ".txt") == 0) {
+            load_res = yetty_yrich_ydoc_import_text_file(file_path);
+        } else if ((path_len > 5 && strcmp(file_path + path_len - 5, ".html") == 0) ||
+                   (path_len > 4 && strcmp(file_path + path_len - 4, ".htm") == 0)) {
+            load_res = yetty_yrich_ydoc_import_html_file(file_path);
+        } else if (path_len > 4 && strcmp(file_path + path_len - 4, ".rtf") == 0) {
+            load_res = yetty_yrich_ydoc_import_rtf_file(file_path);
+        } else {
+            load_res = yetty_yrich_ydoc_load_yaml_file(file_path);
+        }
         if (YETTY_IS_ERR(load_res)) {
             yetty_ycore_error_print(stderr, "ydoc: load failed", load_res.error);
             yetty_ycore_error_destroy(load_res.error);

@@ -771,10 +771,16 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
         const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
         const char *font_family = "DejaVuSansMNerdFontMono";
+        const char *cache_dir = config->ops->get_string(config, "paths/cache", "");
         char cdb_path[768];
         char shader_path[768];
-        snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir,
-                 font_family);
+        struct yetty_ycore_void_result cdb_res =
+            yetty_yfont_msdf_resolve_cdb(context->runtime->gpu.msdf_generator, fonts_dir, cache_dir,
+                                         font_family, "-Regular", cdb_path, sizeof(cdb_path));
+        if (!YETTY_IS_OK(cdb_res)) {
+            free(yui);
+            return YETTY_ERR(yetty_yui_ptr, "yui_create: resolve msdf cdb", cdb_res);
+        }
         snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", shaders_dir);
         struct yetty_font_font_result fr =
             yetty_yfont_msdf_font_create(cdb_path, shader_path, "yui_default");

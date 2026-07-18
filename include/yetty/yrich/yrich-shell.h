@@ -32,7 +32,8 @@ struct yetty_yclass_object;
  * host can extend the chrome or update status text. */
 struct yetty_yrich_editor {
     struct yetty_yclass_object *root;
-    struct yetty_yclass_object *menubar; /* NULL when the kind has no menus */
+    struct yetty_yclass_object *menubar;   /* NULL when the kind has no menus */
+    struct yetty_yclass_object *file_menu; /* the "File" popup (for adding Exit) */
     struct yetty_yclass_object *toolbar;
     struct yetty_yclass_object *view;
     struct yetty_yclass_object *statusbar;

@@ -23,7 +23,9 @@ add_library(yetty_yrich STATIC
     yrich-selection.c
     yrich-operation.c
     yrich-command.c
+    yrich-keymap.c
     yrich-yaml.c
+    yrich-export.c
 )
 
 target_include_directories(yetty_yrich PUBLIC
@@ -36,6 +38,8 @@ target_link_libraries(yetty_yrich PUBLIC
     yetty_yclass
     yetty_ydraw_core
     yetty_ysdf
+    yetty_yfont_core
+    yetty_yimage
     yaml
 )
 
@@ -97,6 +101,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND YETTY_ENABLE_LIB_WEBGPU)
         YETTY_ANDROID=0
         YETTY_USE_FORKPTY=1
     )
+
+    # Dual-mode in-terminal host (app.c yrich_run_terminal) is libuv-driven;
+    # gate it like every other dual-mode app. uv_a is already in the link set.
+    if(NOT WIN32)
+        target_compile_definitions(yetty_yrich_app PUBLIC YETTY_YGUI_HAS_UV)
+    endif()
 
     # The full link set the standalone yframework host needs (same shape
     # ycompositor-ygui / the demo runner use). Exported as a cache var so

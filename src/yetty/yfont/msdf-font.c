@@ -11,10 +11,12 @@
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yfont/font.h>
 #include <yetty/ymsdf-gen/ymsdf-gen.h>
+#include <yetty/ymsdf/generator.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/ycdb/ycdb.h>
 #include <yetty/ycore/map.h>
 #include <yetty/ycore/util.h>
+#include <yetty/yplatform/fs.h>
 #include <yetty/yrender/texture-format.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -442,6 +444,71 @@ static const struct yetty_yfont_font_ops msdf_font_ops = {
 };
 
 /*=============================================================================
+ * CDB resolution (install -> cache -> GPU generation)
+ *===========================================================================*/
+
+struct yetty_ycore_void_result yetty_yfont_msdf_resolve_cdb(struct yetty_ymsdf_generator *generator,
+                                                            const char *fonts_dir,
+                                                            const char *cache_dir, const char *name,
+                                                            const char *style_suffix,
+                                                            char *cdb_path_out, size_t cdb_path_cap)
+{
+    if (!fonts_dir || !name || !cdb_path_out) {
+        return YETTY_ERR(yetty_ycore_void, "resolve_cdb: NULL fonts_dir/name/out");
+    }
+    if (!style_suffix) {
+        style_suffix = "";
+    }
+
+    /* 1. Installed atlas shipped next to the bundled fonts — used silently. */
+    char install_dir[768];
+    snprintf(install_dir, sizeof(install_dir), "%s/../msdf-fonts", fonts_dir);
+    snprintf(cdb_path_out, cdb_path_cap, "%s/%s%s.cdb", install_dir, name, style_suffix);
+    if (yetty_yplatform_file_exists(cdb_path_out)) {
+        return YETTY_OK_VOID();
+    }
+
+    /* 2. Previously generated atlas in the user cache — reused silently. */
+    char cache_fonts_dir[768];
+    int have_cache = cache_dir && cache_dir[0];
+    if (have_cache) {
+        snprintf(cache_fonts_dir, sizeof(cache_fonts_dir), "%s/msdf-fonts", cache_dir);
+        snprintf(cdb_path_out, cdb_path_cap, "%s/%s%s.cdb", cache_fonts_dir, name, style_suffix);
+        if (yetty_yplatform_file_exists(cdb_path_out)) {
+            return YETTY_OK_VOID();
+        }
+    }
+
+    /* 3. Neither location has it — generate from the face's TTF into the cache.
+     * Only this branch is noisy: it names both searched locations, then
+     * confirms the generated cache file, so the log reads as a one-time
+     * first-run event rather than an error. */
+    char ttf_path[768];
+    snprintf(ttf_path, sizeof(ttf_path), "%s/%s%s.ttf", fonts_dir, name, style_suffix);
+    if (!have_cache || !generator || !yetty_yplatform_file_exists(ttf_path)) {
+        /* Nothing we can do — return quietly and let the caller fall back. */
+        return YETTY_ERR(yetty_ycore_void,
+                         "no installed or cached MSDF CDB and none can be generated");
+    }
+
+    ywarn("msdf font '%s%s': no CDB in install dir (%s) nor cache (%s) — generating on the GPU "
+          "from %s",
+          name, style_suffix, install_dir, cache_fonts_dir, ttf_path);
+
+    yetty_yplatform_mkdir_p(cache_fonts_dir);
+    struct yetty_ymsdf_generator_config gen = {
+        .ttf_path = ttf_path,
+        .cdb_path = cdb_path_out,
+        .font_size = 32.0f,
+        .pixel_range = 4.0f,
+    };
+    struct yetty_ycore_void_result gen_res = generator->ops->generate(generator, &gen);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gen_res, "GPU MSDF CDB generation failed");
+    yinfo("msdf font '%s%s': generated MSDF CDB in cache: %s", name, style_suffix, cdb_path_out);
+    return YETTY_OK_VOID();
+}
+
+/*=============================================================================
  * Create
  *===========================================================================*/
 
@@ -476,7 +543,10 @@ struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
 
     struct yetty_ycdb_reader_result cdb_res = yetty_ycdb_reader_open(cdb_path);
     if (YETTY_IS_ERR(cdb_res)) {
-        yerror("msdf_font: cannot open glyph cdb: %s", cdb_path);
+        /* Recoverable at the call site: callers fall back to another font (or the
+         * face is regenerated on the GPU elsewhere). Warn, don't error — the
+         * error is also returned in the Result for the caller to surface. */
+        ywarn("msdf_font: cannot open glyph cdb: %s", cdb_path);
         free(shader_res.value.data);
         return YETTY_ERR(yetty_font_font, "msdf font: cannot open glyph cdb", cdb_res);
     }

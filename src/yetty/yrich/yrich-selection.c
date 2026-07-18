@@ -88,6 +88,22 @@ void yetty_yrich_selection_select_text(struct yetty_yrich_selection *s,
     s->kind = YETTY_YRICH_SEL_TEXT;
     s->u.text.element_id = element_id;
     s->u.text.start = start;
+    s->u.text.focus_element_id = element_id;
+    s->u.text.end = end;
+}
+
+void yetty_yrich_selection_select_text_range(struct yetty_yrich_selection *s,
+                                             yetty_yrich_element_id anchor_id, int32_t start,
+                                             yetty_yrich_element_id focus_id, int32_t end)
+{
+    if (!s) {
+        return;
+    }
+    yetty_yrich_selection_clear(s);
+    s->kind = YETTY_YRICH_SEL_TEXT;
+    s->u.text.element_id = anchor_id;
+    s->u.text.start = start;
+    s->u.text.focus_element_id = focus_id;
     s->u.text.end = end;
 }
 

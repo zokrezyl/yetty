@@ -44,7 +44,11 @@ struct yetty_yrich_command_ops {
 
     bool (*can_merge_with)(const struct yetty_yrich_command *self,
                            const struct yetty_yrich_command *other);
-    void (*merge_with)(struct yetty_yrich_command *self, struct yetty_yrich_command *other);
+    /* Coalesce `other` into `self`. Returns true if merged (the caller then
+     * destroys `other`); false if the merge could not complete (e.g. an
+     * allocation failure) — the caller must then keep `other` as its own
+     * undo entry so the already-applied edit is never lost. */
+    bool (*merge_with)(struct yetty_yrich_command *self, struct yetty_yrich_command *other);
 };
 
 struct yetty_yrich_command {

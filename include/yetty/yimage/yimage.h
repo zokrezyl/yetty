@@ -52,6 +52,14 @@ int yetty_yimage_probe_size(const uint8_t *image_bytes, size_t len, int *out_w, 
 struct yetty_ydraw_drawable_list_result yetty_yimage_render(
     const uint8_t *image_bytes, size_t len, const struct yetty_yimage_render_config *config);
 
+/* Decode `image_bytes` and append ONE yimage complex prim into an existing
+ * `buf` at the config's bounds — the in-place counterpart of yetty_yimage_render
+ * for producers that composite the image into a larger drawable_list (e.g. a
+ * ydoc inline image drawn into the document buffer). */
+struct yetty_ycore_void_result yetty_yimage_emit_into(
+    struct yetty_ydraw_drawable_list *buf, const uint8_t *image_bytes, size_t len,
+    const struct yetty_yimage_render_config *config);
+
 /* Convenience: read the file at `path` and call yetty_yimage_render. */
 struct yetty_ydraw_drawable_list_result yetty_yimage_render_path(
     const char *path, const struct yetty_yimage_render_config *config);

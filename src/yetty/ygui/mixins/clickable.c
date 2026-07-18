@@ -15,6 +15,7 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/event.h>
 #include <yetty/ygui/widget.h>
 
 /* The click callback type. Defined here in the owning .c; codegen reproduces
@@ -64,33 +65,51 @@ static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_ob
                                                           float x, float y, int button)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    (void)x;
-    (void)y;
     (void)button;
     struct yetty_ygui_clickable_ptr_result cd_dr = yetty_ygui_clickable_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, cd_dr, "clickable_on_release: data_get");
     struct yetty_ygui_clickable *cd = cd_dr.value;
     int was_pressed = cd->pressed;
     cd->pressed = 0;
-    /* Mark dirty BEFORE invoking on_click. The callback is free to
-     * destroy this widget — apps frequently use it as a "navigate"
-     * trigger that rebuilds the entire subtree the button lives in
-     * (see ygreeter's on_row_clicked → rebuild_tab_content). After
-     * on_click returns, `obj` may already have been yetty_ygui_del'd,
-     * so dereferencing it (set_dirty walks obj->parent until it finds
-     * the root's engine pointer) is a use-after-free that surfaces as
-     * a garbage engine pointer and a SEGV in framework_mark_dirty.
-     * Setting dirty first preserves the "something happened this
-     * frame" hint without depending on the widget surviving. */
+    /* Capture the direct callback + userdata NOW: any click handler (the
+     * on_click below, or a CLICK subscriber fired via widget_emit) is free to
+     * destroy this widget, after which `cd` is dangling. */
+    yetty_ygui_click_cb on_click = cd->on_click;
+    void *on_click_userdata = cd->userdata;
+    /* Mark dirty BEFORE invoking any callback. A callback is free to destroy
+     * this widget — apps frequently use it as a "navigate" trigger that
+     * rebuilds the entire subtree the button lives in (see ygreeter's
+     * on_row_clicked → rebuild_tab_content). After it returns, `obj` may already
+     * have been yetty_ygui_del'd, so dereferencing it (set_dirty walks
+     * obj->parent to find the root's engine pointer) is a use-after-free that
+     * surfaces as a garbage engine pointer and a SEGV in framework_mark_dirty.
+     * Setting dirty first preserves the "something happened this frame" hint
+     * without depending on the widget surviving. */
     struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return YETTY_ERR(yetty_ycore_int, "clickable_on_release: set_dirty", dr);
     }
-    if (was_pressed && cd->on_click) {
-        struct yetty_ycore_void_result r =
-            cd->on_click((struct yetty_yclass_object *)obj, cd->userdata);
-        if (YETTY_IS_ERR(r)) {
-            return YETTY_ERR(yetty_ycore_int, "clickable_on_release: on_click", r);
+    if (was_pressed) {
+        /* Emit a CLICK event so widgets wired through widget_subscribe(CLICK)
+         * (e.g. the yrich toolbar buttons) actually fire — the clickable mixin
+         * otherwise only invokes the on_click callback below, leaving subscribe-
+         * based handlers dead. A widget uses one mechanism or the other, so this
+         * does not double-fire. */
+        struct yetty_ygui_event click_event = {
+            .type = YETTY_YGUI_EVENT_CLICK,
+            .source = obj,
+            .x = x,
+            .y = y,
+        };
+        struct yetty_ycore_void_result er = yetty_ygui_widget_emit(obj, &click_event);
+        if (YETTY_IS_ERR(er)) {
+            return YETTY_ERR(yetty_ycore_int, "clickable_on_release: emit click", er);
+        }
+        if (on_click) {
+            struct yetty_ycore_void_result r = on_click(obj, on_click_userdata);
+            if (YETTY_IS_ERR(r)) {
+                return YETTY_ERR(yetty_ycore_int, "clickable_on_release: on_click", r);
+            }
         }
     }
     return YETTY_OK(yetty_ycore_int, 1);

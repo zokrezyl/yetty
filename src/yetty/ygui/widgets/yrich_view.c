@@ -134,10 +134,13 @@ static size_t yrich_view_prim_size(const uint32_t *prim, size_t remaining)
     return s <= remaining ? s : 0;
 }
 
-/* Recolour every TEXT_DRAWABLE_LIST in the freshly-rendered buffer to `color`. The
- * yrich model bakes a fixed (near-black) colour into each text run; this
- * makes content legible against the themed background. TEXT_DRAWABLE_LIST wire
- * layout (text-drawable-list.h): word[6] is the packed colour. */
+/* Retint only the text runs that carry the model's DEFAULT colour, so default
+ * body text stays legible against the themed background — while any colour the
+ * user explicitly set (red/green/blue via the toolbar, or a per-run colour)
+ * is preserved and shown as authored. The yrich model default is opaque black
+ * (YETTY_YRICH_COLOR_BLACK == 0xFF000000). TEXT_DRAWABLE_LIST wire layout
+ * (text-drawable-list.h): word[6] is the packed colour. */
+#define YRICH_VIEW_MODEL_DEFAULT_TEXT_COLOR 0xFF000000u
 static void yrich_view_retint_text(struct yetty_ydraw_drawable_list *buf, uint32_t color)
 {
     uint8_t *data = (uint8_t *)yetty_ydraw_drawable_list_data(buf);
@@ -153,7 +156,7 @@ static void yrich_view_retint_text(struct yetty_ydraw_drawable_list *buf, uint32
             break;
         }
         if (YRICH_VIEW_TYPE_BASE(prim[0]) == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST &&
-            s >= 7 * sizeof(uint32_t)) {
+            s >= 7 * sizeof(uint32_t) && prim[6] == YRICH_VIEW_MODEL_DEFAULT_TEXT_COLOR) {
             prim[6] = color;
         }
         off += s;
@@ -509,6 +512,39 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_ycla
         yetty_yrich_document_on_text_input(d->doc, text_buffer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "yrich_view_feed_text");
     return yetty_ygui_widget_set_dirty(obj);
+}
+
+/* Forward a double-click at framework-space (x,y) to the document (word
+ * select + word-drag arming). Returns 1 if the point was inside the view and
+ * the click was consumed, 0 otherwise — the platform delivers double-click
+ * separately from the press/motion path, so the host routes it here. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ygui_yrich_view_feed_double_click(
+    struct yetty_yclass_object *obj, float x, float y, int button)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_int, "yrich_view_feed_double_click: NULL obj");
+    }
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_yrich_view_feed_double_click: data_get");
+    struct yetty_ygui_yrich_view *d = d_dr.value;
+    if (!d->doc) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "yrich_view_feed_double_click: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
+    if (x < r.min.x || x >= r.max.x || y < r.min.y || y >= r.max.y) {
+        return YETTY_OK(yetty_ycore_int, 0); /* outside the document view */
+    }
+    float dx = x - r.min.x;
+    float dy = y - r.min.y;
+    struct yetty_ycore_void_result dbl_res =
+        yetty_yrich_document_on_mouse_double_click(d->doc, dx, dy, (uint32_t)button, 0u);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, dbl_res, "yrich_view_feed_double_click: dispatch");
+    struct yetty_ycore_void_result dirty_res = yetty_ygui_widget_set_dirty(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, dirty_res, "yrich_view_feed_double_click: dirty");
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 #include "yrich_view.gen.c"

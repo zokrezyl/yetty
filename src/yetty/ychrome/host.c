@@ -449,6 +449,14 @@ struct yetty_ycore_int_result yetty_ychrome_host_handle_event(struct yetty_ychro
     return YETTY_OK(yetty_ycore_int, consumed);
 }
 
+struct yetty_ycore_int_result yetty_ychrome_host_in_gesture(struct yetty_ychrome_host *host)
+{
+    if (!host) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    return yetty_ychrome_in_gesture(host->chrome);
+}
+
 struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_host *host,
                                                           float width, float height)
 {

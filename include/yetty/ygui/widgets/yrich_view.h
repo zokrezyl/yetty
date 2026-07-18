@@ -59,6 +59,12 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_yclas
                                                               uint32_t key, uint32_t mods);
 struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_yclass_object *obj,
                                                                const char *text, size_t len);
+/* Forward a double-click at framework-space (x,y) to the document (word
+ * select + word-drag arming). Returns 1 if the point was inside the view and
+ * the click was consumed, 0 otherwise — the platform delivers double-click
+ * separately from the press/motion path, so the host routes it here. */
+struct yetty_ycore_int_result yetty_ygui_yrich_view_feed_double_click(
+    struct yetty_yclass_object *obj, float x, float y, int button);
 
 #ifdef __cplusplus
 }

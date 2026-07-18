@@ -58,10 +58,19 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_set_text_color(struct yetty_ycla
                                                                uint32_t color);
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_alignment(struct yetty_yclass_object *obj,
                                                               uint32_t halign);
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_line_spacing(struct yetty_yclass_object *obj,
+                                                                 float spacing);
+struct yetty_ycore_void_result yetty_yrich_ydoc_adjust_indent(struct yetty_yclass_object *obj,
+                                                              int32_t direction);
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_highlight(struct yetty_yclass_object *obj,
+                                                              uint32_t bg_color);
+struct yetty_ycore_void_result yetty_yrich_ydoc_clear_format(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_heading(struct yetty_yclass_object *obj,
                                                             uint32_t level);
 struct yetty_ycore_void_result yetty_yrich_ydoc_change_font_size(struct yetty_yclass_object *obj,
                                                                  float delta);
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_font_size(struct yetty_yclass_object *obj,
+                                                              float size);
 typedef struct yetty_ycore_void_result (*yetty_yrich_constructor_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_destroy_fn)(
     struct yetty_yclass_object *);
@@ -107,9 +116,19 @@ typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_text_color_fn)(
     struct yetty_yclass_object *, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_alignment_fn)(
     struct yetty_yclass_object *, uint32_t);
+typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_line_spacing_fn)(
+    struct yetty_yclass_object *, float);
+typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_adjust_indent_fn)(
+    struct yetty_yclass_object *, int32_t);
+typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_highlight_fn)(
+    struct yetty_yclass_object *, uint32_t);
+typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_clear_format_fn)(
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_heading_fn)(
     struct yetty_yclass_object *, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_change_font_size_fn)(
+    struct yetty_yclass_object *, float);
+typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_font_size_fn)(
     struct yetty_yclass_object *, float);
 
 YETTY_MAYBE_UNUSED
@@ -366,11 +385,26 @@ YETTY_MAYBE_UNUSED
 static yetty_yrich_ydoc_set_alignment_fn yetty_yrich_ydoc_yetty_yrich_ydoc_set_alignment_check =
     ydoc_set_alignment_impl;
 YETTY_MAYBE_UNUSED
+static yetty_yrich_ydoc_set_line_spacing_fn
+    yetty_yrich_ydoc_yetty_yrich_ydoc_set_line_spacing_check = ydoc_set_line_spacing_impl;
+YETTY_MAYBE_UNUSED
+static yetty_yrich_ydoc_adjust_indent_fn yetty_yrich_ydoc_yetty_yrich_ydoc_adjust_indent_check =
+    ydoc_adjust_indent_impl;
+YETTY_MAYBE_UNUSED
+static yetty_yrich_ydoc_set_highlight_fn yetty_yrich_ydoc_yetty_yrich_ydoc_set_highlight_check =
+    ydoc_set_highlight_impl;
+YETTY_MAYBE_UNUSED
+static yetty_yrich_ydoc_clear_format_fn yetty_yrich_ydoc_yetty_yrich_ydoc_clear_format_check =
+    ydoc_clear_format_impl;
+YETTY_MAYBE_UNUSED
 static yetty_yrich_ydoc_set_heading_fn yetty_yrich_ydoc_yetty_yrich_ydoc_set_heading_check =
     ydoc_set_heading_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_ydoc_change_font_size_fn
     yetty_yrich_ydoc_yetty_yrich_ydoc_change_font_size_check = ydoc_change_font_size_impl;
+YETTY_MAYBE_UNUSED
+static yetty_yrich_ydoc_set_font_size_fn yetty_yrich_ydoc_yetty_yrich_ydoc_set_font_size_check =
+    ydoc_set_font_size_impl;
 
 struct yetty_yclass_ptr_result yetty_yrich_ydoc_class_get(void)
 {
@@ -426,11 +460,26 @@ struct yetty_yclass_ptr_result yetty_yrich_ydoc_class_get(void)
         {"yetty_yrich", "ydoc_set_alignment",
          (yetty_yclass_method_id_t)yetty_yrich_ydoc_set_alignment,
          (yetty_yclass_impl_t)ydoc_set_alignment_impl},
+        {"yetty_yrich", "ydoc_set_line_spacing",
+         (yetty_yclass_method_id_t)yetty_yrich_ydoc_set_line_spacing,
+         (yetty_yclass_impl_t)ydoc_set_line_spacing_impl},
+        {"yetty_yrich", "ydoc_adjust_indent",
+         (yetty_yclass_method_id_t)yetty_yrich_ydoc_adjust_indent,
+         (yetty_yclass_impl_t)ydoc_adjust_indent_impl},
+        {"yetty_yrich", "ydoc_set_highlight",
+         (yetty_yclass_method_id_t)yetty_yrich_ydoc_set_highlight,
+         (yetty_yclass_impl_t)ydoc_set_highlight_impl},
+        {"yetty_yrich", "ydoc_clear_format",
+         (yetty_yclass_method_id_t)yetty_yrich_ydoc_clear_format,
+         (yetty_yclass_impl_t)ydoc_clear_format_impl},
         {"yetty_yrich", "ydoc_set_heading", (yetty_yclass_method_id_t)yetty_yrich_ydoc_set_heading,
          (yetty_yclass_impl_t)ydoc_set_heading_impl},
         {"yetty_yrich", "ydoc_change_font_size",
          (yetty_yclass_method_id_t)yetty_yrich_ydoc_change_font_size,
          (yetty_yclass_impl_t)ydoc_change_font_size_impl},
+        {"yetty_yrich", "ydoc_set_font_size",
+         (yetty_yclass_method_id_t)yetty_yrich_ydoc_set_font_size,
+         (yetty_yclass_impl_t)ydoc_set_font_size_impl},
     };
     struct yetty_yclass_ptr_result parent_class_r = yetty_yrich_document_class_get();
     if (YETTY_IS_ERR(parent_class_r)) {
@@ -692,6 +741,290 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_set_alignment(struct yetty_yclas
     }
 }
 
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_line_spacing(struct yetty_yclass_object *obj,
+                                                                 float spacing)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_yrich", (yetty_yclass_method_id_t)yetty_yrich_ydoc_set_line_spacing);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_yrich_ydoc_set_line_spacing: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yrich_ydoc_set_line_spacing: NULL object");
+    }
+
+    if (obj->session) {
+        struct uint32_result remote_id_r =
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r,
+                            "yetty_yrich_ydoc_set_line_spacing: ensure_remote_id failed");
+        uint32_t remote_id = remote_id_r.value;
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
+            uint64_t obj_handle;
+            float spacing;
+        } wire_args = {
+            container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
+                ->handle,
+            spacing};
+#pragma pack(pop)
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
+                            "yetty_yrich_ydoc_set_line_spacing: RPC call failed");
+        if (response_len < 1) {
+            free(resp_buf);
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_yrich_ydoc_set_line_spacing: short RPC response");
+        }
+        if (resp_buf[0] != 0) {
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error = YETTY_ERR(
+                yetty_ycore_void, "yetty_yrich_ydoc_set_line_spacing: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
+        }
+        free(resp_buf);
+        return YETTY_OK_VOID();
+    } else {
+        struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                            "yetty_yrich_ydoc_set_line_spacing: object_class failed");
+        struct yetty_yclass_impl_t_result dispatch_impl_r =
+            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                            "yetty_yrich_ydoc_set_line_spacing: dispatch_lookup failed");
+        return ((yetty_yrich_ydoc_set_line_spacing_fn)dispatch_impl_r.value)(obj, spacing);
+    }
+}
+
+struct yetty_ycore_void_result yetty_yrich_ydoc_adjust_indent(struct yetty_yclass_object *obj,
+                                                              int32_t direction)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_yrich", (yetty_yclass_method_id_t)yetty_yrich_ydoc_adjust_indent);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_yrich_ydoc_adjust_indent: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yrich_ydoc_adjust_indent: NULL object");
+    }
+
+    if (obj->session) {
+        struct uint32_result remote_id_r =
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r,
+                            "yetty_yrich_ydoc_adjust_indent: ensure_remote_id failed");
+        uint32_t remote_id = remote_id_r.value;
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
+            uint64_t obj_handle;
+            int32_t direction;
+        } wire_args = {
+            container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
+                ->handle,
+            direction};
+#pragma pack(pop)
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
+                            "yetty_yrich_ydoc_adjust_indent: RPC call failed");
+        if (response_len < 1) {
+            free(resp_buf);
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_yrich_ydoc_adjust_indent: short RPC response");
+        }
+        if (resp_buf[0] != 0) {
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error = YETTY_ERR(
+                yetty_ycore_void, "yetty_yrich_ydoc_adjust_indent: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
+        }
+        free(resp_buf);
+        return YETTY_OK_VOID();
+    } else {
+        struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                            "yetty_yrich_ydoc_adjust_indent: object_class failed");
+        struct yetty_yclass_impl_t_result dispatch_impl_r =
+            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                            "yetty_yrich_ydoc_adjust_indent: dispatch_lookup failed");
+        return ((yetty_yrich_ydoc_adjust_indent_fn)dispatch_impl_r.value)(obj, direction);
+    }
+}
+
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_highlight(struct yetty_yclass_object *obj,
+                                                              uint32_t bg_color)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_yrich", (yetty_yclass_method_id_t)yetty_yrich_ydoc_set_highlight);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_yrich_ydoc_set_highlight: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yrich_ydoc_set_highlight: NULL object");
+    }
+
+    if (obj->session) {
+        struct uint32_result remote_id_r =
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r,
+                            "yetty_yrich_ydoc_set_highlight: ensure_remote_id failed");
+        uint32_t remote_id = remote_id_r.value;
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
+            uint64_t obj_handle;
+            uint32_t bg_color;
+        } wire_args = {
+            container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
+                ->handle,
+            bg_color};
+#pragma pack(pop)
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
+                            "yetty_yrich_ydoc_set_highlight: RPC call failed");
+        if (response_len < 1) {
+            free(resp_buf);
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_yrich_ydoc_set_highlight: short RPC response");
+        }
+        if (resp_buf[0] != 0) {
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error = YETTY_ERR(
+                yetty_ycore_void, "yetty_yrich_ydoc_set_highlight: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
+        }
+        free(resp_buf);
+        return YETTY_OK_VOID();
+    } else {
+        struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                            "yetty_yrich_ydoc_set_highlight: object_class failed");
+        struct yetty_yclass_impl_t_result dispatch_impl_r =
+            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                            "yetty_yrich_ydoc_set_highlight: dispatch_lookup failed");
+        return ((yetty_yrich_ydoc_set_highlight_fn)dispatch_impl_r.value)(obj, bg_color);
+    }
+}
+
+struct yetty_ycore_void_result yetty_yrich_ydoc_clear_format(struct yetty_yclass_object *obj)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_yrich", (yetty_yclass_method_id_t)yetty_yrich_ydoc_clear_format);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_yrich_ydoc_clear_format: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yrich_ydoc_clear_format: NULL object");
+    }
+
+    if (obj->session) {
+        struct uint32_result remote_id_r =
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r,
+                            "yetty_yrich_ydoc_clear_format: ensure_remote_id failed");
+        uint32_t remote_id = remote_id_r.value;
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
+            uint64_t obj_handle;
+        } wire_args = {
+            container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
+                ->handle};
+#pragma pack(pop)
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
+                            "yetty_yrich_ydoc_clear_format: RPC call failed");
+        if (response_len < 1) {
+            free(resp_buf);
+            return YETTY_ERR(yetty_ycore_void, "yetty_yrich_ydoc_clear_format: short RPC response");
+        }
+        if (resp_buf[0] != 0) {
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error = YETTY_ERR(
+                yetty_ycore_void, "yetty_yrich_ydoc_clear_format: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
+        }
+        free(resp_buf);
+        return YETTY_OK_VOID();
+    } else {
+        struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                            "yetty_yrich_ydoc_clear_format: object_class failed");
+        struct yetty_yclass_impl_t_result dispatch_impl_r =
+            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                            "yetty_yrich_ydoc_clear_format: dispatch_lookup failed");
+        return ((yetty_yrich_ydoc_clear_format_fn)dispatch_impl_r.value)(obj);
+    }
+}
+
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_heading(struct yetty_yclass_object *obj,
                                                             uint32_t level)
 {
@@ -831,6 +1164,78 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_change_font_size(struct yetty_yc
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                             "yetty_yrich_ydoc_change_font_size: dispatch_lookup failed");
         return ((yetty_yrich_ydoc_change_font_size_fn)dispatch_impl_r.value)(obj, delta);
+    }
+}
+
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_font_size(struct yetty_yclass_object *obj,
+                                                              float size)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_yrich", (yetty_yclass_method_id_t)yetty_yrich_ydoc_set_font_size);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_yrich_ydoc_set_font_size: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yrich_ydoc_set_font_size: NULL object");
+    }
+
+    if (obj->session) {
+        struct uint32_result remote_id_r =
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r,
+                            "yetty_yrich_ydoc_set_font_size: ensure_remote_id failed");
+        uint32_t remote_id = remote_id_r.value;
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
+            uint64_t obj_handle;
+            float size;
+        } wire_args = {
+            container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
+                ->handle,
+            size};
+#pragma pack(pop)
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
+                            "yetty_yrich_ydoc_set_font_size: RPC call failed");
+        if (response_len < 1) {
+            free(resp_buf);
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_yrich_ydoc_set_font_size: short RPC response");
+        }
+        if (resp_buf[0] != 0) {
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error = YETTY_ERR(
+                yetty_ycore_void, "yetty_yrich_ydoc_set_font_size: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
+        }
+        free(resp_buf);
+        return YETTY_OK_VOID();
+    } else {
+        struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                            "yetty_yrich_ydoc_set_font_size: object_class failed");
+        struct yetty_yclass_impl_t_result dispatch_impl_r =
+            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                            "yetty_yrich_ydoc_set_font_size: dispatch_lookup failed");
+        return ((yetty_yrich_ydoc_set_font_size_fn)dispatch_impl_r.value)(obj, size);
     }
 }
 
@@ -1020,6 +1425,245 @@ size_t yetty_yrich_ydoc_set_alignment_skel(const void *body, size_t body_len, vo
  * status wire response at this boundary. External linkage so this module's
  * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
  * across translation units. */
+size_t yetty_yrich_ydoc_set_line_spacing_skel(const void *, size_t, void *, size_t);
+YETTY_EXTERNAL_CALLBACK
+size_t yetty_yrich_ydoc_set_line_spacing_skel(const void *body, size_t body_len, void *resp,
+                                              size_t resp_max)
+{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
+        uint64_t obj_handle;
+        float spacing;
+    } wire_args;
+#pragma pack(pop)
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (body_len != sizeof(wire_args)) {
+        return 0;
+    }
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_set_line_spacing: handle_resolve",
+                                obj_resolve_r.error);
+        if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
+            return 0;
+        }
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
+    }
+    struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_set_line_spacing(
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.spacing);
+    if (resp_max < 1) {
+        return 0;
+    }
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_set_line_spacing", call_r.error);
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
+    }
+    ((uint8_t *)resp)[0] = 0;
+    return 1;
+}
+
+/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
+ * contract (the RPC engine calls it as a fn-pointer), so it cannot return
+ * a Result; handle_resolve / impl failures are absorbed into the 1-byte
+ * status wire response at this boundary. External linkage so this module's
+ * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
+ * across translation units. */
+size_t yetty_yrich_ydoc_adjust_indent_skel(const void *, size_t, void *, size_t);
+YETTY_EXTERNAL_CALLBACK
+size_t yetty_yrich_ydoc_adjust_indent_skel(const void *body, size_t body_len, void *resp,
+                                           size_t resp_max)
+{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
+        uint64_t obj_handle;
+        int32_t direction;
+    } wire_args;
+#pragma pack(pop)
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (body_len != sizeof(wire_args)) {
+        return 0;
+    }
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_adjust_indent: handle_resolve",
+                                obj_resolve_r.error);
+        if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
+            return 0;
+        }
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
+    }
+    struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_adjust_indent(
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.direction);
+    if (resp_max < 1) {
+        return 0;
+    }
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_adjust_indent", call_r.error);
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
+    }
+    ((uint8_t *)resp)[0] = 0;
+    return 1;
+}
+
+/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
+ * contract (the RPC engine calls it as a fn-pointer), so it cannot return
+ * a Result; handle_resolve / impl failures are absorbed into the 1-byte
+ * status wire response at this boundary. External linkage so this module's
+ * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
+ * across translation units. */
+size_t yetty_yrich_ydoc_set_highlight_skel(const void *, size_t, void *, size_t);
+YETTY_EXTERNAL_CALLBACK
+size_t yetty_yrich_ydoc_set_highlight_skel(const void *body, size_t body_len, void *resp,
+                                           size_t resp_max)
+{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
+        uint64_t obj_handle;
+        uint32_t bg_color;
+    } wire_args;
+#pragma pack(pop)
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (body_len != sizeof(wire_args)) {
+        return 0;
+    }
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_set_highlight: handle_resolve",
+                                obj_resolve_r.error);
+        if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
+            return 0;
+        }
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
+    }
+    struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_set_highlight(
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.bg_color);
+    if (resp_max < 1) {
+        return 0;
+    }
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_set_highlight", call_r.error);
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
+    }
+    ((uint8_t *)resp)[0] = 0;
+    return 1;
+}
+
+/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
+ * contract (the RPC engine calls it as a fn-pointer), so it cannot return
+ * a Result; handle_resolve / impl failures are absorbed into the 1-byte
+ * status wire response at this boundary. External linkage so this module's
+ * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
+ * across translation units. */
+size_t yetty_yrich_ydoc_clear_format_skel(const void *, size_t, void *, size_t);
+YETTY_EXTERNAL_CALLBACK
+size_t yetty_yrich_ydoc_clear_format_skel(const void *body, size_t body_len, void *resp,
+                                          size_t resp_max)
+{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
+        uint64_t obj_handle;
+    } wire_args;
+#pragma pack(pop)
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (body_len != sizeof(wire_args)) {
+        return 0;
+    }
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_clear_format: handle_resolve",
+                                obj_resolve_r.error);
+        if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
+            return 0;
+        }
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
+    }
+    struct yetty_ycore_void_result call_r =
+        yetty_yrich_ydoc_clear_format((struct yetty_yclass_object *)obj_resolve_r.value);
+    if (resp_max < 1) {
+        return 0;
+    }
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_clear_format", call_r.error);
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
+    }
+    ((uint8_t *)resp)[0] = 0;
+    return 1;
+}
+
+/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
+ * contract (the RPC engine calls it as a fn-pointer), so it cannot return
+ * a Result; handle_resolve / impl failures are absorbed into the 1-byte
+ * status wire response at this boundary. External linkage so this module's
+ * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
+ * across translation units. */
 size_t yetty_yrich_ydoc_set_heading_skel(const void *, size_t, void *, size_t);
 YETTY_EXTERNAL_CALLBACK
 size_t yetty_yrich_ydoc_set_heading_skel(const void *body, size_t body_len, void *resp,
@@ -1124,6 +1768,66 @@ size_t yetty_yrich_ydoc_change_font_size_skel(const void *body, size_t body_len,
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_change_font_size", call_r.error);
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
+    }
+    ((uint8_t *)resp)[0] = 0;
+    return 1;
+}
+
+/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
+ * contract (the RPC engine calls it as a fn-pointer), so it cannot return
+ * a Result; handle_resolve / impl failures are absorbed into the 1-byte
+ * status wire response at this boundary. External linkage so this module's
+ * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
+ * across translation units. */
+size_t yetty_yrich_ydoc_set_font_size_skel(const void *, size_t, void *, size_t);
+YETTY_EXTERNAL_CALLBACK
+size_t yetty_yrich_ydoc_set_font_size_skel(const void *body, size_t body_len, void *resp,
+                                           size_t resp_max)
+{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
+        uint64_t obj_handle;
+        float size;
+    } wire_args;
+#pragma pack(pop)
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (body_len != sizeof(wire_args)) {
+        return 0;
+    }
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_set_font_size: handle_resolve",
+                                obj_resolve_r.error);
+        if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
+            return 0;
+        }
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
+    }
+    struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_set_font_size(
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.size);
+    if (resp_max < 1) {
+        return 0;
+    }
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_set_font_size", call_r.error);
         ((uint8_t *)resp)[0] = 1;
         size_t err_bytes =
             yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);

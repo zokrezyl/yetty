@@ -513,7 +513,6 @@ struct yetty_ycore_void_result yetty_yfigure_apply_scroll_anchor(struct yetty_yc
                                                                          cell_height);
 }
 
-struct yetty_ycore_void_result yetty_yfigure_constructor(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_yclass_ctx *ctx)
 {
@@ -533,15 +532,6 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_y
         struct yetty_yclass_object_ptr_result alloc_r = yetty_yclass_object_alloc(klass);
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
-        }
-        struct yetty_ycore_void_result ctor_r = yetty_yfigure_constructor(alloc_r.value);
-        if (YETTY_IS_ERR(ctor_r)) {
-            struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
-            if (YETTY_IS_ERR(free_r)) {
-                yetty_ycore_error_destroy(free_r.error);
-            }
-            return YETTY_ERR(yetty_yclass_object_ptr,
-                             "yetty_yfigure_figure_create: constructor failed", ctor_r);
         }
         return alloc_r;
     }

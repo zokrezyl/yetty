@@ -627,4 +627,17 @@ struct yetty_ycore_int_result yetty_ychrome_hover_button(struct yetty_yclass_obj
     return YETTY_OK(yetty_ycore_int, ((struct yetty_ychrome_chrome *)data_r.value)->hover_button);
 }
 
+/* 1 while a caption-drag or edge-resize gesture is live. Hosts that route
+ * pointer events UI-first (per the header contract above) still hand chrome
+ * the whole stream while this is set, so a live gesture cannot be stolen by
+ * widgets the pointer happens to cross. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ychrome_in_gesture(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_r, "chrome in_gesture: object");
+    const struct yetty_ychrome_chrome *chrome = data_r.value;
+    return YETTY_OK(yetty_ycore_int, (chrome->dragging || chrome->resizing) ? 1 : 0);
+}
+
 #include "chrome.gen.c"

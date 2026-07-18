@@ -91,6 +91,11 @@ struct yetty_ycore_void_result yetty_ychrome_register(void);
  * 3=close; 0=none). Hosts poll this after forwarding an event and re-paint the
  * caption when it changes, so the hover highlight tracks the pointer. */
 struct yetty_ycore_int_result yetty_ychrome_hover_button(struct yetty_yclass_object *obj);
+/* 1 while a caption-drag or edge-resize gesture is live. Hosts that route
+ * pointer events UI-first (per the header contract above) still hand chrome
+ * the whole stream while this is set, so a live gesture cannot be stolen by
+ * widgets the pointer happens to cross. */
+struct yetty_ycore_int_result yetty_ychrome_in_gesture(struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }
