@@ -27,6 +27,34 @@ struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
                                                            const char *shader_path,
                                                            const char *namespace);
 
+/* Generator is opaque here — declared in <yetty/ymsdf/generator.h>. Taken as a
+ * bare pointer and invoked only through its ops vtable, so this stays a
+ * header-only dependency (no link to yetty_ymsdf, no WebGPU pulled into the
+ * GPU-less yfont clients). */
+struct yetty_ymsdf_generator;
+
+/* Resolve a usable MSDF glyph CDB for a font face, generating it on the GPU
+ * when neither a shipped nor a cached atlas exists. The face file stem is
+ * `<name><style_suffix>` (e.g. name "DejaVuSansMNerdFontMono", style_suffix
+ * "-Regular" / "-Bold" / "-Oblique"). Resolution order:
+ *
+ *   1. Installed  <fonts_dir>/../msdf-fonts/<stem>.cdb — used silently.
+ *   2. Cached     <cache_dir>/msdf-fonts/<stem>.cdb — used silently (a previous
+ *      run already generated it — no warning on reuse).
+ *   3. Generated  the cache CDB is built from <fonts_dir>/<stem>.ttf with
+ *      `generator`. This case logs one warning (neither location had a CDB)
+ *      followed by one info (the CDB was generated into the cache).
+ *
+ * On success writes the usable CDB path into cdb_path_out and returns OK.
+ * Returns an error (without warning) when no CDB can be produced — no source
+ * TTF, no generator, empty cache dir, or the generation itself failed; the
+ * caller decides how to surface that. `style_suffix` may be "" (bare <name>).
+ * `cache_dir` and `generator` may be NULL/empty, in which case only the
+ * installed path is considered. */
+struct yetty_ycore_void_result yetty_yfont_msdf_resolve_cdb(
+    struct yetty_ymsdf_generator *generator, const char *fonts_dir, const char *cache_dir,
+    const char *name, const char *style_suffix, char *cdb_path_out, size_t cdb_path_cap);
+
 #ifdef __cplusplus
 }
 #endif

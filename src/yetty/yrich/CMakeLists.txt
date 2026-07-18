@@ -39,6 +39,7 @@ target_link_libraries(yetty_yrich PUBLIC
     yetty_ydraw_core
     yetty_ysdf
     yetty_yfont_core
+    yetty_yimage
     yaml
 )
 

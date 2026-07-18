@@ -350,6 +350,28 @@ Landed increments (each meets the §8 Definition of Done unless noted):
   did NOT render — the MSDF face lacks U+00B7/U+00B6 coverage — so the marks
   are SDF boxes.)
 
+- **Inline images (real decoded pixels)** — Phase 2 (done, verified live). The
+  `inline_image` element used to render a grey placeholder box; it now composites
+  the actual decoded image. Enablers: (1) the yrich app creates a
+  `yetty_ydraw_composite_factory` (registering the yimage + yplot concrete
+  factories) and passes it in the ygrid factory args, so the ydoc render ygrid
+  runs a composite pass — previously the factory was NULL, which is why images
+  could never render; (2) yimage gained `yetty_yimage_emit_into(buf, bytes, len,
+  config)` (a refactor sharing the decode+serialize core with `yetty_yimage_render`)
+  that appends ONE yimage complex prim into an existing drawable_list at the
+  config bounds; (3) `inline_image_render` reads the element's `source` file,
+  decodes via stb_image, and emits the prim at the image's document bounds
+  (falling back to the placeholder box when there is no decodable source), with a
+  thin selection outline when selected. New accessors: `inline_image_set_source`/
+  `_source`, `_set_bounds`/`_bounds`, and `ydoc_image_count`/`_image_at` for
+  enumeration. YAML round-trip via an `images:` sequence of `{source, x, y, w, h}`
+  (tested: source + bounds survive save/reload). Verified live — a `.ydoc.yaml`
+  referencing a PNG opened with the real photo composited at its bounds
+  (screenshot). Known follow-ups: the image is absolutely positioned and does not
+  yet reserve vertical space in the paragraph flow (text can overlap it); an
+  Insert-menu "Image…" needs the file-picker/text-input that the find/replace bar
+  and link editor also wait on; resize/crop/wrap/alt-text are later Phase-2 image
+  increments.
 - **Tables** — Phase 2. `block_kind` 2: a rows×cols grid of owned cell strings
   on the paragraph. Rendered as SDF grid lines + per-cell text with an
   active-cell wash; height = rows × cell height. **Insert menu** → Table

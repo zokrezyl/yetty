@@ -29,7 +29,8 @@
 #include <yetty/yrich/element.h>
 
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yfont/font.h> /* metrics-only glyph advances for proportional layout */
+#include <yetty/yfont/font.h>    /* metrics-only glyph advances for proportional layout */
+#include <yetty/yimage/yimage.h> /* decode + composite inline images into the doc buffer */
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -1790,6 +1791,42 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_set_format(struct yetty_ycl
  * InlineImage
  *=========================================================================*/
 
+/* Read a whole file into a malloc'd buffer (caller frees); NULL on failure.
+ * Sets *out_len to the byte count. Used to load an inline image's source for
+ * decode at render time. */
+static uint8_t *ydoc_read_binary_file(const char *path, size_t *out_len)
+{
+    FILE *file = fopen(path, "rb");
+    if (!file) {
+        return NULL;
+    }
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        return NULL;
+    }
+    long size = ftell(file);
+    if (size <= 0) {
+        fclose(file);
+        return NULL;
+    }
+    rewind(file);
+    uint8_t *buffer = malloc((size_t)size);
+    if (!buffer) {
+        fclose(file);
+        return NULL;
+    }
+    size_t read = fread(buffer, 1, (size_t)size, file);
+    fclose(file);
+    if (read != (size_t)size) {
+        free(buffer);
+        return NULL;
+    }
+    if (out_len) {
+        *out_len = read;
+    }
+    return buffer;
+}
+
 struct YETTY_ANNOTATE("class@yrich:inline_image") YETTY_ANNOTATE("parent@yrich:element")
     yetty_yrich_inline_image {
     struct yetty_yrich_rect bounds;
@@ -1851,6 +1888,28 @@ static struct yetty_ycore_void_result inline_image_render(
 
     /* Placeholder until image atlasing lands — render a stroked box where
 	 * the image would appear. */
+    int drew_image = 0;
+    if (image->source && image->source[0] != '\0') {
+        size_t bytes_len = 0;
+        uint8_t *bytes = ydoc_read_binary_file(image->source, &bytes_len);
+        if (bytes) {
+            struct yetty_yimage_render_config cfg = {
+                .bounds_x = image->bounds.x,
+                .bounds_y = image->bounds.y,
+                .bounds_w = image->bounds.w,
+                .bounds_h = image->bounds.h,
+            };
+            struct yetty_ycore_void_result emit_res =
+                yetty_yimage_emit_into(drawable_list, bytes, bytes_len, &cfg);
+            free(bytes);
+            if (YETTY_IS_OK(emit_res)) {
+                drew_image = 1;
+            } else {
+                yetty_ycore_error_destroy(emit_res.error);
+            }
+        }
+    }
+
     struct yetty_ysdf_box body = {
         .center_x = image->bounds.x + image->bounds.w * 0.5f,
         .center_y = image->bounds.y + image->bounds.h * 0.5f,
@@ -1860,9 +1919,20 @@ static struct yetty_ycore_void_result inline_image_render(
     };
     uint32_t border =
         selected ? YETTY_YRICH_RGBA(0, 100, 200, 255) : YETTY_YRICH_RGBA(150, 150, 150, 255);
-    struct yetty_ycore_void_result body_res = yetty_ydraw_drawable_list_add_cmd_add_box(
-        drawable_list, 0, layer, YETTY_YRICH_RGBA(245, 245, 245, 255), border, 1.0f, &body);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "inline_image_render: body box add failed");
+    if (drew_image) {
+        /* Real image drawn — only add a selection outline (transparent fill). */
+        if (selected) {
+            struct yetty_ycore_void_result outline_res = yetty_ydraw_drawable_list_add_cmd_add_box(
+                drawable_list, 0, layer + 2, YETTY_YRICH_COLOR_TRANSPARENT, border, 1.5f, &body);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, outline_res,
+                                "inline_image_render: selection outline add failed");
+        }
+    } else {
+        /* No decodable source — a stroked placeholder box marks the spot. */
+        struct yetty_ycore_void_result body_res = yetty_ydraw_drawable_list_add_cmd_add_box(
+            drawable_list, 0, layer, YETTY_YRICH_RGBA(245, 245, 245, 255), border, 1.0f, &body);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "inline_image_render: body box add failed");
+    }
 
     if (image->caption) {
         size_t caption_len = strlen(image->caption);
@@ -2216,6 +2286,100 @@ static struct yetty_ycore_void_result image_list_push(struct yetty_yrich_ydoc *y
     }
     ydoc->images[ydoc->image_count++] = image_obj;
     return YETTY_OK_VOID();
+}
+
+/* Set the inline image's source (a file path decoded at render time). NULL/empty
+ * clears it. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yrich_inline_image_set_source(struct yetty_yclass_object *obj,
+                                                                   const char *source)
+{
+    struct yetty_yrich_inline_image_ptr_result data_res = yetty_yrich_inline_image_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "inline_image_set_source: data_get");
+    char *copy = NULL;
+    if (source && source[0] != '\0') {
+        size_t len = strlen(source);
+        copy = malloc(len + 1);
+        if (!copy) {
+            return YETTY_ERR(yetty_ycore_void, "inline_image_set_source: alloc");
+        }
+        memcpy(copy, source, len + 1);
+    }
+    free(data_res.value->source);
+    data_res.value->source = copy;
+    return YETTY_OK_VOID();
+}
+
+/* The inline image's source path, or NULL when unset. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_const_char_ptr_result yetty_yrich_inline_image_source(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yrich_inline_image_ptr_result data_res = yetty_yrich_inline_image_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, data_res, "inline_image_source: data_get");
+    return YETTY_OK(yetty_ycore_const_char_ptr, data_res.value->source);
+}
+
+/* Set the image's document-space bounds (position + display size). */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yrich_inline_image_set_bounds(struct yetty_yclass_object *obj,
+                                                                   float x, float y, float width,
+                                                                   float height)
+{
+    struct yetty_yrich_inline_image_ptr_result data_res = yetty_yrich_inline_image_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "inline_image_set_bounds: data_get");
+    data_res.value->bounds.x = x;
+    data_res.value->bounds.y = y;
+    data_res.value->bounds.w = width;
+    data_res.value->bounds.h = height;
+    return YETTY_OK_VOID();
+}
+
+/* Read the image's document-space bounds. Any out pointer may be NULL. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yrich_inline_image_bounds(struct yetty_yclass_object *obj,
+                                                               float *out_x, float *out_y,
+                                                               float *out_width, float *out_height)
+{
+    struct yetty_yrich_inline_image_ptr_result data_res = yetty_yrich_inline_image_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "inline_image_bounds: data_get");
+    struct yetty_yrich_inline_image *image = data_res.value;
+    if (out_x) {
+        *out_x = image->bounds.x;
+    }
+    if (out_y) {
+        *out_y = image->bounds.y;
+    }
+    if (out_width) {
+        *out_width = image->bounds.w;
+    }
+    if (out_height) {
+        *out_height = image->bounds.h;
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Number of inline images in the document (serializer / enumeration side). */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_size_result yetty_yrich_ydoc_image_count(struct yetty_yclass_object *obj)
+{
+    struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_size, data_res, "ydoc_image_count: data_get");
+    return YETTY_OK(yetty_ycore_size, data_res.value->image_count);
+}
+
+/* The inline image at `index`, or NULL when out of range. */
+YETTY_ANNOTATE("expose")
+struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_image_at(struct yetty_yclass_object *obj,
+                                                                int32_t index)
+{
+    struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, data_res, "ydoc_image_at: data_get");
+    struct yetty_yrich_ydoc *ydoc = data_res.value;
+    if (index < 0 || (size_t)index >= ydoc->image_count) {
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
+    }
+    return YETTY_OK(yetty_yclass_object_ptr, ydoc->images[index]);
 }
 
 YETTY_ANNOTATE("expose")

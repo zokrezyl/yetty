@@ -33,6 +33,7 @@
 #include <yetty/yfont/ms-font.h>
 #include <yetty/yfont/ms-msdf-font.h>
 #include <yetty/yfont/ms-raster-font.h>
+#include <yetty/yfont/msdf-font.h> /* yetty_yfont_msdf_resolve_cdb */
 #include <yetty/yframework/yframework.h>
 #include <yetty/ymsdf/generator.h>
 #include <yetty/yplatform/fs.h>
@@ -1232,66 +1233,19 @@ static struct yetty_yfont_ms_padding vterm_font_padding_from_config(
     return padding;
 }
 
-/* Resolve the MSDF CDB path for a font `name`, generating the CDB on the GPU
- * when no prebaked file ships for it. Resolution order:
- *
- *   1. Prebaked  <fonts_dir>/../msdf-fonts/<name>-Regular.cdb  (shipped) —
- *      used as-is when present.
- *   2. Cache     <cache_dir>/msdf-fonts/<name>-Regular.cdb — reused when a
- *      previous run already generated it.
- *   3. Generate  the cache CDB from <fonts_dir>/<name>-Regular.ttf with the
- *      shared WebGPU compute-shader MSDF generator (runtime->gpu.msdf_generator),
- *      then use it.
- *
- * On success writes the usable CDB path into cdb_path_out and returns OK.
- * Returns an error when no CDB can be produced (config/runtime unavailable,
- * no source TTF, no generator, or the generation itself failed); callers fall
- * back to the base font. Used by both the base face and the range faces so the
- * two share one resolution + generation policy. */
+/* Resolve the MSDF CDB path for a font `name` (installed -> cache -> GPU
+ * generation), delegating to the shared yfont resolver so the base face, the
+ * range faces, and the non-terminal font consumers all share one policy and
+ * one set of log messages. */
 static struct yetty_ycore_void_result vterm_resolve_msdf_cdb(
     struct yetty_yvterm_vterm *vterm, struct yetty_yconfig_config *config, const char *name,
     const char *fonts_dir, char *cdb_path_out, size_t cdb_path_cap)
 {
-    snprintf(cdb_path_out, cdb_path_cap, "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir, name);
-    if (yetty_yplatform_file_exists(cdb_path_out)) {
-        return YETTY_OK_VOID();
-    }
-
-    /* No prebaked CDB — generate one from the face's TTF into the cache dir. */
-    if (!config || !vterm->runtime) {
-        return YETTY_ERR(yetty_ycore_void, "no prebaked CDB and no config/runtime to generate one");
-    }
-    const char *cache_dir = config->ops->get_string(config, "paths/cache", "");
-    char ttf_path[768];
-    snprintf(ttf_path, sizeof(ttf_path), "%s/%s-Regular.ttf", fonts_dir, name);
-    if (!cache_dir[0] || !yetty_yplatform_file_exists(ttf_path)) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "font has neither a prebaked CDB nor a TTF to build one");
-    }
-
-    char cache_fonts_dir[768];
-    snprintf(cache_fonts_dir, sizeof(cache_fonts_dir), "%s/msdf-fonts", cache_dir);
-    snprintf(cdb_path_out, cdb_path_cap, "%s/%s-Regular.cdb", cache_fonts_dir, name);
-    if (yetty_yplatform_file_exists(cdb_path_out)) {
-        return YETTY_OK_VOID();
-    }
-
-    struct yetty_ymsdf_generator *generator = vterm->runtime->gpu.msdf_generator;
-    if (!generator) {
-        return YETTY_ERR(yetty_ycore_void, "no MSDF generator available");
-    }
-    yetty_yplatform_mkdir_p(cache_fonts_dir);
-    struct yetty_ymsdf_generator_config gen = {
-        .ttf_path = ttf_path,
-        .cdb_path = cdb_path_out,
-        .font_size = 32.0f,
-        .pixel_range = 4.0f,
-    };
-    struct yetty_ycore_void_result gen_res = generator->ops->generate(generator, &gen);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, gen_res, "GPU MSDF CDB generation failed");
-    ydebug("vterm: generated CDB '%s' for font '%s' via %s generator", cdb_path_out, name,
-           generator->ops->name(generator));
-    return YETTY_OK_VOID();
+    const char *cache_dir = config ? config->ops->get_string(config, "paths/cache", "") : "";
+    struct yetty_ymsdf_generator *generator =
+        vterm->runtime ? vterm->runtime->gpu.msdf_generator : NULL;
+    return yetty_yfont_msdf_resolve_cdb(generator, fonts_dir, cache_dir, name, "-Regular",
+                                        cdb_path_out, cdb_path_cap);
 }
 
 /* Find an existing face for (name, method) or create it. Returns the face

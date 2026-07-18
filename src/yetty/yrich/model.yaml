@@ -649,6 +649,10 @@ classes:
         type: struct yetty_ygrid_factory_args
         get: false
         set: false
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
+        get: false
+        set: false
       - name: surface
         type: "void *"
         get: false
@@ -2152,6 +2156,69 @@ exposed:
       - name: index
         type: int32_t
     doc: null
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_inline_image_set_source
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: source
+        type: "const char *"
+    doc: "/* Set the inline image's source (a file path decoded at render time). NULL/empty
+ * clears it. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_inline_image_source
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The inline image's source path, or NULL when unset. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_inline_image_set_bounds
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: width
+        type: float
+      - name: height
+        type: float
+    doc: "/* Set the image's document-space bounds (position + display size). */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_inline_image_bounds
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_x
+        type: "float *"
+      - name: out_y
+        type: "float *"
+      - name: out_width
+        type: "float *"
+      - name: out_height
+        type: "float *"
+    doc: "/* Read the image's document-space bounds. Any out pointer may be NULL. */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_image_count
+    return_type: struct yetty_ycore_size_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Number of inline images in the document (serializer / enumeration side). */"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_image_at
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: int32_t
+    doc: "/* The inline image at `index`, or NULL when out of range. */"
   - source_file: src/yetty/yrich/ydoc.c
     name: yetty_yrich_ydoc_insert_image
     return_type: struct yetty_yclass_object_ptr_result

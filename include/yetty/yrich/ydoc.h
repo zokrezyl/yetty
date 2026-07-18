@@ -151,6 +151,26 @@ struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_add_paragraph(
     struct yetty_yclass_object *obj, const char *text, size_t text_len);
 struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_paragraph_at(struct yetty_yclass_object *obj,
                                                                     int32_t index);
+/* Set the inline image's source (a file path decoded at render time). NULL/empty
+ * clears it. */
+struct yetty_ycore_void_result yetty_yrich_inline_image_set_source(struct yetty_yclass_object *obj,
+                                                                   const char *source);
+/* The inline image's source path, or NULL when unset. */
+struct yetty_ycore_const_char_ptr_result yetty_yrich_inline_image_source(
+    struct yetty_yclass_object *obj);
+/* Set the image's document-space bounds (position + display size). */
+struct yetty_ycore_void_result yetty_yrich_inline_image_set_bounds(struct yetty_yclass_object *obj,
+                                                                   float x, float y, float width,
+                                                                   float height);
+/* Read the image's document-space bounds. Any out pointer may be NULL. */
+struct yetty_ycore_void_result yetty_yrich_inline_image_bounds(struct yetty_yclass_object *obj,
+                                                               float *out_x, float *out_y,
+                                                               float *out_width, float *out_height);
+/* Number of inline images in the document (serializer / enumeration side). */
+struct yetty_ycore_size_result yetty_yrich_ydoc_image_count(struct yetty_yclass_object *obj);
+/* The inline image at `index`, or NULL when out of range. */
+struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_image_at(struct yetty_yclass_object *obj,
+                                                                int32_t index);
 struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_insert_image(struct yetty_yclass_object *obj,
                                                                     int32_t paragraph_index,
                                                                     float width, float height);

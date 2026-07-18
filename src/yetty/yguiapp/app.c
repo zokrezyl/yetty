@@ -661,14 +661,16 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
 
     /* MSDF font for the receiver-side ygrid. */
     {
-        const char *fonts_dir =
-            app->yframework->config->ops->get_string(app->yframework->config, "paths/fonts", "");
-        const char *shaders_dir =
-            app->yframework->config->ops->get_string(app->yframework->config, "paths/shaders", "");
+        struct yetty_yconfig_config *config = app->yframework->config;
+        const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
+        const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
+        const char *cache_dir = config->ops->get_string(config, "paths/cache", "");
         char cdb_path[768];
         char shader_path[768];
-        snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir,
-                 "DejaVuSansMNerdFontMono");
+        struct yetty_ycore_void_result cdb_res = yetty_yfont_msdf_resolve_cdb(
+            app->yframework->gpu.msdf_generator, fonts_dir, cache_dir, "DejaVuSansMNerdFontMono",
+            "-Regular", cdb_path, sizeof(cdb_path));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cdb_res, "yguiapp:run: resolve msdf cdb");
         snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", shaders_dir);
         struct yetty_font_font_result fr =
             yetty_yfont_msdf_font_create(cdb_path, shader_path, "yguiapp_default");

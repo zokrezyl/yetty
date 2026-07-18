@@ -767,6 +767,95 @@ static struct yetty_ycore_void_result parse_ydoc_paragraphs(struct yaml_parser_s
     }
 }
 
+/* Parse the `images:` sequence — each mapping is {source, x, y, w, h}. Each
+ * becomes an inline image on the document. */
+static struct yetty_ycore_void_result parse_ydoc_images(struct yaml_parser_s *p,
+                                                        struct yetty_yclass_object *doc_obj)
+{
+    yaml_event_t ev;
+    struct yetty_ycore_void_result ev_res = next_event(p, &ev);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ev_res, "yrich yaml: images read failed");
+    if (ev.type != YAML_SEQUENCE_START_EVENT) {
+        yaml_event_delete(&ev);
+        return YETTY_ERR(yetty_ycore_void, "yrich yaml: images expected sequence");
+    }
+    yaml_event_delete(&ev);
+
+    for (;;) {
+        ev_res = next_event(p, &ev);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ev_res, "yrich yaml: images read failed");
+        if (ev.type == YAML_SEQUENCE_END_EVENT) {
+            yaml_event_delete(&ev);
+            return YETTY_OK_VOID();
+        }
+        if (ev.type != YAML_MAPPING_START_EVENT) {
+            yaml_event_delete(&ev);
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: image expected mapping");
+        }
+        yaml_event_delete(&ev);
+
+        char *source = NULL;
+        float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+        for (;;) {
+            ev_res = next_event(p, &ev);
+            if (YETTY_IS_ERR(ev_res)) {
+                free(source);
+                return YETTY_ERR(yetty_ycore_void, "yrich yaml: image read failed", ev_res);
+            }
+            if (ev.type == YAML_MAPPING_END_EVENT) {
+                yaml_event_delete(&ev);
+                break;
+            }
+            bool key_source = scalar_eq(&ev, "source");
+            bool key_x = scalar_eq(&ev, "x");
+            bool key_y = scalar_eq(&ev, "y");
+            bool key_w = scalar_eq(&ev, "w");
+            bool key_h = scalar_eq(&ev, "h");
+            yaml_event_delete(&ev);
+            ev_res = next_event(p, &ev);
+            if (YETTY_IS_ERR(ev_res)) {
+                free(source);
+                return YETTY_ERR(yetty_ycore_void, "yrich yaml: image value read failed", ev_res);
+            }
+            if (ev.type == YAML_SCALAR_EVENT) {
+                if (key_source) {
+                    free(source);
+                    source = scalar_dup(&ev);
+                } else if (key_x) {
+                    x = (float)scalar_to_d(&ev);
+                } else if (key_y) {
+                    y = (float)scalar_to_d(&ev);
+                } else if (key_w) {
+                    w = (float)scalar_to_d(&ev);
+                } else if (key_h) {
+                    h = (float)scalar_to_d(&ev);
+                }
+            }
+            yaml_event_delete(&ev);
+        }
+
+        struct yetty_yclass_object_ptr_result image_res =
+            yetty_yrich_ydoc_insert_image(doc_obj, -1, w, h);
+        if (YETTY_IS_ERR(image_res)) {
+            free(source);
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: insert_image failed", image_res);
+        }
+        struct yetty_ycore_void_result bounds_res =
+            yetty_yrich_inline_image_set_bounds(image_res.value, x, y, w, h);
+        if (YETTY_IS_ERR(bounds_res)) {
+            yetty_ycore_error_destroy(bounds_res.error);
+        }
+        if (source) {
+            struct yetty_ycore_void_result source_res =
+                yetty_yrich_inline_image_set_source(image_res.value, source);
+            if (YETTY_IS_ERR(source_res)) {
+                yetty_ycore_error_destroy(source_res.error);
+            }
+        }
+        free(source);
+    }
+}
+
 static struct yetty_ycore_void_result parse_ydoc_document(struct yaml_parser_s *p,
                                                           struct yetty_yclass_object *doc_obj)
 {
@@ -794,12 +883,20 @@ static struct yetty_ycore_void_result parse_ydoc_document(struct yaml_parser_s *
         bool key_mg = scalar_eq(&ev, "margin");
         bool key_version = scalar_eq(&ev, "version");
         bool key_pp = scalar_eq(&ev, "paragraphs");
+        bool key_images = scalar_eq(&ev, "images");
         yaml_event_delete(&ev);
 
         if (key_pp) {
             struct yetty_ycore_void_result paragraphs_res = parse_ydoc_paragraphs(p, doc_obj);
             if (YETTY_IS_ERR(paragraphs_res)) {
                 return paragraphs_res;
+            }
+            continue;
+        }
+        if (key_images) {
+            struct yetty_ycore_void_result images_res = parse_ydoc_images(p, doc_obj);
+            if (YETTY_IS_ERR(images_res)) {
+                return images_res;
             }
             continue;
         }
@@ -1301,6 +1398,53 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_save_yaml_file(struct yetty_ycla
     if (ok) {
         ok = yaml_sequence_end_event_initialize(&event) && emit_event(&emitter, &event);
     }
+
+    /* Inline images — an `images:` sequence of {source, x, y, w, h}. */
+    struct yetty_ycore_size_result image_count_res = yetty_yrich_ydoc_image_count(doc_obj);
+    if (ok && YETTY_IS_OK(image_count_res) && image_count_res.value > 0) {
+        ok = emit_plain_scalar(&emitter, "images");
+        if (ok) {
+            ok = yaml_sequence_start_event_initialize(&event, NULL, NULL, 1,
+                                                      YAML_BLOCK_SEQUENCE_STYLE) &&
+                 emit_event(&emitter, &event);
+        }
+        for (size_t image_index = 0; ok && image_index < image_count_res.value; image_index++) {
+            struct yetty_yclass_object_ptr_result image_res =
+                yetty_yrich_ydoc_image_at(doc_obj, (int32_t)image_index);
+            if (YETTY_IS_ERR(image_res) || !image_res.value) {
+                if (YETTY_IS_ERR(image_res)) {
+                    yetty_ycore_error_destroy(image_res.error);
+                }
+                continue;
+            }
+            struct yetty_ycore_const_char_ptr_result source_res =
+                yetty_yrich_inline_image_source(image_res.value);
+            float image_x = 0.0f, image_y = 0.0f, image_w = 0.0f, image_h = 0.0f;
+            struct yetty_ycore_void_result bounds_res = yetty_yrich_inline_image_bounds(
+                image_res.value, &image_x, &image_y, &image_w, &image_h);
+            if (YETTY_IS_ERR(bounds_res)) {
+                yetty_ycore_error_destroy(bounds_res.error);
+            }
+            ok = ok && emit_mapping_start(&emitter);
+            if (YETTY_IS_OK(source_res) && source_res.value) {
+                ok = ok && emit_plain_scalar(&emitter, "source") &&
+                     emit_quoted_scalar(&emitter, source_res.value, strlen(source_res.value));
+            } else if (YETTY_IS_ERR(source_res)) {
+                yetty_ycore_error_destroy(source_res.error);
+            }
+            ok = ok && emit_key_float(&emitter, "x", image_x);
+            ok = ok && emit_key_float(&emitter, "y", image_y);
+            ok = ok && emit_key_float(&emitter, "w", image_w);
+            ok = ok && emit_key_float(&emitter, "h", image_h);
+            ok = ok && emit_mapping_end(&emitter);
+        }
+        if (ok) {
+            ok = yaml_sequence_end_event_initialize(&event) && emit_event(&emitter, &event);
+        }
+    } else if (YETTY_IS_ERR(image_count_res)) {
+        yetty_ycore_error_destroy(image_count_res.error);
+    }
+
     ok = ok && emit_mapping_end(&emitter);
     ok = ok && emit_mapping_end(&emitter);
     if (ok) {

@@ -22,9 +22,12 @@
 #include <yetty/yfont/font.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
+#include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
+#include <yetty/yimage/yimage-gen.h>
+#include <yetty/yplot/yplot-gen.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ygui/event.h>
 #include <yetty/ygui/mixins/clickable.h>
@@ -104,6 +107,9 @@ struct YETTY_ANNOTATE("class@yrich:app") YETTY_ANNOTATE("parent@yapp:app") yetty
     struct yetty_yfont_font *font_bold_italic;
     struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
     struct yetty_ygrid_factory_args figure_args;
+    /* Composite figure factory (yimage/yplot) so ydoc inline images render as
+     * real decoded textures rather than placeholder boxes. Owned. */
+    struct yetty_ydraw_composite_factory *composite_factory;
     void *surface;
     uint32_t surface_w;
     uint32_t surface_h;
@@ -919,10 +925,13 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
         struct yetty_yconfig_config *config = app->yrt->config;
         const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
         const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
+        const char *cache_dir = config->ops->get_string(config, "paths/cache", "");
         const char *font_family = "DejaVuSansMNerdFontMono";
+        struct yetty_ymsdf_generator *generator = app->yrt->gpu.msdf_generator;
         char cdb_path[768];
-        snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir,
-                 font_family);
+        struct yetty_ycore_void_result cdb_res = yetty_yfont_msdf_resolve_cdb(
+            generator, fonts_dir, cache_dir, font_family, "-Regular", cdb_path, sizeof(cdb_path));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cdb_res, "resolve regular msdf cdb failed");
         snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", shaders_dir);
         struct yetty_font_font_result font_result =
             yetty_yfont_msdf_font_create(cdb_path, shader_path, "yrich_app");
@@ -934,18 +943,26 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
         /* Best-effort styled faces. Each is an independent MSDF font over its
          * own .cdb; slot assignment (1/2/3) happens in the ygrid factory. */
         struct {
-            const char *suffix;
+            const char *suffix; /* face style suffix, e.g. "-Bold" */
             const char *name;
             struct yetty_yfont_font **out;
         } styled[3] = {
-            {"-Bold.cdb", "yrich_app_bold", &app->font_bold},
-            {"-Oblique.cdb", "yrich_app_italic", &app->font_italic},
-            {"-BoldOblique.cdb", "yrich_app_bold_italic", &app->font_bold_italic},
+            {"-Bold", "yrich_app_bold", &app->font_bold},
+            {"-Oblique", "yrich_app_italic", &app->font_italic},
+            {"-BoldOblique", "yrich_app_bold_italic", &app->font_bold_italic},
         };
         for (size_t style_index = 0; style_index < 3; style_index++) {
             char styled_cdb[768];
-            snprintf(styled_cdb, sizeof(styled_cdb), "%s/../msdf-fonts/%s%s", fonts_dir,
-                     font_family, styled[style_index].suffix);
+            /* Best-effort: resolve (and GPU-generate on first run) the styled
+             * face. A style whose TTF isn't shipped resolves to an error and is
+             * skipped silently — ydoc falls back to Regular for that style. */
+            struct yetty_ycore_void_result styled_cdb_res = yetty_yfont_msdf_resolve_cdb(
+                generator, fonts_dir, cache_dir, font_family, styled[style_index].suffix,
+                styled_cdb, sizeof(styled_cdb));
+            if (YETTY_IS_ERR(styled_cdb_res)) {
+                yetty_ycore_error_destroy(styled_cdb_res.error);
+                continue;
+            }
             struct yetty_font_font_result styled_result =
                 yetty_yfont_msdf_font_create(styled_cdb, shader_path, styled[style_index].name);
             if (YETTY_IS_ERR(styled_result)) {
@@ -967,11 +984,41 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
     struct yetty_yfigure_registry_ptr_result reg_r = yetty_yfigure_registry_create();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reg_r, "yfigure_registry_create failed");
     app->registry = reg_r.value;
+    /* Composite factory so ydoc inline images (and plots) render as real
+     * decoded figures through the ygrid's composite pass. */
+    {
+        struct yetty_ydraw_composite_factory_ptr_result factory_res =
+            yetty_ydraw_composite_factory_create(app->yrt->gpu.device, app->yrt->gpu.queue,
+                                                 app->yrt->gpu.surface_format,
+                                                 app->yrt->gpu.allocator, app->yrt->event_loop);
+        if (YETTY_IS_ERR(factory_res)) {
+            yetty_ycore_error_destroy(factory_res.error);
+        } else {
+            app->composite_factory = factory_res.value;
+            struct yetty_ydraw_concrete_factory *yimage_factory = yetty_yimage_factory_create();
+            if (yimage_factory) {
+                struct yetty_ycore_void_result reg =
+                    yetty_ydraw_composite_factory_register(app->composite_factory, yimage_factory);
+                if (YETTY_IS_ERR(reg)) {
+                    yetty_ycore_error_destroy(reg.error);
+                }
+            }
+            struct yetty_ydraw_concrete_factory *yplot_factory = yetty_yplot_factory_create();
+            if (yplot_factory) {
+                struct yetty_ycore_void_result reg =
+                    yetty_ydraw_composite_factory_register(app->composite_factory, yplot_factory);
+                if (YETTY_IS_ERR(reg)) {
+                    yetty_ycore_error_destroy(reg.error);
+                }
+            }
+        }
+    }
+
     app->figure_args.default_font = app->font;
     app->figure_args.bold_font = app->font_bold;
     app->figure_args.italic_font = app->font_italic;
     app->figure_args.bold_italic_font = app->font_bold_italic;
-    app->figure_args.composite_factory = NULL;
+    app->figure_args.composite_factory = app->composite_factory;
     struct yetty_ycore_void_result result_234 =
         yetty_ygrid_register_factory(app->registry, &app->figure_args);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_234, "ygrid_register_factory failed");
@@ -1088,6 +1135,10 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
     if (app->registry) {
         destroy_safe(yetty_yfigure_registry_destroy(app->registry));
         app->registry = NULL;
+    }
+    if (app->composite_factory) {
+        yetty_ydraw_composite_factory_destroy(app->composite_factory);
+        app->composite_factory = NULL;
     }
     app->target->ops->destroy(app->target);
     app->target = NULL;

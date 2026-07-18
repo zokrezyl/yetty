@@ -2304,25 +2304,34 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
         const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
         const char *font_family = "DejaVuSansMNerdFontMono";
+        const char *cache_dir = config->ops->get_string(config, "paths/cache", "");
         char cdb_path[768];
         char shader_path[768];
-        snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir,
-                 font_family);
-        snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", shaders_dir);
-        struct yetty_font_font_result font_res =
-            yetty_yfont_msdf_font_create(cdb_path, shader_path, "terminal_root");
-        if (YETTY_IS_OK(font_res)) {
-            terminal->compositor_font = font_res.value;
-            struct yetty_ycore_void_result load_res =
-                terminal->compositor_font->ops->load_basic_latin(terminal->compositor_font);
-            if (YETTY_IS_ERR(load_res)) {
-                ywarn("terminal_create: root font load_basic_latin: %s", load_res.error.msg);
-                yetty_ycore_error_destroy(load_res.error);
-            }
-            ydebug("terminal_create: root default font ready (%s)", cdb_path);
+        struct yetty_ycore_void_result cdb_res = yetty_yfont_msdf_resolve_cdb(
+            yetty_context->runtime->gpu.msdf_generator, fonts_dir, cache_dir, font_family,
+            "-Regular", cdb_path, sizeof(cdb_path));
+        if (YETTY_IS_ERR(cdb_res)) {
+            ywarn("terminal_create: root font '%s' has no usable CDB: %s", font_family,
+                  cdb_res.error.msg);
+            yetty_ycore_error_destroy(cdb_res.error);
         } else {
-            ywarn("terminal_create: root font load failed (%s): %s", cdb_path, font_res.error.msg);
-            yetty_ycore_error_destroy(font_res.error);
+            snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", shaders_dir);
+            struct yetty_font_font_result font_res =
+                yetty_yfont_msdf_font_create(cdb_path, shader_path, "terminal_root");
+            if (YETTY_IS_OK(font_res)) {
+                terminal->compositor_font = font_res.value;
+                struct yetty_ycore_void_result load_res =
+                    terminal->compositor_font->ops->load_basic_latin(terminal->compositor_font);
+                if (YETTY_IS_ERR(load_res)) {
+                    ywarn("terminal_create: root font load_basic_latin: %s", load_res.error.msg);
+                    yetty_ycore_error_destroy(load_res.error);
+                }
+                ydebug("terminal_create: root default font ready (%s)", cdb_path);
+            } else {
+                ywarn("terminal_create: root font load failed (%s): %s", cdb_path,
+                      font_res.error.msg);
+                yetty_ycore_error_destroy(font_res.error);
+            }
         }
     }
 

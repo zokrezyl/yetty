@@ -932,6 +932,79 @@ static void test_bookmark_roundtrip(struct ytest *test)
     unlink(path);
 }
 
+/* Inline images: source path + document-space bounds survive save + reload. */
+static void test_image_roundtrip(struct ytest *test)
+{
+    char path[] = "/tmp/yrich-img-XXXXXX";
+    int fd = mkstemp(path);
+    YTEST_CHECK(test, fd >= 0);
+    if (fd < 0) {
+        return;
+    }
+    close(fd);
+
+    struct yetty_yclass_object *doc = make_doc("Doc with an image");
+    YTEST_CHECK(test, doc != NULL);
+    if (!doc) {
+        unlink(path);
+        return;
+    }
+    struct yetty_yclass_object_ptr_result img =
+        yetty_yrich_ydoc_insert_image(doc, -1, 320.0f, 240.0f);
+    YTEST_CHECK(test, !YETTY_IS_ERR(img));
+    if (!YETTY_IS_ERR(img)) {
+        destroy_maybe(yetty_yrich_inline_image_set_bounds(img.value, 40.0f, 60.0f, 320.0f, 240.0f));
+        destroy_maybe(yetty_yrich_inline_image_set_source(img.value, "/tmp/some-image.png"));
+    } else {
+        yetty_ycore_error_destroy(img.error);
+    }
+
+    struct yetty_ycore_void_result save = yetty_yrich_ydoc_save_yaml_file(doc, path);
+    YTEST_CHECK(test, !YETTY_IS_ERR(save));
+    if (YETTY_IS_ERR(save)) {
+        yetty_ycore_error_destroy(save.error);
+    }
+    destroy_doc(doc);
+
+    struct yetty_yclass_object_ptr_result loaded_res = yetty_yrich_ydoc_load_yaml_file(path);
+    YTEST_CHECK(test, !YETTY_IS_ERR(loaded_res));
+    if (YETTY_IS_ERR(loaded_res)) {
+        yetty_ycore_error_destroy(loaded_res.error);
+        unlink(path);
+        return;
+    }
+    struct yetty_yclass_object *loaded = loaded_res.value;
+    struct yetty_ycore_size_result count = yetty_yrich_ydoc_image_count(loaded);
+    YTEST_CHECK(test, !YETTY_IS_ERR(count) && count.value == 1);
+    if (YETTY_IS_ERR(count)) {
+        yetty_ycore_error_destroy(count.error);
+    }
+    struct yetty_yclass_object_ptr_result limg = yetty_yrich_ydoc_image_at(loaded, 0);
+    if (!YETTY_IS_ERR(limg) && limg.value) {
+        struct yetty_ycore_const_char_ptr_result src = yetty_yrich_inline_image_source(limg.value);
+        YTEST_CHECK(test, !YETTY_IS_ERR(src) && src.value != NULL &&
+                              strcmp(src.value, "/tmp/some-image.png") == 0);
+        if (YETTY_IS_ERR(src)) {
+            yetty_ycore_error_destroy(src.error);
+        }
+        float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+        struct yetty_ycore_void_result b =
+            yetty_yrich_inline_image_bounds(limg.value, &x, &y, &w, &h);
+        YTEST_CHECK(test,
+                    !YETTY_IS_ERR(b) && x == 40.0f && y == 60.0f && w == 320.0f && h == 240.0f);
+        if (YETTY_IS_ERR(b)) {
+            yetty_ycore_error_destroy(b.error);
+        }
+    } else {
+        if (YETTY_IS_ERR(limg)) {
+            yetty_ycore_error_destroy(limg.error);
+        }
+        YTEST_CHECK(test, 0);
+    }
+    destroy_doc(loaded);
+    unlink(path);
+}
+
 int main(void)
 {
     struct ytest test = ytest_begin("yrich_save_atomic");
@@ -945,5 +1018,6 @@ int main(void)
     YTEST_RUN(&test, test_rtf_roundtrip);
     YTEST_RUN(&test, test_link_roundtrip);
     YTEST_RUN(&test, test_bookmark_roundtrip);
+    YTEST_RUN(&test, test_image_roundtrip);
     return ytest_end(&test);
 }
