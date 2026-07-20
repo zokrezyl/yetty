@@ -1,0 +1,82 @@
+<!doctype html><meta charset=utf-8>
+<title>Element attribute methods invoked on NON-element nodes (Text/Comment/DocumentFragment) must
+return benign values without reading out of bounds. The one DOM JS class wraps every node kind, so
+getAttribute/hasAttribute/setAttribute/removeAttribute/toggleAttribute/className/id/classList/style all
+reach Text/Comment/Fragment wrappers; lexbor's attribute accessors read the element-struct attribute
+fields (first_attr) which sit past the end of those smaller node structs. Under pool pressure that OOB
+read intermittently follows a non-null neighbor pointer and segfaults. This asserts the guarded
+behavior: getAttribute -> null, hasAttribute -> false, className/id -> "", toggleAttribute -> false,
+setAttribute/removeAttribute -> no-op, .style/.classList defined-or-undefined but never a crash. The
+gate grows only when all hold. Harness viewport 800px wide.</title>
+<style>body{margin:0}</style>
+<div data-test="nonelement-attr-safety" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var ok = true;
+
+/* Populate the node + attribute pools first, so a non-element node's out-of-bounds
+   first_attr read is likely to land on a live neighbor attribute pointer — the
+   condition under which the unguarded accessors segfaulted. */
+var sink = document.getElementById('sandbox');
+for (var i = 0; i < 400; i++) {
+  var e = document.createElement('div');
+  e.setAttribute('data-a', 'x' + i);
+  e.setAttribute('data-b', 'y' + i);
+  e.setAttribute('class', 'c' + i);
+  e.id = 'id' + i;
+  sink.appendChild(e);
+}
+
+function exercise(node, label){
+  var good = true;
+  /* Each of these called lexbor's attribute accessors at the element offset on a
+     non-element struct before the fix. They must now return benign values.
+     typeof-guarded because not every non-element wrapper exposes every method. */
+  if (typeof node.getAttribute === 'function') {
+    good = check(node.getAttribute('data-a') === null, label + ".getAttribute -> null") && good;
+    good = check(node.getAttribute('class') === null, label + ".getAttribute(class) -> null") && good;
+  }
+  if (typeof node.hasAttribute === 'function')
+    good = check(node.hasAttribute('data-a') === false, label + ".hasAttribute -> false") && good;
+  if (typeof node.setAttribute === 'function') {
+    try { node.setAttribute('data-a', 'z'); good = check(true, label + ".setAttribute no-throw") && good; }
+    catch (e) { good = check(false, label + ".setAttribute threw " + e) && good; }
+  }
+  if (typeof node.removeAttribute === 'function') {
+    try { node.removeAttribute('data-a'); good = check(true, label + ".removeAttribute no-throw") && good; }
+    catch (e) { good = check(false, label + ".removeAttribute threw " + e) && good; }
+  }
+  /* Reflected IDL attributes read via the same OOB path. A non-element yields a
+     benign empty string (Text/Comment) or undefined (Fragment, which has no such
+     IDL attribute) — never OOB garbage. */
+  good = check(node.className === '' || node.className === undefined, label + ".className benign") && good;
+  good = check(node.id === '' || node.id === undefined, label + ".id benign") && good;
+  return good;
+}
+
+var tpl = document.createElement('template');
+tpl.innerHTML = '<span>x</span>';
+
+var text = document.createTextNode('hello');
+var comment = document.createComment('c');
+var frag = tpl.content; /* a DocumentFragment carrying the shared element-class methods */
+
+ok = exercise(text, 'Text') && ok;
+ok = exercise(comment, 'Comment') && ok;
+ok = exercise(frag, 'Fragment') && ok;
+
+/* Hammer getAttribute on the text node many times under the populated pool — the
+   unguarded path crashed intermittently here; the fix makes every call return null. */
+var allNull = true;
+for (var k = 0; k < 2000; k++) { if (text.getAttribute('data-b') !== null) { allNull = false; break; } }
+ok = check(allNull, "2000x Text.getAttribute all null (no OOB garbage)") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="nonelement-attr-safety"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

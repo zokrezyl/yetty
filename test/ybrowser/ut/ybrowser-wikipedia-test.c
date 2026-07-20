@@ -93,9 +93,6 @@ struct yetty_ylexbor *load_wiki(int viewport_w, int viewport_h)
         exit(2);
     }
     struct yetty_ylexbor *yl = r.value;
-    /* Pin the flat advance ratio this test's layout expectations were
-     * authored against — the engine default is proportional metrics. */
-    yetty_ylexbor_set_glyph_advance_ratio(yl, 0.55f);
     struct yetty_ycore_void_result lr = yetty_ylexbor_load_html(yl, buf, n);
     free(buf);
     if (YETTY_IS_ERR(lr)) {

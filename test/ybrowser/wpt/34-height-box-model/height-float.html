@@ -1,0 +1,50 @@
+<!doctype html><meta charset=utf-8>
+<title>Floated blocks use the same used-border-box height contract as in-flow blocks: a bordered
+explicit-height float reports offsetHeight/clientHeight/rect as the border box, a following
+same-side float clears against the corrected border-box bottom, and a borderless float is
+unchanged. The gate grows only when all hold.</title>
+<style>body{margin:0}</style>
+<div data-test="height-float" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+function m3(el){ var r = el.getBoundingClientRect(); return [el.offsetHeight, el.clientHeight, Math.round(r.height)]; }
+function eq3(el, oh, ch, rh, label){
+  var g = m3(el);
+  return check(g[0] === oh && g[1] === ch && g[2] === rh,
+               label + " -> off/client/rect = " + g[0] + "/" + g[1] + "/" + g[2] +
+               " (want " + oh + "/" + ch + "/" + rh + ")");
+}
+function frag(html){
+  var host = document.createElement('div');
+  host.setAttribute('style', 'display:block;margin:0');
+  host.innerHTML = html;
+  sandbox.appendChild(host);
+  return host;
+}
+var ok = true;
+
+/* 10a. bordered explicit-height float: content-box H30 P40 B20 -> border box 90 */
+var h1 = frag('<div id="f1" style="float:left;box-sizing:content-box;width:120px;height:30px;padding-top:20px;padding-bottom:20px;border-top:10px solid #333;border-bottom:10px solid #333;margin:0;display:block"></div>');
+ok = eq3(h1.querySelector('#f1'), 90, 70, 90, "10a bordered explicit-height float") && ok;
+
+/* 10b. following same-side (left) float clears against the corrected 90 bottom */
+var h2 = frag('<div id="f2a" style="float:left;box-sizing:content-box;width:120px;height:30px;padding:20px 0;border-top:10px solid #333;border-bottom:10px solid #333;margin:0;display:block"></div>' +
+              '<div id="f2b" style="float:left;box-sizing:content-box;width:120px;height:20px;margin:0;display:block"></div>');
+var f2a = h2.querySelector('#f2a'), f2b = h2.querySelector('#f2b');
+var fdy = Math.round(f2b.getBoundingClientRect().top - f2a.getBoundingClientRect().top);
+ok = check(fdy === 90, "10b next left float clears corrected bottom: dy=" + fdy + " (want 90)") && ok;
+
+/* 10c. borderless float baseline unchanged */
+var h3 = frag('<div id="f3" style="float:left;box-sizing:content-box;width:120px;height:40px;margin:0;display:block"></div>');
+ok = eq3(h3.querySelector('#f3'), 40, 40, 40, "10c borderless float unchanged") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="height-float"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

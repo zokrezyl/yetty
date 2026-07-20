@@ -15,6 +15,7 @@
 #include <lexbor/css/css.h>
 #include <lexbor/style/style.h>
 #include <lexbor/html/html.h>
+#include <lexbor/html/serialize.h>
 #include <lexbor/dom/dom.h>
 #include <lexbor/selectors/selectors.h>
 #include <lexbor/tag/const.h>
@@ -118,7 +119,7 @@ const char *yetty_ylexbor_arena_dup(struct yetty_ylexbor *r, const char *bytes, 
     return out;
 }
 
-void yetty_ylexbor_arena_reset(struct yetty_ylexbor *r)
+static void arena_reset(struct yetty_ylexbor *r)
 {
     for (size_t i = 0; i < r->text_chunks_count; i++) {
         free(r->text_chunks[i]);
@@ -127,135 +128,45 @@ void yetty_ylexbor_arena_reset(struct yetty_ylexbor *r)
 }
 
 /* ===========================================================================
- * Text width. Two modes, selected by the advance-ratio argument:
- *
- *   ratio > 0  — FLAT: every glyph advances font_size * ratio. Used when the
- *                renderer is known to be monospace (the in-yetty host sets
- *                0.602 to match its terminal font; the WPT Ahem override is
- *                a per-box 1.0) and by tests that pin wrap mechanics.
- *
- *   ratio <= 0 — PROPORTIONAL (the default): per-codepoint advances from
- *                Helvetica/Arial metrics. Liberation Sans — the metric
- *                match for the Helvetica/Arial/system-ui stacks nearly
- *                every site requests — is what Chrome on Linux actually
- *                shapes with, so these advances are the parity reference.
- *                Real shaping (kerning, non-Latin scripts) is still ahead;
- *                this removes the dominant flat-metric error.
+ * Naive text width — placeholder, will become FreeType-driven later.
+ * Good enough for the same MVP layout shape ynetsurf uses.
  * ===========================================================================*/
-
-size_t yetty_ylexbor_utf8_decode(const char *s, size_t len, uint32_t *out_codepoint)
-{
-    unsigned char first = (unsigned char)s[0];
-    if (first < 0x80) {
-        *out_codepoint = first;
-        return 1;
-    }
-    if ((first & 0xE0) == 0xC0 && len >= 2) {
-        *out_codepoint = ((uint32_t)(first & 0x1F) << 6) | ((uint32_t)s[1] & 0x3F);
-        return 2;
-    }
-    if ((first & 0xF0) == 0xE0 && len >= 3) {
-        *out_codepoint = ((uint32_t)(first & 0x0F) << 12) | (((uint32_t)s[1] & 0x3F) << 6) |
-                         ((uint32_t)s[2] & 0x3F);
-        return 3;
-    }
-    if ((first & 0xF8) == 0xF0 && len >= 4) {
-        *out_codepoint = ((uint32_t)(first & 0x07) << 18) | (((uint32_t)s[1] & 0x3F) << 12) |
-                         (((uint32_t)s[2] & 0x3F) << 6) | ((uint32_t)s[3] & 0x3F);
-        return 4;
-    }
-    *out_codepoint = 0xFFFD;
-    return 1;
-}
-
-float yetty_ylexbor_codepoint_advance_em(uint32_t codepoint)
-{
-    /* Helvetica AFM advance widths, thousandths of an em, ASCII 32..126.
-     * Arial and Liberation Sans share these to the unit. */
-    static const uint16_t helvetica_advance[95] = {
-        278,  278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,
-        556,  556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
-        1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
-        667,  778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
-        333,  556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
-        556,  556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
-    };
-    if (codepoint >= 32 && codepoint <= 126) {
-        return (float)helvetica_advance[codepoint - 32] / 1000.0f;
-    }
-    /* Zero-width codepoints (also skipped by the wrap pass). */
-    if (codepoint == 0x00AD || codepoint == 0x200B || codepoint == 0x200C || codepoint == 0x200D ||
-        codepoint == 0xFEFF) {
-        return 0.0f;
-    }
-    if (codepoint == 0x00A0) {
-        return 0.278f; /* NBSP — same advance as a space */
-    }
-    /* Common punctuation outside ASCII. */
-    if (codepoint == 0x2013) {
-        return 0.556f; /* en dash */
-    }
-    if (codepoint == 0x2014 || codepoint == 0x2015) {
-        return 1.0f; /* em dash / horizontal bar */
-    }
-    if (codepoint >= 0x2018 && codepoint <= 0x201B) {
-        return 0.222f; /* curly single quotes */
-    }
-    if (codepoint >= 0x201C && codepoint <= 0x201F) {
-        return 0.333f; /* curly double quotes */
-    }
-    if (codepoint == 0x2026) {
-        return 1.0f; /* ellipsis */
-    }
-    if (codepoint == 0x2022) {
-        return 0.35f; /* bullet */
-    }
-    /* CJK, Hangul, kana, full-width forms: one em. */
-    if ((codepoint >= 0x1100 && codepoint <= 0x115F) ||
-        (codepoint >= 0x2E80 && codepoint <= 0x9FFF) ||
-        (codepoint >= 0xAC00 && codepoint <= 0xD7A3) ||
-        (codepoint >= 0xF900 && codepoint <= 0xFAFF) ||
-        (codepoint >= 0xFF00 && codepoint <= 0xFF60)) {
-        return 1.0f;
-    }
-    /* Everything else (accented Latin, Cyrillic, Greek, …): the Helvetica
-     * lowercase average — accented letters keep their base advance. */
-    return 0.556f;
-}
 
 float yetty_ylexbor_glyph_advance_ratio(const struct yetty_ylexbor *r)
 {
     if (r != NULL && r->glyph_advance_ratio > 0.0f) {
         return r->glyph_advance_ratio;
     }
-    return 0.0f; /* 0 = proportional Helvetica metrics (the default) */
+    return 0.55f;
 }
 
 float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size,
                                      float advance_ratio)
 {
-    if (advance_ratio > 0.0f) {
-        /* Flat mode: glyph count × fixed advance. */
-        int n = 0;
-        for (size_t i = 0; i < len;) {
-            uint32_t codepoint;
-            i += yetty_ylexbor_utf8_decode(s + i, len - i, &codepoint);
-            n++;
-        }
-        float per_glyph = font_size * advance_ratio;
-        if (per_glyph < 1.0f) {
-            per_glyph = 1.0f;
-        }
-        return n * per_glyph;
-    }
-    /* Proportional mode: sum per-codepoint Helvetica advances. */
-    float total_em = 0.0f;
+    int n = 0;
     for (size_t i = 0; i < len;) {
-        uint32_t codepoint;
-        i += yetty_ylexbor_utf8_decode(s + i, len - i, &codepoint);
-        total_em += yetty_ylexbor_codepoint_advance_em(codepoint);
+        unsigned char c = (unsigned char)s[i];
+        if (c < 0x80) {
+            i += 1;
+        } else if ((c & 0xE0) == 0xC0) {
+            i += 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            i += 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            i += 4;
+        } else {
+            i += 1;
+        }
+        n++;
     }
-    return total_em * font_size;
+    if (advance_ratio <= 0.0f) {
+        advance_ratio = 0.55f;
+    }
+    float per_glyph = font_size * advance_ratio;
+    if (per_glyph < 1.0f) {
+        per_glyph = 1.0f;
+    }
+    return n * per_glyph;
 }
 
 /* ===========================================================================
@@ -299,6 +210,8 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_
 
     r->viewport_w = cfg && cfg->viewport_width > 0 ? cfg->viewport_width : 1024;
     r->viewport_h = cfg && cfg->viewport_height > 0 ? cfg->viewport_height : 768;
+    ydebug("viewport init: config=%dx%d -> %dx%d", cfg ? cfg->viewport_width : -1,
+           cfg ? cfg->viewport_height : -1, r->viewport_w, r->viewport_h);
     r->default_font_size = cfg && cfg->default_font_size > 0 ? cfg->default_font_size : 16.0f;
 
     r->document = lxb_html_document_create();
@@ -486,11 +399,12 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
     }
     destroy_iframe_children(r);
     box_vec_destroy(&r->boxes);
-    yetty_ylexbor_arena_reset(r);
+    arena_reset(r);
     yetty_ylexbor_css_media_map_end(r); /* no-op unless a scan was interrupted */
     yetty_ylexbor_grid_classes_free(r);
     free(r->text_chunks);
     free(r->base_url);
+    free(r->pending_navigation);
     kv_store_destroy(&r->web_local_storage);
     kv_store_destroy(&r->web_session_storage);
     free(r->web_cookie_string);
@@ -825,10 +739,9 @@ enum { YL_IFRAME_MAX_DEPTH = 3 };
 static void destroy_iframe_children(struct yetty_ylexbor *r)
 {
     for (int i = 0; i < r->iframe_child_count; i++) {
-        if (r->iframe_children[i].child != NULL) {
-            (void)yetty_ylexbor_destroy(r->iframe_children[i].child);
+        if (r->iframe_children[i] != NULL) {
+            (void)yetty_ylexbor_destroy(r->iframe_children[i]);
         }
-        free(r->iframe_children[i].src_key);
     }
     free(r->iframe_children);
     r->iframe_children = NULL;
@@ -851,81 +764,18 @@ static char *dup_attr(const lxb_char_t *value, size_t len)
  * srcdoc), render that document in a child engine sized to the iframe's content
  * box, and hang the child off the box so paint can composite it. Runs after
  * layout so the iframe box dimensions (hence the child viewport) are known. */
-/* Compute an iframe box's inner content size (border+padding removed), never
- * below 1px so the child viewport is valid. */
-static void iframe_content_size(const struct yetty_ylexbor_box *b, int *out_w, int *out_h)
-{
-    int content_w =
-        (int)(b->w - b->border_left - b->border_right - b->padding_left - b->padding_right);
-    if (content_w < 1) {
-        content_w = (int)b->w;
-    }
-    int content_h =
-        (int)(b->h - b->border_top - b->border_bottom - b->padding_top - b->padding_bottom);
-    if (content_h < 1) {
-        content_h = (int)b->h;
-    }
-    *out_w = content_w;
-    *out_h = content_h;
-}
-
-static struct yetty_ylexbor_iframe_child *iframe_child_find(struct yetty_ylexbor *r,
-                                                            lxb_dom_element_t *element)
-{
-    for (int i = 0; i < r->iframe_child_count; i++) {
-        if (r->iframe_children[i].element == element) {
-            return &r->iframe_children[i];
-        }
-    }
-    return NULL;
-}
-
-int yetty_ylexbor_is_youtube_host(const char *url)
-{
-    if (url == NULL) {
-        return 0;
-    }
-    const char *host = strstr(url, "://");
-    host = host ? host + 3 : url;
-    size_t host_len = 0;
-    while (host[host_len] != '\0' && host[host_len] != '/' && host[host_len] != ':' &&
-           host[host_len] != '?') {
-        host_len++;
-    }
-    static const char suffix[] = "youtube.com";
-    size_t suffix_len = sizeof(suffix) - 1;
-    if (host_len < suffix_len) {
-        return 0;
-    }
-    if (strncasecmp(host + host_len - suffix_len, suffix, suffix_len) != 0) {
-        return 0;
-    }
-    /* Exact host or a subdomain — not `youtube.com.evil.test`. */
-    return host_len == suffix_len || host[host_len - suffix_len - 1] == '.';
-}
-
 static struct yetty_ycore_void_result resolve_iframes(struct yetty_ylexbor *r)
 {
-    /* Every box starts with no linked child; the reuse loop re-links the ones
-     * that resolve. (box-build does not initialise iframe_doc.) */
-    for (uint32_t i = 0; i < r->boxes.size; i++) {
-        r->boxes.data[i].iframe_doc = NULL;
-    }
+    /* Drop the previous document's nested contexts before rebuilding. */
+    destroy_iframe_children(r);
 
     if (r->iframe_depth >= YL_IFRAME_MAX_DEPTH || getenv("YBROWSER_NO_IFRAMES") != NULL) {
-        destroy_iframe_children(r);
         return YETTY_OK_VOID();
-    }
-
-    /* Mark-and-sweep: entries not touched this pass are iframes that left the
-     * DOM and get torn down at the end. Retained children are REUSED — no
-     * re-fetch, no re-parse, no re-running their scripts. */
-    for (int i = 0; i < r->iframe_child_count; i++) {
-        r->iframe_children[i].used = 0;
     }
 
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        b->iframe_doc = NULL;
         if (b->element == NULL || b->element->node.local_name != LXB_TAG_IFRAME) {
             continue;
         }
@@ -933,17 +783,17 @@ static struct yetty_ycore_void_result resolve_iframes(struct yetty_ylexbor *r)
             continue;
         }
 
-        /* Cheaply derive the source key WITHOUT fetching: inline `srcdoc`
-         * content wins, otherwise the resolved absolute `src` URL. Reuse hinges
-         * on this key being unchanged since the child was built. */
-        int is_srcdoc = 0;
-        char *src_key = NULL;
+        /* Source: inline `srcdoc` wins; otherwise fetch the resolved `src`. */
+        char *doc_html = NULL;
+        size_t doc_len = 0;
+        char *child_base = NULL;
         size_t attr_len = 0;
         const lxb_char_t *srcdoc =
             lxb_dom_element_get_attribute(b->element, (const lxb_char_t *)"srcdoc", 6, &attr_len);
         if (srcdoc != NULL && attr_len > 0) {
-            is_srcdoc = 1;
-            src_key = dup_attr(srcdoc, attr_len);
+            doc_html = dup_attr(srcdoc, attr_len);
+            doc_len = attr_len;
+            child_base = r->base_url ? strdup(r->base_url) : NULL;
         } else {
             const lxb_char_t *src =
                 lxb_dom_element_get_attribute(b->element, (const lxb_char_t *)"src", 3, &attr_len);
@@ -960,57 +810,14 @@ static struct yetty_ycore_void_result resolve_iframes(struct yetty_ylexbor *r)
                 continue;
             }
             /* `about:`/`javascript:` iframes have no fetchable document. */
-            if (strncmp(absolute, "about:", 6) == 0 || strncmp(absolute, "javascript:", 11) == 0) {
+            if (strncmp(absolute, "about:", 6) == 0 ||
+                strncmp(absolute, "javascript:", 11) == 0) {
                 free(absolute);
                 continue;
             }
-            src_key = absolute;
-        }
-        if (src_key == NULL) {
-            continue;
-        }
-
-        int content_w = 0, content_h = 0;
-        iframe_content_size(b, &content_w, &content_h);
-
-        /* Reuse a retained child when the same iframe element still points at
-         * the same source. Only re-lay-out (never re-parse) when it resized. */
-        struct yetty_ylexbor_iframe_child *entry = iframe_child_find(r, b->element);
-        if (entry != NULL && entry->child != NULL && entry->src_key != NULL &&
-            strcmp(entry->src_key, src_key) == 0) {
-            entry->used = 1;
-            free(src_key);
-            if (content_w != entry->content_w || content_h != entry->content_h) {
-                (void)yetty_ylexbor_set_viewport(entry->child, content_w, content_h);
-                (void)yetty_ylexbor_relayout(entry->child);
-                entry->content_w = content_w;
-                entry->content_h = content_h;
-            }
-            b->iframe_doc = entry->child;
-            continue;
-        }
-
-        /* Source changed on an existing element — drop the stale child, then
-         * fall through and build a fresh one into the same entry. */
-        if (entry != NULL && entry->child != NULL) {
-            (void)yetty_ylexbor_destroy(entry->child);
-            entry->child = NULL;
-            free(entry->src_key);
-            entry->src_key = NULL;
-        }
-
-        /* Build a new child: srcdoc content is already in src_key; a `src`
-         * iframe fetches its document now. */
-        char *doc_html = NULL;
-        size_t doc_len = 0;
-        char *child_base = NULL;
-        if (is_srcdoc) {
-            doc_html = src_key; /* borrowed for the load; src_key still owns it */
-            doc_len = attr_len;
-            child_base = r->base_url ? strdup(r->base_url) : NULL;
-        } else {
-            struct yetty_ybrowser_request request = {
-                .url = src_key, .kind = YETTY_YBROWSER_REQUEST_DOCUMENT, .referer = r->base_url};
+            struct yetty_ybrowser_request request = {.url = absolute,
+                                                     .kind = YETTY_YBROWSER_REQUEST_DOCUMENT,
+                                                     .referer = r->base_url};
             struct yetty_ybrowser_response response = {0};
             struct yetty_ycore_void_result fetch_res =
                 yetty_ybrowser_fetch(r->loader, &request, &response);
@@ -1019,14 +826,25 @@ static struct yetty_ycore_void_result resolve_iframes(struct yetty_ylexbor *r)
             } else if (response.status >= 200 && response.status < 300 && response.body != NULL) {
                 doc_html = dup_attr((const lxb_char_t *)response.body, response.body_len);
                 doc_len = response.body_len;
-                child_base = strdup(response.effective_url ? response.effective_url : src_key);
+                child_base = strdup(response.effective_url ? response.effective_url : absolute);
             }
             yetty_ybrowser_response_dispose(&response);
+            free(absolute);
         }
         if (doc_html == NULL) {
             free(child_base);
-            free(src_key);
             continue;
+        }
+
+        int content_w = (int)(b->w - b->border_left - b->border_right - b->padding_left -
+                              b->padding_right);
+        if (content_w < 1) {
+            content_w = (int)b->w;
+        }
+        int content_h = (int)(b->h - b->border_top - b->border_bottom - b->padding_top -
+                              b->padding_bottom);
+        if (content_h < 1) {
+            content_h = (int)b->h;
         }
 
         struct yetty_ylexbor_config child_cfg = {.viewport_width = content_w,
@@ -1036,11 +854,8 @@ static struct yetty_ycore_void_result resolve_iframes(struct yetty_ylexbor *r)
         struct yetty_ylexbor_ptr_result create_res = yetty_ylexbor_create(&child_cfg);
         if (YETTY_IS_ERR(create_res)) {
             yetty_ycore_error_destroy(create_res.error);
-            if (!is_srcdoc) {
-                free(doc_html);
-            }
+            free(doc_html);
             free(child_base);
-            free(src_key);
             continue;
         }
         struct yetty_ylexbor *child = create_res.value;
@@ -1050,59 +865,27 @@ static struct yetty_ycore_void_result resolve_iframes(struct yetty_ylexbor *r)
             (void)yetty_ylexbor_set_base_url(child, child_base);
         }
         (void)yetty_ylexbor_load_html(child, doc_html, doc_len);
-        if (!is_srcdoc) {
-            free(doc_html);
-        }
+        free(doc_html);
         free(child_base);
 
-        /* Stash the child in a retained entry (reuse the stale slot if this was
-         * a source change, else append). src_key ownership transfers in. */
-        if (entry == NULL) {
-            if (r->iframe_child_count == r->iframe_child_cap) {
-                int cap = r->iframe_child_cap ? r->iframe_child_cap * 2 : 4;
-                struct yetty_ylexbor_iframe_child *grown =
-                    realloc(r->iframe_children, (size_t)cap * sizeof(*grown));
-                if (grown == NULL) {
-                    (void)yetty_ylexbor_destroy(child);
-                    free(src_key);
-                    continue;
-                }
-                r->iframe_children = grown;
-                r->iframe_child_cap = cap;
+        if (r->iframe_child_count == r->iframe_child_cap) {
+            int cap = r->iframe_child_cap ? r->iframe_child_cap * 2 : 4;
+            struct yetty_ylexbor **grown =
+                realloc(r->iframe_children, (size_t)cap * sizeof(struct yetty_ylexbor *));
+            if (grown == NULL) {
+                (void)yetty_ylexbor_destroy(child);
+                continue;
             }
-            entry = &r->iframe_children[r->iframe_child_count++];
-            memset(entry, 0, sizeof(*entry));
+            r->iframe_children = grown;
+            r->iframe_child_cap = cap;
         }
-        entry->element = b->element;
-        entry->src_key = src_key;
-        entry->child = child;
-        entry->content_w = content_w;
-        entry->content_h = content_h;
-        entry->used = 1;
+        r->iframe_children[r->iframe_child_count++] = child;
         /* box vector never moves during a child render (child touches only its
          * own state), so `b` is still valid here. */
         b->iframe_doc = child;
         ydebug("iframe resolved: depth=%d content=%dx%d child_boxes=%u", child->iframe_depth,
                content_w, content_h, child->boxes.size);
     }
-
-    /* Sweep untouched entries — their iframe left the DOM. Compact in place. */
-    int write = 0;
-    for (int read = 0; read < r->iframe_child_count; read++) {
-        struct yetty_ylexbor_iframe_child *e = &r->iframe_children[read];
-        if (e->used) {
-            if (write != read) {
-                r->iframe_children[write] = *e;
-            }
-            write++;
-        } else {
-            if (e->child != NULL) {
-                (void)yetty_ylexbor_destroy(e->child);
-            }
-            free(e->src_key);
-        }
-    }
-    r->iframe_child_count = write;
     return YETTY_OK_VOID();
 }
 
@@ -1126,19 +909,8 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
 	 * document. */
     yetty_ylexbor_js_destroy(r);
 
-    /* New document → new cascade context. The libcss bridge is per-document
-	 * by design (one select_ctx; its sheets and the per-element node_data
-	 * store are keyed to the DOM being torn down). Carrying it across a
-	 * navigation left page-1 stylesheets cascading into page 2, and
-	 * node_data entries keyed by element pointers that the re-parse below
-	 * frees and recycles. */
-    yetty_ybrowser_libcss_destroy(r);
-    if (yetty_ybrowser_libcss_init(r) != 0) {
-        ydebug("ybrowser: libcss re-init failed, using lexbor cascade fallback");
-    }
-
     box_vec_clear(&r->boxes);
-    yetty_ylexbor_arena_reset(r);
+    arena_reset(r);
     yetty_ylexbor_grid_classes_free(r);
     r->grid_content_max_px = 0.0f;
     r->content_height = 0;
@@ -1151,11 +923,6 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     /* Same for the element→group-id map (keyed by the same dying pointers).
 	 * next_group_id keeps climbing so a new document never reuses an old id. */
     yetty_ylexbor_group_ids_clear(r);
-    /* Iframe children are keyed by parent element pointers that the re-parse
-	 * frees — drop them all here so resolve_iframes rebuilds fresh (and can't
-	 * match a recycled pointer). Across a plain relayout (same DOM) they are
-	 * instead reused, which is the whole point of the retained map. */
-    destroy_iframe_children(r);
     r->css_sheets_loaded = 0;
     r->css_sheets_failed = 0;
     r->css_sheets_inline = 0;
@@ -1312,6 +1079,7 @@ struct yetty_ycore_void_result yetty_ylexbor_set_viewport(struct yetty_ylexbor *
     }
     r->viewport_w = width > 0 ? width : r->viewport_w;
     r->viewport_h = height > 0 ? height : r->viewport_h;
+    ydebug("viewport set: req=%dx%d -> %dx%d", width, height, r->viewport_w, r->viewport_h);
     if (r->boxes.size > 0) {
         struct yetty_ycore_void_result lr = yetty_ylexbor_layout(r);
         if (YETTY_IS_ERR(lr)) {
@@ -1340,22 +1108,84 @@ int yetty_ylexbor_dom_dirty(const struct yetty_ylexbor *r)
     return r ? r->dom_dirty : 0;
 }
 
-/* Re-resolve box tree + layout from the (possibly mutated) DOM.
- * Used by the host after a JS turn that flipped r->dom_dirty, OR
- * directly after a viewport change. */
+/* A GPU repaint is owed (see needs_paint in ybrowser-internal.h). Unlike
+ * dom_dirty, this survives a geometry getter's layout flush, so the render loop
+ * still repaints after code that mutates then measures in one JS turn. */
+int yetty_ylexbor_needs_paint(const struct yetty_ylexbor *r)
+{
+    return r ? r->needs_paint : 0;
+}
+
+/* Host clears this once it has shipped the current frame to the GPU. */
+void yetty_ylexbor_mark_painted(struct yetty_ylexbor *r)
+{
+    if (r) {
+        r->needs_paint = 0;
+    }
+}
+
+/* Hand the host any JS-initiated navigation target (location.assign/replace/
+ * reload or location.href = …), transferring ownership and clearing it. The
+ * host polls this each tick and drives a real navigate(). Returns NULL when no
+ * navigation is pending; caller frees the returned string. */
+char *yetty_ylexbor_take_pending_navigation(struct yetty_ylexbor *r)
+{
+    if (!r || !r->pending_navigation) {
+        return NULL;
+    }
+    char *url = r->pending_navigation;
+    r->pending_navigation = NULL;
+    return url;
+}
+
+/* Rebuild the box tree + run layout from the (possibly mutated) DOM. This is
+ * the pure style/layout flush with NO side effects beyond r->boxes: it does not
+ * resolve iframes, fetch, or touch child engines. Layout-dependent geometry
+ * getters (clientWidth/getBoundingClientRect) call this as a CSSOM forced-layout
+ * point, so it must stay free of unrelated frame/network/DOM work.
+ *
+ * Sets r->layout_in_progress across the box-build/layout. The layout-dependent
+ * geometry getters check that flag before forcing a synchronous flush, so a
+ * geometry read reached from inside this pass skips re-flushing and returns the
+ * in-progress layout rather than recursing (the flag is a shared layout-state
+ * signal, not a lock — it does not reject reentrant non-geometry callers). On
+ * failure the dirty flag is restored so a transient box-build/layout error does
+ * not permanently suppress the next relayout attempt. */
+struct yetty_ycore_void_result yetty_ylexbor_relayout_boxes_and_layout(struct yetty_ylexbor *r)
+{
+    if (r == NULL) {
+        return YETTY_ERR(yetty_ycore_void, "null");
+    }
+    r->layout_in_progress = 1;
+    r->dom_dirty = 0;
+    struct yetty_ycore_void_result br = yetty_ylexbor_box_build(r);
+    if (YETTY_IS_ERR(br)) {
+        r->dom_dirty = 1;
+        r->layout_in_progress = 0;
+        return br;
+    }
+    struct yetty_ycore_void_result lr = yetty_ylexbor_layout(r);
+    if (YETTY_IS_ERR(lr)) {
+        r->dom_dirty = 1;
+        r->layout_in_progress = 0;
+        return lr;
+    }
+    r->layout_in_progress = 0;
+    return YETTY_OK_VOID();
+}
+
+/* Re-resolve box tree + layout from the (possibly mutated) DOM, then resolve
+ * iframes. Used by the host after a JS turn that flipped r->dom_dirty, OR
+ * directly after a viewport change. iframe resolution runs only on this host
+ * path — never from a geometry getter. */
 struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r)
 {
     if (r == NULL) {
         return YETTY_ERR(yetty_ycore_void, "null");
     }
-    r->dom_dirty = 0;
-    struct yetty_ycore_void_result br = yetty_ylexbor_box_build(r);
-    if (YETTY_IS_ERR(br)) {
-        return br;
-    }
-    struct yetty_ycore_void_result lr = yetty_ylexbor_layout(r);
-    if (YETTY_IS_ERR(lr)) {
-        return lr;
+    struct yetty_ycore_void_result res = yetty_ylexbor_relayout_boxes_and_layout(r);
+    if (YETTY_IS_ERR(res)) {
+        return res;
     }
     (void)resolve_iframes(r);
     return YETTY_OK_VOID();
@@ -1389,54 +1219,6 @@ struct yetty_ycore_void_result _yetty_ylexbor_box_vec_reserve(struct yetty_ylexb
                                                               uint32_t want)
 {
     return box_vec_reserve(v, want);
-}
-
-struct dump_dom_accumulator {
-    char *buf;
-    size_t len, cap;
-};
-
-static lxb_status_t dump_dom_cb(const lxb_char_t *data, size_t len, void *vctx)
-{
-    struct dump_dom_accumulator *acc = vctx;
-    if (acc->len + len + 1 > acc->cap) {
-        size_t new_cap = acc->cap ? acc->cap * 2 : 4096;
-        while (new_cap < acc->len + len + 1) {
-            new_cap *= 2;
-        }
-        char *grown = realloc(acc->buf, new_cap);
-        if (!grown) {
-            return LXB_STATUS_ERROR_MEMORY_ALLOCATION;
-        }
-        acc->buf = grown;
-        acc->cap = new_cap;
-    }
-    memcpy(acc->buf + acc->len, data, len);
-    acc->len += len;
-    return LXB_STATUS_OK;
-}
-
-struct yetty_ycore_char_ptr_result yetty_ylexbor_dump_dom(const struct yetty_ylexbor *r)
-{
-    if (r == NULL || r->document == NULL) {
-        return YETTY_ERR(yetty_ycore_char_ptr, "dump_dom: no document");
-    }
-    struct dump_dom_accumulator acc = {0};
-    lxb_status_t status =
-        lxb_html_serialize_tree_cb(lxb_dom_interface_node(r->document), dump_dom_cb, &acc);
-    if (status != LXB_STATUS_OK) {
-        free(acc.buf);
-        return YETTY_ERR(yetty_ycore_char_ptr, "dump_dom: serialize failed");
-    }
-    if (acc.buf == NULL) {
-        acc.buf = calloc(1, 1);
-        if (acc.buf == NULL) {
-            return YETTY_ERR(yetty_ycore_char_ptr, "dump_dom: out of memory");
-        }
-        return YETTY_OK(yetty_ycore_char_ptr, acc.buf);
-    }
-    acc.buf[acc.len] = '\0';
-    return YETTY_OK(yetty_ycore_char_ptr, acc.buf);
 }
 
 /* Test-only — see header. */
@@ -1523,44 +1305,6 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
     return 0;
 }
 
-int yetty_ylexbor_test_box_paint_at(const struct yetty_ylexbor *r, int index, float *opacity_out,
-                                    int *vis_hidden_out)
-{
-    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size) {
-        return -1;
-    }
-    const struct yetty_ylexbor_box *box = &r->boxes.data[index];
-    if (opacity_out) {
-        *opacity_out = box->opacity;
-    }
-    if (vis_hidden_out) {
-        *vis_hidden_out = box->vis_hidden ? 1 : 0;
-    }
-    return 0;
-}
-
-int yetty_ylexbor_test_box_fg_at(const struct yetty_ylexbor *r, int index, uint8_t *red_out,
-                                 uint8_t *green_out, uint8_t *blue_out, uint8_t *alpha_out)
-{
-    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size) {
-        return -1;
-    }
-    const struct yetty_ylexbor_box *box = &r->boxes.data[index];
-    if (red_out) {
-        *red_out = box->fg.r;
-    }
-    if (green_out) {
-        *green_out = box->fg.g;
-    }
-    if (blue_out) {
-        *blue_out = box->fg.b;
-    }
-    if (alpha_out) {
-        *alpha_out = box->fg.a;
-    }
-    return 0;
-}
-
 int yetty_ylexbor_test_box_attr_at(const struct yetty_ylexbor *r, int index, const char *attr,
                                    char *out_buf, int cap)
 {
@@ -1631,8 +1375,10 @@ const char *yetty_ylexbor_size_source_name(int source)
         [YL_SRC_GRID_TRACKS] = "grid-tracks",
         [YL_SRC_GRID_STRETCH] = "grid-stretch",
         [YL_SRC_TABLE_COLS] = "table-cols",
+        [YL_SRC_TABLE_STRETCH] = "table-stretch",
         [YL_SRC_ABS_INSET] = "abs-inset",
         [YL_SRC_ABS_FIT] = "abs-fit",
+        [YL_SRC_ABS_STRETCH] = "abs-stretch",
         [YL_SRC_IMG_INTRINSIC] = "img",
     };
     if (source < 0 || (size_t)source >= sizeof(names) / sizeof(names[0]) || names[source] == NULL) {
@@ -1710,6 +1456,91 @@ int yetty_ylexbor_test_box_path_at(const struct yetty_ylexbor *r, int index, cha
         pos += written;
     }
     return 0;
+}
+
+/* Growable byte accumulator for the DOM serializer callback below. */
+struct yetty_ylexbor_serialize_accum {
+    char *buf;
+    size_t len;
+    size_t cap;
+};
+
+/* lexbor serialize sink: append `len` bytes, always leaving room for a
+ * trailing NUL so the finished buffer is a valid C string. */
+static lxb_status_t yetty_ylexbor_serialize_append(const lxb_char_t *data, size_t len, void *vctx)
+{
+    struct yetty_ylexbor_serialize_accum *accum = vctx;
+    if (accum->len + len + 1 > accum->cap) {
+        size_t new_cap = accum->cap ? accum->cap * 2 : 4096;
+        while (new_cap < accum->len + len + 1) {
+            new_cap *= 2;
+        }
+        char *grown = realloc(accum->buf, new_cap);
+        if (grown == NULL) {
+            return LXB_STATUS_ERROR_MEMORY_ALLOCATION;
+        }
+        accum->buf = grown;
+        accum->cap = new_cap;
+    }
+    memcpy(accum->buf + accum->len, data, len);
+    accum->len += len;
+    return LXB_STATUS_OK;
+}
+
+char *yetty_ylexbor_serialize_dom(const struct yetty_ylexbor *engine, size_t *out_len)
+{
+    if (out_len != NULL) {
+        *out_len = 0;
+    }
+    if (engine == NULL || engine->document == NULL) {
+        return NULL;
+    }
+    /* Match Chrome's headless `--dump-dom`: the document's doctype (if any) on
+     * its own line, followed by the root <html> element's serialization. The
+     * HTML serialization of a doctype is just `<!DOCTYPE <name>>` — public /
+     * system identifiers are never emitted — so a `<!doctype html …>` legacy
+     * form normalizes to `<!DOCTYPE html>`, exactly as Chrome does. A
+     * doctype-less (quirks) document yields no prefix line, just `<html>…`. */
+    lxb_dom_node_t *doc_node = lxb_dom_interface_node(engine->document);
+    lxb_dom_node_t *doctype_node = NULL;
+    lxb_dom_node_t *root_element = NULL;
+    for (lxb_dom_node_t *child = doc_node->first_child; child != NULL; child = child->next) {
+        if (child->type == LXB_DOM_NODE_TYPE_DOCUMENT_TYPE && doctype_node == NULL) {
+            doctype_node = child;
+        } else if (child->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+            root_element = child;
+            break;
+        }
+    }
+    if (root_element == NULL) {
+        return NULL;
+    }
+    struct yetty_ylexbor_serialize_accum accum = {0};
+    if (doctype_node != NULL) {
+        size_t name_len = 0;
+        const lxb_char_t *name =
+            lxb_dom_document_type_name(lxb_dom_interface_document_type(doctype_node), &name_len);
+        (void)yetty_ylexbor_serialize_append((const lxb_char_t *)"<!DOCTYPE ", 10, &accum);
+        if (name != NULL && name_len > 0) {
+            (void)yetty_ylexbor_serialize_append(name, name_len, &accum);
+        }
+        (void)yetty_ylexbor_serialize_append((const lxb_char_t *)">\n", 2, &accum);
+    }
+    if (lxb_html_serialize_tree_cb(root_element, yetty_ylexbor_serialize_append, &accum) !=
+        LXB_STATUS_OK) {
+        free(accum.buf);
+        return NULL;
+    }
+    if (accum.buf == NULL) {
+        /* Serializer emitted nothing; still return a valid empty string. */
+        accum.buf = calloc(1, 1);
+        return accum.buf;
+    }
+    accum.buf[accum.len] = '\0';
+    if (out_len != NULL) {
+        *out_len = accum.len;
+    }
+    return accum.buf;
 }
 
 /* Copy of `name`'s value on `element` when non-empty and containing

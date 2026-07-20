@@ -50,13 +50,11 @@ static struct yetty_ycore_void_result flex_layout_absolute_children(struct yetty
 static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
                                        float origin_y, float content_w);
 static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_idx, int *budget);
+static void shift_subtree(struct yetty_ylexbor *r, uint32_t idx, float dx, float dy);
 static void resolve_pct_metrics(struct yetty_ylexbor_box *box, float cb_width);
-/* Max boxes one intrinsic measure may visit. Real content easily exceeds a
- * few hundred boxes (a github nav-dropdown panel holds 4 cards × ~80 boxes);
- * exhaustion silently measures the remaining children as 0 and collapses
- * `width:max-content` containers, so the ceiling must sit far above any
- * legitimate subtree while still bounding the pathological ones. */
-#define YL_CELL_MEASURE_BUDGET 8192
+static float used_border_box_height_from_spec(const struct yetty_ylexbor_box *box,
+                                              float specified_height);
+#define YL_CELL_MEASURE_BUDGET 256
 
 /* Walk the box subtree rooted at `idx` and return the largest known
  * width of any INLINE_IMAGE descendant. Stops at YL_CELL_MEASURE_BUDGET
@@ -211,10 +209,7 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
 	 * once emit_fragment grows the box vector. */
     float advance_ratio =
         b->glyph_advance > 0.0f ? b->glyph_advance : yetty_ylexbor_glyph_advance_ratio(r);
-    /* Average per-glyph estimate — used only for the tiny-container floor
-     * heuristics below; the wrap fit itself accumulates real per-codepoint
-     * advances in proportional mode. */
-    float per_glyph = font_size * (advance_ratio > 0.0f ? advance_ratio : 0.5f);
+    float per_glyph = font_size * advance_ratio;
     if (per_glyph < 1.0f) {
         per_glyph = 1.0f;
     }
@@ -347,17 +342,11 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
                     break_after = 1;
                 }
             }
+            if (!zero_width && acc + per_glyph > wrap_w && k > cursor) {
+                break;
+            }
             if (!zero_width) {
-                float advance_px = per_glyph;
-                if (advance_ratio <= 0.0f) {
-                    uint32_t codepoint;
-                    (void)yetty_ylexbor_utf8_decode(text + k, n - k, &codepoint);
-                    advance_px = font_size * yetty_ylexbor_codepoint_advance_em(codepoint);
-                }
-                if (acc + advance_px > wrap_w && k > cursor) {
-                    break;
-                }
-                acc += advance_px;
+                acc += per_glyph;
             }
             k += step;
             fit = k;
@@ -560,34 +549,6 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
     return YETTY_OK(float, y - origin_y);
 }
 
-/* Border-box height from a specified (or percentage-resolved) `height`
- * value. Under the default content-box sizing the specified height is the
- * content height — padding and border grow the border-box; under
- * `box-sizing: border-box` the specified value IS the border-box height. */
-static float border_box_height_from_specified(const struct yetty_ylexbor_box *box, float specified)
-{
-    if (box->border_box) {
-        return specified;
-    }
-    return specified + box->padding_top + box->padding_bottom + box->border_top +
-           box->border_bottom;
-}
-
-/* Content-box height from an explicit `height: <px>` (css_height > 0) —
- * the inverse direction: a border-box specified height must shed padding
- * and border before it can serve as a content-area budget for children. */
-static float content_height_from_specified(const struct yetty_ylexbor_box *box)
-{
-    float height = box->css_height;
-    if (box->border_box) {
-        height -= box->padding_top + box->padding_bottom + box->border_top + box->border_bottom;
-        if (height < 0.0f) {
-            height = 0.0f;
-        }
-    }
-    return height;
-}
-
 /* ---------------------------------------------------------------------------
  * Flex container — single function handling both row and column directions.
  * Resolves each item's main-axis size from flex-basis + flex-grow, lays
@@ -618,6 +579,46 @@ static float content_height_from_specified(const struct yetty_ylexbor_box *box)
 
 #define YL_FLEX_MAX_CHILDREN 256
 
+/* The PADDING-box height of a positioned ancestor, used as the containing-block
+ * height `cb_h` for its absolutely-positioned children (their %-heights,
+ * bottom-anchor positions and inset:0 stretch resolve against it).
+ *
+ * `natural_padding_h` is the ancestor's own layout return (block_height /
+ * container_h), which is ALREADY a padding-box height (content + own padding, NO
+ * border) — so it must NOT have the ancestor's border subtracted again.
+ *
+ * A DEFINITE author/engine height wins EXACTLY (it is not max'd with the natural
+ * content height): a sized containing block is precisely its used padding box,
+ * and overflowing content must not enlarge it — most visibly `height:0`, which
+ * must yield a zero padding box so children resolve against zero, not content.
+ *   - author css height (css_height_set, incl. 0): content-box → +padding;
+ *     border-box → height − border (clamped ≥0);
+ *   - intrinsic placeholder (css_height>0 && !css_height_set): outer geometry,
+ *     so padding box = height − border (clamped ≥0);
+ *   - auto (incl. a negative-encoded percentage): the natural padding-box height.
+ *
+ * GAP (documented, pre-existing): a PERCENTAGE-height ancestor (css_height < 0)
+ * falls into the auto branch and uses the natural content height, NOT the value
+ * its own parent resolved the percentage to — the resolved used height is not
+ * retained on the box at this stage. Correcting it needs the final used
+ * border/padding height stored on the box rather than re-derived from the CSS
+ * encoding; tracked as a separate percentage-CB increment. */
+static float abs_cb_padding_height(const struct yetty_ylexbor_box *self, float natural_padding_h)
+{
+    if (self->css_height_set && self->css_height >= 0.0f) {
+        if (self->border_box) {
+            float inner = self->css_height - self->border_top - self->border_bottom;
+            return inner > 0.0f ? inner : 0.0f;
+        }
+        return self->css_height + self->padding_top + self->padding_bottom;
+    }
+    if (self->css_height > 0.0f) {
+        float inner = self->css_height - self->border_top - self->border_bottom;
+        return inner > 0.0f ? inner : 0.0f;
+    }
+    return natural_padding_h > 0.0f ? natural_padding_h : 0.0f;
+}
+
 /* Place a flex container's absolutely-positioned / fixed children once the
  * container's own size is known. Absolute resolves against the container's
  * padding box (the relative-positioned card), fixed against the viewport. */
@@ -630,10 +631,10 @@ static struct yetty_ycore_void_result flex_layout_absolute_children(struct yetty
     float cb_x = origin_x + self->border_left;
     float cb_y = origin_y + self->border_top;
     float cb_w = content_w;
-    float cb_h = container_h - self->border_top - self->border_bottom;
-    if (cb_h < 0.0f) {
-        cb_h = 0.0f;
-    }
+    /* `container_h` is already a padding-box height — resolve the CB height
+     * (definite wins exactly; auto uses the natural padding box) without
+     * subtracting the ancestor's border again. */
+    float cb_h = abs_cb_padding_height(self, container_h);
     int is_containing_block = (idx == 0) || (r->boxes.data[idx].position != YL_POS_STATIC);
     uint32_t *deferred_absolute = NULL;
     uint32_t deferred_count = 0;
@@ -885,11 +886,32 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
     int justify = self->justify_content;
     int align = self->align_items;
     float css_h = self->css_height;
-    float content_origin_x = origin_x + pad_left;
-    float content_origin_y = origin_y + pad_top;
+    float content_origin_x = origin_x + self->border_left + pad_left;
+    float content_origin_y = origin_y + self->border_top + pad_top;
     float content_width = content_w - pad_left - pad_right;
     if (content_width < 0) {
         content_width = 0;
+    }
+
+    /* Definiteness of a ROW flex container's cross (height) axis, kept SEPARATE
+	 * from the numeric content-box height so a clamped-to-zero border-box height
+	 * (height:0;box-sizing:border-box with padding/border) reads as definite-0,
+	 * NOT indefinite. Keyed on the container's OWN author height (css_height_set),
+	 * NOT a computed budget — content can produce a positive budget without the
+	 * cross size being definite. Percentage item heights resolve against this
+	 * only when definite; otherwise they are auto. */
+    bool row_cross_definite = !column_dir && self->css_height_set && css_h >= 0.0f;
+    float row_cross_content_h = 0.0f;
+    if (row_cross_definite) {
+        if (self->border_box) {
+            row_cross_content_h =
+                css_h - pad_top - pad_bottom - self->border_top - self->border_bottom;
+            if (row_cross_content_h < 0.0f) {
+                row_cross_content_h = 0.0f;
+            }
+        } else {
+            row_cross_content_h = css_h;
+        }
     }
 
     /* Collect direct in-flow children (skip floats — they're laid out
@@ -984,7 +1006,7 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
     /* Main-axis budget. */
     float main_budget;
     if (column_dir) {
-        main_budget = css_h > 0 ? content_height_from_specified(self) : 0;
+        main_budget = css_h > 0 ? css_h : 0;
     } else {
         main_budget = content_width;
     }
@@ -992,6 +1014,17 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
     if (main_budget < 0.0f) {
         main_budget = 0.0f;
     }
+
+    /* A percentage main-axis (height) on a COLUMN item can only resolve
+	 * against a DEFINITE container main size. Definiteness comes from
+	 * provenance, not the number: an authored height (including an explicit
+	 * 0) and an engine-assigned intrinsic outer size are definite; an
+	 * unspecified (auto) height is indefinite, and a container whose own
+	 * height is itself a percentage (negative-encoded, resolved used height
+	 * not retained) is treated as indefinite here — the existing
+	 * percentage-CB / used-height gap. */
+    bool column_main_definite =
+        (self->css_height_set && self->css_height >= 0.0f) || (self->css_height > 0.0f);
 
     /* Resolve each child's hypothetical main-axis size. Encoding
 	 * (shared with css_width / css_height):
@@ -1048,12 +1081,31 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
         } else {
             float css_main = column_dir ? c->css_height : c->css_width;
             float img_main = column_dir ? img_h_intr[i] : img_w_intr[i];
-            if (css_main > 0.0f) {
-                basis = css_main;
+            if (column_dir && c->css_height_set && c->css_height >= 0.0f) {
+                /* Explicit column height (incl. 0), box-sizing-aware. Branch on
+                 * provenance BEFORE positivity so height:0 is not misread as
+                 * auto and re-measured. */
+                basis = used_border_box_height_from_spec(c, c->css_height);
+                src_main[i] = YL_SRC_CSS;
+            } else if (css_main > 0.0f) {
+                basis = css_main; /* row width, or column intrinsic placeholder — as-is */
                 src_main[i] = YL_SRC_CSS;
             } else if (css_main < 0.0f) {
-                basis = main_budget * (-css_main);
-                src_main[i] = YL_SRC_CSS;
+                if (column_dir && !column_main_definite) {
+                    /* Percentage main-axis height against an INDEFINITE column
+					 * main size behaves as auto (content) — CSS 2.1 §10.5 /
+					 * flexbox definite-size rules. Route through the auto/content
+					 * path (leaving provenance NONE so the post-layout column pass
+					 * stamps CONTENT), identical to height:auto on this item.
+					 * Resolving against the 0 budget would collapse it. */
+                    basis = 0.0f;
+                    is_auto[i] = true;
+                    autobasis_count++;
+                } else {
+                    float resolved = main_budget * (-css_main);
+                    basis = column_dir ? used_border_box_height_from_spec(c, resolved) : resolved;
+                    src_main[i] = YL_SRC_CSS;
+                }
             } else if (img_main > 0.0f) {
                 /* Image with no flex-basis sizes to its intrinsic main-axis
                  * dimension, not the auto-distributed share. */
@@ -1063,24 +1115,6 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                 basis = 0.0f;
                 is_auto[i] = true;
                 autobasis_count++;
-            }
-        }
-        /* Hypothetical main size, max side: the base clamped by max-width
-         * (spec §9.2.3), with percent bounds (stored as negative ratios)
-         * resolved against the container's main budget. The wrap pass
-         * breaks lines on these sizes — without the clamp a `width:100%;
-         * max-width:32%` card row (nytimes' recirculation list) lays one
-         * full-width item per line instead of three-up. The MIN side is
-         * deliberately not applied here: raising the base would skew the
-         * grow distribution (`flex:1` + min-width floors are resolved by
-         * the freeze-and-redistribute rounds below). */
-        if (!column_dir && !is_auto[i]) {
-            float max_main = c->css_max_width > 0.0f ? c->css_max_width
-                             : (c->css_max_width < 0.0f && main_budget > 0.0f)
-                                 ? main_budget * (-c->css_max_width)
-                                 : 0.0f;
-            if (max_main > 0.0f && basis > max_main) {
-                basis = max_main;
             }
         }
         main_size[i] = basis;
@@ -1356,10 +1390,18 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                         h = img_h_intr[k] > 0.0f ? img_h_intr[k] : (c->h > 0.0f ? c->h : 100.0f);
                     }
                     c = &r->boxes.data[cidx];
-                    if (c->css_height > 0.0f) {
-                        h = border_box_height_from_specified(c, c->css_height);
+                    if (c->css_height_set && c->css_height >= 0.0f) {
+                        h = used_border_box_height_from_spec(c, c->css_height); /* explicit incl 0 */
+                        c->height_source = YL_SRC_CSS;
+                    } else if (c->css_height > 0.0f) {
+                        h = c->css_height; /* intrinsic placeholder — as-is */
+                        c->height_source = YL_SRC_CSS;
+                    } else if (c->css_height < 0.0f && row_cross_definite) {
+                        float resolved = row_cross_content_h * (-c->css_height);
+                        h = used_border_box_height_from_spec(c, resolved); /* definite % cross */
                         c->height_source = YL_SRC_CSS;
                     } else {
+                        h = h + c->border_top + c->border_bottom; /* auto (incl indefinite %) */
                         c->height_source = YL_SRC_CONTENT;
                     }
                     c->h = h;
@@ -1396,7 +1438,8 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
             YETTY_RETURN_IF_ERR(float, mirror_res, "layout_flex(wrap): wrap-reverse mirror");
             self = &r->boxes.data[idx];
         }
-        float container_h = (line_top + last_line_h) - origin_y + pad_bottom;
+        float container_h =
+            (line_top + last_line_h) - origin_y - r->boxes.data[idx].border_top + pad_bottom;
         /* Aspect-ratio box: height is padding only (see layout_block note). */
         self = &r->boxes.data[idx];
         if (self->css_height_set && self->css_height == 0.0f &&
@@ -1444,16 +1487,8 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                 if (c->flex_grow > 0.0f && round_grow > 0.0f && free_space > 0.0f) {
                     target += free_space * (c->flex_grow / round_grow);
                 }
-                /* Percent bounds arrive as negative ratios — resolve against
-                 * the container's main budget (definite here: grow ran). */
                 float min_w = !column_dir ? c->css_min_width : 0.0f;
-                if (min_w < 0.0f) {
-                    min_w = main_budget > 0.0f ? main_budget * -min_w : 0.0f;
-                }
-                float max_w = !column_dir ? c->css_max_width : 0.0f;
-                if (max_w < 0.0f) {
-                    max_w = main_budget > 0.0f ? main_budget * -max_w : 0.0f;
-                }
+                float max_w = (!column_dir && c->css_max_width > 0.0f) ? c->css_max_width : 0.0f;
                 if (min_w > 0.0f && target < min_w) {
                     main_size[i] = min_w;
                     min_locked[i] = true;
@@ -1529,9 +1564,7 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                     item_content[i] - (scaled > 0.0f ? overflow * (scaled / total_scaled) : 0.0f);
                 float floor_main = !column_dir ? r->boxes.data[children[i]].css_min_width : 0.0f;
                 if (floor_main < 0.0f) {
-                    /* Percent min-width — resolve against the main budget
-                     * (definite here: the shrink branch requires it). */
-                    floor_main = main_budget > 0.0f ? main_budget * -floor_main : 0.0f;
+                    floor_main = 0.0f;
                 }
                 /* min-width:auto — the spec's automatic minimum: don't
 				 * shrink below the (reduced) content-based minimum, capped
@@ -1617,8 +1650,7 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
     /* Place children. Cross-axis position depends on align-items;
 	 * stretch (default) gives every item the full cross extent of
 	 * the container. */
-    float cross_budget =
-        column_dir ? content_width : (css_h > 0 ? content_height_from_specified(self) : 0);
+    float cross_budget = column_dir ? content_width : (css_h > 0 ? css_h : 0);
     /* First pass — lay each child at its resolved main-size, learn
 	 * natural cross-size. */
     float cursor = (column_dir ? content_origin_y : content_origin_x) + leading;
@@ -1650,19 +1682,6 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
             } else {
                 c->w = content_width - margin_cross_total[i];
                 c->width_source = YL_SRC_FLEX_STRETCH;
-            }
-            /* max-width caps the cross size of a column item — stretch and
-             * fit-content alike (Primer SectionIntro paragraphs: centered
-             * column, `max-width:50ch`; without the cap they span the full
-             * container). Percent maxima resolve against the content width. */
-            {
-                float cross_max =
-                    c->css_max_width > 0.0f
-                        ? c->css_max_width
-                        : (c->css_max_width < 0.0f ? content_width * (-c->css_max_width) : 0.0f);
-                if (cross_max > 0.0f && c->w > cross_max) {
-                    c->w = cross_max;
-                }
             }
             if (c->w < 0.0f) {
                 c->w = 0.0f;
@@ -1699,8 +1718,12 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
 			 * forced unconditionally, collapsing text-only items to 0 — which
 			 * piled a flex column's items on top of each other (Google News
 			 * story cards). */
-            if (main_size[i] <= 0.0f) {
-                main_size[i] = h;
+            if (main_size[i] <= 0.0f && src_main[i] != YL_SRC_CSS) {
+                /* Genuinely auto item: content height (padding-box) + its own
+                 * border → used border box. An explicit height:0 basis
+                 * (src_main == CSS) must NOT be overwritten merely because it is
+                 * numerically zero. */
+                main_size[i] = h + c->border_top + c->border_bottom;
                 c->height_source = YL_SRC_CONTENT;
             }
             c->h = main_size[i];
@@ -1708,21 +1731,24 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
             /* Row direction: an explicit CSS height wins over the laid-out
 			 * content height (an empty form control keeps its intrinsic /
 			 * author height instead of collapsing to 0). */
-            c->h = c->css_height > 0.0f ? border_box_height_from_specified(c, c->css_height) : h;
-            c->height_source = c->css_height > 0.0f ? YL_SRC_CSS : YL_SRC_CONTENT;
+            if (c->css_height_set && c->css_height >= 0.0f) {
+                c->h = used_border_box_height_from_spec(c, c->css_height); /* explicit incl 0 */
+                c->height_source = YL_SRC_CSS;
+            } else if (c->css_height > 0.0f) {
+                c->h = c->css_height; /* intrinsic placeholder (form control) — as-is */
+                c->height_source = YL_SRC_CSS;
+            } else if (c->css_height < 0.0f && row_cross_definite) {
+                float resolved = row_cross_content_h * (-c->css_height);
+                c->h = used_border_box_height_from_spec(c, resolved); /* definite % cross */
+                c->height_source = YL_SRC_CSS;
+            } else {
+                c->h = h + c->border_top + c->border_bottom; /* auto (incl indefinite %) */
+                c->height_source = YL_SRC_CONTENT;
+            }
         }
         natural_h[i] = c->h;
         natural_w[i] = c->w;
-        cursor += main_size[i] + margin_main_total[i];
-        /* CSS `gap` (and space-between's computed gap) sits BETWEEN items —
-         * a trailing gap after the last item inflates an auto-height column
-         * by one gap (github's NavGroup lists: 3 items + 3 gaps instead of
-         * 2, every dropdown 20px too tall). space-around/evenly keep their
-         * trailing share via `leading`-style semantics baked into `gap`. */
-        if (i + 1 < n_children || justify == CSS_JUSTIFY_CONTENT_SPACE_AROUND ||
-            justify == CSS_JUSTIFY_CONTENT_SPACE_EVENLY) {
-            cursor += gap + flex_gap;
-        }
+        cursor += main_size[i] + margin_main_total[i] + gap + flex_gap;
     }
 
     /* Cross-axis: tallest item (margin box) dictates row height (or the
@@ -1779,14 +1805,30 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
         if (c->kind == YL_BOX_INLINE_IMAGE) {
             float img_cross = column_dir ? img_w_intr[i] : img_h_intr[i];
             if (img_cross > 0.0f) {
-                cross_used = img_cross;
+                /* A replaced item's intrinsic cross size (box-build stores it as
+                 * a content-box dimension) is normalized to a used border box
+                 * here — on the ROW cross (height) axis add the image's own
+                 * border exactly once, like every other item. Column cross is
+                 * width, outside this height contract. */
+                cross_used = column_dir ? img_cross
+                                        : img_cross + c->border_top + c->border_bottom;
                 cross_source = YL_SRC_IMG_INTRINSIC;
             }
         }
         /* `align-items: stretch` only applies to items whose cross size is
 		 * auto — an explicit CSS cross dimension pins the item (a 14px icon
 		 * in a text-height row stays 14px, as in Chrome). */
-        if ((column_dir ? c->css_width : c->css_height) > 0.0f) {
+        /* A DEFINITE cross size pins the item (no stretch): an explicit height
+         * (incl. 0), an intrinsic placeholder, or a percentage resolved against
+         * a definite container cross. Only a genuinely auto cross size (or an
+         * indefinite percentage) stretches. `cross` == natural_h[i] already
+         * carries the border-box value for these cases. */
+        bool cross_pinned =
+            column_dir
+                ? (c->css_width > 0.0f)
+                : ((c->css_height_set && c->css_height >= 0.0f) || c->css_height > 0.0f ||
+                   (c->css_height < 0.0f && row_cross_definite));
+        if (cross_pinned) {
             cross_used = cross;
             cross_source = YL_SRC_CSS;
         }
@@ -1805,13 +1847,25 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
             }
         }
         if (column_dir) {
-            c->x = cross_pos;
+            /* Cross-axis alignment (flex-end / center) moves the item's box off
+			 * the first-pass origin. layout_block already placed the item's
+			 * CONTENT at the first-pass x, so shift the whole subtree by the
+			 * delta — moving the box alone orphans the content (a centered flex
+			 * item painted its box at the centered x but its text at the origin,
+			 * clipping YouTube's history-off nudge title). */
+            float dx = cross_pos - c->x;
+            if (dx != 0.0f) {
+                shift_subtree(r, cidx, dx, 0.0f);
+            }
             c->w = cross_used;
             if (cross_source != 0) {
                 c->width_source = cross_source;
             }
         } else {
-            c->y = cross_pos;
+            float dy = cross_pos - c->y;
+            if (dy != 0.0f) {
+                shift_subtree(r, cidx, 0.0f, dy);
+            }
             c->h = cross_used;
             if (cross_source != 0) {
                 c->height_source = cross_source;
@@ -1991,6 +2045,8 @@ static uint32_t row_cell_count(struct yetty_ylexbor *r, uint32_t row_idx)
  * cell returns the sum of its glyph widths — the column distribution
  * then clamps it to the available space, so wide cells don't blow up
  * the whole row. */
+#define YL_CELL_MEASURE_BUDGET 256
+
 /* Horizontal margins of a measured child, skipping percent-flagged values
  * (they resolve against a containing block the measure pass doesn't
  * have). */
@@ -2122,8 +2178,8 @@ static struct float_result layout_table(struct yetty_ylexbor *r, uint32_t idx, f
     float pad_right = self->padding_right;
     float pad_top = self->padding_top;
     float pad_bottom = self->padding_bottom;
-    float content_origin_x = origin_x + pad_left;
-    float content_origin_y = origin_y + pad_top;
+    float content_origin_x = origin_x + self->border_left + pad_left;
+    float content_origin_y = origin_y + self->border_top + pad_top;
     float content_width = content_w - pad_left - pad_right;
     if (content_width < 0) {
         content_width = 0;
@@ -2301,20 +2357,68 @@ static struct float_result layout_table(struct yetty_ylexbor *r, uint32_t idx, f
             c->y = cursor_y;
             c->w = this_col_w;
             c->width_source = YL_SRC_TABLE_COLS;
+            /* A table cell's CSS `height` is a MINIMUM, not a fixed used height
+             * (CSS 2.1 §17.5.3): the cell content is laid out as if the cell's
+             * own height were auto, giving the natural content height, and the
+             * specified height then acts only as a lower bound. layout_block
+             * otherwise honours an explicit height:0 as a definite zero (correct
+             * for ordinary block flow), which would clamp away taller cell
+             * content — so force the cell's own height to auto across the content
+             * pass, then restore the authored values and choose the used height
+             * against the minimum below. (Percentage heights of the cell's own
+             * children consequently resolve against an indefinite cell, i.e.
+             * auto — consistent with this engine's indefinite-row model.) */
+            float saved_css_height = c->css_height;
+            uint8_t saved_css_height_set = c->css_height_set;
+            c->css_height = 0.0f;
+            c->css_height_set = 0;
             struct float_result cell_res = layout_block(r, cidx, cell_x, cursor_y, this_col_w);
+            /* Restore the authored height UNCONDITIONALLY and by index, before
+             * the error check: layout_block may have grown the vector (so the
+             * cached `c` pointer is stale), and if the cell layout failed and we
+             * return early the box must not be left permanently mutated to
+             * css_height=0. This keeps the auto-height override transactional. */
+            r->boxes.data[cidx].css_height = saved_css_height;
+            r->boxes.data[cidx].css_height_set = saved_css_height_set;
             if (YETTY_IS_ERR(cell_res)) {
                 free(col_w);
                 free(rows.rows);
                 return YETTY_ERR(float, "layout_table: cell layout_block", cell_res);
             }
-            float h = cell_res.value;
-            /* Refetch — vector may have moved. */
+            /* Refetch — vector may have moved during cell layout. */
             c = &r->boxes.data[cidx];
             row = &r->boxes.data[row_idx];
-            c->h = h;
-            c->height_source = YL_SRC_CONTENT;
-            if (h > row_h) {
-                row_h = h;
+
+            /* content_outer_h is the cell's used border-box height from its own
+             * (auto-height) content flow: layout_block returns a padding-box
+             * height, so add the cell's own border. The specified/box-sizing-
+             * aware height acts only as a lower bound; whichever wins drives the
+             * provenance. */
+            float content_outer_h = cell_res.value + c->border_top + c->border_bottom;
+            float used_h = content_outer_h;
+            uint8_t used_source = YL_SRC_CONTENT;
+            if (c->css_height_set && c->css_height >= 0.0f) {
+                float specified_min_outer_h = used_border_box_height_from_spec(c, c->css_height);
+                if (specified_min_outer_h >= content_outer_h) {
+                    /* Author minimum determines (including the tie). */
+                    used_h = specified_min_outer_h;
+                    used_source = YL_SRC_CSS;
+                }
+            } else if (c->css_height > 0.0f) {
+                /* Engine intrinsic outer minimum (form-control geometry). Does
+                 * not normally occur for <td>/<th>, but honour it as a lower
+                 * bound if a cell ever carries one. */
+                if (c->css_height >= content_outer_h) {
+                    used_h = c->css_height;
+                    used_source = YL_SRC_CSS;
+                }
+            }
+            /* An unresolved percentage height stays auto in the indefinite-row
+             * model, so used_h remains content_outer_h. */
+            c->h = used_h;
+            c->height_source = used_source;
+            if (used_h > row_h) {
+                row_h = used_h;
             }
             cell_x += this_col_w;
             col++;
@@ -2329,7 +2433,12 @@ static struct float_result layout_table(struct yetty_ylexbor *r, uint32_t idx, f
                 continue;
             }
             if (c->h != row_h) {
-                c->height_source = YL_SRC_GRID_STRETCH;
+                /* Row equalization is a distinct algorithm from grid
+                 * align-items:stretch — a cell shorter than the row's tallest
+                 * cell is grown to the row's border-box height. Report the
+                 * table-specific source so provenance stays truthful (the
+                 * row-height winner keeps its own css/content source). */
+                c->height_source = YL_SRC_TABLE_STRETCH;
             }
             c->h = row_h;
         }
@@ -2340,7 +2449,7 @@ static struct float_result layout_table(struct yetty_ylexbor *r, uint32_t idx, f
 
     free(col_w);
     free(rows.rows);
-    return YETTY_OK(float, (cursor_y - origin_y) + pad_bottom);
+    return YETTY_OK(float, (cursor_y - origin_y - r->boxes.data[idx].border_top) + pad_bottom);
 }
 
 /* ---------------------------------------------------------------------------
@@ -2512,20 +2621,67 @@ static void apply_transform(struct yetty_ylexbor *r, uint32_t idx)
  * `width:100%` already worked on these boxes and `height:100%` did not
  * (the MDC ripple overlay `{position:absolute;height:100%;width:100%}`
  * was content-sized instead of filling its button). */
-static float abs_used_height(const struct yetty_ylexbor_box *c, float cb_h, float content_height,
-                             uint8_t *out_source)
+/* Convert a specified/resolved CSS height (px) into the used BORDER-BOX height
+ * stored on `box->h`. Under box-sizing:border-box the specified value already
+ * IS the border box; under content-box the vertical padding+border are added.
+ * `element_box_metrics` treats `box->h` as the border box (offsetHeight,
+ * clientHeight = box->h - vertical borders), so every explicit-height path must
+ * funnel through here to stay consistent with the getters and with the width
+ * axis, where the parent likewise stores a border-box `box->w`.
+ *
+ * INVARIANT: only AUTHOR CSS heights (css_height_set) may pass through here. An
+ * intrinsic / engine-supplied placeholder height (css_height > 0 with
+ * css_height_set == 0, e.g. a form control sized by the box builder) is already
+ * outer geometry — routing it through this box-sizing conversion would wrongly
+ * add padding+border. Keep such placeholders as-is at the call site. */
+static float used_border_box_height_from_spec(const struct yetty_ylexbor_box *box,
+                                              float specified_height)
 {
-    if (c->css_height > 0.0f) {
+    if (box->border_box) {
+        return specified_height;
+    }
+    return specified_height + box->padding_top + box->padding_bottom + box->border_top +
+           box->border_bottom;
+}
+
+/* Used BORDER-BOX height of an absolutely-positioned box, chosen by the same
+ * rules as the block/flex/grid/table paths (NOT by kind alone):
+ *   - author css height (css_height_set, incl. 0) → box-sizing-aware helper, CSS;
+ *   - percentage (css_height < 0) → resolved against the DEFINITE containing-block
+ *     height cb_h (an abspos %-height always has a definite basis — the CB is the
+ *     padding box of the positioned ancestor, whose used height is already known
+ *     when this pass runs — so unlike an in-flow block it does NOT fall back to
+ *     auto), then routed through the box-sizing helper, CSS;
+ *   - intrinsic placeholder (css_height > 0 && !css_height_set, e.g. a form
+ *     control sized by the box builder) → kept as-is; IMG_INTRINSIC for a replaced
+ *     box, else CSS;
+ *   - auto → laid-out padding-box height + the box's OWN border; IMG_INTRINSIC for
+ *     a replaced box, else CONTENT.
+ * `content_padding_box_h` is layout_block's return (content + own padding, NO
+ * border). Replaced (image) boxes keep the documented author-vs-intrinsic
+ * provenance limitation and have no modelled border. */
+static float abs_used_height(const struct yetty_ylexbor_box *c, float cb_h,
+                             float content_padding_box_h, uint8_t *out_source)
+{
+    bool is_image = c->kind == YL_BOX_INLINE_IMAGE;
+    if (c->css_height_set && c->css_height >= 0.0f) {
         *out_source = YL_SRC_CSS;
-        return border_box_height_from_specified(c, c->css_height);
+        return used_border_box_height_from_spec(c, c->css_height); /* explicit incl 0 */
     }
     if (c->css_height < 0.0f) {
-        *out_source = YL_SRC_CSS;
         float resolved = cb_h * (-c->css_height);
-        return resolved > 0.0f ? border_box_height_from_specified(c, resolved) : 0.0f;
+        if (resolved < 0.0f) {
+            resolved = 0.0f;
+        }
+        *out_source = YL_SRC_CSS;
+        return used_border_box_height_from_spec(c, resolved); /* percentage, box-sizing aware */
     }
-    *out_source = YL_SRC_CONTENT;
-    return content_height;
+    if (c->css_height > 0.0f) {
+        *out_source = is_image ? YL_SRC_IMG_INTRINSIC : YL_SRC_CSS;
+        return c->css_height; /* intrinsic placeholder — outer already */
+    }
+    *out_source = is_image ? YL_SRC_IMG_INTRINSIC : YL_SRC_CONTENT;
+    return content_padding_box_h + c->border_top + c->border_bottom; /* auto: add own border */
 }
 
 /* Place a `position: absolute` / `fixed` child against its containing block
@@ -2620,16 +2776,18 @@ static struct float_result layout_absolute_child(struct yetty_ylexbor *r, uint32
     c = &r->boxes.data[cidx];
     uint8_t height_source;
     float height = abs_used_height(c, cb_h, measure.value, &height_source);
-    /* top + bottom both set with no explicit height stretches the box to the
-     * containing block — the `inset:0` full-cover overlay pattern. Only when
-     * height is auto (== 0): a definite px OR percentage height already fixed
-     * the size, so the inset pair just positions it, it does not re-stretch. */
-    if (top_set && bottom_set && c->css_height == 0.0f) {
+    /* top + bottom both set with a truly AUTO height stretches the box to fill
+     * the containing block — the `inset:0` full-cover overlay pattern; the used
+     * border-box height is exactly the inset gap (clamped at 0 if the insets
+     * over-constrain). A definite height — explicit px (incl. authored height:0),
+     * percentage, or an intrinsic placeholder — is NOT auto: the inset pair only
+     * positions such a box, it must not re-stretch it. Gate on true auto, never
+     * on the numeric zero (which also matches authored height:0). */
+    bool height_auto = !c->css_height_set && c->css_height == 0.0f;
+    if (top_set && bottom_set && height_auto) {
         float stretched = cb_h - top - bottom;
-        if (stretched > height) {
-            height = stretched;
-            height_source = YL_SRC_ABS_INSET;
-        }
+        height = stretched > 0.0f ? stretched : 0.0f; /* clamp: insets may over-constrain */
+        height_source = YL_SRC_ABS_STRETCH;
     }
 
     float y;
@@ -2651,13 +2809,12 @@ static struct float_result layout_absolute_child(struct yetty_ylexbor *r, uint32
         c = &r->boxes.data[cidx];
         height = abs_used_height(c, cb_h, place.value, &height_source);
         /* Re-apply the inset stretch — the re-lay recomputed content
-         * height and would otherwise drop it. */
-        if (top_set && bottom_set && c->css_height == 0.0f) {
+         * height and would otherwise drop it. Same true-auto gate as above. */
+        bool relaid_height_auto = !c->css_height_set && c->css_height == 0.0f;
+        if (top_set && bottom_set && relaid_height_auto) {
             float stretched = cb_h - top - bottom;
-            if (stretched > height) {
-                height = stretched;
-                height_source = YL_SRC_ABS_INSET;
-            }
+            height = stretched > 0.0f ? stretched : 0.0f; /* clamp: insets may over-constrain */
+            height_source = YL_SRC_ABS_STRETCH;
         }
     }
 
@@ -2696,6 +2853,41 @@ static struct float_result layout_absolute_child(struct yetty_ylexbor *r, uint32
     return YETTY_OK(float, height);
 }
 
+/* A grid item's used BORDER-BOX height plus its size provenance, chosen by the
+ * SAME rules as the block/flex paths — NOT by item kind alone, which would
+ * mislabel an explicit-height image as intrinsic or an explicit-height text as
+ * content:
+ *   - author css height (css_height_set, incl. 0) → box-sizing-aware helper, CSS;
+ *   - intrinsic placeholder (css_height>0 && !css_height_set) → kept as-is;
+ *     IMG_INTRINSIC for an image, else CSS (an engine-supplied definite height);
+ *   - auto (incl. an indefinite percentage — grid has no definite row cross) →
+ *     laid-out padding-box + own border; IMG_INTRINSIC for an image, else CONTENT.
+ * `source` tracks USED-SIZE origin (the hs= provenance column). Grid has no
+ * row-track sizing, so a percentage item height has no definite operand and
+ * folds into the auto case (documented limitation). */
+struct grid_item_height {
+    float value;
+    uint8_t source;
+};
+
+static struct grid_item_height grid_item_used_height(const struct yetty_ylexbor_box *c,
+                                                     float laid_out_h)
+{
+    struct grid_item_height result;
+    bool is_image = c->kind == YL_BOX_INLINE_IMAGE;
+    if (c->css_height_set && c->css_height >= 0.0f) {
+        result.value = used_border_box_height_from_spec(c, c->css_height); /* explicit incl 0 */
+        result.source = YL_SRC_CSS;
+    } else if (c->css_height > 0.0f) {
+        result.value = c->css_height; /* intrinsic placeholder — outer already */
+        result.source = is_image ? YL_SRC_IMG_INTRINSIC : YL_SRC_CSS;
+    } else {
+        result.value = laid_out_h + c->border_top + c->border_bottom; /* auto (incl indefinite %) */
+        result.source = is_image ? YL_SRC_IMG_INTRINSIC : YL_SRC_CONTENT;
+    }
+    return result;
+}
+
 /* Grid default `align-items: stretch`: block items without an explicit
  * height fill their row (the tallest cell sets the row height). Text and
  * replaced items keep their content height, matching Chrome. */
@@ -2704,7 +2896,13 @@ static void grid_stretch_row_members(struct yetty_ylexbor *r, const uint32_t *me
 {
     for (int i = 0; i < member_count; i++) {
         struct yetty_ylexbor_box *member = &r->boxes.data[members[i]];
-        if (member->kind == YL_BOX_BLOCK && member->css_height <= 0.0f && member->h < row_height) {
+        /* A DEFINITE height pins the item (no stretch): an explicit height
+         * (incl. 0) or an intrinsic placeholder. Only a genuinely auto height
+         * (or an indefinite percentage, which grid treats as auto) stretches to
+         * the row track. Mirrors the flex "pin definite, stretch only auto". */
+        bool item_pinned =
+            (member->css_height_set && member->css_height >= 0.0f) || member->css_height > 0.0f;
+        if (member->kind == YL_BOX_BLOCK && !item_pinned && member->h < row_height) {
             member->h = row_height;
             member->height_source = YL_SRC_GRID_STRETCH;
         }
@@ -2836,8 +3034,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
     float pad_right = self->padding_right;
     float pad_top = self->padding_top;
     float pad_bottom = self->padding_bottom;
-    float content_origin_x = origin_x + pad_left;
-    float content_origin_y = origin_y + pad_top;
+    float content_origin_x = origin_x + self->border_left + pad_left;
+    float content_origin_y = origin_y + self->border_top + pad_top;
     float content_width = content_w - pad_left - pad_right;
     if (content_width < 0.0f) {
         content_width = 0.0f;
@@ -2899,21 +3097,6 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
             if (item->col >= 0 || item->row >= 0) {
                 any_explicit = true;
             }
-        }
-        /* CSS `order` participates in grid auto-placement the same way it
-         * does in flex: items flow in order-modified document order (stable
-         * insertion sort — equal orders keep document order). github's
-         * Primer section templates swap their two 6-span columns with
-         * `order:1` / `order:2`, not markup order. */
-        for (uint32_t i = 1; i < item_count; i++) {
-            struct yl_grid_item moved = items[i];
-            int32_t moved_order = r->boxes.data[moved.box].flex_order;
-            uint32_t j = i;
-            while (j > 0 && r->boxes.data[items[j - 1].box].flex_order > moved_order) {
-                items[j] = items[j - 1];
-                j--;
-            }
-            items[j] = moved;
         }
         struct yl_grid_occupancy occupancy = {0};
         /* Pass 1: fully-explicit items claim their cells. */
@@ -3021,8 +3204,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         } else if (self->grid_tracks[c].is_auto) {
             fixed_sum += auto_w[c];
         } else if (self->grid_tracks[c].is_pct) {
-            float track_w =
-                self->grid_tracks[c].value * 0.01f * content_width + self->grid_tracks[c].offset;
+            float track_w = self->grid_tracks[c].value * 0.01f * content_width +
+                            self->grid_tracks[c].offset;
             fixed_sum += track_w > 0.0f ? track_w : 0.0f;
         } else {
             fixed_sum += self->grid_tracks[c].value;
@@ -3043,8 +3226,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         } else if (self->grid_tracks[c].is_auto) {
             col_w[c] = auto_w[c];
         } else if (self->grid_tracks[c].is_pct) {
-            col_w[c] =
-                self->grid_tracks[c].value * 0.01f * content_width + self->grid_tracks[c].offset;
+            col_w[c] = self->grid_tracks[c].value * 0.01f * content_width +
+                       self->grid_tracks[c].offset;
             if (col_w[c] < 0.0f) {
                 col_w[c] = 0.0f;
             }
@@ -3080,12 +3263,7 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                 ch->float_side != 0) {
                 continue;
             }
-            /* A content-sized (auto / max-content) track IS its item's own
-             * measure — a narrow auto track just means a narrow item, never
-             * "content misplaced into a sidebar track", so the guard only
-             * probes fixed/fr tracks (the Wikipedia named-shell shape). */
-            int narrow = !self->grid_tracks[probe_col].is_auto &&
-                         (col_w[probe_col] < 0.45f * max_track && col_w[probe_col] < 400.0f);
+            int narrow = (col_w[probe_col] < 0.45f * max_track && col_w[probe_col] < 400.0f);
             if (narrow) {
                 /* Count this child's descendants (capped). A page's content
 				 * column has a large subtree; a card's thumbnail in a narrow
@@ -3156,11 +3334,10 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                 struct float_result gres = layout_block(r, cidx, cell_x, row_top, cell_w);
                 YETTY_RETURN_IF_ERR(float, gres, "layout_grid(named): child block");
                 c = &r->boxes.data[cidx];
-                child_h = (c->css_height > 0.0f)
-                              ? border_box_height_from_specified(c, c->css_height)
-                              : gres.value;
+                struct grid_item_height named_block_h = grid_item_used_height(c, gres.value);
+                child_h = named_block_h.value;
                 c->h = child_h;
-                c->height_source = (c->css_height > 0.0f) ? YL_SRC_CSS : YL_SRC_CONTENT;
+                c->height_source = named_block_h.source;
             } else if (c->kind == YL_BOX_INLINE_TEXT) {
                 struct float_result gres = wrap_inline_box(r, cidx, cell_x, row_top, cell_w, 0);
                 YETTY_RETURN_IF_ERR(float, gres, "layout_grid(named): child text");
@@ -3168,8 +3345,10 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                 c->x = cell_x;
                 c->y = row_top;
                 c->w = cell_w;
-                child_h = gres.value;
+                struct grid_item_height named_text_h = grid_item_used_height(c, gres.value);
+                child_h = named_text_h.value;
                 c->h = child_h;
+                c->height_source = named_text_h.source;
             } else if (c->kind == YL_BOX_INLINE_IMAGE) {
                 float img_w = c->w > 0.0f ? c->w : 100.0f;
                 float img_h = c->h > 0.0f ? c->h : 100.0f;
@@ -3180,16 +3359,18 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                 c->x = cell_x;
                 c->y = row_top;
                 c->w = img_w;
-                c->h = img_h;
-                child_h = img_h;
+                struct grid_item_height named_img_h = grid_item_used_height(c, img_h);
+                c->h = named_img_h.value;
+                c->height_source = named_img_h.source;
+                child_h = named_img_h.value;
             }
             if (child_h > band_h) {
                 band_h = child_h;
             }
             apply_transform(r, cidx);
         }
-        float named_h =
-            (band_h > 0.0f ? (row_top + band_h) : content_origin_y) - origin_y + pad_bottom;
+        float named_h = (band_h > 0.0f ? (row_top + band_h) : content_origin_y) - origin_y -
+                        r->boxes.data[idx].border_top + pad_bottom;
         self = &r->boxes.data[idx];
         struct yetty_ycore_void_result abs_res =
             flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, named_h);
@@ -3277,11 +3458,10 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                     return YETTY_ERR(float, "layout_grid: child block", block_res);
                 }
                 c = &r->boxes.data[cidx];
-                child_h = (c->css_height > 0.0f)
-                              ? border_box_height_from_specified(c, c->css_height)
-                              : block_res.value;
+                struct grid_item_height auto_block_h = grid_item_used_height(c, block_res.value);
+                child_h = auto_block_h.value;
                 c->h = child_h;
-                c->height_source = (c->css_height > 0.0f) ? YL_SRC_CSS : YL_SRC_CONTENT;
+                c->height_source = auto_block_h.source;
             } else if (c->kind == YL_BOX_INLINE_TEXT) {
                 struct float_result wrap_res = wrap_inline_box(r, cidx, cell_x, row_y, cell_w, 0);
                 if (YETTY_IS_ERR(wrap_res)) {
@@ -3292,8 +3472,10 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                 c->x = cell_x;
                 c->y = row_y;
                 c->w = cell_w;
-                child_h = wrap_res.value;
+                struct grid_item_height auto_text_h = grid_item_used_height(c, wrap_res.value);
+                child_h = auto_text_h.value;
                 c->h = child_h;
+                c->height_source = auto_text_h.source;
             } else if (c->kind == YL_BOX_INLINE_IMAGE) {
                 float img_w = c->w > 0.0f ? c->w : 100.0f;
                 float img_h = c->h > 0.0f ? c->h : 100.0f;
@@ -3304,10 +3486,11 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                 c->x = cell_x;
                 c->y = row_y;
                 c->w = img_w;
-                c->h = img_h;
                 c->width_source = YL_SRC_IMG_INTRINSIC;
-                c->height_source = YL_SRC_IMG_INTRINSIC;
-                child_h = img_h;
+                struct grid_item_height auto_img_h = grid_item_used_height(c, img_h);
+                c->h = auto_img_h.value;
+                c->height_source = auto_img_h.source;
+                child_h = auto_img_h.value;
             }
             item->bottom = row_y + child_h;
             if (item->row_span == 1) {
@@ -3338,8 +3521,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
     }
     free(items);
 
-    float block_height =
-        (item_count > 0 ? last_row_bottom : content_origin_y) - origin_y + pad_bottom;
+    float block_height = (item_count > 0 ? last_row_bottom : content_origin_y) - origin_y -
+                         r->boxes.data[idx].border_top + pad_bottom;
     struct yetty_ycore_void_result abs_res =
         flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, block_height);
     YETTY_RETURN_IF_ERR(float, abs_res, "layout_grid: place out-of-flow");
@@ -3404,8 +3587,12 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
     float pad_right = self->padding_right;
     float pad_top = self->padding_top;
     float pad_bottom = self->padding_bottom;
-    float content_origin_x = origin_x + pad_left;
-    float content_origin_y = origin_y + pad_top;
+    /* Content placement insets by the box's OWN border AND padding on both axes:
+     * origin_{x,y} is the border-box outer origin, so children start at
+     * origin + border + padding. The returned height (below) subtracts border_top
+     * back out so it stays a padding box — placement moves, used size does not. */
+    float content_origin_x = origin_x + self->border_left + pad_left;
+    float content_origin_y = origin_y + self->border_top + pad_top;
     float content_width = content_w - pad_left - pad_right;
     if (content_width < 0) {
         content_width = 0;
@@ -3591,10 +3778,18 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
                 c->w = fw;
                 struct float_result float_res = layout_block(r, cidx, fx, fy, fw);
                 YETTY_RETURN_IF_ERR(float, float_res, "layout_block: float child");
-                float fh = float_res.value;
                 c = &r->boxes.data[cidx];
-                if (c->css_height > 0) {
-                    fh = border_box_height_from_specified(c, c->css_height);
+                /* Float used height mirrors the in-flow block path: explicit
+                 * height (incl. 0) obeys box-sizing; auto = padding-box return
+                 * plus own border. fl.left_bottom/right_bottom below then clear
+                 * against the correct border-box bottom. */
+                float fh;
+                if (c->css_height_set && c->css_height >= 0.0f) {
+                    fh = used_border_box_height_from_spec(c, c->css_height);
+                } else if (c->css_height > 0.0f) {
+                    fh = c->css_height; /* intrinsic placeholder — outer already */
+                } else {
+                    fh = float_res.value + c->border_top + c->border_bottom;
                 }
                 c->h = fh;
                 if (c->float_side == 1) {
@@ -3750,16 +3945,25 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
             struct float_result child_res =
                 layout_block(r, cidx, place_x, place_y, child_content_w);
             YETTY_RETURN_IF_ERR(float, child_res, "layout_block: child block");
-            float child_h = child_res.value;
             /* Re-fetch — vector may have relocated. */
             c = &r->boxes.data[cidx];
+            /* Auto height forms the used border box from the padding-box return
+             * (content + padding, no border) plus the child's own border — the
+             * parent reserves a box's border here, mirroring the width axis.
+             * Explicit and percentage heights overwrite this below. */
+            float child_h = child_res.value + c->border_top + c->border_bottom;
             /* `height: <px>` from CSS pins; `height: N%` resolves
 			 * against the parent's content-area height when known
 			 * (we don't have one for a streaming page, so fall
 			 * back to content height — same as auto). Otherwise
 			 * content height wins. */
-            if (c->css_height > 0.0f) {
-                child_h = border_box_height_from_specified(c, c->css_height);
+            if (c->css_height_set && c->css_height >= 0.0f) {
+                child_h = used_border_box_height_from_spec(c, c->css_height);
+            } else if (c->css_height > 0.0f) {
+                /* Intrinsic/replaced placeholder height (e.g. a form control
+                 * with no author height, box.c) — already an outer size; keep
+                 * it as-is rather than reinterpreting it through box-sizing. */
+                child_h = c->css_height;
             } else if (c->css_height < 0.0f) {
                 /* `height: N%` — resolve against the containing block's
 				 * content-area height, but only when this parent block has a
@@ -3767,17 +3971,20 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
                 self = &r->boxes.data[idx];
                 float parent_content_h = 0.0f;
                 if (self->css_height > 0.0f) {
-                    parent_content_h = content_height_from_specified(self);
+                    parent_content_h = self->border_box ? (self->css_height - self->padding_top -
+                                                           self->padding_bottom - self->border_top -
+                                                           self->border_bottom)
+                                                        : self->css_height;
+                }
+                if (parent_content_h > 0.0f) {
+                    float resolved_height = parent_content_h * (-c->css_height);
+                    child_h = used_border_box_height_from_spec(c, resolved_height);
                 }
                 c = &r->boxes.data[cidx];
-                if (parent_content_h > 0.0f) {
-                    child_h =
-                        border_box_height_from_specified(c, parent_content_h * (-c->css_height));
-                }
             }
             c->h = child_h;
             c->height_source =
-                (c->css_height != 0.0f && child_h != child_res.value) ? YL_SRC_CSS : YL_SRC_CONTENT;
+                (c->css_height_set || c->css_height != 0.0f) ? YL_SRC_CSS : YL_SRC_CONTENT;
             cursor_y += child_h;
             prev_margin_bottom = c->margin_bottom;
             has_prev = 1;
@@ -3851,8 +4058,10 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
     }
 
     /* Final in-flow height of this block (padding-box) — the containing
-	 * block height for any absolute children placed below. */
-    float block_height = (cursor_y - origin_y) + pad_bottom;
+	 * block height for any absolute children placed below. cursor_y now runs
+	 * from origin + border_top + pad_top, so subtract this box's own border_top
+	 * to keep the return a padding box (content + padding, no border). */
+    float block_height = (cursor_y - origin_y - r->boxes.data[idx].border_top) + pad_bottom;
 
     /* Out-of-flow pass. CSS: an ABSOLUTE box resolves against its nearest
 	 * POSITIONED ancestor, not its parent. An unpositioned block therefore
@@ -3912,23 +4121,13 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
             cb_x = origin_x + self->border_left;
             cb_y = origin_y + self->border_top;
             cb_w = content_w;
-            cb_h = block_height - self->border_top - self->border_bottom;
-            /* An explicit height defines the containing block even when no
-			 * in-flow child contributed height — e.g. a sized
-			 * position:relative box holding only an absolutely-positioned
-			 * overlay, whose bottom/right insets resolve against it. */
-            if (self->css_height > 0.0f) {
-                float pad_box_h =
-                    self->border_box
-                        ? (self->css_height - self->border_top - self->border_bottom)
-                        : (self->css_height + self->padding_top + self->padding_bottom);
-                if (pad_box_h > cb_h) {
-                    cb_h = pad_box_h;
-                }
-            }
-            if (cb_h < 0.0f) {
-                cb_h = 0.0f;
-            }
+            /* block_height is already a padding-box height; the resolver picks a
+			 * DEFINITE author/engine height exactly (a sized block — e.g. a
+			 * position:relative box holding only an absolute overlay — is
+			 * precisely its used padding box, and height:0 yields zero so
+			 * content does not enlarge it) or the natural padding box when
+			 * auto. */
+            cb_h = abs_cb_padding_height(self, block_height);
         }
         struct float_result placement_res =
             layout_absolute_child(r, child_idx, cb_x, cb_y, cb_w, cb_h);
@@ -3941,9 +4140,9 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
 
     /* Total consumed height includes our own padding-top + content +
 	 * padding-bottom. The caller stored origin_y as our top, so
-	 * (cursor_y - origin_y) already counts pad_top + content; just
-	 * add pad_bottom. */
-    float total_height = (cursor_y - origin_y) + pad_bottom;
+	 * (cursor_y - origin_y) now counts border_top + pad_top + content, so
+	 * subtract border_top and add pad_bottom to return the padding box. */
+    float total_height = (cursor_y - origin_y - r->boxes.data[idx].border_top) + pad_bottom;
 
     /* Aspect-ratio-box idiom: an explicit `height:0` with a padding-bottom
 	 * (`height:0;padding-bottom:56.25%`) is a fixed-ratio frame whose height is

@@ -1,0 +1,48 @@
+<!doctype html><meta charset=utf-8>
+<title>Viewport coherence: window.innerWidth/innerHeight, documentElement.clientWidth/clientHeight,
+and matchMedia() all derive from the one engine viewport (r->viewport_w/h) rather than a hardcoded
+constant. documentElement reports the viewport as its client size (CSSOM standards-mode root special
+case) while body keeps ordinary content-box metrics; media queries evaluate against the same
+viewport. The box only grows when every coherence assertion holds.</title>
+<style>body{margin:0}</style>
+<div data-test="viewport-coherence" data-expect="0,0,800,40" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var ok = true;
+var de = document.documentElement, b = document.body;
+var iw = window.innerWidth, ih = window.innerHeight;
+
+/* --- window viewport reflects the engine viewport (harness runs at -w 800) --- */
+ok = check(iw === 800, "innerWidth === 800 (engine viewport), got " + iw) && ok;
+ok = check(window.outerWidth === iw, "outerWidth tracks innerWidth, got " + window.outerWidth) && ok;
+ok = check(screen.width === iw, "screen.width tracks innerWidth, got " + screen.width) && ok;
+
+/* --- documentElement client size IS the viewport (root CSSOM special case) --- */
+ok = check(de.clientWidth === iw, "documentElement.clientWidth === innerWidth, got " + de.clientWidth) && ok;
+ok = check(de.clientHeight === ih, "documentElement.clientHeight === innerHeight, got " + de.clientHeight + "/" + ih) && ok;
+
+/* --- body keeps ORDINARY box metrics: same width, but content-driven height ---
+ * Create tall content in JS (mutation dirties layout so the metric read forces a
+ * synchronous flush) and confirm body's client height follows content, not the
+ * viewport — proving body is not special-cased like documentElement. */
+var tall = document.createElement('div');
+tall.style.height = '3000px';
+document.body.appendChild(tall);
+ok = check(b.clientWidth === de.clientWidth, "body.clientWidth === documentElement.clientWidth, got " + b.clientWidth) && ok;
+ok = check(b.clientHeight > de.clientHeight, "body.clientHeight (content) > documentElement.clientHeight (viewport), got " + b.clientHeight + " vs " + de.clientHeight) && ok;
+
+/* --- media queries evaluate against the same viewport width --- */
+ok = check(window.matchMedia('(min-width: ' + (iw - 1) + 'px)').matches === true, "mq(min " + (iw - 1) + "px) matches") && ok;
+ok = check(window.matchMedia('(min-width: ' + iw + 'px)').matches === true, "mq(min " + iw + "px) matches (inclusive)") && ok;
+ok = check(window.matchMedia('(min-width: ' + (iw + 1) + 'px)').matches === false, "mq(min " + (iw + 1) + "px) does NOT match") && ok;
+ok = check(window.matchMedia('(max-width: ' + iw + 'px)').matches === true, "mq(max " + iw + "px) matches") && ok;
+ok = check(window.matchMedia('(max-width: ' + (iw - 1) + 'px)').matches === false, "mq(max " + (iw - 1) + "px) does NOT match") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="viewport-coherence"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

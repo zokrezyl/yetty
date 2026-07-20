@@ -228,6 +228,22 @@ char *yetty_ylexbor_ancestor_attr_at(struct yetty_ylexbor *r, float x, float y, 
  * yetty_ylexbor_relayout. */
 int yetty_ylexbor_dom_dirty(const struct yetty_ylexbor *r);
 
+/* A GPU repaint is owed. Set on every DOM/style mutation and, unlike dom_dirty,
+ * NOT cleared by a geometry getter's forced layout flush — so the render loop
+ * still repaints after JS that mutates then measures in one turn (e.g. an
+ * overlay positioning itself then reading getBoundingClientRect). The host
+ * consults this each tick and calls yetty_ylexbor_mark_painted() once it ships
+ * the frame. */
+int yetty_ylexbor_needs_paint(const struct yetty_ylexbor *r);
+void yetty_ylexbor_mark_painted(struct yetty_ylexbor *r);
+
+/* Returns any JS-initiated navigation target (location.assign/replace/reload or
+ * `location.href = …`), transferring ownership; NULL when none is pending. The
+ * host polls this each tick and drives a real navigate() with the result, then
+ * frees it. This is what lets e.g. YouTube's consent flow reload into the site
+ * after saving the choice. */
+char *yetty_ylexbor_take_pending_navigation(struct yetty_ylexbor *r);
+
 /* Re-run box-build + layout. Cheap-ish (~ms for small docs). Called by
  * the host after a JS turn that mutated the DOM, or after a viewport
  * resize. Render() reads the same boxes. */
@@ -421,13 +437,6 @@ double yetty_ylexbor_prof_now_ms(void);
  * is internal and may change). `tag_out` is filled with the lowercased
  * element local name (e.g. "div", "p"); set to "" for anonymous boxes.
  * ===========================================================================*/
-
-/* Serialize the CURRENT document (after parsing and any JS mutations) as
- * HTML into a malloc'd NUL-terminated string — the engine-side analogue of
- * Chrome's --dump-dom, for diffing what scripts did to the tree. Caller
- * frees the value. */
-struct yetty_ycore_char_ptr_result yetty_ylexbor_dump_dom(const struct yetty_ylexbor *r);
-
 int yetty_ylexbor_test_box_count(const struct yetty_ylexbor *r);
 int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x, float *y,
                               float *w, float *h, char *tag_out, int tag_cap);
@@ -447,15 +456,6 @@ int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x
 int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int *kind_out,
                                    int *font_weight_out, int *italic_out, int *underline_out,
                                    char *text_out, int text_cap);
-
-/* Test-only: the box's effective paint state — folded opacity [0,1] and
- * the visibility:hidden flag. Any out-pointer may be NULL. */
-int yetty_ylexbor_test_box_paint_at(const struct yetty_ylexbor *r, int index, float *opacity_out,
-                                    int *vis_hidden_out);
-
-/* Test-only: the box's resolved foreground (text/currentColor) color. */
-int yetty_ylexbor_test_box_fg_at(const struct yetty_ylexbor *r, int index, uint8_t *red_out,
-                                 uint8_t *green_out, uint8_t *blue_out, uint8_t *alpha_out);
 
 /* Test-only: fetch the box's `data-test` attribute (used by the Chrome
  * geometry oracle to key boxes by a stable name independent of DOM order).
@@ -495,6 +495,17 @@ int yetty_ylexbor_test_box_attr_at(const struct yetty_ylexbor *r, int index, con
  * getBoundingClientRect by identical DOM path. */
 int yetty_ylexbor_test_box_path_at(const struct yetty_ylexbor *r, int index, char *out_buf,
                                    int cap);
+
+/* Serialize the current document's DOM tree to HTML, matching Chrome's
+ * headless `--dump-dom`: the doctype (if present) as `<!DOCTYPE <name>>` on
+ * its own line, then the post-script `<html>…</html>` serialization of the
+ * root element. A doctype-less (quirks) document emits no prefix line.
+ * Returns a heap-allocated, NUL-terminated buffer the caller must free(), or
+ * NULL when there is no document element or on allocation failure. When
+ * out_len is non-NULL it receives the byte length (excluding the terminating
+ * NUL). Backs the `--dump-dom` CLI mode and DOM-parity tooling that diffs
+ * ybrowser's DOM against Chrome's. */
+char *yetty_ylexbor_serialize_dom(const struct yetty_ylexbor *engine, size_t *out_len);
 
 #ifdef __cplusplus
 }

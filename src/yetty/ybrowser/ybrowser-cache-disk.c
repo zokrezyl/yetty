@@ -10,11 +10,6 @@
  * absolute expiry, so a cold start can serve it fresh or turn it into a
  * conditional refetch exactly like a warm one.
  *
- * Besides HTTP responses this directory also hosts the QuickJS bytecode
- * compile cache: content-addressed entries stored under a private `kind`
- * (YETTY_YBROWSER_DISK_CACHE_KIND_JS_BYTECODE, written and recalled by
- * ybrowser-js.c) that share the budget and eviction below.
- *
  * On-disk format: one file per entry under
  * $XDG_CACHE_HOME/yetty/ybrowser-cache (else ~/.cache/yetty/...), named
  * by an FNV-1a hash of (kind, url). A line-based text header carries the

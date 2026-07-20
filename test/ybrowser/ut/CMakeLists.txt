@@ -33,6 +33,31 @@ yetty_add_c_test(
     LABELS  contract browser
     TIMEOUT 30)
 
+# Viewport coherence (dynamic): window.innerWidth / matchMedia / documentElement
+# client metrics track the engine viewport LIVE across set_viewport(), and a
+# retained MediaQueryList re-evaluates its `matches` getter. Offline; self-skips
+# when the build carries no JS engine.
+yetty_add_c_test(
+    NAME    ybrowser_viewport
+    SOURCES ybrowser-viewport-test.c
+    LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    SHIMS   trace workpool
+    LABELS  contract browser
+    TIMEOUT 30)
+
+# Size-provenance (height_source / hs= column): the shared used-height helpers at
+# the grid/flex/block call sites must label each box's used-size origin
+# consistently (explicit -> css, auto -> content, image -> img, unresolved grid %
+# -> content), so provenance can't silently drift while geometry stays green.
+# Labelled `golden` so it runs in the geometry regression sweep.
+yetty_add_c_test(
+    NAME    ybrowser_provenance
+    SOURCES ybrowser-provenance-test.c
+    LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    SHIMS   trace workpool
+    LABELS  golden browser
+    TIMEOUT 30)
+
 # Storage isolation (#444): localStorage / sessionStorage / document.cookie
 # are engine-owned — two live engines share none of them. Offline; self-skips
 # when the build carries no JS engine.

@@ -20,11 +20,11 @@ these tests assert on box GEOMETRY. Two test shapes, both standard-WPT-shaped:
      reference must produce the SAME geometry for every shared data-test name.
      Best for "feature X lays out identically to a simpler construction Y".
 
-Tests live under test/ybrowser/wpt/<NN-category>/<name>.html (refs: <name>-ref.html).
+Tests live under test/wpt/<NN-category>/<name>.html (refs: <name>-ref.html).
 The leading NN orders categories basic -> advanced. Run:
 
-    test/ybrowser/wpt/run.py                 # all
-    test/ybrowser/wpt/run.py 01 06           # only categories whose path contains 01/06
+    test/wpt/run.py                 # all
+    test/wpt/run.py 01 06           # only categories whose path contains 01/06
 """
 import glob
 import os

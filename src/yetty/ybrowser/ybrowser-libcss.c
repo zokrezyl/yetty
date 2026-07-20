@@ -148,6 +148,7 @@ static css_error cb_node_name(void *pw, void *node, css_qname *qname)
 
 static css_error cb_node_classes(void *pw, void *node, lwc_string ***classes, uint32_t *n_classes)
 {
+    (void)pw;
     *classes = NULL;
     *n_classes = 0;
     size_t alen = 0;
@@ -156,11 +157,7 @@ static css_error cb_node_classes(void *pw, void *node, lwc_string ***classes, ui
     if (!attr || alen == 0) {
         return CSS_OK;
     }
-    /* Split on ASCII whitespace, intern each token. libcss unrefs the
-     * strings but never frees the ARRAY, and style-sharing can request
-     * classes for several nodes within one select — so each call gets its
-     * own array, and the batch is freed by yetty_ybrowser_libcss_select
-     * after css_select_style returns (see pending_class_arrays). */
+    /* Split on ASCII whitespace, intern each token. */
     lwc_string **arr = NULL;
     uint32_t count = 0, cap = 0;
     size_t i = 0;
@@ -199,23 +196,6 @@ static css_error cb_node_classes(void *pw, void *node, lwc_string ***classes, ui
             return CSS_NOMEM;
         }
         count++;
-    }
-    if (arr != NULL) {
-        /* Record for the post-select batch free. On record failure keep
-         * the strings valid for libcss and accept the one-array leak. */
-        struct yetty_ylexbor *r = pw;
-        struct yetty_ybrowser_libcss *lc = r->libcss;
-        if (lc->pending_class_array_count == lc->pending_class_array_cap) {
-            uint32_t ncap = lc->pending_class_array_cap ? lc->pending_class_array_cap * 2 : 8;
-            lwc_string ***grown = realloc(lc->pending_class_arrays, ncap * sizeof(*grown));
-            if (grown) {
-                lc->pending_class_arrays = grown;
-                lc->pending_class_array_cap = ncap;
-            }
-        }
-        if (lc->pending_class_array_count < lc->pending_class_array_cap) {
-            lc->pending_class_arrays[lc->pending_class_array_count++] = arr;
-        }
     }
     *classes = arr;
     *n_classes = count;
@@ -676,85 +656,19 @@ static css_error cb_ua_default_for_property(void *pw, uint32_t property, css_hin
     }
 }
 
-/* Find the slot for `node` (or the empty slot where it would go). Open
- * addressing, linear probe; cap is always a power of two. */
-static struct yetty_ybrowser_libcss_node_slot *node_data_slot_find(struct yetty_ybrowser_libcss *lc,
-                                                                   void *node)
-{
-    size_t mask = lc->node_data_slot_cap - 1;
-    size_t index = ((uintptr_t)node >> 4) & mask;
-    for (;;) {
-        struct yetty_ybrowser_libcss_node_slot *slot = &lc->node_data_slots[index];
-        if (slot->node == node || slot->node == NULL) {
-            return slot;
-        }
-        index = (index + 1) & mask;
-    }
-}
-
-static int node_data_store_grow(struct yetty_ybrowser_libcss *lc)
-{
-    size_t new_cap = lc->node_data_slot_cap ? lc->node_data_slot_cap * 2 : 256;
-    struct yetty_ybrowser_libcss_node_slot *old_slots = lc->node_data_slots;
-    size_t old_cap = lc->node_data_slot_cap;
-    struct yetty_ybrowser_libcss_node_slot *new_slots = calloc(new_cap, sizeof(*new_slots));
-    if (!new_slots) {
-        return -1;
-    }
-    lc->node_data_slots = new_slots;
-    lc->node_data_slot_cap = new_cap;
-    for (size_t i = 0; i < old_cap; i++) {
-        if (old_slots[i].node) {
-            *node_data_slot_find(lc, old_slots[i].node) = old_slots[i];
-        }
-    }
-    free(old_slots);
-    return 0;
-}
-
 static css_error cb_set_libcss_node_data(void *pw, void *node, void *data)
 {
-    /* Keep-alive store, one live entry per element. libcss keeps USING
-     * the handed-over node_data after this returns (the parent-bloom path
-     * reads node_data->bloom for the rest of the select), so destroying
-     * here is a use-after-free — and the old "(void)data" discard leaked
-     * node_data + a saturated parent bloom + one computed-style ref per
-     * pseudo element, for every element of every select. Replacing an
-     * element's previous entry destroys it via the official handler; only
-     * the current select's node_data pointers are ever live-referenced,
-     * and those are never the replaced ones. */
-    struct yetty_ylexbor *r = pw;
-    struct yetty_ybrowser_libcss *lc = r ? r->libcss : NULL;
-    if (!lc || !data) {
-        return CSS_OK;
-    }
-    if (lc->node_data_slot_cap == 0 ||
-        lc->node_data_slot_count * 10 >= lc->node_data_slot_cap * 7) {
-        if (node_data_store_grow(lc) != 0) {
-            /* Can't record it — keep libcss's data alive (leak) rather
-             * than free something still in use. */
-            return CSS_OK;
-        }
-    }
-    struct yetty_ybrowser_libcss_node_slot *slot = node_data_slot_find(lc, node);
-    if (slot->node == NULL) {
-        slot->node = node;
-        lc->node_data_slot_count++;
-    } else if (slot->data && slot->data != data) {
-        (void)css_libcss_node_data_handler(&lc->handler, CSS_NODE_DELETED, pw, node, NULL,
-                                           slot->data);
-    }
-    slot->data = data;
+    (void)pw;
+    (void)node;
+    /* We don't cache. If libcss handed us non-null data anyway, free
+     * the memory it allocated to avoid a leak. The destructor would
+     * normally be invoked through css_libcss_node_data_handler. */
+    (void)data;
     return CSS_OK;
 }
 
 static css_error cb_get_libcss_node_data(void *pw, void *node, void **data)
 {
-    /* Deliberately NOT serving the store back to libcss: returning cached
-     * node_data enables the style-sharing fast path, which without
-     * DOM-mutation invalidation would apply stale sibling styles on
-     * JS-mutating pages. The store exists to own the memory, not to
-     * cache. */
     (void)pw;
     (void)node;
     *data = NULL;
@@ -902,14 +816,11 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
 #endif
         /* Embedded content we don't render — hide outright so the walker
          * doesn't surface their text content (MathML etc.) as garbage at
-         * the top of the page. <svg>, <iframe> and <video> are NOT hidden:
-         * the box builder gives each a replaced box (subtree never walked)
-         * so the layout reserves the right space — the iframe box then
-         * renders its src document as a nested browsing context; the video
-         * box keeps hero/media frames from collapsing (playback is a
-         * separate concern). */
-        "math, audio, object, embed, canvas { display: none; }\n"
-        "video { display: inline; }\n"
+         * the top of the page. <svg> and <iframe> are NOT hidden: the box
+         * builder gives each a replaced box (subtree never walked) so the
+         * layout reserves the right space — the iframe box then renders its
+         * src document as a nested browsing context. */
+        "math, audio, video, object, embed, canvas { display: none; }\n"
         "span, a, strong, b, em, i, cite, code, small, sub, sup, mark, ins, del,"
         " s, u, kbd, samp, var, time, q, abbr, dfn { display: inline; }\n"
         "br { display: inline; }\n"
@@ -1015,16 +926,6 @@ void yetty_ybrowser_libcss_destroy(struct yetty_ylexbor *r)
         return;
     }
     struct yetty_ybrowser_libcss *lc = r->libcss;
-    /* Release every element's stored node_data (blooms + computed-style
-     * refs) through the official handler before the ctx goes away. */
-    for (size_t i = 0; i < lc->node_data_slot_cap; i++) {
-        if (lc->node_data_slots[i].node && lc->node_data_slots[i].data) {
-            (void)css_libcss_node_data_handler(&lc->handler, CSS_NODE_DELETED, r,
-                                               lc->node_data_slots[i].node, NULL,
-                                               lc->node_data_slots[i].data);
-        }
-    }
-    free(lc->node_data_slots);
     if (lc->select_ctx) {
         css_select_ctx_destroy(lc->select_ctx);
     }
@@ -1032,10 +933,6 @@ void yetty_ybrowser_libcss_destroy(struct yetty_ylexbor *r)
         css_stylesheet_destroy(lc->sheets[i]);
     }
     free(lc->sheets);
-    for (uint32_t i = 0; i < lc->pending_class_array_count; i++) {
-        free(lc->pending_class_arrays[i]);
-    }
-    free(lc->pending_class_arrays);
     free(lc);
     r->libcss = NULL;
 }
@@ -1311,12 +1208,6 @@ css_computed_style *yetty_ybrowser_libcss_select(struct yetty_ylexbor *r, lxb_do
     css_select_results *results = NULL;
     css_error e = css_select_style(lc->select_ctx, &el->node, &lc->unit_ctx, &lc->media,
                                    inline_sheet, &lc->handler, r, &results);
-    /* Free the class arrays cb_node_classes handed out during this select
-     * — libcss has unref'd the strings by now but never frees the arrays. */
-    for (uint32_t i = 0; i < lc->pending_class_array_count; i++) {
-        free(lc->pending_class_arrays[i]);
-    }
-    lc->pending_class_array_count = 0;
     if (inline_sheet) {
         css_stylesheet_destroy(inline_sheet);
     }
@@ -1380,10 +1271,9 @@ static float resolve_length_to_px(struct yetty_ylexbor *r, const css_computed_st
         return fixed_to_float(length) * font_size * 0.5f;
     }
     if (unit == CSS_UNIT_CH) {
-        /* Advance of the '0' glyph — 0.556em in the Helvetica/Arial metrics
-         * the proportional text measure uses (Chrome's default sans is the
-         * metric-compatible Liberation Sans). */
-        return fixed_to_float(length) * font_size * 0.556f;
+        /* Advance of the '0' glyph. We have no real metrics; approximate
+         * as half the font size (same shortcut as ex). */
+        return fixed_to_float(length) * font_size * 0.5f;
     }
     if (unit == CSS_UNIT_Q) {
         /* 1Q = 1/40 cm. */
@@ -1533,18 +1423,6 @@ int yetty_ybrowser_libcss_min_width(struct yetty_ylexbor *r, const css_computed_
     css_unit u = CSS_UNIT_PX;
     uint8_t k = css_computed_min_width(style, &l, &u);
     return len_or_pct_property(k, l, u, CSS_MIN_WIDTH_SET, r, style, font_size, pct_basis, out_px);
-}
-
-int yetty_ybrowser_libcss_max_height(struct yetty_ylexbor *r, const css_computed_style *style,
-                                     float font_size, float pct_basis, float *out_px)
-{
-    if (!style) {
-        return 0;
-    }
-    css_fixed l = 0;
-    css_unit u = CSS_UNIT_PX;
-    uint8_t k = css_computed_max_height(style, &l, &u);
-    return len_or_pct_property(k, l, u, CSS_MAX_HEIGHT_SET, r, style, font_size, pct_basis, out_px);
 }
 
 /* Margin / padding percentages resolve against the containing block's
@@ -1904,13 +1782,13 @@ int yetty_ybrowser_libcss_flex_direction(const css_computed_style *style)
     return css_computed_flex_direction(style);
 }
 
-int yetty_ybrowser_libcss_font_advance_class(const css_computed_style *style)
+int yetty_ybrowser_libcss_font_is_ahem(const css_computed_style *style)
 {
     if (!style) {
         return 0;
     }
     lwc_string **names = NULL;
-    uint8_t generic = css_computed_font_family(style, &names);
+    (void)css_computed_font_family(style, &names);
     if (names != NULL) {
         for (int i = 0; names[i] != NULL; i++) {
             const char *d = lwc_string_data(names[i]);
@@ -1918,24 +1796,7 @@ int yetty_ybrowser_libcss_font_advance_class(const css_computed_style *style)
             if (l == 4 && strncasecmp(d, "ahem", 4) == 0) {
                 return 1;
             }
-            /* Named monospace families: "Courier New", "Consolas", "Menlo",
-             * "Monaco", and anything carrying a "mono" token ("SF Mono",
-             * "Roboto Mono", "monospace" spelled as a name, …). */
-            for (size_t k = 0; k + 4 <= l; k++) {
-                if (strncasecmp(d + k, "mono", 4) == 0) {
-                    return 2;
-                }
-            }
-            if ((l >= 7 && strncasecmp(d, "courier", 7) == 0) ||
-                (l == 8 && strncasecmp(d, "consolas", 8) == 0) ||
-                (l == 5 && strncasecmp(d, "menlo", 5) == 0) ||
-                (l == 6 && strncasecmp(d, "monaco", 6) == 0)) {
-                return 2;
-            }
         }
-    }
-    if (generic == CSS_FONT_FAMILY_MONOSPACE) {
-        return 2;
     }
     return 0;
 }

@@ -82,6 +82,48 @@ struct listener {
     JSValue handler;
 };
 
+/* --- MutationObserver -----------------------------------------------------
+ * A real, spec-shaped MutationObserver. Frameworks depend on it for far more
+ * than change tracking: Polymer/lit use an observed text node as their
+ * microtask primitive (mutate its characterData → observer callback drains a
+ * task queue), and the custom-elements/ShadyDOM polyfills use childList+subtree
+ * to react to inserted nodes. A no-op observer silently strands every one of
+ * those flows — which is exactly what kept Polymer's data-binding flush from
+ * ever running. */
+enum {
+    MO_CHILD_LIST = 1 << 0,
+    MO_ATTRIBUTES = 1 << 1,
+    MO_CHARACTER_DATA = 1 << 2,
+    MO_SUBTREE = 1 << 3,
+    MO_ATTR_OLD_VALUE = 1 << 4,
+    MO_CHAR_OLD_VALUE = 1 << 5,
+};
+
+#define MO_MAX_OBSERVATIONS 16
+struct mutation_observation {
+    lxb_dom_node_t *target;
+    int flags;
+};
+
+struct mutation_observer {
+    JSValue self;     /* the MutationObserver instance (see `rooted`) */
+    JSValue callback; /* owned */
+    JSValue records;  /* owned JS array of pending MutationRecords, or
+	                   * JS_UNDEFINED when the queue is empty */
+    struct mutation_observation observations[MO_MAX_OBSERVATIONS];
+    int observation_count;
+    /* An observer with active observations must outlive every JS reference to
+	 * it — the spec keeps it reachable from each observed node's registered-
+	 * observer list. Frameworks rely on this: Polymer's microtask scheduler
+	 * does `new MutationObserver(cb).observe(node,…)` and keeps NO reference.
+	 * While `rooted`, we hold one extra ref on `self` to pin it alive; it is
+	 * released on disconnect (or teardown), after which the object is
+	 * collectable and its finalizer frees this struct. */
+    int rooted;
+};
+
+#define MAX_MUTATION_OBSERVERS 128
+
 /* Per-runtime state parked on the JSRuntime opaque so every callback can
  * reach it from `ctx`. One instance per engine — the wrap cache, listener
  * pool, and class IDs were process-wide once, which aliased wrappers and
@@ -98,6 +140,7 @@ struct js_dom_state {
     JSClassID class_document_id;
     JSClassID class_classlist_id;
     JSClassID class_style_id;
+    JSClassID class_mutation_observer_id;
 
     /* lxb pointer → wrapper JSValue; see the wrapping comment below. */
     struct wrap_cache_entry wrap_cache[WRAP_CACHE_BUCKETS];
@@ -110,6 +153,41 @@ struct js_dom_state {
     /* dispatchEvent re-entrancy guard — a handler that synchronously
 	 * re-dispatches its own event would recurse forever. */
     int dispatch_depth;
+
+    /* Live MutationObservers. Slots freed on finalize become NULL holes and
+	 * are reused; delivery skips NULLs. */
+    struct mutation_observer *mutation_observers[MAX_MUTATION_OBSERVERS];
+    int mutation_observer_count;
+    int mutation_delivery_scheduled; /* one delivery microtask in flight */
+
+    /* Set once the page defines a custom element. Gates the custom-element
+	 * reaction dispatch on DOM insertion so pages with no custom elements
+	 * pay nothing. */
+    int ce_active;
+    /* Re-entrancy depth of the reaction dispatch, so a connectedCallback that
+	 * inserts more nodes does not recurse without bound on a malformed tree. */
+    int ce_react_depth;
+
+    /* CharacterData.prototype — carries `data`/`length`/appendData/… Text,
+	 * Comment and ProcessingInstruction wrappers get this proto (chained above
+	 * the element proto) so those members exist on character-data nodes but NOT
+	 * on elements. `"data" in <element>` must be false: the Closure/resin DOM
+	 * sanitizer classifies `data` as a URL-typed property whenever a generic
+	 * element reports it, and would then reject object property bindings (e.g.
+	 * Polymer `data=[[obj]]`) as unsafe. Owned reference held for the runtime's
+	 * lifetime; JS_UNDEFINED until install. */
+    JSValue chardata_proto;
+
+    /* DocumentFragment.prototype — chained on Node.prototype (NOT the element
+	 * proto), so a fragment wrapper is `instanceof Node` and
+	 * `instanceof DocumentFragment` but NOT `instanceof Element`. The single
+	 * element-class wrapper otherwise makes every non-Document node an Element,
+	 * an impossible hybrid: frameworks branch on `x instanceof Element` (kevlar
+	 * does `F instanceof Element && …` while walking stamped template content)
+	 * and a fragment wrongly classified as an element shifts node-info indices.
+	 * apply_fragment_proto() re-parents fragment wrappers to this proto. Owned
+	 * reference held for the runtime's lifetime; JS_UNDEFINED until install. */
+    JSValue fragment_proto;
 };
 
 static struct js_dom_state *dom_state(JSContext *ctx)
@@ -140,42 +218,8 @@ struct yetty_ylexbor *yetty_ylexbor_js_engine_from_ctx(struct JSContext *ctx)
  * never received a stylesheet, so removing or re-appending it segfaulted.
  * Such elements take the steps-free removal; everything else keeps full
  * removing-steps semantics. */
-static void node_remove_safe(JSContext *ctx, lxb_dom_node_t *node)
+static void node_remove_safe(lxb_dom_node_t *node)
 {
-    /* Wipes of a document-level container are load-bearing events when
-	 * chasing "page went blank" bugs — trace them with the child tag and
-	 * the JS stack of whoever is doing the removing. */
-    if (node->parent && node->parent->type == LXB_DOM_NODE_TYPE_ELEMENT &&
-        (node->parent->local_name == LXB_TAG_HTML || node->parent->local_name == LXB_TAG_HEAD ||
-         node->parent->local_name == LXB_TAG_BODY)) {
-        ydebug("js dom-remove from <%s>: child tag=%u type=%d",
-               node->parent->local_name == LXB_TAG_HTML   ? "html"
-               : node->parent->local_name == LXB_TAG_HEAD ? "head"
-                                                          : "body",
-               (unsigned)node->local_name, (int)node->type);
-        /* JS stack of the remover. Building it costs a JS_Eval, so gate it
-		 * on its own trace point the way the ydebug macro gates output —
-		 * off by default, enabled together with the rest via
-		 * YTRACE_DEFAULT_ON. */
-        static bool wipe_stack_enabled = false;
-        static bool wipe_stack_registered = false;
-        if (!wipe_stack_registered) {
-            wipe_stack_enabled = ytrace_register(&wipe_stack_enabled, __FILE__, __LINE__, __func__,
-                                                 "debug", "js dom-remove stack");
-            wipe_stack_registered = true;
-        }
-        if (ctx != NULL && wipe_stack_enabled) {
-            JSValue probe = JS_Eval(ctx, "(new Error('dom-wipe')).stack",
-                                    strlen("(new Error('dom-wipe')).stack"), "<wipe-probe>",
-                                    JS_EVAL_TYPE_GLOBAL);
-            const char *stack = JS_ToCString(ctx, probe);
-            if (stack) {
-                ydebug("js dom-remove stack:\n%s", stack);
-                JS_FreeCString(ctx, stack);
-            }
-            JS_FreeValue(ctx, probe);
-        }
-    }
     if (node->type == LXB_DOM_NODE_TYPE_ELEMENT && node->local_name == LXB_TAG_STYLE &&
         lxb_html_interface_style(node)->stylesheet == NULL) {
         lxb_dom_node_remove_wo_events(node);
@@ -217,7 +261,39 @@ static void mark_dirty(JSContext *ctx)
     struct yetty_ylexbor *r = runtime_ylex(ctx);
     if (r) {
         r->dom_dirty = 1;
+        /* A repaint is owed too. Kept separate from dom_dirty because a geometry
+         * getter's layout flush clears dom_dirty (layout is current) but leaves
+         * the framebuffer stale — see needs_paint in ybrowser-internal.h. */
+        r->needs_paint = 1;
     }
+}
+
+/* MutationObserver notification — implemented below, forward-declared here so
+ * the mutation methods can report their changes. `old_value` is NULL when not
+ * captured (callers only bother when some observer might want it). */
+static void dom_mo_notify_attributes(JSContext *ctx, lxb_dom_element_t *el, const char *name,
+                                     size_t name_len, const char *old_value);
+static void dom_mo_notify_character_data(JSContext *ctx, lxb_dom_node_t *target,
+                                         const char *old_value);
+static void dom_mo_notify_child_list(JSContext *ctx, lxb_dom_node_t *parent,
+                                     lxb_dom_node_t *added, lxb_dom_node_t *removed,
+                                     lxb_dom_node_t *prev_sibling, lxb_dom_node_t *next_sibling);
+/* True when any live observer could care about a mutation of `type_flag` at
+ * `target` — lets a hot mutation path skip capturing an old value nobody wants. */
+static int dom_mo_any_interest(JSContext *ctx, lxb_dom_node_t *target, int type_flag);
+
+/* Return a heap copy of `el`'s current `name` attribute value, but only when
+ * some observer wants the pre-change value; NULL otherwise (caller frees). */
+static char *mo_capture_attr(JSContext *ctx, lxb_dom_element_t *el, const char *name,
+                             size_t name_len)
+{
+    if (!dom_mo_any_interest(ctx, lxb_dom_interface_node(el), MO_ATTRIBUTES)) {
+        return NULL;
+    }
+    size_t old_len = 0;
+    const lxb_char_t *old =
+        lxb_dom_element_get_attribute(el, (const lxb_char_t *)name, name_len, &old_len);
+    return old != NULL ? strndup((const char *)old, old_len) : NULL;
 }
 
 /* ===========================================================================
@@ -304,6 +380,42 @@ static void wrap_cache_clear(JSContext *ctx)
     }
 }
 
+/* Text, Comment and ProcessingInstruction wrappers get the CharacterData
+ * prototype (chained above the element proto), so `data`/`length`/appendData/…
+ * live only on character-data nodes and not on elements. See the
+ * chardata_proto field comment for why elements must not report `data`. */
+static void apply_chardata_proto(JSContext *ctx, JSValueConst v, const lxb_dom_node_t *n)
+{
+    if (n == NULL || (n->type != LXB_DOM_NODE_TYPE_TEXT &&
+                      n->type != LXB_DOM_NODE_TYPE_COMMENT &&
+                      n->type != LXB_DOM_NODE_TYPE_PROCESSING_INSTRUCTION)) {
+        return;
+    }
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL || JS_IsUndefined(state->chardata_proto)) {
+        return;
+    }
+    JS_SetPrototype(ctx, v, state->chardata_proto);
+}
+
+/* A DocumentFragment wrapper gets the DocumentFragment proto (chained on
+ * Node.prototype) instead of the element proto, so it reports the correct
+ * interface identity: `instanceof Node`/`instanceof DocumentFragment` true,
+ * `instanceof Element` false. The wrapper keeps its element-class opaque
+ * (the lexbor node pointer + finalizer) — only the prototype changes, exactly
+ * like apply_chardata_proto. See the fragment_proto field comment. */
+static void apply_fragment_proto(JSContext *ctx, JSValueConst v, const lxb_dom_node_t *n)
+{
+    if (n == NULL || n->type != LXB_DOM_NODE_TYPE_DOCUMENT_FRAGMENT) {
+        return;
+    }
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL || JS_IsUndefined(state->fragment_proto)) {
+        return;
+    }
+    JS_SetPrototype(ctx, v, state->fragment_proto);
+}
+
 static JSValue wrap_element(JSContext *ctx, lxb_dom_element_t *el)
 {
     if (el == NULL) {
@@ -315,6 +427,13 @@ static JSValue wrap_element(JSContext *ctx, lxb_dom_element_t *el)
     }
     JSValue v = JS_NewObjectClass(ctx, dom_state(ctx)->class_element_id);
     JS_SetOpaque(v, el);
+    /* Internal callers sometimes route a non-element node through this
+	 * element-typed helper (e.g. ce_react_dispatch casts a DocumentFragment,
+	 * MutationRecord helpers wrap generic targets). Correct interface identity
+	 * must not depend on which entry point touches the node first, so apply the
+	 * per-type proto overrides here too — same as wrap_node_any. */
+    apply_chardata_proto(ctx, v, (const lxb_dom_node_t *)el);
+    apply_fragment_proto(ctx, v, (const lxb_dom_node_t *)el);
     wrap_cache_insert(ctx, el, v);
     return v;
 }
@@ -347,6 +466,24 @@ static lxb_dom_element_t *unwrap_element(JSContext *ctx, JSValueConst this_val)
     /* Element methods are also called on Document via prototype chain
 	 * sometimes (querySelector on document). Allow both. */
     return NULL;
+}
+
+/* Like unwrap_element, but ONLY for element-attribute operations. The element
+ * JS class is shared by Text/Comment/Fragment nodes; lexbor's attribute
+ * accessors read the element-struct attribute fields (first_attr / attr_id /
+ * attr_class) which sit past the end of those smaller node structs, so reading
+ * them is out of bounds and intermittently segfaults on adjacent pool memory.
+ * Non-elements have no attributes: return NULL so the attribute method no-ops
+ * (returns null / false), matching the DOM and the hasAttributes/attributes
+ * guards. Do NOT use this for node-level or CharacterData methods that are valid
+ * on non-elements (they still use unwrap_element / unwrap_node). */
+static lxb_dom_element_t *unwrap_attr_element(JSContext *ctx, JSValueConst this_val)
+{
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    if (!el || lxb_dom_interface_node(el)->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+        return NULL;
+    }
+    return el;
 }
 
 static lxb_html_document_t *unwrap_document(JSContext *ctx, JSValueConst this_val)
@@ -574,7 +711,7 @@ static JSValue js_el_getAttribute(JSContext *ctx, JSValueConst this_val, int arg
     if (argc < 1) {
         return JS_NULL;
     }
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_NULL;
     }
@@ -613,7 +750,7 @@ static JSValue js_el_setAttribute(JSContext *ctx, JSValueConst this_val, int arg
     if (argc < 2) {
         return JS_UNDEFINED;
     }
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -624,9 +761,12 @@ static JSValue js_el_setAttribute(JSContext *ctx, JSValueConst this_val, int arg
     }
     const char *val = JS_ToCStringLen(ctx, &vlen, argv[1]);
     if (val) {
+        char *old_value = mo_capture_attr(ctx, el, name, nlen);
         lxb_dom_element_set_attribute(el, (const lxb_char_t *)name, nlen, (const lxb_char_t *)val,
                                       vlen);
         mark_dirty(ctx);
+        dom_mo_notify_attributes(ctx, el, name, nlen, old_value);
+        free(old_value);
         JS_FreeCString(ctx, val);
     }
     free(name);
@@ -639,7 +779,7 @@ static JSValue js_el_removeAttribute(JSContext *ctx, JSValueConst this_val, int 
     if (argc < 1) {
         return JS_UNDEFINED;
     }
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -650,14 +790,20 @@ static JSValue js_el_removeAttribute(JSContext *ctx, JSValueConst this_val, int 
         JS_FreeValue(ctx, JS_GetException(ctx));
         const char *raw = JS_ToCStringLen(ctx, &nlen, argv[0]);
         if (raw) {
+            char *old_value = mo_capture_attr(ctx, el, raw, nlen);
             lxb_dom_element_remove_attribute(el, (const lxb_char_t *)raw, nlen);
             mark_dirty(ctx);
+            dom_mo_notify_attributes(ctx, el, raw, nlen, old_value);
+            free(old_value);
             JS_FreeCString(ctx, raw);
         }
         return JS_UNDEFINED;
     }
+    char *old_value = mo_capture_attr(ctx, el, name, nlen);
     lxb_dom_element_remove_attribute(el, (const lxb_char_t *)name, nlen);
     mark_dirty(ctx);
+    dom_mo_notify_attributes(ctx, el, name, nlen, old_value);
+    free(old_value);
     free(name);
     return JS_UNDEFINED;
 }
@@ -668,7 +814,7 @@ static JSValue js_el_hasAttribute(JSContext *ctx, JSValueConst this_val, int arg
     if (argc < 1) {
         return JS_FALSE;
     }
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_FALSE;
     }
@@ -687,6 +833,158 @@ static JSValue js_el_hasAttribute(JSContext *ctx, JSValueConst this_val, int arg
     bool has = lxb_dom_element_has_attribute(el, (const lxb_char_t *)name, nlen);
     free(name);
     return JS_NewBool(ctx, has);
+}
+
+/* ===========================================================================
+ * Custom-element reactions.
+ *
+ * Web-component frameworks (Polymer, Lit, Stencil) require connectedCallback
+ * to run SYNCHRONOUSLY while a component stamps its template. Kevlar
+ * (YouTube's Polymer app) is the sharp case: ytd-page-manager registers a
+ * dependency-injection provider (PAGE_TOKEN) in its ready(), and ytd-app's
+ * data-binding observer resolves that provider during ytd-app's own ready().
+ * The page-manager is stamped as a child of ytd-app, so it must connect —
+ * synchronously — before the parent's observer runs, or the resolve throws.
+ * A deferred (microtask) connect reorders those steps and breaks the boot.
+ *
+ * So immediately after a node lands in the live document, hand the inserted
+ * subtree to the registry's __connectSubtree, which upgrades + fires
+ * connectedCallback on every defined custom element it contains, in tree
+ * order. This mirrors native custom-element reactions. Gated on ce_active
+ * (set when the page first defines a custom element) so ordinary pages pay
+ * nothing; errors are absorbed so a throwing callback cannot corrupt the DOM
+ * mutation in progress. */
+static int node_is_connected(lxb_dom_node_t *node)
+{
+    for (; node != NULL; node = node->parent) {
+        if (node->type == LXB_DOM_NODE_TYPE_DOCUMENT) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void ce_react_dispatch(JSContext *ctx, lxb_dom_node_t *node, const char *method)
+{
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL || !state->ce_active || node == NULL) {
+        return;
+    }
+    if (node->type != LXB_DOM_NODE_TYPE_ELEMENT &&
+        node->type != LXB_DOM_NODE_TYPE_DOCUMENT_FRAGMENT) {
+        return;
+    }
+    /* Bound the synchronous cascade (connect -> stamp -> insert -> connect)
+	 * against a pathologically deep tree. */
+    if (state->ce_react_depth > 256) {
+        return;
+    }
+    state->ce_react_depth++;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue registry = JS_GetPropertyStr(ctx, global, "customElements");
+    JSValue fn = JS_GetPropertyStr(ctx, registry, method);
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue wrapped = wrap_element(ctx, (lxb_dom_element_t *)node);
+        JSValue call_argv[1] = {wrapped};
+        JSValue result = JS_Call(ctx, fn, registry, 1, call_argv);
+        if (JS_IsException(result)) {
+            /* The connect walk (__connectSubtree) catches per-element reaction
+			 * exceptions in JS and logs them there, so this outer boundary
+			 * normally sees none. If one does surface here, __connectSubtree
+			 * itself failed (not a per-element callback) — flag it. */
+            JSValue ex = JS_GetException(ctx);
+            const char *message = JS_ToCString(ctx, ex);
+            ydebug("ce-react-exc %s depth=%d: %s", method, state->ce_react_depth,
+                   message ? message : "?");
+            if (message != NULL) {
+                JS_FreeCString(ctx, message);
+            }
+            JS_FreeValue(ctx, ex);
+        }
+        JS_FreeValue(ctx, result);
+        JS_FreeValue(ctx, wrapped);
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, registry);
+    JS_FreeValue(ctx, global);
+    state->ce_react_depth--;
+}
+
+/* Fire connect reactions for a node just inserted into the document tree. */
+static void ce_react_connect(JSContext *ctx, lxb_dom_node_t *inserted)
+{
+    if (inserted != NULL && node_is_connected(inserted)) {
+        ce_react_dispatch(ctx, inserted, "__connectSubtree");
+    }
+}
+
+/* Upgrade a freshly-created element in place (document.createElement of a
+ * defined custom tag). Unlike connect, the element is detached, so only the
+ * constructor + observed-attribute reactions run; connectedCallback waits for a
+ * later insertion. Spec "create an element" upgrades synchronously so the
+ * returned object already exposes its methods.
+ *
+ * Takes the ALREADY-WRAPPED element value (not the raw node): the constructor
+ * stamps a template that churns the wrapper cache, so we must upgrade the exact
+ * JS object the caller keeps, not one re-derived from the node afterwards. */
+static void ce_react_upgrade_value(JSContext *ctx, JSValueConst wrapped)
+{
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL || !state->ce_active || JS_IsUndefined(wrapped) || JS_IsNull(wrapped)) {
+        return;
+    }
+    if (state->ce_react_depth > 256) {
+        return;
+    }
+    state->ce_react_depth++;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue registry = JS_GetPropertyStr(ctx, global, "customElements");
+    JSValue fn = JS_GetPropertyStr(ctx, registry, "__upgradeOne");
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue call_argv[1] = {(JSValue)wrapped};
+        JSValue result = JS_Call(ctx, fn, registry, 1, call_argv);
+        /* Per-element reaction exceptions are caught inside __upgradeOne. */
+        JS_FreeValue(ctx, result);
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, registry);
+    JS_FreeValue(ctx, global);
+    state->ce_react_depth--;
+}
+
+/* Fire disconnect reactions for a node just removed from the document tree.
+ * The node is already detached, so connectedness is not re-checked; the
+ * registry only acts on elements it had marked connected. */
+static void ce_react_disconnect(JSContext *ctx, lxb_dom_node_t *removed)
+{
+    ce_react_dispatch(ctx, removed, "__disconnectSubtree");
+}
+
+/* Spec: inserting a DocumentFragment inserts its CHILDREN, in order, at the
+ * insertion point and empties the fragment — the fragment node itself is never
+ * inserted. Insert each child before `ref` (which must be a child of `parent`),
+ * or append when `ref` is NULL. Runs the same per-child bookkeeping (detach,
+ * style ingest, MutationObserver notify, custom-element connect) the single-node
+ * paths run. Frameworks build a subtree in a fragment and insert it wholesale
+ * (Polymer rewraps a <template>'s content into a fresh fragment and appends it);
+ * inserting the fragment node instead leaves a single nested fragment child and
+ * shifts every index a stamping walk depends on. */
+static void insert_fragment_children(JSContext *ctx, lxb_dom_node_t *parent,
+                                     lxb_dom_node_t *fragment, lxb_dom_node_t *ref)
+{
+    lxb_dom_node_t *next = NULL;
+    for (lxb_dom_node_t *sub = fragment->first_child; sub != NULL; sub = next) {
+        next = sub->next;
+        lxb_dom_node_remove(sub);
+        if (ref != NULL && ref->parent == parent) {
+            lxb_dom_node_insert_before(ref, sub);
+        } else {
+            lxb_dom_node_insert_child(parent, sub);
+        }
+        style_element_ingest(ctx, sub);
+        dom_mo_notify_child_list(ctx, parent, sub, NULL, sub->prev, sub->next);
+        ce_react_connect(ctx, sub);
+    }
 }
 
 static JSValue js_el_appendChild(JSContext *ctx, JSValueConst this_val, int argc,
@@ -713,17 +1011,29 @@ static JSValue js_el_appendChild(JSContext *ctx, JSValueConst this_val, int argc
             return JS_DupValue(ctx, argv[0]);
         }
     }
+    if (child->type == LXB_DOM_NODE_TYPE_DOCUMENT_FRAGMENT) {
+        insert_fragment_children(ctx, parent, child, NULL);
+        mark_dirty(ctx);
+        return JS_DupValue(ctx, argv[0]);
+    }
     /* Pre-insert step from the spec: detach child from its current
 	 * parent first. lexbor's insert_child does NOT do this — calling
 	 * it on an already-attached child corrupts the old parent's
 	 * sibling chain (next/prev becomes ambiguous), so a later tree
 	 * walk on the old parent infinite-loops. */
     if (child->parent) {
-        node_remove_safe(ctx, child);
+        lxb_dom_node_t *old_parent = child->parent;
+        lxb_dom_node_t *old_prev = child->prev;
+        lxb_dom_node_t *old_next = child->next;
+        node_remove_safe(child);
+        dom_mo_notify_child_list(ctx, old_parent, NULL, child, old_prev, old_next);
     }
+    lxb_dom_node_t *last = parent->last_child;
     lxb_dom_node_insert_child(parent, child);
     style_element_ingest(ctx, child);
     mark_dirty(ctx);
+    dom_mo_notify_child_list(ctx, parent, child, NULL, last, NULL);
+    ce_react_connect(ctx, child);
     return JS_DupValue(ctx, argv[0]);
 }
 
@@ -737,8 +1047,15 @@ static JSValue js_el_removeChild(JSContext *ctx, JSValueConst this_val, int argc
     if (!child) {
         return JS_UNDEFINED;
     }
-    node_remove_safe(ctx, child);
+    lxb_dom_node_t *old_parent = child->parent;
+    lxb_dom_node_t *old_prev = child->prev;
+    lxb_dom_node_t *old_next = child->next;
+    node_remove_safe(child);
     mark_dirty(ctx);
+    if (old_parent != NULL) {
+        dom_mo_notify_child_list(ctx, old_parent, NULL, child, old_prev, old_next);
+        ce_react_disconnect(ctx, child);
+    }
     return JS_DupValue(ctx, argv[0]);
 }
 
@@ -797,10 +1114,10 @@ static lxb_dom_node_t *coerce_to_node(JSContext *ctx, JSValueConst v, lxb_dom_do
 /* All ChildNode/ParentNode insertion paths must detach the incoming
  * node from its old parent first — see js_el_appendChild for the
  * reasoning (lexbor leaves stale sibling links otherwise). */
-static void detach(JSContext *ctx, lxb_dom_node_t *n)
+static void detach(lxb_dom_node_t *n)
 {
     if (n && n->parent) {
-        node_remove_safe(ctx, n);
+        node_remove_safe(n);
     }
 }
 
@@ -822,7 +1139,7 @@ static JSValue js_el_before(JSContext *ctx, JSValueConst this_val, int argc, JSV
         if (node_would_cycle(self->parent, n)) {
             continue;
         }
-        detach(ctx, n);
+        detach(n);
         lxb_dom_node_insert_before(self, n);
     }
     mark_dirty(ctx);
@@ -848,7 +1165,7 @@ static JSValue js_el_after(JSContext *ctx, JSValueConst this_val, int argc, JSVa
         if (node_would_cycle(self->parent, n)) {
             continue;
         }
-        detach(ctx, n);
+        detach(n);
         lxb_dom_node_insert_after(anchor, n);
         anchor = n;
     }
@@ -872,10 +1189,10 @@ static JSValue js_el_replaceWith(JSContext *ctx, JSValueConst this_val, int argc
         if (node_would_cycle(self->parent, n)) {
             continue;
         }
-        detach(ctx, n);
+        detach(n);
         lxb_dom_node_insert_before(self, n);
     }
-    node_remove_safe(ctx, self);
+    node_remove_safe(self);
     mark_dirty(ctx);
     return JS_UNDEFINED;
 }
@@ -898,7 +1215,7 @@ static JSValue js_el_prepend(JSContext *ctx, JSValueConst this_val, int argc, JS
         if (node_would_cycle(parent, n)) {
             continue;
         }
-        detach(ctx, n);
+        detach(n);
         if (first) {
             lxb_dom_node_insert_before(first, n);
         } else {
@@ -924,7 +1241,7 @@ static JSValue js_el_append(JSContext *ctx, JSValueConst this_val, int argc, JSV
         if (node_would_cycle(parent, n)) {
             continue;
         }
-        detach(ctx, n);
+        detach(n);
         lxb_dom_node_insert_child(parent, n);
     }
     mark_dirty(ctx);
@@ -954,10 +1271,19 @@ static JSValue js_el_insertBefore(JSContext *ctx, JSValueConst this_val, int arg
         return JS_DupValue(ctx, argv[0]);
     }
     lxb_dom_node_t *ref = (argc >= 2) ? unwrap_node(ctx, argv[1]) : NULL;
+    if (node->type == LXB_DOM_NODE_TYPE_DOCUMENT_FRAGMENT) {
+        insert_fragment_children(ctx, parent, node, ref);
+        mark_dirty(ctx);
+        return JS_DupValue(ctx, argv[0]);
+    }
     /* Detach from the current parent first — lexbor's insert paths assume an
      * unlinked node (see appendChild). */
     if (node->parent) {
-        node_remove_safe(ctx, node);
+        lxb_dom_node_t *old_parent = node->parent;
+        lxb_dom_node_t *old_prev = node->prev;
+        lxb_dom_node_t *old_next = node->next;
+        node_remove_safe(node);
+        dom_mo_notify_child_list(ctx, old_parent, NULL, node, old_prev, old_next);
     }
     if (ref && ref->parent == parent) {
         lxb_dom_node_insert_before(ref, node);
@@ -966,6 +1292,8 @@ static JSValue js_el_insertBefore(JSContext *ctx, JSValueConst this_val, int arg
         lxb_dom_node_insert_child(parent, node);
     }
     mark_dirty(ctx);
+    dom_mo_notify_child_list(ctx, parent, node, NULL, node->prev, node->next);
+    ce_react_connect(ctx, node);
     return JS_DupValue(ctx, argv[0]);
 }
 
@@ -987,12 +1315,33 @@ static JSValue js_el_replaceChild(JSContext *ctx, JSValueConst this_val, int arg
     if (node_would_cycle(parent, node)) {
         return JS_DupValue(ctx, argv[1]);
     }
-    if (node->parent) {
-        node_remove_safe(ctx, node);
+    if (node->type == LXB_DOM_NODE_TYPE_DOCUMENT_FRAGMENT) {
+        lxb_dom_node_t *old_prev = old->prev;
+        lxb_dom_node_t *old_next = old->next;
+        insert_fragment_children(ctx, parent, node, old);
+        node_remove_safe(old);
+        mark_dirty(ctx);
+        dom_mo_notify_child_list(ctx, parent, NULL, old, old_prev, old_next);
+        ce_react_disconnect(ctx, old);
+        return JS_DupValue(ctx, argv[1]);
     }
+    if (node->parent) {
+        lxb_dom_node_t *node_old_parent = node->parent;
+        lxb_dom_node_t *node_old_prev = node->prev;
+        lxb_dom_node_t *node_old_next = node->next;
+        node_remove_safe(node);
+        dom_mo_notify_child_list(ctx, node_old_parent, NULL, node, node_old_prev, node_old_next);
+    }
+    lxb_dom_node_t *old_prev = old->prev;
+    lxb_dom_node_t *old_next = old->next;
     lxb_dom_node_insert_before(old, node);
-    node_remove_safe(ctx, old);
+    node_remove_safe(old);
     mark_dirty(ctx);
+    /* One record carrying both the added and removed node, as the spec's
+	 * "replace all"/replace step produces. */
+    dom_mo_notify_child_list(ctx, parent, node, old, old_prev, old_next);
+    ce_react_disconnect(ctx, old);
+    ce_react_connect(ctx, node);
     return JS_DupValue(ctx, argv[1]);
 }
 
@@ -1316,12 +1665,26 @@ static JSValue js_doc_createElement(JSContext *ctx, JSValueConst this_val, int a
     }
     lxb_dom_element_t *el = lxb_dom_document_create_element(lxb_dom_interface_document(doc),
                                                             (const lxb_char_t *)tag, tlen, NULL);
+    /* A tag containing '-' is a custom-element candidate; if it is defined,
+     * upgrade it now (spec "create an element" is synchronous) so callers that
+     * immediately invoke a method on the result get the real prototype. */
+    bool custom_candidate = memchr(tag, '-', tlen) != NULL;
     JS_FreeCString(ctx, tag);
     if (!el) {
         return JS_NULL;
     }
     mark_dirty(ctx);
-    return wrap_element(ctx, el);
+    /* Wrap FIRST, then upgrade THIS wrapper. Upgrading runs the element's
+     * constructor, which stamps its template — creating many child elements that
+     * churn wrap_element's wrapper cache. If we let the upgrade path re-wrap the
+     * node internally, that first wrapper can be evicted before we return, so the
+     * caller would get a fresh, un-upgraded wrapper. Holding the wrapper across
+     * the upgrade keeps the upgraded object alive and returns exactly it. */
+    JSValue wrapped = wrap_element(ctx, el);
+    if (custom_candidate) {
+        ce_react_upgrade_value(ctx, wrapped);
+    }
+    return wrapped;
 }
 
 /* The XML and XMLNS namespace URIs — used by createElementNS to enforce
@@ -1436,6 +1799,8 @@ static JSValue wrap_node_any(JSContext *ctx, lxb_dom_node_t *n)
     }
     JSValue v = JS_NewObjectClass(ctx, dom_state(ctx)->class_element_id);
     JS_SetOpaque(v, n); /* opaque is the node, not interface_element */
+    apply_chardata_proto(ctx, v, n);
+    apply_fragment_proto(ctx, v, n);
     wrap_cache_insert(ctx, n, v);
     return v;
 }
@@ -1465,15 +1830,127 @@ static JSValue js_doc_createTextNode(JSContext *ctx, JSValueConst this_val, int 
     return wrap_node_any(ctx, lxb_dom_interface_node(t));
 }
 
+/* document.createDocumentFragment() — a real DocumentFragment node
+ * (LXB_DOM_NODE_TYPE_DOCUMENT_FRAGMENT), NOT a `<div>`. A fragment has
+ * distinct insertion behaviour: appending it moves its children into the host
+ * and empties the fragment, rather than inserting a wrapper element. Frameworks
+ * rewrap parsed template content through this API before stamping (Polymer's
+ * nested-template prep does `createDocumentFragment().appendChild(tpl.content)`
+ * then `importNode()`s the result), so returning an element here corrupts the
+ * stamped tree shape and shifts the node indices the framework walks.
+ *
+ * The wrapper/insertion machinery already handles real fragment nodes:
+ * wrap_node_any carries any non-Document node, .nodeType reports 11, .nodeName
+ * reports "#document-fragment", and appendChild/insertBefore move fragment
+ * children in order. So this only needs to mint the correct lexbor node.
+ *
+ * No mark_dirty: a freshly created fragment is detached and has no visual
+ * effect until its children are inserted into the live tree, and that insertion
+ * marks dirty itself. Polymer creates many of these during stamping, so
+ * triggering a relayout per creation would be pure waste. */
 static JSValue js_doc_createDocumentFragment(JSContext *ctx, JSValueConst this_val, int argc,
                                              JSValueConst *argv)
 {
     (void)argc;
     (void)argv;
-    JSValueConst args[] = {JS_NewString(ctx, "div")};
-    JSValue el = js_doc_createElement(ctx, this_val, 1, args);
-    JS_FreeValue(ctx, (JSValue)args[0]);
-    return el;
+    lxb_html_document_t *htmldoc = unwrap_document(ctx, this_val);
+    if (!htmldoc) {
+        return JS_NULL;
+    }
+    lxb_dom_document_t *doc = lxb_dom_interface_document(htmldoc);
+    lxb_dom_document_fragment_t *fragment = lxb_dom_document_fragment_interface_create(doc);
+    if (!fragment) {
+        return JS_NULL;
+    }
+    return wrap_node_any(ctx, lxb_dom_interface_node(fragment));
+}
+
+/* A `<template>`'s parsed contents live in a *separate* content fragment
+ * (`lxb_html_template_element_t.content`), not in the element's normal child
+ * list. lexbor's `lxb_dom_node_clone` copies only the normal child tree, so a
+ * deep clone of a subtree that contains templates comes back with every
+ * template's `.content` empty. That silently breaks any framework that clones a
+ * template and then stamps it — Polymer/lit walk the clone by precomputed node
+ * indices, and an empty nested-template content shifts those indices so the node
+ * finder returns `undefined` (→ "cannot set property '__dataHost' of undefined",
+ * binding a `data=` onto `<undefined>`, etc.).
+ *
+ * Per the HTML spec's cloning steps for template elements, deep-cloning a
+ * template must also deep-clone its template contents. Walk `source` and `clone`
+ * in lockstep and, for each template pair, deep-clone the source content
+ * children into the clone's content fragment (recursing so nested templates get
+ * their contents too). */
+static void clone_fixup_template_content(lxb_dom_node_t *source, lxb_dom_node_t *clone)
+{
+    if (source == NULL || clone == NULL) {
+        return;
+    }
+    if (source->type == LXB_DOM_NODE_TYPE_ELEMENT && source->local_name == LXB_TAG_TEMPLATE &&
+        clone->type == LXB_DOM_NODE_TYPE_ELEMENT && clone->local_name == LXB_TAG_TEMPLATE) {
+        lxb_html_template_element_t *source_template = lxb_html_interface_template(source);
+        lxb_html_template_element_t *clone_template = lxb_html_interface_template(clone);
+        if (source_template->content != NULL) {
+            /* Ensure the clone has a content fragment to receive the children. */
+            if (clone_template->content == NULL) {
+                clone_template->content =
+                    lxb_dom_document_fragment_interface_create(clone->owner_document);
+            }
+            if (clone_template->content != NULL) {
+                lxb_dom_node_t *source_fragment =
+                    lxb_dom_interface_node(source_template->content);
+                lxb_dom_node_t *clone_fragment = lxb_dom_interface_node(clone_template->content);
+                /* Defensive: a freshly cloned template's content should be empty,
+                 * but clear anything present so we never double-fill. */
+                while (clone_fragment->first_child != NULL) {
+                    node_remove_safe(clone_fragment->first_child);
+                }
+                for (lxb_dom_node_t *child = source_fragment->first_child; child != NULL;
+                     child = child->next) {
+                    lxb_dom_node_t *child_clone = lxb_dom_node_clone(child, true);
+                    if (child_clone != NULL) {
+                        lxb_dom_node_insert_child(clone_fragment, child_clone);
+                        clone_fixup_template_content(child, child_clone);
+                    }
+                }
+            }
+        }
+    }
+    /* Recurse over the normal child tree in lockstep — the deep clone keeps it
+     * structurally identical to the source, so children pair up positionally. */
+    lxb_dom_node_t *source_child = source->first_child;
+    lxb_dom_node_t *clone_child = clone->first_child;
+    while (source_child != NULL && clone_child != NULL) {
+        clone_fixup_template_content(source_child, clone_child);
+        source_child = source_child->next;
+        clone_child = clone_child->next;
+    }
+}
+
+/* document.importNode(node, deep) — imports a node from another document.
+ * The engine is single-document, so this reduces to a deep/shallow clone of the
+ * source node returned as a wrapped node. Polymer's template stamping
+ * (`_stampTemplate`) relies on it to clone `<template>.content`. */
+static JSValue js_doc_importNode(JSContext *ctx, JSValueConst this_val, int argc,
+                                 JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1) {
+        return JS_NULL;
+    }
+    lxb_dom_node_t *source = unwrap_node(ctx, argv[0]);
+    if (!source) {
+        return JS_NULL;
+    }
+    int deep = argc > 1 ? JS_ToBool(ctx, argv[1]) : 0;
+    lxb_dom_node_t *clone = lxb_dom_node_clone(source, deep ? true : false);
+    if (!clone) {
+        return JS_NULL;
+    }
+    if (deep) {
+        clone_fixup_template_content(source, clone);
+    }
+    mark_dirty(ctx);
+    return wrap_node_any(ctx, clone);
 }
 
 static JSValue js_doc_createComment(JSContext *ctx, JSValueConst this_val, int argc,
@@ -1568,14 +2045,51 @@ static JSValue js_el_empty_obj_get(JSContext *ctx, JSValueConst this_val)
     return JS_NewObject(ctx);
 }
 
-/* `<template>.content` — spec returns a DocumentFragment with the
- * template's parsed contents. We don't model fragments separately, so
- * return the element itself: appendChild / firstElementChild etc. all
- * work transparently against the real DOM. */
+/* Forward declarations — the IDL attribute reflection helpers are defined
+ * further down, but `content` reflection (just below) needs them. */
+static JSValue idl_attr_get(JSContext *ctx, JSValueConst this_val, const char *attr, size_t alen,
+                            int urlish);
+static JSValue idl_attr_set(JSContext *ctx, JSValueConst this_val, JSValueConst val,
+                            const char *attr, size_t alen);
+
+/* `<template>.content` — spec returns a DocumentFragment holding the template's
+ * parsed contents. lexbor parses that content into a *separate* content
+ * fragment (`lxb_html_template_element_t.content`), NOT as regular children of
+ * the <template> element — so returning the element itself hands back an empty
+ * subtree. Polymer's `_stampTemplate` clones `.content` via
+ * document.importNode; an empty clone yields no stamped nodes. Return the real
+ * content fragment when present. */
 static JSValue js_el_content_get(JSContext *ctx, JSValueConst this_val)
 {
-    (void)ctx;
-    return JS_DupValue(ctx, this_val);
+    lxb_dom_node_t *node = unwrap_node(ctx, this_val);
+    if (node && node->type == LXB_DOM_NODE_TYPE_ELEMENT &&
+        node->local_name == LXB_TAG_TEMPLATE) {
+        lxb_html_template_element_t *tmpl = lxb_html_interface_template(node);
+        if (tmpl->content) {
+            return wrap_node_any(ctx, lxb_dom_interface_node(tmpl->content));
+        }
+        return JS_DupValue(ctx, this_val);
+    }
+    /* Non-template: `content` reflects the `content` content attribute — this is
+     * the `<meta name=... content=...>` IDL attribute (a writable string), which
+     * is a different property from `<template>.content` (a live fragment). */
+    return idl_attr_get(ctx, this_val, "content", sizeof("content") - 1, 0);
+}
+
+/* `content` setter. `<template>.content` is a read-only live fragment, so a
+ * strict-mode assignment to it must be a harmless no-op rather than a throw
+ * (returning without touching anything is what a real getter-only accessor
+ * needs to avoid a "no setter for property" TypeError). Every other element
+ * reflects the writable `content` attribute (e.g. YouTube sets
+ * `metaViewport.content = "width=device-width, ..."` during app-shell setup). */
+static JSValue js_el_content_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
+{
+    lxb_dom_node_t *node = unwrap_node(ctx, this_val);
+    if (node && node->type == LXB_DOM_NODE_TYPE_ELEMENT &&
+        node->local_name == LXB_TAG_TEMPLATE) {
+        return JS_UNDEFINED;
+    }
+    return idl_attr_set(ctx, this_val, val, "content", sizeof("content") - 1);
 }
 
 /* `<form>.elements` — we don't have a real form-controls collection,
@@ -1652,8 +2166,16 @@ static JSValue js_el_textContent_set(JSContext *ctx, JSValueConst this_val, JSVa
 		 * turns any retained reference into a use-after-free. Detached
 		 * nodes stay allocated until the document dies — same contract
 		 * as the innerHTML setter below. */
+        int is_char_data = (n->type == LXB_DOM_NODE_TYPE_TEXT ||
+                            n->type == LXB_DOM_NODE_TYPE_COMMENT ||
+                            n->type == LXB_DOM_NODE_TYPE_CDATA_SECTION);
+        char *old_value = NULL;
+        if (is_char_data && dom_mo_any_interest(ctx, n, MO_CHARACTER_DATA)) {
+            lxb_dom_character_data_t *cd = lxb_dom_interface_character_data(n);
+            old_value = strndup((const char *)cd->data.data, cd->data.length);
+        }
         while (n->first_child) {
-            node_remove_safe(ctx, n->first_child);
+            node_remove_safe(n->first_child);
         }
         lxb_dom_node_text_content_set(n, (const lxb_char_t *)s, slen);
         if (n->parent) {
@@ -1661,6 +2183,16 @@ static JSValue js_el_textContent_set(JSContext *ctx, JSValueConst this_val, JSVa
         }
         JS_FreeCString(ctx, s);
         mark_dirty(ctx);
+        /* A text/comment node's textContent IS its character data — Polymer's
+		 * microtask scheduler mutates a text node here, so this path must fire
+		 * a characterData record. An element's textContent is a childList
+		 * change (children replaced by one text node). */
+        if (is_char_data) {
+            dom_mo_notify_character_data(ctx, n, old_value);
+        } else {
+            dom_mo_notify_child_list(ctx, n, n->first_child, NULL, NULL, NULL);
+        }
+        free(old_value);
     }
     return JS_UNDEFINED;
 }
@@ -1718,94 +2250,40 @@ static JSValue js_el_innerHTML_set(JSContext *ctx, JSValueConst this_val, JSValu
     if (!s) {
         return JS_UNDEFINED;
     }
-    if (n->type == LXB_DOM_NODE_TYPE_ELEMENT &&
-        (n->local_name == LXB_TAG_HTML || n->local_name == LXB_TAG_HEAD ||
-         n->local_name == LXB_TAG_BODY)) {
-        ydebug("js innerHTML SET on document container tag=%u new_len=%zu head=%.120s",
-               (unsigned)n->local_name, slen, s);
-    }
     /* Wipe existing children. */
     while (n->first_child) {
-        node_remove_safe(ctx, n->first_child);
+        node_remove_safe(n->first_child);
     }
     /* Parse fragment under this element's context. */
     lxb_html_document_t *doc = lxb_html_interface_document(n->owner_document);
     if (n->type == LXB_DOM_NODE_TYPE_ELEMENT) {
         lxb_html_element_t *htmlel = lxb_html_interface_element(n);
         (void)lxb_html_element_inner_html_set(htmlel, (const lxb_char_t *)s, slen);
+        /* Per spec, setting `.innerHTML` on a <template> parses into its
+         * content DocumentFragment, not as element children. lexbor's
+         * inner_html_set leaves the parsed nodes as regular children, so
+         * relocate them into the content fragment — matching how the HTML
+         * parser fills a parser-created template and keeping `.content`
+         * authoritative (Polymer builds element templates this way). */
+        if (n->local_name == LXB_TAG_TEMPLATE) {
+            lxb_html_template_element_t *tmpl = lxb_html_interface_template(n);
+            if (tmpl->content) {
+                lxb_dom_node_t *fragment = lxb_dom_interface_node(tmpl->content);
+                while (fragment->first_child) {
+                    node_remove_safe(fragment->first_child);
+                }
+                lxb_dom_node_t *child;
+                while ((child = n->first_child) != NULL) {
+                    lxb_dom_node_remove(child);
+                    lxb_dom_node_insert_child(fragment, child);
+                }
+            }
+        }
     } else {
         (void)doc;
     }
     JS_FreeCString(ctx, s);
     mark_dirty(ctx);
-    return JS_UNDEFINED;
-}
-
-/* insertAdjacentHTML(position, html) — parse `html` in a detached container
- * element, then move the resulting nodes into place. Matches the four spec
- * positions; unknown positions are ignored (a browser throws SyntaxError —
- * absorbing keeps the minimal-surface behavior of the other bindings). */
-static JSValue js_el_insertAdjacentHTML(JSContext *ctx, JSValueConst this_val, int argc,
-                                        JSValueConst *argv)
-{
-    lxb_dom_node_t *self = unwrap_node(ctx, this_val);
-    if (!self || argc < 2 || self->type != LXB_DOM_NODE_TYPE_ELEMENT) {
-        return JS_UNDEFINED;
-    }
-    const char *position = JS_ToCString(ctx, argv[0]);
-    size_t html_len = 0;
-    const char *html = JS_ToCStringLen(ctx, &html_len, argv[1]);
-    if (!position || !html) {
-        if (position) {
-            JS_FreeCString(ctx, position);
-        }
-        if (html) {
-            JS_FreeCString(ctx, html);
-        }
-        return JS_UNDEFINED;
-    }
-
-    lxb_dom_element_t *container =
-        lxb_dom_document_create_element(self->owner_document, (const lxb_char_t *)"div", 3, NULL);
-    if (container) {
-        (void)lxb_html_element_inner_html_set(lxb_html_interface_element(container),
-                                              (const lxb_char_t *)html, html_len);
-        lxb_dom_node_t *container_node = lxb_dom_interface_node(container);
-        /* Move children out in document order. The pre-insert detach
-		 * matters — see the appendChild comment on sibling-chain
-		 * corruption. */
-        lxb_dom_node_t *after_anchor = self; /* for afterend ordering */
-        lxb_dom_node_t *moved;
-        while ((moved = container_node->first_child) != NULL) {
-            node_remove_safe(ctx, moved);
-            if (strcmp(position, "beforebegin") == 0 && self->parent) {
-                lxb_dom_node_insert_before(self, moved);
-            } else if (strcmp(position, "afterbegin") == 0) {
-                if (self->first_child) {
-                    lxb_dom_node_insert_before(self->first_child, moved);
-                } else {
-                    lxb_dom_node_insert_child(self, moved);
-                }
-                /* keep insertion order: subsequent nodes go after `moved` */
-                while (container_node->first_child) {
-                    lxb_dom_node_t *next = container_node->first_child;
-                    node_remove_safe(ctx, next);
-                    lxb_dom_node_insert_after(moved, next);
-                    moved = next;
-                }
-            } else if (strcmp(position, "afterend") == 0 && self->parent) {
-                lxb_dom_node_insert_after(after_anchor, moved);
-                after_anchor = moved;
-            } else if (strcmp(position, "beforeend") == 0) {
-                lxb_dom_node_insert_child(self, moved);
-            } else {
-                break; /* unknown position (or detached beforebegin/afterend) */
-            }
-        }
-        mark_dirty(ctx);
-    }
-    JS_FreeCString(ctx, position);
-    JS_FreeCString(ctx, html);
     return JS_UNDEFINED;
 }
 
@@ -1899,9 +2377,16 @@ static JSValue js_cd_data_set(JSContext *ctx, JSValueConst this_val, JSValueCons
     if (!s) {
         return JS_UNDEFINED;
     }
+    lxb_dom_node_t *node = lxb_dom_interface_node(cd);
+    char *old_value = NULL;
+    if (dom_mo_any_interest(ctx, node, MO_CHARACTER_DATA)) {
+        old_value = strndup((const char *)cd->data.data, cd->data.length);
+    }
     (void)lxb_dom_character_data_replace(cd, (const lxb_char_t *)s, l, 0, 0);
     JS_FreeCString(ctx, s);
     mark_dirty(ctx);
+    dom_mo_notify_character_data(ctx, node, old_value);
+    free(old_value);
     return JS_UNDEFINED;
 }
 
@@ -1912,21 +2397,6 @@ static JSValue js_cd_length_get(JSContext *ctx, JSValueConst this_val)
         return JS_NewInt32(ctx, 0);
     }
     return JS_NewInt32(ctx, (int32_t)cd->data.length);
-}
-
-/* Assignment to `length`. On real CharacterData the property is readonly —
- * sloppy-mode assignment silently no-ops, matching a browser. On an element
- * a browser has NO `length` at all, so `el.length = 0` (apnews' bsp-read-more
- * does exactly this) creates a plain own property; without this setter the
- * shared proto accessor would make that assignment throw "no setter for
- * property". Shadow with an own value property to restore normal semantics. */
-static JSValue js_cd_length_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
-{
-    if (as_chardata(ctx, this_val) != NULL) {
-        return JS_UNDEFINED;
-    }
-    JS_DefinePropertyValueStr(ctx, this_val, "length", JS_DupValue(ctx, val), JS_PROP_C_W_E);
-    return JS_UNDEFINED;
 }
 
 static JSValue js_cd_appendData(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -2059,6 +2529,12 @@ static JSValue js_el_tagName_get(JSContext *ctx, JSValueConst this_val)
     if (!el) {
         return JS_UNDEFINED;
     }
+    /* tagName exists only on Element. Text/Comment/DocumentFragment share
+	 * the same wrapper class, and qualified_name on a non-element reads
+	 * through an element-only union member — a crash, not just junk. */
+    if (lxb_dom_interface_node(el)->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+        return JS_UNDEFINED;
+    }
     size_t len;
     const lxb_char_t *name = lxb_dom_element_qualified_name(el, &len);
     if (!name) {
@@ -2077,7 +2553,7 @@ static JSValue js_el_tagName_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_id_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_NewString(ctx, "");
     }
@@ -2091,7 +2567,7 @@ static JSValue js_el_id_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_id_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -2107,7 +2583,7 @@ static JSValue js_el_id_set(JSContext *ctx, JSValueConst this_val, JSValueConst 
 
 static JSValue js_el_className_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_NewString(ctx, "");
     }
@@ -2121,7 +2597,7 @@ static JSValue js_el_className_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_className_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -2150,7 +2626,7 @@ static JSValue js_el_className_set(JSContext *ctx, JSValueConst this_val, JSValu
 static JSValue idl_attr_get(JSContext *ctx, JSValueConst this_val, const char *attr, size_t alen,
                             int urlish)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_NewString(ctx, "");
     }
@@ -2181,7 +2657,7 @@ static JSValue idl_attr_get(JSContext *ctx, JSValueConst this_val, const char *a
 static JSValue idl_attr_set(JSContext *ctx, JSValueConst this_val, JSValueConst val,
                             const char *attr, size_t alen)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -2246,6 +2722,28 @@ static JSValue js_el_nodeType_get(JSContext *ctx, JSValueConst this_val)
     }
 }
 
+/* isConnected — true when the node's ancestor chain reaches the document.
+ * Shadow-root fragments hang off their host as regular children in this
+ * tree, so the plain parent walk gives the spec behaviour (a node inside a
+ * shadow tree is connected iff its host is). Frameworks gate their entire
+ * lifecycle plumbing on this bit — e.g. a patched appendChild that only
+ * fires connect callbacks when `inserted.isConnected` — so a missing
+ * property (undefined = falsy) silently disables all of it. */
+static JSValue js_el_isConnected_get(JSContext *ctx, JSValueConst this_val)
+{
+    if (JS_GetOpaque(this_val, dom_state(ctx)->class_document_id)) {
+        return JS_TRUE;
+    }
+    lxb_dom_node_t *node =
+        (lxb_dom_node_t *)JS_GetOpaque(this_val, dom_state(ctx)->class_element_id);
+    for (; node; node = node->parent) {
+        if (node->type == LXB_DOM_NODE_TYPE_DOCUMENT) {
+            return JS_TRUE;
+        }
+    }
+    return JS_FALSE;
+}
+
 static JSValue js_el_nodeName_get(JSContext *ctx, JSValueConst this_val)
 {
     if (JS_GetOpaque(this_val, dom_state(ctx)->class_document_id)) {
@@ -2281,6 +2779,33 @@ static JSValue js_el_nodeName_get(JSContext *ctx, JSValueConst this_val)
     return JS_NewStringLen(ctx, buf, out);
 }
 
+/* localName — the local part of an element's qualified name, in the
+ * case it was parsed with (lowercase for HTML). Per DOM spec this is
+ * null for non-element nodes (text, comment, document, fragment).
+ * Distinct from nodeName, which uppercases for HTML elements. Several
+ * libraries (e.g. Closure's DOM sanitizer) key per-element policy off
+ * localName; a missing getter returns undefined and breaks them. */
+static JSValue js_el_localName_get(JSContext *ctx, JSValueConst this_val)
+{
+    if (JS_GetOpaque(this_val, dom_state(ctx)->class_document_id)) {
+        return JS_NULL;
+    }
+    lxb_dom_node_t *node = (lxb_dom_node_t *)JS_GetOpaque(this_val, dom_state(ctx)->class_element_id);
+    if (node && node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+        return JS_NULL;
+    }
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    if (!el) {
+        return JS_NULL;
+    }
+    size_t len = 0;
+    const lxb_char_t *name = lxb_dom_element_local_name(el, &len);
+    if (!name) {
+        return JS_NULL;
+    }
+    return JS_NewStringLen(ctx, (const char *)name, len);
+}
+
 /* ownerDocument — for any wrapped element this is the document we
  * minted document_obj for. We don't have a direct handle, so look it
  * up from the runtime opaque. Document's own ownerDocument is null per
@@ -2312,6 +2837,54 @@ IDL_ATTR(placeholder, "placeholder", 0)
 IDL_ATTR(method, "method", 0)
 IDL_ATTR(rel, "rel", 0)
 IDL_ATTR(target, "target", 0)
+
+/* `hidden` — the BOOLEAN global HTML attribute, reflected as a property.
+ * IDL_ATTR only handles STRING attributes; hidden is boolean: `el.hidden = true`
+ * must ADD `hidden=""`, `el.hidden = false` must REMOVE it, getter is
+ * attribute-presence. This reflection was MISSING, so frameworks that toggle
+ * visibility via the property (Polymer binds `hidden="[[x]]"` → sets the
+ * property, not the attribute) never actually hid the node — the box builder
+ * hides by the `hidden` ATTRIBUTE. Concretely: YouTube's consent lightbox keeps
+ * its `loading-overlay` / `error-overlay` divs hidden by binding their `hidden`
+ * property; without reflection those overlays painted over the real Accept/Reject
+ * choice, so the consent looked stuck on "Saving your choice / An error occurred". */
+static JSValue js_el_hidden_get(JSContext *ctx, JSValueConst this_val)
+{
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
+    if (!el) {
+        return JS_FALSE;
+    }
+    size_t vlen = 0;
+    const lxb_char_t *v = lxb_dom_element_get_attribute(el, (const lxb_char_t *)"hidden", 6, &vlen);
+    return JS_NewBool(ctx, v != NULL);
+}
+
+static JSValue js_el_hidden_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
+{
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
+    if (!el) {
+        return JS_UNDEFINED;
+    }
+    int on = JS_ToBool(ctx, val);
+    size_t vlen = 0;
+    bool already = lxb_dom_element_get_attribute(el, (const lxb_char_t *)"hidden", 6, &vlen) != NULL;
+    /* Reflect only a real change. Frameworks re-assign `el.hidden = false` on
+     * already-visible nodes every render tick; without this guard each no-op
+     * assignment marked the tree dirty and queued a MutationObserver record. */
+    if ((on > 0) == already) {
+        return JS_UNDEFINED;
+    }
+    char *old_value = mo_capture_attr(ctx, el, "hidden", 6);
+    if (on > 0) {
+        lxb_dom_element_set_attribute(el, (const lxb_char_t *)"hidden", 6, (const lxb_char_t *)"", 0);
+    } else {
+        lxb_dom_element_remove_attribute(el, (const lxb_char_t *)"hidden", 6);
+    }
+    mark_dirty(ctx);
+    dom_mo_notify_attributes(ctx, el, "hidden", 6, old_value);
+    free(old_value);
+    return JS_UNDEFINED;
+}
 
 /* parentElement / firstElementChild / nextElementSibling / children */
 
@@ -2844,7 +3417,7 @@ static int style_set_property(JSContext *ctx, JSValueConst obj, JSAtom prop, JSV
 
 static JSValue js_el_style_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -3258,6 +3831,68 @@ static JSValue js_classlist_toString(JSContext *ctx, JSValueConst this_val, int 
     return js_classlist_value_get(ctx, this_val);
 }
 
+/* Define `object[Symbol.iterator] = fn`. QuickJS's function-list installer keys
+ * on plain string atoms, so a well-known symbol has to be attached by hand. */
+static void js_dom_define_iterator(JSContext *ctx, JSValueConst object, JSValue fn)
+{
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue symbol_ctor = JS_GetPropertyStr(ctx, global, "Symbol");
+    JSValue iterator_sym = JS_GetPropertyStr(ctx, symbol_ctor, "iterator");
+    JSAtom iterator_atom = JS_ValueToAtom(ctx, iterator_sym);
+    JS_DefinePropertyValue(ctx, object, iterator_atom, fn,
+                           JS_PROP_CONFIGURABLE | JS_PROP_WRITABLE);
+    JS_FreeAtom(ctx, iterator_atom);
+    JS_FreeValue(ctx, iterator_sym);
+    JS_FreeValue(ctx, symbol_ctor);
+    JS_FreeValue(ctx, global);
+}
+
+/* classList[Symbol.iterator]() — DOMTokenList is iterable. Build an array of
+ * the current class tokens and hand back its own array iterator so that
+ * `[...el.classList]` / `for (const c of el.classList)` work. */
+static JSValue js_classlist_symbol_iterator(JSContext *ctx, JSValueConst this_val, int argc,
+                                            JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JSValue arr = JS_NewArray(ctx);
+    lxb_dom_element_t *el = JS_GetOpaque(this_val, dom_state(ctx)->class_classlist_id);
+    uint32_t count = 0;
+    if (el) {
+        size_t clen = 0;
+        const lxb_char_t *cls =
+            lxb_dom_element_get_attribute(el, (const lxb_char_t *)"class", 5, &clen);
+        if (cls) {
+            size_t start = 0;
+            for (size_t pos = 0; pos <= clen; pos++) {
+                int is_ws = (pos == clen) || cls[pos] == ' ' || cls[pos] == '\t' ||
+                            cls[pos] == '\n' || cls[pos] == '\r' || cls[pos] == '\f';
+                if (is_ws) {
+                    if (pos > start) {
+                        JS_SetPropertyUint32(
+                            ctx, arr, count++,
+                            JS_NewStringLen(ctx, (const char *)(cls + start), pos - start));
+                    }
+                    start = pos + 1;
+                }
+            }
+        }
+    }
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue symbol_ctor = JS_GetPropertyStr(ctx, global, "Symbol");
+    JSValue iterator_sym = JS_GetPropertyStr(ctx, symbol_ctor, "iterator");
+    JSAtom iterator_atom = JS_ValueToAtom(ctx, iterator_sym);
+    JSValue array_iter_fn = JS_GetProperty(ctx, arr, iterator_atom);
+    JSValue result = JS_Call(ctx, array_iter_fn, arr, 0, NULL);
+    JS_FreeValue(ctx, array_iter_fn);
+    JS_FreeAtom(ctx, iterator_atom);
+    JS_FreeValue(ctx, iterator_sym);
+    JS_FreeValue(ctx, symbol_ctor);
+    JS_FreeValue(ctx, global);
+    JS_FreeValue(ctx, arr);
+    return result;
+}
+
 static JSValue js_el_classList_get(JSContext *ctx, JSValueConst this_val)
 {
     static const JSCFunctionListEntry classlist_funcs[] = {
@@ -3272,7 +3907,7 @@ static JSValue js_el_classList_get(JSContext *ctx, JSValueConst this_val)
         JS_CGETSET_DEF("length", js_classlist_length_get, NULL),
         JS_CGETSET_DEF("value", js_classlist_value_get, js_classlist_value_set),
     };
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -3280,6 +3915,9 @@ static JSValue js_el_classList_get(JSContext *ctx, JSValueConst this_val)
     JS_SetOpaque(v, el);
     JS_SetPropertyFunctionList(ctx, v, classlist_funcs,
                                sizeof(classlist_funcs) / sizeof(classlist_funcs[0]));
+    js_dom_define_iterator(ctx, v,
+                           JS_NewCFunction(ctx, js_classlist_symbol_iterator,
+                                           "[Symbol.iterator]", 0));
     return v;
 }
 
@@ -3385,7 +4023,14 @@ static JSValue js_el_hasAttributes_stub(JSContext *ctx, JSValueConst this_val, i
     (void)argc;
     (void)argv;
     lxb_dom_element_t *el = unwrap_element(ctx, this_val);
-    if (!el) {
+    /* Only real elements carry attributes. The wrapper for a DocumentFragment
+     * (e.g. a <template>.content node) shares the element JS class, so
+     * unwrap_element returns a non-NULL pointer for it — reading `first_attr`
+     * off a non-element struct yields garbage that reads as "has attributes".
+     * Polymer's template parser calls `content.hasAttributes()` and asserts the
+     * result is only truthy for a node it built nodeInfo for; a spurious true
+     * makes it throw and abandon that element's template. Guard on node type. */
+    if (!el || ((lxb_dom_node_t *)el)->type != LXB_DOM_NODE_TYPE_ELEMENT) {
         return JS_FALSE;
     }
     return JS_NewBool(ctx, el->first_attr != NULL);
@@ -3398,7 +4043,7 @@ static JSValue js_el_getAttributeNames_stub(JSContext *ctx, JSValueConst this_va
     (void)argv;
     lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     JSValue arr = JS_NewArray(ctx);
-    if (!el) {
+    if (!el || ((lxb_dom_node_t *)el)->type != LXB_DOM_NODE_TYPE_ELEMENT) {
         return arr;
     }
     uint32_t i = 0;
@@ -3412,33 +4057,97 @@ static JSValue js_el_getAttributeNames_stub(JSContext *ctx, JSValueConst this_va
     return arr;
 }
 
-/* `attributes` — a snapshot array of {name, value} objects. Covers the
- * common clone loop `for (t < el.attributes.length) { s = el.attributes[t];
- * … s.name, s.value }` (apnews' custom-headline element); live NamedNodeMap
- * semantics are not modeled. */
+/* element.attributes — a NamedNodeMap. Returned as a real JS Array so it is
+ * spread-able / for-of iterable (`[...el.attributes]`) and index/length
+ * addressable out of the box, with `item()` and `getNamedItem()` added on top
+ * for the NamedNodeMap surface. Polymer/kevlar element constructors spread
+ * `[...this.attributes]`; an undefined value there throws
+ * "cannot read property 'Symbol.iterator' of undefined". */
+static JSValue js_el_attr_item(JSContext *ctx, JSValueConst this_val, int argc,
+                               JSValueConst *argv)
+{
+    if (argc < 1) {
+        return JS_NULL;
+    }
+    int32_t index = 0;
+    if (JS_ToInt32(ctx, &index, argv[0]) < 0) {
+        return JS_NULL;
+    }
+    JSValue at = JS_GetPropertyUint32(ctx, this_val, (uint32_t)index);
+    if (JS_IsUndefined(at)) {
+        return JS_NULL;
+    }
+    return at;
+}
+
+static JSValue js_el_attr_getNamedItem(JSContext *ctx, JSValueConst this_val, int argc,
+                                       JSValueConst *argv)
+{
+    if (argc < 1) {
+        return JS_NULL;
+    }
+    const char *want = JS_ToCString(ctx, argv[0]);
+    if (!want) {
+        return JS_NULL;
+    }
+    JSValue result = JS_NULL;
+    uint32_t length = 0;
+    JSValue length_val = JS_GetPropertyStr(ctx, this_val, "length");
+    JS_ToUint32(ctx, &length, length_val);
+    JS_FreeValue(ctx, length_val);
+    for (uint32_t i = 0; i < length; i++) {
+        JSValue entry = JS_GetPropertyUint32(ctx, this_val, i);
+        JSValue name_val = JS_GetPropertyStr(ctx, entry, "name");
+        const char *name = JS_ToCString(ctx, name_val);
+        if (name && strcmp(name, want) == 0) {
+            JS_FreeCString(ctx, name);
+            JS_FreeValue(ctx, name_val);
+            result = entry;
+            break;
+        }
+        if (name) {
+            JS_FreeCString(ctx, name);
+        }
+        JS_FreeValue(ctx, name_val);
+        JS_FreeValue(ctx, entry);
+    }
+    JS_FreeCString(ctx, want);
+    return result;
+}
+
 static JSValue js_el_attributes_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     JSValue arr = JS_NewArray(ctx);
-    if (!el) {
-        return arr;
-    }
-    uint32_t index = 0;
-    for (lxb_dom_attr_t *attr = el->first_attr; attr; attr = attr->next) {
-        size_t name_len = 0;
-        const lxb_char_t *name = lxb_dom_attr_qualified_name(attr, &name_len);
-        if (!name) {
-            continue;
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    uint32_t i = 0;
+    /* The element-class wrapper also carries Text/Comment nodes; reading
+     * ->first_attr off a non-element node walks garbage. Only Elements
+     * have an attribute list. */
+    if (el && ((lxb_dom_node_t *)el)->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+        for (lxb_dom_attr_t *a = el->first_attr; a; a = a->next) {
+            size_t nlen = 0;
+            const lxb_char_t *nm = lxb_dom_attr_qualified_name(a, &nlen);
+            size_t llen = 0;
+            const lxb_char_t *ln = lxb_dom_attr_local_name(a, &llen);
+            size_t vlen = 0;
+            const lxb_char_t *va = lxb_dom_attr_value(a, &vlen);
+            JSValue entry = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, entry, "name",
+                              JS_NewStringLen(ctx, nm ? (const char *)nm : "", nm ? nlen : 0));
+            JS_SetPropertyStr(ctx, entry, "localName",
+                              JS_NewStringLen(ctx, ln ? (const char *)ln : "", ln ? llen : 0));
+            JS_SetPropertyStr(ctx, entry, "value",
+                              JS_NewStringLen(ctx, va ? (const char *)va : "", va ? vlen : 0));
+            JS_SetPropertyStr(ctx, entry, "namespaceURI", JS_NULL);
+            JS_SetPropertyStr(ctx, entry, "prefix", JS_NULL);
+            JS_SetPropertyStr(ctx, entry, "specified", JS_TRUE);
+            JS_SetPropertyUint32(ctx, arr, i++, entry);
         }
-        size_t value_len = 0;
-        const lxb_char_t *value = lxb_dom_attr_value(attr, &value_len);
-        JSValue item = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, item, "name", JS_NewStringLen(ctx, (const char *)name, name_len));
-        JS_SetPropertyStr(ctx, item, "value",
-                          value ? JS_NewStringLen(ctx, (const char *)value, value_len)
-                                : JS_NewString(ctx, ""));
-        JS_SetPropertyUint32(ctx, arr, index++, item);
     }
+    JS_SetPropertyStr(ctx, arr, "item",
+                      JS_NewCFunction(ctx, js_el_attr_item, "item", 1));
+    JS_SetPropertyStr(ctx, arr, "getNamedItem",
+                      JS_NewCFunction(ctx, js_el_attr_getNamedItem, "getNamedItem", 1));
     return arr;
 }
 
@@ -3454,17 +4163,51 @@ static JSValue js_el_cloneNode_stub(JSContext *ctx, JSValueConst this_val, int a
     if (!cl) {
         return JS_NULL;
     }
-    if (cl->type == LXB_DOM_NODE_TYPE_ELEMENT) {
-        return wrap_element(ctx, lxb_dom_interface_element(cl));
+    if (deep) {
+        /* lexbor does not clone a <template>'s separate content fragment; do it
+         * ourselves so stamping frameworks see the cloned contents. */
+        clone_fixup_template_content(self, cl);
     }
-    return JS_DupValue(ctx, this_val);
+    /* Wrap the CLONE (any node type) — a document fragment or text clone must
+     * not fall through to returning the original node. */
+    return wrap_node_any(ctx, cl);
+}
+
+/* CSSOM forced-layout point. offsetWidth/Height, clientWidth/Height and
+ * getBoundingClientRect() are defined against *current* layout, so a browser
+ * synchronously flushes pending style + layout before returning them. ybrowser
+ * otherwise returns the last completed layout, so JS that inserts a node and
+ * immediately measures it — e.g. a framework's dataChanged() reading clientWidth
+ * to size a grid — reads 0 and lays out wrong. Flush only when the DOM was
+ * mutated since the last layout (dom_dirty), and guard against reentrancy: a
+ * geometry read reached from inside the flush's own box-build/layout returns the
+ * in-progress layout rather than recursing. Observer callbacks (ResizeObserver /
+ * MutationObserver) are NOT delivered here — that stays asynchronous. */
+static void geometry_flush_pending_layout(struct yetty_ylexbor *r)
+{
+    if (r == NULL || !r->dom_dirty || r->layout_in_progress) {
+        return;
+    }
+    /* Box-build + layout only — NOT the full relayout: a geometry getter must
+     * flush style/layout without initiating iframe resolution/fetch/DOM work
+     * while JS is synchronously reading geometry. The callee sets/clears
+     * layout_in_progress and restores dom_dirty on failure. */
+    struct yetty_ycore_void_result res = yetty_ylexbor_relayout_boxes_and_layout(r);
+    if (YETTY_IS_ERR(res)) {
+        /* A getter must not throw a synchronous JS exception for a transient
+         * layout failure — trace it and fall back to the last completed
+         * layout (dom_dirty was restored, so the next read retries). */
+        ydebug("geometry-flush relayout failed: %s", res.error.msg ? res.error.msg : "?");
+        yetty_ycore_error_destroy(res.error);
+    }
 }
 
 /* getBoundingClientRect — return the element's real laid-out rectangle (union
- * of its boxes) instead of a zero stub. Boxes exist after the first layout
- * pass; calls from initial inline scripts (which run before layout) still get
- * zeros, but deferred / event-driven measurements — which is what JS app
- * shells use to size cards and grids — now see true geometry. */
+ * of its boxes) instead of a zero stub. As a CSSOM forced-layout point it first
+ * flushes any pending layout (geometry_flush_pending_layout), so even a call
+ * from an initial inline script that just mutated the DOM sees current geometry
+ * rather than a stale/empty layout. An element with no box (disconnected /
+ * display:none / never laid out) still reports zeros. */
 static JSValue js_el_getBoundingClientRect(JSContext *ctx, JSValueConst this_val, int argc,
                                            JSValueConst *argv)
 {
@@ -3472,6 +4215,7 @@ static JSValue js_el_getBoundingClientRect(JSContext *ctx, JSValueConst this_val
     (void)argv;
     float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
     struct yetty_ylexbor *r = runtime_ylex(ctx);
+    geometry_flush_pending_layout(r);
     lxb_dom_node_t *node = unwrap_node(ctx, this_val);
     if (r != NULL && node != NULL && node->type == LXB_DOM_NODE_TYPE_ELEMENT) {
         lxb_dom_element_t *el = lxb_dom_interface_element(node);
@@ -3531,13 +4275,309 @@ static JSValue js_el_clientRects_stub(JSContext *ctx, JSValueConst this_val, int
     return JS_NewArray(ctx);
 }
 
+static void computed_set_px(JSContext *ctx, JSValue obj, const char *name, float value)
+{
+    char buf[48];
+    snprintf(buf, sizeof(buf), "%gpx", (double)value);
+    JS_SetPropertyStr(ctx, obj, name, JS_NewString(ctx, buf));
+}
+
+/* window.getComputedStyle(el) — a resolved-value view backed by the element's
+ * laid-out box. The inline-style object is installed as the RESULT'S PROTOTYPE
+ * so the returned declaration still answers getPropertyValue / setProperty /
+ * item / cssText and any inline property that layout does not override — a plain
+ * fresh object would be missing those methods and breaks callers that use them.
+ * On top of that we set the box-derived resolved properties that overlay /
+ * positioning code (iron-fit-behavior, overlay managers) reads: position, the
+ * four inset sides, the four margins/paddings, max-width/height, box-sizing and
+ * z-index. An element with no laid-out box (display:none, disconnected) returns
+ * the pure inline view — a browser likewise returns empty resolved values for an
+ * unrendered element, so no box-derived overrides are added. */
+JSValue yetty_ylexbor_js_getComputedStyle(JSContext *ctx, JSValueConst this_val, int argc,
+                                          JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1) {
+        return JS_NULL;
+    }
+    JSValue inline_style = JS_GetPropertyStr(ctx, argv[0], "style");
+    JSValue out = JS_NewObject(ctx);
+    if (JS_IsObject(inline_style)) {
+        JS_SetPrototype(ctx, out, inline_style);
+    }
+
+    struct yetty_ylexbor *r = runtime_ylex(ctx);
+    lxb_dom_node_t *node = unwrap_node(ctx, argv[0]);
+    const struct yetty_ylexbor_box *box = NULL;
+    if (r != NULL && node != NULL && node->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+        geometry_flush_pending_layout(r);
+        lxb_dom_element_t *el = lxb_dom_interface_element(node);
+        for (uint32_t i = 0; i < r->boxes.size; i++) {
+            if (r->boxes.data[i].element == el) {
+                box = &r->boxes.data[i];
+                break;
+            }
+        }
+    }
+
+    if (box != NULL) {
+        const char *pos = "static";
+        switch (box->position) {
+        case YL_POS_RELATIVE:
+            pos = "relative";
+            break;
+        case YL_POS_ABSOLUTE:
+            pos = "absolute";
+            break;
+        case YL_POS_FIXED:
+            pos = "fixed";
+            break;
+        default:
+            pos = "static";
+            break;
+        }
+        JS_SetPropertyStr(ctx, out, "position", JS_NewString(ctx, pos));
+
+        /* Inset sides resolve to a px value when specified, else `auto`
+         * (0px is a real offset, distinct from auto — hence the mask). */
+        if (box->pos_set_mask & 0x1) {
+            computed_set_px(ctx, out, "top", box->pos_top);
+        } else {
+            JS_SetPropertyStr(ctx, out, "top", JS_NewString(ctx, "auto"));
+        }
+        if (box->pos_set_mask & 0x2) {
+            computed_set_px(ctx, out, "right", box->pos_right);
+        } else {
+            JS_SetPropertyStr(ctx, out, "right", JS_NewString(ctx, "auto"));
+        }
+        if (box->pos_set_mask & 0x4) {
+            computed_set_px(ctx, out, "bottom", box->pos_bottom);
+        } else {
+            JS_SetPropertyStr(ctx, out, "bottom", JS_NewString(ctx, "auto"));
+        }
+        if (box->pos_set_mask & 0x8) {
+            computed_set_px(ctx, out, "left", box->pos_left);
+        } else {
+            JS_SetPropertyStr(ctx, out, "left", JS_NewString(ctx, "auto"));
+        }
+
+        computed_set_px(ctx, out, "marginTop", box->margin_top);
+        computed_set_px(ctx, out, "marginRight", box->margin_right);
+        computed_set_px(ctx, out, "marginBottom", box->margin_bottom);
+        computed_set_px(ctx, out, "marginLeft", box->margin_left);
+
+        computed_set_px(ctx, out, "paddingTop", box->padding_top);
+        computed_set_px(ctx, out, "paddingRight", box->padding_right);
+        computed_set_px(ctx, out, "paddingBottom", box->padding_bottom);
+        computed_set_px(ctx, out, "paddingLeft", box->padding_left);
+
+        if (box->css_max_width > 0.0f) {
+            computed_set_px(ctx, out, "maxWidth", box->css_max_width);
+        } else {
+            JS_SetPropertyStr(ctx, out, "maxWidth", JS_NewString(ctx, "none"));
+        }
+        JS_SetPropertyStr(ctx, out, "maxHeight", JS_NewString(ctx, "none"));
+
+        JS_SetPropertyStr(ctx, out, "boxSizing",
+                          JS_NewString(ctx, box->border_box ? "border-box" : "content-box"));
+
+        if (box->z_index_set) {
+            JS_SetPropertyStr(ctx, out, "zIndex", JS_NewInt32(ctx, box->z_index));
+        } else {
+            JS_SetPropertyStr(ctx, out, "zIndex", JS_NewString(ctx, "auto"));
+        }
+    }
+
+    JS_FreeValue(ctx, inline_style);
+    return out;
+}
+
+
+/* clientWidth/Height + offsetWidth/Height. All four derive from the same
+ * laid-out box union getBoundingClientRect() uses (border box), so the box-kind
+ * knowledge lives here once rather than being duplicated per getter:
+ *   offset* = border-box dimensions (integer CSS px);
+ *   client* = padding-box = border-box minus the two side borders.
+ * A disconnected / unlaid-out / display:none element has no matching box and
+ * reports 0 (spec). Reading a metric first flushes any pending layout (see
+ * geometry_flush_pending_layout — a CSSOM forced-layout point) but never itself
+ * dirties layout; post-layout change notification remains ResizeObserver's job. */
+struct el_box_metrics {
+    int client_w, client_h, offset_w, offset_h;
+    bool found;
+};
+
+static struct el_box_metrics element_box_metrics(struct yetty_ylexbor *r, lxb_dom_element_t *el)
+{
+    struct el_box_metrics m = {0, 0, 0, 0, false};
+    if (r == NULL || el == NULL) {
+        return m;
+    }
+    float min_x = 0.0f, min_y = 0.0f, max_x = 0.0f, max_y = 0.0f;
+    float border_left = 0.0f, border_right = 0.0f, border_top = 0.0f, border_bottom = 0.0f;
+    for (uint32_t i = 0; i < r->boxes.size; i++) {
+        struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        if (b->element != el) {
+            continue;
+        }
+        if (!m.found) {
+            min_x = b->x;
+            min_y = b->y;
+            max_x = b->x + b->w;
+            max_y = b->y + b->h;
+            /* Principal box carries the border widths for the padding-box math. */
+            border_left = b->border_left;
+            border_right = b->border_right;
+            border_top = b->border_top;
+            border_bottom = b->border_bottom;
+            m.found = true;
+        } else {
+            if (b->x < min_x) {
+                min_x = b->x;
+            }
+            if (b->y < min_y) {
+                min_y = b->y;
+            }
+            if (b->x + b->w > max_x) {
+                max_x = b->x + b->w;
+            }
+            if (b->y + b->h > max_y) {
+                max_y = b->y + b->h;
+            }
+        }
+    }
+    if (!m.found) {
+        return m;
+    }
+    float border_box_w = max_x - min_x;
+    float border_box_h = max_y - min_y;
+    float client_w = border_box_w - border_left - border_right;
+    float client_h = border_box_h - border_top - border_bottom;
+    if (client_w < 0.0f) {
+        client_w = 0.0f;
+    }
+    if (client_h < 0.0f) {
+        client_h = 0.0f;
+    }
+    m.offset_w = (int)(border_box_w + 0.5f);
+    m.offset_h = (int)(border_box_h + 0.5f);
+    m.client_w = (int)(client_w + 0.5f);
+    m.client_h = (int)(client_h + 0.5f);
+    return m;
+}
+
+/* The document's root element (<html>) — the first element child of the
+ * document. CSSOM gives it special client-size semantics (the viewport). */
+static lxb_dom_element_t *document_root_element(struct yetty_ylexbor *r)
+{
+    if (r == NULL || r->document == NULL) {
+        return NULL;
+    }
+    lxb_dom_node_t *doc_node = lxb_dom_interface_node(r->document);
+    for (lxb_dom_node_t *c = doc_node->first_child; c; c = c->next) {
+        if (c->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+            return lxb_dom_interface_element(c);
+        }
+    }
+    return NULL;
+}
+
+static struct el_box_metrics el_metrics_of(JSContext *ctx, JSValueConst this_val)
+{
+    struct el_box_metrics m = {0, 0, 0, 0, false};
+    struct yetty_ylexbor *r = runtime_ylex(ctx);
+    geometry_flush_pending_layout(r);
+    lxb_dom_node_t *node = unwrap_node(ctx, this_val);
+    if (r == NULL || node == NULL || node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+        return m;
+    }
+    lxb_dom_element_t *el = lxb_dom_interface_element(node);
+    m = element_box_metrics(r, el);
+    /* CSSOM standards-mode root-element special case: documentElement's
+     * clientWidth/clientHeight report the layout viewport (not the root box's
+     * content size — the root box is viewport-wide but content-tall). offset*
+     * and getBoundingClientRect keep the real box geometry. body and every other
+     * element use ordinary box metrics. */
+    if (el != NULL && el == document_root_element(r)) {
+        m.client_w = r->viewport_w;
+        m.client_h = r->viewport_h;
+        m.found = true;
+    }
+    return m;
+}
+
+static JSValue js_el_clientWidth_get(JSContext *ctx, JSValueConst this_val)
+{
+    return JS_NewInt32(ctx, el_metrics_of(ctx, this_val).client_w);
+}
+
+static JSValue js_el_clientHeight_get(JSContext *ctx, JSValueConst this_val)
+{
+    return JS_NewInt32(ctx, el_metrics_of(ctx, this_val).client_h);
+}
+
+static JSValue js_el_offsetWidth_get(JSContext *ctx, JSValueConst this_val)
+{
+    return JS_NewInt32(ctx, el_metrics_of(ctx, this_val).offset_w);
+}
+
+static JSValue js_el_offsetHeight_get(JSContext *ctx, JSValueConst this_val)
+{
+    return JS_NewInt32(ctx, el_metrics_of(ctx, this_val).offset_h);
+}
+
+/* Fire every registered listener for (el, type) at one propagation level.
+ * `current_target` is the wrapper for the level being visited; the event's
+ * target property was already set to the dispatch origin by the caller.
+ * Returns 1 when a handler called stopImmediatePropagation(). */
+static int dispatch_fire_level(JSContext *ctx, struct js_dom_state *state, lxb_dom_element_t *el,
+                               const char *type, JSValueConst event,
+                               JSValueConst current_target, int snapshot)
+{
+    JS_SetPropertyStr(ctx, (JSValue)event, "currentTarget", JS_DupValue(ctx, current_target));
+    for (int i = 0; i < snapshot; i++) {
+        if (state->listeners[i].el != el || strcmp(state->listeners[i].type, type) != 0) {
+            continue;
+        }
+        JSValueConst call_args[] = {event};
+        JSValue ret = JS_Call(ctx, state->listeners[i].handler, current_target, 1, call_args);
+        if (JS_IsException(ret)) {
+            JSValue exc = JS_GetException(ctx);
+            JS_FreeValue(ctx, exc);
+        } else {
+            JS_FreeValue(ctx, ret);
+        }
+        JSValue imm = JS_GetPropertyStr(ctx, (JSValue)event, "__immediateStopped");
+        int stopped = JS_ToBool(ctx, imm);
+        JS_FreeValue(ctx, imm);
+        if (stopped) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* True when a handler called stopPropagation() (or stopImmediate…) on the
+ * event — the flags are set by the Event constructor stubs. Events built as
+ * plain object literals carry no flag and simply keep propagating. */
+static int dispatch_propagation_stopped(JSContext *ctx, JSValueConst event)
+{
+    JSValue flag = JS_GetPropertyStr(ctx, (JSValue)event, "__propagationStopped");
+    int stopped = JS_ToBool(ctx, flag);
+    JS_FreeValue(ctx, flag);
+    return stopped;
+}
+
 /* Real EventTarget.dispatchEvent: invoke every registered listener whose type
- * matches the event and whose target is this object (el == NULL means a
- * document/window listener). Used on Element, Document, and window — sites
- * dispatch synthetic CustomEvents to drive their own flows (e.g. CNN's
- * WMUC consent fires "userConsentReady" on document; a missing/stub
- * dispatchEvent threw "not a function" and aborted the handler). Returns
- * !event.defaultPrevented. */
+ * matches the event, starting at the dispatch target and — for events created
+ * with bubbles:true — walking up the ancestor chain, firing each ancestor's
+ * listeners with currentTarget updated per level, then the document/window
+ * bucket (el == NULL) at the top. Shadow-root fragments in the parent chain
+ * are crossed only for composed events (non-composed events stay inside their
+ * shadow tree, per spec). Web-component UIs depend on bubbling wholesale: a
+ * child fires a CustomEvent and the app root listens for it — without the
+ * upward walk every such notification silently matches zero listeners.
+ * Returns !event.defaultPrevented. */
 static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int argc,
                                    JSValueConst *argv)
 {
@@ -3562,21 +4602,45 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
     state->dispatch_depth++;
     lxb_dom_element_t *el = unwrap_element(ctx, this_val); /* NULL for document/window */
     JS_SetPropertyStr(ctx, (JSValue)argv[0], "target", JS_DupValue(ctx, this_val));
-    JS_SetPropertyStr(ctx, (JSValue)argv[0], "currentTarget", JS_DupValue(ctx, this_val));
     /* Snapshot the count: a handler may addEventListener during dispatch and
 	 * those new listeners must not fire for this same event. */
     int snapshot = state->listener_count;
-    for (int i = 0; i < snapshot; i++) {
-        if (state->listeners[i].el != el || strcmp(state->listeners[i].type, type) != 0) {
-            continue;
+    int immediate_stopped = dispatch_fire_level(ctx, state, el, type, argv[0], this_val, snapshot);
+
+    JSValue bubbles_v = JS_GetPropertyStr(ctx, (JSValue)argv[0], "bubbles");
+    int bubbles = JS_ToBool(ctx, bubbles_v);
+    JS_FreeValue(ctx, bubbles_v);
+    JSValue composed_v = JS_GetPropertyStr(ctx, (JSValue)argv[0], "composed");
+    int composed = JS_ToBool(ctx, composed_v);
+    JS_FreeValue(ctx, composed_v);
+
+    if (el != NULL && bubbles && !immediate_stopped &&
+        !dispatch_propagation_stopped(ctx, argv[0])) {
+        for (lxb_dom_node_t *node = lxb_dom_interface_node(el)->parent; node;
+             node = node->parent) {
+            if (node->type == LXB_DOM_NODE_TYPE_DOCUMENT_FRAGMENT && !composed) {
+                break; /* non-composed events stay inside their shadow tree */
+            }
+            if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+                continue;
+            }
+            lxb_dom_element_t *ancestor = lxb_dom_interface_element(node);
+            JSValue ancestor_wrap = wrap_element(ctx, ancestor);
+            immediate_stopped = dispatch_fire_level(ctx, state, ancestor, type, argv[0],
+                                                    ancestor_wrap, snapshot);
+            JS_FreeValue(ctx, ancestor_wrap);
+            if (immediate_stopped || dispatch_propagation_stopped(ctx, argv[0])) {
+                break;
+            }
         }
-        JSValueConst call_args[] = {argv[0]};
-        JSValue ret = JS_Call(ctx, state->listeners[i].handler, this_val, 1, call_args);
-        if (JS_IsException(ret)) {
-            JSValue exc = JS_GetException(ctx);
-            JS_FreeValue(ctx, exc);
-        } else {
-            JS_FreeValue(ctx, ret);
+        /* Top of the tree: the document/window listener bucket. */
+        if (!immediate_stopped && !dispatch_propagation_stopped(ctx, argv[0])) {
+            JSValue global = JS_GetGlobalObject(ctx);
+            JSValue doc_obj = JS_GetPropertyStr(ctx, global, "document");
+            JS_FreeValue(ctx, global);
+            dispatch_fire_level(ctx, state, NULL, type, argv[0],
+                                JS_IsObject(doc_obj) ? doc_obj : this_val, snapshot);
+            JS_FreeValue(ctx, doc_obj);
         }
     }
     JS_FreeCString(ctx, type);
@@ -3630,7 +4694,7 @@ static JSValue js_el_toggleAttr_stub(JSContext *ctx, JSValueConst this_val, int 
     if (argc < 1) {
         return JS_FALSE;
     }
-    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
         return JS_FALSE;
     }
@@ -3741,83 +4805,525 @@ static JSValue js_doc_implementation_get(JSContext *ctx, JSValueConst this_val)
     return obj;
 }
 
-/* DOMParser.parseFromString(source, mimeType) — parse into a throwaway
- * lexbor document, then IMPORT (deep-clone) its documentElement/head/body
- * into the LIVE document's memory pool and return a plain object carrying
- * those imports as documentElement/head/body. Every MIME type takes the
- * HTML parser (no XML parser in the engine).
+/* Constructor stub for the DOM interface globals (EventTarget/Node/Element/…).
+ * `new Element()` returns a plain object whose prototype is the constructor's
+ * .prototype so `class X extends HTMLElement {…}` (custom elements) and the
+ * Shady-DOM polyfill's `X.prototype` walks both work. Instances of real DOM
+ * nodes come from wrap_element(), not from calling these. */
+static JSValue js_dom_iface_ctor(JSContext *ctx, JSValueConst new_target, int argc,
+                                 JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JSValue proto = JS_GetPropertyStr(ctx, new_target, "prototype");
+    JSValue self = JS_IsObject(proto) ? JS_NewObjectProto(ctx, proto) : JS_NewObject(ctx);
+    JS_FreeValue(ctx, proto);
+    return self;
+}
+
+/* Install a DOM interface constructor `name` on the global with `.prototype`
+ * set to `proto` (a borrowed ref — this dups what it keeps). */
+static void install_dom_iface(JSContext *ctx, JSValueConst global, const char *name,
+                              JSValueConst proto)
+{
+    JSValue ctor = JS_NewCFunction2(ctx, js_dom_iface_ctor, name, 0, JS_CFUNC_constructor, 0);
+    JS_SetPropertyStr(ctx, ctor, "prototype", JS_DupValue(ctx, proto));
+    JS_DefinePropertyValueStr(ctx, (JSValue)proto, "constructor", JS_DupValue(ctx, ctor),
+                              JS_PROP_CONFIGURABLE | JS_PROP_WRITABLE);
+    JS_SetPropertyStr(ctx, (JSValue)global, name, ctor);
+}
+
+/* ===========================================================================
+ * MutationObserver — a real implementation (see the struct comment above).
  *
- * Why import into the main pool rather than keep the parsed document
- * alive: page code grafts these nodes into the live tree (Zephr's outcome
- * renderer moves t.head/t.body childNodes into the page). If the nodes
- * physically lived in a SEPARATE document's allocator, that graft would
- * link cross-pool nodes into the main tree — and on navigation the main
- * document's re-parse and the parsed document's teardown would both manage
- * the same node memory (heap corruption surfacing later in malloc). Importing
- * makes every returned node main-pool, so grafting is same-pool and the
- * nodes are freed exactly once, by the main document. The throwaway parse
- * document is destroyed here; nothing outlives this call. */
-static JSValue js_domparser_parse_from_string(JSContext *ctx, JSValueConst this_val, int argc,
-                                              JSValueConst *argv)
+ * DOM mutations report themselves through dom_mo_notify_*; for every live
+ * observer that covers the target, one MutationRecord is queued and a single
+ * delivery microtask is scheduled. Delivery coalesces per observer (all its
+ * records in one callback call), matching the spec's "queue a mutation
+ * observer microtask" step. Records deliver on the QuickJS job queue, i.e. as
+ * a microtask after the current turn — the timing frameworks expect.
+ * ===========================================================================*/
+
+static void mo_register(struct js_dom_state *state, struct mutation_observer *observer)
+{
+    for (int i = 0; i < state->mutation_observer_count; i++) {
+        if (state->mutation_observers[i] == NULL) {
+            state->mutation_observers[i] = observer;
+            return;
+        }
+    }
+    if (state->mutation_observer_count < MAX_MUTATION_OBSERVERS) {
+        state->mutation_observers[state->mutation_observer_count++] = observer;
+    }
+}
+
+static void mo_unregister(struct js_dom_state *state, struct mutation_observer *observer)
+{
+    for (int i = 0; i < state->mutation_observer_count; i++) {
+        if (state->mutation_observers[i] == observer) {
+            state->mutation_observers[i] = NULL;
+            return;
+        }
+    }
+}
+
+/* Does this observation cover `target` for the given mutation? An observation
+ * covers its exact target always, and any descendant when `subtree` is set. */
+static int mo_observation_covers(const struct mutation_observation *observation,
+                                 lxb_dom_node_t *target)
+{
+    if (observation->target == target) {
+        return 1;
+    }
+    if (!(observation->flags & MO_SUBTREE)) {
+        return 0;
+    }
+    for (lxb_dom_node_t *node = target->parent; node != NULL; node = node->parent) {
+        if (node == observation->target) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int dom_mo_any_interest(JSContext *ctx, lxb_dom_node_t *target, int type_flag)
+{
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL) {
+        return 0;
+    }
+    for (int i = 0; i < state->mutation_observer_count; i++) {
+        struct mutation_observer *observer = state->mutation_observers[i];
+        if (observer == NULL) {
+            continue;
+        }
+        for (int j = 0; j < observer->observation_count; j++) {
+            struct mutation_observation *observation = &observer->observations[j];
+            if ((observation->flags & type_flag) && mo_observation_covers(observation, target)) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static JSValue mo_deliver_job(JSContext *ctx, int argc, JSValueConst *argv);
+
+static void mo_schedule_delivery(JSContext *ctx)
+{
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL || state->mutation_delivery_scheduled) {
+        return;
+    }
+    state->mutation_delivery_scheduled = 1;
+    /* Deliver on the microtask queue. The job body re-reads the registry, so
+	 * mutations that happen before it runs are folded into the same delivery. */
+    JS_EnqueueJob(ctx, mo_deliver_job, 0, NULL);
+}
+
+/* Push a record onto an observer's pending queue (creating it on demand); the
+ * record ref is transferred to the array. */
+static void mo_push_record(JSContext *ctx, struct mutation_observer *observer, JSValue record)
+{
+    if (JS_IsUndefined(observer->records)) {
+        observer->records = JS_NewArray(ctx);
+    }
+    JSValue length_val = JS_GetPropertyStr(ctx, observer->records, "length");
+    uint32_t length = 0;
+    JS_ToUint32(ctx, &length, length_val);
+    JS_FreeValue(ctx, length_val);
+    JS_SetPropertyUint32(ctx, observer->records, length, record);
+}
+
+static JSValue mo_new_record(JSContext *ctx, const char *type, lxb_dom_node_t *target)
+{
+    JSValue record = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, record, "type", JS_NewString(ctx, type));
+    JS_SetPropertyStr(ctx, record, "target", wrap_element(ctx, (lxb_dom_element_t *)target));
+    JS_SetPropertyStr(ctx, record, "addedNodes", JS_NewArray(ctx));
+    JS_SetPropertyStr(ctx, record, "removedNodes", JS_NewArray(ctx));
+    JS_SetPropertyStr(ctx, record, "previousSibling", JS_NULL);
+    JS_SetPropertyStr(ctx, record, "nextSibling", JS_NULL);
+    JS_SetPropertyStr(ctx, record, "attributeName", JS_NULL);
+    JS_SetPropertyStr(ctx, record, "attributeNamespace", JS_NULL);
+    JS_SetPropertyStr(ctx, record, "oldValue", JS_NULL);
+    return record;
+}
+
+/* Single-element NodeList-ish array holding one wrapped node. */
+static JSValue mo_single_node_array(JSContext *ctx, lxb_dom_node_t *node)
+{
+    JSValue array = JS_NewArray(ctx);
+    JS_SetPropertyUint32(ctx, array, 0, wrap_element(ctx, (lxb_dom_element_t *)node));
+    return array;
+}
+
+static void dom_mo_notify_attributes(JSContext *ctx, lxb_dom_element_t *el, const char *name,
+                                     size_t name_len, const char *old_value)
+{
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL || state->mutation_observer_count == 0) {
+        return;
+    }
+    lxb_dom_node_t *target = lxb_dom_interface_node(el);
+    int queued = 0;
+    for (int i = 0; i < state->mutation_observer_count; i++) {
+        struct mutation_observer *observer = state->mutation_observers[i];
+        if (observer == NULL) {
+            continue;
+        }
+        int interested = 0, want_old_value = 0;
+        for (int j = 0; j < observer->observation_count; j++) {
+            struct mutation_observation *observation = &observer->observations[j];
+            if (!(observation->flags & MO_ATTRIBUTES) ||
+                !mo_observation_covers(observation, target)) {
+                continue;
+            }
+            interested = 1;
+            if (observation->flags & MO_ATTR_OLD_VALUE) {
+                want_old_value = 1;
+            }
+        }
+        if (!interested) {
+            continue;
+        }
+        JSValue record = mo_new_record(ctx, "attributes", target);
+        JS_SetPropertyStr(ctx, record, "attributeName", JS_NewStringLen(ctx, name, name_len));
+        if (want_old_value && old_value != NULL) {
+            JS_SetPropertyStr(ctx, record, "oldValue", JS_NewString(ctx, old_value));
+        }
+        mo_push_record(ctx, observer, record);
+        queued = 1;
+    }
+    if (queued) {
+        mo_schedule_delivery(ctx);
+    }
+}
+
+static void dom_mo_notify_character_data(JSContext *ctx, lxb_dom_node_t *target,
+                                         const char *old_value)
+{
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL || state->mutation_observer_count == 0) {
+        return;
+    }
+    int queued = 0;
+    for (int i = 0; i < state->mutation_observer_count; i++) {
+        struct mutation_observer *observer = state->mutation_observers[i];
+        if (observer == NULL) {
+            continue;
+        }
+        int interested = 0, want_old_value = 0;
+        for (int j = 0; j < observer->observation_count; j++) {
+            struct mutation_observation *observation = &observer->observations[j];
+            if (!(observation->flags & MO_CHARACTER_DATA) ||
+                !mo_observation_covers(observation, target)) {
+                continue;
+            }
+            interested = 1;
+            if (observation->flags & MO_CHAR_OLD_VALUE) {
+                want_old_value = 1;
+            }
+        }
+        if (!interested) {
+            continue;
+        }
+        JSValue record = mo_new_record(ctx, "characterData", target);
+        if (want_old_value && old_value != NULL) {
+            JS_SetPropertyStr(ctx, record, "oldValue", JS_NewString(ctx, old_value));
+        }
+        mo_push_record(ctx, observer, record);
+        queued = 1;
+    }
+    if (queued) {
+        mo_schedule_delivery(ctx);
+    }
+}
+
+static void dom_mo_notify_child_list(JSContext *ctx, lxb_dom_node_t *parent,
+                                     lxb_dom_node_t *added, lxb_dom_node_t *removed,
+                                     lxb_dom_node_t *prev_sibling, lxb_dom_node_t *next_sibling)
+{
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL || state->mutation_observer_count == 0) {
+        return;
+    }
+    int queued = 0;
+    for (int i = 0; i < state->mutation_observer_count; i++) {
+        struct mutation_observer *observer = state->mutation_observers[i];
+        if (observer == NULL) {
+            continue;
+        }
+        int interested = 0;
+        for (int j = 0; j < observer->observation_count; j++) {
+            struct mutation_observation *observation = &observer->observations[j];
+            if ((observation->flags & MO_CHILD_LIST) &&
+                mo_observation_covers(observation, parent)) {
+                interested = 1;
+                break;
+            }
+        }
+        if (!interested) {
+            continue;
+        }
+        JSValue record = mo_new_record(ctx, "childList", parent);
+        if (added != NULL) {
+            JS_SetPropertyStr(ctx, record, "addedNodes", mo_single_node_array(ctx, added));
+        }
+        if (removed != NULL) {
+            JS_SetPropertyStr(ctx, record, "removedNodes", mo_single_node_array(ctx, removed));
+        }
+        if (prev_sibling != NULL) {
+            JS_SetPropertyStr(ctx, record, "previousSibling",
+                              wrap_element(ctx, (lxb_dom_element_t *)prev_sibling));
+        }
+        if (next_sibling != NULL) {
+            JS_SetPropertyStr(ctx, record, "nextSibling",
+                              wrap_element(ctx, (lxb_dom_element_t *)next_sibling));
+        }
+        mo_push_record(ctx, observer, record);
+        queued = 1;
+    }
+    if (queued) {
+        mo_schedule_delivery(ctx);
+    }
+}
+
+/* The delivery microtask: hand each observer its queued records in one call.
+ * Clearing `mutation_delivery_scheduled` first means mutations made by a
+ * callback schedule a fresh delivery, which drains in the same job loop. */
+static void mo_deliver_job_body(JSContext *ctx)
+{
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL) {
+        return;
+    }
+    state->mutation_delivery_scheduled = 0;
+    for (int i = 0; i < state->mutation_observer_count; i++) {
+        struct mutation_observer *observer = state->mutation_observers[i];
+        if (observer == NULL || JS_IsUndefined(observer->records)) {
+            continue;
+        }
+        JSValue records = observer->records;
+        observer->records = JS_UNDEFINED;
+        JSValueConst args[2] = {records, observer->self};
+        JSValue ret = JS_Call(ctx, observer->callback, observer->self, 2, args);
+        if (JS_IsException(ret)) {
+            JSValue exc = JS_GetException(ctx);
+            const char *msg = JS_ToCString(ctx, exc);
+            ydebug("MutationObserver callback: %s", msg ? msg : "?");
+            if (msg) {
+                JS_FreeCString(ctx, msg);
+            }
+            JS_FreeValue(ctx, exc);
+        } else {
+            JS_FreeValue(ctx, ret);
+        }
+        JS_FreeValue(ctx, records);
+    }
+}
+
+static JSValue mo_deliver_job(JSContext *ctx, int argc, JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    mo_deliver_job_body(ctx);
+    return JS_UNDEFINED;
+}
+
+static struct mutation_observer *mo_from_this(JSContext *ctx, JSValueConst this_val)
+{
+    return JS_GetOpaque(this_val, dom_state(ctx)->class_mutation_observer_id);
+}
+
+static int mo_opt_bool(JSContext *ctx, JSValueConst options, const char *name)
+{
+    JSValue value = JS_GetPropertyStr(ctx, options, name);
+    int result = JS_ToBool(ctx, value);
+    JS_FreeValue(ctx, value);
+    return result;
+}
+
+static JSValue js_mutation_observer_observe(JSContext *ctx, JSValueConst this_val, int argc,
+                                            JSValueConst *argv)
+{
+    struct mutation_observer *observer = mo_from_this(ctx, this_val);
+    if (observer == NULL) {
+        return JS_ThrowTypeError(ctx, "observe called on non-MutationObserver");
+    }
+    if (argc < 1) {
+        return JS_ThrowTypeError(ctx, "observe requires a target node");
+    }
+    lxb_dom_node_t *target = unwrap_node(ctx, argv[0]);
+    if (target == NULL) {
+        return JS_ThrowTypeError(ctx, "observe target is not a node");
+    }
+    int flags = 0;
+    if (argc >= 2 && JS_IsObject(argv[1])) {
+        JSValueConst options = argv[1];
+        if (mo_opt_bool(ctx, options, "childList")) {
+            flags |= MO_CHILD_LIST;
+        }
+        if (mo_opt_bool(ctx, options, "attributes")) {
+            flags |= MO_ATTRIBUTES;
+        }
+        if (mo_opt_bool(ctx, options, "characterData")) {
+            flags |= MO_CHARACTER_DATA;
+        }
+        if (mo_opt_bool(ctx, options, "subtree")) {
+            flags |= MO_SUBTREE;
+        }
+        if (mo_opt_bool(ctx, options, "attributeOldValue")) {
+            flags |= MO_ATTR_OLD_VALUE | MO_ATTRIBUTES;
+        }
+        if (mo_opt_bool(ctx, options, "characterDataOldValue")) {
+            flags |= MO_CHAR_OLD_VALUE | MO_CHARACTER_DATA;
+        }
+    }
+    if (!(flags & (MO_CHILD_LIST | MO_ATTRIBUTES | MO_CHARACTER_DATA))) {
+        return JS_ThrowTypeError(
+            ctx, "observe requires childList, attributes, or characterData to be true");
+    }
+    /* Pin the observer alive now that it has an active observation. */
+    if (!observer->rooted) {
+        JS_DupValue(ctx, this_val);
+        observer->rooted = 1;
+    }
+    /* Re-observing the same target replaces its options (spec). */
+    for (int i = 0; i < observer->observation_count; i++) {
+        if (observer->observations[i].target == target) {
+            observer->observations[i].flags = flags;
+            return JS_UNDEFINED;
+        }
+    }
+    if (observer->observation_count < MO_MAX_OBSERVATIONS) {
+        observer->observations[observer->observation_count].target = target;
+        observer->observations[observer->observation_count].flags = flags;
+        observer->observation_count++;
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_mutation_observer_disconnect(JSContext *ctx, JSValueConst this_val, int argc,
+                                               JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    struct mutation_observer *observer = mo_from_this(ctx, this_val);
+    if (observer == NULL) {
+        return JS_UNDEFINED;
+    }
+    observer->observation_count = 0;
+    JS_FreeValue(ctx, observer->records);
+    observer->records = JS_UNDEFINED;
+    /* No active observations → release the keep-alive pin. `this_val` still
+	 * holds a ref for the duration of this call, so the object is not
+	 * finalized out from under us here. */
+    if (observer->rooted) {
+        observer->rooted = 0;
+        JS_FreeValue(ctx, this_val);
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_mutation_observer_take_records(JSContext *ctx, JSValueConst this_val, int argc,
+                                                 JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    struct mutation_observer *observer = mo_from_this(ctx, this_val);
+    if (observer == NULL || JS_IsUndefined(observer->records)) {
+        return JS_NewArray(ctx);
+    }
+    JSValue records = observer->records;
+    observer->records = JS_UNDEFINED;
+    return records;
+}
+
+static void mutation_observer_finalizer(JSRuntime *rt, JSValue val)
+{
+    struct js_dom_state *state = JS_GetRuntimeOpaque(rt);
+    if (state == NULL) {
+        return;
+    }
+    struct mutation_observer *observer =
+        JS_GetOpaque(val, state->class_mutation_observer_id);
+    if (observer == NULL) {
+        return;
+    }
+    mo_unregister(state, observer);
+    JS_FreeValueRT(rt, observer->callback);
+    JS_FreeValueRT(rt, observer->records);
+    free(observer);
+}
+
+static JSValue js_mutation_observer_ctor(JSContext *ctx, JSValueConst new_target, int argc,
+                                         JSValueConst *argv)
+{
+    if (argc < 1 || !JS_IsFunction(ctx, argv[0])) {
+        return JS_ThrowTypeError(ctx, "MutationObserver requires a callback function");
+    }
+    struct js_dom_state *state = dom_state(ctx);
+    JSValue proto = JS_GetPropertyStr(ctx, new_target, "prototype");
+    if (JS_IsException(proto)) {
+        return proto;
+    }
+    JSValue obj = JS_NewObjectProtoClass(ctx, proto, state->class_mutation_observer_id);
+    JS_FreeValue(ctx, proto);
+    if (JS_IsException(obj)) {
+        return obj;
+    }
+    struct mutation_observer *observer = calloc(1, sizeof(*observer));
+    if (observer == NULL) {
+        JS_FreeValue(ctx, obj);
+        return JS_ThrowOutOfMemory(ctx);
+    }
+    observer->self = obj; /* non-owned: the finalizer unregisters, so a
+	                       * registered observer's self is always live */
+    observer->callback = JS_DupValue(ctx, argv[0]);
+    observer->records = JS_UNDEFINED;
+    JS_SetOpaque(obj, observer);
+    mo_register(state, observer);
+    return obj;
+}
+
+/* Install globalThis.MutationObserver backed by the C implementation. */
+/* Called by the custom-element registry the first time a page defines a
+ * custom element. Arms the reaction dispatch in the DOM insertion paths so
+ * pages that never use custom elements pay no per-insertion cost. */
+static JSValue js_ce_activate(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     (void)this_val;
-    struct yetty_ylexbor *r = runtime_ylex(ctx);
-    if (!r || argc < 1) {
-        return JS_NULL;
+    (void)argc;
+    (void)argv;
+    struct js_dom_state *state = dom_state(ctx);
+    if (state != NULL) {
+        state->ce_active = 1;
     }
-    size_t source_len = 0;
-    const char *source = JS_ToCStringLen(ctx, &source_len, argv[0]);
-    if (!source) {
-        return JS_NULL;
-    }
-    lxb_html_document_t *parsed_doc = lxb_html_document_create();
-    if (!parsed_doc) {
-        JS_FreeCString(ctx, source);
-        return JS_NULL;
-    }
-    lxb_status_t parse_status =
-        lxb_html_document_parse(parsed_doc, (const lxb_char_t *)source, source_len);
-    JS_FreeCString(ctx, source);
-    if (parse_status != LXB_STATUS_OK) {
-        lxb_html_document_destroy(parsed_doc);
-        return JS_NULL;
-    }
+    return JS_UNDEFINED;
+}
 
-    lxb_dom_document_t *main_doc = lxb_dom_interface_document(r->document);
-    JSValue parsed_obj = JS_NewObject(ctx);
-
-    /* documentElement — first element child of the parsed document. */
-    lxb_dom_node_t *parsed_node = lxb_dom_interface_node(parsed_doc);
-    for (lxb_dom_node_t *child = parsed_node->first_child; child; child = child->next) {
-        if (child->type == LXB_DOM_NODE_TYPE_ELEMENT) {
-            lxb_dom_node_t *imported = lxb_dom_document_import_node(main_doc, child, true);
-            if (imported) {
-                JS_SetPropertyStr(ctx, parsed_obj, "documentElement",
-                                  wrap_element(ctx, lxb_dom_interface_element(imported)));
-            }
-            break;
-        }
-    }
-    lxb_html_body_element_t *parsed_body = lxb_html_document_body_element(parsed_doc);
-    if (parsed_body) {
-        lxb_dom_node_t *imported =
-            lxb_dom_document_import_node(main_doc, lxb_dom_interface_node(parsed_body), true);
-        if (imported) {
-            JS_SetPropertyStr(ctx, parsed_obj, "body",
-                              wrap_element(ctx, lxb_dom_interface_element(imported)));
-        }
-    }
-    lxb_html_head_element_t *parsed_head = lxb_html_document_head_element(parsed_doc);
-    if (parsed_head) {
-        lxb_dom_node_t *imported =
-            lxb_dom_document_import_node(main_doc, lxb_dom_interface_node(parsed_head), true);
-        if (imported) {
-            JS_SetPropertyStr(ctx, parsed_obj, "head",
-                              wrap_element(ctx, lxb_dom_interface_element(imported)));
-        }
-    }
-    lxb_html_document_destroy(parsed_doc);
-    return parsed_obj;
+static void install_mutation_observer(JSContext *ctx, JSValueConst global)
+{
+    struct js_dom_state *state = dom_state(ctx);
+    JS_SetPropertyStr(ctx, (JSValue)global, "__ceActivate",
+                      JS_NewCFunction(ctx, js_ce_activate, "__ceActivate", 0));
+    JSValue proto = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, proto, "observe",
+                      JS_NewCFunction(ctx, js_mutation_observer_observe, "observe", 2));
+    JS_SetPropertyStr(ctx, proto, "disconnect",
+                      JS_NewCFunction(ctx, js_mutation_observer_disconnect, "disconnect", 0));
+    JS_SetPropertyStr(ctx, proto, "takeRecords",
+                      JS_NewCFunction(ctx, js_mutation_observer_take_records, "takeRecords", 0));
+    JS_SetClassProto(ctx, state->class_mutation_observer_id, JS_DupValue(ctx, proto));
+    JSValue ctor =
+        JS_NewCFunction2(ctx, js_mutation_observer_ctor, "MutationObserver", 1, JS_CFUNC_constructor, 0);
+    JS_SetConstructor(ctx, ctor, proto);
+    JS_SetPropertyStr(ctx, (JSValue)global, "MutationObserver", ctor);
+    /* WebKitMutationObserver is the legacy alias some libraries feature-detect. */
+    JS_SetPropertyStr(ctx, (JSValue)global, "WebKitMutationObserver",
+                      JS_GetPropertyStr(ctx, global, "MutationObserver"));
+    JS_FreeValue(ctx, proto);
 }
 
 void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
@@ -3832,6 +5338,11 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
     struct js_dom_state *state = JS_GetRuntimeOpaque(rt);
     if (state == NULL) {
         state = calloc(1, sizeof(*state));
+        /* A zeroed JSValue is JS_TAG_INT 0, not undefined; set it explicitly so
+    	 * the apply_chardata_proto/apply_fragment_proto guards hold before this
+    	 * install wires them. */
+        state->chardata_proto = JS_UNDEFINED;
+        state->fragment_proto = JS_UNDEFINED;
         JS_SetRuntimeOpaque(rt, state);
     }
     state->r = r;
@@ -3850,6 +5361,7 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_NewClassID(rt, &state->class_document_id);
         JS_NewClassID(rt, &state->class_classlist_id);
         JS_NewClassID(rt, &state->class_style_id);
+        JS_NewClassID(rt, &state->class_mutation_observer_id);
     }
     const JSClassDef class_node_def = {"Node", .finalizer = node_finalizer};
     const JSClassDef class_element_def = {"Element", .finalizer = node_finalizer};
@@ -3857,11 +5369,14 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
     const JSClassDef class_classlist_def = {"DOMTokenList", .finalizer = node_finalizer};
     const JSClassDef class_style_def = {"CSSStyleDeclaration", .finalizer = node_finalizer,
                                         .exotic = (JSClassExoticMethods *)&style_exotic_methods};
+    const JSClassDef class_mutation_observer_def = {"MutationObserver",
+                                                    .finalizer = mutation_observer_finalizer};
     JS_NewClass(rt, state->class_node_id, &class_node_def);
     JS_NewClass(rt, state->class_element_id, &class_element_def);
     JS_NewClass(rt, state->class_document_id, &class_document_def);
     JS_NewClass(rt, state->class_classlist_id, &class_classlist_def);
     JS_NewClass(rt, state->class_style_id, &class_style_def);
+    JS_NewClass(rt, state->class_mutation_observer_id, &class_mutation_observer_def);
 
     static const JSCFunctionListEntry element_funcs[] = {
         JS_CFUNC_DEF("getAttribute", 1, js_el_getAttribute),
@@ -3896,6 +5411,7 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CFUNC_DEF("hasChildNodes", 0, js_el_hasChildNodes_stub),
         JS_CFUNC_DEF("hasAttributes", 0, js_el_hasAttributes_stub),
         JS_CFUNC_DEF("getAttributeNames", 0, js_el_getAttributeNames_stub),
+        JS_CGETSET_DEF("attributes", js_el_attributes_get, NULL),
         JS_CFUNC_DEF("cloneNode", 1, js_el_cloneNode_stub),
         JS_CFUNC_DEF("getBoundingClientRect", 0, js_el_getBoundingClientRect),
         JS_CFUNC_DEF("getClientRects", 0, js_el_clientRects_stub),
@@ -3909,23 +5425,11 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CFUNC_DEF("removeEventListener", 2, js_el_undef_stub),
         JS_CFUNC_DEF("toggleAttribute", 1, js_el_toggleAttr_stub),
         JS_CGETSET_DEF("textContent", js_el_textContent_get, js_el_textContent_set),
-        /* innerText ≈ textContent — no layout-aware rendering of the text,
-    	 * but sites read it constantly for truncation/measure logic. */
-        JS_CGETSET_DEF("innerText", js_el_textContent_get, js_el_textContent_set),
         JS_CGETSET_DEF("innerHTML", js_el_innerHTML_get, js_el_innerHTML_set),
         JS_CGETSET_DEF("outerHTML", js_el_outerHTML_get, NULL),
-        JS_CFUNC_DEF("insertAdjacentHTML", 2, js_el_insertAdjacentHTML),
-        JS_CGETSET_DEF("attributes", js_el_attributes_get, NULL),
-        /* CharacterData (Text/Comment) — `data` and `length` plus the
-    	 * appendData/insertData/deleteData/replaceData/substringData
-    	 * mutators. as_chardata() in each guards element-only nodes. */
-        JS_CGETSET_DEF("data", js_cd_data_get, js_cd_data_set),
-        JS_CGETSET_DEF("length", js_cd_length_get, js_cd_length_set),
-        JS_CFUNC_DEF("appendData", 1, js_cd_appendData),
-        JS_CFUNC_DEF("insertData", 2, js_cd_insertData),
-        JS_CFUNC_DEF("deleteData", 2, js_cd_deleteData),
-        JS_CFUNC_DEF("replaceData", 3, js_cd_replaceData),
-        JS_CFUNC_DEF("substringData", 2, js_cd_substringData),
+        /* CharacterData members (`data`/`length`/appendData/…) are NOT here:
+    	 * they live on chardata_proto, which only Text/Comment/PI wrappers
+    	 * inherit, so `"data" in <element>` stays false (see chardata_proto). */
         JS_CGETSET_DEF("tagName", js_el_tagName_get, NULL),
         JS_CGETSET_DEF("id", js_el_id_get, js_el_id_set),
         JS_CGETSET_DEF("className", js_el_className_get, js_el_className_set),
@@ -3943,7 +5447,16 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CGETSET_DEF("classList", js_el_classList_get, NULL),
         JS_CGETSET_DEF("nodeType", js_el_nodeType_get, NULL),
         JS_CGETSET_DEF("nodeName", js_el_nodeName_get, NULL),
+        JS_CGETSET_DEF("localName", js_el_localName_get, NULL),
+        JS_CGETSET_DEF("isConnected", js_el_isConnected_get, NULL),
         JS_CGETSET_DEF("ownerDocument", js_el_ownerDocument_get, NULL),
+        /* Laid-out geometry the responsive components read (YouTube's
+    	 * ytd-rich-grid-renderer bails out of reflow when hostElement.clientWidth
+    	 * is undefined). Integer CSS px from the last completed layout. */
+        JS_CGETSET_DEF("clientWidth", js_el_clientWidth_get, NULL),
+        JS_CGETSET_DEF("clientHeight", js_el_clientHeight_get, NULL),
+        JS_CGETSET_DEF("offsetWidth", js_el_offsetWidth_get, NULL),
+        JS_CGETSET_DEF("offsetHeight", js_el_offsetHeight_get, NULL),
         /* `delegate` — Turbo's custom-element wiring does
     	 *   Object.getPrototypeOf(el.delegate)
     	 * during boot. Returning an empty object lets that walk through.
@@ -3951,7 +5464,7 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
     	 * frameworks make on elements. */
         JS_CGETSET_DEF("delegate", js_el_delegate_get, NULL),
         JS_CGETSET_DEF("dataset", js_el_empty_obj_get, NULL),
-        JS_CGETSET_DEF("content", js_el_content_get, NULL),
+        JS_CGETSET_DEF("content", js_el_content_get, js_el_content_set),
         JS_CGETSET_DEF("elements", js_el_elements_get, NULL),
         JS_CGETSET_DEF("src", js_el_src_get, js_el_src_set),
         JS_CGETSET_DEF("href", js_el_href_get, js_el_href_set),
@@ -3965,12 +5478,65 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CGETSET_DEF("method", js_el_method_get, js_el_method_set),
         JS_CGETSET_DEF("rel", js_el_rel_get, js_el_rel_set),
         JS_CGETSET_DEF("target", js_el_target_get, js_el_target_set),
+        JS_CGETSET_DEF("hidden", js_el_hidden_get, js_el_hidden_set),
     };
-    /* Element prototype — methods + accessors via JS_CGETSET_DEF. */
-    JSValue el_proto = JS_NewObject(ctx);
-    JS_SetPropertyFunctionList(ctx, el_proto, element_funcs,
+    /* DOM interface prototype CHAIN: element_proto -> node_proto ->
+     * event_target_proto. Every node instance points at element_proto, so it
+     * still reaches all methods by inheritance (all methods start on
+     * element_proto). YouTube's Shady-DOM polyfill captures native methods
+     * per-interface via Object.getOwnPropertyDescriptor(Node.prototype, …) and
+     * re-patches them, expecting instances to pick up the patch through
+     * inheritance — impossible when every method is an OWN prop of one flat
+     * proto. The redistribute step (js_dom_redistribute_protos below, run after
+     * the globals are wired) moves the Node/EventTarget methods UP to the level
+     * the polyfill inspects; reachability is unchanged either way. */
+    JSValue event_target_proto = JS_NewObject(ctx);
+    JSValue node_proto = JS_NewObjectProto(ctx, event_target_proto);
+    JSValue element_proto = JS_NewObjectProto(ctx, node_proto);
+    JS_SetPropertyFunctionList(ctx, element_proto, element_funcs,
                                sizeof(element_funcs) / sizeof(element_funcs[0]));
-    JS_SetClassProto(ctx, state->class_element_id, el_proto);
+    /* SetClassProto consumes a ref; keep element_proto for the wiring below. */
+    JS_SetClassProto(ctx, state->class_element_id, JS_DupValue(ctx, element_proto));
+
+    /* CharacterData.prototype, chained above the element proto so Text/Comment/PI
+     * wrappers keep every Node/Element method they reach today AND gain the
+     * character-data members — while plain elements (which inherit element_proto
+     * directly) never report `data`. apply_chardata_proto() re-parents the
+     * relevant wrappers to this proto. */
+    static const JSCFunctionListEntry chardata_funcs[] = {
+        JS_CGETSET_DEF("data", js_cd_data_get, js_cd_data_set),
+        JS_CGETSET_DEF("length", js_cd_length_get, NULL),
+        JS_CFUNC_DEF("appendData", 1, js_cd_appendData),
+        JS_CFUNC_DEF("insertData", 2, js_cd_insertData),
+        JS_CFUNC_DEF("deleteData", 2, js_cd_deleteData),
+        JS_CFUNC_DEF("replaceData", 3, js_cd_replaceData),
+        JS_CFUNC_DEF("substringData", 2, js_cd_substringData),
+    };
+    JSValue chardata_proto = JS_NewObjectProto(ctx, element_proto);
+    JS_SetPropertyFunctionList(ctx, chardata_proto, chardata_funcs,
+                               sizeof(chardata_funcs) / sizeof(chardata_funcs[0]));
+    JS_FreeValue(ctx, state->chardata_proto); /* release a prior install's proto */
+    state->chardata_proto = JS_DupValue(ctx, chardata_proto);
+
+    /* DocumentFragment.prototype — chained on node_proto (Node.prototype), NOT
+	 * element_proto, so a fragment is not `instanceof Element`. The redistribute
+	 * step below moves the core Node/insertion methods (appendChild, insertBefore,
+	 * cloneNode, append/prepend, childNodes, firstChild, nodeType, …) up to
+	 * node_proto, which a fragment reaches by inheritance. The ParentNode *query*
+	 * methods stay on element_proto, so copy the ones a fragment legitimately has
+	 * (querySelector/querySelectorAll/children/firstElementChild) directly onto
+	 * the fragment proto — mirroring how doc_proto gets its own method copy. */
+    static const JSCFunctionListEntry fragment_funcs[] = {
+        JS_CFUNC_DEF("querySelector", 1, js_el_querySelector),
+        JS_CFUNC_DEF("querySelectorAll", 1, js_el_querySelectorAll),
+        JS_CGETSET_DEF("children", js_el_children_get, NULL),
+        JS_CGETSET_DEF("firstElementChild", js_el_firstElementChild_get, NULL),
+    };
+    JSValue fragment_proto = JS_NewObjectProto(ctx, node_proto);
+    JS_SetPropertyFunctionList(ctx, fragment_proto, fragment_funcs,
+                               sizeof(fragment_funcs) / sizeof(fragment_funcs[0]));
+    JS_FreeValue(ctx, state->fragment_proto); /* release a prior install's proto */
+    state->fragment_proto = JS_DupValue(ctx, fragment_proto);
 
     static const JSCFunctionListEntry document_funcs[] = {
         JS_CFUNC_DEF("getElementById", 1, js_doc_getElementById),
@@ -3983,6 +5549,7 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CFUNC_DEF("createElementNS", 2, js_doc_createElementNS),
         JS_CFUNC_DEF("createTextNode", 1, js_doc_createTextNode),
         JS_CFUNC_DEF("createDocumentFragment", 0, js_doc_createDocumentFragment),
+        JS_CFUNC_DEF("importNode", 2, js_doc_importNode),
         JS_CFUNC_DEF("createComment", 1, js_doc_createComment),
         JS_CFUNC_DEF("addEventListener", 2, js_el_addEventListener),
         JS_CFUNC_DEF("dispatchEvent", 1, js_el_dispatchEvent),
@@ -4000,6 +5567,8 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CFUNC_DEF("contains", 1, js_el_contains_stub),
         JS_CGETSET_DEF("nodeType", js_el_nodeType_get, NULL),
         JS_CGETSET_DEF("nodeName", js_el_nodeName_get, NULL),
+        JS_CGETSET_DEF("localName", js_el_localName_get, NULL),
+        JS_CGETSET_DEF("isConnected", js_el_isConnected_get, NULL),
         JS_CGETSET_DEF("ownerDocument", js_el_ownerDocument_get, NULL),
         JS_CGETSET_DEF("implementation", js_doc_implementation_get, NULL),
     };
@@ -4007,37 +5576,58 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
 	 * We give it the *same* methods as Element so document.querySelector
 	 * works directly (not via the Element prototype chain since we
 	 * don't model that yet). */
-    JSValue doc_proto = JS_NewObject(ctx);
+    JSValue doc_proto = JS_NewObjectProto(ctx, node_proto);
     JS_SetPropertyFunctionList(ctx, doc_proto, document_funcs,
                                sizeof(document_funcs) / sizeof(document_funcs[0]));
-    JS_SetClassProto(ctx, state->class_document_id, doc_proto);
+    JS_SetClassProto(ctx, state->class_document_id, JS_DupValue(ctx, doc_proto));
 
     /* globalThis.document */
     JSValue global = JS_GetGlobalObject(ctx);
+
+    /* Wire the real DOM interface constructors so their .prototype IS the chain
+	 * object instances inherit from. The web-api stubs (js_web_install, run
+	 * next) must not clobber these — they guard with `|| function(){}`. */
+    install_dom_iface(ctx, global, "EventTarget", event_target_proto);
+    install_dom_iface(ctx, global, "Node", node_proto);
+    install_dom_iface(ctx, global, "Element", element_proto);
+    install_dom_iface(ctx, global, "Document", doc_proto);
+    install_dom_iface(ctx, global, "DocumentFragment", fragment_proto);
+    install_mutation_observer(ctx, global);
+
+    /* Move Node/EventTarget methods from element_proto UP to the interface
+	 * level the Shady-DOM polyfill inspects (it captures own-props per
+	 * prototype). Instances still reach everything through the chain; any name
+	 * absent from element_proto is skipped. */
+    static const char redistribute_js[] =
+        "(function(){"
+        "  function move(from,to,names){"
+        "    for(var i=0;i<names.length;i++){var n=names[i];"
+        "      var d=Object.getOwnPropertyDescriptor(from,n);"
+        "      if(d){Object.defineProperty(to,n,d); if(d.configurable) delete from[n];}}}"
+        "  var ep=Element.prototype, np=Node.prototype, tp=EventTarget.prototype;"
+        "  move(ep,tp,['addEventListener','removeEventListener','dispatchEvent']);"
+        "  move(ep,np,['appendChild','removeChild','insertBefore','replaceChild',"
+        "    'prepend','append','before','after','remove','replaceWith','cloneNode',"
+        "    'contains','hasChildNodes','normalize','textContent','firstChild','lastChild',"
+        "    'nextSibling','previousSibling','parentNode','parentElement','childNodes',"
+        "    'nodeType','nodeName','ownerDocument']);"
+        "})();";
+    JSValue redistribute_res = JS_Eval(ctx, redistribute_js, sizeof(redistribute_js) - 1,
+                                       "<dom-protos>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(redistribute_res)) {
+        JS_FreeValue(ctx, JS_GetException(ctx));
+    }
+    JS_FreeValue(ctx, redistribute_res);
+
+    JS_FreeValue(ctx, event_target_proto);
+    JS_FreeValue(ctx, node_proto);
+    JS_FreeValue(ctx, element_proto);
+    JS_FreeValue(ctx, chardata_proto);
+    JS_FreeValue(ctx, fragment_proto);
+    JS_FreeValue(ctx, doc_proto);
+
     JSValue doc_obj = wrap_document(ctx, r->document);
     JS_SetPropertyStr(ctx, global, "document", doc_obj);
-
-    /* DOMParser — real parsing into a SEPARATE document (see
-	 * js_domparser_parse_from_string). The constructor shim lives in JS;
-	 * every instance shares the C parse function. This replaces an old
-	 * `parseFromString = () => document` stub that returned the LIVE
-	 * document — code that "moves the parsed nodes into the page" (Zephr's
-	 * outcome renderer on apnews.com) then moved the live page's own
-	 * head/body children into a detached fragment, blanking the page. */
-    JS_SetPropertyStr(ctx, global, "__ylexborParseHTML",
-                      JS_NewCFunction(ctx, js_domparser_parse_from_string, "parseFromString", 2));
-    {
-        static const char domparser_def[] =
-            "(function DOMParser(){ this.parseFromString = globalThis.__ylexborParseHTML; })";
-        JSValue domparser_ctor = JS_Eval(ctx, domparser_def, sizeof(domparser_def) - 1,
-                                         "<domparser>", JS_EVAL_TYPE_GLOBAL);
-        if (JS_IsException(domparser_ctor)) {
-            JSValue ctor_error = JS_GetException(ctx);
-            JS_FreeValue(ctx, ctor_error);
-        } else {
-            JS_SetPropertyStr(ctx, global, "DOMParser", domparser_ctor);
-        }
-    }
 
     /* document.documentElement / body / head — convenience props. */
     lxb_dom_node_t *doc_node = lxb_dom_interface_node(r->document);
@@ -4107,6 +5697,131 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
  * matching 'click' listener.
  * ===========================================================================*/
 
+/* Synthetic pointer-event helpers. The host builds a plain event object for
+ * mouse dispatch: apps routinely replace window.MouseEvent with their own
+ * wrapper (YouTube's produces an event whose .type is undefined in our engine),
+ * so we cannot construct the page's MouseEvent. These give our plain object the
+ * DOM Event methods real handlers call — most importantly composedPath(), which
+ * Polymer's tap-gesture emitter invokes; on the old bare object that call threw,
+ * silently killing every button tap. */
+static JSValue synth_event_composed_path(JSContext *ctx, JSValueConst this_val, int argc,
+                                         JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JSValue path = JS_GetPropertyStr(ctx, this_val, "__composedPath");
+    if (JS_IsUndefined(path) || JS_IsNull(path)) {
+        JS_FreeValue(ctx, path);
+        return JS_NewArray(ctx);
+    }
+    return path;
+}
+
+static JSValue synth_event_prevent_default(JSContext *ctx, JSValueConst this_val, int argc,
+                                           JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "defaultPrevented", JS_TRUE);
+    return JS_UNDEFINED;
+}
+
+static JSValue synth_event_stop_propagation(JSContext *ctx, JSValueConst this_val, int argc,
+                                            JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "__propagationStopped", JS_TRUE);
+    return JS_UNDEFINED;
+}
+
+static JSValue synth_event_stop_immediate_propagation(JSContext *ctx, JSValueConst this_val,
+                                                      int argc, JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "__propagationStopped", JS_TRUE);
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "__immediateStopped", JS_TRUE);
+    return JS_UNDEFINED;
+}
+
+/* Fire one synthetic event over the target's ancestor chain (bubble phase) then
+ * the document/window bucket, honouring stopPropagation / stopImmediatePropagation
+ * flags the handlers set. Returns 1 if any listener ran. */
+static int synth_dispatch_one(struct yetty_ylexbor *r, struct js_dom_state *state,
+                              lxb_dom_element_t *target, const char *type, JSValueConst event)
+{
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    int snapshot = state->listener_count;
+    int fired = 0;
+    int stop = 0;
+    for (lxb_dom_node_t *n = lxb_dom_interface_node(target); n && !stop; n = n->parent) {
+        if (n->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        lxb_dom_element_t *el = lxb_dom_interface_element(n);
+        JSValue current = wrap_element(ctx, el);
+        JS_SetPropertyStr(ctx, (JSValue)event, "currentTarget", JS_DupValue(ctx, current));
+        for (int i = 0; i < snapshot; i++) {
+            if (state->listeners[i].el != el || strcmp(state->listeners[i].type, type) != 0) {
+                continue;
+            }
+            JSValueConst args[] = {event};
+            JSValue ret = JS_Call(ctx, state->listeners[i].handler, current, 1, args);
+            if (JS_IsException(ret)) {
+                JSValue ex = JS_GetException(ctx);
+                JS_FreeValue(ctx, ex);
+                r->js_error_count++;
+            } else {
+                JS_FreeValue(ctx, ret);
+            }
+            fired = 1;
+            JSValue immediate = JS_GetPropertyStr(ctx, event, "__immediateStopped");
+            int immediate_stop = JS_ToBool(ctx, immediate);
+            JS_FreeValue(ctx, immediate);
+            if (immediate_stop) {
+                break;
+            }
+        }
+        JS_FreeValue(ctx, current);
+        JSValue propagation = JS_GetPropertyStr(ctx, event, "__propagationStopped");
+        stop = JS_ToBool(ctx, propagation);
+        JS_FreeValue(ctx, propagation);
+    }
+    if (!stop) {
+        JSValue global = JS_GetGlobalObject(ctx);
+        JSValue document = JS_GetPropertyStr(ctx, global, "document");
+        JSValue current =
+            JS_IsObject(document) ? JS_DupValue(ctx, document) : JS_DupValue(ctx, global);
+        JS_SetPropertyStr(ctx, (JSValue)event, "currentTarget", JS_DupValue(ctx, current));
+        for (int i = 0; i < snapshot; i++) {
+            if (state->listeners[i].el != NULL || strcmp(state->listeners[i].type, type) != 0) {
+                continue;
+            }
+            JSValueConst args[] = {event};
+            JSValue ret = JS_Call(ctx, state->listeners[i].handler, current, 1, args);
+            if (JS_IsException(ret)) {
+                JSValue ex = JS_GetException(ctx);
+                JS_FreeValue(ctx, ex);
+                r->js_error_count++;
+            } else {
+                JS_FreeValue(ctx, ret);
+            }
+            fired = 1;
+            JSValue immediate = JS_GetPropertyStr(ctx, event, "__immediateStopped");
+            int immediate_stop = JS_ToBool(ctx, immediate);
+            JS_FreeValue(ctx, immediate);
+            if (immediate_stop) {
+                break;
+            }
+        }
+        JS_FreeValue(ctx, current);
+        JS_FreeValue(ctx, document);
+        JS_FreeValue(ctx, global);
+    }
+    return fired;
+}
+
 int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
 {
     if (!r || !r->js_ctx || !r->js_rt) {
@@ -4114,6 +5829,9 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
     }
     struct js_dom_state *state = JS_GetRuntimeOpaque((JSRuntime *)r->js_rt);
     if (!state || state->listener_count == 0) {
+        return 0;
+    }
+    if (state->dispatch_depth > 32) {
         return 0;
     }
 
@@ -4144,44 +5862,75 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
         return 0;
     }
 
-    /* Walk up ancestry; fire any 'click' listener on the chain. */
     JSContext *ctx = (JSContext *)r->js_ctx;
-    int fired = 0;
+    state->dispatch_depth++;
+
+    /* composedPath = [target, ...element ancestors, document, window]. Real
+     * handlers (Polymer's tap-gesture emitter) call event.composedPath(); built
+     * once and shared across the down/up/click events. */
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue document = JS_GetPropertyStr(ctx, global, "document");
+    JSValue path = JS_NewArray(ctx);
+    uint32_t path_len = 0;
     for (lxb_dom_node_t *n = lxb_dom_interface_node(target); n; n = n->parent) {
-        if (n->type != LXB_DOM_NODE_TYPE_ELEMENT) {
-            continue;
-        }
-        lxb_dom_element_t *el = lxb_dom_interface_element(n);
-        for (int i = 0; i < state->listener_count; i++) {
-            if (state->listeners[i].el != el) {
-                continue;
-            }
-            if (strcmp(state->listeners[i].type, "click") != 0) {
-                continue;
-            }
-            JSValue ev = JS_NewObject(ctx);
-            JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, "click"));
-            JS_SetPropertyStr(ctx, ev, "target", wrap_element(ctx, target));
-            JS_SetPropertyStr(ctx, ev, "currentTarget", wrap_element(ctx, el));
-            JS_SetPropertyStr(ctx, ev, "clientX", JS_NewFloat64(ctx, x));
-            JS_SetPropertyStr(ctx, ev, "clientY", JS_NewFloat64(ctx, y));
-            JSValueConst args[] = {ev};
-            JSValue ret = JS_Call(ctx, state->listeners[i].handler, JS_UNDEFINED, 1, args);
-            if (JS_IsException(ret)) {
-                JSValue ex = JS_GetException(ctx);
-                const char *m = JS_ToCString(ctx, ex);
-                ydebug("js click-handler: %s", m ? m : "?");
-                if (m) {
-                    JS_FreeCString(ctx, m);
-                }
-                JS_FreeValue(ctx, ex);
-                r->js_error_count++;
-            }
-            JS_FreeValue(ctx, ret);
-            JS_FreeValue(ctx, ev);
-            fired = 1;
+        if (n->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+            JS_SetPropertyUint32(ctx, path, path_len++,
+                                 wrap_element(ctx, lxb_dom_interface_element(n)));
         }
     }
+    if (JS_IsObject(document)) {
+        JS_SetPropertyUint32(ctx, path, path_len++, JS_DupValue(ctx, document));
+    }
+    JS_SetPropertyUint32(ctx, path, path_len++, JS_DupValue(ctx, global));
+
+    /* A real click is a pointer/mouse SEQUENCE, not a lone 'click'. Polymer's
+     * gesture recognizer arms its tap on mousedown and emits it on click, so
+     * firing only 'click' (as the old code did) never produced a tap and button
+     * activations did nothing. */
+    static const char *const sequence[] = {"mousedown", "mouseup", "click"};
+    int fired = 0;
+    for (size_t phase = 0; phase < sizeof(sequence) / sizeof(sequence[0]); phase++) {
+        const char *type = sequence[phase];
+        int is_down = (phase == 0);
+
+        JSValue event = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, event, "type", JS_NewString(ctx, type));
+        JS_SetPropertyStr(ctx, event, "target", wrap_element(ctx, target));
+        JS_SetPropertyStr(ctx, event, "clientX", JS_NewFloat64(ctx, x));
+        JS_SetPropertyStr(ctx, event, "clientY", JS_NewFloat64(ctx, y));
+        JS_SetPropertyStr(ctx, event, "pageX", JS_NewFloat64(ctx, x));
+        JS_SetPropertyStr(ctx, event, "pageY", JS_NewFloat64(ctx, y));
+        JS_SetPropertyStr(ctx, event, "screenX", JS_NewFloat64(ctx, x));
+        JS_SetPropertyStr(ctx, event, "screenY", JS_NewFloat64(ctx, y));
+        JS_SetPropertyStr(ctx, event, "button", JS_NewInt32(ctx, 0));
+        JS_SetPropertyStr(ctx, event, "buttons", JS_NewInt32(ctx, is_down ? 1 : 0));
+        JS_SetPropertyStr(ctx, event, "detail", JS_NewInt32(ctx, 1));
+        JS_SetPropertyStr(ctx, event, "bubbles", JS_TRUE);
+        JS_SetPropertyStr(ctx, event, "cancelable", JS_TRUE);
+        JS_SetPropertyStr(ctx, event, "composed", JS_TRUE);
+        JS_SetPropertyStr(ctx, event, "isTrusted", JS_FALSE);
+        JS_SetPropertyStr(ctx, event, "defaultPrevented", JS_FALSE);
+        JS_SetPropertyStr(ctx, event, "__composedPath", JS_DupValue(ctx, path));
+        JS_SetPropertyStr(ctx, event, "composedPath",
+                          JS_NewCFunction(ctx, synth_event_composed_path, "composedPath", 0));
+        JS_SetPropertyStr(ctx, event, "preventDefault",
+                          JS_NewCFunction(ctx, synth_event_prevent_default, "preventDefault", 0));
+        JS_SetPropertyStr(ctx, event, "stopPropagation",
+                          JS_NewCFunction(ctx, synth_event_stop_propagation, "stopPropagation", 0));
+        JS_SetPropertyStr(ctx, event, "stopImmediatePropagation",
+                          JS_NewCFunction(ctx, synth_event_stop_immediate_propagation,
+                                          "stopImmediatePropagation", 0));
+
+        if (synth_dispatch_one(r, state, target, type, event)) {
+            fired = 1;
+        }
+        JS_FreeValue(ctx, event);
+    }
+
+    JS_FreeValue(ctx, path);
+    JS_FreeValue(ctx, document);
+    JS_FreeValue(ctx, global);
+    state->dispatch_depth--;
     return fired;
 }
 
@@ -4212,8 +5961,45 @@ void yetty_ylexbor_js_dom_reset(struct yetty_ylexbor *r)
     if (r && r->js_rt) {
         struct js_dom_state *state = JS_GetRuntimeOpaque((JSRuntime *)r->js_rt);
         if (state) {
+            /* Release the CharacterData proto ref while the context is live, so
+    		 * the next dom_install starts from JS_UNDEFINED. */
+            if (r->js_ctx && !JS_IsUndefined(state->chardata_proto)) {
+                JS_FreeValue((JSContext *)r->js_ctx, state->chardata_proto);
+                state->chardata_proto = JS_UNDEFINED;
+            }
+            if (r->js_ctx && !JS_IsUndefined(state->fragment_proto)) {
+                JS_FreeValue((JSContext *)r->js_ctx, state->fragment_proto);
+                state->fragment_proto = JS_UNDEFINED;
+            }
             state->listener_count = 0;
             memset(state->listeners, 0, sizeof(state->listeners));
+            /* Free MutationObserver structs while the context is still live:
+			 * the runtime opaque is cleared before finalizers run at
+			 * JS_FreeRuntime, so mutation_observer_finalizer would find a NULL
+			 * state and leak them. */
+            if (r->js_ctx) {
+                JSContext *ctx = (JSContext *)r->js_ctx;
+                for (int i = 0; i < state->mutation_observer_count; i++) {
+                    struct mutation_observer *observer = state->mutation_observers[i];
+                    if (observer == NULL) {
+                        continue;
+                    }
+                    JSValue self = observer->self;
+                    int rooted = observer->rooted;
+                    /* NULL the opaque first so the finalizer no-ops when the
+					 * pin release below drops the last ref — no double free. */
+                    JS_SetOpaque(self, NULL);
+                    JS_FreeValue(ctx, observer->callback);
+                    JS_FreeValue(ctx, observer->records);
+                    free(observer);
+                    state->mutation_observers[i] = NULL;
+                    if (rooted) {
+                        JS_FreeValue(ctx, self);
+                    }
+                }
+            }
+            state->mutation_observer_count = 0;
+            state->mutation_delivery_scheduled = 0;
         }
     }
 }

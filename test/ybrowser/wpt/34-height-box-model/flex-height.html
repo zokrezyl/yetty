@@ -1,0 +1,100 @@
+<!doctype html><meta charset=utf-8>
+<title>Flex items carry a USED BORDER-BOX height on box->h just like ordinary blocks: row items
+(main=width) and column items (main=height) report offsetHeight = border box, clientHeight = padding
+box, getBoundingClientRect().height agrees; box-sizing is honored; an explicit height:0 is a definite
+zero (border-box clamps to 0, content-box is padding+border) and is NOT re-measured as auto; the
+container height accounts for the border-box item sizes (row = tallest, column = sum); align-stretch
+fills the container content-box cross with a used border box; a bordered item on a wrapped line is
+border-box. The gate grows to 40 only when every assert holds. Harness viewport is 800px wide.</title>
+<style>body{margin:0}</style>
+<div data-test="flex-height" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+function mk(style, parent){
+  var el = document.createElement('div');
+  el.setAttribute('style', style);
+  (parent || sandbox).appendChild(el);
+  return el;
+}
+function m3(el){ var r = el.getBoundingClientRect(); return [el.offsetHeight, el.clientHeight, Math.round(r.height)]; }
+function eq3(el, oh, ch, rh, label){
+  var g = m3(el);
+  return check(g[0] === oh && g[1] === ch && g[2] === rh,
+               label + " -> off/client/rect = " + g[0] + "/" + g[1] + "/" + g[2] +
+               " (want " + oh + "/" + ch + "/" + rh + ")");
+}
+var BORD = 'border-top:10px solid #333;border-bottom:10px solid #333';
+var ok = true;
+
+/* 1. ROW content-box item -> border box 90; container = tallest item border-box */
+var f1 = mk('display:flex;margin:0');
+var f1i = mk('box-sizing:content-box;height:30px;padding:20px 0;' + BORD + ';margin:0', f1);
+ok = eq3(f1i, 90, 70, 90, "1 row content-box item") && ok;
+ok = check(f1.offsetHeight === 90, "1 row container = tallest border-box: " + f1.offsetHeight + " (want 90)") && ok;
+
+/* 2. ROW border-box item */
+var f2 = mk('display:flex;margin:0');
+var f2i = mk('box-sizing:border-box;height:90px;padding:20px 0;' + BORD + ';margin:0', f2);
+ok = eq3(f2i, 90, 70, 90, "2 row border-box item") && ok;
+
+/* 3. ROW explicit height:0 + P + B */
+var f3 = mk('display:flex;margin:0');
+var f3i = mk('box-sizing:content-box;height:0;padding:20px 0;' + BORD + ';margin:0', f3);
+ok = eq3(f3i, 60, 40, 60, "3 row explicit height:0") && ok;
+
+/* 4. COLUMN content-box items -> container = sum of border-boxes (180) */
+var f4 = mk('display:flex;flex-direction:column;margin:0');
+var f4a = mk('box-sizing:content-box;height:30px;padding:20px 0;' + BORD + ';margin:0', f4);
+mk('box-sizing:content-box;height:30px;padding:20px 0;' + BORD + ';margin:0', f4);
+ok = eq3(f4a, 90, 70, 90, "4 column content-box item") && ok;
+ok = check(f4.offsetHeight === 180, "4 column container = sum border-boxes: " + f4.offsetHeight + " (want 180)") && ok;
+
+/* 5. COLUMN explicit height:0 content-box -> 60 */
+var f5 = mk('display:flex;flex-direction:column;margin:0');
+var f5i = mk('box-sizing:content-box;height:0;padding:20px 0;' + BORD + ';margin:0', f5);
+ok = eq3(f5i, 60, 40, 60, "5 column height:0 content-box") && ok;
+
+/* 6. COLUMN explicit height:0 border-box -> 0 (NOT re-measured as auto: the src_main==CSS gate) */
+var f6 = mk('display:flex;flex-direction:column;margin:0');
+var f6i = mk('box-sizing:border-box;height:0;padding:20px 0;' + BORD + ';margin:0', f6);
+ok = eq3(f6i, 0, 0, 0, "6 column height:0 border-box clamps to 0") && ok;
+
+/* 7. COLUMN mixed explicit + auto: container accounts for both border-boxes */
+var f7 = mk('display:flex;flex-direction:column;margin:0');
+var f7a = mk('box-sizing:content-box;height:40px;margin:0', f7);
+var f7b = mk('box-sizing:content-box;border-top:5px solid #333;border-bottom:5px solid #333;margin:0', f7);
+mk('height:50px;margin:0', f7b);
+ok = eq3(f7a, 40, 40, 40, "7 column explicit item") && ok;
+ok = eq3(f7b, 60, 50, 60, "7 column auto item = content50 + border10") && ok;
+ok = check(f7.offsetHeight === 100, "7 column container = 40 + 60: " + f7.offsetHeight + " (want 100)") && ok;
+
+/* 11. align-items:stretch, nonzero padding + ASYMMETRIC borders (10 top / 4 bottom):
+       item border box fills container content-box cross; clientHeight = off - borders; edges coincide */
+var f11 = mk('display:flex;align-items:stretch;height:100px;box-sizing:content-box;margin:0');
+var f11i = mk('box-sizing:content-box;padding:8px 0;border-top:10px solid #333;border-bottom:4px solid #333;margin:0', f11);
+ok = check(f11i.offsetHeight === 100, "11 stretch fills container content cross: " + f11i.offsetHeight + " (want 100)") && ok;
+ok = check(f11i.clientHeight === 86, "11 stretch clientHeight = 100 - 14 borders: " + f11i.clientHeight + " (want 86)") && ok;
+var cr = f11.getBoundingClientRect(), ir = f11i.getBoundingClientRect();
+ok = check(Math.round(ir.top - cr.top) === 0, "11 stretch item top at container content top: " + Math.round(ir.top - cr.top)) && ok;
+ok = check(Math.round(ir.bottom - cr.top) === 100, "11 stretch item bottom at content bottom: " + Math.round(ir.bottom - cr.top) + " (want 100)") && ok;
+
+/* 12. flex-wrap: two 60px items in a 100px row wrap to two lines; each item is border-box 90,
+       and the wrapped second item sits one border-box line (90) below the first */
+var f12 = mk('display:flex;flex-wrap:wrap;width:100px;margin:0');
+var f12a = mk('box-sizing:content-box;width:60px;height:30px;padding:20px 0;' + BORD + ';margin:0', f12);
+var f12b = mk('box-sizing:content-box;width:60px;height:30px;padding:20px 0;' + BORD + ';margin:0', f12);
+ok = eq3(f12a, 90, 70, 90, "12 flex-wrap item a border-box") && ok;
+ok = eq3(f12b, 90, 70, 90, "12 flex-wrap item b border-box") && ok;
+var wdy = Math.round(f12b.getBoundingClientRect().top - f12a.getBoundingClientRect().top);
+ok = check(wdy === 90, "12 wrapped second item one line below: dy=" + wdy + " (want 90)") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="flex-height"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

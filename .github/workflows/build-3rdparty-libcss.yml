@@ -12,8 +12,10 @@ name: Build 3rdparty — libcss
 # build-tools/cmake/libs/libcss.cmake detects and silently skips.
 #
 # Version source of truth: build-tools/3rdparty/libcss/version (the
-# libcss version itself; libparserutils + libwapcaplet + buildsystem
-# versions are pinned inside _build.sh and bumped alongside).
+# package/release version, `-pN`-suffixed for local patches). libcss +
+# libparserutils + libwapcaplet + the NetSurf buildsystem are VENDORED
+# in-repo under build-tools/3rdparty/libcss/vendor/ and built from that
+# source — there is no upstream fetch (see vendor/README.md).
 
 on:
   push:

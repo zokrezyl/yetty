@@ -3,9 +3,8 @@
  * QuickJS), with two operating modes:
  *
  *   ONE-SHOT (--once, or non-TTY stdout):
- *     read HTML, lay out, emit one ydraw DCS envelope to stdout, exit.
- *     Used to pipe HTML into yetty — a yetty renders the envelope, every
- *     other terminal discards it:
+ *     read HTML, lay out, emit one ydraw OSC envelope to stdout, exit.
+ *     Used to pipe HTML into yetty (legacy OSC mode):
  *         echo '<h1>hi</h1>' | ./ybrowser --once
  *
  *   INTERACTIVE (default when stdin + stdout are TTYs):
@@ -217,12 +216,12 @@ char *ybrowser_slurp_file(struct yetty_ybrowser_loader *loader, const char *path
  * One-shot output — yface emit helpers.
  * ===========================================================================*/
 
-static int emit_envelope(int wire_code, int compressed, const void *args, size_t args_len,
+static int emit_envelope(int osc_code, int compressed, const void *args, size_t args_len,
                          const void *body, size_t body_len)
 {
     struct yetty_ycore_buffer env = {0};
     struct yetty_ycore_void_result r =
-        yetty_yface_emit(wire_code, compressed, args, args_len, body, body_len, &env);
+        yetty_yface_emit(osc_code, compressed, args, args_len, body, body_len, &env);
     int rc = 0;
     if (YETTY_IS_OK(r) && env.size > 0) {
         fwrite(env.data, 1, env.size, stdout);
@@ -233,7 +232,7 @@ static int emit_envelope(int wire_code, int compressed, const void *args, size_t
     return rc;
 }
 
-static int emit_bin_dcs(const uint8_t *bytes, size_t blen)
+static int emit_bin_osc(const uint8_t *bytes, size_t blen)
 {
     struct yetty_yface_bin_meta meta = {
         .magic = YETTY_YFACE_BIN_MAGIC,
@@ -294,7 +293,7 @@ static int parse_float_arg(const char *flag, const char *text, float min_value, 
 static void usage(const char *argv0)
 {
     fprintf(stderr,
-            "usage: %s [--once|--interactive] [--no-ui]\n"
+            "usage: %s [--once|--interactive] [--osc|--raw] [--no-ui]\n"
             "            [--record FILE] [-w W] [-H H] [--font-size PX]\n"
             "            [<file>|<url>|-]\n"
             "\n"
@@ -307,9 +306,16 @@ static void usage(const char *argv0)
             "  --record FILE (standalone): record the run to an mp4 (the core\n"
             "  yframework/yvnc recorder; captures the GPU output directly).\n"
             "\n"
-            "  --once (default when stdout is not a TTY):\n"
+            "  --once (legacy OSC mode; default when stdout is not a TTY):\n"
             "  read HTML from <file> (or '-' / no arg = stdin) or a url, render\n"
-            "  it, and emit one ydraw DCS envelope on stdout, then exit.\n",
+            "  it, and emit one ydraw OSC envelope on stdout (raw YPB1 bytes\n"
+            "  with --raw), then exit.\n"
+            "\n"
+            "  --dump-dom: after scripts run and layout settles, serialize the\n"
+            "  DOM (doctype line + documentElement.outerHTML) to stdout and exit.\n"
+            "  Matches Chrome's headless --dump-dom for DOM-parity diffing.\n"
+            "  --dump-boxes / --dump-geo / --dump-wpt: post-layout box geometry\n"
+            "  dumps consumed by the anchors / geometry-oracle / WPT comparators.\n",
             argv0);
 }
 
@@ -353,6 +359,7 @@ static int probe_terminal_size(int *w_out, int *h_out)
 int main(int argc, char **argv)
 {
     int interactive = isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
+    int osc = isatty(STDOUT_FILENO) ? 1 : 0;
     /* Detect the viewport from the terminal. -w / -H still override. */
     int width = 1024, height = 768;
     int term_w = 0, term_h = 0;
@@ -374,9 +381,9 @@ int main(int argc, char **argv)
     /* --dump-geo: emit `dom-path  x  y  w  h` per element box, for matching
      * against Chrome's getBoundingClientRect (geometry diff oracle). */
     int dump_geo = 0;
-    /* --dump-dom: after load (and JS), serialize the current DOM as HTML to
-     * stdout — the engine-side analogue of Chrome's --dump-dom, for seeing
-     * what page scripts did to the tree. */
+    /* --dump-dom: after scripts run and layout settles, serialize the DOM tree
+     * (document.documentElement.outerHTML) to stdout and exit — matches Chrome's
+     * headless `--dump-dom`, for DOM-parity diffing. */
     int dump_dom = 0;
     /* Standalone-only: hide the browser chrome (tab strip + address bar) so
      * the window is just the page, and record the GPU output to an mp4 via
@@ -386,18 +393,22 @@ int main(int argc, char **argv)
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
-        if (!strcmp(a, "--dump-boxes")) {
+        if (!strcmp(a, "--osc")) {
+            osc = 1;
+        } else if (!strcmp(a, "--dump-boxes")) {
             dump_boxes = 1;
             interactive = 0;
         } else if (!strcmp(a, "--dump-geo")) {
             dump_geo = 1;
             interactive = 0;
-        } else if (!strcmp(a, "--dump-dom")) {
-            dump_dom = 1;
-            interactive = 0;
         } else if (!strcmp(a, "--dump-wpt")) {
             dump_wpt = 1;
             interactive = 0;
+        } else if (!strcmp(a, "--dump-dom")) {
+            dump_dom = 1;
+            interactive = 0;
+        } else if (!strcmp(a, "--raw")) {
+            osc = 0;
         } else if (!strcmp(a, "--once")) {
             interactive = 0;
         } else if (!strcmp(a, "--interactive")) {
@@ -447,13 +458,13 @@ int main(int argc, char **argv)
         }
     }
 
-    /* When the DCS envelope stream (stdout) and diagnostics (stderr) share
-	 * the same terminal, an unbuffered stderr write can split an envelope
-	 * mid-frame and spill raw escape bytes into the host terminal (a failed
-	 * navigation's "HTTP 403" line was enough). Silence stderr only in that
-	 * case; an explicit `2>file` redirection keeps trace/profile output
-	 * working, and a piped stdout leaves stderr diagnostics intact. */
-    if (isatty(STDOUT_FILENO) && isatty(STDERR_FILENO)) {
+    /* OSC mode shares the PTY between the DCS envelope stream (stdout)
+	 * and diagnostics (stderr). An unbuffered stderr write can split an
+	 * envelope mid-frame and spill raw escape bytes into the host
+	 * terminal (a failed navigation's "HTTP 403" line was enough). When
+	 * stderr still points at that same terminal, silence it; an explicit
+	 * `2>file` redirection keeps trace/profile output working. */
+    if (osc && isatty(STDERR_FILENO)) {
         (void)freopen("/dev/null", "w", stderr);
     }
 
@@ -486,7 +497,7 @@ int main(int argc, char **argv)
         return ybrowser_ui_run(path, width, height, font_size);
     }
 
-    /* ---- One-shot: render the page and emit one DCS envelope. ---- */
+    /* ---- One-shot: render the page and emit one OSC envelope. ---- */
     const char *src = path ? path : "-";
     if (ybrowser_looks_like_url(src)) {
         curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -535,7 +546,11 @@ int main(int argc, char **argv)
         }
         const uint8_t *svg_bytes = NULL;
         size_t svg_blen = yetty_ydraw_drawable_list_serialize(svg_res.value.buffer, &svg_bytes);
-        (void)emit_bin_dcs(svg_bytes, svg_blen);
+        if (osc) {
+            (void)emit_bin_osc(svg_bytes, svg_blen);
+        } else {
+            fwrite(svg_bytes, 1, svg_blen, stdout);
+        }
         fflush(stdout);
         yetty_ydraw_drawable_list_destroy(svg_res.value.buffer);
         (void)yetty_ybrowser_loader_destroy(loader);
@@ -586,25 +601,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* Navigation-stress harness: re-load the same document N times in one
-	 * process to exercise the load_html teardown/re-parse path (the code a
-	 * real click-navigation runs) headlessly, e.g. under ASAN. Debug aid;
-	 * off unless YBROWSER_NAV_STRESS is set. */
-    {
-        const char *stress_env = getenv("YBROWSER_NAV_STRESS");
-        int stress_rounds = stress_env ? atoi(stress_env) : 0;
-        for (int round = 0; round < stress_rounds; round++) {
-            struct yetty_ycore_void_result reload = yetty_ylexbor_load_html(yl, html, html_len);
-            if (YETTY_IS_ERR(reload)) {
-                fprintf(stderr, "nav-stress reload %d: %s\n", round, reload.error.msg);
-                yetty_ycore_error_destroy(reload.error);
-                break;
-            }
-            (void)yetty_ylexbor_relayout(yl);
-            fprintf(stderr, "nav-stress round %d ok\n", round);
-        }
-    }
-
     /* SPA boot: most modern pages render their initial body via
 	 * setTimeout(fn, 0) / queueMicrotask / requestAnimationFrame
 	 * chains that haven't fired by the time load_html returns. Pump
@@ -643,16 +639,21 @@ int main(int argc, char **argv)
     }
 
     if (dump_dom) {
-        struct yetty_ycore_char_ptr_result dom_res = yetty_ylexbor_dump_dom(yl);
-        if (YETTY_IS_ERR(dom_res)) {
-            fprintf(stderr, "dump-dom: %s\n", dom_res.error.msg);
-            yetty_ycore_error_destroy(dom_res.error);
-        } else {
-            fputs(dom_res.value, stdout);
-            fputc('\n', stdout);
-            free(dom_res.value);
+        /* Post-script DOM serialization (root <html> element, no doctype),
+         * matching Chrome's headless `--dump-dom` so the two can be diffed. */
+        size_t dom_len = 0;
+        char *dom = yetty_ylexbor_serialize_dom(yl, &dom_len);
+        if (dom == NULL) {
+            fprintf(stderr, "ybrowser: --dump-dom: no document element to serialize\n");
+            yetty_ylexbor_destroy(yl);
+            free(html);
+            (void)yetty_ybrowser_loader_destroy(loader);
+            return 1;
         }
+        fwrite(dom, 1, dom_len, stdout);
+        fputc('\n', stdout);
         fflush(stdout);
+        free(dom);
         yetty_ylexbor_destroy(yl);
         free(html);
         (void)yetty_ybrowser_loader_destroy(loader);
@@ -748,18 +749,9 @@ int main(int argc, char **argv)
             const char *width_source = "?";
             const char *height_source = "?";
             (void)yetty_ylexbor_test_box_sources_at(yl, bi, &width_source, &height_source);
-            float box_opacity = 1.0f;
-            int box_vis_hidden = 0;
-            (void)yetty_ylexbor_test_box_paint_at(yl, bi, &box_opacity, &box_vis_hidden);
-            uint8_t fg_red = 0, fg_green = 0, fg_blue = 0, fg_alpha = 0;
-            (void)yetty_ylexbor_test_box_fg_at(yl, bi, &fg_red, &fg_green, &fg_blue, &fg_alpha);
-            /* o=/v=/fg= (paint state) sit before the snippet, which consumers
-             * index as the LAST column. */
-            printf("%d\t%s\t%s\t%.1f\t%.1f\t%.1f\t%.1f\tw=%d\ti=%d\tu=%d\tws=%s\ths=%s\to=%.2f\t"
-                   "v=%d\tfg=%02x%02x%02x%02x\t%s\n",
-                   kind, tag[0] ? tag : "-", data_test[0] ? data_test : "-", x, y, w, h, weight,
-                   italic, underline, width_source, height_source, box_opacity, box_vis_hidden,
-                   fg_red, fg_green, fg_blue, fg_alpha, snippet);
+            printf("%d\t%s\t%s\t%.1f\t%.1f\t%.1f\t%.1f\tw=%d\ti=%d\tu=%d\tws=%s\ths=%s\t%s\n", kind,
+                   tag[0] ? tag : "-", data_test[0] ? data_test : "-", x, y, w, h, weight, italic,
+                   underline, width_source, height_source, snippet);
         }
         fflush(stdout);
         yetty_ylexbor_destroy(yl);
@@ -788,7 +780,11 @@ int main(int argc, char **argv)
     }
     const uint8_t *bytes = NULL;
     size_t blen = yetty_ydraw_drawable_list_serialize(buf, &bytes);
-    (void)emit_bin_dcs(bytes, blen);
+    if (osc) {
+        (void)emit_bin_osc(bytes, blen);
+    } else {
+        fwrite(bytes, 1, blen, stdout);
+    }
     fflush(stdout);
     yetty_ydraw_drawable_list_destroy(buf);
 

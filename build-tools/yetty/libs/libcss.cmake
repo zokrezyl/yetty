@@ -29,6 +29,36 @@ if(TARGET libcss_static)
     return()
 endif()
 
+# libcss is VENDORED in-repo (build-tools/3rdparty/libcss/vendor/) and built
+# from that source, not downloaded — so local edits to the CSS engine take
+# effect on a rebuild without publishing a release. If the per-version
+# tarball isn't already in the 3rdparty cache, build it now from the vendored
+# source; yetty_3rdparty_fetch below then consumes it from the cache exactly
+# like a downloaded prebuilt. Editing the vendored source requires bumping
+# `build-tools/3rdparty/libcss/version` (or deleting the cached tarball) to
+# force a rebuild.
+yetty_3rdparty_target_platform(_LIBCSS_BUILD_PLAT)
+file(READ "${YETTY_ROOT}/build-tools/3rdparty/libcss/version" _LIBCSS_BUILD_VER)
+string(STRIP "${_LIBCSS_BUILD_VER}" _LIBCSS_BUILD_VER)
+set(_LIBCSS_CACHED
+    "${YETTY_3RDPARTY_CACHE_DIR}/libcss-${_LIBCSS_BUILD_PLAT}-${_LIBCSS_BUILD_VER}.tar.gz")
+if(NOT EXISTS "${_LIBCSS_CACHED}")
+    message(STATUS
+        "libcss: building vendored source (${_LIBCSS_BUILD_PLAT} ${_LIBCSS_BUILD_VER})")
+    file(MAKE_DIRECTORY "${YETTY_3RDPARTY_CACHE_DIR}")
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E env
+                "TARGET_PLATFORM=${_LIBCSS_BUILD_PLAT}"
+                "OUTPUT_DIR=${YETTY_3RDPARTY_CACHE_DIR}"
+                bash "${YETTY_ROOT}/build-tools/3rdparty/libcss/build.sh"
+        RESULT_VARIABLE _LIBCSS_BUILD_RC)
+    if(NOT _LIBCSS_BUILD_RC EQUAL 0)
+        message(FATAL_ERROR
+            "libcss: building vendored source failed (rc=${_LIBCSS_BUILD_RC}) — \
+needs make/perl/gcc + flex/bison/gperf on PATH")
+    endif()
+endif()
+
 yetty_3rdparty_fetch(libcss _LIBCSS_DIR)
 
 # Placeholder tarball for platforms where the upstream make build

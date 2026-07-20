@@ -29,7 +29,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #ifndef YETTY_HAVE_QUICKJS
 #define YETTY_HAVE_QUICKJS 0
@@ -210,54 +209,13 @@ DEFINE_CONSOLE_FN(info, "info")
 DEFINE_CONSOLE_FN(debug, "debug")
 DEFINE_CONSOLE_FN(warn, "warn")
 DEFINE_CONSOLE_FN(error, "error")
-DEFINE_CONSOLE_FN(trace, "debug")
-DEFINE_CONSOLE_FN(dir, "debug")
-DEFINE_CONSOLE_FN(table, "debug")
-
-/* time/timeEnd/count/group families — sites call these unconditionally
- * (apnews' leaderboard element gates its whole connectedCallback on
- * console.time), so they must exist; the timing/grouping itself has no
- * value here. */
-static JSValue js_console_noop(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
-{
-    (void)ctx;
-    (void)this_val;
-    (void)argc;
-    (void)argv;
-    return JS_UNDEFINED;
-}
-
-static JSValue js_console_assert(JSContext *ctx, JSValueConst this_val, int argc,
-                                 JSValueConst *argv)
-{
-    (void)this_val;
-    if (argc > 0 && !JS_ToBool(ctx, argv[0])) {
-        console_print(ctx, "error", argc - 1, argv + 1);
-    }
-    return JS_UNDEFINED;
-}
 
 static void install_console(JSContext *ctx)
 {
     static const JSCFunctionListEntry console_funcs[] = {
-        JS_CFUNC_DEF("log", 1, js_console_log),
-        JS_CFUNC_DEF("info", 1, js_console_info),
-        JS_CFUNC_DEF("debug", 1, js_console_debug),
-        JS_CFUNC_DEF("warn", 1, js_console_warn),
+        JS_CFUNC_DEF("log", 1, js_console_log),     JS_CFUNC_DEF("info", 1, js_console_info),
+        JS_CFUNC_DEF("debug", 1, js_console_debug), JS_CFUNC_DEF("warn", 1, js_console_warn),
         JS_CFUNC_DEF("error", 1, js_console_error),
-        JS_CFUNC_DEF("trace", 0, js_console_trace),
-        JS_CFUNC_DEF("dir", 1, js_console_dir),
-        JS_CFUNC_DEF("table", 1, js_console_table),
-        JS_CFUNC_DEF("assert", 2, js_console_assert),
-        JS_CFUNC_DEF("time", 1, js_console_noop),
-        JS_CFUNC_DEF("timeLog", 1, js_console_noop),
-        JS_CFUNC_DEF("timeEnd", 1, js_console_noop),
-        JS_CFUNC_DEF("count", 1, js_console_noop),
-        JS_CFUNC_DEF("countReset", 1, js_console_noop),
-        JS_CFUNC_DEF("group", 1, js_console_noop),
-        JS_CFUNC_DEF("groupCollapsed", 1, js_console_noop),
-        JS_CFUNC_DEF("groupEnd", 0, js_console_noop),
-        JS_CFUNC_DEF("clear", 0, js_console_noop),
     };
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue console = JS_NewObject(ctx);
@@ -337,133 +295,6 @@ void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r)
 }
 
 /* ===========================================================================
- * Bytecode compile cache — content-addressed entries on the loader's disk
- * cache tier.
- *
- * Page scripts are run-once, so what QuickJS does with a big bundle is
- * parse + compile + execute; the parse/compile half is a pure function of
- * the source bytes. Caching its output (JS_WriteObject bytecode) keyed by a
- * content hash turns every warm evaluation into JS_ReadObject +
- * JS_EvalFunction. Entries live in the loader's HTTP disk cache under a
- * private `kind`, so budget / LRU eviction / atomic writes are shared with
- * HTTP entries, and a quickjs version bump (version is part of the key)
- * simply keys fresh entries while the stale ones age out.
- * ===========================================================================*/
-
-/* Below this the compile is cheaper than the hash + disk round-trip. */
-enum { JS_BYTECODE_CACHE_MIN_SOURCE_BYTES = 16 * 1024 };
-
-static void bytecode_cache_key(const char *source, size_t source_len, char *out, size_t out_size)
-{
-    /* FNV-1a over the source bytes. The quickjs version and the source
-     * length are part of the key text, so a bytecode format change can
-     * never resurrect stale entries. */
-    uint64_t hash = 1469598103934665603ull;
-    for (size_t i = 0; i < source_len; i++) {
-        hash = (hash ^ (unsigned char)source[i]) * 1099511628211ull;
-    }
-    snprintf(out, out_size, "qjsbc:%d.%d.%d:%zu:%016llx", QJS_VERSION_MAJOR, QJS_VERSION_MINOR,
-             QJS_VERSION_PATCH, source_len, (unsigned long long)hash);
-}
-
-static struct yetty_ybrowser_disk_cache *bytecode_cache_for(struct yetty_ylexbor *r,
-                                                            size_t source_len)
-{
-    if (source_len < JS_BYTECODE_CACHE_MIN_SOURCE_BYTES || r == NULL || r->loader == NULL) {
-        return NULL;
-    }
-    /* Kill switch for A/B timing runs. getenv-per-call on purpose (matches
-     * YBROWSER_JS_CONSOLE): script evaluation is not hot, and caching the
-     * answer would need a static variable. */
-    const char *env = getenv("YBROWSER_JS_BYTECODE_CACHE");
-    if (env != NULL && strcmp(env, "0") == 0) {
-        return NULL;
-    }
-    return yetty_ybrowser_loader_disk_cache(r->loader);
-}
-
-/* Compile-or-recall `source`, then execute it. Returns what a plain JS_Eval
- * would have returned: the completion value, or JS_EXCEPTION with the
- * exception pending on the context. */
-static JSValue eval_global_cached(struct yetty_ylexbor *r, JSContext *ctx, const char *source,
-                                  size_t source_len, const char *url_label)
-{
-    struct yetty_ybrowser_disk_cache *cache = bytecode_cache_for(r, source_len);
-    if (cache == NULL) {
-        return JS_Eval(ctx, source, source_len, url_label, JS_EVAL_TYPE_GLOBAL);
-    }
-
-    char key[96];
-    bytecode_cache_key(source, source_len, key, sizeof(key));
-
-    struct yetty_ybrowser_disk_cache_meta meta;
-    char *bytecode = NULL;
-    size_t bytecode_len = 0;
-    double lookup_start = yetty_ylexbor_prof_now_ms();
-    if (yetty_ybrowser_disk_cache_load(cache, key, YETTY_YBROWSER_DISK_CACHE_KIND_JS_BYTECODE,
-                                       &meta, &bytecode, &bytecode_len)) {
-        JSValue recalled =
-            JS_ReadObject(ctx, (const uint8_t *)bytecode, bytecode_len, JS_READ_OBJ_BYTECODE);
-        free(bytecode);
-        if (!JS_IsException(recalled)) {
-            yetty_ylexbor_prof("    js bc-hit  %4zu KB in %5.1f ms  %.80s", source_len / 1024,
-                               yetty_ylexbor_prof_now_ms() - lookup_start, url_label);
-            return JS_EvalFunction(ctx, recalled);
-        }
-        /* Undeserializable entry (should not happen — the version is in the
-         * key): absorb the exception and fall through to a fresh compile,
-         * whose store below overwrites the bad entry. */
-        JSValue read_error = JS_GetException(ctx);
-        JS_FreeValue(ctx, read_error);
-        JS_FreeValue(ctx, recalled);
-    }
-
-    double compile_start = yetty_ylexbor_prof_now_ms();
-    JSValue compiled = JS_Eval(ctx, source, source_len, url_label,
-                               JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_COMPILE_ONLY);
-    if (JS_IsException(compiled)) {
-        return compiled; /* compile error — identical shape to plain JS_Eval */
-    }
-    size_t serialized_len = 0;
-    uint8_t *serialized = JS_WriteObject(ctx, &serialized_len, compiled, JS_WRITE_OBJ_BYTECODE);
-    if (serialized != NULL) {
-        struct yetty_ybrowser_disk_cache_meta store_meta = {0};
-        store_meta.status = 200;
-        store_meta.stored_at = time(NULL);
-        /* Content-addressed → effectively immutable. The far-future expiry
-         * only matters to someone inspecting the entry file: recall above
-         * bypasses the loader's freshness logic entirely. */
-        store_meta.expires_at = store_meta.stored_at + (time_t)10 * 365 * 24 * 3600;
-        snprintf(store_meta.content_type, sizeof(store_meta.content_type),
-                 "application/x-quickjs-bytecode");
-        yetty_ybrowser_disk_cache_store(cache, key, YETTY_YBROWSER_DISK_CACHE_KIND_JS_BYTECODE,
-                                        &store_meta, (const char *)serialized, serialized_len);
-        js_free(ctx, serialized);
-    } else {
-        /* Serialization failure sets a pending exception — absorb it; the
-         * compiled function itself is fine to run. */
-        JSValue write_error = JS_GetException(ctx);
-        JS_FreeValue(ctx, write_error);
-    }
-    yetty_ylexbor_prof("    js compile %4zu KB in %5.1f ms (bc stored %zu KB)  %.80s",
-                       source_len / 1024, yetty_ylexbor_prof_now_ms() - compile_start,
-                       serialized_len / 1024, url_label);
-    return JS_EvalFunction(ctx, compiled);
-}
-
-int yetty_ylexbor_js_eval_cached(struct yetty_ylexbor *r, struct JSContext *ctx, const char *source,
-                                 size_t source_len, const char *url_label)
-{
-    JSValue value = eval_global_cached(r, ctx, source, source_len, url_label);
-    if (JS_IsException(value)) {
-        JS_FreeValue(ctx, value);
-        return -1; /* exception left pending for the caller */
-    }
-    JS_FreeValue(ctx, value);
-    return 0;
-}
-
-/* ===========================================================================
  * Run all inline <script> elements once.
  * ===========================================================================*/
 
@@ -517,7 +348,7 @@ static void print_src_at(const char *src, size_t slen, int line_no, int col_no)
 static void eval_buf(struct yetty_ylexbor *r, JSContext *ctx, const char *src, size_t slen,
                      const char *url)
 {
-    JSValue v = eval_global_cached(r, ctx, src, slen, url ? url : "<inline>");
+    JSValue v = JS_Eval(ctx, src, slen, url ? url : "<inline>", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(v)) {
         /* Pull the line+col out of the stack frame so we can show
 		 * the offending source line. ydebug fires only when the
@@ -635,15 +466,6 @@ static int is_js_script_type(lxb_dom_element_t *el)
     return 0;
 }
 
-/* True iff type="module" — modules are implicitly deferred. */
-static int is_module_script_type(lxb_dom_element_t *el)
-{
-    size_t tlen = 0;
-    const lxb_char_t *type =
-        lxb_dom_element_get_attribute(el, (const lxb_char_t *)"type", 4, &tlen);
-    return type != NULL && tlen == 6 && strncmp((const char *)type, "module", 6) == 0;
-}
-
 /* True iff `url` points at a well-known analytics / advertising / tracking
  * script. These never produce visible content, yet a synchronous inline
  * fetch+eval of one (e.g. googletagmanager's 425 KB gtag.js) blocks first
@@ -669,17 +491,6 @@ static int is_tracking_script_url(const char *url)
         "cdn.segment.com",
         "cdn.mxpnl.com",
         "amplitude.com/libs",
-        /* A/B-testing engine. Beyond being pure analytics, its anti-flicker
-		 * mode hides the whole page until its data endpoints answer —
-		 * apnews.com renders 3 boxes instead of ~5000 when those return
-		 * 429, because nothing ever un-hides the body. */
-        ".kameleoon.io/",
-        /* Nativo sponsored-content/ad loader. On apnews.com it detaches
-		 * every child of <head> and <body> when run against this engine's
-		 * partial API surface — a real browser keeps it on the ad path.
-		 * Ad delivery has no rendering value here; skip like the other ad
-		 * networks. */
-        "s.ntv.io/",
     };
     if (!url) {
         return 0;
@@ -695,21 +506,11 @@ static int is_tracking_script_url(const char *url)
 /* One <script> to execute, in document order. EITHER `url` is set (an
  * external script — after the parallel-fetch step the matching response
  * carries its body) OR `inline_body` is set. Execution order is the
- * collected order in both cases — only the FETCHING is parallel.
- *
- * `deferred` marks async / defer / type=module scripts. A browser runs
- * plain inline scripts DURING the parse and async/defer bundles after it,
- * so a bundle's customElements.define() always sees the globals that
- * inline scripts set up (apnews.com: <script async> All.min in <head>
- * reads window.i18n assigned by an inline script much later in <body>).
- * Since this engine executes everything post-parse, honoring that order
- * means: blocking scripts first, then the deferred batch, both in
- * document order. */
+ * collected order in both cases — only the FETCHING is parallel. */
 struct script_entry {
     char *url;         /* owned; external script when non-NULL */
     char *inline_body; /* owned when url == NULL */
     size_t inline_len;
-    int deferred; /* async / defer attribute, or type=module */
 };
 
 struct script_collect {
@@ -764,24 +565,14 @@ static void collect_scripts_recursive(struct yetty_ylexbor *r, lxb_dom_node_t *n
                     free(url);
                     continue;
                 }
-                /* has_attribute, NOT get_attribute — the latter returns the
-				 * VALUE, which is NULL for the bare boolean form
-				 * `<script src=… async>`. */
-                int deferred = lxb_dom_element_has_attribute(el, (const lxb_char_t *)"async", 5) ||
-                               lxb_dom_element_has_attribute(el, (const lxb_char_t *)"defer", 5) ||
-                               is_module_script_type(el);
-                struct script_entry entry = {.url = url, .deferred = deferred};
+                struct script_entry entry = {.url = url};
                 script_collect_push(collect, entry);
                 continue;
             }
             size_t slen = 0;
             char *inline_src = collect_script_text(c, &slen);
             if (inline_src) {
-                /* async/defer are ignored on inline scripts per spec;
-				 * only type=module defers an inline body. */
-                struct script_entry entry = {.inline_body = inline_src,
-                                             .inline_len = slen,
-                                             .deferred = is_module_script_type(el)};
+                struct script_entry entry = {.inline_body = inline_src, .inline_len = slen};
                 script_collect_push(collect, entry);
             }
             continue; /* don't recurse into <script> children */
@@ -848,39 +639,46 @@ static void run_collected_scripts(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
         }
     }
 
-    /* Two passes: blocking scripts first (a browser runs those during the
-	 * parse), then the async/defer/module batch — document order within
-	 * each. See the script_entry comment. */
-    for (int pass = 0; pass < 2; pass++) {
-        for (int i = 0; i < collect.count; i++) {
-            struct script_entry *entry = &collect.items[i];
-            if (entry->deferred != pass) {
-                continue;
-            }
-            if (entry->url) {
-                struct yetty_ybrowser_response *response =
-                    entry_to_slot ? &fetch_responses[entry_to_slot[i]] : NULL;
-                if (response && response->body && response->status >= 200 &&
-                    response->status < 300) {
-                    eval_buf(r, ctx, response->body, response->body_len, entry->url);
-                } else {
-                    ydebug("js script-load %s status=%ld", entry->url,
-                           response ? response->status : 0L);
-                }
-                if (response) {
-                    yetty_ybrowser_response_dispose(response);
-                }
-                free(entry->url);
+    for (int i = 0; i < collect.count; i++) {
+        struct script_entry *entry = &collect.items[i];
+        if (entry->url) {
+            struct yetty_ybrowser_response *response =
+                entry_to_slot ? &fetch_responses[entry_to_slot[i]] : NULL;
+            if (response && response->body && response->status >= 200 && response->status < 300) {
+                eval_buf(r, ctx, response->body, response->body_len, entry->url);
             } else {
-                eval_buf(r, ctx, entry->inline_body, entry->inline_len, "<inline>");
-                free(entry->inline_body);
+                ydebug("js script-load %s status=%ld", entry->url,
+                       response ? response->status : 0L);
             }
+            if (response) {
+                yetty_ybrowser_response_dispose(response);
+            }
+            free(entry->url);
+        } else {
+            eval_buf(r, ctx, entry->inline_body, entry->inline_len, "<inline>");
+            free(entry->inline_body);
         }
     }
     free(fetch_requests);
     free(fetch_responses);
     free(entry_to_slot);
     free(collect.items);
+}
+
+/* Update document.readyState (plain data property on the document object). */
+static void js_doc_set_ready_state(struct yetty_ylexbor *r, const char *ready_state)
+{
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    if (ctx == NULL) {
+        return;
+    }
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue doc = JS_GetPropertyStr(ctx, global, "document");
+    if (JS_IsObject(doc)) {
+        JS_SetPropertyStr(ctx, doc, "readyState", JS_NewString(ctx, ready_state));
+    }
+    JS_FreeValue(ctx, doc);
+    JS_FreeValue(ctx, global);
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(struct yetty_ylexbor *r)
@@ -899,13 +697,57 @@ struct yetty_ycore_void_result yetty_ylexbor_js_run_all_scripts(struct yetty_yle
         return ir;
     }
 
+    /* Investigation prelude (YBROWSER_PRELUDE=<file>): evaluate a JS file in the
+     * page context after the environment is initialised but before any page
+     * script runs. Lets an investigator install probes (e.g. an event-timeline
+     * logger) that observe the very first boot navigation. Env-gated; no effect
+     * unless the variable points at a readable file. */
+    {
+        const char *prelude_path = getenv("YBROWSER_PRELUDE");
+        if (prelude_path != NULL) {
+            FILE *prelude_file = fopen(prelude_path, "rb");
+            if (prelude_file != NULL) {
+                fseek(prelude_file, 0, SEEK_END);
+                long prelude_len = ftell(prelude_file);
+                fseek(prelude_file, 0, SEEK_SET);
+                if (prelude_len > 0) {
+                    char *prelude_src = calloc(1, (size_t)prelude_len + 1);
+                    if (prelude_src != NULL &&
+                        fread(prelude_src, 1, (size_t)prelude_len, prelude_file) > 0) {
+                        JSContext *prelude_ctx = (JSContext *)r->js_ctx;
+                        JSValue prelude_val = JS_Eval(prelude_ctx, prelude_src,
+                                                      strlen(prelude_src), "<prelude>",
+                                                      JS_EVAL_TYPE_GLOBAL);
+                        if (JS_IsException(prelude_val)) {
+                            JSValue exc = JS_GetException(prelude_ctx);
+                            const char *exc_s = JS_ToCString(prelude_ctx, exc);
+                            fprintf(stderr, "prelude: ERR %s\n", exc_s ? exc_s : "(unknown)");
+                            JS_FreeCString(prelude_ctx, exc_s);
+                            JS_FreeValue(prelude_ctx, exc);
+                        }
+                        JS_FreeValue(prelude_ctx, prelude_val);
+                    }
+                    free(prelude_src);
+                }
+                fclose(prelude_file);
+            }
+        }
+    }
+
     run_collected_scripts(r, (JSContext *)r->js_ctx, lxb_dom_interface_node(r->document));
 
-    /* Fire DOMContentLoaded + load on document — many SPAs gate boot
-	 * on these. We synthesise both right after script execution
-	 * because the parse is already complete by the time we get
-	 * here. */
+    /* Document readiness sequence, matching browser order:
+	 *   readyState=interactive → readystatechange → DOMContentLoaded →
+	 *   readyState=complete → readystatechange → load.
+	 * readyState is "loading" for the whole script pass above, so a
+	 * framework that defers a boot walk to readystatechange (rather than
+	 * running it against the half-built page) gets the same timing it
+	 * gets in a browser. */
+    js_doc_set_ready_state(r, "interactive");
+    yetty_ylexbor_js_dispatch_event_type(r, "readystatechange", NULL);
     yetty_ylexbor_js_dispatch_event_type(r, "DOMContentLoaded", NULL);
+    js_doc_set_ready_state(r, "complete");
+    yetty_ylexbor_js_dispatch_event_type(r, "readystatechange", NULL);
     yetty_ylexbor_js_dispatch_event_type(r, "load", NULL);
     yetty_ylexbor_js_drain_jobs(r);
 

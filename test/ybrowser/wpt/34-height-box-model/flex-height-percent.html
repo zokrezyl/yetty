@@ -1,0 +1,67 @@
+<!doctype html><meta charset=utf-8>
+<title>A percentage height on a ROW flex item resolves against the container's DEFINITE content-box
+cross size (the container's own author height), then honors the item's box-sizing: content-box adds
+padding+border, border-box treats the resolved value as the border box. When the container cross size
+is INDEFINITE (no author height) a percentage behaves as auto (content-driven), NOT resolved. The
+gate grows only when all three hold. Harness viewport 800px wide.</title>
+<style>body{margin:0}</style>
+<div data-test="flex-height-percent" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+function mk(style, parent){
+  var el = document.createElement('div');
+  el.setAttribute('style', style);
+  (parent || sandbox).appendChild(el);
+  return el;
+}
+function m3(el){ var r = el.getBoundingClientRect(); return [el.offsetHeight, el.clientHeight, Math.round(r.height)]; }
+function eq3(el, oh, ch, rh, label){
+  var g = m3(el);
+  return check(g[0] === oh && g[1] === ch && g[2] === rh,
+               label + " -> off/client/rect = " + g[0] + "/" + g[1] + "/" + g[2] +
+               " (want " + oh + "/" + ch + "/" + rh + ")");
+}
+var ok = true;
+
+/* 8. DEFINITE row container (content-box height:200) + content-box height:50% item:
+      resolved 100 content + P20 + B10 -> border box 130 */
+var p1 = mk('display:flex;box-sizing:content-box;height:200px;margin:0');
+var p1i = mk('box-sizing:content-box;height:50%;padding:10px 0;border-top:5px solid #333;border-bottom:5px solid #333;margin:0', p1);
+ok = eq3(p1i, 130, 120, 130, "8 definite row + content-box 50% -> 130/120/130") && ok;
+
+/* 9. DEFINITE row container + border-box height:50% item:
+      resolved 100 IS the border box; client = 100 - 10 borders = 90 */
+var p2 = mk('display:flex;box-sizing:content-box;height:200px;margin:0');
+var p2i = mk('box-sizing:border-box;height:50%;padding:10px 0;border-top:5px solid #333;border-bottom:5px solid #333;margin:0', p2);
+ok = eq3(p2i, 100, 90, 100, "9 definite row + border-box 50% -> 100/90/100") && ok;
+
+/* 10. INDEFINITE row container (no author height) + height:50% item behaves as AUTO:
+       item content = a 20px child; border-box = 20 + border 10 = 30 (NOT a resolved percentage) */
+var p3 = mk('display:flex;margin:0');
+var p3i = mk('box-sizing:content-box;height:50%;border-top:5px solid #333;border-bottom:5px solid #333;margin:0', p3);
+mk('height:20px;margin:0', p3i);
+ok = eq3(p3i, 30, 20, 30, "10 indefinite row + 50% behaves as auto (content 20 + border 10)") && ok;
+
+/* 11. DEFINITE border-box row container height:0 (+ padding/border) -> content-box cross = 0
+      (clamped, still DEFINITE, not indefinite). content-box child height:50% resolves against 0:
+      0 content + P12 + B6 -> border box 18. Must NOT stretch and must NOT fall to auto. */
+var z1 = mk('display:flex;box-sizing:border-box;height:0;padding:20px 0;border-top:10px solid #333;border-bottom:10px solid #333;margin:0');
+var z1i = mk('box-sizing:content-box;height:50%;padding:6px 0;border-top:3px solid #333;border-bottom:3px solid #333;margin:0', z1);
+ok = check(z1.offsetHeight === 0, "11 border-box height:0 container is 0 tall: " + z1.offsetHeight) && ok;
+ok = eq3(z1i, 18, 12, 18, "11 content-box 50% of definite-0 -> own P+B (18), not auto/stretched") && ok;
+
+/* 12. Same definite-0 container, border-box child height:50% -> resolved 0 IS the border box -> 0 */
+var z2 = mk('display:flex;box-sizing:border-box;height:0;padding:20px 0;border-top:10px solid #333;border-bottom:10px solid #333;margin:0');
+var z2i = mk('box-sizing:border-box;height:50%;padding:6px 0;border-top:3px solid #333;border-bottom:3px solid #333;margin:0', z2);
+ok = eq3(z2i, 0, 0, 0, "12 border-box 50% of definite-0 clamps to 0") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="flex-height-percent"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

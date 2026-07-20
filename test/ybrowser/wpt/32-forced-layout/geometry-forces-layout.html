@@ -1,0 +1,40 @@
+<!doctype html><meta charset=utf-8>
+<title>Layout-dependent geometry reads are CSSOM forced-layout points: a node inserted and
+measured in the SAME JS turn reports its real clientWidth/offsetWidth/getBoundingClientRect
+without waiting for a frame or timer, and a subsequent style mutation is reflected on the very
+next read. Frameworks (e.g. a grid's dataChanged() sizing itself from clientWidth) depend on this
+synchronous flush; without it the read returns the stale/empty last layout (0) and the component
+never lays out. The box only reaches its expected height when every forced-layout assertion holds.</title>
+<style>body{margin:0}</style>
+<div data-test="forced-layout" data-expect="0,0,800,40" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var ok = true;
+
+/* --- insert-then-measure in the SAME turn (no timer/frame) ---
+ * appendChild marks layout dirty; the clientWidth getter must synchronously
+ * flush pending layout so the freshly inserted element reports true geometry. */
+var el = document.createElement('div');
+el.style.width = '321px';
+el.style.height = '20px';
+document.body.appendChild(el);
+ok = check(el.clientWidth > 0, "clientWidth > 0 in same turn, got " + el.clientWidth) && ok;
+ok = check(el.clientWidth === 321, "clientWidth === 321, got " + el.clientWidth) && ok;
+ok = check(el.offsetWidth === 321, "offsetWidth === 321, got " + el.offsetWidth) && ok;
+
+/* getBoundingClientRect is a forced-layout point too. */
+var rect = el.getBoundingClientRect();
+ok = check(Math.round(rect.width) === 321, "rect.width === 321, got " + rect.width) && ok;
+
+/* --- style mutation reflected on the very next read --- */
+el.style.width = '123px';
+ok = check(el.clientWidth === 123, "clientWidth === 123 after mutate, got " + el.clientWidth) && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="forced-layout"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

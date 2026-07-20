@@ -2,7 +2,7 @@
 """Generate Chrome geometry reference JSON for ybrowser layout fixtures.
 
 This is the oracle side of the ybrowser geometry test layer. Each fixture in
-``test/ybrowser/ut/fixtures/*.html`` marks key elements with
+``test/ut/ybrowser/fixtures/*.html`` marks key elements with
 ``data-test="NAME"`` and carries an inline script that, after load, walks
 ``[data-test]``, reads ``getBoundingClientRect()``, and writes the geometry as
 JSON into ``<pre id="geom">``.
@@ -14,7 +14,7 @@ regenerated only on intentional layout changes — review the diff before
 committing.
 
 Usage:
-    test/ybrowser/ut/geometry-oracle/gen-chrome-refs.py [fixture.html ...]
+    test/ut/ybrowser/geometry-oracle/gen-chrome-refs.py [fixture.html ...]
 
 With no arguments it refreshes every fixture under the fixtures directory. The
 viewport is fixed at 1000x600 to match the comparator and the C layout tests.
@@ -29,7 +29,7 @@ from pathlib import Path
 VIEWPORT_W = 1000
 VIEWPORT_H = 600
 
-# This script lives in test/ybrowser/ut/geometry-oracle/; the fixtures are its
+# This script lives in test/ut/ybrowser/geometry-oracle/; the fixtures are its
 # sibling directory.
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 

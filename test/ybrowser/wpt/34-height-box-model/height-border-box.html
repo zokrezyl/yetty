@@ -1,0 +1,81 @@
+<!doctype html><meta charset=utf-8>
+<title>box->h is the USED BORDER-BOX height on every ordinary-block path: offsetHeight is the
+border box, clientHeight is the padding box (border box minus vertical borders),
+getBoundingClientRect().height agrees, in-flow siblings advance by the border box, box-sizing is
+honored, an oversized overflow:visible child does NOT enlarge the box, auto height expands to
+content+padding+border, width is unchanged, and nested/flex cases do not double-add borders. The
+gate box grows to height 40 only when every assert holds. Harness viewport is 800px wide.</title>
+<style>body{margin:0}</style>
+<div data-test="height-border-box" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+function mk(style, parent){
+  var el = document.createElement('div');
+  el.setAttribute('style', style + ';display:block');
+  (parent || sandbox).appendChild(el);
+  return el;
+}
+/* [offsetHeight, clientHeight, round(getBoundingClientRect().height)] */
+function m3(el){ var r = el.getBoundingClientRect(); return [el.offsetHeight, el.clientHeight, Math.round(r.height)]; }
+function eq3(el, oh, ch, rh, label){
+  var g = m3(el);
+  return check(g[0] === oh && g[1] === ch && g[2] === rh,
+               label + " -> off/client/rect = " + g[0] + "/" + g[1] + "/" + g[2] +
+               " (want " + oh + "/" + ch + "/" + rh + ")");
+}
+var ok = true;
+
+/* 1. content-box: H=30 P=40 B=20 -> border box 90, padding box 70 */
+var c1 = mk('box-sizing:content-box;height:30px;padding-top:20px;padding-bottom:20px;border-top:10px solid #333;border-bottom:10px solid #333;margin:0');
+ok = eq3(c1, 90, 70, 90, "1 content-box H30+P40+B20") && ok;
+
+/* 2. border-box: specified 90 IS the border box; client = 90-20 borders */
+var c2 = mk('box-sizing:border-box;height:90px;padding-top:20px;padding-bottom:20px;border-top:10px solid #333;border-bottom:10px solid #333;margin:0');
+ok = eq3(c2, 90, 70, 90, "2 border-box H90+P40+B20") && ok;
+
+/* 3. following in-flow sibling advances by the used border box (90) */
+var w3 = mk('margin:0');
+var c3a = mk('box-sizing:content-box;height:30px;padding:20px 0;border-top:10px solid #333;border-bottom:10px solid #333;margin:0', w3);
+var c3b = mk('box-sizing:content-box;height:30px;padding:20px 0;border-top:10px solid #333;border-bottom:10px solid #333;margin:0', w3);
+var dy = Math.round(c3b.getBoundingClientRect().top - c3a.getBoundingClientRect().top);
+ok = check(dy === 90, "3 sibling advances by border box: dy=" + dy + " (want 90)") && ok;
+
+/* 4. oversized overflow:visible child does NOT enlarge the box */
+var c4 = mk('box-sizing:content-box;height:30px;overflow:visible;margin:0');
+mk('height:100px;margin:0', c4);
+ok = check(c4.offsetHeight === 30, "4 overflow-visible oversized child: offsetHeight=" + c4.offsetHeight + " (want 30, not 100)") && ok;
+
+/* 5. auto height expands to content(50)+padding(20)+border(10) = 80 */
+var c5 = mk('box-sizing:content-box;padding-top:10px;padding-bottom:10px;border-top:5px solid #333;border-bottom:5px solid #333;margin:0');
+mk('height:50px;margin:0', c5);
+ok = eq3(c5, 80, 70, 80, "5 auto height content50+P20+B10") && ok;
+
+/* 6. width axis unchanged by the height edit: content-box W=200 P=40 B=20 */
+var c6 = mk('box-sizing:content-box;width:200px;height:10px;padding-left:20px;padding-right:20px;border-left:10px solid #333;border-right:10px solid #333;margin:0');
+ok = check(c6.offsetWidth === 260 && c6.clientWidth === 240,
+           "6 width unchanged: offsetWidth/clientWidth = " + c6.offsetWidth + "/" + c6.clientWidth + " (want 260/240)") && ok;
+
+/* 8a. nesting no-double-add: outer auto (no border/pad) wraps inner border-box 50;
+       outer must equal inner exactly (border counted once through the padding-box return) */
+var c8outer = mk('margin:0');
+var c8inner = mk('box-sizing:content-box;height:30px;border-top:10px solid #333;border-bottom:10px solid #333;margin:0', c8outer);
+ok = check(c8inner.offsetHeight === 50, "8a inner off=" + c8inner.offsetHeight + " (want 50)") && ok;
+ok = check(c8outer.offsetHeight === 50, "8a outer off=" + c8outer.offsetHeight + " (want 50, not 70 = double border)") && ok;
+ok = check(Math.round(c8outer.getBoundingClientRect().height) === 50, "8a outer rect=" + Math.round(c8outer.getBoundingClientRect().height) + " (want 50)") && ok;
+
+/* 8b. flex borderless item: block-path border-add must not leak onto the flex path */
+var c8flex = mk('display:flex;margin:0');
+var c8item = mk('width:40px;height:40px;margin:0', c8flex);
+ok = check(c8item.offsetHeight === 40, "8b flex item off=" + c8item.offsetHeight + " (want 40, no phantom border)") && ok;
+ok = check(c8flex.offsetHeight === 40, "8b flex container off=" + c8flex.offsetHeight + " (want 40)") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="height-border-box"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

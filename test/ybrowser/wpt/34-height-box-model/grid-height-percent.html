@@ -1,0 +1,41 @@
+<!doctype html><meta charset=utf-8>
+<title>This engine's grid has no grid-template-rows / row-track sizing, so a grid row's cross size is
+INDEFINITE and a percentage item height has no definite operand to resolve against. Per that
+documented limitation a grid item's percentage height behaves as AUTO (content-driven) — NOT resolved
+against the container height. The gate grows only when that holds. Harness viewport 800px wide.</title>
+<style>body{margin:0}</style>
+<div data-test="grid-height-percent" data-expect="*,*,*,40" style="display:block"></div>
+<div id="sandbox" style="display:block"></div>
+<script>
+function check(cond, msg){ console.log((cond ? "PASS" : "FAIL") + ": " + msg); return !!cond; }
+var sandbox = document.getElementById('sandbox');
+function mk(style, parent){
+  var el = document.createElement('div');
+  el.setAttribute('style', style);
+  (parent || sandbox).appendChild(el);
+  return el;
+}
+function m3(el){ var r = el.getBoundingClientRect(); return [el.offsetHeight, el.clientHeight, Math.round(r.height)]; }
+function eq3(el, oh, ch, rh, label){
+  var g = m3(el);
+  return check(g[0] === oh && g[1] === ch && g[2] === rh,
+               label + " -> off/client/rect = " + g[0] + "/" + g[1] + "/" + g[2] +
+               " (want " + oh + "/" + ch + "/" + rh + ")");
+}
+var ok = true;
+
+/* Definite-height grid container (height:200), but grid has no row tracks -> a height:50% item does
+   NOT resolve to 100; it is auto: content(20px child) + border(10) = 30 border box, NOT 100. */
+var gp = mk('display:grid;grid-template-columns:200px;height:200px;box-sizing:content-box;margin:0');
+var gpi = mk('box-sizing:content-box;height:50%;border-top:5px solid #333;border-bottom:5px solid #333;margin:0', gp);
+mk('height:20px;margin:0', gpi);
+ok = eq3(gpi, 30, 20, 30, "grid % height behaves as auto (content 20 + border 10 = 30, NOT resolved to 100)") && ok;
+
+console.log(ok ? "ALL PASS" : "SOME FAIL");
+if (ok) {
+  var box = document.querySelector('div[data-test="grid-height-percent"]');
+  var grow = document.createElement('div');
+  grow.setAttribute('style', 'height:40px');
+  box.appendChild(grow);
+}
+</script>

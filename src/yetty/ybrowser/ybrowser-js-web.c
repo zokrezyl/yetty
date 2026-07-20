@@ -50,6 +50,7 @@
 
 #include <stdatomic.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -334,6 +335,14 @@ struct yetty_ybrowser_loader {
     /* $XDG_CACHE_HOME/yetty/altsvc-cache (or $HOME/.cache/...). Empty
 	 * string when no cache dir could be derived. */
     char altsvc_path[1024];
+
+    /* Cookies a page set via document.cookie, mirrored here (separate from
+	 * curl's jar) so the next same-origin DOCUMENT navigation carries them —
+	 * consent/session cookies (YouTube SOCS) are written this way then the page
+	 * reloads. Host-scoped to avoid leaking cross-site. Guarded by cache_mutex;
+	 * freed on loader destroy. */
+    char *page_cookies;
+    char *page_cookie_host;
 
     /* Disk tier — persists cache entries across restarts. The memory
 	 * LRU below stays authoritative within a session; disk hits are
@@ -1144,6 +1153,8 @@ struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrows
         loader_cache_entry_free(&loader->cache_entries[i]);
     }
     free(loader->cache_entries);
+    free(loader->page_cookies);
+    free(loader->page_cookie_host);
     pthread_mutex_destroy(&loader->cache_mutex);
     pthread_mutex_destroy(&loader->inflight_mutex);
     yetty_ybrowser_disk_cache_shutdown(&loader->disk_cache);
@@ -1155,12 +1166,6 @@ struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrows
 void *yetty_ybrowser_loader_curl_share(struct yetty_ybrowser_loader *loader)
 {
     return loader ? loader->share : NULL;
-}
-
-struct yetty_ybrowser_disk_cache *yetty_ybrowser_loader_disk_cache(
-    struct yetty_ybrowser_loader *loader)
-{
-    return loader ? &loader->disk_cache : NULL;
 }
 
 /* Apply the loader-owned bits (share handle, Alt-Svc cache) to one easy
@@ -1319,15 +1324,6 @@ static struct curl_slist *build_request_headers(const struct yetty_ybrowser_requ
                  sec_fetch_site_for(request->url, request->referer));
         headers = curl_slist_append(headers, site_header);
     }
-    /* YouTube serves a consent-wall page with an EMPTY feed to a cookieless
-     * client (a `consentBumpV2Renderer`, no video data). `SOCS=CAI` is the
-     * "consent already recorded" value that unlocks the real server-rendered
-     * content (search results, watch pages) — the same bypass lightweight
-     * YouTube frontends use. The general cookie engine is off for documents,
-     * so inject this fixed cookie directly. */
-    if (yetty_ylexbor_is_youtube_host(request->url)) {
-        headers = curl_slist_append(headers, "Cookie: SOCS=CAI");
-    }
     /* Caller-supplied headers last (fetch()/XHR: Authorization,
 	 * Content-Type, X-*). */
     for (int i = 0; i < request->extra_header_count; i++) {
@@ -1374,18 +1370,32 @@ static void fetch_configure_easy(struct yetty_ybrowser_loader *loader, CURL *eas
 	 * write callback still guards chunked/streamed responses. */
     curl_easy_setopt(easy, CURLOPT_MAXFILESIZE_LARGE, (curl_off_t)FETCH_MAX_RESPONSE);
     curl_easy_setopt(easy, CURLOPT_ACCEPT_ENCODING, "");
-    /* Enable the cookie engine (empty COOKIEFILE = no file, just parse)
-	 * for SUBRESOURCE and API fetches — session-gated image CDNs and
-	 * affinity-routed sheets need the cookies the document's redirect
-	 * chain set (shared across handles via CURL_LOCK_DATA_COOKIE on the
-	 * loader). Deliberately NOT for DOCUMENT navigations: cookie-capable
-	 * page requests make variant-sniffing sites serve their JS-heavy SPA
-	 * shell (news.google.com drops from 1.7 MB of static article markup
-	 * to a 650 KB shell our JS can't boot), while the cookie-less page
-	 * fetch gets the static variant this engine renders well. Revisit
-	 * when the JS surface can boot those shells. */
-    if (request->kind != YETTY_YBROWSER_REQUEST_DOCUMENT) {
-        curl_easy_setopt(easy, CURLOPT_COOKIEFILE, "");
+    /* Enable the cookie engine (empty COOKIEFILE = no file, just parse) for
+     * ALL requests, including DOCUMENT navigations. The page redirect chain
+     * sets consent/visitor/session cookies (e.g. YouTube SOCS, YSC,
+     * VISITOR_INFO1_LIVE) that the document and its subresources need; without
+     * them sites serve a consent-walled or logged-out-empty variant (the
+     * YouTube homepage feed is empty cookieless). The jar is shared across
+     * handles via CURL_LOCK_DATA_COOKIE on the loader, so cookies set on the
+     * page request are visible to subresource/API fetches too. */
+    curl_easy_setopt(easy, CURLOPT_COOKIEFILE, "");
+    /* A same-origin DOCUMENT navigation also carries cookies the previous page
+	 * set via document.cookie (mirrored on the loader): that is how a consent
+	 * reload sends its freshly-written SOCS. Host-scoped so a page's cookies
+	 * never travel to a different site. curl copies the string in setopt, so it
+	 * is safe to unlock right after. */
+    if (request->kind == YETTY_YBROWSER_REQUEST_DOCUMENT) {
+        pthread_mutex_lock(&loader->cache_mutex);
+        if (loader->page_cookies && loader->page_cookie_host) {
+            const char *req_host = NULL;
+            size_t req_host_len = 0;
+            if (url_host_span(request->url, &req_host, &req_host_len) &&
+                req_host_len == strlen(loader->page_cookie_host) &&
+                strncmp(req_host, loader->page_cookie_host, req_host_len) == 0) {
+                curl_easy_setopt(easy, CURLOPT_COOKIE, loader->page_cookies);
+            }
+        }
+        pthread_mutex_unlock(&loader->cache_mutex);
     }
     curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, fetch_write_cb);
     curl_easy_setopt(easy, CURLOPT_WRITEDATA, transfer);
@@ -1802,13 +1812,6 @@ struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrows
 }
 
 void *yetty_ybrowser_loader_curl_share(struct yetty_ybrowser_loader *loader)
-{
-    (void)loader;
-    return NULL;
-}
-
-struct yetty_ybrowser_disk_cache *yetty_ybrowser_loader_disk_cache(
-    struct yetty_ybrowser_loader *loader)
 {
     (void)loader;
     return NULL;
@@ -2242,15 +2245,20 @@ static void js_fetch_parse_init(JSContext *ctx, JSValueConst init, struct js_fet
 
     JSValue headers_val = JS_GetPropertyStr(ctx, init, "headers");
     if (JS_IsObject(headers_val)) {
+        /* A Headers instance keeps its name→value pairs in an internal map
+         * object exposed as `headerMap` (its own props are accessor methods,
+         * not the header entries); a plain object is iterated directly. */
+        JSValue header_map = JS_GetPropertyStr(ctx, headers_val, "headerMap");
+        JSValueConst header_source = JS_IsObject(header_map) ? header_map : headers_val;
         JSPropertyEnum *props = NULL;
         uint32_t prop_count = 0;
-        if (JS_GetOwnPropertyNames(ctx, &props, &prop_count, headers_val,
+        if (JS_GetOwnPropertyNames(ctx, &props, &prop_count, header_source,
                                    JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) == 0) {
             params->header_lines =
                 calloc(prop_count ? prop_count : 1, sizeof(*params->header_lines));
             for (uint32_t i = 0; params->header_lines && i < prop_count; i++) {
                 const char *name = JS_AtomToCString(ctx, props[i].atom);
-                JSValue value_val = JS_GetProperty(ctx, headers_val, props[i].atom);
+                JSValue value_val = JS_GetProperty(ctx, header_source, props[i].atom);
                 const char *value = JS_ToCString(ctx, value_val);
                 if (name && value) {
                     size_t line_len = strlen(name) + 2 + strlen(value) + 1;
@@ -2270,6 +2278,7 @@ static void js_fetch_parse_init(JSContext *ctx, JSValueConst init, struct js_fet
             }
             JS_FreePropertyEnum(ctx, props, prop_count);
         }
+        JS_FreeValue(ctx, header_map);
     }
     JS_FreeValue(ctx, headers_val);
 }
@@ -2314,6 +2323,8 @@ struct js_fetch_job {
 static void js_fetch_job_run(void *job_ptr)
 {
     struct js_fetch_job *job = job_ptr;
+    ydebug("js fetch: %s %s", job->params.method ? job->params.method : "GET",
+           job->params.url ? job->params.url : "(null)");
     struct yetty_ybrowser_request request = {
         .url = job->params.url,
         .kind = YETTY_YBROWSER_REQUEST_XHR,
@@ -2387,21 +2398,45 @@ static JSValue js_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValue
         JS_FreeValue(ctx, error_obj);
         goto out;
     }
-    const char *url_arg = JS_ToCString(ctx, argv[0]);
+    /* The first argument is a URL string OR a Request object. A Request
+     * carries the URL in .url (plus .method/.headers/.body); stringifying it
+     * directly would yield "[object Object]". Read .url when it's a string. */
+    JSValue request_url_val = JS_UNDEFINED;
+    bool arg0_is_request = false;
+    const char *url_arg = NULL;
+    if (JS_IsObject(argv[0]) && !JS_IsString(argv[0])) {
+        JSValue url_prop = JS_GetPropertyStr(ctx, argv[0], "url");
+        if (JS_IsString(url_prop)) {
+            request_url_val = url_prop;
+            url_arg = JS_ToCString(ctx, request_url_val);
+            arg0_is_request = true;
+        } else {
+            JS_FreeValue(ctx, url_prop);
+        }
+    }
+    if (!arg0_is_request) {
+        url_arg = JS_ToCString(ctx, argv[0]);
+    }
     if (!url_arg) {
+        JS_FreeValue(ctx, request_url_val);
         goto out;
     }
     struct js_fetch_params params = {0};
     params.url = yetty_ylexbor_resolve_url(r, url_arg);
     JS_FreeCString(ctx, url_arg);
+    JS_FreeValue(ctx, request_url_val);
     if (!params.url) {
         JSValue error_obj = JS_NewError(ctx);
         JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, (JSValueConst[]){error_obj});
         JS_FreeValue(ctx, error_obj);
         goto out;
     }
-    if (argc >= 2) {
+    /* Init precedence: an explicit init object wins; otherwise a Request
+     * object supplies its own method/headers/body. */
+    if (argc >= 2 && JS_IsObject(argv[1])) {
         js_fetch_parse_init(ctx, argv[1], &params);
+    } else if (arg0_is_request) {
+        js_fetch_parse_init(ctx, argv[0], &params);
     }
 
     /* Async path: hand the transfer to the worker pool and resolve from
@@ -2650,6 +2685,40 @@ DEFINE_STORAGE(session, session_store)
  * never leak cookies into each other; freed by the engine destroy.
  * ===========================================================================*/
 
+/* Mirror the page's accumulated document.cookie onto the loader so the next
+ * same-origin DOCUMENT navigation can send it: document.cookie and curl's jar
+ * are separate stores, and sites set consent/session cookies via document.cookie
+ * then reload — YouTube writes SOCS this way; without this the reload is
+ * cookieless and the consent wall returns. Host-scoped so it never leaks to a
+ * different site. Safe from the JS thread (a plain mutexed string copy — no curl
+ * handle, so it can't disturb the loader's in-flight transfers). */
+static void cookie_bridge_to_jar(struct yetty_ylexbor *r, const char *cookie)
+{
+    (void)cookie;
+    if (!r || !r->loader || !r->base_url || !r->web_cookie_string) {
+        return;
+    }
+    const char *host = NULL;
+    size_t host_len = 0;
+    if (!url_host_span(r->base_url, &host, &host_len) || host_len == 0) {
+        return;
+    }
+    struct yetty_ybrowser_loader *loader = r->loader;
+    char *cookies_copy = strdup(r->web_cookie_string);
+    char *host_copy = strndup(host, host_len);
+    if (!cookies_copy || !host_copy) {
+        free(cookies_copy);
+        free(host_copy);
+        return;
+    }
+    pthread_mutex_lock(&loader->cache_mutex);
+    free(loader->page_cookies);
+    free(loader->page_cookie_host);
+    loader->page_cookies = cookies_copy;
+    loader->page_cookie_host = host_copy;
+    pthread_mutex_unlock(&loader->cache_mutex);
+}
+
 static JSValue js_doc_cookie_get(JSContext *ctx, JSValueConst this_val)
 {
     (void)this_val;
@@ -2680,6 +2749,7 @@ static JSValue js_doc_cookie_set(JSContext *ctx, JSValueConst this_val, JSValueC
             r->web_cookie_string = p;
         }
     }
+    cookie_bridge_to_jar(r, s);
     JS_FreeCString(ctx, s);
     return JS_UNDEFINED;
 }
@@ -2689,31 +2759,328 @@ static JSValue js_doc_cookie_set(JSContext *ctx, JSValueConst this_val, JSValueC
  * shapes.
  * ===========================================================================*/
 
+/* -------- matchMedia: a minimal but STRICT media-query evaluator --------
+ * We evaluate width/height range features and the screen/all media types
+ * against the live viewport. Anything we do not model (color-scheme, resolution,
+ * orientation, hover, non-px units, MQ4 `<` / `>` range syntax) makes the query
+ * NON-matching rather than being guessed at. Invalid syntax (unbalanced parens,
+ * dangling not/only, two media types) is likewise a non-match. The CSS cascade
+ * itself uses libcss's own evaluator against the same viewport. */
+
+/* Parse a media-feature length in [s,e): optional spaces, a non-negative
+ * number, optional spaces, then "px" — or a unitless 0. The whole range must be
+ * consumed; any other unit (em/rem/vw/%) or trailing garbage is rejected so an
+ * unsupported unit is NOT silently treated as pixels. */
+static bool media_parse_px(const char *s, const char *e, float *out)
+{
+    while (s < e && isspace((unsigned char)*s)) {
+        s++;
+    }
+    const char *num_start = s;
+    bool any_digit = false;
+    while (s < e && isdigit((unsigned char)*s)) {
+        s++;
+        any_digit = true;
+    }
+    if (s < e && *s == '.') {
+        s++;
+        while (s < e && isdigit((unsigned char)*s)) {
+            s++;
+            any_digit = true;
+        }
+    }
+    /* Require at least one digit so ".", ".px", and "px" are rejected rather
+     * than parsed as 0. Accepts 0, 0.0, .5px, 1.5px. */
+    if (!any_digit) {
+        return false;
+    }
+    size_t nlen = (size_t)(s - num_start);
+    if (nlen >= 64) {
+        return false;
+    }
+    char numbuf[64];
+    memcpy(numbuf, num_start, nlen);
+    numbuf[nlen] = '\0';
+    float value = (float)atof(numbuf);
+    while (s < e && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (s == e) {
+        /* unitless — only 0 is a valid length */
+        if (value != 0.0f) {
+            return false;
+        }
+        *out = 0.0f;
+        return true;
+    }
+    if (e - s >= 2 && s[0] == 'p' && s[1] == 'x') {
+        s += 2;
+        while (s < e && isspace((unsigned char)*s)) {
+            s++;
+        }
+        if (s != e) {
+            return false;
+        }
+        *out = value;
+        return true;
+    }
+    return false;
+}
+
+/* Evaluate one "(name: value)" feature (inner = text between the parens). Sets
+ * *invalid on a structural error: no colon (bare/range syntax), a value that is
+ * not a valid px length, or a feature we do not model. */
+static bool media_eval_feature(const char *inner, size_t len, int vw, int vh, bool *invalid)
+{
+    const char *e = inner + len;
+    const char *colon = memchr(inner, ':', len);
+    if (!colon) {
+        *invalid = true; /* range syntax or a boolean feature we don't support */
+        return false;
+    }
+    const char *name_s = inner, *name_e = colon;
+    while (name_s < name_e && isspace((unsigned char)*name_s)) {
+        name_s++;
+    }
+    while (name_e > name_s && isspace((unsigned char)name_e[-1])) {
+        name_e--;
+    }
+    size_t nlen = (size_t)(name_e - name_s);
+    float px = 0.0f;
+    if (!media_parse_px(colon + 1, e, &px)) {
+        *invalid = true;
+        return false;
+    }
+    /* Compare against the parsed float directly so a fractional threshold like
+     * (min-width: 800.9px) does not round down to 800 and mis-match at 800px. */
+    if (nlen == 9 && !memcmp(name_s, "min-width", 9)) {
+        return (float)vw >= px;
+    }
+    if (nlen == 9 && !memcmp(name_s, "max-width", 9)) {
+        return (float)vw <= px;
+    }
+    if (nlen == 5 && !memcmp(name_s, "width", 5)) {
+        return (float)vw == px;
+    }
+    if (nlen == 10 && !memcmp(name_s, "min-height", 10)) {
+        return (float)vh >= px;
+    }
+    if (nlen == 10 && !memcmp(name_s, "max-height", 10)) {
+        return (float)vh <= px;
+    }
+    if (nlen == 6 && !memcmp(name_s, "height", 6)) {
+        return (float)vh == px;
+    }
+    *invalid = true; /* feature we don't model */
+    return false;
+}
+
+/* Evaluate one comma-separated media-query part. Grammar handled:
+ *   [only|not]? <type>? [and (feature)]*  |  (feature) [and (feature)]*
+ * Matching media types: screen, all. print/speech/unknown do not match. `not`
+ * negates a well-formed result. A structural error (unbalanced parens, unknown
+ * feature, bad unit, two media types, dangling not/only) is a non-match
+ * regardless of `not`. */
+static bool media_query_part_matches(const char *part, size_t len, int vw, int vh)
+{
+    /* Reject an overlong part rather than truncating — a truncated matching
+     * prefix could turn an invalid/non-matching query into a matching one. */
+    char buf[512];
+    if (len >= sizeof(buf)) {
+        return false;
+    }
+    for (size_t i = 0; i < len; i++) {
+        buf[i] = (char)tolower((unsigned char)part[i]);
+    }
+    buf[len] = '\0';
+
+    char *s = buf, *e = buf + strlen(buf);
+    while (s < e && isspace((unsigned char)*s)) {
+        s++;
+    }
+    while (e > s && isspace((unsigned char)e[-1])) {
+        e--;
+    }
+    *e = '\0';
+    if (s == e) {
+        return true; /* empty query == all */
+    }
+
+    int depth = 0;
+    for (char *p = s; p < e; p++) {
+        if (*p == '(') {
+            depth++;
+        } else if (*p == ')') {
+            if (--depth < 0) {
+                return false; /* unbalanced */
+            }
+        }
+    }
+    if (depth != 0) {
+        return false;
+    }
+
+    bool negate = false;
+    if ((size_t)(e - s) > 3 && !memcmp(s, "not", 3) && isspace((unsigned char)s[3])) {
+        negate = true;
+        s += 3;
+    } else if ((size_t)(e - s) > 4 && !memcmp(s, "only", 4) && isspace((unsigned char)s[4])) {
+        s += 4;
+    }
+    while (s < e && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (s == e) {
+        return false; /* dangling not/only */
+    }
+
+    /* Conjunction grammar enforced with a small state machine:
+     *   EXPECT_PRIMARY : first token — a media type OR a feature;
+     *   EXPECT_AND     : after a type/feature — only `and` or end is valid;
+     *   EXPECT_FEATURE : after `and` — only a feature is valid (no type, no
+     *                    repeated `and`, no end).
+     * Rejects missing / leading / trailing / repeated `and` and bare adjacency. */
+    enum { EXPECT_PRIMARY, EXPECT_AND, EXPECT_FEATURE } state = EXPECT_PRIMARY;
+    bool result = true;
+    char *p = s;
+    while (p < e) {
+        while (p < e && isspace((unsigned char)*p)) {
+            p++;
+        }
+        if (p >= e) {
+            break;
+        }
+        if (*p == '(') {
+            if (state != EXPECT_PRIMARY && state != EXPECT_FEATURE) {
+                return false; /* feature with no preceding `and` */
+            }
+            char *q = p;
+            int d = 0;
+            for (; q < e; q++) {
+                if (*q == '(') {
+                    d++;
+                } else if (*q == ')') {
+                    if (--d == 0) {
+                        q++;
+                        break;
+                    }
+                }
+            }
+            bool invalid = false;
+            bool feature_matches =
+                media_eval_feature(p + 1, (size_t)((q - 1) - (p + 1)), vw, vh, &invalid);
+            if (invalid) {
+                return false;
+            }
+            result = result && feature_matches;
+            state = EXPECT_AND;
+            p = q;
+        } else {
+            char *q = p;
+            while (q < e && !isspace((unsigned char)*q) && *q != '(') {
+                q++;
+            }
+            size_t tlen = (size_t)(q - p);
+            if (tlen == 3 && !memcmp(p, "and", 3)) {
+                if (state != EXPECT_AND) {
+                    return false; /* leading or repeated `and` */
+                }
+                state = EXPECT_FEATURE;
+            } else {
+                /* a bare media type — only valid as the first primary token */
+                if (state != EXPECT_PRIMARY) {
+                    return false; /* type after `and`, or a second media type */
+                }
+                bool type_ok = (tlen == 6 && !memcmp(p, "screen", 6)) ||
+                               (tlen == 3 && !memcmp(p, "all", 3));
+                result = result && type_ok;
+                state = EXPECT_AND;
+            }
+            p = q;
+        }
+    }
+    if (state == EXPECT_FEATURE) {
+        return false; /* trailing `and` */
+    }
+    return negate ? !result : result;
+}
+
+static bool media_query_matches(const char *query, int vw, int vh)
+{
+    if (query == NULL) {
+        return false;
+    }
+    /* Always evaluate at least one part so an empty query string (a valid list
+     * that means `all`) matches rather than being skipped by a `while (*part)`. */
+    const char *part = query;
+    for (;;) {
+        const char *comma = strchr(part, ',');
+        size_t len = comma ? (size_t)(comma - part) : strlen(part);
+        if (media_query_part_matches(part, len, vw, vh)) {
+            return true; /* comma = OR */
+        }
+        if (!comma) {
+            break;
+        }
+        part = comma + 1;
+    }
+    return false;
+}
+
+/* Live MediaQueryList.matches: re-evaluates the stored `media` string against
+ * the CURRENT viewport on every read, so a set_viewport() is reflected on the
+ * same object without recreating it. */
+static JSValue js_mql_matches_get(JSContext *ctx, JSValueConst this_val)
+{
+    JSValue mediav = JS_GetPropertyStr(ctx, this_val, "media");
+    const char *query = JS_ToCString(ctx, mediav);
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    int vw = r ? r->viewport_w : 1024;
+    int vh = r ? r->viewport_h : 768;
+    bool matches = query ? media_query_matches(query, vw, vh) : false;
+    if (query) {
+        JS_FreeCString(ctx, query);
+    }
+    JS_FreeValue(ctx, mediav);
+    return JS_NewBool(ctx, matches);
+}
+
+static void define_getter(JSContext *ctx, JSValue obj, const char *name,
+                          JSValue (*getter)(JSContext *, JSValueConst));
+
 static JSValue js_matchMedia(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     (void)this_val;
-    (void)argc;
-    (void)argv;
-    const char *def = "({ matches: false, media: '', "
-                      "   addEventListener: ()=>{}, removeEventListener: ()=>{}, "
-                      "   addListener: ()=>{}, removeListener: ()=>{}, "
-                      "   dispatchEvent: ()=>false, onchange: null })";
-    return JS_Eval(ctx, def, strlen(def), "<matchMedia>", JS_EVAL_TYPE_GLOBAL);
+    const char *query = (argc >= 1) ? JS_ToCString(ctx, argv[0]) : NULL;
+    /* MediaQueryList with a LIVE `matches` getter — re-reads the stored query
+     * against the current r->viewport_w/h on each access, so a set_viewport() is
+     * reflected on the same object. Change-event dispatch (onchange /
+     * addEventListener('change')) is not yet wired; listeners stay no-ops. */
+    const char *def = "({ media:'', addEventListener:()=>{}, removeEventListener:()=>{}, "
+                      "addListener:()=>{}, removeListener:()=>{}, dispatchEvent:()=>false, "
+                      "onchange:null })";
+    JSValue mql = JS_Eval(ctx, def, strlen(def), "<matchMedia>", JS_EVAL_TYPE_GLOBAL);
+    if (!JS_IsException(mql)) {
+        JS_SetPropertyStr(ctx, mql, "media", JS_NewString(ctx, query ? query : ""));
+        define_getter(ctx, mql, "matches", js_mql_matches_get);
+    }
+    if (query) {
+        JS_FreeCString(ctx, query);
+    }
+    return mql;
 }
+
+/* Resolved-value computed style lives in ybrowser-js-dom.c, where the laid-out
+ * box vector is reachable. It installs the inline-style declaration as the
+ * result's prototype, so callers still get getPropertyValue/setProperty/cssText
+ * plus every inline property, and layers the box-derived resolved values on top. */
+JSValue yetty_ylexbor_js_getComputedStyle(JSContext *ctx, JSValueConst this_val, int argc,
+                                          JSValueConst *argv);
 
 static JSValue js_getComputedStyle(JSContext *ctx, JSValueConst this_val, int argc,
                                    JSValueConst *argv)
 {
-    (void)this_val;
-    if (argc < 1) {
-        return JS_NULL;
-    }
-    /* Return the same `style` proxy we use for el.style — JS code
-	 * that only reads inline-style values keeps working; reads of
-	 * properties not set in the inline style get "". JS_GetPropertyStr
-	 * already returns an owned reference we transfer to the caller;
-	 * don't JS_DupValue it or the original reference leaks. */
-    return JS_GetPropertyStr(ctx, argv[0], "style");
+    return yetty_ylexbor_js_getComputedStyle(ctx, this_val, argc, argv);
 }
 
 /* ===========================================================================
@@ -2785,6 +3152,139 @@ static void install_global_fn(JSContext *ctx, JSValue global, const char *name, 
     JS_SetPropertyStr(ctx, global, name, JS_NewCFunction(ctx, fn, name, argc));
 }
 
+/* __ybIngestCSS(cssText): push a CSS string into the live libcss cascade.
+ * Bridges CONSTRUCTABLE STYLESHEETS — `new CSSStyleSheet().replaceSync(css)` +
+ * `document.adoptedStyleSheets = [sheet]` — which modern CSS-in-JS (YouTube's
+ * kevlar: 16 adoptedStyleSheets uses in base.js) applies per component. Our
+ * CSSStyleSheet was a no-op stub, so those rules — including the consent
+ * lightbox's `:host{position:fixed;inset:0}` modal styling — never reached the
+ * cascade and the lightbox collapsed to height 0 (in-flow, not a modal). Shady
+ * DOM scopes these rules by class (`.style-scope.<tag>`), so a document-level
+ * ingest is correct — the selectors self-scope. Marks the tree dirty so the next
+ * relayout applies the new rules. */
+static JSValue js_ingest_css(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1) {
+        return JS_UNDEFINED;
+    }
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    if (r == NULL) {
+        return JS_UNDEFINED;
+    }
+    size_t len = 0;
+    const char *css = JS_ToCStringLen(ctx, &len, argv[0]);
+    if (css != NULL) {
+        struct yetty_ycore_void_result res = yetty_ylexbor_add_css(r, css, len);
+        if (YETTY_IS_ERR(res)) {
+            yetty_ycore_error_destroy(res.error);
+        }
+        r->dom_dirty = 1;
+        JS_FreeCString(ctx, css);
+    }
+    return JS_UNDEFINED;
+}
+
+/* window.innerWidth/innerHeight (and outerWidth/Height, which for a chromeless
+ * embedded viewport are identical) report the LIVE engine viewport, so a later
+ * yetty_ylexbor_set_viewport() is reflected without re-running any prelude. This
+ * keeps the JS window viewport coherent with the libcss/media viewport and
+ * documentElement.clientWidth — all derived from the one r->viewport_w/h. */
+static JSValue js_window_inner_width_get(JSContext *ctx, JSValueConst this_val)
+{
+    (void)this_val;
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    return JS_NewInt32(ctx, r ? r->viewport_w : 1024);
+}
+
+static JSValue js_window_inner_height_get(JSContext *ctx, JSValueConst this_val)
+{
+    (void)this_val;
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    return JS_NewInt32(ctx, r ? r->viewport_h : 768);
+}
+
+/* Define an accessor (getter-only) property on obj. globalThis rejects
+ * JS_SetPropertyFunctionList (see install_global_fn), so live window/screen
+ * metrics are installed one at a time this way. */
+static void define_getter(JSContext *ctx, JSValue obj, const char *name,
+                          JSValue (*getter)(JSContext *, JSValueConst))
+{
+    JSAtom atom = JS_NewAtom(ctx, name);
+    /* JS_NewCFunction2 reinterprets the callback per its cproto (JS_CFUNC_getter
+     * => JSValue(*)(JSContext*, JSValueConst)); cast through the generic type. */
+    JSValue getter_fn = JS_NewCFunction2(ctx, (JSCFunction *)getter, name, 0, JS_CFUNC_getter, 0);
+    JS_DefinePropertyGetSet(ctx, obj, atom, getter_fn, JS_UNDEFINED,
+                            JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE);
+    JS_FreeAtom(ctx, atom);
+}
+
+/* location.assign/replace/reload and `location.href = …` all funnel here:
+ * record the resolved target so the host can drive a real navigate() on the
+ * next frame (a plain page has no other way to reload — YouTube's consent flow
+ * calls location.reload() after saving the choice, and the old no-op stub left
+ * it stuck on "Saving your choice" forever). */
+static void location_request_navigation(JSContext *ctx, struct yetty_ylexbor *r, const char *url)
+{
+    (void)ctx;
+    if (!r || !url || !*url) {
+        return;
+    }
+    char *resolved = yetty_ylexbor_resolve_url(r, url);
+    free(r->pending_navigation);
+    r->pending_navigation = resolved ? resolved : strdup(url);
+}
+
+static JSValue js_location_assign(JSContext *ctx, JSValueConst this_val, int argc,
+                                  JSValueConst *argv)
+{
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    if (argc >= 1) {
+        const char *url = JS_ToCString(ctx, argv[0]);
+        if (url) {
+            location_request_navigation(ctx, r, url);
+            JS_SetPropertyStr(ctx, (JSValue)this_val, "__hrefValue",
+                              JS_NewString(ctx, (r && r->pending_navigation) ? r->pending_navigation
+                                                                             : url));
+            JS_FreeCString(ctx, url);
+        }
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_location_reload(JSContext *ctx, JSValueConst this_val, int argc,
+                                  JSValueConst *argv)
+{
+    (void)this_val;
+    (void)argc;
+    (void)argv;
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    if (r && r->base_url) {
+        free(r->pending_navigation);
+        r->pending_navigation = strdup(r->base_url);
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_location_href_get(JSContext *ctx, JSValueConst this_val)
+{
+    return JS_GetPropertyStr(ctx, this_val, "__hrefValue");
+}
+
+static JSValue js_location_href_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
+{
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    const char *url = JS_ToCString(ctx, val);
+    if (url) {
+        location_request_navigation(ctx, r, url);
+        JS_SetPropertyStr(ctx, (JSValue)this_val, "__hrefValue",
+                          JS_NewString(ctx, (r && r->pending_navigation) ? r->pending_navigation
+                                                                         : url));
+        JS_FreeCString(ctx, url);
+    }
+    return JS_UNDEFINED;
+}
+
 void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 {
     JSContext *ctx = (JSContext *)r->js_ctx;
@@ -2803,6 +3303,24 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
     install_global_fn(ctx, global, "fetch", js_fetch, 1);
     install_global_fn(ctx, global, "matchMedia", js_matchMedia, 1);
     install_global_fn(ctx, global, "getComputedStyle", js_getComputedStyle, 1);
+
+    /* Live window viewport metrics (replaces the old hardcoded 1024/768 in the
+     * stubs prelude) — always reflect r->viewport_w/h. */
+    define_getter(ctx, global, "innerWidth", js_window_inner_width_get);
+    define_getter(ctx, global, "innerHeight", js_window_inner_height_get);
+    define_getter(ctx, global, "outerWidth", js_window_inner_width_get);
+    define_getter(ctx, global, "outerHeight", js_window_inner_height_get);
+
+    /* screen — no separate physical screen for a chromeless embed, so track the
+     * viewport too (coherent with innerWidth rather than a stale 1024/768). */
+    JSValue screen = JS_NewObject(ctx);
+    define_getter(ctx, screen, "width", js_window_inner_width_get);
+    define_getter(ctx, screen, "height", js_window_inner_height_get);
+    define_getter(ctx, screen, "availWidth", js_window_inner_width_get);
+    define_getter(ctx, screen, "availHeight", js_window_inner_height_get);
+    JS_SetPropertyStr(ctx, screen, "colorDepth", JS_NewInt32(ctx, 24));
+    JS_SetPropertyStr(ctx, screen, "pixelDepth", JS_NewInt32(ctx, 24));
+    JS_SetPropertyStr(ctx, global, "screen", screen);
 
     /* navigator */
     JSValue nav = JS_NewObject(ctx);
@@ -2839,7 +3357,8 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 	 * Location semantics (assign/replace/reload) can come later. */
     JSValue loc = JS_NewObject(ctx);
     const char *href = r->base_url ? r->base_url : "about:blank";
-    JS_SetPropertyStr(ctx, loc, "href", JS_NewString(ctx, href));
+    /* Backing store for the href accessor defined below. */
+    JS_SetPropertyStr(ctx, loc, "__hrefValue", JS_NewString(ctx, href));
     /* Crude parse — good enough for feature detection. */
     const char *p = strstr(href, "://");
     if (p) {
@@ -2876,15 +3395,30 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         JS_SetPropertyStr(ctx, loc, "hash", JS_NewString(ctx, ""));
         JS_SetPropertyStr(ctx, loc, "port", JS_NewString(ctx, ""));
     }
-    const char *locmethods = "l => { l.assign = () => {}; l.replace = () => {}; "
-                             "       l.reload = () => {}; l.toString = () => l.href; "
-                             "       return l; }";
-    JSValue li = JS_Eval(ctx, locmethods, strlen(locmethods), "<loc>", JS_EVAL_TYPE_GLOBAL);
-    if (!JS_IsException(li)) {
-        JSValue r2 = JS_Call(ctx, li, JS_UNDEFINED, 1, (JSValueConst[]){loc});
-        JS_FreeValue(ctx, r2);
+    JS_SetPropertyStr(ctx, loc, "assign", JS_NewCFunction(ctx, js_location_assign, "assign", 1));
+    JS_SetPropertyStr(ctx, loc, "replace", JS_NewCFunction(ctx, js_location_assign, "replace", 1));
+    JS_SetPropertyStr(ctx, loc, "reload", JS_NewCFunction(ctx, js_location_reload, "reload", 0));
+    /* href is an accessor: reads return the stored value; writes record a
+	 * navigation for the host to act on. */
+    {
+        JSAtom href_atom = JS_NewAtom(ctx, "href");
+        JSValue href_get = JS_NewCFunction2(ctx, (JSCFunction *)js_location_href_get, "href", 0,
+                                            JS_CFUNC_getter, 0);
+        JSValue href_set = JS_NewCFunction2(ctx, (JSCFunction *)js_location_href_set, "href", 1,
+                                            JS_CFUNC_setter, 0);
+        JS_DefinePropertyGetSet(ctx, loc, href_atom, href_get, href_set,
+                                JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE);
+        JS_FreeAtom(ctx, href_atom);
     }
-    JS_FreeValue(ctx, li);
+    {
+        const char *tostr = "l => { l.toString = () => l.href; return l; }";
+        JSValue li = JS_Eval(ctx, tostr, strlen(tostr), "<loc>", JS_EVAL_TYPE_GLOBAL);
+        if (!JS_IsException(li)) {
+            JSValue r2 = JS_Call(ctx, li, JS_UNDEFINED, 1, (JSValueConst[]){loc});
+            JS_FreeValue(ctx, r2);
+        }
+        JS_FreeValue(ctx, li);
+    }
     /* Both `window.location` and `document.location` reference the
 	 * same Location object — share by ref. */
     JSValue doc_for_loc = JS_GetPropertyStr(ctx, global, "document");
@@ -2934,8 +3468,14 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
                                           JS_CFUNC_setter, 0);
         JS_DefinePropertyGetSet(ctx, doc, atom, getter, setter, JS_PROP_CONFIGURABLE);
         JS_FreeAtom(ctx, atom);
-        /* Also: document.readyState */
-        JS_SetPropertyStr(ctx, doc, "readyState", JS_NewString(ctx, "complete"));
+        /* document.readyState starts at "loading": page scripts run while the
+		 * document is still loading, and frameworks branch on this — e.g. a
+		 * boot pass that runs immediately when readyState is already
+		 * "complete" but otherwise DEFERS to a readystatechange listener so
+		 * it sees the fully-built app. The script runner advances the state
+		 * to interactive/complete (firing readystatechange) after the script
+		 * pass — see yetty_ylexbor_js_run_all_scripts. */
+        JS_SetPropertyStr(ctx, doc, "readyState", JS_NewString(ctx, "loading"));
         /* document.URL / location */
         JS_SetPropertyStr(ctx, doc, "URL", JS_NewString(ctx, href));
         JS_SetPropertyStr(ctx, doc, "documentURI", JS_NewString(ctx, href));
@@ -2988,37 +3528,49 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
     JSValue sub = JS_Eval(ctx, subtle, strlen(subtle), "<subtle>", JS_EVAL_TYPE_GLOBAL);
     JS_SetPropertyStr(ctx, cry, "subtle", sub);
     JS_SetPropertyStr(ctx, global, "crypto", cry);
+    /* Constructable-stylesheet bridge (see js_ingest_css). */
+    install_global_fn(ctx, global, "__ybIngestCSS", js_ingest_css, 1);
 
     /* Misc stubs — feature detection rarely actually USES these,
 	 * just checks they exist. */
     const char *stubs =
+        /* Shady-DOM composition control. Some apps (YouTube's Polymer build)
+         * set window.ShadyDOM = {force:true, preferPerformance:true,
+         * noPatch:true}. Those two performance flags tell Shady-DOM to skip
+         * physically composing each shadow tree into the light DOM, on the
+         * assumption that a native shadow-DOM renderer will draw the shadow
+         * trees. This engine renders the native tree only, so without physical
+         * composition the stamped content is invisible. Intercept the
+         * assignment and clear both flags so Shady-DOM composes shadow content
+         * into the native DOM (its classic non-shadow-browser mode). */
+        "(function(){ var shadyOpts; Object.defineProperty(globalThis,'ShadyDOM',{"
+        "  configurable:true,"
+        "  get:function(){ return shadyOpts; },"
+        "  set:function(v){ if(v && typeof v==='object'){ v.preferPerformance=false; } "
+        "    shadyOpts=v; } }); })();"
         "globalThis.Worker          = function(){ this.postMessage = ()=>{}; "
         "this.terminate=()=>{}; this.addEventListener=()=>{}; };"
         "globalThis.SharedWorker    = function(){ this.port = { postMessage:()=>{}, "
         "addEventListener:()=>{} }; };"
         "globalThis.BroadcastChannel= function(){ this.postMessage = ()=>{}; this.close=()=>{}; "
         "this.addEventListener=()=>{}; };"
-        /* AbortController/AbortSignal — the signal must carry throwIfAborted()
-         * (the kevlar app reads `signal.throwIfAborted` and threw
-         * "cannot read property 'throwIfAborted' of undefined" without it) plus
-         * the static AbortSignal.abort/timeout/any factories, each returning a
-         * signal that owns the same method surface. */
+        /* AbortSignal must carry throwIfAborted() (the kevlar app reads
+		 * signal.throwIfAborted and threw "cannot read property 'throwIfAborted'
+		 * of undefined" without it) plus the static abort/timeout/any factories,
+		 * each returning a signal with the same method surface. */
         "globalThis.AbortSignal = (function(){"
         "  function make(){ return { aborted:false, reason:undefined, onabort:null,"
-        "    throwIfAborted:function(){ if(this.aborted) throw (this.reason||new "
-        "Error('aborted')); },"
+        "    throwIfAborted:function(){ if(this.aborted) throw (this.reason||new Error('aborted')); },"
         "    addEventListener:function(){}, removeEventListener:function(){},"
         "    dispatchEvent:function(){ return false; } }; }"
         "  var S=function(){ return make(); };"
-        "  S.abort  =function(reason){ var s=make(); s.aborted=true; s.reason=reason; return s; };"
+        "  S.abort=function(r){ var s=make(); s.aborted=true; s.reason=r; return s; };"
         "  S.timeout=function(){ return make(); };"
-        "  S.any    =function(){ return make(); };"
-        "  S._make  =make;"
-        "  return S; })();"
+        "  S.any=function(){ return make(); };"
+        "  S._make=make; return S; })();"
         "globalThis.AbortController = function(){ this.signal = globalThis.AbortSignal._make();"
-        "  this.abort = function(reason){ this.signal.aborted=true; this.signal.reason=reason;"
-        "    if(typeof this.signal.onabort==='function'){ try{ "
-        "this.signal.onabort({type:'abort'}); }"
+        "  this.abort = function(r){ this.signal.aborted=true; this.signal.reason=r;"
+        "    if(typeof this.signal.onabort==='function'){ try{ this.signal.onabort({type:'abort'}); }"
         "    catch(e){} } }; };"
         "globalThis.indexedDB       = { open: ()=>({ onsuccess:null, onerror:null, "
         "addEventListener:()=>{} }), deleteDatabase: ()=>({}) };"
@@ -3270,56 +3822,93 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "};\n"
         "})(globalThis);\n"
         "globalThis.Event = function(t, init){ this.type=t; this.bubbles=!!(init&&init.bubbles); "
-        "this.cancelable=!!(init&&init.cancelable); this.defaultPrevented=false; "
-        "this.preventDefault=()=>{this.defaultPrevented=true;}; this.stopPropagation=()=>{}; "
-        "this.stopImmediatePropagation=()=>{}; };"
-        "globalThis.CustomEvent = function(t, init){ globalThis.Event.call(this,t,init); "
-        "this.detail = init? init.detail : null; };"
-        "globalThis.MessageEvent = function(t, init){ globalThis.Event.call(this,t,init); "
-        "this.data = init?init.data:null; this.origin = init?init.origin||'':''; };"
-        "globalThis.MutationObserver = function(cb){ this.observe=()=>{}; this.disconnect=()=>{}; "
-        "this.takeRecords=()=>[]; };"
-        /* IntersectionObserver: immediately-intersecting approximation. A
-         * silent no-op left every scroll-reveal site invisible — github's
-         * landing page keeps sections `opacity:0` until its observer fires.
-         * Each observe() schedules one batched microtask callback with
-         * isIntersecting=true, so reveal-on-scroll and lazy-load code runs
-         * its visible path. Real viewport tracking is a later concern. */
-        "globalThis.IntersectionObserver = function(cb, opts){"
-        "  this._cb = cb; this._pending = []; this._scheduled = false;"
-        "  this.root = (opts && opts.root) || null;"
-        "  this.rootMargin = (opts && opts.rootMargin) || '0px';"
-        "  var th = opts && opts.threshold;"
-        "  this.thresholds = th == null ? [0] : (Array.isArray(th) ? th : [th]);"
-        "  var self = this;"
-        "  this.observe = function(el){"
-        "    if (!el || self._pending.indexOf(el) >= 0) return;"
-        "    self._pending.push(el);"
-        "    if (self._scheduled) return;"
-        "    self._scheduled = true;"
-        "    Promise.resolve().then(function(){"
-        "      self._scheduled = false;"
-        "      var targets = self._pending; self._pending = [];"
-        "      var entries = targets.map(function(t){"
-        "        var r = t.getBoundingClientRect ? t.getBoundingClientRect()"
-        "                                        : {x:0,y:0,width:0,height:0,top:0,left:0,"
-        "                                           right:0,bottom:0};"
-        "        return { isIntersecting: true, intersectionRatio: 1, target: t,"
-        "                 boundingClientRect: r, intersectionRect: r, rootBounds: null,"
-        "                 time: Date.now() };"
-        "      });"
-        "      try { cb(entries, self); } catch (e) {}"
-        "    });"
-        "  };"
-        "  this.unobserve = function(el){"
-        "    var i = self._pending.indexOf(el);"
-        "    if (i >= 0) self._pending.splice(i, 1);"
-        "  };"
-        "  this.disconnect = function(){ self._pending = []; };"
-        "  this.takeRecords = function(){ return []; };"
-        "};"
-        "globalThis.ResizeObserver = function(cb){ this.observe=()=>{}; this.unobserve=()=>{}; "
-        "this.disconnect=()=>{}; };"
+        "this.cancelable=!!(init&&init.cancelable); this.composed=!!(init&&init.composed); "
+        "this.defaultPrevented=false; "
+        "this.preventDefault=()=>{this.defaultPrevented=true;}; "
+        /* Propagation flags read by the dispatchEvent bubbling walk. */
+        "this.stopPropagation=()=>{this.__propagationStopped=true;}; "
+        "this.stopImmediatePropagation=()=>{this.__propagationStopped=true;"
+        "this.__immediateStopped=true;}; };"
+        /* CustomEvent/MessageEvent must CAPTURE the base Event constructor at
+		 * definition time. Shadow-DOM polyfills wrap globalThis.Event with a
+		 * function that ignores `this` and returns a fresh object — a dynamic
+		 * `globalThis.Event.call(this, …)` inside these subclasses then
+		 * initializes nothing, leaving every instance without a .type, and
+		 * every dispatched event silently matches zero listeners. */
+        "globalThis.CustomEvent = (function(BaseEvent){ return function(t, init){ "
+        "BaseEvent.call(this,t,init); "
+        "this.detail = init? init.detail : null; }; })(globalThis.Event);"
+        "globalThis.MessageEvent = (function(BaseEvent){ return function(t, init){ "
+        "BaseEvent.call(this,t,init); "
+        "this.data = init?init.data:null; this.origin = init?init.origin||'':''; }; "
+        "})(globalThis.Event);"
+        /* MutationObserver is a real implementation installed by dom_install
+		 * (js_dom_install runs first); do NOT stub it here or the working one
+		 * gets clobbered by a no-op. */
+        /* A real-enough IntersectionObserver. Lazy-loaders gate content on
+			 * isIntersecting=true — most importantly YouTube thumbnails: yt-image sets
+			 * the <img> src only from an IntersectionObserver "viewport entered"
+			 * callback (jet()->eLO()->observe()); a no-op stub leaves every thumbnail
+			 * blank. We report isIntersecting=true ONLY for elements that have a real
+			 * laid-out size AND fall inside the viewport (+rootMargin), re-checking a
+			 * few times to catch elements laid out after observe(), then giving up.
+			 * Requiring real size is what keeps off-screen / not-yet-laid-out lazy
+			 * content (e.g. GitHub's below-the-fold images) from all reporting visible
+			 * and flooding the loader. */
+        "globalThis.IntersectionObserver = function(cb, opts){ var self=this; var margin=0;"
+        "  try{ if(opts&&opts.rootMargin){ var mm=(''+opts.rootMargin).match(/-?\\d+/);"
+        "    if(mm) margin=Math.abs(parseInt(mm[0],10)); } }catch(e){}"
+        "  var watched=[]; var ticking=false;"
+        "  var rectOf=function(el){ try{ return el.getBoundingClientRect(); }"
+        "    catch(e){ return {top:0,left:0,right:0,bottom:0,width:0,height:0}; } };"
+        "  var fire=function(el, rc, vis){ var vw=window.innerWidth||1280, vh=window.innerHeight||800;"
+        "    cb([{ target: el, isIntersecting: vis, intersectionRatio: vis?1:0,"
+        "          boundingClientRect: rc, intersectionRect: rc,"
+        "          rootBounds: {top:0,left:0,right:vw,bottom:vh,width:vw,height:vh}, time: 0 }], self); };"
+        "  var check=function(){ ticking=false; var vw=window.innerWidth||1280, vh=window.innerHeight||800;"
+        "    for(var i=watched.length-1;i>=0;i--){ var w=watched[i]; w.n++;"
+        "      var rc=rectOf(w.el);"
+        "      var vis=(rc.width>0)&&(rc.height>0)&&(rc.bottom>=-margin)&&(rc.top<=vh+margin)"
+        "        &&(rc.right>=-margin)&&(rc.left<=vw+margin);"
+        "      if(vis){ fire(w.el, rc, true); watched.splice(i,1); }"
+        "      else if(w.n>=8){ watched.splice(i,1); } }"
+        "    if(watched.length && !ticking){ ticking=true; setTimeout(check, 250); } };"
+        "  this.observe=function(el){ if(!el) return; watched.push({el:el, n:0});"
+        "    if(!ticking){ ticking=true; setTimeout(check, 50); } };"
+        "  this.unobserve=function(el){ for(var i=0;i<watched.length;i++){ if(watched[i].el===el){ watched.splice(i,1); break; } } };"
+        "  this.disconnect=function(){ watched.length=0; };"
+        "  this.takeRecords=function(){ return []; }; };"
+        /* Real ResizeObserver delivery. Responsive components (YouTube's
+		 * ytd-rich-grid-renderer) read clientWidth at dataChanged — before the
+		 * first layout gives a nonzero box — and depend on a post-layout resize
+		 * notification to retry. A no-op stub strands them at containerWidth=0
+		 * forever. Delivery is async (a re-check timer, never synchronous from
+		 * observe(), never re-entering the layout pass), compares each target's
+		 * border box against its last-reported size, batches all changed targets
+		 * into one callback per observer, and isolates callback exceptions. This
+		 * mirrors the IntersectionObserver re-check loop above. */
+        "globalThis.ResizeObserver = function(cb){"
+        "  var self=this; var watched=[]; var ticking=false;"
+        "  var boxOf=function(el){ try{ var r=el.getBoundingClientRect(); return {w:r.width,h:r.height}; }"
+        "    catch(e){ return {w:0,h:0}; } };"
+        "  var check=function(){ ticking=false; var changed=[];"
+        "    for(var i=0;i<watched.length;i++){ var wt=watched[i]; var b=boxOf(wt.el);"
+        "      if(b.w!==wt.w || b.h!==wt.h){ wt.w=b.w; wt.h=b.h;"
+        "        if(globalThis.__RO_DEBUG){try{console.log('[RO] fire <'+(wt.el&&wt.el.tagName)+'> '+b.w+'x'+b.h);}catch(_){}}"
+        "        changed.push({target: wt.el,"
+        "          contentRect:{x:0,y:0,top:0,left:0,width:b.w,height:b.h,right:b.w,bottom:b.h},"
+        "          borderBoxSize:[{inlineSize:b.w,blockSize:b.h}],"
+        "          contentBoxSize:[{inlineSize:b.w,blockSize:b.h}]}); } }"
+        "    if(changed.length){ try{ cb(changed, self); }"
+        "      catch(e){ try{console.error('[RO] callback', (e&&e.name||'Error')+': '+(e&&e.message));}catch(_){}} }"
+        "    if(watched.length && !ticking){ ticking=true; setTimeout(check, 300); } };"
+        "  this.observe=function(el){ if(!el) return;"
+        "    for(var i=0;i<watched.length;i++){ if(watched[i].el===el) return; }"
+        "    watched.push({el:el, w:-1, h:-1});"
+        "    if(globalThis.__RO_DEBUG){try{var dr=boxOf(el);console.log('[RO] observe <'+(el&&el.tagName)+'> '+dr.w+'x'+dr.h);}catch(_){}}"
+        "    if(!ticking){ ticking=true; setTimeout(check, 50); } };"
+        "  this.unobserve=function(el){ for(var i=0;i<watched.length;i++){ if(watched[i].el===el){ watched.splice(i,1); break; } } };"
+        "  this.disconnect=function(){ watched.length=0; }; };"
         "globalThis.PerformanceObserver = function(cb){ this.observe=()=>{}; "
         "this.disconnect=()=>{}; this.takeRecords=()=>[]; };"
         "globalThis.performance = { now: () => Date.now(), mark: ()=>{}, measure: ()=>{}, "
@@ -3330,16 +3919,18 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.confirm = () => false;"
         "globalThis.prompt = () => null;"
         "globalThis.devicePixelRatio = 1;"
-        "globalThis.innerWidth  = "
-        "1024;"
-        "globalThis.innerHeight = "
-        "768;"
-        "globalThis.outerWidth  = 1024; globalThis.outerHeight = 768;"
-        "globalThis.screen      = { width:1024, height:768, availWidth:1024, availHeight:768, "
-        "colorDepth:24, pixelDepth:24 };"
+        /* innerWidth/innerHeight/outerWidth/outerHeight and screen.{width,height,
+         * availWidth,availHeight} are installed from C as LIVE getters over the
+         * engine viewport (r->viewport_w/h) in yetty_ylexbor_js_web_install — do
+         * NOT assign them here or a later set_viewport() would be masked by these
+         * stale constants (and the assignment would clobber the getters). */
         /* EventTarget — base class many libs `class X extends
 		 * EventTarget` against. Mirrors addEventListener etc. */
-        "globalThis.EventTarget = function(){"
+        /* dom_install already wired a real EventTarget whose prototype carries
+		 * the native addEventListener/dispatchEvent the Shady-DOM polyfill
+		 * captures — keep it if present; only fall back to this generic stub
+		 * when the DOM bindings are absent. */
+        "globalThis.EventTarget = globalThis.EventTarget || function(){"
         "  this._lst = {};"
         "  this.addEventListener = (t, fn) => { (this._lst[t] = this._lst[t] || []).push(fn); };"
         "  this.removeEventListener = (t, fn) => { const a = this._lst[t]; if (!a) return; const i "
@@ -3367,10 +3958,39 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.HTMLElement.prototype.disconnectedCallback = function(){};"
         "globalThis.HTMLElement.prototype.adoptedCallback = function(){};"
         "globalThis.HTMLElement.prototype.attributeChangedCallback = function(){};"
-        "globalThis.Element     = function(){};"
-        "globalThis.Node        = function(){};"
-        "globalThis.Document    = function(){};"
+        /* Element/Node/Document are wired by dom_install with real prototype
+		 * chains (Element.prototype -> Node.prototype -> EventTarget.prototype);
+		 * keep those, fall back to bare stubs only without the DOM bindings. */
+        "globalThis.Element     = globalThis.Element  || function(){};"
+        "globalThis.Node        = globalThis.Node     || function(){};"
+        "globalThis.Document    = globalThis.Document || function(){};"
         "globalThis.HTMLDocument= function(){};"
+        /* Chain HTMLElement onto the real Element.prototype so element methods
+		 * and the interface hierarchy are inherited by `class X extends
+		 * HTMLElement` custom elements. */
+        "try{ Object.setPrototypeOf(globalThis.HTMLElement.prototype, globalThis.Element.prototype); "
+        "}catch(e){}"
+        /* Canvas 2D context stub — the web-animations polyfill creates a
+		 * <canvas> and calls getContext('2d') to normalise CSS colors; without
+		 * it the whole polyfill threw "not a function". Non-drawing stub: it
+		 * stores fillStyle and no-ops the drawing surface. */
+        "try{ if(globalThis.Element && !globalThis.Element.prototype.getContext){"
+        "  globalThis.Element.prototype.getContext = function(){ var fs='#000000';"
+        "    return { canvas:this, get fillStyle(){return fs;}, set fillStyle(v){fs=v;},"
+        "      strokeStyle:'#000', globalAlpha:1, lineWidth:1, font:'10px sans-serif',"
+        "      fillRect:function(){}, clearRect:function(){}, strokeRect:function(){},"
+        "      beginPath:function(){}, closePath:function(){}, moveTo:function(){}, lineTo:function(){},"
+        "      arc:function(){}, rect:function(){}, fill:function(){}, stroke:function(){}, clip:function(){},"
+        "      save:function(){}, restore:function(){}, scale:function(){}, rotate:function(){},"
+        "      translate:function(){}, transform:function(){}, setTransform:function(){}, drawImage:function(){},"
+        "      putImageData:function(){}, fillText:function(){}, strokeText:function(){},"
+        "      createLinearGradient:function(){return {addColorStop:function(){}};},"
+        "      createRadialGradient:function(){return {addColorStop:function(){}};},"
+        "      createPattern:function(){return {};},"
+        "      getImageData:function(x,y,w,h){w=w||1;h=h||1;"
+        "        return {data:new Uint8ClampedArray(w*h*4), width:w, height:h};},"
+        "      measureText:function(t){return {width:(t?String(t).length:0)*6};} };"
+        "  }; } }catch(e){}"
         "globalThis.HTMLAnchorElement = function(){};"
         "globalThis.HTMLImageElement  = function(){};"
         "globalThis.HTMLInputElement  = function(){};"
@@ -3432,33 +4052,90 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.HTMLTimeElement   = function(){};"
         "globalThis.HTMLDataElement   = function(){};"
         "globalThis.HTMLUnknownElement= function(){};"
-        "globalThis.MessageChannel = function(){ const port = { postMessage:()=>{}, "
-        "onmessage:null, start:()=>{}, close:()=>{}, addEventListener:()=>{}, "
-        "removeEventListener:()=>{} }; this.port1=port; this.port2=port; };"
+        /* MessageChannel — a REAL entangled port pair with async delivery.
+		 * Task schedulers (e.g. YouTube's scheduler.js) pump their macrotask
+		 * queue through a MessageChannel port; a silent no-op stub swallows
+		 * every scheduled task — fetch continuations, SPA navigation — with
+		 * no error anywhere. Delivery order: onmessage first, then
+		 * addEventListener('message') listeners. Messages posted before the
+		 * port is started queue up; assigning onmessage auto-starts (spec). */
+        "(function(){"
+        "function deliver(port){"
+        "  if(!port._started||port._closed)return;"
+        "  while(port._queue.length){"
+        "    var data=port._queue.shift();"
+        "    var ev={type:'message',data:data,origin:'',ports:[],source:null,"
+        "      target:port,currentTarget:port,bubbles:false,cancelable:false,"
+        "      stopPropagation:function(){},stopImmediatePropagation:function(){},"
+        "      preventDefault:function(){}};"
+        "    try{ if(typeof port._onmessage==='function') port._onmessage(ev); }"
+        "    catch(e){ try{console.error('MessagePort onmessage:',e&&e.message);}catch(_){}}"
+        "    for(var i=0;i<port._listeners.length;i++){"
+        "      try{ port._listeners[i].call(port,ev); }"
+        "      catch(e){ try{console.error('MessagePort listener:',e&&e.message);}catch(_){}}"
+        "    }"
+        "  }"
+        "}"
+        "function makePort(){"
+        "  var port={_peer:null,_queue:[],_listeners:[],_onmessage:null,"
+        "    _started:false,_closed:false,onmessageerror:null,"
+        "    start:function(){ this._started=true; var p=this;"
+        "      setTimeout(function(){deliver(p);},0); },"
+        "    close:function(){ this._closed=true; },"
+        "    addEventListener:function(t,f){"
+        "      if(t==='message'&&typeof f==='function') this._listeners.push(f); },"
+        "    removeEventListener:function(t,f){"
+        "      var i=this._listeners.indexOf(f); if(i>=0)this._listeners.splice(i,1); },"
+        "    postMessage:function(data){"
+        "      var peer=this._peer;"
+        "      if(!peer||peer._closed)return;"
+        "      peer._queue.push(data);"
+        "      setTimeout(function(){deliver(peer);},0); }};"
+        "  Object.defineProperty(port,'onmessage',{"
+        "    get:function(){return this._onmessage;},"
+        "    set:function(f){ this._onmessage=f; this.start(); }});"
+        "  return port;"
+        "}"
+        "globalThis.MessageChannel=function(){"
+        "  this.port1=makePort(); this.port2=makePort();"
+        "  this.port1._peer=this.port2; this.port2._peer=this.port1;"
+        "};"
+        "})();"
         "globalThis.MessagePort   = function(){};"
+        /* window.postMessage — async 'message' event at the window itself
+		 * (the same-window mailbox pattern; also a scheduler macrotask
+		 * primitive). window.onmessage fires first, then the registered
+		 * 'message' listeners via the normal window dispatch path. */
+        "globalThis.postMessage = function(data,origin){"
+        "  setTimeout(function(){"
+        "    var ev={type:'message',data:data,"
+        "      origin:(globalThis.location&&globalThis.location.origin)||'',"
+        "      source:globalThis,ports:[],bubbles:false,cancelable:false,"
+        "      target:globalThis,currentTarget:globalThis,"
+        "      stopPropagation:function(){},stopImmediatePropagation:function(){},"
+        "      preventDefault:function(){}};"
+        "    try{ if(typeof globalThis.onmessage==='function') globalThis.onmessage(ev); }"
+        "    catch(e){ try{console.error('window.onmessage:',e&&e.message);}catch(_){}}"
+        "    try{ globalThis.dispatchEvent(ev); }catch(e){}"
+        "  },0);"
+        "};"
         "globalThis.Worklet       = function(){ this.addModule=()=>Promise.resolve(); };"
         "globalThis.LinkPreloadManager = function(){};"
-        /* NodeFilter — the constant bag DOM traversal APIs and the Shadow-DOM
-         * (webcomponents) polyfill reference. Its absence was a hard
-         * ReferenceError that aborted the whole polyfill script. */
-        "globalThis.NodeFilter    = { SHOW_ALL:0xFFFFFFFF, SHOW_ELEMENT:1, "
-        "SHOW_ATTRIBUTE:2, SHOW_TEXT:4, SHOW_CDATA_SECTION:8, SHOW_ENTITY_REFERENCE:16, "
-        "SHOW_ENTITY:32, SHOW_PROCESSING_INSTRUCTION:64, SHOW_COMMENT:128, SHOW_DOCUMENT:256, "
+        /* NodeFilter constants — the Shady-DOM (webcomponents) polyfill and DOM
+		 * traversal reference them; absence was a hard ReferenceError. */
+        "globalThis.NodeFilter    = { SHOW_ALL:0xFFFFFFFF, SHOW_ELEMENT:1, SHOW_ATTRIBUTE:2, "
+        "SHOW_TEXT:4, SHOW_CDATA_SECTION:8, SHOW_ENTITY_REFERENCE:16, SHOW_ENTITY:32, "
+        "SHOW_PROCESSING_INSTRUCTION:64, SHOW_COMMENT:128, SHOW_DOCUMENT:256, "
         "SHOW_DOCUMENT_TYPE:512, SHOW_DOCUMENT_FRAGMENT:1024, SHOW_NOTATION:2048, "
         "FILTER_ACCEPT:1, FILTER_REJECT:2, FILTER_SKIP:3 };"
-        /* A REAL TreeWalker / NodeIterator over the live DOM (the node wrappers
-         * already expose firstChild/nextSibling/parentNode/nodeType). The
-         * Shadow-DOM (webcomponents) polyfill calls
-         * document.createTreeWalker(document, NodeFilter.SHOW_ALL, …) to scan the
-         * tree — a no-op walker made it silently patch nothing and the app then
-         * crashed. whatToShow filters by nodeType bit (1<<(nodeType-1)); the
-         * optional filter may be a function or a {acceptNode} object and returns
-         * FILTER_ACCEPT/REJECT/SKIP. */
+        /* A REAL TreeWalker/NodeIterator over the live DOM (node wrappers expose
+		 * firstChild/nextSibling/parentNode/nodeType). The Shady-DOM polyfill
+		 * calls document.createTreeWalker(document, SHOW_ALL, …) to scan the tree
+		 * — a no-op walker made it patch nothing and the app crashed. */
         "(function(){"
         "function accept(node,show,filter){var nt=node.nodeType||0;"
         "if(nt>=1&&nt<=32&&!(((show>>>0))&(1<<(nt-1))))return 3;"
-        "if(!filter)return 1;"
-        "var fn=(typeof filter==='function')?filter:(filter&&filter.acceptNode?"
+        "if(!filter)return 1;var fn=(typeof filter==='function')?filter:(filter&&filter.acceptNode?"
         "function(n){return filter.acceptNode(n);}:null);"
         "if(!fn)return 1;var v=fn(node);return (typeof v==='number')?v:1;}"
         "function TW(root,show,filter){this.root=root;this.whatToShow=(show>>>0)||0xFFFFFFFF;"
@@ -3468,13 +4145,11 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "r=accept(node,this.whatToShow,this.filter);"
         "if(r===1){this.currentNode=node;return node;}}"
         "var nx=null,n=node;while(n&&n!==this.root){if(n.nextSibling){nx=n.nextSibling;break;}"
-        "n=n.parentNode;}if(!nx)return null;node=nx;"
-        "r=accept(node,this.whatToShow,this.filter);"
+        "n=n.parentNode;}if(!nx)return null;node=nx;r=accept(node,this.whatToShow,this.filter);"
         "if(r===1){this.currentNode=node;return node;}}};"
         "TW.prototype.parentNode=function(){var n=this.currentNode;"
         "while(n&&n!==this.root){n=n.parentNode;"
-        "if(n&&accept(n,this.whatToShow,this.filter)===1){this.currentNode=n;return n;}}return "
-        "null;};"
+        "if(n&&accept(n,this.whatToShow,this.filter)===1){this.currentNode=n;return n;}}return null;};"
         "TW.prototype.firstChild=function(){var n=this.currentNode&&this.currentNode.firstChild;"
         "while(n){var r=accept(n,this.whatToShow,this.filter);"
         "if(r===1){this.currentNode=n;return n;}if(r===3&&n.firstChild){n=n.firstChild;continue;}"
@@ -3487,12 +4162,9 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "TW.prototype.previousSibling=function(){return null;};"
         "globalThis.TreeWalker=TW;"
         "function NI(root,show,filter){this._tw=new TW(root,show,filter);this.root=root;"
-        "this.referenceNode=root;this.whatToShow=(show>>>0)||0xFFFFFFFF;this."
-        "pointerBeforeReferenceNode=true;}"
-        "NI.prototype.nextNode=function(){var "
-        "n=this._tw.nextNode();if(n)this.referenceNode=n;return n;};"
-        "NI.prototype.previousNode=function(){return null;};"
-        "NI.prototype.detach=function(){};"
+        "this.referenceNode=root;this.whatToShow=(show>>>0)||0xFFFFFFFF;this.pointerBeforeReferenceNode=true;}"
+        "NI.prototype.nextNode=function(){var n=this._tw.nextNode();if(n)this.referenceNode=n;return n;};"
+        "NI.prototype.previousNode=function(){return null;};NI.prototype.detach=function(){};"
         "globalThis.NodeIterator=NI;"
         "if(typeof document!=='undefined'){"
         "document.createTreeWalker=function(root,show,filter){"
@@ -3520,14 +4192,17 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.SVGSVGElement     = function(){};"
         "globalThis.MathMLElement     = function(){};"
         "globalThis.ShadowRoot        = function(){};"
-        "globalThis.DocumentFragment  = function(){};"
+        /* DocumentFragment is installed by the DOM layer with a real prototype
+		 * chained on Node.prototype (so fragments are not `instanceof Element`);
+		 * keep that if present and only stub it when the DOM layer is absent. */
+        "globalThis.DocumentFragment  = globalThis.DocumentFragment || function(){};"
         "globalThis.Text              = function(){};"
         "globalThis.Comment           = function(){};"
-        /* Rest of the Node hierarchy. The Shadow-DOM (webcomponents) polyfill and
-         * the kevlar app iterate a list of these constructors patching
-         * `.prototype.insertBefore`/`removeChild`; a missing one (CharacterData
-         * was the first) threw "cannot read property 'prototype' of undefined"
-         * and aborted app startup. */
+        /* Rest of the Node hierarchy. The Shady-DOM polyfill and kevlar iterate
+		 * a list of these constructors patching `.prototype.insertBefore`; a
+		 * missing one (CharacterData was first) threw "cannot read property
+		 * 'prototype' of undefined". Chain the character-data types onto the real
+		 * Node.prototype so the patched methods reach them. */
         "globalThis.CharacterData     = function(){};"
         "globalThis.ProcessingInstruction = function(){};"
         "globalThis.DocumentType      = function(){};"
@@ -3535,13 +4210,103 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.HTMLSlotElement   = function(){};"
         "globalThis.StaticRange       = function(){};"
         "globalThis.DOMImplementation = function(){};"
+        "try{ if(globalThis.Node){"
+        "  Object.setPrototypeOf(globalThis.CharacterData.prototype, globalThis.Node.prototype);"
+        "  Object.setPrototypeOf(globalThis.Text.prototype, globalThis.CharacterData.prototype);"
+        "  Object.setPrototypeOf(globalThis.Comment.prototype, globalThis.CharacterData.prototype);"
+        "  Object.setPrototypeOf(globalThis.DocumentFragment.prototype, globalThis.Node.prototype);"
+        "} }catch(e){}"
+        /* nodeType / document-position constants. The spec exposes these on both
+         * the Node interface object AND Node.prototype (so `Node.ELEMENT_NODE`
+         * and `someNode.ELEMENT_NODE` both resolve). Without them every
+         * `node.nodeType === Node.ELEMENT_NODE` comparison in web code tests
+         * against undefined and silently takes the wrong branch — this is what
+         * broke YouTube's Shady-DOM polyfill wholesale (its ShadowRoot.nodeType
+         * getter returns Node.DOCUMENT_FRAGMENT_NODE, which was undefined). */
+        "try{ if(globalThis.Node){ var NT={"
+        "ELEMENT_NODE:1,ATTRIBUTE_NODE:2,TEXT_NODE:3,CDATA_SECTION_NODE:4,"
+        "ENTITY_REFERENCE_NODE:5,ENTITY_NODE:6,PROCESSING_INSTRUCTION_NODE:7,"
+        "COMMENT_NODE:8,DOCUMENT_NODE:9,DOCUMENT_TYPE_NODE:10,"
+        "DOCUMENT_FRAGMENT_NODE:11,NOTATION_NODE:12,"
+        "DOCUMENT_POSITION_DISCONNECTED:1,DOCUMENT_POSITION_PRECEDING:2,"
+        "DOCUMENT_POSITION_FOLLOWING:4,DOCUMENT_POSITION_CONTAINS:8,"
+        "DOCUMENT_POSITION_CONTAINED_BY:16,DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC:32};"
+        "for(var ntk in NT){ try{ globalThis.Node[ntk]=NT[ntk];"
+        "globalThis.Node.prototype[ntk]=NT[ntk]; }catch(e){} } } }catch(e){}"
+        /* Native-ish Shadow DOM. Providing Element.prototype.attachShadow +
+         * Node.prototype.getRootNode makes the Shady-DOM polyfill's feature
+         * probe (`w.Rb=!(!attachShadow||!getRootNode)`, `inUse=force||!Rb`)
+         * report native support, so it stays dormant instead of patching the
+         * whole DOM (which it can't fully drive against this engine). The
+         * shadow root is a light view over the host: mutations delegate to the
+         * host element, so stamped template content lands in the host's child
+         * list and the layout engine renders it. Slot distribution is not
+         * modeled — the composed tree is approximated by the host's children. */
+        "try{ if(globalThis.Element && globalThis.Node){"
+        "  globalThis.Element.prototype.attachShadow=function(init){"
+        "    var host=this;"
+        "    if(host.__shadowRoot) return host.__shadowRoot;"
+        "    var root={host:host, mode:(init&&init.mode)||'open', nodeType:11,"
+        "      ownerDocument:(typeof document!=='undefined'?document:null),"
+        "      appendChild:function(n){return host.appendChild(n);},"
+        "      insertBefore:function(n,r){return host.insertBefore(n,r);},"
+        "      removeChild:function(n){return host.removeChild(n);},"
+        "      replaceChild:function(a,b){return host.replaceChild(a,b);},"
+        "      append:function(){return host.append.apply(host,arguments);},"
+        "      prepend:function(){return host.prepend.apply(host,arguments);},"
+        "      querySelector:function(s){return host.querySelector(s);},"
+        "      querySelectorAll:function(s){return host.querySelectorAll(s);},"
+        "      getElementById:function(id){return host.querySelector('#'+id);},"
+        "      addEventListener:function(){return host.addEventListener.apply(host,arguments);},"
+        "      removeEventListener:function(){return host.removeEventListener.apply(host,arguments);},"
+        "      dispatchEvent:function(e){return host.dispatchEvent(e);},"
+        "      cloneNode:function(d){return host.cloneNode(d);},"
+        "      contains:function(n){return host.contains?host.contains(n):false;},"
+        "      getRootNode:function(){return this;}};"
+        "    Object.defineProperty(root,'childNodes',{get:function(){return host.childNodes;}});"
+        "    Object.defineProperty(root,'children',{get:function(){return host.children;}});"
+        "    Object.defineProperty(root,'firstChild',{get:function(){return host.firstChild;}});"
+        "    Object.defineProperty(root,'lastChild',{get:function(){return host.lastChild;}});"
+        "    Object.defineProperty(root,'firstElementChild',{get:function(){return host.firstElementChild;}});"
+        "    Object.defineProperty(root,'innerHTML',{get:function(){return host.innerHTML;},set:function(v){host.innerHTML=v;}});"
+        "    Object.defineProperty(root,'textContent',{get:function(){return host.textContent;},set:function(v){host.textContent=v;}});"
+        "    Object.defineProperty(root,'activeElement',{get:function(){return null;}});"
+        "    try{Object.defineProperty(host,'shadowRoot',{value:root,configurable:true});}catch(e){host.shadowRoot=root;}"
+        "    host.__shadowRoot=root;"
+        "    return root;"
+        "  };"
+        "  if(!globalThis.Node.prototype.getRootNode){"
+        "    globalThis.Node.prototype.getRootNode=function(opts){var n=this;while(n&&n.parentNode){n=n.parentNode;}return n||this;};"
+        "  }"
+        "} }catch(e){}"
         "globalThis.Attr              = function(){};"
         "globalThis.NodeList          = function(){};"
         "globalThis.HTMLCollection    = function(){};"
         "globalThis.DOMTokenList      = function(){};"
         "globalThis.NamedNodeMap      = function(){};"
         "globalThis.CSSStyleDeclaration= function(){};"
-        "globalThis.CSSStyleSheet     = function(){};"
+        /* Constructable stylesheet: `new CSSStyleSheet(); s.replaceSync(css);
+			 * document.adoptedStyleSheets=[s]`. replace/replaceSync push the CSS
+			 * into the cascade via __ybIngestCSS (see the C side). Without this the
+			 * sheet was inert and adopted component styles never applied. */
+        "globalThis.CSSStyleSheet     = function(){ this._css=''; this.cssRules=[]; this.rules=[]; };"
+        /* Methods on the PROTOTYPE — frameworks feature-detect
+			 * `CSSStyleSheet.prototype.replaceSync` before using constructable
+			 * sheets; instance-only methods fail that check and the site silently
+			 * falls back to a path that never applies the styles here. */
+        "globalThis.CSSStyleSheet.prototype.replaceSync=function(t){ this._css=''+t;"
+        "  try{globalThis.__ybIngestCSS(this._css);}catch(e){} return this; };"
+        "globalThis.CSSStyleSheet.prototype.replace=function(t){ this._css=''+t;"
+        "  try{globalThis.__ybIngestCSS(this._css);}catch(e){} return Promise.resolve(this); };"
+        "globalThis.CSSStyleSheet.prototype.insertRule=function(rule){"
+        "  try{globalThis.__ybIngestCSS(''+rule);}catch(e){} return 0; };"
+        "globalThis.CSSStyleSheet.prototype.deleteRule=function(){};"
+        /* adoptedStyleSheets: a settable array. The CSS is already ingested at
+			 * replaceSync time (class-scoped, so document-level is correct), so the
+			 * assignment itself only needs to not throw and stay iterable for the
+			 * `[...document.adoptedStyleSheets, sheet]` idiom. */
+        "try{ if(globalThis.document && globalThis.document.adoptedStyleSheets===undefined)"
+        "  globalThis.document.adoptedStyleSheets=[]; }catch(e){}"
         "globalThis.CSSRule           = function(){};"
         "globalThis.MediaQueryList    = function(){};"
         "globalThis.Range             = function(){ this.setStart=()=>{}; this.setEnd=()=>{}; "
@@ -3557,8 +4322,20 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.Screen            = function(){};"
         "globalThis.Storage           = function(){};"
         "globalThis.Window            = function(){};"
+        /* Window IS an EventTarget, and the Shady-DOM polyfill captures the
+		 * native event methods off Window.prototype then reads them back as
+		 * window.__shady_native_addEventListener — so window must inherit from
+		 * Window.prototype, which must own addEventListener/etc. */
+        "try{"
+        "  globalThis.Window.prototype.addEventListener = globalThis.addEventListener;"
+        "  globalThis.Window.prototype.removeEventListener = globalThis.removeEventListener;"
+        "  globalThis.Window.prototype.dispatchEvent = globalThis.dispatchEvent;"
+        "  if(globalThis.EventTarget)"
+        "    Object.setPrototypeOf(globalThis.Window.prototype, globalThis.EventTarget.prototype);"
+        "  Object.setPrototypeOf(globalThis, globalThis.Window.prototype);"
+        "}catch(e){}"
         "globalThis.WindowProxy       = function(){};"
-        "globalThis.Headers           = function(init){ const m={}; "
+        "globalThis.Headers           = function(init){ const m={}; this.headerMap=m; "
         "this.get=k=>m[String(k).toLowerCase()]||null; "
         "this.set=(k,v)=>{m[String(k).toLowerCase()]=v;}; this.has=k=>String(k).toLowerCase() in "
         "m; this.append=this.set; this.delete=k=>{delete m[String(k).toLowerCase()];}; "
@@ -3587,9 +4364,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "this.items={length:0}; this.getData=()=>''; this.setData=()=>{}; };"
         "globalThis.DOMException      = function(message, name){ this.message=message||''; "
         "this.name=name||'Error'; };"
-        /* DOMParser is installed by the DOM bindings (real parse into a
-		 * separate document) — no stub here. The old `=> document` stub
-		 * made "move the parsed nodes" code move the LIVE page's children. */
+        "globalThis.DOMParser         = function(){ this.parseFromString = (s, t) => document; };"
         "globalThis.XPathResult       = function(){};"
         "globalThis.TextEncoder       = function(){ this.encode = s => { const a = new "
         "Uint8Array(s.length); for (let i=0;i<s.length;i++) a[i]=s.charCodeAt(i)&0xff; return a; "
@@ -3674,6 +4449,16 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "    if(ep && globalThis.HTMLElement && globalThis.HTMLElement.prototype)"
         "      Object.setPrototypeOf(globalThis.HTMLElement.prototype, ep);"
         "  }catch(e){} };"
+        /* connectedCallback fires once per element, only while it is in the
+		 * document tree. Kept separate from upgrade() so an element created
+		 * detached and inserted later connects at insertion time, matching the
+		 * custom-element-reaction lifecycle every web-component framework
+		 * relies on. */
+        "  const connectIfNeeded=(el)=>{ if(el.__ceConnected)return;"
+        "    if(el.isConnected!==true)return; el.__ceConnected=true;"
+        "    try{ if(typeof el.connectedCallback==='function') el.connectedCallback(); }"
+        "    catch(e){ try{console.error('ce connect <'+(el&&el.tagName)+'>', (e&&e.name||'Error')+': '+(e&&e.message),"
+        "      '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- '));}catch(_){}} };"
         "  const upgrade=(el,c)=>{ try{ if(el.__ceUpgraded)return; el.__ceUpgraded=true;"
         "    Object.setPrototypeOf(el,c.prototype);"
         /* Run the real constructor with `el` as `this` (brands private fields)
@@ -3682,23 +4467,168 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "    try{ Reflect.construct(c,[],c); }"
         "    finally{ if(globalThis.__ceStack[globalThis.__ceStack.length-1]===el)"
         "             globalThis.__ceStack.pop(); }"
-        "    if(typeof el.connectedCallback==='function') el.connectedCallback();"
+        /* Upgrade-algorithm step: enqueue attributeChangedCallback for each
+			 * PRE-EXISTING attribute named in observedAttributes. Parse-time
+			 * attributes never fired a reaction (the element was not yet upgraded),
+			 * so frameworks that deserialize attribute -> property here (Polymer:
+			 * `modal` attr -> modal=true -> withBackdrop -> backdrop) would silently
+			 * drop that config. Runs after the constructor (property system ready)
+			 * and before connectedCallback, per the spec order. */
+        "    try{ var oa=c.observedAttributes;"
+        "      if(oa&&oa.length&&typeof el.attributeChangedCallback==='function'){"
+        "        for(var ai=0;ai<oa.length;ai++){ var an=oa[ai];"
+        "          if(el.hasAttribute&&el.hasAttribute(an)){"
+        "            try{ el.attributeChangedCallback(an,null,el.getAttribute(an),null); }catch(e){}"
+        "          } } } }catch(e){}"
+        "    connectIfNeeded(el);"
+        /* Reconcile own data properties that shadow a prototype accessor. A value
+			 * written to the raw element before its class prototype was installed
+			 * becomes an own DATA property; after setPrototypeOf it shadows the class's
+			 * forwarding/data accessor, so later reads and writes never reach the
+			 * component instance. YouTube's Wiz yt-formatted-string is a wrapper whose
+			 * `text` accessor forwards to an inner instance (inst.text); a `text` bound
+			 * before upgrade lands as an own data property that shadows it, so inst.text
+			 * stays undefined and the node renders blank (the consent dialog title and
+			 * Reject/Accept labels). The prototype and instance now exist, so route each
+			 * such value back through the accessor's setter (the standard pre-upgrade
+			 * property reconciliation). */
+        "    try{ var reconcileProto=Object.getPrototypeOf(el);"
+        "      Object.getOwnPropertyNames(el).forEach(function(propName){"
+        "        if(propName.charAt(0)==='_')return;"
+        "        var ownDesc=Object.getOwnPropertyDescriptor(el,propName);"
+        "        if(!ownDesc||!('value' in ownDesc)||!ownDesc.writable||!ownDesc.configurable)return;"
+        "        var accessorDesc=null, protoCursor=reconcileProto;"
+        "        while(protoCursor){ accessorDesc=Object.getOwnPropertyDescriptor(protoCursor,propName);"
+        "          if(accessorDesc)break; protoCursor=Object.getPrototypeOf(protoCursor); }"
+        "        if(accessorDesc && typeof accessorDesc.set==='function'){"
+        "          var stashedValue=el[propName];"
+        "          try{ delete el[propName]; el[propName]=stashedValue; }catch(reassignErr){} }"
+        "      }); }catch(reconcileErr){}"
         "  }catch(e){ try{console.error('ce upgrade <'+(el&&el.tagName)+'>',"
-        "    e&&e.message, '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- "
+        "    (e&&e.name||'Error')+': '+(e&&e.message), '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- "
         "'));}catch(_){}} };"
+        /* Upgrade a raw defined element, or connect one already upgraded. */
+        "  const upgradeOrConnect=(el)=>{ if(!el||el.nodeType!==1)return;"
+        "    var tag=el.tagName?(''+el.tagName).toLowerCase():''; if(tag.indexOf('-')<=0)return;"
+        "    var c=m[tag]; if(!c)return;"
+        "    if(!el.__ceUpgraded) upgrade(el,c); else connectIfNeeded(el); };"
+        /* Collect matching elements by a manual deep walk. querySelectorAll skips
+			 * DocumentFragment children, but a framework stamps a component's
+			 * template into a fragment that becomes the host's child; a renderer
+			 * defined AFTER it was stamped must still be upgraded retroactively, and
+			 * an insertion of fragment-nested content must connect its descendants.
+			 * Descend into element (1) and document-fragment (11) children plus any
+			 * shadow root; `tag==='*'` matches every element. A <template>'s content
+			 * is reached via `.content`, not childNodes, so inert template contents
+			 * are correctly left un-upgraded. */
+        "  const deepEls=(root,tag)=>{ var out=[], seen=new Set(), st=[root];"
+        "    while(st.length){ var el=st.pop(); if(!el||seen.has(el))continue; seen.add(el);"
+        "      if(el.nodeType===1 && el.tagName && (tag==='*' || (''+el.tagName).toLowerCase()===tag)) out.push(el);"
+        "      var kids=el.childNodes; if(kids){ for(var i=0;i<kids.length;i++){ var k=kids[i];"
+        "        if(k&&(k.nodeType===1||k.nodeType===11)) st.push(k); } }"
+        "      if(el.shadowRoot&&el.shadowRoot.childNodes){ var sr=el.shadowRoot.childNodes;"
+        "        for(var j=0;j<sr.length;j++){ var s=sr[j]; if(s&&(s.nodeType===1||s.nodeType===11)) st.push(s); } } }"
+        "    return out; };"
         "  this.define=(n,c)=>{ m[n]=c; chain();"
-        "    try{ var els=document.querySelectorAll(n); for(var i=0;i<els.length;i++) "
-        "upgrade(els[i],c);"
+        /* Arm synchronous custom-element reactions in the DOM insertion paths
+			 * the first time any element is defined. */
+        "    try{ globalThis.__ceActivate && globalThis.__ceActivate(); }catch(e){}"
+        /* Upgrade + connect any element of this tag already in the tree.
+		 * attachShadow delegates to the host, so shadow-stamped content is
+		 * the host's real children and querySelectorAll reaches it. */
+        "    try{ var els=deepEls(document.documentElement,n); for(var i=0;i<els.length;i++)"
+        "      upgradeOrConnect(els[i]);"
         "    }catch(e){}"
         "    if(defers[n]){ defers[n].forEach(r=>r()); delete defers[n]; } };"
         "  this.get=n=>m[n];"
         "  this.whenDefined=n=>{ if(m[n])return Promise.resolve(m[n]);"
         "    return new Promise(res=>{ (defers[n]=defers[n]||[]).push(()=>res(m[n])); }); };"
-        "  this.upgrade=root=>{ for(var n in m){ try{ var els=(root||document).querySelectorAll(n);"
-        "    for(var i=0;i<els.length;i++) upgrade(els[i],m[n]); }catch(e){} } }; };"
+        "  this.upgrade=root=>{ var base=root||document.documentElement;"
+        "    for(var n in m){ try{ var els=deepEls(base,n);"
+        "    for(var i=0;i<els.length;i++) upgradeOrConnect(els[i]); }catch(e){} } };"
+        /* Connect every defined custom element in a freshly-inserted subtree,
+		 * in tree order. Driven by the reaction observer below on each
+		 * insertion. */
+        /* Upgrade a single freshly-created element (document.createElement of a
+			 * defined custom tag). Runs the constructor + observed-attribute
+			 * reactions synchronously so the returned element already carries its
+			 * prototype and methods, as the spec's "create an element" requires;
+			 * connectedCallback still waits for insertion (connectIfNeeded is a
+			 * no-op while detached). Without this a manager that does
+			 * createElement(tag) then calls a method on the result (iron-overlay
+			 * creating its backdrop and calling backdrop.prepare()) hits undefined. */
+        /* createElement of a defined custom tag: install the prototype so the
+			 * returned object exposes its methods immediately (callers routinely
+			 * invoke a method on the result — iron-overlay creating its backdrop
+			 * then calling backdrop.prepare()). We do NOT run the constructor here:
+			 * legacy Polymer runs its full property init in connectedCallback, and
+			 * running the constructor now would make it run TWICE (once here, once at
+			 * connect), the second pass re-creating __data and discarding any property
+			 * the caller set on the detached element (e.g. backdrop.opened=true, which
+			 * then self-removes). Deferring the constructor to insertion keeps a single
+			 * init; properties set pre-connect are preserved via Polymer's __dataProto.
+			 * __ceUpgraded is left unset so the normal connect path upgrades fully. */
+        /* createElement of a defined custom tag. We must expose the element's
+			 * methods immediately (callers invoke them on the detached result — the
+			 * iron-overlay manager creates its backdrop then calls backdrop.prepare()),
+			 * but we must NOT construct the instance here: lazy component systems
+			 * (Polymer under ShadyDOM, YouTube's Wiz wrapper) construct the instance
+			 * again in connectedCallback, and that second construction re-creates the
+			 * element's data store, discarding any property set on the detached element
+			 * (backdrop.opened=true -> reverts to the false default -> the backdrop
+			 * self-removes on attach). So: (1) finalize the CLASS once — a throwaway
+			 * construction publishes the methods + property accessors onto the shared
+			 * prototype; (2) give the returned element that prototype WITHOUT
+			 * constructing it. Its pre-connect property writes land in Polymer's
+			 * __dataProto and are applied by the single connect-time construction. */
+        /* createElement of a defined custom tag: construct the element (so the
+			 * returned object exposes its methods — callers invoke them on the
+			 * detached result, e.g. iron-overlay creating its backdrop then calling
+			 * backdrop.prepare()), then run its ONE-TIME connect init immediately.
+			 * Lazy component systems (Polymer under ShadyDOM / YouTube's Wiz wrapper)
+			 * defer their real initialization to connectedCallback, guarded by an
+			 * internal once-flag. If we don't trigger it now, that init runs at the
+			 * real attach and RE-CREATES the element's data store, discarding any
+			 * property set on the detached element between createElement and insert
+			 * (backdrop.opened=true reverts to false → the backdrop self-removes).
+			 * Running it here consumes the once-flag, so the real attach only
+			 * attaches and pre-insert property writes survive. connectedCallback
+			 * stays reentrant/idempotent by that same once-flag, so firing it twice
+			 * (here + at attach) is safe. */
+        "  this.__upgradeOne=(el)=>{ try{ upgradeOrConnect(el);"
+        "    if(el && el.nodeType===1 && !el.__ybEagerInit){ el.__ybEagerInit=true;"
+        "      try{ if(typeof el.connectedCallback==='function') el.connectedCallback(); }catch(e){} }"
+        "  }catch(e){} };"
+        "  this.__connectSubtree=(node)=>{ try{"
+        "    var all=deepEls(node,'*'); for(var i=0;i<all.length;i++) upgradeOrConnect(all[i]);"
+        "  }catch(e){ try{console.error('ce subtree <'+(node&&(node.tagName||node.nodeName))+'> nt='+(node&&node.nodeType),"
+        "    (e&&e.name||'Error')+': '+(e&&e.message), '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- '));}catch(_){}} };"
+        "  this.__disconnectSubtree=(node)=>{ try{"
+        "    var visit=(el)=>{ if(el&&el.nodeType===1&&el.__ceConnected){ el.__ceConnected=false;"
+        "      try{ if(typeof el.disconnectedCallback==='function') el.disconnectedCallback(); }"
+        "      catch(e){} } };"
+        "    var all=deepEls(node,'*'); for(var i=0;i<all.length;i++) visit(all[i]);"
+        "  }catch(e){} }; };"
         "globalThis.customElements = new globalThis.CustomElementRegistry();"
+        /* Custom-element reactions are driven synchronously from the DOM
+		 * insertion primitives (see ce_react_connect in the dom layer): on every
+		 * insertion into the live document the inserted subtree is handed to
+		 * __connectSubtree, so connectedCallback fires in-line with template
+		 * stamping -- the ordering Polymer/Lit/Stencil require. */
         "globalThis.Image       = function(){ this.src=''; this.onload=null; this.onerror=null; "
         "this.addEventListener=()=>{}; };"
+        /* Audio: no playback, but the constructor must EXIST. YouTube's
+			 * masthead render constructs `new Audio(...)` mid-stamp; with the
+			 * global missing the ReferenceError was swallowed by the page's
+			 * component-wrapper error handling and the masthead (and everything
+			 * inside it: search box, topbar buttons, consent renderer) silently
+			 * froze at the server-rendered skeleton. */
+        "globalThis.Audio       = function(src){ this.src=src||''; this.volume=1; this.muted=false; "
+        "this.paused=true; this.currentTime=0; this.duration=NaN; this.autoplay=false; "
+        "this.loop=false; this.preload='auto'; this.onload=null; this.onerror=null; "
+        "this.play=()=>Promise.resolve(); this.pause=()=>{}; this.load=()=>{}; "
+        "this.canPlayType=()=>''; this.addEventListener=()=>{}; this.removeEventListener=()=>{}; "
+        "this.dispatchEvent=()=>false; };"
         "globalThis.FileReader  = function(){ this.readAsText=()=>{}; this.readAsDataURL=()=>{}; "
         "this.addEventListener=()=>{}; };"
         "globalThis.FormData    = function(){ const m={}; this.append=(k,v)=>{m[k]=v;}; "
@@ -3723,14 +4653,64 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "() => null; this.addEventListener = (t, fn) => { this['on'+t] = fn; }; };"
         "globalThis.WebSocket = function(){ this.send=()=>{}; this.close=()=>{}; "
         "this.addEventListener=()=>{}; this.readyState=3; };"
+        /* navigator.sendBeacon: fire-and-forget POST that MUST return true. Its
+			 * absence made callers throw `sendBeacon is not a function`; when that
+			 * throw happens inside a framework's swallow-all wrapper (e.g. YouTube's
+			 * consent-save handler) the operation silently "fails" — the consent
+			 * lightbox showed "An error occurred while saving your choice" and never
+			 * dismissed, covering the page. sendBeacon does not expose the response
+			 * to the caller, so best-effort POST + unconditional true is spec-faithful. */
+        "if(globalThis.navigator && !globalThis.navigator.sendBeacon){"
+        "  globalThis.navigator.sendBeacon = function(url, data){"
+        "    try{ globalThis.fetch(url, { method:'POST', keepalive:true,"
+        "      body:(data===undefined||data===null)?undefined:"
+        "        (typeof data==='string'?data:data) }); }catch(e){}"
+        "    return true; }; }"
+        /* HTMLFormElement.submit / requestSubmit: were absent, so a caller doing
+			 * `form.submit()` threw `submit is not a function`. Inside a swallow-all
+			 * framework wrapper (YouTube's consent-save) that throw silently failed
+			 * the save — the consent lightbox stuck on "An error occurred while
+			 * saving your choice" and never dismissed. We can't do a full navigating
+			 * submit (location.assign is a stub), but a best-effort form-encoded
+			 * POST of the named controls to the form's action fires the request
+			 * through the cookie engine (so any Set-Cookie the save relies on, e.g.
+			 * YouTube's SOCS consent cookie, is captured) and, crucially, does not
+			 * throw — so the caller's success path runs. */
+        "(function(){ try{ var ep=Object.getPrototypeOf(document.createElement('form'));"
+        "  if(ep && !ep.submit){"
+        "    var doSubmit=function(form){ try{"
+        "      var action=(form.getAttribute&&form.getAttribute('action'))||globalThis.location.href;"
+        "      var method=((form.getAttribute&&form.getAttribute('method'))||'GET').toUpperCase();"
+        "      var ctrls=form.querySelectorAll?form.querySelectorAll('input,select,textarea'):[];"
+        "      var parts=[]; for(var i=0;i<ctrls.length;i++){ var c=ctrls[i];"
+        "        var name=c.getAttribute&&c.getAttribute('name'); if(!name)continue;"
+        "        var val=(c.value!==undefined&&c.value!==null)?c.value:((c.getAttribute&&c.getAttribute('value'))||'');"
+        "        parts.push(encodeURIComponent(name)+'='+encodeURIComponent(val)); }"
+        "      var body=parts.join('&');"
+        "      if(method==='GET'){ globalThis.fetch(action+(action.indexOf('?')<0?'?':'&')+body,{method:'GET'}); }"
+        "      else{ globalThis.fetch(action,{method:method,"
+        "        headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}); }"
+        "    }catch(e){} };"
+        "    ep.submit=function(){ doSubmit(this); };"
+        "    ep.requestSubmit=function(){ doSubmit(this); }; } }catch(e){} })();"
         "globalThis.HTMLCanvasElement = function(){};"
         "globalThis.OffscreenCanvas = function(){ this.getContext = () => null; };"
-        "globalThis.requestIdleCallback = (cb) => setTimeout(cb, 1);"
+        /* requestIdleCallback must hand the callback an IdleDeadline; code that
+         * reads `deadline.timeRemaining()` / `.didTimeout` throws on undefined,
+         * which silently kills idle-scheduled work (framework hydration/render
+         * chunks are frequently idle-scheduled). */
+        "globalThis.requestIdleCallback = (cb) => setTimeout(function(){"
+        "  cb({didTimeout:false, timeRemaining:function(){return 50;}}); }, 1);"
         "globalThis.cancelIdleCallback = clearTimeout;"
+        /* rAF callbacks receive a DOMHighResTimeStamp; without it, `t - last`
+         * math yields NaN and breaks scheduler loops. Wrap the native rAF to
+         * inject one. */
+        "if(globalThis.requestAnimationFrame){ var nativeRaf=globalThis.requestAnimationFrame;"
+        "  globalThis.requestAnimationFrame = (cb) => nativeRaf(function(){"
+        "    cb((globalThis.performance&&performance.now)?performance.now():0); }); }"
         "";
-    /* This blob recompiles on every runtime creation (one per page load) —
-	 * route it through the bytecode compile cache like page scripts. */
-    if (yetty_ylexbor_js_eval_cached(r, ctx, stubs, strlen(stubs), "<webapi-stubs>") != 0) {
+    JSValue stub_v = JS_Eval(ctx, stubs, strlen(stubs), "<webapi-stubs>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(stub_v)) {
         JSValue ex = JS_GetException(ctx);
         const char *m = JS_ToCString(ctx, ex);
         ydebug("js webapi-stub: %s", m ? m : "?");
@@ -3739,6 +4719,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         }
         JS_FreeValue(ctx, ex);
     }
+    JS_FreeValue(ctx, stub_v);
 
     JS_FreeValue(ctx, global);
 }

@@ -2,7 +2,7 @@
 """Compare ybrowser layout geometry against the Chrome reference JSON.
 
 The geometry test layer: for each fixture under
-``test/ybrowser/ut/fixtures/`` that has a committed ``<fixture>.ref.json``
+``test/ut/ybrowser/fixtures/`` that has a committed ``<fixture>.ref.json``
 (produced by ``gen-chrome-refs.py`` from real Chrome), this runs the
 ``ybrowser`` tool's ``--dump-boxes`` mode, keys boxes by their ``data-test``
 attribute, and compares each element's geometry to the reference with
@@ -17,7 +17,7 @@ Exit status is non-zero if any TIGHT-tolerance property is out of range, so
 this is suitable as a CI gate. Loose mismatches are reported but not fatal.
 
 Usage:
-    test/ybrowser/ut/geometry-oracle/compare-geometry.py [--ybrowser PATH] [fixture.html ...]
+    test/ut/ybrowser/geometry-oracle/compare-geometry.py [--ybrowser PATH] [fixture.html ...]
 """
 
 import argparse
@@ -37,7 +37,7 @@ LOOSE_TOL = 16.0
 TOLERANCES = {"x": TIGHT_TOL, "w": TIGHT_TOL, "y": LOOSE_TOL, "h": LOOSE_TOL}
 TIGHT_PROPS = {"x", "w"}
 
-# This script lives in test/ybrowser/ut/geometry-oracle/; the fixtures are its
+# This script lives in test/ut/ybrowser/geometry-oracle/; the fixtures are its
 # sibling directory. The repo root is found by walking up to the Makefile so
 # the build-*/tools/ybrowser binary can be located.
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"

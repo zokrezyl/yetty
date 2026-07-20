@@ -356,17 +356,6 @@ static uint16_t sel_var_specificity(const char *sel, size_t len)
             }
             continue;
         }
-        if (c == '[') {
-            /* Attribute selector — class-level specificity per spec. The
-             * theme idiom `[data-color-mode=dark]{--tokens}` must outrank
-             * a bare `:root` light default, not lose to it. */
-            current += 10;
-            in_word = 1;
-            while (i + 1 < len && sel[i + 1] != ']') {
-                i++;
-            }
-            continue;
-        }
         if (css_var_is_class_char(c)) {
             if (!in_word) {
                 current += 1; /* tag token */
@@ -379,69 +368,11 @@ static uint16_t sel_var_specificity(const char *sel, size_t len)
     return current > best ? current : best;
 }
 
-/* `[name=value]` / `[name="value"]` / `[name]` segment vs the DOCUMENT ROOT
- * (<html>) element. Theme scopes (`[data-color-mode=dark]{--tokens}`) must
- * only register when the page actually runs that theme — otherwise the
- * light and dark palettes fight at equal specificity and source order picks
- * the wrong one. Returns 1 on match / no root to check (permissive). */
-static int sel_attr_matches_root(struct yetty_ylexbor *r, const char *attr_start,
-                                 const char *attr_end)
-{
-    if (r == NULL || r->document == NULL) {
-        return 1;
-    }
-    lxb_dom_element_t *root =
-        lxb_dom_interface_element(lxb_dom_interface_document(r->document)->element);
-    if (root == NULL) {
-        return 1;
-    }
-    const char *p = attr_start;
-    while (p < attr_end && (*p == ' ' || *p == '\t')) {
-        p++;
-    }
-    const char *name_start = p;
-    while (p < attr_end && *p != '=' && *p != ' ' && *p != '~' && *p != '^' && *p != '$' &&
-           *p != '*' && *p != '|') {
-        p++;
-    }
-    size_t name_len = (size_t)(p - name_start);
-    if (name_len == 0) {
-        return 1;
-    }
-    size_t value_len = 0;
-    const lxb_char_t *value =
-        lxb_dom_element_get_attribute(root, (const lxb_char_t *)name_start, name_len, &value_len);
-    if (value == NULL) {
-        return 0; /* root doesn't carry the attribute at all */
-    }
-    /* Bare [attr] — presence is enough. */
-    while (p < attr_end && *p != '=') {
-        p++;
-    }
-    if (p >= attr_end) {
-        return 1;
-    }
-    p++; /* past '=' */
-    if (p < attr_end && (*p == '"' || *p == '\'')) {
-        char quote_ch = *p;
-        p++;
-        const char *val_start = p;
-        while (p < attr_end && *p != quote_ch) {
-            p++;
-        }
-        return (size_t)(p - val_start) == value_len && memcmp(val_start, value, value_len) == 0;
-    }
-    const char *val_start = p;
-    while (p < attr_end && *p != ' ' && *p != '\t') {
-        p++;
-    }
-    return (size_t)(p - val_start) == value_len && memcmp(val_start, value, value_len) == 0;
-}
-
 static int sel_is_global_target(struct yetty_ylexbor *r, const char *sel, size_t len)
 {
     const char *p = sel;
     const char *end = sel + len;
+    int in_attr = 0;
     char quote = 0;
     while (p < end) {
         char c = *p;
@@ -457,83 +388,17 @@ static int sel_is_global_target(struct yetty_ylexbor *r, const char *sel, size_t
             p++;
             continue;
         }
-        if (c == ':' && (size_t)(end - p) >= 5 && strncasecmp(p, ":not(", 5) == 0) {
-            /* Negation. The whole `:not(arg)` span is skipped so its inner
-             * tokens aren't evaluated with un-negated semantics by the branches
-             * below. For an `[attr]` argument we invert the root test: a root
-             * that HAS the attribute makes `:not([attr])` false, so the rule
-             * does not apply to this document — reject the global capture.
-             * (apnews gates its collapsed-leaderboard tokens on
-             * `html:not([data-header-hasleaderboard])`; the header DOES carry
-             * that attribute, so the 0px override must not win.) */
-            const char *arg = p + 5;
-            const char *close = arg;
-            int not_depth = 1;
-            char not_quote = 0;
-            while (close < end && not_depth > 0) {
-                if (not_quote) {
-                    if (*close == not_quote) {
-                        not_quote = 0;
-                    }
-                } else if (*close == '"' || *close == '\'') {
-                    not_quote = *close;
-                } else if (*close == '(') {
-                    not_depth++;
-                } else if (*close == ')') {
-                    not_depth--;
-                    if (not_depth == 0) {
-                        break;
-                    }
-                }
-                close++;
-            }
-            for (const char *ai = arg; ai < close;) {
-                if (*ai == '[') {
-                    const char *attr_start = ai + 1;
-                    const char *attr_end = attr_start;
-                    char attr_quote = 0;
-                    while (attr_end < close && (attr_quote || *attr_end != ']')) {
-                        if (attr_quote) {
-                            if (*attr_end == attr_quote) {
-                                attr_quote = 0;
-                            }
-                        } else if (*attr_end == '"' || *attr_end == '\'') {
-                            attr_quote = *attr_end;
-                        }
-                        attr_end++;
-                    }
-                    if (sel_attr_matches_root(r, attr_start, attr_end)) {
-                        return 0; /* :not([attr]) but the root has the attribute */
-                    }
-                    ai = attr_end < close ? attr_end + 1 : close;
-                    continue;
-                }
-                ai++;
-            }
-            p = close < end ? close + 1 : end;
-            continue;
-        }
         if (c == '[') {
-            const char *attr_start = p + 1;
-            const char *attr_end = attr_start;
-            char attr_quote = 0;
-            while (attr_end < end && (attr_quote || *attr_end != ']')) {
-                if (attr_quote) {
-                    if (*attr_end == attr_quote) {
-                        attr_quote = 0;
-                    }
-                } else if (*attr_end == '"' || *attr_end == '\'') {
-                    attr_quote = *attr_end;
-                }
-                attr_end++;
-            }
-            if (!sel_attr_matches_root(r, attr_start, attr_end)) {
-                return 0; /* theme scope for a mode this page doesn't run */
-            }
-            p = attr_end < end ? attr_end + 1 : end;
+            in_attr = 1;
+            p++;
             continue;
         }
-        if (c == '.') {
+        if (c == ']') {
+            in_attr = 0;
+            p++;
+            continue;
+        }
+        if (c == '.' && !in_attr) {
             p++;
             const char *s = p;
             while (p < end && css_var_is_class_char(*p)) {
@@ -2575,65 +2440,10 @@ int yetty_ylexbor_grid_resolve_line(const char *value, size_t n, const char *nam
     return -1;
 }
 
-/* Parse one CSS length token to px: `12px`, `1.5rem` / `.75em` (against the
- * 16px root size), a bare number, or `var(--name[, fallback])` resolved
- * through the engine's custom-property table (nesting bounded; `r` may be
- * NULL, e.g. inline-style paths where var() was substituted upstream — then
- * only the fallback can resolve). Returns -1 when unparsable. */
-static float css_length_token_px(const struct yetty_ylexbor *r, const char *token, int depth)
-{
-    if (depth > 4 || token == NULL) {
-        return -1.0f;
-    }
-    while (*token == ' ' || *token == '\t') {
-        token++;
-    }
-    if (strncasecmp(token, "var(", 4) == 0) {
-        const char *name = token + 4;
-        while (*name == ' ') {
-            name++;
-        }
-        size_t name_len = 0;
-        while (name[name_len] != '\0' && name[name_len] != ',' && name[name_len] != ')' &&
-               name[name_len] != ' ') {
-            name_len++;
-        }
-        if (r != NULL) {
-            const char *value = customs_get(&r->customs, name, name_len);
-            if (value != NULL) {
-                float resolved = css_length_token_px(r, value, depth + 1);
-                if (resolved >= 0.0f) {
-                    return resolved;
-                }
-            }
-        }
-        /* `var(--x, 12px)` — the fallback after the first comma. */
-        const char *comma = name + name_len;
-        while (*comma != '\0' && *comma != ',' && *comma != ')') {
-            comma++;
-        }
-        if (*comma == ',') {
-            return css_length_token_px(r, comma + 1, depth + 1);
-        }
-        return -1.0f;
-    }
-    char *end = NULL;
-    float value = strtof(token, &end);
-    if (end == token) {
-        return -1.0f;
-    }
-    if (strncasecmp(end, "rem", 3) == 0 || strncasecmp(end, "em", 2) == 0) {
-        return value * 16.0f;
-    }
-    return value; /* px or unitless */
-}
-
-/* Read a length declaration `prop:<len>` inside [block, block+blen). Returns
- * the px value (var()/rem resolved via css_length_token_px), or -1 if absent.
- * For two-value forms (`gap:R C`) `which` selects 0=first(row) or
- * 1=second(col). */
-static float grid_find_len(const struct yetty_ylexbor *r, const char *block, size_t blen,
-                           const char *prop, int which)
+/* Read a px length declaration `prop:Npx` inside [block, block+blen). Returns
+ * the px value, or -1 if absent. For two-value forms (`gap:R C`) `which`
+ * selects 0=first(row) or 1=second(col). */
+static float grid_find_len(const char *block, size_t blen, const char *prop, int which)
 {
     size_t plen = strlen(prop);
     for (size_t i = 0; i + plen < blen; i++) {
@@ -2644,28 +2454,19 @@ static float grid_find_len(const struct yetty_ylexbor *r, const char *block, siz
                 while (j < blen && (block[j] == ' ' || block[j] == '\t')) {
                     j++;
                 }
-                char buf[64];
+                char buf[32];
                 size_t k = 0;
-                int paren_depth = 0;
-                /* Consume one value token, keeping function forms like
-                 * `var(--x, 12px)` whole (spaces inside parens don't end
-                 * the token). */
-                while (j < blen && block[j] != ';' && block[j] != '}' &&
-                       (paren_depth > 0 || block[j] != ' ') && k < sizeof(buf) - 1) {
-                    if (block[j] == '(') {
-                        paren_depth++;
-                    } else if (block[j] == ')') {
-                        paren_depth--;
-                    }
+                while (j < blen && block[j] != ';' && block[j] != '}' && block[j] != ' ' &&
+                       k < sizeof(buf) - 1) {
                     buf[k++] = block[j++];
                 }
                 buf[k] = '\0';
                 if (idx == which ||
                     (which == 1 && (j >= blen || block[j] == ';' || block[j] == '}'))) {
-                    return css_length_token_px(r, buf, 0);
+                    return (float)atof(buf);
                 }
                 if (j >= blen || block[j] == ';' || block[j] == '}') {
-                    return css_length_token_px(r, buf, 0); /* only one value present */
+                    return (float)atof(buf); /* only one value present */
                 }
             }
         }
@@ -2995,15 +2796,15 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
         }
         const char *block = src + brace;
         size_t blen = block_end - brace;
-        float col_gap = grid_find_len(r, block, blen, "column-gap", 0);
+        float col_gap = grid_find_len(block, blen, "column-gap", 0);
         float row_gap = -1.0f;
         if (col_gap < 0.0f) {
-            col_gap = grid_find_len(r, block, blen, "gap", 1);
-            row_gap = grid_find_len(r, block, blen, "gap", 0);
+            col_gap = grid_find_len(block, blen, "gap", 1);
+            row_gap = grid_find_len(block, blen, "gap", 0);
         }
         if (col_gap < 0.0f) {
-            col_gap = grid_find_len(r, block, blen, "grid-gap", 1);
-            row_gap = grid_find_len(r, block, blen, "grid-gap", 0);
+            col_gap = grid_find_len(block, blen, "grid-gap", 1);
+            row_gap = grid_find_len(block, blen, "grid-gap", 0);
         }
 
         /* One entry per comma-alternative of the selector, keyed by the
@@ -3119,18 +2920,18 @@ int yetty_ylexbor_grid_parse_inline(const char *style, size_t len, struct yl_gri
         }
         int ntracks = grid_parse_tracks(style + value_start, value_end - value_start, out, maxn);
         if (col_gap) {
-            float g = grid_find_len(NULL, style, len, "column-gap", 0);
+            float g = grid_find_len(style, len, "column-gap", 0);
             if (g < 0.0f) {
-                g = grid_find_len(NULL, style, len, "gap", 0);
+                g = grid_find_len(style, len, "gap", 0);
             }
             if (g > 0.0f) {
                 *col_gap = g;
             }
         }
         if (row_gap) {
-            float g = grid_find_len(NULL, style, len, "row-gap", 0);
+            float g = grid_find_len(style, len, "row-gap", 0);
             if (g < 0.0f) {
-                g = grid_find_len(NULL, style, len, "gap", 0);
+                g = grid_find_len(style, len, "gap", 0);
             }
             if (g > 0.0f) {
                 *row_gap = g;
@@ -3186,18 +2987,18 @@ int yetty_ylexbor_grid_parse_inline_named(const char *style, size_t len, struct 
             *out_value_len = value_end - value_start;
         }
         if (col_gap) {
-            float g = grid_find_len(NULL, style, len, "column-gap", 0);
+            float g = grid_find_len(style, len, "column-gap", 0);
             if (g < 0.0f) {
-                g = grid_find_len(NULL, style, len, "gap", 0);
+                g = grid_find_len(style, len, "gap", 0);
             }
             if (g > 0.0f) {
                 *col_gap = g;
             }
         }
         if (row_gap) {
-            float g = grid_find_len(NULL, style, len, "row-gap", 0);
+            float g = grid_find_len(style, len, "row-gap", 0);
             if (g < 0.0f) {
-                g = grid_find_len(NULL, style, len, "gap", 0);
+                g = grid_find_len(style, len, "gap", 0);
             }
             if (g > 0.0f) {
                 *row_gap = g;
@@ -3217,12 +3018,12 @@ float yetty_ylexbor_css_inline_gap(const char *style, size_t len)
     if (style == NULL || len == 0) {
         return -1.0f;
     }
-    float g = grid_find_len(NULL, style, len, "column-gap", 0);
+    float g = grid_find_len(style, len, "column-gap", 0);
     if (g < 0.0f) {
-        g = grid_find_len(NULL, style, len, "gap", 0);
+        g = grid_find_len(style, len, "gap", 0);
     }
     if (g < 0.0f) {
-        g = grid_find_len(NULL, style, len, "grid-column-gap", 0);
+        g = grid_find_len(style, len, "grid-column-gap", 0);
     }
     return g;
 }
@@ -3268,17 +3069,14 @@ void yetty_ylexbor_css_scan_var_heights(struct yetty_ylexbor *r, const char *src
         if (val_end <= val_start || val_end - val_start > 512) {
             continue;
         }
-        /* Capture `height:` values carrying var() (resolved element-scoped at
-         * lookup) or calc() (a length-only calc folded to a constant px there).
-         * Plain lengths/keywords libcss already handles. */
-        int has_var_or_calc = 0;
+        int has_var = 0;
         for (size_t k = val_start; k + 4 <= val_end; k++) {
-            if (memcmp(src + k, "var(", 4) == 0 || memcmp(src + k, "calc", 4) == 0) {
-                has_var_or_calc = 1;
+            if (memcmp(src + k, "var(", 4) == 0) {
+                has_var = 1;
                 break;
             }
         }
-        if (!has_var_or_calc) {
+        if (!has_var) {
             continue;
         }
         if (!grid_media_active_at(r, src, len, i)) {
@@ -3330,97 +3128,13 @@ void yetty_ylexbor_css_scan_var_heights(struct yetty_ylexbor *r, const char *src
     }
 }
 
-/* Evaluate a `calc(...)` whose terms are all absolute lengths (px / rem / em)
- * joined by + or - into a single constant pixel value. libcss 0.9.x cannot
- * parse calc() and drops the declaration; a length-only calc has a fixed
- * result that needs no containing block (apnews reserves its leaderboard-ad
- * slot with `height:calc(var(--adHeight) + var(--adXtraSpace))`, both px). A
- * percentage or any unmodelled unit makes the result non-constant → false, so
- * the caller keeps libcss's value or defers to a containing-block path. `rem`
- * uses the 16px root size; `em` uses the element's font size. */
-static bool calc_eval_const_length(const char *value, float font_size, float *out_px)
-{
-    if (value == NULL) {
-        return false;
-    }
-    while (isspace((unsigned char)*value)) {
-        value++;
-    }
-    if (strncasecmp(value, "calc(", 5) != 0) {
-        return false;
-    }
-    const char *p = value + 5;
-    const char *end = value + strlen(value);
-    while (end > p && isspace((unsigned char)end[-1])) {
-        end--;
-    }
-    if (end <= p || end[-1] != ')') {
-        return false;
-    }
-    end--; /* exclude the closing paren */
-
-    float total = 0.0f;
-    int8_t sign = 1;
-    bool have_term = false;
-    while (p < end) {
-        while (p < end && isspace((unsigned char)*p)) {
-            p++;
-        }
-        if (p >= end) {
-            break;
-        }
-        if (*p == '+' || *p == '-') {
-            if (!have_term) {
-                return false; /* leading / doubled operator — malformed */
-            }
-            sign = (*p == '-') ? -1 : 1;
-            have_term = false;
-            p++;
-            continue;
-        }
-        if (have_term) {
-            return false; /* two terms with no operator between them */
-        }
-        char *num_end = NULL;
-        float mag = strtof(p, &num_end);
-        if (num_end == NULL || num_end == p) {
-            return false; /* nested calc(), a stray var(), min()/max() … — give up */
-        }
-        size_t ulen = 0;
-        while (num_end + ulen < end &&
-               (isalpha((unsigned char)num_end[ulen]) || num_end[ulen] == '%')) {
-            ulen++;
-        }
-        float px;
-        if (ulen == 0) {
-            px = mag; /* unitless — only 0 is valid, but treat as px */
-        } else if (ulen == 2 && strncasecmp(num_end, "px", 2) == 0) {
-            px = mag;
-        } else if (ulen == 3 && strncasecmp(num_end, "rem", 3) == 0) {
-            px = mag * 16.0f;
-        } else if (ulen == 2 && strncasecmp(num_end, "em", 2) == 0) {
-            px = mag * font_size;
-        } else {
-            return false; /* %, vw, vh, ch … — not a constant length */
-        }
-        total += (float)sign * px;
-        have_term = true;
-        sign = 1;
-        p = num_end + ulen;
-    }
-    if (!have_term) {
-        return false; /* empty, or trailing operator */
-    }
-    *out_px = total;
-    return true;
-}
-
 int yetty_ylexbor_var_height_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *element,
                                     float font_size, float *out_px)
 {
     if (r == NULL || element == NULL || r->var_height_count == 0) {
         return 0;
     }
+    (void)font_size;
     /* Last matching rule wins — capture preserved cascade order. */
     for (int e = r->var_height_count; e-- > 0;) {
         struct yl_var_height_rule *rule = &r->var_height_rules[e];
@@ -3436,15 +3150,6 @@ int yetty_ylexbor_var_height_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *
         float px = strtof(value, &unit_end);
         int definite =
             unit_end && unit_end != value && strncmp(unit_end, "px", 2) == 0 && px >= 0.0f;
-        /* `height:calc(<len> + <len>)` — vars already substituted to lengths;
-         * fold the length-only calc to a constant px. */
-        if (!definite) {
-            float calc_px = 0.0f;
-            if (calc_eval_const_length(value, font_size, &calc_px) && calc_px >= 0.0f) {
-                px = calc_px;
-                definite = 1;
-            }
-        }
         free(resolved);
         if (definite) {
             *out_px = px;
@@ -3764,14 +3469,12 @@ int yetty_ylexbor_calc_length_lookup(struct yetty_ylexbor *r, lxb_dom_element_t 
 
 /* Record one aspect-ratio rule (selector already stripped of any ::after /
  * ::before pseudo). ratio is height/width. */
-static void aspect_rule_add(struct yetty_ylexbor *r, char *selector, float ratio, char *raw_value)
+static void aspect_rule_add(struct yetty_ylexbor *r, char *selector, float ratio)
 {
     if (selector == NULL) {
-        free(raw_value);
         return;
     }
-    /* ratio -1 is the explicit `aspect-ratio:unset` cancel sentinel. */
-    if (raw_value == NULL && ratio != -1.0f && (ratio <= 0.0f || ratio > 100.0f)) {
+    if (ratio <= 0.0f || ratio > 100.0f) {
         free(selector);
         return;
     }
@@ -3780,7 +3483,6 @@ static void aspect_rule_add(struct yetty_ylexbor *r, char *selector, float ratio
         struct yl_aspect_rule *grown = realloc(r->aspect_rules, (size_t)cap * sizeof(*grown));
         if (!grown) {
             free(selector);
-            free(raw_value);
             return;
         }
         r->aspect_rules = grown;
@@ -3790,7 +3492,6 @@ static void aspect_rule_add(struct yetty_ylexbor *r, char *selector, float ratio
     memset(rule, 0, sizeof(*rule));
     rule->selector = selector;
     rule->ratio = ratio;
-    rule->raw_value = raw_value;
     r->aspect_count++;
 }
 
@@ -3820,7 +3521,7 @@ static void aspect_strip_pseudo(const char *src, size_t start, size_t *end_inout
  * dropped so the ratio binds to the real element. Commas inside a functional
  * pseudo — `:is(.a, .b)` — are not treated as list separators. */
 static void aspect_emit_rules(struct yetty_ylexbor *r, const char *src, size_t len, size_t decl_pos,
-                              float ratio, const char *raw_value, size_t raw_len)
+                              float ratio)
 {
     (void)len;
     size_t brace = decl_pos;
@@ -3854,15 +3555,7 @@ static void aspect_emit_rules(struct yetty_ylexbor *r, const char *src, size_t l
             size_t be = scan;
             aspect_strip_pseudo(src, bs, &be);
             if (bs < be) {
-                char *raw_copy = NULL;
-                if (raw_value != NULL && raw_len > 0) {
-                    raw_copy = malloc(raw_len + 1);
-                    if (raw_copy != NULL) {
-                        memcpy(raw_copy, raw_value, raw_len);
-                        raw_copy[raw_len] = '\0';
-                    }
-                }
-                aspect_rule_add(r, supp_selector_capture(src, bs, be), ratio, raw_copy);
+                aspect_rule_add(r, supp_selector_capture(src, bs, be), ratio);
             }
             branch_start = scan + 1;
         }
@@ -3883,36 +3576,6 @@ void yetty_ylexbor_css_scan_aspect_ratios(struct yetty_ylexbor *r, const char *s
             continue;
         }
         const char *value = src + i + ar_len;
-        while (*value == ' ' || *value == '\t') {
-            value++;
-        }
-        /* `aspect-ratio: unset|auto|initial|none` — an explicit CANCEL of an
-         * earlier ratio (github's hero: `aspect-ratio:1` on mobile, doubled-
-         * class `aspect-ratio:unset` override at >=768px). Registered as a
-         * negative-ratio rule; the lookup returns "no aspect" when it is the
-         * latest match instead of falling through to the base rule. */
-        if (strncasecmp(value, "unset", 5) == 0 || strncasecmp(value, "auto", 4) == 0 ||
-            strncasecmp(value, "initial", 7) == 0 || strncasecmp(value, "none", 4) == 0) {
-            if (!grid_media_active_at(r, src, len, i)) {
-                continue;
-            }
-            aspect_emit_rules(r, src, len, i, -1.0f, NULL, 0);
-            continue;
-        }
-        /* `aspect-ratio: var(--x)` — the ratio lives in a custom property
-         * (often element-scoped, set inline). Register the raw value; the
-         * lookup re-resolves it per matching element. */
-        if (strncasecmp(value, "var(", 4) == 0) {
-            size_t vend = (size_t)(value - src);
-            while (vend < len && src[vend] != ';' && src[vend] != '}') {
-                vend++;
-            }
-            if (!grid_media_active_at(r, src, len, i)) {
-                continue;
-            }
-            aspect_emit_rules(r, src, len, i, 0.0f, value, vend - (size_t)(value - src));
-            continue;
-        }
         char *after = NULL;
         float w = strtof(value, &after);
         if (after == NULL || after == value || w <= 0.0f) {
@@ -3939,7 +3602,7 @@ void yetty_ylexbor_css_scan_aspect_ratios(struct yetty_ylexbor *r, const char *s
         if (!grid_media_active_at(r, src, len, i)) {
             continue;
         }
-        aspect_emit_rules(r, src, len, i, ratio, NULL, 0);
+        aspect_emit_rules(r, src, len, i, ratio);
     }
     /* Classic `SEL::after { padding-bottom: P% }` frame — the pseudo's
      * percentage padding sets the element's height as a fraction of its width. */
@@ -4003,7 +3666,7 @@ void yetty_ylexbor_css_scan_aspect_ratios(struct yetty_ylexbor *r, const char *s
         if (css_find_substr(src + brace, block_end - brace, "content:", 8) == NULL) {
             continue;
         }
-        aspect_emit_rules(r, src, len, i, pct / 100.0f, NULL, 0);
+        aspect_emit_rules(r, src, len, i, pct / 100.0f);
     }
 }
 
@@ -4016,41 +3679,8 @@ float yetty_ylexbor_aspect_ratio_lookup(struct yetty_ylexbor *r, lxb_dom_element
         struct yl_aspect_rule *rule = &r->aspect_rules[e];
         int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
                                           &rule->selector_state, element);
-        if (verdict <= 0) {
-            continue;
-        }
-        if (rule->raw_value == NULL) {
-            /* Negative ratio = explicit `unset` cancel — the latest matching
-             * rule wins, so an earlier base ratio must not apply. */
-            return rule->ratio < 0.0f ? 0.0f : rule->ratio;
-        }
-        /* var()-valued rule: resolve against the element's scoped custom
-         * properties, then parse the resulting `W / H` (or single number). */
-        char *resolved = yetty_ylexbor_css_vars_resolve_for_element(r, element, rule->raw_value,
-                                                                    strlen(rule->raw_value));
-        if (resolved == NULL) {
-            continue;
-        }
-        char *after = NULL;
-        float w = strtof(resolved, &after);
-        float ratio = 0.0f;
-        if (after != NULL && after != resolved && w > 0.0f) {
-            while (*after == ' ' || *after == '\t') {
-                after++;
-            }
-            if (*after == '/') {
-                after++;
-                float h = strtof(after, NULL);
-                if (h > 0.0f) {
-                    ratio = h / w;
-                }
-            } else {
-                ratio = 1.0f / w;
-            }
-        }
-        free(resolved);
-        if (ratio > 0.0f && ratio <= 100.0f) {
-            return ratio;
+        if (verdict > 0) {
+            return rule->ratio;
         }
     }
     return 0.0f;
@@ -4585,7 +4215,6 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
     r->calc_length_cap = 0;
     for (int e = 0; e < r->aspect_count; e++) {
         free(r->aspect_rules[e].selector);
-        free(r->aspect_rules[e].raw_value);
         if (r->aspect_rules[e].compiled_selector) {
             lxb_css_selector_list_destroy_memory(r->aspect_rules[e].compiled_selector);
         }
@@ -5261,12 +4890,12 @@ void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *src, 
         }
         const char *block = src + brace;
         size_t blen = block_end - brace;
-        float col_gap = grid_find_len(r, block, blen, "column-gap", 0);
+        float col_gap = grid_find_len(block, blen, "column-gap", 0);
         if (col_gap < 0.0f) {
-            col_gap = grid_find_len(r, block, blen, "gap", 1);
+            col_gap = grid_find_len(block, blen, "gap", 1);
         }
         if (col_gap < 0.0f) {
-            col_gap = grid_find_len(r, block, blen, "gap", 0);
+            col_gap = grid_find_len(block, blen, "gap", 0);
         }
         if (col_gap <= 0.0f) {
             continue;
