@@ -39,7 +39,13 @@ target_link_libraries(yetty_yrich PUBLIC
     yetty_ydraw_core
     yetty_ysdf
     yetty_yfont_core
-    yetty_yimage
+    # The lean document model only decodes/emits inline images via
+    # yetty_yimage_emit_into (yimage.c) — a GPU-less symbol in
+    # yetty_yimage_core. The concrete GPU factory (yetty_yimage,
+    # yimage-gen.c) lives only in the WebGPU-on yetty_yrich_app link set
+    # below. Linking the GPU target here breaks no-WebGPU cross-builds
+    # (riscv64), where yetty_yimage is never defined.
+    yetty_yimage_core
     yaml
 )
 
