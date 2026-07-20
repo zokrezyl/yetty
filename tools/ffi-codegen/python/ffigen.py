@@ -31,24 +31,48 @@ import sys
 import yaml
 
 REPO = pathlib.Path(__file__).resolve().parents[3]
-SRC = REPO / "src" / "yetty"
+# model.yaml lives under the implementation tree (src/yetty/<module>/) and the
+# public-API facade tree (src/api/<group>/). A facade's group directory need
+# not match its yclass domain (src/api/yplot has domain api_yplot), so models
+# are keyed by DOMAIN, not directory name — the domain is the symbol prefix.
+SRC_ROOTS = [REPO / "src" / "yetty", REPO / "src" / "api"]
 
 
 # ---------------------------------------------------------------------------
 # Model loading
 # ---------------------------------------------------------------------------
 
+def model_domain(model: dict) -> str | None:
+    """The yclass domain a model belongs to — the `yetty_<domain>_*` prefix.
+    Read from the first class (or method); classes in one model share a domain."""
+    for entry in model.get("classes", []) or []:
+        if entry.get("domain"):
+            return entry["domain"]
+    for entry in model.get("methods", []) or []:
+        if entry.get("domain"):
+            return entry["domain"]
+    return None
+
+
 def discover_models(selected: list[str]) -> dict[str, dict]:
-    """Load model.yaml for the requested modules (default: every module that
-    has one)."""
+    """Load every model.yaml under the implementation + API trees, keyed by
+    yclass domain (default: all; `selected` restricts to those domains)."""
+    found: dict[str, dict] = {}
+    for root in SRC_ROOTS:
+        if not root.is_dir():
+            continue
+        for path in root.glob("*/model.yaml"):
+            model = yaml.safe_load(path.read_text()) or {}
+            domain = model_domain(model)
+            if domain:
+                found[domain] = model
+    names = selected or sorted(found)
     models: dict[str, dict] = {}
-    names = selected or sorted(p.parent.name for p in SRC.glob("*/model.yaml"))
     for name in names:
-        path = SRC / name / "model.yaml"
-        if not path.exists():
-            sys.stderr.write(f"ffigen: no model.yaml for module '{name}'\n")
+        if name not in found:
+            sys.stderr.write(f"ffigen: no model.yaml for domain '{name}'\n")
             sys.exit(1)
-        models[name] = yaml.safe_load(path.read_text()) or {}
+        models[name] = found[name]
     return models
 
 
@@ -466,8 +490,9 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
         return "[" + ", ".join(items) + "]"
 
     def call_params(args: list[dict]) -> list[str]:
-        # args[0]=ctx -> None, args[1]=obj -> self._handle, rest -> params
-        return [f"{py_arg_name(a, i + 2)}: {py_arg_annot(a['type'], type_names)}" for i, a in enumerate(args[2:])]
+        # A method slot's C stub is (obj, rest...) — no ctx. args[0]=obj is the
+        # receiver (self._handle); the rest are the Python method parameters.
+        return [f"{py_arg_name(a, i + 1)}: {py_arg_annot(a['type'], type_names)}" for i, a in enumerate(args[1:])]
 
     def return_expr(return_type: str) -> str:
         converter = py_result_converter(return_type)
@@ -507,15 +532,34 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
         parts.append(
             f'            _fn = _rt.cfn("{create_sym}", _t.yetty_yclass_object_ptr_result, [c_void_p])')
         parts.append("            res = _rt.result_from_c(_fn(None))")
-        parts.append("            if not res:")
-        parts.append("                _rt.YClass.__init__(self, None, res.error)")
-        parts.append("                return")
+        parts.append("            if res.error is not None:")
+        parts.append("                raise _rt.YettyError(res.error.message)")
         parts.append("            _handle = res.value")
         parts.append("        super().__init__(_handle)")
+        # create(**kwargs): each keyword maps to a set_<name> method (tuple/list
+        # values unpack, so size=(640, 320) -> set_size(640, 320)). A class whose
+        # primary content has a dedicated setter (set_expression, else set_body)
+        # also accepts that content as the first positional argument, so
+        # Plot.create("f=sin(x)") / Function.create("sin(x)") work. Raises
+        # YettyError on any failing setter (or on an unknown keyword).
+        setter_names = {op["slot"][4:] for op in cls.get("ops", []) if op["slot"].startswith("set_")}
+        primary_setter = next((name for name in ("expression", "body") if name in setter_names), None)
         parts.append("    @classmethod")
-        parts.append(f"    def create(cls) -> _rt.Result[{cname!r}]:")
-        parts.append("        obj = cls()")
-        parts.append("        return obj.init_result")
+        if primary_setter is not None:
+            parts.append(f"    def create(cls, {primary_setter}: Any = None, **kwargs: Any) -> {cname!r}:")
+            parts.append("        obj = cls()")
+            parts.append(f"        if {primary_setter} is not None:")
+            parts.append(f"            obj.set_{primary_setter}({primary_setter})")
+        else:
+            parts.append(f"    def create(cls, **kwargs: Any) -> {cname!r}:")
+            parts.append("        obj = cls()")
+        parts.append("        for _key, _value in kwargs.items():")
+        parts.append('            _setter = getattr(obj, "set_" + _key, None)')
+        parts.append("            if _setter is None:")
+        parts.append(f'                raise TypeError(f"{cname}.create: unknown property {{_key!r}}")')
+        parts.append(
+            "            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)")
+        parts.append("        return obj")
         # methods introduced by this class. Inherited slots remain inherited
         # Python methods; the C public stub still dispatches dynamically through
         # the yclass vtable using this instance's handle.
@@ -533,22 +577,33 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
             ret_ann = py_result_value_annot(m["return_type"])
             sig = f"self, {params}" if params else "self"
             sym = f"yetty_{m['domain']}_{slot}"
-            parts.append(f"    def {py_method_pyname(slot)}({sig}) -> _rt.Result[{ret_ann}]:")
-            parts.append(f'        """Call `{sym}`; returns Result, never raises for yclass errors."""')
+            parts.append(f"    def {py_method_pyname(slot)}({sig}) -> {ret_ann}:")
+            parts.append(f'        """Call `{sym}`; raises _rt.YettyError on failure."""')
             parts.append("        if self._handle is None:")
-            parts.append("            return self._invalid_result()")
+            parts.append('            raise _rt.YettyError("uninitialized yclass handle")')
             parts.append(
                 f'        _fn = _rt.cfn("{sym}", _t.{classify(m["return_type"])[1]}, {argtypes_expr(args)})')
 
             def pass_expr(arg):
-                # str -> bytes for char* params; everything else passes through.
-                if py_ctype(arg["type"], type_names) == "c_char_p":
-                    return f"_rt.cstr({py_arg_name(arg)})"
-                return py_arg_name(arg)
+                # str -> bytes for char* params; a yclass object arg -> its raw
+                # handle (_rt.handle passes a bare pointer through unchanged, so
+                # it is safe for any opaque pointer); everything else as-is.
+                ctype = py_ctype(arg["type"], type_names)
+                name = py_arg_name(arg)
+                if ctype == "c_char_p":
+                    return f"_rt.cstr({name})"
+                if ctype == "c_void_p":
+                    return f"_rt.handle({name})"
+                return name
 
-            passed = ["None", "self._handle"] + [pass_expr(a) for a in args[2:]]
-            parts.append(f"        res = _fn({', '.join(passed)})")
-            parts.append(return_expr(m["return_type"]))
+            passed = ["self._handle"] + [pass_expr(a) for a in args[1:]]
+            converter = py_result_converter(m["return_type"])
+            unwrap = f"_rt.result_from_c(_fn({', '.join(passed)})"
+            unwrap += f", {converter})" if converter else ")"
+            parts.append(f"        res = {unwrap}")
+            parts.append("        if res.error is not None:")
+            parts.append("            raise _rt.YettyError(res.error.message)")
+            parts.append("        return res.value")
         # property members → idiomatic @property getters/setters. Unlike
         # methods (which return a Result), a property RAISES _rt.YettyError on
         # failure so it reads as a plain attribute: `obj.rect`, `obj.rect = v`.
@@ -1067,19 +1122,49 @@ def emit_python(models: dict[str, dict]):
     py_emit_types(types, gen / "_types.py")
     py_emit_connection(gen / "connection.py")
     module_names = []
+    api_modules = []  # (subname, generated_module, [class names]) for src/api facades
     for module, model in models.items():
         if not model.get("classes"):
             continue  # nothing callable to expose
         py_emit_module(module, model, type_names, gen / f"{module}.py")
         module_names.append(module)
+        if module.startswith("api_"):
+            subname = module[len("api_"):]
+            class_names = [py_class_name(c["name"])
+                           for c in py_regular_classes_in_base_order(model)]
+            api_modules.append((subname, module, class_names))
     # generated package __init__ re-exports the module classes lazily.
     init = ['"""GENERATED package — do not edit."""']
     init.append("from . import connection as connection")
     for m in sorted(module_names):
         init.append(f"from . import {m} as {m}")
     (gen / "__init__.py").write_text("\n".join(init) + "\n")
-    print(f"ffigen: python → {len(module_names)} modules + connection facade, "
-          f"{len(types)} types under bindings/python/yetty/generated/")
+    # Public API surface: a `yetty.api.<name>` package that re-exports each
+    # src/api facade's classes. `generated/` stays the internal raw bindings;
+    # user code imports `from yetty.api.yplot import Plot, Function`.
+    emit_python_api(root, api_modules)
+    print(f"ffigen: python → {len(module_names)} modules ({len(api_modules)} public api) "
+          f"+ connection facade, {len(types)} types under bindings/python/yetty/")
+
+
+def emit_python_api(root: pathlib.Path, api_modules: list):
+    api_dir = root / "api"
+    if not api_modules:
+        return
+    api_dir.mkdir(parents=True, exist_ok=True)
+    for subname, module, class_names in sorted(api_modules):
+        exported = ", ".join(class_names)
+        all_list = ", ".join(repr(name) for name in class_names)
+        lines = [
+            f'"""yetty.api.{subname} — public {subname} API. GENERATED, do not edit."""',
+            f"from ..generated.{module} import {exported}",
+            f"__all__ = [{all_list}]",
+        ]
+        (api_dir / f"{subname}.py").write_text("\n".join(lines) + "\n")
+    init = ['"""yetty public API packages. GENERATED, do not edit."""']
+    for subname, _module, _class_names in sorted(api_modules):
+        init.append(f"from . import {subname} as {subname}")
+    (api_dir / "__init__.py").write_text("\n".join(init) + "\n")
 
 
 

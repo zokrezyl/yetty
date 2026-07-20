@@ -26,6 +26,7 @@
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yplot/yplot.h>
+#include <yetty/yplot/resolve.h>
 #ifdef YETTY_YECHO_HAS_YVIDEO
 #include <yetty/yvideo/yvideo.h>
 #include <yetty/yvideo/yvideo-gen.h>
@@ -870,197 +871,62 @@ static int span_has_attr(const struct yetty_yecho_span *span, const char *key)
 static struct yetty_ycore_void_result render_yplot_block(struct render_state *rs,
                                                          const struct yetty_yecho_span *span)
 {
-    struct yetty_yplot_uniforms u = {
-        .bounds_x = rs->cursor_x,
-        .bounds_y = rs->cursor_y,
+    /* Build a render config from the yecho block attrs; the shared yplot path
+     * (yetty_yplot_emit_expression) does parse + resolve + compile + emit —
+     * curves AND chrome (title, axis/tick labels, legend, colorbar) — into our
+     * list. Figure/axis attributes in the source (@plot.title, @x.scale, …) are
+     * honored automatically, identically to the shell `yplot`. */
+    struct yetty_yplot_render_config config = {
         .bounds_w = 400.0f,
         .bounds_h = 200.0f,
         .x_min = -3.14159f,
         .x_max = 3.14159f,
         .y_min = -1.5f,
         .y_max = 1.5f,
-        .flags = 7, /* grid + axes + labels */
-        .function_count = 0,
+        .flags = YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS,
     };
-
-    /* Apply yecho attrs. */
     for (size_t i = 0; i < span->attr_count; i++) {
         const char *k = span->attrs[i].key;
         const char *v = span->attrs[i].value;
         if (strcmp(k, "w") == 0 && v) {
-            u.bounds_w = strtof(v, NULL);
+            config.bounds_w = strtof(v, NULL);
         } else if (strcmp(k, "h") == 0 && v) {
-            u.bounds_h = strtof(v, NULL);
+            config.bounds_h = strtof(v, NULL);
         } else if (strcmp(k, "xrange") == 0) {
             float lo, hi;
             if (parse_range(v, &lo, &hi)) {
-                u.x_min = lo;
-                u.x_max = hi;
+                config.x_min = lo;
+                config.x_max = hi;
             }
         } else if (strcmp(k, "yrange") == 0) {
             float lo, hi;
             if (parse_range(v, &lo, &hi)) {
-                u.y_min = lo;
-                u.y_max = hi;
+                config.y_min = lo;
+                config.y_max = hi;
             }
         } else if (strcmp(k, "nogrid") == 0) {
-            u.flags &= ~1u;
+            config.flags &= ~(uint32_t)YETTY_YPLOT_FLAG_GRID;
         } else if (strcmp(k, "noaxes") == 0) {
-            u.flags &= ~2u;
+            config.flags &= ~(uint32_t)YETTY_YPLOT_FLAG_AXES;
         } else if (strcmp(k, "nolabels") == 0) {
-            u.flags &= ~4u;
+            config.flags &= ~(uint32_t)YETTY_YPLOT_FLAG_LABELS;
         }
     }
 
-    /* Default color palette — overridden by @<name>.color attrs below. */
-    static const uint32_t palette[8] = {
-        0xFFFF6B6B, 0xFF4ECDC4, 0xFFFFE66D, 0xFF95E1D3,
-        0xFFF38181, 0xFFAA96DA, 0xFF72D6C9, 0xFFFCBF49,
-    };
-    for (int i = 0; i < 8; i++) {
-        u.colors[i] = palette[i];
-    }
-
-    /* Parse the content with yexpr's plot syntax (handles f=expr; @f.color=...).
-     * The node arena stays on this frame; the parsed AST points into it and is
-     * consumed by the compile below. */
     const char *content = span->text ? span->text : "";
-    size_t content_len = strlen(content);
-    struct yetty_yexpr_arena expr_arena;
-    struct yetty_yexpr_plot_expr_result pr =
-        yetty_yexpr_parse_plot(content, content_len, &expr_arena);
-    if (YETTY_IS_ERR(pr)) {
-        return YETTY_ERR(yetty_ycore_void, "plot parse failed", pr);
-    }
+    float figure_w = config.bounds_w;
+    float figure_h = config.bounds_h;
+    struct yetty_ycore_void_result emit_res =
+        yetty_yplot_emit_expression(content, strlen(content), NULL, 0, &config, rs->buf,
+                                    rs->cursor_x, rs->cursor_y, &figure_w, &figure_h);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "yecho: yplot block");
 
-    /* Inline ranges from the source override yecho's xrange=/yrange= attrs
-     * (the source is closer to the author's intent). */
-    if (pr.value.has_x_range) {
-        u.x_min = pr.value.x_min;
-        u.x_max = pr.value.x_max;
-    }
-    if (pr.value.has_y_range) {
-        u.y_min = pr.value.y_min;
-        u.y_max = pr.value.y_max;
-    }
-    if (pr.value.has_view) {
-        u.x_min = pr.value.view_x_min;
-        u.x_max = pr.value.view_x_max;
-        u.y_min = pr.value.view_y_min;
-        u.y_max = pr.value.view_y_max;
-    }
-
-    u.function_count = pr.value.def_count;
-    if (u.function_count > 8) {
-        u.function_count = 8;
-    }
-
-    /* Apply per-plot color attrs. plot_attr names like "color" reference
-     * the plot definition's index by matching plot_name against def name. */
-    for (uint32_t i = 0; i < pr.value.attr_count; i++) {
-        const struct yetty_yexpr_plot_attr *attr = &pr.value.attrs[i];
-        if (strcmp(attr->attr_name, "color") != 0) {
-            continue;
-        }
-        for (uint32_t j = 0; j < u.function_count; j++) {
-            if (strcmp(pr.value.defs[j].name, attr->plot_name) == 0) {
-                uint32_t c;
-                if (parse_hex_color(attr->value, &c)) {
-                    u.colors[j] = c;
-                }
-                break;
-            }
-        }
-    }
-
-    /* Compile to bytecode. */
-    struct yetty_yfsvm_program_result prog = yetty_yfsvm_compile_multi(&pr.value);
-    if (YETTY_IS_ERR(prog)) {
-        return YETTY_ERR(yetty_ycore_void, "yfsvm_compile_multi failed", prog);
-    }
-
-    uint32_t bc_buf[1024];
-    uint32_t bc_len = yetty_yfsvm_program_serialize(&prog.value, bc_buf, 1024);
-    if (bc_len == 0) {
-        return YETTY_ERR(yetty_ycore_void, "yfsvm_program_serialize failed");
-    }
-
-    if (prog.value.uses_time) {
-        u.flags |= YETTY_YPLOT_FLAG_USES_TIME;
-    }
-
-    /* Buffer declarations from source → wire data buffers. Inline values
-     * stream through as-is; size-only declarations get zero-filled scratch
-     * (rendered as a flat baseline until streamed). */
-    uint32_t decl_count = pr.value.buffer_count;
-    if (decl_count > 8) {
-        decl_count = 8;
-    }
-    struct yetty_yplot_data_buffer wire_bufs[8] = {0};
-    float *zero_fill = NULL;
-    size_t zero_fill_total = 0;
-    for (uint32_t i = 0; i < decl_count; i++) {
-        const struct yetty_yexpr_plot_buffer *d = &pr.value.buffers[i];
-        if (d->inline_count == 0 && d->size > 0) {
-            zero_fill_total += d->size;
-        }
-    }
-    if (zero_fill_total > 0) {
-        zero_fill = calloc(zero_fill_total, sizeof(float));
-        if (!zero_fill) {
-            return YETTY_ERR(yetty_ycore_void, "yplot zero-fill alloc failed");
-        }
-    }
-    size_t zf_off = 0;
-    for (uint32_t i = 0; i < decl_count; i++) {
-        const struct yetty_yexpr_plot_buffer *d = &pr.value.buffers[i];
-        if (d->inline_count > 0) {
-            wire_bufs[i].samples = d->inline_values;
-            wire_bufs[i].count = d->inline_count;
-        } else if (d->size > 0) {
-            wire_bufs[i].samples = zero_fill + zf_off;
-            wire_bufs[i].count = d->size;
-            zf_off += d->size;
-        } else {
-            wire_bufs[i].samples = NULL;
-            wire_bufs[i].count = 0;
-        }
-    }
-
-    struct yetty_yplot_buffers bufs = {
-        .bytecode = bc_buf,
-        .bytecode_len = bc_len,
-        .data = decl_count > 0 ? wire_bufs : NULL,
-        .data_count = decl_count,
-    };
-
-    size_t required = yetty_yplot_uniforms_serialized_size(&u, &bufs);
-    uint8_t *drawable_buf = malloc(required);
-    if (!drawable_buf) {
-        free(zero_fill);
-        return YETTY_ERR(yetty_ycore_void, "yplot prim alloc failed");
-    }
-    struct yetty_ycore_size_result ser =
-        yetty_yplot_uniforms_serialize(&u, &bufs, drawable_buf, required);
-    if (YETTY_IS_ERR(ser)) {
-        free(drawable_buf);
-        free(zero_fill);
-        return YETTY_ERR(yetty_ycore_void, "yplot_serialize failed", ser);
-    }
-
-    struct yetty_ydraw_id_result idr =
-        yetty_ydraw_drawable_list_add_prim(rs->buf, drawable_buf, required);
-    free(drawable_buf);
-    free(zero_fill);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "yplot add_prim failed");
-
-    /* Advance the cursor past the plot. The plot is a block element; the
-     * next text run starts on a fresh line below it. */
-    if (u.bounds_x + u.bounds_w > rs->scene_max_x) {
-        rs->scene_max_x = u.bounds_x + u.bounds_w;
+    /* Block element: extend the scene and advance to a fresh line below it. */
+    if (rs->cursor_x + figure_w > rs->scene_max_x) {
+        rs->scene_max_x = rs->cursor_x + figure_w;
     }
     rs->cursor_x = YECHO_X_ORIGIN;
-    rs->cursor_y += u.bounds_h + rs->line_height;
+    rs->cursor_y += figure_h + rs->line_height;
     if (rs->cursor_y > rs->scene_max_y) {
         rs->scene_max_y = rs->cursor_y;
     }

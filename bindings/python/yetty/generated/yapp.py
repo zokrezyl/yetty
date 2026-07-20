@@ -19,36 +19,46 @@ class App(_rt.YClass):
         if _handle is None:
             _fn = _rt.cfn("yetty_yapp_app_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['App']:
+    def create(cls, **kwargs: Any) -> 'App':
         obj = cls()
-        return obj.init_result
-    def init(self) -> _rt.Result[None]:
-        """Call `yetty_yapp_init`; returns Result, never raises for yclass errors."""
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"App.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
+    def init(self, platform: Any) -> None:
+        """Call `yetty_yapp_init`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yapp_init", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def run(self) -> _rt.Result[None]:
-        """Call `yetty_yapp_run`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(platform)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def run(self, platform: Any) -> None:
+        """Call `yetty_yapp_run`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yapp_run", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def quit(self) -> _rt.Result[None]:
-        """Call `yetty_yapp_quit`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(platform)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def quit(self) -> None:
+        """Call `yetty_yapp_quit`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yapp_quit", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
 
 def create_app(ctx: Any) -> _rt.Result[Any]:
     """Call `yetty_yapp_create_app`."""

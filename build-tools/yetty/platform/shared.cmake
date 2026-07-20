@@ -454,6 +454,27 @@ set(YETTY_APP_ENTRY_GLFW
 # Add src/yetty (populates YETTY_SOURCES, YETTY_CORE_SOURCES, builds feature libraries)
 add_subdirectory(${YETTY_ROOT}/src/yetty ${CMAKE_BINARY_DIR}/src/yetty)
 
+# Public API facades (yetty_api_*). Declared after src/yetty because they depend
+# on the implementation modules (e.g. yetty_api_yplot -> yetty_yplot_core).
+add_subdirectory(${YETTY_ROOT}/src/api/yplot ${CMAKE_BINARY_DIR}/src/api/yplot)
+
+# When building libyetty_ffi.so, only that shared object and its dependency
+# closure must be position-independent. Scope PIC to exactly those targets here
+# (they all exist by now) so the rest of the application build stays non-PIC —
+# building one small shared library never turns the whole project into a PIC
+# build. Keep this list in sync with src/yetty/yffi/CMakeLists.txt.
+if(YETTY_BUILD_FFI_SHARED)
+    foreach(ffi_pic_target
+            yetty_api_yplot yetty_yplot_core yetty_ydraw_core yetty_yface
+            yetty_ysdf yetty_yfsvm_core yetty_yexpr yetty_yclass yetty_ywire
+            yetty_ycore)
+        if(TARGET ${ffi_pic_target})
+            set_target_properties(${ffi_pic_target} PROPERTIES
+                POSITION_INDEPENDENT_CODE ON)
+        endif()
+    endforeach()
+endif()
+
 # getopt + the rest of the platform layer live in yetty_yplatform_core
 # (declared in src/yetty/yplatform/CMakeLists.txt). Tools link that lib
 # directly; the main yetty exec links it via platform/<plat>/cmake.cmake.

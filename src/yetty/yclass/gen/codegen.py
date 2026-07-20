@@ -2499,7 +2499,19 @@ def _class_header_lookup(model: dict, ref: dict, fallback_dom: str, module_src: 
     for c in model.get("classes", []):
         if c["domain"] == dom and c["name"] == name:
             return class_header_for(c, dom, module_src)
-    return f"yetty/{dom}/{name}.h"
+    return f"yetty/{module_include_subpath(dom)}/{name}.h"
+
+
+def module_include_subpath(module: str) -> str:
+    """Header directory for a module, relative to include/yetty. Normally the
+    module name, but an `api_<name>` public-facade module nests as `api/<name>`
+    to mirror its src/api/<name>/ sources and the yetty.api.<name> bindings —
+    so `api_yplot` headers live under include/yetty/api/yplot/, not api_yplot/.
+    The C symbol prefix stays `yetty_api_yplot_*` (that is the domain); only the
+    on-disk header layout is nested."""
+    if module.startswith("api_"):
+        return "api/" + module[len("api_"):]
+    return module
 
 
 def class_header_for(cls: dict, module: str, module_src: Path) -> str:
@@ -2513,7 +2525,7 @@ def class_header_for(cls: dict, module: str, module_src: Path) -> str:
     src_path = Path(cls["source_file"]).resolve()
     rel = source_rel_subdir(cls["source_file"], module_src)
     rel_subdir = "" if str(rel) == "." else str(rel) + "/"
-    return f"yetty/{module}/{rel_subdir}{src_path.stem}.h"
+    return f"yetty/{module_include_subpath(module)}/{rel_subdir}{src_path.stem}.h"
 
 
 def emit_skel(m: dict) -> str:
@@ -2999,7 +3011,7 @@ def main():
     module_src = Path(argv[2])
     sources = [Path(p) for p in argv[3:]]
 
-    include_module = include_base / module
+    include_module = include_base / module_include_subpath(module)
     include_module.mkdir(parents=True, exist_ok=True)
     module_src.mkdir(parents=True, exist_ok=True)
 

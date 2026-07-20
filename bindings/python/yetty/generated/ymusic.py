@@ -19,57 +19,73 @@ class Music(_rt.YClass):
         if _handle is None:
             _fn = _rt.cfn("yetty_ymusic_music_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Music']:
+    def create(cls, **kwargs: Any) -> 'Music':
         obj = cls()
-        return obj.init_result
-    def configure(self, staff_space: float, flags: int) -> _rt.Result[None]:
-        """Call `yetty_ymusic_configure`; returns Result, never raises for yclass errors."""
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Music.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
+    def configure(self, width: float, staff_space: float, flags: int) -> None:
+        """Call `yetty_ymusic_configure`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymusic_configure", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float, c_uint32])
-        res = _fn(None, self._handle, staff_space, flags)
-        return _rt.result_from_c(res)
-    def parse(self, len: int) -> _rt.Result[None]:
-        """Call `yetty_ymusic_parse`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, width, staff_space, flags))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def parse(self, input: str | bytes | None, len: int) -> None:
+        """Call `yetty_ymusic_parse`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymusic_parse", _t.yetty_ycore_void_result, [c_void_p, c_char_p, c_size_t])
-        res = _fn(None, self._handle, len)
-        return _rt.result_from_c(res)
-    def render(self) -> _rt.Result[Any]:
-        """Call `yetty_ymusic_render`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(input), len))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def render(self) -> Any:
+        """Call `yetty_ymusic_render`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymusic_render", _t.yetty_ydraw_drawable_list_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def hit_test(self, y: float) -> _rt.Result[int]:
-        """Call `yetty_ymusic_hit_test`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def hit_test(self, x: float, y: float) -> int:
+        """Call `yetty_ymusic_hit_test`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymusic_hit_test", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float])
-        res = _fn(None, self._handle, y)
-        return _rt.result_from_c(res)
-    def set_highlight(self) -> _rt.Result[None]:
-        """Call `yetty_ymusic_set_highlight`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, x, y))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def set_highlight(self, element_id: int) -> None:
+        """Call `yetty_ymusic_set_highlight`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymusic_set_highlight", _t.yetty_ycore_void_result, [c_void_p, c_int32])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def destroy(self) -> _rt.Result[None]:
-        """Call `yetty_ymusic_destroy`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, element_id))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def destroy(self) -> None:
+        """Call `yetty_ymusic_destroy`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymusic_destroy", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
 
 def emit_osc(list: Any, fd: int) -> _rt.Result[None]:
     """Call `yetty_ymusic_emit_osc`."""

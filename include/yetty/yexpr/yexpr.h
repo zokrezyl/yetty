@@ -107,6 +107,14 @@ struct yetty_yexpr_arena {
 #define YETTY_YEXPR_MAX_PLOT_BUFFERS 8
 #define YETTY_YEXPR_MAX_INLINE_VALUES 64
 
+/* Presence bits for the typed figure attributes in yetty_yexpr_plot_expr.
+ * A resolver uses these to tell an unset value apart from a real zero. */
+enum yetty_yexpr_fig_present {
+    YETTY_YEXPR_FIG_WIDTH = 1u << 0,
+    YETTY_YEXPR_FIG_HEIGHT = 1u << 1,
+    YETTY_YEXPR_FIG_FIELD = 1u << 2,
+};
+
 struct yetty_yexpr_plot_def {
     char name[YETTY_YEXPR_MAX_NAME_LEN];
     struct yetty_yexpr_node *expression;
@@ -115,7 +123,9 @@ struct yetty_yexpr_plot_def {
 struct yetty_yexpr_plot_attr {
     char plot_name[YETTY_YEXPR_MAX_NAME_LEN];
     char attr_name[YETTY_YEXPR_MAX_NAME_LEN];
-    char value[64];
+    /* Wide enough for figure/axis string attrs (@plot.title, @x.label) as
+     * well as short values like colors and numbers. */
+    char value[128];
 };
 
 /* One named buffer declaration: `f=buffer; @f.size=N; @f.values=...`.
@@ -153,6 +163,14 @@ struct yetty_yexpr_plot_expr {
     float view_x_min, view_x_max;
     float view_y_min, view_y_max;
     uint8_t has_view;
+
+    /* Typed figure geometry (@plot.size|width|height) and field/heatmap value
+     * range (@plot.field). Parsed from the lexed numeric tokens (never text),
+     * validated finite/positive/ordered at parse time. `fig_present` carries
+     * YETTY_YEXPR_FIG_* bits so a resolver can distinguish unset from zero. */
+    float fig_width, fig_height;
+    float field_min, field_max;
+    uint32_t fig_present;
 };
 
 /*=============================================================================

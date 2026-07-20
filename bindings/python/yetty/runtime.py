@@ -13,8 +13,11 @@ the env var `YETTY_FFI_LIB` and it loads lazily on first call.
 from __future__ import annotations
 
 import ctypes
+import ctypes.util
+import glob
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Generic, TypeVar
 
 _lib: ctypes.CDLL | None = None
@@ -75,32 +78,118 @@ class YClass:
     def _invalid_result(self):
         return Result(error=self._error or Error("uninitialized yclass handle"))
 
+    def destroy(self) -> None:
+        """Reclaim the underlying yclass object.
+
+        Generic fallback used by classes that declare no class-specific
+        `destroy` slot (nothing but the object allocation to free). A class
+        with owned resources declares its own `destroy` slot, whose generated
+        method shadows this one and frees those resources first.
+        """
+        if self._handle is None:
+            return
+        from .generated import _types
+        free = cfn("yetty_yclass_object_free", _types.yetty_ycore_void_result, [ctypes.c_void_p])
+        res = result_from_c(free(self._handle))
+        self._handle = None
+        if res.error is not None:
+            raise YettyError(res.error.message)
+
     @classmethod
     def from_handle(cls, handle):
         return cls(_handle=handle)
 
 
+_LIB_BASENAMES = ("libyetty_ffi.so", "libyetty_ffi.dylib", "yetty_ffi.dll")
+
+# Load with LAZY symbol binding: the FFI shared object is large and links the
+# whole app-bootstrap surface (GLFW/WebGPU/…), and eager (RTLD_NOW) binding can
+# fault on an IFUNC/relocation before any binding call runs. Lazy defers symbol
+# resolution to first use, which is what the generated stubs need.
+_LOAD_MODE = ctypes.RTLD_LOCAL | getattr(os, "RTLD_LAZY", 1)
+
+
+def _open_library(path: str) -> ctypes.CDLL:
+    return ctypes.CDLL(path, mode=_LOAD_MODE)
+
+
+def _candidate_paths() -> list[str]:
+    """Ordered library locations tried on first use. `import yetty` alone is
+    enough — no explicit load() call and no env var are required in a normal
+    dev checkout or an installed wheel. Order, strongest signal first:
+
+      1. $YETTY_FFI_LIB          explicit override
+      2. bundled in the package  (an installed wheel ships the .so here)
+      3. build trees in the repo (dev checkout: build-desktop-ffi-release, …)
+      4. the OS loader           (LD_LIBRARY_PATH / ldconfig / DYLD_*)
+    """
+    package_dir = Path(__file__).resolve().parent
+    repo_root = package_dir.parents[2]  # <repo>/bindings/python/yetty → <repo>
+    candidates: list[str] = []
+
+    override = os.environ.get("YETTY_FFI_LIB")
+    if override:
+        candidates.append(override)
+
+    for basename in _LIB_BASENAMES:
+        candidates.append(str(package_dir / basename))
+
+    # Dev checkout: the library builds inside the normal build tree, under the
+    # yffi module dir (e.g. build-desktop-ytrace-release/src/yetty/yffi/). Prefer
+    # a release tree, then any build* tree.
+    for basename in _LIB_BASENAMES:
+        for build_glob in ("build-desktop-*-release", "build-desktop-*", "build*"):
+            candidates.extend(sorted(glob.glob(
+                str(repo_root / build_glob / "**" / basename), recursive=True)))
+
+    system = ctypes.util.find_library("yetty_ffi")
+    if system:
+        candidates.append(system)
+    candidates.extend(_LIB_BASENAMES)  # let the loader resolve a bare soname
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for candidate in candidates:
+        if candidate not in seen:
+            seen.add(candidate)
+            ordered.append(candidate)
+    return ordered
+
+
 def load(path: str | None = None) -> ctypes.CDLL:
-    """Load (or reload) the yetty FFI shared library. Idempotent-ish: the last
-    call wins."""
+    """Load the yetty FFI shared library.
+
+    Normally you never call this — the library auto-loads on the first FFI
+    call (see `_require`). Call it explicitly only to force a specific build:
+    `yetty.runtime.load("/path/to/libyetty_ffi.so")`. The last call wins.
+    """
     global _lib
-    resolved = path or os.environ.get("YETTY_FFI_LIB")
-    if not resolved:
-        raise RuntimeError(
-            "yetty FFI: no library path — call yetty.runtime.load(path) "
-            "or set YETTY_FFI_LIB to the shared library.")
-    _lib = ctypes.CDLL(resolved)
-    return _lib
+    if path is not None:
+        _lib = _open_library(path)
+        return _lib
+
+    attempted: list[str] = []
+    for candidate in _candidate_paths():
+        is_path = os.sep in candidate or (os.altsep and os.altsep in candidate)
+        if is_path and not os.path.exists(candidate):
+            continue
+        attempted.append(candidate)
+        try:
+            _lib = _open_library(candidate)
+            return _lib
+        except OSError:
+            continue
+
+    raise RuntimeError(
+        "yetty FFI: could not locate libyetty_ffi.so. Build it with "
+        "`make build-desktop-ffi-release`, or set YETTY_FFI_LIB to its path.\n"
+        f"Tried: {attempted or _candidate_paths()}")
 
 
 def _require() -> ctypes.CDLL:
+    """Return the loaded library, auto-loading it on first use."""
     if _lib is None:
-        env = os.environ.get("YETTY_FFI_LIB")
-        if env:
-            return load(env)
-        raise RuntimeError(
-            "yetty FFI: library not loaded — call yetty.runtime.load(path) "
-            "or set YETTY_FFI_LIB.")
+        return load()
     return _lib
 
 

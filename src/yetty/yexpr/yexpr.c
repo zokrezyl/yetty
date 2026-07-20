@@ -1,5 +1,7 @@
 #include <yetty/yexpr/yexpr.h>
 #include <ctype.h>
+#include <errno.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -112,20 +114,38 @@ static struct yetty_yexpr_token lex_scan_number(struct yetty_yexpr_lexer *lex)
         if (lex_current(lex) == '+' || lex_current(lex) == '-') {
             lex_advance(lex);
         }
+        /* A scientific exponent requires at least one digit — `1e` / `1e+` are
+         * malformed numbers, reported as TOK_ERROR (not silently truncated to
+         * the mantissa by strtod). Number consumers reject TOK_ERROR. */
+        if (!isdigit((unsigned char)lex_current(lex))) {
+            return lex_make(YETTY_YEXPR_TOK_ERROR, start,
+                            (size_t)((lex->source + lex->pos) - start));
+        }
         while (isdigit((unsigned char)lex_current(lex))) {
             lex_advance(lex);
         }
     }
 
-    size_t len = (lex->source + lex->pos) - start;
-    struct yetty_yexpr_token tok = lex_make(YETTY_YEXPR_TOK_NUMBER, start, len);
-
+    size_t len = (size_t)((lex->source + lex->pos) - start);
     char buf[64];
-    size_t copy_len = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
-    memcpy(buf, start, copy_len);
-    buf[copy_len] = '\0';
-    tok.num_value = strtod(buf, NULL);
+    if (len >= sizeof(buf)) {
+        return lex_make(YETTY_YEXPR_TOK_ERROR, start, len);
+    }
+    memcpy(buf, start, len);
+    buf[len] = '\0';
 
+    /* Require the whole token to convert, in range, to a finite value — so
+     * overflow (`1e400`) and stray trailing characters surface as errors at
+     * the lexical boundary rather than as a silently clamped constant. */
+    errno = 0;
+    char *number_end = NULL;
+    double value = strtod(buf, &number_end);
+    if (number_end != buf + len || errno == ERANGE || !isfinite(value)) {
+        return lex_make(YETTY_YEXPR_TOK_ERROR, start, len);
+    }
+
+    struct yetty_yexpr_token tok = lex_make(YETTY_YEXPR_TOK_NUMBER, start, len);
+    tok.num_value = value;
     return tok;
 }
 
@@ -744,6 +764,39 @@ static int parse_inline_values(struct yetty_yexpr_parser *p, struct yetty_yexpr_
     return 0;
 }
 
+/* Read one (optionally negative) numeric literal. Returns 1 on success. */
+static int parse_scalar_number(struct yetty_yexpr_parser *p, float *out)
+{
+    float sign = 1.0f;
+    if (parser_match(p, YETTY_YEXPR_TOK_MINUS)) {
+        sign = -1.0f;
+    }
+    if (!parser_check(p, YETTY_YEXPR_TOK_NUMBER)) {
+        p->error = "expected numeric value";
+        return 0;
+    }
+    *out = sign * (float)p->current.num_value;
+    parser_advance(p);
+    return 1;
+}
+
+/* Append a generic `@plot_name.attr_name = value` attribute. Composite
+ * figure attrs (size, field) decompose into scalar attrs through here so the
+ * consumer only ever sees single-valued attributes. */
+static int plot_push_attr(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_expr *plot,
+                          const char *plot_name, const char *attr_name, const char *value)
+{
+    if (plot->attr_count >= YETTY_YEXPR_MAX_PLOT_ATTRS) {
+        p->error = "too many plot attributes";
+        return -1;
+    }
+    struct yetty_yexpr_plot_attr *attr = &plot->attrs[plot->attr_count++];
+    snprintf(attr->plot_name, sizeof(attr->plot_name), "%s", plot_name);
+    snprintf(attr->attr_name, sizeof(attr->attr_name), "%s", attr_name);
+    snprintf(attr->value, sizeof(attr->value), "%s", value);
+    return 0;
+}
+
 static int parse_plot_attr(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_expr *plot)
 {
     parser_advance(p); /* consume '@' */
@@ -778,6 +831,69 @@ static int parse_plot_attr(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot
     if (!parser_match(p, YETTY_YEXPR_TOK_EQUALS)) {
         p->error = "expected '=' after attribute name";
         return -1;
+    }
+
+    /* Typed figure-geometry attrs. `plot`/`fig`/`figure` are reserved figure
+     * targets. These parse straight from the lexed numeric tokens into typed
+     * fields (never text → no atof/strtof downstream), validated finite and,
+     * for dimensions, positive:
+     *   @plot.size  = W, H     -> fig_width / fig_height
+     *   @plot.width | .height  -> the one dimension
+     *   @plot.field = A .. B   -> field_min / field_max  (heatmap value range) */
+    int figure_target = strcmp(plot_name, "plot") == 0 || strcmp(plot_name, "fig") == 0 ||
+                        strcmp(plot_name, "figure") == 0;
+    if (figure_target && strcmp(attr_name, "size") == 0) {
+        float width, height;
+        if (!parse_scalar_number(p, &width)) {
+            return -1;
+        }
+        if (!parser_match(p, YETTY_YEXPR_TOK_COMMA)) {
+            p->error = "expected ',' between width and height in @plot.size";
+            return -1;
+        }
+        if (!parse_scalar_number(p, &height)) {
+            return -1;
+        }
+        if (!(isfinite(width) && width > 0.0f && isfinite(height) && height > 0.0f)) {
+            p->error = "@plot.size expects positive finite width, height";
+            return -1;
+        }
+        plot->fig_width = width;
+        plot->fig_height = height;
+        plot->fig_present |= YETTY_YEXPR_FIG_WIDTH | YETTY_YEXPR_FIG_HEIGHT;
+        return 0;
+    }
+    if (figure_target && (strcmp(attr_name, "width") == 0 || strcmp(attr_name, "height") == 0)) {
+        float value;
+        if (!parse_scalar_number(p, &value)) {
+            return -1;
+        }
+        if (!(isfinite(value) && value > 0.0f)) {
+            p->error = "@plot.width/height expects a positive finite number";
+            return -1;
+        }
+        if (strcmp(attr_name, "width") == 0) {
+            plot->fig_width = value;
+            plot->fig_present |= YETTY_YEXPR_FIG_WIDTH;
+        } else {
+            plot->fig_height = value;
+            plot->fig_present |= YETTY_YEXPR_FIG_HEIGHT;
+        }
+        return 0;
+    }
+    if (figure_target && strcmp(attr_name, "field") == 0) {
+        float lo, hi;
+        if (!parse_range_value(p, &lo, &hi)) {
+            return -1;
+        }
+        if (!(isfinite(lo) && isfinite(hi)) || lo >= hi) {
+            p->error = "@plot.field expects finite lo..hi with lo < hi";
+            return -1;
+        }
+        plot->field_min = lo;
+        plot->field_max = hi;
+        plot->fig_present |= YETTY_YEXPR_FIG_FIELD;
+        return 0;
     }
 
     /* Buffer-property attrs: route to the buffer table. */
@@ -834,11 +950,17 @@ static int parse_plot_attr(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot
         return 0;
     }
 
-    /* Generic attribute fallthrough (e.g., color). */
-    char value[64] = {0};
+    /* Generic attribute fallthrough (e.g., color, title, legend). */
+    char value[128] = {0};
     if (parser_check(p, YETTY_YEXPR_TOK_HEX_COLOR) || parser_check(p, YETTY_YEXPR_TOK_STRING) ||
         parser_check(p, YETTY_YEXPR_TOK_IDENTIFIER) || parser_check(p, YETTY_YEXPR_TOK_NUMBER)) {
-        size_t copy_len = p->current.len < sizeof(value) - 1 ? p->current.len : sizeof(value) - 1;
+        /* Reject rather than silently truncate — a clipped title/label is
+         * changed user content the caller never sees reported. */
+        if (p->current.len >= sizeof(value)) {
+            p->error = "attribute value too long";
+            return -1;
+        }
+        size_t copy_len = p->current.len;
         memcpy(value, p->current.start, copy_len);
         value[copy_len] = '\0';
         parser_advance(p);
@@ -847,17 +969,7 @@ static int parse_plot_attr(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot
         return -1;
     }
 
-    if (plot->attr_count >= YETTY_YEXPR_MAX_PLOT_ATTRS) {
-        p->error = "too many plot attributes";
-        return -1;
-    }
-
-    struct yetty_yexpr_plot_attr *attr = &plot->attrs[plot->attr_count++];
-    memcpy(attr->plot_name, plot_name, sizeof(attr->plot_name));
-    memcpy(attr->attr_name, attr_name, sizeof(attr->attr_name));
-    memcpy(attr->value, value, sizeof(attr->value));
-
-    return 0;
+    return plot_push_attr(p, plot, plot_name, attr_name, value);
 }
 
 static int add_plot_def(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_expr *plot,
