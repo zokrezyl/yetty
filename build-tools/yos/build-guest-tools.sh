@@ -272,7 +272,7 @@ YCAT_SOURCES=(
     tools/ycat/main.c
     src/yetty/ycat/ycat.c
     src/yetty/ycat/detect.c
-    src/yetty/ycat/osc.c
+    src/yetty/ycat/dcs.c
     src/yetty/ycat/fetch.c
     src/yetty/ycat/ts-grammars.c
     src/yetty/ycat/ts-highlight.c
