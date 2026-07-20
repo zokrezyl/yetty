@@ -1,0 +1,22 @@
+Upstream:       quickjs-ng (https://github.com/quickjs-ng/quickjs)
+Tag:            v0.15.0
+Source archive: https://github.com/quickjs-ng/quickjs/archive/refs/tags/v0.15.0.tar.gz
+Archive SHA256: d65f951fa9d347a912a53ec2c151bd0ac79bf73d445788e67670ca1b894c67c4
+License:        MIT (see LICENSE)
+Drop date:      2026-07-20
+
+Pruned relative to the archive (build- and test-irrelevant only; every kept
+file is byte-identical to upstream):
+  docs/ examples/ .github/ .gitattributes .gitignore .gitmodules
+  test262/ (empty submodule directory; the test262 corpus is not vendored)
+
+The static library is built in-tree by build-tools/yetty/libs/quickjs.cmake
+(target `qjs`, same name the old prebuilt import exposed). The upstream
+CMakeLists.txt/Makefile/meson.build are kept for reference and for running
+the upstream test suites locally; the yetty build does not invoke them.
+
+Upgrade procedure: land a fresh pristine drop of the new tag as its own
+commit (update this file), then replay the local modification commits on
+top. Local modifications must be listed below.
+
+Local modifications: none (pristine drop).
