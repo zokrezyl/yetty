@@ -31,6 +31,18 @@ static int parses_ok(const char *source)
     return 1;
 }
 
+static int plot_parses_ok(const char *source)
+{
+    struct yetty_yexpr_arena arena;
+    struct yetty_yexpr_plot_expr_result parse_res =
+        yetty_yexpr_parse_plot(source, strlen(source), &arena);
+    if (YETTY_IS_ERR(parse_res)) {
+        yetty_ycore_error_destroy(parse_res.error);
+        return 0;
+    }
+    return 1;
+}
+
 /*---------------------------------------------------------------------------
  * Well-formed expressions across every grammar production parse successfully.
  *-------------------------------------------------------------------------*/
@@ -50,6 +62,9 @@ static void test_accepts_valid(struct ytest *test)
     YTEST_CHECK(test, parses_ok("f(a, b, c, d)"));   /* 4 args (the limit) */
     YTEST_CHECK(test, parses_ok("sin(x) + cos(y)")); /* two calls */
     YTEST_CHECK(test, parses_ok("@buffer3"));        /* buffer reference */
+    YTEST_CHECK(test, parses_ok("1e3"));             /* scientific exponent */
+    YTEST_CHECK(test, parses_ok("1.5e-2"));          /* signed exponent */
+    YTEST_CHECK(test, parses_ok("2E10"));            /* capital E exponent */
 }
 
 /*---------------------------------------------------------------------------
@@ -64,6 +79,10 @@ static void test_rejects_malformed(struct ytest *test)
     YTEST_CHECK(test, !parses_ok("* 5"));              /* leading binary op */
     YTEST_CHECK(test, !parses_ok("f(a, b, c, d, e)")); /* one past the 4-arg limit */
     YTEST_CHECK(test, !parses_ok("@"));                /* '@' with no identifier */
+    YTEST_CHECK(test, !parses_ok("1e"));               /* exponent with no digits */
+    YTEST_CHECK(test, !parses_ok("1e+"));              /* exponent sign, no digits */
+    YTEST_CHECK(test, !parses_ok("1e400"));            /* overflow to infinity */
+    YTEST_CHECK(test, !parses_ok("1e-400"));           /* underflow (ERANGE) */
 }
 
 /*---------------------------------------------------------------------------
@@ -320,6 +339,71 @@ static void test_plot_ast(struct ytest *test)
     YTEST_CHECK_NEAR(test, plot->buffers[0].inline_values[2], 3.0f, 1e-6);
 }
 
+/*---------------------------------------------------------------------------
+ * Figure/axis attributes: typed geometry + field range parse into typed fields
+ * with presence bits (never the string bag); string attrs (title/legend/label)
+ * land in the generic bag; malformed numeric and oversized string values are
+ * rejected rather than coerced or truncated.
+ *-------------------------------------------------------------------------*/
+static void test_plot_figure_attrs(struct ytest *test)
+{
+    struct yetty_yexpr_arena arena;
+
+    const char *source =
+        "f = sin(x); @plot.size = 640, 320; @plot.field = -1..2; "
+        "@plot.title = \"hi\"; @plot.legend = on; @x.label = \"phase\"; @x.scale = log";
+    struct yetty_yexpr_plot_expr_result parse_res =
+        yetty_yexpr_parse_plot(source, strlen(source), &arena);
+    YTEST_REQUIRE_OK(test, parse_res);
+    const struct yetty_yexpr_plot_expr *plot = &parse_res.value;
+
+    /* Typed geometry + field range, tracked by presence bits. */
+    YTEST_CHECK_EQ_INT(test, plot->fig_present & YETTY_YEXPR_FIG_WIDTH, YETTY_YEXPR_FIG_WIDTH);
+    YTEST_CHECK_EQ_INT(test, plot->fig_present & YETTY_YEXPR_FIG_HEIGHT, YETTY_YEXPR_FIG_HEIGHT);
+    YTEST_CHECK_EQ_INT(test, plot->fig_present & YETTY_YEXPR_FIG_FIELD, YETTY_YEXPR_FIG_FIELD);
+    YTEST_CHECK_NEAR(test, plot->fig_width, 640.0f, 1e-3);
+    YTEST_CHECK_NEAR(test, plot->fig_height, 320.0f, 1e-3);
+    YTEST_CHECK_NEAR(test, plot->field_min, -1.0f, 1e-6);
+    YTEST_CHECK_NEAR(test, plot->field_max, 2.0f, 1e-6);
+
+    /* String attrs come through the generic bag; geometry never does. */
+    int have_title = 0, have_legend = 0, have_xlabel = 0;
+    for (uint32_t i = 0; i < plot->attr_count; i++) {
+        const struct yetty_yexpr_plot_attr *attr = &plot->attrs[i];
+        if (!strcmp(attr->attr_name, "title")) {
+            have_title = 1;
+            YTEST_CHECK_STR_EQ(test, attr->value, "hi");
+        }
+        if (!strcmp(attr->attr_name, "legend")) {
+            have_legend = 1;
+            YTEST_CHECK_STR_EQ(test, attr->value, "on");
+        }
+        if (!strcmp(attr->plot_name, "x") && !strcmp(attr->attr_name, "label")) {
+            have_xlabel = 1;
+            YTEST_CHECK_STR_EQ(test, attr->value, "phase");
+        }
+        YTEST_CHECK(test, strcmp(attr->attr_name, "width") != 0);
+        YTEST_CHECK(test, strcmp(attr->attr_name, "height") != 0);
+    }
+    YTEST_CHECK(test, have_title && have_legend && have_xlabel);
+
+    /* Reserved figure aliases fig / figure. */
+    YTEST_CHECK(test, plot_parses_ok("f=sin(x); @fig.width=100"));
+    YTEST_CHECK(test, plot_parses_ok("f=sin(x); @figure.height=50"));
+
+    /* Malformed numeric / geometry values are rejected. */
+    YTEST_CHECK(test, !plot_parses_ok("f=sin(x); @plot.size=0,320"));   /* nonpositive */
+    YTEST_CHECK(test, !plot_parses_ok("f=sin(x); @plot.width=-5"));     /* negative */
+    YTEST_CHECK(test, !plot_parses_ok("f=sin(x); @plot.size=abc,320")); /* non-numeric */
+    YTEST_CHECK(test, !plot_parses_ok("f=sin(x); @plot.field=1..-1"));  /* reversed range */
+
+    /* Oversized string value is rejected, not silently truncated (>127 bytes). */
+    YTEST_CHECK(test, !plot_parses_ok("f=sin(x); @plot.title=\"aaaaaaaaaaaaaaaaaaaa"
+                                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                                      "aaaaaaaaaaaaaaaa\""));
+}
+
 int main(void)
 {
     struct ytest test = ytest_begin("yexpr_parse");
@@ -332,5 +416,6 @@ int main(void)
     YTEST_RUN(&test, test_ast_call);
     YTEST_RUN(&test, test_ast_buffer_ref);
     YTEST_RUN(&test, test_plot_ast);
+    YTEST_RUN(&test, test_plot_figure_attrs);
     return ytest_end(&test);
 }

@@ -19,15 +19,19 @@ class Framework(_rt.YClass):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_framework_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Framework']:
+    def create(cls, **kwargs: Any) -> 'Framework':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Framework.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Widget(_rt.YClass):
     """yclass ygui:widget"""
@@ -41,78 +45,100 @@ class Widget(_rt.YClass):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_widget_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Widget']:
+    def create(cls, **kwargs: Any) -> 'Widget':
         obj = cls()
-        return obj.init_result
-    def constructor(self) -> _rt.Result[None]:
-        """Call `yetty_ygui_constructor`; returns Result, never raises for yclass errors."""
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Widget.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
+    def constructor(self) -> None:
+        """Call `yetty_ygui_constructor`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ygui_constructor", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def destructor(self) -> _rt.Result[None]:
-        """Call `yetty_ygui_destructor`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def destructor(self) -> None:
+        """Call `yetty_ygui_destructor`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ygui_destructor", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def widget_on_press(self, y: float, button: int) -> _rt.Result[int]:
-        """Call `yetty_ygui_widget_on_press`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def widget_on_press(self, x: float, y: float, button: int) -> int:
+        """Call `yetty_ygui_widget_on_press`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ygui_widget_on_press", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_int])
-        res = _fn(None, self._handle, y, button)
-        return _rt.result_from_c(res)
-    def widget_on_release(self, y: float, button: int) -> _rt.Result[int]:
-        """Call `yetty_ygui_widget_on_release`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, x, y, button))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def widget_on_release(self, x: float, y: float, button: int) -> int:
+        """Call `yetty_ygui_widget_on_release`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ygui_widget_on_release", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_int])
-        res = _fn(None, self._handle, y, button)
-        return _rt.result_from_c(res)
-    def widget_on_motion(self, y: float) -> _rt.Result[int]:
-        """Call `yetty_ygui_widget_on_motion`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, x, y, button))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def widget_on_motion(self, x: float, y: float) -> int:
+        """Call `yetty_ygui_widget_on_motion`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ygui_widget_on_motion", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float])
-        res = _fn(None, self._handle, y)
-        return _rt.result_from_c(res)
-    def widget_on_scroll(self, y: float, dx: float, dy: float) -> _rt.Result[int]:
-        """Call `yetty_ygui_widget_on_scroll`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, x, y))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def widget_on_scroll(self, x: float, y: float, dx: float, dy: float) -> int:
+        """Call `yetty_ygui_widget_on_scroll`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ygui_widget_on_scroll", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_float, c_float])
-        res = _fn(None, self._handle, y, dx, dy)
-        return _rt.result_from_c(res)
-    def widget_paint(self) -> _rt.Result[None]:
-        """Call `yetty_ygui_widget_paint`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, x, y, dx, dy))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def widget_paint(self, emit_ctx: Any) -> None:
+        """Call `yetty_ygui_widget_paint`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ygui_widget_paint", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def widget_emit_container(self) -> _rt.Result[None]:
-        """Call `yetty_ygui_widget_emit_container`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(emit_ctx)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def widget_emit_container(self, emit_ctx: Any) -> None:
+        """Call `yetty_ygui_widget_emit_container`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ygui_widget_emit_container", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def widget_emit_body(self) -> _rt.Result[None]:
-        """Call `yetty_ygui_widget_emit_body`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(emit_ctx)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def widget_emit_body(self, emit_ctx: Any) -> None:
+        """Call `yetty_ygui_widget_emit_body`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ygui_widget_emit_body", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(emit_ctx)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
 
 class PrimitiveWidget(Widget):
     """yclass ygui:primitive_widget"""
@@ -126,15 +152,19 @@ class PrimitiveWidget(Widget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_primitive_widget_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['PrimitiveWidget']:
+    def create(cls, **kwargs: Any) -> 'PrimitiveWidget':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"PrimitiveWidget.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Breadcrumbs(PrimitiveWidget):
     """yclass ygui:breadcrumbs"""
@@ -148,15 +178,19 @@ class Breadcrumbs(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_breadcrumbs_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Breadcrumbs']:
+    def create(cls, **kwargs: Any) -> 'Breadcrumbs':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Breadcrumbs.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Button(PrimitiveWidget):
     """yclass ygui:button"""
@@ -170,15 +204,19 @@ class Button(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_button_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Button']:
+    def create(cls, **kwargs: Any) -> 'Button':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Button.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Checkbox(PrimitiveWidget):
     """yclass ygui:checkbox"""
@@ -192,15 +230,19 @@ class Checkbox(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_checkbox_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Checkbox']:
+    def create(cls, **kwargs: Any) -> 'Checkbox':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Checkbox.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Chip(PrimitiveWidget):
     """yclass ygui:chip"""
@@ -214,15 +256,19 @@ class Chip(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_chip_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Chip']:
+    def create(cls, **kwargs: Any) -> 'Chip':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Chip.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Choicebox(PrimitiveWidget):
     """yclass ygui:choicebox"""
@@ -236,15 +282,19 @@ class Choicebox(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_choicebox_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Choicebox']:
+    def create(cls, **kwargs: Any) -> 'Choicebox':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Choicebox.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Vbox(PrimitiveWidget):
     """yclass ygui:vbox"""
@@ -258,15 +308,19 @@ class Vbox(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_vbox_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Vbox']:
+    def create(cls, **kwargs: Any) -> 'Vbox':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Vbox.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class CollapsingHeader(Vbox):
     """yclass ygui:collapsing_header"""
@@ -280,15 +334,19 @@ class CollapsingHeader(Vbox):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_collapsing_header_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['CollapsingHeader']:
+    def create(cls, **kwargs: Any) -> 'CollapsingHeader':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"CollapsingHeader.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Colorpicker(PrimitiveWidget):
     """yclass ygui:colorpicker"""
@@ -302,15 +360,19 @@ class Colorpicker(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_colorpicker_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Colorpicker']:
+    def create(cls, **kwargs: Any) -> 'Colorpicker':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Colorpicker.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Combobox(PrimitiveWidget):
     """yclass ygui:combobox"""
@@ -324,15 +386,19 @@ class Combobox(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_combobox_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Combobox']:
+    def create(cls, **kwargs: Any) -> 'Combobox':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Combobox.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Datepicker(PrimitiveWidget):
     """yclass ygui:datepicker"""
@@ -346,15 +412,19 @@ class Datepicker(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_datepicker_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Datepicker']:
+    def create(cls, **kwargs: Any) -> 'Datepicker':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Datepicker.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Dialog(Vbox):
     """yclass ygui:dialog"""
@@ -368,15 +438,19 @@ class Dialog(Vbox):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_dialog_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Dialog']:
+    def create(cls, **kwargs: Any) -> 'Dialog':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Dialog.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Dropdown(PrimitiveWidget):
     """yclass ygui:dropdown"""
@@ -390,15 +464,19 @@ class Dropdown(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_dropdown_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Dropdown']:
+    def create(cls, **kwargs: Any) -> 'Dropdown':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Dropdown.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Filepicker(PrimitiveWidget):
     """yclass ygui:filepicker"""
@@ -412,15 +490,19 @@ class Filepicker(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_filepicker_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Filepicker']:
+    def create(cls, **kwargs: Any) -> 'Filepicker':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Filepicker.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Hbox(PrimitiveWidget):
     """yclass ygui:hbox"""
@@ -434,15 +516,19 @@ class Hbox(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_hbox_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Hbox']:
+    def create(cls, **kwargs: Any) -> 'Hbox':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Hbox.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Label(PrimitiveWidget):
     """yclass ygui:label"""
@@ -456,15 +542,19 @@ class Label(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_label_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Label']:
+    def create(cls, **kwargs: Any) -> 'Label':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Label.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class List(PrimitiveWidget):
     """yclass ygui:list"""
@@ -478,15 +568,19 @@ class List(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_list_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['List']:
+    def create(cls, **kwargs: Any) -> 'List':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"List.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Menubar(Hbox):
     """yclass ygui:menubar"""
@@ -500,15 +594,19 @@ class Menubar(Hbox):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_menubar_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Menubar']:
+    def create(cls, **kwargs: Any) -> 'Menubar':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Menubar.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Panel(PrimitiveWidget):
     """yclass ygui:panel"""
@@ -522,15 +620,19 @@ class Panel(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_panel_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Panel']:
+    def create(cls, **kwargs: Any) -> 'Panel':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Panel.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class PopupMenu(PrimitiveWidget):
     """yclass ygui:popup_menu"""
@@ -544,15 +646,19 @@ class PopupMenu(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_popup_menu_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['PopupMenu']:
+    def create(cls, **kwargs: Any) -> 'PopupMenu':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"PopupMenu.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Progress(PrimitiveWidget):
     """yclass ygui:progress"""
@@ -566,15 +672,19 @@ class Progress(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_progress_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Progress']:
+    def create(cls, **kwargs: Any) -> 'Progress':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Progress.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Radio(PrimitiveWidget):
     """yclass ygui:radio"""
@@ -588,15 +698,19 @@ class Radio(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_radio_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Radio']:
+    def create(cls, **kwargs: Any) -> 'Radio':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Radio.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Rich(PrimitiveWidget):
     """yclass ygui:rich"""
@@ -610,15 +724,19 @@ class Rich(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_rich_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Rich']:
+    def create(cls, **kwargs: Any) -> 'Rich':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Rich.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Scrollarea(Vbox):
     """yclass ygui:scrollarea"""
@@ -632,15 +750,19 @@ class Scrollarea(Vbox):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_scrollarea_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Scrollarea']:
+    def create(cls, **kwargs: Any) -> 'Scrollarea':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Scrollarea.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Selectable(PrimitiveWidget):
     """yclass ygui:selectable"""
@@ -654,15 +776,19 @@ class Selectable(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_selectable_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Selectable']:
+    def create(cls, **kwargs: Any) -> 'Selectable':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Selectable.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Separator(PrimitiveWidget):
     """yclass ygui:separator"""
@@ -676,15 +802,19 @@ class Separator(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_separator_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Separator']:
+    def create(cls, **kwargs: Any) -> 'Separator':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Separator.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Slider(PrimitiveWidget):
     """yclass ygui:slider"""
@@ -698,15 +828,19 @@ class Slider(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_slider_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Slider']:
+    def create(cls, **kwargs: Any) -> 'Slider':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Slider.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Spinner(PrimitiveWidget):
     """yclass ygui:spinner"""
@@ -720,15 +854,19 @@ class Spinner(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_spinner_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Spinner']:
+    def create(cls, **kwargs: Any) -> 'Spinner':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Spinner.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Splitter(PrimitiveWidget):
     """yclass ygui:splitter"""
@@ -742,15 +880,19 @@ class Splitter(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_splitter_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Splitter']:
+    def create(cls, **kwargs: Any) -> 'Splitter':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Splitter.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Statusbar(PrimitiveWidget):
     """yclass ygui:statusbar"""
@@ -764,15 +906,19 @@ class Statusbar(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_statusbar_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Statusbar']:
+    def create(cls, **kwargs: Any) -> 'Statusbar':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Statusbar.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Stepper(PrimitiveWidget):
     """yclass ygui:stepper"""
@@ -786,15 +932,19 @@ class Stepper(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_stepper_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Stepper']:
+    def create(cls, **kwargs: Any) -> 'Stepper':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Stepper.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Tabbar(Hbox):
     """yclass ygui:tabbar"""
@@ -808,15 +958,19 @@ class Tabbar(Hbox):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_tabbar_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Tabbar']:
+    def create(cls, **kwargs: Any) -> 'Tabbar':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Tabbar.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Table(PrimitiveWidget):
     """yclass ygui:table"""
@@ -830,15 +984,19 @@ class Table(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_table_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Table']:
+    def create(cls, **kwargs: Any) -> 'Table':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Table.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Textarea(PrimitiveWidget):
     """yclass ygui:textarea"""
@@ -852,15 +1010,19 @@ class Textarea(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_textarea_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Textarea']:
+    def create(cls, **kwargs: Any) -> 'Textarea':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Textarea.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Textinput(PrimitiveWidget):
     """yclass ygui:textinput"""
@@ -874,15 +1036,19 @@ class Textinput(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_textinput_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Textinput']:
+    def create(cls, **kwargs: Any) -> 'Textinput':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Textinput.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Toggle(PrimitiveWidget):
     """yclass ygui:toggle"""
@@ -896,15 +1062,19 @@ class Toggle(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_toggle_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Toggle']:
+    def create(cls, **kwargs: Any) -> 'Toggle':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Toggle.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Tooltip(PrimitiveWidget):
     """yclass ygui:tooltip"""
@@ -918,15 +1088,19 @@ class Tooltip(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_tooltip_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Tooltip']:
+    def create(cls, **kwargs: Any) -> 'Tooltip':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Tooltip.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class TreeNode(Vbox):
     """yclass ygui:tree_node"""
@@ -940,15 +1114,19 @@ class TreeNode(Vbox):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_tree_node_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['TreeNode']:
+    def create(cls, **kwargs: Any) -> 'TreeNode':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"TreeNode.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Window(Vbox):
     """yclass ygui:window"""
@@ -962,15 +1140,19 @@ class Window(Vbox):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Window']:
+    def create(cls, **kwargs: Any) -> 'Window':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Window.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class YdrawEmbed(PrimitiveWidget):
     """yclass ygui:ydraw_embed"""
@@ -984,15 +1166,19 @@ class YdrawEmbed(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_ydraw_embed_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['YdrawEmbed']:
+    def create(cls, **kwargs: Any) -> 'YdrawEmbed':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"YdrawEmbed.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Ybrowser(YdrawEmbed):
     """yclass ygui:ybrowser"""
@@ -1006,15 +1192,19 @@ class Ybrowser(YdrawEmbed):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_ybrowser_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Ybrowser']:
+    def create(cls, **kwargs: Any) -> 'Ybrowser':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Ybrowser.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Ydiagram(YdrawEmbed):
     """yclass ygui:ydiagram"""
@@ -1028,15 +1218,19 @@ class Ydiagram(YdrawEmbed):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_ydiagram_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Ydiagram']:
+    def create(cls, **kwargs: Any) -> 'Ydiagram':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Ydiagram.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Yimage(Widget):
     """yclass ygui:yimage"""
@@ -1050,15 +1244,19 @@ class Yimage(Widget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_yimage_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Yimage']:
+    def create(cls, **kwargs: Any) -> 'Yimage':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Yimage.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Yjungle(YdrawEmbed):
     """yclass ygui:yjungle"""
@@ -1072,15 +1270,19 @@ class Yjungle(YdrawEmbed):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_yjungle_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Yjungle']:
+    def create(cls, **kwargs: Any) -> 'Yjungle':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Yjungle.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Ymarkdown(YdrawEmbed):
     """yclass ygui:ymarkdown"""
@@ -1094,15 +1296,19 @@ class Ymarkdown(YdrawEmbed):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_ymarkdown_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Ymarkdown']:
+    def create(cls, **kwargs: Any) -> 'Ymarkdown':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Ymarkdown.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Ymaze(YdrawEmbed):
     """yclass ygui:ymaze"""
@@ -1116,15 +1322,19 @@ class Ymaze(YdrawEmbed):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_ymaze_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Ymaze']:
+    def create(cls, **kwargs: Any) -> 'Ymaze':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Ymaze.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Ynode(Vbox):
     """yclass ygui:ynode"""
@@ -1138,15 +1348,19 @@ class Ynode(Vbox):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_ynode_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Ynode']:
+    def create(cls, **kwargs: Any) -> 'Ynode':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Ynode.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Ynodes(PrimitiveWidget):
     """yclass ygui:ynodes"""
@@ -1160,15 +1374,19 @@ class Ynodes(PrimitiveWidget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_ynodes_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Ynodes']:
+    def create(cls, **kwargs: Any) -> 'Ynodes':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Ynodes.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Ypdf(YdrawEmbed):
     """yclass ygui:ypdf"""
@@ -1182,15 +1400,19 @@ class Ypdf(YdrawEmbed):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_ypdf_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Ypdf']:
+    def create(cls, **kwargs: Any) -> 'Ypdf':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Ypdf.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Yplot(Widget):
     """yclass ygui:yplot"""
@@ -1204,15 +1426,19 @@ class Yplot(Widget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_yplot_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Yplot']:
+    def create(cls, **kwargs: Any) -> 'Yplot':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Yplot.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class YrichView(YdrawEmbed):
     """yclass ygui:yrich_view"""
@@ -1226,15 +1452,19 @@ class YrichView(YdrawEmbed):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_yrich_view_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['YrichView']:
+    def create(cls, **kwargs: Any) -> 'YrichView':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"YrichView.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Yshadertoy(Widget):
     """yclass ygui:yshadertoy"""
@@ -1248,15 +1478,19 @@ class Yshadertoy(Widget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_yshadertoy_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Yshadertoy']:
+    def create(cls, **kwargs: Any) -> 'Yshadertoy':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Yshadertoy.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Yvideo(Widget):
     """yclass ygui:yvideo"""
@@ -1270,15 +1504,19 @@ class Yvideo(Widget):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_yvideo_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Yvideo']:
+    def create(cls, **kwargs: Any) -> 'Yvideo':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Yvideo.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Yzoo(YdrawEmbed):
     """yclass ygui:yzoo"""
@@ -1292,15 +1530,19 @@ class Yzoo(YdrawEmbed):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygui_yzoo_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Yzoo']:
+    def create(cls, **kwargs: Any) -> 'Yzoo':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Yzoo.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 def framework_destroy(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_framework_destroy`."""
@@ -1368,9 +1610,9 @@ def framework_feed_mouse_motion(obj: Any, x: float, y: float) -> _rt.Result[int]
     res = _fn(_rt.handle(obj), x, y)
     return _rt.result_from_c(res)
 
-def framework_feed_mouse_scroll(obj: Any, x: float, y: float, dx: float, dy: float) -> _rt.Result[None]:
+def framework_feed_mouse_scroll(obj: Any, x: float, y: float, dx: float, dy: float) -> _rt.Result[int]:
     """Call `yetty_ygui_framework_feed_mouse_scroll`."""
-    _fn = _rt.cfn("yetty_ygui_framework_feed_mouse_scroll", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float, c_float, c_float])
+    _fn = _rt.cfn("yetty_ygui_framework_feed_mouse_scroll", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_float, c_float])
     res = _fn(_rt.handle(obj), x, y, dx, dy)
     return _rt.result_from_c(res)
 
@@ -1392,9 +1634,21 @@ def framework_free_id(obj: Any, id: int) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj), id)
     return _rt.result_from_c(res)
 
+def framework_ship_figure_delta(obj: Any, figure_id: int, body: Any, body_len: int) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_ship_figure_delta`."""
+    _fn = _rt.cfn("yetty_ygui_framework_ship_figure_delta", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), figure_id, _rt.handle(body), body_len)
+    return _rt.result_from_c(res)
+
 def framework_clear(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_framework_clear`."""
     _fn = _rt.cfn("yetty_ygui_framework_clear", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def framework_forget_remote(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_forget_remote`."""
+    _fn = _rt.cfn("yetty_ygui_framework_forget_remote", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
@@ -1426,6 +1680,12 @@ def draggable_on_drag_set(obj: Any, cb: Any, userdata: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_draggable_on_drag_set`."""
     _fn = _rt.cfn("yetty_ygui_draggable_on_drag_set", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
     res = _fn(_rt.handle(obj), _rt.handle(cb), _rt.handle(userdata))
+    return _rt.result_from_c(res)
+
+def draggable_press_point(obj: Any, out_x: Any, out_y: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_draggable_press_point`."""
+    _fn = _rt.cfn("yetty_ygui_draggable_press_point", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(out_x), _rt.handle(out_y))
     return _rt.result_from_c(res)
 
 def draggable_is_dragging(obj: Any) -> _rt.Result[int]:
@@ -1557,6 +1817,54 @@ def super_int(obj: Any, self_class: Any, method_id: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_super_int`."""
     _fn = _rt.cfn("yetty_ygui_super_int", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_void_p])
     res = _fn(_rt.handle(obj), _rt.handle(self_class), _rt.handle(method_id))
+    return _rt.result_from_c(res)
+
+def super_on_press(obj: Any, self_class: Any, x: float, y: float, button: int) -> _rt.Result[int]:
+    """Call `yetty_ygui_super_on_press`."""
+    _fn = _rt.cfn("yetty_ygui_super_on_press", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_int])
+    res = _fn(_rt.handle(obj), _rt.handle(self_class), x, y, button)
+    return _rt.result_from_c(res)
+
+def super_on_release(obj: Any, self_class: Any, x: float, y: float, button: int) -> _rt.Result[int]:
+    """Call `yetty_ygui_super_on_release`."""
+    _fn = _rt.cfn("yetty_ygui_super_on_release", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_int])
+    res = _fn(_rt.handle(obj), _rt.handle(self_class), x, y, button)
+    return _rt.result_from_c(res)
+
+def super_on_motion(obj: Any, self_class: Any, x: float, y: float) -> _rt.Result[int]:
+    """Call `yetty_ygui_super_on_motion`."""
+    _fn = _rt.cfn("yetty_ygui_super_on_motion", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float])
+    res = _fn(_rt.handle(obj), _rt.handle(self_class), x, y)
+    return _rt.result_from_c(res)
+
+def super_on_scroll(obj: Any, self_class: Any, x: float, y: float, dx: float, dy: float) -> _rt.Result[int]:
+    """Call `yetty_ygui_super_on_scroll`."""
+    _fn = _rt.cfn("yetty_ygui_super_on_scroll", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_float, c_float])
+    res = _fn(_rt.handle(obj), _rt.handle(self_class), x, y, dx, dy)
+    return _rt.result_from_c(res)
+
+def mixin_on_press(obj: Any, mixin_class: Any, x: float, y: float, button: int) -> _rt.Result[int]:
+    """Call `yetty_ygui_mixin_on_press`."""
+    _fn = _rt.cfn("yetty_ygui_mixin_on_press", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_int])
+    res = _fn(_rt.handle(obj), _rt.handle(mixin_class), x, y, button)
+    return _rt.result_from_c(res)
+
+def mixin_on_release(obj: Any, mixin_class: Any, x: float, y: float, button: int) -> _rt.Result[int]:
+    """Call `yetty_ygui_mixin_on_release`."""
+    _fn = _rt.cfn("yetty_ygui_mixin_on_release", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_int])
+    res = _fn(_rt.handle(obj), _rt.handle(mixin_class), x, y, button)
+    return _rt.result_from_c(res)
+
+def mixin_on_motion(obj: Any, mixin_class: Any, x: float, y: float) -> _rt.Result[int]:
+    """Call `yetty_ygui_mixin_on_motion`."""
+    _fn = _rt.cfn("yetty_ygui_mixin_on_motion", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float])
+    res = _fn(_rt.handle(obj), _rt.handle(mixin_class), x, y)
+    return _rt.result_from_c(res)
+
+def mixin_on_scroll(obj: Any, mixin_class: Any, x: float, y: float, dx: float, dy: float) -> _rt.Result[int]:
+    """Call `yetty_ygui_mixin_on_scroll`."""
+    _fn = _rt.cfn("yetty_ygui_mixin_on_scroll", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_float, c_float])
+    res = _fn(_rt.handle(obj), _rt.handle(mixin_class), x, y, dx, dy)
     return _rt.result_from_c(res)
 
 def class_expect(class_result: _t.yetty_yclass_ptr_result, name: str | bytes | None) -> Any:
@@ -2206,6 +2514,24 @@ def textinput_set_text(obj: Any, text: str | bytes | None) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj), _rt.cstr(text))
     return _rt.result_from_c(res)
 
+def textinput_get_selection(obj: Any) -> _rt.Result[str | None]:
+    """Call `yetty_ygui_textinput_get_selection`."""
+    _fn = _rt.cfn("yetty_ygui_textinput_get_selection", _t.yetty_ycore_char_ptr_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res, _rt.decode_cstr)
+
+def textinput_select_all(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_textinput_select_all`."""
+    _fn = _rt.cfn("yetty_ygui_textinput_select_all", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def textinput_insert_text(obj: Any, text: str | bytes | None) -> _rt.Result[None]:
+    """Call `yetty_ygui_textinput_insert_text`."""
+    _fn = _rt.cfn("yetty_ygui_textinput_insert_text", _t.yetty_ycore_void_result, [c_void_p, c_char_p])
+    res = _fn(_rt.handle(obj), _rt.cstr(text))
+    return _rt.result_from_c(res)
+
 def textinput_get_text(obj: Any) -> _rt.Result[str | None]:
     """Call `yetty_ygui_textinput_get_text`."""
     _fn = _rt.cfn("yetty_ygui_textinput_get_text", _t.yetty_ycore_const_char_ptr_result, [c_void_p])
@@ -2224,10 +2550,10 @@ def textinput_set_focus(obj: Any, focused: int) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj), focused)
     return _rt.result_from_c(res)
 
-def textinput_handle_key(obj: Any, key: int) -> _rt.Result[int]:
+def textinput_handle_key(obj: Any, key: int, mods: int) -> _rt.Result[int]:
     """Call `yetty_ygui_textinput_handle_key`."""
-    _fn = _rt.cfn("yetty_ygui_textinput_handle_key", _t.yetty_ycore_int_result, [c_void_p, c_uint32])
-    res = _fn(_rt.handle(obj), key)
+    _fn = _rt.cfn("yetty_ygui_textinput_handle_key", _t.yetty_ycore_int_result, [c_void_p, c_uint32, c_int])
+    res = _fn(_rt.handle(obj), key, mods)
     return _rt.result_from_c(res)
 
 def toggle_set_label(obj: Any, label: str | bytes | None) -> _rt.Result[None]:
@@ -2600,6 +2926,12 @@ def yrich_view_feed_text(obj: Any, text: str | bytes | None, len: int) -> _rt.Re
     """Call `yetty_ygui_yrich_view_feed_text`."""
     _fn = _rt.cfn("yetty_ygui_yrich_view_feed_text", _t.yetty_ycore_void_result, [c_void_p, c_char_p, c_size_t])
     res = _fn(_rt.handle(obj), _rt.cstr(text), len)
+    return _rt.result_from_c(res)
+
+def yrich_view_feed_double_click(obj: Any, x: float, y: float, button: int) -> _rt.Result[int]:
+    """Call `yetty_ygui_yrich_view_feed_double_click`."""
+    _fn = _rt.cfn("yetty_ygui_yrich_view_feed_double_click", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_int])
+    res = _fn(_rt.handle(obj), x, y, button)
     return _rt.result_from_c(res)
 
 def yshadertoy_set_source(obj: Any, src: str | bytes | None, len: int) -> _rt.Result[None]:

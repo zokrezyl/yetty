@@ -27,6 +27,12 @@ if(TARGET yetty_yexpr)
     add_subdirectory(ut/yexpr)
 endif()
 
+# yplot resolver — expression↔options merge, precedence, presence, validation.
+# GPU-less (yetty_yplot_core only).
+if(TARGET yetty_yplot_core)
+    add_subdirectory(ut/yplot)
+endif()
+
 # yrich — pure geometry/style helpers (document model needs a context, so it is
 # out of scope for the pure lane).
 if(TARGET yetty_yrich)

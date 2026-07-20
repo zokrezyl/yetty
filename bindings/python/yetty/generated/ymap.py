@@ -19,113 +19,154 @@ class Map(_rt.YClass):
         if _handle is None:
             _fn = _rt.cfn("yetty_ymap_map_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Map']:
+    def create(cls, **kwargs: Any) -> 'Map':
         obj = cls()
-        return obj.init_result
-    def configure(self, longitude: float, zoom: int, width_px: int, height_px: int) -> _rt.Result[None]:
-        """Call `yetty_ymap_configure`; returns Result, never raises for yclass errors."""
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Map.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
+    def configure(self, latitude: float, longitude: float, zoom: int, width_px: int, height_px: int) -> None:
+        """Call `yetty_ymap_configure`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_configure", _t.yetty_ycore_void_result, [c_void_p, c_double, c_double, c_uint32, c_uint32, c_uint32])
-        res = _fn(None, self._handle, longitude, zoom, width_px, height_px)
-        return _rt.result_from_c(res)
-    def set_provider(self) -> _rt.Result[None]:
-        """Call `yetty_ymap_set_provider`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, latitude, longitude, zoom, width_px, height_px))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def set_provider(self, name: str | bytes | None) -> None:
+        """Call `yetty_ymap_set_provider`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_set_provider", _t.yetty_ycore_void_result, [c_void_p, c_char_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def set_custom_provider(self, is_vector: int, file_extension: str | bytes | None, max_zoom: int, attribution: str | bytes | None) -> _rt.Result[None]:
-        """Call `yetty_ymap_set_custom_provider`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(name)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def set_custom_provider(self, url_template: str | bytes | None, is_vector: int, file_extension: str | bytes | None, max_zoom: int, attribution: str | bytes | None) -> None:
+        """Call `yetty_ymap_set_custom_provider`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_set_custom_provider", _t.yetty_ycore_void_result, [c_void_p, c_char_p, c_int, c_char_p, c_uint32, c_char_p])
-        res = _fn(None, self._handle, is_vector, _rt.cstr(file_extension), max_zoom, _rt.cstr(attribution))
-        return _rt.result_from_c(res)
-    def set_center(self, longitude: float) -> _rt.Result[None]:
-        """Call `yetty_ymap_set_center`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(url_template), is_vector, _rt.cstr(file_extension), max_zoom, _rt.cstr(attribution)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def set_center(self, latitude: float, longitude: float) -> None:
+        """Call `yetty_ymap_set_center`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_set_center", _t.yetty_ycore_void_result, [c_void_p, c_double, c_double])
-        res = _fn(None, self._handle, longitude)
-        return _rt.result_from_c(res)
-    def set_zoom(self) -> _rt.Result[None]:
-        """Call `yetty_ymap_set_zoom`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, latitude, longitude))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def set_zoom(self, zoom: int) -> None:
+        """Call `yetty_ymap_set_zoom`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_set_zoom", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def set_viewport(self, height_px: int) -> _rt.Result[None]:
-        """Call `yetty_ymap_set_viewport`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, zoom))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def set_viewport(self, width_px: int, height_px: int) -> None:
+        """Call `yetty_ymap_set_viewport`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_set_viewport", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_uint32])
-        res = _fn(None, self._handle, height_px)
-        return _rt.result_from_c(res)
-    def pan_by_pixels(self, delta_y: float) -> _rt.Result[None]:
-        """Call `yetty_ymap_pan_by_pixels`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, width_px, height_px))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def pan_by_pixels(self, delta_x: float, delta_y: float) -> None:
+        """Call `yetty_ymap_pan_by_pixels`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_pan_by_pixels", _t.yetty_ycore_void_result, [c_void_p, c_double, c_double])
-        res = _fn(None, self._handle, delta_y)
-        return _rt.result_from_c(res)
-    def zoom_by_at(self, anchor_x: float, anchor_y: float) -> _rt.Result[int]:
-        """Call `yetty_ymap_zoom_by_at`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, delta_x, delta_y))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def zoom_by_at(self, step: int, anchor_x: float, anchor_y: float) -> int:
+        """Call `yetty_ymap_zoom_by_at`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_zoom_by_at", _t.yetty_ycore_int_result, [c_void_p, c_int32, c_double, c_double])
-        res = _fn(None, self._handle, anchor_x, anchor_y)
-        return _rt.result_from_c(res)
-    def get_zoom(self) -> _rt.Result[int]:
-        """Call `yetty_ymap_get_zoom`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, step, anchor_x, anchor_y))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def get_zoom(self) -> int:
+        """Call `yetty_ymap_get_zoom`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_get_zoom", _t.yetty_ycore_int_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def geolocate(self) -> _rt.Result[None]:
-        """Call `yetty_ymap_geolocate`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def geolocate(self) -> None:
+        """Call `yetty_ymap_geolocate`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_geolocate", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def attribution(self) -> _rt.Result[str | None]:
-        """Call `yetty_ymap_attribution`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def attribution(self) -> str | None:
+        """Call `yetty_ymap_attribution`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_attribution", _t.yetty_ycore_const_char_ptr_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res, _rt.decode_cstr)
-    def is_vector(self) -> _rt.Result[int]:
-        """Call `yetty_ymap_is_vector`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle), _rt.decode_cstr)
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def is_vector(self) -> int:
+        """Call `yetty_ymap_is_vector`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_is_vector", _t.yetty_ycore_int_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def render(self) -> _rt.Result[Any]:
-        """Call `yetty_ymap_render`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def overlay_geojson(self, geojson_text: str | bytes | None) -> None:
+        """Call `yetty_ymap_overlay_geojson`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ymap_overlay_geojson", _t.yetty_ycore_void_result, [c_void_p, c_char_p])
+        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(geojson_text)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def render(self) -> Any:
+        """Call `yetty_ymap_render`; raises _rt.YettyError on failure."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_render", _t.yetty_ydraw_drawable_list_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def destroy(self) -> _rt.Result[None]:
-        """Call `yetty_ymap_destroy`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def destroy(self) -> None:
+        """Call `yetty_ymap_destroy`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymap_destroy", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
 
 def provider_count() -> int:
     """Call `yetty_ymap_provider_count`."""

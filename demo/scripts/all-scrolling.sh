@@ -97,6 +97,10 @@ run yplot/stochastic.sh
 run yplot/trunc.sh
 # run yplot/buffer-language.sh   # BROKEN: yfsvm compile "program has no functions"
 
+# Same plots, driven from Python through the FFI binding (needs the ffi build +
+# a system-ABI python3; the script self-skips with a hint if either is absent).
+run api/python/yplot/basic.sh
+
 run yshadertoy/basic.sh
 run ysvg/basic.sh
 run ysvg/gallery.sh

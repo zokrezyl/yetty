@@ -20,13 +20,17 @@ class App(_yapp.App):
         if _handle is None:
             _fn = _rt.cfn("yetty_yetty_app_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['App']:
+    def create(cls, **kwargs: Any) -> 'App':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"App.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 

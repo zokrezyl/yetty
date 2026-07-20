@@ -7,6 +7,7 @@
 
 #include <yetty/yexpr/yexpr.h>
 #include <yetty/yfsvm/compiler.h>
+#include <yetty/yplot/resolve.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ycore/types.h>
@@ -85,9 +86,15 @@ static void yplot_init_base_uniforms(const struct yetty_yplot_render_config *con
         u->y_min = -1.5f;
         u->y_max = 1.5f;
     }
-    u->flags = config && config->flags
-                   ? config->flags
-                   : (YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS);
+    /* USES_TIME / FIELD are DERIVED from the compiled program (LOAD_T / LOAD_Y),
+     * never honored from caller flags — so a static plot cannot be forced to
+     * animate and a 1-D function cannot be forced into heatmap rendering. The
+     * compile/scan paths OR these bits in afterward. */
+    uint32_t caller_flags =
+        (config && config->flags)
+            ? config->flags
+            : (YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS);
+    u->flags = caller_flags & ~(uint32_t)(YETTY_YPLOT_FLAG_USES_TIME | YETTY_YPLOT_FLAG_FIELD);
 
     u->colormap_id = config ? (uint32_t)config->colormap : 0u;
     if (config && config->field_min != config->field_max) {
@@ -192,25 +199,9 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
         *out_plot = pr.value;
     }
 
-    /* Domain / viewport overrides come from inline `x=A..B` etc. The
-     * @view= viewport currently rebinds the static domain — the shader
-     * doesn't yet animate zoom from this, but the override still gives
-     * a useful initial framing for the first frame. */
-    if (pr.value.has_x_range) {
-        u->x_min = pr.value.x_min;
-        u->x_max = pr.value.x_max;
-    }
-    if (pr.value.has_y_range) {
-        u->y_min = pr.value.y_min;
-        u->y_max = pr.value.y_max;
-    }
-    if (pr.value.has_view) {
-        u->x_min = pr.value.view_x_min;
-        u->x_max = pr.value.view_x_max;
-        u->y_min = pr.value.view_y_min;
-        u->y_max = pr.value.view_y_max;
-    }
-
+    /* Domain / viewport ranges (`x=A..B`, `@view=…`) are applied later from the
+     * resolved options (yplot_apply_resolved), the single source of truth — not
+     * duplicated here. */
     u->function_count = pr.value.def_count;
     if (u->function_count > 8) {
         u->function_count = 8;
@@ -231,6 +222,15 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
                 break;
             }
         }
+    }
+
+    /* A plot may declare only data buffers and no functions — e.g. an inline
+     * `data=buffer; @data.values=…` meant to render directly as a curve.
+     * Compiling a zero-function program is an error, so skip the compile: emit
+     * no bytecode and let the data buffers (if any) render on their own. */
+    if (pr.value.def_count == 0) {
+        *out_bc_len = 0;
+        return YETTY_OK_VOID();
     }
 
     /* Compile to bytecode. The compile_multi entry threads the plot
@@ -849,22 +849,27 @@ static struct yetty_ycore_void_result yplot_emit_colorbar(struct yetty_ydraw_dra
  * curve legend, all gated on FLAG_LABELS. `legend_entries` names each curve
  * for the legend (may be NULL); `config` carries the chrome strings and the
  * legend mode (may be NULL). */
-static struct yetty_ydraw_drawable_list_result yplot_emit_prim(
+/* Emit the plot prim + chrome INTO `dest` at (origin_x, origin_y). The caller
+ * owns the list and its scene bounds; on error the partial prims are left for
+ * the caller to discard. This is the single emission body every frontend
+ * funnels through (via yetty_yplot_emit_into). */
+static struct yetty_ycore_void_result yplot_emit_into_list(
+    struct yetty_ydraw_drawable_list *dest, float origin_x, float origin_y,
     const struct yetty_yplot_uniforms *u_in, const struct yetty_yplot_buffers *bufs,
     const struct yplot_legend_entry *legend_entries, size_t legend_count,
     const struct yetty_yplot_render_config *config)
 {
     struct yetty_yplot_uniforms u = *u_in;
+    u.bounds_x = origin_x;
+    u.bounds_y = origin_y;
 
     /* A log axis over a non-positive range has no defined mapping — reject
      * it here, the shared choke point of every render entry path. */
     if ((u.flags & YETTY_YPLOT_FLAG_XLOG) && !(u.x_min > 0.0f && u.x_max > u.x_min)) {
-        return YETTY_ERR(yetty_ydraw_drawable_list,
-                         "yplot: x log scale requires 0 < x_min < x_max");
+        return YETTY_ERR(yetty_ycore_void, "yplot: x log scale requires 0 < x_min < x_max");
     }
     if ((u.flags & YETTY_YPLOT_FLAG_YLOG) && !(u.y_min > 0.0f && u.y_max > u.y_min)) {
-        return YETTY_ERR(yetty_ydraw_drawable_list,
-                         "yplot: y log scale requires 0 < y_min < y_max");
+        return YETTY_ERR(yetty_ycore_void, "yplot: y log scale requires 0 < y_min < y_max");
     }
 
     /* Full figure extents BEFORE any label inset — the drawable list scene
@@ -875,7 +880,6 @@ static struct yetty_ydraw_drawable_list_result yplot_emit_prim(
     float figure_w = u.bounds_w;
     float figure_h = u.bounds_h;
     float figure_max_x = u.bounds_x + u.bounds_w;
-    float figure_max_y = u.bounds_y + u.bounds_h;
 
     /* Reserve label margins by insetting the plot rect; the shader positions
      * and clips the plot to bounds_*, so the margins stay transparent for
@@ -939,72 +943,592 @@ static struct yetty_ydraw_drawable_list_result yplot_emit_prim(
     size_t required = yetty_yplot_uniforms_serialized_size(&u, bufs);
     uint8_t *drawable_buf = malloc(required);
     if (!drawable_buf) {
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: prim alloc failed");
+        return YETTY_ERR(yetty_ycore_void, "yplot: prim alloc failed");
     }
     struct yetty_ycore_size_result ser =
         yetty_yplot_uniforms_serialize(&u, bufs, drawable_buf, required);
     if (YETTY_IS_ERR(ser)) {
         free(drawable_buf);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: serialize failed", ser);
+        return YETTY_ERR(yetty_ycore_void, "yplot: serialize failed", ser);
     }
 
-    struct yetty_ydraw_drawable_list_config bcfg = {
-        .scene_min_x = 0.0f,
-        .scene_min_y = 0.0f,
-        .scene_max_x = figure_max_x,
-        .scene_max_y = figure_max_y,
-    };
-    struct yetty_ydraw_drawable_list_result br =
-        yetty_ydraw_drawable_list_config_buffer_create(&bcfg);
-    if (YETTY_IS_ERR(br)) {
-        free(drawable_buf);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: ydraw buffer create failed", br);
-    }
-
-    struct yetty_ydraw_id_result idr =
-        yetty_ydraw_drawable_list_add_prim(br.value, drawable_buf, required);
+    struct yetty_ydraw_id_result idr = yetty_ydraw_drawable_list_add_prim(dest, drawable_buf, required);
     free(drawable_buf);
     if (YETTY_IS_ERR(idr)) {
-        yetty_ydraw_drawable_list_destroy(br.value);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: ydraw add_prim failed", idr);
+        return YETTY_ERR(yetty_ycore_void, "yplot: ydraw add_prim failed", idr);
     }
 
     if (plan.enabled) {
         struct yetty_ycore_void_result label_res =
-            yplot_emit_axis_labels(br.value, &u, &plan, figure_max_x);
-        if (YETTY_IS_ERR(label_res)) {
-            yetty_ydraw_drawable_list_destroy(br.value);
-            return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: axis labels", label_res);
-        }
+            yplot_emit_axis_labels(dest, &u, &plan, figure_max_x);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, label_res, "yplot: axis labels");
         if (plan.have_title || plan.have_x_label || plan.have_y_label) {
-            struct yetty_ycore_void_result chrome_res = yplot_emit_chrome(
-                br.value, &u, &plan, figure_x, figure_y, figure_w, figure_h, config);
-            if (YETTY_IS_ERR(chrome_res)) {
-                yetty_ydraw_drawable_list_destroy(br.value);
-                return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: figure chrome", chrome_res);
-            }
+            struct yetty_ycore_void_result chrome_res =
+                yplot_emit_chrome(dest, &u, &plan, figure_x, figure_y, figure_w, figure_h, config);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, chrome_res, "yplot: figure chrome");
         }
     }
     if (show_legend) {
         /* The strip's left edge is the inset plot's right edge. */
         float margin_left = u.bounds_x + u.bounds_w;
         struct yetty_ycore_void_result legend_res =
-            yplot_emit_legend(br.value, &u, &plan, margin_left, legend_entries, legend_count);
-        if (YETTY_IS_ERR(legend_res)) {
-            yetty_ydraw_drawable_list_destroy(br.value);
-            return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: legend", legend_res);
-        }
+            yplot_emit_legend(dest, &u, &plan, margin_left, legend_entries, legend_count);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, legend_res, "yplot: legend");
     }
     if (show_colorbar) {
         float margin_left = u.bounds_x + u.bounds_w;
         struct yetty_ycore_void_result colorbar_res =
-            yplot_emit_colorbar(br.value, &u, &plan, margin_left);
-        if (YETTY_IS_ERR(colorbar_res)) {
-            yetty_ydraw_drawable_list_destroy(br.value);
-            return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: colorbar", colorbar_res);
+            yplot_emit_colorbar(dest, &u, &plan, margin_left);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, colorbar_res, "yplot: colorbar");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Emit a complete render plan into an existing list at an origin — the public
+ * shared entry (yplot/resolve.h). Rebuilds the private legend view and a chrome
+ * config from the plan's flat fields, then runs the one emission body. */
+struct yetty_ycore_void_result yetty_yplot_emit_into(
+    const struct yetty_yplot_render_plan *plan, struct yetty_ydraw_drawable_list *dest,
+    float origin_x, float origin_y)
+{
+    if (!plan || !dest) {
+        return YETTY_ERR(yetty_ycore_void, "yplot emit_into: NULL plan or dest");
+    }
+    if (!(isfinite(origin_x) && isfinite(origin_y))) {
+        return YETTY_ERR(yetty_ycore_void, "yplot emit_into: non-finite origin");
+    }
+    /* Validate plan invariants before mutating dest — a plan is valid or not. */
+    if (!(isfinite(plan->uniforms.bounds_w) && plan->uniforms.bounds_w > 0.0f &&
+          isfinite(plan->uniforms.bounds_h) && plan->uniforms.bounds_h > 0.0f)) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yplot emit_into: figure dimensions must be positive finite");
+    }
+    /* Every pointer/count pair must be consistent — the serializer sizes on the
+     * declared lengths but skips the copy when the pointer is NULL, which would
+     * emit malformed, partly-uninitialized wire bytes. Bound the sizes too so
+     * the serialized-size arithmetic cannot overflow size_t (the caps sit far
+     * above any real plot; the shared plan builder stays well under them). */
+    if (plan->buffers.bytecode == NULL && plan->buffers.bytecode_len > 0) {
+        return YETTY_ERR(yetty_ycore_void, "yplot emit_into: bytecode_len > 0 with NULL bytecode");
+    }
+    if (plan->buffers.bytecode_len > (1u << 20) || plan->buffers.data_count > 256) {
+        return YETTY_ERR(yetty_ycore_void, "yplot emit_into: plan exceeds size bounds");
+    }
+    if (plan->buffers.data == NULL && plan->buffers.data_count > 0) {
+        return YETTY_ERR(yetty_ycore_void, "yplot emit_into: data_count > 0 with NULL buffers");
+    }
+    for (size_t i = 0; i < plan->buffers.data_count; i++) {
+        if (plan->buffers.data[i].samples == NULL && plan->buffers.data[i].count > 0) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "yplot emit_into: data buffer count > 0 with NULL samples");
+        }
+        if (plan->buffers.data[i].count > (1u << 22)) {
+            return YETTY_ERR(yetty_ycore_void, "yplot emit_into: data buffer too large");
         }
     }
-    return YETTY_OK(yetty_ydraw_drawable_list, br.value);
+    if (plan->legend_count > YETTY_YEXPR_MAX_PLOT_DEFS + 8) {
+        return YETTY_ERR(yetty_ycore_void, "yplot emit_into: legend_count exceeds capacity");
+    }
+    size_t legend_count = plan->legend_count;
+    struct yplot_legend_entry legend[YETTY_YEXPR_MAX_PLOT_DEFS + 8];
+    for (size_t i = 0; i < legend_count; i++) {
+        legend[i].name = plan->legend_names[i];
+        legend[i].color = plan->legend_colors[i];
+    }
+    struct yetty_yplot_render_config config = {
+        .title = plan->title,
+        .x_label = plan->x_label,
+        .y_label = plan->y_label,
+        .legend_mode = plan->legend_mode,
+    };
+    return yplot_emit_into_list(dest, origin_x, origin_y, &plan->uniforms, &plan->buffers, legend,
+                                legend_count, &config);
+}
+
+/* Emit a plan into a fresh drawable list spanning the figure extents (the label
+ * margins are reserved inside these bounds, so nothing is clipped) — the
+ * standalone-render convenience used by both the expression and precompiled
+ * entry points. */
+static struct yetty_ydraw_drawable_list_result yplot_emit_to_new_list(
+    const struct yetty_yplot_render_plan *plan)
+{
+    const struct yetty_yplot_uniforms *u = &plan->uniforms;
+    struct yetty_ydraw_drawable_list_config list_cfg = {
+        .scene_min_x = 0.0f,
+        .scene_min_y = 0.0f,
+        .scene_max_x = u->bounds_x + u->bounds_w,
+        .scene_max_y = u->bounds_y + u->bounds_h,
+    };
+    struct yetty_ydraw_drawable_list_result list_res =
+        yetty_ydraw_drawable_list_config_buffer_create(&list_cfg);
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, list_res, "yplot: list create");
+
+    struct yetty_ycore_void_result emit_res =
+        yetty_yplot_emit_into(plan, list_res.value, u->bounds_x, u->bounds_y);
+    if (YETTY_IS_ERR(emit_res)) {
+        yetty_ydraw_drawable_list_destroy(list_res.value);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: emit", emit_res);
+    }
+    return YETTY_OK(yetty_ydraw_drawable_list, list_res.value);
+}
+
+/* Map an on/off keyword. Returns 1 on success. */
+static int yplot_attr_bool(const char *value, bool *out)
+{
+    if (!strcmp(value, "on") || !strcmp(value, "true") || !strcmp(value, "yes") ||
+        !strcmp(value, "1")) {
+        *out = true;
+        return 1;
+    }
+    if (!strcmp(value, "off") || !strcmp(value, "false") || !strcmp(value, "no") ||
+        !strcmp(value, "0")) {
+        *out = false;
+        return 1;
+    }
+    return 0;
+}
+
+/*=============================================================================
+ * Expression resolution — the shared boundary (yplot/resolve.h). Merges a
+ * parsed expression with presence-aware caller overrides under an explicit
+ * precedence, validating semantics over the whole parsed expression.
+ *===========================================================================*/
+
+static void yplot_resolved_defaults(struct yetty_yplot_resolved *out)
+{
+    *out = (struct yetty_yplot_resolved){0};
+    out->grid = true;
+    out->axes = true;
+    out->labels = true;
+    out->legend = YETTY_YPLOT_LEGEND_AUTO;
+    out->colormap = YETTY_YPLOT_COLORMAP_VIRIDIS;
+}
+
+static void yplot_resolved_apply_options(struct yetty_yplot_resolved *out,
+                                         const struct yetty_yplot_options *options)
+{
+    if (!options) {
+        return;
+    }
+    uint32_t present = options->present;
+    if (present & YETTY_YPLOT_OPT_WIDTH) {
+        out->width = options->width;
+        out->has_width = true;
+    }
+    if (present & YETTY_YPLOT_OPT_HEIGHT) {
+        out->height = options->height;
+        out->has_height = true;
+    }
+    if (present & YETTY_YPLOT_OPT_X_RANGE) {
+        out->x_min = options->x_min;
+        out->x_max = options->x_max;
+        out->has_x_range = true;
+    }
+    if (present & YETTY_YPLOT_OPT_Y_RANGE) {
+        out->y_min = options->y_min;
+        out->y_max = options->y_max;
+        out->has_y_range = true;
+    }
+    if (present & YETTY_YPLOT_OPT_TITLE) {
+        out->title = options->title;
+    }
+    if (present & YETTY_YPLOT_OPT_X_LABEL) {
+        out->x_label = options->x_label;
+    }
+    if (present & YETTY_YPLOT_OPT_Y_LABEL) {
+        out->y_label = options->y_label;
+    }
+    if (present & YETTY_YPLOT_OPT_GRID) {
+        out->grid = options->grid;
+    }
+    if (present & YETTY_YPLOT_OPT_AXES) {
+        out->axes = options->axes;
+    }
+    if (present & YETTY_YPLOT_OPT_LABELS) {
+        out->labels = options->labels;
+    }
+    if (present & YETTY_YPLOT_OPT_X_LOG) {
+        out->x_log = options->x_log;
+    }
+    if (present & YETTY_YPLOT_OPT_Y_LOG) {
+        out->y_log = options->y_log;
+    }
+    if (present & YETTY_YPLOT_OPT_LEGEND) {
+        out->legend = options->legend;
+    }
+    if (present & YETTY_YPLOT_OPT_COLORMAP) {
+        out->colormap = options->colormap;
+    }
+    if (present & YETTY_YPLOT_OPT_FIELD) {
+        out->field_min = options->field_min;
+        out->field_max = options->field_max;
+        out->has_field = true;
+    }
+}
+
+static bool yplot_is_declared_curve(const struct yetty_yexpr_plot_expr *expr, const char *name)
+{
+    for (uint32_t i = 0; i < expr->def_count; i++) {
+        if (!strcmp(expr->defs[i].name, name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool yplot_is_declared_buffer(const struct yetty_yexpr_plot_expr *expr, const char *name)
+{
+    for (uint32_t i = 0; i < expr->buffer_count; i++) {
+        if (!strcmp(expr->buffers[i].name, name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Apply + validate the parsed expression's figure/axis/curve attributes onto
+ * `out`. Runs over the fully-parsed expression, so validation is independent
+ * of the order attributes and curve/buffer declarations appear in the source.
+ * Title/label pointers borrow into `expr`, which must outlive the emit. */
+static struct yetty_ycore_void_result yplot_resolved_apply_expr(
+    struct yetty_yplot_resolved *out, const struct yetty_yexpr_plot_expr *expr)
+{
+    if (expr->fig_present & YETTY_YEXPR_FIG_WIDTH) {
+        out->width = expr->fig_width;
+        out->has_width = true;
+    }
+    if (expr->fig_present & YETTY_YEXPR_FIG_HEIGHT) {
+        out->height = expr->fig_height;
+        out->has_height = true;
+    }
+    if (expr->fig_present & YETTY_YEXPR_FIG_FIELD) {
+        out->field_min = expr->field_min;
+        out->field_max = expr->field_max;
+        out->has_field = true;
+    }
+    if (expr->has_x_range) {
+        out->x_min = expr->x_min;
+        out->x_max = expr->x_max;
+        out->has_x_range = true;
+    }
+    if (expr->has_y_range) {
+        out->y_min = expr->y_min;
+        out->y_max = expr->y_max;
+        out->has_y_range = true;
+    }
+    if (expr->has_view) {
+        out->x_min = expr->view_x_min;
+        out->x_max = expr->view_x_max;
+        out->y_min = expr->view_y_min;
+        out->y_max = expr->view_y_max;
+        out->has_x_range = true;
+        out->has_y_range = true;
+    }
+
+    for (uint32_t i = 0; i < expr->attr_count; i++) {
+        const struct yetty_yexpr_plot_attr *attr = &expr->attrs[i];
+        const char *target = attr->plot_name;
+        const char *name = attr->attr_name;
+        const char *value = attr->value;
+        bool is_figure =
+            !strcmp(target, "plot") || !strcmp(target, "fig") || !strcmp(target, "figure");
+        bool is_x_axis = !strcmp(target, "x");
+        bool is_y_axis = !strcmp(target, "y");
+
+        if (is_figure) {
+            if (!strcmp(name, "title")) {
+                out->title = attr->value;
+            } else if (!strcmp(name, "grid") || !strcmp(name, "axes") || !strcmp(name, "labels")) {
+                bool on;
+                if (!yplot_attr_bool(value, &on)) {
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "yplot: @plot grid/axes/labels expects on/off");
+                }
+                if (!strcmp(name, "grid")) {
+                    out->grid = on;
+                } else if (!strcmp(name, "axes")) {
+                    out->axes = on;
+                } else {
+                    out->labels = on;
+                }
+            } else if (!strcmp(name, "legend")) {
+                if (!strcmp(value, "auto")) {
+                    out->legend = YETTY_YPLOT_LEGEND_AUTO;
+                } else if (!strcmp(value, "on")) {
+                    out->legend = YETTY_YPLOT_LEGEND_ON;
+                } else if (!strcmp(value, "off")) {
+                    out->legend = YETTY_YPLOT_LEGEND_OFF;
+                } else {
+                    return YETTY_ERR(yetty_ycore_void, "yplot: @plot.legend expects auto/on/off");
+                }
+            } else if (!strcmp(name, "colormap")) {
+                if (!strcmp(value, "viridis")) {
+                    out->colormap = YETTY_YPLOT_COLORMAP_VIRIDIS;
+                } else if (!strcmp(value, "plasma")) {
+                    out->colormap = YETTY_YPLOT_COLORMAP_PLASMA;
+                } else if (!strcmp(value, "magma")) {
+                    out->colormap = YETTY_YPLOT_COLORMAP_MAGMA;
+                } else if (!strcmp(value, "inferno")) {
+                    out->colormap = YETTY_YPLOT_COLORMAP_INFERNO;
+                } else {
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "yplot: @plot.colormap expects viridis/plasma/magma/inferno");
+                }
+            } else {
+                return YETTY_ERR(yetty_ycore_void, "yplot: unknown @plot attribute");
+            }
+        } else if (is_x_axis || is_y_axis) {
+            if (!strcmp(name, "label")) {
+                if (is_x_axis) {
+                    out->x_label = attr->value;
+                } else {
+                    out->y_label = attr->value;
+                }
+            } else if (!strcmp(name, "scale")) {
+                bool log_scale;
+                if (!strcmp(value, "log")) {
+                    log_scale = true;
+                } else if (!strcmp(value, "linear")) {
+                    log_scale = false;
+                } else {
+                    return YETTY_ERR(yetty_ycore_void, "yplot: @x/@y.scale expects linear/log");
+                }
+                if (is_x_axis) {
+                    out->x_log = log_scale;
+                } else {
+                    out->y_log = log_scale;
+                }
+            } else {
+                return YETTY_ERR(yetty_ycore_void, "yplot: unknown axis attribute (@x/@y)");
+            }
+        } else if (yplot_is_declared_curve(expr, target) || yplot_is_declared_buffer(expr, target)) {
+            /* `color` is the sole supported curve/buffer attribute. Validate the
+             * value with the same parser emission uses, so an unparseable color
+             * is an error here — not a silent palette-default at emit time. */
+            if (strcmp(name, "color") != 0) {
+                return YETTY_ERR(yetty_ycore_void, "yplot: unknown curve/buffer attribute");
+            }
+            uint32_t curve_color;
+            if (!parse_hex_color(value, &curve_color)) {
+                return YETTY_ERR(yetty_ycore_void, "yplot: invalid curve color (expected #RRGGBB)");
+            }
+        } else {
+            return YETTY_ERR(yetty_ycore_void, "yplot: attribute targets an unknown name");
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Validate presence-aware caller overrides. The facade passes these directly,
+ * so they get the same rigor as expression attributes: no unknown presence
+ * bits, positive finite dimensions, finite ordered ranges, in-range enums. */
+static struct yetty_ycore_void_result yplot_options_validate(
+    const struct yetty_yplot_options *options)
+{
+    if (!options) {
+        return YETTY_OK_VOID();
+    }
+    const uint32_t known =
+        YETTY_YPLOT_OPT_WIDTH | YETTY_YPLOT_OPT_HEIGHT | YETTY_YPLOT_OPT_X_RANGE |
+        YETTY_YPLOT_OPT_Y_RANGE | YETTY_YPLOT_OPT_TITLE | YETTY_YPLOT_OPT_X_LABEL |
+        YETTY_YPLOT_OPT_Y_LABEL | YETTY_YPLOT_OPT_GRID | YETTY_YPLOT_OPT_AXES |
+        YETTY_YPLOT_OPT_LABELS | YETTY_YPLOT_OPT_X_LOG | YETTY_YPLOT_OPT_Y_LOG |
+        YETTY_YPLOT_OPT_LEGEND | YETTY_YPLOT_OPT_COLORMAP | YETTY_YPLOT_OPT_FIELD;
+    if (options->present & ~known) {
+        return YETTY_ERR(yetty_ycore_void, "yplot options: unknown presence bit");
+    }
+    if ((options->present & YETTY_YPLOT_OPT_WIDTH) &&
+        !(isfinite(options->width) && options->width > 0.0f)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot options: width must be positive finite");
+    }
+    if ((options->present & YETTY_YPLOT_OPT_HEIGHT) &&
+        !(isfinite(options->height) && options->height > 0.0f)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot options: height must be positive finite");
+    }
+    if ((options->present & YETTY_YPLOT_OPT_X_RANGE) &&
+        !(isfinite(options->x_min) && isfinite(options->x_max) && options->x_min < options->x_max)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot options: x range must be finite and ordered");
+    }
+    if ((options->present & YETTY_YPLOT_OPT_Y_RANGE) &&
+        !(isfinite(options->y_min) && isfinite(options->y_max) && options->y_min < options->y_max)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot options: y range must be finite and ordered");
+    }
+    if ((options->present & YETTY_YPLOT_OPT_FIELD) &&
+        !(isfinite(options->field_min) && isfinite(options->field_max) &&
+          options->field_min < options->field_max)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot options: field range must be finite and ordered");
+    }
+    if ((options->present & YETTY_YPLOT_OPT_LEGEND) &&
+        ((int)options->legend < 0 || (int)options->legend > YETTY_YPLOT_LEGEND_OFF)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot options: invalid legend mode");
+    }
+    if ((options->present & YETTY_YPLOT_OPT_COLORMAP) &&
+        ((int)options->colormap < 0 || (int)options->colormap > YETTY_YPLOT_COLORMAP_INFERNO)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot options: invalid colormap");
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yplot_resolve(
+    const struct yetty_yexpr_plot_expr *expression, const struct yetty_yplot_options *options,
+    enum yetty_yplot_attr_precedence precedence, struct yetty_yplot_resolved *out)
+{
+    if (!expression || !out) {
+        return YETTY_ERR(yetty_ycore_void, "yplot resolve: NULL expression or output");
+    }
+    if (precedence != YETTY_YPLOT_EXPRESSION_WINS && precedence != YETTY_YPLOT_CONFIG_WINS) {
+        return YETTY_ERR(yetty_ycore_void, "yplot resolve: invalid precedence");
+    }
+    struct yetty_ycore_void_result options_valid = yplot_options_validate(options);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, options_valid, "yplot resolve: invalid options");
+
+    /* Resolve into a local; assign *out only on success so a validation failure
+     * never leaves partially-merged state visible. Apply the lower-precedence
+     * source first, then let the higher-precedence source overwrite the
+     * properties it names. `apply_expr` always runs (and validates). */
+    struct yetty_yplot_resolved local;
+    yplot_resolved_defaults(&local);
+    if (precedence == YETTY_YPLOT_CONFIG_WINS) {
+        struct yetty_ycore_void_result expr_res = yplot_resolved_apply_expr(&local, expression);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, expr_res, "yplot resolve: expression");
+        yplot_resolved_apply_options(&local, options);
+    } else {
+        yplot_resolved_apply_options(&local, options);
+        struct yetty_ycore_void_result expr_res = yplot_resolved_apply_expr(&local, expression);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, expr_res, "yplot resolve: expression");
+    }
+
+    /* Validate the MERGED domain ranges regardless of which source won — a
+     * reversed range (from an expression `x=5..1` or a `@view`) has no
+     * well-defined axis mapping. Log-axis positivity stays an emission check
+     * since it depends on range + scale together. */
+    if (local.has_x_range &&
+        !(isfinite(local.x_min) && isfinite(local.x_max) && local.x_min < local.x_max)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot resolve: x range must be finite and ordered");
+    }
+    if (local.has_y_range &&
+        !(isfinite(local.y_min) && isfinite(local.y_max) && local.y_min < local.y_max)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot resolve: y range must be finite and ordered");
+    }
+
+    *out = local;
+    return YETTY_OK_VOID();
+}
+
+/* Map the legacy public render_config to presence-aware options (a non-default
+ * field is treated as explicitly present). Lets existing config-driven callers
+ * flow through the resolver unchanged, under EXPRESSION_WINS. */
+static void yplot_options_from_config(const struct yetty_yplot_render_config *config,
+                                      struct yetty_yplot_options *out)
+{
+    *out = (struct yetty_yplot_options){0};
+    if (!config) {
+        return;
+    }
+    if (config->bounds_w > 0.0f) {
+        out->present |= YETTY_YPLOT_OPT_WIDTH;
+        out->width = config->bounds_w;
+    }
+    if (config->bounds_h > 0.0f) {
+        out->present |= YETTY_YPLOT_OPT_HEIGHT;
+        out->height = config->bounds_h;
+    }
+    if (config->x_min != 0.0f || config->x_max != 0.0f) {
+        out->present |= YETTY_YPLOT_OPT_X_RANGE;
+        out->x_min = config->x_min;
+        out->x_max = config->x_max;
+    }
+    if (config->y_min != 0.0f || config->y_max != 0.0f) {
+        out->present |= YETTY_YPLOT_OPT_Y_RANGE;
+        out->y_min = config->y_min;
+        out->y_max = config->y_max;
+    }
+    if (config->title && config->title[0]) {
+        out->present |= YETTY_YPLOT_OPT_TITLE;
+        out->title = config->title;
+    }
+    if (config->x_label && config->x_label[0]) {
+        out->present |= YETTY_YPLOT_OPT_X_LABEL;
+        out->x_label = config->x_label;
+    }
+    if (config->y_label && config->y_label[0]) {
+        out->present |= YETTY_YPLOT_OPT_Y_LABEL;
+        out->y_label = config->y_label;
+    }
+    if (config->flags != 0) {
+        out->present |= YETTY_YPLOT_OPT_GRID | YETTY_YPLOT_OPT_AXES | YETTY_YPLOT_OPT_LABELS |
+                        YETTY_YPLOT_OPT_X_LOG | YETTY_YPLOT_OPT_Y_LOG;
+        out->grid = (config->flags & YETTY_YPLOT_FLAG_GRID) != 0;
+        out->axes = (config->flags & YETTY_YPLOT_FLAG_AXES) != 0;
+        out->labels = (config->flags & YETTY_YPLOT_FLAG_LABELS) != 0;
+        out->x_log = (config->flags & YETTY_YPLOT_FLAG_XLOG) != 0;
+        out->y_log = (config->flags & YETTY_YPLOT_FLAG_YLOG) != 0;
+    }
+    if (config->legend_mode != YETTY_YPLOT_LEGEND_AUTO) {
+        out->present |= YETTY_YPLOT_OPT_LEGEND;
+        out->legend = config->legend_mode;
+    }
+    if (config->colormap != YETTY_YPLOT_COLORMAP_VIRIDIS) {
+        out->present |= YETTY_YPLOT_OPT_COLORMAP;
+        out->colormap = config->colormap;
+    }
+    if (config->field_min != config->field_max) {
+        out->present |= YETTY_YPLOT_OPT_FIELD;
+        out->field_min = config->field_min;
+        out->field_max = config->field_max;
+    }
+}
+
+/* Bridge: fold resolved state into the uniforms + effective chrome config.
+ * Step 3 replaces this with emit_into consuming `resolved` directly. */
+static void yplot_apply_resolved(const struct yetty_yplot_resolved *resolved,
+                                 struct yetty_yplot_uniforms *u,
+                                 struct yetty_yplot_render_config *config)
+{
+    if (resolved->has_width) {
+        u->bounds_w = resolved->width;
+    }
+    if (resolved->has_height) {
+        u->bounds_h = resolved->height;
+    }
+    if (resolved->has_x_range) {
+        u->x_min = resolved->x_min;
+        u->x_max = resolved->x_max;
+    }
+    if (resolved->has_y_range) {
+        u->y_min = resolved->y_min;
+        u->y_max = resolved->y_max;
+    }
+    /* Clear only the toggleable decoration bits so the bytecode-derived
+     * USES_TIME / FIELD flags survive. */
+    uint32_t flags = u->flags & ~(uint32_t)(YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES |
+                                            YETTY_YPLOT_FLAG_LABELS | YETTY_YPLOT_FLAG_XLOG |
+                                            YETTY_YPLOT_FLAG_YLOG);
+    if (resolved->grid) {
+        flags |= YETTY_YPLOT_FLAG_GRID;
+    }
+    if (resolved->axes) {
+        flags |= YETTY_YPLOT_FLAG_AXES;
+    }
+    if (resolved->labels) {
+        flags |= YETTY_YPLOT_FLAG_LABELS;
+    }
+    if (resolved->x_log) {
+        flags |= YETTY_YPLOT_FLAG_XLOG;
+    }
+    if (resolved->y_log) {
+        flags |= YETTY_YPLOT_FLAG_YLOG;
+    }
+    u->flags = flags;
+    u->colormap_id = (uint32_t)resolved->colormap;
+    if (resolved->has_field) {
+        u->field_min = resolved->field_min;
+        u->field_max = resolved->field_max;
+    }
+    config->title = resolved->title;
+    config->x_label = resolved->x_label;
+    config->y_label = resolved->y_label;
+    config->legend_mode = resolved->legend;
 }
 
 struct yetty_ydraw_drawable_list_result yetty_yplot_render(
@@ -1013,15 +1537,20 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render(
     return yetty_yplot_render_with_buffers(source, len, NULL, 0, config);
 }
 
-struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
+struct yetty_ycore_void_result yetty_yplot_emit_expression(
     const char *source, size_t len, const struct yetty_yplot_buffer_input *buffers,
-    size_t buffer_count, const struct yetty_yplot_render_config *config)
+    size_t buffer_count, const struct yetty_yplot_render_config *config,
+    struct yetty_ydraw_drawable_list *dest, float origin_x, float origin_y, float *out_figure_w,
+    float *out_figure_h)
 {
+    if (!dest) {
+        return YETTY_ERR(yetty_ycore_void, "yplot: dest is NULL");
+    }
     if (!source && len > 0) {
-        return YETTY_ERR(yetty_ydraw_drawable_list, "source is NULL");
+        return YETTY_ERR(yetty_ycore_void, "source is NULL");
     }
     if (!buffers && buffer_count > 0) {
-        return YETTY_ERR(yetty_ydraw_drawable_list, "buffers is NULL but buffer_count > 0");
+        return YETTY_ERR(yetty_ycore_void, "buffers is NULL but buffer_count > 0");
     }
 
     struct yetty_yplot_uniforms u;
@@ -1033,7 +1562,21 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
     struct yetty_ycore_void_result ub = yplot_build_uniforms_and_bytecode(
         source, len, config, bc_buf, (uint32_t)(sizeof bc_buf / sizeof bc_buf[0]), &u, &bc_len,
         &expr_arena, &parsed);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, ub, "yplot: uniforms/bytecode build failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ub, "yplot: uniforms/bytecode build failed");
+
+    /* Fold figure/axis attributes from the expression (@plot.title, @plot.size,
+     * @x.scale, …) into the uniforms and an effective chrome config. Expression
+     * attrs override the caller's config for the fields they name. Nothing has
+     * been allocated yet, so an error here returns without cleanup. */
+    struct yetty_yplot_render_config effective_config =
+        config ? *config : (struct yetty_yplot_render_config){0};
+    struct yetty_yplot_options options;
+    yplot_options_from_config(config, &options);
+    struct yetty_yplot_resolved resolved;
+    struct yetty_ycore_void_result resolve_res =
+        yetty_yplot_resolve(&parsed, &options, YETTY_YPLOT_EXPRESSION_WINS, &resolved);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, resolve_res, "yplot: bad plot attribute");
+    yplot_apply_resolved(&resolved, &u, &effective_config);
 
     /* Buffer slots come from TWO sources, layered in this order so that
      * sampler-slot indices match what the compiler emitted:
@@ -1057,7 +1600,7 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
     if (total_bufs > 0) {
         wire_bufs = (total_bufs <= 8) ? wire_bufs_stack : malloc(total_bufs * sizeof(*wire_bufs));
         if (!wire_bufs) {
-            return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: buffer view alloc failed");
+            return YETTY_ERR(yetty_ycore_void, "yplot: buffer view alloc failed");
         }
 
         /* First pass: how much zero-fill do we need? */
@@ -1073,7 +1616,7 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
                 if (wire_bufs != wire_bufs_stack) {
                     free(wire_bufs);
                 }
-                return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: zero-fill alloc failed");
+                return YETTY_ERR(yetty_ycore_void, "yplot: zero-fill alloc failed");
             }
         }
 
@@ -1165,13 +1708,65 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
         legend_count++;
     }
 
-    struct yetty_ydraw_drawable_list_result out =
-        yplot_emit_prim(&u, &bufs, legend, legend_count, config);
+    /* Assemble the render plan and emit it through the one shared path into a
+     * fresh list. The list spans the full figure extents so the reserved label
+     * margins are not clipped. */
+    struct yetty_yplot_render_plan render_plan = {0};
+    render_plan.uniforms = u;
+    render_plan.buffers = bufs;
+    render_plan.legend_count = legend_count;
+    for (size_t i = 0; i < legend_count; i++) {
+        render_plan.legend_names[i] = legend[i].name;
+        render_plan.legend_colors[i] = legend[i].color;
+    }
+    render_plan.title = effective_config.title;
+    render_plan.x_label = effective_config.x_label;
+    render_plan.y_label = effective_config.y_label;
+    render_plan.legend_mode = effective_config.legend_mode;
+
+    /* The plan's data buffers alias `wire_bufs`/`zero_fill`, so they must stay
+     * alive across the emit; free them only after it returns. */
+    struct yetty_ycore_void_result emit_res =
+        yetty_yplot_emit_into(&render_plan, dest, origin_x, origin_y);
     if (wire_bufs && wire_bufs != wire_bufs_stack) {
         free(wire_bufs);
     }
     free(zero_fill);
-    return out;
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "yplot: emit");
+
+    if (out_figure_w) {
+        *out_figure_w = render_plan.uniforms.bounds_w;
+    }
+    if (out_figure_h) {
+        *out_figure_h = render_plan.uniforms.bounds_h;
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
+    const char *source, size_t len, const struct yetty_yplot_buffer_input *buffers,
+    size_t buffer_count, const struct yetty_yplot_render_config *config)
+{
+    /* Standalone render: emit the expression into a fresh list at the config
+     * origin, then set the list's scene bounds to the full figure extents (the
+     * reserved label margins live inside these bounds, so nothing is clipped). */
+    struct yetty_ydraw_drawable_list_result list_res =
+        yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, list_res, "yplot: list create");
+
+    float origin_x = config ? config->bounds_x : 0.0f;
+    float origin_y = config ? config->bounds_y : 0.0f;
+    float figure_w = 0.0f, figure_h = 0.0f;
+    struct yetty_ycore_void_result emit_res =
+        yetty_yplot_emit_expression(source, len, buffers, buffer_count, config, list_res.value,
+                                    origin_x, origin_y, &figure_w, &figure_h);
+    if (YETTY_IS_ERR(emit_res)) {
+        yetty_ydraw_drawable_list_destroy(list_res.value);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: emit expression", emit_res);
+    }
+    yetty_ydraw_drawable_list_set_scene_bounds(list_res.value, 0.0f, 0.0f, origin_x + figure_w,
+                                               origin_y + figure_h);
+    return YETTY_OK(yetty_ydraw_drawable_list, list_res.value);
 }
 
 struct yetty_ydraw_drawable_list_result yetty_yplot_render_program(
@@ -1217,8 +1812,21 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_program(
         .data = NULL,
         .data_count = 0,
     };
-    /* Precompiled programs carry no per-curve names, so no legend. */
-    return yplot_emit_prim(&u, &bufs, NULL, 0, config);
+
+    /* Config-only path (no expression attributes to resolve): build the plan
+     * straight from the caller's config. Precompiled programs carry no
+     * per-curve names, so no legend. */
+    struct yetty_yplot_render_plan render_plan = {0};
+    render_plan.uniforms = u;
+    render_plan.buffers = bufs;
+    render_plan.legend_count = 0;
+    if (config) {
+        render_plan.title = config->title;
+        render_plan.x_label = config->x_label;
+        render_plan.y_label = config->y_label;
+        render_plan.legend_mode = config->legend_mode;
+    }
+    return yplot_emit_to_new_list(&render_plan);
 }
 
 struct yetty_ycore_size_result yetty_yplot_dcs_bin_emit(

@@ -19,99 +19,127 @@ class Circuit(_rt.YClass):
         if _handle is None:
             _fn = _rt.cfn("yetty_ycircuit_circuit_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Circuit']:
+    def create(cls, **kwargs: Any) -> 'Circuit':
         obj = cls()
-        return obj.init_result
-    def configure(self, flags: int) -> _rt.Result[None]:
-        """Call `yetty_ycircuit_configure`; returns Result, never raises for yclass errors."""
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Circuit.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
+    def configure(self, grid_px: float, flags: int) -> None:
+        """Call `yetty_ycircuit_configure`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycircuit_configure", _t.yetty_ycore_void_result, [c_void_p, c_float, c_uint32])
-        res = _fn(None, self._handle, flags)
-        return _rt.result_from_c(res)
-    def parse(self, len: int) -> _rt.Result[None]:
-        """Call `yetty_ycircuit_parse`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, grid_px, flags))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def parse(self, input: str | bytes | None, len: int) -> None:
+        """Call `yetty_ycircuit_parse`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycircuit_parse", _t.yetty_ycore_void_result, [c_void_p, c_char_p, c_size_t])
-        res = _fn(None, self._handle, len)
-        return _rt.result_from_c(res)
-    def clear(self) -> _rt.Result[None]:
-        """Call `yetty_ycircuit_clear`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(input), len))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def clear(self) -> None:
+        """Call `yetty_ycircuit_clear`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycircuit_clear", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def add_component(self, x: float, y: float, rotation_deg: int, name: str | bytes | None, value: str | bytes | None) -> _rt.Result[int]:
-        """Call `yetty_ycircuit_add_component`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def add_component(self, kind: str | bytes | None, x: float, y: float, rotation_deg: int, name: str | bytes | None, value: str | bytes | None) -> int:
+        """Call `yetty_ycircuit_add_component`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycircuit_add_component", _t.yetty_ycore_int_result, [c_void_p, c_char_p, c_float, c_float, c_int32, c_char_p, c_char_p])
-        res = _fn(None, self._handle, x, y, rotation_deg, _rt.cstr(name), _rt.cstr(value))
-        return _rt.result_from_c(res)
-    def add_ic(self, y: float, rotation_deg: int, name: str | bytes | None, value: str | bytes | None, pins_left: str | bytes | None, pins_right: str | bytes | None, pins_top: str | bytes | None, pins_bottom: str | bytes | None) -> _rt.Result[int]:
-        """Call `yetty_ycircuit_add_ic`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(kind), x, y, rotation_deg, _rt.cstr(name), _rt.cstr(value)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def add_ic(self, x: float, y: float, rotation_deg: int, name: str | bytes | None, value: str | bytes | None, pins_left: str | bytes | None, pins_right: str | bytes | None, pins_top: str | bytes | None, pins_bottom: str | bytes | None) -> int:
+        """Call `yetty_ycircuit_add_ic`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycircuit_add_ic", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_int32, c_char_p, c_char_p, c_char_p, c_char_p, c_char_p, c_char_p])
-        res = _fn(None, self._handle, y, rotation_deg, _rt.cstr(name), _rt.cstr(value), _rt.cstr(pins_left), _rt.cstr(pins_right), _rt.cstr(pins_top), _rt.cstr(pins_bottom))
-        return _rt.result_from_c(res)
-    def add_wire(self, y0: float, x1: float, y1: float) -> _rt.Result[int]:
-        """Call `yetty_ycircuit_add_wire`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, x, y, rotation_deg, _rt.cstr(name), _rt.cstr(value), _rt.cstr(pins_left), _rt.cstr(pins_right), _rt.cstr(pins_top), _rt.cstr(pins_bottom)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def add_wire(self, x0: float, y0: float, x1: float, y1: float) -> int:
+        """Call `yetty_ycircuit_add_wire`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycircuit_add_wire", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_float, c_float])
-        res = _fn(None, self._handle, y0, x1, y1)
-        return _rt.result_from_c(res)
-    def add_junction(self, y: float) -> _rt.Result[int]:
-        """Call `yetty_ycircuit_add_junction`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, x0, y0, x1, y1))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def add_junction(self, x: float, y: float) -> int:
+        """Call `yetty_ycircuit_add_junction`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycircuit_add_junction", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float])
-        res = _fn(None, self._handle, y)
-        return _rt.result_from_c(res)
-    def add_label(self, y: float, text: str | bytes | None) -> _rt.Result[int]:
-        """Call `yetty_ycircuit_add_label`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, x, y))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def add_label(self, x: float, y: float, text: str | bytes | None) -> int:
+        """Call `yetty_ycircuit_add_label`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycircuit_add_label", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_char_p])
-        res = _fn(None, self._handle, y, _rt.cstr(text))
-        return _rt.result_from_c(res)
-    def render(self) -> _rt.Result[Any]:
-        """Call `yetty_ycircuit_render`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, x, y, _rt.cstr(text)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def render(self) -> Any:
+        """Call `yetty_ycircuit_render`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycircuit_render", _t.yetty_ydraw_drawable_list_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def hit_test(self, y: float) -> _rt.Result[int]:
-        """Call `yetty_ycircuit_hit_test`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def hit_test(self, x: float, y: float) -> int:
+        """Call `yetty_ycircuit_hit_test`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycircuit_hit_test", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float])
-        res = _fn(None, self._handle, y)
-        return _rt.result_from_c(res)
-    def set_highlight(self) -> _rt.Result[None]:
-        """Call `yetty_ycircuit_set_highlight`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, x, y))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def set_highlight(self, element_id: int) -> None:
+        """Call `yetty_ycircuit_set_highlight`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycircuit_set_highlight", _t.yetty_ycore_void_result, [c_void_p, c_int32])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def destroy(self) -> _rt.Result[None]:
-        """Call `yetty_ycircuit_destroy`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, element_id))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def destroy(self) -> None:
+        """Call `yetty_ycircuit_destroy`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycircuit_destroy", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
 
 def emit_osc(list: Any, fd: int) -> _rt.Result[None]:
     """Call `yetty_ycircuit_emit_osc`."""

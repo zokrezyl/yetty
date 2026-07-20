@@ -140,9 +140,11 @@ The grammar is always `<verb>@<domain>:<colon-separated path>`:
 | `mixin@<DOMAIN>:<CLASS>` | data `struct` | declare a mixin class |
 | `parent@<DOMAIN>:<CLASS>` | data `struct` | single parent of the class |
 | `uses@<DOMAIN>:<MIXIN>` | data `struct` | include a mixin |
+| `virtual@<DOMAIN>:<CLASS>:<SLOT>` | method implementation | introduce a public slot owned by this domain |
 | `override@<DOMAIN>:<CLASS>:<SLOT>` | impl function | implement a same-module slot for the class |
 | `override@<DOMAIN>:<CLASS>:<SLOT_DOMAIN>:<SLOT>` | impl function | implement a **cross-module** slot |
 | `local@<DOMAIN>:<SLOT>` | any function | mark a slot local — never wire-marshalled |
+| `oneway@<DOMAIN>:<SLOT>` | any function | mark a wire slot fire-and-forget |
 
 A class declaration stacks its annotations on the data struct, and each
 implementing function carries its `override`:

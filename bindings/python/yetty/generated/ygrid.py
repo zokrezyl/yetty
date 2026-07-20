@@ -20,34 +20,44 @@ class Grid(_yfigure.Figure):
         if _handle is None:
             _fn = _rt.cfn("yetty_ygrid_grid_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Grid']:
+    def create(cls, **kwargs: Any) -> 'Grid':
         obj = cls()
-        return obj.init_result
-    def destroy(self) -> _rt.Result[None]:
-        """Call `yetty_ygrid_destroy`; returns Result, never raises for yclass errors."""
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Grid.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
+    def destroy(self) -> None:
+        """Call `yetty_ygrid_destroy`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ygrid_destroy", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def add_record(self) -> _rt.Result[None]:
-        """Call `yetty_ygrid_add_record`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def add_record(self, record: _t.yetty_ycore_buffer) -> None:
+        """Call `yetty_ygrid_add_record`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ygrid_add_record", _t.yetty_ycore_void_result, [c_void_p, _t.yetty_ycore_buffer])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def clear(self) -> _rt.Result[None]:
-        """Call `yetty_ygrid_clear`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, record))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def clear(self) -> None:
+        """Call `yetty_ygrid_clear`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ygrid_clear", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
 

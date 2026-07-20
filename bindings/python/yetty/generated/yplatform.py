@@ -19,36 +19,46 @@ class Clipboard(_rt.YClass):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Clipboard']:
+    def create(cls, **kwargs: Any) -> 'Clipboard':
         obj = cls()
-        return obj.init_result
-    def clipboard_set_text(self, len: int) -> _rt.Result[None]:
-        """Call `yetty_yplatform_clipboard_set_text`; returns Result, never raises for yclass errors."""
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Clipboard.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
+    def clipboard_set_text(self, text: str | bytes | None, len: int) -> None:
+        """Call `yetty_yplatform_clipboard_set_text`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_clipboard_set_text", _t.yetty_ycore_void_result, [c_void_p, c_char_p, c_size_t])
-        res = _fn(None, self._handle, len)
-        return _rt.result_from_c(res)
-    def clipboard_request_paste(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_clipboard_request_paste`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(text), len))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def clipboard_request_paste(self) -> None:
+        """Call `yetty_yplatform_clipboard_request_paste`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_clipboard_request_paste", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def clipboard_drain(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_clipboard_drain`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def clipboard_drain(self) -> None:
+        """Call `yetty_yplatform_clipboard_drain`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_clipboard_drain", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
 
 class AndroidClipboard(Clipboard):
     """yclass yplatform:android_clipboard"""
@@ -62,15 +72,19 @@ class AndroidClipboard(Clipboard):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_android_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['AndroidClipboard']:
+    def create(cls, **kwargs: Any) -> 'AndroidClipboard':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"AndroidClipboard.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class GlfwClipboard(Clipboard):
     """yclass yplatform:glfw_clipboard"""
@@ -84,15 +98,19 @@ class GlfwClipboard(Clipboard):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_glfw_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['GlfwClipboard']:
+    def create(cls, **kwargs: Any) -> 'GlfwClipboard':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"GlfwClipboard.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class IosClipboard(Clipboard):
     """yclass yplatform:ios_clipboard"""
@@ -106,15 +124,19 @@ class IosClipboard(Clipboard):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_ios_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['IosClipboard']:
+    def create(cls, **kwargs: Any) -> 'IosClipboard':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"IosClipboard.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class WebasmClipboard(Clipboard):
     """yclass yplatform:webasm_clipboard"""
@@ -128,15 +150,19 @@ class WebasmClipboard(Clipboard):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_webasm_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['WebasmClipboard']:
+    def create(cls, **kwargs: Any) -> 'WebasmClipboard':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"WebasmClipboard.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Platform(_rt.YClass):
     """yclass yplatform:platform"""
@@ -150,29 +176,37 @@ class Platform(_rt.YClass):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Platform']:
+    def create(cls, **kwargs: Any) -> 'Platform':
         obj = cls()
-        return obj.init_result
-    def platform_init(self, argc: int, argv: Any) -> _rt.Result[None]:
-        """Call `yetty_yplatform_platform_init`; returns Result, never raises for yclass errors."""
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Platform.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
+    def platform_init(self, app: Any, argc: int, argv: Any) -> None:
+        """Call `yetty_yplatform_platform_init`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_platform_init", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_int, c_void_p])
-        res = _fn(None, self._handle, argc, argv)
-        return _rt.result_from_c(res)
-    def platform_run(self, argc: int, argv: Any) -> _rt.Result[None]:
-        """Call `yetty_yplatform_platform_run`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(app), argc, _rt.handle(argv)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def platform_run(self, app: Any, argc: int, argv: Any) -> None:
+        """Call `yetty_yplatform_platform_run`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_platform_run", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_int, c_void_p])
-        res = _fn(None, self._handle, argc, argv)
-        return _rt.result_from_c(res)
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(app), argc, _rt.handle(argv)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
 
 class AndroidPlatform(Platform):
     """yclass yplatform:android_platform"""
@@ -186,15 +220,19 @@ class AndroidPlatform(Platform):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_android_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['AndroidPlatform']:
+    def create(cls, **kwargs: Any) -> 'AndroidPlatform':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"AndroidPlatform.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class GlfwPlatform(Platform):
     """yclass yplatform:glfw_platform"""
@@ -208,15 +246,19 @@ class GlfwPlatform(Platform):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_glfw_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['GlfwPlatform']:
+    def create(cls, **kwargs: Any) -> 'GlfwPlatform':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"GlfwPlatform.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class IosPlatform(Platform):
     """yclass yplatform:ios_platform"""
@@ -230,15 +272,19 @@ class IosPlatform(Platform):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_ios_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['IosPlatform']:
+    def create(cls, **kwargs: Any) -> 'IosPlatform':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"IosPlatform.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class WebasmPlatform(Platform):
     """yclass yplatform:webasm_platform"""
@@ -252,15 +298,19 @@ class WebasmPlatform(Platform):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_webasm_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['WebasmPlatform']:
+    def create(cls, **kwargs: Any) -> 'WebasmPlatform':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"WebasmPlatform.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class WindowChrome(_rt.YClass):
     """yclass yplatform:window_chrome"""
@@ -274,92 +324,118 @@ class WindowChrome(_rt.YClass):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_window_chrome_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['WindowChrome']:
+    def create(cls, **kwargs: Any) -> 'WindowChrome':
         obj = cls()
-        return obj.init_result
-    def window_chrome_configure(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_chrome_configure`; returns Result, never raises for yclass errors."""
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"WindowChrome.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
+    def window_chrome_configure(self, output_pipe: Any) -> None:
+        """Call `yetty_yplatform_window_chrome_configure`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_chrome_configure", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def window_chrome_destroy(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_chrome_destroy`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(output_pipe)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_chrome_destroy(self) -> None:
+        """Call `yetty_yplatform_window_chrome_destroy`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_chrome_destroy", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def window_chrome_iconify(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_chrome_iconify`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_chrome_iconify(self) -> None:
+        """Call `yetty_yplatform_window_chrome_iconify`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_chrome_iconify", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def window_chrome_toggle_maximize(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_chrome_toggle_maximize`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_chrome_toggle_maximize(self) -> None:
+        """Call `yetty_yplatform_window_chrome_toggle_maximize`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_chrome_toggle_maximize", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def window_chrome_request_close(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_chrome_request_close`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_chrome_request_close(self) -> None:
+        """Call `yetty_yplatform_window_chrome_request_close`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_chrome_request_close", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def window_chrome_drag_by(self, dy: int) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_chrome_drag_by`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_chrome_drag_by(self, dx: int, dy: int) -> None:
+        """Call `yetty_yplatform_window_chrome_drag_by`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_chrome_drag_by", _t.yetty_ycore_void_result, [c_void_p, c_int, c_int])
-        res = _fn(None, self._handle, dy)
-        return _rt.result_from_c(res)
-    def window_chrome_resize_by(self, dy: int, edge: int) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_chrome_resize_by`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, dx, dy))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_chrome_resize_by(self, dx: int, dy: int, edge: int) -> None:
+        """Call `yetty_yplatform_window_chrome_resize_by`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_chrome_resize_by", _t.yetty_ycore_void_result, [c_void_p, c_int, c_int, c_int])
-        res = _fn(None, self._handle, dy, edge)
-        return _rt.result_from_c(res)
-    def window_chrome_begin_interactive_move(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_chrome_begin_interactive_move`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, dx, dy, edge))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_chrome_begin_interactive_move(self) -> None:
+        """Call `yetty_yplatform_window_chrome_begin_interactive_move`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_chrome_begin_interactive_move", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def window_chrome_begin_interactive_resize(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_chrome_begin_interactive_resize`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_chrome_begin_interactive_resize(self, edge: int) -> None:
+        """Call `yetty_yplatform_window_chrome_begin_interactive_resize`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_chrome_begin_interactive_resize", _t.yetty_ycore_void_result, [c_void_p, c_int])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def window_chrome_set_cursor(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_chrome_set_cursor`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, edge))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_chrome_set_cursor(self, shape: int) -> None:
+        """Call `yetty_yplatform_window_chrome_set_cursor`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_chrome_set_cursor", _t.yetty_ycore_void_result, [c_void_p, c_int])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def window_chrome_handle_event(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_chrome_handle_event`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, shape))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_chrome_handle_event(self, event: Any) -> None:
+        """Call `yetty_yplatform_window_chrome_handle_event`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_chrome_handle_event", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(event)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
 
 class GlfwWindowChrome(WindowChrome):
     """yclass yplatform:glfw_window_chrome"""
@@ -373,15 +449,19 @@ class GlfwWindowChrome(WindowChrome):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_glfw_window_chrome_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['GlfwWindowChrome']:
+    def create(cls, **kwargs: Any) -> 'GlfwWindowChrome':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"GlfwWindowChrome.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class Window(_rt.YClass):
     """yclass yplatform:window"""
@@ -395,71 +475,91 @@ class Window(_rt.YClass):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['Window']:
+    def create(cls, **kwargs: Any) -> 'Window':
         obj = cls()
-        return obj.init_result
-    def window_open(self, height: int, title: str | bytes | None) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_open`; returns Result, never raises for yclass errors."""
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"Window.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
+    def window_open(self, width: int, height: int, title: str | bytes | None) -> None:
+        """Call `yetty_yplatform_window_open`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_open", _t.yetty_ycore_void_result, [c_void_p, c_int, c_int, c_char_p])
-        res = _fn(None, self._handle, height, _rt.cstr(title))
-        return _rt.result_from_c(res)
-    def window_destroy(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_destroy`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, width, height, _rt.cstr(title)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_destroy(self) -> None:
+        """Call `yetty_yplatform_window_destroy`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_destroy", _t.yetty_ycore_void_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def window_create_surface(self) -> _rt.Result[Any]:
-        """Call `yetty_yplatform_window_create_surface`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_create_surface(self, instance: Any) -> Any:
+        """Call `yetty_yplatform_window_create_surface`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_create_surface", _t.yetty_yclass_void_ptr_result, [c_void_p, c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def window_get_size(self, height: Any) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_get_size`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(instance)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_get_size(self, width: Any, height: Any) -> None:
+        """Call `yetty_yplatform_window_get_size`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_get_size", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
-        res = _fn(None, self._handle, height)
-        return _rt.result_from_c(res)
-    def window_get_framebuffer_size(self, height: Any) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_get_framebuffer_size`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(width), _rt.handle(height)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_get_framebuffer_size(self, width: Any, height: Any) -> None:
+        """Call `yetty_yplatform_window_get_framebuffer_size`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_get_framebuffer_size", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
-        res = _fn(None, self._handle, height)
-        return _rt.result_from_c(res)
-    def window_get_content_scale(self, yscale: Any) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_get_content_scale`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(width), _rt.handle(height)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_get_content_scale(self, xscale: Any, yscale: Any) -> None:
+        """Call `yetty_yplatform_window_get_content_scale`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_get_content_scale", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
-        res = _fn(None, self._handle, yscale)
-        return _rt.result_from_c(res)
-    def window_should_close(self) -> _rt.Result[int]:
-        """Call `yetty_yplatform_window_should_close`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(xscale), _rt.handle(yscale)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_should_close(self) -> int:
+        """Call `yetty_yplatform_window_should_close`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_should_close", _t.yetty_ycore_int_result, [c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
-    def window_set_title(self) -> _rt.Result[None]:
-        """Call `yetty_yplatform_window_set_title`; returns Result, never raises for yclass errors."""
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def window_set_title(self, title: str | bytes | None) -> None:
+        """Call `yetty_yplatform_window_set_title`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yplatform_window_set_title", _t.yetty_ycore_void_result, [c_void_p, c_char_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
+        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(title)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
 
 class AndroidWindow(Window):
     """yclass yplatform:android_window"""
@@ -473,15 +573,19 @@ class AndroidWindow(Window):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_android_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['AndroidWindow']:
+    def create(cls, **kwargs: Any) -> 'AndroidWindow':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"AndroidWindow.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class GlfwWindow(Window):
     """yclass yplatform:glfw_window"""
@@ -495,15 +599,19 @@ class GlfwWindow(Window):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_glfw_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['GlfwWindow']:
+    def create(cls, **kwargs: Any) -> 'GlfwWindow':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"GlfwWindow.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class IosWindow(Window):
     """yclass yplatform:ios_window"""
@@ -517,15 +625,19 @@ class IosWindow(Window):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_ios_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['IosWindow']:
+    def create(cls, **kwargs: Any) -> 'IosWindow':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"IosWindow.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 class WebasmWindow(Window):
     """yclass yplatform:webasm_window"""
@@ -539,15 +651,19 @@ class WebasmWindow(Window):
         if _handle is None:
             _fn = _rt.cfn("yetty_yplatform_webasm_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['WebasmWindow']:
+    def create(cls, **kwargs: Any) -> 'WebasmWindow':
         obj = cls()
-        return obj.init_result
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"WebasmWindow.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
 
 def android_clipboard_configure(obj: Any, response_pipe: Any) -> _rt.Result[None]:
     """Call `yetty_yplatform_android_clipboard_configure`."""

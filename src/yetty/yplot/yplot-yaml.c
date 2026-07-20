@@ -12,6 +12,8 @@
  */
 
 #include <yetty/yplot/yplot-gen.h>
+#include <yetty/yplot/yplot.h>
+#include <yetty/yplot/resolve.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yexpr/yexpr.h>
@@ -204,100 +206,32 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_draw
     uint32_t bc_buf[1024] = {0};
     size_t bc_count = 0;
 
-    /* Wire data buffers — only populated when the `source:` path supplies
-     * buffer declarations. Zero-fill scratch outlives serialization. The
-     * parsed plot expression lives at function scope too: wire_bufs entries
-     * alias plot_expr.buffers[].inline_values, which must stay alive until
-     * the uniforms are serialized at the bottom. */
+    /* The legacy `functions:` path carries no source-declared data buffers, so
+     * the shared serialize below is fed an empty buffer set. (The `source:`
+     * path returns earlier through yetty_yplot_emit_expression.) */
     struct yetty_yplot_data_buffer wire_bufs[8] = {0};
     uint32_t wire_buf_count = 0;
     float *zero_fill = NULL;
-    struct yetty_yexpr_arena expr_arena;
-    struct yetty_yexpr_plot_expr plot_expr = {0};
 
     if (has_source) {
-        /* Full yexpr-plot parse → bytecode + data-buffer table. */
-        struct yetty_yexpr_plot_expr_result pr =
-            yetty_yexpr_parse_plot(source, strlen(source), &expr_arena);
-        if (YETTY_IS_OK(pr)) {
-            plot_expr = pr.value;
+        /* Route the full DSL string through the one shared yplot path, so
+         * figure/axis attributes (@plot.title, @x.scale, …) and chrome (title,
+         * axis/tick labels, legend, colorbar) work identically to the shell and
+         * yecho. Data buffers declared in the source flow through it too. */
+        struct yetty_yplot_render_config config = {
+            .bounds_w = uniforms.bounds_w,
+            .bounds_h = uniforms.bounds_h,
+            .x_min = uniforms.x_min,
+            .x_max = uniforms.x_max,
+            .y_min = uniforms.y_min,
+            .y_max = uniforms.y_max,
+            .flags = uniforms.flags,
+        };
+        return yetty_yplot_emit_expression(source, strlen(source), NULL, 0, &config, buffer,
+                                           uniforms.bounds_x, uniforms.bounds_y, NULL, NULL);
+    }
 
-            /* Inline domain / viewport overrides whatever YAML set. */
-            if (plot_expr.has_x_range) {
-                uniforms.x_min = plot_expr.x_min;
-                uniforms.x_max = plot_expr.x_max;
-            }
-            if (plot_expr.has_y_range) {
-                uniforms.y_min = plot_expr.y_min;
-                uniforms.y_max = plot_expr.y_max;
-            }
-            if (plot_expr.has_view) {
-                uniforms.x_min = plot_expr.view_x_min;
-                uniforms.x_max = plot_expr.view_x_max;
-                uniforms.y_min = plot_expr.view_y_min;
-                uniforms.y_max = plot_expr.view_y_max;
-            }
-
-            uniforms.function_count = plot_expr.def_count;
-            if (uniforms.function_count > 8) {
-                uniforms.function_count = 8;
-            }
-
-            /* Apply @<name>.color attrs to the function slots. */
-            for (uint32_t i = 0; i < plot_expr.attr_count; i++) {
-                const struct yetty_yexpr_plot_attr *attr = &plot_expr.attrs[i];
-                if (strcmp(attr->attr_name, "color") != 0) {
-                    continue;
-                }
-                for (uint32_t j = 0; j < uniforms.function_count; j++) {
-                    if (strcmp(plot_expr.defs[j].name, attr->plot_name) == 0) {
-                        uniforms.colors[j] = yplot_parse_color(attr->value);
-                        break;
-                    }
-                }
-            }
-
-            /* Bytecode. */
-            struct yetty_yfsvm_program_result prog_res = yetty_yfsvm_compile_multi(&plot_expr);
-            if (YETTY_IS_OK(prog_res)) {
-                if (prog_res.value.uses_time) {
-                    uniforms.flags |= 0x8u; /* YETTY_YPLOT_FLAG_USES_TIME */
-                }
-                bc_count = yetty_yfsvm_program_serialize(&prog_res.value, bc_buf, 1024);
-            }
-
-            /* Buffer declarations → wire data buffers. Inline values flow
-             * verbatim; size-only decls render as a flat baseline until
-             * something streams data in. */
-            uint32_t decl_count = plot_expr.buffer_count;
-            if (decl_count > 8) {
-                decl_count = 8;
-            }
-            size_t zero_fill_total = 0;
-            for (uint32_t i = 0; i < decl_count; i++) {
-                const struct yetty_yexpr_plot_buffer *d = &plot_expr.buffers[i];
-                if (d->inline_count == 0 && d->size > 0) {
-                    zero_fill_total += d->size;
-                }
-            }
-            if (zero_fill_total > 0) {
-                zero_fill = calloc(zero_fill_total, sizeof(float));
-            }
-            size_t zf_off = 0;
-            for (uint32_t i = 0; i < decl_count; i++) {
-                const struct yetty_yexpr_plot_buffer *d = &plot_expr.buffers[i];
-                if (d->inline_count > 0) {
-                    wire_bufs[i].samples = d->inline_values;
-                    wire_bufs[i].count = d->inline_count;
-                } else if (d->size > 0 && zero_fill) {
-                    wire_bufs[i].samples = zero_fill + zf_off;
-                    wire_bufs[i].count = d->size;
-                    zf_off += d->size;
-                }
-            }
-            wire_buf_count = decl_count;
-        }
-    } else {
+    {
         /* Legacy `functions:` list. */
         uniforms.function_count = (uint32_t)func_count;
         if (func_count > 0) {

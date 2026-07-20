@@ -20,22 +20,28 @@ class App(_yapp.App):
         if _handle is None:
             _fn = _rt.cfn("yetty_yguiapp_app_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
             res = _rt.result_from_c(_fn(None))
-            if not res:
-                _rt.YClass.__init__(self, None, res.error)
-                return
+            if res.error is not None:
+                raise _rt.YettyError(res.error.message)
             _handle = res.value
         super().__init__(_handle)
     @classmethod
-    def create(cls) -> _rt.Result['App']:
+    def create(cls, **kwargs: Any) -> 'App':
         obj = cls()
-        return obj.init_result
-    def build(self) -> _rt.Result[None]:
-        """Call `yetty_yguiapp_build`; returns Result, never raises for yclass errors."""
+        for _key, _value in kwargs.items():
+            _setter = getattr(obj, "set_" + _key, None)
+            if _setter is None:
+                raise TypeError(f"App.create: unknown property {_key!r}")
+            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
+        return obj
+    def build(self, root: Any) -> None:
+        """Call `yetty_yguiapp_build`; raises _rt.YettyError on failure."""
         if self._handle is None:
-            return self._invalid_result()
+            raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yguiapp_build", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
-        res = _fn(None, self._handle)
-        return _rt.result_from_c(res)
+        res = _rt.result_from_c(_fn(self._handle, _rt.handle(root)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
     @property
     def root(self) -> Any:
         """Property `root` (raises YettyError on failure)."""
@@ -46,4 +52,10 @@ class App(_yapp.App):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
+
+def app_quit(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_yguiapp_app_quit`."""
+    _fn = _rt.cfn("yetty_yguiapp_app_quit", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
 
