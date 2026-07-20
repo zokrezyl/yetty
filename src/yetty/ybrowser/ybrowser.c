@@ -404,6 +404,7 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
     yetty_ylexbor_grid_classes_free(r);
     free(r->text_chunks);
     free(r->base_url);
+    free(r->pending_navigation);
     kv_store_destroy(&r->web_local_storage);
     kv_store_destroy(&r->web_session_storage);
     free(r->web_cookie_string);
@@ -1105,6 +1106,36 @@ int yetty_ylexbor_content_height(const struct yetty_ylexbor *r)
 int yetty_ylexbor_dom_dirty(const struct yetty_ylexbor *r)
 {
     return r ? r->dom_dirty : 0;
+}
+
+/* A GPU repaint is owed (see needs_paint in ybrowser-internal.h). Unlike
+ * dom_dirty, this survives a geometry getter's layout flush, so the render loop
+ * still repaints after code that mutates then measures in one JS turn. */
+int yetty_ylexbor_needs_paint(const struct yetty_ylexbor *r)
+{
+    return r ? r->needs_paint : 0;
+}
+
+/* Host clears this once it has shipped the current frame to the GPU. */
+void yetty_ylexbor_mark_painted(struct yetty_ylexbor *r)
+{
+    if (r) {
+        r->needs_paint = 0;
+    }
+}
+
+/* Hand the host any JS-initiated navigation target (location.assign/replace/
+ * reload or location.href = …), transferring ownership and clearing it. The
+ * host polls this each tick and drives a real navigate(). Returns NULL when no
+ * navigation is pending; caller frees the returned string. */
+char *yetty_ylexbor_take_pending_navigation(struct yetty_ylexbor *r)
+{
+    if (!r || !r->pending_navigation) {
+        return NULL;
+    }
+    char *url = r->pending_navigation;
+    r->pending_navigation = NULL;
+    return url;
 }
 
 /* Rebuild the box tree + run layout from the (possibly mutated) DOM. This is

@@ -802,6 +802,12 @@ struct yetty_ylexbor {
 	 * from a string with no associated URL. Owned, freed on destroy. */
     char *base_url;
 
+    /* JS-initiated navigation request (location.assign/replace/reload or
+	 * location.href = …). Recorded here for the host to pick up and drive a
+	 * real navigate() next frame; owned, cleared by the take-getter. NULL when
+	 * no navigation is pending. */
+    char *pending_navigation;
+
     /* Timer queue: array of timer*, sorted by deadline_ms ascending. */
     struct yetty_ylexbor_timer **timers;
     int timer_count, timer_cap;
@@ -855,6 +861,16 @@ struct yetty_ylexbor {
     int defer_scripts;
     int dom_dirty; /* JS mutated the DOM — host should
 	                            * relayout. */
+    /* A GPU repaint is owed. Set alongside dom_dirty on every DOM/style
+     * mutation, but — unlike dom_dirty — NOT cleared by a geometry getter's
+     * layout flush (getBoundingClientRect/clientWidth). A getter flush makes the
+     * layout current (clears dom_dirty) yet the framebuffer is still stale, so
+     * the render loop must consult this to know a paint is still pending. Without
+     * it, code that mutates then measures in the same JS turn (iron-overlay
+     * positioning its dialog then reading getBoundingClientRect) clears dom_dirty
+     * before the render loop looks, and the modal is never repainted. Cleared by
+     * the host once it ships the frame (yetty_ylexbor_mark_painted). */
+    int needs_paint;
     /* Set while a box-build + layout pass is running (see
      * yetty_ylexbor_relayout_boxes_and_layout). The layout-dependent geometry
      * getters (clientWidth/offsetWidth/getBoundingClientRect) check this before

@@ -228,6 +228,22 @@ char *yetty_ylexbor_ancestor_attr_at(struct yetty_ylexbor *r, float x, float y, 
  * yetty_ylexbor_relayout. */
 int yetty_ylexbor_dom_dirty(const struct yetty_ylexbor *r);
 
+/* A GPU repaint is owed. Set on every DOM/style mutation and, unlike dom_dirty,
+ * NOT cleared by a geometry getter's forced layout flush — so the render loop
+ * still repaints after JS that mutates then measures in one turn (e.g. an
+ * overlay positioning itself then reading getBoundingClientRect). The host
+ * consults this each tick and calls yetty_ylexbor_mark_painted() once it ships
+ * the frame. */
+int yetty_ylexbor_needs_paint(const struct yetty_ylexbor *r);
+void yetty_ylexbor_mark_painted(struct yetty_ylexbor *r);
+
+/* Returns any JS-initiated navigation target (location.assign/replace/reload or
+ * `location.href = …`), transferring ownership; NULL when none is pending. The
+ * host polls this each tick and drives a real navigate() with the result, then
+ * frees it. This is what lets e.g. YouTube's consent flow reload into the site
+ * after saving the choice. */
+char *yetty_ylexbor_take_pending_navigation(struct yetty_ylexbor *r);
+
 /* Re-run box-build + layout. Cheap-ish (~ms for small docs). Called by
  * the host after a JS turn that mutated the DOM, or after a viewport
  * resize. Render() reads the same boxes. */

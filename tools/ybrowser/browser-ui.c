@@ -1878,6 +1878,16 @@ static void render_pass(struct app *a)
     }
     render_active(a);
     a->pending_render = 0;
+    /* The frame is now shipped (or determined unchanged) — the paint debt for
+     * the active engine is settled. Clearing here (not on dom_dirty) is what
+     * lets a getBoundingClientRect-cleared dom_dirty still have driven this
+     * render via needs_paint above. */
+    {
+        struct tab *painted = &a->tabs[a->active];
+        if (painted->kind == CK_HTML && painted->engine) {
+            yetty_ylexbor_mark_painted(painted->engine);
+        }
+    }
     /* Each render relayouts the page and re-ships the WHOLE drawable list to
      * the GPU. A flood of these (one per image as it streams in) is a prime
      * suspect for "slow load". `render_count` is app state, not a global. */
@@ -1910,7 +1920,22 @@ static int pump_active(struct app *a)
         if (next >= 0) {
             wait_ms = next < 100 ? next : 100;
         }
-        if (yetty_ylexbor_dom_dirty(t->engine)) {
+        /* JS asked to navigate (location.assign/replace/reload or
+		 * `location.href = …`). Drive a real page load — this is how e.g.
+		 * YouTube's consent flow reloads into the site after saving the choice.
+		 * navigate() replaces t->engine, so bail out of the rest of this pump
+		 * and let the next tick run against the fresh engine. */
+        char *js_nav = yetty_ylexbor_take_pending_navigation(t->engine);
+        if (js_nav) {
+            navigate(a, t, js_nav, 1);
+            return 0;
+        }
+        /* needs_paint (not just dom_dirty): JS that mutates then reads
+         * getBoundingClientRect in the same turn — iron-overlay positioning its
+         * dialog — flushes layout, which clears dom_dirty before we look. The
+         * repaint would be lost (the consent modal never repaints). needs_paint
+         * survives that flush, so we still repaint. */
+        if (yetty_ylexbor_dom_dirty(t->engine) || yetty_ylexbor_needs_paint(t->engine)) {
             t->needs_render = 1;
             a->pending_render = 1;
         }

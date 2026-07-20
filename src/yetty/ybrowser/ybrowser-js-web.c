@@ -336,6 +336,14 @@ struct yetty_ybrowser_loader {
 	 * string when no cache dir could be derived. */
     char altsvc_path[1024];
 
+    /* Cookies a page set via document.cookie, mirrored here (separate from
+	 * curl's jar) so the next same-origin DOCUMENT navigation carries them —
+	 * consent/session cookies (YouTube SOCS) are written this way then the page
+	 * reloads. Host-scoped to avoid leaking cross-site. Guarded by cache_mutex;
+	 * freed on loader destroy. */
+    char *page_cookies;
+    char *page_cookie_host;
+
     /* Disk tier — persists cache entries across restarts. The memory
 	 * LRU below stays authoritative within a session; disk hits are
 	 * promoted into it and flow through the same freshness /
@@ -1145,6 +1153,8 @@ struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrows
         loader_cache_entry_free(&loader->cache_entries[i]);
     }
     free(loader->cache_entries);
+    free(loader->page_cookies);
+    free(loader->page_cookie_host);
     pthread_mutex_destroy(&loader->cache_mutex);
     pthread_mutex_destroy(&loader->inflight_mutex);
     yetty_ybrowser_disk_cache_shutdown(&loader->disk_cache);
@@ -1369,6 +1379,24 @@ static void fetch_configure_easy(struct yetty_ybrowser_loader *loader, CURL *eas
      * handles via CURL_LOCK_DATA_COOKIE on the loader, so cookies set on the
      * page request are visible to subresource/API fetches too. */
     curl_easy_setopt(easy, CURLOPT_COOKIEFILE, "");
+    /* A same-origin DOCUMENT navigation also carries cookies the previous page
+	 * set via document.cookie (mirrored on the loader): that is how a consent
+	 * reload sends its freshly-written SOCS. Host-scoped so a page's cookies
+	 * never travel to a different site. curl copies the string in setopt, so it
+	 * is safe to unlock right after. */
+    if (request->kind == YETTY_YBROWSER_REQUEST_DOCUMENT) {
+        pthread_mutex_lock(&loader->cache_mutex);
+        if (loader->page_cookies && loader->page_cookie_host) {
+            const char *req_host = NULL;
+            size_t req_host_len = 0;
+            if (url_host_span(request->url, &req_host, &req_host_len) &&
+                req_host_len == strlen(loader->page_cookie_host) &&
+                strncmp(req_host, loader->page_cookie_host, req_host_len) == 0) {
+                curl_easy_setopt(easy, CURLOPT_COOKIE, loader->page_cookies);
+            }
+        }
+        pthread_mutex_unlock(&loader->cache_mutex);
+    }
     curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, fetch_write_cb);
     curl_easy_setopt(easy, CURLOPT_WRITEDATA, transfer);
     curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, fetch_header_cb);
@@ -2657,6 +2685,40 @@ DEFINE_STORAGE(session, session_store)
  * never leak cookies into each other; freed by the engine destroy.
  * ===========================================================================*/
 
+/* Mirror the page's accumulated document.cookie onto the loader so the next
+ * same-origin DOCUMENT navigation can send it: document.cookie and curl's jar
+ * are separate stores, and sites set consent/session cookies via document.cookie
+ * then reload — YouTube writes SOCS this way; without this the reload is
+ * cookieless and the consent wall returns. Host-scoped so it never leaks to a
+ * different site. Safe from the JS thread (a plain mutexed string copy — no curl
+ * handle, so it can't disturb the loader's in-flight transfers). */
+static void cookie_bridge_to_jar(struct yetty_ylexbor *r, const char *cookie)
+{
+    (void)cookie;
+    if (!r || !r->loader || !r->base_url || !r->web_cookie_string) {
+        return;
+    }
+    const char *host = NULL;
+    size_t host_len = 0;
+    if (!url_host_span(r->base_url, &host, &host_len) || host_len == 0) {
+        return;
+    }
+    struct yetty_ybrowser_loader *loader = r->loader;
+    char *cookies_copy = strdup(r->web_cookie_string);
+    char *host_copy = strndup(host, host_len);
+    if (!cookies_copy || !host_copy) {
+        free(cookies_copy);
+        free(host_copy);
+        return;
+    }
+    pthread_mutex_lock(&loader->cache_mutex);
+    free(loader->page_cookies);
+    free(loader->page_cookie_host);
+    loader->page_cookies = cookies_copy;
+    loader->page_cookie_host = host_copy;
+    pthread_mutex_unlock(&loader->cache_mutex);
+}
+
 static JSValue js_doc_cookie_get(JSContext *ctx, JSValueConst this_val)
 {
     (void)this_val;
@@ -2687,6 +2749,7 @@ static JSValue js_doc_cookie_set(JSContext *ctx, JSValueConst this_val, JSValueC
             r->web_cookie_string = p;
         }
     }
+    cookie_bridge_to_jar(r, s);
     JS_FreeCString(ctx, s);
     return JS_UNDEFINED;
 }
@@ -3156,6 +3219,72 @@ static void define_getter(JSContext *ctx, JSValue obj, const char *name,
     JS_FreeAtom(ctx, atom);
 }
 
+/* location.assign/replace/reload and `location.href = …` all funnel here:
+ * record the resolved target so the host can drive a real navigate() on the
+ * next frame (a plain page has no other way to reload — YouTube's consent flow
+ * calls location.reload() after saving the choice, and the old no-op stub left
+ * it stuck on "Saving your choice" forever). */
+static void location_request_navigation(JSContext *ctx, struct yetty_ylexbor *r, const char *url)
+{
+    (void)ctx;
+    if (!r || !url || !*url) {
+        return;
+    }
+    char *resolved = yetty_ylexbor_resolve_url(r, url);
+    free(r->pending_navigation);
+    r->pending_navigation = resolved ? resolved : strdup(url);
+}
+
+static JSValue js_location_assign(JSContext *ctx, JSValueConst this_val, int argc,
+                                  JSValueConst *argv)
+{
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    if (argc >= 1) {
+        const char *url = JS_ToCString(ctx, argv[0]);
+        if (url) {
+            location_request_navigation(ctx, r, url);
+            JS_SetPropertyStr(ctx, (JSValue)this_val, "__hrefValue",
+                              JS_NewString(ctx, (r && r->pending_navigation) ? r->pending_navigation
+                                                                             : url));
+            JS_FreeCString(ctx, url);
+        }
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_location_reload(JSContext *ctx, JSValueConst this_val, int argc,
+                                  JSValueConst *argv)
+{
+    (void)this_val;
+    (void)argc;
+    (void)argv;
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    if (r && r->base_url) {
+        free(r->pending_navigation);
+        r->pending_navigation = strdup(r->base_url);
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_location_href_get(JSContext *ctx, JSValueConst this_val)
+{
+    return JS_GetPropertyStr(ctx, this_val, "__hrefValue");
+}
+
+static JSValue js_location_href_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
+{
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    const char *url = JS_ToCString(ctx, val);
+    if (url) {
+        location_request_navigation(ctx, r, url);
+        JS_SetPropertyStr(ctx, (JSValue)this_val, "__hrefValue",
+                          JS_NewString(ctx, (r && r->pending_navigation) ? r->pending_navigation
+                                                                         : url));
+        JS_FreeCString(ctx, url);
+    }
+    return JS_UNDEFINED;
+}
+
 void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 {
     JSContext *ctx = (JSContext *)r->js_ctx;
@@ -3228,7 +3357,8 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 	 * Location semantics (assign/replace/reload) can come later. */
     JSValue loc = JS_NewObject(ctx);
     const char *href = r->base_url ? r->base_url : "about:blank";
-    JS_SetPropertyStr(ctx, loc, "href", JS_NewString(ctx, href));
+    /* Backing store for the href accessor defined below. */
+    JS_SetPropertyStr(ctx, loc, "__hrefValue", JS_NewString(ctx, href));
     /* Crude parse — good enough for feature detection. */
     const char *p = strstr(href, "://");
     if (p) {
@@ -3265,15 +3395,30 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         JS_SetPropertyStr(ctx, loc, "hash", JS_NewString(ctx, ""));
         JS_SetPropertyStr(ctx, loc, "port", JS_NewString(ctx, ""));
     }
-    const char *locmethods = "l => { l.assign = () => {}; l.replace = () => {}; "
-                             "       l.reload = () => {}; l.toString = () => l.href; "
-                             "       return l; }";
-    JSValue li = JS_Eval(ctx, locmethods, strlen(locmethods), "<loc>", JS_EVAL_TYPE_GLOBAL);
-    if (!JS_IsException(li)) {
-        JSValue r2 = JS_Call(ctx, li, JS_UNDEFINED, 1, (JSValueConst[]){loc});
-        JS_FreeValue(ctx, r2);
+    JS_SetPropertyStr(ctx, loc, "assign", JS_NewCFunction(ctx, js_location_assign, "assign", 1));
+    JS_SetPropertyStr(ctx, loc, "replace", JS_NewCFunction(ctx, js_location_assign, "replace", 1));
+    JS_SetPropertyStr(ctx, loc, "reload", JS_NewCFunction(ctx, js_location_reload, "reload", 0));
+    /* href is an accessor: reads return the stored value; writes record a
+	 * navigation for the host to act on. */
+    {
+        JSAtom href_atom = JS_NewAtom(ctx, "href");
+        JSValue href_get = JS_NewCFunction2(ctx, (JSCFunction *)js_location_href_get, "href", 0,
+                                            JS_CFUNC_getter, 0);
+        JSValue href_set = JS_NewCFunction2(ctx, (JSCFunction *)js_location_href_set, "href", 1,
+                                            JS_CFUNC_setter, 0);
+        JS_DefinePropertyGetSet(ctx, loc, href_atom, href_get, href_set,
+                                JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE);
+        JS_FreeAtom(ctx, href_atom);
     }
-    JS_FreeValue(ctx, li);
+    {
+        const char *tostr = "l => { l.toString = () => l.href; return l; }";
+        JSValue li = JS_Eval(ctx, tostr, strlen(tostr), "<loc>", JS_EVAL_TYPE_GLOBAL);
+        if (!JS_IsException(li)) {
+            JSValue r2 = JS_Call(ctx, li, JS_UNDEFINED, 1, (JSValueConst[]){loc});
+            JS_FreeValue(ctx, r2);
+        }
+        JS_FreeValue(ctx, li);
+    }
     /* Both `window.location` and `document.location` reference the
 	 * same Location object — share by ref. */
     JSValue doc_for_loc = JS_GetPropertyStr(ctx, global, "document");
@@ -4336,6 +4481,29 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "            try{ el.attributeChangedCallback(an,null,el.getAttribute(an),null); }catch(e){}"
         "          } } } }catch(e){}"
         "    connectIfNeeded(el);"
+        /* Reconcile own data properties that shadow a prototype accessor. A value
+			 * written to the raw element before its class prototype was installed
+			 * becomes an own DATA property; after setPrototypeOf it shadows the class's
+			 * forwarding/data accessor, so later reads and writes never reach the
+			 * component instance. YouTube's Wiz yt-formatted-string is a wrapper whose
+			 * `text` accessor forwards to an inner instance (inst.text); a `text` bound
+			 * before upgrade lands as an own data property that shadows it, so inst.text
+			 * stays undefined and the node renders blank (the consent dialog title and
+			 * Reject/Accept labels). The prototype and instance now exist, so route each
+			 * such value back through the accessor's setter (the standard pre-upgrade
+			 * property reconciliation). */
+        "    try{ var reconcileProto=Object.getPrototypeOf(el);"
+        "      Object.getOwnPropertyNames(el).forEach(function(propName){"
+        "        if(propName.charAt(0)==='_')return;"
+        "        var ownDesc=Object.getOwnPropertyDescriptor(el,propName);"
+        "        if(!ownDesc||!('value' in ownDesc)||!ownDesc.writable||!ownDesc.configurable)return;"
+        "        var accessorDesc=null, protoCursor=reconcileProto;"
+        "        while(protoCursor){ accessorDesc=Object.getOwnPropertyDescriptor(protoCursor,propName);"
+        "          if(accessorDesc)break; protoCursor=Object.getPrototypeOf(protoCursor); }"
+        "        if(accessorDesc && typeof accessorDesc.set==='function'){"
+        "          var stashedValue=el[propName];"
+        "          try{ delete el[propName]; el[propName]=stashedValue; }catch(reassignErr){} }"
+        "      }); }catch(reconcileErr){}"
         "  }catch(e){ try{console.error('ce upgrade <'+(el&&el.tagName)+'>',"
         "    (e&&e.name||'Error')+': '+(e&&e.message), '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- "
         "'));}catch(_){}} };"

@@ -261,6 +261,10 @@ static void mark_dirty(JSContext *ctx)
     struct yetty_ylexbor *r = runtime_ylex(ctx);
     if (r) {
         r->dom_dirty = 1;
+        /* A repaint is owed too. Kept separate from dom_dirty because a geometry
+         * getter's layout flush clears dom_dirty (layout is current) but leaves
+         * the framebuffer stale — see needs_paint in ybrowser-internal.h. */
+        r->needs_paint = 1;
     }
 }
 
@@ -5693,6 +5697,131 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
  * matching 'click' listener.
  * ===========================================================================*/
 
+/* Synthetic pointer-event helpers. The host builds a plain event object for
+ * mouse dispatch: apps routinely replace window.MouseEvent with their own
+ * wrapper (YouTube's produces an event whose .type is undefined in our engine),
+ * so we cannot construct the page's MouseEvent. These give our plain object the
+ * DOM Event methods real handlers call — most importantly composedPath(), which
+ * Polymer's tap-gesture emitter invokes; on the old bare object that call threw,
+ * silently killing every button tap. */
+static JSValue synth_event_composed_path(JSContext *ctx, JSValueConst this_val, int argc,
+                                         JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JSValue path = JS_GetPropertyStr(ctx, this_val, "__composedPath");
+    if (JS_IsUndefined(path) || JS_IsNull(path)) {
+        JS_FreeValue(ctx, path);
+        return JS_NewArray(ctx);
+    }
+    return path;
+}
+
+static JSValue synth_event_prevent_default(JSContext *ctx, JSValueConst this_val, int argc,
+                                           JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "defaultPrevented", JS_TRUE);
+    return JS_UNDEFINED;
+}
+
+static JSValue synth_event_stop_propagation(JSContext *ctx, JSValueConst this_val, int argc,
+                                            JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "__propagationStopped", JS_TRUE);
+    return JS_UNDEFINED;
+}
+
+static JSValue synth_event_stop_immediate_propagation(JSContext *ctx, JSValueConst this_val,
+                                                      int argc, JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "__propagationStopped", JS_TRUE);
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "__immediateStopped", JS_TRUE);
+    return JS_UNDEFINED;
+}
+
+/* Fire one synthetic event over the target's ancestor chain (bubble phase) then
+ * the document/window bucket, honouring stopPropagation / stopImmediatePropagation
+ * flags the handlers set. Returns 1 if any listener ran. */
+static int synth_dispatch_one(struct yetty_ylexbor *r, struct js_dom_state *state,
+                              lxb_dom_element_t *target, const char *type, JSValueConst event)
+{
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    int snapshot = state->listener_count;
+    int fired = 0;
+    int stop = 0;
+    for (lxb_dom_node_t *n = lxb_dom_interface_node(target); n && !stop; n = n->parent) {
+        if (n->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        lxb_dom_element_t *el = lxb_dom_interface_element(n);
+        JSValue current = wrap_element(ctx, el);
+        JS_SetPropertyStr(ctx, (JSValue)event, "currentTarget", JS_DupValue(ctx, current));
+        for (int i = 0; i < snapshot; i++) {
+            if (state->listeners[i].el != el || strcmp(state->listeners[i].type, type) != 0) {
+                continue;
+            }
+            JSValueConst args[] = {event};
+            JSValue ret = JS_Call(ctx, state->listeners[i].handler, current, 1, args);
+            if (JS_IsException(ret)) {
+                JSValue ex = JS_GetException(ctx);
+                JS_FreeValue(ctx, ex);
+                r->js_error_count++;
+            } else {
+                JS_FreeValue(ctx, ret);
+            }
+            fired = 1;
+            JSValue immediate = JS_GetPropertyStr(ctx, event, "__immediateStopped");
+            int immediate_stop = JS_ToBool(ctx, immediate);
+            JS_FreeValue(ctx, immediate);
+            if (immediate_stop) {
+                break;
+            }
+        }
+        JS_FreeValue(ctx, current);
+        JSValue propagation = JS_GetPropertyStr(ctx, event, "__propagationStopped");
+        stop = JS_ToBool(ctx, propagation);
+        JS_FreeValue(ctx, propagation);
+    }
+    if (!stop) {
+        JSValue global = JS_GetGlobalObject(ctx);
+        JSValue document = JS_GetPropertyStr(ctx, global, "document");
+        JSValue current =
+            JS_IsObject(document) ? JS_DupValue(ctx, document) : JS_DupValue(ctx, global);
+        JS_SetPropertyStr(ctx, (JSValue)event, "currentTarget", JS_DupValue(ctx, current));
+        for (int i = 0; i < snapshot; i++) {
+            if (state->listeners[i].el != NULL || strcmp(state->listeners[i].type, type) != 0) {
+                continue;
+            }
+            JSValueConst args[] = {event};
+            JSValue ret = JS_Call(ctx, state->listeners[i].handler, current, 1, args);
+            if (JS_IsException(ret)) {
+                JSValue ex = JS_GetException(ctx);
+                JS_FreeValue(ctx, ex);
+                r->js_error_count++;
+            } else {
+                JS_FreeValue(ctx, ret);
+            }
+            fired = 1;
+            JSValue immediate = JS_GetPropertyStr(ctx, event, "__immediateStopped");
+            int immediate_stop = JS_ToBool(ctx, immediate);
+            JS_FreeValue(ctx, immediate);
+            if (immediate_stop) {
+                break;
+            }
+        }
+        JS_FreeValue(ctx, current);
+        JS_FreeValue(ctx, document);
+        JS_FreeValue(ctx, global);
+    }
+    return fired;
+}
+
 int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
 {
     if (!r || !r->js_ctx || !r->js_rt) {
@@ -5700,6 +5829,9 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
     }
     struct js_dom_state *state = JS_GetRuntimeOpaque((JSRuntime *)r->js_rt);
     if (!state || state->listener_count == 0) {
+        return 0;
+    }
+    if (state->dispatch_depth > 32) {
         return 0;
     }
 
@@ -5730,44 +5862,75 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
         return 0;
     }
 
-    /* Walk up ancestry; fire any 'click' listener on the chain. */
     JSContext *ctx = (JSContext *)r->js_ctx;
-    int fired = 0;
+    state->dispatch_depth++;
+
+    /* composedPath = [target, ...element ancestors, document, window]. Real
+     * handlers (Polymer's tap-gesture emitter) call event.composedPath(); built
+     * once and shared across the down/up/click events. */
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue document = JS_GetPropertyStr(ctx, global, "document");
+    JSValue path = JS_NewArray(ctx);
+    uint32_t path_len = 0;
     for (lxb_dom_node_t *n = lxb_dom_interface_node(target); n; n = n->parent) {
-        if (n->type != LXB_DOM_NODE_TYPE_ELEMENT) {
-            continue;
-        }
-        lxb_dom_element_t *el = lxb_dom_interface_element(n);
-        for (int i = 0; i < state->listener_count; i++) {
-            if (state->listeners[i].el != el) {
-                continue;
-            }
-            if (strcmp(state->listeners[i].type, "click") != 0) {
-                continue;
-            }
-            JSValue ev = JS_NewObject(ctx);
-            JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, "click"));
-            JS_SetPropertyStr(ctx, ev, "target", wrap_element(ctx, target));
-            JS_SetPropertyStr(ctx, ev, "currentTarget", wrap_element(ctx, el));
-            JS_SetPropertyStr(ctx, ev, "clientX", JS_NewFloat64(ctx, x));
-            JS_SetPropertyStr(ctx, ev, "clientY", JS_NewFloat64(ctx, y));
-            JSValueConst args[] = {ev};
-            JSValue ret = JS_Call(ctx, state->listeners[i].handler, JS_UNDEFINED, 1, args);
-            if (JS_IsException(ret)) {
-                JSValue ex = JS_GetException(ctx);
-                const char *m = JS_ToCString(ctx, ex);
-                ydebug("js click-handler: %s", m ? m : "?");
-                if (m) {
-                    JS_FreeCString(ctx, m);
-                }
-                JS_FreeValue(ctx, ex);
-                r->js_error_count++;
-            }
-            JS_FreeValue(ctx, ret);
-            JS_FreeValue(ctx, ev);
-            fired = 1;
+        if (n->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+            JS_SetPropertyUint32(ctx, path, path_len++,
+                                 wrap_element(ctx, lxb_dom_interface_element(n)));
         }
     }
+    if (JS_IsObject(document)) {
+        JS_SetPropertyUint32(ctx, path, path_len++, JS_DupValue(ctx, document));
+    }
+    JS_SetPropertyUint32(ctx, path, path_len++, JS_DupValue(ctx, global));
+
+    /* A real click is a pointer/mouse SEQUENCE, not a lone 'click'. Polymer's
+     * gesture recognizer arms its tap on mousedown and emits it on click, so
+     * firing only 'click' (as the old code did) never produced a tap and button
+     * activations did nothing. */
+    static const char *const sequence[] = {"mousedown", "mouseup", "click"};
+    int fired = 0;
+    for (size_t phase = 0; phase < sizeof(sequence) / sizeof(sequence[0]); phase++) {
+        const char *type = sequence[phase];
+        int is_down = (phase == 0);
+
+        JSValue event = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, event, "type", JS_NewString(ctx, type));
+        JS_SetPropertyStr(ctx, event, "target", wrap_element(ctx, target));
+        JS_SetPropertyStr(ctx, event, "clientX", JS_NewFloat64(ctx, x));
+        JS_SetPropertyStr(ctx, event, "clientY", JS_NewFloat64(ctx, y));
+        JS_SetPropertyStr(ctx, event, "pageX", JS_NewFloat64(ctx, x));
+        JS_SetPropertyStr(ctx, event, "pageY", JS_NewFloat64(ctx, y));
+        JS_SetPropertyStr(ctx, event, "screenX", JS_NewFloat64(ctx, x));
+        JS_SetPropertyStr(ctx, event, "screenY", JS_NewFloat64(ctx, y));
+        JS_SetPropertyStr(ctx, event, "button", JS_NewInt32(ctx, 0));
+        JS_SetPropertyStr(ctx, event, "buttons", JS_NewInt32(ctx, is_down ? 1 : 0));
+        JS_SetPropertyStr(ctx, event, "detail", JS_NewInt32(ctx, 1));
+        JS_SetPropertyStr(ctx, event, "bubbles", JS_TRUE);
+        JS_SetPropertyStr(ctx, event, "cancelable", JS_TRUE);
+        JS_SetPropertyStr(ctx, event, "composed", JS_TRUE);
+        JS_SetPropertyStr(ctx, event, "isTrusted", JS_FALSE);
+        JS_SetPropertyStr(ctx, event, "defaultPrevented", JS_FALSE);
+        JS_SetPropertyStr(ctx, event, "__composedPath", JS_DupValue(ctx, path));
+        JS_SetPropertyStr(ctx, event, "composedPath",
+                          JS_NewCFunction(ctx, synth_event_composed_path, "composedPath", 0));
+        JS_SetPropertyStr(ctx, event, "preventDefault",
+                          JS_NewCFunction(ctx, synth_event_prevent_default, "preventDefault", 0));
+        JS_SetPropertyStr(ctx, event, "stopPropagation",
+                          JS_NewCFunction(ctx, synth_event_stop_propagation, "stopPropagation", 0));
+        JS_SetPropertyStr(ctx, event, "stopImmediatePropagation",
+                          JS_NewCFunction(ctx, synth_event_stop_immediate_propagation,
+                                          "stopImmediatePropagation", 0));
+
+        if (synth_dispatch_one(r, state, target, type, event)) {
+            fired = 1;
+        }
+        JS_FreeValue(ctx, event);
+    }
+
+    JS_FreeValue(ctx, path);
+    JS_FreeValue(ctx, document);
+    JS_FreeValue(ctx, global);
+    state->dispatch_depth--;
     return fired;
 }
 
