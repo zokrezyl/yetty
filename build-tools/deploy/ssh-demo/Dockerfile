@@ -9,10 +9,18 @@
 # ychart-cli, ydiagram-cli, ymesh, yflame, ydoc, ysheet, yslide, ...). They
 # emit rich-content OSC/ydraw envelopes over the SSH stream, which the
 # browser-side yetty (yetty.dev, webasm) renders as figures. That is the demo.
+#
+# This image is a STABLE THIN RUNTIME: base OS + the shared libraries the tools
+# link against + a few terminal toys + the demo user. NOTHING yetty-specific is
+# baked in. The yetty binaries/data/config AND the browsable source tree all
+# live in host directories that yetty-demo-session.sh bind-mounts read-only at
+# runtime, so shipping a newer yetty needs only a host-side `update-yetty.sh`
+# run — never an image rebuild. Because the image no longer carries the ~1.4 GB
+# yetty payload it is small and rarely changes.
 FROM debian:stable-slim
 
 # Runtime shared libraries the companion tools link against, plus a couple of
-# small terminal toys and the tools the installer bootstrap needs.
+# small terminal toys. curl/ca-certificates are handy inside the shell too.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
@@ -31,41 +39,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         cmatrix \
     && rm -rf /var/lib/apt/lists/*
 
-# Install the yetty product into system paths (not $HOME, which is a tmpfs at
-# runtime and would be wiped). yinstall resolves its target dirs from the XDG
-# variables, so we set them ONLY for this install step — deliberately NOT as
-# persistent ENV. Leaking XDG_DATA_HOME=/usr/local/share into the runtime
-# environment would hijack every other XDG-aware program (nvim, for one, would
-# try to create /usr/local/share/nvim on the read-only rootfs). At runtime the
-# shell keeps the normal per-user XDG defaults; profile.sh symlinks the yetty
-# data/config into the writable home so the tools still find their install.
-
-# GitHub's "latest" points at a yos-web release with no Linux desktop asset, so
-# pin the newest yetty-* release that ships yetty-linux.tar.gz. Both the tools/
-# demos (yinstall) and the bundled source tree below track this tag, so they
-# stay in lockstep. Override with --build-arg YETTY_VERSION=yetty-X.Y.Z to bump.
-ARG YETTY_VERSION=yetty-0.2.71
-
-RUN curl -fsSL https://yetty.dev/install.sh \
-    | XDG_BIN_HOME=/usr/local/bin \
-      XDG_DATA_HOME=/usr/local/share \
-      XDG_CONFIG_HOME=/usr/local/etc/xdg \
-      YETTY_VERSION="${YETTY_VERSION}" bash \
-    # Drop the RISC-V VM runtime — ~470 MB, irrelevant to the CLI demos.
-    && rm -rf /usr/local/share/yetty/yemu /usr/local/share/yetty/qemu \
-    # yinstall lays the demo scripts down non-executable (0644); make them
-    # runnable so visitors can `./all.sh` instead of `bash all.sh`.
-    && find /usr/local/share/yetty/demos -type f -name '*.sh' -exec chmod 0755 {} + \
-    && ls /usr/local/bin/ycat /usr/local/bin/yplot >/dev/null
-
-# Bundle the full source tree of the SAME release into the image so visitors can
-# browse and grep the exact code that produced the installed binaries. The
-# GitHub tag archive unpacks under a "yetty-${YETTY_VERSION}" top dir, which we
-# strip so the tree sits directly under /usr/share/yetty/sources.
-RUN mkdir -p /usr/share/yetty/sources \
-    && curl -fsSL "https://github.com/zokrezyl/yetty/archive/refs/tags/${YETTY_VERSION}.tar.gz" \
-       | tar -xz -C /usr/share/yetty/sources --strip-components=1 \
-    && test -f /usr/share/yetty/sources/CMakeLists.txt
+# Mount points for the host-provided yetty install and source tree. The demo
+# user resolves the product via the normal /usr/local paths (profile.sh bridges
+# them into the writable home), so the launcher mounts the host prefix's bin /
+# share/yetty / etc/xdg/yetty subtrees over these, plus the source tree. Creating
+# the empty dirs means the paths exist even when nothing is mounted. (/usr/local/bin
+# already exists in the base image and is the binaries mount point.)
+RUN mkdir -p /usr/local/share/yetty \
+             /usr/local/etc/xdg/yetty \
+             /usr/share/yetty/sources
 
 # Non-root demo user. uid/gid 1000 matches the runtime tmpfs home mount so the
 # shell can write to its own home even under --read-only.

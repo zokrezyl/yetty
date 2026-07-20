@@ -991,12 +991,14 @@
         // TLS-terminated) rather than a per-host ws:// endpoint — an
         // https-served page cannot open an insecure ws:// socket
         // (mixed-content), and the bridge lives at its own subdomain.
-        // The :8025 is shown explicitly so it's clear the port can be
-        // changed here or via ?url=wss://host:PORT.
+        // Port 443 is nginx's public TLS endpoint, which proxies to the
+        // loopback-only websocat relay (127.0.0.1:8025) — that internal
+        // port is NOT reachable from the internet. Override here or via
+        // ?url=wss://host:PORT.
         const MODE_DEFAULT_URLS = {
             websocket: 'ws://' + (location.hostname || '127.0.0.1') + ':8090',
             telnet:    'ws://' + (location.hostname || '127.0.0.1') + ':8024',
-            ssh:       'wss://ws.yetty.dev:8025',
+            ssh:       'wss://ws.yetty.dev:443',
             relay:     'wss://relay.widgetry.org/',
         };
 
