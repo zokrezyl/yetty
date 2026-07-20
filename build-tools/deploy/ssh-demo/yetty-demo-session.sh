@@ -32,6 +32,8 @@ NETWORK="${YETTY_DEMO_NETWORK:-none}"         # 'none' (default) or 'bridge'
 MEMORY="${YETTY_DEMO_MEMORY:-512m}"           # the yetty tools load font atlases
 CPUS="${YETTY_DEMO_CPUS:-1.0}"
 PIDS="${YETTY_DEMO_PIDS:-256}"
+PREFIX_DIR="${YETTY_DEMO_PREFIX:-/var/lib/yetty-demo/prefix}"    # host yetty install
+SOURCES_DIR="${YETTY_DEMO_SOURCES:-/var/lib/yetty-demo/sources}" # host source tree
 
 LABEL="yetty-demo"
 
@@ -48,6 +50,28 @@ fi
 tty_flag=()
 if [ -t 0 ]; then
     tty_flag=(-t)
+fi
+
+# The yetty product is NOT baked into the image — it lives on the host and is
+# bind-mounted read-only here, so the image never needs rebuilding to ship a
+# newer yetty. update-yetty.sh (yetty-demo-update-yetty) refreshes both the
+# install prefix and the source tree. Mount:
+#   - the binaries, data and config over the /usr/local paths the shell expects
+#   - the browsable source tree at /usr/share/yetty/sources
+# Each mount is skipped if its host dir isn't populated yet, so a container can
+# still start (it just sees the empty baked-in mount points).
+yetty_mounts=()
+if [ -d "${PREFIX_DIR}/bin" ]; then
+    yetty_mounts+=(--mount "type=bind,source=${PREFIX_DIR}/bin,target=/usr/local/bin,readonly")
+fi
+if [ -d "${PREFIX_DIR}/share/yetty" ]; then
+    yetty_mounts+=(--mount "type=bind,source=${PREFIX_DIR}/share/yetty,target=/usr/local/share/yetty,readonly")
+fi
+if [ -d "${PREFIX_DIR}/etc/xdg/yetty" ]; then
+    yetty_mounts+=(--mount "type=bind,source=${PREFIX_DIR}/etc/xdg/yetty,target=/usr/local/etc/xdg/yetty,readonly")
+fi
+if [ -d "${SOURCES_DIR}" ]; then
+    yetty_mounts+=(--mount "type=bind,source=${SOURCES_DIR},target=/usr/share/yetty/sources,readonly")
 fi
 
 # Unique per-session container name so teardown can target exactly this one.
@@ -83,6 +107,7 @@ timeout --signal=TERM --foreground "${SESSION_TIMEOUT}" \
         --read-only \
         --tmpfs /tmp:rw,nosuid,nodev,size=128m \
         --tmpfs /home/yetty:rw,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700 \
+        "${yetty_mounts[@]}" \
         --cap-drop ALL \
         --security-opt no-new-privileges \
         --user 1000:1000 \

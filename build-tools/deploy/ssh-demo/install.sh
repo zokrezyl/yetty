@@ -62,6 +62,16 @@ docker build -t yetty-demo:latest "${HERE}"
 echo "==> installing session launcher"
 install -m 0755 "${HERE}/yetty-demo-session.sh" /usr/local/bin/yetty-demo-session
 
+echo "==> installing yetty updater and seeding the mounted install + sources"
+# Nothing yetty-specific is baked into the image; the binaries/data/config and
+# the source tree live on the host and are bind-mounted read-only into each
+# session. Install the updater and populate both directories once now. Re-run
+# yetty-demo-update-yetty (e.g. from cron) to ship a newer yetty — binaries and
+# sources both — without rebuilding the image.
+install -m 0755 "${HERE}/update-yetty.sh" /usr/local/bin/yetty-demo-update-yetty
+/usr/local/bin/yetty-demo-update-yetty || \
+    echo "    warning: could not seed yetty now (network?); run yetty-demo-update-yetty later"
+
 echo "==> configuring sshd (scoped password auth + ForceCommand for ${DEMO_USER})"
 sed "s/@DEMO_USER@/${DEMO_USER}/g" "${HERE}/sshd-yetty-demo.conf" \
     > /etc/ssh/sshd_config.d/yetty-demo.conf

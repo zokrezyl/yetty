@@ -37,8 +37,11 @@ One WebSocket → one SSH session → one ephemeral container.
 
 | File | Purpose |
 |---|---|
-| `install.sh` | One-shot provisioner for a fresh Ubuntu host |
-| `Dockerfile` | The disposable demo image (`yetty-demo:latest`) |
+| `install.sh` | One-shot provisioner for a fresh Ubuntu host (runs **on** the host, as root) |
+| `remote-install.sh` | Run from your workstation: copies this dir to the host and runs `install.sh` there over ssh |
+| `Dockerfile` | The disposable demo image (`yetty-demo:latest`) — a stable thin runtime, no yetty baked in |
+| `update-yetty.sh` | Downloads the latest yetty release — binaries **and** source tree — to the host dirs the container mounts (no image rebuild) |
+| `remote-update-yetty.sh` | Run from your workstation: copies `update-yetty.sh` to the host and runs it there over ssh |
 | `motd`, `profile.sh` | Banner, prompt, and idle-timeout inside the container |
 | `yetty-demo-session.sh` | sshd `ForceCommand`: spawns the sandboxed container |
 | `sshd-yetty-demo.conf` | Scoped sshd config (password auth + ForceCommand for `yetty` only) |
@@ -65,6 +68,28 @@ That installs docker, websocat, nginx and certbot; creates the throwaway
 TLS cert. It prints the exact client URL at the end.
 
 Set a non-default password with `DEMO_PASSWORD=... sudo -E ./install.sh <domain>`.
+
+### From your workstation (over ssh)
+
+You don't have to copy files up by hand or ssh in yourself — the two
+`remote-*` wrappers do it for you. They run **locally** (no root on your
+machine), `scp` the scripts to the host, and run them there under `sudo`:
+
+```sh
+# full provision — copies this whole dir to ubuntu@ws.yetty.dev and runs install.sh
+./remote-install.sh
+
+# refresh the mounted yetty (binaries + sources) to the latest release (no image rebuild)
+./remote-update-yetty.sh
+# ...or pin a tag:
+./remote-update-yetty.sh yetty-0.2.71
+```
+
+Both default the ssh target to `ubuntu@ws.yetty.dev`; override with
+`YETTY_DEMO_SSH=ubuntu@<host> ./remote-install.sh`. `remote-install.sh` derives
+the TLS domain from the host part of the ssh target (override it with a
+positional arg) and forwards `DEMO_PASSWORD` / `CERTBOT_EMAIL` / `DEMO_USER` /
+`WS_PORT` if you export them.
 
 ## Pointing the client at it
 
@@ -96,6 +121,8 @@ environment, or edit the script):
 | `YETTY_DEMO_MEMORY` | `256m` | per-container memory cap |
 | `YETTY_DEMO_CPUS` | `0.5` | per-container CPU cap |
 | `YETTY_DEMO_PIDS` | `128` | per-container process cap |
+| `YETTY_DEMO_PREFIX` | `/var/lib/yetty-demo/prefix` | host yetty install; its `bin`, `share/yetty`, `etc/xdg/yetty` are mounted read-only into `/usr/local/…` |
+| `YETTY_DEMO_SOURCES` | `/var/lib/yetty-demo/sources` | host source tree, bind-mounted read-only at `/usr/share/yetty/sources` |
 
 Watch it live:
 
@@ -103,6 +130,49 @@ Watch it live:
 docker ps --filter label=yetty-demo     # active sessions
 journalctl -u yetty-ssh-ws -f           # relay logs
 ```
+
+## yetty is mounted, not baked
+
+**Nothing yetty-specific is baked into the image.** The image
+(`yetty-demo:latest`) is a stable thin runtime: base OS + the shared libraries
+the tools link against + a few terminal toys + the demo user. Everything yetty
+— the binaries and their data/config, and the browsable source tree — lives in
+host directories that each session bind-mounts **read-only**:
+
+| Host dir (default) | Mounted read-only at | Holds |
+|---|---|---|
+| `/var/lib/yetty-demo/prefix/bin` | `/usr/local/bin` | the companion tools (`ycat`, `yplot`, …) |
+| `/var/lib/yetty-demo/prefix/share/yetty` | `/usr/local/share/yetty` | shaders, fonts, demos |
+| `/var/lib/yetty-demo/prefix/etc/xdg/yetty` | `/usr/local/etc/xdg/yetty` | config |
+| `/var/lib/yetty-demo/sources` | `/usr/share/yetty/sources` | the browsable source tree |
+
+The payoff: shipping a newer yetty **never rebuilds the image**. You refresh the
+host directories in place and the next session picks them up. Because the image
+no longer carries the ~1.4 GB yetty payload it is small and rarely changes.
+
+Refresh with the updater the provisioner installs:
+
+```sh
+# pull the newest desktop release — binaries AND sources — in place (no rebuild)
+sudo yetty-demo-update-yetty
+
+# or pin a specific tag
+sudo yetty-demo-update-yetty yetty-0.2.71
+```
+
+`update-yetty.sh` resolves "latest" the same way `https://yetty.dev/install.sh`
+does — the repo publishes several release families (`yetty-*`, `yos-web-*`,
+`yetty-rootfs-riscv-*`) and the repo-wide "latest release" is whichever
+published most recently, so it lists releases and picks the highest
+`yetty-X.Y.Z` rather than trusting the pointer. For that one tag it runs the
+canonical installer into a host staging prefix (dropping the ~470 MB RISC-V VM
+runtime) and unpacks the matching source archive, then swaps both into place
+with same-filesystem renames. Binaries and sources are always the **same tag**,
+so they never drift. A marker file in each tree skips the download when already
+current, so it is cheap to run from cron or a systemd timer.
+
+The **only** time you rebuild the image is to change the runtime itself (bump
+the base OS, add a shared library, add a terminal toy) — not to ship new yetty.
 
 ## Security notes
 
