@@ -107,6 +107,55 @@ static char *slurp_url(struct yetty_ybrowser_loader *loader, const char *url, si
     return body;
 }
 
+char *ybrowser_slurp_request(struct yetty_ybrowser_loader *loader, const char *url,
+                             const char *method, const char *body, size_t body_len, size_t *out_len,
+                             char **out_effective_url, char **out_content_type)
+{
+    if (out_effective_url) {
+        *out_effective_url = NULL;
+    }
+    if (out_content_type) {
+        *out_content_type = NULL;
+    }
+    *out_len = 0;
+    const char *const headers[] = {"Content-Type: application/x-www-form-urlencoded"};
+    struct yetty_ybrowser_request request = {
+        .url = url,
+        .kind = YETTY_YBROWSER_REQUEST_DOCUMENT,
+        .method = method,
+        .body = body,
+        .body_len = body_len,
+        .extra_headers = (method && strcasecmp(method, "GET") != 0) ? headers : NULL,
+        .extra_header_count = (method && strcasecmp(method, "GET") != 0) ? 1 : 0,
+    };
+    struct yetty_ybrowser_response response = {0};
+    struct yetty_ycore_void_result fetch_res = yetty_ybrowser_fetch(loader, &request, &response);
+    if (YETTY_IS_ERR(fetch_res)) {
+        fprintf(stderr, "ybrowser: %s %s failed: %s\n", method ? method : "GET", url,
+                fetch_res.error.msg);
+        yetty_ycore_error_destroy(fetch_res.error);
+        return NULL;
+    }
+    if (!response.body) {
+        fprintf(stderr, "ybrowser: %s %s failed\n", method ? method : "GET", url);
+        yetty_ybrowser_response_dispose(&response);
+        return NULL;
+    }
+    if (out_effective_url && response.effective_url) {
+        *out_effective_url = response.effective_url;
+        response.effective_url = NULL;
+    }
+    if (out_content_type && response.content_type) {
+        *out_content_type = response.content_type;
+        response.content_type = NULL;
+    }
+    *out_len = response.body_len;
+    char *out_body = response.body;
+    response.body = NULL;
+    yetty_ybrowser_response_dispose(&response);
+    return out_body;
+}
+
 char *ybrowser_local_file_url(const char *path)
 {
     if (!path || strcmp(path, "-") == 0 || ybrowser_looks_like_url(path)) {

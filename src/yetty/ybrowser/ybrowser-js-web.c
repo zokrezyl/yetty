@@ -3196,8 +3196,8 @@ static bool media_query_part_matches(const char *part, size_t len, int vw, int v
                 if (state != EXPECT_PRIMARY) {
                     return false; /* type after `and`, or a second media type */
                 }
-                bool type_ok =
-                    (tlen == 6 && !memcmp(p, "screen", 6)) || (tlen == 3 && !memcmp(p, "all", 3));
+                bool type_ok = (tlen == 6 && !memcmp(p, "screen", 6)) ||
+                               (tlen == 3 && !memcmp(p, "all", 3));
                 result = result && type_ok;
                 state = EXPECT_AND;
             }
@@ -3448,9 +3448,9 @@ static JSValue js_location_assign(JSContext *ctx, JSValueConst this_val, int arg
         const char *url = JS_ToCString(ctx, argv[0]);
         if (url) {
             location_request_navigation(ctx, r, url);
-            JS_SetPropertyStr(
-                ctx, (JSValue)this_val, "__hrefValue",
-                JS_NewString(ctx, (r && r->pending_navigation) ? r->pending_navigation : url));
+            JS_SetPropertyStr(ctx, (JSValue)this_val, "__hrefValue",
+                              JS_NewString(ctx, (r && r->pending_navigation) ? r->pending_navigation
+                                                                             : url));
             JS_FreeCString(ctx, url);
         }
     }
@@ -3471,6 +3471,60 @@ static JSValue js_location_reload(JSContext *ctx, JSValueConst this_val, int arg
     return JS_UNDEFINED;
 }
 
+/* Form submission as a real navigating request. __ybFormNavigate(action,
+ * method, body) resolves the action against the base URL and records it as the
+ * pending navigation together with the HTTP method and form-encoded body, so
+ * the host issues a genuine POST (or GET), follows redirects, and loads the
+ * resulting document — replacing the page. This is what makes a consent
+ * "Accept all" (POST to consent.google.com/save) set the cookie and land back
+ * on the site, instead of a background fetch that saves the cookie but never
+ * navigates. */
+static JSValue js_form_navigate(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    if (!r || argc < 1) {
+        return JS_UNDEFINED;
+    }
+    const char *action = JS_ToCString(ctx, argv[0]);
+    if (!action) {
+        return JS_UNDEFINED;
+    }
+    char *resolved = yetty_ylexbor_resolve_url(r, action);
+    free(r->pending_navigation);
+    r->pending_navigation = resolved ? resolved : strdup(action);
+    JS_FreeCString(ctx, action);
+
+    free(r->pending_nav_method);
+    r->pending_nav_method = NULL;
+    free(r->pending_nav_body);
+    r->pending_nav_body = NULL;
+    r->pending_nav_body_len = 0;
+
+    if (argc >= 2 && JS_IsString(argv[1])) {
+        const char *method = JS_ToCString(ctx, argv[1]);
+        if (method && *method) {
+            r->pending_nav_method = strdup(method);
+        }
+        JS_FreeCString(ctx, method);
+    }
+    if (argc >= 3 && JS_IsString(argv[2])) {
+        size_t body_len = 0;
+        const char *body = JS_ToCStringLen(ctx, &body_len, argv[2]);
+        if (body) {
+            char *copy = malloc(body_len + 1);
+            if (copy) {
+                memcpy(copy, body, body_len);
+                copy[body_len] = '\0';
+                r->pending_nav_body = copy;
+                r->pending_nav_body_len = body_len;
+            }
+            JS_FreeCString(ctx, body);
+        }
+    }
+    return JS_UNDEFINED;
+}
+
 static JSValue js_location_href_get(JSContext *ctx, JSValueConst this_val)
 {
     return JS_GetPropertyStr(ctx, this_val, "__hrefValue");
@@ -3482,9 +3536,9 @@ static JSValue js_location_href_set(JSContext *ctx, JSValueConst this_val, JSVal
     const char *url = JS_ToCString(ctx, val);
     if (url) {
         location_request_navigation(ctx, r, url);
-        JS_SetPropertyStr(
-            ctx, (JSValue)this_val, "__hrefValue",
-            JS_NewString(ctx, (r && r->pending_navigation) ? r->pending_navigation : url));
+        JS_SetPropertyStr(ctx, (JSValue)this_val, "__hrefValue",
+                          JS_NewString(ctx, (r && r->pending_navigation) ? r->pending_navigation
+                                                                         : url));
         JS_FreeCString(ctx, url);
     }
     return JS_UNDEFINED;
@@ -3735,6 +3789,8 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
     JS_SetPropertyStr(ctx, global, "crypto", cry);
     /* Constructable-stylesheet bridge (see js_ingest_css). */
     install_global_fn(ctx, global, "__ybIngestCSS", js_ingest_css, 1);
+    /* Form-submission navigation bridge (see js_form_navigate). */
+    install_global_fn(ctx, global, "__ybFormNavigate", js_form_navigate, 3);
 
     /* Misc stubs — feature detection rarely actually USES these,
 	 * just checks they exist. */
@@ -3765,8 +3821,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 		 * each returning a signal with the same method surface. */
         "globalThis.AbortSignal = (function(){"
         "  function make(){ return { aborted:false, reason:undefined, onabort:null,"
-        "    throwIfAborted:function(){ if(this.aborted) throw (this.reason||new "
-        "Error('aborted')); },"
+        "    throwIfAborted:function(){ if(this.aborted) throw (this.reason||new Error('aborted')); },"
         "    addEventListener:function(){}, removeEventListener:function(){},"
         "    dispatchEvent:function(){ return false; } }; }"
         "  var S=function(){ return make(); };"
@@ -3776,8 +3831,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "  S._make=make; return S; })();"
         "globalThis.AbortController = function(){ this.signal = globalThis.AbortSignal._make();"
         "  this.abort = function(r){ this.signal.aborted=true; this.signal.reason=r;"
-        "    if(typeof this.signal.onabort==='function'){ try{ "
-        "this.signal.onabort({type:'abort'}); }"
+        "    if(typeof this.signal.onabort==='function'){ try{ this.signal.onabort({type:'abort'}); }"
         "    catch(e){} } }; };"
         "globalThis.indexedDB       = { open: ()=>({ onsuccess:null, onerror:null, "
         "addEventListener:()=>{} }), deleteDatabase: ()=>({}) };"
@@ -4031,6 +4085,9 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.Event = function(t, init){ this.type=t; this.bubbles=!!(init&&init.bubbles); "
         "this.cancelable=!!(init&&init.cancelable); this.composed=!!(init&&init.composed); "
         "this.defaultPrevented=false; "
+        /* Empty until dispatchEvent installs the real path — matching the
+		 * spec's "composedPath() returns [] outside dispatch". */
+        "this.composedPath=()=>this.__composedPath||[]; "
         "this.preventDefault=()=>{this.defaultPrevented=true;}; "
         /* Propagation flags read by the dispatchEvent bubbling walk. */
         "this.stopPropagation=()=>{this.__propagationStopped=true;}; "
@@ -4068,14 +4125,11 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "  var watched=[]; var ticking=false;"
         "  var rectOf=function(el){ try{ return el.getBoundingClientRect(); }"
         "    catch(e){ return {top:0,left:0,right:0,bottom:0,width:0,height:0}; } };"
-        "  var fire=function(el, rc, vis){ var vw=window.innerWidth||1280, "
-        "vh=window.innerHeight||800;"
+        "  var fire=function(el, rc, vis){ var vw=window.innerWidth||1280, vh=window.innerHeight||800;"
         "    cb([{ target: el, isIntersecting: vis, intersectionRatio: vis?1:0,"
         "          boundingClientRect: rc, intersectionRect: rc,"
-        "          rootBounds: {top:0,left:0,right:vw,bottom:vh,width:vw,height:vh}, time: 0 }], "
-        "self); };"
-        "  var check=function(){ ticking=false; var vw=window.innerWidth||1280, "
-        "vh=window.innerHeight||800;"
+        "          rootBounds: {top:0,left:0,right:vw,bottom:vh,width:vw,height:vh}, time: 0 }], self); };"
+        "  var check=function(){ ticking=false; var vw=window.innerWidth||1280, vh=window.innerHeight||800;"
         "    for(var i=watched.length-1;i>=0;i--){ var w=watched[i]; w.n++;"
         "      var rc=rectOf(w.el);"
         "      var vis=(rc.width>0)&&(rc.height>0)&&(rc.bottom>=-margin)&&(rc.top<=vh+margin)"
@@ -4085,8 +4139,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "    if(watched.length && !ticking){ ticking=true; setTimeout(check, 250); } };"
         "  this.observe=function(el){ if(!el) return; watched.push({el:el, n:0});"
         "    if(!ticking){ ticking=true; setTimeout(check, 50); } };"
-        "  this.unobserve=function(el){ for(var i=0;i<watched.length;i++){ if(watched[i].el===el){ "
-        "watched.splice(i,1); break; } } };"
+        "  this.unobserve=function(el){ for(var i=0;i<watched.length;i++){ if(watched[i].el===el){ watched.splice(i,1); break; } } };"
         "  this.disconnect=function(){ watched.length=0; };"
         "  this.takeRecords=function(){ return []; }; };"
         /* Real ResizeObserver delivery. Responsive components (YouTube's
@@ -4100,30 +4153,25 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 		 * mirrors the IntersectionObserver re-check loop above. */
         "globalThis.ResizeObserver = function(cb){"
         "  var self=this; var watched=[]; var ticking=false;"
-        "  var boxOf=function(el){ try{ var r=el.getBoundingClientRect(); return "
-        "{w:r.width,h:r.height}; }"
+        "  var boxOf=function(el){ try{ var r=el.getBoundingClientRect(); return {w:r.width,h:r.height}; }"
         "    catch(e){ return {w:0,h:0}; } };"
         "  var check=function(){ ticking=false; var changed=[];"
         "    for(var i=0;i<watched.length;i++){ var wt=watched[i]; var b=boxOf(wt.el);"
         "      if(b.w!==wt.w || b.h!==wt.h){ wt.w=b.w; wt.h=b.h;"
-        "        if(globalThis.__RO_DEBUG){try{console.log('[RO] fire <'+(wt.el&&wt.el.tagName)+'> "
-        "'+b.w+'x'+b.h);}catch(_){}}"
+        "        if(globalThis.__RO_DEBUG){try{console.log('[RO] fire <'+(wt.el&&wt.el.tagName)+'> '+b.w+'x'+b.h);}catch(_){}}"
         "        changed.push({target: wt.el,"
         "          contentRect:{x:0,y:0,top:0,left:0,width:b.w,height:b.h,right:b.w,bottom:b.h},"
         "          borderBoxSize:[{inlineSize:b.w,blockSize:b.h}],"
         "          contentBoxSize:[{inlineSize:b.w,blockSize:b.h}]}); } }"
         "    if(changed.length){ try{ cb(changed, self); }"
-        "      catch(e){ try{console.error('[RO] callback', (e&&e.name||'Error')+': "
-        "'+(e&&e.message));}catch(_){}} }"
+        "      catch(e){ try{console.error('[RO] callback', (e&&e.name||'Error')+': '+(e&&e.message));}catch(_){}} }"
         "    if(watched.length && !ticking){ ticking=true; setTimeout(check, 300); } };"
         "  this.observe=function(el){ if(!el) return;"
         "    for(var i=0;i<watched.length;i++){ if(watched[i].el===el) return; }"
         "    watched.push({el:el, w:-1, h:-1});"
-        "    if(globalThis.__RO_DEBUG){try{var dr=boxOf(el);console.log('[RO] observe "
-        "<'+(el&&el.tagName)+'> '+dr.w+'x'+dr.h);}catch(_){}}"
+        "    if(globalThis.__RO_DEBUG){try{var dr=boxOf(el);console.log('[RO] observe <'+(el&&el.tagName)+'> '+dr.w+'x'+dr.h);}catch(_){}}"
         "    if(!ticking){ ticking=true; setTimeout(check, 50); } };"
-        "  this.unobserve=function(el){ for(var i=0;i<watched.length;i++){ if(watched[i].el===el){ "
-        "watched.splice(i,1); break; } } };"
+        "  this.unobserve=function(el){ for(var i=0;i<watched.length;i++){ if(watched[i].el===el){ watched.splice(i,1); break; } } };"
         "  this.disconnect=function(){ watched.length=0; }; };"
         "globalThis.PerformanceObserver = function(cb){ this.observe=()=>{}; "
         "this.disconnect=()=>{}; this.takeRecords=()=>[]; };"
@@ -4184,8 +4232,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         /* Chain HTMLElement onto the real Element.prototype so element methods
 		 * and the interface hierarchy are inherited by `class X extends
 		 * HTMLElement` custom elements. */
-        "try{ Object.setPrototypeOf(globalThis.HTMLElement.prototype, "
-        "globalThis.Element.prototype); "
+        "try{ Object.setPrototypeOf(globalThis.HTMLElement.prototype, globalThis.Element.prototype); "
         "}catch(e){}"
         /* Canvas 2D context stub — the web-animations polyfill creates a
 		 * <canvas> and calls getContext('2d') to normalise CSS colors; without
@@ -4196,13 +4243,10 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "    return { canvas:this, get fillStyle(){return fs;}, set fillStyle(v){fs=v;},"
         "      strokeStyle:'#000', globalAlpha:1, lineWidth:1, font:'10px sans-serif',"
         "      fillRect:function(){}, clearRect:function(){}, strokeRect:function(){},"
-        "      beginPath:function(){}, closePath:function(){}, moveTo:function(){}, "
-        "lineTo:function(){},"
-        "      arc:function(){}, rect:function(){}, fill:function(){}, stroke:function(){}, "
-        "clip:function(){},"
+        "      beginPath:function(){}, closePath:function(){}, moveTo:function(){}, lineTo:function(){},"
+        "      arc:function(){}, rect:function(){}, fill:function(){}, stroke:function(){}, clip:function(){},"
         "      save:function(){}, restore:function(){}, scale:function(){}, rotate:function(){},"
-        "      translate:function(){}, transform:function(){}, setTransform:function(){}, "
-        "drawImage:function(){},"
+        "      translate:function(){}, transform:function(){}, setTransform:function(){}, drawImage:function(){},"
         "      putImageData:function(){}, fillText:function(){}, strokeText:function(){},"
         "      createLinearGradient:function(){return {addColorStop:function(){}};},"
         "      createRadialGradient:function(){return {addColorStop:function(){}};},"
@@ -4369,8 +4413,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "if(r===1){this.currentNode=node;return node;}}};"
         "TW.prototype.parentNode=function(){var n=this.currentNode;"
         "while(n&&n!==this.root){n=n.parentNode;"
-        "if(n&&accept(n,this.whatToShow,this.filter)===1){this.currentNode=n;return n;}}return "
-        "null;};"
+        "if(n&&accept(n,this.whatToShow,this.filter)===1){this.currentNode=n;return n;}}return null;};"
         "TW.prototype.firstChild=function(){var n=this.currentNode&&this.currentNode.firstChild;"
         "while(n){var r=accept(n,this.whatToShow,this.filter);"
         "if(r===1){this.currentNode=n;return n;}if(r===3&&n.firstChild){n=n.firstChild;continue;}"
@@ -4383,10 +4426,8 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "TW.prototype.previousSibling=function(){return null;};"
         "globalThis.TreeWalker=TW;"
         "function NI(root,show,filter){this._tw=new TW(root,show,filter);this.root=root;"
-        "this.referenceNode=root;this.whatToShow=(show>>>0)||0xFFFFFFFF;this."
-        "pointerBeforeReferenceNode=true;}"
-        "NI.prototype.nextNode=function(){var "
-        "n=this._tw.nextNode();if(n)this.referenceNode=n;return n;};"
+        "this.referenceNode=root;this.whatToShow=(show>>>0)||0xFFFFFFFF;this.pointerBeforeReferenceNode=true;}"
+        "NI.prototype.nextNode=function(){var n=this._tw.nextNode();if(n)this.referenceNode=n;return n;};"
         "NI.prototype.previousNode=function(){return null;};NI.prototype.detach=function(){};"
         "globalThis.NodeIterator=NI;"
         "if(typeof document!=='undefined'){"
@@ -4481,8 +4522,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "      querySelectorAll:function(s){return host.querySelectorAll(s);},"
         "      getElementById:function(id){return host.querySelector('#'+id);},"
         "      addEventListener:function(){return host.addEventListener.apply(host,arguments);},"
-        "      removeEventListener:function(){return "
-        "host.removeEventListener.apply(host,arguments);},"
+        "      removeEventListener:function(){return host.removeEventListener.apply(host,arguments);},"
         "      dispatchEvent:function(e){return host.dispatchEvent(e);},"
         "      cloneNode:function(d){return host.cloneNode(d);},"
         "      contains:function(n){return host.contains?host.contains(n):false;},"
@@ -4491,22 +4531,16 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "    Object.defineProperty(root,'children',{get:function(){return host.children;}});"
         "    Object.defineProperty(root,'firstChild',{get:function(){return host.firstChild;}});"
         "    Object.defineProperty(root,'lastChild',{get:function(){return host.lastChild;}});"
-        "    Object.defineProperty(root,'firstElementChild',{get:function(){return "
-        "host.firstElementChild;}});"
-        "    Object.defineProperty(root,'innerHTML',{get:function(){return "
-        "host.innerHTML;},set:function(v){host.innerHTML=v;}});"
-        "    Object.defineProperty(root,'textContent',{get:function(){return "
-        "host.textContent;},set:function(v){host.textContent=v;}});"
+        "    Object.defineProperty(root,'firstElementChild',{get:function(){return host.firstElementChild;}});"
+        "    Object.defineProperty(root,'innerHTML',{get:function(){return host.innerHTML;},set:function(v){host.innerHTML=v;}});"
+        "    Object.defineProperty(root,'textContent',{get:function(){return host.textContent;},set:function(v){host.textContent=v;}});"
         "    Object.defineProperty(root,'activeElement',{get:function(){return null;}});"
-        "    "
-        "try{Object.defineProperty(host,'shadowRoot',{value:root,configurable:true});}catch(e){"
-        "host.shadowRoot=root;}"
+        "    try{Object.defineProperty(host,'shadowRoot',{value:root,configurable:true});}catch(e){host.shadowRoot=root;}"
         "    host.__shadowRoot=root;"
         "    return root;"
         "  };"
         "  if(!globalThis.Node.prototype.getRootNode){"
-        "    globalThis.Node.prototype.getRootNode=function(opts){var "
-        "n=this;while(n&&n.parentNode){n=n.parentNode;}return n||this;};"
+        "    globalThis.Node.prototype.getRootNode=function(opts){var n=this;while(n&&n.parentNode){n=n.parentNode;}return n||this;};"
         "  }"
         "} }catch(e){}"
         "globalThis.Attr              = function(){};"
@@ -4519,8 +4553,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 			 * document.adoptedStyleSheets=[s]`. replace/replaceSync push the CSS
 			 * into the cascade via __ybIngestCSS (see the C side). Without this the
 			 * sheet was inert and adopted component styles never applied. */
-        "globalThis.CSSStyleSheet     = function(){ this._css=''; this.cssRules=[]; this.rules=[]; "
-        "};"
+        "globalThis.CSSStyleSheet     = function(){ this._css=''; this.cssRules=[]; this.rules=[]; };"
         /* Methods on the PROTOTYPE — frameworks feature-detect
 			 * `CSSStyleSheet.prototype.replaceSync` before using constructable
 			 * sheets; instance-only methods fail that check and the site silently
@@ -4688,8 +4721,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "  const connectIfNeeded=(el)=>{ if(el.__ceConnected)return;"
         "    if(el.isConnected!==true)return; el.__ceConnected=true;"
         "    try{ if(typeof el.connectedCallback==='function') el.connectedCallback(); }"
-        "    catch(e){ try{console.error('ce connect <'+(el&&el.tagName)+'>', "
-        "(e&&e.name||'Error')+': '+(e&&e.message),"
+        "    catch(e){ try{console.error('ce connect <'+(el&&el.tagName)+'>', (e&&e.name||'Error')+': '+(e&&e.message),"
         "      '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- '));}catch(_){}} };"
         "  const upgrade=(el,c)=>{ try{ if(el.__ceUpgraded)return; el.__ceUpgraded=true;"
         "    Object.setPrototypeOf(el,c.prototype);"
@@ -4710,8 +4742,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "      if(oa&&oa.length&&typeof el.attributeChangedCallback==='function'){"
         "        for(var ai=0;ai<oa.length;ai++){ var an=oa[ai];"
         "          if(el.hasAttribute&&el.hasAttribute(an)){"
-        "            try{ el.attributeChangedCallback(an,null,el.getAttribute(an),null); "
-        "}catch(e){}"
+        "            try{ el.attributeChangedCallback(an,null,el.getAttribute(an),null); }catch(e){}"
         "          } } } }catch(e){}"
         "    connectIfNeeded(el);"
         /* Reconcile own data properties that shadow a prototype accessor. A value
@@ -4729,19 +4760,16 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "      Object.getOwnPropertyNames(el).forEach(function(propName){"
         "        if(propName.charAt(0)==='_')return;"
         "        var ownDesc=Object.getOwnPropertyDescriptor(el,propName);"
-        "        if(!ownDesc||!('value' in "
-        "ownDesc)||!ownDesc.writable||!ownDesc.configurable)return;"
+        "        if(!ownDesc||!('value' in ownDesc)||!ownDesc.writable||!ownDesc.configurable)return;"
         "        var accessorDesc=null, protoCursor=reconcileProto;"
-        "        while(protoCursor){ "
-        "accessorDesc=Object.getOwnPropertyDescriptor(protoCursor,propName);"
+        "        while(protoCursor){ accessorDesc=Object.getOwnPropertyDescriptor(protoCursor,propName);"
         "          if(accessorDesc)break; protoCursor=Object.getPrototypeOf(protoCursor); }"
         "        if(accessorDesc && typeof accessorDesc.set==='function'){"
         "          var stashedValue=el[propName];"
         "          try{ delete el[propName]; el[propName]=stashedValue; }catch(reassignErr){} }"
         "      }); }catch(reconcileErr){}"
         "  }catch(e){ try{console.error('ce upgrade <'+(el&&el.tagName)+'>',"
-        "    (e&&e.name||'Error')+': '+(e&&e.message), '|', "
-        "(e&&e.stack||'').split('\\n').slice(0,3).join(' <- "
+        "    (e&&e.name||'Error')+': '+(e&&e.message), '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- "
         "'));}catch(_){}} };"
         /* Upgrade a raw defined element, or connect one already upgraded. */
         "  const upgradeOrConnect=(el)=>{ if(!el||el.nodeType!==1)return;"
@@ -4759,13 +4787,11 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 			 * are correctly left un-upgraded. */
         "  const deepEls=(root,tag)=>{ var out=[], seen=new Set(), st=[root];"
         "    while(st.length){ var el=st.pop(); if(!el||seen.has(el))continue; seen.add(el);"
-        "      if(el.nodeType===1 && el.tagName && (tag==='*' || "
-        "(''+el.tagName).toLowerCase()===tag)) out.push(el);"
+        "      if(el.nodeType===1 && el.tagName && (tag==='*' || (''+el.tagName).toLowerCase()===tag)) out.push(el);"
         "      var kids=el.childNodes; if(kids){ for(var i=0;i<kids.length;i++){ var k=kids[i];"
         "        if(k&&(k.nodeType===1||k.nodeType===11)) st.push(k); } }"
         "      if(el.shadowRoot&&el.shadowRoot.childNodes){ var sr=el.shadowRoot.childNodes;"
-        "        for(var j=0;j<sr.length;j++){ var s=sr[j]; "
-        "if(s&&(s.nodeType===1||s.nodeType===11)) st.push(s); } } }"
+        "        for(var j=0;j<sr.length;j++){ var s=sr[j]; if(s&&(s.nodeType===1||s.nodeType===11)) st.push(s); } } }"
         "    return out; };"
         "  this.define=(n,c)=>{ m[n]=c; chain();"
         /* Arm synchronous custom-element reactions in the DOM insertion paths
@@ -4819,31 +4845,23 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 			 * prototype; (2) give the returned element that prototype WITHOUT
 			 * constructing it. Its pre-connect property writes land in Polymer's
 			 * __dataProto and are applied by the single connect-time construction. */
-        /* createElement of a defined custom tag: construct the element (so the
-			 * returned object exposes its methods — callers invoke them on the
+        /* createElement of a defined custom tag: construct the element in place
+			 * (constructor + observed-attribute reactions via upgradeOrConnect), so
+			 * the returned object exposes its methods — callers invoke them on the
 			 * detached result, e.g. iron-overlay creating its backdrop then calling
-			 * backdrop.prepare()), then run its ONE-TIME connect init immediately.
-			 * Lazy component systems (Polymer under ShadyDOM / YouTube's Wiz wrapper)
-			 * defer their real initialization to connectedCallback, guarded by an
-			 * internal once-flag. If we don't trigger it now, that init runs at the
-			 * real attach and RE-CREATES the element's data store, discarding any
-			 * property set on the detached element between createElement and insert
-			 * (backdrop.opened=true reverts to false → the backdrop self-removes).
-			 * Running it here consumes the once-flag, so the real attach only
-			 * attaches and pre-insert property writes survive. connectedCallback
-			 * stays reentrant/idempotent by that same once-flag, so firing it twice
-			 * (here + at attach) is safe. */
-        "  this.__upgradeOne=(el)=>{ try{ upgradeOrConnect(el);"
-        "    if(el && el.nodeType===1 && !el.__ybEagerInit){ el.__ybEagerInit=true;"
-        "      try{ if(typeof el.connectedCallback==='function') el.connectedCallback(); "
-        "}catch(e){} }"
-        "  }catch(e){} };"
+			 * backdrop.prepare(). connectedCallback is NOT fired here: it must wait
+			 * for real insertion. An earlier "eager connect" that fired it on the
+			 * detached element poisoned every framework attach-state flag — legacy
+			 * Polymer's connectedCallback unconditionally sets isAttached=true, and
+			 * YouTube's page-manager attachPage() skips its appendChild for a page
+			 * whose isAttached is already set, so the created ytd-browse was never
+			 * inserted and the whole page stayed blank. Pre-connect property writes
+			 * survive via the shadowed-accessor reconciliation in upgrade(). */
+        "  this.__upgradeOne=(el)=>{ try{ upgradeOrConnect(el); }catch(e){} };"
         "  this.__connectSubtree=(node)=>{ try{"
         "    var all=deepEls(node,'*'); for(var i=0;i<all.length;i++) upgradeOrConnect(all[i]);"
-        "  }catch(e){ try{console.error('ce subtree <'+(node&&(node.tagName||node.nodeName))+'> "
-        "nt='+(node&&node.nodeType),"
-        "    (e&&e.name||'Error')+': '+(e&&e.message), '|', "
-        "(e&&e.stack||'').split('\\n').slice(0,3).join(' <- '));}catch(_){}} };"
+        "  }catch(e){ try{console.error('ce subtree <'+(node&&(node.tagName||node.nodeName))+'> nt='+(node&&node.nodeType),"
+        "    (e&&e.name||'Error')+': '+(e&&e.message), '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- '));}catch(_){}} };"
         "  this.__disconnectSubtree=(node)=>{ try{"
         "    var visit=(el)=>{ if(el&&el.nodeType===1&&el.__ceConnected){ el.__ceConnected=false;"
         "      try{ if(typeof el.disconnectedCallback==='function') el.disconnectedCallback(); }"
@@ -4864,8 +4882,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 			 * component-wrapper error handling and the masthead (and everything
 			 * inside it: search box, topbar buttons, consent renderer) silently
 			 * froze at the server-rendered skeleton. */
-        "globalThis.Audio       = function(src){ this.src=src||''; this.volume=1; "
-        "this.muted=false; "
+        "globalThis.Audio       = function(src){ this.src=src||''; this.volume=1; this.muted=false; "
         "this.paused=true; this.currentTime=0; this.duration=NaN; this.autoplay=false; "
         "this.loop=false; this.preload='auto'; this.onload=null; this.onerror=null; "
         "this.play=()=>Promise.resolve(); this.pause=()=>{}; this.load=()=>{}; "
@@ -4908,37 +4925,46 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "      body:(data===undefined||data===null)?undefined:"
         "        (typeof data==='string'?data:data) }); }catch(e){}"
         "    return true; }; }"
-        /* HTMLFormElement.submit / requestSubmit: were absent, so a caller doing
-			 * `form.submit()` threw `submit is not a function`. Inside a swallow-all
-			 * framework wrapper (YouTube's consent-save) that throw silently failed
-			 * the save — the consent lightbox stuck on "An error occurred while
-			 * saving your choice" and never dismissed. We can't do a full navigating
-			 * submit (location.assign is a stub), but a best-effort form-encoded
-			 * POST of the named controls to the form's action fires the request
-			 * through the cookie engine (so any Set-Cookie the save relies on, e.g.
-			 * YouTube's SOCS consent cookie, is captured) and, crucially, does not
-			 * throw — so the caller's success path runs. */
-        "(function(){ try{ var ep=Object.getPrototypeOf(document.createElement('form'));"
-        "  if(ep && !ep.submit){"
-        "    var doSubmit=function(form){ try{"
-        "      var "
-        "action=(form.getAttribute&&form.getAttribute('action'))||globalThis.location.href;"
-        "      var method=((form.getAttribute&&form.getAttribute('method'))||'GET').toUpperCase();"
-        "      var ctrls=form.querySelectorAll?form.querySelectorAll('input,select,textarea'):[];"
-        "      var parts=[]; for(var i=0;i<ctrls.length;i++){ var c=ctrls[i];"
-        "        var name=c.getAttribute&&c.getAttribute('name'); if(!name)continue;"
-        "        var "
-        "val=(c.value!==undefined&&c.value!==null)?c.value:((c.getAttribute&&c.getAttribute('value'"
-        "))||'');"
-        "        parts.push(encodeURIComponent(name)+'='+encodeURIComponent(val)); }"
-        "      var body=parts.join('&');"
-        "      if(method==='GET'){ "
-        "globalThis.fetch(action+(action.indexOf('?')<0?'?':'&')+body,{method:'GET'}); }"
-        "      else{ globalThis.fetch(action,{method:method,"
-        "        headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body}); }"
-        "    }catch(e){} };"
-        "    ep.submit=function(){ doSubmit(this); };"
-        "    ep.requestSubmit=function(){ doSubmit(this); }; } }catch(e){} })();"
+        /* HTMLFormElement.submit / requestSubmit + the native submit-button
+			 * default action all funnel through __ybSubmitForm, which serializes
+			 * the successful controls and hands the host a real NAVIGATING request
+			 * via __ybFormNavigate (POST body or GET query). A prior version did a
+			 * background fetch() that captured the Set-Cookie but never navigated —
+			 * so a consent "Accept all" (POST to consent.google.com/save, 302 back
+			 * to the site) saved the cookie yet left the page unchanged. Navigating
+			 * for real loads the redirected document, so the choice takes effect. */
+        "(function(){ try{"
+        "  var submitter=null;"
+        "  globalThis.__ybSubmitForm=function(form, btn){ try{"
+        "    if(!form) return;"
+        "    var action=(form.getAttribute&&form.getAttribute('action'))||globalThis.location.href;"
+        "    if(!action) action=globalThis.location.href;"
+        "    var method=((form.getAttribute&&form.getAttribute('method'))||'GET').toUpperCase();"
+        "    var ctrls=form.querySelectorAll?form.querySelectorAll('input,select,textarea'):[];"
+        "    var parts=[];"
+        "    var add=function(n,v){ parts.push(encodeURIComponent(n)+'='+encodeURIComponent(v)); };"
+        "    for(var i=0;i<ctrls.length;i++){ var c=ctrls[i];"
+        "      var name=c.getAttribute&&c.getAttribute('name'); if(!name)continue;"
+        "      if(c.disabled)continue;"
+        "      var tag=(c.tagName||'').toLowerCase();"
+        "      var type=((c.getAttribute&&c.getAttribute('type'))||'').toLowerCase();"
+        /* skip unchecked checkbox/radio and non-submitting button types */
+        "      if(tag==='input'&&(type==='checkbox'||type==='radio')&&!c.checked)continue;"
+        "      if(tag==='input'&&(type==='submit'||type==='button'||type==='image'||type==='reset'||type==='file'))continue;"
+        "      if(tag==='button')continue;"
+        "      var val=(c.value!==undefined&&c.value!==null)?c.value:((c.getAttribute&&c.getAttribute('value'))||'');"
+        "      add(name,val); }"
+        /* the activated submit button contributes its own name=value */
+        "    if(btn){ var bn=btn.getAttribute&&btn.getAttribute('name');"
+        "      if(bn){ var bv=(btn.value!==undefined&&btn.value!==null)?btn.value:((btn.getAttribute&&btn.getAttribute('value'))||''); add(bn,bv); } }"
+        "    var body=parts.join('&');"
+        "    if(method==='GET'){ globalThis.__ybFormNavigate(action.split('#')[0]+(action.indexOf('?')<0?'?':'&')+body,'GET',''); }"
+        "    else{ globalThis.__ybFormNavigate(action,method,body); }"
+        "  }catch(e){} };"
+        "  var ep=Object.getPrototypeOf(document.createElement('form'));"
+        "  if(ep){"
+        "    ep.submit=function(){ globalThis.__ybSubmitForm(this,null); };"
+        "    ep.requestSubmit=function(b){ globalThis.__ybSubmitForm(this,b||null); }; } }catch(e){} })();"
         "globalThis.HTMLCanvasElement = function(){};"
         "globalThis.OffscreenCanvas = function(){ this.getContext = () => null; };"
         /* requestIdleCallback must hand the callback an IdleDeadline; code that

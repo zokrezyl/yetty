@@ -39,6 +39,14 @@ char *ybrowser_slurp_document(struct yetty_ybrowser_loader *loader, const char *
                               uint64_t generation, const _Atomic uint64_t *cancel_generation,
                               size_t *out_len, char **out_effective_url, char **out_content_type);
 
+/* Fetch a document with an explicit HTTP method + body (form submission).
+ * `method` is "POST"/etc. and `body`/`body_len` the form-encoded request body;
+ * the request carries application/x-www-form-urlencoded and follows redirects.
+ * Returns the response body (caller frees), NULL on failure. Defined in main.c. */
+char *ybrowser_slurp_request(struct yetty_ybrowser_loader *loader, const char *url,
+                             const char *method, const char *body, size_t body_len, size_t *out_len,
+                             char **out_effective_url, char **out_content_type);
+
 /* Canonicalize a local file path into a file:// URL for use as a document
  * base (relative hrefs then resolve against the file's directory). Returns
  * a malloc'd URL (caller frees), or NULL for "-", NULL, http(s) inputs and

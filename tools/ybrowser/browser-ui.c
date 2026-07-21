@@ -1184,6 +1184,40 @@ static void navigate(struct app *a, struct tab *t, char *url, int push_to_back)
     navigate_full(a, t, url, push_to_back, 0);
 }
 
+/* Form-submission navigation: issue an explicit-method request (POST body or
+ * GET query) that follows redirects, then load the resulting document. Never
+ * cache-served (a POST is not idempotent). Takes ownership of url/method/body.
+ * This is what makes the consent "Accept all" form actually take effect: the
+ * POST to the save endpoint sets the cookie and 302s back to the site, which we
+ * then render. */
+static void navigate_post(struct app *a, struct tab *t, char *url, char *method, char *body,
+                          size_t body_len)
+{
+    set_loading(a, 1);
+    nav_abort(t);
+    if (t->url && strcmp(t->url, START_URL) != 0) {
+        hist_push(&t->back, &t->n_back, &t->cap_back, str_dup(t->url));
+        hist_clear(t->fwd, &t->n_fwd);
+    }
+    size_t len = 0;
+    char *eff = NULL;
+    char *ctype = NULL;
+    char *data =
+        ybrowser_slurp_request(a->loader, url, method, body, body_len, &len, &eff, &ctype);
+    /* Land on the redirected URL (consent save 302s to the continue= target)
+	 * so the address bar, base URL, and history reflect the real page. */
+    const char *final_url = eff ? eff : url;
+    navigate_apply(a, t, final_url, (const uint8_t *)data, len, eff, ctype);
+    free(data);
+    free(ctype);
+    char *finish_url = str_dup(final_url);
+    free(eff);
+    navigate_finish(a, t, finish_url);
+    free(url);
+    free(method);
+    free(body);
+}
+
 static void go_back(struct app *a)
 {
     struct tab *t = &a->tabs[a->active];
@@ -1928,7 +1962,16 @@ static int pump_active(struct app *a)
 		 * and let the next tick run against the fresh engine. */
         char *js_nav = yetty_ylexbor_take_pending_navigation(t->engine);
         if (js_nav) {
-            navigate(a, t, js_nav, 1);
+            char *nav_method = NULL;
+            char *nav_body = NULL;
+            size_t nav_body_len = 0;
+            yetty_ylexbor_take_pending_nav_post(t->engine, &nav_method, &nav_body, &nav_body_len);
+            if (nav_method) {
+                navigate_post(a, t, js_nav, nav_method, nav_body, nav_body_len);
+            } else {
+                free(nav_body);
+                navigate(a, t, js_nav, 1);
+            }
             return 0;
         }
         /* needs_paint (not just dom_dirty): JS that mutates then reads

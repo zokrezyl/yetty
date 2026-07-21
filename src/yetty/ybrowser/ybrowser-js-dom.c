@@ -4876,6 +4876,9 @@ static int dispatch_propagation_stopped(JSContext *ctx, JSValueConst event)
     return stopped;
 }
 
+static JSValue synth_event_composed_path(JSContext *ctx, JSValueConst this_val, int argc,
+                                         JSValueConst *argv);
+
 /* Real EventTarget.dispatchEvent: invoke every registered listener whose type
  * matches the event, starting at the dispatch target and — for events created
  * with bubbles:true — walking up the ancestor chain, firing each ancestor's
@@ -4910,10 +4913,6 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
     state->dispatch_depth++;
     lxb_dom_element_t *el = unwrap_element(ctx, this_val); /* NULL for document/window */
     JS_SetPropertyStr(ctx, (JSValue)argv[0], "target", JS_DupValue(ctx, this_val));
-    /* Snapshot the count: a handler may addEventListener during dispatch and
-	 * those new listeners must not fire for this same event. */
-    int snapshot = state->listener_count;
-    int immediate_stopped = dispatch_fire_level(ctx, state, el, type, argv[0], this_val, snapshot);
 
     JSValue bubbles_v = JS_GetPropertyStr(ctx, (JSValue)argv[0], "bubbles");
     int bubbles = JS_ToBool(ctx, bubbles_v);
@@ -4921,6 +4920,23 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
     JSValue composed_v = JS_GetPropertyStr(ctx, (JSValue)argv[0], "composed");
     int composed = JS_ToBool(ctx, composed_v);
     JS_FreeValue(ctx, composed_v);
+
+    /* Install a lazy composedPath() reading the event's own target. Handlers
+	 * resolve the ORIGINAL target through it — YouTube's app boot literally
+	 * gates on composedPath()[0].id === "page-manager" when the page-manager
+	 * announces itself; without it the guard fails silently and the whole page
+	 * never attaches. The array itself is built on first call (see
+	 * synth_event_composed_path), so an event nobody inspects costs nothing. A
+	 * stale __composedPath from a previous dispatch of the same event object is
+	 * cleared so the fresh target is walked. */
+    JS_SetPropertyStr(ctx, (JSValue)argv[0], "__composedPath", JS_UNDEFINED);
+    JS_SetPropertyStr(ctx, (JSValue)argv[0], "composedPath",
+                      JS_NewCFunction(ctx, synth_event_composed_path, "composedPath", 0));
+
+    /* Snapshot the count: a handler may addEventListener during dispatch and
+	 * those new listeners must not fire for this same event. */
+    int snapshot = state->listener_count;
+    int immediate_stopped = dispatch_fire_level(ctx, state, el, type, argv[0], this_val, snapshot);
 
     if (el != NULL && bubbles && !immediate_stopped &&
         !dispatch_propagation_stopped(ctx, argv[0])) {
@@ -4956,6 +4972,41 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
     int prevented = JS_ToBool(ctx, dp);
     JS_FreeValue(ctx, dp);
     return prevented ? JS_FALSE : JS_TRUE;
+}
+
+static void maybe_submit_activated_form(JSContext *ctx, lxb_dom_element_t *target);
+
+/* HTMLElement.click(): dispatch a synthetic click on the element, then — unless
+ * a handler called preventDefault() — run the activation default action (submit
+ * a form when the element is a submit control). Mirrors what a real pointer
+ * click does via dispatch_click, so JS-driven activation (and headless tests)
+ * take the same path. Previously a no-op stub, so `button.click()` did nothing. */
+static JSValue js_el_click(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JSValue event = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, event, "type", JS_NewString(ctx, "click"));
+    JS_SetPropertyStr(ctx, event, "bubbles", JS_TRUE);
+    JS_SetPropertyStr(ctx, event, "cancelable", JS_TRUE);
+    JS_SetPropertyStr(ctx, event, "composed", JS_TRUE);
+    JS_SetPropertyStr(ctx, event, "isTrusted", JS_FALSE);
+    JS_SetPropertyStr(ctx, event, "detail", JS_NewInt32(ctx, 1));
+    JS_SetPropertyStr(ctx, event, "defaultPrevented", JS_FALSE);
+    JSValueConst dispatch_argv[1] = {event};
+    JSValue rc = js_el_dispatchEvent(ctx, this_val, 1, dispatch_argv);
+    JS_FreeValue(ctx, rc);
+    JSValue dp = JS_GetPropertyStr(ctx, event, "defaultPrevented");
+    int prevented = JS_ToBool(ctx, dp);
+    JS_FreeValue(ctx, dp);
+    JS_FreeValue(ctx, event);
+    if (!prevented) {
+        lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+        if (el != NULL) {
+            maybe_submit_activated_form(ctx, el);
+        }
+    }
+    return JS_UNDEFINED;
 }
 
 /* For HTML documents, attribute-manipulation methods must:
@@ -5725,7 +5776,7 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CFUNC_DEF("scrollIntoView", 0, js_el_undef_stub),
         JS_CFUNC_DEF("focus", 0, js_el_undef_stub),
         JS_CFUNC_DEF("blur", 0, js_el_undef_stub),
-        JS_CFUNC_DEF("click", 0, js_el_undef_stub),
+        JS_CFUNC_DEF("click", 0, js_el_click),
         JS_CFUNC_DEF("normalize", 0, js_el_undef_stub),
         JS_CFUNC_DEF("dispatchEvent", 1, js_el_dispatchEvent),
         JS_CFUNC_DEF("removeEventListener", 2, js_el_undef_stub),
@@ -6026,11 +6077,55 @@ static JSValue synth_event_composed_path(JSContext *ctx, JSValueConst this_val, 
 {
     (void)argc;
     (void)argv;
+    /* Fast path: a caller (dispatch_click) may have pre-built and cached the
+	 * path; the first call through dispatchEvent caches it here too. */
     JSValue path = JS_GetPropertyStr(ctx, this_val, "__composedPath");
-    if (JS_IsUndefined(path) || JS_IsNull(path)) {
-        JS_FreeValue(ctx, path);
-        return JS_NewArray(ctx);
+    if (JS_IsArray(path)) {
+        return path;
     }
+    JS_FreeValue(ctx, path);
+
+    /* Lazily build [target, ...element ancestors, document, window] from the
+	 * event's own target. Kept out of dispatchEvent's hot path: the vast
+	 * majority of dispatched events never have composedPath() called, and the
+	 * ancestor walk + per-node wrap is pure waste for them. Non-composed events
+	 * stop at the first shadow-root (document-fragment) boundary. */
+    path = JS_NewArray(ctx);
+    uint32_t path_len = 0;
+    JSValue target = JS_GetPropertyStr(ctx, this_val, "target");
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue doc_obj = JS_GetPropertyStr(ctx, global, "document");
+    JSValue composed_v = JS_GetPropertyStr(ctx, this_val, "composed");
+    int composed = JS_ToBool(ctx, composed_v);
+    JS_FreeValue(ctx, composed_v);
+
+    if (JS_IsObject(target)) {
+        JS_SetPropertyUint32(ctx, path, path_len++, JS_DupValue(ctx, target));
+        lxb_dom_element_t *el = unwrap_element(ctx, target);
+        if (el != NULL) {
+            for (lxb_dom_node_t *node = lxb_dom_interface_node(el)->parent; node;
+                 node = node->parent) {
+                if (node->type == LXB_DOM_NODE_TYPE_DOCUMENT_FRAGMENT && !composed) {
+                    break;
+                }
+                if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+                    continue;
+                }
+                JS_SetPropertyUint32(ctx, path, path_len++,
+                                     wrap_element(ctx, lxb_dom_interface_element(node)));
+            }
+            if (JS_IsObject(doc_obj)) {
+                JS_SetPropertyUint32(ctx, path, path_len++, JS_DupValue(ctx, doc_obj));
+            }
+            JS_SetPropertyUint32(ctx, path, path_len++, JS_DupValue(ctx, global));
+        }
+    }
+    JS_FreeValue(ctx, target);
+    JS_FreeValue(ctx, doc_obj);
+    JS_FreeValue(ctx, global);
+
+    /* Cache so repeated composedPath() calls within one handler are O(1). */
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "__composedPath", JS_DupValue(ctx, path));
     return path;
 }
 
@@ -6139,6 +6234,87 @@ static int synth_dispatch_one(struct yetty_ylexbor *r, struct js_dom_state *stat
     return fired;
 }
 
+/* Native form-submission default action for a click. Walk from the clicked
+ * element up its ancestry to the nearest activated submit control (a
+ * <button> with no type or type=submit, or <input type=submit/image>), then to
+ * that control's owning <form>, and hand both to the page's __ybSubmitForm
+ * helper (installed in js-web.c), which serializes the controls and issues a
+ * real navigating request. Does nothing when the click did not land on a submit
+ * control or the control is not in a form. */
+static void maybe_submit_activated_form(JSContext *ctx, lxb_dom_element_t *target)
+{
+    lxb_dom_element_t *submit_el = NULL;
+    for (lxb_dom_node_t *node = lxb_dom_interface_node(target); node; node = node->parent) {
+        if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        lxb_dom_element_t *el = lxb_dom_interface_element(node);
+        size_t name_len = 0;
+        const lxb_char_t *tag = lxb_dom_element_qualified_name(el, &name_len);
+        if (!tag) {
+            continue;
+        }
+        int is_button = (name_len == 6 && strncasecmp((const char *)tag, "button", 6) == 0);
+        int is_input = (name_len == 5 && strncasecmp((const char *)tag, "input", 5) == 0);
+        if (!is_button && !is_input) {
+            continue;
+        }
+        size_t type_len = 0;
+        const lxb_char_t *type_attr =
+            lxb_dom_element_get_attribute(el, (const lxb_char_t *)"type", 4, &type_len);
+        /* <button> defaults to type=submit; <input> needs an explicit
+		 * submit/image type. reset/button never submit. */
+        int submits;
+        if (is_button) {
+            submits = (type_attr == NULL) ||
+                      (type_len == 6 && strncasecmp((const char *)type_attr, "submit", 6) == 0);
+        } else {
+            submits = type_attr != NULL &&
+                      ((type_len == 6 && strncasecmp((const char *)type_attr, "submit", 6) == 0) ||
+                       (type_len == 5 && strncasecmp((const char *)type_attr, "image", 5) == 0));
+        }
+        if (submits) {
+            submit_el = el;
+        }
+        break; /* first button/input ancestor decides; stop regardless */
+    }
+    if (submit_el == NULL) {
+        return;
+    }
+    /* Find the owning form: nearest <form> ancestor. (We don't model the
+	 * form= attribute association; the ancestor form covers real pages.) */
+    lxb_dom_element_t *form_el = NULL;
+    for (lxb_dom_node_t *node = lxb_dom_interface_node(submit_el)->parent; node;
+         node = node->parent) {
+        if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        lxb_dom_element_t *el = lxb_dom_interface_element(node);
+        size_t name_len = 0;
+        const lxb_char_t *tag = lxb_dom_element_qualified_name(el, &name_len);
+        if (tag && name_len == 4 && strncasecmp((const char *)tag, "form", 4) == 0) {
+            form_el = el;
+            break;
+        }
+    }
+    if (form_el == NULL) {
+        return;
+    }
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue submit_fn = JS_GetPropertyStr(ctx, global, "__ybSubmitForm");
+    if (JS_IsFunction(ctx, submit_fn)) {
+        JSValue form_wrap = wrap_element(ctx, form_el);
+        JSValue btn_wrap = wrap_element(ctx, submit_el);
+        JSValue args[2] = {form_wrap, btn_wrap};
+        JSValue ret = JS_Call(ctx, submit_fn, global, 2, args);
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, form_wrap);
+        JS_FreeValue(ctx, btn_wrap);
+    }
+    JS_FreeValue(ctx, submit_fn);
+    JS_FreeValue(ctx, global);
+}
+
 int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
 {
     if (!r || !r->js_ctx || !r->js_rt) {
@@ -6206,9 +6382,11 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
      * activations did nothing. */
     static const char *const sequence[] = {"mousedown", "mouseup", "click"};
     int fired = 0;
+    int click_default_prevented = 0;
     for (size_t phase = 0; phase < sizeof(sequence) / sizeof(sequence[0]); phase++) {
         const char *type = sequence[phase];
         int is_down = (phase == 0);
+        int is_click = (phase == 2);
 
         JSValue event = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, event, "type", JS_NewString(ctx, type));
@@ -6241,7 +6419,23 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
         if (synth_dispatch_one(r, state, target, type, event)) {
             fired = 1;
         }
+        if (is_click) {
+            JSValue dp = JS_GetPropertyStr(ctx, event, "defaultPrevented");
+            click_default_prevented = JS_ToBool(ctx, dp);
+            JS_FreeValue(ctx, dp);
+        }
         JS_FreeValue(ctx, event);
+    }
+
+    /* Native default action of a click on a submit control: submit its form.
+	 * Without this, a plain-HTML consent page (news.google.com's
+	 * consent.google.com "Accept all" is a type=submit button in a
+	 * <form method=POST action=".../save">) does nothing — the JS above only
+	 * fires the mouse/click events. Skipped if a handler called
+	 * preventDefault(). Delegated to __ybSubmitForm so the form-encoding and
+	 * navigating-request logic lives in one place (js-web.c). */
+    if (!click_default_prevented) {
+        maybe_submit_activated_form(ctx, target);
     }
 
     JS_FreeValue(ctx, path);

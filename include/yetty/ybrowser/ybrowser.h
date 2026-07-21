@@ -244,6 +244,15 @@ void yetty_ylexbor_mark_painted(struct yetty_ylexbor *r);
  * after saving the choice. */
 char *yetty_ylexbor_take_pending_navigation(struct yetty_ylexbor *r);
 
+/* Companion to the above for form submissions: hands the host the HTTP method
+ * and request body that accompany the pending navigation. Call right after
+ * take_pending_navigation() returns non-NULL. *out_method is "POST"/etc. (NULL
+ * for a GET), *out_body is the form-encoded body (NULL if none); both transfer
+ * ownership. This is what makes the consent "Accept all" form actually POST to
+ * the save endpoint, set the cookie, and navigate the returned page. */
+void yetty_ylexbor_take_pending_nav_post(struct yetty_ylexbor *r, char **out_method,
+                                         char **out_body, size_t *out_body_len);
+
 /* Re-run box-build + layout. Cheap-ish (~ms for small docs). Called by
  * the host after a JS turn that mutated the DOM, or after a viewport
  * resize. Render() reads the same boxes. */

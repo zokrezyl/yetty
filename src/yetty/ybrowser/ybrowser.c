@@ -405,6 +405,8 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
     free(r->text_chunks);
     free(r->base_url);
     free(r->pending_navigation);
+    free(r->pending_nav_method);
+    free(r->pending_nav_body);
     kv_store_destroy(&r->web_local_storage);
     kv_store_destroy(&r->web_session_storage);
     free(r->web_cookie_string);
@@ -1134,6 +1136,30 @@ char *yetty_ylexbor_take_pending_navigation(struct yetty_ylexbor *r)
     char *url = r->pending_navigation;
     r->pending_navigation = NULL;
     return url;
+}
+
+/* Take the method/body that accompany a form-submission navigation. Call
+ * immediately after yetty_ylexbor_take_pending_navigation() returned non-NULL.
+ * On return *out_method is "POST"/etc. (or NULL for a plain GET) and *out_body
+ * is the form-encoded body (or NULL); both transfer ownership to the caller.
+ * Clears the stored values so the next navigation starts clean. */
+void yetty_ylexbor_take_pending_nav_post(struct yetty_ylexbor *r, char **out_method,
+                                         char **out_body, size_t *out_body_len)
+{
+    if (out_method) {
+        *out_method = r ? r->pending_nav_method : NULL;
+    }
+    if (out_body) {
+        *out_body = r ? r->pending_nav_body : NULL;
+    }
+    if (out_body_len) {
+        *out_body_len = r ? r->pending_nav_body_len : 0;
+    }
+    if (r) {
+        r->pending_nav_method = NULL;
+        r->pending_nav_body = NULL;
+        r->pending_nav_body_len = 0;
+    }
 }
 
 /* Rebuild the box tree + run layout from the (possibly mutated) DOM. This is

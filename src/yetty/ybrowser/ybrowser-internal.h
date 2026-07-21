@@ -808,6 +808,16 @@ struct yetty_ylexbor {
 	 * no navigation is pending. */
     char *pending_navigation;
 
+    /* Form submission carries a method + body alongside pending_navigation.
+		 * A submit-button click or form.submit()/requestSubmit() records the
+		 * form-encoded body here so the host issues a real navigating POST (the
+		 * consent "Accept all" form posts to consent.google.com/save, which sets
+		 * the consent cookie and 302-redirects back). NULL method means a plain
+		 * GET. Owned, cleared by the take-getter alongside pending_navigation. */
+    char *pending_nav_method;
+    char *pending_nav_body;
+    size_t pending_nav_body_len;
+
     /* Timer queue: array of timer*, sorted by deadline_ms ascending. */
     struct yetty_ylexbor_timer **timers;
     int timer_count, timer_cap;
