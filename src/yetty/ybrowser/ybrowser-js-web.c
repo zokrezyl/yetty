@@ -51,8 +51,10 @@
 #include <stdatomic.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 
 #ifndef YETTY_HAVE_QUICKJS
@@ -335,6 +337,13 @@ struct yetty_ybrowser_loader {
     /* $XDG_CACHE_HOME/yetty/altsvc-cache (or $HOME/.cache/...). Empty
 	 * string when no cache dir could be derived. */
     char altsvc_path[1024];
+
+    /* Persistent Netscape cookie jar ($XDG_CACHE_HOME/yetty/cookies.txt or
+	 * $HOME/.cache/yetty/cookies.txt). Loaded ONCE into the shared jar at loader
+	 * create and written back ONCE at destroy, so consent/session cookies
+	 * (YouTube SOCS, login state) survive a restart instead of forcing the
+	 * consent wall every launch. Empty when no cache dir could be derived. */
+    char cookie_path[1024];
 
     /* Cookies a page set via document.cookie, mirrored here (separate from
 	 * curl's jar) so the next same-origin DOCUMENT navigation carries them —
@@ -1100,6 +1109,46 @@ struct yetty_ybrowser_loader_ptr_result yetty_ybrowser_loader_create(void)
         }
     }
 
+    /* Persistent cookie jar: derive $XDG_CACHE_HOME/yetty/cookies.txt (or under
+	 * $HOME/.cache), ensure the directory exists, and load any saved cookies
+	 * into the shared jar ONCE so consent/session state survives a restart. The
+	 * jar is written back at loader destroy. Best-effort: if the dir can't be
+	 * made or the file doesn't exist yet, we simply start cookieless. */
+    {
+        const char *xdg = getenv("XDG_CACHE_HOME");
+        const char *home = getenv("HOME");
+        char dir[1024] = {0};
+        if (xdg && *xdg) {
+            snprintf(dir, sizeof(dir), "%s/yetty", xdg);
+        } else if (home && *home) {
+            snprintf(dir, sizeof(dir), "%s/.cache/yetty", home);
+        }
+        if (dir[0]) {
+            /* Create the parent chain (…/.cache then …/.cache/yetty). */
+            char parent[1024];
+            snprintf(parent, sizeof(parent), "%s", dir);
+            char *slash = strrchr(parent, '/');
+            if (slash && slash != parent) {
+                *slash = '\0';
+                (void)mkdir(parent, 0755);
+            }
+            if (mkdir(dir, 0700) == 0 || errno == EEXIST) {
+                snprintf(loader->cookie_path, sizeof(loader->cookie_path), "%s/cookies.txt", dir);
+                if (loader->share) {
+                    CURL *primer = curl_easy_init();
+                    if (primer) {
+                        curl_easy_setopt(primer, CURLOPT_SHARE, loader->share);
+                        curl_easy_setopt(primer, CURLOPT_COOKIEFILE, loader->cookie_path);
+                        /* Force the read now so the cookies land in the shared
+						 * jar before the first real transfer. */
+                        curl_easy_setopt(primer, CURLOPT_COOKIELIST, "RELOAD");
+                        curl_easy_cleanup(primer);
+                    }
+                }
+            }
+        }
+    }
+
     /* Central scheduler thread — every transfer this loader runs goes
 	 * through this ONE multi: same-origin requests multiplex on shared
 	 * H2 connections, per-host and total connection counts are bounded
@@ -1139,6 +1188,21 @@ struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrows
         pthread_mutex_destroy(&loader->scheduler_mutex);
         pthread_cond_destroy(&loader->scheduler_cond);
         loader->scheduler_running = 0;
+    }
+    /* Persist the shared cookie jar to disk before tearing the share down, so
+	 * consent/session cookies set this run are there on the next launch. The
+	 * flush handle joins the share (COOKIEFILE="" enables the engine against the
+	 * shared jar without re-reading the file), points COOKIEJAR at our path, and
+	 * both the explicit FLUSH and the cleanup write the Netscape jar. */
+    if (loader->share && loader->cookie_path[0]) {
+        CURL *flush = curl_easy_init();
+        if (flush) {
+            curl_easy_setopt(flush, CURLOPT_SHARE, loader->share);
+            curl_easy_setopt(flush, CURLOPT_COOKIEFILE, "");
+            curl_easy_setopt(flush, CURLOPT_COOKIEJAR, loader->cookie_path);
+            curl_easy_setopt(flush, CURLOPT_COOKIELIST, "FLUSH");
+            curl_easy_cleanup(flush);
+        }
     }
     if (loader->share) {
         CURLSHcode code = curl_share_cleanup(loader->share);
@@ -1385,6 +1449,14 @@ static void fetch_configure_easy(struct yetty_ybrowser_loader *loader, CURL *eas
 	 * never travel to a different site. curl copies the string in setopt, so it
 	 * is safe to unlock right after. */
     if (request->kind == YETTY_YBROWSER_REQUEST_DOCUMENT) {
+        /* Persist the jar to disk when this navigation's easy handle is cleaned
+		 * up (right after the transfer, not at process exit), so consent/session
+		 * cookies set on the page — the reload after "Accept all" writes SOCS —
+		 * survive even a later crash or hard kill. Navigations are infrequent
+		 * and effectively serial, so the per-nav write is cheap. */
+        if (loader->cookie_path[0]) {
+            curl_easy_setopt(easy, CURLOPT_COOKIEJAR, loader->cookie_path);
+        }
         pthread_mutex_lock(&loader->cache_mutex);
         if (loader->page_cookies && loader->page_cookie_host) {
             const char *req_host = NULL;
@@ -2719,6 +2791,150 @@ static void cookie_bridge_to_jar(struct yetty_ylexbor *r, const char *cookie)
     pthread_mutex_unlock(&loader->cache_mutex);
 }
 
+/* Case-insensitive "does hay start with prefix". */
+static bool cookie_ci_prefix(const char *hay, const char *prefix)
+{
+    while (*prefix) {
+        if (tolower((unsigned char)*hay) != tolower((unsigned char)*prefix)) {
+            return false;
+        }
+        hay++;
+        prefix++;
+    }
+    return true;
+}
+
+/* Case-insensitive search for `needle` anywhere in `hay`. */
+static const char *cookie_ci_find(const char *hay, const char *needle)
+{
+    for (; *hay; hay++) {
+        if (cookie_ci_prefix(hay, needle)) {
+            return hay;
+        }
+    }
+    return NULL;
+}
+
+/* Apply one `document.cookie = "..."` write with real (if simplified) cookie
+ * semantics. Only the leading `name=value` is the cookie; everything after the
+ * first ';' is attributes. An Expires in the past or Max-Age <= 0 DELETES the
+ * named cookie; otherwise the cookie is SET, replacing any existing cookie of
+ * the same name — never accumulating duplicates and never storing
+ * expires/domain/path/secure as if they were cookies. The store is the
+ * "name=value; name2=value2" string in r->web_cookie_string, which is both what
+ * document.cookie returns and what is mirrored onto the loader for the next
+ * navigation. (The previous code appended the whole raw declaration, so the
+ * store filled with attribute-junk and stale duplicates, and a page that reads
+ * document.cookie back to confirm its consent write — YouTube does — saw a
+ * garbled string and re-showed the consent wall.) */
+static void web_cookie_apply(struct yetty_ylexbor *r, const char *decl)
+{
+    if (!decl) {
+        return;
+    }
+    while (*decl == ' ' || *decl == '\t') {
+        decl++;
+    }
+    const char *semi = strchr(decl, ';');
+    size_t nv_len = semi ? (size_t)(semi - decl) : strlen(decl);
+    while (nv_len > 0 && (decl[nv_len - 1] == ' ' || decl[nv_len - 1] == '\t')) {
+        nv_len--;
+    }
+    const char *eq = memchr(decl, '=', nv_len);
+    if (!eq) {
+        return; /* not a name=value pair — ignore */
+    }
+    size_t name_len = (size_t)(eq - decl);
+    while (name_len > 0 && (decl[name_len - 1] == ' ' || decl[name_len - 1] == '\t')) {
+        name_len--;
+    }
+    if (name_len == 0) {
+        return;
+    }
+    const char *value = eq + 1;
+    size_t value_len = (size_t)(decl + nv_len - value);
+
+    /* Deletion? Expires in the past or Max-Age <= 0. */
+    bool del = false;
+    if (semi) {
+        const char *attrs = semi + 1;
+        const char *ma = cookie_ci_find(attrs, "max-age");
+        if (ma) {
+            const char *q = ma + 7;
+            while (*q == ' ' || *q == '\t') {
+                q++;
+            }
+            if (*q == '=') {
+                if (strtol(q + 1, NULL, 10) <= 0) {
+                    del = true;
+                }
+            }
+        }
+        const char *ex = cookie_ci_find(attrs, "expires");
+        if (ex) {
+            const char *q = ex + 7;
+            while (*q == ' ' || *q == '\t') {
+                q++;
+            }
+            if (*q == '=') {
+                time_t t = curl_getdate(q + 1, NULL);
+                if (t != (time_t)-1 && t <= time(NULL)) {
+                    del = true;
+                }
+            }
+        }
+    }
+
+    /* Rebuild the store: keep every existing pair whose name differs from this
+	 * one, then append the fresh pair (unless deleting). */
+    const char *old = r->web_cookie_string ? r->web_cookie_string : "";
+    size_t need = strlen(old) + name_len + value_len + 4;
+    char *out = malloc(need);
+    if (!out) {
+        return;
+    }
+    size_t out_len = 0;
+    const char *p = old;
+    while (*p) {
+        while (*p == ' ' || *p == '\t' || *p == ';') {
+            p++;
+        }
+        if (!*p) {
+            break;
+        }
+        const char *pair = p;
+        const char *pair_end = strchr(p, ';');
+        size_t pair_len = pair_end ? (size_t)(pair_end - p) : strlen(p);
+        p = pair_end ? pair_end : p + pair_len;
+        /* Compare this pair's name to the incoming name. */
+        const char *peq = memchr(pair, '=', pair_len);
+        size_t pn_len = peq ? (size_t)(peq - pair) : pair_len;
+        if (pn_len == name_len && strncmp(pair, decl, name_len) == 0) {
+            continue; /* drop the stale copy */
+        }
+        if (out_len) {
+            memcpy(out + out_len, "; ", 2);
+            out_len += 2;
+        }
+        memcpy(out + out_len, pair, pair_len);
+        out_len += pair_len;
+    }
+    if (!del) {
+        if (out_len) {
+            memcpy(out + out_len, "; ", 2);
+            out_len += 2;
+        }
+        memcpy(out + out_len, decl, name_len);
+        out_len += name_len;
+        out[out_len++] = '=';
+        memcpy(out + out_len, value, value_len);
+        out_len += value_len;
+    }
+    out[out_len] = '\0';
+    free(r->web_cookie_string);
+    r->web_cookie_string = out;
+}
+
 static JSValue js_doc_cookie_get(JSContext *ctx, JSValueConst this_val)
 {
     (void)this_val;
@@ -2737,18 +2953,7 @@ static JSValue js_doc_cookie_set(JSContext *ctx, JSValueConst this_val, JSValueC
     if (!s) {
         return JS_UNDEFINED;
     }
-    /* Append (real cookie semantics is way more complicated). */
-    if (!r->web_cookie_string) {
-        r->web_cookie_string = strdup(s);
-    } else {
-        size_t old_len = strlen(r->web_cookie_string), add_len = strlen(s);
-        char *p = realloc(r->web_cookie_string, old_len + add_len + 3);
-        if (p) {
-            strcat(p, "; ");
-            strcat(p, s);
-            r->web_cookie_string = p;
-        }
-    }
+    web_cookie_apply(r, s);
     cookie_bridge_to_jar(r, s);
     JS_FreeCString(ctx, s);
     return JS_UNDEFINED;

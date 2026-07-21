@@ -43,6 +43,48 @@ if(WIN32)
     target_compile_definitions(qjs PRIVATE WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0601)
 endif()
 
+# Stage 0 JIT profiler (see quickjs-jit.h): compiled in on the Linux
+# measurement target, runtime-off until JS_ProfileStart. Other
+# platforms keep the API as stubs.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_compile_definitions(qjs PRIVATE QJS_ENABLE_PROFILE)
+    target_link_libraries(qjs PUBLIC rt)
+endif()
+
+# Baseline bytecode JIT (SLJIT backend; design: src/quickjs/quickjs-jit.h,
+# tmp/qjs-sljit-jit.md). Compiled in only on the validated Linux x86-64
+# development target and default-OFF at runtime (JS_JITSetMode). Every
+# other platform builds interpreter-only with the JIT-API stubs
+# (JS_JITAvailable() == 0), so hosts need no conditional code.
+#
+# Per-platform enablement checklist (extend the guard below only after
+# the target's item is validated — the design's platform table):
+#   Linux/Android AArch64 : SLJIT ARM64 backend + cache-flush + W^X audit
+#   Windows x86-64        : MSVC ABI, SEH/unwind, exec-mem policy
+#   macOS x86-64/ARM64    : W^X + hardened-runtime (MAP_JIT) validation
+#   Linux RISC-V 64       : SLJIT RISC-V backend validation
+#   WebAssembly           : interpreter only (no runtime executable memory)
+#   iOS/tvOS              : interpreter only unless JIT entitlement permits
+# Opt out entirely with -DQJS_ENABLE_JIT=OFF.
+option(QJS_ENABLE_JIT "quickjs baseline JIT (SLJIT), Linux x86-64" ON)
+set(QJS_SLJIT_DIR ${QJS_DIR}/sljit/sljit_src)
+if(QJS_ENABLE_JIT
+   AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
+   AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64"
+   AND EXISTS ${QJS_SLJIT_DIR}/sljitLir.c)
+    target_sources(qjs PRIVATE ${QJS_SLJIT_DIR}/sljitLir.c)
+    target_include_directories(qjs PRIVATE ${QJS_SLJIT_DIR})
+    # W^X: the dual-mapping protected allocator keeps a writable and an
+    # executable view of the code as separate mappings — generated code
+    # is never simultaneously writable and executable (design: Native-
+    # code memory and security).
+    target_compile_definitions(qjs PRIVATE QJS_ENABLE_JIT SLJIT_CONFIG_AUTO=1
+                               SLJIT_PROT_EXECUTABLE_ALLOCATOR=1)
+    message(STATUS "quickjs: baseline JIT enabled (SLJIT, linux-x86_64, W^X)")
+else()
+    message(STATUS "quickjs: baseline JIT disabled (interpreter only)")
+endif()
+
 # Third-party source: not held to yetty warning levels.
 if(MSVC)
     target_compile_options(qjs PRIVATE /w)

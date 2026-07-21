@@ -47,6 +47,26 @@
 #include "quickjs.h"
 #include "libregexp.h"
 #include "dtoa.h"
+#if defined(QJS_ENABLE_PROFILE) || defined(QJS_ENABLE_JIT)
+#include "quickjs-jit-internal.h"
+struct JSFunctionBytecode;
+#endif
+#ifdef QJS_ENABLE_PROFILE
+/* implemented in quickjs-jit.c, #included at the bottom of this file */
+static void qjs_prof_free(JSRuntime *rt);
+static void qjs_prof_function_freed(QJSProfileState *state, JSRuntime *rt,
+                                    struct JSFunctionBytecode *b);
+#else
+#define QJS_PROF_CAT_PUSH_DECL(rt, category, savevar) do { } while (0)
+#define QJS_PROF_CAT_POP(rt, savevar) do { } while (0)
+#define QJS_PROF_OP_TAP(opcode_fetch) (opcode_fetch)
+#endif
+#ifdef QJS_ENABLE_JIT
+/* implemented in quickjs-jit-compile.c, #included via quickjs-jit.c */
+static void qjs_jit_runtime_init(JSRuntime *rt);
+static void qjs_jit_compile(JSContext *ctx, struct JSFunctionBytecode *b);
+static void qjs_jit_function_freed(JSRuntime *rt, struct JSFunctionBytecode *b);
+#endif
 
 #if defined(EMSCRIPTEN) || defined(_MSC_VER)
 #define DIRECT_DISPATCH  0
@@ -354,6 +374,12 @@ struct JSRuntime {
     void *user_opaque;
     void *libc_opaque;
     JSRuntimeFinalizerState *finalizers;
+#ifdef QJS_ENABLE_PROFILE
+    QJSProfileState *prof; /* Stage 0 JIT profiler; NULL when inactive */
+#endif
+#ifdef QJS_ENABLE_JIT
+    QJSJitRuntime jit;     /* baseline JIT policy + accounting */
+#endif
 };
 
 struct JSClass {
@@ -812,6 +838,15 @@ typedef struct JSFunctionBytecode {
     int pc2line_len;
     uint8_t *pc2line_buf;
     char *source;
+#ifdef QJS_ENABLE_PROFILE
+    QJSProfileFuncCounters prof; /* Stage 0 JIT profiler counters */
+#endif
+#ifdef QJS_ENABLE_JIT
+    uint32_t jitc_call_count;
+    uint32_t jitc_backedge_count;
+    uint8_t jitc_state;          /* QJS_JITC_* */
+    QJSJitCode *jitc_code;       /* published native code, or NULL */
+#endif
 } JSFunctionBytecode;
 
 typedef struct JSBoundFunction {
@@ -1983,6 +2018,9 @@ JSRuntime *JS_NewRuntime2(const JSMallocFunctions *mf, void *opaque)
     init_list_head(&rt->gc_obj_list);
     init_list_head(&rt->gc_zero_ref_count_list);
     rt->gc_phase = JS_GC_PHASE_NONE;
+#ifdef QJS_ENABLE_JIT
+    qjs_jit_runtime_init(rt);
+#endif
 
 #ifdef ENABLE_DUMPS // JS_DUMP_LEAKS
     init_list_head(&rt->string_list);
@@ -2291,6 +2329,9 @@ void JS_FreeRuntime(JSRuntime *rt)
     bool leak = false;
     int i;
 
+#ifdef QJS_ENABLE_PROFILE
+    qjs_prof_free(rt);
+#endif
     rt->in_free = true;
     JS_FreeValueRT(rt, rt->current_exception);
 
@@ -6259,7 +6300,11 @@ static JSValue js_call_c_function_data(JSContext *ctx, JSValueConst func_obj,
     sf->is_strict_mode = false;
     sf->cur_func = unsafe_unconst(func_obj);
     sf->arg_count = argc;
-    ret = s->func(ctx, this_val, argc, arg_buf, s->magic, vc(s->data));
+    {
+        QJS_PROF_CAT_PUSH_DECL(rt, QJS_PROF_CAT_NATIVE, prof_cat_save);
+        ret = s->func(ctx, this_val, argc, arg_buf, s->magic, vc(s->data));
+        QJS_PROF_CAT_POP(rt, prof_cat_save);
+    }
     rt->current_stack_frame = sf->prev_frame;
     return ret;
 }
@@ -6384,7 +6429,11 @@ static JSValue js_call_c_closure(JSContext *ctx, JSValueConst func_obj,
     sf->is_strict_mode = false;
     sf->cur_func = unsafe_unconst(func_obj);
     sf->arg_count = argc;
-    ret = s->func(ctx, this_val, argc, arg_buf, s->magic, s->opaque);
+    {
+        QJS_PROF_CAT_PUSH_DECL(rt, QJS_PROF_CAT_NATIVE, prof_cat_save);
+        ret = s->func(ctx, this_val, argc, arg_buf, s->magic, s->opaque);
+        QJS_PROF_CAT_POP(rt, prof_cat_save);
+    }
     rt->current_stack_frame = sf->prev_frame;
 
     return ret;
@@ -14740,7 +14789,11 @@ int JS_ToBigUint64(JSContext *ctx, uint64_t *pres, JSValueConst val)
 
 static no_inline __exception int js_unary_arith_slow(JSContext *ctx,
                                                      JSValue *sp,
-                                                     OPCodeEnum op)
+                                                     OPCodeEnum op);
+
+static no_inline __exception int js_unary_arith_slow_impl(JSContext *ctx,
+                                                          JSValue *sp,
+                                                          OPCodeEnum op)
 {
     JSValue op1;
     int v;
@@ -14895,7 +14948,7 @@ static __exception int js_post_inc_slow(JSContext *ctx,
     return js_unary_arith_slow(ctx, sp + 1, op - OP_post_dec + OP_dec);
 }
 
-static no_inline int js_not_slow(JSContext *ctx, JSValue *sp)
+static no_inline int js_not_slow_impl(JSContext *ctx, JSValue *sp)
 {
     JSValue op1;
 
@@ -14924,8 +14977,8 @@ static no_inline int js_not_slow(JSContext *ctx, JSValue *sp)
     return -1;
 }
 
-static no_inline __exception int js_binary_arith_slow(JSContext *ctx, JSValue *sp,
-                                                      OPCodeEnum op)
+static no_inline __exception int js_binary_arith_slow_impl(JSContext *ctx, JSValue *sp,
+                                                           OPCodeEnum op)
 {
     JSValue op1, op2;
     uint32_t tag1, tag2;
@@ -15119,7 +15172,7 @@ static no_inline __exception int js_binary_arith_slow(JSContext *ctx, JSValue *s
     return -1;
 }
 
-static no_inline __exception int js_add_slow(JSContext *ctx, JSValue *sp)
+static no_inline __exception int js_add_slow_impl(JSContext *ctx, JSValue *sp)
 {
     JSValue op1, op2;
     uint32_t tag1, tag2;
@@ -15172,7 +15225,9 @@ static no_inline __exception int js_add_slow(JSContext *ctx, JSValue *sp)
     }
 
     if (tag_is_string(tag1) || tag_is_string(tag2)) {
+        QJS_PROF_CAT_PUSH_DECL(ctx, QJS_PROF_CAT_STRING, prof_cat_save);
         sp[-2] = JS_ConcatString(ctx, op1, op2);
+        QJS_PROF_CAT_POP(ctx, prof_cat_save);
         if (JS_IsException(sp[-2]))
             goto exception;
         return 0;
@@ -15237,9 +15292,9 @@ static no_inline __exception int js_add_slow(JSContext *ctx, JSValue *sp)
     return -1;
 }
 
-static no_inline __exception int js_binary_logic_slow(JSContext *ctx,
-                                                      JSValue *sp,
-                                                      OPCodeEnum op)
+static no_inline __exception int js_binary_logic_slow_impl(JSContext *ctx,
+                                                           JSValue *sp,
+                                                           OPCodeEnum op)
 {
     JSValue op1, op2;
     uint32_t tag1, tag2;
@@ -15491,8 +15546,8 @@ static int js_compare_bigint(JSContext *ctx, OPCodeEnum op,
     return res;
 }
 
-static no_inline int js_relational_slow(JSContext *ctx, JSValue *sp,
-                                        OPCodeEnum op)
+static no_inline int js_relational_slow_impl(JSContext *ctx, JSValue *sp,
+                                             OPCodeEnum op)
 {
     JSValue op1, op2;
     int res;
@@ -15633,8 +15688,8 @@ static bool tag_is_number(uint32_t tag)
             tag == JS_TAG_BIG_INT || tag == JS_TAG_SHORT_BIG_INT);
 }
 
-static no_inline __exception int js_eq_slow(JSContext *ctx, JSValue *sp,
-                                            bool is_neq)
+static no_inline __exception int js_eq_slow_impl(JSContext *ctx, JSValue *sp,
+                                                 bool is_neq)
 {
     JSValue op1, op2;
     int res;
@@ -15756,7 +15811,7 @@ static no_inline __exception int js_eq_slow(JSContext *ctx, JSValue *sp,
     return -1;
 }
 
-static no_inline int js_shr_slow(JSContext *ctx, JSValue *sp)
+static no_inline int js_shr_slow_impl(JSContext *ctx, JSValue *sp)
 {
     JSValue op1, op2;
     uint32_t v1, v2, r;
@@ -15793,6 +15848,73 @@ static no_inline int js_shr_slow(JSContext *ctx, JSValue *sp)
     sp[-2] = JS_UNDEFINED;
     sp[-1] = JS_UNDEFINED;
     return -1;
+}
+
+/* Profiling wrappers over the arithmetic/logic slow paths: attribute
+   their time to the VM-helper sample category. Callers keep the
+   original names; the bodies are the *_impl functions above. */
+#ifdef QJS_ENABLE_PROFILE
+#define QJS_PROF_VM_SLOW_WRAPPER(call_expr)                            \
+    do {                                                               \
+        if (unlikely(qjs_prof_thread_state)) {                         \
+            int prof_cat_save =                                        \
+                qjs_prof_cat_push(qjs_prof_thread_state,               \
+                                  QJS_PROF_CAT_VM);                    \
+            int prof_ret = (call_expr);                                \
+            qjs_prof_cat_pop(qjs_prof_thread_state, prof_cat_save);    \
+            return prof_ret;                                           \
+        }                                                              \
+        return (call_expr);                                            \
+    } while (0)
+#else
+#define QJS_PROF_VM_SLOW_WRAPPER(call_expr) return (call_expr)
+#endif
+
+static no_inline __exception int js_unary_arith_slow(JSContext *ctx,
+                                                     JSValue *sp,
+                                                     OPCodeEnum op)
+{
+    QJS_PROF_VM_SLOW_WRAPPER(js_unary_arith_slow_impl(ctx, sp, op));
+}
+
+static no_inline int js_not_slow(JSContext *ctx, JSValue *sp)
+{
+    QJS_PROF_VM_SLOW_WRAPPER(js_not_slow_impl(ctx, sp));
+}
+
+static no_inline __exception int js_binary_arith_slow(JSContext *ctx, JSValue *sp,
+                                                      OPCodeEnum op)
+{
+    QJS_PROF_VM_SLOW_WRAPPER(js_binary_arith_slow_impl(ctx, sp, op));
+}
+
+static no_inline __exception int js_add_slow(JSContext *ctx, JSValue *sp)
+{
+    QJS_PROF_VM_SLOW_WRAPPER(js_add_slow_impl(ctx, sp));
+}
+
+static no_inline __exception int js_binary_logic_slow(JSContext *ctx,
+                                                      JSValue *sp,
+                                                      OPCodeEnum op)
+{
+    QJS_PROF_VM_SLOW_WRAPPER(js_binary_logic_slow_impl(ctx, sp, op));
+}
+
+static no_inline int js_relational_slow(JSContext *ctx, JSValue *sp,
+                                        OPCodeEnum op)
+{
+    QJS_PROF_VM_SLOW_WRAPPER(js_relational_slow_impl(ctx, sp, op));
+}
+
+static no_inline __exception int js_eq_slow(JSContext *ctx, JSValue *sp,
+                                            bool is_neq)
+{
+    QJS_PROF_VM_SLOW_WRAPPER(js_eq_slow_impl(ctx, sp, is_neq));
+}
+
+static no_inline int js_shr_slow(JSContext *ctx, JSValue *sp)
+{
+    QJS_PROF_VM_SLOW_WRAPPER(js_shr_slow_impl(ctx, sp));
 }
 
 static bool js_strict_eq2(JSContext *ctx, JSValueConst op1, JSValueConst op2,
@@ -17361,14 +17483,17 @@ static JSValue js_call_c_function(JSContext *ctx, JSValueConst func_obj,
     JSValueConst *arg_buf;
     int arg_count, i;
     JSCFunctionEnum cproto;
+    QJS_PROF_CAT_PUSH_DECL(rt, QJS_PROF_CAT_NATIVE, prof_cat_save);
 
     p = JS_VALUE_GET_OBJ(func_obj);
     cproto = p->u.cfunc.cproto;
     arg_count = p->u.cfunc.length;
 
     /* better to always check stack overflow */
-    if (js_check_stack_overflow(rt, sizeof(arg_buf[0]) * arg_count))
+    if (js_check_stack_overflow(rt, sizeof(arg_buf[0]) * arg_count)) {
+        QJS_PROF_CAT_POP(rt, prof_cat_save);
         return JS_ThrowStackOverflow(ctx);
+    }
 
     prev_sf = rt->current_stack_frame;
     sf->prev_frame = prev_sf;
@@ -17475,6 +17600,7 @@ static JSValue js_call_c_function(JSContext *ctx, JSValueConst func_obj,
         abort();
     }
 
+    QJS_PROF_CAT_POP(rt, prof_cat_save);
     rt->current_stack_frame = sf->prev_frame;
     return ret_val;
 }
@@ -17561,6 +17687,13 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
     JSValue *local_buf, *stack_buf, *var_buf, *arg_buf, *sp, ret_val, *pval;
     JSVarRef **var_refs;
     size_t alloca_size;
+#ifdef QJS_ENABLE_PROFILE
+    QJSProfileState *prof_state = qjs_prof_thread_state;
+    QJSProfileFuncCounters *prof_prev_func = NULL;
+    int prof_prev_cat = 0;
+    int prof_cat_local = QJS_PROF_CAT_DISPATCH;
+    (void)prof_cat_local;
+#endif
 
 #ifdef ENABLE_DUMPS // JS_DUMP_BYTECODE_STEP
 #define DUMP_BYTECODE_OR_DONT(pc) \
@@ -17570,7 +17703,7 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 #endif
 
 #if !DIRECT_DISPATCH
-#define SWITCH(pc)      DUMP_BYTECODE_OR_DONT(pc) switch (opcode = *pc++)
+#define SWITCH(pc)      DUMP_BYTECODE_OR_DONT(pc) switch (QJS_PROF_OP_TAP(opcode = *pc++))
 #define CASE(op)        case op
 #define DEFAULT         default
 #define BREAK           break
@@ -17581,7 +17714,7 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 #include "quickjs-opcode.h"
         [ OP_COUNT ... 255 ] = &&case_default
     };
-#define SWITCH(pc)      DUMP_BYTECODE_OR_DONT(pc) __extension__ ({ goto *dispatch_table[opcode = *pc++]; });
+#define SWITCH(pc)      DUMP_BYTECODE_OR_DONT(pc) __extension__ ({ goto *dispatch_table[QJS_PROF_OP_TAP(opcode = *pc++)]; });
 #define CASE(op)        case_ ## op
 #define DEFAULT         case_default
 #define BREAK           SWITCH(pc)
@@ -17607,6 +17740,11 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
             pc = sf->cur_pc;
             sf->prev_frame = rt->current_stack_frame;
             rt->current_stack_frame = sf;
+#ifdef QJS_ENABLE_PROFILE
+            if (unlikely(prof_state))
+                qjs_prof_enter(prof_state, &b->prof,
+                               &prof_prev_func, &prof_prev_cat);
+#endif
             if (s->throw_flag)
                 goto exception;
             else
@@ -17675,6 +17813,50 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
     sf->prev_frame = rt->current_stack_frame;
     rt->current_stack_frame = sf;
     ctx = b->realm; /* set the current realm */
+#ifdef QJS_ENABLE_PROFILE
+    if (unlikely(prof_state))
+        qjs_prof_enter(prof_state, &b->prof,
+                       &prof_prev_func, &prof_prev_cat);
+#endif
+
+#ifdef QJS_ENABLE_JIT
+    /* Baseline JIT tiering and dispatch. The frame above is set up
+       exactly as the interpreter needs; the generated code reuses it.
+       Only whole-function compilation, no mid-function entry. */
+    if (rt->jit.mode != QJS_JIT_MODE_OFF && b->func_kind == JS_FUNC_NORMAL) {
+        if (b->jitc_state == QJS_JITC_COLD) {
+            bool hot = rt->jit.mode == QJS_JIT_MODE_EAGER;
+            if (!hot && b->jitc_call_count != UINT32_MAX)
+                hot = (++b->jitc_call_count >= rt->jit.call_threshold);
+            if (hot && !rt->jit.compiling) {
+                rt->jit.compiling = 1;
+                qjs_jit_compile(ctx, b);   /* sets COMPILED / UNSUPPORTED / FAILED */
+                rt->jit.compiling = 0;
+            }
+        }
+        if (b->jitc_state == QJS_JITC_COMPILED && b->jitc_code) {
+            QJSJitFrame jit_frame;
+            int jit_status;
+            jit_frame.ctx = ctx;
+            jit_frame.b = b;
+            jit_frame.arg_buf = arg_buf;
+            jit_frame.var_buf = var_buf;
+            jit_frame.stack_buf = stack_buf;
+            jit_frame.var_refs = var_refs;
+            jit_frame.sf = sf;
+            rt->jit.jit_calls++;
+            jit_status = ((QJSJitEntry)b->jitc_code->entry)(&jit_frame, &ret_val);
+            /* The generated code consumes every operand it pushes (and,
+               on the exception path, frees its live operands), so the
+               operand stack is empty on return. `done` then frees the
+               args/vars via local_buf..sp. */
+            sp = stack_buf;
+            if (jit_status < 0)
+                goto exception;
+            goto done;
+        }
+    }
+#endif
 
 #ifdef ENABLE_DUMPS // JS_DUMP_BYTECODE_STEP
     if (check_dump_flag(ctx->rt, JS_DUMP_BYTECODE_STEP))
@@ -18662,16 +18844,28 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
             BREAK;
 
         CASE(OP_goto):
+#ifdef QJS_ENABLE_PROFILE
+            if (unlikely(prof_state) && (int32_t)get_u32(pc) < 0)
+                qjs_prof_backedge(&b->prof);
+#endif
             pc += (int32_t)get_u32(pc);
             if (unlikely(js_poll_interrupts(ctx)))
                 goto exception;
             BREAK;
         CASE(OP_goto16):
+#ifdef QJS_ENABLE_PROFILE
+            if (unlikely(prof_state) && (int16_t)get_u16(pc) < 0)
+                qjs_prof_backedge(&b->prof);
+#endif
             pc += (int16_t)get_u16(pc);
             if (unlikely(js_poll_interrupts(ctx)))
                 goto exception;
             BREAK;
         CASE(OP_goto8):
+#ifdef QJS_ENABLE_PROFILE
+            if (unlikely(prof_state) && (int8_t)pc[0] < 0)
+                qjs_prof_backedge(&b->prof);
+#endif
             pc += (int8_t)pc[0];
             if (unlikely(js_poll_interrupts(ctx)))
                 goto exception;
@@ -20319,6 +20513,14 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
         }
     }
  exception:
+#ifdef QJS_ENABLE_PROFILE
+    /* A category set whose op was aborted by `goto exception` must not
+       leak past the unwind; re-sync the shadow with the real slot. */
+    if (unlikely(prof_state)) {
+        prof_state->cat = QJS_PROF_CAT_DISPATCH;
+        prof_cat_local = QJS_PROF_CAT_DISPATCH;
+    }
+#endif
     if (needs_backtrace(rt->current_exception)
     || JS_IsUndefined(ctx->error_back_trace)) {
         sf->cur_pc = pc;
@@ -20366,6 +20568,10 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
             JS_FreeValue(ctx, *pval);
         }
     }
+#ifdef QJS_ENABLE_PROFILE
+    if (unlikely(prof_state))
+        qjs_prof_exit(prof_state, prof_prev_func, prof_prev_cat);
+#endif
     rt->current_stack_frame = sf->prev_frame;
     return ret_val;
 }
@@ -36315,6 +36521,15 @@ static JSValue js_create_function(JSContext *ctx, JSFunctionDef *fd)
 static void free_function_bytecode(JSRuntime *rt, JSFunctionBytecode *b)
 {
     int i;
+
+#ifdef QJS_ENABLE_PROFILE
+    if (unlikely(qjs_prof_thread_state))
+        qjs_prof_function_freed(qjs_prof_thread_state, rt, b);
+#endif
+#ifdef QJS_ENABLE_JIT
+    if (b->jitc_code)
+        qjs_jit_function_freed(rt, b);
+#endif
 
     if (b->byte_code_buf)
         free_bytecode_atoms(rt, b->byte_code_buf, b->byte_code_len, true);
@@ -63417,3 +63632,9 @@ uintptr_t js_std_cmd(int cmd, ...) {
 #undef malloc
 #undef free
 #undef realloc
+
+/* JIT groundwork (Stage 0 profiler, eligibility classifier, bytecode
+   fingerprint). Single-TU spike: the file uses this TU's private types
+   and statics. */
+#define QJS_JIT_INCLUDED_FROM_QUICKJS_C
+#include "quickjs-jit.c"

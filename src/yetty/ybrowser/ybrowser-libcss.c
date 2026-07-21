@@ -8,10 +8,14 @@
  * and a list of owned css_stylesheets parsed from <style> blocks /
  * external sheets.
  *
- * The select handler does NOT cache libcss_node_data per element —
- * libcss recomputes matching on every css_select_style call. That's
- * slower than NetSurf but keeps the bridge stateless; profile before
- * adding the cache.
+ * The select handler does NOT cache libcss_node_data per element, but
+ * the FINAL css_select_style output IS cached per element (see the
+ * style_rc_* cache below). Profiling the youtube restyle storm showed
+ * css_select_style — libcss's own selector cascade — re-run for every
+ * element every frame was the dominant cost after the supplementary-match
+ * cache landed. Because ybrowser resolves inheritance itself in box-build
+ * (no css_computed_style_compose), that output is parent-independent and
+ * safely memoizable per (element, inline-style hash).
  */
 
 #include "ybrowser-internal.h"
@@ -925,6 +929,8 @@ void yetty_ybrowser_libcss_destroy(struct yetty_ylexbor *r)
     if (r == NULL || r->libcss == NULL) {
         return;
     }
+    /* Free the cache-owned computed styles before the select context goes. */
+    yetty_ybrowser_libcss_style_cache_free(r);
     struct yetty_ybrowser_libcss *lc = r->libcss;
     if (lc->select_ctx) {
         css_select_ctx_destroy(lc->select_ctx);
@@ -1040,6 +1046,9 @@ int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, si
         /* keep the sheet in the list so destroy frees it */
         return -1;
     }
+    /* A new sheet joined the cascade — every cached computed style may now be
+     * wrong. Invalidate the per-element style cache on its next lookup. */
+    r->style_epoch++;
     return 0;
 }
 
@@ -1160,6 +1169,135 @@ static void libcss_load_imports(struct yetty_ylexbor *r, css_stylesheet *parent,
     }
 }
 
+/* ===========================================================================
+ * Per-element computed-style cache. Cache OWNS the styles it hands out; callers
+ * borrow and must NOT destroy (yetty_ybrowser_libcss_release is a no-op). Wiped
+ * whenever the cascade could have changed (style_epoch) or the viewport moved.
+ * ===========================================================================*/
+
+struct style_rc_entry {
+    const lxb_dom_element_t *el;
+    uint64_t inline_hash;
+    css_computed_style *style;
+};
+
+static uint64_t style_rc_fnv(const void *data, size_t len)
+{
+    const unsigned char *p = data;
+    uint64_t h = 1469598103934665603ULL;
+    for (size_t i = 0; i < len; i++) {
+        h ^= p[i];
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+static uint32_t style_rc_slot_of(const void *ptr, uint32_t mask)
+{
+    uint64_t x = (uint64_t)(uintptr_t)ptr;
+    return (uint32_t)style_rc_fnv(&x, sizeof(x)) & mask;
+}
+
+static void style_rc_wipe(struct yetty_ylexbor *r)
+{
+    struct style_rc_entry *entries = (struct style_rc_entry *)r->style_rc;
+    if (entries) {
+        for (int i = 0; i < r->style_rc_cap; i++) {
+            if (entries[i].el && entries[i].style) {
+                css_computed_style_destroy(entries[i].style);
+            }
+        }
+        if (r->style_rc_cap > 0) {
+            memset(entries, 0, (size_t)r->style_rc_cap * sizeof(*entries));
+        }
+    }
+    r->style_rc_count = 0;
+    r->style_rc_epoch = r->style_epoch;
+    r->style_rc_vw = r->viewport_w;
+    r->style_rc_vh = r->viewport_h;
+}
+
+static bool style_rc_grow(struct yetty_ylexbor *r)
+{
+    int old_cap = r->style_rc_cap;
+    struct style_rc_entry *old = (struct style_rc_entry *)r->style_rc;
+    int new_cap = old_cap ? old_cap * 2 : 2048;
+    struct style_rc_entry *fresh = calloc((size_t)new_cap, sizeof(*fresh));
+    if (!fresh) {
+        return false;
+    }
+    uint32_t mask = (uint32_t)new_cap - 1;
+    for (int i = 0; i < old_cap; i++) {
+        if (!old[i].el) {
+            continue;
+        }
+        uint32_t slot = style_rc_slot_of(old[i].el, mask);
+        while (fresh[slot].el) {
+            slot = (slot + 1) & mask;
+        }
+        fresh[slot] = old[i]; /* moves the owned style pointer — no free */
+    }
+    free(old);
+    r->style_rc = fresh;
+    r->style_rc_cap = new_cap;
+    return true;
+}
+
+/* Find or create the cache entry for `el`. Returns NULL only on hard OOM (the
+ * caller then treats the select as a failure rather than leaking an unowned
+ * style). Wipes the whole cache first if the cascade or viewport changed. */
+static struct style_rc_entry *style_rc_lookup(struct yetty_ylexbor *r, const lxb_dom_element_t *el)
+{
+    if (r->style_rc_epoch != r->style_epoch || r->style_rc_vw != r->viewport_w ||
+        r->style_rc_vh != r->viewport_h) {
+        style_rc_wipe(r);
+    }
+    if (r->style_rc_cap == 0 || (r->style_rc_count + 1) * 4 >= r->style_rc_cap * 3) {
+        if (!style_rc_grow(r)) {
+            return NULL;
+        }
+    }
+    struct style_rc_entry *entries = (struct style_rc_entry *)r->style_rc;
+    uint32_t mask = (uint32_t)r->style_rc_cap - 1;
+    uint32_t slot = style_rc_slot_of(el, mask);
+    while (entries[slot].el) {
+        if (entries[slot].el == el) {
+            return &entries[slot];
+        }
+        slot = (slot + 1) & mask;
+    }
+    entries[slot].el = el;
+    entries[slot].inline_hash = 0;
+    entries[slot].style = NULL;
+    r->style_rc_count++;
+    return &entries[slot];
+}
+
+void yetty_ybrowser_libcss_style_cache_free(struct yetty_ylexbor *r)
+{
+    if (getenv("YB_SUPP_STATS") && (r->style_rc_hits || r->style_rc_misses)) {
+        uint64_t total = r->style_rc_hits + r->style_rc_misses;
+        fprintf(stderr,
+                "[YB_SUPP_STATS] libcss computed-style cache: %llu hits, %llu misses "
+                "(%.1f%% cascades skipped)\n",
+                (unsigned long long)r->style_rc_hits, (unsigned long long)r->style_rc_misses,
+                total ? 100.0 * (double)r->style_rc_hits / (double)total : 0.0);
+    }
+    struct style_rc_entry *entries = (struct style_rc_entry *)r->style_rc;
+    if (entries) {
+        for (int i = 0; i < r->style_rc_cap; i++) {
+            if (entries[i].el && entries[i].style) {
+                css_computed_style_destroy(entries[i].style);
+            }
+        }
+    }
+    free(entries);
+    r->style_rc = NULL;
+    r->style_rc_cap = 0;
+    r->style_rc_count = 0;
+    r->style_rc_epoch = 0;
+}
+
 css_computed_style *yetty_ybrowser_libcss_select(struct yetty_ylexbor *r, lxb_dom_element_t *el,
                                                  const char *inline_css, size_t inline_css_len)
 {
@@ -1167,6 +1305,18 @@ css_computed_style *yetty_ybrowser_libcss_select(struct yetty_ylexbor *r, lxb_do
         return NULL;
     }
     struct yetty_ybrowser_libcss *lc = r->libcss;
+
+    /* Cache probe. Key = (element, inline-style hash). A regular inline-style
+     * write doesn't bump style_epoch, so the element that changed is caught
+     * here by its inline-hash while every untouched element stays a hit. */
+    uint64_t inline_hash =
+        (inline_css && inline_css_len > 0) ? style_rc_fnv(inline_css, inline_css_len) : 0;
+    struct style_rc_entry *cache_ent = style_rc_lookup(r, el);
+    if (cache_ent && cache_ent->style && cache_ent->inline_hash == inline_hash) {
+        r->style_rc_hits++;
+        return cache_ent->style;
+    }
+    r->style_rc_misses++;
 
     /* Refresh the media context from the LIVE viewport before every
 	 * selection. lc->media was seeded once at init; a later set_viewport()
@@ -1219,14 +1369,28 @@ css_computed_style *yetty_ybrowser_libcss_select(struct yetty_ylexbor *r, lxb_do
      * doesn't free it from under us. */
     results->styles[CSS_PSEUDO_ELEMENT_NONE] = NULL;
     css_select_results_destroy(results);
-    return style;
+
+    /* Hand the fresh style to the cache to own. If caching is unavailable
+     * (hard OOM) we cannot return an unowned style — release is a no-op — so
+     * destroy it and report failure; the caller falls back to defaults. */
+    if (!cache_ent) {
+        css_computed_style_destroy(style);
+        return NULL;
+    }
+    if (cache_ent->style) {
+        css_computed_style_destroy(cache_ent->style); /* stale (inline changed) */
+    }
+    cache_ent->style = style;
+    cache_ent->inline_hash = inline_hash;
+    return style; /* borrowed — cache owns it */
 }
 
+/* No-op: all styles handed out by yetty_ybrowser_libcss_select are owned by the
+ * per-element style cache and freed on cache wipe / document teardown. Kept for
+ * call-site symmetry and API stability. */
 void yetty_ybrowser_libcss_release(css_computed_style *style)
 {
-    if (style) {
-        css_computed_style_destroy(style);
-    }
+    (void)style;
 }
 
 /* ===========================================================================

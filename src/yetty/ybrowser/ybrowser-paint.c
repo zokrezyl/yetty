@@ -2436,17 +2436,26 @@ struct yetty_ylexbor_incremental_result yetty_ylexbor_paint_image_deltas(
         return out; /* no baseline on the receiver — caller does a full render */
     }
 
-    struct yetty_ycore_void_result relayout_res = yetty_ylexbor_relayout(r);
-    if (YETTY_IS_ERR(relayout_res)) {
-        yetty_ycore_error_destroy(relayout_res.error);
-        return out; /* relayout failed — fall back to a full render */
-    }
-
-    /* The delta is only sound if the page laid out to exactly the same
-     * geometry as the last full render: images landed but nothing shifted.
-     * Any layout change means unshipped non-image content moved, so bail. */
-    if (ylexbor_layout_hash(r) != r->last_layout_hash) {
-        return out;
+    /* Relayout only when the DOM actually changed since the last one.
+     * Without this gate a settled page pays a full box-tree rebuild +
+     * O(elements × rules) restyle on EVERY frame (youtube: ~24/s forever)
+     * just to recompute an unchanged layout hash. When !dom_dirty the box
+     * tree is already current and the geometry equals the last render, so
+     * we go straight to the image-delta pass (images can still land at the
+     * reserved geometry without a DOM mutation). */
+    if (r->dom_dirty) {
+        struct yetty_ycore_void_result relayout_res = yetty_ylexbor_relayout(r);
+        if (YETTY_IS_ERR(relayout_res)) {
+            yetty_ycore_error_destroy(relayout_res.error);
+            return out; /* relayout failed — fall back to a full render */
+        }
+        /* The delta is only sound if the page laid out to exactly the same
+         * geometry as the last full render: images landed but nothing
+         * shifted. Any layout change means unshipped non-image content
+         * moved, so bail to a full render. */
+        if (ylexbor_layout_hash(r) != r->last_layout_hash) {
+            return out;
+        }
     }
     out.is_delta = 1;
 

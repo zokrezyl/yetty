@@ -1156,15 +1156,18 @@ struct yetty_ycore_void_result yetty_ylexbor_relayout_boxes_and_layout(struct ye
     }
     r->layout_in_progress = 1;
     r->dom_dirty = 0;
+    r->layout_dirty = 0;
     struct yetty_ycore_void_result br = yetty_ylexbor_box_build(r);
     if (YETTY_IS_ERR(br)) {
         r->dom_dirty = 1;
+        r->layout_dirty = 1;
         r->layout_in_progress = 0;
         return br;
     }
     struct yetty_ycore_void_result lr = yetty_ylexbor_layout(r);
     if (YETTY_IS_ERR(lr)) {
         r->dom_dirty = 1;
+        r->layout_dirty = 1;
         r->layout_in_progress = 0;
         return lr;
     }

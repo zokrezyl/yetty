@@ -2986,6 +2986,13 @@ struct yetty_ycore_void_result yetty_ylexbor_box_build(struct yetty_ylexbor *r)
         return YETTY_ERR(yetty_ycore_void, "ylexbor_box_build: null");
     }
 
+    /* Invalidate the supplementary-selector class/id memo: the DOM is
+	 * stable within this build pass, but may have mutated since the last
+	 * one, so a cached element's class/id could be stale. */
+    r->supp_cache_element = NULL;
+    r->box_build_count++;
+
+
     /* Free per-box heap (segs) from the previous build. wrap_inline_box
 	 * clears segs on consumption, but a relayout path that skips painting
 	 * (or aborts mid-build) leaves them owned by the box — resetting size

@@ -63,15 +63,20 @@ int yetty_ybrowser_libcss_apply_wikipedia_quirks(struct yetty_ylexbor *r);
 int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, size_t len,
                                     css_origin origin, const char *sheet_url);
 
-/* Run libcss's selector matching against the cascade for `el` and
- * return the cascaded computed style for the unstyled-pseudo (i.e.
- * CSS_PSEUDO_ELEMENT_NONE). Caller frees with
- * yetty_ybrowser_libcss_release. inline_css/inline_css_len may be NULL/0
- * to mean "no inline style". */
+/* Run libcss's selector matching against the cascade for `el` and return the
+ * cascaded computed style for the unstyled-pseudo (i.e. CSS_PSEUDO_ELEMENT_NONE).
+ * The returned style is BORROWED — owned by the per-element style cache and
+ * valid until the next cascade/viewport change or document teardown. Do NOT
+ * destroy it; call yetty_ybrowser_libcss_release (a no-op kept for symmetry).
+ * inline_css/inline_css_len may be NULL/0 to mean "no inline style". */
 css_computed_style *yetty_ybrowser_libcss_select(struct yetty_ylexbor *r, lxb_dom_element_t *el,
                                                  const char *inline_css, size_t inline_css_len);
 
 void yetty_ybrowser_libcss_release(css_computed_style *style);
+
+/* Free every cache-owned computed style + the cache itself. Called on document
+ * teardown; also usable to force-drop the cache. */
+void yetty_ybrowser_libcss_style_cache_free(struct yetty_ylexbor *r);
 
 /* ===========================================================================
  * Computed-property bridges. Each returns 1 when the property was set

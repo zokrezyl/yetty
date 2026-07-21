@@ -19,4 +19,117 @@ Upgrade procedure: land a fresh pristine drop of the new tag as its own
 commit (update this file), then replay the local modification commits on
 top. Local modifications must be listed below.
 
-Local modifications: none (pristine drop).
+Local modifications (each lands as its own commit on top of the drop):
+
+8. Inline codegen + default-on. The hot-loop path now runs in native
+   registers/memory with NO per-op call: constants, get/put/set_loc,
+   get_loc0_loc1, int arithmetic/bitwise/comparison (both-int inline,
+   overflow/non-int -> slow), inc/dec/inc_loc/dec_loc, if_true/false
+   truthiness, and the backedge interrupt (inline counter decrement).
+   Refcount inc is inlined; free/put on heap values fall to helpers via
+   a tag check. Prologue caches stack_buf/var_buf/arg_buf/ctx in saved
+   regs (6 scratch, 6 saved). RESULT: 3.4-4.7x faster than the
+   interpreter on hot numeric loops (was ~1.13x call-threaded).
+   ybrowser-js.c: JIT is now DEFAULT ON (baseline); YBROWSER_JS_JIT=off
+   disables, =eager compiles all. SLJIT flag gotcha fixed: SUB sets a
+   flag with the CANONICAL condition (SIG_LESS/SIG_GREATER/Z); the
+   inverse (…_EQUAL) is read via op_flags, not SET. NOTE: valgrind
+   cannot trace SLJIT's dual-mapped W^X memory (false crash) — ASan is
+   the authoritative check and is clean (differential + stress).
+
+7. Stage 6 platform gating. quickjs.cmake compiles the JIT in ONLY on
+   Linux x86-64 (validated); every other platform builds interpreter-
+   only with the JS_JIT* API stubs (JS_JITAvailable()==0), verified by a
+   no-JIT build of the engine + selftest. Per-platform enablement
+   checklist documented in quickjs.cmake. QJS_ENABLE_JIT=OFF disables
+   entirely.
+
+6. Stage 5 JIT hardening. W^X: SLJIT PROT dual-mapping allocator
+   (SLJIT_PROT_EXECUTABLE_ALLOCATOR=1 in quickjs.cmake) — code never
+   RWX. Thread-wide native-code cap (qjs_jit_thread_code_bytes, 64MB)
+   alongside the per-runtime cap; both checked before compile, released
+   on free. Tests: test/ybrowser/jit/jit-stress.c (differential +
+   create/eval/destroy cycles) and the interruptibility check in
+   jit-selftest.c; run.sh drives plain + ASan/UBSan builds under a
+   timeout. Verified: ASan/UBSan clean, differential clean, WPT 115/115
+   eager AND baseline, JIT infinite loop interrupted via backedge
+   safe-points.
+
+5. Stage 4 JIT object operations. quickjs-jit-compile.c: property /
+   element access (get_field/get_field2/get_length/put_field/
+   get_array_el/get_array_el2/put_array_el via JS_GetPropertyInternal /
+   JS_SetPropertyInternal2 / JS_GetPropertyValue / JS_SetPropertyValue,
+   consumed slots nulled), closure vars (get/put/set_var_ref +short
+   +_check), and call/constructor expansion (call_method,
+   call_constructor, tail_call/tail_call_method returning the result).
+   Atom/index operands re-read from bytecode at pc_off. Return lowering
+   frees operands below the result. Verified: prop/array/method/closure/
+   constructor cases + throws, valgrind-clean (ownership), WPT 115/115
+   eager. Stage 4b guarded inline-cache load remains a perf refinement
+   (Stage 0 audit found no reusable 0.15.0 IC records; JS_GetProperty*
+   already does the internal shape lookup).
+
+4. Stage 3 JIT arithmetic. quickjs-jit-compile.c: binary
+   arith/logic/compare (both-int fast path inline, exact interpreter
+   slow fn otherwise — js_add_slow/js_binary_arith_slow/js_shr_slow/
+   js_relational_slow/js_eq_slow/js_strict_eq_slow/js_binary_logic_slow),
+   unary (neg/plus/not/lnot/inc/dec), post_inc/dec, inc_loc/dec_loc,
+   add_loc (string+slow, consumed slot nulled for unwind), get_loc0_loc1.
+   op/pc packed into helper arg words (function len < 1MB). Verified:
+   real loops (sum/mul/nested/fib/while), valgrind-clean, WPT 115/115
+   eager; ~1.13x on a pure-int loop (call-threaded; inline int codegen
+   is a later perf refinement).
+
+3. Stage 2 JIT control flow. quickjs-jit-compile.c: worklist stack-depth
+   pre-pass, per-target SLJIT labels + jump patching, exception-unwind
+   path (free live operands, return -1) matching the interpreter's
+   `exception:`; lowerings for stack manip, locals/args (incl. TDZ
+   get/put_loc_check), branches (if_true/false + goto, backward-edge
+   interrupt safe-point), and the call family. ybrowser-js.c:
+   YBROWSER_JS_JIT env toggle. Status helpers return sljit_sw (a 32-bit
+   int return leaves the upper reg bits undefined → misread -1).
+   Verified: jit-selftest.c (interp/eager/baseline agree incl. exception
+   unwind), valgrind-clean, WPT 115/115 with eager JIT on real page JS.
+
+2. Stage 1 baseline JIT skeleton (SLJIT backend). NEW files:
+   quickjs-jit-compile.c (bytecode->SLJIT translator; #included via
+   quickjs-jit.c under QJS_ENABLE_JIT); sljit/ vendored (own UPSTREAM).
+   quickjs.c: JSFunctionBytecode jitc_* fields, JSRuntime jit field,
+   JS_CallInternal tiering+dispatch hook (reuses the interpreter frame),
+   free_function_bytecode + JS_NewRuntime2 hooks — all under
+   QJS_ENABLE_JIT. Public control API (JS_JITSetMode/Available/GetStats)
+   in quickjs-jit.h. Compiles constants + return; mixed-tier verified
+   against the interpreter (test/ybrowser/jit/jit-selftest.c).
+
+1. Stage 0 JIT profiler + eligibility classifier (design:
+   tmp/qjs-sljit-jit.md; opt-in API: quickjs-jit.h).
+   - NEW  quickjs-jit-internal.h  — profile structures + inline hooks
+   - NEW  quickjs-jit.h           — opt-in public API (JS_Profile*,
+                                    JS_JITBytecodeFingerprint)
+   - NEW  quickjs-jit.c           — sampler, dump, decode/classify-only
+                                    eligibility walker, bytecode ABI
+                                    fingerprint, JSValue layout asserts;
+                                    #included at the foot of quickjs.c
+                                    (single-TU spike per the design)
+   - MOD  quickjs.c — all guarded by QJS_ENABLE_PROFILE:
+     * JSRuntime.prof + JSFunctionBytecode.prof fields
+     * JS_CallInternal: enter/exit current-function tracking, saturating
+       call counter, backedge counting on backward goto/goto16/goto8,
+       exception-label category reset
+     * SWITCH dispatch macros: QJS_PROF_OP_TAP — per-opcode stage-3
+       category classification (compare-before-store), thread-wide
+       gate so iframe child runtimes on the sampled thread contribute
+     * js_call_c_function / js_call_c_function_data: NATIVE category
+     * arith/logic slow helpers renamed *_impl + VM-category wrappers
+       (js_unary_arith_slow, js_not_slow, js_binary_arith_slow,
+       js_add_slow, js_binary_logic_slow, js_relational_slow,
+       js_eq_slow, js_shr_slow); STRING refinement around the
+       JS_ConcatString branch in js_add_slow_impl
+     * free_function_bytecode: full per-function tombstone snapshot
+       (identity, counters, samples, eligibility) for functions freed
+       before a dump; aggregate reclaim only as allocation-failure
+       fallback; JS_FreeRuntime: profiler teardown
+     * dump rows carry runtime identity (v3); per-frame cached
+       profile-state pointer + category shadow local keep the per-op
+       tap cost register-level
+     * foot: #include "quickjs-jit.c"

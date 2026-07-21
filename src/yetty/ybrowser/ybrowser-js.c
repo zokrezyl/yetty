@@ -105,9 +105,11 @@ void yetty_ylexbor_console_clear(struct yetty_ylexbor *r)
 #if YETTY_HAVE_QUICKJS
 
 #include <quickjs.h>
+#include <quickjs-jit.h>
 #include <lexbor/dom/dom.h>
 #include <lexbor/html/html.h>
 #include <lexbor/tag/const.h>
+#include <unistd.h>
 
 #include <yetty/ytrace/ytrace.h>
 
@@ -249,6 +251,41 @@ struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r)
     r->js_rt = (struct JSRuntime *)rt;
     r->js_ctx = (struct JSContext *)ctx;
 
+    /* Baseline JIT (see src/quickjs/quickjs-jit.h). ON by default
+	 * (baseline: compile hot functions). YBROWSER_JS_JIT=eager compiles
+	 * every compilable function on first call; =off|0 disables.
+	 * Compiled in only on the Linux x86-64 target; a no-op elsewhere. */
+    {
+        const char *jit_env = getenv("YBROWSER_JS_JIT");
+        int jit_mode = JS_JIT_MODE_BASELINE;   /* default on */
+        if (jit_env != NULL && jit_env[0] != '\0') {
+            if (strcmp(jit_env, "eager") == 0)
+                jit_mode = JS_JIT_MODE_EAGER;
+            else if (strcmp(jit_env, "off") == 0 || strcmp(jit_env, "0") == 0)
+                jit_mode = JS_JIT_MODE_OFF;
+        }
+        (void)JS_JITSetMode(rt, jit_mode);
+    }
+
+    /* Stage 0 JS profiler (see src/quickjs/quickjs-jit.h). Gated on
+	 * env; one profile per thread, so iframe child runtimes fail the
+	 * start silently and only the top document is sampled. */
+    {
+        const char *profile_env = getenv("YBROWSER_JS_PROFILE");
+        if (profile_env == NULL) {
+            profile_env = getenv("YBROWSER_PROFILE");
+        }
+        if (profile_env != NULL && profile_env[0] != '\0' &&
+            strcmp(profile_env, "0") != 0) {
+            int sample_hz = 1000;
+            const char *hz_env = getenv("YBROWSER_JS_PROFILE_HZ");
+            if (hz_env != NULL && atoi(hz_env) > 0) {
+                sample_hz = atoi(hz_env);
+            }
+            (void)JS_ProfileStart(rt, sample_hz);
+        }
+    }
+
     /* Install DOM bindings (document, Element, classList, style, …). */
     yetty_ylexbor_js_dom_install(r);
     /* Install WebAPI surface (fetch, timers, navigator, location,
@@ -276,6 +313,30 @@ void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r)
 	 * out from under them when JS_FreeRuntime ran the GC. */
     if (r->js_rt && r->js_ctx) {
         yetty_ylexbor_js_drain_jobs(r);
+    }
+    /* Stage 0 JS profile dump. The profile is thread-wide: iframe
+	 * child runtimes contribute samples too, so EVERY runtime dumps
+	 * its own function rows at teardown (rows are drained on dump, so
+	 * nothing double-counts). The owning runtime additionally stops
+	 * the sampler; child runtimes dump to "<base>.<runtime>" side
+	 * files that the analyzer merges. Dump while the context can
+	 * still stringify atoms. */
+    if (r->js_rt && r->js_ctx && JS_ProfileThreadActive()) {
+        const char *dump_path = getenv("YBROWSER_JS_PROFILE_OUT");
+        char default_path[64];
+        char child_path[160];
+        bool owner = JS_ProfileStop((JSRuntime *)r->js_rt) == 0;
+        if (dump_path == NULL || dump_path[0] == '\0') {
+            snprintf(default_path, sizeof(default_path),
+                     "tmp/js-profile-%d.tsv", (int)getpid());
+            dump_path = default_path;
+        }
+        if (!owner) {
+            snprintf(child_path, sizeof(child_path), "%s.%p",
+                     dump_path, (void *)r->js_rt);
+            dump_path = child_path;
+        }
+        (void)JS_ProfileDump((JSContext *)r->js_ctx, dump_path);
     }
     yetty_ylexbor_js_web_shutdown(r);
     yetty_ylexbor_js_dom_reset(r);
