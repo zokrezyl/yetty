@@ -2426,7 +2426,18 @@ static void js_fetch_job_done(void *job_ptr)
     struct yetty_ylexbor *r = job->r;
     r->img_jobs_in_flight--;
 
-    int stale = (job->generation != r->fetch_generation) || r->destroy_pending;
+    /* A navigation/reload runs load_html, which SYNCHRONOUSLY frees this
+	 * engine's JS context (js_destroy) and bumps fetch_generation. A deferred
+	 * full-destroy (destroy_pending) instead keeps the context pinned alive
+	 * until in-flight jobs drain. So a generation mismatch means our JSContext
+	 * is already gone: JS_FreeContext/JS_FreeRuntime freed every object in it,
+	 * including the promise resolve/reject refs this job dup'd. Touching them
+	 * now is a use-after-free on a dangling context that corrupts the allocator
+	 * and crashes later (seen while parsing the reloaded page's scripts;
+	 * YouTube fires dozens of icon fetch()es that outlive its consent reload).
+	 * On reload we must NOT deliver AND must NOT free those refs. */
+    int reloaded = (job->generation != r->fetch_generation);
+    int stale = reloaded || r->destroy_pending;
     if (!stale && r->js_ctx) {
         js_fetch_deliver(job->ctx, &job->response, job->resolve_func, job->reject_func);
         yetty_ylexbor_js_drain_jobs(r);
@@ -2436,8 +2447,12 @@ static void js_fetch_job_done(void *job_ptr)
     }
     /* The context is still alive even on the deferred-teardown path —
 	 * _yetty_ylexbor_destroy_now only runs below, after the last job. */
-    JS_FreeValue(job->ctx, job->resolve_func);
-    JS_FreeValue(job->ctx, job->reject_func);
+    if (!reloaded) {
+        /* Context still alive: a live engine, or the deferred-teardown path
+		 * (_yetty_ylexbor_destroy_now only runs below, after the last job). */
+        JS_FreeValue(job->ctx, job->resolve_func);
+        JS_FreeValue(job->ctx, job->reject_func);
+    }
     yetty_ybrowser_response_dispose(&job->response);
     js_fetch_params_free(&job->params);
     free(job->referer);
@@ -3438,6 +3453,7 @@ static void location_request_navigation(JSContext *ctx, struct yetty_ylexbor *r,
     char *resolved = yetty_ylexbor_resolve_url(r, url);
     free(r->pending_navigation);
     r->pending_navigation = resolved ? resolved : strdup(url);
+    r->pending_nav_reload = false;
 }
 
 static JSValue js_location_assign(JSContext *ctx, JSValueConst this_val, int argc,
@@ -3467,6 +3483,10 @@ static JSValue js_location_reload(JSContext *ctx, JSValueConst this_val, int arg
     if (r && r->base_url) {
         free(r->pending_navigation);
         r->pending_navigation = strdup(r->base_url);
+        /* A reload must re-fetch, not replay a cached response: the consent
+		 * flow reloads after writing SOCS and the cached consent-walled page
+		 * would otherwise loop forever. */
+        r->pending_nav_reload = true;
     }
     return JS_UNDEFINED;
 }
@@ -3493,6 +3513,7 @@ static JSValue js_form_navigate(JSContext *ctx, JSValueConst this_val, int argc,
     char *resolved = yetty_ylexbor_resolve_url(r, action);
     free(r->pending_navigation);
     r->pending_navigation = resolved ? resolved : strdup(action);
+    r->pending_nav_reload = false;
     JS_FreeCString(ctx, action);
 
     free(r->pending_nav_method);
@@ -4805,6 +4826,20 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "    }catch(e){}"
         "    if(defers[n]){ defers[n].forEach(r=>r()); delete defers[n]; } };"
         "  this.get=n=>m[n];"
+        /* Deliver an observed-attribute change to an already-upgraded custom
+			 * element (fired from setAttribute/removeAttribute in the DOM layer).
+			 * Native custom elements get attributeChangedCallback on every runtime
+			 * observed-attribute change; a framework toggling one (Polymer clearing
+			 * a bound disable-upgrade so an icon can finally upgrade) depends on it.
+			 * Gated on __ceUpgraded + observedAttributes so plain and un-upgraded
+			 * elements pay nothing. */
+        "  this.__attributeChanged=(el,name,oldVal,newVal)=>{ try{"
+        "    if(!el||el.nodeType!==1||!el.__ceUpgraded)return;"
+        "    var c=m[(''+el.tagName).toLowerCase()]; if(!c)return;"
+        "    var oa=c.observedAttributes; if(!oa||oa.indexOf(name)<0)return;"
+        "    if(typeof el.attributeChangedCallback==='function')"
+        "      el.attributeChangedCallback(name,oldVal,newVal,null);"
+        "  }catch(e){} };"
         "  this.whenDefined=n=>{ if(m[n])return Promise.resolve(m[n]);"
         "    return new Promise(res=>{ (defers[n]=defers[n]||[]).push(()=>res(m[n])); }); };"
         "  this.upgrade=root=>{ var base=root||document.documentElement;"
@@ -4965,6 +5000,60 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "  if(ep){"
         "    ep.submit=function(){ globalThis.__ybSubmitForm(this,null); };"
         "    ep.requestSubmit=function(b){ globalThis.__ybSubmitForm(this,b||null); }; } }catch(e){} })();"
+        /* Page text input. The host has no way to type into a page <input> —
+		 * key_cb/char_cb only fed the address bar. These helpers give the
+		 * standalone shell a focused-element model + text/edit dispatch so a
+		 * click focuses a field (YouTube's search box) and typed characters land
+		 * in it, firing the `input` events the page's suggestion/search logic
+		 * listens for, and Enter submits. Caret is end-of-value (covers the
+		 * dominant "type a query" case; full caret editing is future work). */
+        "(function(){"
+        "  var isTextField=function(e){ if(!e||e.nodeType!==1)return false;"
+        "    var tag=(e.tagName||'').toLowerCase();"
+        "    if(tag==='textarea')return true;"
+        "    if(e.getAttribute&&e.getAttribute('contenteditable')==='true')return true;"
+        "    if(tag!=='input')return false;"
+        "    var t=((e.getAttribute&&e.getAttribute('type'))||'text').toLowerCase();"
+        "    return ['text','search','email','url','tel','password','number',''].indexOf(t)>=0; };"
+        "  var fire=function(e,type,bubbles){ try{ var ev=new Event(type,{bubbles:!!bubbles});"
+        "    e.dispatchEvent(ev); }catch(x){} };"
+        /* Called from dispatch_click. Focus the nearest text field ancestor of
+		 * the clicked element, or blur the current one. Returns true if a field
+		 * took focus. */
+        "  globalThis.__ybFocusHit=function(el){ var e=el;"
+        "    while(e&&e.nodeType===1){ if(isTextField(e)){"
+        "      if(globalThis.__ybPageFocus!==e){"
+        "        if(globalThis.__ybPageFocus){ fire(globalThis.__ybPageFocus,'blur',false); }"
+        "        globalThis.__ybPageFocus=e; try{ if(typeof e.focus==='function')e.focus(); }catch(x){}"
+        "        fire(e,'focus',false); fire(e,'focusin',true); }"
+        "      return true; }"
+        "      e=e.parentNode; }"
+        "    if(globalThis.__ybPageFocus){ fire(globalThis.__ybPageFocus,'blur',false);"
+        "      fire(globalThis.__ybPageFocus,'focusout',true); globalThis.__ybPageFocus=null; }"
+        "    return false; };"
+        "  globalThis.__ybHasPageFocus=function(){ var e=globalThis.__ybPageFocus;"
+        "    return !!(e && e.isConnected!==false); };"
+        /* Insert typed text at the end of the focused field's value. */
+        "  globalThis.__ybInsertText=function(text){ var e=globalThis.__ybPageFocus;"
+        "    if(!e||!text)return; var tag=(e.tagName||'').toLowerCase();"
+        "    try{ if(tag==='input'||tag==='textarea'){ e.value=(e.value||'')+text; }"
+        "      else{ e.appendChild(document.createTextNode(text)); } }catch(x){}"
+        "    fire(e,'beforeinput',true); fire(e,'input',true); };"
+        /* Editing / navigation keys. keyName is the DOM key name. */
+        "  globalThis.__ybEditKey=function(keyName){ var e=globalThis.__ybPageFocus;"
+        "    if(!e)return false; var tag=(e.tagName||'').toLowerCase();"
+        "    var isField=(tag==='input'||tag==='textarea');"
+        "    try{ var kd=new Event('keydown',{bubbles:true}); kd.key=keyName;"
+        "      kd.code=keyName; e.dispatchEvent(kd); }catch(x){}"
+        "    if(keyName==='Backspace'){ if(isField){ var v=e.value||''; e.value=v.slice(0,-1);"
+        "        fire(e,'beforeinput',true); fire(e,'input',true); } }"
+        "    else if(keyName==='Enter'){"
+        "      var f=e; while(f&&(f.tagName||'').toLowerCase()!=='form')f=f.parentNode;"
+        "      if(f&&globalThis.__ybSubmitForm){ globalThis.__ybSubmitForm(f,null); }"
+        "      fire(e,'change',true); }"
+        "    try{ var ku=new Event('keyup',{bubbles:true}); ku.key=keyName; e.dispatchEvent(ku); }catch(x){}"
+        "    return true; };"
+        "})();"
         "globalThis.HTMLCanvasElement = function(){};"
         "globalThis.OffscreenCanvas = function(){ this.getContext = () => null; };"
         /* requestIdleCallback must hand the callback an IdleDeadline; code that

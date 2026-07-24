@@ -1144,7 +1144,7 @@ char *yetty_ylexbor_take_pending_navigation(struct yetty_ylexbor *r)
  * is the form-encoded body (or NULL); both transfer ownership to the caller.
  * Clears the stored values so the next navigation starts clean. */
 void yetty_ylexbor_take_pending_nav_post(struct yetty_ylexbor *r, char **out_method,
-                                         char **out_body, size_t *out_body_len)
+                                         char **out_body, size_t *out_body_len, bool *out_reload)
 {
     if (out_method) {
         *out_method = r ? r->pending_nav_method : NULL;
@@ -1155,10 +1155,14 @@ void yetty_ylexbor_take_pending_nav_post(struct yetty_ylexbor *r, char **out_met
     if (out_body_len) {
         *out_body_len = r ? r->pending_nav_body_len : 0;
     }
+    if (out_reload) {
+        *out_reload = r ? r->pending_nav_reload : false;
+    }
     if (r) {
         r->pending_nav_method = NULL;
         r->pending_nav_body = NULL;
         r->pending_nav_body_len = 0;
+        r->pending_nav_reload = false;
     }
 }
 

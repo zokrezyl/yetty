@@ -818,6 +818,14 @@ struct yetty_ylexbor {
     char *pending_nav_body;
     size_t pending_nav_body_len;
 
+    /* location.reload() must bypass the cache (Ctrl-R semantics): the same URL
+		 * can serve a different document depending on cookies the page just
+		 * wrote — the consent flow reloads youtube.com after saving SOCS, and a
+		 * cache hit would replay the consent-walled variant forever. Set by
+		 * js_location_reload, cleared by a plain navigation; consumed alongside
+		 * pending_navigation by the host. */
+    bool pending_nav_reload;
+
     /* Timer queue: array of timer*, sorted by deadline_ms ascending. */
     struct yetty_ylexbor_timer **timers;
     int timer_count, timer_cap;

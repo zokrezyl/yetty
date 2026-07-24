@@ -359,6 +359,7 @@ static void ui_new_tab(struct app *a);
 static void ui_close_tab(struct app *a, int idx);
 static void switch_tab(struct app *a, int idx);
 static void navigate(struct app *a, struct tab *t, char *url, int push_to_back);
+static size_t utf8_encode(uint32_t cp, char *out);
 static void nav_abort(struct tab *t);
 static void go_back(struct app *a);
 static void go_forward(struct app *a);
@@ -1538,6 +1539,38 @@ static int key_cb(struct yetty_yclass_object *fw, uint32_t key, int mods, void *
         }
         return consumed;
     }
+    /* Neither the address bar nor the DevTools REPL is focused: if a click has
+	 * focused a text field IN THE PAGE (e.g. YouTube's search box), route the
+	 * keystroke there. Printable codepoints insert; Backspace/Enter edit/submit.
+	 * Without this, typing into a page input did nothing. */
+    {
+        struct tab *t = &a->tabs[a->active];
+        if (t->engine && yetty_ylexbor_has_page_focus(t->engine)) {
+            if (key == 0x08 || key == 0x7F) { /* Backspace / Delete */
+                yetty_ylexbor_dispatch_key(t->engine, "Backspace");
+                yetty_ygui_framework_mark_dirty(fw);
+                return 1;
+            }
+            if (key == '\r' || key == '\n') {
+                yetty_ylexbor_dispatch_key(t->engine, "Enter");
+                yetty_ygui_framework_mark_dirty(fw);
+                return 1;
+            }
+            if (key == 0x1B) { /* Esc — leave the field (blur handled on next click) */
+                return 0;
+            }
+            /* Printable character (skip C0 controls). mods with Ctrl are chrome
+			 * shortcuts already handled above, so anything here is text. */
+            if (key >= 0x20 && key != 0x7F) {
+                char buf[8];
+                size_t n = utf8_encode((uint32_t)key, buf);
+                buf[n] = '\0';
+                yetty_ylexbor_dispatch_text(t->engine, buf);
+                yetty_ygui_framework_mark_dirty(fw);
+                return 1;
+            }
+        }
+    }
     return 0;
 }
 
@@ -1965,9 +1998,17 @@ static int pump_active(struct app *a)
             char *nav_method = NULL;
             char *nav_body = NULL;
             size_t nav_body_len = 0;
-            yetty_ylexbor_take_pending_nav_post(t->engine, &nav_method, &nav_body, &nav_body_len);
+            bool nav_reload = false;
+            yetty_ylexbor_take_pending_nav_post(t->engine, &nav_method, &nav_body, &nav_body_len,
+                                                &nav_reload);
             if (nav_method) {
                 navigate_post(a, t, js_nav, nav_method, nav_body, nav_body_len);
+            } else if (nav_reload) {
+                /* location.reload(): bypass the cache so a cookie the page just
+				 * wrote (consent SOCS) changes what the same URL serves, instead
+				 * of replaying the cached pre-consent document forever.
+				 * navigate_full takes ownership of js_nav. */
+                navigate_full(a, t, js_nav, 1, /*bypass_cache=*/1);
             } else {
                 free(nav_body);
                 navigate(a, t, js_nav, 1);

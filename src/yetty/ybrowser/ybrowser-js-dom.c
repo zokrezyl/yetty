@@ -875,6 +875,9 @@ static JSValue js_el_getAttribute(JSContext *ctx, JSValueConst this_val, int arg
     return JS_NewStringLen(ctx, (const char *)v, vlen);
 }
 
+static void ce_react_attr_changed(JSContext *ctx, lxb_dom_element_t *el, const char *name,
+                                  const char *old_value, const char *new_value);
+
 static JSValue js_el_setAttribute(JSContext *ctx, JSValueConst this_val, int argc,
                                   JSValueConst *argv)
 {
@@ -897,6 +900,7 @@ static JSValue js_el_setAttribute(JSContext *ctx, JSValueConst this_val, int arg
                                       vlen);
         mark_dirty(ctx);
         dom_mo_notify_attributes(ctx, el, name, nlen, old_value);
+        ce_react_attr_changed(ctx, el, name, old_value, val);
         free(old_value);
         JS_FreeCString(ctx, val);
     }
@@ -925,6 +929,7 @@ static JSValue js_el_removeAttribute(JSContext *ctx, JSValueConst this_val, int 
             lxb_dom_element_remove_attribute(el, (const lxb_char_t *)raw, nlen);
             mark_dirty(ctx);
             dom_mo_notify_attributes(ctx, el, raw, nlen, old_value);
+            ce_react_attr_changed(ctx, el, raw, old_value, NULL);
             free(old_value);
             JS_FreeCString(ctx, raw);
         }
@@ -934,6 +939,7 @@ static JSValue js_el_removeAttribute(JSContext *ctx, JSValueConst this_val, int 
     lxb_dom_element_remove_attribute(el, (const lxb_char_t *)name, nlen);
     mark_dirty(ctx);
     dom_mo_notify_attributes(ctx, el, name, nlen, old_value);
+    ce_react_attr_changed(ctx, el, name, old_value, NULL);
     free(old_value);
     free(name);
     return JS_UNDEFINED;
@@ -1089,6 +1095,62 @@ static void ce_react_upgrade_value(JSContext *ctx, JSValueConst wrapped)
 static void ce_react_disconnect(JSContext *ctx, lxb_dom_node_t *removed)
 {
     ce_react_dispatch(ctx, removed, "__disconnectSubtree");
+}
+
+/* Fire the attributeChangedCallback custom-element reaction for a runtime
+ * setAttribute/removeAttribute. Native browsers deliver this whenever an
+ * observed attribute of an upgraded custom element changes; without it a
+ * framework that toggles an observed attribute at runtime never sees the
+ * change. The concrete casualty: Polymer stamps yt-icon with a bound
+ * `disable-upgrade$="[[data.thumbnail]]"` that is briefly set then REMOVED once
+ * the (undefined) binding resolves; the removal must fire
+ * attributeChangedCallback so the element clears __isUpgradeDisabled and finally
+ * upgrades — otherwise every guide/menu icon stays upgrade-disabled and blank.
+ * The JS registry gates on el.__ceUpgraded + observedAttributes, so this is a
+ * no-op for plain elements and un-upgraded ones. old_value/new_value are C
+ * strings or NULL (attribute absent). */
+static void ce_react_attr_changed(JSContext *ctx, lxb_dom_element_t *el, const char *name,
+                                  const char *old_value, const char *new_value)
+{
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL || !state->ce_active || el == NULL || name == NULL) {
+        return;
+    }
+    if (state->ce_react_depth > 256) {
+        return;
+    }
+    /* Custom-element names always contain a hyphen; a plain HTML element
+	 * (div/span/a/…) can never have an attributeChangedCallback reaction, so
+	 * skip the JS call entirely for them. This keeps attribute-heavy pages that
+	 * define some custom elements (so ce_active is set) from paying a JS round
+	 * trip on every setAttribute of a regular element. */
+    size_t tag_len = 0;
+    const lxb_char_t *tag = lxb_dom_element_local_name(el, &tag_len);
+    if (tag == NULL || memchr(tag, '-', tag_len) == NULL) {
+        return;
+    }
+    state->ce_react_depth++;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue registry = JS_GetPropertyStr(ctx, global, "customElements");
+    JSValue fn = JS_GetPropertyStr(ctx, registry, "__attributeChanged");
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue wrapped = wrap_element(ctx, el);
+        JSValue argv[4] = {
+            wrapped,
+            JS_NewString(ctx, name),
+            old_value ? JS_NewString(ctx, old_value) : JS_NULL,
+            new_value ? JS_NewString(ctx, new_value) : JS_NULL,
+        };
+        JSValue result = JS_Call(ctx, fn, registry, 4, argv);
+        JS_FreeValue(ctx, result);
+        for (int i = 0; i < 4; i++) {
+            JS_FreeValue(ctx, argv[i]);
+        }
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, registry);
+    JS_FreeValue(ctx, global);
+    state->ce_react_depth--;
 }
 
 /* Spec: inserting a DocumentFragment inserts its CHILDREN, in order, at the
@@ -4975,6 +5037,7 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
 }
 
 static void maybe_submit_activated_form(JSContext *ctx, lxb_dom_element_t *target);
+static void maybe_navigate_anchor(JSContext *ctx, lxb_dom_element_t *target);
 
 /* HTMLElement.click(): dispatch a synthetic click on the element, then — unless
  * a handler called preventDefault() — run the activation default action (submit
@@ -6315,6 +6378,64 @@ static void maybe_submit_activated_form(JSContext *ctx, lxb_dom_element_t *targe
     JS_FreeValue(ctx, global);
 }
 
+/* Native default action for a click on a hyperlink: navigate to the nearest
+ * ancestor <a>'s href. Fragment-only (`#…`), `javascript:` and empty hrefs are
+ * ignored. Navigation is routed through location.assign, which resolves the URL
+ * against the base and records it as the pending navigation for the host to
+ * drive next frame — the same path location.href/reload use. */
+static void maybe_navigate_anchor(JSContext *ctx, lxb_dom_element_t *target)
+{
+    lxb_dom_element_t *anchor = NULL;
+    for (lxb_dom_node_t *node = lxb_dom_interface_node(target); node; node = node->parent) {
+        if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        lxb_dom_element_t *el = lxb_dom_interface_element(node);
+        size_t name_len = 0;
+        const lxb_char_t *tag = lxb_dom_element_qualified_name(el, &name_len);
+        if (tag && name_len == 1 && (tag[0] == 'a' || tag[0] == 'A')) {
+            anchor = el;
+            break;
+        }
+    }
+    if (anchor == NULL) {
+        return;
+    }
+    size_t href_len = 0;
+    const lxb_char_t *href =
+        lxb_dom_element_get_attribute(anchor, (const lxb_char_t *)"href", 4, &href_len);
+    if (href == NULL || href_len == 0) {
+        return;
+    }
+    /* Skip in-page fragments and non-navigating schemes. */
+    if (href[0] == '#') {
+        return;
+    }
+    if (href_len >= 11 && strncasecmp((const char *)href, "javascript:", 11) == 0) {
+        return;
+    }
+    char *href_str = malloc(href_len + 1);
+    if (href_str == NULL) {
+        return;
+    }
+    memcpy(href_str, href, href_len);
+    href_str[href_len] = '\0';
+
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue location = JS_GetPropertyStr(ctx, global, "location");
+    JSValue assign = JS_GetPropertyStr(ctx, location, "assign");
+    if (JS_IsFunction(ctx, assign)) {
+        JSValue url_val = JS_NewString(ctx, href_str);
+        JSValue ret = JS_Call(ctx, assign, location, 1, (JSValueConst[]){url_val});
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, url_val);
+    }
+    JS_FreeValue(ctx, assign);
+    JS_FreeValue(ctx, location);
+    JS_FreeValue(ctx, global);
+    free(href_str);
+}
+
 int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
 {
     if (!r || !r->js_ctx || !r->js_rt) {
@@ -6436,6 +6557,26 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
 	 * navigating-request logic lives in one place (js-web.c). */
     if (!click_default_prevented) {
         maybe_submit_activated_form(ctx, target);
+        /* Native default action of a click on a hyperlink: navigate to its
+		 * href. Without this a plain <a href> (YouTube's "Sign in" is a real
+		 * <a href="https://accounts.google.com/ServiceLogin?...">) does nothing
+		 * — SPA links that kevlar routes call preventDefault first, so this only
+		 * fires for genuinely un-intercepted anchors. */
+        maybe_navigate_anchor(ctx, target);
+    }
+
+    /* Focus the clicked text field (or blur on a click elsewhere) so keyboard
+	 * input the host forwards lands in it. Runs regardless of preventDefault:
+	 * focusing is not the click's cancelable default action. */
+    {
+        JSValue focus_fn = JS_GetPropertyStr(ctx, global, "__ybFocusHit");
+        if (JS_IsFunction(ctx, focus_fn)) {
+            JSValue tgt = wrap_element(ctx, target);
+            JSValue ret = JS_Call(ctx, focus_fn, global, 1, (JSValueConst[]){tgt});
+            JS_FreeValue(ctx, ret);
+            JS_FreeValue(ctx, tgt);
+        }
+        JS_FreeValue(ctx, focus_fn);
     }
 
     JS_FreeValue(ctx, path);
@@ -6443,6 +6584,77 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
     JS_FreeValue(ctx, global);
     state->dispatch_depth--;
     return fired;
+}
+
+/* Bridge: does the page currently hold keyboard focus in a text field? The host
+ * asks this to decide whether to route a keystroke to the page vs its address
+ * bar. */
+int yetty_ylexbor_has_page_focus(struct yetty_ylexbor *r)
+{
+    if (!r || !r->js_ctx) {
+        return 0;
+    }
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue fn = JS_GetPropertyStr(ctx, global, "__ybHasPageFocus");
+    int has = 0;
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue ret = JS_Call(ctx, fn, global, 0, NULL);
+        has = JS_ToBool(ctx, ret);
+        JS_FreeValue(ctx, ret);
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+    return has;
+}
+
+/* Bridge: insert typed text (UTF-8, usually one character) into the focused
+ * page field, firing the page's input events, then relayout so it shows. */
+void yetty_ylexbor_dispatch_text(struct yetty_ylexbor *r, const char *utf8)
+{
+    if (!r || !r->js_ctx || !utf8 || !*utf8) {
+        return;
+    }
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue fn = JS_GetPropertyStr(ctx, global, "__ybInsertText");
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue text = JS_NewString(ctx, utf8);
+        JSValue ret = JS_Call(ctx, fn, global, 1, (JSValueConst[]){text});
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, text);
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+    if (yetty_ylexbor_dom_dirty(r)) {
+        (void)yetty_ylexbor_relayout(r);
+    }
+}
+
+/* Bridge: deliver an editing/navigation key (DOM key name, e.g. "Backspace",
+ * "Enter") to the focused page field. Returns whether it was consumed. */
+int yetty_ylexbor_dispatch_key(struct yetty_ylexbor *r, const char *key_name)
+{
+    if (!r || !r->js_ctx || !key_name) {
+        return 0;
+    }
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue fn = JS_GetPropertyStr(ctx, global, "__ybEditKey");
+    int consumed = 0;
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue name = JS_NewString(ctx, key_name);
+        JSValue ret = JS_Call(ctx, fn, global, 1, (JSValueConst[]){name});
+        consumed = JS_ToBool(ctx, ret);
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, name);
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+    if (yetty_ylexbor_dom_dirty(r)) {
+        (void)yetty_ylexbor_relayout(r);
+    }
+    return consumed;
 }
 
 /* Reset the global listener pool — called from js_destroy so JSValues
