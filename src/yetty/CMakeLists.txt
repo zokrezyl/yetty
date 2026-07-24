@@ -196,7 +196,6 @@ if(YETTY_ENABLE_FEATURE_YDRAW)
     add_subdirectory(ydraw-factory)
     add_subdirectory(ydraw-yaml)
     add_subdirectory(ysdf)
-    add_subdirectory(ydraw)
 endif()
 
 # yview — client emitter for server-side scrollable content surfaces.

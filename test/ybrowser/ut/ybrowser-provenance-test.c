@@ -52,7 +52,8 @@ static int find_box_by_height(struct yetty_ylexbor *engine, const char *tag, flo
     for (int index = 0; index < total; index++) {
         float x, y, w, h;
         char box_tag[16] = {0};
-        if (yetty_ylexbor_test_box_at(engine, index, &x, &y, &w, &h, box_tag, sizeof(box_tag)) != 0) {
+        if (yetty_ylexbor_test_box_at(engine, index, &x, &y, &w, &h, box_tag, sizeof(box_tag)) !=
+            0) {
             continue;
         }
         if (strcmp(box_tag, tag) != 0) {
@@ -187,7 +188,8 @@ static int nth_td(struct yetty_ylexbor *engine, int n, float *h_out, const char 
     for (int index = 0; index < total; index++) {
         float x, y, w, h;
         char box_tag[16] = {0};
-        if (yetty_ylexbor_test_box_at(engine, index, &x, &y, &w, &h, box_tag, sizeof(box_tag)) != 0) {
+        if (yetty_ylexbor_test_box_at(engine, index, &x, &y, &w, &h, box_tag, sizeof(box_tag)) !=
+            0) {
             continue;
         }
         if (strcmp(box_tag, "td") != 0) {
@@ -196,7 +198,8 @@ static int nth_td(struct yetty_ylexbor *engine, int n, float *h_out, const char 
         if (seen == n) {
             const char *width_source = NULL;
             const char *height_source = NULL;
-            if (yetty_ylexbor_test_box_sources_at(engine, index, &width_source, &height_source) != 0) {
+            if (yetty_ylexbor_test_box_sources_at(engine, index, &width_source, &height_source) !=
+                0) {
                 return -1;
             }
             if (h_out != NULL) {
@@ -219,16 +222,17 @@ static int nth_td(struct yetty_ylexbor *engine, int n, float *h_out, const char 
  * provenance the peer required so the shared source contract stays truthful. */
 static void test_table_cell_stretch_provenance(struct ytest *test)
 {
-    static const char html[] =
-        "<html><body>"
-        "<table style='border-collapse:separate;border-spacing:0'>"
-        "<tr>"
-        "<td style='width:120px;padding:0;border-top:10px solid #333;border-bottom:10px solid #333'>"
-        "<div style='height:20px'></div></td>"
-        "<td style='width:120px;padding:0;border-top:10px solid #333;border-bottom:10px solid #333'>"
-        "<div style='height:60px'></div></td>"
-        "</tr></table>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<table style='border-collapse:separate;border-spacing:0'>"
+                               "<tr>"
+                               "<td style='width:120px;padding:0;border-top:10px solid "
+                               "#333;border-bottom:10px solid #333'>"
+                               "<div style='height:20px'></div></td>"
+                               "<td style='width:120px;padding:0;border-top:10px solid "
+                               "#333;border-bottom:10px solid #333'>"
+                               "<div style='height:60px'></div></td>"
+                               "</tr></table>"
+                               "</body></html>";
     struct yetty_ylexbor *engine = load(test, html);
 
     /* Cell 0: natural content 20 + 20 border = 40; equalized UP to the row's
@@ -264,7 +268,8 @@ static void test_abs_height_provenance(struct ytest *test)
         "<div style='position:relative;width:400px;height:200px;margin:0;padding:0;border:0'>"
         "<div style='position:absolute;top:0;left:0;width:90px;height:31px'>a</div>"
         "<div style='position:absolute;top:0;left:100px;width:90px;"
-        "border-top:10px solid #333;border-bottom:10px solid #333'><div style='height:43px'></div></div>"
+        "border-top:10px solid #333;border-bottom:10px solid #333'><div "
+        "style='height:43px'></div></div>"
         "<div style='position:absolute;top:0;left:200px;width:90px;height:50%'>p</div>"
         "<div style='position:absolute;top:10px;bottom:10px;left:300px;width:90px'>s</div>"
         "<img style='position:absolute;top:0;left:0;width:90px;height:44px' src='data:,'>"
@@ -345,7 +350,8 @@ static void test_flex_column_pct_height_provenance(struct ytest *test)
      * P+B -> 24, css. Must NOT expand to the 53px content. */
     float zero_x = -1.0f;
     const char *zero_source = NULL;
-    YTEST_CHECK(test, find_box_by_height(engine, "section", 24.0f, 0.0f, &zero_x, &zero_source) == 0);
+    YTEST_CHECK(test,
+                find_box_by_height(engine, "section", 24.0f, 0.0f, &zero_x, &zero_source) == 0);
     YTEST_CHECK_STR_EQ(test, zero_source ? zero_source : "(none)", "css");
 
     yetty_ylexbor_destroy(engine);

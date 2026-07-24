@@ -85,7 +85,7 @@ static void test_emit_into_validation(struct ytest *test)
 
     YTEST_CHECK(test, emit_fails(NULL, dest, 0.0f, 0.0f));
     YTEST_CHECK(test, emit_fails(&plan, NULL, 0.0f, 0.0f));
-    YTEST_CHECK(test, emit_fails(&plan, dest, INFINITY, 0.0f));   /* non-finite origin */
+    YTEST_CHECK(test, emit_fails(&plan, dest, INFINITY, 0.0f)); /* non-finite origin */
     YTEST_CHECK(test, emit_fails(&plan, dest, 0.0f, NAN));
 
     struct yetty_yplot_render_plan bad_dims = minimal_plan();
@@ -157,12 +157,12 @@ static void test_emit_expression_shared_path(struct ytest *test)
     YTEST_REQUIRE_OK(test, lb);
 
     float figure_w = 0.0f, figure_h = 0.0f;
-    YTEST_REQUIRE(test, YETTY_IS_OK(yetty_yplot_emit_expression(
-                            source, source_len, NULL, 0, &config, la.value, 0.0f, 0.0f,
-                            &figure_w, &figure_h)));
-    YTEST_REQUIRE(test, YETTY_IS_OK(yetty_yplot_emit_expression(
-                            source, source_len, NULL, 0, &config, lb.value, 0.0f, 0.0f, NULL,
-                            NULL)));
+    YTEST_REQUIRE(
+        test, YETTY_IS_OK(yetty_yplot_emit_expression(source, source_len, NULL, 0, &config,
+                                                      la.value, 0.0f, 0.0f, &figure_w, &figure_h)));
+    YTEST_REQUIRE(test,
+                  YETTY_IS_OK(yetty_yplot_emit_expression(source, source_len, NULL, 0, &config,
+                                                          lb.value, 0.0f, 0.0f, NULL, NULL)));
 
     size_t size_a = yetty_ydraw_drawable_list_size(la.value);
     size_t size_b = yetty_ydraw_drawable_list_size(lb.value);
@@ -176,9 +176,9 @@ static void test_emit_expression_shared_path(struct ytest *test)
     struct yetty_ydraw_drawable_list_result lc =
         yetty_ydraw_drawable_list_config_buffer_create(NULL);
     YTEST_REQUIRE_OK(test, lc);
-    YTEST_REQUIRE(test, YETTY_IS_OK(yetty_yplot_emit_expression(
-                            source, source_len, NULL, 0, &config, lc.value, 100.0f, 50.0f, NULL,
-                            NULL)));
+    YTEST_REQUIRE(test,
+                  YETTY_IS_OK(yetty_yplot_emit_expression(source, source_len, NULL, 0, &config,
+                                                          lc.value, 100.0f, 50.0f, NULL, NULL)));
     YTEST_CHECK(test, yetty_ydraw_drawable_list_size(lc.value) == size_a);
 
     (void)yetty_ydraw_drawable_list_destroy(la.value);

@@ -88,8 +88,8 @@ static bool path_readable(const char *path)
     return stat(path, &st) == 0;
 }
 
-/* Build the standard yetty asset paths from the platform's data_dir. The
- * canvas does the same construction in src/yetty/ydraw/canvas.c:335. */
+/* Build the standard yetty asset paths from the platform's data_dir, the
+ * same construction the app-side font cache does. */
 static struct yetty_yfont_font *open_default_font(const char *cdb_override,
                                                   const char *shader_override)
 {

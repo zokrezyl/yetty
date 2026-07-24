@@ -14,44 +14,36 @@
 #include "select/properties/properties.h"
 #include "select/properties/helpers.h"
 
-css_error css__cascade_page_break_inside(uint32_t opv, css_style *style,
-		css_select_state *state)
+css_error css__cascade_page_break_inside(uint32_t opv, css_style *style, css_select_state *state)
 {
-	return css__cascade_page_break_after_before_inside(opv, style, state,
-			set_page_break_inside);
+    return css__cascade_page_break_after_before_inside(opv, style, state, set_page_break_inside);
 }
 
-css_error css__set_page_break_inside_from_hint(const css_hint *hint,
-		css_computed_style *style)
+css_error css__set_page_break_inside_from_hint(const css_hint *hint, css_computed_style *style)
 {
-	return set_page_break_inside(style, hint->status);
+    return set_page_break_inside(style, hint->status);
 }
 
 css_error css__initial_page_break_inside(css_select_state *state)
 {
-	return set_page_break_inside(state->computed,
-			CSS_PAGE_BREAK_INSIDE_AUTO);
+    return set_page_break_inside(state->computed, CSS_PAGE_BREAK_INSIDE_AUTO);
 }
 
-css_error css__copy_page_break_inside(
-		const css_computed_style *from,
-		css_computed_style *to)
+css_error css__copy_page_break_inside(const css_computed_style *from, css_computed_style *to)
 {
-	if (from == to) {
-		return CSS_OK;
-	}
+    if (from == to) {
+        return CSS_OK;
+    }
 
-	return set_page_break_inside(to, get_page_break_inside(from));
+    return set_page_break_inside(to, get_page_break_inside(from));
 }
 
 css_error css__compose_page_break_inside(const css_computed_style *parent,
-		const css_computed_style *child,
-		css_computed_style *result)
+                                         const css_computed_style *child,
+                                         css_computed_style *result)
 {
-	uint8_t type = get_page_break_inside(child);
+    uint8_t type = get_page_break_inside(child);
 
-	return css__copy_page_break_inside(
-			type == CSS_PAGE_BREAK_INSIDE_INHERIT ? parent : child,
-			result);
+    return css__copy_page_break_inside(type == CSS_PAGE_BREAK_INSIDE_INHERIT ? parent : child,
+                                       result);
 }
-

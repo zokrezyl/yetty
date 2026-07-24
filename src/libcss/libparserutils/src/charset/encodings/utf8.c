@@ -18,22 +18,14 @@
 
 /** Number of continuation bytes for a given start byte */
 const uint8_t numContinuations[256] = {
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-	2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-	3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
 };
 
 /**
@@ -48,14 +40,14 @@ const uint8_t numContinuations[256] = {
  * \param clen  Pointer to location to receive byte length of UTF-8 sequence
  * \return PARSERUTILS_OK on success, appropriate error otherwise
  */
-parserutils_error parserutils_charset_utf8_to_ucs4(const uint8_t *s, size_t len,
-		uint32_t *ucs4, size_t *clen)
+parserutils_error parserutils_charset_utf8_to_ucs4(const uint8_t *s, size_t len, uint32_t *ucs4,
+                                                   size_t *clen)
 {
-	parserutils_error error;
+    parserutils_error error;
 
-	UTF8_TO_UCS4(s, len, ucs4, clen, error);
+    UTF8_TO_UCS4(s, len, ucs4, clen, error);
 
-	return error;
+    return error;
 }
 
 /**
@@ -69,14 +61,13 @@ parserutils_error parserutils_charset_utf8_to_ucs4(const uint8_t *s, size_t len,
  * \param len   Pointer to length, in bytes, of output buffer, updated on exit
  * \return PARSERUTILS_OK on success, appropriate error otherwise
  */
-parserutils_error parserutils_charset_utf8_from_ucs4(uint32_t ucs4, 
-		uint8_t **s, size_t *len)
+parserutils_error parserutils_charset_utf8_from_ucs4(uint32_t ucs4, uint8_t **s, size_t *len)
 {
-	parserutils_error error;
+    parserutils_error error;
 
-	UTF8_FROM_UCS4(ucs4, s, len, error);
+    UTF8_FROM_UCS4(ucs4, s, len, error);
 
-	return error;
+    return error;
 }
 
 /**
@@ -87,14 +78,13 @@ parserutils_error parserutils_charset_utf8_from_ucs4(uint32_t ucs4,
  * \param len  Pointer to location to receive length of string
  * \return PARSERUTILS_OK on success, appropriate error otherwise
  */
-parserutils_error parserutils_charset_utf8_length(const uint8_t *s, size_t max,
-		size_t *len)
+parserutils_error parserutils_charset_utf8_length(const uint8_t *s, size_t max, size_t *len)
 {
-	parserutils_error error;
+    parserutils_error error;
 
-	UTF8_LENGTH(s, max, len, error);
+    UTF8_LENGTH(s, max, len, error);
 
-	return error;
+    return error;
 }
 
 /**
@@ -104,14 +94,13 @@ parserutils_error parserutils_charset_utf8_length(const uint8_t *s, size_t max,
  * \param len  Pointer to location to receive length
  * \return PARSERUTILS_OK on success, appropriate error otherwise
  */
-parserutils_error parserutils_charset_utf8_char_byte_length(const uint8_t *s,
-		size_t *len)
+parserutils_error parserutils_charset_utf8_char_byte_length(const uint8_t *s, size_t *len)
 {
-	parserutils_error error;
+    parserutils_error error;
 
-	UTF8_CHAR_BYTE_LENGTH(s, len, error);
+    UTF8_CHAR_BYTE_LENGTH(s, len, error);
 
-	return error;
+    return error;
 }
 
 /**
@@ -123,14 +112,13 @@ parserutils_error parserutils_charset_utf8_char_byte_length(const uint8_t *s,
  *                 previous legal character
  * \return PARSERUTILS_OK on success, appropriate error otherwise
  */
-parserutils_error parserutils_charset_utf8_prev(const uint8_t *s, uint32_t off,
-		uint32_t *prevoff)
+parserutils_error parserutils_charset_utf8_prev(const uint8_t *s, uint32_t off, uint32_t *prevoff)
 {
-	parserutils_error error;
+    parserutils_error error;
 
-	UTF8_PREV(s, off, prevoff, error);
+    UTF8_PREV(s, off, prevoff, error);
 
-	return error;
+    return error;
 }
 
 /**
@@ -143,14 +131,14 @@ parserutils_error parserutils_charset_utf8_prev(const uint8_t *s, uint32_t off,
  *                 next legal character
  * \return PARSERUTILS_OK on success, appropriate error otherwise
  */
-parserutils_error parserutils_charset_utf8_next(const uint8_t *s, uint32_t len,
-		uint32_t off, uint32_t *nextoff)
+parserutils_error parserutils_charset_utf8_next(const uint8_t *s, uint32_t len, uint32_t off,
+                                                uint32_t *nextoff)
 {
-	parserutils_error error;
+    parserutils_error error;
 
-	UTF8_NEXT(s, len, off, nextoff, error);
+    UTF8_NEXT(s, len, off, nextoff, error);
 
-	return error;
+    return error;
 }
 
 /**
@@ -163,13 +151,12 @@ parserutils_error parserutils_charset_utf8_next(const uint8_t *s, uint32_t len,
  *                 next legal character
  * \return PARSERUTILS_OK on success, appropriate error otherwise
  */
-parserutils_error parserutils_charset_utf8_next_paranoid(const uint8_t *s, 
-		uint32_t len, uint32_t off, uint32_t *nextoff)
+parserutils_error parserutils_charset_utf8_next_paranoid(const uint8_t *s, uint32_t len,
+                                                         uint32_t off, uint32_t *nextoff)
 {
-	parserutils_error error;
+    parserutils_error error;
 
-	UTF8_NEXT_PARANOID(s, len, off, nextoff, error);
+    UTF8_NEXT_PARANOID(s, len, off, nextoff, error);
 
-	return error;
+    return error;
 }
-

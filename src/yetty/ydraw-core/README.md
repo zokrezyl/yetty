@@ -5,8 +5,8 @@ producers append primitives into, the type registry that maps wire type ids to
 size/aabb handlers, the streaming iterator that receiving canvases decode
 envelopes with, and the control-command / font / text-run record definitions.
 Every ydraw producer (ychart, ydiagram, ysvg, ymarkdown, ymusic, yrich/ypdf,
-ygui, the `tools/*` CLIs, …) and every receiver (the scrolling canvas in
-[ydraw](../ydraw/README.md), ygrid) builds on this module. It links only
+ygui, the `tools/*` CLIs, …) and every receiver (yvterm's sdf-layer, ygrid)
+builds on this module. It links only
 `yetty_ycore` (plus the [ywire](../ywire/README.md) statemachine *header* for
 the iterator), so client tools and no-GPU builds use it freely.
 
@@ -58,7 +58,8 @@ primitive stream. Entity-scoped editing uses `begin_group[_with_rect]` /
 (`size`, `aabb` — the minimum needed to stride a buffer and place a record in
 a spatial grid). The fully wired registry for all tiers is built by
 `yetty_ydraw_drawable_list_registry_create_default()` in
-`../ydraw/drawable-list-registry.c`.
+`../ysdf/default-registry.c` (ysdf, because the default handler is the SDF
+one and ydraw-core must not depend on ysdf).
 
 Two decode paths:
 

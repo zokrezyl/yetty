@@ -4,9 +4,9 @@
 
 int main(void)
 {
-	foo();
+    foo();
 
-	printf("PASS\n");
+    printf("PASS\n");
 
-	return 0;
+    return 0;
 }

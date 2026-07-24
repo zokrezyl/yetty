@@ -26,7 +26,7 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/drawable-list-registry.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
-#include <yetty/ydraw/drawable-list-registry.h>
+#include <yetty/ysdf/default-registry.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/ysdf/types.gen.h>
 

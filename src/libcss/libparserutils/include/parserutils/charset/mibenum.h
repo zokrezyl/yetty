@@ -9,8 +9,7 @@
 #define parserutils_charset_mibenum_h_
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #include <inttypes.h>

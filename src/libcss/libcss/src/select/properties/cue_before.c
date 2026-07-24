@@ -14,47 +14,41 @@
 #include "select/properties/properties.h"
 #include "select/properties/helpers.h"
 
-css_error css__cascade_cue_before(uint32_t opv, css_style *style,
-		css_select_state *state)
+css_error css__cascade_cue_before(uint32_t opv, css_style *style, css_select_state *state)
 {
-	/** \todo cue-before */
-	return css__cascade_uri_none(opv, style, state, NULL);
+    /** \todo cue-before */
+    return css__cascade_uri_none(opv, style, state, NULL);
 }
 
-css_error css__set_cue_before_from_hint(const css_hint *hint,
-		css_computed_style *style)
+css_error css__set_cue_before_from_hint(const css_hint *hint, css_computed_style *style)
 {
-	UNUSED(hint);
-	UNUSED(style);
+    UNUSED(hint);
+    UNUSED(style);
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
 css_error css__initial_cue_before(css_select_state *state)
 {
-	UNUSED(state);
+    UNUSED(state);
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
-css_error css__copy_cue_before(
-		const css_computed_style *from,
-		css_computed_style *to)
+css_error css__copy_cue_before(const css_computed_style *from, css_computed_style *to)
 {
-	UNUSED(from);
-	UNUSED(to);
+    UNUSED(from);
+    UNUSED(to);
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
-css_error css__compose_cue_before(const css_computed_style *parent,
-		const css_computed_style *child,
-		css_computed_style *result)
+css_error css__compose_cue_before(const css_computed_style *parent, const css_computed_style *child,
+                                  css_computed_style *result)
 {
-	UNUSED(parent);
-	UNUSED(child);
-	UNUSED(result);
+    UNUSED(parent);
+    UNUSED(child);
+    UNUSED(result);
 
-	return CSS_OK;
+    return CSS_OK;
 }
-

@@ -93,9 +93,10 @@ struct yetty_yplot_resolved {
  * ordered finite ranges, in-range enums, no unknown presence bits). `options`
  * may be NULL. `*out` is written only on success, so a failed resolve never
  * leaves partially-resolved state. Returns an error Result on any violation. */
-struct yetty_ycore_void_result yetty_yplot_resolve(
-    const struct yetty_yexpr_plot_expr *expression, const struct yetty_yplot_options *options,
-    enum yetty_yplot_attr_precedence precedence, struct yetty_yplot_resolved *out);
+struct yetty_ycore_void_result yetty_yplot_resolve(const struct yetty_yexpr_plot_expr *expression,
+                                                   const struct yetty_yplot_options *options,
+                                                   enum yetty_yplot_attr_precedence precedence,
+                                                   struct yetty_yplot_resolved *out);
 
 /* A complete, self-contained internal render plan — the single input to the
  * canonical emission path. It bundles the built render state (uniforms, with
@@ -118,9 +119,9 @@ struct yetty_yplot_render_plan {
  * INTO an existing drawable list, with the figure positioned at (origin_x,
  * origin_y). The caller owns `dest` and its scene bounds. This is the one
  * emission path shared by the shell render, yecho, and yplot-yaml. */
-struct yetty_ycore_void_result yetty_yplot_emit_into(
-    const struct yetty_yplot_render_plan *plan, struct yetty_ydraw_drawable_list *dest,
-    float origin_x, float origin_y);
+struct yetty_ycore_void_result yetty_yplot_emit_into(const struct yetty_yplot_render_plan *plan,
+                                                     struct yetty_ydraw_drawable_list *dest,
+                                                     float origin_x, float origin_y);
 
 /* The one high-level shared path: parse a plot expression, resolve it against
  * `config` (expression attributes win), compile + build the render plan, and
@@ -132,10 +133,10 @@ struct yetty_ycore_void_result yetty_yplot_emit_into(
  * bounds or advance a layout cursor. The caller owns `dest` and its scene
  * bounds. */
 struct yetty_ycore_void_result yetty_yplot_emit_expression(
-    const char *source, size_t source_len,
-    const struct yetty_yplot_buffer_input *api_buffers, size_t api_buffer_count,
-    const struct yetty_yplot_render_config *config, struct yetty_ydraw_drawable_list *dest,
-    float origin_x, float origin_y, float *out_figure_w, float *out_figure_h);
+    const char *source, size_t source_len, const struct yetty_yplot_buffer_input *api_buffers,
+    size_t api_buffer_count, const struct yetty_yplot_render_config *config,
+    struct yetty_ydraw_drawable_list *dest, float origin_x, float origin_y, float *out_figure_w,
+    float *out_figure_h);
 
 #ifdef __cplusplus
 }

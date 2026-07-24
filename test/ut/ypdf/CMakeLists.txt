@@ -8,7 +8,7 @@
 yetty_add_c_test(
     NAME    ypdf_render
     SOURCES ypdf-render-test.c
-    LIBS    yetty_ypdf yetty_ydraw yetty_ydraw_core yetty_yfont_core yetty_ycore
+    LIBS    yetty_ypdf yetty_ysdf yetty_ydraw_core yetty_yfont_core yetty_ycore
             yetty_yrender pdfio_lib yetty_yplatform_core
     SHIMS   trace
     LABELS  golden
@@ -29,7 +29,7 @@ target_compile_definitions(ypdf_render-test PRIVATE
 yetty_add_c_test(
     NAME    ypdf_positions
     SOURCES ypdf-positions-test.c
-    LIBS    yetty_ypdf yetty_ydraw yetty_ydraw_core yetty_yfont_core yetty_ycore
+    LIBS    yetty_ypdf yetty_ysdf yetty_ydraw_core yetty_yfont_core yetty_ycore
             yetty_yrender pdfio_lib yetty_yplatform_core
     SHIMS   trace
     LABELS  golden

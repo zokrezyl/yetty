@@ -14,75 +14,68 @@
 #include "select/properties/properties.h"
 #include "select/properties/helpers.h"
 
-css_error css__cascade_elevation(uint32_t opv, css_style *style,
-		css_select_state *state)
+css_error css__cascade_elevation(uint32_t opv, css_style *style, css_select_state *state)
 {
-	css_fixed val = 0;
-	uint32_t unit = UNIT_DEG;
+    css_fixed val = 0;
+    uint32_t unit = UNIT_DEG;
 
-	if (hasFlagValue(opv) == false) {
-		switch (getValue(opv)) {
-		case ELEVATION_ANGLE:
-			val = *((css_fixed *) style->bytecode);
-			advance_bytecode(style, sizeof(val));
+    if (hasFlagValue(opv) == false) {
+        switch (getValue(opv)) {
+        case ELEVATION_ANGLE:
+            val = *((css_fixed *)style->bytecode);
+            advance_bytecode(style, sizeof(val));
 
-			unit = *((uint32_t *) style->bytecode);
-			advance_bytecode(style, sizeof(unit));
-			break;
-		case ELEVATION_BELOW:
-		case ELEVATION_LEVEL:
-		case ELEVATION_ABOVE:
-		case ELEVATION_HIGHER:
-		case ELEVATION_LOWER:
-			/** \todo convert to public values */
-			break;
-		}
-	}
+            unit = *((uint32_t *)style->bytecode);
+            advance_bytecode(style, sizeof(unit));
+            break;
+        case ELEVATION_BELOW:
+        case ELEVATION_LEVEL:
+        case ELEVATION_ABOVE:
+        case ELEVATION_HIGHER:
+        case ELEVATION_LOWER:
+            /** \todo convert to public values */
+            break;
+        }
+    }
 
-	unit = css__to_css_unit(unit);
+    unit = css__to_css_unit(unit);
 
-	if (css__outranks_existing(getOpcode(opv), isImportant(opv), state,
-			getFlagValue(opv))) {
-		/** \todo set computed elevation */
-	}
+    if (css__outranks_existing(getOpcode(opv), isImportant(opv), state, getFlagValue(opv))) {
+        /** \todo set computed elevation */
+    }
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
-css_error css__set_elevation_from_hint(const css_hint *hint,
-		css_computed_style *style)
+css_error css__set_elevation_from_hint(const css_hint *hint, css_computed_style *style)
 {
-	UNUSED(hint);
-	UNUSED(style);
+    UNUSED(hint);
+    UNUSED(style);
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
 css_error css__initial_elevation(css_select_state *state)
 {
-	UNUSED(state);
+    UNUSED(state);
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
-css_error css__copy_elevation(
-		const css_computed_style *from,
-		css_computed_style *to)
+css_error css__copy_elevation(const css_computed_style *from, css_computed_style *to)
 {
-	UNUSED(from);
-	UNUSED(to);
+    UNUSED(from);
+    UNUSED(to);
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
-css_error css__compose_elevation(const css_computed_style *parent,
-		const css_computed_style *child,
-		css_computed_style *result)
+css_error css__compose_elevation(const css_computed_style *parent, const css_computed_style *child,
+                                 css_computed_style *result)
 {
-	UNUSED(parent);
-	UNUSED(child);
-	UNUSED(result);
+    UNUSED(parent);
+    UNUSED(child);
+    UNUSED(result);
 
-	return CSS_OK;
+    return CSS_OK;
 }
-

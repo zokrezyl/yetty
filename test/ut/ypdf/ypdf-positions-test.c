@@ -32,7 +32,7 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/font-resource.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
-#include <yetty/ydraw/drawable-list-registry.h>
+#include <yetty/ysdf/default-registry.h>
 #include <yetty/ypdf/ypdf.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/raster-font.h>

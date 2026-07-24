@@ -1056,8 +1056,8 @@ static lxb_dom_element_t *dom_find_by_tag_attr(lxb_dom_node_t *root, const char 
             }
         }
         if (node->first_child) {
-            lxb_dom_element_t *found = dom_find_by_tag_attr(node->first_child, tag, tag_len, attr,
-                                                            attr_len, val, val_len);
+            lxb_dom_element_t *found =
+                dom_find_by_tag_attr(node->first_child, tag, tag_len, attr, attr_len, val, val_len);
             if (found) {
                 return found;
             }
@@ -1118,7 +1118,8 @@ static lxb_dom_element_t *dom_find_glyph_in_iconsets(lxb_dom_node_t *root, const
             }
         }
         if (node->first_child) {
-            lxb_dom_element_t *found = dom_find_glyph_in_iconsets(node->first_child, name, name_len);
+            lxb_dom_element_t *found =
+                dom_find_glyph_in_iconsets(node->first_child, name, name_len);
             if (found) {
                 return found;
             }
@@ -2685,8 +2686,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     parse_html_dimension_attr((const char *)iframe_aw, iframe_alen, &definite_w,
                                               &pct_w);
                 }
-                const lxb_char_t *iframe_ah =
-                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"height", 6, &iframe_alen);
+                const lxb_char_t *iframe_ah = lxb_dom_element_get_attribute(
+                    el, (const lxb_char_t *)"height", 6, &iframe_alen);
                 if (iframe_ah && iframe_alen > 0) {
                     parse_html_dimension_attr((const char *)iframe_ah, iframe_alen, &definite_h,
                                               &pct_h);
@@ -2775,8 +2776,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         lxb_dom_element_get_attribute(el, (const lxb_char_t *)"viewBox", 7, &alen);
                     if (vb && alen > 0) {
                         float view_min_x = 0.0f, view_min_y = 0.0f;
-                        if (sscanf((const char *)vb, "%f %f %f %f", &view_min_x, &view_min_y, &view_w,
-                                   &view_h) != 4) {
+                        if (sscanf((const char *)vb, "%f %f %f %f", &view_min_x, &view_min_y,
+                                   &view_w, &view_h) != 4) {
                             view_w = 0.0f;
                             view_h = 0.0f;
                         }

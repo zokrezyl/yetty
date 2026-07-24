@@ -14,71 +14,64 @@
 #include "select/properties/properties.h"
 #include "select/properties/helpers.h"
 
-css_error css__cascade_speech_rate(uint32_t opv, css_style *style,
-		css_select_state *state)
+css_error css__cascade_speech_rate(uint32_t opv, css_style *style, css_select_state *state)
 {
-	css_fixed rate = 0;
+    css_fixed rate = 0;
 
-	if (hasFlagValue(opv) == false) {
-		switch (getValue(opv)) {
-		case SPEECH_RATE_SET:
-			rate = *((css_fixed *) style->bytecode);
-			advance_bytecode(style, sizeof(rate));
-			break;
-		case SPEECH_RATE_X_SLOW:
-		case SPEECH_RATE_SLOW:
-		case SPEECH_RATE_MEDIUM:
-		case SPEECH_RATE_FAST:
-		case SPEECH_RATE_X_FAST:
-		case SPEECH_RATE_FASTER:
-		case SPEECH_RATE_SLOWER:
-			/** \todo convert to public values */
-			break;
-		}
-	}
+    if (hasFlagValue(opv) == false) {
+        switch (getValue(opv)) {
+        case SPEECH_RATE_SET:
+            rate = *((css_fixed *)style->bytecode);
+            advance_bytecode(style, sizeof(rate));
+            break;
+        case SPEECH_RATE_X_SLOW:
+        case SPEECH_RATE_SLOW:
+        case SPEECH_RATE_MEDIUM:
+        case SPEECH_RATE_FAST:
+        case SPEECH_RATE_X_FAST:
+        case SPEECH_RATE_FASTER:
+        case SPEECH_RATE_SLOWER:
+            /** \todo convert to public values */
+            break;
+        }
+    }
 
-	if (css__outranks_existing(getOpcode(opv), isImportant(opv), state,
-			getFlagValue(opv))) {
-		/** \todo speech-rate */
-	}
+    if (css__outranks_existing(getOpcode(opv), isImportant(opv), state, getFlagValue(opv))) {
+        /** \todo speech-rate */
+    }
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
-css_error css__set_speech_rate_from_hint(const css_hint *hint,
-		css_computed_style *style)
+css_error css__set_speech_rate_from_hint(const css_hint *hint, css_computed_style *style)
 {
-	UNUSED(hint);
-	UNUSED(style);
+    UNUSED(hint);
+    UNUSED(style);
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
 css_error css__initial_speech_rate(css_select_state *state)
 {
-	UNUSED(state);
+    UNUSED(state);
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
-css_error css__copy_speech_rate(
-		const css_computed_style *from,
-		css_computed_style *to)
+css_error css__copy_speech_rate(const css_computed_style *from, css_computed_style *to)
 {
-	UNUSED(from);
-	UNUSED(to);
+    UNUSED(from);
+    UNUSED(to);
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
 css_error css__compose_speech_rate(const css_computed_style *parent,
-		const css_computed_style *child,
-		css_computed_style *result)
+                                   const css_computed_style *child, css_computed_style *result)
 {
-	UNUSED(parent);
-	UNUSED(child);
-	UNUSED(result);
+    UNUSED(parent);
+    UNUSED(child);
+    UNUSED(result);
 
-	return CSS_OK;
+    return CSS_OK;
 }
-

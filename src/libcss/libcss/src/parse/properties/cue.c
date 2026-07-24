@@ -27,68 +27,66 @@
  * Post condition: \a *ctx is updated with the next token to process
  *		   If the input is invalid, then \a *ctx remains unchanged.
  */
-css_error css__parse_cue(css_language *c,
-		const parserutils_vector *vector, int32_t *ctx,
-		css_style *result)
+css_error css__parse_cue(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+                         css_style *result)
 {
-	int32_t orig_ctx = *ctx;
-	css_error error;
-	const css_token *first_token;
-	const css_token *token;
+    int32_t orig_ctx = *ctx;
+    css_error error;
+    const css_token *first_token;
+    const css_token *token;
 
-	/* one or two tokens follow:
+    /* one or two tokens follow:
 	 *  if one emit for both BEFORE and AFTER
 	 *  if two first is before second is after
 	 *  tokens are either IDENT:none or URI
 	 */
 
-	first_token = parserutils_vector_peek(vector, *ctx);
+    first_token = parserutils_vector_peek(vector, *ctx);
 
-	error = css__parse_cue_before(c, vector, ctx, result);
-	if (error == CSS_OK) {
-		/* first token parsed */
+    error = css__parse_cue_before(c, vector, ctx, result);
+    if (error == CSS_OK) {
+        /* first token parsed */
 
-		consumeWhitespace(vector, ctx);
+        consumeWhitespace(vector, ctx);
 
-		token = parserutils_vector_peek(vector, *ctx);
-		if (token == NULL)  {
-			/* no second token, re-parse the first */
-			*ctx = orig_ctx;
-			error = css__parse_cue_after(c, vector, ctx, result);
-		} else {
-			/* second token - might be useful */
-			enum flag_value flag_value;
+        token = parserutils_vector_peek(vector, *ctx);
+        if (token == NULL) {
+            /* no second token, re-parse the first */
+            *ctx = orig_ctx;
+            error = css__parse_cue_after(c, vector, ctx, result);
+        } else {
+            /* second token - might be useful */
+            enum flag_value flag_value;
 
-			flag_value = get_css_flag_value(c, token);
+            flag_value = get_css_flag_value(c, token);
 
-			if (flag_value != FLAG_VALUE__NONE) {
-				/* another generic property reset value
+            if (flag_value != FLAG_VALUE__NONE) {
+                /* another generic property reset value
 				 * which is bogus */
-				error = CSS_INVALID;
-			} else {
-				error = css__parse_cue_after(c, vector, ctx, result);
-				if (error == CSS_OK) {
-					/* second token parsed */
-					flag_value = get_css_flag_value(c, first_token);
+                error = CSS_INVALID;
+            } else {
+                error = css__parse_cue_after(c, vector, ctx, result);
+                if (error == CSS_OK) {
+                    /* second token parsed */
+                    flag_value = get_css_flag_value(c, first_token);
 
-					if (flag_value != FLAG_VALUE__NONE) {
-						/* valid second token after
+                    if (flag_value != FLAG_VALUE__NONE) {
+                        /* valid second token after
 						 * generic property reset value */
-						error = CSS_INVALID;
-					}
-				} else {
-					/* second token appears to be junk re-try with first */
-					*ctx = orig_ctx;
-					error = css__parse_cue_after(c, vector, ctx, result);
-				}
-			}
-		}
-	}
+                        error = CSS_INVALID;
+                    }
+                } else {
+                    /* second token appears to be junk re-try with first */
+                    *ctx = orig_ctx;
+                    error = css__parse_cue_after(c, vector, ctx, result);
+                }
+            }
+        }
+    }
 
+    if (error != CSS_OK) {
+        *ctx = orig_ctx;
+    }
 
-	if (error != CSS_OK)
-		*ctx = orig_ctx;
-
-	return error;
+    return error;
 }
-

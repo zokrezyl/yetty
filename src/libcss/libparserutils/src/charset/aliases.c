@@ -21,52 +21,51 @@
 #include "aliases.inc"
 
 typedef struct {
-        size_t slen;
-        const char *s;
+    size_t slen;
+    const char *s;
 } lengthed_string;
 
-
-#define IS_PUNCT_OR_SPACE(x)                    \
-        (!(((x) >= 'A' && (x) <= 'Z') ||        \
-           ((x) >= 'a' && (x) <= 'z') ||        \
-           ((x) >= '0' && (x) <= '9')))
-
+#define IS_PUNCT_OR_SPACE(x)                                                                       \
+    (!(((x) >= 'A' && (x) <= 'Z') || ((x) >= 'a' && (x) <= 'z') || ((x) >= '0' && (x) <= '9')))
 
 static int parserutils_charset_alias_match(const void *a, const void *b)
 {
-        lengthed_string *s = (lengthed_string *)a;
-        parserutils_charset_aliases_alias *alias = (parserutils_charset_aliases_alias*)b;
-        size_t key_left = s->slen;
-        size_t alias_left = alias->name_len;
-        const char *s_alias = alias->name;
-        const char *s_key = s->s;
-        int cmpret;
-        
-        while ((key_left > 0) && (alias_left > 0)) {
-                while ((key_left > 0) && IS_PUNCT_OR_SPACE(*s_key)) {
-                        key_left--; s_key++;
-                }
-                
-                if (key_left == 0)
-                        break;
-                
-                cmpret = tolower(*s_key) - *s_alias;
-                
-                if (cmpret != 0) {
-                        return cmpret;
-                }
-                
-                key_left--;
-                s_key++;
-                alias_left--;
-                s_alias++;
-        }
-        
+    lengthed_string *s = (lengthed_string *)a;
+    parserutils_charset_aliases_alias *alias = (parserutils_charset_aliases_alias *)b;
+    size_t key_left = s->slen;
+    size_t alias_left = alias->name_len;
+    const char *s_alias = alias->name;
+    const char *s_key = s->s;
+    int cmpret;
+
+    while ((key_left > 0) && (alias_left > 0)) {
         while ((key_left > 0) && IS_PUNCT_OR_SPACE(*s_key)) {
-          key_left--; s_key++;
+            key_left--;
+            s_key++;
         }
-        
-        return key_left - alias_left;
+
+        if (key_left == 0) {
+            break;
+        }
+
+        cmpret = tolower(*s_key) - *s_alias;
+
+        if (cmpret != 0) {
+            return cmpret;
+        }
+
+        key_left--;
+        s_key++;
+        alias_left--;
+        s_alias++;
+    }
+
+    while ((key_left > 0) && IS_PUNCT_OR_SPACE(*s_key)) {
+        key_left--;
+        s_key++;
+    }
+
+    return key_left - alias_left;
 }
 
 /**
@@ -76,25 +75,24 @@ static int parserutils_charset_alias_match(const void *a, const void *b)
  * \param len    The length of the alias name
  * \return Pointer to canonical form or NULL if not found
  */
-parserutils_charset_aliases_canon *parserutils__charset_alias_canonicalise(
-		const char *alias, size_t len)
+parserutils_charset_aliases_canon *parserutils__charset_alias_canonicalise(const char *alias,
+                                                                           size_t len)
 {
-        parserutils_charset_aliases_alias *c;
-        lengthed_string s;
-        
-        s.slen = len;
-        s.s = alias;
+    parserutils_charset_aliases_alias *c;
+    lengthed_string s;
 
-        c = (parserutils_charset_aliases_alias*)bsearch(&s,
-		&charset_aliases[0],
-		charset_aliases_count,
-		sizeof(parserutils_charset_aliases_alias),
-		parserutils_charset_alias_match);
-        
-        if (c == NULL)
-                return NULL;
-        
-        return c->canon;
+    s.slen = len;
+    s.s = alias;
+
+    c = (parserutils_charset_aliases_alias *)bsearch(&s, &charset_aliases[0], charset_aliases_count,
+                                                     sizeof(parserutils_charset_aliases_alias),
+                                                     parserutils_charset_alias_match);
+
+    if (c == NULL) {
+        return NULL;
+    }
+
+    return c->canon;
 }
 
 /**
@@ -106,16 +104,18 @@ parserutils_charset_aliases_canon *parserutils__charset_alias_canonicalise(
  */
 uint16_t parserutils_charset_mibenum_from_name(const char *alias, size_t len)
 {
-	parserutils_charset_aliases_canon *c;
+    parserutils_charset_aliases_canon *c;
 
-	if (alias == NULL)
-		return 0;
+    if (alias == NULL) {
+        return 0;
+    }
 
-	c = parserutils__charset_alias_canonicalise(alias, len);
-	if (c == NULL)
-		return 0;
+    c = parserutils__charset_alias_canonicalise(alias, len);
+    if (c == NULL) {
+        return 0;
+    }
 
-	return c->mib_enum;
+    return c->mib_enum;
 }
 
 /**
@@ -126,16 +126,17 @@ uint16_t parserutils_charset_mibenum_from_name(const char *alias, size_t len)
  */
 const char *parserutils_charset_mibenum_to_name(uint16_t mibenum)
 {
-	int i;
-	parserutils_charset_aliases_canon *c;
-        
-        for (i = 0; i < charset_aliases_canon_count; ++i) {
-                c = &canonical_charset_names[i];
-                if (c->mib_enum == mibenum)
-                        return c->name;
+    int i;
+    parserutils_charset_aliases_canon *c;
+
+    for (i = 0; i < charset_aliases_canon_count; ++i) {
+        c = &canonical_charset_names[i];
+        if (c->mib_enum == mibenum) {
+            return c->name;
         }
-        
-        return NULL;
+    }
+
+    return NULL;
 }
 
 /**
@@ -146,5 +147,5 @@ const char *parserutils_charset_mibenum_to_name(uint16_t mibenum)
  */
 bool parserutils_charset_mibenum_is_unicode(uint16_t mibenum)
 {
-        return MIBENUM_IS_UNICODE(mibenum);
+    return MIBENUM_IS_UNICODE(mibenum);
 }

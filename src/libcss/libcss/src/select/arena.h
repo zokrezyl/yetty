@@ -32,4 +32,3 @@ enum css_error css__arena_intern_style(struct css_computed_style **style);
 enum css_error css__arena_remove_style(struct css_computed_style *style);
 
 #endif
-

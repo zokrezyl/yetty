@@ -40,6 +40,7 @@ struct yetty_yplatform_wgpu;
 struct yetty_yvnc_server;
 struct yetty_yctl_server;
 struct yetty_ycore_memtag_registry;
+struct yetty_ydraw_drawable_list_registry;
 struct yetty_ydraw_target;
 struct yetty_yfigure_registry;
 struct yetty_context;
@@ -80,6 +81,12 @@ struct yetty_yframework {
      * the yctl `memtags` command dumps them. May be NULL (create failure) —
      * consumers must tolerate that. */
     struct yetty_ycore_memtag_registry *memtag_registry;
+
+    /* Owned. The process-wide ydraw drawable-list decode registry, built
+     * once via yetty_ydraw_drawable_list_registry_create_default() and
+     * immutable afterwards. Terminals and ygrids borrow it for wire-record
+     * parsing; they never build their own (headless test grids excepted). */
+    struct yetty_ydraw_drawable_list_registry *drawable_registry;
 
     /* Per-kind factory args bundles (e.g. ymgui's lazy-pipeline cache).
      * The struct is private to yframework.c; consumers only see this

@@ -40,8 +40,6 @@
 #include <yetty/ydraw-core/drawable-iterator.h>
 #include <yetty/ydraw-core/drawable-list-registry.h>
 #include <yetty/ydraw-core/font-resource.h>
-#include <yetty/ydraw-core/text-drawable-list.h>
-#include <yetty/ysdf/handler.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
@@ -256,8 +254,8 @@ struct yetty_yterminal_terminal {
     struct yetty_ydraw_composite_factory *composite_factory;
 
     /* Drawable-list registry for parsing inbound YDRAW_BIN record streams into
-     * the content grid's anchored rich model. Same handler set ygrid uses, so
-     * the iterator can step SDF primitives and composite (FAM) records. */
+     * the content grid's anchored rich model. Borrowed from the framework's
+     * shared instance (runtime->drawable_registry) — never owned. */
     struct yetty_ydraw_drawable_list_registry *ydraw_registry;
 
     /* CMD_UPDATE routing for scrollback figures: each envelope's composites
@@ -2403,34 +2401,14 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
 #endif
     }
 
-    /* Drawable-list registry for ingesting inbound YDRAW_BIN record streams.
-     * Same handler set ygrid registers, so the iterator can step SDF primitives,
-     * cmd/font/text-list records, and composite (FAM) records alike. */
-    {
-        struct yetty_ydraw_drawable_list_registry_ptr_result reg_res =
-            yetty_ydraw_drawable_list_registry_create();
-        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_res,
-                            "terminal_create: ydraw registry create");
-        terminal->ydraw_registry = reg_res.value;
-        yetty_ydraw_drawable_list_registry_set_default(terminal->ydraw_registry,
-                                                       yetty_ysdf_handler);
-        struct yetty_ycore_void_result hr;
-        hr = yetty_ydraw_drawable_list_registry_add(terminal->ydraw_registry, YETTY_YDRAW_CMD_BASE,
-                                                    YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
-        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry cmd");
-        hr = yetty_ydraw_drawable_list_registry_add(
-            terminal->ydraw_registry, YETTY_YDRAW_RESOURCE_FONT, YETTY_YDRAW_RESOURCE_FONT,
-            yetty_ydraw_font_resource_handler);
-        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry font");
-        hr = yetty_ydraw_drawable_list_registry_add(
-            terminal->ydraw_registry, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
-            YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST, yetty_ydraw_text_drawable_list_handler);
-        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry text");
-        hr = yetty_ydraw_drawable_list_registry_add(terminal->ydraw_registry,
-                                                    YETTY_YDRAW_COMPOSITE_TYPE_BASE, 0xFFFFFFFFu,
-                                                    yetty_ydraw_composite_record_handler);
-        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr,
-                            "terminal_create: ydraw registry complex");
+    /* Drawable-list registry for ingesting inbound YDRAW_BIN record streams —
+     * borrowed from the framework's shared instance (immutable after
+     * framework create), so the iterator can step SDF primitives,
+     * cmd/font/text-list records, and composite records alike. */
+    terminal->ydraw_registry = terminal->context.yetty_context.runtime->drawable_registry;
+    if (!terminal->ydraw_registry) {
+        return YETTY_ERR(yetty_yterminal_terminal,
+                         "terminal_create: runtime has no drawable registry");
     }
 
     terminal->figure_args.default_font = terminal->compositor_font;
@@ -2775,10 +2753,8 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
         yetty_ydraw_composite_factory_destroy(terminal->composite_factory);
         terminal->composite_factory = NULL;
     }
-    if (terminal->ydraw_registry) {
-        yetty_ydraw_drawable_list_registry_destroy(terminal->ydraw_registry);
-        terminal->ydraw_registry = NULL;
-    }
+    /* ydraw_registry is borrowed from the framework — not ours to destroy. */
+    terminal->ydraw_registry = NULL;
     if (terminal->compositor_font) {
         terminal->compositor_font->ops->destroy(terminal->compositor_font);
         terminal->compositor_font = NULL;

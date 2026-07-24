@@ -27,38 +27,37 @@
  * Post condition: \a *ctx is updated with the next token to process
  *		   If the input is invalid, then \a *ctx remains unchanged.
  */
-css_error css__parse_border(css_language *c,
-		const parserutils_vector *vector, int32_t *ctx,
-		css_style *result)
+css_error css__parse_border(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+                            css_style *result)
 {
-	int32_t orig_ctx = *ctx;
-	css_error error;
+    int32_t orig_ctx = *ctx;
+    css_error error;
 
-	error = css__parse_border_side(c, vector, ctx, result, BORDER_SIDE_TOP);
-	if (error != CSS_OK) {
-		*ctx = orig_ctx;
-		return error;
-	}
+    error = css__parse_border_side(c, vector, ctx, result, BORDER_SIDE_TOP);
+    if (error != CSS_OK) {
+        *ctx = orig_ctx;
+        return error;
+    }
 
-	*ctx = orig_ctx;
-	error = css__parse_border_side(c, vector, ctx, result, BORDER_SIDE_RIGHT);
-	if (error != CSS_OK) {
-		*ctx = orig_ctx;
-		return error;
-	}
+    *ctx = orig_ctx;
+    error = css__parse_border_side(c, vector, ctx, result, BORDER_SIDE_RIGHT);
+    if (error != CSS_OK) {
+        *ctx = orig_ctx;
+        return error;
+    }
 
-	*ctx = orig_ctx;
-	error = css__parse_border_side(c, vector, ctx, result, BORDER_SIDE_BOTTOM);
-	if (error != CSS_OK) {
-		*ctx = orig_ctx;
-		return error;
-	}
+    *ctx = orig_ctx;
+    error = css__parse_border_side(c, vector, ctx, result, BORDER_SIDE_BOTTOM);
+    if (error != CSS_OK) {
+        *ctx = orig_ctx;
+        return error;
+    }
 
-	*ctx = orig_ctx;
-	error = css__parse_border_side(c, vector, ctx, result, BORDER_SIDE_LEFT);
-	if (error != CSS_OK)
-		*ctx = orig_ctx;
+    *ctx = orig_ctx;
+    error = css__parse_border_side(c, vector, ctx, result, BORDER_SIDE_LEFT);
+    if (error != CSS_OK) {
+        *ctx = orig_ctx;
+    }
 
-	return error;
-
+    return error;
 }

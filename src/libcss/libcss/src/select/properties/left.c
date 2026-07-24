@@ -14,49 +14,40 @@
 #include "select/properties/properties.h"
 #include "select/properties/helpers.h"
 
-css_error css__cascade_left(uint32_t opv, css_style *style,
-		css_select_state *state)
+css_error css__cascade_left(uint32_t opv, css_style *style, css_select_state *state)
 {
-	return css__cascade_length_auto(opv, style, state, set_left);
+    return css__cascade_length_auto(opv, style, state, set_left);
 }
 
-css_error css__set_left_from_hint(const css_hint *hint,
-		css_computed_style *style)
+css_error css__set_left_from_hint(const css_hint *hint, css_computed_style *style)
 {
-	return set_left(style, hint->status,
-			hint->data.length.value, hint->data.length.unit);
+    return set_left(style, hint->status, hint->data.length.value, hint->data.length.unit);
 }
 
 css_error css__initial_left(css_select_state *state)
 {
-	return set_left(state->computed, CSS_LEFT_AUTO, 0, CSS_UNIT_PX);
+    return set_left(state->computed, CSS_LEFT_AUTO, 0, CSS_UNIT_PX);
 }
 
-css_error css__copy_left(
-		const css_computed_style *from,
-		css_computed_style *to)
+css_error css__copy_left(const css_computed_style *from, css_computed_style *to)
 {
-	css_fixed length = 0;
-	css_unit unit = CSS_UNIT_PX;
-	uint8_t type = get_left(from, &length, &unit);
+    css_fixed length = 0;
+    css_unit unit = CSS_UNIT_PX;
+    uint8_t type = get_left(from, &length, &unit);
 
-	if (from == to) {
-		return CSS_OK;
-	}
+    if (from == to) {
+        return CSS_OK;
+    }
 
-	return set_left(to, type, length, unit);
+    return set_left(to, type, length, unit);
 }
 
-css_error css__compose_left(const css_computed_style *parent,
-		const css_computed_style *child,
-		css_computed_style *result)
+css_error css__compose_left(const css_computed_style *parent, const css_computed_style *child,
+                            css_computed_style *result)
 {
-	css_fixed length = 0;
-	css_unit unit = CSS_UNIT_PX;
-	uint8_t type = get_left(child, &length, &unit);
+    css_fixed length = 0;
+    css_unit unit = CSS_UNIT_PX;
+    uint8_t type = get_left(child, &length, &unit);
 
-	return css__copy_left(
-			type == CSS_LEFT_INHERIT ? parent : child,
-			result);
+    return css__copy_left(type == CSS_LEFT_INHERIT ? parent : child, result);
 }
-

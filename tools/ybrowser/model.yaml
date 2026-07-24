@@ -55,6 +55,22 @@ classes:
         type: "const char *"
         get: false
         set: false
+      - name: frame_listener
+        type: struct yetty_yevent_event_listener
+        get: false
+        set: false
+      - name: frame_timer
+        type: yetty_yevent_timer_id
+        get: false
+        set: false
+      - name: frame_timer_active
+        type: int
+        get: false
+        set: false
+      - name: presented_once
+        type: int
+        get: false
+        set: false
       - name: prefetch_thread
         type: pthread_t
         get: false
@@ -81,6 +97,10 @@ classes:
         set: false
       - name: prefetch_ctype
         type: "char *"
+        get: false
+        set: false
+      - name: debug_eval_mtime
+        type: long
         get: false
         set: false
     ops:
@@ -140,6 +160,32 @@ types:
         type: int
       - name: running
         type: int
+      - name: devtools
+        type: "struct yetty_yclass_object *"
+      - name: tab_console
+        type: "struct yetty_yclass_object *"
+      - name: tab_elements
+        type: "struct yetty_yclass_object *"
+      - name: console_pane
+        type: "struct yetty_yclass_object *"
+      - name: console_log
+        type: "struct yetty_yclass_object *"
+      - name: console_input
+        type: "struct yetty_yclass_object *"
+      - name: elements_pane
+        type: "struct yetty_yclass_object *"
+      - name: tree_box
+        type: "struct yetty_yclass_object *"
+      - name: devtools_open
+        type: int
+      - name: devtools_tab
+        type: int
+      - name: console_focused
+        type: int
+      - name: console_dirty
+        type: int
+      - name: console_seen_total
+        type: uint64_t
       - name: viewport_w
         type: float
       - name: viewport_h
@@ -277,6 +323,12 @@ types:
     fields:
       - name: default_font
         type: "struct yetty_yfont_font *"
+      - name: bold_font
+        type: "struct yetty_yfont_font *"
+      - name: italic_font
+        type: "struct yetty_yfont_font *"
+      - name: bold_italic_font
+        type: "struct yetty_yfont_font *"
       - name: composite_factory
         type: "struct yetty_ydraw_composite_factory *"
       - name: absolute_coords
@@ -288,6 +340,7 @@ local_types:
   tab: tools/ybrowser/browser-ui.c
   app: tools/ybrowser/browser-ui.c
   nav_job: tools/ybrowser/browser-ui.c
+  dom_tree_builder: tools/ybrowser/browser-ui.c
   client_pipe_completion: tools/ybrowser/browser-ui.c
   client_pipe_loop: tools/ybrowser/browser-ui.c
   yetty_ybrowser_app: tools/ybrowser/browser-ui.c

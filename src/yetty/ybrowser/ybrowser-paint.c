@@ -1567,8 +1567,9 @@ static void emit_image_box_prims(struct yetty_ylexbor *r, struct yetty_ylexbor_b
             struct yetty_ylexbor_svg_inline_entry *icon =
                 svg_icon_scene_get(r, b->element, inherited_rgba, b->font_size);
             if (icon && icon->scene) {
-                svg_scene_merge(buf, icon->scene, icon->min_x, icon->min_y, icon->w, icon->h, px, py,
-                                b->w, b->h, icon->par_align_x, icon->par_align_y, icon->par_mode, z);
+                svg_scene_merge(buf, icon->scene, icon->min_x, icon->min_y, icon->w, icon->h, px,
+                                py, b->w, b->h, icon->par_align_x, icon->par_align_y,
+                                icon->par_mode, z);
             }
             return;
         }

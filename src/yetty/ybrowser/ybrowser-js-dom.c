@@ -275,9 +275,9 @@ static void dom_mo_notify_attributes(JSContext *ctx, lxb_dom_element_t *el, cons
                                      size_t name_len, const char *old_value);
 static void dom_mo_notify_character_data(JSContext *ctx, lxb_dom_node_t *target,
                                          const char *old_value);
-static void dom_mo_notify_child_list(JSContext *ctx, lxb_dom_node_t *parent,
-                                     lxb_dom_node_t *added, lxb_dom_node_t *removed,
-                                     lxb_dom_node_t *prev_sibling, lxb_dom_node_t *next_sibling);
+static void dom_mo_notify_child_list(JSContext *ctx, lxb_dom_node_t *parent, lxb_dom_node_t *added,
+                                     lxb_dom_node_t *removed, lxb_dom_node_t *prev_sibling,
+                                     lxb_dom_node_t *next_sibling);
 /* True when any live observer could care about a mutation of `type_flag` at
  * `target` — lets a hot mutation path skip capturing an old value nobody wants. */
 static int dom_mo_any_interest(JSContext *ctx, lxb_dom_node_t *target, int type_flag);
@@ -386,8 +386,7 @@ static void wrap_cache_clear(JSContext *ctx)
  * chardata_proto field comment for why elements must not report `data`. */
 static void apply_chardata_proto(JSContext *ctx, JSValueConst v, const lxb_dom_node_t *n)
 {
-    if (n == NULL || (n->type != LXB_DOM_NODE_TYPE_TEXT &&
-                      n->type != LXB_DOM_NODE_TYPE_COMMENT &&
+    if (n == NULL || (n->type != LXB_DOM_NODE_TYPE_TEXT && n->type != LXB_DOM_NODE_TYPE_COMMENT &&
                       n->type != LXB_DOM_NODE_TYPE_PROCESSING_INSTRUCTION)) {
         return;
     }
@@ -1896,8 +1895,7 @@ static void clone_fixup_template_content(lxb_dom_node_t *source, lxb_dom_node_t 
                     lxb_dom_document_fragment_interface_create(clone->owner_document);
             }
             if (clone_template->content != NULL) {
-                lxb_dom_node_t *source_fragment =
-                    lxb_dom_interface_node(source_template->content);
+                lxb_dom_node_t *source_fragment = lxb_dom_interface_node(source_template->content);
                 lxb_dom_node_t *clone_fragment = lxb_dom_interface_node(clone_template->content);
                 /* Defensive: a freshly cloned template's content should be empty,
                  * but clear anything present so we never double-fill. */
@@ -2062,8 +2060,7 @@ static JSValue idl_attr_set(JSContext *ctx, JSValueConst this_val, JSValueConst 
 static JSValue js_el_content_get(JSContext *ctx, JSValueConst this_val)
 {
     lxb_dom_node_t *node = unwrap_node(ctx, this_val);
-    if (node && node->type == LXB_DOM_NODE_TYPE_ELEMENT &&
-        node->local_name == LXB_TAG_TEMPLATE) {
+    if (node && node->type == LXB_DOM_NODE_TYPE_ELEMENT && node->local_name == LXB_TAG_TEMPLATE) {
         lxb_html_template_element_t *tmpl = lxb_html_interface_template(node);
         if (tmpl->content) {
             return wrap_node_any(ctx, lxb_dom_interface_node(tmpl->content));
@@ -2085,8 +2082,7 @@ static JSValue js_el_content_get(JSContext *ctx, JSValueConst this_val)
 static JSValue js_el_content_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
 {
     lxb_dom_node_t *node = unwrap_node(ctx, this_val);
-    if (node && node->type == LXB_DOM_NODE_TYPE_ELEMENT &&
-        node->local_name == LXB_TAG_TEMPLATE) {
+    if (node && node->type == LXB_DOM_NODE_TYPE_ELEMENT && node->local_name == LXB_TAG_TEMPLATE) {
         return JS_UNDEFINED;
     }
     return idl_attr_set(ctx, this_val, val, "content", sizeof("content") - 1);
@@ -2166,9 +2162,9 @@ static JSValue js_el_textContent_set(JSContext *ctx, JSValueConst this_val, JSVa
 		 * turns any retained reference into a use-after-free. Detached
 		 * nodes stay allocated until the document dies — same contract
 		 * as the innerHTML setter below. */
-        int is_char_data = (n->type == LXB_DOM_NODE_TYPE_TEXT ||
-                            n->type == LXB_DOM_NODE_TYPE_COMMENT ||
-                            n->type == LXB_DOM_NODE_TYPE_CDATA_SECTION);
+        int is_char_data =
+            (n->type == LXB_DOM_NODE_TYPE_TEXT || n->type == LXB_DOM_NODE_TYPE_COMMENT ||
+             n->type == LXB_DOM_NODE_TYPE_CDATA_SECTION);
         char *old_value = NULL;
         if (is_char_data && dom_mo_any_interest(ctx, n, MO_CHARACTER_DATA)) {
             lxb_dom_character_data_t *cd = lxb_dom_interface_character_data(n);
@@ -2790,7 +2786,8 @@ static JSValue js_el_localName_get(JSContext *ctx, JSValueConst this_val)
     if (JS_GetOpaque(this_val, dom_state(ctx)->class_document_id)) {
         return JS_NULL;
     }
-    lxb_dom_node_t *node = (lxb_dom_node_t *)JS_GetOpaque(this_val, dom_state(ctx)->class_element_id);
+    lxb_dom_node_t *node =
+        (lxb_dom_node_t *)JS_GetOpaque(this_val, dom_state(ctx)->class_element_id);
     if (node && node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
         return JS_NULL;
     }
@@ -2867,7 +2864,8 @@ static JSValue js_el_hidden_set(JSContext *ctx, JSValueConst this_val, JSValueCo
     }
     int on = JS_ToBool(ctx, val);
     size_t vlen = 0;
-    bool already = lxb_dom_element_get_attribute(el, (const lxb_char_t *)"hidden", 6, &vlen) != NULL;
+    bool already =
+        lxb_dom_element_get_attribute(el, (const lxb_char_t *)"hidden", 6, &vlen) != NULL;
     /* Reflect only a real change. Frameworks re-assign `el.hidden = false` on
      * already-visible nodes every render tick; without this guard each no-op
      * assignment marked the tree dirty and queued a MutationObserver record. */
@@ -2876,7 +2874,8 @@ static JSValue js_el_hidden_set(JSContext *ctx, JSValueConst this_val, JSValueCo
     }
     char *old_value = mo_capture_attr(ctx, el, "hidden", 6);
     if (on > 0) {
-        lxb_dom_element_set_attribute(el, (const lxb_char_t *)"hidden", 6, (const lxb_char_t *)"", 0);
+        lxb_dom_element_set_attribute(el, (const lxb_char_t *)"hidden", 6, (const lxb_char_t *)"",
+                                      0);
     } else {
         lxb_dom_element_remove_attribute(el, (const lxb_char_t *)"hidden", 6);
     }
@@ -3839,8 +3838,7 @@ static void js_dom_define_iterator(JSContext *ctx, JSValueConst object, JSValue 
     JSValue symbol_ctor = JS_GetPropertyStr(ctx, global, "Symbol");
     JSValue iterator_sym = JS_GetPropertyStr(ctx, symbol_ctor, "iterator");
     JSAtom iterator_atom = JS_ValueToAtom(ctx, iterator_sym);
-    JS_DefinePropertyValue(ctx, object, iterator_atom, fn,
-                           JS_PROP_CONFIGURABLE | JS_PROP_WRITABLE);
+    JS_DefinePropertyValue(ctx, object, iterator_atom, fn, JS_PROP_CONFIGURABLE | JS_PROP_WRITABLE);
     JS_FreeAtom(ctx, iterator_atom);
     JS_FreeValue(ctx, iterator_sym);
     JS_FreeValue(ctx, symbol_ctor);
@@ -3915,9 +3913,8 @@ static JSValue js_el_classList_get(JSContext *ctx, JSValueConst this_val)
     JS_SetOpaque(v, el);
     JS_SetPropertyFunctionList(ctx, v, classlist_funcs,
                                sizeof(classlist_funcs) / sizeof(classlist_funcs[0]));
-    js_dom_define_iterator(ctx, v,
-                           JS_NewCFunction(ctx, js_classlist_symbol_iterator,
-                                           "[Symbol.iterator]", 0));
+    js_dom_define_iterator(
+        ctx, v, JS_NewCFunction(ctx, js_classlist_symbol_iterator, "[Symbol.iterator]", 0));
     return v;
 }
 
@@ -4063,8 +4060,7 @@ static JSValue js_el_getAttributeNames_stub(JSContext *ctx, JSValueConst this_va
  * for the NamedNodeMap surface. Polymer/kevlar element constructors spread
  * `[...this.attributes]`; an undefined value there throws
  * "cannot read property 'Symbol.iterator' of undefined". */
-static JSValue js_el_attr_item(JSContext *ctx, JSValueConst this_val, int argc,
-                               JSValueConst *argv)
+static JSValue js_el_attr_item(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     if (argc < 1) {
         return JS_NULL;
@@ -4144,8 +4140,7 @@ static JSValue js_el_attributes_get(JSContext *ctx, JSValueConst this_val)
             JS_SetPropertyUint32(ctx, arr, i++, entry);
         }
     }
-    JS_SetPropertyStr(ctx, arr, "item",
-                      JS_NewCFunction(ctx, js_el_attr_item, "item", 1));
+    JS_SetPropertyStr(ctx, arr, "item", JS_NewCFunction(ctx, js_el_attr_item, "item", 1));
     JS_SetPropertyStr(ctx, arr, "getNamedItem",
                       JS_NewCFunction(ctx, js_el_attr_getNamedItem, "getNamedItem", 1));
     return arr;
@@ -4392,7 +4387,6 @@ JSValue yetty_ylexbor_js_getComputedStyle(JSContext *ctx, JSValueConst this_val,
     return out;
 }
 
-
 /* clientWidth/Height + offsetWidth/Height. All four derive from the same
  * laid-out box union getBoundingClientRect() uses (border box), so the box-kind
  * knowledge lives here once rather than being duplicated per getter:
@@ -4531,8 +4525,8 @@ static JSValue js_el_offsetHeight_get(JSContext *ctx, JSValueConst this_val)
  * target property was already set to the dispatch origin by the caller.
  * Returns 1 when a handler called stopImmediatePropagation(). */
 static int dispatch_fire_level(JSContext *ctx, struct js_dom_state *state, lxb_dom_element_t *el,
-                               const char *type, JSValueConst event,
-                               JSValueConst current_target, int snapshot)
+                               const char *type, JSValueConst event, JSValueConst current_target,
+                               int snapshot)
 {
     JS_SetPropertyStr(ctx, (JSValue)event, "currentTarget", JS_DupValue(ctx, current_target));
     for (int i = 0; i < snapshot; i++) {
@@ -4616,8 +4610,7 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
 
     if (el != NULL && bubbles && !immediate_stopped &&
         !dispatch_propagation_stopped(ctx, argv[0])) {
-        for (lxb_dom_node_t *node = lxb_dom_interface_node(el)->parent; node;
-             node = node->parent) {
+        for (lxb_dom_node_t *node = lxb_dom_interface_node(el)->parent; node; node = node->parent) {
             if (node->type == LXB_DOM_NODE_TYPE_DOCUMENT_FRAGMENT && !composed) {
                 break; /* non-composed events stay inside their shadow tree */
             }
@@ -4626,8 +4619,8 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
             }
             lxb_dom_element_t *ancestor = lxb_dom_interface_element(node);
             JSValue ancestor_wrap = wrap_element(ctx, ancestor);
-            immediate_stopped = dispatch_fire_level(ctx, state, ancestor, type, argv[0],
-                                                    ancestor_wrap, snapshot);
+            immediate_stopped =
+                dispatch_fire_level(ctx, state, ancestor, type, argv[0], ancestor_wrap, snapshot);
             JS_FreeValue(ctx, ancestor_wrap);
             if (immediate_stopped || dispatch_propagation_stopped(ctx, argv[0])) {
                 break;
@@ -5040,9 +5033,9 @@ static void dom_mo_notify_character_data(JSContext *ctx, lxb_dom_node_t *target,
     }
 }
 
-static void dom_mo_notify_child_list(JSContext *ctx, lxb_dom_node_t *parent,
-                                     lxb_dom_node_t *added, lxb_dom_node_t *removed,
-                                     lxb_dom_node_t *prev_sibling, lxb_dom_node_t *next_sibling)
+static void dom_mo_notify_child_list(JSContext *ctx, lxb_dom_node_t *parent, lxb_dom_node_t *added,
+                                     lxb_dom_node_t *removed, lxb_dom_node_t *prev_sibling,
+                                     lxb_dom_node_t *next_sibling)
 {
     struct js_dom_state *state = dom_state(ctx);
     if (state == NULL || state->mutation_observer_count == 0) {
@@ -5246,8 +5239,7 @@ static void mutation_observer_finalizer(JSRuntime *rt, JSValue val)
     if (state == NULL) {
         return;
     }
-    struct mutation_observer *observer =
-        JS_GetOpaque(val, state->class_mutation_observer_id);
+    struct mutation_observer *observer = JS_GetOpaque(val, state->class_mutation_observer_id);
     if (observer == NULL) {
         return;
     }
@@ -5316,8 +5308,8 @@ static void install_mutation_observer(JSContext *ctx, JSValueConst global)
     JS_SetPropertyStr(ctx, proto, "takeRecords",
                       JS_NewCFunction(ctx, js_mutation_observer_take_records, "takeRecords", 0));
     JS_SetClassProto(ctx, state->class_mutation_observer_id, JS_DupValue(ctx, proto));
-    JSValue ctor =
-        JS_NewCFunction2(ctx, js_mutation_observer_ctor, "MutationObserver", 1, JS_CFUNC_constructor, 0);
+    JSValue ctor = JS_NewCFunction2(ctx, js_mutation_observer_ctor, "MutationObserver", 1,
+                                    JS_CFUNC_constructor, 0);
     JS_SetConstructor(ctx, ctor, proto);
     JS_SetPropertyStr(ctx, (JSValue)global, "MutationObserver", ctor);
     /* WebKitMutationObserver is the legacy alias some libraries feature-detect. */

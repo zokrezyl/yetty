@@ -18,76 +18,65 @@
 #include "charset/codecs/8859_tables.h"
 
 static struct {
-	uint16_t mib;
-	const char *name;
-	size_t len;
-	uint32_t *table;
+    uint16_t mib;
+    const char *name;
+    size_t len;
+    uint32_t *table;
 } known_charsets[] = {
-	{ 0, "ISO-8859-1", SLEN("ISO-8859-1"), t1 },
-	{ 0, "ISO-8859-2", SLEN("ISO-8859-2"), t2 },
-	{ 0, "ISO-8859-3", SLEN("ISO-8859-3"), t3 },
-	{ 0, "ISO-8859-4", SLEN("ISO-8859-4"), t4 },
-	{ 0, "ISO-8859-5", SLEN("ISO-8859-5"), t5 },
-	{ 0, "ISO-8859-6", SLEN("ISO-8859-6"), t6 },
-	{ 0, "ISO-8859-7", SLEN("ISO-8859-7"), t7 },
-	{ 0, "ISO-8859-8", SLEN("ISO-8859-8"), t8 },
-	{ 0, "ISO-8859-9", SLEN("ISO-8859-9"), t9 },
-	{ 0, "ISO-8859-10", SLEN("ISO-8859-10"), t10 },
-	{ 0, "ISO-8859-11", SLEN("ISO-8859-11"), t11 },
-	{ 0, "ISO-8859-13", SLEN("ISO-8859-13"), t13 },
-	{ 0, "ISO-8859-14", SLEN("ISO-8859-14"), t14 },
-	{ 0, "ISO-8859-15", SLEN("ISO-8859-15"), t15 },
-	{ 0, "ISO-8859-16", SLEN("ISO-8859-16"), t16 }
-};
+    {0, "ISO-8859-1", SLEN("ISO-8859-1"), t1},    {0, "ISO-8859-2", SLEN("ISO-8859-2"), t2},
+    {0, "ISO-8859-3", SLEN("ISO-8859-3"), t3},    {0, "ISO-8859-4", SLEN("ISO-8859-4"), t4},
+    {0, "ISO-8859-5", SLEN("ISO-8859-5"), t5},    {0, "ISO-8859-6", SLEN("ISO-8859-6"), t6},
+    {0, "ISO-8859-7", SLEN("ISO-8859-7"), t7},    {0, "ISO-8859-8", SLEN("ISO-8859-8"), t8},
+    {0, "ISO-8859-9", SLEN("ISO-8859-9"), t9},    {0, "ISO-8859-10", SLEN("ISO-8859-10"), t10},
+    {0, "ISO-8859-11", SLEN("ISO-8859-11"), t11}, {0, "ISO-8859-13", SLEN("ISO-8859-13"), t13},
+    {0, "ISO-8859-14", SLEN("ISO-8859-14"), t14}, {0, "ISO-8859-15", SLEN("ISO-8859-15"), t15},
+    {0, "ISO-8859-16", SLEN("ISO-8859-16"), t16}};
 
 /**
  * ISO-8859-n charset codec
  */
 typedef struct charset_8859_codec {
-	parserutils_charset_codec base;	/**< Base class */
+    parserutils_charset_codec base; /**< Base class */
 
-	uint32_t *table;		/**< Mapping table for 0xA0-0xFF */
+    uint32_t *table; /**< Mapping table for 0xA0-0xFF */
 
 #define READ_BUFSIZE (8)
-	uint32_t read_buf[READ_BUFSIZE];	/**< Buffer for partial
+    uint32_t read_buf[READ_BUFSIZE]; /**< Buffer for partial
 						 * output sequences (decode)
 						 * (host-endian) */
-	size_t read_len;		/**< Character length of read_buf */
+    size_t read_len;                 /**< Character length of read_buf */
 
 #define WRITE_BUFSIZE (8)
-	uint32_t write_buf[WRITE_BUFSIZE];	/**< Buffer for partial
+    uint32_t write_buf[WRITE_BUFSIZE]; /**< Buffer for partial
 						 * output sequences (encode)
 						 * (host-endian) */
-	size_t write_len;		/**< Character length of write_buf */
+    size_t write_len;                  /**< Character length of write_buf */
 
 } charset_8859_codec;
 
 static bool charset_8859_codec_handles_charset(const char *charset);
 static parserutils_error charset_8859_codec_create(const char *charset,
-		parserutils_charset_codec **codec);
-static parserutils_error charset_8859_codec_destroy(
-		parserutils_charset_codec *codec);
-static parserutils_error charset_8859_codec_encode(
-		parserutils_charset_codec *codec,
-		const uint8_t **source, size_t *sourcelen,
-		uint8_t **dest, size_t *destlen);
-static parserutils_error charset_8859_codec_decode(
-		parserutils_charset_codec *codec,
-		const uint8_t **source, size_t *sourcelen,
-		uint8_t **dest, size_t *destlen);
-static parserutils_error charset_8859_codec_reset(
-		parserutils_charset_codec *codec);
-static inline parserutils_error charset_8859_codec_read_char(
-		charset_8859_codec *c,
-		const uint8_t **source, size_t *sourcelen,
-		uint8_t **dest, size_t *destlen);
-static inline parserutils_error charset_8859_codec_output_decoded_char(
-		charset_8859_codec *c,
-		uint32_t ucs4, uint8_t **dest, size_t *destlen);
-static inline parserutils_error charset_8859_from_ucs4(charset_8859_codec *c,
-		uint32_t ucs4, uint8_t **s, size_t *len);
-static inline parserutils_error charset_8859_to_ucs4(charset_8859_codec *c,
-		const uint8_t *s, size_t len, uint32_t *ucs4);
+                                                   parserutils_charset_codec **codec);
+static parserutils_error charset_8859_codec_destroy(parserutils_charset_codec *codec);
+static parserutils_error charset_8859_codec_encode(parserutils_charset_codec *codec,
+                                                   const uint8_t **source, size_t *sourcelen,
+                                                   uint8_t **dest, size_t *destlen);
+static parserutils_error charset_8859_codec_decode(parserutils_charset_codec *codec,
+                                                   const uint8_t **source, size_t *sourcelen,
+                                                   uint8_t **dest, size_t *destlen);
+static parserutils_error charset_8859_codec_reset(parserutils_charset_codec *codec);
+static inline parserutils_error charset_8859_codec_read_char(charset_8859_codec *c,
+                                                             const uint8_t **source,
+                                                             size_t *sourcelen, uint8_t **dest,
+                                                             size_t *destlen);
+static inline parserutils_error charset_8859_codec_output_decoded_char(charset_8859_codec *c,
+                                                                       uint32_t ucs4,
+                                                                       uint8_t **dest,
+                                                                       size_t *destlen);
+static inline parserutils_error charset_8859_from_ucs4(charset_8859_codec *c, uint32_t ucs4,
+                                                       uint8_t **s, size_t *len);
+static inline parserutils_error charset_8859_to_ucs4(charset_8859_codec *c, const uint8_t *s,
+                                                     size_t len, uint32_t *ucs4);
 
 /**
  * Determine whether this codec handles a specific charset
@@ -97,25 +86,23 @@ static inline parserutils_error charset_8859_to_ucs4(charset_8859_codec *c,
  */
 bool charset_8859_codec_handles_charset(const char *charset)
 {
-	uint32_t i;
-	uint16_t match = parserutils_charset_mibenum_from_name(charset,
-			strlen(charset));
+    uint32_t i;
+    uint16_t match = parserutils_charset_mibenum_from_name(charset, strlen(charset));
 
-	if (known_charsets[0].mib == 0) {
-		for (i = 0; i < N_ELEMENTS(known_charsets); i++) {
-			known_charsets[i].mib =
-				parserutils_charset_mibenum_from_name(
-						known_charsets[i].name,
-						known_charsets[i].len);
-		}
-	}
+    if (known_charsets[0].mib == 0) {
+        for (i = 0; i < N_ELEMENTS(known_charsets); i++) {
+            known_charsets[i].mib = parserutils_charset_mibenum_from_name(known_charsets[i].name,
+                                                                          known_charsets[i].len);
+        }
+    }
 
-	for (i = 0; i < N_ELEMENTS(known_charsets); i++) {
-		if (known_charsets[i].mib == match)
-			return true;
-	}
+    for (i = 0; i < N_ELEMENTS(known_charsets); i++) {
+        if (known_charsets[i].mib == match) {
+            return true;
+        }
+    }
 
-	return false;
+    return false;
 }
 
 /**
@@ -127,45 +114,44 @@ bool charset_8859_codec_handles_charset(const char *charset)
  *         PARSERUTILS_BADPARM on bad parameters,
  *         PARSERUTILS_NOMEM on memory exhausion
  */
-parserutils_error charset_8859_codec_create(const char *charset,
-		parserutils_charset_codec **codec)
+parserutils_error charset_8859_codec_create(const char *charset, parserutils_charset_codec **codec)
 {
-	uint32_t i;
-	charset_8859_codec *c;
-	uint16_t match = parserutils_charset_mibenum_from_name(
-			charset, strlen(charset));
-	uint32_t *table = NULL;
+    uint32_t i;
+    charset_8859_codec *c;
+    uint16_t match = parserutils_charset_mibenum_from_name(charset, strlen(charset));
+    uint32_t *table = NULL;
 
-	for (i = 0; i < N_ELEMENTS(known_charsets); i++) {
-		if (known_charsets[i].mib == match) {
-			table = known_charsets[i].table;
-			break;
-		}
-	}
+    for (i = 0; i < N_ELEMENTS(known_charsets); i++) {
+        if (known_charsets[i].mib == match) {
+            table = known_charsets[i].table;
+            break;
+        }
+    }
 
-	assert(table != NULL);
+    assert(table != NULL);
 
-	c = malloc(sizeof(charset_8859_codec));
-	if (c == NULL)
-		return PARSERUTILS_NOMEM;
+    c = malloc(sizeof(charset_8859_codec));
+    if (c == NULL) {
+        return PARSERUTILS_NOMEM;
+    }
 
-	c->table = table;
+    c->table = table;
 
-	c->read_buf[0] = 0;
-	c->read_len = 0;
+    c->read_buf[0] = 0;
+    c->read_len = 0;
 
-	c->write_buf[0] = 0;
-	c->write_len = 0;
+    c->write_buf[0] = 0;
+    c->write_len = 0;
 
-	/* Finally, populate vtable */
-	c->base.handler.destroy = charset_8859_codec_destroy;
-	c->base.handler.encode = charset_8859_codec_encode;
-	c->base.handler.decode = charset_8859_codec_decode;
-	c->base.handler.reset = charset_8859_codec_reset;
+    /* Finally, populate vtable */
+    c->base.handler.destroy = charset_8859_codec_destroy;
+    c->base.handler.encode = charset_8859_codec_encode;
+    c->base.handler.decode = charset_8859_codec_decode;
+    c->base.handler.reset = charset_8859_codec_reset;
 
-	*codec = (parserutils_charset_codec *) c;
+    *codec = (parserutils_charset_codec *)c;
 
-	return PARSERUTILS_OK;
+    return PARSERUTILS_OK;
 }
 
 /**
@@ -174,11 +160,11 @@ parserutils_error charset_8859_codec_create(const char *charset,
  * \param codec  The codec to destroy
  * \return PARSERUTILS_OK on success, appropriate error otherwise
  */
-parserutils_error charset_8859_codec_destroy (parserutils_charset_codec *codec)
+parserutils_error charset_8859_codec_destroy(parserutils_charset_codec *codec)
 {
-	UNUSED(codec);
+    UNUSED(codec);
 
-	return PARSERUTILS_OK;
+    return PARSERUTILS_OK;
 }
 
 /**
@@ -209,81 +195,80 @@ parserutils_error charset_8859_codec_destroy (parserutils_charset_codec *codec)
  * ::destlen will be reduced appropriately on exit.
  */
 parserutils_error charset_8859_codec_encode(parserutils_charset_codec *codec,
-		const uint8_t **source, size_t *sourcelen,
-		uint8_t **dest, size_t *destlen)
+                                            const uint8_t **source, size_t *sourcelen,
+                                            uint8_t **dest, size_t *destlen)
 {
-	charset_8859_codec *c = (charset_8859_codec *) codec;
-	uint32_t ucs4;
-	uint32_t *towrite;
-	size_t towritelen;
-	parserutils_error error;
+    charset_8859_codec *c = (charset_8859_codec *)codec;
+    uint32_t ucs4;
+    uint32_t *towrite;
+    size_t towritelen;
+    parserutils_error error;
 
-	/* Process any outstanding characters from the previous call */
-	if (c->write_len > 0) {
-		uint32_t *pwrite = c->write_buf;
+    /* Process any outstanding characters from the previous call */
+    if (c->write_len > 0) {
+        uint32_t *pwrite = c->write_buf;
 
-		while (c->write_len > 0) {
-			error = charset_8859_from_ucs4(c, pwrite[0],
-					dest, destlen);
-			if (error != PARSERUTILS_OK) {
-				uint32_t len;
-				assert(error == PARSERUTILS_NOMEM);
+        while (c->write_len > 0) {
+            error = charset_8859_from_ucs4(c, pwrite[0], dest, destlen);
+            if (error != PARSERUTILS_OK) {
+                uint32_t len;
+                assert(error == PARSERUTILS_NOMEM);
 
-				for (len = 0; len < c->write_len; len++) {
-					c->write_buf[len] = pwrite[len];
-				}
+                for (len = 0; len < c->write_len; len++) {
+                    c->write_buf[len] = pwrite[len];
+                }
 
-				return error;
-			}
+                return error;
+            }
 
-			pwrite++;
-			c->write_len--;
-		}
-	}
+            pwrite++;
+            c->write_len--;
+        }
+    }
 
-	/* Now process the characters for this call */
-	while (*sourcelen > 0) {
-		ucs4 = endian_big_to_host(*((uint32_t *) (void *) *source));
-		towrite = &ucs4;
-		towritelen = 1;
+    /* Now process the characters for this call */
+    while (*sourcelen > 0) {
+        ucs4 = endian_big_to_host(*((uint32_t *)(void *)*source));
+        towrite = &ucs4;
+        towritelen = 1;
 
-		/* Output current characters */
-		while (towritelen > 0) {
-			error = charset_8859_from_ucs4(c, towrite[0], dest,
-					destlen);
-			if (error != PARSERUTILS_OK) {
-				uint32_t len;
-				if (error != PARSERUTILS_NOMEM) {
-					return error;
-				}
+        /* Output current characters */
+        while (towritelen > 0) {
+            error = charset_8859_from_ucs4(c, towrite[0], dest, destlen);
+            if (error != PARSERUTILS_OK) {
+                uint32_t len;
+                if (error != PARSERUTILS_NOMEM) {
+                    return error;
+                }
 
-				/* Insufficient output space */
-				assert(towritelen < WRITE_BUFSIZE);
+                /* Insufficient output space */
+                assert(towritelen < WRITE_BUFSIZE);
 
-				c->write_len = towritelen;
+                c->write_len = towritelen;
 
-				/* Copy pending chars to save area, for
+                /* Copy pending chars to save area, for
 				 * processing next call. */
-				for (len = 0; len < towritelen; len++)
-					c->write_buf[len] = towrite[len];
+                for (len = 0; len < towritelen; len++) {
+                    c->write_buf[len] = towrite[len];
+                }
 
-				/* Claim character we've just buffered,
+                /* Claim character we've just buffered,
 				 * so it's not reprocessed */
-				*source += 4;
-				*sourcelen -= 4;
+                *source += 4;
+                *sourcelen -= 4;
 
-				return PARSERUTILS_NOMEM;
-			}
+                return PARSERUTILS_NOMEM;
+            }
 
-			towrite++;
-			towritelen--;
-		}
+            towrite++;
+            towritelen--;
+        }
 
-		*source += 4;
-		*sourcelen -= 4;
-	}
+        *source += 4;
+        *sourcelen -= 4;
+    }
 
-	return PARSERUTILS_OK;
+    return PARSERUTILS_OK;
 }
 
 /**
@@ -328,49 +313,48 @@ parserutils_error charset_8859_codec_encode(parserutils_charset_codec *codec,
  * Call this with a source length of 0 to flush the output buffer.
  */
 parserutils_error charset_8859_codec_decode(parserutils_charset_codec *codec,
-		const uint8_t **source, size_t *sourcelen,
-		uint8_t **dest, size_t *destlen)
+                                            const uint8_t **source, size_t *sourcelen,
+                                            uint8_t **dest, size_t *destlen)
 {
-	charset_8859_codec *c = (charset_8859_codec *) codec;
-	parserutils_error error;
+    charset_8859_codec *c = (charset_8859_codec *)codec;
+    parserutils_error error;
 
-	if (c->read_len > 0) {
-		/* Output left over from last decode */
-		uint32_t *pread = c->read_buf;
+    if (c->read_len > 0) {
+        /* Output left over from last decode */
+        uint32_t *pread = c->read_buf;
 
-		while (c->read_len > 0 && *destlen >= c->read_len * 4) {
-			*((uint32_t *) (void *) *dest) =
-					endian_host_to_big(pread[0]);
+        while (c->read_len > 0 && *destlen >= c->read_len * 4) {
+            *((uint32_t *)(void *)*dest) = endian_host_to_big(pread[0]);
 
-			*dest += 4;
-			*destlen -= 4;
+            *dest += 4;
+            *destlen -= 4;
 
-			pread++;
-			c->read_len--;
-		}
+            pread++;
+            c->read_len--;
+        }
 
-		if (*destlen < c->read_len * 4) {
-			/* Ran out of output buffer */
-			size_t i;
+        if (*destlen < c->read_len * 4) {
+            /* Ran out of output buffer */
+            size_t i;
 
-			/* Shuffle remaining output down */
-			for (i = 0; i < c->read_len; i++)
-				c->read_buf[i] = pread[i];
+            /* Shuffle remaining output down */
+            for (i = 0; i < c->read_len; i++) {
+                c->read_buf[i] = pread[i];
+            }
 
-			return PARSERUTILS_NOMEM;
-		}
-	}
+            return PARSERUTILS_NOMEM;
+        }
+    }
 
-	/* Finally, the "normal" case; process all outstanding characters */
-	while (*sourcelen > 0) {
-		error = charset_8859_codec_read_char(c,
-				source, sourcelen, dest, destlen);
-		if (error != PARSERUTILS_OK) {
-			return error;
-		}
-	}
+    /* Finally, the "normal" case; process all outstanding characters */
+    while (*sourcelen > 0) {
+        error = charset_8859_codec_read_char(c, source, sourcelen, dest, destlen);
+        if (error != PARSERUTILS_OK) {
+            return error;
+        }
+    }
 
-	return PARSERUTILS_OK;
+    return PARSERUTILS_OK;
 }
 
 /**
@@ -381,17 +365,16 @@ parserutils_error charset_8859_codec_decode(parserutils_charset_codec *codec,
  */
 parserutils_error charset_8859_codec_reset(parserutils_charset_codec *codec)
 {
-	charset_8859_codec *c = (charset_8859_codec *) codec;
+    charset_8859_codec *c = (charset_8859_codec *)codec;
 
-	c->read_buf[0] = 0;
-	c->read_len = 0;
+    c->read_buf[0] = 0;
+    c->read_len = 0;
 
-	c->write_buf[0] = 0;
-	c->write_len = 0;
+    c->write_buf[0] = 0;
+    c->write_len = 0;
 
-	return PARSERUTILS_OK;
+    return PARSERUTILS_OK;
 }
-
 
 /**
  * Read a character from the ISO-8859-n to UCS-4 (big endian)
@@ -421,51 +404,47 @@ parserutils_error charset_8859_codec_reset(parserutils_charset_codec *codec)
  *
  * ::destlen will be reduced appropriately on exit.
  */
-parserutils_error charset_8859_codec_read_char(charset_8859_codec *c,
-		const uint8_t **source, size_t *sourcelen,
-		uint8_t **dest, size_t *destlen)
+parserutils_error charset_8859_codec_read_char(charset_8859_codec *c, const uint8_t **source,
+                                               size_t *sourcelen, uint8_t **dest, size_t *destlen)
 {
-	uint32_t ucs4;
-	parserutils_error error;
+    uint32_t ucs4;
+    parserutils_error error;
 
-	/* Convert a single character */
-	error = charset_8859_to_ucs4(c, *source, *sourcelen, &ucs4);
-	if (error == PARSERUTILS_OK) {
-		/* Read a character */
-		error = charset_8859_codec_output_decoded_char(c,
-				ucs4, dest, destlen);
-		if (error == PARSERUTILS_OK || error == PARSERUTILS_NOMEM) {
-			/* output succeeded; update source pointers */
-			*source += 1;
-			*sourcelen -= 1;
-		}
+    /* Convert a single character */
+    error = charset_8859_to_ucs4(c, *source, *sourcelen, &ucs4);
+    if (error == PARSERUTILS_OK) {
+        /* Read a character */
+        error = charset_8859_codec_output_decoded_char(c, ucs4, dest, destlen);
+        if (error == PARSERUTILS_OK || error == PARSERUTILS_NOMEM) {
+            /* output succeeded; update source pointers */
+            *source += 1;
+            *sourcelen -= 1;
+        }
 
-		return error;
-	} else if (error == PARSERUTILS_NEEDDATA) {
-		/* Can only happen if sourcelen == 0 */
-		return error;
-	} else if (error == PARSERUTILS_INVALID) {
-		/* Illegal input sequence */
+        return error;
+    } else if (error == PARSERUTILS_NEEDDATA) {
+        /* Can only happen if sourcelen == 0 */
+        return error;
+    } else if (error == PARSERUTILS_INVALID) {
+        /* Illegal input sequence */
 
-		/* Strict errormode; simply flag invalid character */
-		if (c->base.errormode ==
-				PARSERUTILS_CHARSET_CODEC_ERROR_STRICT) {
-			return PARSERUTILS_INVALID;
-		}
+        /* Strict errormode; simply flag invalid character */
+        if (c->base.errormode == PARSERUTILS_CHARSET_CODEC_ERROR_STRICT) {
+            return PARSERUTILS_INVALID;
+        }
 
-		/* output U+FFFD and continue processing. */
-		error = charset_8859_codec_output_decoded_char(c,
-				0xFFFD, dest, destlen);
-		if (error == PARSERUTILS_OK || error == PARSERUTILS_NOMEM) {
-			/* output succeeded; update source pointers */
-			*source += 1;
-			*sourcelen -= 1;
-		}
+        /* output U+FFFD and continue processing. */
+        error = charset_8859_codec_output_decoded_char(c, 0xFFFD, dest, destlen);
+        if (error == PARSERUTILS_OK || error == PARSERUTILS_NOMEM) {
+            /* output succeeded; update source pointers */
+            *source += 1;
+            *sourcelen -= 1;
+        }
 
-		return error;
-	}
+        return error;
+    }
 
-	return PARSERUTILS_OK;
+    return PARSERUTILS_OK;
 }
 
 /**
@@ -478,22 +457,22 @@ parserutils_error charset_8859_codec_read_char(charset_8859_codec *c,
  * \return PARSERUTILS_OK          on success,
  *         PARSERUTILS_NOMEM       if output buffer is too small,
  */
-parserutils_error charset_8859_codec_output_decoded_char(charset_8859_codec *c,
-		uint32_t ucs4, uint8_t **dest, size_t *destlen)
+parserutils_error charset_8859_codec_output_decoded_char(charset_8859_codec *c, uint32_t ucs4,
+                                                         uint8_t **dest, size_t *destlen)
 {
-	if (*destlen < 4) {
-		/* Run out of output buffer */
-		c->read_len = 1;
-		c->read_buf[0] = ucs4;
+    if (*destlen < 4) {
+        /* Run out of output buffer */
+        c->read_len = 1;
+        c->read_buf[0] = ucs4;
 
-		return PARSERUTILS_NOMEM;
-	}
+        return PARSERUTILS_NOMEM;
+    }
 
-	*((uint32_t *) (void *) *dest) = endian_host_to_big(ucs4);
-	*dest += 4;
-	*destlen -= 4;
+    *((uint32_t *)(void *)*dest) = endian_host_to_big(ucs4);
+    *dest += 4;
+    *destlen -= 4;
 
-	return PARSERUTILS_OK;
+    return PARSERUTILS_OK;
 }
 
 /**
@@ -512,41 +491,43 @@ parserutils_error charset_8859_codec_output_decoded_char(charset_8859_codec *c,
  *
  * On successful conversion, *s and *len will be updated.
  */
-parserutils_error charset_8859_from_ucs4(charset_8859_codec *c,
-		uint32_t ucs4, uint8_t **s, size_t *len)
+parserutils_error charset_8859_from_ucs4(charset_8859_codec *c, uint32_t ucs4, uint8_t **s,
+                                         size_t *len)
 {
-	uint8_t out = 0;
+    uint8_t out = 0;
 
-	if (*len < 1)
-		return PARSERUTILS_NOMEM;
+    if (*len < 1) {
+        return PARSERUTILS_NOMEM;
+    }
 
-	if (ucs4 < 0x80) {
-		/* ASCII */
-		out = ucs4;
-	} else {
-		uint32_t i;
+    if (ucs4 < 0x80) {
+        /* ASCII */
+        out = ucs4;
+    } else {
+        uint32_t i;
 
-		for (i = 0; i < 96; i++) {
-			if (ucs4 == c->table[i])
-				break;
-		}
+        for (i = 0; i < 96; i++) {
+            if (ucs4 == c->table[i]) {
+                break;
+            }
+        }
 
-		if (i == 96) {
-			if (c->base.errormode ==
-					PARSERUTILS_CHARSET_CODEC_ERROR_STRICT)
-				return PARSERUTILS_INVALID;
-			else
-				out = '?';
-		} else {
-			out = 0xA0 + i;
-		}
-	}
+        if (i == 96) {
+            if (c->base.errormode == PARSERUTILS_CHARSET_CODEC_ERROR_STRICT) {
+                return PARSERUTILS_INVALID;
+            } else {
+                out = '?';
+            }
+        } else {
+            out = 0xA0 + i;
+        }
+    }
 
-	*(*s) = out;
-	(*s)++;
-	(*len)--;
+    *(*s) = out;
+    (*s)++;
+    (*len)--;
 
-	return PARSERUTILS_OK;
+    return PARSERUTILS_OK;
 }
 
 /**
@@ -560,32 +541,31 @@ parserutils_error charset_8859_from_ucs4(charset_8859_codec *c,
  *         PARSERUTILS_NEEDDATA if there's insufficient input data
  *         PARSERUTILS_INVALID if the character cannot be represented
  */
-parserutils_error charset_8859_to_ucs4(charset_8859_codec *c,
-		const uint8_t *s, size_t len, uint32_t *ucs4)
+parserutils_error charset_8859_to_ucs4(charset_8859_codec *c, const uint8_t *s, size_t len,
+                                       uint32_t *ucs4)
 {
-	uint32_t out;
+    uint32_t out;
 
-	if (len < 1)
-		return PARSERUTILS_NEEDDATA;
+    if (len < 1) {
+        return PARSERUTILS_NEEDDATA;
+    }
 
-	if (*s < 0x80) {
-		out = *s;
-	} else if (*s >= 0xA0) {
-		if (c->table[*s - 0xA0] == 0xFFFF)
-			return PARSERUTILS_INVALID;
+    if (*s < 0x80) {
+        out = *s;
+    } else if (*s >= 0xA0) {
+        if (c->table[*s - 0xA0] == 0xFFFF) {
+            return PARSERUTILS_INVALID;
+        }
 
-		out = c->table[*s - 0xA0];
-	} else {
-		return PARSERUTILS_INVALID;
-	}
+        out = c->table[*s - 0xA0];
+    } else {
+        return PARSERUTILS_INVALID;
+    }
 
-	*ucs4 = out;
+    *ucs4 = out;
 
-	return PARSERUTILS_OK;
+    return PARSERUTILS_OK;
 }
 
-const parserutils_charset_handler charset_8859_codec_handler = {
-	charset_8859_codec_handles_charset,
-	charset_8859_codec_create
-};
-
+const parserutils_charset_handler charset_8859_codec_handler = {charset_8859_codec_handles_charset,
+                                                                charset_8859_codec_create};

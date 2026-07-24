@@ -75,7 +75,7 @@ USE_CCACHE ?= 0
 # tells distcc to reach the host over ssh, resolving host/port/user/identity
 # from ~/.ssh/config. That alias enables ControlMaster, so all the per-job
 # ssh connections share one persistent master instead of re-handshaking.
-DISTCC_HOSTS ?= @nixem-remote-yetty-build
+DISTCC_HOSTS ?= localhost
 export DISTCC_HOSTS
 
 # Android builds run on the plain host toolchain — no nix.

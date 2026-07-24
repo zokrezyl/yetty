@@ -1391,7 +1391,8 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                     }
                     c = &r->boxes.data[cidx];
                     if (c->css_height_set && c->css_height >= 0.0f) {
-                        h = used_border_box_height_from_spec(c, c->css_height); /* explicit incl 0 */
+                        h = used_border_box_height_from_spec(c,
+                                                             c->css_height); /* explicit incl 0 */
                         c->height_source = YL_SRC_CSS;
                     } else if (c->css_height > 0.0f) {
                         h = c->css_height; /* intrinsic placeholder — as-is */
@@ -1810,8 +1811,7 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                  * here — on the ROW cross (height) axis add the image's own
                  * border exactly once, like every other item. Column cross is
                  * width, outside this height contract. */
-                cross_used = column_dir ? img_cross
-                                        : img_cross + c->border_top + c->border_bottom;
+                cross_used = column_dir ? img_cross : img_cross + c->border_top + c->border_bottom;
                 cross_source = YL_SRC_IMG_INTRINSIC;
             }
         }
@@ -1824,10 +1824,9 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
          * indefinite percentage) stretches. `cross` == natural_h[i] already
          * carries the border-box value for these cases. */
         bool cross_pinned =
-            column_dir
-                ? (c->css_width > 0.0f)
-                : ((c->css_height_set && c->css_height >= 0.0f) || c->css_height > 0.0f ||
-                   (c->css_height < 0.0f && row_cross_definite));
+            column_dir ? (c->css_width > 0.0f)
+                       : ((c->css_height_set && c->css_height >= 0.0f) || c->css_height > 0.0f ||
+                          (c->css_height < 0.0f && row_cross_definite));
         if (cross_pinned) {
             cross_used = cross;
             cross_source = YL_SRC_CSS;
@@ -3204,8 +3203,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         } else if (self->grid_tracks[c].is_auto) {
             fixed_sum += auto_w[c];
         } else if (self->grid_tracks[c].is_pct) {
-            float track_w = self->grid_tracks[c].value * 0.01f * content_width +
-                            self->grid_tracks[c].offset;
+            float track_w =
+                self->grid_tracks[c].value * 0.01f * content_width + self->grid_tracks[c].offset;
             fixed_sum += track_w > 0.0f ? track_w : 0.0f;
         } else {
             fixed_sum += self->grid_tracks[c].value;
@@ -3226,8 +3225,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         } else if (self->grid_tracks[c].is_auto) {
             col_w[c] = auto_w[c];
         } else if (self->grid_tracks[c].is_pct) {
-            col_w[c] = self->grid_tracks[c].value * 0.01f * content_width +
-                       self->grid_tracks[c].offset;
+            col_w[c] =
+                self->grid_tracks[c].value * 0.01f * content_width + self->grid_tracks[c].offset;
             if (col_w[c] < 0.0f) {
                 col_w[c] = 0.0f;
             }

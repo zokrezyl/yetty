@@ -50,6 +50,10 @@ classes:
         type: "struct yetty_ydraw_drawable_list_registry *"
         get: false
         set: false
+      - name: owns_registry
+        type: bool
+        get: false
+        set: false
       - name: grid_cols
         type: uint32_t
         get: false

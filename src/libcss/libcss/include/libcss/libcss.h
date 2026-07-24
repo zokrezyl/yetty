@@ -9,8 +9,7 @@
 #define libcss_h_
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #include <libwapcaplet/libwapcaplet.h>
@@ -29,4 +28,3 @@ extern "C"
 #endif
 
 #endif
-

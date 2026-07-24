@@ -14,50 +14,41 @@
 #include "select/properties/properties.h"
 #include "select/properties/helpers.h"
 
-css_error css__cascade_border_top_width(uint32_t opv, css_style *style,
-		css_select_state *state)
+css_error css__cascade_border_top_width(uint32_t opv, css_style *style, css_select_state *state)
 {
-	return css__cascade_border_width(opv, style, state, set_border_top_width);
+    return css__cascade_border_width(opv, style, state, set_border_top_width);
 }
 
-css_error css__set_border_top_width_from_hint(const css_hint *hint,
-		css_computed_style *style)
+css_error css__set_border_top_width_from_hint(const css_hint *hint, css_computed_style *style)
 {
-	return set_border_top_width(style, hint->status,
-			hint->data.length.value, hint->data.length.unit);
+    return set_border_top_width(style, hint->status, hint->data.length.value,
+                                hint->data.length.unit);
 }
 
 css_error css__initial_border_top_width(css_select_state *state)
 {
-	return set_border_top_width(state->computed, CSS_BORDER_WIDTH_MEDIUM,
-			0, CSS_UNIT_PX);
+    return set_border_top_width(state->computed, CSS_BORDER_WIDTH_MEDIUM, 0, CSS_UNIT_PX);
 }
 
-css_error css__copy_border_top_width(
-		const css_computed_style *from,
-		css_computed_style *to)
+css_error css__copy_border_top_width(const css_computed_style *from, css_computed_style *to)
 {
-	css_fixed length = 0;
-	css_unit unit = CSS_UNIT_PX;
-	uint8_t type = get_border_top_width(from, &length, &unit);
+    css_fixed length = 0;
+    css_unit unit = CSS_UNIT_PX;
+    uint8_t type = get_border_top_width(from, &length, &unit);
 
-	if (from == to) {
-		return CSS_OK;
-	}
+    if (from == to) {
+        return CSS_OK;
+    }
 
-	return set_border_top_width(to, type, length, unit);
+    return set_border_top_width(to, type, length, unit);
 }
 
 css_error css__compose_border_top_width(const css_computed_style *parent,
-		const css_computed_style *child,
-		css_computed_style *result)
+                                        const css_computed_style *child, css_computed_style *result)
 {
-	css_fixed length = 0;
-	css_unit unit = CSS_UNIT_PX;
-	uint8_t type = get_border_top_width(child, &length, &unit);
+    css_fixed length = 0;
+    css_unit unit = CSS_UNIT_PX;
+    uint8_t type = get_border_top_width(child, &length, &unit);
 
-	return css__copy_border_top_width(
-			type == CSS_BORDER_WIDTH_INHERIT ? parent : child,
-			result);
+    return css__copy_border_top_width(type == CSS_BORDER_WIDTH_INHERIT ? parent : child, result);
 }
-

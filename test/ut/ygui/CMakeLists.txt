@@ -16,9 +16,9 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    ygui_layout
     SOURCES layout-test.c
-    # yetty_ydraw provides the default drawable-list registry the paint test
-    # iterates with (drift-proof prim walk); it PUBLIC-links ydraw_core/ysdf/…
-    LIBS    yetty_ygui yetty_ycore yetty_ydraw_core yetty_ydraw
+    # yetty_ysdf provides the default drawable-list registry the paint test
+    # iterates with (drift-proof prim walk); it PUBLIC-links ydraw_core.
+    LIBS    yetty_ygui yetty_ycore yetty_ysdf yetty_ydraw_core
     SHIMS   trace platform_thread platform_term
     LABELS  unit
     TIMEOUT 30)

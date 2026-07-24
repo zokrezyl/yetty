@@ -68,13 +68,13 @@
  * pipeline (see pack_rgba in ybrowser-paint.c). The level colors reuse the
  * brand palette; warn/error are functional severity colors the brand set does
  * not define (a console must read amber for warnings and red for errors). */
-#define CONSOLE_TEXT 0xFFE4E5E0u    /* #E0E5E4 brand text-primary — log/info */
-#define CONSOLE_MUTED 0xFF626155u   /* #556162 brand text-muted — debug */
-#define CONSOLE_WARN 0xFF4DA3E5u    /* #E5A34D amber */
-#define CONSOLE_ERROR 0xFF4D57E5u   /* #E5574D red */
-#define CONSOLE_INPUT 0xFFA8A79Fu   /* #9FA7A8 brand text-secondary — typed input */
-#define CONSOLE_ACCENT 0xFF92A86Bu  /* #6BA892 brand accent — prompt/marker glyphs */
-#define CONSOLE_RESULT 0xFFA5C574u  /* #74C5A5 brand accent-bright — eval result */
+#define CONSOLE_TEXT 0xFFE4E5E0u   /* #E0E5E4 brand text-primary — log/info */
+#define CONSOLE_MUTED 0xFF626155u  /* #556162 brand text-muted — debug */
+#define CONSOLE_WARN 0xFF4DA3E5u   /* #E5A34D amber */
+#define CONSOLE_ERROR 0xFF4D57E5u  /* #E5574D red */
+#define CONSOLE_INPUT 0xFFA8A79Fu  /* #9FA7A8 brand text-secondary — typed input */
+#define CONSOLE_ACCENT 0xFF92A86Bu /* #6BA892 brand accent — prompt/marker glyphs */
+#define CONSOLE_RESULT 0xFFA5C574u /* #74C5A5 brand accent-bright — eval result */
 #define CONSOLE_FONT_SIZE 13.0f
 #define DEVTOOLS_HEIGHT 300.0f
 
@@ -369,8 +369,9 @@ static int build_ui(struct app *a);
 static void dt_layout(struct yetty_yclass_object *w, float height, float flex_grow, float pad_x,
                       float pad_y);
 static void dt_set_hidden(struct yetty_yclass_object *w, int hidden);
-static struct yetty_yclass_object *dt_add_label(struct yetty_yclass_object *parent, const char *text,
-                                                struct yetty_ycore_rgba color, float font_size);
+static struct yetty_yclass_object *dt_add_label(struct yetty_yclass_object *parent,
+                                                const char *text, struct yetty_ycore_rgba color,
+                                                float font_size);
 static void toggle_devtools(struct app *a);
 static void switch_devtools_tab(struct app *a, int tab);
 static void dom_tree_rebuild(struct app *a);
@@ -1641,9 +1642,9 @@ static int dom_tree_visit(void *user, int depth, int has_children, const char *l
         }
         builder->parent_at_depth[depth + 1] = node_res.value;
     } else {
-        struct yetty_ycore_rgba color = label[0] == '"'
-                                            ? (struct yetty_ycore_rgba){159, 167, 168, 255} /* text */
-                                            : (struct yetty_ycore_rgba){116, 197, 165, 255}; /* elem */
+        struct yetty_ycore_rgba color =
+            label[0] == '"' ? (struct yetty_ycore_rgba){159, 167, 168, 255}  /* text */
+                            : (struct yetty_ycore_rgba){116, 197, 165, 255}; /* elem */
         struct yetty_yclass_object *leaf = dt_add_label(parent, label, color, CONSOLE_FONT_SIZE);
         if (leaf) {
             /* Explicit row height: labels report no intrinsic height to the flex
@@ -1754,8 +1755,8 @@ static void console_add_wrapped(struct app *a, const char *marker, const char *t
         line[copy_len] = '\0';
         err_ok(yetty_ygui_rich_add_line(a->console_log));
         if (first_segment && marker && marker[0]) {
-            err_ok(
-                yetty_ygui_rich_add_span(a->console_log, marker, CONSOLE_FONT_SIZE, CONSOLE_ACCENT));
+            err_ok(yetty_ygui_rich_add_span(a->console_log, marker, CONSOLE_FONT_SIZE,
+                                            CONSOLE_ACCENT));
         }
         err_ok(yetty_ygui_rich_add_span(a->console_log, line, CONSOLE_FONT_SIZE, color));
         first_segment = 0;
@@ -1940,8 +1941,7 @@ static int pump_active(struct app *a)
             a->pending_render = 1;
         }
         /* New page console.* output while DevTools is open → refresh the log. */
-        if (a->devtools_open &&
-            yetty_ylexbor_console_total(t->engine) != a->console_seen_total) {
+        if (a->devtools_open && yetty_ylexbor_console_total(t->engine) != a->console_seen_total) {
             a->console_dirty = 1;
             a->pending_render = 1;
         }
@@ -3166,7 +3166,8 @@ static struct yetty_ycore_int_result sa_frame_tick(struct yetty_yevent_event_lis
                                                    const struct yetty_yui_event *ev)
 {
     (void)ev;
-    struct yetty_ybrowser_app *s = container_of(listener, struct yetty_ybrowser_app, frame_listener);
+    struct yetty_ybrowser_app *s =
+        container_of(listener, struct yetty_ybrowser_app, frame_listener);
     sa_request_render(s);
     return YETTY_OK(yetty_ycore_int, 1);
 }

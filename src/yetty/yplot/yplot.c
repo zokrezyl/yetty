@@ -952,7 +952,8 @@ static struct yetty_ycore_void_result yplot_emit_into_list(
         return YETTY_ERR(yetty_ycore_void, "yplot: serialize failed", ser);
     }
 
-    struct yetty_ydraw_id_result idr = yetty_ydraw_drawable_list_add_prim(dest, drawable_buf, required);
+    struct yetty_ydraw_id_result idr =
+        yetty_ydraw_drawable_list_add_prim(dest, drawable_buf, required);
     free(drawable_buf);
     if (YETTY_IS_ERR(idr)) {
         return YETTY_ERR(yetty_ycore_void, "yplot: ydraw add_prim failed", idr);
@@ -987,9 +988,9 @@ static struct yetty_ycore_void_result yplot_emit_into_list(
 /* Emit a complete render plan into an existing list at an origin — the public
  * shared entry (yplot/resolve.h). Rebuilds the private legend view and a chrome
  * config from the plan's flat fields, then runs the one emission body. */
-struct yetty_ycore_void_result yetty_yplot_emit_into(
-    const struct yetty_yplot_render_plan *plan, struct yetty_ydraw_drawable_list *dest,
-    float origin_x, float origin_y)
+struct yetty_ycore_void_result yetty_yplot_emit_into(const struct yetty_yplot_render_plan *plan,
+                                                     struct yetty_ydraw_drawable_list *dest,
+                                                     float origin_x, float origin_y)
 {
     if (!plan || !dest) {
         return YETTY_ERR(yetty_ycore_void, "yplot emit_into: NULL plan or dest");
@@ -1301,7 +1302,8 @@ static struct yetty_ycore_void_result yplot_resolved_apply_expr(
             } else {
                 return YETTY_ERR(yetty_ycore_void, "yplot: unknown axis attribute (@x/@y)");
             }
-        } else if (yplot_is_declared_curve(expr, target) || yplot_is_declared_buffer(expr, target)) {
+        } else if (yplot_is_declared_curve(expr, target) ||
+                   yplot_is_declared_buffer(expr, target)) {
             /* `color` is the sole supported curve/buffer attribute. Validate the
              * value with the same parser emission uses, so an unparseable color
              * is an error here — not a silent palette-default at emit time. */
@@ -1346,11 +1348,13 @@ static struct yetty_ycore_void_result yplot_options_validate(
         return YETTY_ERR(yetty_ycore_void, "yplot options: height must be positive finite");
     }
     if ((options->present & YETTY_YPLOT_OPT_X_RANGE) &&
-        !(isfinite(options->x_min) && isfinite(options->x_max) && options->x_min < options->x_max)) {
+        !(isfinite(options->x_min) && isfinite(options->x_max) &&
+          options->x_min < options->x_max)) {
         return YETTY_ERR(yetty_ycore_void, "yplot options: x range must be finite and ordered");
     }
     if ((options->present & YETTY_YPLOT_OPT_Y_RANGE) &&
-        !(isfinite(options->y_min) && isfinite(options->y_max) && options->y_min < options->y_max)) {
+        !(isfinite(options->y_min) && isfinite(options->y_max) &&
+          options->y_min < options->y_max)) {
         return YETTY_ERR(yetty_ycore_void, "yplot options: y range must be finite and ordered");
     }
     if ((options->present & YETTY_YPLOT_OPT_FIELD) &&
@@ -1369,9 +1373,10 @@ static struct yetty_ycore_void_result yplot_options_validate(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yplot_resolve(
-    const struct yetty_yexpr_plot_expr *expression, const struct yetty_yplot_options *options,
-    enum yetty_yplot_attr_precedence precedence, struct yetty_yplot_resolved *out)
+struct yetty_ycore_void_result yetty_yplot_resolve(const struct yetty_yexpr_plot_expr *expression,
+                                                   const struct yetty_yplot_options *options,
+                                                   enum yetty_yplot_attr_precedence precedence,
+                                                   struct yetty_yplot_resolved *out)
 {
     if (!expression || !out) {
         return YETTY_ERR(yetty_ycore_void, "yplot resolve: NULL expression or output");

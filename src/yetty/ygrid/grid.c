@@ -39,6 +39,7 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
+#include <yetty/ysdf/default-registry.h>
 #include <yetty/ysdf/handler.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/font-cache.h>
@@ -192,10 +193,14 @@ struct ygrid_id_index_entry {
  *=========================================================================*/
 
 struct YETTY_ANNOTATE("class@ygrid:grid") YETTY_ANNOTATE("parent@yfigure:figure") yetty_ygrid_grid {
-    /* Owned. Built at create time. Used by process_input to walk the
-     * routed-record payload as a stream of SDF/glyph/TEXT_DRAWABLE_LIST records
-     * and feed each one into the ygrid's flat byte buffer. */
+    /* Used by process_input to walk the routed-record payload as a stream
+     * of SDF/glyph/TEXT_DRAWABLE_LIST records and feed each one into the
+     * ygrid's flat byte buffer. Normally BORROWED from the framework's
+     * shared instance (context->runtime->drawable_registry); a headless
+     * grid (no runtime — tests/tooling) builds its own via
+     * yetty_ydraw_drawable_list_registry_create_default() and owns it. */
     struct yetty_ydraw_drawable_list_registry *registry;
+    bool owns_registry;
 
     uint32_t grid_cols;
     uint32_t grid_rows;
@@ -1752,7 +1757,7 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
     if (g->binder) {
         g->binder->ops->destroy(g->binder);
     }
-    if (g->registry) {
+    if (g->registry && g->owns_registry) {
         yetty_ydraw_drawable_list_registry_destroy(g->registry);
     }
     /* Wire-shipped fonts live in this cache (the default font in slot 0 is
@@ -3015,45 +3020,26 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
 
     /* Drawable-list registry — used by process_input to walk the routed-
      * record payload as a stream of SDF / glyph / TEXT_DRAWABLE_LIST / FONT
-     * records. Same handler set the legacy compositor used for its
-     * outer iterator, lifted here so each ygrid is self-sufficient. */
-    {
-        struct yetty_ydraw_drawable_list_registry_ptr_result rr =
-            yetty_ydraw_drawable_list_registry_create();
-        if (YETTY_IS_ERR(rr)) {
+     * records. The registry is immutable after construction, so grids
+     * borrow the framework's shared instance. Only a headless grid (no
+     * runtime) builds its own — through the same constructor. */
+    if (headless) {
+        struct yetty_ydraw_drawable_list_registry_ptr_result registry_res =
+            yetty_ydraw_drawable_list_registry_create_default();
+        if (YETTY_IS_ERR(registry_res)) {
             (void)ygrid_destroy(base);
-            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry", rr);
+            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry", registry_res);
         }
-        g->registry = rr.value;
-        yetty_ydraw_drawable_list_registry_set_default(g->registry, yetty_ysdf_handler);
-        struct yetty_ycore_void_result hr;
-        hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_CMD_BASE,
-                                                    YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
-        if (YETTY_IS_ERR(hr)) {
+        g->registry = registry_res.value;
+        g->owns_registry = true;
+    } else {
+        if (!context->runtime->drawable_registry) {
             (void)ygrid_destroy(base);
-            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry cmd", hr);
+            return YETTY_ERR(yetty_ygrid_grid_ptr,
+                             "ygrid_create: runtime has no drawable registry");
         }
-        hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_RESOURCE_FONT,
-                                                    YETTY_YDRAW_RESOURCE_FONT,
-                                                    yetty_ydraw_font_resource_handler);
-        if (YETTY_IS_ERR(hr)) {
-            (void)ygrid_destroy(base);
-            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry font", hr);
-        }
-        hr = yetty_ydraw_drawable_list_registry_add(
-            g->registry, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
-            yetty_ydraw_text_drawable_list_handler);
-        if (YETTY_IS_ERR(hr)) {
-            (void)ygrid_destroy(base);
-            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry text", hr);
-        }
-        hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_COMPOSITE_TYPE_BASE,
-                                                    0xFFFFFFFFu,
-                                                    yetty_ydraw_composite_record_handler);
-        if (YETTY_IS_ERR(hr)) {
-            (void)ygrid_destroy(base);
-            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry complex", hr);
-        }
+        g->registry = context->runtime->drawable_registry;
+        g->owns_registry = false;
     }
 
     struct yetty_ycore_void_result cr = cells_alloc(g);
