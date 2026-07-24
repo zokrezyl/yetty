@@ -27,72 +27,62 @@
  * Post condition: \a *ctx is updated with the next token to process
  *		   If the input is invalid, then \a *ctx remains unchanged.
  */
-css_error css__parse_overflow(css_language *c,
-		const parserutils_vector *vector, int32_t *ctx,
-		css_style *result)
+css_error css__parse_overflow(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+                              css_style *result)
 {
-	int32_t orig_ctx = *ctx;
-	css_error error1, error2 = CSS_OK;
-	const css_token *token;
-	enum flag_value flag_value;
-	bool match;
+    int32_t orig_ctx = *ctx;
+    css_error error1, error2 = CSS_OK;
+    const css_token *token;
+    enum flag_value flag_value;
+    bool match;
 
-	token = parserutils_vector_iterate(vector, ctx);
-	if ((token == NULL) || ((token->type != CSS_TOKEN_IDENT))) {
-		*ctx = orig_ctx;
-		return CSS_INVALID;
-	}
+    token = parserutils_vector_iterate(vector, ctx);
+    if ((token == NULL) || ((token->type != CSS_TOKEN_IDENT))) {
+        *ctx = orig_ctx;
+        return CSS_INVALID;
+    }
 
-	flag_value = get_css_flag_value(c, token);
+    flag_value = get_css_flag_value(c, token);
 
-	if (flag_value != FLAG_VALUE__NONE) {
-		error1 = css_stylesheet_style_flag_value(result, flag_value,
-				CSS_PROP_OVERFLOW_X);
-		error2 = css_stylesheet_style_flag_value(result, flag_value,
-				CSS_PROP_OVERFLOW_Y);
+    if (flag_value != FLAG_VALUE__NONE) {
+        error1 = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_OVERFLOW_X);
+        error2 = css_stylesheet_style_flag_value(result, flag_value, CSS_PROP_OVERFLOW_Y);
 
-	} else if ((lwc_string_caseless_isequal(token->idata,
-			c->strings[VISIBLE], &match) == lwc_error_ok &&
-			match)) {
-		error1 = css__stylesheet_style_appendOPV(result,
-				CSS_PROP_OVERFLOW_X, 0, OVERFLOW_VISIBLE);
-		error2 = css__stylesheet_style_appendOPV(result,
-				CSS_PROP_OVERFLOW_Y, 0, OVERFLOW_VISIBLE);
+    } else if ((lwc_string_caseless_isequal(token->idata, c->strings[VISIBLE], &match) ==
+                    lwc_error_ok &&
+                match)) {
+        error1 = css__stylesheet_style_appendOPV(result, CSS_PROP_OVERFLOW_X, 0, OVERFLOW_VISIBLE);
+        error2 = css__stylesheet_style_appendOPV(result, CSS_PROP_OVERFLOW_Y, 0, OVERFLOW_VISIBLE);
 
-	} else if ((lwc_string_caseless_isequal(token->idata,
-			c->strings[HIDDEN], &match) == lwc_error_ok &&
-			match)) {
-		error1 = css__stylesheet_style_appendOPV(result,
-				CSS_PROP_OVERFLOW_X, 0, OVERFLOW_HIDDEN);
-		error2 = css__stylesheet_style_appendOPV(result,
-				CSS_PROP_OVERFLOW_Y, 0, OVERFLOW_HIDDEN);
+    } else if ((lwc_string_caseless_isequal(token->idata, c->strings[HIDDEN], &match) ==
+                    lwc_error_ok &&
+                match)) {
+        error1 = css__stylesheet_style_appendOPV(result, CSS_PROP_OVERFLOW_X, 0, OVERFLOW_HIDDEN);
+        error2 = css__stylesheet_style_appendOPV(result, CSS_PROP_OVERFLOW_Y, 0, OVERFLOW_HIDDEN);
 
-	} else if ((lwc_string_caseless_isequal(token->idata,
-			c->strings[SCROLL], &match) == lwc_error_ok &&
-			match)) {
-		error1 = css__stylesheet_style_appendOPV(result,
-				CSS_PROP_OVERFLOW_X, 0, OVERFLOW_SCROLL);
-		error2 = css__stylesheet_style_appendOPV(result,
-				CSS_PROP_OVERFLOW_Y, 0, OVERFLOW_SCROLL);
+    } else if ((lwc_string_caseless_isequal(token->idata, c->strings[SCROLL], &match) ==
+                    lwc_error_ok &&
+                match)) {
+        error1 = css__stylesheet_style_appendOPV(result, CSS_PROP_OVERFLOW_X, 0, OVERFLOW_SCROLL);
+        error2 = css__stylesheet_style_appendOPV(result, CSS_PROP_OVERFLOW_Y, 0, OVERFLOW_SCROLL);
 
-	} else if ((lwc_string_caseless_isequal(token->idata,
-			c->strings[AUTO], &match) == lwc_error_ok &&
-			match)) {
-		error1 = css__stylesheet_style_appendOPV(result,
-				CSS_PROP_OVERFLOW_X, 0, OVERFLOW_AUTO);
-		error2 = css__stylesheet_style_appendOPV(result,
-				CSS_PROP_OVERFLOW_Y, 0, OVERFLOW_AUTO);
+    } else if ((lwc_string_caseless_isequal(token->idata, c->strings[AUTO], &match) ==
+                    lwc_error_ok &&
+                match)) {
+        error1 = css__stylesheet_style_appendOPV(result, CSS_PROP_OVERFLOW_X, 0, OVERFLOW_AUTO);
+        error2 = css__stylesheet_style_appendOPV(result, CSS_PROP_OVERFLOW_Y, 0, OVERFLOW_AUTO);
 
-	} else {
-		error1 = CSS_INVALID;
-	}
+    } else {
+        error1 = CSS_INVALID;
+    }
 
-	if (error2 != CSS_OK)
-		error1 = error2;
+    if (error2 != CSS_OK) {
+        error1 = error2;
+    }
 
-	if (error1 != CSS_OK)
-		*ctx = orig_ctx;
+    if (error1 != CSS_OK) {
+        *ctx = orig_ctx;
+    }
 
-	return error1;
+    return error1;
 }
-

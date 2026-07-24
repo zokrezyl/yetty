@@ -1,5 +1,4 @@
 extern int bar(void)
 {
-	return -1;
+    return -1;
 }
-

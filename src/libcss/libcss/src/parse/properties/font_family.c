@@ -22,23 +22,22 @@
  */
 static bool font_family_reserved(css_language *c, const css_token *ident)
 {
-	bool match;
+    bool match;
 
-	return (lwc_string_caseless_isequal(
-			ident->idata, c->strings[SERIF],
-			&match) == lwc_error_ok && match) ||
-		(lwc_string_caseless_isequal(
-			ident->idata, c->strings[SANS_SERIF],
-			&match) == lwc_error_ok && match) ||
-		(lwc_string_caseless_isequal(
-			ident->idata, c->strings[CURSIVE],
-			&match) == lwc_error_ok && match) ||
-		(lwc_string_caseless_isequal(
-			ident->idata, c->strings[FANTASY],
-			&match) == lwc_error_ok && match) ||
-		(lwc_string_caseless_isequal(
-			ident->idata, c->strings[MONOSPACE],
-			&match) == lwc_error_ok && match);
+    return (lwc_string_caseless_isequal(ident->idata, c->strings[SERIF], &match) == lwc_error_ok &&
+            match) ||
+           (lwc_string_caseless_isequal(ident->idata, c->strings[SANS_SERIF], &match) ==
+                lwc_error_ok &&
+            match) ||
+           (lwc_string_caseless_isequal(ident->idata, c->strings[CURSIVE], &match) ==
+                lwc_error_ok &&
+            match) ||
+           (lwc_string_caseless_isequal(ident->idata, c->strings[FANTASY], &match) ==
+                lwc_error_ok &&
+            match) ||
+           (lwc_string_caseless_isequal(ident->idata, c->strings[MONOSPACE], &match) ==
+                lwc_error_ok &&
+            match);
 }
 
 /**
@@ -51,37 +50,37 @@ static bool font_family_reserved(css_language *c, const css_token *ident)
  */
 static css_code_t font_family_value(css_language *c, const css_token *token, bool first)
 {
-	uint16_t value;
-	bool match;
+    uint16_t value;
+    bool match;
 
-	if (token->type == CSS_TOKEN_IDENT) {
-		if ((lwc_string_caseless_isequal(
-				token->idata, c->strings[SERIF],
-				&match) == lwc_error_ok && match))
-			value = FONT_FAMILY_SERIF;
-		else if ((lwc_string_caseless_isequal(
-				token->idata, c->strings[SANS_SERIF],
-				&match) == lwc_error_ok && match))
-			value = FONT_FAMILY_SANS_SERIF;
-		else if ((lwc_string_caseless_isequal(
-				token->idata, c->strings[CURSIVE],
-				&match) == lwc_error_ok && match))
-			value = FONT_FAMILY_CURSIVE;
-		else if ((lwc_string_caseless_isequal(
-				token->idata, c->strings[FANTASY],
-				&match) == lwc_error_ok && match))
-			value = FONT_FAMILY_FANTASY;
-		else if ((lwc_string_caseless_isequal(
-				token->idata, c->strings[MONOSPACE],
-				&match) == lwc_error_ok && match))
-			value = FONT_FAMILY_MONOSPACE;
-		else
-			value = FONT_FAMILY_IDENT_LIST;
-	} else {
-		value = FONT_FAMILY_STRING;
-	}
+    if (token->type == CSS_TOKEN_IDENT) {
+        if ((lwc_string_caseless_isequal(token->idata, c->strings[SERIF], &match) == lwc_error_ok &&
+             match)) {
+            value = FONT_FAMILY_SERIF;
+        } else if ((lwc_string_caseless_isequal(token->idata, c->strings[SANS_SERIF], &match) ==
+                        lwc_error_ok &&
+                    match)) {
+            value = FONT_FAMILY_SANS_SERIF;
+        } else if ((lwc_string_caseless_isequal(token->idata, c->strings[CURSIVE], &match) ==
+                        lwc_error_ok &&
+                    match)) {
+            value = FONT_FAMILY_CURSIVE;
+        } else if ((lwc_string_caseless_isequal(token->idata, c->strings[FANTASY], &match) ==
+                        lwc_error_ok &&
+                    match)) {
+            value = FONT_FAMILY_FANTASY;
+        } else if ((lwc_string_caseless_isequal(token->idata, c->strings[MONOSPACE], &match) ==
+                        lwc_error_ok &&
+                    match)) {
+            value = FONT_FAMILY_MONOSPACE;
+        } else {
+            value = FONT_FAMILY_IDENT_LIST;
+        }
+    } else {
+        value = FONT_FAMILY_STRING;
+    }
 
-	return first ? buildOPV(CSS_PROP_FONT_FAMILY, 0, value) : value;
+    return first ? buildOPV(CSS_PROP_FONT_FAMILY, 0, value) : value;
 }
 
 /**
@@ -98,16 +97,15 @@ static css_code_t font_family_value(css_language *c, const css_token *token, boo
  * Post condition: \a *ctx is updated with the next token to process
  *		   If the input is invalid, then \a *ctx remains unchanged.
  */
-css_error css__parse_font_family(css_language *c,
-		const parserutils_vector *vector, int32_t *ctx,
-		css_style *result)
+css_error css__parse_font_family(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+                                 css_style *result)
 {
-	int32_t orig_ctx = *ctx;
-	css_error error;
-	const css_token *token;
-	bool match;
+    int32_t orig_ctx = *ctx;
+    css_error error;
+    const css_token *token;
+    bool match;
 
-	/* [ IDENT+ | STRING ] [ ',' [ IDENT+ | STRING ] ]* | IDENT(inherit)
+    /* [ IDENT+ | STRING ] [ ',' [ IDENT+ | STRING ] ]* | IDENT(inherit)
 	 *
 	 * In the case of IDENT+, any whitespace between tokens is collapsed to
 	 * a single space
@@ -116,59 +114,52 @@ css_error css__parse_font_family(css_language *c,
 	 * Perhaps this is a quirk we should inherit?
 	 */
 
-	token = parserutils_vector_iterate(vector, ctx);
-	if (token == NULL || (token->type != CSS_TOKEN_IDENT &&
-			token->type != CSS_TOKEN_STRING)) {
-		*ctx = orig_ctx;
-		return CSS_INVALID;
-	}
+    token = parserutils_vector_iterate(vector, ctx);
+    if (token == NULL || (token->type != CSS_TOKEN_IDENT && token->type != CSS_TOKEN_STRING)) {
+        *ctx = orig_ctx;
+        return CSS_INVALID;
+    }
 
-	if (token->type == CSS_TOKEN_IDENT &&
-			(lwc_string_caseless_isequal(
-			token->idata, c->strings[INHERIT],
-			&match) == lwc_error_ok && match)) {
-		error = css_stylesheet_style_inherit(result,
-				CSS_PROP_FONT_FAMILY);
+    if (token->type == CSS_TOKEN_IDENT &&
+        (lwc_string_caseless_isequal(token->idata, c->strings[INHERIT], &match) == lwc_error_ok &&
+         match)) {
+        error = css_stylesheet_style_inherit(result, CSS_PROP_FONT_FAMILY);
 
-	} else if ((token->type == CSS_TOKEN_IDENT) &&
-			(lwc_string_caseless_isequal(
-			token->idata, c->strings[INITIAL],
-			&match) == lwc_error_ok && match)) {
-		error = css_stylesheet_style_initial(result,
-				CSS_PROP_FONT_FAMILY);
+    } else if ((token->type == CSS_TOKEN_IDENT) &&
+               (lwc_string_caseless_isequal(token->idata, c->strings[INITIAL], &match) ==
+                    lwc_error_ok &&
+                match)) {
+        error = css_stylesheet_style_initial(result, CSS_PROP_FONT_FAMILY);
 
-	} else if ((token->type == CSS_TOKEN_IDENT) &&
-			(lwc_string_caseless_isequal(
-			token->idata, c->strings[REVERT],
-			&match) == lwc_error_ok && match)) {
-		error = css_stylesheet_style_revert(result,
-				CSS_PROP_FONT_FAMILY);
+    } else if ((token->type == CSS_TOKEN_IDENT) &&
+               (lwc_string_caseless_isequal(token->idata, c->strings[REVERT], &match) ==
+                    lwc_error_ok &&
+                match)) {
+        error = css_stylesheet_style_revert(result, CSS_PROP_FONT_FAMILY);
 
-	} else if ((token->type == CSS_TOKEN_IDENT) &&
-			(lwc_string_caseless_isequal(
-			token->idata, c->strings[UNSET],
-			&match) == lwc_error_ok && match)) {
-		error = css_stylesheet_style_unset(result,
-				CSS_PROP_FONT_FAMILY);
+    } else if ((token->type == CSS_TOKEN_IDENT) &&
+               (lwc_string_caseless_isequal(token->idata, c->strings[UNSET], &match) ==
+                    lwc_error_ok &&
+                match)) {
+        error = css_stylesheet_style_unset(result, CSS_PROP_FONT_FAMILY);
 
-	} else {
-		*ctx = orig_ctx;
+    } else {
+        *ctx = orig_ctx;
 
-		error = css__comma_list_to_style(c, vector, ctx,
-				font_family_reserved, font_family_value,
-				result);
-		if (error != CSS_OK) {
-			*ctx = orig_ctx;
-			return error;
-		}
+        error = css__comma_list_to_style(c, vector, ctx, font_family_reserved, font_family_value,
+                                         result);
+        if (error != CSS_OK) {
+            *ctx = orig_ctx;
+            return error;
+        }
 
-		error = css__stylesheet_style_append(result, FONT_FAMILY_END);
-	}
+        error = css__stylesheet_style_append(result, FONT_FAMILY_END);
+    }
 
-	if (error != CSS_OK) {
-		*ctx = orig_ctx;
-		return error;
-	}
+    if (error != CSS_OK) {
+        *ctx = orig_ctx;
+        return error;
+    }
 
-	return CSS_OK;
+    return CSS_OK;
 }

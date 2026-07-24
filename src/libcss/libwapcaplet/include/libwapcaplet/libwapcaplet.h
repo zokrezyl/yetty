@@ -10,8 +10,7 @@
 #define libwapcaplet_h_
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #include <sys/types.h>
@@ -24,7 +23,7 @@ extern "C"
  * The type of a reference counter used in libwapcaplet.
  */
 typedef uint32_t lwc_refcounter;
-	
+
 /**
  * The type of a hash value used in libwapcaplet.
  */
@@ -39,14 +38,14 @@ typedef uint32_t lwc_hash;
  * use them.
  */
 typedef struct lwc_string_s {
-        struct lwc_string_s **	prevptr;
-        struct lwc_string_s *	next;
-        size_t		len;
-        lwc_hash	hash;
-        lwc_refcounter	refcnt;
-        struct lwc_string_s *	insensitive;
+    struct lwc_string_s **prevptr;
+    struct lwc_string_s *next;
+    size_t len;
+    lwc_hash hash;
+    lwc_refcounter refcnt;
+    struct lwc_string_s *insensitive;
 } lwc_string;
-	
+
 /**
  * String iteration function
  *
@@ -59,9 +58,9 @@ typedef void (*lwc_iteration_callback_fn)(lwc_string *str, void *pw);
  * Result codes which libwapcaplet might return.
  */
 typedef enum lwc_error_e {
-	lwc_error_ok		= 0,	/**< No error. */
-	lwc_error_oom		= 1,	/**< Out of memory. */
-	lwc_error_range		= 2	/**< Substring internment out of range. */
+    lwc_error_ok = 0,   /**< No error. */
+    lwc_error_oom = 1,  /**< Out of memory. */
+    lwc_error_range = 2 /**< Substring internment out of range. */
 } lwc_error;
 
 /**
@@ -87,8 +86,7 @@ typedef enum lwc_error_e {
  *	 will not necessarily be the case in future.  Try not to rely
  *	 on it.
  */
-extern lwc_error lwc_intern_string(const char *s, size_t slen,
-                                   lwc_string **ret);
+extern lwc_error lwc_intern_string(const char *s, size_t slen, lwc_string **ret);
 
 /**
  * Intern a substring.
@@ -102,8 +100,7 @@ extern lwc_error lwc_intern_string(const char *s, size_t slen,
  * @return	   Result of operation, if not OK then the value
  *		   pointed to by \a ret will not be valid.
  */
-extern lwc_error lwc_intern_substring(lwc_string *str,
-                                      size_t ssoffset, size_t sslen,
+extern lwc_error lwc_intern_substring(lwc_string *str, size_t ssoffset, size_t sslen,
                                       lwc_string **ret);
 
 /**
@@ -134,14 +131,19 @@ extern lwc_error lwc_string_tolower(lwc_string *str, lwc_string **ret);
  * ownership.
  */
 #if defined(STMTEXPR)
-#define lwc_string_ref(str) ({lwc_string *__lwc_s = (str); assert(__lwc_s != NULL); __lwc_s->refcnt++; __lwc_s;})
+#define lwc_string_ref(str)                                                                        \
+    ({                                                                                             \
+        lwc_string *__lwc_s = (str);                                                               \
+        assert(__lwc_s != NULL);                                                                   \
+        __lwc_s->refcnt++;                                                                         \
+        __lwc_s;                                                                                   \
+    })
 #else
-static inline lwc_string *
-lwc_string_ref(lwc_string *str)
+static inline lwc_string *lwc_string_ref(lwc_string *str)
 {
-	assert(str != NULL);
-	str->refcnt++;
-	return str;
+    assert(str != NULL);
+    str->refcnt++;
+    return str;
 }
 #endif
 
@@ -156,15 +158,16 @@ lwc_string_ref(lwc_string *str)
  *       freed. (Ref count of 1 where string is its own insensitve match
  *       will also result in the string being freed.)
  */
-#define lwc_string_unref(str) {						\
-		lwc_string *__lwc_s = (str);				\
-		assert(__lwc_s != NULL);				\
-		__lwc_s->refcnt--;						\
-		if ((__lwc_s->refcnt == 0) ||					\
-		    ((__lwc_s->refcnt == 1) && (__lwc_s->insensitive == __lwc_s)))	\
-			lwc_string_destroy(__lwc_s);				\
-	}
-	
+#define lwc_string_unref(str)                                                                      \
+    {                                                                                              \
+        lwc_string *__lwc_s = (str);                                                               \
+        assert(__lwc_s != NULL);                                                                   \
+        __lwc_s->refcnt--;                                                                         \
+        if ((__lwc_s->refcnt == 0) ||                                                              \
+            ((__lwc_s->refcnt == 1) && (__lwc_s->insensitive == __lwc_s)))                         \
+            lwc_string_destroy(__lwc_s);                                                           \
+    }
+
 /**
  * Destroy an unreffed lwc_string.
  *
@@ -183,8 +186,7 @@ extern void lwc_string_destroy(lwc_string *str);
  * @return     Result of operation, if not ok then value pointed to
  *	       by \a ret will not be valid.
  */
-#define lwc_string_isequal(str1, str2, ret) \
-	((*(ret) = ((str1) == (str2))), lwc_error_ok)
+#define lwc_string_isequal(str1, str2, ret) ((*(ret) = ((str1) == (str2))), lwc_error_ok)
 
 /**
  * Intern a caseless copy of the passed string.
@@ -197,8 +199,7 @@ extern void lwc_string_destroy(lwc_string *str);
  * @note This is for "internal" use by the caseless comparison
  *       macro and not for users.
  */
-extern lwc_error
-lwc__intern_caseless_string(lwc_string *str);
+extern lwc_error lwc__intern_caseless_string(lwc_string *str);
 
 #if defined(STMTEXPR)
 /**
@@ -210,23 +211,24 @@ lwc__intern_caseless_string(lwc_string *str);
  * @return Result of operation, if not ok then value pointed to by \a ret will
  *	    not be valid.
  */
-#define lwc_string_caseless_isequal(_str1,_str2,_ret) ({                \
-            lwc_error __lwc_err = lwc_error_ok;                         \
-            lwc_string *__lwc_str1 = (_str1);                           \
-            lwc_string *__lwc_str2 = (_str2);                           \
-            bool *__lwc_ret = (_ret);                                   \
-                                                                        \
-            if (__lwc_str1->insensitive == NULL) {                      \
-                __lwc_err = lwc__intern_caseless_string(__lwc_str1);    \
-            }                                                           \
-            if (__lwc_err == lwc_error_ok && __lwc_str2->insensitive == NULL) { \
-                __lwc_err = lwc__intern_caseless_string(__lwc_str2);    \
-            }                                                           \
-            if (__lwc_err == lwc_error_ok)                              \
-                *__lwc_ret = (__lwc_str1->insensitive == __lwc_str2->insensitive); \
-            __lwc_err;                                                  \
-        })
-	
+#define lwc_string_caseless_isequal(_str1, _str2, _ret)                                            \
+    ({                                                                                             \
+        lwc_error __lwc_err = lwc_error_ok;                                                        \
+        lwc_string *__lwc_str1 = (_str1);                                                          \
+        lwc_string *__lwc_str2 = (_str2);                                                          \
+        bool *__lwc_ret = (_ret);                                                                  \
+                                                                                                   \
+        if (__lwc_str1->insensitive == NULL) {                                                     \
+            __lwc_err = lwc__intern_caseless_string(__lwc_str1);                                   \
+        }                                                                                          \
+        if (__lwc_err == lwc_error_ok && __lwc_str2->insensitive == NULL) {                        \
+            __lwc_err = lwc__intern_caseless_string(__lwc_str2);                                   \
+        }                                                                                          \
+        if (__lwc_err == lwc_error_ok)                                                             \
+            *__lwc_ret = (__lwc_str1->insensitive == __lwc_str2->insensitive);                     \
+        __lwc_err;                                                                                 \
+    })
+
 #else
 /**
  * Check if two interned strings are case-insensitively equal.
@@ -237,28 +239,32 @@ lwc__intern_caseless_string(lwc_string *str);
  * @return Result of operation, if not ok then value pointed to by \a ret will
  *         not be valid.
  */
-static inline lwc_error
-lwc_string_caseless_isequal(lwc_string *str1, lwc_string *str2, bool *ret)
+static inline lwc_error lwc_string_caseless_isequal(lwc_string *str1, lwc_string *str2, bool *ret)
 {
-       lwc_error err = lwc_error_ok;
-       if (str1->insensitive == NULL) {
-           err = lwc__intern_caseless_string(str1);
-       }
-       if (err == lwc_error_ok && str2->insensitive == NULL) {
-           err = lwc__intern_caseless_string(str2);
-       }
-       if (err == lwc_error_ok)
-           *ret = (str1->insensitive == str2->insensitive);
-       return err;
+    lwc_error err = lwc_error_ok;
+    if (str1->insensitive == NULL) {
+        err = lwc__intern_caseless_string(str1);
+    }
+    if (err == lwc_error_ok && str2->insensitive == NULL) {
+        err = lwc__intern_caseless_string(str2);
+    }
+    if (err == lwc_error_ok) {
+        *ret = (str1->insensitive == str2->insensitive);
+    }
+    return err;
 }
 #endif
 
 #if defined(STMTEXPR)
-#define lwc__assert_and_expr(str, expr) ({assert(str != NULL); expr;})
+#define lwc__assert_and_expr(str, expr)                                                            \
+    ({                                                                                             \
+        assert(str != NULL);                                                                       \
+        expr;                                                                                      \
+    })
 #else
 #define lwc__assert_and_expr(str, expr) (expr)
 #endif
-	
+
 /**
  * Retrieve the data pointer for an interned string.
  *
@@ -271,7 +277,7 @@ lwc_string_caseless_isequal(lwc_string *str1, lwc_string *str2, bool *ret)
  *	 in future.  Any code relying on it currently should be
  *	 modified to use ::lwc_string_length if possible.
  */
-#define lwc_string_data(str) lwc__assert_and_expr(str, (const char *)((str)+1))
+#define lwc_string_data(str) lwc__assert_and_expr(str, (const char *)((str) + 1))
 
 /**
  * Retrieve the data length for an interned string.
@@ -303,20 +309,18 @@ lwc_string_caseless_isequal(lwc_string *str1, lwc_string *str2, bool *ret)
  * @return Result of operation, if not ok then value pointed to by \a ret will
  *      not be valid.
  */
-static inline lwc_error lwc_string_caseless_hash_value(
-	lwc_string *str, lwc_hash *hash)
+static inline lwc_error lwc_string_caseless_hash_value(lwc_string *str, lwc_hash *hash)
 {
-	if (str->insensitive == NULL) {
-		lwc_error err = lwc__intern_caseless_string(str);
-		if (err != lwc_error_ok) {
-			return err;
-		}
-	}
+    if (str->insensitive == NULL) {
+        lwc_error err = lwc__intern_caseless_string(str);
+        if (err != lwc_error_ok) {
+            return err;
+        }
+    }
 
-	*hash = str->insensitive->hash;
-	return lwc_error_ok;
+    *hash = str->insensitive->hash;
+    return lwc_error_ok;
 }
-
 
 /**
  * Iterate the context and return every string in it.

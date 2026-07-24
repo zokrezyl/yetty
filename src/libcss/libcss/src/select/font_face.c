@@ -12,25 +12,21 @@
 
 static void font_faces_srcs_destroy(css_font_face *font_face)
 {
-	uint32_t i;
-	css_font_face_src *srcs = font_face->srcs;
+    uint32_t i;
+    css_font_face_src *srcs = font_face->srcs;
 
-	for (i = 0; i < font_face->n_srcs; ++i) {
-		if (srcs[i].location != NULL) {
-			lwc_string_unref(srcs[i].location);
-		}
-	}
+    for (i = 0; i < font_face->n_srcs; ++i) {
+        if (srcs[i].location != NULL) {
+            lwc_string_unref(srcs[i].location);
+        }
+    }
 
-	free(srcs);
-	font_face->srcs = NULL;
+    free(srcs);
+    font_face->srcs = NULL;
 }
 
 static const css_font_face default_font_face = {
-	NULL,
-	NULL,
-	0,
-	{ (CSS_FONT_WEIGHT_NORMAL << 2) | CSS_FONT_STYLE_NORMAL }
-};
+    NULL, NULL, 0, {(CSS_FONT_WEIGHT_NORMAL << 2) | CSS_FONT_STYLE_NORMAL}};
 
 /**
  * Create a font-face
@@ -42,20 +38,22 @@ static const css_font_face default_font_face = {
  */
 css_error css__font_face_create(css_font_face **result)
 {
-	css_font_face *f;
+    css_font_face *f;
 
-	if (result == NULL)
-		return CSS_BADPARM;
+    if (result == NULL) {
+        return CSS_BADPARM;
+    }
 
-	f = malloc(sizeof(css_font_face));
-	if (f == NULL)
-		return CSS_NOMEM;
+    f = malloc(sizeof(css_font_face));
+    if (f == NULL) {
+        return CSS_NOMEM;
+    }
 
-	memcpy(f, &default_font_face, sizeof(css_font_face));
+    memcpy(f, &default_font_face, sizeof(css_font_face));
 
-	*result = f;
+    *result = f;
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
 /**
@@ -66,20 +64,22 @@ css_error css__font_face_create(css_font_face **result)
  */
 css_error css__font_face_destroy(css_font_face *font_face)
 {
-	if (font_face == NULL)
-		return CSS_BADPARM;
+    if (font_face == NULL) {
+        return CSS_BADPARM;
+    }
 
-	if (font_face->font_family != NULL)
-		lwc_string_unref(font_face->font_family);
+    if (font_face->font_family != NULL) {
+        lwc_string_unref(font_face->font_family);
+    }
 
-	if (font_face->srcs != NULL)
-		font_faces_srcs_destroy(font_face);
+    if (font_face->srcs != NULL) {
+        font_faces_srcs_destroy(font_face);
+    }
 
-	free(font_face);
+    free(font_face);
 
-	return CSS_OK;
+    return CSS_OK;
 }
-
 
 /**
  * Set a font-face's font-family name
@@ -90,18 +90,19 @@ css_error css__font_face_destroy(css_font_face *font_face)
  * \return CSS_OK on success,
  *         CSS_BADPARM on bad parameters.
  */
-css_error css__font_face_set_font_family(css_font_face *font_face,
-		lwc_string *font_family)
+css_error css__font_face_set_font_family(css_font_face *font_face, lwc_string *font_family)
 {
-	if (font_face == NULL || font_family == NULL)
-		return CSS_BADPARM;
+    if (font_face == NULL || font_family == NULL) {
+        return CSS_BADPARM;
+    }
 
-	if (font_face->font_family != NULL)
-		lwc_string_unref(font_face->font_family);
+    if (font_face->font_family != NULL) {
+        lwc_string_unref(font_face->font_family);
+    }
 
-	font_face->font_family = lwc_string_ref(font_family);
+    font_face->font_family = lwc_string_ref(font_family);
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
 /**
@@ -112,15 +113,15 @@ css_error css__font_face_set_font_family(css_font_face *font_face,
  * \return CSS_OK on success,
  *         CSS_BADPARM on bad parameters.
  */
-css_error css_font_face_get_font_family(const css_font_face *font_face,
-		lwc_string **font_family)
+css_error css_font_face_get_font_family(const css_font_face *font_face, lwc_string **font_family)
 {
-	if (font_face == NULL || font_family == NULL)
-		return CSS_BADPARM;
+    if (font_face == NULL || font_family == NULL) {
+        return CSS_BADPARM;
+    }
 
-	*font_family = font_face->font_family;
+    *font_family = font_face->font_family;
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
 /**
@@ -131,7 +132,7 @@ css_error css_font_face_get_font_family(const css_font_face *font_face,
  */
 uint8_t css_font_face_font_style(const css_font_face *font_face)
 {
-	return font_face->bits[0] & 0x3;
+    return font_face->bits[0] & 0x3;
 }
 
 /**
@@ -142,7 +143,7 @@ uint8_t css_font_face_font_style(const css_font_face *font_face)
  */
 uint8_t css_font_face_font_weight(const css_font_face *font_face)
 {
-	return (font_face->bits[0] >> 2) & 0xf;
+    return (font_face->bits[0] >> 2) & 0xf;
 }
 
 /**
@@ -153,14 +154,14 @@ uint8_t css_font_face_font_weight(const css_font_face *font_face)
  * \return CSS_OK on success,
  *         CSS_BADPARM on bad parameters.
  */
-css_error css_font_face_count_srcs(const css_font_face *font_face,
-		uint32_t *count)
+css_error css_font_face_count_srcs(const css_font_face *font_face, uint32_t *count)
 {
-	if (font_face == NULL || count == NULL)
-		return CSS_BADPARM;
+    if (font_face == NULL || count == NULL) {
+        return CSS_BADPARM;
+    }
 
-	*count = font_face->n_srcs;
-	return CSS_OK;
+    *count = font_face->n_srcs;
+    return CSS_OK;
 }
 
 /**
@@ -172,15 +173,16 @@ css_error css_font_face_count_srcs(const css_font_face *font_face,
  * \return CSS_OK on success,
  *         CSS_BADPARM on bad parameters.
  */
-css_error css_font_face_get_src(const css_font_face *font_face,
-		uint32_t index, const css_font_face_src **src)
+css_error css_font_face_get_src(const css_font_face *font_face, uint32_t index,
+                                const css_font_face_src **src)
 {
-	if (font_face == NULL || src == NULL || index >= font_face->n_srcs)
-		return CSS_BADPARM;
+    if (font_face == NULL || src == NULL || index >= font_face->n_srcs) {
+        return CSS_BADPARM;
+    }
 
-	*src = &(font_face->srcs[index]);
+    *src = &(font_face->srcs[index]);
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
 /**
@@ -195,15 +197,15 @@ css_error css_font_face_get_src(const css_font_face *font_face,
  *        css_font_face_src_location_type, and the format of font (if specified)
  *        from css_font_face_src_format.
  */
-css_error css_font_face_src_get_location(const css_font_face_src *src,
-		lwc_string **location)
+css_error css_font_face_src_get_location(const css_font_face_src *src, lwc_string **location)
 {
-	if (src == NULL || location == NULL)
-		return CSS_BADPARM;
+    if (src == NULL || location == NULL) {
+        return CSS_BADPARM;
+    }
 
-	*location = src->location;
+    *location = src->location;
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
 /**
@@ -212,10 +214,9 @@ css_error css_font_face_src_get_location(const css_font_face_src *src,
  * \param src  The font-face src
  * \return The location type
  */
-css_font_face_location_type css_font_face_src_location_type(
-		const css_font_face_src *src)
+css_font_face_location_type css_font_face_src_location_type(const css_font_face_src *src)
 {
-	return src->bits[0] & 0x3;
+    return src->bits[0] & 0x3;
 }
 
 /**
@@ -226,7 +227,7 @@ css_font_face_location_type css_font_face_src_location_type(
  */
 css_font_face_format css_font_face_src_format(const css_font_face_src *src)
 {
-	return (src->bits[0] >> 2) & 0x1f;
+    return (src->bits[0] >> 2) & 0x1f;
 }
 
 /**
@@ -237,16 +238,15 @@ css_font_face_format css_font_face_src_format(const css_font_face_src *src)
  * \param n_srcs     The count of css_font_face_srcs in the array
  * \return The format, if specified
  */
-css_error css__font_face_set_srcs(css_font_face *font_face,
-		css_font_face_src *srcs, uint32_t n_srcs)
+css_error css__font_face_set_srcs(css_font_face *font_face, css_font_face_src *srcs,
+                                  uint32_t n_srcs)
 {
-	if (font_face->srcs != NULL)
-		font_faces_srcs_destroy(font_face);
+    if (font_face->srcs != NULL) {
+        font_faces_srcs_destroy(font_face);
+    }
 
-	font_face->srcs = srcs;
-	font_face->n_srcs = n_srcs;
+    font_face->srcs = srcs;
+    font_face->n_srcs = n_srcs;
 
-	return CSS_OK;
+    return CSS_OK;
 }
-
-

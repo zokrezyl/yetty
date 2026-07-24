@@ -14,95 +14,86 @@
 #include "select/properties/properties.h"
 #include "select/properties/helpers.h"
 
-css_error css__cascade_font_weight(uint32_t opv, css_style *style,
-		css_select_state *state)
+css_error css__cascade_font_weight(uint32_t opv, css_style *style, css_select_state *state)
 {
-	uint16_t value = CSS_FONT_WEIGHT_INHERIT;
+    uint16_t value = CSS_FONT_WEIGHT_INHERIT;
 
-	UNUSED(style);
+    UNUSED(style);
 
-	if (hasFlagValue(opv) == false) {
-		switch (getValue(opv)) {
-		case FONT_WEIGHT_NORMAL:
-			value = CSS_FONT_WEIGHT_NORMAL;
-			break;
-		case FONT_WEIGHT_BOLD:
-			value = CSS_FONT_WEIGHT_BOLD;
-			break;
-		case FONT_WEIGHT_BOLDER:
-			value = CSS_FONT_WEIGHT_BOLDER;
-			break;
-		case FONT_WEIGHT_LIGHTER:
-			value = CSS_FONT_WEIGHT_LIGHTER;
-			break;
-		case FONT_WEIGHT_100:
-			value = CSS_FONT_WEIGHT_100;
-			break;
-		case FONT_WEIGHT_200:
-			value = CSS_FONT_WEIGHT_200;
-			break;
-		case FONT_WEIGHT_300:
-			value = CSS_FONT_WEIGHT_300;
-			break;
-		case FONT_WEIGHT_400:
-			value = CSS_FONT_WEIGHT_400;
-			break;
-		case FONT_WEIGHT_500:
-			value = CSS_FONT_WEIGHT_500;
-			break;
-		case FONT_WEIGHT_600:
-			value = CSS_FONT_WEIGHT_600;
-			break;
-		case FONT_WEIGHT_700:
-			value = CSS_FONT_WEIGHT_700;
-			break;
-		case FONT_WEIGHT_800:
-			value = CSS_FONT_WEIGHT_800;
-			break;
-		case FONT_WEIGHT_900:
-			value = CSS_FONT_WEIGHT_900;
-			break;
-		}
-	}
+    if (hasFlagValue(opv) == false) {
+        switch (getValue(opv)) {
+        case FONT_WEIGHT_NORMAL:
+            value = CSS_FONT_WEIGHT_NORMAL;
+            break;
+        case FONT_WEIGHT_BOLD:
+            value = CSS_FONT_WEIGHT_BOLD;
+            break;
+        case FONT_WEIGHT_BOLDER:
+            value = CSS_FONT_WEIGHT_BOLDER;
+            break;
+        case FONT_WEIGHT_LIGHTER:
+            value = CSS_FONT_WEIGHT_LIGHTER;
+            break;
+        case FONT_WEIGHT_100:
+            value = CSS_FONT_WEIGHT_100;
+            break;
+        case FONT_WEIGHT_200:
+            value = CSS_FONT_WEIGHT_200;
+            break;
+        case FONT_WEIGHT_300:
+            value = CSS_FONT_WEIGHT_300;
+            break;
+        case FONT_WEIGHT_400:
+            value = CSS_FONT_WEIGHT_400;
+            break;
+        case FONT_WEIGHT_500:
+            value = CSS_FONT_WEIGHT_500;
+            break;
+        case FONT_WEIGHT_600:
+            value = CSS_FONT_WEIGHT_600;
+            break;
+        case FONT_WEIGHT_700:
+            value = CSS_FONT_WEIGHT_700;
+            break;
+        case FONT_WEIGHT_800:
+            value = CSS_FONT_WEIGHT_800;
+            break;
+        case FONT_WEIGHT_900:
+            value = CSS_FONT_WEIGHT_900;
+            break;
+        }
+    }
 
-	if (css__outranks_existing(getOpcode(opv), isImportant(opv), state,
-			getFlagValue(opv))) {
-		return set_font_weight(state->computed, value);
-	}
+    if (css__outranks_existing(getOpcode(opv), isImportant(opv), state, getFlagValue(opv))) {
+        return set_font_weight(state->computed, value);
+    }
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
-css_error css__set_font_weight_from_hint(const css_hint *hint,
-		css_computed_style *style)
+css_error css__set_font_weight_from_hint(const css_hint *hint, css_computed_style *style)
 {
-	return set_font_weight(style, hint->status);
+    return set_font_weight(style, hint->status);
 }
 
 css_error css__initial_font_weight(css_select_state *state)
 {
-	return set_font_weight(state->computed, CSS_FONT_WEIGHT_NORMAL);
+    return set_font_weight(state->computed, CSS_FONT_WEIGHT_NORMAL);
 }
 
-css_error css__copy_font_weight(
-		const css_computed_style *from,
-		css_computed_style *to)
+css_error css__copy_font_weight(const css_computed_style *from, css_computed_style *to)
 {
-	if (from == to) {
-		return CSS_OK;
-	}
+    if (from == to) {
+        return CSS_OK;
+    }
 
-	return set_font_weight(to, get_font_weight(from));
+    return set_font_weight(to, get_font_weight(from));
 }
 
 css_error css__compose_font_weight(const css_computed_style *parent,
-		const css_computed_style *child,
-		css_computed_style *result)
+                                   const css_computed_style *child, css_computed_style *result)
 {
-	uint8_t type = get_font_weight(child);
+    uint8_t type = get_font_weight(child);
 
-	return css__copy_font_weight(
-			type == CSS_FONT_WEIGHT_INHERIT ? parent : child,
-			result);
+    return css__copy_font_weight(type == CSS_FONT_WEIGHT_INHERIT ? parent : child, result);
 }
-

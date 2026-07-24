@@ -14,71 +14,62 @@
 #include "select/properties/properties.h"
 #include "select/properties/helpers.h"
 
-css_error css__cascade_white_space(uint32_t opv, css_style *style,
-		css_select_state *state)
+css_error css__cascade_white_space(uint32_t opv, css_style *style, css_select_state *state)
 {
-	uint16_t value = CSS_WHITE_SPACE_INHERIT;
+    uint16_t value = CSS_WHITE_SPACE_INHERIT;
 
-	UNUSED(style);
+    UNUSED(style);
 
-	if (hasFlagValue(opv) == false) {
-		switch (getValue(opv)) {
-		case WHITE_SPACE_NORMAL:
-			value = CSS_WHITE_SPACE_NORMAL;
-			break;
-		case WHITE_SPACE_PRE:
-			value = CSS_WHITE_SPACE_PRE;
-			break;
-		case WHITE_SPACE_NOWRAP:
-			value = CSS_WHITE_SPACE_NOWRAP;
-			break;
-		case WHITE_SPACE_PRE_WRAP:
-			value = CSS_WHITE_SPACE_PRE_WRAP;
-			break;
-		case WHITE_SPACE_PRE_LINE:
-			value = CSS_WHITE_SPACE_PRE_LINE;
-			break;
-		}
-	}
+    if (hasFlagValue(opv) == false) {
+        switch (getValue(opv)) {
+        case WHITE_SPACE_NORMAL:
+            value = CSS_WHITE_SPACE_NORMAL;
+            break;
+        case WHITE_SPACE_PRE:
+            value = CSS_WHITE_SPACE_PRE;
+            break;
+        case WHITE_SPACE_NOWRAP:
+            value = CSS_WHITE_SPACE_NOWRAP;
+            break;
+        case WHITE_SPACE_PRE_WRAP:
+            value = CSS_WHITE_SPACE_PRE_WRAP;
+            break;
+        case WHITE_SPACE_PRE_LINE:
+            value = CSS_WHITE_SPACE_PRE_LINE;
+            break;
+        }
+    }
 
-	if (css__outranks_existing(getOpcode(opv), isImportant(opv), state,
-			getFlagValue(opv))) {
-		return set_white_space(state->computed, value);
-	}
+    if (css__outranks_existing(getOpcode(opv), isImportant(opv), state, getFlagValue(opv))) {
+        return set_white_space(state->computed, value);
+    }
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
-css_error css__set_white_space_from_hint(const css_hint *hint,
-		css_computed_style *style)
+css_error css__set_white_space_from_hint(const css_hint *hint, css_computed_style *style)
 {
-	return set_white_space(style, hint->status);
+    return set_white_space(style, hint->status);
 }
 
 css_error css__initial_white_space(css_select_state *state)
 {
-	return set_white_space(state->computed, CSS_WHITE_SPACE_NORMAL);
+    return set_white_space(state->computed, CSS_WHITE_SPACE_NORMAL);
 }
 
-css_error css__copy_white_space(
-		const css_computed_style *from,
-		css_computed_style *to)
+css_error css__copy_white_space(const css_computed_style *from, css_computed_style *to)
 {
-	if (from == to) {
-		return CSS_OK;
-	}
+    if (from == to) {
+        return CSS_OK;
+    }
 
-	return set_white_space(to, get_white_space(from));
+    return set_white_space(to, get_white_space(from));
 }
 
 css_error css__compose_white_space(const css_computed_style *parent,
-		const css_computed_style *child,
-		css_computed_style *result)
+                                   const css_computed_style *child, css_computed_style *result)
 {
-	uint8_t type = get_white_space(child);
+    uint8_t type = get_white_space(child);
 
-	return css__copy_white_space(
-			type == CSS_WHITE_SPACE_INHERIT ? parent : child,
-			result);
+    return css__copy_white_space(type == CSS_WHITE_SPACE_INHERIT ? parent : child, result);
 }
-

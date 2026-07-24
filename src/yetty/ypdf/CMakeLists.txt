@@ -40,8 +40,11 @@ if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID AND NOT YETTY_IOS AND NOT YETTY_TVOS AND
                       /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu /usr/lib
                       /usr/local/lib /opt/local/lib /opt/homebrew/lib)
             if(_FC_STATIC AND _EXPAT_STATIC AND _UUID_STATIC)
+                # freetype must follow the static fontconfig archive on the
+                # link line (fcfreetype.o pulls FT_Get_PS_Font_Info etc.);
+                # naming it here pins that order for every consumer.
                 target_link_libraries(yetty_ypdf INTERFACE
-                    ${_FC_STATIC} ${_EXPAT_STATIC} ${_UUID_STATIC})
+                    ${_FC_STATIC} ${_EXPAT_STATIC} ${_UUID_STATIC} freetype)
                 # Homebrew/MacPorts fontconfig is built with NLS, so the
                 # static archive references libintl_dgettext from GNU gettext.
                 if(APPLE)

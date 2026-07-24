@@ -9,8 +9,7 @@
 #define parserutils_functypes_h_
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #include <stdbool.h>
@@ -24,4 +23,3 @@ extern "C"
 #endif
 
 #endif
-

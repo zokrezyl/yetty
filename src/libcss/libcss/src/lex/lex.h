@@ -21,58 +21,69 @@ typedef struct css_lexer css_lexer;
 /**
  * Lexer option types
  */
-typedef enum css_lexer_opttype {
-	CSS_LEXER_EMIT_COMMENTS
-} css_lexer_opttype;
+typedef enum css_lexer_opttype { CSS_LEXER_EMIT_COMMENTS } css_lexer_opttype;
 
 /**
  * Lexer option parameters
  */
 typedef union css_lexer_optparams {
-	bool emit_comments;
+    bool emit_comments;
 } css_lexer_optparams;
 
 /**
  * Token type
  */
 typedef enum css_token_type {
-	CSS_TOKEN_IDENT, CSS_TOKEN_ATKEYWORD, CSS_TOKEN_HASH,
-	CSS_TOKEN_FUNCTION, CSS_TOKEN_STRING, CSS_TOKEN_INVALID_STRING,
-	CSS_TOKEN_URI, CSS_TOKEN_UNICODE_RANGE, CSS_TOKEN_CHAR,
-	CSS_TOKEN_NUMBER, CSS_TOKEN_PERCENTAGE, CSS_TOKEN_DIMENSION,
+    CSS_TOKEN_IDENT,
+    CSS_TOKEN_ATKEYWORD,
+    CSS_TOKEN_HASH,
+    CSS_TOKEN_FUNCTION,
+    CSS_TOKEN_STRING,
+    CSS_TOKEN_INVALID_STRING,
+    CSS_TOKEN_URI,
+    CSS_TOKEN_UNICODE_RANGE,
+    CSS_TOKEN_CHAR,
+    CSS_TOKEN_NUMBER,
+    CSS_TOKEN_PERCENTAGE,
+    CSS_TOKEN_DIMENSION,
 
-	/* Those tokens that want strings interned appear above */
-	CSS_TOKEN_LAST_INTERN,
+    /* Those tokens that want strings interned appear above */
+    CSS_TOKEN_LAST_INTERN,
 
-	CSS_TOKEN_CDO, CSS_TOKEN_CDC, CSS_TOKEN_S, CSS_TOKEN_COMMENT,
-	CSS_TOKEN_INCLUDES, CSS_TOKEN_DASHMATCH, CSS_TOKEN_PREFIXMATCH,
-	CSS_TOKEN_SUFFIXMATCH, CSS_TOKEN_SUBSTRINGMATCH, CSS_TOKEN_EOF
+    CSS_TOKEN_CDO,
+    CSS_TOKEN_CDC,
+    CSS_TOKEN_S,
+    CSS_TOKEN_COMMENT,
+    CSS_TOKEN_INCLUDES,
+    CSS_TOKEN_DASHMATCH,
+    CSS_TOKEN_PREFIXMATCH,
+    CSS_TOKEN_SUFFIXMATCH,
+    CSS_TOKEN_SUBSTRINGMATCH,
+    CSS_TOKEN_EOF
 } css_token_type;
 
 /**
  * Token object
  */
 typedef struct css_token {
-	css_token_type type;
+    css_token_type type;
 
-	struct {
-		uint8_t *data;
-		size_t len;
-	} data;
+    struct {
+        uint8_t *data;
+        size_t len;
+    } data;
 
-	lwc_string *idata;
+    lwc_string *idata;
 
-	uint32_t col;
-	uint32_t line;
+    uint32_t col;
+    uint32_t line;
 } css_token;
 
 css_error css__lexer_create(parserutils_inputstream *input, css_lexer **lexer);
 css_error css__lexer_destroy(css_lexer *lexer);
 
-css_error css__lexer_setopt(css_lexer *lexer, css_lexer_opttype type,
-		css_lexer_optparams *params);
+css_error css__lexer_setopt(css_lexer *lexer, css_lexer_opttype type, css_lexer_optparams *params);
 
 css_error css__lexer_get_token(css_lexer *lexer, css_token **token);
 
 #endif
-

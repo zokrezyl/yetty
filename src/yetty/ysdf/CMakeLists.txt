@@ -3,6 +3,7 @@ add_library(yetty_ysdf STATIC
     aabb.gen.c
     yaml-factory.gen.c
     merge.c
+    default-registry.c
 )
 
 target_include_directories(yetty_ysdf PUBLIC

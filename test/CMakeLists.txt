@@ -62,7 +62,7 @@ if(TARGET yetty_ywire)
 endif()
 
 # ydraw-core — serialized draw-command layer.
-if(TARGET yetty_ydraw AND TARGET yetty_ydraw_core)
+if(TARGET yetty_ydraw_core AND TARGET yetty_ysdf)
     add_subdirectory(ut/ydraw-core)
 endif()
 

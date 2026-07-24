@@ -215,8 +215,8 @@ static void test_resolve_option_validation(struct ytest *test)
     YTEST_CHECK(test, resolve_with_options_fails(expr, &bad, YETTY_YPLOT_CONFIG_WINS));
 
     struct yetty_yplot_options empty = {0};
-    YTEST_CHECK(test, resolve_with_options_fails(expr, &empty,
-                                                 (enum yetty_yplot_attr_precedence)7));
+    YTEST_CHECK(test,
+                resolve_with_options_fails(expr, &empty, (enum yetty_yplot_attr_precedence)7));
 
     struct yetty_yplot_options good = {0};
     good.present = YETTY_YPLOT_OPT_WIDTH | YETTY_YPLOT_OPT_X_RANGE;
@@ -286,7 +286,8 @@ static void test_resolve_range_validation(struct ytest *test)
         yetty_yplot_resolve(&parse_res.value, &fix, YETTY_YPLOT_CONFIG_WINS, &resolved);
     YTEST_CHECK(test, YETTY_IS_OK(corrected));
     /* EXPRESSION_WINS: the reversed expression range stands and is rejected. */
-    YTEST_CHECK(test, resolve_with_options_fails(&parse_res.value, &fix, YETTY_YPLOT_EXPRESSION_WINS));
+    YTEST_CHECK(test,
+                resolve_with_options_fails(&parse_res.value, &fix, YETTY_YPLOT_EXPRESSION_WINS));
 }
 
 /* Field bounds require a strict range; equal bounds are rejected (not passed
@@ -306,8 +307,8 @@ static void test_resolve_field_bounds(struct ytest *test)
     equal_field.present = YETTY_YPLOT_OPT_FIELD;
     equal_field.field_min = 2.0f;
     equal_field.field_max = 2.0f;
-    YTEST_CHECK(test, resolve_with_options_fails(&parse_res.value, &equal_field,
-                                                 YETTY_YPLOT_CONFIG_WINS));
+    YTEST_CHECK(
+        test, resolve_with_options_fails(&parse_res.value, &equal_field, YETTY_YPLOT_CONFIG_WINS));
 }
 
 int main(void)

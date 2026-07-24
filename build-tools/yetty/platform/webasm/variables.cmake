@@ -29,7 +29,8 @@ set(YETTY_ENABLE_FEATURE_YCAT   OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_FEATURE_YMGUI  OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_TOOL_YCAT      OFF CACHE BOOL "" FORCE)
 
-# msdfgen + ymsdf-gen must stay ON: yetty_ydraw hard-depends on yetty_ymsdf_gen.
+# msdfgen + ymsdf-gen must stay ON: the ymsdf wrapper's cpu backend
+# (on-demand MSDF CDB generation for wire fonts) needs yetty_ymsdf_gen.
 set(YETTY_ENABLE_LIB_MSDFGEN       ON CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_FEATURE_YMSDF_GEN ON CACHE BOOL "" FORCE)
 

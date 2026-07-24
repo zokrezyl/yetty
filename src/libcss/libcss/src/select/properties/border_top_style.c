@@ -14,42 +14,34 @@
 #include "select/properties/properties.h"
 #include "select/properties/helpers.h"
 
-css_error css__cascade_border_top_style(uint32_t opv, css_style *style,
-		css_select_state *state)
+css_error css__cascade_border_top_style(uint32_t opv, css_style *style, css_select_state *state)
 {
-	return css__cascade_border_style(opv, style, state, set_border_top_style);
+    return css__cascade_border_style(opv, style, state, set_border_top_style);
 }
 
-css_error css__set_border_top_style_from_hint(const css_hint *hint,
-		css_computed_style *style)
+css_error css__set_border_top_style_from_hint(const css_hint *hint, css_computed_style *style)
 {
-	return set_border_top_style(style, hint->status);
+    return set_border_top_style(style, hint->status);
 }
 
 css_error css__initial_border_top_style(css_select_state *state)
 {
-	return set_border_top_style(state->computed, CSS_BORDER_STYLE_NONE);
+    return set_border_top_style(state->computed, CSS_BORDER_STYLE_NONE);
 }
 
-css_error css__copy_border_top_style(
-		const css_computed_style *from,
-		css_computed_style *to)
+css_error css__copy_border_top_style(const css_computed_style *from, css_computed_style *to)
 {
-	if (from == to) {
-		return CSS_OK;
-	}
+    if (from == to) {
+        return CSS_OK;
+    }
 
-	return set_border_top_style(to, get_border_top_style(from));
+    return set_border_top_style(to, get_border_top_style(from));
 }
 
 css_error css__compose_border_top_style(const css_computed_style *parent,
-		const css_computed_style *child,
-		css_computed_style *result)
+                                        const css_computed_style *child, css_computed_style *result)
 {
-	uint8_t type = get_border_top_style(child);
+    uint8_t type = get_border_top_style(child);
 
-	return css__copy_border_top_style(
-			type == CSS_BORDER_STYLE_INHERIT ? parent : child,
-			result);
+    return css__copy_border_top_style(type == CSS_BORDER_STYLE_INHERIT ? parent : child, result);
 }
-

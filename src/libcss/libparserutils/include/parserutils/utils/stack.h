@@ -9,8 +9,7 @@
 #define parserutils_utils_stack_h_
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #include <stddef.h>
@@ -22,11 +21,10 @@ struct parserutils_stack;
 typedef struct parserutils_stack parserutils_stack;
 
 parserutils_error parserutils_stack_create(size_t item_size, size_t chunk_size,
-		parserutils_stack **stack);
+                                           parserutils_stack **stack);
 parserutils_error parserutils_stack_destroy(parserutils_stack *stack);
 
-parserutils_error parserutils_stack_push(parserutils_stack *stack, 
-		const void *item);
+parserutils_error parserutils_stack_push(parserutils_stack *stack, const void *item);
 parserutils_error parserutils_stack_pop(parserutils_stack *stack, void *item);
 
 void *parserutils_stack_get_current(parserutils_stack *stack);
@@ -36,4 +34,3 @@ void *parserutils_stack_get_current(parserutils_stack *stack);
 #endif
 
 #endif
-

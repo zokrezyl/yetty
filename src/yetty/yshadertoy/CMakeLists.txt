@@ -55,7 +55,9 @@ endif()
 #   yetty_yshadertoy_core — wire serializer + drawable-list builder.
 #                            CPU-only, no Dawn. Linked by client tools (ycat).
 #   yetty_yshadertoy_prim — receiving concrete factory (per-instance WGSL
-#                            compile + render). Linked by yetty_ydraw.
+#                            compile + render). Linked into the app link
+#                            set (platform/shared.cmake); terminal.c
+#                            registers its factory at startup.
 #=============================================================================
 
 add_library(yetty_yshadertoy_core STATIC

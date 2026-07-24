@@ -9,22 +9,21 @@
 #define parserutils_errors_h_
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #include <stddef.h>
 
 typedef enum parserutils_error {
-	PARSERUTILS_OK               = 0,
+    PARSERUTILS_OK = 0,
 
-	PARSERUTILS_NOMEM            = 1,
-	PARSERUTILS_BADPARM          = 2,
-	PARSERUTILS_INVALID          = 3,
-	PARSERUTILS_FILENOTFOUND     = 4,
-	PARSERUTILS_NEEDDATA         = 5,
-	PARSERUTILS_BADENCODING      = 6,
-	PARSERUTILS_EOF              = 7
+    PARSERUTILS_NOMEM = 1,
+    PARSERUTILS_BADPARM = 2,
+    PARSERUTILS_INVALID = 3,
+    PARSERUTILS_FILENOTFOUND = 4,
+    PARSERUTILS_NEEDDATA = 5,
+    PARSERUTILS_BADENCODING = 6,
+    PARSERUTILS_EOF = 7
 } parserutils_error;
 
 /* Convert a parserutils error value to a string */
@@ -37,4 +36,3 @@ parserutils_error parserutils_error_from_string(const char *str, size_t len);
 #endif
 
 #endif
-

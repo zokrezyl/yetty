@@ -9,8 +9,7 @@
 #define parserutils_types_h_
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #include <stdbool.h>
@@ -21,4 +20,3 @@ extern "C"
 #endif
 
 #endif
-

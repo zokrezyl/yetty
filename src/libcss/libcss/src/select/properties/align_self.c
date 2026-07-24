@@ -14,74 +14,65 @@
 #include "select/properties/properties.h"
 #include "select/properties/helpers.h"
 
-css_error css__cascade_align_self(uint32_t opv, css_style *style, 
-		css_select_state *state)
+css_error css__cascade_align_self(uint32_t opv, css_style *style, css_select_state *state)
 {
-	uint16_t value = CSS_ALIGN_SELF_INHERIT;
+    uint16_t value = CSS_ALIGN_SELF_INHERIT;
 
-	UNUSED(style);
+    UNUSED(style);
 
-	if (hasFlagValue(opv) == false) {
-		switch (getValue(opv)) {
-		case ALIGN_SELF_STRETCH:
-			value = CSS_ALIGN_SELF_STRETCH;
-			break;
-		case ALIGN_SELF_FLEX_START:
-			value = CSS_ALIGN_SELF_FLEX_START;
-			break;
-		case ALIGN_SELF_FLEX_END:
-			value = CSS_ALIGN_SELF_FLEX_END;
-			break;
-		case ALIGN_SELF_CENTER:
-			value = CSS_ALIGN_SELF_CENTER;
-			break;
-		case ALIGN_SELF_BASELINE:
-			value = CSS_ALIGN_SELF_BASELINE;
-			break;
-		case ALIGN_SELF_AUTO:
-			value = CSS_ALIGN_SELF_AUTO;
-			break;
-		}
-	}
+    if (hasFlagValue(opv) == false) {
+        switch (getValue(opv)) {
+        case ALIGN_SELF_STRETCH:
+            value = CSS_ALIGN_SELF_STRETCH;
+            break;
+        case ALIGN_SELF_FLEX_START:
+            value = CSS_ALIGN_SELF_FLEX_START;
+            break;
+        case ALIGN_SELF_FLEX_END:
+            value = CSS_ALIGN_SELF_FLEX_END;
+            break;
+        case ALIGN_SELF_CENTER:
+            value = CSS_ALIGN_SELF_CENTER;
+            break;
+        case ALIGN_SELF_BASELINE:
+            value = CSS_ALIGN_SELF_BASELINE;
+            break;
+        case ALIGN_SELF_AUTO:
+            value = CSS_ALIGN_SELF_AUTO;
+            break;
+        }
+    }
 
-	if (css__outranks_existing(getOpcode(opv), isImportant(opv), state,
-			getFlagValue(opv))) {
-		return set_align_self(state->computed, value);
-	}
+    if (css__outranks_existing(getOpcode(opv), isImportant(opv), state, getFlagValue(opv))) {
+        return set_align_self(state->computed, value);
+    }
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
-css_error css__set_align_self_from_hint(const css_hint *hint,
-		css_computed_style *style)
+css_error css__set_align_self_from_hint(const css_hint *hint, css_computed_style *style)
 {
-	return set_align_self(style, hint->status);
+    return set_align_self(style, hint->status);
 }
 
 css_error css__initial_align_self(css_select_state *state)
 {
-	return set_align_self(state->computed, CSS_ALIGN_SELF_AUTO);
+    return set_align_self(state->computed, CSS_ALIGN_SELF_AUTO);
 }
 
-css_error css__copy_align_self(
-		const css_computed_style *from,
-		css_computed_style *to)
+css_error css__copy_align_self(const css_computed_style *from, css_computed_style *to)
 {
-	if (from == to) {
-		return CSS_OK;
-	}
+    if (from == to) {
+        return CSS_OK;
+    }
 
-	return set_align_self(to, get_align_self(from));
+    return set_align_self(to, get_align_self(from));
 }
 
-css_error css__compose_align_self(const css_computed_style *parent,
-		const css_computed_style *child,
-		css_computed_style *result)
+css_error css__compose_align_self(const css_computed_style *parent, const css_computed_style *child,
+                                  css_computed_style *result)
 {
-	uint8_t type = get_align_self(child);
+    uint8_t type = get_align_self(child);
 
-	return css__copy_align_self(
-			type == CSS_ALIGN_SELF_INHERIT ? parent : child,
-			result);
+    return css__copy_align_self(type == CSS_ALIGN_SELF_INHERIT ? parent : child, result);
 }
-

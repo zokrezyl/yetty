@@ -715,9 +715,8 @@ struct yetty_ycore_void_result yetty_ylexbor_js_run_all_scripts(struct yetty_yle
                     if (prelude_src != NULL &&
                         fread(prelude_src, 1, (size_t)prelude_len, prelude_file) > 0) {
                         JSContext *prelude_ctx = (JSContext *)r->js_ctx;
-                        JSValue prelude_val = JS_Eval(prelude_ctx, prelude_src,
-                                                      strlen(prelude_src), "<prelude>",
-                                                      JS_EVAL_TYPE_GLOBAL);
+                        JSValue prelude_val = JS_Eval(prelude_ctx, prelude_src, strlen(prelude_src),
+                                                      "<prelude>", JS_EVAL_TYPE_GLOBAL);
                         if (JS_IsException(prelude_val)) {
                             JSValue exc = JS_GetException(prelude_ctx);
                             const char *exc_s = JS_ToCString(prelude_ctx, exc);

@@ -11,9 +11,8 @@
 #include "stylesheet.h"
 #include "parse/language.h"
 
-css_error css__parse_important(css_language *c,
-		const parserutils_vector *vector, int32_t *ctx,
-		uint8_t *result);
+css_error css__parse_important(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+                               uint8_t *result);
 
 void css__make_style_important(css_style *style);
 

@@ -5,9 +5,8 @@
  * Copyright 2017 The NetSurf Project
  */
 
-
 struct css_computed_style_i {
-/*
+    /*
  * Property                       Size (bits)     Size (bytes)
  * ---                            ---             ---
  * align_content                    3             
@@ -204,82 +203,82 @@ struct css_computed_style_i {
  * list_style_image; flex_shrink; flex_grow; fill_opacity; counter_reset;
  * counter_increment; color; background_image
  */
-	uint32_t bits[15];
-	
-	css_color background_color;
-	lwc_string *background_image;
-	css_fixed background_position_a;
-	css_fixed background_position_b;
-	css_color border_bottom_color;
-	css_fixed border_bottom_width;
-	css_color border_left_color;
-	css_fixed border_left_width;
-	css_color border_right_color;
-	css_fixed border_right_width;
-	css_fixed border_spacing_a;
-	css_fixed border_spacing_b;
-	css_color border_top_color;
-	css_fixed border_top_width;
-	css_fixed bottom;
-	css_fixed clip_a;
-	css_fixed clip_b;
-	css_fixed clip_c;
-	css_fixed clip_d;
-	css_color color;
-	int32_t column_count;
-	css_fixed column_gap;
-	css_color column_rule_color;
-	css_fixed column_rule_width;
-	css_fixed column_width;
-	css_fixed fill_opacity;
-	css_fixed flex_basis;
-	css_fixed flex_grow;
-	css_fixed flex_shrink;
-	css_fixed font_size;
-	css_fixed height;
-	css_fixed left;
-	css_fixed letter_spacing;
-	css_fixed line_height;
-	lwc_string *list_style_image;
-	css_fixed margin_bottom;
-	css_fixed margin_left;
-	css_fixed margin_right;
-	css_fixed margin_top;
-	css_fixed max_height;
-	css_fixed max_width;
-	css_fixed min_height;
-	css_fixed min_width;
-	css_fixed opacity;
-	int32_t order;
-	int32_t orphans;
-	css_color outline_color;
-	css_fixed outline_width;
-	css_fixed padding_bottom;
-	css_fixed padding_left;
-	css_fixed padding_right;
-	css_fixed padding_top;
-	css_fixed right;
-	css_fixed stroke_opacity;
-	css_fixed text_indent;
-	css_fixed top;
-	css_fixed vertical_align;
-	int32_t widows;
-	css_fixed width;
-	css_fixed word_spacing;
-	int32_t z_index;
+    uint32_t bits[15];
+
+    css_color background_color;
+    lwc_string *background_image;
+    css_fixed background_position_a;
+    css_fixed background_position_b;
+    css_color border_bottom_color;
+    css_fixed border_bottom_width;
+    css_color border_left_color;
+    css_fixed border_left_width;
+    css_color border_right_color;
+    css_fixed border_right_width;
+    css_fixed border_spacing_a;
+    css_fixed border_spacing_b;
+    css_color border_top_color;
+    css_fixed border_top_width;
+    css_fixed bottom;
+    css_fixed clip_a;
+    css_fixed clip_b;
+    css_fixed clip_c;
+    css_fixed clip_d;
+    css_color color;
+    int32_t column_count;
+    css_fixed column_gap;
+    css_color column_rule_color;
+    css_fixed column_rule_width;
+    css_fixed column_width;
+    css_fixed fill_opacity;
+    css_fixed flex_basis;
+    css_fixed flex_grow;
+    css_fixed flex_shrink;
+    css_fixed font_size;
+    css_fixed height;
+    css_fixed left;
+    css_fixed letter_spacing;
+    css_fixed line_height;
+    lwc_string *list_style_image;
+    css_fixed margin_bottom;
+    css_fixed margin_left;
+    css_fixed margin_right;
+    css_fixed margin_top;
+    css_fixed max_height;
+    css_fixed max_width;
+    css_fixed min_height;
+    css_fixed min_width;
+    css_fixed opacity;
+    int32_t order;
+    int32_t orphans;
+    css_color outline_color;
+    css_fixed outline_width;
+    css_fixed padding_bottom;
+    css_fixed padding_left;
+    css_fixed padding_right;
+    css_fixed padding_top;
+    css_fixed right;
+    css_fixed stroke_opacity;
+    css_fixed text_indent;
+    css_fixed top;
+    css_fixed vertical_align;
+    int32_t widows;
+    css_fixed width;
+    css_fixed word_spacing;
+    int32_t z_index;
 };
 
 struct css_computed_style {
-	struct css_computed_style_i i;
-	
-	css_computed_content_item *content;
-	css_computed_counter *counter_increment;
-	css_computed_counter *counter_reset;
-	lwc_string **cursor;
-	lwc_string **font_family;
-	lwc_string **quotes;
-	
-	struct css_computed_style *next;
-	uint32_t count;
-	uint32_t bin;
+    struct css_computed_style_i i;
+
+    css_computed_content_item *content;
+    css_computed_counter *counter_increment;
+    css_computed_counter *counter_reset;
+    lwc_string **cursor;
+    lwc_string **font_family;
+    lwc_string **quotes;
+
+    struct css_computed_style *next;
+    uint32_t count;
+    uint32_t bin;
 };

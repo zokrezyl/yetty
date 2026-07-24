@@ -14,63 +14,55 @@
 #include "select/properties/properties.h"
 #include "select/properties/helpers.h"
 
-css_error css__cascade_list_style_position(uint32_t opv, css_style *style,
-		css_select_state *state)
+css_error css__cascade_list_style_position(uint32_t opv, css_style *style, css_select_state *state)
 {
-	uint16_t value = CSS_LIST_STYLE_POSITION_INHERIT;
+    uint16_t value = CSS_LIST_STYLE_POSITION_INHERIT;
 
-	UNUSED(style);
+    UNUSED(style);
 
-	if (hasFlagValue(opv) == false) {
-		switch (getValue(opv)) {
-		case LIST_STYLE_POSITION_INSIDE:
-			value = CSS_LIST_STYLE_POSITION_INSIDE;
-			break;
-		case LIST_STYLE_POSITION_OUTSIDE:
-			value = CSS_LIST_STYLE_POSITION_OUTSIDE;
-			break;
-		}
-	}
+    if (hasFlagValue(opv) == false) {
+        switch (getValue(opv)) {
+        case LIST_STYLE_POSITION_INSIDE:
+            value = CSS_LIST_STYLE_POSITION_INSIDE;
+            break;
+        case LIST_STYLE_POSITION_OUTSIDE:
+            value = CSS_LIST_STYLE_POSITION_OUTSIDE;
+            break;
+        }
+    }
 
-	if (css__outranks_existing(getOpcode(opv), isImportant(opv), state,
-			getFlagValue(opv))) {
-		return set_list_style_position(state->computed, value);
-	}
+    if (css__outranks_existing(getOpcode(opv), isImportant(opv), state, getFlagValue(opv))) {
+        return set_list_style_position(state->computed, value);
+    }
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
-css_error css__set_list_style_position_from_hint(const css_hint *hint,
-		css_computed_style *style)
+css_error css__set_list_style_position_from_hint(const css_hint *hint, css_computed_style *style)
 {
-	return set_list_style_position(style, hint->status);
+    return set_list_style_position(style, hint->status);
 }
 
 css_error css__initial_list_style_position(css_select_state *state)
 {
-	return set_list_style_position(state->computed,
-			CSS_LIST_STYLE_POSITION_OUTSIDE);
+    return set_list_style_position(state->computed, CSS_LIST_STYLE_POSITION_OUTSIDE);
 }
 
-css_error css__copy_list_style_position(
-		const css_computed_style *from,
-		css_computed_style *to)
+css_error css__copy_list_style_position(const css_computed_style *from, css_computed_style *to)
 {
-	if (from == to) {
-		return CSS_OK;
-	}
+    if (from == to) {
+        return CSS_OK;
+    }
 
-	return set_list_style_position(to, get_list_style_position(from));
+    return set_list_style_position(to, get_list_style_position(from));
 }
 
 css_error css__compose_list_style_position(const css_computed_style *parent,
-		const css_computed_style *child,
-		css_computed_style *result)
+                                           const css_computed_style *child,
+                                           css_computed_style *result)
 {
-	uint8_t type = get_list_style_position(child);
+    uint8_t type = get_list_style_position(child);
 
-	return css__copy_list_style_position(
-			type == CSS_LIST_STYLE_POSITION_INHERIT ? parent : child,
-			result);
+    return css__copy_list_style_position(type == CSS_LIST_STYLE_POSITION_INHERIT ? parent : child,
+                                         result);
 }
-

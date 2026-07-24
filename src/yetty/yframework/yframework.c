@@ -15,6 +15,7 @@
 #include <yetty/yframework/yframework.h>
 
 #include <yetty/ycore/memtag.h>
+#include <yetty/ysdf/default-registry.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yplatform/yplatform/platform.h>
@@ -866,6 +867,19 @@ struct yetty_yframework_ptr_result yetty_yframework_create(struct yetty_yclass_o
         }
     }
 
+    /* Shared ydraw drawable-list decode registry. Immutable after this
+     * point; terminals and ygrids borrow it instead of building copies. */
+    {
+        struct yetty_ydraw_drawable_list_registry_ptr_result drawable_registry_res =
+            yetty_ydraw_drawable_list_registry_create_default();
+        if (YETTY_IS_ERR(drawable_registry_res)) {
+            (void)yetty_yframework_destroy(rt);
+            return YETTY_ERR(yetty_yframework_ptr, "yframework: drawable registry create",
+                             drawable_registry_res);
+        }
+        rt->drawable_registry = drawable_registry_res.value;
+    }
+
     /* RPC server (optional). Created here so any app that wants the
      * generic key/mouse/resize/shutdown injection just toggles
      * `rpc/port` in its config. Apps can register more handlers on
@@ -922,6 +936,13 @@ struct yetty_ycore_void_result yetty_yframework_destroy(struct yetty_yframework 
     if (rt->memtag_registry) {
         yetty_ycore_memtag_registry_destroy(rt->memtag_registry);
         rt->memtag_registry = NULL;
+    }
+
+    /* Terminals/ygrids that borrowed the drawable registry are torn down by
+     * the app before the framework, so nothing references it here. */
+    if (rt->drawable_registry) {
+        yetty_ydraw_drawable_list_registry_destroy(rt->drawable_registry);
+        rt->drawable_registry = NULL;
     }
 
     /* Tear down the per-kind factory bundles BEFORE the GPU goes away

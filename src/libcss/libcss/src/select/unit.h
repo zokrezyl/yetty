@@ -19,10 +19,7 @@
  * \param[in]  unit    Current unit of length.
  * \return A length in CSS pixels.
  */
-css_fixed css_unit_len2px_mq(
-		const css_unit_ctx *ctx,
-		const css_fixed length,
-		const css_unit unit);
+css_fixed css_unit_len2px_mq(const css_unit_ctx *ctx, const css_fixed length, const css_unit unit);
 
 /**
  * Convert relative font size units to absolute units.
@@ -33,10 +30,8 @@ css_fixed css_unit_len2px_mq(
  * \param[in,out] size           The length to convert.
  * \return CSS_OK on success, or appropriate error otherwise.
  */
-css_error css_unit_compute_absolute_font_size(
-		const css_hint_length *ref_length,
-		const css_computed_style *root_style,
-		css_fixed font_size_default,
-		css_hint *size);
+css_error css_unit_compute_absolute_font_size(const css_hint_length *ref_length,
+                                              const css_computed_style *root_style,
+                                              css_fixed font_size_default, css_hint *size);
 
 #endif
