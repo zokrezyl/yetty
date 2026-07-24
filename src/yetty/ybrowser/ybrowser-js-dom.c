@@ -265,7 +265,139 @@ static void mark_dirty(JSContext *ctx)
          * getter's layout flush clears dom_dirty (layout is current) but leaves
          * the framebuffer stale — see needs_paint in ybrowser-internal.h. */
         r->needs_paint = 1;
+        /* Any structure / class / attribute change can flip which selectors
+         * match, so BOTH selector caches must drop: the supplementary-match
+         * cache and the libcss computed-style cache. Bumping the epochs
+         * invalidates them lazily on next lookup. */
+        r->supp_match_epoch++;
+        r->style_epoch++;
+        /* Structure/class/attribute can change layout geometry. */
+        r->layout_dirty = 1;
     }
+}
+
+/* Like mark_dirty, but for a REGULAR inline-style / CSS-property write
+ * (element.style.transform = …, setProperty("width", …), cssText). Selectors
+ * never match on inline style, and ybrowser resolves inheritance in box-build,
+ * so neither the supplementary-match cache nor the per-element computed-style
+ * cache is invalidated globally — the one element that changed is caught by its
+ * inline-style hash. This is what keeps both caches warm through CSS animations
+ * (the youtube case). `affects_layout` marks whether the property can move a box
+ * (width/height/margin/… yes; opacity/color/box-shadow no). */
+static void mark_dirty_style_write(JSContext *ctx, bool affects_layout)
+{
+    struct yetty_ylexbor *r = runtime_ylex(ctx);
+    if (r) {
+        r->dom_dirty = 1;
+        r->needs_paint = 1;
+        if (affects_layout) {
+            r->layout_dirty = 1;
+        }
+    }
+}
+
+/* An inline CUSTOM-property write (element.style.setProperty("--x", …)).
+ * Custom properties inherit, so any descendant's var(--x) resolution can
+ * change — the computed-style cache (which bakes in resolved var()s) must drop
+ * globally, and var() can feed a layout property (width: var(--x)), so a
+ * relayout may be owed too. Selector matching is unaffected, so the
+ * supplementary-match cache survives. */
+static void mark_dirty_custom_prop(JSContext *ctx)
+{
+    struct yetty_ylexbor *r = runtime_ylex(ctx);
+    if (r) {
+        r->dom_dirty = 1;
+        r->needs_paint = 1;
+        r->style_epoch++;
+        r->layout_dirty = 1;
+    }
+}
+
+/* True for CSS properties that CANNOT change layout geometry — neither the
+ * layout box (offsetWidth/Height/clientWidth) nor the transformed border box
+ * (getBoundingClientRect). A geometry read after only such a write does not need
+ * a relayout. Deliberately conservative: anything not listed here is treated as
+ * layout-affecting. Notably EXCLUDES transform (feeds getBoundingClientRect) and
+ * visibility (collapse removes table-track space). */
+static bool css_prop_is_paint_only(const char *name)
+{
+    static const char *const paint_only[] = {
+        "opacity",
+        "color",
+        "background",
+        "background-color",
+        "background-image",
+        "background-position",
+        "background-repeat",
+        "background-size",
+        "background-attachment",
+        "background-clip",
+        "background-origin",
+        "box-shadow",
+        "text-shadow",
+        "outline",
+        "outline-color",
+        "outline-style",
+        "outline-width",
+        "outline-offset",
+        "border-color",
+        "border-top-color",
+        "border-right-color",
+        "border-bottom-color",
+        "border-left-color",
+        "cursor",
+        "filter",
+        "-webkit-filter",
+        "backdrop-filter",
+        "caret-color",
+        "accent-color",
+        "pointer-events",
+        "user-select",
+        "-webkit-user-select",
+        "text-decoration",
+        "text-decoration-color",
+        "text-decoration-style",
+        "-webkit-tap-highlight-color",
+        "transition",
+        "transition-property",
+        "transition-duration",
+        "transition-timing-function",
+        "transition-delay",
+        "animation-name",
+        "animation-duration",
+        "animation-timing-function",
+        "animation-delay",
+        "animation-iteration-count",
+        "animation-direction",
+        "animation-fill-mode",
+        "animation-play-state",
+        "will-change",
+    };
+    for (size_t i = 0; i < sizeof(paint_only) / sizeof(paint_only[0]); i++) {
+        if (strcmp(name, paint_only[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Route an inline-style property write to the right invalidation: a custom
+ * property (--foo) can affect descendants' var() resolution; a plain property
+ * only affects this element (caught by its inline-hash), and only forces a
+ * relayout when it can actually move a box. */
+static void mark_dirty_inline_prop(JSContext *ctx, const char *prop_name)
+{
+    /* A custom property, or a wholesale cssText replacement (which may add or
+     * change custom properties), needs the conservative descendant-affecting
+     * invalidation; a plain property only affects this element. */
+    bool conservative = prop_name && ((prop_name[0] == '-' && prop_name[1] == '-') ||
+                                      strcmp(prop_name, "cssText") == 0 ||
+                                      strcmp(prop_name, "css-text") == 0);
+    if (conservative) {
+        mark_dirty_custom_prop(ctx);
+        return;
+    }
+    mark_dirty_style_write(ctx, /*affects_layout=*/!prop_name || !css_prop_is_paint_only(prop_name));
 }
 
 /* MutationObserver notification — implemented below, forward-declared here so
@@ -743,6 +875,9 @@ static JSValue js_el_getAttribute(JSContext *ctx, JSValueConst this_val, int arg
     return JS_NewStringLen(ctx, (const char *)v, vlen);
 }
 
+static void ce_react_attr_changed(JSContext *ctx, lxb_dom_element_t *el, const char *name,
+                                  const char *old_value, const char *new_value);
+
 static JSValue js_el_setAttribute(JSContext *ctx, JSValueConst this_val, int argc,
                                   JSValueConst *argv)
 {
@@ -765,6 +900,7 @@ static JSValue js_el_setAttribute(JSContext *ctx, JSValueConst this_val, int arg
                                       vlen);
         mark_dirty(ctx);
         dom_mo_notify_attributes(ctx, el, name, nlen, old_value);
+        ce_react_attr_changed(ctx, el, name, old_value, val);
         free(old_value);
         JS_FreeCString(ctx, val);
     }
@@ -793,6 +929,7 @@ static JSValue js_el_removeAttribute(JSContext *ctx, JSValueConst this_val, int 
             lxb_dom_element_remove_attribute(el, (const lxb_char_t *)raw, nlen);
             mark_dirty(ctx);
             dom_mo_notify_attributes(ctx, el, raw, nlen, old_value);
+            ce_react_attr_changed(ctx, el, raw, old_value, NULL);
             free(old_value);
             JS_FreeCString(ctx, raw);
         }
@@ -802,6 +939,7 @@ static JSValue js_el_removeAttribute(JSContext *ctx, JSValueConst this_val, int 
     lxb_dom_element_remove_attribute(el, (const lxb_char_t *)name, nlen);
     mark_dirty(ctx);
     dom_mo_notify_attributes(ctx, el, name, nlen, old_value);
+    ce_react_attr_changed(ctx, el, name, old_value, NULL);
     free(old_value);
     free(name);
     return JS_UNDEFINED;
@@ -957,6 +1095,62 @@ static void ce_react_upgrade_value(JSContext *ctx, JSValueConst wrapped)
 static void ce_react_disconnect(JSContext *ctx, lxb_dom_node_t *removed)
 {
     ce_react_dispatch(ctx, removed, "__disconnectSubtree");
+}
+
+/* Fire the attributeChangedCallback custom-element reaction for a runtime
+ * setAttribute/removeAttribute. Native browsers deliver this whenever an
+ * observed attribute of an upgraded custom element changes; without it a
+ * framework that toggles an observed attribute at runtime never sees the
+ * change. The concrete casualty: Polymer stamps yt-icon with a bound
+ * `disable-upgrade$="[[data.thumbnail]]"` that is briefly set then REMOVED once
+ * the (undefined) binding resolves; the removal must fire
+ * attributeChangedCallback so the element clears __isUpgradeDisabled and finally
+ * upgrades — otherwise every guide/menu icon stays upgrade-disabled and blank.
+ * The JS registry gates on el.__ceUpgraded + observedAttributes, so this is a
+ * no-op for plain elements and un-upgraded ones. old_value/new_value are C
+ * strings or NULL (attribute absent). */
+static void ce_react_attr_changed(JSContext *ctx, lxb_dom_element_t *el, const char *name,
+                                  const char *old_value, const char *new_value)
+{
+    struct js_dom_state *state = dom_state(ctx);
+    if (state == NULL || !state->ce_active || el == NULL || name == NULL) {
+        return;
+    }
+    if (state->ce_react_depth > 256) {
+        return;
+    }
+    /* Custom-element names always contain a hyphen; a plain HTML element
+	 * (div/span/a/…) can never have an attributeChangedCallback reaction, so
+	 * skip the JS call entirely for them. This keeps attribute-heavy pages that
+	 * define some custom elements (so ce_active is set) from paying a JS round
+	 * trip on every setAttribute of a regular element. */
+    size_t tag_len = 0;
+    const lxb_char_t *tag = lxb_dom_element_local_name(el, &tag_len);
+    if (tag == NULL || memchr(tag, '-', tag_len) == NULL) {
+        return;
+    }
+    state->ce_react_depth++;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue registry = JS_GetPropertyStr(ctx, global, "customElements");
+    JSValue fn = JS_GetPropertyStr(ctx, registry, "__attributeChanged");
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue wrapped = wrap_element(ctx, el);
+        JSValue argv[4] = {
+            wrapped,
+            JS_NewString(ctx, name),
+            old_value ? JS_NewString(ctx, old_value) : JS_NULL,
+            new_value ? JS_NewString(ctx, new_value) : JS_NULL,
+        };
+        JSValue result = JS_Call(ctx, fn, registry, 4, argv);
+        JS_FreeValue(ctx, result);
+        for (int i = 0; i < 4; i++) {
+            JS_FreeValue(ctx, argv[i]);
+        }
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, registry);
+    JS_FreeValue(ctx, global);
+    state->ce_react_depth--;
 }
 
 /* Spec: inserting a DocumentFragment inserts its CHILDREN, in order, at the
@@ -2668,6 +2862,177 @@ static JSValue idl_attr_set(JSContext *ctx, JSValueConst this_val, JSValueConst 
     return JS_UNDEFINED;
 }
 
+/* HTMLAnchorElement / HTMLAreaElement URL-decomposition IDL attributes:
+ * protocol / host / hostname / port / pathname / search / hash / origin. Each
+ * parses the element's `href` resolved to an absolute URL. YouTube's kevlar
+ * router normalizes routes with `a.href = url; a.pathname` — with pathname
+ * missing it returned undefined, `pathname.startsWith("/")` threw, the router
+ * aborted, and the page-manager never stamped ytd-browse (blank homepage). */
+enum anchor_url_part {
+    ANCHOR_PROTOCOL,
+    ANCHOR_HOST,
+    ANCHOR_HOSTNAME,
+    ANCHOR_PORT,
+    ANCHOR_PATHNAME,
+    ANCHOR_SEARCH,
+    ANCHOR_HASH,
+    ANCHOR_ORIGIN,
+};
+
+static JSValue anchor_url_component(JSContext *ctx, JSValueConst this_val, enum anchor_url_part which)
+{
+    lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
+    if (!el) {
+        return JS_NewString(ctx, "");
+    }
+    size_t vlen = 0;
+    const lxb_char_t *v = lxb_dom_element_get_attribute(el, (const lxb_char_t *)"href", 4, &vlen);
+    if (!v || vlen == 0) {
+        return JS_NewString(ctx, "");
+    }
+    struct yetty_ylexbor *r = runtime_ylex(ctx);
+    char *raw = malloc(vlen + 1);
+    if (!raw) {
+        return JS_NewString(ctx, "");
+    }
+    memcpy(raw, v, vlen);
+    raw[vlen] = '\0';
+    char *abs = r ? yetty_ylexbor_resolve_url(r, raw) : NULL;
+    const char *url = abs ? abs : raw;
+
+    /* Split scheme://authority/rest. */
+    size_t scheme_len = 0;
+    const char *authority = NULL;
+    const char *rest = url;
+    const char *sep = strstr(url, "://");
+    if (sep) {
+        scheme_len = (size_t)(sep - url);
+        authority = sep + 3;
+        rest = authority + strcspn(authority, "/?#");
+    }
+    /* Host / port from the authority (userinfo stripped). */
+    const char *host = NULL;
+    size_t host_len = 0, port_len = 0;
+    const char *port = NULL;
+    if (authority) {
+        const char *auth_end = rest;
+        const char *at = memchr(authority, '@', (size_t)(auth_end - authority));
+        const char *hstart = at ? at + 1 : authority;
+        const char *colon = memchr(hstart, ':', (size_t)(auth_end - hstart));
+        if (colon) {
+            host = hstart;
+            host_len = (size_t)(colon - hstart);
+            port = colon + 1;
+            port_len = (size_t)(auth_end - (colon + 1));
+        } else {
+            host = hstart;
+            host_len = (size_t)(auth_end - hstart);
+        }
+    }
+    /* Path / query / fragment from rest. */
+    const char *frag = strchr(rest, '#');
+    const char *query = strchr(rest, '?');
+    if (frag && query && query > frag) {
+        query = NULL; /* '?' after '#' is part of the fragment */
+    }
+    const char *path = rest;
+    const char *path_end = query ? query : (frag ? frag : rest + strlen(rest));
+
+    char out[2048];
+    out[0] = '\0';
+    switch (which) {
+    case ANCHOR_PROTOCOL:
+        if (scheme_len) {
+            snprintf(out, sizeof(out), "%.*s:", (int)scheme_len, url);
+        }
+        break;
+    case ANCHOR_HOSTNAME:
+        if (host) {
+            snprintf(out, sizeof(out), "%.*s", (int)host_len, host);
+        }
+        break;
+    case ANCHOR_PORT:
+        if (port) {
+            snprintf(out, sizeof(out), "%.*s", (int)port_len, port);
+        }
+        break;
+    case ANCHOR_HOST:
+        if (host && port) {
+            snprintf(out, sizeof(out), "%.*s:%.*s", (int)host_len, host, (int)port_len, port);
+        } else if (host) {
+            snprintf(out, sizeof(out), "%.*s", (int)host_len, host);
+        }
+        break;
+    case ANCHOR_PATHNAME:
+        if (path_end > path) {
+            snprintf(out, sizeof(out), "%.*s", (int)(path_end - path), path);
+        } else if (authority) {
+            /* Empty path on a hierarchical URL normalizes to "/". */
+            snprintf(out, sizeof(out), "/");
+        }
+        break;
+    case ANCHOR_SEARCH:
+        if (query) {
+            const char *q_end = frag ? frag : query + strlen(query);
+            if (q_end > query + 1) {
+                snprintf(out, sizeof(out), "%.*s", (int)(q_end - query), query);
+            }
+        }
+        break;
+    case ANCHOR_HASH:
+        if (frag && frag[1]) {
+            snprintf(out, sizeof(out), "%s", frag);
+        }
+        break;
+    case ANCHOR_ORIGIN:
+        if (scheme_len && host) {
+            if (port) {
+                snprintf(out, sizeof(out), "%.*s://%.*s:%.*s", (int)scheme_len, url, (int)host_len,
+                         host, (int)port_len, port);
+            } else {
+                snprintf(out, sizeof(out), "%.*s://%.*s", (int)scheme_len, url, (int)host_len, host);
+            }
+        }
+        break;
+    }
+    free(raw);
+    free(abs);
+    return JS_NewString(ctx, out);
+}
+
+static JSValue js_el_protocol_get(JSContext *ctx, JSValueConst tv)
+{
+    return anchor_url_component(ctx, tv, ANCHOR_PROTOCOL);
+}
+static JSValue js_el_host_get(JSContext *ctx, JSValueConst tv)
+{
+    return anchor_url_component(ctx, tv, ANCHOR_HOST);
+}
+static JSValue js_el_hostname_get(JSContext *ctx, JSValueConst tv)
+{
+    return anchor_url_component(ctx, tv, ANCHOR_HOSTNAME);
+}
+static JSValue js_el_port_get(JSContext *ctx, JSValueConst tv)
+{
+    return anchor_url_component(ctx, tv, ANCHOR_PORT);
+}
+static JSValue js_el_pathname_get(JSContext *ctx, JSValueConst tv)
+{
+    return anchor_url_component(ctx, tv, ANCHOR_PATHNAME);
+}
+static JSValue js_el_search_get(JSContext *ctx, JSValueConst tv)
+{
+    return anchor_url_component(ctx, tv, ANCHOR_SEARCH);
+}
+static JSValue js_el_hash_get(JSContext *ctx, JSValueConst tv)
+{
+    return anchor_url_component(ctx, tv, ANCHOR_HASH);
+}
+static JSValue js_el_urlorigin_get(JSContext *ctx, JSValueConst tv)
+{
+    return anchor_url_component(ctx, tv, ANCHOR_ORIGIN);
+}
+
 #define IDL_ATTR(prop, attr, urlish)                                                               \
     static JSValue js_el_##prop##_get(JSContext *ctx, JSValueConst tv)                             \
     {                                                                                              \
@@ -3161,7 +3526,7 @@ static JSValue style_method_setProperty(JSContext *ctx, JSValueConst this_val, i
             lxb_dom_element_set_attribute(el, (const lxb_char_t *)"style", 5,
                                           (const lxb_char_t *)buf, off);
             free(buf);
-            mark_dirty(ctx);
+            mark_dirty_inline_prop(ctx, k);
         }
     }
     if (k) {
@@ -3405,7 +3770,7 @@ static int style_set_property(JSContext *ctx, JSValueConst obj, JSAtom prop, JSV
 
     lxb_dom_element_set_attribute(el, (const lxb_char_t *)"style", 5, (const lxb_char_t *)out,
                                   strlen(out));
-    mark_dirty(ctx);
+    mark_dirty_inline_prop(ctx, kebab);
 
     free(buf);
     free(parse_buf);
@@ -4180,9 +4545,16 @@ static JSValue js_el_cloneNode_stub(JSContext *ctx, JSValueConst this_val, int a
  * MutationObserver) are NOT delivered here — that stays asynchronous. */
 static void geometry_flush_pending_layout(struct yetty_ylexbor *r)
 {
-    if (r == NULL || !r->dom_dirty || r->layout_in_progress) {
+    /* Only force a full relayout when a LAYOUT-affecting mutation is pending.
+	 * A paint-only change (opacity/color/…) leaves box geometry current, so the
+	 * read is served from the last layout — this is what spares youtube's
+	 * paint-only animation frames the O(page) rebuild. */
+    if (r == NULL || !r->layout_dirty || r->layout_in_progress) {
         return;
     }
+    r->forced_flush_count++;
+    struct timespec flush_t0;
+    clock_gettime(CLOCK_MONOTONIC, &flush_t0);
     /* Box-build + layout only — NOT the full relayout: a geometry getter must
      * flush style/layout without initiating iframe resolution/fetch/DOM work
      * while JS is synchronously reading geometry. The callee sets/clears
@@ -4195,6 +4567,10 @@ static void geometry_flush_pending_layout(struct yetty_ylexbor *r)
         ydebug("geometry-flush relayout failed: %s", res.error.msg ? res.error.msg : "?");
         yetty_ycore_error_destroy(res.error);
     }
+    struct timespec flush_t1;
+    clock_gettime(CLOCK_MONOTONIC, &flush_t1);
+    r->forced_flush_ns += (uint64_t)(flush_t1.tv_sec - flush_t0.tv_sec) * 1000000000ULL +
+                          (uint64_t)(flush_t1.tv_nsec - flush_t0.tv_nsec);
 }
 
 /* getBoundingClientRect — return the element's real laid-out rectangle (union
@@ -4562,6 +4938,9 @@ static int dispatch_propagation_stopped(JSContext *ctx, JSValueConst event)
     return stopped;
 }
 
+static JSValue synth_event_composed_path(JSContext *ctx, JSValueConst this_val, int argc,
+                                         JSValueConst *argv);
+
 /* Real EventTarget.dispatchEvent: invoke every registered listener whose type
  * matches the event, starting at the dispatch target and — for events created
  * with bubbles:true — walking up the ancestor chain, firing each ancestor's
@@ -4596,10 +4975,6 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
     state->dispatch_depth++;
     lxb_dom_element_t *el = unwrap_element(ctx, this_val); /* NULL for document/window */
     JS_SetPropertyStr(ctx, (JSValue)argv[0], "target", JS_DupValue(ctx, this_val));
-    /* Snapshot the count: a handler may addEventListener during dispatch and
-	 * those new listeners must not fire for this same event. */
-    int snapshot = state->listener_count;
-    int immediate_stopped = dispatch_fire_level(ctx, state, el, type, argv[0], this_val, snapshot);
 
     JSValue bubbles_v = JS_GetPropertyStr(ctx, (JSValue)argv[0], "bubbles");
     int bubbles = JS_ToBool(ctx, bubbles_v);
@@ -4607,6 +4982,23 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
     JSValue composed_v = JS_GetPropertyStr(ctx, (JSValue)argv[0], "composed");
     int composed = JS_ToBool(ctx, composed_v);
     JS_FreeValue(ctx, composed_v);
+
+    /* Install a lazy composedPath() reading the event's own target. Handlers
+	 * resolve the ORIGINAL target through it — YouTube's app boot literally
+	 * gates on composedPath()[0].id === "page-manager" when the page-manager
+	 * announces itself; without it the guard fails silently and the whole page
+	 * never attaches. The array itself is built on first call (see
+	 * synth_event_composed_path), so an event nobody inspects costs nothing. A
+	 * stale __composedPath from a previous dispatch of the same event object is
+	 * cleared so the fresh target is walked. */
+    JS_SetPropertyStr(ctx, (JSValue)argv[0], "__composedPath", JS_UNDEFINED);
+    JS_SetPropertyStr(ctx, (JSValue)argv[0], "composedPath",
+                      JS_NewCFunction(ctx, synth_event_composed_path, "composedPath", 0));
+
+    /* Snapshot the count: a handler may addEventListener during dispatch and
+	 * those new listeners must not fire for this same event. */
+    int snapshot = state->listener_count;
+    int immediate_stopped = dispatch_fire_level(ctx, state, el, type, argv[0], this_val, snapshot);
 
     if (el != NULL && bubbles && !immediate_stopped &&
         !dispatch_propagation_stopped(ctx, argv[0])) {
@@ -4642,6 +5034,42 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
     int prevented = JS_ToBool(ctx, dp);
     JS_FreeValue(ctx, dp);
     return prevented ? JS_FALSE : JS_TRUE;
+}
+
+static void maybe_submit_activated_form(JSContext *ctx, lxb_dom_element_t *target);
+static void maybe_navigate_anchor(JSContext *ctx, lxb_dom_element_t *target);
+
+/* HTMLElement.click(): dispatch a synthetic click on the element, then — unless
+ * a handler called preventDefault() — run the activation default action (submit
+ * a form when the element is a submit control). Mirrors what a real pointer
+ * click does via dispatch_click, so JS-driven activation (and headless tests)
+ * take the same path. Previously a no-op stub, so `button.click()` did nothing. */
+static JSValue js_el_click(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)argc;
+    (void)argv;
+    JSValue event = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, event, "type", JS_NewString(ctx, "click"));
+    JS_SetPropertyStr(ctx, event, "bubbles", JS_TRUE);
+    JS_SetPropertyStr(ctx, event, "cancelable", JS_TRUE);
+    JS_SetPropertyStr(ctx, event, "composed", JS_TRUE);
+    JS_SetPropertyStr(ctx, event, "isTrusted", JS_FALSE);
+    JS_SetPropertyStr(ctx, event, "detail", JS_NewInt32(ctx, 1));
+    JS_SetPropertyStr(ctx, event, "defaultPrevented", JS_FALSE);
+    JSValueConst dispatch_argv[1] = {event};
+    JSValue rc = js_el_dispatchEvent(ctx, this_val, 1, dispatch_argv);
+    JS_FreeValue(ctx, rc);
+    JSValue dp = JS_GetPropertyStr(ctx, event, "defaultPrevented");
+    int prevented = JS_ToBool(ctx, dp);
+    JS_FreeValue(ctx, dp);
+    JS_FreeValue(ctx, event);
+    if (!prevented) {
+        lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+        if (el != NULL) {
+            maybe_submit_activated_form(ctx, el);
+        }
+    }
+    return JS_UNDEFINED;
 }
 
 /* For HTML documents, attribute-manipulation methods must:
@@ -5411,7 +5839,7 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CFUNC_DEF("scrollIntoView", 0, js_el_undef_stub),
         JS_CFUNC_DEF("focus", 0, js_el_undef_stub),
         JS_CFUNC_DEF("blur", 0, js_el_undef_stub),
-        JS_CFUNC_DEF("click", 0, js_el_undef_stub),
+        JS_CFUNC_DEF("click", 0, js_el_click),
         JS_CFUNC_DEF("normalize", 0, js_el_undef_stub),
         JS_CFUNC_DEF("dispatchEvent", 1, js_el_dispatchEvent),
         JS_CFUNC_DEF("removeEventListener", 2, js_el_undef_stub),
@@ -5460,6 +5888,17 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CGETSET_DEF("elements", js_el_elements_get, NULL),
         JS_CGETSET_DEF("src", js_el_src_get, js_el_src_set),
         JS_CGETSET_DEF("href", js_el_href_get, js_el_href_set),
+        /* HTMLAnchorElement/HTMLAreaElement URL-decomposition attributes —
+		 * parsed from the resolved href. Read-only here (setters are rarely
+		 * used and would need URL re-composition). */
+        JS_CGETSET_DEF("protocol", js_el_protocol_get, NULL),
+        JS_CGETSET_DEF("host", js_el_host_get, NULL),
+        JS_CGETSET_DEF("hostname", js_el_hostname_get, NULL),
+        JS_CGETSET_DEF("port", js_el_port_get, NULL),
+        JS_CGETSET_DEF("pathname", js_el_pathname_get, NULL),
+        JS_CGETSET_DEF("search", js_el_search_get, NULL),
+        JS_CGETSET_DEF("hash", js_el_hash_get, NULL),
+        JS_CGETSET_DEF("origin", js_el_urlorigin_get, NULL),
         JS_CGETSET_DEF("action", js_el_action_get, js_el_action_set),
         JS_CGETSET_DEF("name", js_el_name_get, js_el_name_set),
         JS_CGETSET_DEF("value", js_el_value_get, js_el_value_set),
@@ -5701,11 +6140,55 @@ static JSValue synth_event_composed_path(JSContext *ctx, JSValueConst this_val, 
 {
     (void)argc;
     (void)argv;
+    /* Fast path: a caller (dispatch_click) may have pre-built and cached the
+	 * path; the first call through dispatchEvent caches it here too. */
     JSValue path = JS_GetPropertyStr(ctx, this_val, "__composedPath");
-    if (JS_IsUndefined(path) || JS_IsNull(path)) {
-        JS_FreeValue(ctx, path);
-        return JS_NewArray(ctx);
+    if (JS_IsArray(path)) {
+        return path;
     }
+    JS_FreeValue(ctx, path);
+
+    /* Lazily build [target, ...element ancestors, document, window] from the
+	 * event's own target. Kept out of dispatchEvent's hot path: the vast
+	 * majority of dispatched events never have composedPath() called, and the
+	 * ancestor walk + per-node wrap is pure waste for them. Non-composed events
+	 * stop at the first shadow-root (document-fragment) boundary. */
+    path = JS_NewArray(ctx);
+    uint32_t path_len = 0;
+    JSValue target = JS_GetPropertyStr(ctx, this_val, "target");
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue doc_obj = JS_GetPropertyStr(ctx, global, "document");
+    JSValue composed_v = JS_GetPropertyStr(ctx, this_val, "composed");
+    int composed = JS_ToBool(ctx, composed_v);
+    JS_FreeValue(ctx, composed_v);
+
+    if (JS_IsObject(target)) {
+        JS_SetPropertyUint32(ctx, path, path_len++, JS_DupValue(ctx, target));
+        lxb_dom_element_t *el = unwrap_element(ctx, target);
+        if (el != NULL) {
+            for (lxb_dom_node_t *node = lxb_dom_interface_node(el)->parent; node;
+                 node = node->parent) {
+                if (node->type == LXB_DOM_NODE_TYPE_DOCUMENT_FRAGMENT && !composed) {
+                    break;
+                }
+                if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+                    continue;
+                }
+                JS_SetPropertyUint32(ctx, path, path_len++,
+                                     wrap_element(ctx, lxb_dom_interface_element(node)));
+            }
+            if (JS_IsObject(doc_obj)) {
+                JS_SetPropertyUint32(ctx, path, path_len++, JS_DupValue(ctx, doc_obj));
+            }
+            JS_SetPropertyUint32(ctx, path, path_len++, JS_DupValue(ctx, global));
+        }
+    }
+    JS_FreeValue(ctx, target);
+    JS_FreeValue(ctx, doc_obj);
+    JS_FreeValue(ctx, global);
+
+    /* Cache so repeated composedPath() calls within one handler are O(1). */
+    JS_SetPropertyStr(ctx, (JSValue)this_val, "__composedPath", JS_DupValue(ctx, path));
     return path;
 }
 
@@ -5814,6 +6297,145 @@ static int synth_dispatch_one(struct yetty_ylexbor *r, struct js_dom_state *stat
     return fired;
 }
 
+/* Native form-submission default action for a click. Walk from the clicked
+ * element up its ancestry to the nearest activated submit control (a
+ * <button> with no type or type=submit, or <input type=submit/image>), then to
+ * that control's owning <form>, and hand both to the page's __ybSubmitForm
+ * helper (installed in js-web.c), which serializes the controls and issues a
+ * real navigating request. Does nothing when the click did not land on a submit
+ * control or the control is not in a form. */
+static void maybe_submit_activated_form(JSContext *ctx, lxb_dom_element_t *target)
+{
+    lxb_dom_element_t *submit_el = NULL;
+    for (lxb_dom_node_t *node = lxb_dom_interface_node(target); node; node = node->parent) {
+        if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        lxb_dom_element_t *el = lxb_dom_interface_element(node);
+        size_t name_len = 0;
+        const lxb_char_t *tag = lxb_dom_element_qualified_name(el, &name_len);
+        if (!tag) {
+            continue;
+        }
+        int is_button = (name_len == 6 && strncasecmp((const char *)tag, "button", 6) == 0);
+        int is_input = (name_len == 5 && strncasecmp((const char *)tag, "input", 5) == 0);
+        if (!is_button && !is_input) {
+            continue;
+        }
+        size_t type_len = 0;
+        const lxb_char_t *type_attr =
+            lxb_dom_element_get_attribute(el, (const lxb_char_t *)"type", 4, &type_len);
+        /* <button> defaults to type=submit; <input> needs an explicit
+		 * submit/image type. reset/button never submit. */
+        int submits;
+        if (is_button) {
+            submits = (type_attr == NULL) ||
+                      (type_len == 6 && strncasecmp((const char *)type_attr, "submit", 6) == 0);
+        } else {
+            submits = type_attr != NULL &&
+                      ((type_len == 6 && strncasecmp((const char *)type_attr, "submit", 6) == 0) ||
+                       (type_len == 5 && strncasecmp((const char *)type_attr, "image", 5) == 0));
+        }
+        if (submits) {
+            submit_el = el;
+        }
+        break; /* first button/input ancestor decides; stop regardless */
+    }
+    if (submit_el == NULL) {
+        return;
+    }
+    /* Find the owning form: nearest <form> ancestor. (We don't model the
+	 * form= attribute association; the ancestor form covers real pages.) */
+    lxb_dom_element_t *form_el = NULL;
+    for (lxb_dom_node_t *node = lxb_dom_interface_node(submit_el)->parent; node;
+         node = node->parent) {
+        if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        lxb_dom_element_t *el = lxb_dom_interface_element(node);
+        size_t name_len = 0;
+        const lxb_char_t *tag = lxb_dom_element_qualified_name(el, &name_len);
+        if (tag && name_len == 4 && strncasecmp((const char *)tag, "form", 4) == 0) {
+            form_el = el;
+            break;
+        }
+    }
+    if (form_el == NULL) {
+        return;
+    }
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue submit_fn = JS_GetPropertyStr(ctx, global, "__ybSubmitForm");
+    if (JS_IsFunction(ctx, submit_fn)) {
+        JSValue form_wrap = wrap_element(ctx, form_el);
+        JSValue btn_wrap = wrap_element(ctx, submit_el);
+        JSValue args[2] = {form_wrap, btn_wrap};
+        JSValue ret = JS_Call(ctx, submit_fn, global, 2, args);
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, form_wrap);
+        JS_FreeValue(ctx, btn_wrap);
+    }
+    JS_FreeValue(ctx, submit_fn);
+    JS_FreeValue(ctx, global);
+}
+
+/* Native default action for a click on a hyperlink: navigate to the nearest
+ * ancestor <a>'s href. Fragment-only (`#…`), `javascript:` and empty hrefs are
+ * ignored. Navigation is routed through location.assign, which resolves the URL
+ * against the base and records it as the pending navigation for the host to
+ * drive next frame — the same path location.href/reload use. */
+static void maybe_navigate_anchor(JSContext *ctx, lxb_dom_element_t *target)
+{
+    lxb_dom_element_t *anchor = NULL;
+    for (lxb_dom_node_t *node = lxb_dom_interface_node(target); node; node = node->parent) {
+        if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        lxb_dom_element_t *el = lxb_dom_interface_element(node);
+        size_t name_len = 0;
+        const lxb_char_t *tag = lxb_dom_element_qualified_name(el, &name_len);
+        if (tag && name_len == 1 && (tag[0] == 'a' || tag[0] == 'A')) {
+            anchor = el;
+            break;
+        }
+    }
+    if (anchor == NULL) {
+        return;
+    }
+    size_t href_len = 0;
+    const lxb_char_t *href =
+        lxb_dom_element_get_attribute(anchor, (const lxb_char_t *)"href", 4, &href_len);
+    if (href == NULL || href_len == 0) {
+        return;
+    }
+    /* Skip in-page fragments and non-navigating schemes. */
+    if (href[0] == '#') {
+        return;
+    }
+    if (href_len >= 11 && strncasecmp((const char *)href, "javascript:", 11) == 0) {
+        return;
+    }
+    char *href_str = malloc(href_len + 1);
+    if (href_str == NULL) {
+        return;
+    }
+    memcpy(href_str, href, href_len);
+    href_str[href_len] = '\0';
+
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue location = JS_GetPropertyStr(ctx, global, "location");
+    JSValue assign = JS_GetPropertyStr(ctx, location, "assign");
+    if (JS_IsFunction(ctx, assign)) {
+        JSValue url_val = JS_NewString(ctx, href_str);
+        JSValue ret = JS_Call(ctx, assign, location, 1, (JSValueConst[]){url_val});
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, url_val);
+    }
+    JS_FreeValue(ctx, assign);
+    JS_FreeValue(ctx, location);
+    JS_FreeValue(ctx, global);
+    free(href_str);
+}
+
 int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
 {
     if (!r || !r->js_ctx || !r->js_rt) {
@@ -5881,9 +6503,11 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
      * activations did nothing. */
     static const char *const sequence[] = {"mousedown", "mouseup", "click"};
     int fired = 0;
+    int click_default_prevented = 0;
     for (size_t phase = 0; phase < sizeof(sequence) / sizeof(sequence[0]); phase++) {
         const char *type = sequence[phase];
         int is_down = (phase == 0);
+        int is_click = (phase == 2);
 
         JSValue event = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, event, "type", JS_NewString(ctx, type));
@@ -5916,7 +6540,43 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
         if (synth_dispatch_one(r, state, target, type, event)) {
             fired = 1;
         }
+        if (is_click) {
+            JSValue dp = JS_GetPropertyStr(ctx, event, "defaultPrevented");
+            click_default_prevented = JS_ToBool(ctx, dp);
+            JS_FreeValue(ctx, dp);
+        }
         JS_FreeValue(ctx, event);
+    }
+
+    /* Native default action of a click on a submit control: submit its form.
+	 * Without this, a plain-HTML consent page (news.google.com's
+	 * consent.google.com "Accept all" is a type=submit button in a
+	 * <form method=POST action=".../save">) does nothing — the JS above only
+	 * fires the mouse/click events. Skipped if a handler called
+	 * preventDefault(). Delegated to __ybSubmitForm so the form-encoding and
+	 * navigating-request logic lives in one place (js-web.c). */
+    if (!click_default_prevented) {
+        maybe_submit_activated_form(ctx, target);
+        /* Native default action of a click on a hyperlink: navigate to its
+		 * href. Without this a plain <a href> (YouTube's "Sign in" is a real
+		 * <a href="https://accounts.google.com/ServiceLogin?...">) does nothing
+		 * — SPA links that kevlar routes call preventDefault first, so this only
+		 * fires for genuinely un-intercepted anchors. */
+        maybe_navigate_anchor(ctx, target);
+    }
+
+    /* Focus the clicked text field (or blur on a click elsewhere) so keyboard
+	 * input the host forwards lands in it. Runs regardless of preventDefault:
+	 * focusing is not the click's cancelable default action. */
+    {
+        JSValue focus_fn = JS_GetPropertyStr(ctx, global, "__ybFocusHit");
+        if (JS_IsFunction(ctx, focus_fn)) {
+            JSValue tgt = wrap_element(ctx, target);
+            JSValue ret = JS_Call(ctx, focus_fn, global, 1, (JSValueConst[]){tgt});
+            JS_FreeValue(ctx, ret);
+            JS_FreeValue(ctx, tgt);
+        }
+        JS_FreeValue(ctx, focus_fn);
     }
 
     JS_FreeValue(ctx, path);
@@ -5924,6 +6584,77 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
     JS_FreeValue(ctx, global);
     state->dispatch_depth--;
     return fired;
+}
+
+/* Bridge: does the page currently hold keyboard focus in a text field? The host
+ * asks this to decide whether to route a keystroke to the page vs its address
+ * bar. */
+int yetty_ylexbor_has_page_focus(struct yetty_ylexbor *r)
+{
+    if (!r || !r->js_ctx) {
+        return 0;
+    }
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue fn = JS_GetPropertyStr(ctx, global, "__ybHasPageFocus");
+    int has = 0;
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue ret = JS_Call(ctx, fn, global, 0, NULL);
+        has = JS_ToBool(ctx, ret);
+        JS_FreeValue(ctx, ret);
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+    return has;
+}
+
+/* Bridge: insert typed text (UTF-8, usually one character) into the focused
+ * page field, firing the page's input events, then relayout so it shows. */
+void yetty_ylexbor_dispatch_text(struct yetty_ylexbor *r, const char *utf8)
+{
+    if (!r || !r->js_ctx || !utf8 || !*utf8) {
+        return;
+    }
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue fn = JS_GetPropertyStr(ctx, global, "__ybInsertText");
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue text = JS_NewString(ctx, utf8);
+        JSValue ret = JS_Call(ctx, fn, global, 1, (JSValueConst[]){text});
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, text);
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+    if (yetty_ylexbor_dom_dirty(r)) {
+        (void)yetty_ylexbor_relayout(r);
+    }
+}
+
+/* Bridge: deliver an editing/navigation key (DOM key name, e.g. "Backspace",
+ * "Enter") to the focused page field. Returns whether it was consumed. */
+int yetty_ylexbor_dispatch_key(struct yetty_ylexbor *r, const char *key_name)
+{
+    if (!r || !r->js_ctx || !key_name) {
+        return 0;
+    }
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue fn = JS_GetPropertyStr(ctx, global, "__ybEditKey");
+    int consumed = 0;
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue name = JS_NewString(ctx, key_name);
+        JSValue ret = JS_Call(ctx, fn, global, 1, (JSValueConst[]){name});
+        consumed = JS_ToBool(ctx, ret);
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, name);
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+    if (yetty_ylexbor_dom_dirty(r)) {
+        (void)yetty_ylexbor_relayout(r);
+    }
+    return consumed;
 }
 
 /* Reset the global listener pool — called from js_destroy so JSValues

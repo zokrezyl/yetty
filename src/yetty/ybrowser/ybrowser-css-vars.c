@@ -42,6 +42,47 @@ static bool grid_media_condition_matches(const char *cond, size_t n, float viewp
 static int supp_selector_match(struct yetty_ylexbor *r, const char *selector_text, void **compiled,
                                uint8_t *selector_state, const lxb_dom_element_t *element);
 
+/* Class-bucketed supplementary-rule index (defined below; used by the
+ * per-element table lookups above their definition). */
+#define SUPP_CAND_MAX 2048
+static int supp_index_candidates(struct yetty_ylexbor *r, const void *base,
+                                 size_t stride, int count,
+                                 const lxb_dom_element_t *element,
+                                 int *out, int cap);
+
+/* Per-element supplementary-match result cache (defined below). Each of the
+ * single-compound-subject tables gets a stable small id; supp_rc_slot returns
+ * a pointer to the cached winning-rule index for (element, table), or NULL if
+ * caching is unavailable. SUPP_RC_UNCOMPUTED marks a slot not yet filled this
+ * epoch. The cache is wiped whenever a selector-affecting DOM mutation bumps
+ * r->supp_match_epoch, so it stays correct across the restyle storm while
+ * skipping the selector scan for every element untouched since last frame. */
+/* calc_length is deliberately absent: its winner depends on a per-lookup
+ * `prop` argument, not on selector match alone, and it holds only a handful of
+ * rules — not worth a cache dimension. It stays on the bucketed scan. */
+enum {
+    SUPP_TBL_VAR_HEIGHT = 0,
+    SUPP_TBL_WIDTH_KEYWORD,
+    SUPP_TBL_ASPECT,
+    SUPP_TBL_LINE_CLAMP,
+    SUPP_TBL_TRANSFORM,
+    SUPP_TBL_GRID_CLASS,
+    SUPP_TBL_GRID_SPAN_COL,
+    SUPP_TBL_GRID_SPAN_ROW,
+    SUPP_TBL_FLEX_GAP,
+    SUPP_RC_NTABLES
+};
+#define SUPP_RC_UNCOMPUTED ((int16_t) - 2)
+static int16_t *supp_rc_slot(struct yetty_ylexbor *r, const lxb_dom_element_t *element,
+                             int table_id);
+/* Returns the winning (last-in-cascade) matching rule index for `element` in a
+ * single-compound-subject supplementary table, or -1. Result cached per
+ * (element, table). sel_off/comp_off/state_off locate the selector text /
+ * compiled-selector cache / match-state fields inside each rule struct. */
+static int supp_table_winner(struct yetty_ylexbor *r, const lxb_dom_element_t *element,
+                             int table_id, const void *base, size_t stride, int count,
+                             size_t sel_off, size_t comp_off, size_t state_off);
+
 /* ===========================================================================
  * Storage — linear scan; tens to low hundreds of entries on real sites.
  * ===========================================================================*/
@@ -103,6 +144,9 @@ static const char *customs_get(const struct yetty_ylexbor_customs *t, const char
     return NULL;
 }
 
+void yetty_ylexbor_supp_indexes_free(struct yetty_ylexbor *r);
+void yetty_ylexbor_supp_result_cache_free(struct yetty_ylexbor *r);
+
 void yetty_ylexbor_css_vars_destroy(struct yetty_ylexbor *r)
 {
     for (int i = 0; i < r->customs.size; i++) {
@@ -112,6 +156,8 @@ void yetty_ylexbor_css_vars_destroy(struct yetty_ylexbor *r)
     free(r->customs.data);
     r->customs.data = NULL;
     r->customs.size = r->customs.cap = 0;
+    yetty_ylexbor_supp_indexes_free(r);
+    yetty_ylexbor_supp_result_cache_free(r);
     yetty_ylexbor_css_vars_reset_doc_classes(r);
 }
 
@@ -3136,13 +3182,13 @@ int yetty_ylexbor_var_height_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *
     }
     (void)font_size;
     /* Last matching rule wins — capture preserved cascade order. */
-    for (int e = r->var_height_count; e-- > 0;) {
-        struct yl_var_height_rule *rule = &r->var_height_rules[e];
-        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
-                                          &rule->selector_state, element);
-        if (verdict <= 0) {
-            continue;
-        }
+    int won = supp_table_winner(r, element, SUPP_TBL_VAR_HEIGHT, r->var_height_rules,
+                                sizeof(r->var_height_rules[0]), r->var_height_count,
+                                offsetof(struct yl_var_height_rule, selector),
+                                offsetof(struct yl_var_height_rule, compiled_selector),
+                                offsetof(struct yl_var_height_rule, selector_state));
+    if (won >= 0) {
+        struct yl_var_height_rule *rule = &r->var_height_rules[won];
         char *resolved = yetty_ylexbor_css_vars_resolve_for_element(r, element, rule->raw_value,
                                                                     strlen(rule->raw_value));
         const char *value = resolved ? resolved : rule->raw_value;
@@ -3234,13 +3280,13 @@ int yetty_ylexbor_width_keyword_lookup(struct yetty_ylexbor *r, lxb_dom_element_
     if (r == NULL || element == NULL || r->width_keyword_count == 0) {
         return 0;
     }
-    for (int e = r->width_keyword_count; e-- > 0;) {
-        struct yl_width_keyword_rule *rule = &r->width_keyword_rules[e];
-        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
-                                          &rule->selector_state, element);
-        if (verdict > 0) {
-            return rule->keyword;
-        }
+    int won = supp_table_winner(r, element, SUPP_TBL_WIDTH_KEYWORD, r->width_keyword_rules,
+                                sizeof(r->width_keyword_rules[0]), r->width_keyword_count,
+                                offsetof(struct yl_width_keyword_rule, selector),
+                                offsetof(struct yl_width_keyword_rule, compiled_selector),
+                                offsetof(struct yl_width_keyword_rule, selector_state));
+    if (won >= 0) {
+        return r->width_keyword_rules[won].keyword;
     }
     return 0;
 }
@@ -3444,7 +3490,11 @@ int yetty_ylexbor_calc_length_lookup(struct yetty_ylexbor *r, lxb_dom_element_t 
     /* Last matching rule wins — capture preserved cascade order. The final
      * `pct/100 * cb_width + offset` is deferred to layout (resolve_pct_metrics)
      * because the containing-block width isn't known at box-build. */
-    for (int e = r->calc_length_count; e-- > 0;) {
+    int cand_buf[SUPP_CAND_MAX];
+    int cand_n = supp_index_candidates(r, r->calc_length_rules, sizeof(r->calc_length_rules[0]), r->calc_length_count, element, cand_buf, SUPP_CAND_MAX);
+    int cand_total = (cand_n < 0) ? r->calc_length_count : cand_n;
+    for (int ci = cand_total; ci-- > 0;) {
+        int e = (cand_n < 0) ? ci : cand_buf[ci];
         struct yl_calc_length_rule *rule = &r->calc_length_rules[e];
         if (rule->prop != prop) {
             continue;
@@ -3675,13 +3725,13 @@ float yetty_ylexbor_aspect_ratio_lookup(struct yetty_ylexbor *r, lxb_dom_element
     if (r == NULL || element == NULL || r->aspect_count == 0) {
         return 0.0f;
     }
-    for (int e = r->aspect_count; e-- > 0;) {
-        struct yl_aspect_rule *rule = &r->aspect_rules[e];
-        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
-                                          &rule->selector_state, element);
-        if (verdict > 0) {
-            return rule->ratio;
-        }
+    int won = supp_table_winner(r, element, SUPP_TBL_ASPECT, r->aspect_rules,
+                                sizeof(r->aspect_rules[0]), r->aspect_count,
+                                offsetof(struct yl_aspect_rule, selector),
+                                offsetof(struct yl_aspect_rule, compiled_selector),
+                                offsetof(struct yl_aspect_rule, selector_state));
+    if (won >= 0) {
+        return r->aspect_rules[won].ratio;
     }
     return 0.0f;
 }
@@ -3782,7 +3832,11 @@ int yetty_ylexbor_display_none_lookup(struct yetty_ylexbor *r, lxb_dom_element_t
     if (r == NULL || element == NULL || r->display_none_count == 0) {
         return 0;
     }
-    for (int e = 0; e < r->display_none_count; e++) {
+    int cand_buf[SUPP_CAND_MAX];
+    int cand_n = supp_index_candidates(r, r->display_none_rules, sizeof(r->display_none_rules[0]), r->display_none_count, element, cand_buf, SUPP_CAND_MAX);
+    int cand_total = (cand_n < 0) ? r->display_none_count : cand_n;
+    for (int ci = 0; ci < cand_total; ci++) {
+        int e = (cand_n < 0) ? ci : cand_buf[ci];
         struct yl_display_none_rule *rule = &r->display_none_rules[e];
         int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
                                           &rule->selector_state, element);
@@ -3864,13 +3918,13 @@ int yetty_ylexbor_line_clamp_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *
     if (r == NULL || element == NULL || r->line_clamp_count == 0) {
         return 0;
     }
-    for (int e = r->line_clamp_count; e-- > 0;) {
-        struct yl_line_clamp_rule *rule = &r->line_clamp_rules[e];
-        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
-                                          &rule->selector_state, element);
-        if (verdict > 0) {
-            return rule->lines;
-        }
+    int won = supp_table_winner(r, element, SUPP_TBL_LINE_CLAMP, r->line_clamp_rules,
+                                sizeof(r->line_clamp_rules[0]), r->line_clamp_count,
+                                offsetof(struct yl_line_clamp_rule, selector),
+                                offsetof(struct yl_line_clamp_rule, compiled_selector),
+                                offsetof(struct yl_line_clamp_rule, selector_state));
+    if (won >= 0) {
+        return r->line_clamp_rules[won].lines;
     }
     return 0;
 }
@@ -4148,17 +4202,18 @@ int yetty_ylexbor_transform_lookup(struct yetty_ylexbor *r, lxb_dom_element_t *e
     if (r == NULL || element == NULL || r->transform_count == 0) {
         return 0;
     }
-    for (int e = r->transform_count; e-- > 0;) {
-        struct yl_transform_rule *rule = &r->transform_rules[e];
-        int verdict = supp_selector_match(r, rule->selector, &rule->compiled_selector,
-                                          &rule->selector_state, element);
-        if (verdict > 0) {
-            *out_tx = rule->tx;
-            *out_ty = rule->ty;
-            *out_tx_pct = rule->tx_pct;
-            *out_ty_pct = rule->ty_pct;
-            return 1;
-        }
+    int won = supp_table_winner(r, element, SUPP_TBL_TRANSFORM, r->transform_rules,
+                                sizeof(r->transform_rules[0]), r->transform_count,
+                                offsetof(struct yl_transform_rule, selector),
+                                offsetof(struct yl_transform_rule, compiled_selector),
+                                offsetof(struct yl_transform_rule, selector_state));
+    if (won >= 0) {
+        struct yl_transform_rule *rule = &r->transform_rules[won];
+        *out_tx = rule->tx;
+        *out_ty = rule->ty;
+        *out_tx_pct = rule->tx_pct;
+        *out_ty_pct = rule->ty_pct;
+        return 1;
     }
     return 0;
 }
@@ -4168,6 +4223,13 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
     if (r == NULL) {
         return;
     }
+    /* The supplementary tables (and, on a document reload, every element the
+     * caches keyed on) are about to be freed and rebuilt. Bumping both epochs
+     * invalidates the per-element supplementary-match cache and the libcss
+     * computed-style cache lazily on their next lookup — before any stale table
+     * index, element pointer, or cascade result can be read. */
+    r->supp_match_epoch++;
+    r->style_epoch++;
     for (int e = 0; e < r->grid_class_count; e++) {
         free(r->grid_classes[e].cls);
         for (int k = 0; k < r->grid_classes[e].context_count; k++) {
@@ -4300,11 +4362,534 @@ static lxb_status_t supp_selector_match_cb(lxb_dom_node_t *node,
     return LXB_STATUS_OK;
 }
 
+/* Chromium-style rightmost-key rejection. The full lexbor selector match
+ * (lxb_selectors_match_node) is expensive and these supplementary tables
+ * are scanned per element × per rule — O(N*M). But a selector whose
+ * subject compound (the rightmost simple selector, the element itself)
+ * requires an id or class the element plainly lacks can never match, and
+ * that is checkable with one attribute fetch + a substring test. Returns
+ * 1 = safe to reject (definitely no match), 0 = must run the full match.
+ * Conservative: only rejects when the element provably cannot match. */
+static int supp_ident_char(char c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+           (unsigned char)c >= 0x80; /* allow non-ASCII identifier bytes */
+}
+
+static int supp_selector_prefilter(struct yetty_ylexbor *r, const char *sel,
+                                   const lxb_dom_element_t *element)
+{
+    if (sel == NULL)
+        return 0;
+
+    /* Single forward pass: track the subject compound's key. At each
+     * top-level combinator the key resets (a new compound begins); an id
+     * (#) always wins, otherwise the first class (.). Bracket/paren
+     * contents are skipped by depth so classes inside [attr="..."] or
+     * :not(...) don't count. Attribute selectors on the subject only ADD
+     * constraints, so a present class/id key stays a valid necessary
+     * condition. */
+    const char *key = NULL;
+    int is_id = 0;
+    int depth = 0;
+    for (const char *p = sel; *p; p++) {
+        char c = *p;
+        if (c == ',')
+            return 0; /* selector list: run the full match */
+        if (c == '[' || c == '(') {
+            depth++;
+            continue;
+        }
+        if (c == ']' || c == ')') {
+            if (depth)
+                depth--;
+            continue;
+        }
+        if (depth)
+            continue;
+        if (c == ' ' || c == '>' || c == '+' || c == '~') {
+            key = NULL; /* new compound begins */
+            is_id = 0;
+        } else if (c == '#') {
+            key = p + 1;
+            is_id = 1;
+        } else if (c == '.' && key == NULL) {
+            key = p + 1;
+        }
+    }
+    if (key == NULL)
+        return 0; /* tag-only / pseudo — run the full match */
+
+    size_t n = 0;
+    while (key[n] && supp_ident_char(key[n]))
+        n++;
+    if (n == 0)
+        return 0;
+
+    /* Fetch this element's class + id once, memoized by element identity
+     * (the side-table loops test many rules against the same element). */
+    if (r->supp_cache_element != element) {
+        r->supp_cache_element = element;
+        r->supp_cache_class = lxb_dom_element_get_attribute(
+            (lxb_dom_element_t *)element, (const lxb_char_t *)"class", 5,
+            &r->supp_cache_class_len);
+        r->supp_cache_id = lxb_dom_element_get_attribute(
+            (lxb_dom_element_t *)element, (const lxb_char_t *)"id", 2,
+            &r->supp_cache_id_len);
+    }
+    const unsigned char *value = is_id ? r->supp_cache_id : r->supp_cache_class;
+    size_t vlen = is_id ? r->supp_cache_id_len : r->supp_cache_class_len;
+    if (value == NULL || vlen == 0)
+        return 1; /* element has no id/class at all — cannot match */
+    if (is_id)
+        return !(vlen == n && memcmp(value, key, n) == 0);
+    /* class: reject only when the key is not even a substring (safe — a
+     * token match implies a substring match). */
+    return memmem(value, vlen, key, n) == NULL;
+}
+
+/* ===========================================================================
+ * Class-bucketed index over a supplementary rule table.
+ *
+ * The 7+ side tables (var-height, transform, grid, …) were each scanned in
+ * full for EVERY element — O(N_elements × M_rules). youtube's timers drive
+ * ~19 whole-page restyles/second, so this is the dominant CPU cost (61%).
+ * This index groups each table's rules by the subject compound's first
+ * class (the class the ELEMENT itself must carry). At lookup an element
+ * only visits rules bucketed under one of its own classes, plus a small
+ * "universal" list (rules whose subject has an id / tag / no key). Bucketed
+ * by class-name HASH — a collision only adds a candidate the full match then
+ * rejects, so it stays correct.
+ * ===========================================================================*/
+
+struct supp_index_bucket {
+    uint64_t class_hash;
+    int *indices;
+    int count, cap;
+};
+
+struct supp_index {
+    const void *base;   /* identity: the rule array's base pointer */
+    size_t stride;
+    int built_count;    /* rebuild when the table's rule count changes */
+    struct supp_index_bucket *buckets;
+    int nbuckets;       /* power of two */
+    int *universal;
+    int universal_count, universal_cap;
+};
+
+static uint64_t supp_hash_bytes(const char *p, size_t n)
+{
+    uint64_t h = UINT64_C(0xcbf29ce484222325);
+    for (size_t i = 0; i < n; i++) {
+        h ^= (unsigned char)p[i];
+        h *= UINT64_C(0x100000001b3);
+    }
+    return h;
+}
+
+/* The subject compound's first class (the element's own required class),
+ * matching supp_selector_prefilter's key logic. Returns 1 with (start,len)
+ * set for a class key; 0 for id / tag / none / list (→ universal bucket). */
+static int supp_rule_class_key(const char *sel, const char **out, size_t *out_len)
+{
+    if (sel == NULL || memchr(sel, ',', strlen(sel)))
+        return 0;
+    const char *key = NULL;
+    int is_id = 0, depth = 0;
+    for (const char *p = sel; *p; p++) {
+        char c = *p;
+        if (c == '[' || c == '(') { depth++; continue; }
+        if (c == ']' || c == ')') { if (depth) depth--; continue; }
+        if (depth)
+            continue;
+        if (c == ' ' || c == '>' || c == '+' || c == '~') { key = NULL; is_id = 0; }
+        else if (c == '#') { key = p + 1; is_id = 1; }
+        else if (c == '.' && key == NULL) { key = p + 1; }
+    }
+    if (key == NULL || is_id)
+        return 0;
+    size_t n = 0;
+    while (key[n] && supp_ident_char(key[n]))
+        n++;
+    if (n == 0)
+        return 0;
+    *out = key;
+    *out_len = n;
+    return 1;
+}
+
+static void supp_bucket_add(struct supp_index_bucket *b, int idx)
+{
+    if (b->count >= b->cap) {
+        int cap = b->cap ? b->cap * 2 : 4;
+        int *grown = realloc(b->indices, (size_t)cap * sizeof(int));
+        if (!grown)
+            return;
+        b->indices = grown;
+        b->cap = cap;
+    }
+    b->indices[b->count++] = idx;
+}
+
+static struct supp_index_bucket *supp_index_slot(struct supp_index *idx, uint64_t h)
+{
+    int mask = idx->nbuckets - 1;
+    int i = (int)(h & (uint64_t)mask);
+    for (;;) {
+        struct supp_index_bucket *b = &idx->buckets[i];
+        if (b->indices == NULL || b->class_hash == h) {
+            b->class_hash = h;
+            return b;
+        }
+        i = (i + 1) & mask;
+    }
+}
+
+static void supp_index_free_one(struct supp_index *idx)
+{
+    for (int i = 0; i < idx->nbuckets; i++)
+        free(idx->buckets[i].indices);
+    free(idx->buckets);
+    free(idx->universal);
+    memset(idx, 0, sizeof(*idx));
+}
+
+/* Find-or-(re)build the index for a table. Returns NULL on OOM (caller then
+ * falls back to a full scan). */
+static struct supp_index *supp_index_get(struct yetty_ylexbor *r, const void *base,
+                                         size_t stride, int count)
+{
+    struct supp_index *arr = (struct supp_index *)r->supp_indexes;
+    struct supp_index *idx = NULL;
+    for (int i = 0; i < r->supp_index_count; i++) {
+        if (arr[i].base == base) { idx = &arr[i]; break; }
+    }
+    if (idx && idx->built_count == count)
+        return idx;
+    if (!idx) {
+        if (r->supp_index_count >= r->supp_index_cap) {
+            int cap = r->supp_index_cap ? r->supp_index_cap * 2 : 8;
+            struct supp_index *grown = realloc(arr, (size_t)cap * sizeof(*grown));
+            if (!grown)
+                return NULL;
+            memset(grown + r->supp_index_cap, 0,
+                   (size_t)(cap - r->supp_index_cap) * sizeof(*grown));
+            r->supp_indexes = grown;
+            r->supp_index_cap = cap;
+            arr = grown;
+        }
+        idx = &arr[r->supp_index_count++];
+        memset(idx, 0, sizeof(*idx));
+    } else {
+        supp_index_free_one(idx);
+    }
+    idx->base = base;
+    idx->stride = stride;
+    idx->built_count = count;
+
+    int nb = 8;
+    while (nb < count * 2)
+        nb <<= 1;
+    idx->buckets = calloc((size_t)nb, sizeof(*idx->buckets));
+    if (!idx->buckets) {
+        idx->built_count = -1; /* force rebuild next time */
+        return NULL;
+    }
+    idx->nbuckets = nb;
+
+    for (int e = 0; e < count; e++) {
+        const char *sel = *(const char *const *)((const char *)base + (size_t)e * stride);
+        const char *key;
+        size_t klen;
+        if (supp_rule_class_key(sel, &key, &klen)) {
+            supp_bucket_add(supp_index_slot(idx, supp_hash_bytes(key, klen)), e);
+        } else {
+            if (idx->universal_count >= idx->universal_cap) {
+                int cap = idx->universal_cap ? idx->universal_cap * 2 : 8;
+                int *grown = realloc(idx->universal, (size_t)cap * sizeof(int));
+                if (!grown) { idx->built_count = -1; return NULL; }
+                idx->universal = grown;
+                idx->universal_cap = cap;
+            }
+            idx->universal[idx->universal_count++] = e;
+        }
+    }
+    return idx;
+}
+
+static int supp_int_cmp(const void *a, const void *b)
+{
+    int x = *(const int *)a, y = *(const int *)b;
+    return (x > y) - (x < y);
+}
+
+/* Candidate rule indices for `element`, ascending & deduped. Returns the
+ * count, or -1 if it overflows `cap` (caller full-scans). */
+static int supp_index_candidates(struct yetty_ylexbor *r, const void *base,
+                                 size_t stride, int count,
+                                 const lxb_dom_element_t *element,
+                                 int *out, int cap)
+{
+    struct supp_index *idx = supp_index_get(r, base, stride, count);
+    if (!idx)
+        return -1; /* build failed — full scan */
+
+    int n = 0;
+    for (int i = 0; i < idx->universal_count; i++) {
+        if (n >= cap) return -1;
+        out[n++] = idx->universal[i];
+    }
+
+    size_t class_len = 0;
+    const lxb_char_t *cls = lxb_dom_element_get_attribute(
+        (lxb_dom_element_t *)element, (const lxb_char_t *)"class", 5, &class_len);
+    if (cls != NULL && class_len > 0) {
+        size_t i = 0;
+        while (i < class_len) {
+            while (i < class_len && (cls[i] == ' ' || cls[i] == '\t' ||
+                                     cls[i] == '\n' || cls[i] == '\r' || cls[i] == '\f'))
+                i++;
+            size_t start = i;
+            while (i < class_len && cls[i] != ' ' && cls[i] != '\t' &&
+                   cls[i] != '\n' && cls[i] != '\r' && cls[i] != '\f')
+                i++;
+            if (i == start)
+                continue;
+            uint64_t h = supp_hash_bytes((const char *)cls + start, i - start);
+            int mask = idx->nbuckets - 1;
+            int slot = (int)(h & (uint64_t)mask);
+            for (;;) {
+                struct supp_index_bucket *b = &idx->buckets[slot];
+                if (b->indices == NULL)
+                    break;
+                if (b->class_hash == h) {
+                    for (int k = 0; k < b->count; k++) {
+                        if (n >= cap) return -1;
+                        out[n++] = b->indices[k];
+                    }
+                    break;
+                }
+                slot = (slot + 1) & mask;
+            }
+        }
+    }
+
+    if (n > 1) {
+        qsort(out, (size_t)n, sizeof(int), supp_int_cmp);
+        int w = 1;
+        for (int i = 1; i < n; i++)
+            if (out[i] != out[w - 1])
+                out[w++] = out[i];
+        n = w;
+    }
+    return n;
+}
+
+void yetty_ylexbor_supp_indexes_free(struct yetty_ylexbor *r)
+{
+    struct supp_index *arr = (struct supp_index *)r->supp_indexes;
+    for (int i = 0; i < r->supp_index_count; i++)
+        supp_index_free_one(&arr[i]);
+    free(arr);
+    r->supp_indexes = NULL;
+    r->supp_index_count = 0;
+    r->supp_index_cap = 0;
+}
+
+/* ===========================================================================
+ * Per-element supplementary-match result cache.
+ *
+ * The whole-page restyle storm (youtube fires JS timers ~every 50ms → the
+ * render loop rebuilds and re-styles the ENTIRE page ~19×/s, forever) meant
+ * every element re-ran selector matching against the supplementary tables on
+ * every frame. But selector matches depend only on structure / class /
+ * attributes — none of which change between pure CSS-animation frames. So we
+ * cache the winning rule index per (element, table) and reuse it until a
+ * selector-affecting mutation bumps r->supp_match_epoch. Open-addressed hash
+ * on the element pointer; entries hold one int16 winner per cached table.
+ * ===========================================================================*/
+
+struct supp_rc_entry {
+    const lxb_dom_element_t *el;
+    int16_t won[SUPP_RC_NTABLES];
+};
+
+static void supp_rc_reset(struct yetty_ylexbor *r)
+{
+    struct supp_rc_entry *entries = (struct supp_rc_entry *)r->supp_rc;
+    if (entries && r->supp_rc_cap > 0) {
+        memset(entries, 0, (size_t)r->supp_rc_cap * sizeof(*entries));
+    }
+    r->supp_rc_count = 0;
+    r->supp_rc_epoch = r->supp_match_epoch;
+}
+
+/* FNV-1a of a pointer, spread across the table. */
+static uint32_t supp_rc_hash(const void *ptr)
+{
+    uint64_t x = (uint64_t)(uintptr_t)ptr;
+    uint64_t h = 1469598103934665603ULL;
+    for (int i = 0; i < 8; i++) {
+        h ^= (x & 0xff);
+        h *= 1099511628211ULL;
+        x >>= 8;
+    }
+    return (uint32_t)(h ^ (h >> 32));
+}
+
+static bool supp_rc_grow(struct yetty_ylexbor *r)
+{
+    int old_cap = r->supp_rc_cap;
+    struct supp_rc_entry *old = (struct supp_rc_entry *)r->supp_rc;
+    int new_cap = old_cap ? old_cap * 2 : 2048;
+    struct supp_rc_entry *fresh = calloc((size_t)new_cap, sizeof(*fresh));
+    if (!fresh) {
+        return false;
+    }
+    uint32_t mask = (uint32_t)new_cap - 1;
+    for (int i = 0; i < old_cap; i++) {
+        if (!old[i].el) {
+            continue;
+        }
+        uint32_t slot = supp_rc_hash(old[i].el) & mask;
+        while (fresh[slot].el) {
+            slot = (slot + 1) & mask;
+        }
+        fresh[slot] = old[i];
+    }
+    free(old);
+    r->supp_rc = fresh;
+    r->supp_rc_cap = new_cap;
+    return true;
+}
+
+/* Find or create the whole cache entry for `element`, or NULL on OOM. Callers
+ * that need more than one table's slot (e.g. grid-span's per-axis winners) must
+ * use this ONCE and read the won[] fields off the returned entry — calling
+ * supp_rc_slot twice can rehash the table and dangle the first pointer. */
+static struct supp_rc_entry *supp_rc_entry_of(struct yetty_ylexbor *r,
+                                              const lxb_dom_element_t *element)
+{
+    if (!r || !element) {
+        return NULL;
+    }
+    /* A selector-affecting mutation since the cache was last valid → wipe. */
+    if (r->supp_rc_epoch != r->supp_match_epoch) {
+        supp_rc_reset(r);
+    }
+    /* Keep load factor under ~3/4 so probe chains stay short. */
+    if (r->supp_rc_cap == 0 || (r->supp_rc_count + 1) * 4 >= r->supp_rc_cap * 3) {
+        if (!supp_rc_grow(r)) {
+            return NULL;
+        }
+    }
+    struct supp_rc_entry *entries = (struct supp_rc_entry *)r->supp_rc;
+    uint32_t mask = (uint32_t)r->supp_rc_cap - 1;
+    uint32_t slot = supp_rc_hash(element) & mask;
+    while (entries[slot].el) {
+        if (entries[slot].el == element) {
+            return &entries[slot];
+        }
+        slot = (slot + 1) & mask;
+    }
+    /* New element — claim the slot, mark every table uncomputed. */
+    entries[slot].el = element;
+    for (int t = 0; t < SUPP_RC_NTABLES; t++) {
+        entries[slot].won[t] = SUPP_RC_UNCOMPUTED;
+    }
+    r->supp_rc_count++;
+    return &entries[slot];
+}
+
+static int16_t *supp_rc_slot(struct yetty_ylexbor *r, const lxb_dom_element_t *element,
+                             int table_id)
+{
+    if (table_id < 0 || table_id >= SUPP_RC_NTABLES) {
+        return NULL;
+    }
+    struct supp_rc_entry *entry = supp_rc_entry_of(r, element);
+    return entry ? &entry->won[table_id] : NULL;
+}
+
+void yetty_ylexbor_supp_result_cache_free(struct yetty_ylexbor *r)
+{
+    if (getenv("YB_SUPP_STATS") && (r->supp_rc_hits || r->supp_rc_misses)) {
+        uint64_t total = r->supp_rc_hits + r->supp_rc_misses;
+        fprintf(stderr,
+                "[YB_SUPP_STATS] supp-match result cache: %llu hits, %llu misses "
+                "(%.1f%% scans skipped)\n",
+                (unsigned long long)r->supp_rc_hits, (unsigned long long)r->supp_rc_misses,
+                total ? 100.0 * (double)r->supp_rc_hits / (double)total : 0.0);
+        fprintf(stderr,
+                "[YB_SUPP_STATS] whole-page box-builds: %llu total, %llu forced by JS "
+                "geometry reads (layout thrashing), %llu ms in forced flushes\n",
+                (unsigned long long)r->box_build_count, (unsigned long long)r->forced_flush_count,
+                (unsigned long long)(r->forced_flush_ns / 1000000ULL));
+        uint64_t grid_calls = r->supp_match_total_calls - r->supp_match_cached_table_calls;
+        fprintf(stderr,
+                "[YB_SUPP_STATS] supp_selector_match calls: %llu total = %llu cached-table "
+                "misses + %llu UNCACHED grid/flex loops\n",
+                (unsigned long long)r->supp_match_total_calls,
+                (unsigned long long)r->supp_match_cached_table_calls, (unsigned long long)grid_calls);
+    }
+    free(r->supp_rc);
+    r->supp_rc = NULL;
+    r->supp_rc_cap = 0;
+    r->supp_rc_count = 0;
+    r->supp_rc_epoch = 0;
+}
+
+static int supp_table_winner(struct yetty_ylexbor *r, const lxb_dom_element_t *element,
+                             int table_id, const void *base, size_t stride, int count,
+                             size_t sel_off, size_t comp_off, size_t state_off)
+{
+    int16_t *cached = supp_rc_slot(r, element, table_id);
+    if (cached && *cached != SUPP_RC_UNCOMPUTED) {
+        r->supp_rc_hits++;
+        return *cached;
+    }
+    r->supp_rc_misses++;
+    int won = -1;
+    int cand_buf[SUPP_CAND_MAX];
+    int cand_n = supp_index_candidates(r, base, stride, count, element, cand_buf, SUPP_CAND_MAX);
+    int cand_total = (cand_n < 0) ? count : cand_n;
+    /* Descending = highest index first, so the first match is the cascade
+     * winner (last matching rule wins). */
+    for (int ci = cand_total; ci-- > 0;) {
+        int e = (cand_n < 0) ? ci : cand_buf[ci];
+        /* The rule's compiled-selector cache is filled lazily by
+         * supp_selector_match, so the row is genuinely mutable even though the
+         * index-scan view of it is const; launder via uintptr_t. */
+        char *rule = (char *)(uintptr_t)base + (size_t)e * stride;
+        char *selector = *(char **)(rule + sel_off);
+        void **compiled = (void **)(rule + comp_off);
+        uint8_t *state = (uint8_t *)(rule + state_off);
+        r->supp_match_cached_table_calls++;
+        if (supp_selector_match(r, selector, compiled, state, element) > 0) {
+            won = e;
+            break;
+        }
+    }
+    /* int16 cache slot — the supplementary tables are far below 32767 rules,
+     * but guard anyway; an out-of-range index just isn't cached. */
+    if (cached && won >= -1 && won < 32767) {
+        *cached = (int16_t)won;
+    }
+    return won;
+}
+
 static int supp_selector_match(struct yetty_ylexbor *r, const char *selector_text, void **compiled,
                                uint8_t *selector_state, const lxb_dom_element_t *element)
 {
+    r->supp_match_total_calls++;
     if (!selector_text || !element || *selector_state == 2) {
         return -1;
+    }
+    /* Cheap rightmost-key rejection before the full selector match. */
+    if (supp_selector_prefilter(r, selector_text, element)) {
+        return 0;
     }
     if (*selector_state == 0) {
         *selector_state = 2; /* sticky failure unless everything below works */
@@ -4374,41 +4959,56 @@ const struct yl_grid_class *yetty_ylexbor_grid_class_lookup(struct yetty_ylexbor
     if (r == NULL || element == NULL || r->grid_class_count == 0) {
         return NULL;
     }
+    /* Result cache: the winning rule index is epoch-stable (selector + class +
+	 * ancestor-context all depend only on structure/class/attr). */
+    int16_t *cached = supp_rc_slot(r, element, SUPP_TBL_GRID_CLASS);
+    if (cached && *cached != SUPP_RC_UNCOMPUTED) {
+        r->supp_rc_hits++;
+        return (*cached < 0) ? NULL : &r->grid_classes[*cached];
+    }
+    r->supp_rc_misses++;
     size_t attr_len = 0;
     const lxb_char_t *attr = lxb_dom_element_get_attribute(
         (lxb_dom_element_t *)element, (const lxb_char_t *)"class", 5, &attr_len);
-    if (attr == NULL || attr_len == 0) {
-        return NULL;
-    }
-    const struct yl_grid_class *found = NULL;
-    for (int e = 0; e < r->grid_class_count; e++) {
-        struct yl_grid_class *entry = &r->grid_classes[e];
-        int verdict = supp_selector_match(r, entry->selector, &entry->compiled_selector,
-                                          &entry->selector_state, element);
-        if (verdict == 0) {
-            continue;
-        }
-        if (verdict < 0) {
-            /* Fallback: reduced class-key approximation. */
-            if (!class_attr_has_token((const char *)attr, attr_len, entry->cls)) {
+    int won = -1;
+    if (attr != NULL && attr_len != 0) {
+        int cand_buf[SUPP_CAND_MAX];
+        int cand_n = supp_index_candidates(r, r->grid_classes, sizeof(r->grid_classes[0]),
+                                           r->grid_class_count, element, cand_buf, SUPP_CAND_MAX);
+        int cand_total = (cand_n < 0) ? r->grid_class_count : cand_n;
+        for (int ci = 0; ci < cand_total; ci++) {
+            int e = (cand_n < 0) ? ci : cand_buf[ci];
+            struct yl_grid_class *entry = &r->grid_classes[e];
+            int verdict = supp_selector_match(r, entry->selector, &entry->compiled_selector,
+                                              &entry->selector_state, element);
+            if (verdict == 0) {
                 continue;
             }
-            int context_ok = 1;
-            for (int k = 0; k < entry->context_count; k++) {
-                if (!element_or_ancestor_has_class(element, entry->context[k])) {
-                    context_ok = 0;
-                    break;
+            if (verdict < 0) {
+                /* Fallback: reduced class-key approximation. */
+                if (!class_attr_has_token((const char *)attr, attr_len, entry->cls)) {
+                    continue;
+                }
+                int context_ok = 1;
+                for (int k = 0; k < entry->context_count; k++) {
+                    if (!element_or_ancestor_has_class(element, entry->context[k])) {
+                        context_ok = 0;
+                        break;
+                    }
+                }
+                if (!context_ok) {
+                    continue;
                 }
             }
-            if (!context_ok) {
-                continue;
-            }
+            /* Keep scanning: entries are in stylesheet order and the last
+			 * matching rule wins (cascade approximation). */
+            won = e;
         }
-        /* Keep scanning: entries are in stylesheet order and the last
-		 * matching rule wins (cascade approximation). */
-        found = entry;
     }
-    return found;
+    if (cached && won >= -1 && won < 32767) {
+        *cached = (int16_t)won;
+    }
+    return (won < 0) ? NULL : &r->grid_classes[won];
 }
 
 /* Extract the class structure of ONE comma-alternative of a selector
@@ -4790,44 +5390,85 @@ struct yl_grid_placement yetty_ylexbor_grid_span_class_lookup(struct yetty_ylexb
     if (r == NULL || element == NULL || r->grid_span_class_count == 0) {
         return placement;
     }
+    /* Two winners — the last matching rule per axis. Both indices are
+	 * epoch-stable, so cache them in the element's entry (fetched ONCE so a
+	 * rehash can't dangle it). */
+    struct supp_rc_entry *rc = supp_rc_entry_of(r, element);
+    if (rc && rc->won[SUPP_TBL_GRID_SPAN_COL] != SUPP_RC_UNCOMPUTED) {
+        r->supp_rc_hits++;
+        int col = rc->won[SUPP_TBL_GRID_SPAN_COL];
+        int row = rc->won[SUPP_TBL_GRID_SPAN_ROW];
+        if (col >= 0) {
+            placement.col_start = r->grid_span_classes[col].start;
+            placement.col_span = r->grid_span_classes[col].span;
+        }
+        if (row >= 0) {
+            placement.row_start = r->grid_span_classes[row].start;
+            placement.row_span = r->grid_span_classes[row].span;
+        }
+        return placement;
+    }
+    r->supp_rc_misses++;
+    int col_won = -1;
+    int row_won = -1;
     size_t attr_len = 0;
     const lxb_char_t *attr = lxb_dom_element_get_attribute(
         (lxb_dom_element_t *)element, (const lxb_char_t *)"class", 5, &attr_len);
-    if (attr == NULL || attr_len == 0) {
-        return placement;
-    }
-    for (int e = 0; e < r->grid_span_class_count; e++) {
-        struct yl_grid_span_class *entry = &r->grid_span_classes[e];
-        int verdict = supp_selector_match(r, entry->selector, &entry->compiled_selector,
-                                          &entry->selector_state, element);
-        if (verdict == 0) {
-            continue;
-        }
-        if (verdict < 0) {
-            /* Fallback: reduced class-key approximation. */
-            if (!class_attr_has_token((const char *)attr, attr_len, entry->cls)) {
+    if (attr != NULL && attr_len != 0) {
+        int cand_buf[SUPP_CAND_MAX];
+        int cand_n = supp_index_candidates(r, r->grid_span_classes, sizeof(r->grid_span_classes[0]),
+                                           r->grid_span_class_count, element, cand_buf,
+                                           SUPP_CAND_MAX);
+        int cand_total = (cand_n < 0) ? r->grid_span_class_count : cand_n;
+        for (int ci = 0; ci < cand_total; ci++) {
+            int e = (cand_n < 0) ? ci : cand_buf[ci];
+            struct yl_grid_span_class *entry = &r->grid_span_classes[e];
+            int verdict = supp_selector_match(r, entry->selector, &entry->compiled_selector,
+                                              &entry->selector_state, element);
+            if (verdict == 0) {
                 continue;
             }
-            int context_ok = 1;
-            for (int k = 0; k < entry->context_count; k++) {
-                if (!element_or_ancestor_has_class(element, entry->context[k])) {
-                    context_ok = 0;
-                    break;
+            if (verdict < 0) {
+                /* Fallback: reduced class-key approximation. */
+                if (!class_attr_has_token((const char *)attr, attr_len, entry->cls)) {
+                    continue;
+                }
+                int context_ok = 1;
+                for (int k = 0; k < entry->context_count; k++) {
+                    if (!element_or_ancestor_has_class(element, entry->context[k])) {
+                        context_ok = 0;
+                        break;
+                    }
+                }
+                if (!context_ok) {
+                    continue;
                 }
             }
-            if (!context_ok) {
-                continue;
+            /* Keep scanning: entries are in stylesheet order and the last
+			 * matching declaration per axis wins (cascade approximation). */
+            if (entry->axis == 0) {
+                col_won = e;
+            } else {
+                row_won = e;
             }
         }
-        /* Keep scanning: entries are in stylesheet order and the last
-         * matching declaration per axis wins (cascade approximation). */
-        if (entry->axis == 0) {
-            placement.col_start = entry->start;
-            placement.col_span = entry->span;
-        } else {
-            placement.row_start = entry->start;
-            placement.row_span = entry->span;
-        }
+    }
+    /* supp_rc_entry_of may have rehashed during the scan? No — the scan makes no
+	 * cache calls, so `rc` is still valid. Guard the index range for the int16
+	 * store anyway. */
+    if (rc) {
+        rc->won[SUPP_TBL_GRID_SPAN_COL] =
+            (col_won >= -1 && col_won < 32767) ? (int16_t)col_won : (int16_t)-1;
+        rc->won[SUPP_TBL_GRID_SPAN_ROW] =
+            (row_won >= -1 && row_won < 32767) ? (int16_t)row_won : (int16_t)-1;
+    }
+    if (col_won >= 0) {
+        placement.col_start = r->grid_span_classes[col_won].start;
+        placement.col_span = r->grid_span_classes[col_won].span;
+    }
+    if (row_won >= 0) {
+        placement.row_start = r->grid_span_classes[row_won].start;
+        placement.row_span = r->grid_span_classes[row_won].span;
     }
     return placement;
 }
@@ -5014,15 +5655,32 @@ float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const lxb_dom_eleme
     if (r == NULL || r->flex_gap_class_count == 0) {
         return 0.0f;
     }
+    /* Cache the winning entry index per element (epoch-stable: selector / class
+	 * / tag). Only when an element is supplied; the class/tag passed alongside
+	 * are that element's own, so the key is consistent. */
+    int16_t *flex_cached = (element != NULL) ? supp_rc_slot(r, element, SUPP_TBL_FLEX_GAP) : NULL;
+    if (flex_cached && *flex_cached != SUPP_RC_UNCOMPUTED) {
+        r->supp_rc_hits++;
+        return (*flex_cached < 0) ? 0.0f : r->flex_gap_classes[*flex_cached].col_gap;
+    }
+    if (element != NULL) {
+        r->supp_rc_misses++;
+    }
+    int flex_won = -1;
     /* Real selector matching first — the key fallback below only sees
 	 * the LAST simple selector and mis-fires on shared class names. */
     if (element != NULL) {
-        for (int e = 0; e < r->flex_gap_class_count; e++) {
+        int cand_buf[SUPP_CAND_MAX];
+        int cand_n = supp_index_candidates(r, r->flex_gap_classes, sizeof(r->flex_gap_classes[0]), r->flex_gap_class_count, element, cand_buf, SUPP_CAND_MAX);
+        int cand_total = (cand_n < 0) ? r->flex_gap_class_count : cand_n;
+        for (int ci = 0; ci < cand_total; ci++) {
+            int e = (cand_n < 0) ? ci : cand_buf[ci];
             struct yl_flex_gap_class *entry = &r->flex_gap_classes[e];
             int verdict = supp_selector_match(r, entry->selector, &entry->compiled_selector,
                                               &entry->selector_state, element);
             if (verdict == 1) {
-                return entry->col_gap;
+                flex_won = e;
+                goto flex_gap_done;
             }
             if (verdict == 0) {
                 /* Compiled and did NOT match this element — the key
@@ -5056,7 +5714,8 @@ float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const lxb_dom_eleme
                 }
                 if (!entry->match_tag && strlen(entry->key) == tlen &&
                     strncmp(entry->key, class_attr + start, tlen) == 0) {
-                    return entry->col_gap;
+                    flex_won = e;
+                    goto flex_gap_done;
                 }
             }
         }
@@ -5069,11 +5728,16 @@ float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const lxb_dom_eleme
             }
             if (entry->match_tag && strlen(entry->key) == tag_len &&
                 strncasecmp(entry->key, tag_name, tag_len) == 0) {
-                return entry->col_gap;
+                flex_won = e;
+                goto flex_gap_done;
             }
         }
     }
-    return 0.0f;
+flex_gap_done:
+    if (flex_cached && flex_won >= -1 && flex_won < 32767) {
+        *flex_cached = (int16_t)flex_won;
+    }
+    return (flex_won < 0) ? 0.0f : r->flex_gap_classes[flex_won].col_gap;
 }
 
 /*===========================================================================

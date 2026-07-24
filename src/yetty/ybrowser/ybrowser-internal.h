@@ -808,6 +808,24 @@ struct yetty_ylexbor {
 	 * no navigation is pending. */
     char *pending_navigation;
 
+    /* Form submission carries a method + body alongside pending_navigation.
+		 * A submit-button click or form.submit()/requestSubmit() records the
+		 * form-encoded body here so the host issues a real navigating POST (the
+		 * consent "Accept all" form posts to consent.google.com/save, which sets
+		 * the consent cookie and 302-redirects back). NULL method means a plain
+		 * GET. Owned, cleared by the take-getter alongside pending_navigation. */
+    char *pending_nav_method;
+    char *pending_nav_body;
+    size_t pending_nav_body_len;
+
+    /* location.reload() must bypass the cache (Ctrl-R semantics): the same URL
+		 * can serve a different document depending on cookies the page just
+		 * wrote — the consent flow reloads youtube.com after saving SOCS, and a
+		 * cache hit would replay the consent-walled variant forever. Set by
+		 * js_location_reload, cleared by a plain navigation; consumed alongside
+		 * pending_navigation by the host. */
+    bool pending_nav_reload;
+
     /* Timer queue: array of timer*, sorted by deadline_ms ascending. */
     struct yetty_ylexbor_timer **timers;
     int timer_count, timer_cap;
@@ -861,6 +879,15 @@ struct yetty_ylexbor {
     int defer_scripts;
     int dom_dirty; /* JS mutated the DOM — host should
 	                            * relayout. */
+    /* Set only by mutations that can change LAYOUT geometry (structure, class,
+	 * attribute, and layout-affecting inline-style props). A paint-only inline
+	 * write — opacity/color/background/box-shadow/visibility/… — sets dom_dirty
+	 * (a repaint is owed) but NOT this, because it cannot move a box. A JS
+	 * geometry read (offsetWidth/getBoundingClientRect) forces a full whole-page
+	 * relayout ONLY when this is set, so youtube's paint-only animations don't
+	 * trigger the O(page) layout-thrashing rebuild. Cleared together with
+	 * dom_dirty once a layout completes (relayout_boxes_and_layout). */
+    int layout_dirty;
     /* A GPU repaint is owed. Set alongside dom_dirty on every DOM/style
      * mutation, but — unlike dom_dirty — NOT cleared by a geometry getter's
      * layout flush (getBoundingClientRect/clientWidth). A getter flush makes the
@@ -987,6 +1014,74 @@ struct yetty_ylexbor {
 	 * cascade lookups (grid templates / spans / flex gaps). Lazy;
 	 * destroyed with the engine. */
     void *supp_selector_matcher; /* lxb_selectors_t* */
+
+    /* Per-element class/id memo for the supplementary-selector pre-filter.
+	 * The 7 side-table lookups each scan all their rules against one
+	 * element, so the element's class/id attribute is fetched once per
+	 * element instead of once per (element × rule). Valid only within a
+	 * single style pass (no DOM mutation); keyed by element identity. */
+    const void *supp_cache_element;
+    const unsigned char *supp_cache_class;
+    size_t supp_cache_class_len;
+    const unsigned char *supp_cache_id;
+    size_t supp_cache_id_len;
+
+    /* Class-bucketed indexes over the supplementary rule tables, so an
+	 * element only tests rules whose subject class it has (Chromium
+	 * RuleSet-style). Lazily built per table, keyed by the table base
+	 * pointer; rebuilt when a table's rule count changes. Owned; freed in
+	 * yetty_ylexbor_css_vars_destroy. */
+    void *supp_indexes; /* struct supp_index * (dynamic array) */
+    int supp_index_count;
+    int supp_index_cap;
+
+    /* Per-element supplementary-match result cache, so the whole-page
+	 * restyle storm (youtube: ~19 full restyles/s) doesn't re-scan every
+	 * element every frame. Selector matches depend on structure / class /
+	 * attributes — NOT on inline style or property values. `supp_match_epoch`
+	 * is bumped by every selector-affecting DOM mutation (mark_dirty) but
+	 * NOT by inline-style-only changes (mark_dirty_style_only), so CSS
+	 * animations (element.style.transform = …) keep the cache warm. The
+	 * cache stores the winning rule index per (element, table); it is wiped
+	 * whenever the epoch advances. */
+    uint64_t supp_match_epoch;
+    void *supp_rc;        /* struct supp_rc_entry * (open-addressed hash) */
+    int supp_rc_cap;      /* power of two, or 0 */
+    int supp_rc_count;
+    uint64_t supp_rc_epoch;
+    /* Diagnostics (printed on destroy when YB_SUPP_STATS is set): how often the
+     * result cache spared a full selector scan across the restyle storm. */
+    uint64_t supp_rc_hits;
+    uint64_t supp_rc_misses;
+
+    /* Per-element libcss computed-style cache. The whole-page restyle storm
+	 * also re-ran libcss's own selector cascade (css_select_style) for every
+	 * element every frame — the biggest post-supp-cache cost. Because ybrowser
+	 * resolves inheritance itself in box-build (no css_computed_style_compose),
+	 * css_select_style's per-element output is PARENT-INDEPENDENT, so it can be
+	 * cached keyed by (element, inline-style hash). `style_epoch` bumps on any
+	 * change that could alter which rules cascade or how var()s resolve —
+	 * structure / class / attribute (mark_dirty) and inline CUSTOM-property
+	 * writes (which propagate to descendants' var()). Regular inline-style
+	 * writes bump neither epoch; the element that changed is caught by its
+	 * inline-hash. Cache owns the styles; callers borrow (release is a no-op).
+	 * Wiped on epoch or viewport change. */
+    uint64_t style_epoch;
+    void *style_rc;       /* struct style_rc_entry * (open-addressed hash) */
+    int style_rc_cap;
+    int style_rc_count;
+    uint64_t style_rc_epoch;
+    int style_rc_vw;
+    int style_rc_vh;
+    uint64_t style_rc_hits;
+    uint64_t style_rc_misses;
+    /* Diagnostics: total whole-page box-builds and how many were forced
+	 * synchronously by a JS geometry read (layout thrashing). */
+    uint64_t box_build_count;
+    uint64_t forced_flush_count;
+    uint64_t forced_flush_ns;
+    uint64_t supp_match_total_calls;
+    uint64_t supp_match_cached_table_calls;
 
     /* Rendered inline-<svg> scenes, keyed by element (see
 	 * yetty_ylexbor_svg_inline_entry). */

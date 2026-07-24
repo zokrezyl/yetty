@@ -661,10 +661,26 @@ bool yetty_ylexbor_box_clipped_out(const struct yetty_ylexbor *r, uint32_t idx)
         } else if (esc == YL_POS_ABSOLUTE && anc->position == YL_POS_STATIC) {
             skip = true; /* absolute: static ancestors below its CB do not clip */
         }
-        if (!skip && cur != idx && anc->clip_overflow && anc->w > 0.0f && anc->h > 0.0f) {
+        /* Per-axis clip validity. An overflow-clip ancestor that collapsed to
+			 * sub-pixel on an axis because its flex-basis never grew (flex:1 1 0 in
+			 * a flex column whose definite main-size did not propagate — YouTube's
+			 * guide scroll container inside the app-drawer) is a layout artifact,
+			 * not an intentional clip; using its degenerate rect would hide the
+			 * whole correctly-laid-out guide. So an axis whose extent is <1px AND
+			 * came from an ungrown flex-basis does not clip. Everything else is
+			 * unchanged: a real overflow strip still clips, and a deliberate
+			 * height:0 (exactly 0) was already non-clipping via anc->h>0. */
+        bool clip_h_ok =
+            anc->w > 0.0f && !(anc->w < 1.0f && anc->width_source == YL_SRC_FLEX_BASIS);
+        bool clip_v_ok =
+            anc->h > 0.0f && !(anc->h < 1.0f && anc->height_source == YL_SRC_FLEX_BASIS);
+        if (!skip && cur != idx && anc->clip_overflow && (clip_h_ok || clip_v_ok)) {
             const float slack = 0.5f;
-            if (b->x >= anc->x + anc->w - slack || b->x + b->w <= anc->x + slack ||
-                b->y >= anc->y + anc->h - slack || b->y + b->h <= anc->y + slack) {
+            bool out_h =
+                clip_h_ok && (b->x >= anc->x + anc->w - slack || b->x + b->w <= anc->x + slack);
+            bool out_v =
+                clip_v_ok && (b->y >= anc->y + anc->h - slack || b->y + b->h <= anc->y + slack);
+            if (out_h || out_v) {
                 return true;
             }
         }
@@ -2469,6 +2485,36 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 			 * must be cleared. Without this, "<a>x</a> <p>y</p>"
 			 * would tag "y" inside the <p> with the <a>'s element. */
             s.link_element = NULL;
+            /* A text <input> is a void element, so it has no child text node to
+			 * render — its current value must be synthesized as the box's inline
+			 * content, or a field the user types into shows nothing. The `value`
+			 * property reflects to the `value` attribute (IDL_ATTR), and the
+			 * host's page-text-input path writes it there, so reading the
+			 * attribute here surfaces the typed text. */
+            if (child->local_name == LXB_TAG_INPUT) {
+                lxb_dom_element_t *iel = lxb_dom_interface_element(child);
+                size_t itlen = 0;
+                const lxb_char_t *itype =
+                    lxb_dom_element_get_attribute(iel, (const lxb_char_t *)"type", 4, &itlen);
+                bool texty =
+                    itype == NULL ||
+                    (itlen == 4 && strncasecmp((const char *)itype, "text", 4) == 0) ||
+                    (itlen == 6 && strncasecmp((const char *)itype, "search", 6) == 0) ||
+                    (itlen == 5 && strncasecmp((const char *)itype, "email", 5) == 0) ||
+                    (itlen == 3 && strncasecmp((const char *)itype, "url", 3) == 0) ||
+                    (itlen == 3 && strncasecmp((const char *)itype, "tel", 3) == 0) ||
+                    (itlen == 8 && strncasecmp((const char *)itype, "password", 8) == 0) ||
+                    (itlen == 6 && strncasecmp((const char *)itype, "number", 6) == 0);
+                if (texty) {
+                    size_t vlen = 0;
+                    const lxb_char_t *val = lxb_dom_element_get_attribute(
+                        iel, (const lxb_char_t *)"value", 5, &vlen);
+                    if (val != NULL && vlen > 0) {
+                        inline_buf_open_seg(&ib, &s);
+                        inline_buf_append(&ib, (const char *)val, vlen);
+                    }
+                }
+            }
             struct yetty_ycore_void_result walk_res = walk(r, child, &s, bidx, &ib, depth + 1);
             if (YETTY_IS_ERR(walk_res)) {
                 free(ib.buf);
@@ -2985,6 +3031,13 @@ struct yetty_ycore_void_result yetty_ylexbor_box_build(struct yetty_ylexbor *r)
     if (r == NULL || r->document == NULL) {
         return YETTY_ERR(yetty_ycore_void, "ylexbor_box_build: null");
     }
+
+    /* Invalidate the supplementary-selector class/id memo: the DOM is
+	 * stable within this build pass, but may have mutated since the last
+	 * one, so a cached element's class/id could be stale. */
+    r->supp_cache_element = NULL;
+    r->box_build_count++;
+
 
     /* Free per-box heap (segs) from the previous build. wrap_inline_box
 	 * clears segs on consumption, but a relayout path that skips painting

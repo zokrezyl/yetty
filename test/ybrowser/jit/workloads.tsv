@@ -1,0 +1,17 @@
+# Stage 0 gate workloads — pre-registered per the JIT design (tmp/qjs-sljit-jit.md).
+# FROZEN at first data collection: changing name/url/role/parameters after
+# seeing data requires an explicit design decision, not threshold tuning.
+# role: gate = enters the 10%-median gate set; priority = sole 15% exception.
+# bundle_sha256 is filled when a workload is recorded/minimized locally; empty = live fetch.
+# interaction: fixed script name under test/ybrowser/jit/interactions/ (none = load only).
+name	url	role	viewport_w	viewport_h	cache	interaction	repetitions	bundle_sha256
+youtube-search	https://www.youtube.com/results?search_query=quickjs	gate	1280	800	clean	none	10
+youtube-watch	https://www.youtube.com/watch?v=dQw4w9WgXcQ	gate+priority	1280	800	clean	none	10
+google-news	https://news.google.com/?hl=en-US&gl=US&ceid=US:en	gate	1280	800	clean	none	10
+apnews	https://apnews.com/	gate	1280	800	clean	none	10
+cnn	https://www.cnn.com/	gate	1280	800	clean	none	10
+github	https://github.com/	gate	1280	800	clean	none	10
+# Deterministic sampler-validation fixtures (NOT in the gate median):
+polymer-stamp	test/ybrowser/wpt/31-document-fragment/polymer-nested-template-stamp.html	fixture	1000	800	n/a	none	3
+create-fragment	test/ybrowser/wpt/31-document-fragment/create-document-fragment.html	fixture	1000	800	n/a	none	3
+geometry-forced	test/ybrowser/wpt/32-forced-layout/geometry-forces-layout.html	fixture	1000	800	n/a	none	3

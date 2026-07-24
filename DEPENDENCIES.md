@@ -31,6 +31,7 @@ license texts ship alongside them.
 |-----------|---------|-----------|--------------|
 | libvterm 0.3.3 | MIT | (c) 2008 Paul Evans | `src/libvterm-0.3.3/LICENSE` |
 | TinyEMU | MIT | (c) 2016-2017 Fabrice Bellard | `src/tinyemu/MIT-LICENSE.txt` |
+| QuickJS-NG 0.15.0 | MIT | (c) Fabrice Bellard, Charlie Gordon, Ben Noordhuis, Saúl Ibarra Corretgé | `src/quickjs/LICENSE` |
 
 Anyone redistributing these vendored files does so under their MIT terms,
 independently of Yetty's BSL.
@@ -72,7 +73,6 @@ Pinned versions are tracked under `build-tools/3rdparty/<name>/version`.
 | minimp4 | 4575afb | CC0 (public domain) | MP4 demux |
 | lexbor | 3.0.0 | Apache-2.0 | HTML/CSS engine (ylexbor) |
 | libcss | 0.9.2 | MIT | CSS engine |
-| QuickJS | 0.15.0 | MIT | JavaScript engine (ylexbor) |
 | libssh2 | 1.11.1 | BSD-3-Clause | SSH backend (yssh) |
 | mbedTLS | 3.6.2 | Apache-2.0 | libssh2 crypto backend (webasm only) |
 | libcurl | 8.20.0 | curl License (MIT/X11-style) | HTTP transport |

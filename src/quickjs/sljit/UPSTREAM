@@ -1,0 +1,24 @@
+Upstream:       SLJIT (https://github.com/zherczeg/sljit)
+Branch/commit:  master @ 3907e69005ba6e30b225000f24aaef3632f88347
+Source archive: https://github.com/zherczeg/sljit/archive/refs/heads/master.tar.gz
+Archive SHA256: 9ca522c40987a10733f643eb4876d7733114f1a11310d69db17456bb8d436d11
+License:        BSD-2-Clause (see LICENSE)
+Drop date:      2026-07-20
+
+Vendored for the QuickJS baseline JIT (design: tmp/qjs-sljit-jit.md).
+Only sljit_src/ (the library) plus LICENSE and README.md are kept; the
+upstream docs/, regex_src/, test_src/, CMakeLists.txt, and GNUmakefile
+are pruned. Every kept file is byte-identical to upstream.
+
+SLJIT compiles as a single translation unit: build sljit_src/sljitLir.c,
+which #includes the CPU backend selected by SLJIT_CONFIG_AUTO (default).
+The executable-memory allocator files under sljit_src/allocator_src/ are
+included by sljitLir.c per platform — all are kept.
+
+Built privately into the `qjs` static library by
+build-tools/yetty/libs/quickjs.cmake; SLJIT symbols do not appear in
+ybrowser's public include or link interface. Enabled only when
+QJS_ENABLE_JIT is defined (Linux x86-64 first; see the design's platform
+table).
+
+Local modifications: none (pristine drop).

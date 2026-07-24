@@ -359,6 +359,7 @@ static void ui_new_tab(struct app *a);
 static void ui_close_tab(struct app *a, int idx);
 static void switch_tab(struct app *a, int idx);
 static void navigate(struct app *a, struct tab *t, char *url, int push_to_back);
+static size_t utf8_encode(uint32_t cp, char *out);
 static void nav_abort(struct tab *t);
 static void go_back(struct app *a);
 static void go_forward(struct app *a);
@@ -1184,6 +1185,40 @@ static void navigate(struct app *a, struct tab *t, char *url, int push_to_back)
     navigate_full(a, t, url, push_to_back, 0);
 }
 
+/* Form-submission navigation: issue an explicit-method request (POST body or
+ * GET query) that follows redirects, then load the resulting document. Never
+ * cache-served (a POST is not idempotent). Takes ownership of url/method/body.
+ * This is what makes the consent "Accept all" form actually take effect: the
+ * POST to the save endpoint sets the cookie and 302s back to the site, which we
+ * then render. */
+static void navigate_post(struct app *a, struct tab *t, char *url, char *method, char *body,
+                          size_t body_len)
+{
+    set_loading(a, 1);
+    nav_abort(t);
+    if (t->url && strcmp(t->url, START_URL) != 0) {
+        hist_push(&t->back, &t->n_back, &t->cap_back, str_dup(t->url));
+        hist_clear(t->fwd, &t->n_fwd);
+    }
+    size_t len = 0;
+    char *eff = NULL;
+    char *ctype = NULL;
+    char *data =
+        ybrowser_slurp_request(a->loader, url, method, body, body_len, &len, &eff, &ctype);
+    /* Land on the redirected URL (consent save 302s to the continue= target)
+	 * so the address bar, base URL, and history reflect the real page. */
+    const char *final_url = eff ? eff : url;
+    navigate_apply(a, t, final_url, (const uint8_t *)data, len, eff, ctype);
+    free(data);
+    free(ctype);
+    char *finish_url = str_dup(final_url);
+    free(eff);
+    navigate_finish(a, t, finish_url);
+    free(url);
+    free(method);
+    free(body);
+}
+
 static void go_back(struct app *a)
 {
     struct tab *t = &a->tabs[a->active];
@@ -1503,6 +1538,38 @@ static int key_cb(struct yetty_yclass_object *fw, uint32_t key, int mods, void *
             yetty_ygui_framework_mark_dirty(fw);
         }
         return consumed;
+    }
+    /* Neither the address bar nor the DevTools REPL is focused: if a click has
+	 * focused a text field IN THE PAGE (e.g. YouTube's search box), route the
+	 * keystroke there. Printable codepoints insert; Backspace/Enter edit/submit.
+	 * Without this, typing into a page input did nothing. */
+    {
+        struct tab *t = &a->tabs[a->active];
+        if (t->engine && yetty_ylexbor_has_page_focus(t->engine)) {
+            if (key == 0x08 || key == 0x7F) { /* Backspace / Delete */
+                yetty_ylexbor_dispatch_key(t->engine, "Backspace");
+                yetty_ygui_framework_mark_dirty(fw);
+                return 1;
+            }
+            if (key == '\r' || key == '\n') {
+                yetty_ylexbor_dispatch_key(t->engine, "Enter");
+                yetty_ygui_framework_mark_dirty(fw);
+                return 1;
+            }
+            if (key == 0x1B) { /* Esc — leave the field (blur handled on next click) */
+                return 0;
+            }
+            /* Printable character (skip C0 controls). mods with Ctrl are chrome
+			 * shortcuts already handled above, so anything here is text. */
+            if (key >= 0x20 && key != 0x7F) {
+                char buf[8];
+                size_t n = utf8_encode((uint32_t)key, buf);
+                buf[n] = '\0';
+                yetty_ylexbor_dispatch_text(t->engine, buf);
+                yetty_ygui_framework_mark_dirty(fw);
+                return 1;
+            }
+        }
     }
     return 0;
 }
@@ -1928,7 +1995,24 @@ static int pump_active(struct app *a)
 		 * and let the next tick run against the fresh engine. */
         char *js_nav = yetty_ylexbor_take_pending_navigation(t->engine);
         if (js_nav) {
-            navigate(a, t, js_nav, 1);
+            char *nav_method = NULL;
+            char *nav_body = NULL;
+            size_t nav_body_len = 0;
+            bool nav_reload = false;
+            yetty_ylexbor_take_pending_nav_post(t->engine, &nav_method, &nav_body, &nav_body_len,
+                                                &nav_reload);
+            if (nav_method) {
+                navigate_post(a, t, js_nav, nav_method, nav_body, nav_body_len);
+            } else if (nav_reload) {
+                /* location.reload(): bypass the cache so a cookie the page just
+				 * wrote (consent SOCS) changes what the same URL serves, instead
+				 * of replaying the cached pre-consent document forever.
+				 * navigate_full takes ownership of js_nav. */
+                navigate_full(a, t, js_nav, 1, /*bypass_cache=*/1);
+            } else {
+                free(nav_body);
+                navigate(a, t, js_nav, 1);
+            }
             return 0;
         }
         /* needs_paint (not just dom_dirty): JS that mutates then reads

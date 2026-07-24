@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<!-- Tombstone test: 40 dynamically created hot functions, each freed by
+     refcount when its binding goes out of scope, so their rows must
+     surface as tombstones with full per-function data. Expected per
+     function: calls=50, backedges=100000, hot+eligible. -->
+<html><body><div id="out"></div><script>
+let total = 0;
+for (let generation = 0; generation < 40; generation++) {
+  const hot = new Function("n",
+    "let s = 0; for (let i = 0; i < n; i++) s = (s + i) | 0; return s;");
+  for (let call = 0; call < 50; call++) total += hot(2000);
+}
+document.getElementById("out").textContent = "done " + total;
+</script></body></html>

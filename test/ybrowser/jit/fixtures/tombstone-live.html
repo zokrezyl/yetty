@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<!-- Control for tombstone-dynamic: identical workload but every dynamic
+     function is kept alive, so all rows dump live at teardown. Exact
+     counter totals must equal the tombstone-dynamic run. -->
+<html><body><div id="out"></div><script>
+window.keepAlive = [];
+let total = 0;
+for (let generation = 0; generation < 40; generation++) {
+  const hot = new Function("n",
+    "let s = 0; for (let i = 0; i < n; i++) s = (s + i) | 0; return s;");
+  window.keepAlive.push(hot);
+  for (let call = 0; call < 50; call++) total += hot(2000);
+}
+document.getElementById("out").textContent = "done " + total;
+</script></body></html>

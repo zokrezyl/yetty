@@ -405,6 +405,8 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
     free(r->text_chunks);
     free(r->base_url);
     free(r->pending_navigation);
+    free(r->pending_nav_method);
+    free(r->pending_nav_body);
     kv_store_destroy(&r->web_local_storage);
     kv_store_destroy(&r->web_session_storage);
     free(r->web_cookie_string);
@@ -1136,6 +1138,34 @@ char *yetty_ylexbor_take_pending_navigation(struct yetty_ylexbor *r)
     return url;
 }
 
+/* Take the method/body that accompany a form-submission navigation. Call
+ * immediately after yetty_ylexbor_take_pending_navigation() returned non-NULL.
+ * On return *out_method is "POST"/etc. (or NULL for a plain GET) and *out_body
+ * is the form-encoded body (or NULL); both transfer ownership to the caller.
+ * Clears the stored values so the next navigation starts clean. */
+void yetty_ylexbor_take_pending_nav_post(struct yetty_ylexbor *r, char **out_method,
+                                         char **out_body, size_t *out_body_len, bool *out_reload)
+{
+    if (out_method) {
+        *out_method = r ? r->pending_nav_method : NULL;
+    }
+    if (out_body) {
+        *out_body = r ? r->pending_nav_body : NULL;
+    }
+    if (out_body_len) {
+        *out_body_len = r ? r->pending_nav_body_len : 0;
+    }
+    if (out_reload) {
+        *out_reload = r ? r->pending_nav_reload : false;
+    }
+    if (r) {
+        r->pending_nav_method = NULL;
+        r->pending_nav_body = NULL;
+        r->pending_nav_body_len = 0;
+        r->pending_nav_reload = false;
+    }
+}
+
 /* Rebuild the box tree + run layout from the (possibly mutated) DOM. This is
  * the pure style/layout flush with NO side effects beyond r->boxes: it does not
  * resolve iframes, fetch, or touch child engines. Layout-dependent geometry
@@ -1156,15 +1186,18 @@ struct yetty_ycore_void_result yetty_ylexbor_relayout_boxes_and_layout(struct ye
     }
     r->layout_in_progress = 1;
     r->dom_dirty = 0;
+    r->layout_dirty = 0;
     struct yetty_ycore_void_result br = yetty_ylexbor_box_build(r);
     if (YETTY_IS_ERR(br)) {
         r->dom_dirty = 1;
+        r->layout_dirty = 1;
         r->layout_in_progress = 0;
         return br;
     }
     struct yetty_ycore_void_result lr = yetty_ylexbor_layout(r);
     if (YETTY_IS_ERR(lr)) {
         r->dom_dirty = 1;
+        r->layout_dirty = 1;
         r->layout_in_progress = 0;
         return lr;
     }

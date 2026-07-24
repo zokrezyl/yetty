@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<!-- Multi-runtime test: the top document and a srcdoc iframe each run a
+     distinct named hot loop in their own QuickJS runtime on the same
+     thread. Expected: topLoop calls=80 backedges=320000 in the base
+     dump; childLoop calls=60 backedges=300000 in a side dump; the
+     merged view holds each exactly once. -->
+<html><body><div id="out"></div>
+<iframe srcdoc="&lt;script&gt;function childLoop(n){let s=0;for(let i=0;i&lt;n;i++)s=(s+i)|0;return s;}let t=0;for(let c=0;c&lt;60;c++)t+=childLoop(5000);&lt;/script&gt;"></iframe>
+<script>
+function topLoop(n) { let s = 0; for (let i = 0; i < n; i++) s = (s + i) | 0; return s; }
+let total = 0;
+for (let call = 0; call < 80; call++) total += topLoop(4000);
+document.getElementById("out").textContent = "done " + total;
+</script></body></html>
