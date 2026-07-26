@@ -60,8 +60,9 @@ target_link_libraries(yetty_yrdawn
         yetty_yface
         # Figure-tree emit path: the client connects to the host, navigates
         # to the root container (yetty_api_yterminal), and drives
-        # create/delete/body through the typed container stubs.
-        yetty_yfigure
+        # create/delete/body through the typed container stubs. It is a pure
+        # remote-driver — only the api stubs, never the yfigure impl.
+        yetty_api_yfigure
         yetty_api_yterminal
         # Cross-platform sleep + non-blocking read used by the client
         # pump. yetty_yplatform_core is per-OS so we don't drag POSIX

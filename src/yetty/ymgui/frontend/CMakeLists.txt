@@ -27,13 +27,14 @@ target_link_libraries(ymgui_frontend PUBLIC
 )
 if(NOT EMSCRIPTEN)
     # yetty_yclient: libuv event loop. yetty_yclass: the connect runtime
-    # (rpc_connect_fds / _disconnect / session_translate_class). yetty_yfigure:
-    # typed container stubs (create_child / set_child_rect / apply_child_body /
-    # …). yetty_api_yterminal: figure_root_container navigation from the session
-    # root. The figure-tree records and per-figure body uploads travel as typed
+    # (rpc_connect_fds / _disconnect / session_translate_class). yetty_api_yfigure:
+    # typed container stubs only (create_child / set_child_rect / apply_child_body
+    # / …) — the frontend is a pure remote-driver, never the yfigure impl.
+    # yetty_api_yterminal: figure_root_container navigation from the session root.
+    # The figure-tree records and per-figure body uploads travel as typed
     # yclass-RPC calls on the root container proxy instead of hand-built
     # YCOMPOSITOR_BIN envelopes.
-    target_link_libraries(ymgui_frontend PUBLIC yetty_yclient yetty_yclass yetty_yfigure
+    target_link_libraries(ymgui_frontend PUBLIC yetty_yclient yetty_yclass yetty_api_yfigure
                           yetty_api_yterminal)
 endif()
 
