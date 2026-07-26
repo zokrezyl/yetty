@@ -187,18 +187,16 @@ YCLASS_DEFINES_ybrowser := YETTY_YBROWSER_HAS_STANDALONE YETTY_YGUI_HAS_UV
 YCLASS_DEFINES_yhello := YETTY_YHELLO_HAS_STANDALONE
 YCLASS_DEFINES_ygreeter := YETTY_YGREETER_HAS_STANDALONE YETTY_YGUI_HAS_UV
 
-# Two-generator rollout. Modules migrate to the role-split layout ONE BY
-# ONE: a module marked YCLASS_SPLIT_<mod> := 1 runs the NEW generator
-# (src/yetty/yclass/gen/codegen.py) and gets the split output — raw
-# annotated source in src/yetty/<module>/, generated object API in
-# src/yetty/gen/api/<mod>/ (+ header under include/yetty/api/<mod>/),
-# generated impl glue in src/yetty/gen/impl/<module>/, remote slots
-# resolved by canonical qualified name, local-only factory, no constructor
-# skel, no module-level rpc.gen.c. Every UNMARKED module runs the FROZEN
-# origin/main generator (src/yetty/yclass/gen/codegen-old.py — never edit
-# it; it exists so legacy output cannot drift while the new generator
-# evolves). When the last module is migrated, codegen-old.py and these
-# markers are deleted.
+# Role-split codegen. Every module runs the split generator
+# (src/yetty/yclass/gen/codegen.py): raw annotated source in
+# src/yetty/<module>/, generated object API in src/yetty/gen/api/<mod>/ (+
+# header under include/yetty/api/<mod>/), generated impl glue in
+# src/yetty/gen/impl/<module>/, remote slots resolved by canonical qualified
+# name, local-only factory, no constructor skel, no module-level rpc.gen.c.
+# The per-module YCLASS_SPLIT_<mod> := 1 markers below are the rollout residue
+# — all modules are migrated, so the markers are uniformly set; they still gate
+# split mode (YCLASS_SPLIT env) and pair with YCLASS_COMPAT_HEADER_<mod> for the
+# modules whose legacy-path headers still have un-flipped consumers.
 YCLASS_SPLIT_ydummy := 1
 YCLASS_SPLIT_ytermsink := 1
 YCLASS_SPLIT_yview := 1
@@ -242,11 +240,10 @@ YCLASS_SPLIT_yai := 1
 YCLASS_SPLIT_api_yplot := 1
 YCLASS_SPLIT_demoygui := 1
 
-# The two rollout groups, derived from the YCLASS_SPLIT_<mod> markers:
-# migrated modules run the NEW generator (codegen.py, role-split layout),
-# everything else runs the FROZEN origin/main generator (codegen-old.py).
-YCLASS_SPLIT_MODNAMES := $(strip $(foreach m,$(YCLASS_MODNAMES),$(if $(filter 1,$(YCLASS_SPLIT_$(m))),$(m))))
-YCLASS_LEGACY_MODNAMES := $(filter-out $(YCLASS_SPLIT_MODNAMES),$(YCLASS_MODNAMES))
+# Every module now runs the single role-split generator (codegen.py). The
+# per-module YCLASS_SPLIT_<mod> markers are all set and still gate split mode +
+# the compat-header emission; this list is simply every module.
+YCLASS_SPLIT_MODNAMES := $(YCLASS_MODNAMES)
 
 define codegen_one
 mod="$(1)"; spec="$$mod"; \
@@ -255,7 +252,7 @@ case "$$spec" in *=*) src_dir=$${spec#*=};; *) src_dir="src/yetty/$$mod";; esac;
 sources=$$(grep -lrE '(clang::annotate|YETTY_ANNOTATE)\("(class|mixin)@'"$$mod"':' "$$src_dir" --include='*.c' --exclude='*.gen.c' | LC_ALL=C sort); \
 if [ -z "$$sources" ]; then echo "ERROR: no annotated sources under $$src_dir"; exit 1; fi; \
 local_headers=""; case " $(YCLASS_LOCAL_HEADERS) " in *" $$mod "*) local_headers="--headers-local";; esac; \
-if [ "$(YCLASS_SPLIT_$(1))" = "1" ]; then generator="src/yetty/yclass/gen/codegen.py"; else generator="src/yetty/yclass/gen/codegen-old.py"; fi; \
+generator="src/yetty/yclass/gen/codegen.py"; \
 echo "  codegen: $$mod ($${generator##*/})"; \
 YCLASS_DEFINES="$(YCLASS_DEFINES_$(1))" YCLASS_INCLUDE_DIRS="$(YCLASS_INCLUDE_DIRS_$(1))" YCLASS_SPLIT="$(YCLASS_SPLIT_$(1))" YCLASS_COMPAT_HEADER="$(YCLASS_COMPAT_HEADER_$(1))" PYTHONHASHSEED=0 uv run $$generator "$$mod" "$(CURDIR)/include/yetty" "$(CURDIR)/$$src_dir" $$local_headers $$sources
 endef
@@ -263,13 +260,12 @@ endef
 # NB: the per-module _cg1-%/_cg2-% targets are deliberately NOT .PHONY — GNU
 # make skips pattern-rule (implicit) recipes for phony targets. They never
 # correspond to real files, so the pattern rule runs them every time anyway.
-.PHONY: codegen codegen-old codegen-new _codegen_old_pass1 _codegen_old_pass2 _codegen_new_pass1 _codegen_new_pass2
+.PHONY: codegen codegen-new _codegen_new_pass1 _codegen_new_pass2
 
-codegen: ## Run yclass codegen for ALL modules (legacy group + migrated group)
-	@$(MAKE) --no-print-directory codegen-old
+codegen: ## Run yclass codegen for ALL modules (every module is on the split generator)
 	@$(MAKE) --no-print-directory codegen-new
 
-codegen-old: ## Run yclass codegen for the LEGACY modules only (frozen codegen-old.py)
+codegen-new: ## Run yclass codegen for all modules (codegen.py, role-split layout)
 	@# Each module writes only its OWN files, so within a pass the modules run
 	@# in parallel. Two passes with a barrier between them: a header-destined
 	@# type (exposed arg, callback typedef, vtable struct) becomes visible to
@@ -277,22 +273,13 @@ codegen-old: ## Run yclass codegen for the LEGACY modules only (frozen codegen-o
 	@# pass 2 re-parses with all headers present. codegen writes atomically, so
 	@# a consumer never reads a half-written header mid-pass. (A cross-module
 	@# type chain deeper than one level would need a 3rd pass.)
-	@$(MAKE) --no-print-directory -j$(CODEGEN_JOBS) _codegen_old_pass1
-	@$(MAKE) --no-print-directory -j$(CODEGEN_JOBS) _codegen_old_pass2
-
-codegen-new: ## Run yclass codegen for the MIGRATED role-split modules only (codegen.py)
-	@# Same two-pass shape as codegen-old, restricted to the migrated group.
 	@$(MAKE) --no-print-directory -j$(CODEGEN_JOBS) _codegen_new_pass1
 	@$(MAKE) --no-print-directory -j$(CODEGEN_JOBS) _codegen_new_pass2
 
-_codegen_old_pass1: $(foreach m,$(YCLASS_LEGACY_MODNAMES),_cg1-$(m))
-	@echo "==> yclass codegen (legacy): pass 1 done ($(words $(YCLASS_LEGACY_MODNAMES)) modules)"
-_codegen_old_pass2: $(foreach m,$(YCLASS_LEGACY_MODNAMES),_cg2-$(m))
-	@echo "==> yclass codegen (legacy): pass 2 done"
 _codegen_new_pass1: $(foreach m,$(YCLASS_SPLIT_MODNAMES),_cg1-$(m))
-	@echo "==> yclass codegen (migrated): pass 1 done ($(words $(YCLASS_SPLIT_MODNAMES)) modules)"
+	@echo "==> yclass codegen: pass 1 done ($(words $(YCLASS_SPLIT_MODNAMES)) modules)"
 _codegen_new_pass2: $(foreach m,$(YCLASS_SPLIT_MODNAMES),_cg2-$(m))
-	@echo "==> yclass codegen (migrated): pass 2 done"
+	@echo "==> yclass codegen: pass 2 done"
 
 _cg1-%:
 	@$(call codegen_one,$*)
