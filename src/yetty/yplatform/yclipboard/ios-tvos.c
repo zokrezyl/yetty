@@ -75,4 +75,4 @@ static struct yetty_ycore_void_result ios_clipboard_request_paste(struct yetty_y
     return YETTY_OK_VOID();
 }
 
-#include "ios-tvos.gen.c"
+#include "yetty/gen/impl/yplatform/yclipboard/ios-tvos.c"

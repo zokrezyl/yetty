@@ -142,4 +142,4 @@ static struct yetty_ycore_void_result window_default_set_title(struct yetty_ycla
     return YETTY_ERR(yetty_ycore_void, "window_set_title: not implemented by base window class");
 }
 
-#include "window.gen.c"
+#include "yetty/gen/impl/yplatform/ywindow/window.c"

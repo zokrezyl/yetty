@@ -1,0 +1,52 @@
+/* GENERATED — do not edit. */
+/* Object API for regular class(es) `ios_clipboard` (implementation module: yplatform).
+ * Fully generated from the source .c — do not edit. The API does
+ * not encode whether an implementation dispatches in-process or
+ * over RPC; it declares the typed methods, create(), properties,
+ * exposed functions, and the types those signatures use. */
+#ifndef YETTY_YCLASSGEN_API_YPLATFORM_YCLIPBOARD_IOS_TVOS_H
+#define YETTY_YCLASSGEN_API_YPLATFORM_YCLIPBOARD_IOS_TVOS_H
+
+#include <yetty/yclass/class.h>
+#include <yetty/yclass/rpc.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_ycore_xthread_event_pipe;
+
+
+
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
+struct yetty_yplatform_ios_clipboard;
+#ifndef YETTY_YCLASSGEN_TYPE_YETTY_YPLATFORM_IOS_CLIPBOARD_PTR_RESULT
+#define YETTY_YCLASSGEN_TYPE_YETTY_YPLATFORM_IOS_CLIPBOARD_PTR_RESULT
+struct yetty_yplatform_ios_clipboard_ptr_result {
+    int ok;
+    union {
+        struct yetty_yplatform_ios_clipboard *value;
+        struct yetty_ycore_error error;
+    };
+};
+#endif
+struct yetty_yplatform_ios_clipboard_ptr_result yetty_yplatform_ios_clipboard_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yplatform_ios_clipboard_to(struct yetty_yplatform_ios_clipboard *data);
+
+struct yetty_yclass_object_ptr_result yetty_yplatform_ios_clipboard_create(struct yetty_yclass_ctx *ctx);
+
+
+
+/* Bind the pipe that paste results are delivered on. Borrowed. */
+struct yetty_ycore_void_result yetty_yplatform_ios_clipboard_configure(struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *response_pipe);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

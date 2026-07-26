@@ -840,6 +840,9 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/yfigure/container.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ycomposite_factory_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yfigure/registry.h
+    text: "typedef struct yetty_yfigure_figure_ptr_result (*yetty_ycomposite_factory_fn)(struct yetty_ycore_rectangle, const struct yetty_context *, void *);"
   container_visitor_fn:
     source_file: src/yetty/yfigure/container.c
     text: "typedef int (*container_visitor_fn)(uint32_t, struct yetty_yfigure_figure *, void *);"

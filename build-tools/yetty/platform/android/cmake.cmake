@@ -54,7 +54,7 @@ set(YETTY_PLATFORM_SOURCES
     # yplatform module aggregator — defines yetty_yplatform_register (the entry
     # calls it). On desktop it lives in the glfw lib; android has no glfw, so
     # compile it into the lib here (as iOS/tvOS/webasm do).
-    ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/gen/impl/yplatform/rpc.gen.c
     # The concrete app the android entry injects via yetty_yapp_create_app
     # (its run() builds the framework/terminal — same yetty:app as desktop/web).
     ${YETTY_ROOT}/src/yetty/yetty/app.c
@@ -218,7 +218,7 @@ add_library(ygreeter SHARED
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/android.c
-    ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/gen/impl/yplatform/rpc.gen.c
     # Core sources ygreeter compiles directly (not provided as libs) —
     # mirrors tools/ygreeter/CMakeLists.txt's YGREETER_SOURCES + the
     # Android platform backends (default.c, not glfw/webasm).
@@ -374,7 +374,7 @@ add_library(yhello SHARED
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/android.c
-    ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/gen/impl/yplatform/rpc.gen.c
     # Core sources yhello compiles directly (not provided as libs) —
     # mirrors tools/yhello/CMakeLists.txt's YHELLO_SOURCES + the Android
     # platform backends (default.c / android.c, not glfw).

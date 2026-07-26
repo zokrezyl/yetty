@@ -1,0 +1,53 @@
+/* GENERATED — do not edit. */
+/* Object API for regular class(es) `glfw_clipboard` (implementation module: yplatform).
+ * Fully generated from the source .c — do not edit. The API does
+ * not encode whether an implementation dispatches in-process or
+ * over RPC; it declares the typed methods, create(), properties,
+ * exposed functions, and the types those signatures use. */
+#ifndef YETTY_YCLASSGEN_API_YPLATFORM_YCLIPBOARD_GLFW_H
+#define YETTY_YCLASSGEN_API_YPLATFORM_YCLIPBOARD_GLFW_H
+
+#include <yetty/yclass/class.h>
+#include <yetty/yclass/rpc.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_ycore_xthread_event_pipe;
+
+
+
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
+struct yetty_yplatform_glfw_clipboard;
+#ifndef YETTY_YCLASSGEN_TYPE_YETTY_YPLATFORM_GLFW_CLIPBOARD_PTR_RESULT
+#define YETTY_YCLASSGEN_TYPE_YETTY_YPLATFORM_GLFW_CLIPBOARD_PTR_RESULT
+struct yetty_yplatform_glfw_clipboard_ptr_result {
+    int ok;
+    union {
+        struct yetty_yplatform_glfw_clipboard *value;
+        struct yetty_ycore_error error;
+    };
+};
+#endif
+struct yetty_yplatform_glfw_clipboard_ptr_result yetty_yplatform_glfw_clipboard_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_clipboard_to(struct yetty_yplatform_glfw_clipboard *data);
+
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_clipboard_create(struct yetty_yclass_ctx *ctx);
+
+
+
+/* Bind the render→main marshalling bus and the main→render response pipe. Both
+ * are borrowed. Call once after create(), before any other slot. */
+struct yetty_ycore_void_result yetty_yplatform_glfw_clipboard_configure(struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *output_pipe, struct yetty_ycore_xthread_event_pipe *input_pipe);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

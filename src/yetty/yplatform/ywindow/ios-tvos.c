@@ -129,4 +129,4 @@ struct yetty_ycore_void_result yetty_yplatform_ios_window_set_metrics(
     return YETTY_OK_VOID();
 }
 
-#include "ios-tvos.gen.c"
+#include "yetty/gen/impl/yplatform/ywindow/ios-tvos.c"

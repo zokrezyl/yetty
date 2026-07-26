@@ -112,4 +112,4 @@ static struct yetty_ycore_void_result ios_platform_run(struct yetty_yclass_objec
     return YETTY_OK_VOID();
 }
 
-#include "ios-tvos.gen.c"
+#include "yetty/gen/impl/yplatform/yplatform/ios-tvos.c"

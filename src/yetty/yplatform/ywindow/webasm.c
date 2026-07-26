@@ -96,4 +96,4 @@ static struct yetty_ycore_void_result webasm_window_set_title(struct yetty_yclas
     return YETTY_OK_VOID();
 }
 
-#include "webasm.gen.c"
+#include "yetty/gen/impl/yplatform/ywindow/webasm.c"

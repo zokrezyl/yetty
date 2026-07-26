@@ -278,4 +278,4 @@ static struct yetty_ycore_void_result glfw_window_chrome_handle_event(
     return YETTY_OK_VOID();
 }
 
-#include "glfw.gen.c"
+#include "yetty/gen/impl/yplatform/ywindow-chrome/glfw.c"

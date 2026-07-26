@@ -1888,6 +1888,9 @@ local_typedefs:
   yetty_yvterm_grid_sixel_write_fn:
     source_file: src/yetty/yvterm/grid.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_sixel_write_fn)(const char *, size_t, void *);"
+  yetty_yvterm_tiers_line_visit_fn:
+    source_file: src/yetty/yvterm/scroll-tiers.h
+    text: "typedef void (*yetty_yvterm_tiers_line_visit_fn)(struct yetty_yvterm_line *, uint64_t, void *);"
   yetty_yvterm_grid_clear_hook_fn:
     source_file: src/yetty/yvterm/grid.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);"

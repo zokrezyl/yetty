@@ -22,6 +22,10 @@ struct yetty_ydraw_drawable_list;
 struct yetty_yrich_command;
 struct yetty_yrich_operation;
 
+typedef void (*yetty_yrich_dirty_cb)(struct yetty_yclass_object *, void *);
+typedef uint64_t yetty_yrich_element_id;
+typedef void (*yetty_yrich_sync_cb)(struct yetty_yclass_object *, struct yetty_yrich_operation *const *, size_t, void *);
+
 struct yetty_yclass_ptr_result yetty_yrich_document_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct

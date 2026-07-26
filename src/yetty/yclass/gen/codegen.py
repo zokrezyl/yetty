@@ -505,6 +505,26 @@ def _typedef_text(decl: dict) -> str:
     return f"typedef {underlying}{sep}{name};"
 
 
+def _typedef_defined_names(text: str) -> set:
+    """The set of typedef names DEFINED by `typedef …;` statements in a text
+    blob. Used to keep the local-typedef reproduction from re-emitting a typedef
+    another emission block already defines (e.g. an override `_fn` type the stub
+    machinery emits) — a second identical typedef in the same header is at best
+    redundant and trips -Werror on older toolchains."""
+    names: set = set()
+    # Function-pointer typedef: `typedef RET (*NAME)(ARGS);` — name inside (* ).
+    names |= set(re.findall(r"\(\s*\*\s*([A-Za-z_]\w*)\s*\)\s*\(", text or ""))
+    # Plain/object typedef: `typedef <underlying> NAME;` — last identifier
+    # before the terminating `;` (skip the function-pointer form handled above).
+    for stmt in re.findall(r"\btypedef\b[^;{}]*;", text or ""):
+        if "(*" in stmt:
+            continue
+        match = re.search(r"([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*;\s*$", stmt)
+        if match:
+            names.add(match.group(1))
+    return names
+
+
 def _record_field_list(decl: dict) -> list:
     """Field list for a RecordDecl, inlining anonymous nested struct/union
     members. An anonymous member is emitted as {name, kind: struct|union,
@@ -1289,49 +1309,25 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     if local_type_files:
         model["local_types"] = local_type_files
     if local_typedefs:
-        # Parse recorded EVERY typedef in each TU. Narrow that down to the set a
-        # public signature actually names, and — crucially — to typedefs OWNED by
-        # this module. Ownership matters: a header must reproduce a callback type
-        # authored in a sibling file of THIS module (e.g. yetty_ygui_click_cb in
-        # ygui/mixins/clickable.h, used by a widget's stub), but must NOT
-        # reproduce system typedefs (uint32_t, size_t — those arrive via
-        # <stdint.h>/<stddef.h>) or another module's typedefs (they arrive via
-        # that module's public header #include). A typedef is owned when its
-        # defining file lives under this module's own include/src subtree.
+        # Parse recorded EVERY typedef in each TU. Keep only those OWNED by this
+        # module — a typedef whose defining file lives under this module's own
+        # include/src subtree. Ownership is the right filter: a header must be
+        # able to reproduce a callback type authored in a sibling file of THIS
+        # module (e.g. yetty_ygui_click_cb in ygui/mixins/clickable.h, used by a
+        # widget's stub; yetty_yrdawn_emit_osc_fn in yrdawn/figure.c, used in a
+        # factory-args struct), but must NOT reproduce system typedefs (uint32_t,
+        # size_t — those arrive via <stdint.h>/<stddef.h>) or another module's
+        # typedefs (they arrive via that module's public header #include). The
+        # owned set is small and bounded, so it does not bloat the model; the
+        # per-header emitter reproduces only the owned typedefs its own content
+        # actually names (a regex scan over the emitted structs/protos/stubs).
         owned_marker = f"/yetty/{module_include_subpath(module)}/"
         owned_typedefs = {
             name: info
             for name, info in local_typedefs.items()
             if owned_marker in ("/" + info.get("source_file", ""))}
-        referenced: set = set()
-        def _scan_type_tokens(type_str):
-            for tok in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", type_str or ""):
-                referenced.add(tok)
-        for method in model.get("methods", []):
-            _scan_type_tokens(method.get("return_type"))
-            for arg in method.get("args", []):
-                _scan_type_tokens(arg.get("type"))
-        for item in model.get("exposed", []):
-            _scan_type_tokens(item.get("return_type"))
-            for arg in item.get("args", []):
-                _scan_type_tokens(arg.get("type"))
-        for cls in model.get("classes", []):
-            for field in cls.get("data_fields", []):
-                _scan_type_tokens(field.get("type"))
-        # Transitive closure over OWNED typedefs only: a kept typedef's own text
-        # may name another module-owned typedef (which must be reproduced first).
-        keep: dict = {}
-        frontier = [name for name in owned_typedefs if name in referenced]
-        while frontier:
-            name = frontier.pop()
-            if name in keep:
-                continue
-            keep[name] = owned_typedefs[name]
-            for tok in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", owned_typedefs[name]["text"]):
-                if tok in owned_typedefs and tok not in keep:
-                    frontier.append(tok)
-        if keep:
-            model["local_typedefs"] = keep
+        if owned_typedefs:
+            model["local_typedefs"] = owned_typedefs
     if includes_by_file:
         model["includes"] = includes_by_file
     return model
@@ -2418,18 +2414,24 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         # Typedefs (callback function pointers, …) referenced by any emitted
         # prototype, stub or type definition — reproduced so the public header
         # is self-contained, emitted before the structs/functions that use them.
-        # The model's local_typedefs set was already narrowed to the signature-
-        # referenced closure at parse time, so a typedef defined in a SIBLING
-        # file (e.g. a mixin's callback type used by a widget's stub) reproduces
-        # here too; the source file it was authored in no longer matters — a
-        # header emits whichever of the referenced set its own content names.
+        # local_typedefs is the module-OWNED set (parse-time), so a typedef
+        # defined in a SIBLING file (e.g. a mixin's callback type used by a
+        # widget's stub, or a callback field type used by a factory-args struct)
+        # reproduces here too — the source file it was authored in no longer
+        # matters, a header emits whichever owned typedef its own content names.
+        # EXCLUDE any name another emission block already DEFINES (the override
+        # `_fn` typedefs the stub machinery emits) — a second identical typedef
+        # in one header is redundant and trips -Werror on older toolchains.
         local_typedefs = model.get("local_typedefs", {})
         typedef_scan = "\n".join(exposed_protos + header_type_texts + local_type_defs
                                  + [stub_decls, stub_typedefs])
+        already_defined = (_typedef_defined_names(stub_typedefs)
+                           | _typedef_defined_names(stub_decls))
         typedef_defs = [
             info["text"]
             for name, info in sorted(local_typedefs.items())
-            if re.search(r"\b" + re.escape(name) + r"\b", typedef_scan)]
+            if name not in already_defined
+            and re.search(r"\b" + re.escape(name) + r"\b", typedef_scan)]
 
         # Forward declarations for struct tags named only in pointer position
         # (completeness is only required at the call site and the definition).
@@ -2542,6 +2544,11 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path, split: bool = F
     groups: dict = {}
     for c in model["classes"]:
         groups.setdefault(c["source_file"], []).append(c)
+
+    # Modules whose sources share a filename stem across subdirs (only
+    # yplatform) emit registration as standalone per-submodule aggregators
+    # instead of a per-source folded hook — see the split branch below.
+    module_has_dup_stems = _module_has_duplicate_stems(model)
 
     # Route each owned method (its public stub + server skel) and each regular
     # class (its factory) to the <stem>.gen.c of the owning class's source, so
@@ -2755,19 +2762,30 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path, split: bool = F
             # the module-level yetty_<module>_register() chaining them all,
             # emitted into the first source (sorted by stem) so existing
             # callers keep their one registration call.
-            all_stems = sorted(Path(p).stem for p in groups)
-            if len(all_stems) == 1:
-                registration_block = emit_group_aggregator(
-                    classes, own_methods, module, (), split)
+            #
+            # A module with duplicate source stems (yplatform's per-OS
+            # variants: yclipboard/glfw.c, ywindow/glfw.c, …) can't fold a
+            # per-source register — the yetty_<module>_glfw_register symbols
+            # would collide. Its registration is emitted per-submodule into
+            # standalone rpc.gen.c aggregators (emit_submodule_register_tus,
+            # called from main()); the impl TU carries only accessor/skel/
+            # factory, no registration block.
+            if module_has_dup_stems:
+                registration_block = ""
             else:
-                source_group = re.sub(r"\W", "_", f"{module}_{src_path_p.stem}")
-                registration_block = emit_group_aggregator(
-                    classes, own_methods, source_group, (), split)
-                if src_path_p.stem == all_stems[0]:
-                    chain_groups = [re.sub(r"\W", "_", f"{module}_{stem}")
-                                    for stem in all_stems]
-                    registration_block += "\n" + emit_group_aggregator(
-                        [], [], module, chain_groups, split)
+                all_stems = sorted(Path(p).stem for p in groups)
+                if len(all_stems) == 1:
+                    registration_block = emit_group_aggregator(
+                        classes, own_methods, module, (), split)
+                else:
+                    source_group = re.sub(r"\W", "_", f"{module}_{src_path_p.stem}")
+                    registration_block = emit_group_aggregator(
+                        classes, own_methods, source_group, (), split)
+                    if src_path_p.stem == all_stems[0]:
+                        chain_groups = [re.sub(r"\W", "_", f"{module}_{stem}")
+                                        for stem in all_stems]
+                        registration_block += "\n" + emit_group_aggregator(
+                            [], [], module, chain_groups, split)
             impl_body = (HEADER + include_block + "\n" + slot_block
                          + accessor_block + "\n\n"
                          + ctor_stub_block + skel_block + create_block
@@ -3197,6 +3215,54 @@ def emit_rpc_aggregator_c(classes, methods, group, chain_registers, out_path, sp
     )
 
 
+def _module_has_duplicate_stems(model) -> bool:
+    """True when two annotated sources of the module share a filename stem —
+    yplatform's per-OS variants (yclipboard/glfw.c, ywindow/glfw.c, …) are the
+    only case. Such a module cannot fold a per-source
+    yetty_<module>_<stem>_register into each impl TU (the symbols collide), so
+    its registration is emitted as standalone per-submodule rpc.gen.c
+    aggregators instead — the same layout the legacy generator uses."""
+    sources = {c["source_file"] for c in model["classes"]}
+    stems = [Path(s).stem for s in sources]
+    return len(stems) != len(set(stems))
+
+
+def emit_submodule_register_tus(model, module, module_src, out_dir, split):
+    """Standalone registration TUs: one rpc.gen.c per submodule subdir
+    (registering that subdir's classes) plus the module-root rpc.gen.c that
+    registers the root classes and chains the submodule registers, so callers
+    of yetty_<module>_register() still register everything. `module_src` locates
+    each source's submodule; `out_dir` is where the rpc.gen.c files are written
+    (the module source tree for legacy modules, the gen/impl tree in split
+    mode)."""
+    cls_source = {(c["domain"], c["name"]): c["source_file"]
+                  for c in model["classes"]}
+    sub_groups: dict = {}
+    for c in model["classes"]:
+        sub = _submodule_of(c["source_file"], module_src)
+        sub_groups.setdefault(sub, {"classes": [], "methods": []})["classes"].append(c)
+    for m in model.get("methods", []):
+        src = cls_source.get((m["domain"], m["owning_class"]))
+        sub = _submodule_of(src, module_src) if src else ""
+        sub_groups.setdefault(sub, {"classes": [], "methods": []})["methods"].append(m)
+
+    def group_symbol(submodule):
+        return re.sub(r"\W", "_", f"{module}_{submodule}") if submodule else module
+
+    submodules = sorted(s for s in sub_groups if s)
+    for sub in submodules:
+        bucket = sub_groups[sub]
+        (out_dir / sub).mkdir(parents=True, exist_ok=True)
+        emit_rpc_aggregator_c(bucket["classes"], bucket["methods"],
+                              group_symbol(sub), (),
+                              out_dir / sub / "rpc.gen.c", split)
+    root = sub_groups.get("", {"classes": [], "methods": []})
+    out_dir.mkdir(parents=True, exist_ok=True)
+    emit_rpc_aggregator_c(root["classes"], root["methods"], module,
+                          [group_symbol(s) for s in submodules],
+                          out_dir / "rpc.gen.c", split)
+
+
 def _platform_macro(platform):
     return "YETTY_PLATFORM_" + re.sub(r"\W", "_", platform).upper()
 
@@ -3522,34 +3588,17 @@ def main():
     # the module), registering only that subdir's classes. The module-root
     # rpc.gen.c registers the root classes and chains the submodule registers, so
     # existing callers of yetty_<module>_register() still register everything.
-    # Role-split modules emit NO rpc.gen.c: each generated impl file owns its
-    # own registration hook (emitted by emit_class_gen_c).
+    # Role-split modules normally emit NO rpc.gen.c: each generated impl file owns
+    # its own registration hook (emitted by emit_class_gen_c). The exception is a
+    # split module with duplicate source stems (yplatform), whose per-source hooks
+    # would collide — it emits the same standalone per-submodule aggregators, but
+    # into the gen/impl tree.
     if not split:
-        cls_source = {(c["domain"], c["name"]): c["source_file"]
-                      for c in model["classes"]}
-        sub_groups: dict = {}
-        for c in model["classes"]:
-            sub = _submodule_of(c["source_file"], module_src)
-            sub_groups.setdefault(sub, {"classes": [], "methods": []})["classes"].append(c)
-        for m in model.get("methods", []):
-            src = cls_source.get((m["domain"], m["owning_class"]))
-            sub = _submodule_of(src, module_src) if src else ""
-            sub_groups.setdefault(sub, {"classes": [], "methods": []})["methods"].append(m)
-
-        def group_symbol(submodule):
-            return re.sub(r"\W", "_", f"{module}_{submodule}") if submodule else module
-
-        submodules = sorted(s for s in sub_groups if s)
-        for sub in submodules:
-            bucket = sub_groups[sub]
-            (module_src / sub).mkdir(parents=True, exist_ok=True)
-            emit_rpc_aggregator_c(bucket["classes"], bucket["methods"],
-                                  group_symbol(sub), (),
-                                  module_src / sub / "rpc.gen.c")
-        root = sub_groups.get("", {"classes": [], "methods": []})
-        emit_rpc_aggregator_c(root["classes"], root["methods"], module,
-                              [group_symbol(s) for s in submodules],
-                              module_src / "rpc.gen.c")
+        emit_submodule_register_tus(model, module, module_src, module_src, False)
+    elif _module_has_duplicate_stems(model):
+        emit_submodule_register_tus(
+            model, module, module_src,
+            module_src.parent / "gen" / "impl" / module, True)
 
     _write_atomic(module_src / "model.yaml", yaml_dump(model) + "\n")
 

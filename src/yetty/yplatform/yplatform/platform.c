@@ -183,4 +183,4 @@ struct yetty_yclass_object_ptr_result yetty_yplatform_platform_window_chrome(
     return YETTY_OK(yetty_yclass_object_ptr, data.value->window_chrome);
 }
 
-#include "platform.gen.c"
+#include "yetty/gen/impl/yplatform/yplatform/platform.c"

@@ -113,4 +113,4 @@ static struct yetty_ycore_void_result android_platform_run(struct yetty_yclass_o
     return YETTY_OK_VOID();
 }
 
-#include "android.gen.c"
+#include "yetty/gen/impl/yplatform/yplatform/android.c"

@@ -20,6 +20,8 @@ extern "C" {
 struct yetty_ydraw_drawable_list;
 struct yetty_yrich_rect;
 
+typedef uint64_t yetty_yrich_element_id;
+
 struct yetty_yclass_ptr_result yetty_yrich_element_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
