@@ -62,4 +62,4 @@ static struct yetty_ycore_void_result yapp_default_quit(struct yetty_yclass_obje
 YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx);
 
-#include "app.gen.c"
+#include "yetty/gen/impl/yapp/app.c"

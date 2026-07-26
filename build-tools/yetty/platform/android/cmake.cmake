@@ -58,7 +58,7 @@ set(YETTY_PLATFORM_SOURCES
     # The concrete app the android entry injects via yetty_yapp_create_app
     # (its run() builds the framework/terminal — same yetty:app as desktop/web).
     ${YETTY_ROOT}/src/yetty/yetty/app.c
-    ${YETTY_ROOT}/src/yetty/yetty/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/gen/api/yetty/app.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c

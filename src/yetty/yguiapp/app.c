@@ -29,7 +29,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/yapp/app.h>
+#include <yetty/api/yapp/app.h>
 #include <yetty/yclass/class.h>
 #include <yetty/yconfig/config.h>
 
@@ -913,4 +913,4 @@ static struct yetty_ycore_void_result yguiapp_quit(struct yetty_yclass_object *o
     return YETTY_OK_VOID();
 }
 
-#include "app.gen.c"
+#include "yetty/gen/impl/yguiapp/app.c"

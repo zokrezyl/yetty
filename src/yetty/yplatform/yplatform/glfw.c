@@ -33,7 +33,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/yclass/class.h>
-#include <yetty/yapp/app.h>
+#include <yetty/api/yapp/app.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yframework/yframework.h>

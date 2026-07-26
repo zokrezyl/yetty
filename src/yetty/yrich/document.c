@@ -28,7 +28,7 @@
 #include <yetty/yrich/yrich-selection.h>
 #include <yetty/yrich/yrich-types.h>
 
-#include <yetty/yrich/element.h>
+#include "yetty/gen/impl/yrich/element.h"
 
 #include <yetty/ydraw-core/drawable-list.h>
 
@@ -795,4 +795,4 @@ static struct yetty_ycore_void_result document_default_on_text_input(
     return yetty_yrich_document_mark_dirty(obj);
 }
 
-#include "document.gen.c"
+#include "yetty/gen/impl/yrich/document.c"

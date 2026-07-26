@@ -9,8 +9,8 @@
 
 #include <yetty/yrich/yrich-export.h>
 
-#include <yetty/yrich/document.h>
-#include <yetty/yrich/ydoc.h>
+#include <yetty/api/yrich/document.h>
+#include <yetty/api/yrich/ydoc.h>
 #include <yetty/yrich/yrich-types.h>
 
 #include <stdint.h>

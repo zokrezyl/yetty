@@ -89,7 +89,7 @@ add_library(yetty_yplatform_core STATIC
     # run dispatch stubs plus the weak app factory that concrete apps override.
     # In core so the platform can host any yapp:app subclass without naming it.
     ${YETTY_ROOT}/src/yetty/yapp/app.c
-    ${YETTY_ROOT}/src/yetty/yapp/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/gen/api/yapp/app.c
     # Submodule accessor-lookup registrations. The yplatform module aggregator
     # (yplatform/rpc.gen.c, compiled into yetty_yplatform_window_chrome) calls
     # each of these; the references are declared weak so absence is tolerated

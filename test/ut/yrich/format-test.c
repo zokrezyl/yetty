@@ -6,8 +6,8 @@
  * paragraph (whole paragraph, not just its last line), as one undoable step.
  */
 
-#include <yetty/yrich/document.h>
-#include <yetty/yrich/ydoc.h>
+#include <yetty/api/yrich/document.h>
+#include <yetty/api/yrich/ydoc.h>
 #include <yetty/yrich/yrich-types.h>
 
 #include "ytest.h"

@@ -3059,7 +3059,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yplatform/platform.h>
-#include <yetty/yapp/app.h>
+#include "yetty/gen/impl/yapp/app.h"
 #include <yetty/yclass/class.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yrender/render-target.h>

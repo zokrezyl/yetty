@@ -29,7 +29,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/webasm.c
     ${YETTY_ROOT}/src/yetty/yetty/app.c
-    ${YETTY_ROOT}/src/yetty/yetty/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/gen/api/yetty/app.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/window/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/webasm.c

@@ -2500,8 +2500,15 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
          * yetty_yfigure_kind_token in yfigure/registry.h. The composite
          * factory in figure_args lets each ygrid render yplot/yimage/etc.
          * instances embedded in the prim stream. */
-        static const char *const producer_kind_names[] = {"yplot", "yimage", "yvideo", "yzoo",
-                                                          "yjungle"};
+        /* "yscroll": a LOCAL (framebuffer-pixel, non-absolute) ygrid for a
+         * scrollable document producer — content is emitted in document coords,
+         * the figure is sized to the viewport and scrolled natively via
+         * set_child_scroll (view_size = viewport for 1:1 mapping, content =
+         * set_content_size so prims past the viewport are NOT clipped). This is
+         * what ychromium's web page uses; the default "ygrid" kind is absolute
+         * (chrome/widgets) and cannot scroll content taller than its rect. */
+        static const char *const producer_kind_names[] = {"yplot", "yimage",  "yvideo", "yzoo",
+                                                          "yjungle", "yscroll"};
         for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); i++) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
                 terminal->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),

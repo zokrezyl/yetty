@@ -20,8 +20,8 @@
 
 #include <yetty/yrich/yrich-types.h>
 
-#include <yetty/yrich/document.h>
-#include <yetty/yrich/element.h>
+#include "yetty/gen/impl/yrich/document.h"
+#include "yetty/gen/impl/yrich/element.h"
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
@@ -827,4 +827,4 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_image(struct yetty_
     return add_shape_to_current(obj, YETTY_YRICH_SHAPE_IMAGE, bounds);
 }
 
-#include "slides.gen.c"
+#include "yetty/gen/impl/yrich/slides.c"

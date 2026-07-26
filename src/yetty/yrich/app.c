@@ -36,7 +36,7 @@
 #include <yetty/ygui/widgets/popup_menu.h>
 #include <yetty/ygui/widgets/vbox.h>
 #include <yetty/ygui/widgets/yrich_view.h>
-#include <yetty/yapp/app.h>
+#include "yetty/gen/impl/yapp/app.h"
 #include <yetty/yclass/class.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yclipboard/clipboard.h>
@@ -48,8 +48,8 @@
 #include <yetty/yrich/yrich-types.h>
 
 #include <yetty/ycore/terminal-detect.h> /* yetty_running_under_yetty (dual mode) */
-#include <yetty/yrich/document.h>        /* document_undo / document_redo */
-#include <yetty/yrich/ydoc.h>
+#include "yetty/gen/impl/yrich/document.h"        /* document_undo / document_redo */
+#include "yetty/gen/impl/yrich/ydoc.h"
 #include <yetty/yrich/yrich-keymap.h> /* semantic commands + remappable modal keymap */
 #include <yetty/yrich/yrich-yaml.h>   /* ydoc save */
 
@@ -1734,4 +1734,4 @@ struct yetty_ycore_int_result yetty_yrich_app_run(int argc, char **argv,
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-#include "app.gen.c"
+#include "yetty/gen/impl/yrich/app.c"

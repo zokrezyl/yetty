@@ -11,11 +11,11 @@
 #include <yetty/yrich/yrich-operation.h>
 #include <yetty/yrich/yrich-types.h>
 
-#include <yetty/yrich/document.h>
-#include <yetty/yrich/element.h>
-#include <yetty/yrich/slides.h>
-#include <yetty/yrich/spreadsheet.h>
-#include <yetty/yrich/ydoc.h>
+#include <yetty/api/yrich/document.h>
+#include <yetty/api/yrich/element.h>
+#include <yetty/api/yrich/slides.h>
+#include <yetty/api/yrich/spreadsheet.h>
+#include <yetty/api/yrich/ydoc.h>
 
 #include <yaml.h>
 

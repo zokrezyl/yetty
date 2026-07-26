@@ -25,8 +25,8 @@
 #include <yetty/yrich/yrich-selection.h>
 #include <yetty/yrich/yrich-types.h>
 
-#include <yetty/yrich/document.h>
-#include <yetty/yrich/element.h>
+#include "yetty/gen/impl/yrich/document.h"
+#include "yetty/gen/impl/yrich/element.h"
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfont/font.h>    /* metrics-only glyph advances for proportional layout */
@@ -6694,4 +6694,4 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_add_run(struct yetty_yclass
     return YETTY_OK_VOID();
 }
 
-#include "ydoc.gen.c"
+#include "yetty/gen/impl/yrich/ydoc.c"

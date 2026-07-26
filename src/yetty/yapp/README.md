@@ -36,7 +36,7 @@ platform code never names a concrete app.
 ## Public API sketch
 
 ```c
-#include <yetty/yapp/app.h>   /* generated */
+#include "yetty/gen/impl/yapp/app.h"   /* generated */
 
 struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object *app,
                                                struct yetty_yclass_object *platform);
