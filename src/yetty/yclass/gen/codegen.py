@@ -2227,7 +2227,7 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         src_path = Path(src_file).resolve()
         stem = src_path.stem
         rel_subdir = source_rel_subdir(src_file, module_src)
-        api_name = module  # API namespace == module name (matches include/yetty/api/yplot/)
+        api_name = api_namespace(module)  # api/<api_name> (facade drops api_ prefix)
         if split:
             # Role-split layout: the object-API header lives under
             # include/yetty/api/<api>/ — the ONE public header of the class.
@@ -2236,7 +2236,15 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             # functions, and the types those signatures need. It must not
             # expose the class accessor, data-slice access, skeletons or
             # implementation registration.
-            out_dir = include_module_dir.parent / "api" / api_name / rel_subdir
+            #
+            # For an api_<name> facade module, include_module_dir is ALREADY
+            # include/yetty/api/<name> (module_include_subpath nests it there),
+            # so the header sits directly in it; a normal module nests one level
+            # down into api/<module>.
+            if module.startswith("api_"):
+                out_dir = include_module_dir / rel_subdir
+            else:
+                out_dir = include_module_dir.parent / "api" / api_name / rel_subdir
             out_dir.mkdir(parents=True, exist_ok=True)
             header_path = out_dir / f"{stem}.h"
         elif headers_local:
@@ -2722,7 +2730,7 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path, split: bool = F
             # accessor, check shims, constructor stub, skels, factory and
             # this source's registration hook — there is no module-level
             # rpc.gen.c in split mode.
-            api_name = module  # API namespace == module name (matches include/yetty/api/yplot/)
+            api_name = api_namespace(module)  # api/<api_name> (facade drops api_ prefix)
             # The generated .c tree is ALWAYS the shared src/yetty/gen — pinned
             # by the caller (gen_root), so an OUT-OF-TREE module (tools/*, demo/*)
             # emits into src/yetty/gen, not a stray tools/gen beside its source.
@@ -2863,6 +2871,16 @@ def module_include_subpath(module: str) -> str:
     if module.startswith("api_"):
         return "api/" + module[len("api_"):]
     return module
+
+
+def api_namespace(module: str) -> str:
+    """The object-API namespace segment for a module — the directory name under
+    include/yetty/api/ and src/yetty/gen/api/. Normally the module name; an
+    api_<name> facade drops the redundant `api_` prefix so its object API lands
+    in api/<name> (matching the long-standing include/yetty/api/yplot layout),
+    not api/api_yplot. For a non-facade module this is the module name
+    unchanged, so every other module's paths stay byte-identical."""
+    return module[len("api_"):] if module.startswith("api_") else module
 
 
 def class_header_for(cls: dict, module: str, module_src: Path) -> str:

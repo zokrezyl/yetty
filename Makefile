@@ -239,6 +239,7 @@ YCLASS_SPLIT_ycompositorygui := 1
 YCLASS_SPLIT_ybrowser := 1
 YCLASS_SPLIT_ygreeter := 1
 YCLASS_SPLIT_yai := 1
+YCLASS_SPLIT_api_yplot := 1
 
 # The two rollout groups, derived from the YCLASS_SPLIT_<mod> markers:
 # migrated modules run the NEW generator (codegen.py, role-split layout),
