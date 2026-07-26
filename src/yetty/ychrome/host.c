@@ -27,7 +27,7 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/api/yfigure/container.h>
 #include <yetty/api/yfigure/figure.h>
-#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/kind.h>
 #ifdef YETTY_YCHROME_HAS_LOCAL
 /* ygrid is GPU-backed (composites through a pipeline). Only the LOCAL sink —
  * pinned ygrid figures the app renders itself — needs it. The WIRE sink emits

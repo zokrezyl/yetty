@@ -24,7 +24,7 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_yshadertoy_ptr, struct yetty_ygui_yshadertoy *);
 struct yetty_yclass_ptr_result yetty_ygui_yshadertoy_class_get(void);
 struct yetty_ygui_yshadertoy_ptr_result yetty_ygui_yshadertoy_from(struct yetty_yclass_object *obj);
-#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/kind.h>
 #include <stdlib.h>
 #include <string.h>
 

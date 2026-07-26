@@ -36,7 +36,7 @@
 #include <yetty/api/yfigure/container.h>
 #include <yetty/api/yterminal/terminal.h>
 #include <yetty/yclass/rpc.h>
-#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/kind.h>
 #include <yetty/yplot/yplot.h>
 #include <yetty/ysdf/types.gen.h>
 

@@ -15,7 +15,7 @@
 #include "../internal.h"
 #include <yetty/ygui/framework-defs.h>
 #include <yetty/ygui/widget.h>
-#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/kind.h>
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine

@@ -28,7 +28,7 @@
 #include <yetty/api/yfigure/container.h>
 #include <yetty/api/yterminal/terminal.h>
 #include <yetty/yclass/rpc.h>
-#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/kind.h>
 #include <yetty/yplatform/io.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yrdawn/wire.h>

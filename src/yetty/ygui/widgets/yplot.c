@@ -33,7 +33,7 @@ struct YETTY_ANNOTATE("expose") yetty_ygui_yplot_config {
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/kind.h>
 #include <yetty/yplot/yplot.h>
 
 #include <stdlib.h>

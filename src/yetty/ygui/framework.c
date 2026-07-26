@@ -35,7 +35,7 @@
 #include <yetty/api/yterminal/terminal.h>
 #include <yetty/yclass/rpc.h>
 #include <yetty/ywire/connection.h>
-#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/kind.h>
 #include <yetty/ygui/theme.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/ytrace/ytrace.h>

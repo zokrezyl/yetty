@@ -14,7 +14,7 @@ struct yetty_yclass_ptr_result yetty_ygui_yvideo_class_get(void);
 struct yetty_ygui_yvideo_ptr_result yetty_ygui_yvideo_from(struct yetty_yclass_object *obj);
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/kind.h>
 #include <yetty/yvideo/yvideo-mp4.h>
 #include <stdlib.h>
 #include <string.h>

@@ -39,7 +39,7 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
     struct yetty_yclass_object *to, int in_idx, void *userdata);
 #include "paint-helpers.h"
 
-#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/kind.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/popup_menu.h>
 #include <yetty/ygui/widgets/ynode.h>

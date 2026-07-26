@@ -22,6 +22,11 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/api/yfigure/figure.h>
+/* The client-safe kind token (FNV inline) lives here — this header re-includes
+ * it so registry consumers keep seeing yetty_yfigure_kind_token unchanged. A
+ * pure wire client that only needs the token includes <yetty/yfigure/kind.h>
+ * directly, avoiding the GPU context <yetty/yetty/yetty.h> pulls in above. */
+#include <yetty/yfigure/kind.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,37 +35,6 @@ extern "C" {
 struct yetty_yfigure_registry;
 
 YETTY_YRESULT_DECLARE(yetty_yfigure_registry_ptr, struct yetty_yfigure_registry *);
-
-/* Map a figure-kind name to its registry token. The token is the key the
- * registry stores factories under and the value carried (derived from the
- * self-describing name) on a CREATE_CHILD; there is no central enum of kinds.
- * A figure-kind module registers under yetty_yfigure_kind_token("<name>") and
- * the producer mints by sending the same "<name>" — both sides agree purely on
- * the string, so adding a kind touches no shared header.
- *
- * static inline (FNV-1a over the name bytes): a pure, dependency-free hash, so
- * any producer can compute a token by including this header alone — it needs no
- * link dependency on yetty_yfigure. */
-static inline uint32_t yetty_yfigure_kind_token_n(const char *name, size_t name_len)
-{
-    uint32_t hash = 2166136261u;
-    for (size_t i = 0; i < name_len; i++) {
-        hash ^= (uint32_t)(uint8_t)name[i];
-        hash *= 16777619u;
-    }
-    return hash;
-}
-
-static inline uint32_t yetty_yfigure_kind_token(const char *name)
-{
-    size_t name_len = 0;
-    if (name) {
-        while (name[name_len] != '\0') {
-            name_len++;
-        }
-    }
-    return yetty_yfigure_kind_token_n(name, name_len);
-}
 
 /* Factory signature. The registry passes the rect the wire told us to
  * use, the host context (for GPU access), and the per-kind user pointer

@@ -33,7 +33,7 @@
 #include <yetty/api/yterminal/terminal.h>
 #include <yetty/yclass/class.h>
 #include <yetty/yclass/rpc.h>
-#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/kind.h>
 
 #include <float.h>
 #include <stdio.h>
