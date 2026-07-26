@@ -44,4 +44,4 @@ static struct yetty_ycore_int_result editor_feed_byte(struct yetty_yclass_object
     return YETTY_ERR(yetty_ycore_int, "yai editor: feed_byte not implemented (abstract base)");
 }
 
-#include "editor.gen.c"
+#include "yetty/gen/impl/yai/editor.c"

@@ -192,4 +192,4 @@ static struct yetty_ycore_int_result emacs_feed_byte(struct yetty_yclass_object 
     }
 }
 
-#include "editor-emacs.gen.c"
+#include "yetty/gen/impl/yai/editor-emacs.c"

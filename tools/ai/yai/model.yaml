@@ -532,18 +532,36 @@ local_types:
   yetty_yai_turn_engine: tools/ai/yai/turn-engine.c
   yetty_yai_turn_engine_ptr_result: tools/ai/yai/turn-engine.c
 local_typedefs:
-  __int128_t:
-    source_file: tools/ai/yai/claude.c
-    text: typedef __int128 __int128_t;
-  __uint128_t:
-    source_file: tools/ai/yai/claude.c
-    text: typedef unsigned __int128 __uint128_t;
-  __NSConstantString:
-    source_file: tools/ai/yai/claude.c
-    text: typedef struct __NSConstantString_tag __NSConstantString;
-  __builtin_ms_va_list:
-    source_file: tools/ai/yai/claude.c
-    text: "typedef char *__builtin_ms_va_list;"
-  __builtin_va_list:
-    source_file: tools/ai/yai/claude.c
-    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_yai_resolve_permission_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yai/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_yai_resolve_permission_fn)(struct yetty_yclass_object *, struct yai_app *, int);"
+  yetty_yai_handle_event_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yai/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_yai_handle_event_fn)(struct yetty_yclass_object *, struct yai_app *, struct yyjson_val *);"
+  yetty_yai_send_user_message_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yai/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_yai_send_user_message_fn)(struct yetty_yclass_object *, struct yai_app *, const char *);"
+  yetty_yai_interrupt_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yai/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_yai_interrupt_fn)(struct yetty_yclass_object *, struct yai_app *);"
+  yetty_yai_start_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yai/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_yai_start_fn)(struct yetty_yclass_object *, struct yai_app *);"
+  yetty_yai_describe_config_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yai/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_yai_describe_config_fn)(struct yetty_yclass_object *, struct yai_app *, char *, size_t);"
+  yetty_yai_config_knob_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yai/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_yai_config_knob_fn)(struct yetty_yclass_object *, struct yai_app *, char *, size_t);"
+  yetty_yai_apply_config_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yai/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_yai_apply_config_fn)(struct yetty_yclass_object *, struct yai_app *, const char *, const char *);"
+  yetty_yai_on_child_exit_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yai/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_yai_on_child_exit_fn)(struct yetty_yclass_object *, struct yai_app *, int64_t);"
+  yetty_yai_on_child_eof_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yai/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_yai_on_child_eof_fn)(struct yetty_yclass_object *, struct yai_app *);"
+  yetty_yai_feed_byte_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yai/editor.h
+    text: "typedef struct yetty_ycore_int_result (*yetty_yai_feed_byte_fn)(struct yetty_yclass_object *, struct yai_app *, int);"
