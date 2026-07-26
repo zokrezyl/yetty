@@ -230,6 +230,14 @@ YCLASS_SPLIT_yterminal := 1
 YCLASS_SPLIT_yplatform := 1
 YCLASS_COMPAT_HEADER_yplatform := 1
 YCLASS_SPLIT_yhello := 1
+YCLASS_SPLIT_yzoo := 1
+YCLASS_SPLIT_ymaze := 1
+YCLASS_SPLIT_yjungle := 1
+YCLASS_SPLIT_ycompositor := 1
+YCLASS_SPLIT_yaudio := 1
+YCLASS_SPLIT_ycompositorygui := 1
+YCLASS_SPLIT_ybrowser := 1
+YCLASS_SPLIT_ygreeter := 1
 
 # The two rollout groups, derived from the YCLASS_SPLIT_<mod> markers:
 # migrated modules run the NEW generator (codegen.py, role-split layout),

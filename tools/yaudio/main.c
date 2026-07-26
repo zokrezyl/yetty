@@ -1332,4 +1332,4 @@ int main(int argc, char **argv)
     return 0;
 }
 
-#include "main.gen.c"
+#include "yetty/gen/impl/yaudio/main.c"

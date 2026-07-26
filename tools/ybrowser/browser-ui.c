@@ -3914,6 +3914,6 @@ int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int no_
     return 0;
 }
 
-#include "browser-ui.gen.c"
+#include "yetty/gen/impl/ybrowser/browser-ui.c"
 
 #endif /* YETTY_YBROWSER_HAS_STANDALONE */

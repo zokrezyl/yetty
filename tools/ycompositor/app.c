@@ -698,4 +698,4 @@ struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_
     return yetty_ycompositor_app_create(ctx);
 }
 
-#include "app.gen.c"
+#include "yetty/gen/impl/ycompositor/app.c"
