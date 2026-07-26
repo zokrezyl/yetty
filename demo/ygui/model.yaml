@@ -1012,19 +1012,3 @@ local_types:
   yetty_demoygui_43_tree_showcase_ptr_result: demo/ygui/43_tree_showcase/main.c
   yetty_demoygui_44_textinput: demo/ygui/44_textinput/main.c
   yetty_demoygui_44_textinput_ptr_result: demo/ygui/44_textinput/main.c
-local_typedefs:
-  __int128_t:
-    source_file: demo/ygui/00_simple/main.c
-    text: typedef __int128 __int128_t;
-  __uint128_t:
-    source_file: demo/ygui/00_simple/main.c
-    text: typedef unsigned __int128 __uint128_t;
-  __NSConstantString:
-    source_file: demo/ygui/00_simple/main.c
-    text: typedef struct __NSConstantString_tag __NSConstantString;
-  __builtin_ms_va_list:
-    source_file: demo/ygui/00_simple/main.c
-    text: "typedef char *__builtin_ms_va_list;"
-  __builtin_va_list:
-    source_file: demo/ygui/00_simple/main.c
-    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

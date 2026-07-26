@@ -503,4 +503,4 @@ int main(int argc, char **argv)
                                   yetty_demoygui_35_collapsing_header_open_class_get().value);
 }
 
-#include "main.gen.c"
+#include "yetty/gen/impl/demoygui/35_collapsing_header_open/main.c"

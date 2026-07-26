@@ -170,7 +170,7 @@ YCLASS_MODULES := yapp yetty yfigure ygrid ygit ygui yguiapp ymgui yrdawn yshade
 # whose sources live outside the shared include tree — the ygui demos under
 # demo/ygui/, where each demo dir stays self-contained (main.c + main.gen.c +
 # main.h + rpc.gen.c together) rather than scattering headers into include/.
-YCLASS_LOCAL_HEADERS := demoygui
+YCLASS_LOCAL_HEADERS :=
 
 # Bare module names (strip any "=<srcdir>" suffix used by out-of-tree modules).
 YCLASS_MODNAMES := $(foreach spec,$(YCLASS_MODULES),$(firstword $(subst =, ,$(spec))))
@@ -240,6 +240,7 @@ YCLASS_SPLIT_ybrowser := 1
 YCLASS_SPLIT_ygreeter := 1
 YCLASS_SPLIT_yai := 1
 YCLASS_SPLIT_api_yplot := 1
+YCLASS_SPLIT_demoygui := 1
 
 # The two rollout groups, derived from the YCLASS_SPLIT_<mod> markers:
 # migrated modules run the NEW generator (codegen.py, role-split layout),

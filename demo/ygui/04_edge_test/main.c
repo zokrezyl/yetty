@@ -45,4 +45,4 @@ int main(int argc, char **argv)
     return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_04_edge_test_class_get().value);
 }
 
-#include "main.gen.c"
+#include "yetty/gen/impl/demoygui/04_edge_test/main.c"

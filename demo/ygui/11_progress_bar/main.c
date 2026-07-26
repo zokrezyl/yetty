@@ -60,4 +60,4 @@ int main(int argc, char **argv)
     return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_11_progress_bar_class_get().value);
 }
 
-#include "main.gen.c"
+#include "yetty/gen/impl/demoygui/11_progress_bar/main.c"
