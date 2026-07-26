@@ -8,11 +8,16 @@
 
 include(${YETTY_ROOT}/build-tools/yetty/libs/libgit2.cmake)
 
+add_library(yetty_api_ygit STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/ygit/repo.c
+)
+target_include_directories(yetty_api_ygit PUBLIC ${YETTY_ROOT}/include)
+target_link_libraries(yetty_api_ygit PUBLIC yetty_ycore yetty_yclass)
+
 add_library(yetty_ygit STATIC
     repo.c
     git-backend.c
     commit-graph.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_ygit PUBLIC
@@ -25,6 +30,7 @@ target_include_directories(yetty_ygit PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_ygit
     PUBLIC
+        yetty_api_ygit
         yetty_ycore
         yetty_yclass
     PRIVATE

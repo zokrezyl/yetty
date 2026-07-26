@@ -34,7 +34,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/util.h>
 
-#include <yetty/ynotebook/mime-bundle.h> /* mime_bundle create / load / destroy */
+#include "yetty/gen/impl/ynotebook/mime-bundle.h" /* mime_bundle create / load / destroy */
 
 /*=============================================================================
  * Class data
@@ -1014,4 +1014,4 @@ static struct yetty_ycore_void_result notebook_destroy(struct yetty_yclass_objec
     return yetty_yclass_object_free(obj);
 }
 
-#include "notebook.gen.c"
+#include "yetty/gen/impl/ynotebook/notebook.c"

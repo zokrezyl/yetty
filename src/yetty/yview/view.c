@@ -537,4 +537,4 @@ static struct yetty_ycore_void_result view_destroy(struct yetty_yclass_object *o
     return result;
 }
 
-#include "view.gen.c"
+#include "yetty/gen/impl/yview/view.c"

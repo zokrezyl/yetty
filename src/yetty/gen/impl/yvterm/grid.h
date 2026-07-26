@@ -22,12 +22,8 @@ struct yetty_ydraw_composite;
 struct yetty_yvterm_grid;
 struct yetty_ywire_wire_statemachine;
 
-typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, int, void *);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);
-typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clipboard_write_fn)(const char *, size_t, int, void *);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);
-typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_pty_write_fn)(const char *, size_t, void *);
-typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_sixel_write_fn)(const char *, size_t, void *);
 
 #ifndef YETTY_YCLASSGEN_TYPE_YETTY_YVTERM_TEXT_ATTR
 #define YETTY_YCLASSGEN_TYPE_YETTY_YVTERM_TEXT_ATTR
@@ -121,11 +117,10 @@ struct yetty_ycore_void_result yetty_yvterm_register(void);
 
 struct yetty_yclass_object_ptr_result yetty_yvterm_grid_make(uint32_t cols, uint32_t rows, uint32_t scrollback_rows, uint32_t hot_rows);
 struct yetty_ycore_void_result yetty_yvterm_grid_dispose(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yvterm_grid_set_pty_write(struct yetty_yclass_object *obj, yetty_yvterm_grid_pty_write_fn fn, void *userdata);
-struct yetty_ycore_void_result yetty_yvterm_grid_set_clipboard_write(struct yetty_yclass_object *obj, yetty_yvterm_grid_clipboard_write_fn fn, void *userdata);
-struct yetty_ycore_void_result yetty_yvterm_grid_set_sixel_write(struct yetty_yclass_object *obj, yetty_yvterm_grid_sixel_write_fn fn, void *userdata);
+/* Install the terminal-host sink the grid dispatches its upcalls on (pty_write
+ * / mouse_sub / clipboard_write / sixel_write). Borrowed — the host owns it. */
+struct yetty_ycore_void_result yetty_yvterm_grid_set_sink(struct yetty_yclass_object *obj, struct yetty_yclass_object *sink);
 struct yetty_ycore_void_result yetty_yvterm_grid_set_clear_hook(struct yetty_yclass_object *obj, yetty_yvterm_grid_clear_hook_fn fn, void *userdata);
-struct yetty_ycore_void_result yetty_yvterm_grid_set_card_sub(struct yetty_yclass_object *obj, yetty_yvterm_grid_card_sub_fn fn, void *userdata);
 /* Register the figure re-materialization hook. The integration layer (which
  * owns the composite factory) supplies it; the grid replays retained wire
  * envelopes through it when an evicted history line scrolls back into view. */

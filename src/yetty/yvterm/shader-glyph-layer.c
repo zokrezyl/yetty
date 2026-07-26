@@ -28,6 +28,7 @@
 #include <webgpu/webgpu.h>
 
 #include <yetty/yconfig/config.h>
+#include <yetty/api/ytermsink/sink.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yetty/yetty.h>
@@ -63,8 +64,8 @@ struct yetty_yvterm_shader_glyph_layer {
     /* The owning yvterm:vterm figure object — the anim timer marks it dirty so
      * the next frame repaints. Borrowed. */
     struct yetty_yclass_object *owner_figure;
-    yetty_yterminal_request_render_fn request_render_fn;
-    void *request_render_userdata;
+    /* Terminal-host sink — request_render is dispatched on it. Borrowed. */
+    struct yetty_yclass_object *sink;
 
     int headless; /* no GPU / no shader → render is a no-op */
 
@@ -477,8 +478,8 @@ static struct yetty_ycore_int_result sg_on_anim_tick(struct yetty_yevent_event_l
             yetty_yfigure_figure_dirty_set(layer->owner_figure, 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, set_r, "shader-glyph tick: dirty_set");
     }
-    if (layer->request_render_fn) {
-        struct yetty_ycore_void_result r = layer->request_render_fn(layer->request_render_userdata);
+    if (layer->sink) {
+        struct yetty_ycore_void_result r = yetty_ytermsink_request_render(layer->sink);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "shader-glyph tick: request_render");
     }
     return YETTY_OK(yetty_ycore_int, 0);
@@ -547,7 +548,7 @@ static uint32_t sg_pack_instances(struct yetty_yvterm_shader_glyph_layer *layer,
 
 struct yetty_yvterm_shader_glyph_layer_ptr_result yetty_yvterm_shader_glyph_layer_create(
     const struct yetty_context *context, struct yetty_yclass_object *owner_figure,
-    yetty_yterminal_request_render_fn request_render_fn, void *request_render_userdata)
+    struct yetty_yclass_object *sink)
 {
     struct yetty_yvterm_shader_glyph_layer *layer = calloc(1, sizeof(*layer));
     if (!layer) {
@@ -555,8 +556,7 @@ struct yetty_yvterm_shader_glyph_layer_ptr_result yetty_yvterm_shader_glyph_laye
     }
     layer->context = context;
     layer->owner_figure = owner_figure;
-    layer->request_render_fn = request_render_fn;
-    layer->request_render_userdata = request_render_userdata;
+    layer->sink = sink;
 
     if (!context || !context->runtime || !context->runtime->gpu.device) {
         layer->headless = 1;
@@ -805,9 +805,8 @@ struct yetty_ycore_void_result yetty_yvterm_shader_glyph_layer_render(
             yetty_ycore_error_destroy(dr.error);
         }
     }
-    if (layer->request_render_fn) {
-        struct yetty_ycore_void_result rr =
-            layer->request_render_fn(layer->request_render_userdata);
+    if (layer->sink) {
+        struct yetty_ycore_void_result rr = yetty_ytermsink_request_render(layer->sink);
         if (YETTY_IS_ERR(rr)) {
             yetty_ycore_error_destroy(rr.error);
         }

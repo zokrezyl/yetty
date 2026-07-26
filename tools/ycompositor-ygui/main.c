@@ -50,7 +50,7 @@
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
-#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #include <yetty/ygui/ygui.h>
 #include "yetty/gen/impl/ymgui/figure.h"

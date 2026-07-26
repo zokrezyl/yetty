@@ -26,8 +26,8 @@
 
 #include <yetty/yface/yface.h>
 #include <yetty/ymime/mime.h>
-#include <yetty/ynotebook/mime-bundle.h>
-#include <yetty/ynotebook/notebook.h>
+#include "yetty/gen/impl/ynotebook/mime-bundle.h"
+#include "yetty/gen/impl/ynotebook/notebook.h"
 #include <yetty/yterminal/dcs-codes.h>
 
 /* ANSI helpers — plain terminal styling for the prompts/labels. */

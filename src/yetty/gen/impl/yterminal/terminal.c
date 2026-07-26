@@ -1,4 +1,5 @@
 /* GENERATED — do not edit. */
+#include "yetty/gen/impl/ytermsink/sink.h"
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>  /* container_of, buffer */
@@ -15,6 +16,16 @@ struct yetty_yclass_object_ptr_result yetty_yterminal_figure_root_container(stru
 typedef struct yetty_yclass_object_ptr_result (*yetty_yterminal_figure_root_container_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
+static yetty_ytermsink_pty_write_fn yetty_yterminal_terminal_yetty_ytermsink_pty_write_check = terminal_sink_pty_write;
+YETTY_MAYBE_UNUSED
+static yetty_ytermsink_mouse_sub_fn yetty_yterminal_terminal_yetty_ytermsink_mouse_sub_check = terminal_sink_mouse_sub;
+YETTY_MAYBE_UNUSED
+static yetty_ytermsink_clipboard_write_fn yetty_yterminal_terminal_yetty_ytermsink_clipboard_write_check = terminal_sink_clipboard_write;
+YETTY_MAYBE_UNUSED
+static yetty_ytermsink_sixel_write_fn yetty_yterminal_terminal_yetty_ytermsink_sixel_write_check = terminal_sink_sixel_write;
+YETTY_MAYBE_UNUSED
+static yetty_ytermsink_request_render_fn yetty_yterminal_terminal_yetty_ytermsink_request_render_check = terminal_sink_request_render;
+YETTY_MAYBE_UNUSED
 static yetty_yterminal_figure_root_container_fn yetty_yterminal_terminal_yetty_yterminal_figure_root_container_check = terminal_figure_root_container;
 
 struct yetty_yclass_ptr_result yetty_yterminal_terminal_class_get(void)
@@ -30,11 +41,21 @@ struct yetty_yclass_ptr_result yetty_yterminal_terminal_class_get(void)
         .data_align = _Alignof(struct yetty_yterminal_terminal),
     };
     static const struct yetty_yclass_op ops[] = {
+        {"yetty_ytermsink", "pty_write", (yetty_yclass_method_id_t)yetty_ytermsink_pty_write, (yetty_yclass_impl_t)terminal_sink_pty_write},
+        {"yetty_ytermsink", "mouse_sub", (yetty_yclass_method_id_t)yetty_ytermsink_mouse_sub, (yetty_yclass_impl_t)terminal_sink_mouse_sub},
+        {"yetty_ytermsink", "clipboard_write", (yetty_yclass_method_id_t)yetty_ytermsink_clipboard_write, (yetty_yclass_impl_t)terminal_sink_clipboard_write},
+        {"yetty_ytermsink", "sixel_write", (yetty_yclass_method_id_t)yetty_ytermsink_sixel_write, (yetty_yclass_impl_t)terminal_sink_sixel_write},
+        {"yetty_ytermsink", "request_render", (yetty_yclass_method_id_t)yetty_ytermsink_request_render, (yetty_yclass_impl_t)terminal_sink_request_render},
         {"yetty_yterminal", "figure_root_container", (yetty_yclass_method_id_t)yetty_yterminal_figure_root_container, (yetty_yclass_impl_t)terminal_figure_root_container},
     };
+    struct yetty_yclass_ptr_result parent_class_r = yetty_ytermsink_sink_class_get();
+    if (YETTY_IS_ERR(parent_class_r)) {
+        yerror("yetty_yterminal_terminal_class_get: parent accessor failed: %s", parent_class_r.error.msg);
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_yterminal_terminal_class_get: parent accessor failed", parent_class_r);
+    }
     struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
-                              NULL, NULL, 0);
+                              parent_class_r.value, NULL, 0);
     if (YETTY_IS_ERR(register_class_r)) {
         yerror("yetty_yterminal_terminal_class_get: class_register failed: %s", register_class_r.error.msg);
         return YETTY_ERR(yetty_yclass_ptr, "yetty_yterminal_terminal_class_get: class_register failed", register_class_r);

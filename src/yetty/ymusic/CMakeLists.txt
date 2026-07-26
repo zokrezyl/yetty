@@ -8,9 +8,14 @@
 # drives the FFI / host-language bindings. GPU-less — produces generic ydraw
 # primitives, shipped via yview (like yflame).
 
+add_library(yetty_api_ymusic STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/ymusic/music.c
+)
+target_include_directories(yetty_api_ymusic PUBLIC ${YETTY_ROOT}/include)
+target_link_libraries(yetty_api_ymusic PUBLIC yetty_ycore yetty_yclass)
+
 add_library(yetty_ymusic STATIC
     music.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_ymusic PUBLIC
@@ -20,6 +25,7 @@ target_include_directories(yetty_ymusic PUBLIC
 target_include_directories(yetty_ymusic PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_ymusic PUBLIC
+    yetty_api_ymusic
     yetty_ycore
     yetty_yclass
     yetty_yface

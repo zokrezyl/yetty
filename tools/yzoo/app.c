@@ -17,7 +17,7 @@
 #include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yapp/app.h>
 #include <yetty/yclass/class.h>
-#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>

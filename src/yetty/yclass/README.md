@@ -172,7 +172,7 @@ struct [[clang::annotate("class@ytuning:tuned_sportscar")]]
        [[clang::annotate("parent@yvehicle:sportscar")]] tuned_sportscar_data { int boost_level; };
 
 /* override yvehicle's `vehicle_describe` slot from the ytuning module */
-[[clang::annotate("override@ytuning:tuned_sportscar:yvehicle:vehicle_describe")]]
+[[clang::annotate("override@yvehicle:vehicle:vehicle_describe")]]
 static struct str_result tuned_sportscar_describe(struct object *obj, float distance) { ... }
 ```
 

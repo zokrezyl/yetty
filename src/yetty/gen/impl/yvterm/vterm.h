@@ -11,7 +11,6 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/yterminal/terminal.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,7 +58,7 @@ struct yetty_ycore_void_result yetty_yvterm_register(void);
  * cell_size starts at a placeholder until the renderer build-out resolves exact
  * metrics from the active font; the terminal overwrites it on the first resize.
  * `context` is accepted now for that future font setup. */
-struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(uint32_t cols, uint32_t rows, const struct yetty_context *context, yetty_yterminal_pty_write_fn pty_write_fn, void *pty_write_userdata, yetty_yterminal_request_render_fn request_render_fn, void *request_render_userdata, yetty_yterminal_mouse_sub_fn mouse_sub_fn, void *mouse_sub_userdata, yetty_yterminal_clipboard_write_fn clipboard_write_fn, void *clipboard_write_userdata, yetty_yterminal_sixel_write_fn sixel_write_fn, void *sixel_write_userdata);
+struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(uint32_t cols, uint32_t rows, const struct yetty_context *context, struct yetty_yclass_object *sink);
 /* Upcast to the figure base (first slice in the object). */
 struct yetty_yfigure_figure_ptr_result yetty_yvterm_vterm_as_figure(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yvterm_vterm_feed(struct yetty_yclass_object *obj, const char *bytes, size_t len);

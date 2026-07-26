@@ -42,8 +42,8 @@
 #include <yetty/api/yfigure/container.h>
 #include <yetty/api/yterminal/terminal.h>
 #include <yetty/yclass/rpc.h>
-#include <yetty/ycircuit/circuit.h>
-#include <yetty/ymusic/music.h>
+#include "yetty/gen/impl/ycircuit/circuit.h"
+#include "yetty/gen/impl/ymusic/music.h"
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/yshadertoy/demo-shaders.h>
@@ -62,7 +62,7 @@
  * records the hosting yetty renders, so these compile on every target
  * (including the no-WebGPU riscv guest). Needed by both standalone and client
  * mode, hence gated on HAS_CHROME, not HAS_STANDALONE. */
-#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #endif
 

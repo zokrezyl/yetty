@@ -26,8 +26,8 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/api/yfigure/figure.h>
 #include <yetty/api/yfigure/container.h>
-#include <yetty/ycircuit/circuit.h>
-#include <yetty/ymusic/music.h>
+#include "yetty/gen/impl/ycircuit/circuit.h"
+#include "yetty/gen/impl/ymusic/music.h"
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/yshadertoy/demo-shaders.h>
@@ -46,7 +46,7 @@
 #define YHELLO_YFIGURE_KIND_YVIDEO 7u
 
 #ifdef YETTY_YHELLO_HAS_CHROME
-#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #endif
 

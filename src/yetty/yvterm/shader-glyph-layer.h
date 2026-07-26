@@ -24,7 +24,6 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/yterminal/terminal.h> /* yetty_yterminal_request_render_fn */
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,11 +41,12 @@ YETTY_YRESULT_DECLARE(yetty_yvterm_shader_glyph_layer_ptr,
  * the glyph dispatcher from <paths/shaders>/glyph-shaders, and arm the
  * animation timer on the framework event loop. `owner_figure` is the owning
  * yvterm:vterm object — the timer marks it dirty so the next frame repaints.
- * `request_render_fn` nudges the event loop to schedule that frame. Returns a
- * NULL-valued OK when the context is headless (no GPU) — render then no-ops. */
+ * `sink` (the terminal-host ytermsink:sink) nudges the event loop to schedule
+ * that frame via its request_render method. Returns a NULL-valued OK when the
+ * context is headless (no GPU) — render then no-ops. */
 struct yetty_yvterm_shader_glyph_layer_ptr_result yetty_yvterm_shader_glyph_layer_create(
     const struct yetty_context *context, struct yetty_yclass_object *owner_figure,
-    yetty_yterminal_request_render_fn request_render_fn, void *request_render_userdata);
+    struct yetty_yclass_object *sink);
 
 /* Tear down the timer, binder, shader, and instance buffer. NULL-safe. */
 void yetty_yvterm_shader_glyph_layer_destroy(struct yetty_yvterm_shader_glyph_layer *layer);

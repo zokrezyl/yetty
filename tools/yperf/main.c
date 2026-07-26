@@ -37,7 +37,7 @@
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yface/yface.h>
-#include <yetty/yflame/flame.h>
+#include "yetty/gen/impl/yflame/flame.h"
 #include <yetty/ygui/ygui.h>
 #include <yetty/ymgui/wire.h>             /* YMGUI_WIRE_VERSION */
 #include <yetty/yterminal/client-input.h> /* mouse / resize / subscription wire */

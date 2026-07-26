@@ -24,7 +24,7 @@
 
 #include "interactive.h"
 
-#include <yetty/ymap/map.h>
+#include <yetty/api/ymap/map.h>
 
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
@@ -33,7 +33,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterminal/client-input.h>
-#include <yetty/yview/view.h>
+#include "yetty/gen/impl/yview/view.h"
 #include <yetty/yplatform/term.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yplatform/tty.h>

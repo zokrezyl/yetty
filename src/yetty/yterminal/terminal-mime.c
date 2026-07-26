@@ -77,10 +77,10 @@ typedef long long ssize_t;
 #include <yetty/yimage/yimage.h>
 #endif
 #ifdef YETTY_HAS_YMUSIC
-#include <yetty/ymusic/music.h>
+#include "yetty/gen/impl/ymusic/music.h"
 #endif
 #ifdef YETTY_HAS_YCIRCUIT
-#include <yetty/ycircuit/circuit.h>
+#include "yetty/gen/impl/ycircuit/circuit.h"
 #endif
 #ifdef YETTY_HAS_YMESH
 #include <yetty/ymesh/ymesh.h>

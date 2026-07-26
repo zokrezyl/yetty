@@ -19,7 +19,9 @@ classes:
     accessor: yetty_yterminal_terminal_class_get
     type: regular
     source_file: src/yetty/yterminal/terminal.c
-    parent: null
+    parent:
+      domain: ytermsink
+      name: sink
     mixins: []
     data: struct yetty_yterminal_terminal
     data_fields:
@@ -224,6 +226,21 @@ classes:
         get: false
         set: false
     ops:
+      - slot: pty_write
+        slot_domain: ytermsink
+        impl: terminal_sink_pty_write
+      - slot: mouse_sub
+        slot_domain: ytermsink
+        impl: terminal_sink_mouse_sub
+      - slot: clipboard_write
+        slot_domain: ytermsink
+        impl: terminal_sink_clipboard_write
+      - slot: sixel_write
+        slot_domain: ytermsink
+        impl: terminal_sink_sixel_write
+      - slot: request_render
+        slot_domain: ytermsink
+        impl: terminal_sink_request_render
       - slot: figure_root_container
         slot_domain: yterminal
         impl: terminal_figure_root_container

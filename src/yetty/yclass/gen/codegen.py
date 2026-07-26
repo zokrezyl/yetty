@@ -180,15 +180,16 @@ def result_payload_type(return_type: str, types_by_name: dict):
 #   mixin@<DOMAIN>:<CLASS>                            on data struct  — mixin class
 #   parent@<DOMAIN>:<CLASS>                           on data struct  — parent class
 #   uses@<DOMAIN>:<MIXIN>                             on data struct  — included mixin
-#   override@<DOMAIN>:<CLASS>:<SLOT>                  on impl fn      — same-domain
-#                                                                       override (slot lives
-#                                                                       in <DOMAIN>)
-#   override@<DOMAIN>:<CLASS>:<SLOT_DOMAIN>:<SLOT>    on impl fn      — cross-domain
-#                                                                       override; the impl
-#                                                                       class is in <DOMAIN>,
-#                                                                       the slot is owned by
-#                                                                       <SLOT_DOMAIN> (a
-#                                                                       different module).
+#   override@<BASE_DOMAIN>:<BASE_CLASS>:<SLOT>        on impl fn      — the ONLY form.
+#                                                                       Names ONLY the base
+#                                                                       slot being overridden
+#                                                                       (the parent/mixin that
+#                                                                       declared <SLOT>). The
+#                                                                       overriding class is
+#                                                                       NEVER written — it is
+#                                                                       the class this
+#                                                                       annotation sits on,
+#                                                                       resolved from context.
 #   local@<DOMAIN>:<SLOT>                             on any fn       — mark the named slot
 #                                                                       as local-only; the
 #                                                                       public stub is built
@@ -1072,13 +1073,13 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                                         f"{path}; declare the class before its overrides.\n")
                                     sys.exit(1)
                                 impl_dom, slot_dom = module, ann_dom
-                        elif len(args) == 4:
-                            impl_dom, cls, slot_dom, slot = args
                         else:
                             sys.stderr.write(
-                                f"error: 'override@{':'.join(args)}' — expected "
-                                "override@<DOMAIN>:<CLASS>:<SLOT> or "
-                                "override@<DOMAIN>:<CLASS>:<SLOT_DOMAIN>:<SLOT>\n")
+                                f"error: 'override@{':'.join(args)}' — the only accepted form is "
+                                "override@<BASE_DOMAIN>:<BASE_CLASS>:<SLOT>, naming ONLY the base "
+                                "slot being overridden. Never name the overriding class — it is "
+                                "the class this annotation sits on, resolved from context. The "
+                                "4-part form is removed.\n")
                             sys.exit(1)
                         # Skip override impls that belong to a foreign
                         # module — they'd only reach us via a header

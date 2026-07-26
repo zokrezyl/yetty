@@ -90,6 +90,11 @@ set(YETTY_YCORE_SOURCES "")
 # Wire-format state machine (OSC framer + decode stack)
 add_subdirectory(ywire)
 
+# ytermsink — abstract terminal-host sink interface (GPU-free). Both yvterm
+# (content figure, calls up) and yterminal (host, implements) link it, so it
+# must be defined before either.
+add_subdirectory(ytermsink)
+
 # Term subsystem: yvterm (text-grid figure) + yterminal (coordinator).
 # yvterm first — yterminal links it.
 add_subdirectory(yvterm)

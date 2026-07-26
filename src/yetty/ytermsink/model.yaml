@@ -1,0 +1,173 @@
+methods:
+  - slot: pty_write
+    domain: ytermsink
+    owning_class: sink
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: data
+        type: "const char *"
+      - name: len
+        type: size_t
+    doc: "/* pty_write: relay child-directed bytes to the real PTY. Default no-op — a
+ * host with no PTY (headless/test) drops them. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: request_render
+    domain: ytermsink
+    owning_class: sink
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* request_render: ask the host to schedule a frame. Default no-op. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: mouse_sub
+    domain: ytermsink
+    owning_class: sink
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: click_enabled
+        type: int
+      - name: move_enabled
+        type: int
+      - name: key_enabled
+        type: int
+    doc: "/* mouse_sub: report the current DEC 1500/1501 (card click/move) plus key
+ * subscription state so the host starts/stops forwarding input. Default
+ * no-op. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: clipboard_write
+    domain: ytermsink
+    owning_class: sink
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+      - name: len
+        type: size_t
+      - name: clipboard
+        type: int
+    doc: "/* clipboard_write: hand an OSC 52 payload up so the host sets the OS
+ * clipboard. `clipboard` is non-zero for the system clipboard ('c'), zero
+ * for the primary selection. Default no-op. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: sixel_write
+    domain: ytermsink
+    owning_class: sink
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: data
+        type: "const char *"
+      - name: len
+        type: size_t
+    doc: "/* sixel_write: hand a decoded sixel image up so the host presents it as an
+ * anchored image figure. Default no-op. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+classes:
+  - name: sink
+    domain: ytermsink
+    accessor: yetty_ytermsink_sink_class_get
+    type: regular
+    source_file: src/yetty/ytermsink/sink.c
+    parent: null
+    mixins: []
+    data: struct yetty_ytermsink_sink
+    data_fields:
+      - name: reserved_unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: pty_write
+        slot_domain: ytermsink
+        impl: yetty_ytermsink_sink_default_pty_write
+      - slot: request_render
+        slot_domain: ytermsink
+        impl: yetty_ytermsink_sink_default_request_render
+      - slot: mouse_sub
+        slot_domain: ytermsink
+        impl: yetty_ytermsink_sink_default_mouse_sub
+      - slot: clipboard_write
+        slot_domain: ytermsink
+        impl: yetty_ytermsink_sink_default_clipboard_write
+      - slot: sixel_write
+        slot_domain: ytermsink
+        impl: yetty_ytermsink_sink_default_sixel_write
+    doc: "/* Pure abstract interface — no per-instance data. The implementing host (the
+ * terminal) carries the real state; these slots dispatch onto its object. The
+ * single reserved member keeps the data slice a well-formed (non-empty) C
+ * struct without implying any state. */"
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+local_types:
+  yetty_ytermsink_sink: src/yetty/ytermsink/sink.c
+  yetty_ytermsink_sink_ptr_result: src/yetty/ytermsink/sink.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ytermsink/sink.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ytermsink/sink.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ytermsink/sink.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ytermsink/sink.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ytermsink/sink.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

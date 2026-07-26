@@ -163,7 +163,7 @@ all: help
 
 # A module entry is either a bare name (sources under src/yetty/<name>/)
 # or <name>=<path> for yclass modules living elsewhere (yclass-based tools).
-YCLASS_MODULES := yapp yetty yfigure ygrid ygit ygui yguiapp ymgui yrdawn yshadertoy yvterm yflame ymap ynotebook yjupyter yview yplatform ychrome ymusic ycircuit yai=tools/ai/yai yrich yzoo=tools/yzoo ymaze=tools/ymaze yjungle=tools/yjungle demoygui=demo/ygui ycompositor=tools/ycompositor yaudio=tools/yaudio ycompositorygui=tools/ycompositor-ygui ybrowser=tools/ybrowser yhello=tools/yhello ygreeter=tools/ygreeter ynet api_yplot=src/api/yplot ydummy yterminal
+YCLASS_MODULES := yapp yetty yfigure ygrid ygit ygui yguiapp ymgui yrdawn yshadertoy yvterm yflame ymap ynotebook yjupyter yview yplatform ychrome ymusic ycircuit yai=tools/ai/yai yrich yzoo=tools/yzoo ymaze=tools/ymaze yjungle=tools/yjungle demoygui=demo/ygui ycompositor=tools/ycompositor yaudio=tools/yaudio ycompositorygui=tools/ycompositor-ygui ybrowser=tools/ybrowser yhello=tools/yhello ygreeter=tools/ygreeter ynet api_yplot=src/api/yplot ydummy ytermsink yterminal
 
 # Modules whose generated public headers are written NEXT TO their source instead
 # of under include/yetty/<module>/ (codegen --headers-local). Used for modules
@@ -200,6 +200,17 @@ YCLASS_DEFINES_ygreeter := YETTY_YGREETER_HAS_STANDALONE YETTY_YGUI_HAS_UV
 # evolves). When the last module is migrated, codegen-old.py and these
 # markers are deleted.
 YCLASS_SPLIT_ydummy := 1
+YCLASS_SPLIT_ytermsink := 1
+YCLASS_SPLIT_yview := 1
+YCLASS_SPLIT_ynet := 1
+YCLASS_SPLIT_ymusic := 1
+YCLASS_SPLIT_ycircuit := 1
+YCLASS_SPLIT_yflame := 1
+YCLASS_SPLIT_ymap := 1
+YCLASS_SPLIT_ygit := 1
+YCLASS_SPLIT_ychrome := 1
+YCLASS_SPLIT_yjupyter := 1
+YCLASS_SPLIT_ynotebook := 1
 YCLASS_SPLIT_yfigure := 1
 YCLASS_SPLIT_ygrid := 1
 YCLASS_SPLIT_yrdawn := 1

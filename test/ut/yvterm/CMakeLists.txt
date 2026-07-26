@@ -22,7 +22,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    yvterm_state_matrix
     SOURCES state-matrix-test.c
-    LIBS    yetty_yvterm yetty_yclass yetty_ywire yetty_ycore
+    LIBS    yetty_yvterm yetty_api_ytermsink yetty_yclass yetty_ywire yetty_ycore
     SHIMS   trace platform_thread platform_term
     LABELS  contract terminal
     TIMEOUT 30)

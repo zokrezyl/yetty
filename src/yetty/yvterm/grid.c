@@ -21,6 +21,7 @@
 #include <vterm.h>
 #include <vterm_keycodes.h>
 
+#include <yetty/api/ytermsink/sink.h>
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/memtag.h>
 #include <yetty/ycore/result.h>
@@ -242,18 +243,16 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
     yetty_yvterm_grid_clear_hook_fn clear_hook_fn;
     void *clear_hook_userdata;
 
-    yetty_yvterm_grid_card_sub_fn card_sub_fn;
-    void *card_sub_userdata;
+    /* Terminal-host sink (ytermsink:sink): the grid dispatches pty_write /
+     * mouse_sub / clipboard_write / sixel_write on it. Borrowed — the host
+     * (terminal) owns it and outlives the grid. NULL in headless/test. */
+    struct yetty_yclass_object *sink;
 
     /* Re-creates one figure from its retained envelope (registered by the
      * terminal, which owns the composite factory). NULL → evicted figures
      * simply stay blank when scrolled back into view. */
     yetty_yvterm_grid_materialize_fn materialize_fn;
     void *materialize_userdata;
-
-    /* Keyboard output / libvterm query responses go to the child via this. */
-    yetty_yvterm_grid_pty_write_fn pty_write_fn;
-    void *pty_write_userdata;
 
     /* OSC 52 clipboard write. libvterm decodes the base64 payload into
      * `osc52_decode` and hands it back in fragments; those are accumulated into
@@ -262,8 +261,6 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
      * so an oversized write is dropped rather than growing without bound. Read
      * (`OSC 52 ; c ; ?`) is intentionally not wired — clipboard contents stay
      * unreadable by the child. */
-    yetty_yvterm_grid_clipboard_write_fn clipboard_write_fn;
-    void *clipboard_write_userdata;
     char osc52_decode[1024];
     char *osc52_accum;
     size_t osc52_accum_len;
@@ -284,8 +281,6 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
      * across fragments and hands the whole image to clipboard_write_fn's sibling
      * on the final fragment. `sixel_overflow` trips past the cap so an oversized
      * stream is dropped rather than growing without bound. */
-    yetty_yvterm_grid_sixel_write_fn sixel_write_fn;
-    void *sixel_write_userdata;
     char *sixel_accum;
     size_t sixel_accum_len;
     size_t sixel_accum_cap;
@@ -1116,9 +1111,9 @@ static int cb_settermprop(VTermProp prop, VTermValue *val, void *user)
          * modes so it can start/stop forwarding mouse + keyboard + resize to
          * the hosted client. A libvterm callback can't propagate a Result —
          * absorb at this boundary. */
-        if (grid->card_sub_fn) {
-            struct yetty_ycore_void_result sub_res = grid->card_sub_fn(
-                grid->card_click, grid->card_move, grid->card_key, grid->card_sub_userdata);
+        if (grid->sink) {
+            struct yetty_ycore_void_result sub_res = yetty_ytermsink_mouse_sub(
+                grid->sink, grid->card_click, grid->card_move, grid->card_key);
             if (YETTY_IS_ERR(sub_res)) {
                 yetty_ycore_error_destroy(sub_res.error);
             }
@@ -1267,12 +1262,12 @@ static int cb_selection_set(VTermSelectionMask mask, VTermStringFragment frag, v
     }
 
     if (frag.final) {
-        if (grid->clipboard_write_fn && !grid->osc52_overflow && grid->osc52_accum_len > 0) {
+        if (grid->sink && !grid->osc52_overflow && grid->osc52_accum_len > 0) {
             /* External-callback boundary: libvterm's `set` returns int, so a
              * failed clipboard write has nowhere to propagate — absorb it. */
             struct yetty_ycore_void_result wr =
-                grid->clipboard_write_fn(grid->osc52_accum, grid->osc52_accum_len,
-                                         grid->osc52_clipboard, grid->clipboard_write_userdata);
+                yetty_ytermsink_clipboard_write(grid->sink, grid->osc52_accum,
+                                                grid->osc52_accum_len, grid->osc52_clipboard);
             (void)wr;
         }
         grid->osc52_accum_len = 0;
@@ -1431,7 +1426,7 @@ static void grid_osc_apply_color(struct yetty_yvterm_grid *grid, int command, ui
  * xterm's 16-bit-per-channel form: `OSC 1x ; rgb:rrrr/gggg/bbbb ST`. */
 static void grid_osc_report_color(struct yetty_yvterm_grid *grid, int command, uint32_t packed)
 {
-    if (!grid->pty_write_fn) {
+    if (!grid->sink) {
         return;
     }
     static const char digits[] = "0123456789abcdef";
@@ -1456,7 +1451,7 @@ static void grid_osc_report_color(struct yetty_yvterm_grid *grid, int command, u
         reply[pos++] = (channel < 2) ? '/' : 0x1b;
     }
     reply[pos++] = '\\'; /* ST tail (ESC \) */
-    struct yetty_ycore_void_result wr = grid->pty_write_fn(reply, pos, grid->pty_write_userdata);
+    struct yetty_ycore_void_result wr = yetty_ytermsink_pty_write(grid->sink, reply, pos);
     /* External-callback boundary: a failed reply write has nowhere to go. */
     if (YETTY_IS_ERR(wr)) {
         yetty_ycore_error_destroy(wr.error);
@@ -1561,10 +1556,10 @@ static int cb_dcs(const char *command, size_t commandlen, VTermStringFragment fr
     }
 
     if (frag.final) {
-        if (grid->sixel_write_fn && !grid->sixel_overflow && grid->sixel_accum_len > 0) {
+        if (grid->sink && !grid->sixel_overflow && grid->sixel_accum_len > 0) {
             /* External-callback boundary: a failed present has nowhere to go. */
-            struct yetty_ycore_void_result wr = grid->sixel_write_fn(
-                grid->sixel_accum, grid->sixel_accum_len, grid->sixel_write_userdata);
+            struct yetty_ycore_void_result wr = yetty_ytermsink_sixel_write(
+                grid->sink, grid->sixel_accum, grid->sixel_accum_len);
             if (YETTY_IS_ERR(wr)) {
                 yetty_ycore_error_destroy(wr.error);
             }
@@ -2378,37 +2373,15 @@ struct yetty_ycore_void_result yetty_yvterm_grid_dispose(struct yetty_yclass_obj
     return yetty_yclass_object_free(obj);
 }
 
+/* Install the terminal-host sink the grid dispatches its upcalls on (pty_write
+ * / mouse_sub / clipboard_write / sixel_write). Borrowed — the host owns it. */
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_yvterm_grid_set_pty_write(struct yetty_yclass_object *obj,
-                                                               yetty_yvterm_grid_pty_write_fn fn,
-                                                               void *userdata)
+struct yetty_ycore_void_result yetty_yvterm_grid_set_sink(struct yetty_yclass_object *obj,
+                                                          struct yetty_yclass_object *sink)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_pty_write: from_obj");
-    grid_res.value->pty_write_fn = fn;
-    grid_res.value->pty_write_userdata = userdata;
-    return YETTY_OK_VOID();
-}
-
-YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_yvterm_grid_set_clipboard_write(
-    struct yetty_yclass_object *obj, yetty_yvterm_grid_clipboard_write_fn fn, void *userdata)
-{
-    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_clipboard_write: from_obj");
-    grid_res.value->clipboard_write_fn = fn;
-    grid_res.value->clipboard_write_userdata = userdata;
-    return YETTY_OK_VOID();
-}
-
-YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_yvterm_grid_set_sixel_write(
-    struct yetty_yclass_object *obj, yetty_yvterm_grid_sixel_write_fn fn, void *userdata)
-{
-    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_sixel_write: from_obj");
-    grid_res.value->sixel_write_fn = fn;
-    grid_res.value->sixel_write_userdata = userdata;
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_sink: from_obj");
+    grid_res.value->sink = sink;
     return YETTY_OK_VOID();
 }
 
@@ -2421,18 +2394,6 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_clear_hook(struct yetty_ycl
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_clear_hook: from_obj");
     grid_res.value->clear_hook_fn = fn;
     grid_res.value->clear_hook_userdata = userdata;
-    return YETTY_OK_VOID();
-}
-
-YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_yvterm_grid_set_card_sub(struct yetty_yclass_object *obj,
-                                                              yetty_yvterm_grid_card_sub_fn fn,
-                                                              void *userdata)
-{
-    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_card_sub: from_obj");
-    grid_res.value->card_sub_fn = fn;
-    grid_res.value->card_sub_userdata = userdata;
     return YETTY_OK_VOID();
 }
 
@@ -2732,13 +2693,13 @@ static VTermModifier grid_map_mods(int mods)
 
 static struct yetty_ycore_void_result grid_flush_output(struct yetty_yvterm_grid *grid)
 {
-    if (!grid->pty_write_fn) {
+    if (!grid->sink) {
         return YETTY_OK_VOID();
     }
     char buf[256];
     size_t got;
     while ((got = vterm_output_read(grid->vterm, buf, sizeof(buf))) > 0) {
-        struct yetty_ycore_void_result wr = grid->pty_write_fn(buf, got, grid->pty_write_userdata);
+        struct yetty_ycore_void_result wr = yetty_ytermsink_pty_write(grid->sink, buf, got);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "grid_flush_output: pty write");
     }
     return YETTY_OK_VOID();

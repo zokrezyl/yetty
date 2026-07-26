@@ -11,10 +11,16 @@
 
 include(${YETTY_ROOT}/build-tools/yetty/libs/yyjson.cmake)
 
+add_library(yetty_api_ynotebook STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/ynotebook/mime-bundle.c
+    ${YETTY_ROOT}/src/yetty/gen/api/ynotebook/notebook.c
+)
+target_include_directories(yetty_api_ynotebook PUBLIC ${YETTY_ROOT}/include)
+target_link_libraries(yetty_api_ynotebook PUBLIC yetty_ycore yetty_yclass)
+
 add_library(yetty_ynotebook STATIC
     mime-bundle.c
     notebook.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_ynotebook PUBLIC
@@ -22,6 +28,7 @@ target_include_directories(yetty_ynotebook PUBLIC
 )
 
 target_link_libraries(yetty_ynotebook PUBLIC
+    yetty_api_ynotebook
     yetty_ycore
     yetty_yclass
     yyjson::yyjson

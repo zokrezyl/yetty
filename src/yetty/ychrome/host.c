@@ -23,7 +23,7 @@
  */
 #include <yetty/ychrome/host.h>
 
-#include <yetty/ychrome/chrome.h>
+#include "yetty/gen/impl/ychrome/chrome.h"
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/api/yfigure/container.h>
 #include <yetty/api/yfigure/figure.h>

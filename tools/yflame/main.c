@@ -14,7 +14,7 @@
  * Inside a yetty terminal the OSC renders; outside, the bytes print raw.
  */
 
-#include <yetty/yflame/flame.h>
+#include "yetty/gen/impl/yflame/flame.h"
 #include <yetty/yclass/class.h>
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/result.h>

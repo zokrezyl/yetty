@@ -2199,6 +2199,16 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
         if (!inst || !inst->render) {
             continue;
         }
+        /* Scroll offset: composites must move with the scroll exactly like
+         * prims do. Prims are shifted on the GPU by U_CZ_OFF = (scroll_x,
+         * scroll_y + scroll_anchor_y) — the shader maps screen->content with
+         * `pixel_pos = after_visual/cz_scale + cz_off`, so the forward mapping
+         * for a producer-positioned figure is screen = content - cz_off.
+         * Subtract that same offset from the composite anchor; without it a
+         * scrolled figure (an <img>, a plot) stayed frozen while the text
+         * scrolled underneath it. */
+        const float cz_x = g->scroll_x;
+        const float cz_y = g->scroll_y + g->scroll_anchor_y;
         float sx, sy;
         if (g->absolute_coords) {
             float coord_scale = g->content_scale > 0.0f ? g->content_scale : 1.0f;
@@ -2212,9 +2222,10 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
              * for a figure near the top-left, catastrophic for one in a
              * lower row). For an absolute grid the producer's bounds are
              * already full target-local coordinates, so the anchor is the
-             * target origin and the render op supplies the position. */
-            sx = 0.0f;
-            sy = 0.0f;
+             * target origin (minus scroll) and the render op supplies the
+             * position. The scroll is in content units, so scale it too. */
+            sx = -cz_x * coord_scale;
+            sy = -cz_y * coord_scale;
             inst->content_scale = coord_scale;
         } else {
             /* Local (scrolling-layer) grid: the figure block is anchored at
@@ -2222,8 +2233,8 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
              * offset, added by the render op. Framebuffer-pixel coords, so
              * content_scale stays 1. As above, the anchor must NOT include
              * inst->bounds.min — the render op adds the wire origin itself. */
-            sx = base_rect.min.x;
-            sy = base_rect.min.y;
+            sx = base_rect.min.x - cz_x;
+            sy = base_rect.min.y - cz_y;
             inst->content_scale = 1.0f;
         }
         /* Go through the generic wrapper (not inst->render directly) so the
@@ -2632,7 +2643,7 @@ static struct yetty_ycore_char_ptr_result ygrid_dump(const struct yetty_yfigure_
 /* yclass cross-domain override of the yfigure:render slot. Recovers the
  * typed body from the object header (body begins at obj + 1) and forwards
  * to the existing render impl. */
-YETTY_ANNOTATE("override@ygrid:grid:yfigure:render")
+YETTY_ANNOTATE("override@yfigure:figure:render")
 static struct yetty_ycore_void_result ygrid_render_slot(struct yetty_yclass_object *obj,
                                                         struct yetty_ydraw_target *target)
 {
@@ -2640,7 +2651,7 @@ static struct yetty_ycore_void_result ygrid_render_slot(struct yetty_yclass_obje
 }
 
 /* yclass cross-domain override of yfigure:destroy. Body sits at obj + 1. */
-YETTY_ANNOTATE("override@ygrid:grid:yfigure:destroy")
+YETTY_ANNOTATE("override@yfigure:figure:destroy")
 static struct yetty_ycore_void_result ygrid_destroy_slot(struct yetty_yclass_object *obj)
 {
     return ygrid_destroy((struct yetty_yfigure_figure *)(obj + 1));
@@ -3482,21 +3493,21 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_destroy_impl(struct yetty
     return ygrid_destroy((struct yetty_yfigure_figure *)(obj + 1));
 }
 
-YETTY_ANNOTATE("override@ygrid:grid:yfigure:process_bytes")
+YETTY_ANNOTATE("override@yfigure:figure:process_bytes")
 static struct yetty_ycore_void_result yetty_ygrid_grid_process_bytes_impl(
     struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len)
 {
     return ygrid_process_bytes((struct yetty_yfigure_figure *)(obj + 1), bytes, bytes_len);
 }
 
-YETTY_ANNOTATE("override@ygrid:grid:yfigure:reset_content")
+YETTY_ANNOTATE("override@yfigure:figure:reset_content")
 static struct yetty_ycore_void_result yetty_ygrid_grid_reset_content_impl(
     struct yetty_yclass_object *obj)
 {
     return ygrid_reset_content((struct yetty_yfigure_figure *)(obj + 1));
 }
 
-YETTY_ANNOTATE("override@ygrid:grid:yfigure:dump_state")
+YETTY_ANNOTATE("override@yfigure:figure:dump_state")
 static struct yetty_ycore_char_ptr_result yetty_ygrid_grid_dump_state_impl(
     struct yetty_yclass_object *obj, int indent)
 {
@@ -3507,7 +3518,7 @@ static struct yetty_ycore_char_ptr_result yetty_ygrid_grid_dump_state_impl(
  * SET_CHILD_SCROLL / SET_CHILD_CONTENT_SIZE, or the terminal's autonomous
  * wheel/key handler). Both wrap the in-process setters and mark the figure
  * base dirty so the compositor repaints the (re-clipped) viewport. */
-YETTY_ANNOTATE("override@ygrid:grid:yfigure:set_scroll")
+YETTY_ANNOTATE("override@yfigure:figure:set_scroll")
 static struct yetty_ycore_void_result yetty_ygrid_grid_set_scroll_impl(
     struct yetty_yclass_object *obj, float scroll_x, float scroll_y)
 {
@@ -3518,7 +3529,7 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_set_scroll_impl(
     return yetty_yfigure_figure_dirty_set(obj, 1);
 }
 
-YETTY_ANNOTATE("override@ygrid:grid:yfigure:set_content_size")
+YETTY_ANNOTATE("override@yfigure:figure:set_content_size")
 static struct yetty_ycore_void_result yetty_ygrid_grid_set_content_size_impl(
     struct yetty_yclass_object *obj, float content_w, float content_h)
 {
@@ -3536,7 +3547,7 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_set_content_size_impl(
  * cell_size/bucketing and works for a card whose cell geometry differs from the
  * text grid. Only absolute-coord grids anchor this way; a local grid draws
  * relative to its own rect, which the container moves directly. */
-YETTY_ANNOTATE("override@ygrid:grid:yfigure:apply_scroll_anchor")
+YETTY_ANNOTATE("override@yfigure:figure:apply_scroll_anchor")
 static struct yetty_ycore_void_result yetty_ygrid_grid_apply_scroll_anchor_impl(
     struct yetty_yclass_object *obj, int32_t rolling_row_offset, float cell_height)
 {

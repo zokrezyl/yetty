@@ -57,7 +57,7 @@
 
 /* Window chrome (drag/resize/maximize the borderless OS window) — the
  * reusable, ygui/yui-independent engine. */
-#include <yetty/ychrome/chrome.h>
+#include "yetty/gen/impl/ychrome/chrome.h"
 #include <yetty/yplatform/ywindow-chrome/window-chrome.h>
 
 #include "yetty/yguiapp/run.h"

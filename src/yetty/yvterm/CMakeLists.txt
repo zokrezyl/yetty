@@ -26,6 +26,7 @@ target_include_directories(yetty_yvterm PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yvterm PUBLIC
     yetty_api_yvterm
+    yetty_api_ytermsink  # grid/vterm/shader-glyph-layer dispatch the terminal-host sink
     yetty_ycore
     yetty_yclass
     yetty_yfigure

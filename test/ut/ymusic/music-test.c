@@ -7,7 +7,7 @@
  */
 
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ymusic/music.h>
+#include <yetty/api/ymusic/music.h>
 
 #include "ytest.h"
 
@@ -20,7 +20,6 @@ static const char k_score[] = "\\version \"2.24.0\"\n"
 
 static struct yetty_yclass_object *make_obj(struct ytest *test)
 {
-    YTEST_REQUIRE_OK(test, yetty_ymusic_register());
     struct yetty_yclass_object_ptr_result cr = yetty_ymusic_music_create(NULL);
     YTEST_REQUIRE_OK(test, cr);
     return cr.value;

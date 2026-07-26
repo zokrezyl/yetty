@@ -28,6 +28,9 @@ target_include_directories(yetty_yterminal PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yterminal
     yetty_api_yterminal
+    # The terminal IS-A ytermsink:sink (parent) — it overrides the five upcalls
+    # (pty_write / request_render / mouse_sub / clipboard_write / sixel_write).
+    yetty_ytermsink
     # The text-grid figure the coordinator drives. PUBLIC so consumers (yui)
     # see yvterm's headers/symbols transitively.
     yetty_yvterm

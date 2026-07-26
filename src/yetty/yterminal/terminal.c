@@ -55,6 +55,7 @@
 #include <yetty/ysixel/sixel.h>
 #endif
 #include <yetty/yterminal/terminal.h>
+#include "yetty/gen/impl/ytermsink/sink.h"
 #include "yetty/gen/impl/yvterm/vterm.h"
 #include "yetty/gen/impl/yfigure/figure.h"
 #include "yetty/gen/impl/yfigure/container.h"
@@ -130,7 +131,8 @@ struct yetty_yterminal_terminal_context {
     struct yetty_platform_pty *pty;
 };
 
-struct YETTY_ANNOTATE("class@yterminal:terminal") yetty_yterminal_terminal {
+struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsink:sink")
+    yetty_yterminal_terminal {
     struct yetty_yui_view view; /* MUST be first - allows cast to view */
     struct yetty_yevent_event_listener listener;
     struct yetty_yterminal_terminal_context context;
@@ -532,13 +534,16 @@ static struct yetty_ycore_size_result terminal_pty_write_raw(
 
 /* yetty_yterminal_pty_write_fn impl — adapts the Result-returning PTY op
  * (size_result) to the typedef (void_result). */
-static struct yetty_ycore_void_result terminal_pty_write_callback(const char *data, size_t len,
-                                                                  void *userdata)
+YETTY_ANNOTATE("override@ytermsink:sink:pty_write")
+static struct yetty_ycore_void_result terminal_sink_pty_write(struct yetty_yclass_object *obj,
+                                                              const char *data, size_t len)
 {
-    struct yetty_yterminal_terminal *terminal = userdata;
+    struct yetty_yterminal_terminal_ptr_result terminal_res = yetty_yterminal_terminal_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, terminal_res, "terminal sink pty_write: from_obj");
+    struct yetty_yterminal_terminal *terminal = terminal_res.value;
     struct yetty_ycore_size_result r = terminal_pty_write_raw(terminal, data, len);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_pty_write_callback: pty_write_raw failed");
-    ydebug("terminal_pty_write_callback: wrote %zu bytes to PTY", len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal sink pty_write: pty_write_raw failed");
+    ydebug("terminal sink pty_write: wrote %zu bytes to PTY", len);
     return YETTY_OK_VOID();
 }
 
@@ -1760,11 +1765,14 @@ static struct yetty_ycore_void_result terminal_ydraw_process_input(
  * YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE — over telnet/guest transports
  * TIOCGWINSZ carries no pixels, so this OSC is the client's only size cue
  * (without it a ygui client renders at its 800x600 default). */
-static struct yetty_ycore_void_result terminal_mouse_sub_callback(int click_enabled,
-                                                                  int move_enabled, int key_enabled,
-                                                                  void *userdata)
+YETTY_ANNOTATE("override@ytermsink:sink:mouse_sub")
+static struct yetty_ycore_void_result terminal_sink_mouse_sub(struct yetty_yclass_object *obj,
+                                                              int click_enabled, int move_enabled,
+                                                              int key_enabled)
 {
-    struct yetty_yterminal_terminal *terminal = userdata;
+    struct yetty_yterminal_terminal_ptr_result terminal_res = yetty_yterminal_terminal_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, terminal_res, "terminal sink mouse_sub: from_obj");
+    struct yetty_yterminal_terminal *terminal = terminal_res.value;
     int was_subscribed = terminal->mouse_click_subscribed || terminal->mouse_move_subscribed;
     terminal->mouse_click_subscribed = click_enabled;
     terminal->mouse_move_subscribed = move_enabled;
@@ -1798,19 +1806,22 @@ static struct yetty_ycore_void_result terminal_mouse_sub_callback(int click_enab
  * platform exposes a single clipboard, so the primary-selection target is routed
  * there too rather than dropped; `clipboard` is kept for a future
  * PRIMARY-capable backend. */
-static struct yetty_ycore_void_result terminal_clipboard_write_callback(const char *text,
-                                                                        size_t len, int clipboard,
-                                                                        void *userdata)
+YETTY_ANNOTATE("override@ytermsink:sink:clipboard_write")
+static struct yetty_ycore_void_result terminal_sink_clipboard_write(struct yetty_yclass_object *obj,
+                                                                    const char *text, size_t len,
+                                                                    int clipboard)
 {
-    struct yetty_yterminal_terminal *terminal = userdata;
+    struct yetty_yterminal_terminal_ptr_result terminal_res = yetty_yterminal_terminal_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, terminal_res, "terminal sink clipboard_write: from_obj");
+    struct yetty_yterminal_terminal *terminal = terminal_res.value;
     struct yetty_yclass_object *clip = terminal->context.yetty_context.runtime->clipboard;
     if (!clip) {
-        ydebug("terminal_clipboard_write_callback: no clipboard");
+        ydebug("terminal sink clipboard_write: no clipboard");
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result sr = yetty_yplatform_clipboard_set_text(clip, text, len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr,
-                        "terminal_clipboard_write_callback: clipboard set_text failed");
+                        "terminal sink clipboard_write: clipboard set_text failed");
     yinfo("terminal: OSC 52 set %zu bytes to %s", len, clipboard ? "clipboard" : "primary");
     return YETTY_OK_VOID();
 }
@@ -1822,11 +1833,14 @@ static struct yetty_ycore_void_result terminal_clipboard_write_callback(const ch
  * text. Downscaled (aspect-preserving) to the pane width when wider. Built only
  * when the ysixel decoder is compiled in; otherwise the DCS is silently
  * dropped (the callback is never registered). */
-#if defined(YETTY_HAS_YSIXEL) && YETTY_HAS_YSIXEL
-static struct yetty_ycore_void_result terminal_sixel_write_callback(const char *data, size_t len,
-                                                                    void *userdata)
+YETTY_ANNOTATE("override@ytermsink:sink:sixel_write")
+static struct yetty_ycore_void_result terminal_sink_sixel_write(struct yetty_yclass_object *obj,
+                                                                const char *data, size_t len)
 {
-    struct yetty_yterminal_terminal *terminal = userdata;
+#if defined(YETTY_HAS_YSIXEL) && YETTY_HAS_YSIXEL
+    struct yetty_yterminal_terminal_ptr_result terminal_res = yetty_yterminal_terminal_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, terminal_res, "terminal sink sixel_write: from_obj");
+    struct yetty_yterminal_terminal *terminal = terminal_res.value;
     struct yetty_yterminal_mime_env env = yetty_yterminal_mime_env_get(terminal);
     struct yetty_ysixel_render_config sixel_config = {
         .max_width_px = (float)(env.cols * env.cell_width),
@@ -1847,18 +1861,39 @@ static struct yetty_ycore_void_result terminal_sixel_write_callback(const char *
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ingest_res, "terminal: sixel ingest");
     yinfo("terminal: sixel image %zu bytes decoded and anchored", len);
     return YETTY_OK_VOID();
-}
+#else
+    (void)obj;
+    (void)data;
+    (void)len;
+    return YETTY_OK_VOID();
 #endif
+}
 
-/* yetty_yterminal_request_render_fn impl — called when the content layer needs a
- * render frame. */
-static struct yetty_ycore_void_result terminal_request_render_callback(void *userdata)
+/* Shared body for "the content layer needs a render frame": kick the event
+ * loop. Used by both the sink override below and the yrdawn callback (which
+ * needs a plain (void*) signature). */
+static struct yetty_ycore_void_result terminal_request_render_impl(
+    struct yetty_yterminal_terminal *terminal)
 {
-    struct yetty_yterminal_terminal *terminal = userdata;
-    ydebug("terminal_request_render_callback: calling request_render");
+    ydebug("terminal request_render: calling request_render");
     terminal->context.yetty_context.event_loop->ops->request_render(
         terminal->context.yetty_context.event_loop);
     return YETTY_OK_VOID();
+}
+
+/* yrdawn passes this as a plain (fn, userdata) callback (it has its own
+ * callback type), so the void* form stays. */
+static struct yetty_ycore_void_result terminal_request_render_callback(void *userdata)
+{
+    return terminal_request_render_impl((struct yetty_yterminal_terminal *)userdata);
+}
+
+YETTY_ANNOTATE("override@ytermsink:sink:request_render")
+static struct yetty_ycore_void_result terminal_sink_request_render(struct yetty_yclass_object *obj)
+{
+    struct yetty_yterminal_terminal_ptr_result terminal_res = yetty_yterminal_terminal_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, terminal_res, "terminal sink request_render: from_obj");
+    return terminal_request_render_impl(terminal_res.value);
 }
 
 /*-------------------------------------------------------------------------
@@ -2276,19 +2311,12 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     /* Create the content grid — the yvterm:grid figure for this pane. It owns
      * the libvterm text grid and the ydraw rich-content canvas, drives both
      * render passes, and routes all the text<->ydraw plumbing (scroll, cursor,
-     * alt-screen, clear, selection, view-top) internally. The
-     * mouse-subscription callback still targets the terminal because it mutates
-     * terminal-side state (focused figure, outbound resize OSC). It is seated as
-     * the lowest-z child of the root container further below. */
-#if defined(YETTY_HAS_YSIXEL) && YETTY_HAS_YSIXEL
-    yetty_yterminal_sixel_write_fn sixel_write_cb = terminal_sixel_write_callback;
-#else
-    yetty_yterminal_sixel_write_fn sixel_write_cb = NULL;
-#endif
-    struct yetty_yclass_object_ptr_result grid_res = yetty_yvterm_vterm_figure_create(
-        cols, rows, yetty_context, terminal_pty_write_callback, terminal,
-        terminal_request_render_callback, terminal, terminal_mouse_sub_callback, terminal,
-        terminal_clipboard_write_callback, terminal, sixel_write_cb, terminal);
+     * alt-screen, clear, selection, view-top) internally. It talks back to the
+     * terminal (PTY write, render, mouse subscription, clipboard, sixel) by
+     * dispatching the ytermsink:sink methods on the terminal object we pass as
+     * its host. It is seated as the lowest-z child of the root container below. */
+    struct yetty_yclass_object_ptr_result grid_res =
+        yetty_yvterm_vterm_figure_create(cols, rows, yetty_context, terminal_object);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, grid_res,
                         "terminal_create: grid figure create failed");
     terminal->grid = grid_res.value;

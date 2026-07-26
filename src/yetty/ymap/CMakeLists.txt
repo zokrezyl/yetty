@@ -21,9 +21,14 @@
 # GeoJSON overlay parsing (map.c overlay_geojson) uses the prebuilt yyjson.
 include(${YETTY_ROOT}/build-tools/yetty/libs/yyjson.cmake)
 
+add_library(yetty_api_ymap STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/ymap/map.c
+)
+target_include_directories(yetty_api_ymap PUBLIC ${YETTY_ROOT}/include)
+target_link_libraries(yetty_api_ymap PUBLIC yetty_ycore yetty_yclass)
+
 add_library(yetty_ymap STATIC
     map.c
-    rpc.gen.c
     engine.c
     tile-fetch.c
     vector-tile.c
@@ -37,6 +42,7 @@ target_include_directories(yetty_ymap PUBLIC
 )
 
 target_link_libraries(yetty_ymap PUBLIC
+    yetty_api_ymap
     yetty_ycore
     yetty_yclass
     yetty_yface

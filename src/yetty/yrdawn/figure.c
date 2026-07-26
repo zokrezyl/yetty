@@ -884,7 +884,7 @@ static struct yetty_ycore_void_result yrdawn_figure_destroy(struct yetty_yclass_
  *=========================================================================*/
 
 /* yclass cross-domain override of yfigure:render. */
-YETTY_ANNOTATE("override@yrdawn:figure:yfigure:render")
+YETTY_ANNOTATE("override@yfigure:figure:render")
 static struct yetty_ycore_void_result yrdawn_figure_render_slot(struct yetty_yclass_object *obj,
                                                                 struct yetty_ydraw_target *target)
 {
@@ -892,20 +892,20 @@ static struct yetty_ycore_void_result yrdawn_figure_render_slot(struct yetty_ycl
 }
 
 /* yclass cross-domain override of yfigure:destroy. */
-YETTY_ANNOTATE("override@yrdawn:figure:yfigure:destroy")
+YETTY_ANNOTATE("override@yfigure:figure:destroy")
 static struct yetty_ycore_void_result yrdawn_figure_destroy_slot(struct yetty_yclass_object *obj)
 {
     return yrdawn_figure_destroy(obj);
 }
 
-YETTY_ANNOTATE("override@yrdawn:figure:yfigure:process_input")
+YETTY_ANNOTATE("override@yfigure:figure:process_input")
 static struct yetty_ycore_void_result yrdawn_figure_process_input_slot(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *statemachine)
 {
     return yrdawn_figure_process_input(obj, statemachine);
 }
 
-YETTY_ANNOTATE("override@yrdawn:figure:yfigure:process_bytes")
+YETTY_ANNOTATE("override@yfigure:figure:process_bytes")
 static struct yetty_ycore_void_result yrdawn_figure_process_bytes_slot(
     struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len)
 {

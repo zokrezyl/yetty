@@ -6,9 +6,14 @@
 # plus hit-test / focus for interactive zoom. The yclass model.yaml drives the
 # FFI / host-language bindings. GPU-less — produces generic ydraw primitives.
 
+add_library(yetty_api_yflame STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/yflame/flame.c
+)
+target_include_directories(yetty_api_yflame PUBLIC ${YETTY_ROOT}/include)
+target_link_libraries(yetty_api_yflame PUBLIC yetty_ycore yetty_yclass)
+
 add_library(yetty_yflame STATIC
     flame.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_yflame PUBLIC
@@ -18,6 +23,7 @@ target_include_directories(yetty_yflame PUBLIC
 target_include_directories(yetty_yflame PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yflame PUBLIC
+    yetty_api_yflame
     yetty_ycore
     yetty_yclass
     yetty_yface
