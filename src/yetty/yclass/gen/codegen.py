@@ -2528,7 +2528,8 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         sys.exit(1)
 
 
-def emit_class_gen_c(model: dict, module: str, module_dir: Path, split: bool = False):
+def emit_class_gen_c(model: dict, module: str, module_dir: Path, split: bool = False,
+                     gen_root: Path = None):
     """One `<class>.gen.c` per annotated source. `#include`d at the foot
     of the matching hand-written `<class>.c` — so it must sit in the
     SAME directory as that .c, not at the module root. A widget at
@@ -2722,7 +2723,11 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path, split: bool = F
             # this source's registration hook — there is no module-level
             # rpc.gen.c in split mode.
             api_name = module  # API namespace == module name (matches include/yetty/api/yplot/)
-            gen_base = module_dir.parent / "gen"
+            # The generated .c tree is ALWAYS the shared src/yetty/gen — pinned
+            # by the caller (gen_root), so an OUT-OF-TREE module (tools/*, demo/*)
+            # emits into src/yetty/gen, not a stray tools/gen beside its source.
+            # For in-tree modules this equals module_dir.parent / "gen".
+            gen_base = gen_root if gen_root is not None else module_dir.parent / "gen"
             impl_dir = gen_base / "impl" / module / source_rel_subdir(src_path, module_dir)
             api_dir = gen_base / "api" / api_name / source_rel_subdir(src_path, module_dir)
             impl_dir.mkdir(parents=True, exist_ok=True)
@@ -3490,6 +3495,12 @@ def main():
     # headers seed with `#include <yetty/yclass/class.h>` so the runtime structs
     # (ctx, object, class) are visible during AST parsing.
     placeholder_class_h = '#include <yetty/yclass/class.h>\n'
+    # The role-split generated .c tree is ALWAYS the shared src/yetty/gen,
+    # regardless of where the module's annotated sources live — derived from
+    # include_base (<root>/include/yetty) so an out-of-tree module (tools/*,
+    # demo/*, src/api/*) does not emit a stray <its-parent>/gen. For an in-tree
+    # module this equals module_src.parent / "gen".
+    gen_root = include_base.parent.parent / "src" / "yetty" / "gen"
     for s in sources:
         if s.suffix == ".c":
             # Place the per-source generated impl file where the
@@ -3497,7 +3508,7 @@ def main():
             # source in the legacy layout, under src/yetty/gen/impl/ in
             # the role-split layout.
             if split:
-                inc = (module_src.parent / "gen" / "impl" / module
+                inc = (gen_root / "impl" / module
                        / source_rel_subdir(s, module_src) / f"{s.stem}.c")
                 inc.parent.mkdir(parents=True, exist_ok=True)
             else:
@@ -3566,7 +3577,7 @@ def main():
     # exposes it.
     if split:
         emit_class_public_headers(model, module,
-                                  module_src.parent / "gen" / "impl" / module,
+                                  gen_root / "impl" / module,
                                   module_src, headers_local)
     # Compatibility headers for a split module with un-migrated dependents
     # (YCLASS_COMPAT_HEADER=1): ALSO emit the legacy-content header at the
@@ -3583,7 +3594,7 @@ def main():
     # emit_class_gen_c — into each class's own <stem>.gen.c in the legacy
     # layout, or into the role-split gen/api + gen/impl roots (see the
     # layout note at the top of main).
-    emit_class_gen_c(model, module, module_src, split)
+    emit_class_gen_c(model, module, module_src, split, gen_root)
     # The registration glue lives in rpc.gen.c — one PER SUBMODULE (each subdir of
     # the module), registering only that subdir's classes. The module-root
     # rpc.gen.c registers the root classes and chains the submodule registers, so
@@ -3598,7 +3609,7 @@ def main():
     elif _module_has_duplicate_stems(model):
         emit_submodule_register_tus(
             model, module, module_src,
-            module_src.parent / "gen" / "impl" / module, True)
+            gen_root / "impl" / module, True)
 
     _write_atomic(module_src / "model.yaml", yaml_dump(model) + "\n")
 

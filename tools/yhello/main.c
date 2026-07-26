@@ -4093,7 +4093,7 @@ static int run_standalone_mode(int argc, char **argv)
 
 /* yclass glue for yhello:app — compiled in every standalone build (desktop, web,
  * Android), outside the __ANDROID__ split above. */
-#include "main.gen.c"
+#include "yetty/gen/impl/yhello/main.c"
 
 #endif /* YETTY_YHELLO_HAS_STANDALONE */
 

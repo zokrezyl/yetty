@@ -30,6 +30,8 @@ struct yetty_yclass_ptr_result yetty_yhello_app_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yhello_app;
+#ifndef YETTY_YCLASSGEN_TYPE_YETTY_YHELLO_APP_PTR_RESULT
+#define YETTY_YCLASSGEN_TYPE_YETTY_YHELLO_APP_PTR_RESULT
 struct yetty_yhello_app_ptr_result {
     int ok;
     union {
@@ -37,6 +39,7 @@ struct yetty_yhello_app_ptr_result {
         struct yetty_ycore_error error;
     };
 };
+#endif
 struct yetty_yhello_app_ptr_result yetty_yhello_app_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_yhello_app_to(struct yetty_yhello_app *data);
 

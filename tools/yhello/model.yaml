@@ -220,19 +220,3 @@ local_types:
   key_ctx: tools/yhello/main.c
   yetty_yhello_app: tools/yhello/main.c
   yetty_yhello_app_ptr_result: tools/yhello/main.c
-local_typedefs:
-  __int128_t:
-    source_file: tools/yhello/main.c
-    text: typedef __int128 __int128_t;
-  __uint128_t:
-    source_file: tools/yhello/main.c
-    text: typedef unsigned __int128 __uint128_t;
-  __NSConstantString:
-    source_file: tools/yhello/main.c
-    text: typedef struct __NSConstantString_tag __NSConstantString;
-  __builtin_ms_va_list:
-    source_file: tools/yhello/main.c
-    text: "typedef char *__builtin_ms_va_list;"
-  __builtin_va_list:
-    source_file: tools/yhello/main.c
-    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
