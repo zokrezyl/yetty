@@ -302,4 +302,4 @@ struct yetty_ycore_void_result yetty_ygui_datepicker_get_date(const struct yetty
     return YETTY_OK_VOID();
 }
 
-#include "datepicker.gen.c"
+#include "yetty/gen/impl/ygui/widgets/datepicker.c"

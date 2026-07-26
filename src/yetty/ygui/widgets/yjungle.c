@@ -121,4 +121,4 @@ static struct yetty_ycore_void_result yjungle_emit_body(struct yetty_yclass_obje
     return ((fn_t)impl)(yclass_obj, ctx);
 }
 
-#include "yjungle.gen.c"
+#include "yetty/gen/impl/ygui/widgets/yjungle.c"

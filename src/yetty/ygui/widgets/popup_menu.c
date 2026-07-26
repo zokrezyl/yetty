@@ -595,4 +595,4 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_set_modal(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
-#include "popup_menu.gen.c"
+#include "yetty/gen/impl/ygui/widgets/popup_menu.c"

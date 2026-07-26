@@ -270,4 +270,4 @@ struct yetty_ycore_int_result yetty_ygui_dialog_is_open(const struct yetty_yclas
     return YETTY_OK(yetty_ycore_int, d->open);
 }
 
-#include "dialog.gen.c"
+#include "yetty/gen/impl/ygui/widgets/dialog.c"

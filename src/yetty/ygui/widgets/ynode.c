@@ -836,4 +836,4 @@ struct yetty_ycore_int_result yetty_ygui_ynode_output_count(const struct yetty_y
     return YETTY_OK(yetty_ycore_int, (int)data_res.value->out_count);
 }
 
-#include "ynode.gen.c"
+#include "yetty/gen/impl/ygui/widgets/ynode.c"

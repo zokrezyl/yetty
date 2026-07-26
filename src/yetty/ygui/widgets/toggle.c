@@ -217,4 +217,4 @@ struct yetty_ycore_int_result yetty_ygui_toggle_get_on(const struct yetty_yclass
     return YETTY_OK(yetty_ycore_int, d->on);
 }
 
-#include "toggle.gen.c"
+#include "yetty/gen/impl/ygui/widgets/toggle.c"

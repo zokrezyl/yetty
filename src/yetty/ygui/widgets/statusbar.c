@@ -168,4 +168,4 @@ struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_yclas
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "statusbar.gen.c"
+#include "yetty/gen/impl/ygui/widgets/statusbar.c"

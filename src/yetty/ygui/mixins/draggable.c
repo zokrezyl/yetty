@@ -163,4 +163,4 @@ struct yetty_ycore_int_result yetty_ygui_draggable_is_dragging(
     return YETTY_OK(yetty_ycore_int, dd->dragging);
 }
 
-#include "draggable.gen.c"
+#include "yetty/gen/impl/ygui/mixins/draggable.c"

@@ -420,4 +420,4 @@ struct yetty_ycore_void_result yetty_ygui_window_set_chromeless(struct yetty_ycl
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "window.gen.c"
+#include "yetty/gen/impl/ygui/widgets/window.c"

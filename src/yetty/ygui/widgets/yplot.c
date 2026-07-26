@@ -342,4 +342,4 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "yplot.gen.c"
+#include "yetty/gen/impl/ygui/widgets/yplot.c"

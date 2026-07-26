@@ -1018,4 +1018,4 @@ static struct yetty_ycore_int_result ynodes_on_scroll(struct yetty_yclass_object
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-#include "ynodes.gen.c"
+#include "yetty/gen/impl/ygui/widgets/ynodes.c"

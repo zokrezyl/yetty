@@ -46,4 +46,4 @@ struct YETTY_ANNOTATE("class@ygui:hbox") YETTY_ANNOTATE("parent@ygui:primitive_w
     char _empty;
 };
 
-#include "hbox.gen.c"
+#include "yetty/gen/impl/ygui/widgets/hbox.c"

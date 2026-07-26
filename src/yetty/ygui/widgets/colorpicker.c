@@ -102,4 +102,4 @@ struct yetty_ycore_uint32_result yetty_ygui_colorpicker_get_color(
                     ((struct yetty_ygui_colorpicker *)data_result.value)->color);
 }
 
-#include "colorpicker.gen.c"
+#include "yetty/gen/impl/ygui/widgets/colorpicker.c"

@@ -270,4 +270,4 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     return YETTY_OK_VOID();
 }
 
-#include "scrollarea.gen.c"
+#include "yetty/gen/impl/ygui/widgets/scrollarea.c"

@@ -1532,4 +1532,4 @@ struct yetty_ycore_void_result yetty_ygui_widget_raise(struct yetty_yclass_objec
     return YETTY_OK_VOID();
 }
 
-#include "widget.gen.c"
+#include "yetty/gen/impl/ygui/widget.c"

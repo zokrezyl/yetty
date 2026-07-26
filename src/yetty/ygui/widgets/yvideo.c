@@ -199,4 +199,4 @@ struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "yvideo.gen.c"
+#include "yetty/gen/impl/ygui/widgets/yvideo.c"

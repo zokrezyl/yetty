@@ -170,4 +170,4 @@ struct yetty_ycore_void_result yetty_ygui_label_set_color(struct yetty_yclass_ob
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "label.gen.c"
+#include "yetty/gen/impl/ygui/widgets/label.c"

@@ -322,4 +322,4 @@ struct yetty_ycore_int_result yetty_ygui_collapsing_header_is_open(
     return YETTY_OK(yetty_ycore_int, data_res.value->open);
 }
 
-#include "collapsing_header.gen.c"
+#include "yetty/gen/impl/ygui/widgets/collapsing_header.c"

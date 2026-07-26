@@ -5352,45 +5352,30 @@ local_types:
   yetty_ygui_yzoo_ptr_result: src/yetty/ygui/widgets/yzoo.c
   yetty_ygui_yzoo: src/yetty/ygui/widgets/yzoo.c
 local_typedefs:
-  __int128_t:
-    source_file: src/yetty/ygui/framework.c
-    text: typedef __int128 __int128_t;
-  __uint128_t:
-    source_file: src/yetty/ygui/framework.c
-    text: typedef unsigned __int128 __uint128_t;
-  __NSConstantString:
-    source_file: src/yetty/ygui/framework.c
-    text: typedef struct __NSConstantString_tag __NSConstantString;
-  __builtin_ms_va_list:
-    source_file: src/yetty/ygui/framework.c
-    text: "typedef char *__builtin_ms_va_list;"
-  __builtin_va_list:
-    source_file: src/yetty/ygui/framework.c
-    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
-  yetty_ygui_click_cb:
-    source_file: src/yetty/ygui/mixins/clickable.c
-    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_object *, void *);"
-  yetty_ygui_drag_cb:
-    source_file: src/yetty/ygui/mixins/draggable.c
-    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *, float, float, void *);"
-  fn_t:
-    source_file: src/yetty/ygui/widget.c
-    text: "typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_object *);"
-  yetty_ygui_menu_item_cb:
-    source_file: src/yetty/ygui/widgets/popup_menu.c
-    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *, int, void *);"
-  yetty_ygui_splitter_change_cb:
-    source_file: src/yetty/ygui/widgets/splitter.c
-    text: "typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *, float, void *);"
-  yetty_ygui_tab_close_cb:
-    source_file: src/yetty/ygui/widgets/tabbar.c
-    text: "typedef void (*yetty_ygui_tab_close_cb)(struct yetty_yclass_object *, int, void *);"
+  yetty_ygui_ynodes_link_cb:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widgets/ynodes.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, struct yetty_yclass_object *, int, void *);"
   yetty_ygui_tab_new_cb:
     source_file: src/yetty/ygui/widgets/tabbar.c
     text: "typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *, void *);"
-  yetty_ygui_ynodes_link_cb:
-    source_file: src/yetty/ygui/widgets/ynodes.c
-    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, struct yetty_yclass_object *, int, void *);"
+  yetty_ygui_tab_close_cb:
+    source_file: src/yetty/ygui/widgets/tabbar.c
+    text: "typedef void (*yetty_ygui_tab_close_cb)(struct yetty_yclass_object *, int, void *);"
+  yetty_ygui_splitter_change_cb:
+    source_file: src/yetty/ygui/widgets/splitter.c
+    text: "typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *, float, void *);"
+  yetty_ygui_menu_item_cb:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widgets/popup_menu.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *, int, void *);"
+  yetty_ygui_drag_cb:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/mixins/draggable.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *, float, float, void *);"
+  yetty_ygui_click_cb:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/mixins/clickable.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_object *, void *);"
+  yetty_ygui_key_cb:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/framework-defs.h
+    text: "typedef int (*yetty_ygui_key_cb)(struct yetty_yclass_object *, uint32_t, int, void *);"
 includes:
   src/yetty/ygui/framework.c:
     - yetty/ygui/framework-defs.h

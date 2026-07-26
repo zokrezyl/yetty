@@ -264,4 +264,4 @@ struct yetty_ycore_size_result yetty_ygui_yimage_bytes_len(const struct yetty_yc
     return YETTY_OK(yetty_ycore_size, d->len);
 }
 
-#include "yimage.gen.c"
+#include "yetty/gen/impl/ygui/widgets/yimage.c"

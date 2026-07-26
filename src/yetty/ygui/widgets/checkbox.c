@@ -211,4 +211,4 @@ struct yetty_ycore_int_result yetty_ygui_checkbox_get_checked(const struct yetty
     return YETTY_OK(yetty_ycore_int, d->checked);
 }
 
-#include "checkbox.gen.c"
+#include "yetty/gen/impl/ygui/widgets/checkbox.c"

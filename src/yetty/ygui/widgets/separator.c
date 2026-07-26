@@ -53,4 +53,4 @@ struct YETTY_ANNOTATE("class@ygui:separator") YETTY_ANNOTATE("parent@ygui:primit
     char _empty;
 };
 
-#include "separator.gen.c"
+#include "yetty/gen/impl/ygui/widgets/separator.c"

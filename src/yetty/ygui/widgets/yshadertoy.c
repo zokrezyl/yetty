@@ -130,4 +130,4 @@ struct yetty_ycore_void_result yetty_ygui_yshadertoy_set_source(struct yetty_ycl
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "yshadertoy.gen.c"
+#include "yetty/gen/impl/ygui/widgets/yshadertoy.c"

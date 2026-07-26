@@ -138,4 +138,4 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_textarea_get_text(
     return YETTY_OK(yetty_ycore_const_char_ptr, d->text ? d->text : "");
 }
 
-#include "textarea.gen.c"
+#include "yetty/gen/impl/ygui/widgets/textarea.c"

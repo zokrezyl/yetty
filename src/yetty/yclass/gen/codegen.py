@@ -882,12 +882,22 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
         # only on the FIRST declaration that moves into a header.
         for decl, decl_file in _walk_decls(tu, current_file=str(path)):
             kind = decl.get("kind")
-            # Record every named struct/enum/typedef DEFINED in this .c. This
-            # lets the header emitter reproduce the full definition of such a
-            # type when a public signature uses it (by value for a struct/enum,
-            # or by name for a typedef) — without the type itself carrying an
-            # `expose` annotation.
-            if decl_file == str(path) and decl.get("name"):
+            # Record named types so the header emitter can reproduce a type a
+            # public signature uses (by value for a struct/enum, by name for a
+            # typedef) — without the type carrying an `expose` annotation.
+            #
+            # Structs/enums are recorded only when DEFINED in this .c (the owning
+            # source re-asserts its authoritative body). Typedefs are recorded
+            # from ANY file in the translation unit: a public signature in this
+            # module may use a typedef defined in a sibling file (e.g. a mixin's
+            # callback type like yetty_ygui_click_cb, used by a widget). Every
+            # typedef in the TU lands here keyed by name; the ones no signature
+            # references are dropped before the model is written (see below).
+            if decl.get("name") and kind == "TypedefDecl":
+                if decl["name"] not in local_typedefs:
+                    local_typedefs[decl["name"]] = {
+                        "source_file": decl_file, "text": _typedef_text(decl)}
+            elif decl_file == str(path) and decl.get("name"):
                 if kind in ("RecordDecl", "EnumDecl"):
                     record_body = _record_field_list(decl) if kind == "RecordDecl" else None
                     enum_body = _enum_values(decl) if kind == "EnumDecl" else None
@@ -900,10 +910,6 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                             authoritative_records[decl["name"]] = record_body
                         else:
                             authoritative_enums[decl["name"]] = enum_body
-                elif kind == "TypedefDecl":
-                    local_typedefs.setdefault(
-                        decl["name"],
-                        {"source_file": str(path), "text": _typedef_text(decl)})
             anns = _collect_annotations(decl, file_bytes_cache, decl_file)
             # Header-destined #include directives: `include@<path>` pulls a
             # foreign header into the generated <stem>.h (for a by-value type
@@ -1283,7 +1289,49 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     if local_type_files:
         model["local_types"] = local_type_files
     if local_typedefs:
-        model["local_typedefs"] = local_typedefs
+        # Parse recorded EVERY typedef in each TU. Narrow that down to the set a
+        # public signature actually names, and — crucially — to typedefs OWNED by
+        # this module. Ownership matters: a header must reproduce a callback type
+        # authored in a sibling file of THIS module (e.g. yetty_ygui_click_cb in
+        # ygui/mixins/clickable.h, used by a widget's stub), but must NOT
+        # reproduce system typedefs (uint32_t, size_t — those arrive via
+        # <stdint.h>/<stddef.h>) or another module's typedefs (they arrive via
+        # that module's public header #include). A typedef is owned when its
+        # defining file lives under this module's own include/src subtree.
+        owned_marker = f"/yetty/{module_include_subpath(module)}/"
+        owned_typedefs = {
+            name: info
+            for name, info in local_typedefs.items()
+            if owned_marker in ("/" + info.get("source_file", ""))}
+        referenced: set = set()
+        def _scan_type_tokens(type_str):
+            for tok in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", type_str or ""):
+                referenced.add(tok)
+        for method in model.get("methods", []):
+            _scan_type_tokens(method.get("return_type"))
+            for arg in method.get("args", []):
+                _scan_type_tokens(arg.get("type"))
+        for item in model.get("exposed", []):
+            _scan_type_tokens(item.get("return_type"))
+            for arg in item.get("args", []):
+                _scan_type_tokens(arg.get("type"))
+        for cls in model.get("classes", []):
+            for field in cls.get("data_fields", []):
+                _scan_type_tokens(field.get("type"))
+        # Transitive closure over OWNED typedefs only: a kept typedef's own text
+        # may name another module-owned typedef (which must be reproduced first).
+        keep: dict = {}
+        frontier = [name for name in owned_typedefs if name in referenced]
+        while frontier:
+            name = frontier.pop()
+            if name in keep:
+                continue
+            keep[name] = owned_typedefs[name]
+            for tok in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", owned_typedefs[name]["text"]):
+                if tok in owned_typedefs and tok not in keep:
+                    frontier.append(tok)
+        if keep:
+            model["local_typedefs"] = keep
     if includes_by_file:
         model["includes"] = includes_by_file
     return model
@@ -2367,18 +2415,21 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             exclude=exposed_type_names | data_block_result_tags)
         exposed_type_names |= local_def_names
 
-        # Locally-authored typedefs (callback function pointers, …) referenced
-        # by any emitted prototype, stub or type definition — reproduced so the
-        # public header is self-contained, emitted before the structs/functions
-        # that use them.
+        # Typedefs (callback function pointers, …) referenced by any emitted
+        # prototype, stub or type definition — reproduced so the public header
+        # is self-contained, emitted before the structs/functions that use them.
+        # The model's local_typedefs set was already narrowed to the signature-
+        # referenced closure at parse time, so a typedef defined in a SIBLING
+        # file (e.g. a mixin's callback type used by a widget's stub) reproduces
+        # here too; the source file it was authored in no longer matters — a
+        # header emits whichever of the referenced set its own content names.
         local_typedefs = model.get("local_typedefs", {})
         typedef_scan = "\n".join(exposed_protos + header_type_texts + local_type_defs
                                  + [stub_decls, stub_typedefs])
         typedef_defs = [
             info["text"]
             for name, info in sorted(local_typedefs.items())
-            if info.get("source_file") == src_file
-            and re.search(r"\b" + re.escape(name) + r"\b", typedef_scan)]
+            if re.search(r"\b" + re.escape(name) + r"\b", typedef_scan)]
 
         # Forward declarations for struct tags named only in pointer position
         # (completeness is only required at the call site and the definition).

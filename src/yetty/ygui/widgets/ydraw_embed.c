@@ -439,4 +439,4 @@ struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "ydraw_embed.gen.c"
+#include "yetty/gen/impl/ygui/widgets/ydraw_embed.c"

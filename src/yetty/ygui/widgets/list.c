@@ -200,4 +200,4 @@ struct yetty_ycore_int_result yetty_ygui_list_get_selected(const struct yetty_yc
     return YETTY_OK(yetty_ycore_int, ((struct yetty_ygui_list *)data_result.value)->selected);
 }
 
-#include "list.gen.c"
+#include "yetty/gen/impl/ygui/widgets/list.c"

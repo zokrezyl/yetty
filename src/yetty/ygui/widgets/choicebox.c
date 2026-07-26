@@ -201,4 +201,4 @@ struct yetty_ycore_int_result yetty_ygui_choicebox_is_selected(
     return YETTY_OK(yetty_ycore_int, d->rows[idx].selected);
 }
 
-#include "choicebox.gen.c"
+#include "yetty/gen/impl/ygui/widgets/choicebox.c"

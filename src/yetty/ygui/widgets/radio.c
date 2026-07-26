@@ -158,4 +158,4 @@ struct yetty_ycore_int_result yetty_ygui_radio_is_selected(const struct yetty_yc
     return YETTY_OK(yetty_ycore_int, ((struct yetty_ygui_radio *)data_result.value)->selected);
 }
 
-#include "radio.gen.c"
+#include "yetty/gen/impl/ygui/widgets/radio.c"

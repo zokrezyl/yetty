@@ -84,13 +84,16 @@ set(YGUI_SOURCES
     layout.c
     theme.c
     ${YGUI_ANNOTATED}
-    rpc.gen.c
-    # Per-submodule registration units; the root rpc.gen.c chains their
-    # yetty_ygui_<submodule>_register() so yetty_ygui_register() still
-    # registers every class in the module.
-    widgets/rpc.gen.c
-    mixins/rpc.gen.c
 )
+
+file(GLOB YGUI_API_SOURCES
+    ${YETTY_ROOT}/src/yetty/gen/api/ygui/*.c
+    ${YETTY_ROOT}/src/yetty/gen/api/ygui/widgets/*.c
+    ${YETTY_ROOT}/src/yetty/gen/api/ygui/mixins/*.c
+)
+add_library(yetty_api_ygui STATIC ${YGUI_API_SOURCES})
+target_include_directories(yetty_api_ygui PUBLIC ${YETTY_ROOT}/include)
+target_link_libraries(yetty_api_ygui PUBLIC yetty_ycore yetty_yclass)
 
 add_library(yetty_ygui STATIC ${YGUI_SOURCES})
 
@@ -106,6 +109,7 @@ target_include_directories(yetty_ygui PUBLIC
 target_include_directories(yetty_ygui PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_ygui PUBLIC
+    yetty_api_ygui
     yetty_ycore
     yetty_yclass
     yetty_ydraw_core

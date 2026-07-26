@@ -219,4 +219,4 @@ struct yetty_ycore_void_result yetty_ygui_tree_node_on_toggle(struct yetty_yclas
     return YETTY_OK_VOID();
 }
 
-#include "tree_node.gen.c"
+#include "yetty/gen/impl/ygui/widgets/tree_node.c"

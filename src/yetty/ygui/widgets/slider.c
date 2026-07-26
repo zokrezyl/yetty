@@ -249,4 +249,4 @@ struct yetty_ycore_float_result yetty_ygui_slider_get_value(const struct yetty_y
     return YETTY_OK(yetty_ycore_float, d->value);
 }
 
-#include "slider.gen.c"
+#include "yetty/gen/impl/ygui/widgets/slider.c"

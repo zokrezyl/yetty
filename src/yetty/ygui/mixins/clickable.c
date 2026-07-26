@@ -164,4 +164,4 @@ struct yetty_ycore_void_result yetty_ygui_clickable_press_pos(const struct yetty
     return YETTY_OK_VOID();
 }
 
-#include "clickable.gen.c"
+#include "yetty/gen/impl/ygui/mixins/clickable.c"

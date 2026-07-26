@@ -47,4 +47,4 @@ struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_yclass_obje
 #endif
 }
 
-#include "ypdf.gen.c"
+#include "yetty/gen/impl/ygui/widgets/ypdf.c"

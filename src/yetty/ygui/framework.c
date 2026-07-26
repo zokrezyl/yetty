@@ -2123,4 +2123,4 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_yclass_obj
 /* Codegen-emitted class accessor (yetty_ygui_framework_class_get /
  * _from / _to), the generated create/destroy, and the expose'd public stubs.
  * Appended at the foot like every other yclass module. */
-#include "framework.gen.c"
+#include "yetty/gen/impl/ygui/framework.c"

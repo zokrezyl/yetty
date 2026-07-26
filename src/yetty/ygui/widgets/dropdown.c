@@ -295,4 +295,4 @@ struct yetty_ycore_void_result yetty_ygui_dropdown_set_menu(struct yetty_yclass_
     return YETTY_OK_VOID();
 }
 
-#include "dropdown.gen.c"
+#include "yetty/gen/impl/ygui/widgets/dropdown.c"
