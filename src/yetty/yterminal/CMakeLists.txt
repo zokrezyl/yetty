@@ -1,3 +1,12 @@
+# yterminal object API (role-split codegen): the terminal is the yclass
+# class `yterminal:terminal` — the session-root object a connecting tool
+# receives, with the object-returning figure_root_container navigation slot.
+add_library(yetty_api_yterminal STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/yterminal/terminal.c
+)
+target_include_directories(yetty_api_yterminal PUBLIC ${YETTY_ROOT}/include)
+target_link_libraries(yetty_api_yterminal PUBLIC yetty_ycore yetty_yclass)
+
 # yterminal — the coordination layer. Owns the PTY, the wire statemachine,
 # mints the figures (the yvterm content layer, the root container of figures),
 # and sets up wire-statemachine dispatch. The pane background fill layer lives
@@ -18,6 +27,7 @@ target_include_directories(yetty_yterminal PUBLIC
 target_include_directories(yetty_yterminal PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yterminal
+    yetty_api_yterminal
     # The text-grid figure the coordinator drives. PUBLIC so consumers (yui)
     # see yvterm's headers/symbols transitively.
     yetty_yvterm

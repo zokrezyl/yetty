@@ -55,12 +55,14 @@ target_include_directories(yetty_yrdawn PUBLIC
 
 target_link_libraries(yetty_yrdawn
     PUBLIC
+        yetty_api_yrdawn
         yetty_ycore
         yetty_yface
-        # Figure-tree emit path: the client attaches to the host root
-        # container over the yclass RPC transport (yetty_yfigure_producer_*)
-        # and drives create/delete/body through the typed container stubs.
+        # Figure-tree emit path: the client connects to the host, navigates
+        # to the root container (yetty_api_yterminal), and drives
+        # create/delete/body through the typed container stubs.
         yetty_yfigure
+        yetty_api_yterminal
         # Cross-platform sleep + non-blocking read used by the client
         # pump. yetty_yplatform_core is per-OS so we don't drag POSIX
         # (poll(2), nanosleep) into the Windows build.
@@ -93,8 +95,7 @@ if(NOT EMSCRIPTEN)
     add_library(yetty_yrdawn_server STATIC
         figure.c
         session.c
-        rpc.gen.c
-        ${_yrdawn_server_dispatch}
+            ${_yrdawn_server_dispatch}
     )
 
     target_include_directories(yetty_yrdawn_server BEFORE PUBLIC
@@ -129,3 +130,20 @@ if(NOT EMSCRIPTEN)
         )
     endif()
 endif()
+
+# Object-API library (role-split codegen layout): the typed stubs alone,
+# with no strong references to the implementation, accessors, skels or
+# registration. Pure wire consumers link THIS; the impl lib links it too
+# (skels re-enter the public stubs). Header: <yetty/api/yrdawn/*.h>.
+add_library(yetty_api_yrdawn STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/yrdawn/figure.c
+)
+
+target_include_directories(yetty_api_yrdawn PUBLIC
+    ${YETTY_ROOT}/include
+)
+
+target_link_libraries(yetty_api_yrdawn PUBLIC
+    yetty_ycore
+    yetty_yclass
+)

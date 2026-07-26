@@ -28,7 +28,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/ms-font.h>
 #include <yetty/yfont/ms-msdf-font.h>
@@ -43,7 +43,7 @@
 #include <yetty/yterminal/terminal.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yfont/shader-glyph.h> /* shader-glyph codepoint table lookup */
-#include <yetty/yvterm/grid.h>
+#include "yetty/gen/impl/yvterm/grid.h"
 #include <yetty/yvterm/shader-glyph-pua.h> /* PUA-B codepoint helpers */
 #include <yetty/ywire/wire-statemachine.h>
 
@@ -2806,4 +2806,4 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_mouse(struct yetty_yclass_
     return YETTY_OK_VOID();
 }
 
-#include "vterm.gen.c"
+#include "yetty/gen/impl/yvterm/vterm.c"

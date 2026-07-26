@@ -1,0 +1,297 @@
+methods:
+  - slot: constructor
+    domain: ydummy
+    owning_class: canvas
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* constructor: creation-time defaults. Every sanctioned creation path must
+ * run this exactly once (the creation-contract pilot assertion). */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: set_shader
+    domain: ydummy
+    owning_class: canvas
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: wgsl
+        type: struct yetty_ycore_buffer
+    doc: "/* set_shader: replace the user fragment WGSL. The buffer carries the raw
+ * text of `fn ydummy_fragment(uv: vec2f, time: f32) -> vec4f`; an empty
+ * buffer reverts to the renderer's built-in default. Wire shape: length-
+ * prefixed byte payload (`struct yetty_ycore_buffer` by value). */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: set_rect
+    domain: ydummy
+    owning_class: canvas
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: min_x
+        type: float
+      - name: min_y
+        type: float
+      - name: max_x
+        type: float
+      - name: max_y
+        type: float
+    doc: "/* set_rect: placement in target pixels. Zero-area → cover the target. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: set_time
+    domain: ydummy
+    owning_class: canvas
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: seconds
+        type: float
+    doc: "/* set_time: advance the animation clock the fragment sees. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: destroy
+    domain: ydummy
+    owning_class: canvas
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* destroy: release the owned WGSL copy and the object. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+classes:
+  - name: canvas
+    domain: ydummy
+    accessor: yetty_ydummy_canvas_class_get
+    type: regular
+    source_file: src/yetty/ydummy/canvas.c
+    parent: null
+    mixins: []
+    data: struct yetty_ydummy_canvas
+    data_fields:
+      - name: fragment_wgsl
+        type: "char *"
+        get: false
+        set: false
+      - name: fragment_wgsl_len
+        type: size_t
+        get: false
+        set: false
+      - name: shader_generation
+        type: uint32_t
+        get: false
+        set: false
+      - name: rect
+        type: struct yetty_ycore_rectangle
+        get: false
+        set: false
+      - name: time_seconds
+        type: float
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: ydummy
+        impl: canvas_constructor
+      - slot: set_shader
+        slot_domain: ydummy
+        impl: canvas_set_shader
+      - slot: set_rect
+        slot_domain: ydummy
+        impl: canvas_set_rect
+      - slot: set_time
+        slot_domain: ydummy
+        impl: canvas_set_time
+      - slot: destroy
+        slot_domain: ydummy
+        impl: canvas_destroy
+    doc: null
+exposed:
+  - source_file: src/yetty/ydummy/canvas.c
+    name: yetty_ydummy_canvas_shader_text
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Current user fragment WGSL text, or NULL for \"use the built-in default\". */"
+  - source_file: src/yetty/ydummy/canvas.c
+    name: yetty_ydummy_canvas_shader_length
+    return_type: struct yetty_ycore_size_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Byte length of the current user fragment WGSL (0 when default). */"
+  - source_file: src/yetty/ydummy/canvas.c
+    name: yetty_ydummy_canvas_shader_generation
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Monotonic shader generation — bumped by every set_shader. A renderer
+ * rebuilds its pipeline when this differs from the generation it last
+ * compiled. */"
+  - source_file: src/yetty/ydummy/canvas.c
+    name: yetty_ydummy_canvas_rect
+    return_type: struct yetty_ycore_rectangle_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Placement rect in target pixels (zero-area → cover the whole target). */"
+  - source_file: src/yetty/ydummy/canvas.c
+    name: yetty_ydummy_canvas_time
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Animation clock last stored by set_time. */"
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_buffer
+    kind: struct
+    fields:
+      - name: data
+        type: "uint8_t *"
+      - name: capacity
+        type: size_t
+      - name: size
+        type: size_t
+  - name: yetty_ycore_const_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const char *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_float_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: float
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_pixel_coord
+    kind: struct
+    fields:
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - name: yetty_ycore_rectangle
+    kind: struct
+    fields:
+      - name: min
+        type: struct yetty_ycore_pixel_coord
+      - name: max
+        type: struct yetty_ycore_pixel_coord
+  - name: yetty_ycore_rectangle_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: struct yetty_ycore_rectangle
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_size_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: size_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_uint32_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: uint32_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+local_types:
+  yetty_ydummy_canvas: src/yetty/ydummy/canvas.c
+  yetty_ydummy_canvas_ptr_result: src/yetty/ydummy/canvas.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ydummy/canvas.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ydummy/canvas.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ydummy/canvas.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ydummy/canvas.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ydummy/canvas.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

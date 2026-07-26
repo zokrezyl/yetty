@@ -13,7 +13,7 @@
  */
 
 #include <yetty/yplatform/pty.h>
-#include <yetty/yvterm/grid.h>
+#include <yetty/api/yvterm/grid.h>
 #include <yetty/ywire/wire-statemachine.h>
 
 #include "ytest.h"

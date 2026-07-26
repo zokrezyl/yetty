@@ -14,7 +14,6 @@
 
 add_library(yetty_yshadertoy STATIC
     figure.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_yshadertoy PUBLIC
@@ -24,6 +23,7 @@ target_include_directories(yetty_yshadertoy PUBLIC
 target_include_directories(yetty_yshadertoy PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yshadertoy PUBLIC
+    yetty_api_yshadertoy
     yetty_ycore
     yetty_yclass
     yetty_yfigure
@@ -88,4 +88,21 @@ target_link_libraries(yetty_yshadertoy_prim PUBLIC
     yetty_yevent
     yetty_yplatform_core
     webgpu
+)
+
+# Object-API library (role-split codegen layout): the typed stubs alone,
+# with no strong references to the implementation, accessors, skels or
+# registration. Pure wire consumers link THIS; the impl lib links it too
+# (skels re-enter the public stubs). Header: <yetty/api/yshadertoy/*.h>.
+add_library(yetty_api_yshadertoy STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/yshadertoy/figure.c
+)
+
+target_include_directories(yetty_api_yshadertoy PUBLIC
+    ${YETTY_ROOT}/include
+)
+
+target_link_libraries(yetty_api_yshadertoy PUBLIC
+    yetty_ycore
+    yetty_yclass
 )

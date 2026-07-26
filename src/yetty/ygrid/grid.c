@@ -36,9 +36,8 @@
 #include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ywire/wire-statemachine.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/ysdf/default-registry.h>
 #include <yetty/ysdf/handler.h>
 #include <yetty/yfont/font.h>
@@ -3555,4 +3554,4 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_apply_scroll_anchor_impl(
     return yetty_yfigure_figure_dirty_set(obj, 1);
 }
 
-#include "grid.gen.c"
+#include "yetty/gen/impl/ygrid/grid.c"

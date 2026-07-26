@@ -38,9 +38,10 @@
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
-#include <yetty/yfigure/producer.h>
+#include <yetty/api/yfigure/figure.h>
+#include <yetty/api/yfigure/container.h>
+#include <yetty/api/yterminal/terminal.h>
+#include <yetty/yclass/rpc.h>
 #include <yetty/ycircuit/circuit.h>
 #include <yetty/ymusic/music.h>
 #include <yetty/yfont/msdf-font.h>
@@ -74,7 +75,7 @@
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
-#include <yetty/yshadertoy/figure.h>
+#include <yetty/api/yshadertoy/figure.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yapp/app.h>
@@ -3111,8 +3112,8 @@ struct client_state {
      * terminal text beneath us; the caption gives the in-terminal app a
      * titlebar. The producer session owns the RPC transport; the container is a
      * borrowed proxy obtained from it. */
-    struct yetty_yfigure_producer_session *chrome_session;
-    struct yetty_yclass_object *chrome_container;
+    struct yetty_yclass_object *chrome_root;      /* terminal (session root) */
+    struct yetty_yclass_object *chrome_container;  /* navigated container proxy */
     struct yetty_ychrome_host *chrome_host;
     int chrome_width;
     int chrome_height;
@@ -3159,8 +3160,8 @@ static struct yetty_ycore_void_result client_chrome_sync(struct client_state *cs
     }
     if (!cs->chrome_host) {
         struct yetty_ychrome_host_ptr_result host_result = yetty_ychrome_host_create_wire(
-            cs->chrome_container, cs->chrome_session,
-            /*window_chrome=*/NULL, width, height, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
+            cs->chrome_container, /*window_chrome=*/NULL, width, height, 34.0f, 8.0f,
+            YETTY_YCHROME_FLAG_ALL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, host_result, "client_chrome_sync: create wire host");
         cs->chrome_host = host_result.value;
         cs->chrome_width = (int)width;
@@ -3317,7 +3318,8 @@ static void client_input_sink(void *userdata, int wire_code, const uint8_t *args
         struct yetty_ycore_void_result chrome_sync_result =
             client_chrome_sync(app->client, msg->width, msg->height);
         if (YETTY_IS_ERR(chrome_sync_result)) {
-            ywarn("ygreeter client: chrome sync (resize) failed: %s", chrome_sync_result.error.msg);
+            yetty_ycore_error_print(stderr, "ygreeter client: chrome sync (resize) failed",
+                                    chrome_sync_result.error);
             yetty_ycore_error_destroy(chrome_sync_result.error);
         }
 #endif
@@ -3556,35 +3558,44 @@ static int run_client_mode(void)
      * the fd over below. The chrome host itself is created lazily once we know
      * the pane pixel size (client_chrome_sync, driven from the resize path). */
     {
-        struct yetty_ywire_channel *rpc_channel =
-            yetty_ywire_connection_channel(cs.conn, YETTY_YWIRE_CHANNEL_RPC);
-        struct yetty_yfigure_producer_session_ptr_result session_result;
-        struct yetty_yclass_transport_ptr_result rpc_transport =
-            yetty_ywire_channel_transport(rpc_channel);
-        if (YETTY_IS_OK(rpc_transport)) {
-            session_result = yetty_yfigure_producer_attach_transport(rpc_transport.value);
-        } else {
-            session_result = YETTY_ERR(yetty_yfigure_producer_session_ptr,
-                                       "ygreeter client: rpc channel transport", rpc_transport);
-        }
-        if (YETTY_IS_OK(session_result)) {
-            cs.chrome_session = session_result.value;
-            cs.chrome_container = yetty_yfigure_producer_session_container(cs.chrome_session);
-            /* Drive the ygui widget tree into the SAME host root container over
-             * the SAME session as the chrome — one attach, one stdin reader.
-             * Without this the client framework has no container and
-             * framework_emit fails with "no container", so the greeter's
-             * widgets never render inside yetty. */
-            struct yetty_ycore_void_result set_container_result =
-                yetty_ygui_framework_set_container_obj(app.engine, cs.chrome_container);
-            if (YETTY_IS_ERR(set_container_result)) {
-                yetty_ycore_error_print(stderr, "ygreeter client: set_container_obj",
-                                        set_container_result.error);
-                yetty_ycore_error_destroy(set_container_result.error);
+        /* Open our OWN dynamic RPC channel on the connection (the SSH model)
+         * — NOT the shared well-known lane — so multiple in-pane clients on
+         * one PTY never tear each other's frames. connect_channel returns the
+         * session root (the terminal); navigate to its figure container. */
+        struct yetty_yclass_object_ptr_result terminal_result =
+            yetty_yclass_rpc_connect_channel(cs.conn);
+        if (YETTY_IS_OK(terminal_result)) {
+            cs.chrome_root = terminal_result.value;
+            struct yetty_yclass_object_ptr_result container_result =
+                yetty_yterminal_figure_root_container(cs.chrome_root);
+            if (YETTY_IS_OK(container_result)) {
+                cs.chrome_container = container_result.value;
+                /* Prime the container's slots now (attach window, pipeline
+                 * empty): steady-state pipelined mutations never mid-stream
+                 * RESOLVE_SLOT (which async mode forbids). */
+                struct yetty_ycore_void_result prime_result =
+                    yetty_yclass_rpc_session_translate_class(cs.chrome_root->session,
+                                                             "yetty_yfigure_container");
+                if (YETTY_IS_ERR(prime_result)) {
+                    yetty_ycore_error_destroy(prime_result.error);
+                }
+                /* Drive the ygui widget tree into the SAME host container over
+                 * the SAME session as the chrome — one channel, one reader. */
+                struct yetty_ycore_void_result set_container_result =
+                    yetty_ygui_framework_set_container_obj(app.engine, cs.chrome_container);
+                if (YETTY_IS_ERR(set_container_result)) {
+                    yetty_ycore_error_print(stderr, "ygreeter client: set_container_obj",
+                                            set_container_result.error);
+                    yetty_ycore_error_destroy(set_container_result.error);
+                }
+            } else {
+                ywarn("ygreeter client: figure_root_container failed: %s",
+                      container_result.error.msg);
+                yetty_ycore_error_destroy(container_result.error);
             }
         } else {
-            ywarn("ygreeter client: chrome attach failed: %s", session_result.error.msg);
-            yetty_ycore_error_destroy(session_result.error);
+            ywarn("ygreeter client: connect_channel failed: %s", terminal_result.error.msg);
+            yetty_ycore_error_destroy(terminal_result.error);
         }
     }
 #endif
@@ -3676,7 +3687,7 @@ static int run_client_mode(void)
             yetty_ycore_void_chain(teardown_result, yetty_ychrome_host_destroy(cs.chrome_host));
         cs.chrome_host = NULL;
     }
-    /* Detaching cs.chrome_session is DEFERRED to the very end of teardown: the
+    /* Disconnecting cs.chrome_root is DEFERRED to the very end of teardown: the
      * ygui framework was wired to this same session's root-container proxy
      * (set_container_obj), so framework_clear / framework_destroy below still
      * use it. Detaching here would free the proxy out from under them, skipping
@@ -3737,11 +3748,15 @@ static int run_client_mode(void)
      * container proxy and destroys the channel-backed transport adapter. Must
      * be the LAST use of the session, and must precede connection_destroy
      * (the adapter borrows the rpc channel). */
-    if (cs.chrome_session) {
-        teardown_result = yetty_ycore_void_chain(teardown_result,
-                                                 yetty_yfigure_producer_detach(cs.chrome_session));
-        cs.chrome_session = NULL;
+    if (cs.chrome_root) {
+        /* The container proxy is a plain calloc'd carrier — free it, then
+         * disconnect (session_destroy CLOSEs our dynamic channel; the
+         * connection stays ours to destroy after). */
+        free(cs.chrome_container);
         cs.chrome_container = NULL;
+        teardown_result = yetty_ycore_void_chain(teardown_result,
+                                                 yetty_yclass_rpc_disconnect(cs.chrome_root));
+        cs.chrome_root = NULL;
     }
 #endif
     /* The figure clears above were queued through the non-blocking writer —

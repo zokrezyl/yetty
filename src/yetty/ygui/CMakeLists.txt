@@ -111,6 +111,7 @@ target_link_libraries(yetty_ygui PUBLIC
     yetty_ydraw_core
     yetty_yface
     yetty_yfigure
+    yetty_api_yterminal
     yetty_yplatform_core
     yetty_ysdf
     yetty_yplot_core

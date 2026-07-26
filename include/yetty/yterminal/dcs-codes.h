@@ -53,9 +53,12 @@
  * client→server envelopes carry yrpc request frames, server→client
  * envelopes carry yrpc response frames. Each end of the PTY knows which
  * direction its transport operates in, so no separate REQ/RESP codes are
- * needed.
+ * needed. The value is OWNED by the yclass protocol itself
+ * (<yetty/yclass/transport-dcs.h>); this registry entry aliases it so
+ * the code stays visible in the one place that catalogs every DCS code.
  */
-#define YETTY_DCS_YCLASS_RPC 800000
+#include <yetty/yclass/transport-dcs.h>
+#define YETTY_DCS_YCLASS_RPC YETTY_YCLASS_RPC_DCS_CODE
 
 /*
  * ywire connection-layer channel messages (SSH connection-layer analog).

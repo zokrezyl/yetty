@@ -21,7 +21,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yfigure/figure.h>
+#include <yetty/api/yfigure/figure.h>
 
 #ifdef __cplusplus
 extern "C" {

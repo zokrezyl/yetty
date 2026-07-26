@@ -29,8 +29,10 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/yfigure/container.h>
-#include <yetty/yfigure/producer.h>
+#include <yetty/api/yfigure/container.h>
+#include <yetty/api/yterminal/terminal.h>
+#include <yetty/yclass/class.h>
+#include <yetty/yclass/rpc.h>
 #include <yetty/yfigure/registry.h>
 
 #include <float.h>
@@ -95,13 +97,13 @@ struct ymgui_impl_state {
     int in_fd;
     struct yetty_yface *yface_in; /* stream-scanner for incoming events */
 
-    /* yclass-RPC producer session driving the host's root figure container.
-     * The figure-tree mutations (create / set-rect / delete / clear-all) and
-     * the per-figure body uploads (atlas, frame) travel as typed one-way RPC
-     * calls on this session. Attached once during Init(), before the input
-     * poll path flips in_fd to non-blocking. */
-    struct yetty_yfigure_producer_session *producer_session;
-    struct yetty_yclass_object *container; /* root container proxy (borrowed) */
+    /* yclass-RPC session root driving the host's root figure container. The
+     * figure-tree mutations (create / set-rect / delete / clear-all) and the
+     * per-figure body uploads (atlas, frame) travel as typed RPC calls on its
+     * session. Attached once during Init(), before the input poll path flips
+     * in_fd to non-blocking. Its session owns the connection stack. */
+    struct yetty_yclass_object *rpc_root;
+    struct yetty_yclass_object *container; /* navigated container proxy (owned) */
 
     int raw_mode_active;
 #ifndef _WIN32
@@ -126,7 +128,7 @@ static struct ymgui_impl_state g_state = {
     YMGUI_STDOUT_FD,
     YMGUI_STDIN_FD,
     nullptr, /* yface_in */
-    nullptr, /* producer_session */
+    nullptr, /* rpc_root */
     nullptr, /* container */
     0,
 #ifndef _WIN32
@@ -192,23 +194,39 @@ static bool ensure_attached(void)
     if (g_state.container) {
         return true;
     }
-    struct yetty_yfigure_producer_session_ptr_result session_result =
-        yetty_yfigure_producer_attach(g_state.in_fd, g_state.out_fd, /*compressed=*/1);
-    if (YETTY_IS_ERR(session_result)) {
-        yetty_ycore_error_destroy(session_result.error);
+    struct yetty_yclass_object_ptr_result root_result =
+        yetty_yclass_rpc_connect_fds(g_state.in_fd, g_state.out_fd);
+    if (YETTY_IS_ERR(root_result)) {
+        yetty_ycore_error_destroy(root_result.error);
         return false;
     }
-    g_state.producer_session = session_result.value;
-    g_state.container = yetty_yfigure_producer_session_container(g_state.producer_session);
+    g_state.rpc_root = root_result.value;
+    struct yetty_yclass_object_ptr_result container_result =
+        yetty_yterminal_figure_root_container(g_state.rpc_root);
+    if (YETTY_IS_ERR(container_result)) {
+        yetty_ycore_error_destroy(container_result.error);
+        discard_error(yetty_yclass_rpc_disconnect(g_state.rpc_root));
+        g_state.rpc_root = nullptr;
+        return false;
+    }
+    g_state.container = container_result.value;
+    /* Prime the container's slots while the pipeline is empty (steady-state
+     * pipelined mutations must never mid-stream RESOLVE_SLOT). */
+    struct yetty_ycore_void_result prime_result =
+        yetty_yclass_rpc_session_translate_class(g_state.rpc_root->session,
+                                                 "yetty_yfigure_container");
+    if (YETTY_IS_ERR(prime_result)) {
+        yetty_ycore_error_destroy(prime_result.error);
+    }
     return g_state.container != nullptr;
 }
 
 /*===========================================================================
  * Figure-tree record helpers.
  *
- * Each call drives the host's root figure container through a typed one-way
- * RPC stub (yetty_yfigure_create_child / _set_child_rect / _delete_child /
- * _apply_child_body) on the producer session attached during Init().
+ * Each call drives the host's root figure container through a typed RPC stub
+ * (yetty_yfigure_create_child / _set_child_rect / _delete_child /
+ * _apply_child_body) on the session attached during Init().
  *=========================================================================*/
 
 /* CREATE_CHILD with kind=YMGUI and no init payload, as a typed one-way RPC
@@ -392,8 +410,8 @@ void yetty_ymgui_ImGui_ImplYetty_SetInputFd(int fd)
 bool yetty_ymgui_ImGui_ImplYetty_Init(void)
 {
     /* yface instance for the incoming-event decode pipeline. Outgoing figure
-     * traffic now rides typed one-way RPC stubs on the producer session, not
-     * a hand-built OSC envelope, so no encode-side yface is needed. */
+     * traffic now rides typed RPC stubs on the attached session, not a
+     * hand-built OSC envelope, so no encode-side yface is needed. */
     {
         struct yetty_yface_ptr_result yr = yetty_yface_create();
         if (!yr.ok) {
@@ -464,13 +482,14 @@ void yetty_ymgui_ImGui_ImplYetty_Shutdown(void)
     }
     g_state.figures.clear();
 
-    /* Tear down the producer session (destroys the owned RPC transport and
-     * the root container proxy). NULL-safe; detach absorbs any teardown
-     * error since Shutdown has nowhere to propagate. */
-    if (g_state.producer_session) {
-        discard_error(yetty_yfigure_producer_detach(g_state.producer_session));
-        g_state.producer_session = nullptr;
-        g_state.container = nullptr;
+    /* Disconnect the session (CLOSEs our channel, tears down connection + pty)
+     * and free the navigated container proxy. NULL-safe; disconnect absorbs
+     * any teardown error since Shutdown has nowhere to propagate. */
+    free(g_state.container);
+    g_state.container = nullptr;
+    if (g_state.rpc_root) {
+        discard_error(yetty_yclass_rpc_disconnect(g_state.rpc_root));
+        g_state.rpc_root = nullptr;
     }
 
     if (g_state.yface_in) {

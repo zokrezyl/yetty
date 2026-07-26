@@ -19,7 +19,7 @@
  * intentionally not repeated here.
  */
 
-#include <yetty/yvterm/grid.h>
+#include <yetty/api/yvterm/grid.h>
 
 #include "ytest.h"
 

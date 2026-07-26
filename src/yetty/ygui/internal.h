@@ -83,7 +83,6 @@ struct yetty_ygui_event_subscription {
 YETTY_YRESULT_DECLARE(yetty_ygui_event_subscription_ptr, struct yetty_ygui_event_subscription *);
 
 struct yetty_ygui_framework;
-struct yetty_yfigure_producer_session;
 
 /* Framework-internal mutators of the widget base data slice (struct
  * yetty_ygui_widget, defined in widget.c). The widget tree links and the

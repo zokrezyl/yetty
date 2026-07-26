@@ -13,7 +13,7 @@
  *     yclass-RPC stubs (yetty_yfigure_create_child / set_child_z /
  *     delete_child). Each stub is one-way fire-and-forget and flushes its
  *     request synchronously, so the chrome renders in the host's pane with
- *     no per-app boilerplate. The owner attaches the producer session and
+ *     no per-app boilerplate. The owner attaches the session and
  *     hands this host the container proxy + session.
  *
  * The backdrop is an opaque BRAND_BG surface beneath all app content. In
@@ -25,9 +25,8 @@
 
 #include <yetty/ychrome/chrome.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yfigure/container.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/producer.h>
+#include <yetty/api/yfigure/container.h>
+#include <yetty/api/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>
 #ifdef YETTY_YCHROME_HAS_LOCAL
 /* ygrid is GPU-backed (composites through a pipeline). Only the LOCAL sink —
@@ -73,11 +72,10 @@ struct yetty_ychrome_host {
 #endif
 
     /* WIRE sink — figures driven on the host's root container proxy via the
-     * typed yclass-RPC stubs (NULL in local mode). The owner attaches the
-     * producer session and passes both in; both are borrowed (the owner keeps
-     * ownership and detaches the session after this host is destroyed). */
-    struct yetty_yclass_object *container;                   /* root container proxy */
-    struct yetty_yfigure_producer_session *producer_session; /* owning session */
+     * typed yclass-RPC stubs (NULL in local mode). The owner navigates to the
+     * container proxy and passes it in; it is borrowed (the owner keeps
+     * ownership and disconnects the session after this host is destroyed). */
+    struct yetty_yclass_object *container; /* root container proxy */
 
     float width;
     float height;
@@ -369,9 +367,8 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
 #endif /* YETTY_YCHROME_HAS_LOCAL */
 
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
-    struct yetty_yclass_object *container, struct yetty_yfigure_producer_session *producer_session,
-    struct yetty_yclass_object *window_chrome, float width, float height, float caption_height,
-    float edge_size, unsigned int flags)
+    struct yetty_yclass_object *container, struct yetty_yclass_object *window_chrome, float width,
+    float height, float caption_height, float edge_size, unsigned int flags)
 {
     if (!container) {
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host_create_wire: container required");
@@ -381,7 +378,6 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
     YETTY_RETURN_IF_ERR(yetty_ychrome_host_ptr, alloc_result, "ychrome_host_create_wire");
     struct yetty_ychrome_host *host = alloc_result.value;
     host->container = container;
-    host->producer_session = producer_session;
 
     struct yetty_ycore_void_result backdrop_result = host_wire_backdrop_emit(host);
     if (YETTY_IS_ERR(backdrop_result)) {
@@ -520,12 +516,12 @@ struct yetty_ycore_void_result yetty_ychrome_host_destroy(struct yetty_ychrome_h
     struct yetty_ycore_void_result result = YETTY_OK_VOID();
     /* Figure removal is NOT this destroy's job:
      *  - WIRE: the owner removes our children by calling yetty_ychrome_host_clear
-     *    (typed delete_child stubs, each a synchronous one-way write) BEFORE
-     *    this destroy, then detaches the producer session it owns afterwards.
+     *    (typed delete_child stubs, each a synchronous request) BEFORE this
+     *    destroy, then disconnects the session it owns afterwards.
      *  - LOCAL: the pinned figures are owned by the container (added via
      *    add_child) and destroyed with it.
      * Either way, destroy only frees what is ours: the chrome engine + host.
-     * The container proxy + session are borrowed; the owner detaches them. */
+     * The container proxy is borrowed; the owner disconnects the session. */
     if (host->chrome) {
         result = yetty_ycore_void_chain(result, yetty_ychrome_destroy(host->chrome));
     }

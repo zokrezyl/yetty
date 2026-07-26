@@ -33,8 +33,8 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/yclass/transport-fd.h>
 #include <yetty/ycore/result.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
+#include "yetty/gen/impl/yfigure/figure.h"
+#include "yetty/gen/impl/yfigure/container.h"
 #include <yetty/yfigure/registry.h>
 
 static int g_failures = 0;

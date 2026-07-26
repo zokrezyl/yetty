@@ -19,7 +19,8 @@ target_include_directories(yetty_yview PRIVATE ${YETTY_ROOT}/src)
 target_link_libraries(yetty_yview PUBLIC
     yetty_ycore
     yetty_yclass
-    yetty_yfigure      # typed container stubs + producer_attach (yclass-RPC emit path)
+    yetty_yfigure       # typed container stubs (yclass-RPC emit path)
+    yetty_api_yterminal # figure_root_container navigation from the session root
     yetty_ydraw_core
     yetty_yplot_core   # set_plot: render a yplot expression to a drawable list (GPU-less)
 )

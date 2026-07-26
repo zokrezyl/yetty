@@ -23,7 +23,7 @@
  * hit-test lives in yfigure now. */
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterminal/client-input.h>
-#include <yetty/yrdawn/figure.h>
+#include "yetty/gen/impl/yrdawn/figure.h"
 #include <yetty/yrdawn/wire.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-set.h>
@@ -55,12 +55,33 @@
 #include <yetty/ysixel/sixel.h>
 #endif
 #include <yetty/yterminal/terminal.h>
-#include <yetty/yvterm/vterm.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
+#include "yetty/gen/impl/yvterm/vterm.h"
+#include "yetty/gen/impl/yfigure/figure.h"
+#include "yetty/gen/impl/yfigure/container.h"
 #include <yetty/yfigure/registry.h>
+#include <yetty/yclass/class.h>
+/* The terminal is itself the yclass class `yterminal:terminal` — the object
+ * a connecting tool receives as its session root. The generated impl glue
+ * (accessor, from/to, factory, the figure_root_container skel, register) is
+ * #included at the foot of this TU; these forward decls let the create /
+ * destroy / navigation code above the include name it. terminal.c does not
+ * include its own generated api header (a downstream artifact). */
+struct yetty_yterminal_terminal_ptr_result {
+    int ok;
+    union {
+        struct yetty_yterminal_terminal *value;
+        struct yetty_ycore_error error;
+    };
+};
+struct yetty_yclass_ptr_result yetty_yterminal_terminal_class_get(void);
+struct yetty_yterminal_terminal_ptr_result yetty_yterminal_terminal_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yterminal_terminal_to(
+    struct yetty_yterminal_terminal *data);
+struct yetty_yclass_object_ptr_result yetty_yterminal_terminal_create(struct yetty_yclass_ctx *ctx);
+struct yetty_ycore_void_result yetty_yterminal_register(void);
 #include <yetty/ygrid/ygrid.h>
-#include <yetty/ygrid/grid.h>
+#include "yetty/gen/impl/ygrid/grid.h"
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
 
@@ -109,7 +130,7 @@ struct yetty_yterminal_terminal_context {
     struct yetty_platform_pty *pty;
 };
 
-struct yetty_yterminal_terminal {
+struct YETTY_ANNOTATE("class@yterminal:terminal") yetty_yterminal_terminal {
     struct yetty_yui_view view; /* MUST be first - allows cast to view */
     struct yetty_yevent_event_listener listener;
     struct yetty_yterminal_terminal_context context;
@@ -2133,19 +2154,40 @@ static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterminal_t
 
 /* Terminal creation/destruction */
 
-struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
+struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     struct yetty_ycore_grid_size grid_size, const struct yetty_context *yetty_context)
 {
     struct yetty_yterminal_terminal *terminal;
     uint32_t cols = grid_size.cols;
     uint32_t rows = grid_size.rows;
 
-    ydebug("terminal_create: cols=%u rows=%u", cols, rows);
+    ydebug("terminal_open: cols=%u rows=%u", cols, rows);
 
-    terminal = calloc(1, sizeof(struct yetty_yterminal_terminal));
-    if (!terminal) {
-        return YETTY_ERR(yetty_yterminal_terminal, "failed to allocate terminal");
+    /* Allocate the terminal AS a yclass object (yterminal:terminal) so it is
+     * the object a connecting tool receives as its session root. The struct
+     * is the class data slice; consumers keep holding the data pointer
+     * (view embedded first, unchanged), while the RPC layer reaches the
+     * object via yetty_yterminal_terminal_to(). object_alloc zero-fills the
+     * slice, same as the former calloc. */
+    struct yetty_yclass_ctx terminal_ctx = {0};
+    struct yetty_yclass_object_ptr_result object_res =
+        yetty_yterminal_terminal_create(&terminal_ctx);
+    if (YETTY_IS_ERR(object_res)) {
+        return YETTY_ERR(yetty_yterminal_terminal, "failed to allocate terminal object",
+                         object_res);
     }
+    struct yetty_yclass_object *terminal_object = object_res.value;
+    struct yetty_yterminal_terminal_ptr_result terminal_data_res =
+        yetty_yterminal_terminal_from(terminal_object);
+    if (YETTY_IS_ERR(terminal_data_res)) {
+        struct yetty_ycore_void_result free_res = yetty_yclass_object_free(terminal_object);
+        if (YETTY_IS_ERR(free_res)) {
+            yetty_ycore_error_destroy(free_res.error);
+        }
+        return YETTY_ERR(yetty_yterminal_terminal, "terminal_open: from_obj",
+                         terminal_data_res);
+    }
+    terminal = terminal_data_res.value;
 
     /* Initialize view base */
     terminal->view.ops = &terminal_view_ops;
@@ -2169,7 +2211,8 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     /* Validate event loop from context */
     if (!yetty_context->event_loop) {
         ydebug("terminal_create: no event_loop in context");
-        free(terminal);
+        struct yetty_ycore_void_result cleanup_free = yetty_yclass_object_free(terminal_object);
+        if (YETTY_IS_ERR(cleanup_free)) yetty_ycore_error_destroy(cleanup_free.error);
         return YETTY_ERR(yetty_yterminal_terminal, "no event_loop in context");
     }
     ydebug("terminal_create: using event_loop at %p",
@@ -2182,7 +2225,8 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * startup. A missing factory means yetty_context was constructed wrong. */
     struct yetty_yplatform_pty_factory *pty_factory = yetty_context->pty_factory;
     if (!pty_factory || !pty_factory->ops || !pty_factory->ops->create_pty) {
-        free(terminal);
+        struct yetty_ycore_void_result cleanup_free = yetty_yclass_object_free(terminal_object);
+        if (YETTY_IS_ERR(cleanup_free)) yetty_ycore_error_destroy(cleanup_free.error);
         return YETTY_ERR(
             yetty_yterminal_terminal,
             "terminal_create: yetty_context.pty_factory is NULL or has no create_pty op");
@@ -2624,7 +2668,11 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         reg_r = yetty_ygrid_register();
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_r, "terminal_create: ygrid_register");
         reg_r = yetty_yvterm_register();
-        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_r, "terminal_create: yterm_register");
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_r, "terminal_create: yvterm_register");
+        /* The session-root facade — its figure_root_container skel must be
+         * dispatchable for a connecting tool to navigate to the container. */
+        reg_r = yetty_yterminal_register();
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_r, "terminal_create: yterminal_register");
     }
 
     /* yclass RPC over DCS — subprocess clients (ygui, future widgets)
@@ -2653,11 +2701,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
 
     /* Host-side connection layer — the acceptor of dynamic ywire channels
      * (DCS YETTY_DCS_YWIRE_CHANNEL) opened by in-pane clients. Rides the same
-     * statemachine and the same PTY-master writer as the RPC server. With no
-     * accept callback registered every OPEN is answered with CLOSE, so a
-     * client probing for a host service gets a deterministic rejection
-     * instead of a credit-starved hang; in-terminal services claim channels
-     * via yetty_yterminal_terminal_channel_host() + set_accept_cb. */
+     * statemachine and the same PTY-master writer as the RPC server. */
     {
         struct yetty_ywire_connection_ptr_result hr = yetty_ywire_connection_attach(
             terminal->sm, terminal_dcs_emit_response, terminal, /*compressed=*/0);
@@ -2665,20 +2709,33 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
                             "terminal_create: connection_attach for YWIRE_CHANNEL");
         terminal->channel_host = hr.value;
     }
-    ydebug("terminal_create: ywire channel host registered (code=%d)", YETTY_DCS_YWIRE_CHANNEL);
+    /* Serve RPC on this connection: every dynamic channel a client opens is
+     * accepted and served as its OWN independent RPC session (the SSH model)
+     * — several clients on this one PTY no longer share/tear a single RPC
+     * lane. One call; the accept plumbing lives inside yclass. (The legacy
+     * DCS YCLASS_RPC server above stays until every client opens a dynamic
+     * channel instead — issue #676.) */
+    {
+        struct yetty_ycore_void_result sr = yetty_yclass_rpc_serve_connection(terminal->channel_host);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, sr,
+                            "terminal_create: rpc_serve_connection");
+    }
+    ydebug("terminal_create: ywire channel host + RPC serve registered (code=%d)",
+           YETTY_DCS_YWIRE_CHANNEL);
 
-    /* Designate the root container as this server's root object so remote
-     * producers (subprocess figure tools) can obtain a proxy to it via
-     * RPC_OP_GET_ROOT and drive it with the typed yclass stubs. rpc_init
-     * first so handle minting starts at 1 (handle 0 is the invalid
-     * sentinel). */
+    /* Publish THIS TERMINAL as the session root: a connecting tool receives
+     * the terminal object (yterminal:terminal) and navigates to the figure
+     * container via yetty_yterminal_figure_root_container — so each
+     * terminal's session reaches ITS OWN container instead of a process-
+     * global that the last pane would overwrite. rpc_init first so handle
+     * minting starts at 1 (0 is the invalid sentinel). */
     {
         struct yetty_ycore_void_result rpc_init_r = yetty_yclass_rpc_init();
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rpc_init_r, "terminal_create: rpc_init");
-        struct yetty_yclass_handle_result root_r =
-            yetty_yclass_rpc_set_root(terminal->root_container_obj);
+
+        struct yetty_yclass_handle_result root_r = yetty_yclass_rpc_set_root(terminal_object);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, root_r, "terminal_create: rpc_set_root");
-        ydebug("terminal_create: root container registered as RPC root handle=%llu",
+        ydebug("terminal_create: yterminal:terminal root published handle=%llu",
                (unsigned long long)root_r.value);
     }
 
@@ -2818,8 +2875,28 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
     yetty_yface_destroy(terminal->emit_yface);
     free(terminal->pty_read_buf);
 
-    ydebug("terminal_destroy: freeing terminal struct");
-    free(terminal);
+    /* The terminal struct is the data slice of the yterminal:terminal yclass
+     * object — free the OBJECT (its allocation base), not the data pointer. */
+    ydebug("terminal_destroy: freeing terminal object");
+    struct yetty_yclass_object_ptr_result terminal_object_res =
+        yetty_yterminal_terminal_to(terminal);
+    if (YETTY_IS_OK(terminal_object_res)) {
+        struct yetty_ycore_void_result object_free_res =
+            yetty_yclass_object_free(terminal_object_res.value);
+        if (YETTY_IS_ERR(object_free_res)) {
+            if (!have_err) {
+                first_err = object_free_res;
+                have_err = true;
+            } else {
+                yetty_ycore_error_destroy(object_free_res.error);
+            }
+        }
+    } else if (!have_err) {
+        first_err = YETTY_ERR(yetty_ycore_void, "terminal_destroy: to_obj", terminal_object_res);
+        have_err = true;
+    } else {
+        yetty_ycore_error_destroy(terminal_object_res.error);
+    }
     ydebug("terminal_destroy: done");
 
     if (have_err) {
@@ -3855,3 +3932,29 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         return YETTY_OK(yetty_ycore_int, 0);
     }
 }
+
+/*=============================================================================
+ * yclass wire surface — the terminal as the session root object.
+ *===========================================================================*/
+
+/* figure_root_container: navigate from the terminal (the session root a
+ * connecting tool receives) to its root figure container. Object-returning
+ * wire slot — a remote tool receives a session-bound container proxy; a
+ * local caller receives the real container object. */
+YETTY_ANNOTATE("virtual@yterminal:terminal:figure_root_container")
+static struct yetty_yclass_object_ptr_result terminal_figure_root_container(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yterminal_terminal_ptr_result terminal_res =
+        yetty_yterminal_terminal_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, terminal_res,
+                        "yterminal figure_root_container: object");
+    struct yetty_yterminal_terminal *terminal = terminal_res.value;
+    if (!terminal->root_container_obj) {
+        return YETTY_ERR(yetty_yclass_object_ptr,
+                         "yterminal figure_root_container: no root container");
+    }
+    return YETTY_OK(yetty_yclass_object_ptr, terminal->root_container_obj);
+}
+
+#include "yetty/gen/impl/yterminal/terminal.c"

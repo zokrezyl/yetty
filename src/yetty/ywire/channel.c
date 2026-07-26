@@ -309,6 +309,17 @@ static struct yetty_ycore_size_result channel_transport_recv(struct yetty_yclass
     return yetty_ywire_channel_recv_blocking(adapter->channel, buf, max);
 }
 
+/* Non-blocking take of bytes the connection pump already delivered to the
+ * channel — declares this transport ASYNC-capable to the RPC session: after
+ * the attach handshake an event loop owns the fd, so the session pipelines
+ * void calls and drains completions from here instead of block-reading. */
+static struct yetty_ycore_size_result channel_transport_recv_available(
+    struct yetty_yclass_transport *base, void *buf, size_t max)
+{
+    struct ywire_channel_transport *adapter = (struct ywire_channel_transport *)base;
+    return yetty_ywire_channel_read(adapter->channel, buf, max);
+}
+
 static struct yetty_ycore_void_result channel_transport_flush(struct yetty_yclass_transport *base)
 {
     struct ywire_channel_transport *adapter = (struct ywire_channel_transport *)base;
@@ -336,6 +347,7 @@ struct yetty_yclass_transport_ptr_result yetty_ywire_channel_transport(
         .recv = channel_transport_recv,
         .destroy = channel_transport_destroy,
         .flush = channel_transport_flush,
+        .recv_available = channel_transport_recv_available,
     };
     adapter->base.ops = &ops;
     adapter->channel = channel;

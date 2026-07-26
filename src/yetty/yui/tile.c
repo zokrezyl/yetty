@@ -1092,7 +1092,7 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
             view_type = config->ops->get_string(config, "view", "terminal");
 
             if (strcmp(view_type, "terminal") == 0) {
-                term_res = yetty_yterminal_terminal_create(grid_size, yetty_ctx);
+                term_res = yetty_yterminal_terminal_open(grid_size, yetty_ctx);
                 if (YETTY_IS_ERR(term_res)) {
                     (void)yetty_yui_tile_destroy(res.value);
                     return YETTY_ERR(yetty_yui_tile_ptr,

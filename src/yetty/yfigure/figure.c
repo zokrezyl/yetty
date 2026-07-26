@@ -213,4 +213,4 @@ struct YETTY_ANNOTATE("class@yfigure:figure") yetty_yfigure_figure {
  * figure.h publishes the identical declaration for other modules. */
 YETTY_YRESULT_DECLARE(yetty_yfigure_figure_ptr, struct yetty_yfigure_figure *);
 
-#include "figure.gen.c"
+#include "yetty/gen/impl/yfigure/figure.c"

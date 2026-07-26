@@ -24,8 +24,8 @@
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
+#include <yetty/api/yfigure/figure.h>
+#include <yetty/api/yfigure/container.h>
 #include <yetty/ycircuit/circuit.h>
 #include <yetty/ymusic/music.h>
 #include <yetty/yfont/msdf-font.h>
@@ -40,8 +40,7 @@
 
 #include "embedded-assets.h"
 
-/* yfigure producer kind IDs used by the registry. Keep these aligned with
- * include/yetty/yfigure/wire.h without depending on the wire parser here. */
+/* yfigure producer kind IDs used by the registry (kind tokens). */
 #define YHELLO_YFIGURE_KIND_YPLOT 5u
 #define YHELLO_YFIGURE_KIND_YIMAGE 6u
 #define YHELLO_YFIGURE_KIND_YVIDEO 7u
@@ -58,7 +57,7 @@
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
-#include <yetty/yshadertoy/figure.h>
+#include <yetty/api/yshadertoy/figure.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yapp/app.h>

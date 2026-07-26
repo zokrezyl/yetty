@@ -15,7 +15,6 @@
 
 #include "internal.h"
 
-#include <yetty/yfigure/wire.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>

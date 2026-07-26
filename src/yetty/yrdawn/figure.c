@@ -39,9 +39,8 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yrdawn/server.h>
@@ -1199,4 +1198,4 @@ void yrdawn_arena_free(struct yrdawn_arena *a)
 }
 
 /* yclass class accessor (yetty_yrdawn_figure_class_get) + registration. */
-#include "figure.gen.c"
+#include "yetty/gen/impl/yrdawn/figure.c"

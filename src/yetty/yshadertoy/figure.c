@@ -45,9 +45,8 @@
 #include <yetty/yetty/yetty.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yrender/gpu-resource-set.h>
@@ -744,4 +743,4 @@ struct yetty_ycore_void_result yetty_yshadertoy_register_factory(
 }
 
 /* yclass class accessor (yetty_yshadertoy_figure_class_get) + registration. */
-#include "figure.gen.c"
+#include "yetty/gen/impl/yshadertoy/figure.c"

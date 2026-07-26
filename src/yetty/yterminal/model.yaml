@@ -1,0 +1,345 @@
+methods:
+  - slot: figure_root_container
+    domain: yterminal
+    owning_class: terminal
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* figure_root_container: navigate from the terminal (the session root a
+ * connecting tool receives) to its root figure container. Object-returning
+ * wire slot — a remote tool receives a session-bound container proxy; a
+ * local caller receives the real container object. */"
+    local: false
+    oneway: false
+    return_payload_type: "struct yetty_yclass_object *"
+classes:
+  - name: terminal
+    domain: yterminal
+    accessor: yetty_yterminal_terminal_class_get
+    type: regular
+    source_file: src/yetty/yterminal/terminal.c
+    parent: null
+    mixins: []
+    data: struct yetty_yterminal_terminal
+    data_fields:
+      - name: view
+        type: struct yetty_yui_view
+        get: false
+        set: false
+      - name: listener
+        type: struct yetty_yevent_event_listener
+        get: false
+        set: false
+      - name: context
+        type: struct yetty_yterminal_terminal_context
+        get: false
+        set: false
+      - name: cols
+        type: uint32_t
+        get: false
+        set: false
+      - name: rows
+        type: uint32_t
+        get: false
+        set: false
+      - name: applied_w
+        type: float
+        get: false
+        set: false
+      - name: applied_h
+        type: float
+        get: false
+        set: false
+      - name: layout_content_scale
+        type: float
+        get: false
+        set: false
+      - name: zoom_base_cell
+        type: struct yetty_ycore_pixel_size
+        get: false
+        set: false
+      - name: cell_zoom
+        type: float
+        get: false
+        set: false
+      - name: focused
+        type: int
+        get: false
+        set: false
+      - name: pty_pipe_id
+        type: yetty_yevent_pipe_id
+        get: false
+        set: false
+      - name: shutting_down
+        type: int
+        get: false
+        set: false
+      - name: sm
+        type: "struct yetty_ywire_wire_statemachine *"
+        get: false
+        set: false
+      - name: dcs_rpc_server
+        type: "struct yetty_yclass_rpc_dcs_server *"
+        get: false
+        set: false
+      - name: channel_host
+        type: "struct yetty_ywire_connection *"
+        get: false
+        set: false
+      - name: inset_handler_self
+        type: "struct yetty_yterminal_terminal *"
+        get: false
+        set: false
+      - name: content_rect_handler_self
+        type: "struct yetty_yterminal_terminal *"
+        get: false
+        set: false
+      - name: content_spec_x
+        type: float
+        get: false
+        set: false
+      - name: content_spec_y
+        type: float
+        get: false
+        set: false
+      - name: content_spec_w
+        type: float
+        get: false
+        set: false
+      - name: content_spec_h
+        type: float
+        get: false
+        set: false
+      - name: ydraw_handler_self
+        type: "struct yetty_yterminal_terminal *"
+        get: false
+        set: false
+      - name: mime_handler_self
+        type: "struct yetty_yterminal_terminal *"
+        get: false
+        set: false
+      - name: effect_handler_self
+        type: "struct yetty_yterminal_terminal *[3]"
+        get: false
+        set: false
+      - name: pty_read_buf
+        type: "char *"
+        get: false
+        set: false
+      - name: mouse_click_subscribed
+        type: int
+        get: false
+        set: false
+      - name: mouse_move_subscribed
+        type: int
+        get: false
+        set: false
+      - name: key_subscribed
+        type: int
+        get: false
+        set: false
+      - name: mouse_buttons_held
+        type: int
+        get: false
+        set: false
+      - name: emit_yface
+        type: "struct yetty_yface *"
+        get: false
+        set: false
+      - name: focused_figure_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: root_container_obj
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: figure_registry
+        type: "struct yetty_yfigure_registry *"
+        get: false
+        set: false
+      - name: grid
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: compositor_font
+        type: "struct yetty_yfont_font *"
+        get: false
+        set: false
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
+        get: false
+        set: false
+      - name: ydraw_registry
+        type: "struct yetty_ydraw_drawable_list_registry *"
+        get: false
+        set: false
+      - name: stream_targets
+        type: struct yetty_ydraw_stream_registry
+        get: false
+        set: false
+      - name: figure_args
+        type: struct yetty_ygrid_factory_args
+        get: false
+        set: false
+      - name: sel_active
+        type: int
+        get: false
+        set: false
+      - name: sel_dragging
+        type: int
+        get: false
+        set: false
+      - name: sel_anchor_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: sel_anchor_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: sel_head_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: sel_head_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: sel_last_click_sec
+        type: double
+        get: false
+        set: false
+      - name: sel_last_click_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: sel_last_click_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: sel_click_count
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: figure_root_container
+        slot_domain: yterminal
+        impl: terminal_figure_root_container
+    doc: null
+types:
+  - name: yetty_context
+    kind: struct
+    fields:
+      - name: runtime
+        type: "struct yetty_yframework *"
+      - name: pty_factory
+        type: "struct yetty_yplatform_pty_factory *"
+      - name: event_loop
+        type: "struct yetty_yevent_event_loop *"
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_pixel_size
+    kind: struct
+    fields:
+      - name: width
+        type: float
+      - name: height
+        type: float
+  - name: yetty_ydraw_stream_registry
+    kind: struct
+    fields:
+      - name: targets
+        type: "struct yetty_ydraw_composite *[16]"
+  - name: yetty_yevent_event_listener
+    kind: struct
+    fields:
+      - name: handler
+        type: yetty_ycore_event_handler
+  - name: yetty_ygrid_factory_args
+    kind: struct
+    fields:
+      - name: default_font
+        type: "struct yetty_yfont_font *"
+      - name: bold_font
+        type: "struct yetty_yfont_font *"
+      - name: italic_font
+        type: "struct yetty_yfont_font *"
+      - name: bold_italic_font
+        type: "struct yetty_yfont_font *"
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
+      - name: absolute_coords
+        type: int
+  - name: yetty_yterminal_terminal_context
+    kind: struct
+    fields:
+      - name: yetty_context
+        type: struct yetty_context
+      - name: pty
+        type: "struct yetty_platform_pty *"
+  - name: yetty_yui_rect
+    kind: struct
+    fields:
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: w
+        type: float
+      - name: h
+        type: float
+  - name: yetty_yui_view
+    kind: struct
+    fields:
+      - name: ops
+        type: "const struct yetty_yui_view_ops *"
+      - name: id
+        type: yetty_ycore_object_id
+      - name: bounds
+        type: struct yetty_yui_rect
+local_types:
+  yetty_yterminal_terminal_ptr_result: src/yetty/yterminal/terminal.c
+  yetty_yterminal_terminal_context: src/yetty/yterminal/terminal.c
+  yetty_yterminal_terminal: src/yetty/yterminal/terminal.c
+  terminal_ydraw_ingest_state: src/yetty/yterminal/terminal.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/yterminal/terminal.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/yterminal/terminal.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/yterminal/terminal.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/yterminal/terminal.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/yterminal/terminal.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

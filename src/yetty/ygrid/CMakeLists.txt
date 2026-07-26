@@ -1,6 +1,5 @@
 add_library(yetty_ygrid STATIC
     grid.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_ygrid PUBLIC
@@ -12,6 +11,7 @@ target_include_directories(yetty_ygrid PUBLIC
 target_include_directories(yetty_ygrid PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_ygrid PUBLIC
+    yetty_api_ygrid
     yetty_ycore
     yetty_yclass
     yetty_yfigure
@@ -33,3 +33,20 @@ if(NOT MSVC)
         C_STANDARD_REQUIRED ON
     )
 endif()
+
+# Object-API library (role-split codegen layout): the typed stubs alone,
+# with no strong references to the implementation, accessors, skels or
+# registration. Pure wire consumers link THIS; the impl lib links it too
+# (skels re-enter the public stubs). Header: <yetty/api/ygrid/*.h>.
+add_library(yetty_api_ygrid STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/ygrid/grid.c
+)
+
+target_include_directories(yetty_api_ygrid PUBLIC
+    ${YETTY_ROOT}/include
+)
+
+target_link_libraries(yetty_api_ygrid PUBLIC
+    yetty_ycore
+    yetty_yclass
+)

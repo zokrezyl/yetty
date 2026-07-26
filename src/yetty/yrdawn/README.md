@@ -14,8 +14,8 @@ the runnable examples live in `demo/yrdawn/`.
 ## Wire model
 
 yrdawn drives the figure tree exactly like ymgui — through the typed
-yfigure yclass stubs over yclass-RPC (`yetty_yfigure_producer_attach` on
-the client's stdin/stdout pair):
+yfigure yclass stubs over yclass-RPC (`yetty_yclass_rpc_connect_fds` on
+the client's in/out fd pair, then `yetty_yterminal_figure_root_container`):
 
 - canvas open = `yetty_yfigure_create_child` on the root container, whose
   init payload is `u32 SUB_HELLO + struct yetty_yrdawn_wire_hello

@@ -22,7 +22,7 @@
  * below, and this TU declares its own `yetty_yfigure_container_ptr_result`
  * (see after the container struct). The figure base type comes from the
  * parent header `figure.h`. */
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfigure/registry.h>
 /* Internal module header: the yfigure-domain slot stub prototypes
  * (yetty_yfigure_render / _destroy / _process_bytes / _dump_state / …)
@@ -59,6 +59,15 @@ struct YETTY_ANNOTATE("expose") yetty_yfigure_hit {
     uint32_t figure_id;
     float local_x;
     float local_y;
+};
+
+/* Wire record header — a child body buffer is a sequence of
+ * (length, id, payload[length]) records. Length-first so a pipeline
+ * linter / proxy can walk records without knowing figure semantics.
+ * Part of the object-API data contract (formerly <yetty/yfigure/wire.h>). */
+struct YETTY_ANNOTATE("expose") yetty_yfigure_header {
+    uint32_t length;
+    uint32_t id;
 };
 
 /* Result wrapper for the hit-test return. yetty_yfigure_container_hit_test
@@ -1373,10 +1382,16 @@ static struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id_
  * container_do_* helpers above.
  *-------------------------------------------------------------------------*/
 
-/* Each mutation slot is `oneway@` — the producer fires it and moves on; the
- * host applies it with no reply. Matches the legacy one-way figure wire and
- * keeps an interactive producer's input loop unblocked by RPC round-trips. */
-YETTY_ANNOTATE("oneway@yfigure:create_child")
+/* Every mutation slot is plain request/response — a remote failure comes
+ * back to the producer as the stub's Result (full cause chain), never
+ * swallowed. The legacy `oneway@` fire-and-forget here hid every server-side
+ * failure (bad payload, unknown child id, factory rejection) in the host's
+ * log while the producer streamed on against state it believed existed —
+ * the direct source of silently missing/stale figures. Round-trip latency
+ * on the local transports is microseconds; if profiling ever shows the
+ * lockstep wait hurting a remote producer, the answer is pipelined async
+ * calls with error completion on the multiplexed connection — not
+ * discarding the error channel. */
 YETTY_ANNOTATE("virtual@yfigure:container:create_child")
 static struct yetty_ycore_void_result yetty_yfigure_container_create_child_impl(
     struct yetty_yclass_object *obj, uint32_t kind_token, uint32_t id,
@@ -1385,7 +1400,6 @@ static struct yetty_ycore_void_result yetty_yfigure_container_create_child_impl(
     return container_do_create_child(obj, kind_token, id, rect, init.data, init.size);
 }
 
-YETTY_ANNOTATE("oneway@yfigure:delete_child")
 YETTY_ANNOTATE("virtual@yfigure:container:delete_child")
 static struct yetty_ycore_void_result yetty_yfigure_container_delete_child_impl(
     struct yetty_yclass_object *obj, uint32_t id)
@@ -1393,7 +1407,6 @@ static struct yetty_ycore_void_result yetty_yfigure_container_delete_child_impl(
     return container_do_delete_child(obj, id);
 }
 
-YETTY_ANNOTATE("oneway@yfigure:set_child_rect")
 YETTY_ANNOTATE("virtual@yfigure:container:set_child_rect")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_child_rect_impl(
     struct yetty_yclass_object *obj, uint32_t id, struct yetty_ycore_rectangle rect)
@@ -1401,7 +1414,6 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_child_rect_imp
     return container_do_set_child_rect(obj, id, rect);
 }
 
-YETTY_ANNOTATE("oneway@yfigure:set_rect")
 YETTY_ANNOTATE("virtual@yfigure:container:set_rect")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_rect_impl(
     struct yetty_yclass_object *obj, struct yetty_ycore_rectangle rect)
@@ -1409,7 +1421,6 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_rect_impl(
     return container_do_set_container_rect(obj, rect);
 }
 
-YETTY_ANNOTATE("oneway@yfigure:set_child_z")
 YETTY_ANNOTATE("virtual@yfigure:container:set_child_z")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_child_z_impl(
     struct yetty_yclass_object *obj, uint32_t id, int32_t z)
@@ -1417,7 +1428,6 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_child_z_impl(
     return container_do_set_child_z(obj, id, z);
 }
 
-YETTY_ANNOTATE("oneway@yfigure:set_child_hidden")
 YETTY_ANNOTATE("virtual@yfigure:container:set_child_hidden")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_child_hidden_impl(
     struct yetty_yclass_object *obj, uint32_t id, uint32_t hidden)
@@ -1425,7 +1435,6 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_child_hidden_i
     return container_do_set_child_hidden(obj, id, hidden);
 }
 
-YETTY_ANNOTATE("oneway@yfigure:set_child_scroll")
 YETTY_ANNOTATE("virtual@yfigure:container:set_child_scroll")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_child_scroll_impl(
     struct yetty_yclass_object *obj, uint32_t id, float scroll_x, float scroll_y)
@@ -1433,7 +1442,6 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_child_scroll_i
     return container_do_set_child_scroll(obj, id, scroll_x, scroll_y);
 }
 
-YETTY_ANNOTATE("oneway@yfigure:set_child_content_size")
 YETTY_ANNOTATE("virtual@yfigure:container:set_child_content_size")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_child_content_size_impl(
     struct yetty_yclass_object *obj, uint32_t id, float content_w, float content_h)
@@ -1441,7 +1449,6 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_child_content_
     return container_do_set_child_content_size(obj, id, content_w, content_h);
 }
 
-YETTY_ANNOTATE("oneway@yfigure:apply_child_body")
 YETTY_ANNOTATE("virtual@yfigure:container:apply_child_body")
 static struct yetty_ycore_void_result yetty_yfigure_container_apply_child_body_impl(
     struct yetty_yclass_object *obj, uint32_t id, struct yetty_ycore_buffer body)
@@ -1449,7 +1456,6 @@ static struct yetty_ycore_void_result yetty_yfigure_container_apply_child_body_i
     return container_do_apply_child_body(obj, id, body.data, body.size);
 }
 
-YETTY_ANNOTATE("oneway@yfigure:clear_all")
 YETTY_ANNOTATE("virtual@yfigure:container:clear_all")
 static struct yetty_ycore_void_result yetty_yfigure_container_clear_all_slot(
     struct yetty_yclass_object *obj)
@@ -1464,4 +1470,4 @@ static struct yetty_ycore_char_ptr_result container_dump_state_slot(struct yetty
     return container_dump((struct yetty_yfigure_figure *)(obj + 1), indent);
 }
 
-#include "container.gen.c"
+#include "yetty/gen/impl/yfigure/container.c"

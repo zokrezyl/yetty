@@ -20,7 +20,7 @@
  */
 
 #include <yetty/ydraw-factory/composite-factory.h>
-#include <yetty/yvterm/grid.h>
+#include <yetty/api/yvterm/grid.h>
 
 #include "ytest.h"
 

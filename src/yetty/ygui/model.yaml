@@ -252,8 +252,8 @@ classes:
         type: "struct yetty_yclass_object *"
         get: false
         set: false
-      - name: producer_session
-        type: "struct yetty_yfigure_producer_session *"
+      - name: rpc_root
+        type: "struct yetty_yclass_object *"
         get: false
         set: false
     ops:
@@ -2592,7 +2592,7 @@ exposed:
         type: "struct yetty_yclass_object *"
     doc: "/* Public teardown — symmetric to the generated yetty_ygui_framework_create.
  * Runs the destructor chain (framework_destructor frees the widget tree, owned
- * theme, and producer session) then releases the yclass object. Best-effort:
+ * theme, and attached session) then releases the yclass object. Best-effort:
  * both steps run; the first error is surfaced. */"
   - source_file: src/yetty/ygui/framework.c
     name: yetty_ygui_framework_set_container_obj
@@ -2626,16 +2626,16 @@ exposed:
         type: int
     doc: null
   - source_file: src/yetty/ygui/framework.c
-    name: yetty_ygui_framework_attach_transport
+    name: yetty_ygui_framework_attach_connection
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-      - name: transport
-        type: "struct yetty_yclass_transport *"
-    doc: "/* Attach over a caller-provided transport — the endpoint path passes a
- * yetty_ywire_channel-backed transport so the framework rides the multiplexed
- * connection's rpc channel instead of opening its own DCS transport on the fd. */"
+      - name: connection
+        type: "struct yetty_ywire_connection *"
+    doc: "/* Attach over a caller-provided multiplexed connection — the endpoint path.
+ * The framework opens its OWN dynamic RPC channel on the connection (the SSH
+ * model), so it never shares/tears a lane with other clients on the PTY. */"
   - source_file: src/yetty/ygui/framework.c
     name: yetty_ygui_framework_set_viewport
     return_type: struct yetty_ycore_void_result

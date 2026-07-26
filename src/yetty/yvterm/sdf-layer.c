@@ -47,7 +47,7 @@
 #include <yetty/yrender/types.h>
 #include <yetty/ysdf/handler.h>
 #include <yetty/ytrace/ytrace.h>
-#include <yetty/yvterm/grid.h>
+#include "yetty/gen/impl/yvterm/grid.h"
 
 #include "ligature-cells.h"
 

@@ -27,10 +27,9 @@
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
+#include <yetty/api/yfigure/figure.h>
+#include <yetty/api/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/cmds.h>

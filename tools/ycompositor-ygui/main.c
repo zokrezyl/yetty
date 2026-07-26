@@ -44,8 +44,8 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
+#include "yetty/gen/impl/yfigure/figure.h"
+#include "yetty/gen/impl/yfigure/container.h"
 #include <yetty/yfigure/registry.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yfont/font.h>
@@ -53,7 +53,7 @@
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #include <yetty/ygui/ygui.h>
-#include <yetty/ymgui/figure.h>
+#include "yetty/gen/impl/ymgui/figure.h"
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yclass/rpc.h>
 #include <yetty/yclass/rpc-dcs-server.h>

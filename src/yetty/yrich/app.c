@@ -16,8 +16,8 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yevent/event.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
+#include <yetty/api/yfigure/figure.h>
+#include <yetty/api/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfont/font.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
@@ -1582,16 +1582,12 @@ static struct yetty_ycore_void_result yrich_run_terminal(struct yetty_yrich_app 
     }
     app->ygui = fr.value;
 
-    /* Bind the framework's figure output to the connection's rpc channel. */
-    struct yetty_ywire_channel *rpc =
-        yetty_ywire_connection_channel(host.conn, YETTY_YWIRE_CHANNEL_RPC);
-    struct yetty_yclass_transport_ptr_result rpc_tr = yetty_ywire_channel_transport(rpc);
-    if (YETTY_IS_ERR(rpc_tr)) {
-        return YETTY_ERR(yetty_ycore_void, "yrich terminal: rpc transport", rpc_tr);
-    }
+    /* Bind the framework's figure output to its OWN dynamic RPC channel on the
+     * connection (the SSH model): the framework opens the channel, the host
+     * serves it via its accept callback. */
     struct yetty_ycore_void_result attach =
-        yetty_ygui_framework_attach_transport(app->ygui, rpc_tr.value);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, attach, "yrich terminal: attach transport");
+        yetty_ygui_framework_attach_connection(app->ygui, host.conn);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, attach, "yrich terminal: attach connection");
 
     /* Build the same editor tree the standalone path builds. */
     struct yetty_ycore_void_result be = build_editor(app);

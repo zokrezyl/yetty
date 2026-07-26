@@ -16,9 +16,10 @@ features are on.
 
 ## How it works
 
-`configure()` attaches to the host over `yetty_yfigure_producer_attach`
+`configure()` connects to the host over `yetty_yclass_rpc_connect_fds`
 (stdin carries terminal→tool RPC responses; the passed `fd` carries
-tool→terminal requests) and remembers the child id, figure kind, background
+tool→terminal requests), navigates to the root container with
+`yetty_yterminal_figure_root_container`, and remembers the child id, figure kind, background
 color, and rect. The content setters build the child's init byte stream
 (optionally an opaque background box under the content, sized to the full
 content extent) and ship it as the `CREATE_CHILD` init payload via the typed

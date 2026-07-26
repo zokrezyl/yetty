@@ -4,6 +4,7 @@ add_library(yetty_yclass STATIC
     class.c
     rpc.c
     rpc-dcs-server.c
+    rpc-connection-server.c
     transport-fd.c
     transport-dcs.c
     transport-pty.c

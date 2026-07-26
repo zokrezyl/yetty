@@ -1,6 +1,9 @@
 /* RPC runtime — packed-header wire, op enum, uthash translations. */
 
 #include <yetty/yclass/rpc.h>
+#include <yetty/yclass/transport-pty.h>
+#include <yetty/ywire/connection.h>
+#include <yetty/ywire/channel.h>
 
 #include <ut/uthash.h>
 #include <yetty/ycore/result.h>
@@ -146,6 +149,20 @@ struct yetty_yclass_handle_result yetty_yclass_rpc_register_object(void *obj)
     s->objects[s->object_count].ptr = obj;
     s->object_count++;
     return YETTY_OK(yetty_yclass_handle, h);
+}
+
+struct yetty_yclass_handle_result yetty_yclass_rpc_register_object_dedup(void *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_yclass_handle, "rpc_register_object_dedup: NULL object");
+    }
+    struct rpc_server_state *s = server();
+    for (size_t i = 0; i < s->object_count; ++i) {
+        if (s->objects[i].ptr == obj) {
+            return YETTY_OK(yetty_yclass_handle, s->objects[i].handle);
+        }
+    }
+    return yetty_yclass_rpc_register_object(obj);
 }
 
 struct yetty_yclass_handle_result yetty_yclass_rpc_set_root(void *obj)
@@ -489,12 +506,65 @@ struct remote_id_entry {
     UT_hash_handle hh;
 };
 
+/* Qualified-name → remote id. The name-keyed cache backs
+ * ensure_remote_id_by_name: a pure remote client resolves slots by the
+ * canonical wire name compiled into its stubs and needs NO local slot
+ * table at all (no class registration, no method_slot_get). */
+struct remote_name_entry {
+    char *qualified_name; /* owned key */
+    uint32_t remote_id;
+    UT_hash_handle hh;
+};
+
+/* One in-flight pipelined void call awaiting its response frame. The
+ * qualified name is the stub's compile-time string literal — borrowed,
+ * never freed. FIFO: the wire is one ordered stream, responses arrive in
+ * request order. */
+struct pending_call {
+    const char *qualified_name;
+    struct pending_call *next;
+};
+
 struct yetty_yclass_rpc_session {
     struct yetty_yclass_transport *transport; /* owned */
     /* Local slot → remote id. Local slots are sparse (domain id in
      * upper bits), so hash by slot rather than flat-array. */
     struct remote_id_entry *remote_ids;
-    struct translated_class *translated; /* by class name */
+    struct remote_name_entry *remote_names; /* by qualified slot name */
+    struct translated_class *translated;    /* by class name */
+
+    /* ASYNC pipelined mode — set when the transport declares
+     * recv_available (its inbound bytes arrive via an external event
+     * loop's pump; blocking recv after attach is forbidden). Void wire
+     * calls send without waiting; completions drain non-blockingly in
+     * request order and failures go to the error sink. */
+    int async_mode;
+    struct pending_call *pending_head;
+    struct pending_call *pending_tail;
+    size_t pending_count;
+    /* Response-frame reassembly (u32 len | payload, back to back). */
+    uint8_t *inbound_buf;
+    size_t inbound_len;
+    size_t inbound_cap;
+    /* Failure delivery for pipelined calls. NULL → log + destroy. The
+     * sink takes ownership of the error chain. */
+    yetty_yclass_rpc_error_sink_fn error_sink;
+    void *error_sink_userdata;
+
+    /* Root proxy minted by session_attach_root — owned by the session,
+     * freed in session_destroy (a proxy is a plain calloc'd wrapper; it
+     * does not dereference the session on free). */
+    struct yetty_yclass_object *root_proxy;
+
+    /* Connection stack owned by a zero-arg yetty_yclass_rpc_connect(): the
+     * session created the whole thing (pty transport + multiplexed
+     * connection + its own dynamic RPC channel) and tears it down on
+     * destroy. NULL when the caller supplied the transport/connection
+     * (connect_transport / connect_channel) — then only the channel (if we
+     * opened it) is ours to close. */
+    struct yetty_ywire_channel *owned_channel;
+    struct yetty_ywire_connection *owned_connection;
+    struct yetty_yclass_transport_pty *owned_pty;
 };
 
 struct yetty_yclass_rpc_session_ptr_result yetty_yclass_rpc_session_create(
@@ -508,6 +578,7 @@ struct yetty_yclass_rpc_session_ptr_result yetty_yclass_rpc_session_create(
         return YETTY_ERR(yetty_yclass_rpc_session_ptr, "session_create: calloc failed");
     }
     s->transport = transport;
+    s->async_mode = transport->ops->recv_available != NULL;
     return YETTY_OK(yetty_yclass_rpc_session_ptr, s);
 }
 
@@ -529,12 +600,54 @@ struct yetty_ycore_void_result yetty_yclass_rpc_session_destroy(struct yetty_ycl
         HASH_DEL(s->remote_ids, rcur);
         free(rcur);
     }
+    struct remote_name_entry *ncur, *ntmp;
+    HASH_ITER(hh, s->remote_names, ncur, ntmp)
+    {
+        HASH_DEL(s->remote_names, ncur);
+        free(ncur->qualified_name);
+        free(ncur);
+    }
+    /* Best-effort: surface completions that already arrived, then drop the
+     * rest — the transport dies with the session, nothing more can come. */
+    if (s->async_mode) {
+        struct yetty_ycore_void_result pump_res = yetty_yclass_rpc_session_pump(s);
+        if (YETTY_IS_ERR(pump_res)) {
+            yetty_ycore_error_destroy(pump_res.error);
+        }
+    }
+    while (s->pending_head) {
+        struct pending_call *dead = s->pending_head;
+        s->pending_head = dead->next;
+        free(dead);
+    }
+    free(s->inbound_buf);
+    free(s->root_proxy);
     /* Best-effort cleanup: still free the session even if transport
      * destroy fails — propagate the error after freeing so resources
      * are released either way (multi-step *_destroy pattern). */
     struct yetty_ycore_void_result td = YETTY_OK_VOID();
     if (s->transport && s->transport->ops->destroy) {
         td = s->transport->ops->destroy(s->transport);
+    }
+    /* Close our dynamic channel (graceful CLOSE), then tear down the
+     * connection stack if this session owns it (zero-arg connect). */
+    if (s->owned_channel) {
+        struct yetty_ycore_void_result cc = yetty_ywire_channel_close(s->owned_channel);
+        if (YETTY_IS_ERR(cc)) {
+            yetty_ycore_error_destroy(cc.error);
+        }
+    }
+    if (s->owned_connection) {
+        struct yetty_ycore_void_result dc = yetty_ywire_connection_destroy(s->owned_connection);
+        if (YETTY_IS_ERR(dc)) {
+            yetty_ycore_error_destroy(dc.error);
+        }
+    }
+    if (s->owned_pty) {
+        struct yetty_ycore_void_result dp = yetty_yclass_transport_pty_destroy(s->owned_pty);
+        if (YETTY_IS_ERR(dp)) {
+            yetty_ycore_error_destroy(dp.error);
+        }
     }
     free(s);
     if (YETTY_IS_ERR(td)) {
@@ -661,6 +774,14 @@ struct yetty_ycore_size_result yetty_yclass_rpc_call(struct yetty_yclass_rpc_ses
                                                      const void *body, size_t body_len, void *resp,
                                                      size_t resp_max)
 {
+    /* A lockstep round-trip while pipelined completions are in flight would
+     * read THEIR response frames as its own — refuse loudly. Sync calls are
+     * legal in async mode only while the pipeline is empty (the attach
+     * window, or after an explicit drain). */
+    if (s && s->async_mode && s->pending_count) {
+        return YETTY_ERR(yetty_ycore_size,
+                         "rpc_call: sync round-trip with pipelined completions pending");
+    }
     if (resp_max > 0 && resp == NULL) {
         return YETTY_ERR(yetty_ycore_size, "rpc_call: resp_max>0 but resp is NULL");
     }
@@ -708,6 +829,11 @@ struct yetty_ycore_void_result yetty_yclass_rpc_call_alloc(struct yetty_yclass_r
                                                            const void *body, size_t body_len,
                                                            uint8_t **resp_out, size_t *resp_len_out)
 {
+    /* Same lockstep guard as yetty_yclass_rpc_call — see there. */
+    if (s && s->async_mode && s->pending_count) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "rpc_call_alloc: sync round-trip with pipelined completions pending");
+    }
     if (!resp_out || !resp_len_out) {
         return YETTY_ERR(yetty_ycore_void, "rpc_call_alloc: NULL out parameter");
     }
@@ -793,6 +919,396 @@ struct uint32_result yetty_yclass_rpc_session_ensure_remote_id(struct yetty_ycla
     return YETTY_OK(uint32, remote);
 }
 
+struct uint32_result yetty_yclass_rpc_session_ensure_remote_id_by_name(
+    struct yetty_yclass_rpc_session *s, const char *qualified_name)
+{
+    if (!s) {
+        return YETTY_ERR(uint32, "ensure_remote_id_by_name: NULL session");
+    }
+    if (!qualified_name || !qualified_name[0]) {
+        return YETTY_ERR(uint32, "ensure_remote_id_by_name: NULL/empty name");
+    }
+    struct remote_name_entry *entry = NULL;
+    HASH_FIND_STR(s->remote_names, qualified_name, entry);
+    if (entry) {
+        return YETTY_OK(uint32, entry->remote_id);
+    }
+
+    uint32_t remote = YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED;
+    struct yetty_ycore_size_result resolve_res =
+        yetty_yclass_rpc_call(s, YETTY_YCLASS_RPC_OP_RESOLVE_SLOT, 0, qualified_name,
+                              strlen(qualified_name), &remote, sizeof(remote));
+    if (YETTY_IS_ERR(resolve_res)) {
+        return YETTY_ERR(uint32, "ensure_remote_id_by_name: RESOLVE_SLOT call failed", resolve_res);
+    }
+    if (resolve_res.value != sizeof(remote) || remote == YETTY_YCLASS_RPC_REMOTE_ID_UNRESOLVED) {
+        return YETTY_ERR(uint32, "ensure_remote_id_by_name: RESOLVE_SLOT returned unresolved");
+    }
+    if (remote > YETTY_YCLASS_RPC_ID_MASK) {
+        return YETTY_ERR(uint32, "ensure_remote_id_by_name: peer sent rid > id-mask");
+    }
+
+    /* Cache-add failure is non-fatal — return the resolved id so this call
+     * proceeds; the next call simply retries the round-trip. */
+    entry = calloc(1, sizeof(*entry));
+    if (entry) {
+        entry->qualified_name = strdup(qualified_name);
+        if (!entry->qualified_name) {
+            free(entry);
+        } else {
+            entry->remote_id = remote;
+            HASH_ADD_KEYPTR(hh, s->remote_names, entry->qualified_name,
+                            strlen(entry->qualified_name), entry);
+        }
+    }
+    ydebug("lazy resolve by name '%s' remote=%u", qualified_name, remote);
+    return YETTY_OK(uint32, remote);
+}
+
+struct yetty_yclass_object_ptr_result yetty_yclass_rpc_connect_transport(
+    struct yetty_yclass_transport *transport)
+{
+    if (!transport) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "rpc_connect: NULL transport");
+    }
+    struct yetty_yclass_rpc_session_ptr_result session_res =
+        yetty_yclass_rpc_session_create(transport);
+    if (YETTY_IS_ERR(session_res)) {
+        struct yetty_ycore_void_result destroy_res = transport->ops->destroy(transport);
+        if (YETTY_IS_ERR(destroy_res)) {
+            yetty_ycore_error_destroy(destroy_res.error);
+        }
+        return YETTY_ERR(yetty_yclass_object_ptr, "rpc_connect: session_create", session_res);
+    }
+    /* NULL prime-class: the root's own slots resolve lazily by name (the
+     * first typed call does one RESOLVE_SLOT while the pipeline is empty,
+     * then caches). attach_root fetches + proxies the session root. */
+    struct yetty_yclass_object_ptr_result root_res =
+        yetty_yclass_rpc_session_attach_root(session_res.value, NULL);
+    if (YETTY_IS_ERR(root_res)) {
+        struct yetty_ycore_void_result session_destroy_res =
+            yetty_yclass_rpc_session_destroy(session_res.value);
+        if (YETTY_IS_ERR(session_destroy_res)) {
+            yetty_ycore_error_destroy(session_destroy_res.error);
+        }
+        return YETTY_ERR(yetty_yclass_object_ptr, "rpc_connect: attach_root", root_res);
+    }
+    return root_res;
+}
+
+struct yetty_yclass_object_ptr_result yetty_yclass_rpc_connect_channel(
+    struct yetty_ywire_connection *connection)
+{
+    if (!connection) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "rpc_connect_channel: NULL connection");
+    }
+    /* Open our OWN dynamic channel on the (shared) connection — the SSH
+     * CHANNEL_OPEN. Several clients on one connection each get a separate
+     * channel; the host serves each as an independent RPC session. */
+    struct yetty_ywire_channel_ptr_result channel_res =
+        yetty_ywire_connection_open_channel(connection, /*initial_recv_window=*/0);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, channel_res, "rpc_connect_channel: open_channel");
+    struct yetty_yclass_transport_ptr_result transport_res =
+        yetty_ywire_channel_transport(channel_res.value);
+    if (YETTY_IS_ERR(transport_res)) {
+        struct yetty_ycore_void_result close_res = yetty_ywire_channel_close(channel_res.value);
+        if (YETTY_IS_ERR(close_res)) {
+            yetty_ycore_error_destroy(close_res.error);
+        }
+        return YETTY_ERR(yetty_yclass_object_ptr, "rpc_connect_channel: channel_transport",
+                         transport_res);
+    }
+    struct yetty_yclass_object_ptr_result root_res =
+        yetty_yclass_rpc_connect_transport(transport_res.value);
+    if (YETTY_IS_ERR(root_res)) {
+        struct yetty_ycore_void_result close_res = yetty_ywire_channel_close(channel_res.value);
+        if (YETTY_IS_ERR(close_res)) {
+            yetty_ycore_error_destroy(close_res.error);
+        }
+        return root_res;
+    }
+    /* The session (root->session) owns the channel so it CLOSEs it on
+     * destroy; the connection stays the caller's. */
+    root_res.value->session->owned_channel = channel_res.value;
+    return root_res;
+}
+
+struct yetty_yclass_object_ptr_result yetty_yclass_rpc_connect_fds(int read_fd, int write_fd)
+{
+    /* The zero-configuration client bring-up over a chosen fd pair (STDIN/
+     * STDOUT for the common in-terminal tool): own the whole stack — pty byte
+     * transport, a multiplexed connection (initiator role), and one dynamic
+     * RPC channel on it — then attach to the session root. Teardown is one
+     * yetty_yclass_rpc_disconnect (session_destroy frees channel + connection
+     * + pty). */
+    struct yetty_yclass_transport_pty_ptr_result pty_res =
+        yetty_yclass_transport_pty_create(read_fd, write_fd);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, pty_res, "rpc_connect: pty transport");
+    struct yetty_yclass_transport_pty *pty = pty_res.value;
+
+    /* Raw mode: our channel writes must not be echoed back by the tty. */
+    struct yetty_ycore_void_result raw_res = yetty_yclass_transport_pty_enable_raw_mode(pty);
+    if (YETTY_IS_ERR(raw_res)) {
+        yetty_ycore_error_destroy(raw_res.error);
+    }
+
+    struct yetty_ywire_connection_ptr_result connection_res =
+        yetty_ywire_connection_create(yetty_yclass_transport_pty_reactor(pty), /*compressed=*/1);
+    if (YETTY_IS_ERR(connection_res)) {
+        struct yetty_ycore_void_result dp = yetty_yclass_transport_pty_destroy(pty);
+        if (YETTY_IS_ERR(dp)) {
+            yetty_ycore_error_destroy(dp.error);
+        }
+        return YETTY_ERR(yetty_yclass_object_ptr, "rpc_connect: connection_create", connection_res);
+    }
+    struct yetty_ywire_connection *connection = connection_res.value;
+    /* Client is the initiator (even dynamic ids); the host is the acceptor. */
+    struct yetty_ycore_void_result role_res =
+        yetty_ywire_connection_set_role(connection, /*acceptor=*/0);
+    if (YETTY_IS_ERR(role_res)) {
+        yetty_ycore_error_destroy(role_res.error);
+    }
+
+    struct yetty_yclass_object_ptr_result root_res = yetty_yclass_rpc_connect_channel(connection);
+    if (YETTY_IS_ERR(root_res)) {
+        struct yetty_ycore_void_result dc = yetty_ywire_connection_destroy(connection);
+        if (YETTY_IS_ERR(dc)) {
+            yetty_ycore_error_destroy(dc.error);
+        }
+        struct yetty_ycore_void_result dp = yetty_yclass_transport_pty_destroy(pty);
+        if (YETTY_IS_ERR(dp)) {
+            yetty_ycore_error_destroy(dp.error);
+        }
+        return root_res;
+    }
+    /* Hand ownership of the connection stack to the session (connect_channel
+     * already gave it the channel). */
+    root_res.value->session->owned_connection = connection;
+    root_res.value->session->owned_pty = pty;
+    return root_res;
+}
+
+struct yetty_yclass_object_ptr_result yetty_yclass_rpc_connect(void)
+{
+    return yetty_yclass_rpc_connect_fds(0 /*STDIN*/, 1 /*STDOUT*/);
+}
+
+struct yetty_ycore_void_result yetty_yclass_rpc_disconnect(struct yetty_yclass_object *root)
+{
+    if (!root) {
+        return YETTY_OK_VOID();
+    }
+    if (!root->session) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "rpc_disconnect: object has no session (not a connect() root)");
+    }
+    return yetty_yclass_rpc_session_destroy(root->session);
+}
+
+struct yetty_yclass_object_ptr_result yetty_yclass_rpc_session_attach_root(
+    struct yetty_yclass_rpc_session *s, const char *root_class_name)
+{
+    if (!s) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "session_attach_root: NULL session");
+    }
+    if (s->root_proxy) {
+        return YETTY_OK(yetty_yclass_object_ptr, s->root_proxy); /* idempotent */
+    }
+    /* Prime the name→remote-id cache while a sync round-trip is still legal
+     * (attach window). Degraded-but-OK on failure for lockstep transports —
+     * the lazy per-name fallback still resolves there; on an async
+     * transport a missed prime surfaces loudly at the first call. */
+    if (root_class_name) {
+        struct yetty_ycore_void_result translate_res =
+            yetty_yclass_rpc_session_translate_class(s, root_class_name);
+        if (YETTY_IS_ERR(translate_res)) {
+            ywarn("session_attach_root: translate_class('%s') failed: %s", root_class_name,
+                  translate_res.error.msg ? translate_res.error.msg : "(no msg)");
+            yetty_ycore_error_destroy(translate_res.error);
+        }
+    }
+
+    struct yetty_yclass_handle_result root_res = yetty_yclass_rpc_session_get_root(s);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, root_res, "session_attach_root: get_root");
+    if (root_res.value == 0) {
+        return YETTY_ERR(yetty_yclass_object_ptr,
+                         "session_attach_root: peer published no root object");
+    }
+    struct yetty_yclass_object_ptr_result proxy_res =
+        yetty_yclass_object_proxy_create(s, root_res.value, NULL);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, proxy_res, "session_attach_root: proxy_create");
+    s->root_proxy = proxy_res.value;
+    return proxy_res;
+}
+
+void yetty_yclass_rpc_session_set_error_sink(struct yetty_yclass_rpc_session *s,
+                                             yetty_yclass_rpc_error_sink_fn sink, void *userdata)
+{
+    if (!s) {
+        return;
+    }
+    s->error_sink = sink;
+    s->error_sink_userdata = userdata;
+}
+
+/* Complete the FIFO head with one fully-reassembled response payload.
+ * status byte 0 = OK (nothing to do for a void call); 1 = ERR with the
+ * serialized remote cause chain following — rebuild it and hand it to
+ * the sink (which owns it), or log-and-destroy without one. */
+static void complete_pending_call(struct yetty_yclass_rpc_session *s, const uint8_t *payload,
+                                  size_t payload_len)
+{
+    struct pending_call *done = s->pending_head;
+    if (!done) {
+        ywarn("rpc pump: response frame with no pending call — stream desync");
+        return;
+    }
+    s->pending_head = done->next;
+    if (!s->pending_head) {
+        s->pending_tail = NULL;
+    }
+    s->pending_count--;
+
+    if (payload_len < 1) {
+        ywarn("rpc pump: short response for '%s'", done->qualified_name);
+        free(done);
+        return;
+    }
+    if (payload[0] != 0) {
+        struct yetty_ycore_error *remote_chain =
+            yetty_ycore_error_deserialize(payload + 1, payload_len - 1);
+        struct yetty_ycore_void_result failed =
+            YETTY_ERR(yetty_ycore_void, "pipelined call: remote impl returned error");
+        failed.error.cause = remote_chain;
+        if (s->error_sink) {
+            s->error_sink(done->qualified_name, &failed.error, s->error_sink_userdata);
+        } else {
+            yetty_ycore_error_print(stderr, done->qualified_name, failed.error);
+            yetty_ycore_error_destroy(failed.error);
+        }
+    }
+    free(done);
+}
+
+struct yetty_ycore_void_result yetty_yclass_rpc_session_pump(struct yetty_yclass_rpc_session *s)
+{
+    if (!s) {
+        return YETTY_ERR(yetty_ycore_void, "session_pump: NULL session");
+    }
+    if (!s->async_mode) {
+        return YETTY_OK_VOID();
+    }
+    for (;;) {
+        /* Top up the reassembly buffer from what the event loop's pump has
+         * already delivered — strictly non-blocking. */
+        if (s->inbound_cap - s->inbound_len < 4096) {
+            size_t grown_cap = s->inbound_cap ? s->inbound_cap * 2 : 8192;
+            uint8_t *grown = realloc(s->inbound_buf, grown_cap);
+            if (!grown) {
+                return YETTY_ERR(yetty_ycore_void, "session_pump: reassembly grow failed");
+            }
+            s->inbound_buf = grown;
+            s->inbound_cap = grown_cap;
+        }
+        struct yetty_ycore_size_result read_res = s->transport->ops->recv_available(
+            s->transport, s->inbound_buf + s->inbound_len, s->inbound_cap - s->inbound_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, read_res, "session_pump: recv_available");
+        if (read_res.value == 0) {
+            break;
+        }
+        s->inbound_len += read_res.value;
+    }
+    /* Peel complete `u32 resp_len | payload` frames off the front. */
+    size_t consumed = 0;
+    while (s->inbound_len - consumed >= 4) {
+        uint32_t frame_len;
+        memcpy(&frame_len, s->inbound_buf + consumed, 4);
+        if (frame_len > BUF_MAX) {
+            return YETTY_ERR(yetty_ycore_void, "session_pump: response frame exceeds BUF_MAX");
+        }
+        if (s->inbound_len - consumed - 4 < frame_len) {
+            break; /* incomplete — wait for more bytes */
+        }
+        complete_pending_call(s, s->inbound_buf + consumed + 4, frame_len);
+        consumed += 4 + frame_len;
+    }
+    if (consumed) {
+        memmove(s->inbound_buf, s->inbound_buf + consumed, s->inbound_len - consumed);
+        s->inbound_len -= consumed;
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yclass_rpc_call_void(struct yetty_yclass_rpc_session *s,
+                                                          uint32_t remote_id,
+                                                          const char *qualified_name,
+                                                          const void *body, size_t body_len)
+{
+    if (!s) {
+        return YETTY_ERR(yetty_ycore_void, "rpc_call_void: NULL session");
+    }
+    if (!s->async_mode) {
+        /* Lockstep transport: ordinary request/response with the decode the
+         * generated stubs used to carry inline. */
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result call_res = yetty_yclass_rpc_call_alloc(
+            s, YETTY_YCLASS_RPC_OP_CALL, remote_id, body, body_len, &resp_buf, &response_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, call_res, "rpc_call_void: RPC call failed");
+        if (response_len < 1) {
+            free(resp_buf);
+            return YETTY_ERR(yetty_ycore_void, "rpc_call_void: short RPC response");
+        }
+        if (resp_buf[0] != 0) {
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error =
+                YETTY_ERR(yetty_ycore_void, "rpc_call_void: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
+        }
+        free(resp_buf);
+        return YETTY_OK_VOID();
+    }
+
+    /* Pipelined: surface whatever completions already landed, send, enqueue.
+     * The response arrives through the event loop's pump; a failure reaches
+     * the error sink with this call's qualified name. */
+    struct yetty_ycore_void_result pump_res = yetty_yclass_rpc_session_pump(s);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pump_res, "rpc_call_void: completion pump");
+
+    struct pending_call *pending = calloc(1, sizeof(*pending));
+    if (!pending) {
+        return YETTY_ERR(yetty_ycore_void, "rpc_call_void: pending alloc failed");
+    }
+    pending->qualified_name = qualified_name;
+
+    struct yetty_ycore_void_result write_res =
+        rpc_write_request(s, YETTY_YCLASS_RPC_OP_CALL, remote_id, body, body_len);
+    if (YETTY_IS_ERR(write_res)) {
+        free(pending);
+        return YETTY_ERR(yetty_ycore_void, "rpc_call_void: request write failed", write_res);
+    }
+    /* Flush so buffering transports actually put the frame on the wire —
+     * no recv follows to trigger their lazy flush. */
+    if (s->transport->ops->flush) {
+        struct yetty_ycore_void_result flush_res = s->transport->ops->flush(s->transport);
+        if (YETTY_IS_ERR(flush_res)) {
+            free(pending);
+            return YETTY_ERR(yetty_ycore_void, "rpc_call_void: flush failed", flush_res);
+        }
+    }
+    if (s->pending_tail) {
+        s->pending_tail->next = pending;
+    } else {
+        s->pending_head = pending;
+    }
+    s->pending_tail = pending;
+    s->pending_count++;
+    return YETTY_OK_VOID();
+}
+
 struct yetty_yclass_handle_result yetty_yclass_rpc_session_get_root(
     struct yetty_yclass_rpc_session *s)
 {
@@ -864,6 +1380,25 @@ struct yetty_ycore_void_result yetty_yclass_rpc_session_translate_class(
                   rid, slot_name);
             free(slot_name);
             break;
+        }
+
+        /* Prime the name-keyed cache too — the split-generated stubs resolve
+         * by qualified name, and in async mode a mid-stream RESOLVE_SLOT
+         * round-trip is forbidden, so this batch IS their resolution. */
+        struct remote_name_entry *name_entry = NULL;
+        HASH_FIND_STR(s->remote_names, slot_name, name_entry);
+        if (!name_entry) {
+            name_entry = calloc(1, sizeof(*name_entry));
+            if (name_entry) {
+                name_entry->qualified_name = strdup(slot_name);
+                if (!name_entry->qualified_name) {
+                    free(name_entry);
+                } else {
+                    name_entry->remote_id = rid;
+                    HASH_ADD_KEYPTR(hh, s->remote_names, name_entry->qualified_name,
+                                    strlen(name_entry->qualified_name), name_entry);
+                }
+            }
         }
 
         struct yetty_yclass_method_slot_result lr = yetty_yclass_method_slot_by_qname(slot_name);

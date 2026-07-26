@@ -34,7 +34,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yfigure/figure.h>
+#include <yetty/api/yfigure/figure.h>
 /* The generated per-class header publishes the canonical class accessor,
  * the opaque `struct yetty_ygrid_grid` forward decl, and the
  * `YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, …)` wrapper this header's
@@ -42,7 +42,7 @@
  * definition shared by every consumer — this header no longer declares
  * its own (which would redefine the struct in any TU that included
  * both). */
-#include <yetty/ygrid/grid.h>
+#include <yetty/api/ygrid/grid.h>
 
 #ifdef __cplusplus
 extern "C" {

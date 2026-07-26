@@ -619,22 +619,16 @@ struct yetty_ycore_void_result yetty_yguiapp_run_terminal(struct yetty_yclass_ob
         yetty_ygui_framework_set_font(cs.engine, cs.measure_font);
     }
 
-    /* Bind the framework's figure output to the connection's rpc channel: the RPC
-     * requests ride a yetty_ywire_channel transport adapter. The get_root
-     * handshake reads stdin synchronously here and MUST complete before the uv
-     * loop below takes the fd. framework_destroy tears the session down. */
+    /* Bind the framework's figure output to its OWN dynamic RPC channel on the
+     * connection (the SSH model): the framework opens the channel, the host
+     * serves it via its accept callback. The attach handshake reads stdin
+     * synchronously here and MUST complete before the uv loop below takes the
+     * fd. framework_destroy tears the session down. */
     {
-        struct yetty_ywire_channel *rpc_channel =
-            yetty_ywire_connection_channel(cs.conn, YETTY_YWIRE_CHANNEL_RPC);
-        struct yetty_yclass_transport_ptr_result rpc_transport =
-            yetty_ywire_channel_transport(rpc_channel);
-        if (YETTY_IS_ERR(rpc_transport)) {
-            YGUIAPP_TERMINAL_FAIL("yguiapp client: rpc channel transport", rpc_transport);
-        }
         struct yetty_ycore_void_result attach_res =
-            yetty_ygui_framework_attach_transport(cs.engine, rpc_transport.value);
+            yetty_ygui_framework_attach_connection(cs.engine, cs.conn);
         if (YETTY_IS_ERR(attach_res)) {
-            YGUIAPP_TERMINAL_FAIL("yguiapp client: framework_attach_transport", attach_res);
+            YGUIAPP_TERMINAL_FAIL("yguiapp client: framework_attach_connection", attach_res);
         }
     }
 

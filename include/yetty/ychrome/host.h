@@ -37,7 +37,6 @@ extern "C" {
 
 struct yetty_ychrome_host;
 struct yetty_yfigure_container;
-struct yetty_yfigure_producer_session;
 struct yetty_yfont_font;
 struct yetty_context;
 struct yetty_yclass_object;
@@ -59,23 +58,21 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
  * a local container, DRIVE the backdrop + caption onto the hosting yetty's root
  * figure container PROXY via the generated typed yclass-RPC stubs, so they
  * render in the host's pane. The opaque backdrop is what hides the host
- * terminal's text beneath the app. The owner attaches the producer session
- * (yetty_yfigure_producer_attach) and passes both the root container proxy
- * (yetty_yfigure_producer_session_container) and the owning session in here;
- * both are borrowed — the owner detaches the session after this host is
- * destroyed. `window_chrome` is typically a wire adapter (close/min/max → pane
- * ops) or NULL. */
+ * terminal's text beneath the app. The owner navigates to the root container
+ * proxy (yetty_yterminal_figure_root_container) and passes it in here; it is
+ * borrowed — the owner disconnects the session after this host is destroyed.
+ * `window_chrome` is typically a wire adapter (close/min/max → pane ops) or
+ * NULL. */
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
-    struct yetty_yclass_object *container, struct yetty_yfigure_producer_session *producer_session,
-    struct yetty_yclass_object *window_chrome, float width, float height, float caption_height,
-    float edge_size, unsigned int flags);
+    struct yetty_yclass_object *container, struct yetty_yclass_object *window_chrome, float width,
+    float height, float caption_height, float edge_size, unsigned int flags);
 
 /* Explicitly remove the wire chrome's figures (backdrop + caption) from the
- * host pane via the typed delete_child stubs. Each is one-way and flushes its
- * request synchronously with a blocking write to the session's write_fd, so
- * this is safe at process teardown after the event loop has stopped. No-op for
- * a local host. Call this BEFORE yetty_ychrome_host_destroy; the owner detaches
- * the producer session afterwards. */
+ * host pane via the typed delete_child stubs. Each flushes its request
+ * synchronously to the session's channel, so this is safe at process teardown
+ * after the event loop has stopped. No-op for
+ * a local host. Call this BEFORE yetty_ychrome_host_destroy; the owner
+ * disconnects the session afterwards. */
 struct yetty_ycore_void_result yetty_ychrome_host_clear(struct yetty_ychrome_host *host);
 
 /* Re-emit the wire chrome's figures (backdrop + caption). No-op for a local

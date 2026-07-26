@@ -3706,4 +3706,4 @@ struct yetty_ycore_int_result yetty_yvterm_grid_slot_dirty(struct yetty_yclass_o
     return YETTY_OK(yetty_ycore_int, line ? line->dirty : 0);
 }
 
-#include "grid.gen.c"
+#include "yetty/gen/impl/yvterm/grid.c"

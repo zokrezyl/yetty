@@ -26,8 +26,8 @@
 
 #include <yetty/ygui/ygui.h>
 #include <yetty/yplatform/pty.h>
-#include <yetty/yfigure/container.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/container.h"
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfigure/registry.h>
 
 /* Direct access to engine internals for assertions. */

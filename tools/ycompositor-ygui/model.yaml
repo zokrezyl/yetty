@@ -173,13 +173,6 @@ types:
         type: "struct yetty_ydraw_composite_factory *"
       - name: absolute_coords
         type: int
-  - name: yetty_ymgui_factory_args
-    kind: struct
-    fields:
-      - name: context
-        type: "const struct yetty_context *"
-      - name: pipeline
-        type: "struct yetty_ymgui_pipeline *"
 local_types:
   yetty_ycompositorygui_app: tools/ycompositor-ygui/main.c
   yetty_ycompositorygui_app_ptr_result: tools/ycompositor-ygui/main.c

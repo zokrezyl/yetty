@@ -38,8 +38,8 @@
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
-#include <yetty/yfigure/container.h>
-#include <yetty/yfigure/figure.h>
+#include <yetty/api/yfigure/container.h>
+#include <yetty/api/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yfont/msdf-font.h>
@@ -52,7 +52,7 @@
 #include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yshadertoy/figure.h>
+#include <yetty/api/yshadertoy/figure.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* Window chrome (drag/resize/maximize the borderless OS window) — the

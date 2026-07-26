@@ -33,9 +33,8 @@
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yrender/render-target.h>
@@ -1781,4 +1780,4 @@ struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
 
 /* yclass class accessor + slot table + obj→body downcast, generated from
  * the annotations above. */
-#include "figure.gen.c"
+#include "yetty/gen/impl/ymgui/figure.c"

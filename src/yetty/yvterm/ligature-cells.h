@@ -23,7 +23,7 @@
 #include <stdint.h>
 
 #include <yetty/yfont/font.h>
-#include <yetty/yvterm/grid.h>
+#include "yetty/gen/impl/yvterm/grid.h"
 
 /* Length in cells of the programming ligature beginning at cells[col], or 0 if
  * none. A span qualifies only when every covered cell is a plain, single-width,

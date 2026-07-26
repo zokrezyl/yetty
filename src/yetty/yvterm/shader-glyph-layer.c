@@ -33,7 +33,7 @@
 #include <yetty/yetty/yetty.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfont/shader-glyph.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yplatform/fs.h>
@@ -41,7 +41,7 @@
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
-#include <yetty/yvterm/grid.h>
+#include "yetty/gen/impl/yvterm/grid.h"
 #include <yetty/yvterm/shader-glyph-pua.h>
 #include <yetty/webgpu/error.h>
 

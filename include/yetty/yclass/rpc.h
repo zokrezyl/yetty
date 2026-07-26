@@ -45,6 +45,10 @@
 #include <stdint.h>
 #include <yetty/ycore/types.h> /* uint32_result */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct yetty_yclass_rpc_session;
 
 /* --- Result types for yclass-specific values ----------------------- */
@@ -114,6 +118,12 @@ struct yetty_ycore_void_result yetty_yclass_rpc_init(void);
  * full (MAX_OBJECTS), object_count overflow guards. */
 struct yetty_yclass_handle_result yetty_yclass_rpc_register_object(void *obj);
 
+/* Like register_object, but idempotent per pointer: an already-registered
+ * object returns its existing handle. Used by object-returning skels so a
+ * repeated navigation (terminal → container, called every attach) yields
+ * one stable handle instead of leaking table entries. */
+struct yetty_yclass_handle_result yetty_yclass_rpc_register_object_dedup(void *obj);
+
 /* Resolve a previously-minted handle to the user object. Errors:
  * handle=0 (invalid), handle not registered. */
 struct yetty_yclass_void_ptr_result yetty_yclass_rpc_handle_resolve(uint64_t handle);
@@ -157,6 +167,17 @@ struct yetty_yclass_rpc_skel_fn_result yetty_yclass_rpc_skel_for(yetty_yclass_me
 struct yetty_ycore_size_result yetty_yclass_rpc_dispatch_one(uint32_t header, const void *body,
                                                              size_t body_len, void *resp,
                                                              size_t resp_max);
+
+/* Serve yclass RPC over a MULTIPLEXED ywire connection (the SSH model).
+ * Call once on an acceptor connection: every dynamic channel a client opens
+ * is thereafter accepted and served as its own independent RPC session
+ * (request frames reassembled from the channel byte stream, dispatched via
+ * yetty_yclass_rpc_dispatch_one, responses written back). Lets several
+ * clients share one PTY without tearing frames. The accept callback is
+ * internal — the host writes none. `connection` is borrowed. */
+struct yetty_ywire_connection;
+struct yetty_ycore_void_result yetty_yclass_rpc_serve_connection(
+    struct yetty_ywire_connection *connection);
 
 /* ---- Client side -------------------------------------------------- */
 
@@ -223,9 +244,119 @@ struct yetty_ycore_void_result yetty_yclass_rpc_session_translate_class(
 struct uint32_result yetty_yclass_rpc_session_ensure_remote_id(struct yetty_yclass_rpc_session *s,
                                                                yetty_yclass_method_slot local_slot);
 
+/* Name-keyed variant: resolve by the canonical qualified slot name
+ * (e.g. "yetty_ydummy_set_shader") with a per-session name→rid cache.
+ * The stub compiles its own qualified name in as a string constant, so a
+ * pure remote client needs NO local slot table — no class registration,
+ * no method_slot_get — to marshal calls. Split-mode generated stubs use
+ * this on their remote branch; the numeric ensure_remote_id stays for
+ * the legacy combined stubs. */
+struct uint32_result yetty_yclass_rpc_session_ensure_remote_id_by_name(
+    struct yetty_yclass_rpc_session *s, const char *qualified_name);
+
 /* Client: fetch the server's root object handle (RPC_OP_GET_ROOT). 0 if the
  * server set no root. Pair with yetty_yclass_object_proxy_create to wrap it. */
 struct yetty_yclass_handle_result yetty_yclass_rpc_session_get_root(
     struct yetty_yclass_rpc_session *s);
+
+/* CONNECT — the whole client bring-up as one call: build the default
+ * in-band transport (stdin/stdout DCS), create a session that owns it,
+ * fetch the peer's session root and return it as a session-bound proxy.
+ * The returned object is the session ROOT (a yterm:terminal for a tool in
+ * a yetty); navigate from it with the typed object API. Tear down with
+ * yetty_yclass_rpc_disconnect. Errors: transport/session create, no root
+ * published. */
+struct yetty_yclass_object_ptr_result yetty_yclass_rpc_connect(void);
+
+/* CONNECT over a chosen fd pair (a tool whose RPC fds are not stdin/stdout):
+ * builds the pty transport + multiplexed connection + one dynamic RPC channel
+ * over (read_fd, write_fd), returns the session root. Session owns the whole
+ * stack; disconnect tears it down. */
+struct yetty_yclass_object_ptr_result yetty_yclass_rpc_connect_fds(int read_fd, int write_fd);
+
+/* CONNECT on an existing (shared) connection: open a NEW dynamic channel on
+ * it, session on that channel, return the session root. For a client that
+ * already owns a connection (e.g. an event-loop app on the multiplexed
+ * endpoint) and wants its own RPC channel. The session owns/closes the
+ * channel; the connection stays the caller's. */
+struct yetty_ywire_connection;
+struct yetty_yclass_object_ptr_result yetty_yclass_rpc_connect_channel(
+    struct yetty_ywire_connection *connection);
+
+/* CONNECT over a caller-supplied transport (event-loop apps pass their
+ * multiplexed connection's RPC-channel transport). Same result: the
+ * session root proxy, session-owned. The session takes ownership of the
+ * transport. */
+struct yetty_yclass_object_ptr_result yetty_yclass_rpc_connect_transport(
+    struct yetty_yclass_transport *transport);
+
+/* Tear down a connection opened by connect()/connect_transport(): `root`
+ * must be the object either returned. Destroys its session (which frees
+ * the root proxy and the transport). */
+struct yetty_ycore_void_result yetty_yclass_rpc_disconnect(struct yetty_yclass_object *root);
+
+/* The whole client attach ceremony as one call: prime the session's slot
+ * caches for `root_class_name` (batched GET_CLASS — on an event-loop
+ * transport this attach-window round-trip is the LAST legal sync read),
+ * fetch the server's root handle and wrap it in a proxy whose typed stubs
+ * marshal over this session. The proxy is SESSION-OWNED: valid until
+ * session_destroy, never freed by the caller. Idempotent — repeat calls
+ * return the same proxy. Errors: no root published, transport failure. */
+struct yetty_yclass_object_ptr_result yetty_yclass_rpc_session_attach_root(
+    struct yetty_yclass_rpc_session *s, const char *root_class_name);
+
+/* ---- Pipelined (async) client mode -------------------------------- */
+/*
+ * A transport that declares recv_available (the ywire channel adapter)
+ * puts the session in ASYNC mode: after the attach handshake an event
+ * loop owns the fd, so blocking response reads are forbidden. Void wire
+ * calls then PIPELINE — yetty_yclass_rpc_call_void sends the frame and
+ * returns; responses arrive in request order through the event loop's
+ * pump and are drained non-blockingly by yetty_yclass_rpc_session_pump
+ * (called opportunistically before every pipelined send, on session
+ * destroy, or explicitly by the embedder). A failed completion carries
+ * the remote cause chain and is delivered to the error sink with the
+ * slot's qualified name; without a sink it is logged and destroyed.
+ * Nothing is ever silently swallowed — this replaces the retired
+ * fire-and-forget one-way calls with the same non-blocking behavior
+ * AND a working error channel.
+ *
+ * On a synchronous transport (fd / dcs / pty — no recv_available),
+ * yetty_yclass_rpc_call_void is an ordinary lockstep call: it awaits the
+ * response and returns the decoded Result directly.
+ *
+ * Rules in async mode: value-returning calls and admin round-trips are
+ * legal only while no pipelined completions are pending (in practice:
+ * during attach, before the loop starts). A sync call with completions
+ * in flight is refused loudly.
+ */
+
+typedef void (*yetty_yclass_rpc_error_sink_fn)(const char *qualified_name,
+                                               struct yetty_ycore_error *error, void *userdata);
+
+/* Register the failure sink for pipelined calls. The sink takes ownership
+ * of `error` (destroy it when done). NULL restores the default
+ * log-and-destroy behavior. */
+void yetty_yclass_rpc_session_set_error_sink(struct yetty_yclass_rpc_session *s,
+                                             yetty_yclass_rpc_error_sink_fn sink, void *userdata);
+
+/* Drain every completed response frame that is already buffered —
+ * non-blocking, never touches the wire. No-op on sync sessions. */
+struct yetty_ycore_void_result yetty_yclass_rpc_session_pump(struct yetty_yclass_rpc_session *s);
+
+/* Void wire CALL. Sync session: lockstep send + await + decode (the
+ * remote error chain becomes the Result's cause). Async session: pump,
+ * send, enqueue the completion, return — failures surface via the error
+ * sink when their response frame arrives. `qualified_name` must be a
+ * string with static storage duration (the generated stubs pass their
+ * compile-time slot name). */
+struct yetty_ycore_void_result yetty_yclass_rpc_call_void(struct yetty_yclass_rpc_session *s,
+                                                          uint32_t remote_id,
+                                                          const char *qualified_name,
+                                                          const void *body, size_t body_len);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* YCLASS_RPC_H */

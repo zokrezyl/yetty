@@ -1954,6 +1954,7 @@ local_types:
   yvterm_font_range: src/yetty/yvterm/vterm.c
   vterm_uniforms: src/yetty/yvterm/vterm.c
   yetty_yvterm_vterm: src/yetty/yvterm/vterm.c
+  yetty_yvterm_vterm_ptr_result: src/yetty/yvterm/vterm.c
 local_typedefs:
   __int128_t:
     source_file: src/yetty/yvterm/grid.c
