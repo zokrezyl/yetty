@@ -40,12 +40,15 @@ struct yetty_yclass_object_ptr_result yetty_ygui_dialog_create(struct yetty_ycla
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_dialog_set_title(struct yetty_yclass_object *obj, const char *title);
+struct yetty_ycore_void_result yetty_ygui_dialog_set_title(struct yetty_yclass_object *obj,
+                                                           const char *title);
 /* Enable/disable the titlebar ✕ close button. The widget only draws it;
  * the host hit-tests the top-right DIALOG_CLOSE_W square of the titlebar
  * and calls yetty_ygui_dialog_close. */
-struct yetty_ycore_void_result yetty_ygui_dialog_set_closable(struct yetty_yclass_object *obj, int closable);
-struct yetty_ycore_void_result yetty_ygui_dialog_open_at(struct yetty_yclass_object *obj, float x, float y, float width, float height);
+struct yetty_ycore_void_result yetty_ygui_dialog_set_closable(struct yetty_yclass_object *obj,
+                                                              int closable);
+struct yetty_ycore_void_result yetty_ygui_dialog_open_at(struct yetty_yclass_object *obj, float x,
+                                                         float y, float width, float height);
 struct yetty_ycore_void_result yetty_ygui_dialog_close(struct yetty_yclass_object *obj);
 struct yetty_ycore_int_result yetty_ygui_dialog_is_open(const struct yetty_yclass_object *obj);
 

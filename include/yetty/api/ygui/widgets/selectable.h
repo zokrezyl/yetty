@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -38,11 +36,12 @@ struct yetty_yclass_object_ptr_result yetty_ygui_selectable_to(struct yetty_ygui
 
 struct yetty_yclass_object_ptr_result yetty_ygui_selectable_create(struct yetty_yclass_ctx *ctx);
 
-
-
-struct yetty_ycore_void_result yetty_ygui_selectable_set_text(struct yetty_yclass_object *obj, const char *t);
-struct yetty_ycore_void_result yetty_ygui_selectable_set_selected(struct yetty_yclass_object *obj, int s);
-struct yetty_ycore_int_result yetty_ygui_selectable_is_selected(const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_selectable_set_text(struct yetty_yclass_object *obj,
+                                                              const char *t);
+struct yetty_ycore_void_result yetty_ygui_selectable_set_selected(struct yetty_yclass_object *obj,
+                                                                  int s);
+struct yetty_ycore_int_result yetty_ygui_selectable_is_selected(
+    const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -38,12 +36,14 @@ struct yetty_yclass_object_ptr_result yetty_ygui_dropdown_to(struct yetty_ygui_d
 
 struct yetty_yclass_object_ptr_result yetty_ygui_dropdown_create(struct yetty_yclass_ctx *ctx);
 
-
-
-struct yetty_ycore_void_result yetty_ygui_dropdown_add_option(struct yetty_yclass_object *obj, const char *label);
-struct yetty_ycore_void_result yetty_ygui_dropdown_set_selected(struct yetty_yclass_object *obj, int index);
-struct yetty_ycore_int_result yetty_ygui_dropdown_get_selected(const struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_dropdown_set_menu(struct yetty_yclass_object *obj, struct yetty_yclass_object *menu);
+struct yetty_ycore_void_result yetty_ygui_dropdown_add_option(struct yetty_yclass_object *obj,
+                                                              const char *label);
+struct yetty_ycore_void_result yetty_ygui_dropdown_set_selected(struct yetty_yclass_object *obj,
+                                                                int index);
+struct yetty_ycore_int_result yetty_ygui_dropdown_get_selected(
+    const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_dropdown_set_menu(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *menu);
 
 #ifdef __cplusplus
 }

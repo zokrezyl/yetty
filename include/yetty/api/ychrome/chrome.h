@@ -32,8 +32,6 @@ enum yetty_ychrome_flag {
 };
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -54,25 +52,29 @@ struct yetty_yclass_object_ptr_result yetty_ychrome_chrome_to(struct yetty_ychro
 
 /* Bind the engine to a window_chrome and set the caption/edge geometry. Call
  * once after create(), before feeding events. window_chrome is borrowed. */
-struct yetty_ycore_void_result yetty_ychrome_configure(struct yetty_yclass_object * obj, struct yetty_yclass_object * window_chrome, float caption_height, float edge_size, uint32_t flags);
+struct yetty_ycore_void_result yetty_ychrome_configure(struct yetty_yclass_object *obj,
+                                                       struct yetty_yclass_object *window_chrome,
+                                                       float caption_height, float edge_size,
+                                                       uint32_t flags);
 /* Update the window size so the right/bottom edge bands track it. Call on every
  * resize. */
-struct yetty_ycore_void_result yetty_ychrome_set_size(struct yetty_yclass_object * obj, float width, float height);
-struct yetty_ycore_void_result yetty_ychrome_destroy(struct yetty_yclass_object * obj);
-struct yetty_ycore_int_result yetty_ychrome_edge_cursor_at(struct yetty_yclass_object * obj, float x, float y);
+struct yetty_ycore_void_result yetty_ychrome_set_size(struct yetty_yclass_object *obj, float width,
+                                                      float height);
+struct yetty_ycore_void_result yetty_ychrome_destroy(struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_ychrome_edge_cursor_at(struct yetty_yclass_object *obj, float x,
+                                                           float y);
 /* Paint the caption strip into a fresh drawable list and return it: a filled
  * background spanning (width × caption_height) plus the minimize/maximize/close
  * glyphs flush right. The caller composites the list as a pinned top figure and
  * destroys it. Uses font_id=-1 (the default font), so no font dependency. */
-struct yetty_ydraw_drawable_list_result yetty_ychrome_render(struct yetty_yclass_object * obj);
+struct yetty_ydraw_drawable_list_result yetty_ychrome_render(struct yetty_yclass_object *obj);
 /* Feed one mouse event. Returns 1 if chrome claimed it (the app should stop
  * processing it), 0 if it's not a chrome gesture. Forward events here only
  * after your own controls (buttons, tabs) had their chance. */
-struct yetty_ycore_int_result yetty_ychrome_handle_event(struct yetty_yclass_object * obj, const struct yetty_yui_event * event);
+struct yetty_ycore_int_result yetty_ychrome_handle_event(struct yetty_yclass_object *obj,
+                                                         const struct yetty_yui_event *event);
 
 struct yetty_yclass_object_ptr_result yetty_ychrome_chrome_create(struct yetty_yclass_ctx *ctx);
-
-
 
 /* Current window-control button under the pointer (1=minimize, 2=maximize,
  * 3=close; 0=none). Hosts poll this after forwarding an event and re-paint the

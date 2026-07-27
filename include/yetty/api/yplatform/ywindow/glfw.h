@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -33,12 +31,13 @@ struct yetty_yplatform_glfw_window_ptr_result {
     };
 };
 #endif
-struct yetty_yplatform_glfw_window_ptr_result yetty_yplatform_glfw_window_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_window_to(struct yetty_yplatform_glfw_window *data);
+struct yetty_yplatform_glfw_window_ptr_result yetty_yplatform_glfw_window_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_window_to(
+    struct yetty_yplatform_glfw_window *data);
 
-struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_window_create(struct yetty_yclass_ctx *ctx);
-
-
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_window_create(
+    struct yetty_yclass_ctx *ctx);
 
 #ifdef __cplusplus
 }

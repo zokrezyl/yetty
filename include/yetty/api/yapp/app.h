@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -36,18 +34,18 @@ struct yetty_yapp_app_ptr_result {
 struct yetty_yapp_app_ptr_result yetty_yapp_app_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_yapp_app_to(struct yetty_yapp_app *data);
 
-struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object * app, struct yetty_yclass_object * platform);
-struct yetty_ycore_void_result yetty_yapp_run(struct yetty_yclass_object * app, struct yetty_yclass_object * platform);
+struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object *app,
+                                               struct yetty_yclass_object *platform);
+struct yetty_ycore_void_result yetty_yapp_run(struct yetty_yclass_object *app,
+                                              struct yetty_yclass_object *platform);
 /*
  * Ask the app to end its run loop. The base default is a no-op (an app with no
  * event loop has nothing to stop); a concrete app overrides this to stop its
  * loop so run() returns. Local — an app quits itself in-process.
  */
-struct yetty_ycore_void_result yetty_yapp_quit(struct yetty_yclass_object * app);
+struct yetty_ycore_void_result yetty_yapp_quit(struct yetty_yclass_object *app);
 
 struct yetty_yclass_object_ptr_result yetty_yapp_app_create(struct yetty_yclass_ctx *ctx);
-
-
 
 /*
  * App-injection point. The generic platform bootstrap (ymain/<plat>.c) knows

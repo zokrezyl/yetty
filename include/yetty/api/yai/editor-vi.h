@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -37,8 +35,6 @@ struct yetty_yai_vi_ptr_result yetty_yai_vi_from(struct yetty_yclass_object *obj
 struct yetty_yclass_object_ptr_result yetty_yai_vi_to(struct yetty_yai_vi *data);
 
 struct yetty_yclass_object_ptr_result yetty_yai_vi_create(struct yetty_yclass_ctx *ctx);
-
-
 
 #ifdef __cplusplus
 }

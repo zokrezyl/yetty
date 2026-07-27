@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -33,16 +31,19 @@ struct yetty_yplatform_clipboard_ptr_result {
     };
 };
 #endif
-struct yetty_yplatform_clipboard_ptr_result yetty_yplatform_clipboard_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_to(struct yetty_yplatform_clipboard *data);
+struct yetty_yplatform_clipboard_ptr_result yetty_yplatform_clipboard_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_to(
+    struct yetty_yplatform_clipboard *data);
 
-struct yetty_ycore_void_result yetty_yplatform_clipboard_set_text(struct yetty_yclass_object * obj, const char * text, size_t len);
-struct yetty_ycore_void_result yetty_yplatform_clipboard_request_paste(struct yetty_yclass_object * obj);
-struct yetty_ycore_void_result yetty_yplatform_clipboard_drain(struct yetty_yclass_object * obj);
+struct yetty_ycore_void_result yetty_yplatform_clipboard_set_text(struct yetty_yclass_object *obj,
+                                                                  const char *text, size_t len);
+struct yetty_ycore_void_result yetty_yplatform_clipboard_request_paste(
+    struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yplatform_clipboard_drain(struct yetty_yclass_object *obj);
 
-struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_create(struct yetty_yclass_ctx *ctx);
-
-
+struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_create(
+    struct yetty_yclass_ctx *ctx);
 
 #ifdef __cplusplus
 }

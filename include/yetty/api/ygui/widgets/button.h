@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -38,15 +36,16 @@ struct yetty_yclass_object_ptr_result yetty_ygui_button_to(struct yetty_ygui_but
 
 struct yetty_yclass_object_ptr_result yetty_ygui_button_create(struct yetty_yclass_ctx *ctx);
 
-
-
-struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_yclass_object *obj, const char *label);
+struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_yclass_object *obj,
+                                                           const char *label);
 /* Draw the button as an SDF icon instead of a text label: 0=none (normal
  * label button); window controls 1=minimize, 2=maximize, 3=close (used by
  * yetty's yui titlebar so its controls match the ychrome-driven tools);
  * browser-toolbar navigation 4=back, 5=forward, 6=reload, 7=stop. */
-struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_yclass_object *obj, int kind);
-struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_yclass_object *obj,
+                                                                 int kind);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(
+    const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

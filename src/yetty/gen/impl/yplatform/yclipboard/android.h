@@ -36,14 +36,18 @@ struct yetty_yplatform_android_clipboard_ptr_result {
     };
 };
 #endif
-struct yetty_yplatform_android_clipboard_ptr_result yetty_yplatform_android_clipboard_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_yplatform_android_clipboard_to(struct yetty_yplatform_android_clipboard *data);
+struct yetty_yplatform_android_clipboard_ptr_result yetty_yplatform_android_clipboard_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yplatform_android_clipboard_to(
+    struct yetty_yplatform_android_clipboard *data);
 
-struct yetty_yclass_object_ptr_result yetty_yplatform_android_clipboard_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_yplatform_android_clipboard_create(
+    struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yplatform_register(void);
 
-struct yetty_ycore_void_result yetty_yplatform_android_clipboard_configure(struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *response_pipe);
+struct yetty_ycore_void_result yetty_yplatform_android_clipboard_configure(
+    struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *response_pipe);
 
 #ifdef __cplusplus
 }

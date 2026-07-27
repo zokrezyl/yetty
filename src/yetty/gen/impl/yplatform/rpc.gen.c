@@ -19,14 +19,14 @@ struct yetty_ycore_void_result yetty_yplatform_ywindow_register(void);
 struct yetty_ycore_void_result yetty_yplatform_ywindow_chrome_register(void);
 struct yetty_ycore_void_result yetty_yplatform_register(void);
 
-
 /* ---- yplatform: explicit yclass-RPC hook registration ------------- */
 
 struct yetty_ycore_void_result yetty_yplatform_register(void)
 {
     static bool registered = false;
-    if (registered)
+    if (registered) {
         return YETTY_OK_VOID();
+    }
 
     {
         /* Submodule aggregator is always compiled into the same

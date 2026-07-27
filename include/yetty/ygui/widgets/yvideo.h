@@ -40,7 +40,8 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yvideo_create(struct yetty_ycla
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_yclass_object *obj, const uint8_t *bytes, size_t len);
+struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_yclass_object *obj,
+                                                           const uint8_t *bytes, size_t len);
 
 #ifdef __cplusplus
 }

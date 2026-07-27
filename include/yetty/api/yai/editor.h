@@ -18,8 +18,6 @@ extern "C" {
 
 struct yai_app;
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -38,11 +36,10 @@ struct yetty_yai_editor_ptr_result {
 struct yetty_yai_editor_ptr_result yetty_yai_editor_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_yai_editor_to(struct yetty_yai_editor *data);
 
-struct yetty_ycore_int_result yetty_yai_feed_byte(struct yetty_yclass_object * obj, struct yai_app * app, int byte);
+struct yetty_ycore_int_result yetty_yai_feed_byte(struct yetty_yclass_object *obj,
+                                                  struct yai_app *app, int byte);
 
 struct yetty_yclass_object_ptr_result yetty_yai_editor_create(struct yetty_yclass_ctx *ctx);
-
-
 
 #ifdef __cplusplus
 }

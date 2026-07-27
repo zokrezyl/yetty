@@ -19,11 +19,10 @@
 #                           the yclass connect runtime (yetty_yclass) and,
 #                           to navigate to the container, yetty_api_yterminal.
 #
-# include/yetty/yfigure/{figure,container}.h are COMPAT headers (generated
-# by the split codegen alongside the api headers) for un-migrated
-# dependents: the five modules subclassing yfigure:figure on codegen-old
-# hardcode that path, and serving hosts take register()'s declaration
-# from it. They die when the last dependent migrates.
+# yfigure has NO compat header: its subclassing modules (ygrid, yrdawn,
+# yshadertoy, ymgui, yvterm) are all migrated and reach the parent through
+# src/yetty/gen/impl/yfigure/figure.h. Consumers of the object API include
+# include/yetty/api/yfigure/{figure,container}.h.
 
 add_library(yetty_api_yfigure STATIC
     ${YETTY_ROOT}/src/yetty/gen/api/yfigure/figure.c

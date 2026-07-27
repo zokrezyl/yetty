@@ -28,12 +28,10 @@ struct yetty_ymgui_pipeline;
  * full definition into the generated figure.h for consumers; this TU has
  * its own copy and the two never share a translation unit. */
 struct yetty_ymgui_factory_args {
-    const struct yetty_context * context;
-    struct yetty_ymgui_pipeline * pipeline;
+    const struct yetty_context *context;
+    struct yetty_ymgui_pipeline *pipeline;
 };
 #endif
-
-
 
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
@@ -55,14 +53,21 @@ struct yetty_yclass_object_ptr_result yetty_ymgui_figure_to(struct yetty_ymgui_f
 
 struct yetty_yclass_object_ptr_result yetty_ymgui_figure_create(struct yetty_yclass_ctx *ctx);
 
-
-
-struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create_local(struct yetty_ycore_rectangle rect, struct yetty_ymgui_pipeline *pipeline, const struct yetty_context *context);
+struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create_local(
+    struct yetty_ycore_rectangle rect, struct yetty_ymgui_pipeline *pipeline,
+    const struct yetty_context *context);
 struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_from_base(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ymgui_figure_set_frame(struct yetty_yclass_object *obj, const uint8_t *frame_bytes, size_t frame_size);
-struct yetty_ycore_void_result yetty_ymgui_figure_set_atlas(struct yetty_yclass_object *obj, const uint8_t *atlas_bytes, size_t atlas_size, uint32_t atlas_w, uint32_t atlas_h);
-struct yetty_ycore_void_result yetty_ymgui_register_factory(struct yetty_yfigure_registry *registry, struct yetty_ymgui_factory_args *args);
-struct yetty_ycore_void_result yetty_ymgui_factory_args_release(struct yetty_ymgui_factory_args *args);
+struct yetty_ycore_void_result yetty_ymgui_figure_set_frame(struct yetty_yclass_object *obj,
+                                                            const uint8_t *frame_bytes,
+                                                            size_t frame_size);
+struct yetty_ycore_void_result yetty_ymgui_figure_set_atlas(struct yetty_yclass_object *obj,
+                                                            const uint8_t *atlas_bytes,
+                                                            size_t atlas_size, uint32_t atlas_w,
+                                                            uint32_t atlas_h);
+struct yetty_ycore_void_result yetty_ymgui_register_factory(struct yetty_yfigure_registry *registry,
+                                                            struct yetty_ymgui_factory_args *args);
+struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
+    struct yetty_ymgui_factory_args *args);
 
 #ifdef __cplusplus
 }

@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -38,10 +36,10 @@ struct yetty_yclass_object_ptr_result yetty_ygui_filepicker_to(struct yetty_ygui
 
 struct yetty_yclass_object_ptr_result yetty_ygui_filepicker_create(struct yetty_yclass_ctx *ctx);
 
-
-
-struct yetty_ycore_void_result yetty_ygui_filepicker_set_dir(struct yetty_yclass_object *obj, const char *path);
-struct yetty_ycore_const_char_ptr_result yetty_ygui_filepicker_get_dir(const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_filepicker_set_dir(struct yetty_yclass_object *obj,
+                                                             const char *path);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_filepicker_get_dir(
+    const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

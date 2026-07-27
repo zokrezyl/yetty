@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -42,11 +40,10 @@ struct yetty_yclass_object_ptr_result yetty_yguiapp_app_root_get(struct yetty_yc
  * and overrides this to add widgets under `root`. Local-only: `root` is a
  * live in-process widget object, never wire-marshalled. The default is empty.
  *=========================================================================*/
-struct yetty_ycore_void_result yetty_yguiapp_build(struct yetty_yclass_object * app, struct yetty_yclass_object * root);
+struct yetty_ycore_void_result yetty_yguiapp_build(struct yetty_yclass_object *app,
+                                                   struct yetty_yclass_object *root);
 
 struct yetty_yclass_object_ptr_result yetty_yguiapp_app_create(struct yetty_yclass_ctx *ctx);
-
-
 
 /* Stop the app's event loop — the clean-quit path for app subclasses that
  * install their own key handler (e.g. an Esc-to-quit demo) and so bypass the

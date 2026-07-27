@@ -18,8 +18,6 @@ extern "C" {
 
 struct yetty_ycore_rgba;
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -40,10 +38,11 @@ struct yetty_yclass_object_ptr_result yetty_ygui_panel_to(struct yetty_ygui_pane
 
 struct yetty_yclass_object_ptr_result yetty_ygui_panel_create(struct yetty_yclass_ctx *ctx);
 
-
-
-struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_yclass_object *obj, struct yetty_ycore_rgba color);
-struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_yclass_object *obj, struct yetty_ycore_rgba color, float width_px);
+struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_yclass_object *obj,
+                                                       struct yetty_ycore_rgba color);
+struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_yclass_object *obj,
+                                                           struct yetty_ycore_rgba color,
+                                                           float width_px);
 
 #ifdef __cplusplus
 }

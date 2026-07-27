@@ -216,6 +216,12 @@ def _write_atomic(path, content: str):
     could be read mid-write. With the rename a concurrent reader always sees
     either the complete old file or the complete new one — never a torn one.
     The temp name carries the pid so two processes never collide on it."""
+    # Normalize the trailing edge: exactly one newline, no trailing blank line
+    # or trailing whitespace on the last line. Generated files were ending with
+    # a blank line at EOF (git's whitespace check flagged 230 of them). Empty
+    # pre-touch placeholders stay empty.
+    if content.strip():
+        content = content.rstrip() + "\n"
     tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}")
     with open(tmp, "w") as handle:
         handle.write(content)
@@ -1349,6 +1355,11 @@ def _yaml_scalar(v) -> str:
     if isinstance(v, bool): return "true" if v else "false"
     if isinstance(v, (int, float)): return str(v)
     s = str(v)
+    if s == "":
+        # Quote the empty string explicitly — a bare `key:` would emit a
+        # trailing space after the colon (an anonymous union member's empty
+        # name did exactly that) and would re-parse as null, not "".
+        return '""'
     if any(ch in s for ch in ":#[]{}&*!|>'\"%@`") or s != s.strip():
         return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
     return s

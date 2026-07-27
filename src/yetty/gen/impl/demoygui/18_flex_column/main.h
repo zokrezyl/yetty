@@ -34,10 +34,13 @@ struct yetty_demoygui_18_flex_column_ptr_result {
     };
 };
 #endif
-struct yetty_demoygui_18_flex_column_ptr_result yetty_demoygui_18_flex_column_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_demoygui_18_flex_column_to(struct yetty_demoygui_18_flex_column *data);
+struct yetty_demoygui_18_flex_column_ptr_result yetty_demoygui_18_flex_column_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_demoygui_18_flex_column_to(
+    struct yetty_demoygui_18_flex_column *data);
 
-struct yetty_yclass_object_ptr_result yetty_demoygui_18_flex_column_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_demoygui_18_flex_column_create(
+    struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_demoygui_register(void);
 

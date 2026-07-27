@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -38,9 +36,8 @@ struct yetty_yclass_object_ptr_result yetty_ygui_toggle_to(struct yetty_ygui_tog
 
 struct yetty_yclass_object_ptr_result yetty_ygui_toggle_create(struct yetty_yclass_ctx *ctx);
 
-
-
-struct yetty_ycore_void_result yetty_ygui_toggle_set_label(struct yetty_yclass_object *obj, const char *label);
+struct yetty_ycore_void_result yetty_ygui_toggle_set_label(struct yetty_yclass_object *obj,
+                                                           const char *label);
 struct yetty_ycore_void_result yetty_ygui_toggle_set_on(struct yetty_yclass_object *obj, int on);
 struct yetty_ycore_int_result yetty_ygui_toggle_get_on(const struct yetty_yclass_object *obj);
 

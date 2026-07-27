@@ -34,8 +34,10 @@ struct yetty_demoygui_25_ypdf_ptr_result {
     };
 };
 #endif
-struct yetty_demoygui_25_ypdf_ptr_result yetty_demoygui_25_ypdf_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_demoygui_25_ypdf_to(struct yetty_demoygui_25_ypdf *data);
+struct yetty_demoygui_25_ypdf_ptr_result yetty_demoygui_25_ypdf_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_demoygui_25_ypdf_to(
+    struct yetty_demoygui_25_ypdf *data);
 
 struct yetty_yclass_object_ptr_result yetty_demoygui_25_ypdf_create(struct yetty_yclass_ctx *ctx);
 

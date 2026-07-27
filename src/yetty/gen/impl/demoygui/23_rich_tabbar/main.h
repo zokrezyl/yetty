@@ -34,10 +34,13 @@ struct yetty_demoygui_23_rich_tabbar_ptr_result {
     };
 };
 #endif
-struct yetty_demoygui_23_rich_tabbar_ptr_result yetty_demoygui_23_rich_tabbar_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_demoygui_23_rich_tabbar_to(struct yetty_demoygui_23_rich_tabbar *data);
+struct yetty_demoygui_23_rich_tabbar_ptr_result yetty_demoygui_23_rich_tabbar_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_demoygui_23_rich_tabbar_to(
+    struct yetty_demoygui_23_rich_tabbar *data);
 
-struct yetty_yclass_object_ptr_result yetty_demoygui_23_rich_tabbar_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_demoygui_23_rich_tabbar_create(
+    struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_demoygui_register(void);
 

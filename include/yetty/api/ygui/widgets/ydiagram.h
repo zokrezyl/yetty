@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -38,10 +36,10 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ydiagram_to(struct yetty_ygui_y
 
 struct yetty_yclass_object_ptr_result yetty_ygui_ydiagram_create(struct yetty_yclass_ctx *ctx);
 
-
-
-struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_yclass_object *obj, const char *source);
-struct yetty_ycore_const_char_ptr_result yetty_ygui_ydiagram_get_source(const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_yclass_object *obj,
+                                                              const char *source);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_ydiagram_get_source(
+    const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

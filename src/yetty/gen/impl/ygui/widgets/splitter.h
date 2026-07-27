@@ -42,10 +42,14 @@ struct yetty_yclass_object_ptr_result yetty_ygui_splitter_create(struct yetty_yc
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_splitter_set_axis(struct yetty_yclass_object *obj, int row);
+struct yetty_ycore_void_result yetty_ygui_splitter_set_axis(struct yetty_yclass_object *obj,
+                                                            int row);
 struct yetty_ycore_int_result yetty_ygui_splitter_get_axis(const struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_yclass_object *obj, float min_size);
-struct yetty_ycore_void_result yetty_ygui_splitter_on_change(struct yetty_yclass_object *obj, yetty_ygui_splitter_change_cb cb, void *userdata);
+struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_yclass_object *obj,
+                                                           float min_size);
+struct yetty_ycore_void_result yetty_ygui_splitter_on_change(struct yetty_yclass_object *obj,
+                                                             yetty_ygui_splitter_change_cb cb,
+                                                             void *userdata);
 
 #ifdef __cplusplus
 }

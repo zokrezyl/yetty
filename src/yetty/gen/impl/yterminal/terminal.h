@@ -33,16 +33,20 @@ struct yetty_yterminal_terminal_ptr_result {
     };
 };
 #endif
-struct yetty_yterminal_terminal_ptr_result yetty_yterminal_terminal_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_yterminal_terminal_to(struct yetty_yterminal_terminal *data);
+struct yetty_yterminal_terminal_ptr_result yetty_yterminal_terminal_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yterminal_terminal_to(
+    struct yetty_yterminal_terminal *data);
 
 /* figure_root_container: navigate from the terminal (the session root a
  * connecting tool receives) to its root figure container. Object-returning
  * wire slot — a remote tool receives a session-bound container proxy; a
  * local caller receives the real container object. */
-struct yetty_yclass_object_ptr_result yetty_yterminal_figure_root_container(struct yetty_yclass_object * obj);
+struct yetty_yclass_object_ptr_result yetty_yterminal_figure_root_container(
+    struct yetty_yclass_object *obj);
 
-typedef struct yetty_yclass_object_ptr_result (*yetty_yterminal_figure_root_container_fn)(struct yetty_yclass_object *);
+typedef struct yetty_yclass_object_ptr_result (*yetty_yterminal_figure_root_container_fn)(
+    struct yetty_yclass_object *);
 
 struct yetty_yclass_object_ptr_result yetty_yterminal_terminal_create(struct yetty_yclass_ctx *ctx);
 

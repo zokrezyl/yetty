@@ -51,19 +51,26 @@ struct yetty_yrich_shape_ptr_result {
 struct yetty_yrich_shape_ptr_result yetty_yrich_shape_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_yrich_shape_to(struct yetty_yrich_shape *data);
 struct uint32_result yetty_yrich_shape_fill_color_get(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_shape_fill_color_set(struct yetty_yclass_object *obj, uint32_t value);
+struct yetty_ycore_void_result yetty_yrich_shape_fill_color_set(struct yetty_yclass_object *obj,
+                                                                uint32_t value);
 struct uint32_result yetty_yrich_shape_stroke_color_get(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_shape_stroke_color_set(struct yetty_yclass_object *obj, uint32_t value);
+struct yetty_ycore_void_result yetty_yrich_shape_stroke_color_set(struct yetty_yclass_object *obj,
+                                                                  uint32_t value);
 struct float_result yetty_yrich_shape_stroke_width_get(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_shape_stroke_width_set(struct yetty_yclass_object *obj, float value);
+struct yetty_ycore_void_result yetty_yrich_shape_stroke_width_set(struct yetty_yclass_object *obj,
+                                                                  float value);
 struct float_result yetty_yrich_shape_rotation_get(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_shape_rotation_set(struct yetty_yclass_object *obj, float value);
+struct yetty_ycore_void_result yetty_yrich_shape_rotation_set(struct yetty_yclass_object *obj,
+                                                              float value);
 struct float_result yetty_yrich_shape_corner_radius_get(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_shape_corner_radius_set(struct yetty_yclass_object *obj, float value);
+struct yetty_ycore_void_result yetty_yrich_shape_corner_radius_set(struct yetty_yclass_object *obj,
+                                                                   float value);
 struct uint32_result yetty_yrich_shape_text_align_get(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_shape_text_align_set(struct yetty_yclass_object *obj, uint32_t value);
+struct yetty_ycore_void_result yetty_yrich_shape_text_align_set(struct yetty_yclass_object *obj,
+                                                                uint32_t value);
 struct uint32_result yetty_yrich_shape_text_valign_get(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_shape_text_valign_set(struct yetty_yclass_object *obj, uint32_t value);
+struct yetty_ycore_void_result yetty_yrich_shape_text_valign_set(struct yetty_yclass_object *obj,
+                                                                 uint32_t value);
 
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
@@ -83,11 +90,13 @@ struct yetty_yrich_slides_ptr_result {
 struct yetty_yrich_slides_ptr_result yetty_yrich_slides_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_yrich_slides_to(struct yetty_yrich_slides *data);
 
-struct yetty_ycore_void_result yetty_yrich_slides_set_current(struct yetty_yclass_object * obj, int32_t index);
-struct yetty_ycore_void_result yetty_yrich_slides_next(struct yetty_yclass_object * obj);
-struct yetty_ycore_void_result yetty_yrich_slides_prev(struct yetty_yclass_object * obj);
+struct yetty_ycore_void_result yetty_yrich_slides_set_current(struct yetty_yclass_object *obj,
+                                                              int32_t index);
+struct yetty_ycore_void_result yetty_yrich_slides_next(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_slides_prev(struct yetty_yclass_object *obj);
 
-typedef struct yetty_ycore_void_result (*yetty_yrich_slides_set_current_fn)(struct yetty_yclass_object *, int32_t);
+typedef struct yetty_ycore_void_result (*yetty_yrich_slides_set_current_fn)(
+    struct yetty_yclass_object *, int32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_slides_next_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_slides_prev_fn)(struct yetty_yclass_object *);
 
@@ -96,19 +105,33 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_create(struct yetty_ycl
 
 struct yetty_ycore_void_result yetty_yrich_register(void);
 
-struct yetty_ycore_void_result yetty_yrich_shape_set_text(struct yetty_yclass_object *obj, const char *text, size_t len);
-struct yetty_ycore_void_result yetty_yrich_shape_set_font_size(struct yetty_yclass_object *obj, float font_size);
-struct yetty_ycore_void_result yetty_yrich_shape_set_text_color(struct yetty_yclass_object *obj, uint32_t color);
-struct yetty_ycore_void_result yetty_yrich_shape_set_image_source(struct yetty_yclass_object *obj, const char *source);
-struct yetty_ycore_void_result yetty_yrich_slides_set_slide_size(struct yetty_yclass_object *obj, float width, float height);
+struct yetty_ycore_void_result yetty_yrich_shape_set_text(struct yetty_yclass_object *obj,
+                                                          const char *text, size_t len);
+struct yetty_ycore_void_result yetty_yrich_shape_set_font_size(struct yetty_yclass_object *obj,
+                                                               float font_size);
+struct yetty_ycore_void_result yetty_yrich_shape_set_text_color(struct yetty_yclass_object *obj,
+                                                                uint32_t color);
+struct yetty_ycore_void_result yetty_yrich_shape_set_image_source(struct yetty_yclass_object *obj,
+                                                                  const char *source);
+struct yetty_ycore_void_result yetty_yrich_slides_set_slide_size(struct yetty_yclass_object *obj,
+                                                                 float width, float height);
 struct yetty_yrich_slide_ptr_result yetty_yrich_slides_add_slide(struct yetty_yclass_object *obj);
-struct yetty_yrich_slide_ptr_result yetty_yrich_slides_slide_at(struct yetty_yclass_object *obj, int32_t index);
+struct yetty_yrich_slide_ptr_result yetty_yrich_slides_slide_at(struct yetty_yclass_object *obj,
+                                                                int32_t index);
 struct yetty_ycore_int_result yetty_yrich_slides_current(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_rectangle(struct yetty_yclass_object *obj, float x, float y, float width, float height);
-struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_ellipse(struct yetty_yclass_object *obj, float x, float y, float width, float height);
-struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_textbox(struct yetty_yclass_object *obj, float x, float y, float width, float height, const char *text, size_t text_len);
-struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_line(struct yetty_yclass_object *obj, float x1, float y1, float x2, float y2);
-struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_image(struct yetty_yclass_object *obj, float x, float y, float width, float height);
+struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_rectangle(
+    struct yetty_yclass_object *obj, float x, float y, float width, float height);
+struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_ellipse(
+    struct yetty_yclass_object *obj, float x, float y, float width, float height);
+struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_textbox(
+    struct yetty_yclass_object *obj, float x, float y, float width, float height, const char *text,
+    size_t text_len);
+struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_line(struct yetty_yclass_object *obj,
+                                                                  float x1, float y1, float x2,
+                                                                  float y2);
+struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_image(struct yetty_yclass_object *obj,
+                                                                   float x, float y, float width,
+                                                                   float height);
 
 #ifdef __cplusplus
 }

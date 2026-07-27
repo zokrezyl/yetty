@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -38,10 +36,10 @@ struct yetty_yclass_object_ptr_result yetty_ygui_spinner_to(struct yetty_ygui_sp
 
 struct yetty_yclass_object_ptr_result yetty_ygui_spinner_create(struct yetty_yclass_ctx *ctx);
 
-
-
-struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_yclass_object *obj, float v);
-struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_yclass_object *obj, float mn, float mx, float step);
+struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_yclass_object *obj,
+                                                            float v);
+struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_yclass_object *obj,
+                                                            float mn, float mx, float step);
 struct yetty_ycore_float_result yetty_ygui_spinner_get_value(const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus

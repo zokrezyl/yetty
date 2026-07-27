@@ -35,6 +35,13 @@
  * payloads travel as CALL bodies the other direction, never as responses. */
 #define RPC_CHANNEL_RESP_MAX 65536u
 
+/* Hard cap on a single reassembled request frame (header + body). A peer
+ * declares body_len as an untrusted 32-bit field; without a cap it could force
+ * the reassembly buffer to grow toward 4 GiB. Match the ordinary RPC path's
+ * BUF_MAX (64 MiB) — any client frame above it is a protocol violation, not a
+ * legitimate call. */
+#define RPC_CHANNEL_FRAME_MAX (64u * 1024u * 1024u)
+
 /* Per-accepted-channel server state: the request-frame reassembly buffer for
  * one client's channel. Freed when the channel closes. */
 struct rpc_channel_server {
@@ -53,6 +60,16 @@ static void rpc_channel_drain(struct rpc_channel_server *server)
         uint32_t body_len;
         memcpy(&header, server->inbuf + consumed, 4);
         memcpy(&body_len, server->inbuf + consumed + 4, 4);
+        if (body_len > RPC_CHANNEL_FRAME_MAX) {
+            /* Untrusted length past the protocol cap — the stream is corrupt or
+             * hostile and can never be reassembled (raw_sink refuses to grow
+             * past the cap). Drop everything buffered and stop; the channel
+             * layer surfaces the desync as its own error. */
+            ywarn("rpc-conn: request body_len %u exceeds cap %u — dropping channel buffer",
+                  body_len, RPC_CHANNEL_FRAME_MAX);
+            server->inlen = 0;
+            return;
+        }
         if (server->inlen - consumed - 8 < body_len) {
             break; /* incomplete frame — wait for more bytes */
         }
@@ -119,14 +136,34 @@ static void rpc_channel_raw_sink(void *user, const uint8_t *bytes, size_t n)
         return;
     }
     if (server->incap - server->inlen < n) {
+        /* Overflow-guard the size arithmetic, then cap the buffer: a client
+         * cannot force the reassembly allocation past one protocol frame. */
+        if (n > SIZE_MAX - server->inlen) {
+            ywarn("rpc-conn: reassembly size overflow — dropping channel buffer");
+            server->inlen = 0;
+            return;
+        }
         size_t want = server->inlen + n;
+        if (want > RPC_CHANNEL_FRAME_MAX) {
+            ywarn("rpc-conn: reassembly want %zu exceeds cap %u — dropping channel buffer",
+                  want, RPC_CHANNEL_FRAME_MAX);
+            server->inlen = 0;
+            return;
+        }
         size_t grown = server->incap ? server->incap : 8192;
         while (grown < want) {
             grown *= 2;
+            if (grown > RPC_CHANNEL_FRAME_MAX) {
+                grown = RPC_CHANNEL_FRAME_MAX; /* clamp; want <= cap guaranteed above */
+                break;
+            }
         }
         uint8_t *bigger = realloc(server->inbuf, grown);
         if (!bigger) {
-            ywarn("rpc-conn: reassembly grow failed (%zu bytes) — dropping frame", want);
+            /* Drop the whole partial frame — keeping it would append the next
+             * chunk into a corrupted, mis-aligned buffer. */
+            ywarn("rpc-conn: reassembly grow failed (%zu bytes) — dropping channel buffer", grown);
+            server->inlen = 0;
             return;
         }
         server->inbuf = bigger;

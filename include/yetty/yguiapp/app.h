@@ -46,9 +46,11 @@ struct yetty_yclass_object_ptr_result yetty_yguiapp_app_root_get(struct yetty_yc
  * and overrides this to add widgets under `root`. Local-only: `root` is a
  * live in-process widget object, never wire-marshalled. The default is empty.
  *=========================================================================*/
-struct yetty_ycore_void_result yetty_yguiapp_build(struct yetty_yclass_object * app, struct yetty_yclass_object * root);
+struct yetty_ycore_void_result yetty_yguiapp_build(struct yetty_yclass_object *app,
+                                                   struct yetty_yclass_object *root);
 
-typedef struct yetty_ycore_void_result (*yetty_yguiapp_build_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_yguiapp_build_fn)(struct yetty_yclass_object *,
+                                                                 struct yetty_yclass_object *);
 
 struct yetty_yclass_object_ptr_result yetty_yguiapp_app_create(struct yetty_yclass_ctx *ctx);
 

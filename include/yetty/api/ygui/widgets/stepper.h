@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -38,10 +36,10 @@ struct yetty_yclass_object_ptr_result yetty_ygui_stepper_to(struct yetty_ygui_st
 
 struct yetty_yclass_object_ptr_result yetty_ygui_stepper_create(struct yetty_yclass_ctx *ctx);
 
-
-
-struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_yclass_object *obj, const char *label);
-struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_yclass_object *obj, int i);
+struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_yclass_object *obj,
+                                                           const char *label);
+struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_yclass_object *obj,
+                                                              int i);
 
 #ifdef __cplusplus
 }

@@ -36,17 +36,21 @@ struct yetty_yapp_app_ptr_result {
 struct yetty_yapp_app_ptr_result yetty_yapp_app_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_yapp_app_to(struct yetty_yapp_app *data);
 
-struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object * app, struct yetty_yclass_object * platform);
-struct yetty_ycore_void_result yetty_yapp_run(struct yetty_yclass_object * app, struct yetty_yclass_object * platform);
+struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object *app,
+                                               struct yetty_yclass_object *platform);
+struct yetty_ycore_void_result yetty_yapp_run(struct yetty_yclass_object *app,
+                                              struct yetty_yclass_object *platform);
 /*
  * Ask the app to end its run loop. The base default is a no-op (an app with no
  * event loop has nothing to stop); a concrete app overrides this to stop its
  * loop so run() returns. Local — an app quits itself in-process.
  */
-struct yetty_ycore_void_result yetty_yapp_quit(struct yetty_yclass_object * app);
+struct yetty_ycore_void_result yetty_yapp_quit(struct yetty_yclass_object *app);
 
-typedef struct yetty_ycore_void_result (*yetty_yapp_init_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_yapp_run_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_yapp_init_fn)(struct yetty_yclass_object *,
+                                                             struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_yapp_run_fn)(struct yetty_yclass_object *,
+                                                            struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yapp_quit_fn)(struct yetty_yclass_object *);
 
 struct yetty_yclass_object_ptr_result yetty_yapp_app_create(struct yetty_yclass_ctx *ctx);

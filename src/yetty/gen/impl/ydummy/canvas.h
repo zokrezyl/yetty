@@ -38,23 +38,29 @@ struct yetty_yclass_object_ptr_result yetty_ydummy_canvas_to(struct yetty_ydummy
 
 /* constructor: creation-time defaults. Every sanctioned creation path must
  * run this exactly once (the creation-contract pilot assertion). */
-struct yetty_ycore_void_result yetty_ydummy_constructor(struct yetty_yclass_object * obj);
+struct yetty_ycore_void_result yetty_ydummy_constructor(struct yetty_yclass_object *obj);
 /* set_shader: replace the user fragment WGSL. The buffer carries the raw
  * text of `fn ydummy_fragment(uv: vec2f, time: f32) -> vec4f`; an empty
  * buffer reverts to the renderer's built-in default. Wire shape: length-
  * prefixed byte payload (`struct yetty_ycore_buffer` by value). */
-struct yetty_ycore_void_result yetty_ydummy_set_shader(struct yetty_yclass_object * obj, struct yetty_ycore_buffer wgsl);
+struct yetty_ycore_void_result yetty_ydummy_set_shader(struct yetty_yclass_object *obj,
+                                                       struct yetty_ycore_buffer wgsl);
 /* set_rect: placement in target pixels. Zero-area → cover the target. */
-struct yetty_ycore_void_result yetty_ydummy_set_rect(struct yetty_yclass_object * obj, float min_x, float min_y, float max_x, float max_y);
+struct yetty_ycore_void_result yetty_ydummy_set_rect(struct yetty_yclass_object *obj, float min_x,
+                                                     float min_y, float max_x, float max_y);
 /* set_time: advance the animation clock the fragment sees. */
-struct yetty_ycore_void_result yetty_ydummy_set_time(struct yetty_yclass_object * obj, float seconds);
+struct yetty_ycore_void_result yetty_ydummy_set_time(struct yetty_yclass_object *obj,
+                                                     float seconds);
 /* destroy: release the owned WGSL copy and the object. */
-struct yetty_ycore_void_result yetty_ydummy_destroy(struct yetty_yclass_object * obj);
+struct yetty_ycore_void_result yetty_ydummy_destroy(struct yetty_yclass_object *obj);
 
 typedef struct yetty_ycore_void_result (*yetty_ydummy_constructor_fn)(struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_ydummy_set_shader_fn)(struct yetty_yclass_object *, struct yetty_ycore_buffer);
-typedef struct yetty_ycore_void_result (*yetty_ydummy_set_rect_fn)(struct yetty_yclass_object *, float, float, float, float);
-typedef struct yetty_ycore_void_result (*yetty_ydummy_set_time_fn)(struct yetty_yclass_object *, float);
+typedef struct yetty_ycore_void_result (*yetty_ydummy_set_shader_fn)(struct yetty_yclass_object *,
+                                                                     struct yetty_ycore_buffer);
+typedef struct yetty_ycore_void_result (*yetty_ydummy_set_rect_fn)(struct yetty_yclass_object *,
+                                                                   float, float, float, float);
+typedef struct yetty_ycore_void_result (*yetty_ydummy_set_time_fn)(struct yetty_yclass_object *,
+                                                                   float);
 typedef struct yetty_ycore_void_result (*yetty_ydummy_destroy_fn)(struct yetty_yclass_object *);
 
 struct yetty_yclass_object_ptr_result yetty_ydummy_canvas_create(struct yetty_yclass_ctx *ctx);
@@ -62,13 +68,15 @@ struct yetty_yclass_object_ptr_result yetty_ydummy_canvas_create(struct yetty_yc
 struct yetty_ycore_void_result yetty_ydummy_register(void);
 
 /* Current user fragment WGSL text, or NULL for "use the built-in default". */
-struct yetty_ycore_const_char_ptr_result yetty_ydummy_canvas_shader_text(struct yetty_yclass_object *obj);
+struct yetty_ycore_const_char_ptr_result yetty_ydummy_canvas_shader_text(
+    struct yetty_yclass_object *obj);
 /* Byte length of the current user fragment WGSL (0 when default). */
 struct yetty_ycore_size_result yetty_ydummy_canvas_shader_length(struct yetty_yclass_object *obj);
 /* Monotonic shader generation — bumped by every set_shader. A renderer
  * rebuilds its pipeline when this differs from the generation it last
  * compiled. */
-struct yetty_ycore_uint32_result yetty_ydummy_canvas_shader_generation(struct yetty_yclass_object *obj);
+struct yetty_ycore_uint32_result yetty_ydummy_canvas_shader_generation(
+    struct yetty_yclass_object *obj);
 /* Placement rect in target pixels (zero-area → cover the whole target). */
 struct yetty_ycore_rectangle_result yetty_ydummy_canvas_rect(struct yetty_yclass_object *obj);
 /* Animation clock last stored by set_time. */

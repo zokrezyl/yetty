@@ -37,10 +37,13 @@ struct yetty_ygui_primitive_widget_ptr_result {
     };
 };
 #endif
-struct yetty_ygui_primitive_widget_ptr_result yetty_ygui_primitive_widget_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_ygui_primitive_widget_to(struct yetty_ygui_primitive_widget *data);
+struct yetty_ygui_primitive_widget_ptr_result yetty_ygui_primitive_widget_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_ygui_primitive_widget_to(
+    struct yetty_ygui_primitive_widget *data);
 
-struct yetty_yclass_object_ptr_result yetty_ygui_primitive_widget_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_ygui_primitive_widget_create(
+    struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 

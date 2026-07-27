@@ -16,7 +16,8 @@
 extern "C" {
 #endif
 
-typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *, float, float, void *);
+typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *, float,
+                                                             float, void *);
 
 struct yetty_yclass_ptr_result yetty_ygui_draggable_mixin_get(void);
 
@@ -39,9 +40,13 @@ struct yetty_ygui_draggable_ptr_result yetty_ygui_draggable_from(struct yetty_yc
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_draggable_on_drag_set(struct yetty_yclass_object *obj, yetty_ygui_drag_cb cb, void *userdata);
-struct yetty_ycore_void_result yetty_ygui_draggable_press_point(struct yetty_yclass_object *obj, float *out_x, float *out_y);
-struct yetty_ycore_int_result yetty_ygui_draggable_is_dragging(const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_draggable_on_drag_set(struct yetty_yclass_object *obj,
+                                                                yetty_ygui_drag_cb cb,
+                                                                void *userdata);
+struct yetty_ycore_void_result yetty_ygui_draggable_press_point(struct yetty_yclass_object *obj,
+                                                                float *out_x, float *out_y);
+struct yetty_ycore_int_result yetty_ygui_draggable_is_dragging(
+    const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

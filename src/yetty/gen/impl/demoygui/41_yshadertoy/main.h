@@ -34,10 +34,13 @@ struct yetty_demoygui_41_yshadertoy_ptr_result {
     };
 };
 #endif
-struct yetty_demoygui_41_yshadertoy_ptr_result yetty_demoygui_41_yshadertoy_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_demoygui_41_yshadertoy_to(struct yetty_demoygui_41_yshadertoy *data);
+struct yetty_demoygui_41_yshadertoy_ptr_result yetty_demoygui_41_yshadertoy_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_demoygui_41_yshadertoy_to(
+    struct yetty_demoygui_41_yshadertoy *data);
 
-struct yetty_yclass_object_ptr_result yetty_demoygui_41_yshadertoy_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_demoygui_41_yshadertoy_create(
+    struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_demoygui_register(void);
 

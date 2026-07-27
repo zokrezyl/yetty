@@ -33,23 +33,28 @@ struct yetty_ycore_void_result yetty_yplatform_ywindow_register(void);
 static struct yetty_yclass_ptr_result yetty_yplatform_ywindow_accessor_lookup(const char *name)
 {
 #ifdef YETTY_PLATFORM_ANDROID
-    if (strcmp(name, "yetty_yplatform_android_window") == 0)
+    if (strcmp(name, "yetty_yplatform_android_window") == 0) {
         return yetty_yplatform_android_window_class_get();
+    }
 #endif
 #ifdef YETTY_PLATFORM_GLFW
-    if (strcmp(name, "yetty_yplatform_glfw_window") == 0)
+    if (strcmp(name, "yetty_yplatform_glfw_window") == 0) {
         return yetty_yplatform_glfw_window_class_get();
+    }
 #endif
 #ifdef YETTY_PLATFORM_IOS
-    if (strcmp(name, "yetty_yplatform_ios_window") == 0)
+    if (strcmp(name, "yetty_yplatform_ios_window") == 0) {
         return yetty_yplatform_ios_window_class_get();
+    }
 #endif
 #ifdef YETTY_PLATFORM_WEBASM
-    if (strcmp(name, "yetty_yplatform_webasm_window") == 0)
+    if (strcmp(name, "yetty_yplatform_webasm_window") == 0) {
         return yetty_yplatform_webasm_window_class_get();
+    }
 #endif
-    if (strcmp(name, "yetty_yplatform_window") == 0)
+    if (strcmp(name, "yetty_yplatform_window") == 0) {
         return yetty_yplatform_window_class_get();
+    }
     /* "Not mine": OK with NULL value -- yetty_yclass_by_name walks to next hook. */
     return YETTY_OK(yetty_yclass_ptr, NULL);
 }
@@ -59,8 +64,9 @@ static struct yetty_yclass_ptr_result yetty_yplatform_ywindow_accessor_lookup(co
 struct yetty_ycore_void_result yetty_yplatform_ywindow_register(void)
 {
     static bool registered = false;
-    if (registered)
+    if (registered) {
         return YETTY_OK_VOID();
+    }
 
     struct yetty_ycore_void_result add_accessor_r =
         yetty_yclass_add_accessor_lookup(yetty_yplatform_ywindow_accessor_lookup);

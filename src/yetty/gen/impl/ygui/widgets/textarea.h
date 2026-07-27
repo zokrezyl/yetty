@@ -40,8 +40,10 @@ struct yetty_yclass_object_ptr_result yetty_ygui_textarea_create(struct yetty_yc
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_textarea_set_text(struct yetty_yclass_object *obj, const char *text);
-struct yetty_ycore_const_char_ptr_result yetty_ygui_textarea_get_text(const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_textarea_set_text(struct yetty_yclass_object *obj,
+                                                            const char *text);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_textarea_get_text(
+    const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

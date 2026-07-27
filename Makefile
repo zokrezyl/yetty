@@ -146,9 +146,13 @@ all: help
 # yclass codegen — standalone, NOT part of any platform build
 #=============================================================================
 #
-# Generates per-module model.yaml, methods.gen.{h,c}, rpc.gen.c,
-# per-class <name>.gen.c, public include/yetty/<module>/{methods,rpc,
-# <name>}.h from annotated .c sources.
+# Generates, per module, model.yaml plus the role-split output: object-API
+# stubs at src/yetty/gen/api/<module>/<stem>.c with the public header
+# include/yetty/api/<module>/<stem>.h, and implementation glue at
+# src/yetty/gen/impl/<module>/<stem>.{c,h} (foot-#included by the hand-written
+# <stem>.c). No per-module rpc.gen.c / methods.gen.* except the standalone
+# per-submodule rpc.gen.c aggregators a duplicate-stem module (yplatform) emits
+# under gen/impl/.
 #
 # Output is committed to git. Platform builds compile what is in the
 # tree — they NEVER invoke this. Re-run when annotated sources change.
@@ -187,6 +191,13 @@ YCLASS_DEFINES_ybrowser := YETTY_YBROWSER_HAS_STANDALONE YETTY_YGUI_HAS_UV
 YCLASS_DEFINES_yhello := YETTY_YHELLO_HAS_STANDALONE
 YCLASS_DEFINES_ygreeter := YETTY_YGREETER_HAS_STANDALONE YETTY_YGUI_HAS_UV
 
+# Extra parse -I roots (space-separated) for modules whose annotated sources
+# use third-party types the standard roots can't resolve. Without them the
+# type degrades to `int`/`int *` in the model (grid.c's `VTerm *vterm` /
+# `VTermState *state` became `int *`). yvterm's grid/vterm sources #include
+# <vterm.h>/<vterm_keycodes.h> from the vendored libvterm.
+YCLASS_INCLUDE_DIRS_yvterm := $(CURDIR)/src/libvterm-0.3.3/include
+
 # Role-split codegen. Every module runs the split generator
 # (src/yetty/yclass/gen/codegen.py): raw annotated source in
 # src/yetty/<module>/, generated object API in src/yetty/gen/api/<mod>/ (+
@@ -210,7 +221,6 @@ YCLASS_SPLIT_ychrome := 1
 YCLASS_SPLIT_yjupyter := 1
 YCLASS_SPLIT_ynotebook := 1
 YCLASS_SPLIT_yapp := 1
-YCLASS_COMPAT_HEADER_yapp := 1
 YCLASS_SPLIT_yetty := 1
 YCLASS_SPLIT_yguiapp := 1
 YCLASS_COMPAT_HEADER_yguiapp := 1
