@@ -210,19 +210,37 @@ def result_payload_type(return_type: str, types_by_name: dict):
 # introduce a new method entry in this module: the slot's public stub
 # is owned by the slot's home module and is included from there.
 
+def _clang_format(content: str, path: Path) -> str:
+    """Return `content` clang-formatted as if it were `path` — `-assume-filename`
+    gives clang-format the real name so it picks the C/C++ language AND locates
+    the repo's .clang-format by walking up from that path. Reads stdin, writes
+    stdout, so the raw text never touches disk; only the formatted result does."""
+    clang_format = os.environ.get("CLANG_FORMAT", "clang-format")
+    result = subprocess.run([clang_format, f"-assume-filename={path}"],
+                            input=content, capture_output=True, text=True)
+    if result.returncode != 0:
+        sys.stderr.write(f"codegen: clang-format failed on {path}:\n{result.stderr}")
+        sys.exit(1)
+    return result.stdout
+
+
 def _write_atomic(path, content: str):
     """Write `content` to `path` atomically (temp file + os.replace rename).
     Codegen modules run in PARALLEL: a consumer module's clang parse reads a
     producer module's freshly-regenerated header, so a plain truncate-then-write
     could be read mid-write. With the rename a concurrent reader always sees
     either the complete old file or the complete new one — never a torn one.
-    The temp name carries the pid so two processes never collide on it."""
-    # Normalize the trailing edge: exactly one newline, no trailing blank line
-    # or trailing whitespace on the last line. Generated files were ending with
-    # a blank line at EOF (git's whitespace check flagged 230 of them). Empty
-    # pre-touch placeholders stay empty.
+    The temp name carries the pid so two processes never collide on it.
+
+    A generated C/C++ file is clang-formatted HERE, before the write, so the
+    file that lands at `path` is always the formatted one — codegen never emits
+    raw C that a separate format pass has to clean up. Non-C outputs (model.yaml)
+    just get their trailing edge normalized (single newline, no trailing blank
+    line); empty pre-touch placeholders are left untouched."""
     if content.strip():
         content = content.rstrip() + "\n"
+        if path.suffix in (".c", ".h"):
+            content = _clang_format(content, path)
     tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}")
     with open(tmp, "w") as handle:
         handle.write(content)
