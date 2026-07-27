@@ -65,6 +65,7 @@ Usage:
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -228,6 +229,74 @@ def _write_atomic(path, content: str):
     os.replace(tmp, path)
 
 
+# The codegen parse must see EXACTLY the include roots and defines the real
+# build uses — third-party headers (webgpu from the Dawn fetch, yyjson, libvterm)
+# are provided at CONFIGURE time, not committed, so their paths live only in the
+# build's compile_commands.json. We read the per-source flags from there instead
+# of hand-maintaining include lists or leaning on a committed copy: an unresolved
+# type would otherwise degrade to `int` in the model. Cached across all sources.
+_COMPILE_DB = None
+
+
+def _extract_parse_flags(command: str) -> list:
+    """Pull just the preprocessor/include flags out of a full compile command —
+    everything the AST parse needs to resolve headers and macros, and nothing
+    that would fight the -fsyntax-only/-std=gnu2x parse (drop -c/-o/-M/-O/-g/-W
+    and the source/compiler tokens). Handles both attached (-Ifoo, -Dfoo) and
+    separated (-isystem foo, -include foo) spellings."""
+    flags: list = []
+    tokens = shlex.split(command)
+    two_arg = {"-isystem", "-iquote", "-idirafter", "-include", "-imacros"}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token in two_arg and index + 1 < len(tokens):
+            flags += [token, tokens[index + 1]]
+            index += 2
+            continue
+        if token in ("-I", "-D") and index + 1 < len(tokens):
+            flags += [token, tokens[index + 1]]
+            index += 2
+            continue
+        if token.startswith(("-I", "-D")):
+            flags.append(token)
+        index += 1
+    return flags
+
+
+def _load_compile_db() -> dict:
+    global _COMPILE_DB
+    if _COMPILE_DB is not None:
+        return _COMPILE_DB
+    _COMPILE_DB = {}
+    db_path = os.environ.get("YCLASS_COMPILE_DB", "compile_commands.json")
+    if not os.path.exists(db_path):
+        return _COMPILE_DB
+    for entry in json.load(open(db_path)):
+        command = entry.get("command") or " ".join(entry.get("arguments", []))
+        _COMPILE_DB[os.path.abspath(entry["file"])] = _extract_parse_flags(command)
+    return _COMPILE_DB
+
+
+def _compile_flags_for(path: Path):
+    """The build's include/define flags for this source, or None if the compile
+    database has no usable entry. A source not compiled in THIS build config
+    (yplatform's android/ios/webasm variants on a desktop build) borrows a
+    same-directory sibling's flags — same module include needs, and its
+    platform-specific includes are behind #ifdefs this parse never enters."""
+    db = _load_compile_db()
+    if not db:
+        return None
+    absolute = os.path.abspath(str(path))
+    if absolute in db:
+        return db[absolute]
+    directory = os.path.dirname(absolute)
+    for known, flags in db.items():
+        if os.path.dirname(known) == directory:
+            return flags
+    return None
+
+
 def ast_dump(path: Path, include_dirs: list) -> dict:
     clang = os.environ.get("CLANG", "clang")
     # Tolerate semantic errors in the source — what we need from clang
@@ -243,27 +312,24 @@ def ast_dump(path: Path, include_dirs: list) -> dict:
     # special define is required for them to resolve here.
     cmd = [clang, "-Xclang", "-ast-dump=json", "-fsyntax-only", "-std=gnu2x",
            "-ferror-limit=0", "-Wno-error", "-Wno-everything"]
-    # Some modules keep their annotated class/overrides behind a feature
-    # #ifdef (e.g. a standalone-window app guarded by
-    # YETTY_<TOOL>_HAS_STANDALONE). The annotation is invisible to this parse
-    # unless that macro is defined, so the Makefile passes the module's
-    # required guard macros through YCLASS_DEFINES (space-separated). These
-    # only affect which annotated declarations clang sees; the generated
-    # output is committed and compiled under the real CMake define.
-    for macro in os.environ.get("YCLASS_DEFINES", "").split():
-        cmd.append(f"-D{macro}")
-    # Extra include roots for this module's parse (space-separated dirs).
-    # Some annotated sources use types from headers the standard include
-    # roots can't resolve — e.g. <webgpu/webgpu.h>, which the build gets
-    # from the `webgpu` CMake target's include path (Dawn fetch or the
-    # committed yrdawn copy). Without the header the typedefs degrade to
-    # error types and land in the model (and the generated signatures) as
-    # `int`. The Makefile passes the module's dirs via YCLASS_INCLUDE_DIRS,
-    # same pattern as YCLASS_DEFINES.
-    for extra_include_dir in os.environ.get("YCLASS_INCLUDE_DIRS", "").split():
-        cmd.append(f"-I{extra_include_dir}")
-    for d in include_dirs:
-        cmd.append(f"-I{d}")
+    # Primary: parse with the SAME include roots + defines the real build uses,
+    # read from compile_commands.json. This is how third-party headers resolve
+    # — <webgpu/webgpu.h> from the Dawn fetch, <yyjson.h>, <vterm.h> — without
+    # committing a copy or hand-maintaining paths, and it carries the feature
+    # #ifdef defines (YETTY_<TOOL>_HAS_STANDALONE, WEBGPU_BACKEND_DAWN, …) that
+    # make annotated declarations visible. Codegen is a post-configure step;
+    # if there is no compile database, fall back to the caller-supplied roots
+    # and the YCLASS_DEFINES/YCLASS_INCLUDE_DIRS env (legacy path).
+    build_flags = _compile_flags_for(path)
+    if build_flags is not None:
+        cmd += build_flags
+    else:
+        for macro in os.environ.get("YCLASS_DEFINES", "").split():
+            cmd.append(f"-D{macro}")
+        for extra_include_dir in os.environ.get("YCLASS_INCLUDE_DIRS", "").split():
+            cmd.append(f"-I{extra_include_dir}")
+        for d in include_dirs:
+            cmd.append(f"-I{d}")
     cmd.append(str(path))
     r = subprocess.run(cmd, capture_output=True, text=True, check=False)
     # clang still dumps a well-formed AST on stdout even when it reports
@@ -272,12 +338,19 @@ def ast_dump(path: Path, include_dirs: list) -> dict:
     # exist until the generated glue is written. Those are undeclared
     # *identifiers* (functions) and never affect a recorded TYPE.
     #
-    # Every OTHER error is fatal, because it corrupts the model: a missing
-    # #include ("file not found") or an unresolved type ("unknown type name")
-    # makes clang substitute `int` for the real type, so a field/arg silently
-    # lands in model.yaml as `int`/`int *` (e.g. VTerm* → int* when libvterm's
-    # include root is not passed). The model is the FFI contract; a degraded
-    # parse must fail generation, not ship a wrong type.
+    # An error in the HAND-WRITTEN source is fatal, because it corrupts the
+    # model: a missing #include or an unresolved type makes clang substitute
+    # `int` for the real type, so a field/arg silently lands in model.yaml as
+    # `int`/`int *` (e.g. VTerm* → int* when libvterm's include root is missing).
+    # The model is the FFI contract; a degraded parse must fail, not ship `int`.
+    #
+    # Errors that concern a GENERATED artifact under src/yetty/gen/ are tolerated
+    # — that tree is codegen OUTPUT the hand-written .c only foot-#includes for
+    # compilation (its own impl glue; a parent's generated header/`_fn` typedef).
+    # It is produced FROM the model, never read INTO it: the class annotations
+    # are parsed before the foot include, so a missing or momentarily-incomplete
+    # generated file (they race during the parallel two-pass regeneration) never
+    # changes a recorded type.
     fatal = []
     for line in r.stderr.splitlines():
         if " error:" not in line:  # matches "error:" and "fatal error:"
@@ -285,14 +358,10 @@ def ast_dump(path: Path, include_dirs: list) -> dict:
         if "use of undeclared identifier 'yetty_" in line:
             continue  # forward reference to a not-yet-generated stub — expected
         if "file not found" in line and "yetty/gen/" in line:
-            # A generated OUTPUT the source pulls in only for COMPILATION: the
-            # hand-written .c foot-#includes its own impl glue, and a subclass
-            # includes a parent's generated header. Those live under
-            # src/yetty/gen/ and may be absent/incomplete during THIS annotation
-            # parse (they are produced from the model, not consumed by it), so
-            # their absence never degrades a recorded type. Everything read for
-            # the model was already parsed before the foot include.
-            continue
+            continue  # foot-included generated artifact absent during the parse
+        location = re.match(r"^(\S.*?):\d+:\d+:", line)
+        if location and "/yetty/gen/" in location.group(1):
+            continue  # error located INSIDE a generated artifact — not a model input
         fatal.append(line)
     if fatal:
         sys.stderr.write(

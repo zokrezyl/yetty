@@ -3258,6 +3258,7 @@ types:
 local_types:
   yetty_yrich_app: src/yetty/yrich/app.c
   yetty_yrich_app_ptr_result: src/yetty/yrich/app.c
+  yrich_terminal_host: src/yetty/yrich/app.c
   yetty_yrich_document_ptr_result: src/yetty/yrich/document.c
   yetty_yrich_document: src/yetty/yrich/document.c
   yetty_yrich_element_ptr_result: src/yetty/yrich/element.c

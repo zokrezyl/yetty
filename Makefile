@@ -191,26 +191,14 @@ YCLASS_DEFINES_ybrowser := YETTY_YBROWSER_HAS_STANDALONE YETTY_YGUI_HAS_UV
 YCLASS_DEFINES_yhello := YETTY_YHELLO_HAS_STANDALONE
 YCLASS_DEFINES_ygreeter := YETTY_YGREETER_HAS_STANDALONE YETTY_YGUI_HAS_UV
 
-# Extra parse -I roots (space-separated) for the codegen clang parse. Codegen
-# now FAILS on an unresolved header/type instead of silently substituting `int`
-# for the real type in the model, so every annotated source's third-party
-# headers must resolve here — even the ones whose types never reach the model,
-# because a `#include ... file not found` degrades the whole parse.
-#
-# COMMON roots applied to every module:
-#   - <webgpu/webgpu.h>: the committed copy under include/yetty/yrdawn (the same
-#     interface the Dawn/webgpu build target exposes; only opaque handle types
-#     ever appear in a data field, identical across copies).
-#   - <yyjson.h>: the 3rdparty tarball extracted into a build dir. Codegen is a
-#     developer-local, post-configure step; pick whichever desktop build has it.
-YCLASS_INCLUDE_DIRS_COMMON := $(CURDIR)/include/yetty/yrdawn \
-    $(firstword $(wildcard $(CURDIR)/build-desktop-*/3rdparty/yyjson/include) \
-                $(wildcard $(CURDIR)/build-*/3rdparty/yyjson/include))
-
-# Per-module extra roots (appended to the common set). yvterm's grid/vterm
-# sources #include <vterm.h>/<vterm_keycodes.h> from the vendored libvterm;
-# without this, `VTerm *`/`VTermState *` data fields degraded to `int *`.
-YCLASS_INCLUDE_DIRS_yvterm := $(CURDIR)/src/libvterm-0.3.3/include
+# The codegen parse takes its include roots and defines from the build's
+# compile_commands.json (the same flags CMake computed at configure time), so
+# third-party headers — <webgpu/webgpu.h> from the Dawn fetch, <yyjson.h>,
+# <vterm.h> — resolve without a committed copy or hand-maintained path. Codegen
+# now FAILS on an unresolved header/type instead of silently substituting `int`,
+# so a configured build (compile_commands.json) is a prerequisite for `make
+# codegen`. YCLASS_INCLUDE_DIRS_<module> / YCLASS_DEFINES_<module> below are the
+# fallback used only for a source with no compile-database entry.
 
 # Role-split codegen. Every module runs the split generator
 # (src/yetty/yclass/gen/codegen.py): raw annotated source in
@@ -278,7 +266,7 @@ if [ -z "$$sources" ]; then echo "ERROR: no annotated sources under $$src_dir"; 
 local_headers=""; case " $(YCLASS_LOCAL_HEADERS) " in *" $$mod "*) local_headers="--headers-local";; esac; \
 generator="src/yetty/yclass/gen/codegen.py"; \
 echo "  codegen: $$mod ($${generator##*/})"; \
-YCLASS_DEFINES="$(YCLASS_DEFINES_$(1))" YCLASS_INCLUDE_DIRS="$(YCLASS_INCLUDE_DIRS_COMMON) $(YCLASS_INCLUDE_DIRS_$(1))" YCLASS_SPLIT="$(YCLASS_SPLIT_$(1))" YCLASS_COMPAT_HEADER="$(YCLASS_COMPAT_HEADER_$(1))" PYTHONHASHSEED=0 uv run $$generator "$$mod" "$(CURDIR)/include/yetty" "$(CURDIR)/$$src_dir" $$local_headers $$sources
+YCLASS_DEFINES="$(YCLASS_DEFINES_$(1))" YCLASS_INCLUDE_DIRS="$(YCLASS_INCLUDE_DIRS_$(1))" YCLASS_SPLIT="$(YCLASS_SPLIT_$(1))" YCLASS_COMPAT_HEADER="$(YCLASS_COMPAT_HEADER_$(1))" PYTHONHASHSEED=0 uv run $$generator "$$mod" "$(CURDIR)/include/yetty" "$(CURDIR)/$$src_dir" $$local_headers $$sources
 endef
 
 # NB: the per-module _cg1-%/_cg2-% targets are deliberately NOT .PHONY — GNU
