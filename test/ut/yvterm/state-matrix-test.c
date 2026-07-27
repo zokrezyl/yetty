@@ -524,7 +524,8 @@ static void capture_reset(struct yetty_yclass_object *sink)
  *-------------------------------------------------------------------------*/
 static void test_kitty_keyboard(struct ytest *test)
 {
-    struct yetty_yclass_object_ptr_result sink_res = yetty_yclass_object_alloc(capture_sink_class());
+    struct yetty_yclass_object_ptr_result sink_res =
+        yetty_yclass_object_alloc(capture_sink_class());
     YTEST_REQUIRE_OK(test, sink_res);
     struct yetty_yclass_object *sink = sink_res.value;
     struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
@@ -572,7 +573,8 @@ static void test_kitty_keyboard(struct ytest *test)
 static void test_osc52_clipboard(struct ytest *test)
 {
     struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
-    struct yetty_yclass_object_ptr_result sink_res = yetty_yclass_object_alloc(capture_sink_class());
+    struct yetty_yclass_object_ptr_result sink_res =
+        yetty_yclass_object_alloc(capture_sink_class());
     YTEST_REQUIRE_OK(test, sink_res);
     struct yetty_yclass_object *sink = sink_res.value;
     YTEST_REQUIRE_OK(test, yetty_yvterm_grid_set_sink(grid, sink));
@@ -611,7 +613,8 @@ static void test_osc52_clipboard(struct ytest *test)
 static void test_osc_dynamic_colors(struct ytest *test)
 {
     struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
-    struct yetty_yclass_object_ptr_result sink_res = yetty_yclass_object_alloc(capture_sink_class());
+    struct yetty_yclass_object_ptr_result sink_res =
+        yetty_yclass_object_alloc(capture_sink_class());
     YTEST_REQUIRE_OK(test, sink_res);
     struct yetty_yclass_object *sink = sink_res.value;
     YTEST_REQUIRE_OK(test, yetty_yvterm_grid_set_sink(grid, sink));
@@ -654,7 +657,8 @@ static void test_osc_dynamic_colors(struct ytest *test)
 static void test_mode_2048_inband_resize(struct ytest *test)
 {
     struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
-    struct yetty_yclass_object_ptr_result sink_res = yetty_yclass_object_alloc(capture_sink_class());
+    struct yetty_yclass_object_ptr_result sink_res =
+        yetty_yclass_object_alloc(capture_sink_class());
     YTEST_REQUIRE_OK(test, sink_res);
     struct yetty_yclass_object *sink = sink_res.value;
     YTEST_REQUIRE_OK(test, yetty_yvterm_grid_set_sink(grid, sink));
@@ -704,7 +708,8 @@ static void test_mode_2048_inband_resize(struct ytest *test)
 static void test_mode_2031_color_scheme(struct ytest *test)
 {
     struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
-    struct yetty_yclass_object_ptr_result sink_res = yetty_yclass_object_alloc(capture_sink_class());
+    struct yetty_yclass_object_ptr_result sink_res =
+        yetty_yclass_object_alloc(capture_sink_class());
     YTEST_REQUIRE_OK(test, sink_res);
     struct yetty_yclass_object *sink = sink_res.value;
     YTEST_REQUIRE_OK(test, yetty_yvterm_grid_set_sink(grid, sink));

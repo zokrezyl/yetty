@@ -2219,8 +2219,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
         if (YETTY_IS_ERR(free_res)) {
             yetty_ycore_error_destroy(free_res.error);
         }
-        return YETTY_ERR(yetty_yterminal_terminal, "terminal_open: from_obj",
-                         terminal_data_res);
+        return YETTY_ERR(yetty_yterminal_terminal, "terminal_open: from_obj", terminal_data_res);
     }
     terminal = terminal_data_res.value;
 
@@ -2247,7 +2246,9 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     if (!yetty_context->event_loop) {
         ydebug("terminal_create: no event_loop in context");
         struct yetty_ycore_void_result cleanup_free = yetty_yclass_object_free(terminal_object);
-        if (YETTY_IS_ERR(cleanup_free)) yetty_ycore_error_destroy(cleanup_free.error);
+        if (YETTY_IS_ERR(cleanup_free)) {
+            yetty_ycore_error_destroy(cleanup_free.error);
+        }
         return YETTY_ERR(yetty_yterminal_terminal, "no event_loop in context");
     }
     ydebug("terminal_create: using event_loop at %p",
@@ -2261,7 +2262,9 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     struct yetty_yplatform_pty_factory *pty_factory = yetty_context->pty_factory;
     if (!pty_factory || !pty_factory->ops || !pty_factory->ops->create_pty) {
         struct yetty_ycore_void_result cleanup_free = yetty_yclass_object_free(terminal_object);
-        if (YETTY_IS_ERR(cleanup_free)) yetty_ycore_error_destroy(cleanup_free.error);
+        if (YETTY_IS_ERR(cleanup_free)) {
+            yetty_ycore_error_destroy(cleanup_free.error);
+        }
         return YETTY_ERR(
             yetty_yterminal_terminal,
             "terminal_create: yetty_context.pty_factory is NULL or has no create_pty op");
@@ -2507,8 +2510,8 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
          * set_content_size so prims past the viewport are NOT clipped). This is
          * what ychromium's web page uses; the default "ygrid" kind is absolute
          * (chrome/widgets) and cannot scroll content taller than its rect. */
-        static const char *const producer_kind_names[] = {"yplot", "yimage",  "yvideo", "yzoo",
-                                                          "yjungle", "yscroll"};
+        static const char *const producer_kind_names[] = {"yplot", "yimage",  "yvideo",
+                                                          "yzoo",  "yjungle", "yscroll"};
         for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); i++) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
                 terminal->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
@@ -2751,9 +2754,9 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
      * DCS YCLASS_RPC server above stays until every client opens a dynamic
      * channel instead — issue #676.) */
     {
-        struct yetty_ycore_void_result sr = yetty_yclass_rpc_serve_connection(terminal->channel_host);
-        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, sr,
-                            "terminal_create: rpc_serve_connection");
+        struct yetty_ycore_void_result sr =
+            yetty_yclass_rpc_serve_connection(terminal->channel_host);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, sr, "terminal_create: rpc_serve_connection");
     }
     ydebug("terminal_create: ywire channel host + RPC serve registered (code=%d)",
            YETTY_DCS_YWIRE_CHANNEL);
@@ -3980,8 +3983,7 @@ YETTY_ANNOTATE("virtual@yterminal:terminal:figure_root_container")
 static struct yetty_yclass_object_ptr_result terminal_figure_root_container(
     struct yetty_yclass_object *obj)
 {
-    struct yetty_yterminal_terminal_ptr_result terminal_res =
-        yetty_yterminal_terminal_from(obj);
+    struct yetty_yterminal_terminal_ptr_result terminal_res = yetty_yterminal_terminal_from(obj);
     YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, terminal_res,
                         "yterminal figure_root_container: object");
     struct yetty_yterminal_terminal *terminal = terminal_res.value;

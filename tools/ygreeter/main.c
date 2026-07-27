@@ -3113,7 +3113,7 @@ struct client_state {
      * titlebar. The producer session owns the RPC transport; the container is a
      * borrowed proxy obtained from it. */
     struct yetty_yclass_object *chrome_root;      /* terminal (session root) */
-    struct yetty_yclass_object *chrome_container;  /* navigated container proxy */
+    struct yetty_yclass_object *chrome_container; /* navigated container proxy */
     struct yetty_ychrome_host *chrome_host;
     int chrome_width;
     int chrome_height;
@@ -3159,9 +3159,9 @@ static struct yetty_ycore_void_result client_chrome_sync(struct client_state *cs
         return YETTY_OK_VOID();
     }
     if (!cs->chrome_host) {
-        struct yetty_ychrome_host_ptr_result host_result = yetty_ychrome_host_create_wire(
-            cs->chrome_container, /*window_chrome=*/NULL, width, height, 34.0f, 8.0f,
-            YETTY_YCHROME_FLAG_ALL);
+        struct yetty_ychrome_host_ptr_result host_result =
+            yetty_ychrome_host_create_wire(cs->chrome_container, /*window_chrome=*/NULL, width,
+                                           height, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, host_result, "client_chrome_sync: create wire host");
         cs->chrome_host = host_result.value;
         cs->chrome_width = (int)width;
@@ -3754,8 +3754,8 @@ static int run_client_mode(void)
          * connection stays ours to destroy after). */
         free(cs.chrome_container);
         cs.chrome_container = NULL;
-        teardown_result = yetty_ycore_void_chain(teardown_result,
-                                                 yetty_yclass_rpc_disconnect(cs.chrome_root));
+        teardown_result =
+            yetty_ycore_void_chain(teardown_result, yetty_yclass_rpc_disconnect(cs.chrome_root));
         cs.chrome_root = NULL;
     }
 #endif

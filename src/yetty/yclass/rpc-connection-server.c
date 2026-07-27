@@ -145,8 +145,8 @@ static void rpc_channel_raw_sink(void *user, const uint8_t *bytes, size_t n)
         }
         size_t want = server->inlen + n;
         if (want > RPC_CHANNEL_FRAME_MAX) {
-            ywarn("rpc-conn: reassembly want %zu exceeds cap %u — dropping channel buffer",
-                  want, RPC_CHANNEL_FRAME_MAX);
+            ywarn("rpc-conn: reassembly want %zu exceeds cap %u — dropping channel buffer", want,
+                  RPC_CHANNEL_FRAME_MAX);
             server->inlen = 0;
             return;
         }

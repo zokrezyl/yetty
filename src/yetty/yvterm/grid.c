@@ -1265,9 +1265,8 @@ static int cb_selection_set(VTermSelectionMask mask, VTermStringFragment frag, v
         if (grid->sink && !grid->osc52_overflow && grid->osc52_accum_len > 0) {
             /* External-callback boundary: libvterm's `set` returns int, so a
              * failed clipboard write has nowhere to propagate — absorb it. */
-            struct yetty_ycore_void_result wr =
-                yetty_ytermsink_clipboard_write(grid->sink, grid->osc52_accum,
-                                                grid->osc52_accum_len, grid->osc52_clipboard);
+            struct yetty_ycore_void_result wr = yetty_ytermsink_clipboard_write(
+                grid->sink, grid->osc52_accum, grid->osc52_accum_len, grid->osc52_clipboard);
             (void)wr;
         }
         grid->osc52_accum_len = 0;
@@ -1558,8 +1557,8 @@ static int cb_dcs(const char *command, size_t commandlen, VTermStringFragment fr
     if (frag.final) {
         if (grid->sink && !grid->sixel_overflow && grid->sixel_accum_len > 0) {
             /* External-callback boundary: a failed present has nowhere to go. */
-            struct yetty_ycore_void_result wr = yetty_ytermsink_sixel_write(
-                grid->sink, grid->sixel_accum, grid->sixel_accum_len);
+            struct yetty_ycore_void_result wr =
+                yetty_ytermsink_sixel_write(grid->sink, grid->sixel_accum, grid->sixel_accum_len);
             if (YETTY_IS_ERR(wr)) {
                 yetty_ycore_error_destroy(wr.error);
             }

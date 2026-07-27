@@ -47,8 +47,8 @@
 #include <yetty/yrich/yrich-shell.h>
 #include <yetty/yrich/yrich-types.h>
 
-#include <yetty/ycore/terminal-detect.h> /* yetty_running_under_yetty (dual mode) */
-#include "yetty/gen/impl/yrich/document.h"        /* document_undo / document_redo */
+#include <yetty/ycore/terminal-detect.h>   /* yetty_running_under_yetty (dual mode) */
+#include "yetty/gen/impl/yrich/document.h" /* document_undo / document_redo */
 #include "yetty/gen/impl/yrich/ydoc.h"
 #include <yetty/yrich/yrich-keymap.h> /* semantic commands + remappable modal keymap */
 #include <yetty/yrich/yrich-yaml.h>   /* ydoc save */

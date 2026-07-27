@@ -43,7 +43,7 @@
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/ywindow-chrome/window-chrome.h>
 #include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* */
-#include <yetty/ychrome/host.h>   /* the shared window chrome (the ONE chrome) */
+#include <yetty/ychrome/host.h>            /* the shared window chrome (the ONE chrome) */
 
 #include "config-dialog.h"
 #include "debug-window.h"

@@ -162,8 +162,7 @@ static struct yetty_ycore_void_result view_configure(struct yetty_yclass_object 
     /* Attach to the host's root figure container over yclass RPC. These tools
      * run inside a yetty pane: stdin carries terminal→tool (RPC responses), the
      * passed `fd` is tool→terminal (RPC requests). */
-    struct yetty_yclass_object_ptr_result root_r =
-        yetty_yclass_rpc_connect_fds(STDIN_FILENO, fd);
+    struct yetty_yclass_object_ptr_result root_r = yetty_yclass_rpc_connect_fds(STDIN_FILENO, fd);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, root_r, "yview configure: connect_fds");
     view->rpc_root = root_r.value;
     struct yetty_yclass_object_ptr_result container_r =
@@ -172,8 +171,8 @@ static struct yetty_ycore_void_result view_configure(struct yetty_yclass_object 
     view->container = container_r.value;
     /* Prime the container's slots while the pipeline is empty (steady-state
      * pipelined mutations must never mid-stream RESOLVE_SLOT). */
-    struct yetty_ycore_void_result prime_r =
-        yetty_yclass_rpc_session_translate_class(view->rpc_root->session, "yetty_yfigure_container");
+    struct yetty_ycore_void_result prime_r = yetty_yclass_rpc_session_translate_class(
+        view->rpc_root->session, "yetty_yfigure_container");
     if (YETTY_IS_ERR(prime_r)) {
         yetty_ycore_error_destroy(prime_r.error);
     }
@@ -517,8 +516,7 @@ static struct yetty_ycore_void_result view_destroy(struct yetty_yclass_object *o
         free(view->container);
         view->container = NULL;
         if (view->rpc_root) {
-            struct yetty_ycore_void_result detach_r =
-                yetty_yclass_rpc_disconnect(view->rpc_root);
+            struct yetty_ycore_void_result detach_r = yetty_yclass_rpc_disconnect(view->rpc_root);
             if (YETTY_IS_OK(result) && YETTY_IS_ERR(detach_r)) {
                 result = YETTY_ERR(yetty_ycore_void, "yview destroy: disconnect", detach_r);
             } else if (YETTY_IS_ERR(detach_r)) {

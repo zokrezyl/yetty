@@ -325,7 +325,6 @@ struct yetty_yclass_transport_ptr_result yetty_yclass_transport_dcs_create(int r
     return YETTY_OK(yetty_yclass_transport_ptr, &t->base);
 }
 
-
 struct yetty_yclass_transport_ptr_result yetty_yclass_transport_default_create(void)
 {
     /* The zero-configuration in-band transport for a tool inside a hosting
@@ -333,6 +332,6 @@ struct yetty_yclass_transport_ptr_result yetty_yclass_transport_default_create(v
      * responses from STDIN, requests to STDOUT, compression on, the
      * protocol's own code. Event-loop apps ride the multiplexed connection
      * instead (yetty_ywire_channel_transport on the RPC channel). */
-    return yetty_yclass_transport_dcs_create(STDIN_FILENO, STDOUT_FILENO,
-                                             YETTY_YCLASS_RPC_DCS_CODE, /*compressed=*/1);
+    return yetty_yclass_transport_dcs_create(STDIN_FILENO, STDOUT_FILENO, YETTY_YCLASS_RPC_DCS_CODE,
+                                             /*compressed=*/1);
 }

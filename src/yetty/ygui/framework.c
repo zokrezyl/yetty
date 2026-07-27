@@ -344,9 +344,9 @@ struct yetty_ycore_void_result yetty_ygui_framework_set_session(
  * prime its slots (attach window), install the container + session on the
  * framework, and take ownership of the root for teardown. On any failure the
  * whole connection stack is disconnected. */
-static struct yetty_ycore_void_result framework_wire_root(
-    struct yetty_yclass_object *obj, struct yetty_ygui_framework *framework,
-    struct yetty_yclass_object *rpc_root)
+static struct yetty_ycore_void_result framework_wire_root(struct yetty_yclass_object *obj,
+                                                          struct yetty_ygui_framework *framework,
+                                                          struct yetty_yclass_object *rpc_root)
 {
     struct yetty_yclass_object_ptr_result container_res =
         yetty_yterminal_figure_root_container(rpc_root);
@@ -408,8 +408,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_attach_connection(
     struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_framework_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res,
                         "yetty_ygui_framework_attach_connection: from_obj");
-    struct yetty_yclass_object_ptr_result root_res =
-        yetty_yclass_rpc_connect_channel(connection);
+    struct yetty_yclass_object_ptr_result root_res = yetty_yclass_rpc_connect_channel(connection);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, root_res,
                         "yetty_ygui_framework_attach_connection: connect_channel");
     return framework_wire_root(obj, framework_res.value, root_res.value);
