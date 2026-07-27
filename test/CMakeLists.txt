@@ -150,3 +150,7 @@ endif()
 # points at the build-dir binary path and its script self-skips if it is absent
 # rather than gating on if(TARGET yetty) here.
 add_subdirectory(e2e)
+
+# yclass codegen: pure-function units + generation-behavior tests for the
+# codegen refactor (headless; the generation lane self-skips without clang).
+add_subdirectory(codegen)

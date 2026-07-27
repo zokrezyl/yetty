@@ -1203,15 +1203,14 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                         virtual_slots.add(slot)
                         continue
                     if role == "override":
-                        # Shapes accepted:
-                        #   3 segs — slot lives in the impl class's domain
-                        #            (same-module override)
-                        #          — or, when DOMAIN is foreign, the annotation
-                        #            names the target virtual method
-                        #            (`override@yapp:app:run`); the impl class is
-                        #            the current source file's class.
-                        #   4 segs — slot's domain explicit; may differ
-                        #            (cross-module override)
+                        # ONE accepted shape — 3 segments naming only the base
+                        # slot: override@<BASE_DOMAIN>:<BASE_CLASS>:<SLOT>. When
+                        # BASE_DOMAIN == this module it is a same-module override;
+                        # when foreign, it names another module's virtual method
+                        # (e.g. override@yapp:app:run) and the impl class is the
+                        # current source's class@. The overriding class is never
+                        # written — it is resolved from context. The 4-segment
+                        # form (restating the overriding class) is rejected below.
                         if len(args) == 3:
                             ann_dom, ann_cls, slot = args
                             if ann_dom == module:
