@@ -68,19 +68,19 @@ classes:
         get: false
         set: false
       - name: atlas_texture
-        type: int
+        type: WGPUTexture
         get: false
         set: false
       - name: atlas_view
-        type: int
+        type: WGPUTextureView
         get: false
         set: false
       - name: uniform_buffer
-        type: int
+        type: WGPUBuffer
         get: false
         set: false
       - name: vtx_buf
-        type: int
+        type: WGPUBuffer
         get: false
         set: false
       - name: vtx_buf_capacity
@@ -88,7 +88,7 @@ classes:
         get: false
         set: false
       - name: idx_buf
-        type: int
+        type: WGPUBuffer
         get: false
         set: false
       - name: idx_buf_capacity
@@ -96,7 +96,7 @@ classes:
         get: false
         set: false
       - name: bind_group
-        type: int
+        type: WGPUBindGroup
         get: false
         set: false
     ops:

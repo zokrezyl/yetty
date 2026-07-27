@@ -506,11 +506,11 @@ classes:
     data: struct yetty_ynotebook_output
     data_fields:
       - name: doc
-        type: "int *"
+        type: "yyjson_mut_doc *"
         get: false
         set: false
       - name: node
-        type: "int *"
+        type: "yyjson_mut_val *"
         get: false
         set: false
       - name: bundle
@@ -553,11 +553,11 @@ classes:
     data: struct yetty_ynotebook_cell
     data_fields:
       - name: doc
-        type: "int *"
+        type: "yyjson_mut_doc *"
         get: false
         set: false
       - name: node
-        type: "int *"
+        type: "yyjson_mut_val *"
         get: false
         set: false
       - name: outputs
@@ -614,11 +614,11 @@ classes:
     data: struct yetty_ynotebook_notebook
     data_fields:
       - name: doc
-        type: "int *"
+        type: "yyjson_mut_doc *"
         get: false
         set: false
       - name: root
-        type: "int *"
+        type: "yyjson_mut_val *"
         get: false
         set: false
       - name: cells

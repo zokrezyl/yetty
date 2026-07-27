@@ -331,15 +331,15 @@ classes:
         get: false
         set: false
       - name: device
-        type: int
+        type: WGPUDevice
         get: false
         set: false
       - name: queue
-        type: int
+        type: WGPUQueue
         get: false
         set: false
       - name: target_format
-        type: int
+        type: WGPUTextureFormat
         get: false
         set: false
       - name: faces
@@ -395,31 +395,31 @@ classes:
         get: false
         set: false
       - name: shader_module
-        type: int
+        type: WGPUShaderModule
         get: false
         set: false
       - name: bind_group_layout
-        type: int
+        type: WGPUBindGroupLayout
         get: false
         set: false
       - name: pipeline
-        type: int
+        type: WGPURenderPipeline
         get: false
         set: false
       - name: sampler
-        type: int
+        type: WGPUSampler
         get: false
         set: false
       - name: cell_buffer
-        type: int
+        type: WGPUBuffer
         get: false
         set: false
       - name: uniform_buffer
-        type: int
+        type: WGPUBuffer
         get: false
         set: false
       - name: bind_group
-        type: int
+        type: WGPUBindGroup
         get: false
         set: false
       - name: bind_group_valid
@@ -1813,13 +1813,13 @@ types:
       - name: name
         type: "char[64]"
       - name: meta_buffer
-        type: int
+        type: WGPUBuffer
       - name: meta_capacity
         type: size_t
       - name: atlas_texture
-        type: int
+        type: WGPUTexture
       - name: atlas_view
-        type: int
+        type: WGPUTextureView
       - name: atlas_width
         type: uint32_t
       - name: atlas_height

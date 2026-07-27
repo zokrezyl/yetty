@@ -127,15 +127,15 @@ classes:
         get: false
         set: false
       - name: device
-        type: int
+        type: WGPUDevice
         get: false
         set: false
       - name: queue
-        type: int
+        type: WGPUQueue
         get: false
         set: false
       - name: target_format
-        type: int
+        type: WGPUTextureFormat
         get: false
         set: false
       - name: allocator

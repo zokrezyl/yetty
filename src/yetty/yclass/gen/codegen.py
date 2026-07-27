@@ -241,7 +241,7 @@ def ast_dump(path: Path, include_dirs: list) -> dict:
     # plainly in the .c — visible to this parse and to the real build alike —
     # and codegen reproduces the needed ones into the generated header, so no
     # special define is required for them to resolve here.
-    cmd = [clang, "-Xclang", "-ast-dump=json", "-fsyntax-only", "-std=c2x",
+    cmd = [clang, "-Xclang", "-ast-dump=json", "-fsyntax-only", "-std=gnu2x",
            "-ferror-limit=0", "-Wno-error", "-Wno-everything"]
     # Some modules keep their annotated class/overrides behind a feature
     # #ifdef (e.g. a standalone-window app guarded by
@@ -266,9 +266,42 @@ def ast_dump(path: Path, include_dirs: list) -> dict:
         cmd.append(f"-I{d}")
     cmd.append(str(path))
     r = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    # Don't abort on returncode != 0 — clang exits non-zero on any
-    # semantic error but the AST dump on stdout is still well-formed
-    # JSON in those cases.
+    # clang still dumps a well-formed AST on stdout even when it reports
+    # semantic errors, and we deliberately consume it for ONE tolerated class:
+    # a reference to a codegen-emitted stub symbol (yetty_<...>) that does not
+    # exist until the generated glue is written. Those are undeclared
+    # *identifiers* (functions) and never affect a recorded TYPE.
+    #
+    # Every OTHER error is fatal, because it corrupts the model: a missing
+    # #include ("file not found") or an unresolved type ("unknown type name")
+    # makes clang substitute `int` for the real type, so a field/arg silently
+    # lands in model.yaml as `int`/`int *` (e.g. VTerm* → int* when libvterm's
+    # include root is not passed). The model is the FFI contract; a degraded
+    # parse must fail generation, not ship a wrong type.
+    fatal = []
+    for line in r.stderr.splitlines():
+        if " error:" not in line:  # matches "error:" and "fatal error:"
+            continue
+        if "use of undeclared identifier 'yetty_" in line:
+            continue  # forward reference to a not-yet-generated stub — expected
+        if "file not found" in line and "yetty/gen/" in line:
+            # A generated OUTPUT the source pulls in only for COMPILATION: the
+            # hand-written .c foot-#includes its own impl glue, and a subclass
+            # includes a parent's generated header. Those live under
+            # src/yetty/gen/ and may be absent/incomplete during THIS annotation
+            # parse (they are produced from the model, not consumed by it), so
+            # their absence never degrades a recorded type. Everything read for
+            # the model was already parsed before the foot include.
+            continue
+        fatal.append(line)
+    if fatal:
+        sys.stderr.write(
+            f"codegen: unresolved symbol(s) parsing {path} — the model would "
+            f"record degraded (int) types. Add the module's real include roots "
+            f"via YCLASS_INCLUDE_DIRS_<module> (or defines via YCLASS_DEFINES_"
+            f"<module>) so every type resolves:\n")
+        sys.stderr.write("\n".join(fatal) + "\n")
+        sys.exit(1)
     if not r.stdout:
         sys.stderr.write(r.stderr)
         sys.exit(1)

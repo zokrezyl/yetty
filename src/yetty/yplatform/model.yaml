@@ -1188,9 +1188,9 @@ types:
     kind: struct
     fields:
       - name: instance
-        type: int
+        type: WGPUInstance
       - name: surface
-        type: int
+        type: WGPUSurface
       - name: surface_width
         type: uint32_t
       - name: surface_height

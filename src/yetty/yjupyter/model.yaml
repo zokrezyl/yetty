@@ -413,11 +413,11 @@ classes:
     data: struct yetty_yjupyter_message
     data_fields:
       - name: doc
-        type: "int *"
+        type: "yyjson_mut_doc *"
         get: false
         set: false
       - name: root
-        type: "int *"
+        type: "yyjson_mut_val *"
         get: false
         set: false
     ops:
