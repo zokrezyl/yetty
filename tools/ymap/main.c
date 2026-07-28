@@ -12,7 +12,7 @@
  */
 
 #include <yetty/ymap/engine.h>
-#include <yetty/ymap/map.h>
+#include "yetty/gen/impl/ymap/map.h"
 
 #include <yetty/yclass/class.h>
 

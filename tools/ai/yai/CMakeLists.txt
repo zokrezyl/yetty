@@ -14,6 +14,11 @@ include(${YETTY_ROOT}/build-tools/yetty/libs/libyaml.cmake)
 # ytrace is compiled per-final-target (not a standalone library); the
 # rest comes transitively from yetty_ygui (ydraw-core, yface, yfont,
 # yplatform_core, ...).
+# Split codegen: the object-API stubs live under src/yetty/gen/api/yai/ (the
+# per-class impl glue is foot-included by each annotated source); there is no
+# module rpc.gen.c any more.
+file(GLOB YAI_API_SOURCES ${YETTY_ROOT}/src/yetty/gen/api/yai/*.c)
+
 add_executable(yai
     main.c
     render.c
@@ -35,7 +40,7 @@ add_executable(yai
     editor.c
     editor-emacs.c
     editor-vi.c
-    rpc.gen.c
+    ${YAI_API_SOURCES}
     # External msgpack-RPC control server reuses yetty's framing layer.
     ${YETTY_ROOT}/src/yetty/yctl/rpc-message.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c

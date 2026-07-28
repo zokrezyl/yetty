@@ -10,7 +10,7 @@
 #include <yetty/yrich/yrich-operation.h>
 
 #include <yetty/yclass/class.h>
-#include <yetty/yrich/document.h>
+#include <yetty/api/yrich/document.h>
 
 #include <stdlib.h>
 #include <string.h>

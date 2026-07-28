@@ -386,4 +386,4 @@ static struct yetty_ycore_int_result vi_feed_byte(struct yetty_yclass_object *ob
     return YETTY_OK(yetty_ycore_int, action);
 }
 
-#include "editor-vi.gen.c"
+#include "yetty/gen/impl/yai/editor-vi.c"

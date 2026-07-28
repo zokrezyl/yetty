@@ -5,7 +5,7 @@
  * malformed input, and pins render determinism. Headless (no GPU/display).
  */
 
-#include <yetty/ycircuit/circuit.h>
+#include <yetty/api/ycircuit/circuit.h>
 #include <yetty/ydraw-core/drawable-list.h>
 
 #include "ytest.h"
@@ -24,7 +24,6 @@ static const char k_dsl[] = "circuit Half-wave\n"
 static struct yetty_yclass_object *make_parsed(struct ytest *test, const char *dsl, size_t len,
                                                int expect_parse_ok)
 {
-    YTEST_REQUIRE_OK(test, yetty_ycircuit_register());
     struct yetty_yclass_object_ptr_result cr = yetty_ycircuit_circuit_create(NULL);
     YTEST_REQUIRE_OK(test, cr);
     struct yetty_yclass_object *obj = cr.value;

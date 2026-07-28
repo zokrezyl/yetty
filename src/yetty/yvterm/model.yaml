@@ -94,11 +94,11 @@ classes:
         get: false
         set: false
       - name: vterm
-        type: "int *"
+        type: "VTerm *"
         get: false
         set: false
       - name: state
-        type: "int *"
+        type: "VTermState *"
         get: false
         set: false
       - name: pen_fg
@@ -165,12 +165,8 @@ classes:
         type: "void *"
         get: false
         set: false
-      - name: card_sub_fn
-        type: yetty_yvterm_grid_card_sub_fn
-        get: false
-        set: false
-      - name: card_sub_userdata
-        type: "void *"
+      - name: sink
+        type: "struct yetty_yclass_object *"
         get: false
         set: false
       - name: materialize_fn
@@ -178,22 +174,6 @@ classes:
         get: false
         set: false
       - name: materialize_userdata
-        type: "void *"
-        get: false
-        set: false
-      - name: pty_write_fn
-        type: yetty_yvterm_grid_pty_write_fn
-        get: false
-        set: false
-      - name: pty_write_userdata
-        type: "void *"
-        get: false
-        set: false
-      - name: clipboard_write_fn
-        type: yetty_yvterm_grid_clipboard_write_fn
-        get: false
-        set: false
-      - name: clipboard_write_userdata
         type: "void *"
         get: false
         set: false
@@ -235,14 +215,6 @@ classes:
         set: false
       - name: configured_bg
         type: uint32_t
-        get: false
-        set: false
-      - name: sixel_write_fn
-        type: yetty_yvterm_grid_sixel_write_fn
-        get: false
-        set: false
-      - name: sixel_write_userdata
-        type: "void *"
         get: false
         set: false
       - name: sixel_accum
@@ -334,20 +306,8 @@ classes:
         type: float
         get: false
         set: false
-      - name: request_render_fn
-        type: yetty_yterminal_request_render_fn
-        get: false
-        set: false
-      - name: request_render_userdata
-        type: "void *"
-        get: false
-        set: false
-      - name: mouse_sub_fn
-        type: yetty_yterminal_mouse_sub_fn
-        get: false
-        set: false
-      - name: mouse_sub_userdata
-        type: "void *"
+      - name: sink
+        type: "struct yetty_yclass_object *"
         get: false
         set: false
       - name: view_dirty
@@ -371,15 +331,15 @@ classes:
         get: false
         set: false
       - name: device
-        type: int
+        type: WGPUDevice
         get: false
         set: false
       - name: queue
-        type: int
+        type: WGPUQueue
         get: false
         set: false
       - name: target_format
-        type: int
+        type: WGPUTextureFormat
         get: false
         set: false
       - name: faces
@@ -435,31 +395,31 @@ classes:
         get: false
         set: false
       - name: shader_module
-        type: int
+        type: WGPUShaderModule
         get: false
         set: false
       - name: bind_group_layout
-        type: int
+        type: WGPUBindGroupLayout
         get: false
         set: false
       - name: pipeline
-        type: int
+        type: WGPURenderPipeline
         get: false
         set: false
       - name: sampler
-        type: int
+        type: WGPUSampler
         get: false
         set: false
       - name: cell_buffer
-        type: int
+        type: WGPUBuffer
         get: false
         set: false
       - name: uniform_buffer
-        type: int
+        type: WGPUBuffer
         get: false
         set: false
       - name: bind_group
-        type: int
+        type: WGPUBindGroup
         get: false
         set: false
       - name: bind_group_valid
@@ -563,38 +523,15 @@ exposed:
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_set_pty_write
+    name: yetty_yvterm_grid_set_sink
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-      - name: fn
-        type: yetty_yvterm_grid_pty_write_fn
-      - name: userdata
-        type: "void *"
-    doc: null
-  - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_set_clipboard_write
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
+      - name: sink
         type: "struct yetty_yclass_object *"
-      - name: fn
-        type: yetty_yvterm_grid_clipboard_write_fn
-      - name: userdata
-        type: "void *"
-    doc: null
-  - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_set_sixel_write
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: fn
-        type: yetty_yvterm_grid_sixel_write_fn
-      - name: userdata
-        type: "void *"
-    doc: null
+    doc: "/* Install the terminal-host sink the grid dispatches its upcalls on (pty_write
+ * / mouse_sub / clipboard_write / sixel_write). Borrowed — the host owns it. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_set_clear_hook
     return_type: struct yetty_ycore_void_result
@@ -603,17 +540,6 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: fn
         type: yetty_yvterm_grid_clear_hook_fn
-      - name: userdata
-        type: "void *"
-    doc: null
-  - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_set_card_sub
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: fn
-        type: yetty_yvterm_grid_card_sub_fn
       - name: userdata
         type: "void *"
     doc: null
@@ -1136,26 +1062,8 @@ exposed:
         type: uint32_t
       - name: context
         type: "const struct yetty_context *"
-      - name: pty_write_fn
-        type: yetty_yterminal_pty_write_fn
-      - name: pty_write_userdata
-        type: "void *"
-      - name: request_render_fn
-        type: yetty_yterminal_request_render_fn
-      - name: request_render_userdata
-        type: "void *"
-      - name: mouse_sub_fn
-        type: yetty_yterminal_mouse_sub_fn
-      - name: mouse_sub_userdata
-        type: "void *"
-      - name: clipboard_write_fn
-        type: yetty_yterminal_clipboard_write_fn
-      - name: clipboard_write_userdata
-        type: "void *"
-      - name: sixel_write_fn
-        type: yetty_yterminal_sixel_write_fn
-      - name: sixel_write_userdata
-        type: "void *"
+      - name: sink
+        type: "struct yetty_yclass_object *"
     doc: "/* Create the terminal-content figure for one pane. The rect is set in pixels;
  * cell_size is stored so the terminal can read it immediately after create. The
  * terminal hooks (pty write, render request, mouse subscription) are stored for
@@ -1523,7 +1431,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -1624,7 +1532,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -1645,7 +1553,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -1677,7 +1585,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -1709,7 +1617,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -1721,7 +1629,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -1733,7 +1641,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -1745,7 +1653,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -1757,7 +1665,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -1813,7 +1721,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -1905,13 +1813,13 @@ types:
       - name: name
         type: "char[64]"
       - name: meta_buffer
-        type: int
+        type: WGPUBuffer
       - name: meta_capacity
         type: size_t
       - name: atlas_texture
-        type: int
+        type: WGPUTexture
       - name: atlas_view
-        type: int
+        type: WGPUTextureView
       - name: atlas_width
         type: uint32_t
       - name: atlas_height
@@ -1954,6 +1862,7 @@ local_types:
   yvterm_font_range: src/yetty/yvterm/vterm.c
   vterm_uniforms: src/yetty/yvterm/vterm.c
   yetty_yvterm_vterm: src/yetty/yvterm/vterm.c
+  yetty_yvterm_vterm_ptr_result: src/yetty/yvterm/vterm.c
 local_typedefs:
   __int128_t:
     source_file: src/yetty/yvterm/grid.c
@@ -1979,6 +1888,9 @@ local_typedefs:
   yetty_yvterm_grid_sixel_write_fn:
     source_file: src/yetty/yvterm/grid.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_sixel_write_fn)(const char *, size_t, void *);"
+  yetty_yvterm_tiers_line_visit_fn:
+    source_file: src/yetty/yvterm/scroll-tiers.h
+    text: "typedef void (*yetty_yvterm_tiers_line_visit_fn)(struct yetty_yvterm_line *, uint64_t, void *);"
   yetty_yvterm_grid_clear_hook_fn:
     source_file: src/yetty/yvterm/grid.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);"
@@ -1994,6 +1906,3 @@ local_typedefs:
   yetty_yvterm_materialize_fn:
     source_file: src/yetty/yvterm/vterm.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_materialize_fn)(const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);"
-includes:
-  src/yetty/yvterm/vterm.c:
-    - yetty/yterminal/terminal.h

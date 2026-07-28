@@ -125,4 +125,4 @@ static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_object *
     return ((fn_t)impl)(yclass_obj, ctx);
 }
 
-#include "ymaze.gen.c"
+#include "yetty/gen/impl/ygui/widgets/ymaze.c"

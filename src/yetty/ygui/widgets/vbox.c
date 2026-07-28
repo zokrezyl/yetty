@@ -41,4 +41,4 @@ struct YETTY_ANNOTATE("class@ygui:vbox") YETTY_ANNOTATE("parent@ygui:primitive_w
     char _empty;
 };
 
-#include "vbox.gen.c"
+#include "yetty/gen/impl/ygui/widgets/vbox.c"

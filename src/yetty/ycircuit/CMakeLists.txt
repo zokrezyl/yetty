@@ -9,9 +9,14 @@
 # bindings. GPU-less — produces generic ydraw primitives, shipped via the
 # ycat / scrolling-layer path (like ymusic).
 
+add_library(yetty_api_ycircuit STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/ycircuit/circuit.c
+)
+target_include_directories(yetty_api_ycircuit PUBLIC ${YETTY_ROOT}/include)
+target_link_libraries(yetty_api_ycircuit PUBLIC yetty_ycore yetty_yclass)
+
 add_library(yetty_ycircuit STATIC
     circuit.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_ycircuit PUBLIC
@@ -21,6 +26,7 @@ target_include_directories(yetty_ycircuit PUBLIC
 target_include_directories(yetty_ycircuit PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_ycircuit PUBLIC
+    yetty_api_ycircuit
     yetty_ycore
     yetty_yclass
     yetty_yface

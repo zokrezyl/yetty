@@ -87,4 +87,4 @@ static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ob
     return yetty_ygui_widget_paint(yclass_obj, ctx);
 }
 
-#include "primitive-widget.gen.c"
+#include "yetty/gen/impl/ygui/primitive-widget.c"

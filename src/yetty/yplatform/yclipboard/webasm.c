@@ -79,4 +79,4 @@ static struct yetty_ycore_void_result webasm_clipboard_request_paste(
     return YETTY_OK_VOID();
 }
 
-#include "webasm.gen.c"
+#include "yetty/gen/impl/yplatform/yclipboard/webasm.c"

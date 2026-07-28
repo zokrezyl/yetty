@@ -267,7 +267,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -292,7 +292,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -304,19 +304,3 @@ local_types:
   yetty_api_yplot_function: src/api/yplot/plot.c
   yetty_api_yplot_plot_ptr_result: src/api/yplot/plot.c
   yetty_api_yplot_function_ptr_result: src/api/yplot/plot.c
-local_typedefs:
-  __int128_t:
-    source_file: src/api/yplot/plot.c
-    text: typedef __int128 __int128_t;
-  __uint128_t:
-    source_file: src/api/yplot/plot.c
-    text: typedef unsigned __int128 __uint128_t;
-  __NSConstantString:
-    source_file: src/api/yplot/plot.c
-    text: typedef struct __NSConstantString_tag __NSConstantString;
-  __builtin_ms_va_list:
-    source_file: src/api/yplot/plot.c
-    text: "typedef char *__builtin_ms_va_list;"
-  __builtin_va_list:
-    source_file: src/api/yplot/plot.c
-    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

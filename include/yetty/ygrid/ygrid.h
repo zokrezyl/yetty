@@ -18,12 +18,11 @@
  *   - Glyph / TEXT_DRAWABLE_LIST records (drawable-list tier)
  *   - Implicit ADD is the default decode action (no opcode byte).
  *
- * Figures that are not naturally rendered by a grid (yplot, yimage,
- * yvideo, ymgui cards, yrdawn surfaces) are NOT inside ygrid — they
- * each become their own compositor figure with their own pipeline.
- *
- * State of v1: storage + API + figure ops scaffold. The render op is
- * a no-op pending the GPU pipeline (shader, atlas, instanced draws).
+ * Composite records (yplot, yimage, yvideo, …) embedded in the record
+ * stream are minted through the host-supplied composite factory into
+ * per-instance figures that render after the SDF/glyph pass, each with
+ * its own pipeline. ymgui cards and yrdawn surfaces stay separate
+ * compositor figures.
  */
 #ifndef YETTY_YGRID_YGRID_H
 #define YETTY_YGRID_YGRID_H
@@ -34,7 +33,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yfigure/figure.h>
+#include <yetty/api/yfigure/figure.h>
 /* The generated per-class header publishes the canonical class accessor,
  * the opaque `struct yetty_ygrid_grid` forward decl, and the
  * `YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, …)` wrapper this header's
@@ -42,7 +41,7 @@
  * definition shared by every consumer — this header no longer declares
  * its own (which would redefine the struct in any TU that included
  * both). */
-#include <yetty/ygrid/grid.h>
+#include <yetty/api/ygrid/grid.h>
 
 #ifdef __cplusplus
 extern "C" {

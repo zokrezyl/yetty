@@ -175,4 +175,4 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_ydiagram_get_source(
     return YETTY_OK(yetty_ycore_const_char_ptr, d->source);
 }
 
-#include "ydiagram.gen.c"
+#include "yetty/gen/impl/ygui/widgets/ydiagram.c"

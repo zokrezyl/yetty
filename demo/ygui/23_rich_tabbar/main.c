@@ -57,4 +57,4 @@ int main(int argc, char **argv)
     return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_23_rich_tabbar_class_get().value);
 }
 
-#include "main.gen.c"
+#include "yetty/gen/impl/demoygui/23_rich_tabbar/main.c"

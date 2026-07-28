@@ -338,4 +338,4 @@ static struct yetty_ycore_void_result function_set_color(struct yetty_yclass_obj
  * class-specific destructor — the binding's generic destroy (yclass object
  * free) reclaims it. */
 
-#include "plot.gen.c"
+#include "yetty/gen/impl/api_yplot/plot.c"

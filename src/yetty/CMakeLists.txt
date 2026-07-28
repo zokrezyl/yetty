@@ -90,6 +90,11 @@ set(YETTY_YCORE_SOURCES "")
 # Wire-format state machine (OSC framer + decode stack)
 add_subdirectory(ywire)
 
+# ytermsink — abstract terminal-host sink interface (GPU-free). Both yvterm
+# (content figure, calls up) and yterminal (host, implements) link it, so it
+# must be defined before either.
+add_subdirectory(ytermsink)
+
 # Term subsystem: yvterm (text-grid figure) + yterminal (coordinator).
 # yvterm first — yterminal links it.
 add_subdirectory(yvterm)
@@ -203,6 +208,11 @@ endif()
 if(YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
     add_subdirectory(yview)
 endif()
+
+# ydummy — pilot module for the yclass codegen client/server split. Depends
+# only on ycore + yclass + the webgpu include path (always present: Dawn
+# fetch or the headers-only stub), so it builds in every configuration.
+add_subdirectory(ydummy)
 
 # yffi — libyetty_ffi.so for language bindings. Only in the PIC double-build
 # tree; never part of the static application build.

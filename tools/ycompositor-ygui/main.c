@@ -36,7 +36,7 @@
 
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yplatform/platform.h>
-#include <yetty/yapp/app.h>
+#include "yetty/gen/impl/yapp/app.h"
 #include <yetty/yclass/class.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
@@ -44,16 +44,16 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
+#include "yetty/gen/impl/yfigure/figure.h"
+#include "yetty/gen/impl/yfigure/container.h"
 #include <yetty/yfigure/registry.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
-#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #include <yetty/ygui/ygui.h>
-#include <yetty/ymgui/figure.h>
+#include "yetty/gen/impl/ymgui/figure.h"
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yclass/rpc.h>
 #include <yetty/yclass/rpc-dcs-server.h>
@@ -1099,4 +1099,4 @@ int main(int argc, char **argv)
     return 0;
 }
 
-#include "main.gen.c"
+#include "yetty/gen/impl/ycompositorygui/main.c"

@@ -17,13 +17,12 @@
 #include <yetty/ygui/ygui.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yframework/yframework.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
+#include <yetty/api/yfigure/figure.h>
+#include <yetty/api/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/memstats.h>
@@ -43,8 +42,8 @@
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/ywindow-chrome/window-chrome.h>
-#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* */
-#include <yetty/ychrome/host.h>   /* the shared window chrome (the ONE chrome) */
+#include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* */
+#include <yetty/ychrome/host.h>            /* the shared window chrome (the ONE chrome) */
 
 #include "config-dialog.h"
 #include "debug-window.h"
@@ -850,8 +849,10 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: ygrid register_factory", rf);
         }
-        static const char *const producer_kind_names[] = {"yplot", "yimage", "yvideo", "yzoo",
-                                                          "yjungle"};
+        /* "yscroll" is the content-grid kind ygui producer widgets mint; the
+         * rest are deprecated aliases kept for wire compat (#685 Phase 2). */
+        static const char *const producer_kind_names[] = {"yscroll", "yplot", "yimage",
+                                                          "yvideo",  "yzoo",  "yjungle"};
         for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); i++) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
                 yui->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),

@@ -59,4 +59,4 @@ int main(int argc, char **argv)
     return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_02_coord_debug_class_get().value);
 }
 
-#include "main.gen.c"
+#include "yetty/gen/impl/demoygui/02_coord_debug/main.c"

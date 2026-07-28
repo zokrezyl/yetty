@@ -208,4 +208,4 @@ struct yetty_ycore_void_result yetty_ygit_repo_destroy(struct yetty_yclass_objec
     return YETTY_OK_VOID();
 }
 
-#include "repo.gen.c"
+#include "yetty/gen/impl/ygit/repo.c"

@@ -15,7 +15,6 @@
 
 #include "internal.h"
 
-#include <yetty/yfigure/wire.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1533,4 +1532,4 @@ struct yetty_ycore_void_result yetty_ygui_widget_raise(struct yetty_yclass_objec
     return YETTY_OK_VOID();
 }
 
-#include "widget.gen.c"
+#include "yetty/gen/impl/ygui/widget.c"

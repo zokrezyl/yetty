@@ -586,7 +586,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
                 struct yetty_yterminal_terminal_result term_res;
                 struct yetty_ycore_grid_size grid_size = {.rows = 24, .cols = 80};
 
-                term_res = yetty_yterminal_terminal_create(grid_size, yetty_ctx);
+                term_res = yetty_yterminal_terminal_open(grid_size, yetty_ctx);
                 if (YETTY_IS_ERR(term_res)) {
                     (void)yetty_yui_tile_destroy(tile_res.value);
                     return YETTY_ERR(yetty_ycore_void,

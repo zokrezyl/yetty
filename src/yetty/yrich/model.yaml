@@ -2910,7 +2910,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -2931,7 +2931,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -2943,7 +2943,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -2968,7 +2968,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -2980,7 +2980,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -2992,7 +2992,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -3004,7 +3004,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -3016,7 +3016,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -3068,7 +3068,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -3087,7 +3087,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -3110,7 +3110,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -3159,7 +3159,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -3212,7 +3212,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -3235,7 +3235,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -3258,6 +3258,7 @@ types:
 local_types:
   yetty_yrich_app: src/yetty/yrich/app.c
   yetty_yrich_app_ptr_result: src/yetty/yrich/app.c
+  yrich_terminal_host: src/yetty/yrich/app.c
   yetty_yrich_document_ptr_result: src/yetty/yrich/document.c
   yetty_yrich_document: src/yetty/yrich/document.c
   yetty_yrich_element_ptr_result: src/yetty/yrich/element.c
@@ -3315,6 +3316,18 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/yrich/app.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_yrich_element_id:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yrich/yrich-types.h
+    text: typedef uint64_t yetty_yrich_element_id;
+  yetty_yrich_sync_cb:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yrich/yrich-types.h
+    text: "typedef void (*yetty_yrich_sync_cb)(struct yetty_yclass_object *, struct yetty_yrich_operation *const *, size_t, void *);"
+  yetty_yrich_dirty_cb:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yrich/yrich-types.h
+    text: "typedef void (*yetty_yrich_dirty_cb)(struct yetty_yclass_object *, void *);"
+  yetty_yrich_session_id:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yrich/yrich-operation.h
+    text: typedef uint64_t yetty_yrich_session_id;
   fn_t:
     source_file: src/yetty/yrich/document.c
     text: "typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_object *);"

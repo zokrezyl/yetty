@@ -13,7 +13,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <yetty/yjupyter/protocol.h>
+#include "yetty/gen/impl/yjupyter/protocol.h"
 
 static int failures;
 

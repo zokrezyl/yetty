@@ -33,7 +33,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/yclass/class.h>
-#include <yetty/yapp/app.h>
+#include <yetty/api/yapp/app.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yframework/yframework.h>
@@ -569,4 +569,4 @@ struct yetty_yclass_object_ptr_result yetty_yplatform_default_platform_create(
     return yetty_yplatform_glfw_platform_create(ctx);
 }
 
-#include "glfw.gen.c"
+#include "yetty/gen/impl/yplatform/yplatform/glfw.c"

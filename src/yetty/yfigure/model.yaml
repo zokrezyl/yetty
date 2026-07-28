@@ -94,11 +94,18 @@ methods:
         type: struct yetty_ycore_rectangle
       - name: init
         type: struct yetty_ycore_buffer
-    doc: "/* Each mutation slot is `oneway@` — the producer fires it and moves on; the
- * host applies it with no reply. Matches the legacy one-way figure wire and
- * keeps an interactive producer's input loop unblocked by RPC round-trips. */"
+    doc: "/* Every mutation slot is plain request/response — a remote failure comes
+ * back to the producer as the stub's Result (full cause chain), never
+ * swallowed. The legacy `oneway@` fire-and-forget here hid every server-side
+ * failure (bad payload, unknown child id, factory rejection) in the host's
+ * log while the producer streamed on against state it believed existed —
+ * the direct source of silently missing/stale figures. Round-trip latency
+ * on the local transports is microseconds; if profiling ever shows the
+ * lockstep wait hurting a remote producer, the answer is pipelined async
+ * calls with error completion on the multiplexed connection — not
+ * discarding the error channel. */"
     local: false
-    oneway: true
+    oneway: false
     return_payload_type: null
   - slot: delete_child
     domain: yfigure
@@ -111,7 +118,7 @@ methods:
         type: uint32_t
     doc: null
     local: false
-    oneway: true
+    oneway: false
     return_payload_type: null
   - slot: set_child_rect
     domain: yfigure
@@ -126,7 +133,7 @@ methods:
         type: struct yetty_ycore_rectangle
     doc: null
     local: false
-    oneway: true
+    oneway: false
     return_payload_type: null
   - slot: set_rect
     domain: yfigure
@@ -139,7 +146,7 @@ methods:
         type: struct yetty_ycore_rectangle
     doc: null
     local: false
-    oneway: true
+    oneway: false
     return_payload_type: null
   - slot: set_child_z
     domain: yfigure
@@ -154,7 +161,7 @@ methods:
         type: int32_t
     doc: null
     local: false
-    oneway: true
+    oneway: false
     return_payload_type: null
   - slot: set_child_hidden
     domain: yfigure
@@ -169,7 +176,7 @@ methods:
         type: uint32_t
     doc: null
     local: false
-    oneway: true
+    oneway: false
     return_payload_type: null
   - slot: set_child_scroll
     domain: yfigure
@@ -186,7 +193,7 @@ methods:
         type: float
     doc: null
     local: false
-    oneway: true
+    oneway: false
     return_payload_type: null
   - slot: set_child_content_size
     domain: yfigure
@@ -203,7 +210,7 @@ methods:
         type: float
     doc: null
     local: false
-    oneway: true
+    oneway: false
     return_payload_type: null
   - slot: apply_child_body
     domain: yfigure
@@ -218,7 +225,7 @@ methods:
         type: struct yetty_ycore_buffer
     doc: null
     local: false
-    oneway: true
+    oneway: false
     return_payload_type: null
   - slot: clear_all
     domain: yfigure
@@ -229,7 +236,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
-    oneway: true
+    oneway: false
     return_payload_type: null
   - slot: dump_state
     domain: yfigure
@@ -552,6 +559,15 @@ exposed:
  * header copy and this one never share a TU — this TU does not include
  * container.h — so there is no clash. */"
   - source_file: src/yetty/yfigure/container.c
+    type_text: "struct yetty_yfigure_header {
+    uint32_t length;
+    uint32_t id;
+};"
+    doc: "/* Wire record header — a child body buffer is a sequence of
+ * (length, id, payload[length]) records. Length-first so a pipeline
+ * linter / proxy can walk records without knowing figure semantics.
+ * Part of the object-API data contract (formerly <yetty/yfigure/wire.h>). */"
+  - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_dump
     return_type: struct yetty_ycore_char_ptr_result
     args:
@@ -698,7 +714,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -719,7 +735,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -758,7 +774,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -770,7 +786,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -791,7 +807,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -800,6 +816,7 @@ types:
             type: struct yetty_ycore_error
 local_types:
   yetty_yfigure_hit: src/yetty/yfigure/container.c
+  yetty_yfigure_header: src/yetty/yfigure/container.c
   yetty_yfigure_hit_result: src/yetty/yfigure/container.c
   child_entry: src/yetty/yfigure/container.c
   yetty_yfigure_container: src/yetty/yfigure/container.c
@@ -823,6 +840,9 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/yfigure/container.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ycomposite_factory_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yfigure/registry.h
+    text: "typedef struct yetty_yfigure_figure_ptr_result (*yetty_ycomposite_factory_fn)(struct yetty_ycore_rectangle, const struct yetty_context *, void *);"
   container_visitor_fn:
     source_file: src/yetty/yfigure/container.c
     text: "typedef int (*container_visitor_fn)(uint32_t, struct yetty_yfigure_figure *, void *);"

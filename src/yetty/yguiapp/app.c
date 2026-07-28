@@ -29,7 +29,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/yapp/app.h>
+#include <yetty/api/yapp/app.h>
 #include <yetty/yclass/class.h>
 #include <yetty/yconfig/config.h>
 
@@ -38,8 +38,8 @@
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
-#include <yetty/yfigure/container.h>
-#include <yetty/yfigure/figure.h>
+#include <yetty/api/yfigure/container.h>
+#include <yetty/api/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yfont/msdf-font.h>
@@ -52,12 +52,12 @@
 #include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yshadertoy/figure.h>
+#include <yetty/api/yshadertoy/figure.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* Window chrome (drag/resize/maximize the borderless OS window) — the
  * reusable, ygui/yui-independent engine. */
-#include <yetty/ychrome/chrome.h>
+#include "yetty/gen/impl/ychrome/chrome.h"
 #include <yetty/yplatform/ywindow-chrome/window-chrome.h>
 
 #include "yetty/yguiapp/run.h"
@@ -716,7 +716,9 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(app->figure_registry, &app->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "yguiapp:run: ygrid_register_factory");
-        const char *const producer_kind_names[] = {"yplot", "yimage"};
+        /* "yscroll" is the content-grid kind ygui producer widgets mint; the
+         * rest are deprecated aliases kept for wire compat (#685 Phase 2). */
+        const char *const producer_kind_names[] = {"yscroll", "yplot", "yimage"};
         for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); ++i) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
                 app->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
@@ -913,4 +915,4 @@ static struct yetty_ycore_void_result yguiapp_quit(struct yetty_yclass_object *o
     return YETTY_OK_VOID();
 }
 
-#include "app.gen.c"
+#include "yetty/gen/impl/yguiapp/app.c"

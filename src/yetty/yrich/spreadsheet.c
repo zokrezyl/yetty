@@ -20,8 +20,8 @@
 
 #include <yetty/yrich/yrich-types.h>
 
-#include <yetty/yrich/document.h>
-#include <yetty/yrich/element.h>
+#include "yetty/gen/impl/yrich/document.h"
+#include "yetty/gen/impl/yrich/element.h"
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
@@ -839,4 +839,4 @@ struct yetty_yrich_cell_addr_result yetty_yrich_spreadsheet_cell_addr_at(
     return YETTY_OK(yetty_yrich_cell_addr, addr);
 }
 
-#include "spreadsheet.gen.c"
+#include "yetty/gen/impl/yrich/spreadsheet.c"

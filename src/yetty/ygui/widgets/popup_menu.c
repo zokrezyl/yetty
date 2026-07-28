@@ -15,7 +15,7 @@
 #include "../internal.h"
 #include <yetty/ygui/framework-defs.h>
 #include <yetty/ygui/widget.h>
-#include <yetty/yfigure/registry.h>
+#include <yetty/yfigure/kind.h>
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -595,4 +595,4 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_set_modal(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
-#include "popup_menu.gen.c"
+#include "yetty/gen/impl/ygui/widgets/popup_menu.c"

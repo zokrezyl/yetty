@@ -12,10 +12,15 @@
 #           (yetty_yguiapp_run_terminal — the #380 transport-pty + ywire path),
 #           and the shared root/body builder. Not annotated — not seen by codegen.
 
+add_library(yetty_api_yguiapp STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/yguiapp/app.c
+)
+target_include_directories(yetty_api_yguiapp PUBLIC ${YETTY_ROOT}/include)
+target_link_libraries(yetty_api_yguiapp PUBLIC yetty_ycore yetty_yclass)
+
 add_library(yetty_yguiapp STATIC
     app.c
     run.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_yguiapp PUBLIC
@@ -25,6 +30,7 @@ target_include_directories(yetty_yguiapp PUBLIC
 target_include_directories(yetty_yguiapp PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yguiapp PUBLIC
+    yetty_api_yguiapp
     yetty_ycore
     yetty_yclass
     yetty_ygui

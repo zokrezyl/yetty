@@ -3,9 +3,11 @@
 ygrid is a concrete figure kind (`class@ygrid:grid`, parent `yfigure:figure`):
 one GPU batch that stores wire-format drawable records, buckets them by grid
 cell, and renders SDF shapes, glyphs and embedded composite figures through
-its own pipeline. It is the workhorse renderer behind the terminal's ydraw
-scrolling layer, ygui window chrome, and every producer figure (yplot /
-yimage / yvideo content minted through the composite factory). Depends on
+its own pipeline. It is the renderer behind ygui window chrome and every
+producer figure (yplot / yimage / yvideo content minted through the
+composite factory). The terminal's scrolling rich content is NOT rendered
+by ygrid — that is [yvterm](../yvterm/README.md)'s own `sdf-layer.c`; see
+"Relation to yvterm" below. Depends on
 `ycore`, `yclass`, `yfigure`, `ydraw-core`, `yrender`, `ysdf`, `yfont`.
 
 ## How it works
@@ -37,9 +39,25 @@ yimage / yvideo content minted through the composite factory). Depends on
 - **Scrolling** — three mechanisms: `set_content_size` + `set_scroll` turn the
   rect into a viewport over larger content; the rolling-row API
   (`set_rolling_row_0` / `set_insert_rolling_row` / `set_rolling_cell_height`)
-  gives the terminal's ydraw layer O(1) scroll (shader offsets each prim by
-  `(rolling_row - rolling_row_0) * cell_height`); the `apply_scroll_anchor`
+  gives a scrolling host O(1) scroll (shader offsets each prim by
+  `(rolling_row - rolling_row_0) * cell_height`) — this was the terminal's
+  old ydraw-layer mechanism and currently has no in-tree caller since the
+  terminal moved to yvterm; the `apply_scroll_anchor`
   slot slides absolute-coord figures with the surrounding text.
+
+## Relation to yvterm — deliberately parallel renderers
+
+The terminal's scroll layer ([../yvterm/README.md](../yvterm/README.md),
+`sdf-layer.c`) runs the same bucket + stage + draw pipeline but is a
+deliberate sibling implementation, not accidental duplication: an earlier
+architecture rendered the terminal's scrolling rich content through one
+shared grid renderer, and that created more problems than it solved. The
+two specialize differently — yvterm's grid/layer is built for scroll
+integration (per-line anchoring, tiered scrollback, figure
+eviction/re-materialization), while ygrid is built for dynamically
+updatable primitive/composite entity groups (`CMD_GROUP` / `CMD_DELETE`
+editing of live UI content). A fix to the shared drawing logic usually
+needs to land in both.
 
 ## Public API sketch
 
@@ -64,9 +82,15 @@ struct yetty_ycore_void_result yetty_ygrid_add_record(
 struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_yclass_object *obj);
 ```
 
-`yetty_ygrid_register_factory_for_kind` registers the same renderer under an
-arbitrary kind token so ygui's producer widgets (yplot / yimage / yvideo /
-yzoo / yjungle) get distinct wire kinds.
+Two honest kinds exist (#685): `"ygrid"` (absolute coords, hard-wired — the
+chrome/widget surface) and `"yscroll"` (registered via
+`yetty_ygrid_register_factory_for_kind`, coordinate mode follows the host's
+`factory_args.absolute_coords` — the content grid every ygui producer widget
+mints; plot/image/video content ships as composite records in the child
+body, not as a kind). The old content-type tokens (`yplot` / `yimage` /
+`yvideo` / `yzoo` / `yjungle`) remain registered only as deprecated aliases
+for external producers that still hash those strings — kinds name renderer
+configurations, not content types.
 
 ## Generated vs hand-written
 
@@ -90,7 +114,9 @@ hand-written pieces are `grid.c`, the non-class helper header
 
 ## Consumers
 
-- `../yterminal/terminal.c` — the terminal's ydraw scrolling layer.
+- `../yterminal/terminal.c` — registers the ygrid factory on the pane's
+  figure registry (kind `"ygrid"` plus the producer kind tokens); the
+  terminal's scroll layer itself is yvterm's `sdf-layer.c`, not an ygrid.
 - `../ychrome/host.c`, `../yguiapp/app.c`, `../yui/yui.c`, `../yrich/app.c` —
   ygui chrome grids (absolute coords) and producer-kind factories.
 - `tools/ycompositor`, `tools/ygreeter`, `tools/yhello`, `tools/ybrowser`,

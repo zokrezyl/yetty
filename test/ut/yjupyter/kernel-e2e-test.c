@@ -19,8 +19,8 @@
 
 #include <yyjson.h>
 
-#include <yetty/yjupyter/client.h>
-#include <yetty/yjupyter/protocol.h>
+#include "yetty/gen/impl/yjupyter/client.h"
+#include "yetty/gen/impl/yjupyter/protocol.h"
 
 static int failures;
 

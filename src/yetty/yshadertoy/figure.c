@@ -45,9 +45,8 @@
 #include <yetty/yetty/yetty.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yrender/gpu-resource-set.h>
@@ -587,20 +586,20 @@ static struct yetty_ycore_void_result figure_destroy(struct yetty_yclass_object 
  * yclass slot overrides — every slot takes the object handle.
  * ========================================================================= */
 
-YETTY_ANNOTATE("override@yshadertoy:figure:yfigure:render")
+YETTY_ANNOTATE("override@yfigure:figure:render")
 static struct yetty_ycore_void_result figure_render_slot(struct yetty_yclass_object *obj,
                                                          struct yetty_ydraw_target *target)
 {
     return figure_render(obj, target);
 }
 
-YETTY_ANNOTATE("override@yshadertoy:figure:yfigure:destroy")
+YETTY_ANNOTATE("override@yfigure:figure:destroy")
 static struct yetty_ycore_void_result figure_destroy_slot(struct yetty_yclass_object *obj)
 {
     return figure_destroy(obj);
 }
 
-YETTY_ANNOTATE("override@yshadertoy:figure:yfigure:process_bytes")
+YETTY_ANNOTATE("override@yfigure:figure:process_bytes")
 static struct yetty_ycore_void_result figure_process_bytes_slot(struct yetty_yclass_object *obj,
                                                                 const uint8_t *bytes,
                                                                 size_t bytes_len)
@@ -744,4 +743,4 @@ struct yetty_ycore_void_result yetty_yshadertoy_register_factory(
 }
 
 /* yclass class accessor (yetty_yshadertoy_figure_class_get) + registration. */
-#include "figure.gen.c"
+#include "yetty/gen/impl/yshadertoy/figure.c"

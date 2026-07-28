@@ -153,4 +153,4 @@ struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_yclas
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "progress.gen.c"
+#include "yetty/gen/impl/ygui/widgets/progress.c"

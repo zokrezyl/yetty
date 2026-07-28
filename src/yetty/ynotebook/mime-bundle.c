@@ -584,4 +584,4 @@ static struct yetty_ycore_void_result mime_bundle_destroy(struct yetty_yclass_ob
     return yetty_yclass_object_free(obj);
 }
 
-#include "mime-bundle.gen.c"
+#include "yetty/gen/impl/ynotebook/mime-bundle.c"

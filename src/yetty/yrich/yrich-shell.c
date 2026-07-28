@@ -27,10 +27,10 @@
 #include <yetty/yrich/yrich-operation.h>
 #include <yetty/yrich/yrich-types.h>
 
-#include <yetty/yrich/document.h>
-#include <yetty/yrich/slides.h>
-#include <yetty/yrich/spreadsheet.h>
-#include <yetty/yrich/ydoc.h>
+#include "yetty/gen/impl/yrich/document.h"
+#include "yetty/gen/impl/yrich/slides.h"
+#include "yetty/gen/impl/yrich/spreadsheet.h"
+#include "yetty/gen/impl/yrich/ydoc.h"
 #include <yetty/yrich/yrich-export.h>
 #include <yetty/yrich/yrich-yaml.h>
 

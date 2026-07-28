@@ -28,7 +28,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/ms-font.h>
 #include <yetty/yfont/ms-msdf-font.h>
@@ -40,10 +40,10 @@
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yrender/texture-format.h>
-#include <yetty/yterminal/terminal.h>
+#include <yetty/api/ytermsink/sink.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yfont/shader-glyph.h> /* shader-glyph codepoint table lookup */
-#include <yetty/yvterm/grid.h>
+#include "yetty/gen/impl/yvterm/grid.h"
 #include <yetty/yvterm/shader-glyph-pua.h> /* PUA-B codepoint helpers */
 #include <yetty/ywire/wire-statemachine.h>
 
@@ -215,8 +215,8 @@ struct yetty_ydraw_target;
  * The vterm yclass class — a yfigure subclass owning the unified model.
  *=========================================================================*/
 
-struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("include@yetty/yterminal/terminal.h")
-    YETTY_ANNOTATE("parent@yfigure:figure") yetty_yvterm_vterm {
+struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("parent@yfigure:figure")
+    yetty_yvterm_vterm {
     /* The terminal model lives in a separate class@yvterm:grid object; this
      * figure composes it and renders it. Owned: disposed in the destroy slot. */
     struct yetty_yclass_object *grid_obj;
@@ -241,13 +241,10 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("include@yetty/ytermi
     float content_rect_w;
     float content_rect_h;
 
-    /* Terminal-owned hooks. request_render asks the terminal for a frame;
-     * mouse_sub reports libvterm mouse-mode changes. (pty_write lives on the
-     * grid model, which produces the keyboard/query output.) */
-    yetty_yterminal_request_render_fn request_render_fn;
-    void *request_render_userdata;
-    yetty_yterminal_mouse_sub_fn mouse_sub_fn;
-    void *mouse_sub_userdata;
+    /* The terminal-host sink (ytermsink:sink): request_render is dispatched on
+     * it, and it is handed down to the grid + shader-glyph layer for their own
+     * upcalls. Borrowed — the terminal owns it and outlives this figure. */
+    struct yetty_yclass_object *sink;
 
     /* Scrollback view (not yet backed by a scrollback ring — see methods). */
     /* Scrollback view state lives on the GRID (single owner); the renderer
@@ -1534,8 +1531,7 @@ static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *
         yetty_ycore_error_destroy(self_res.error);
     }
     struct yetty_yvterm_shader_glyph_layer_ptr_result sg_res =
-        yetty_yvterm_shader_glyph_layer_create(context, self_obj, vterm->request_render_fn,
-                                               vterm->request_render_userdata);
+        yetty_yvterm_shader_glyph_layer_create(context, self_obj, vterm->sink);
     if (YETTY_IS_OK(sg_res)) {
         vterm->shader_glyph_layer = sg_res.value;
     } else {
@@ -1987,7 +1983,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
  * glyphs, upload, draw the grid quad. The figure rect spans the whole pane;
  * the render places the grid on the resolved content rect inside it (a docked
  * HUD reserved part of the pane), clamped so it never escapes the figure. */
-YETTY_ANNOTATE("override@yvterm:vterm:yfigure:render")
+YETTY_ANNOTATE("override@yfigure:figure:render")
 static struct yetty_ycore_void_result vterm_render_slot(struct yetty_yclass_object *obj,
                                                         struct yetty_ydraw_target *target)
 {
@@ -2015,7 +2011,7 @@ static struct yetty_ycore_void_result vterm_render_slot(struct yetty_yclass_obje
     return vterm_render_grid(vterm, target, rect);
 }
 
-YETTY_ANNOTATE("override@yvterm:vterm:yfigure:destroy")
+YETTY_ANNOTATE("override@yfigure:figure:destroy")
 static struct yetty_ycore_void_result vterm_destroy_slot(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
@@ -2138,11 +2134,7 @@ static void vterm_apply_color_config(struct yetty_yvterm_vterm *vterm,
 YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     uint32_t cols, uint32_t rows, const struct yetty_context *context,
-    yetty_yterminal_pty_write_fn pty_write_fn, void *pty_write_userdata,
-    yetty_yterminal_request_render_fn request_render_fn, void *request_render_userdata,
-    yetty_yterminal_mouse_sub_fn mouse_sub_fn, void *mouse_sub_userdata,
-    yetty_yterminal_clipboard_write_fn clipboard_write_fn, void *clipboard_write_userdata,
-    yetty_yterminal_sixel_write_fn sixel_write_fn, void *sixel_write_userdata)
+    struct yetty_yclass_object *sink)
 {
     if (cols == 0 || rows == 0) {
         return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: invalid size");
@@ -2211,39 +2203,10 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
             yetty_ycore_error_destroy(memtags_res.error);
         }
     }
-    /* The grid produces keyboard/query output; hand it the PTY hook. The
-     * terminal's pty_write_fn matches the grid's pty_write signature. */
-    struct yetty_ycore_void_result set_pty_res = yetty_yvterm_grid_set_pty_write(
-        vterm->grid_obj, (yetty_yvterm_grid_pty_write_fn)pty_write_fn, pty_write_userdata);
-    /* Route DEC ?1500/?1501 (CARDCLICK/CARDMOVE) subscription changes from the
-     * model straight to the terminal's mouse-subscription callback — same
-     * (click, move, userdata) signature, so register it directly. Without this,
-     * hosted clients (ygreeter, …) that enable pixel-precise input forwarding
-     * never receive forwarded mouse/resize events. */
-    struct yetty_ycore_void_result set_card_res = YETTY_OK_VOID();
-    if (YETTY_IS_OK(set_pty_res)) {
-        set_card_res = yetty_yvterm_grid_set_card_sub(
-            vterm->grid_obj, (yetty_yvterm_grid_card_sub_fn)mouse_sub_fn, mouse_sub_userdata);
-    }
-    /* OSC 52 clipboard writes from the model reach the terminal through this;
-     * same decoupling as pty_write — the terminal's clipboard_write_fn matches
-     * the grid's clipboard_write signature. */
-    struct yetty_ycore_void_result set_clip_res = YETTY_OK_VOID();
-    if (YETTY_IS_OK(set_pty_res) && YETTY_IS_OK(set_card_res)) {
-        set_clip_res = yetty_yvterm_grid_set_clipboard_write(
-            vterm->grid_obj, (yetty_yvterm_grid_clipboard_write_fn)clipboard_write_fn,
-            clipboard_write_userdata);
-    }
-    /* Sixel images from the model (DCS <params> q <data> ST) reach the terminal
-     * through this; same decoupling as clipboard_write. */
-    struct yetty_ycore_void_result set_sixel_res = YETTY_OK_VOID();
-    if (YETTY_IS_OK(set_pty_res) && YETTY_IS_OK(set_card_res) && YETTY_IS_OK(set_clip_res)) {
-        set_sixel_res = yetty_yvterm_grid_set_sixel_write(
-            vterm->grid_obj, (yetty_yvterm_grid_sixel_write_fn)sixel_write_fn,
-            sixel_write_userdata);
-    }
-    if (YETTY_IS_ERR(set_pty_res) || YETTY_IS_ERR(set_card_res) || YETTY_IS_ERR(set_clip_res) ||
-        YETTY_IS_ERR(set_sixel_res)) {
+    /* Hand the grid its host sink so it can dispatch pty_write / mouse_sub /
+     * clipboard_write / sixel_write back to the terminal. */
+    struct yetty_ycore_void_result set_sink_res = yetty_yvterm_grid_set_sink(vterm->grid_obj, sink);
+    if (YETTY_IS_ERR(set_sink_res)) {
         struct yetty_ycore_void_result grid_dispose_res =
             yetty_yvterm_grid_dispose(vterm->grid_obj);
         if (YETTY_IS_ERR(grid_dispose_res)) {
@@ -2253,20 +2216,7 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
         if (YETTY_IS_ERR(free_res)) {
             yetty_ycore_error_destroy(free_res.error);
         }
-        if (YETTY_IS_ERR(set_pty_res)) {
-            return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_pty_write",
-                             set_pty_res);
-        }
-        if (YETTY_IS_ERR(set_card_res)) {
-            return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_card_sub",
-                             set_card_res);
-        }
-        if (YETTY_IS_ERR(set_clip_res)) {
-            return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_clipboard_write",
-                             set_clip_res);
-        }
-        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_sixel_write",
-                         set_sixel_res);
+        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_sink", set_sink_res);
     }
     /* Colour palette + default fg/bg from the terminal/colors config keys —
      * before any PTY data, since indexed colours resolve at parse time.
@@ -2275,10 +2225,7 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     vterm_apply_color_config(vterm, config);
     vterm->grid_size = (struct yetty_ycore_grid_size){.cols = cols, .rows = rows};
     vterm->cell_size = (struct yetty_ycore_pixel_size){.width = 9.0f, .height = 18.0f};
-    vterm->request_render_fn = request_render_fn;
-    vterm->request_render_userdata = request_render_userdata;
-    vterm->mouse_sub_fn = mouse_sub_fn;
-    vterm->mouse_sub_userdata = mouse_sub_userdata;
+    vterm->sink = sink;
     vterm->visual_zoom_scale = 1.0f;
 
     /* Best-effort: builds the pipeline/font and overrides cell_size with the
@@ -2795,9 +2742,8 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_mouse(struct yetty_yclass_
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }
-        if (vterm->request_render_fn) {
-            struct yetty_ycore_void_result rr =
-                vterm->request_render_fn(vterm->request_render_userdata);
+        if (vterm->sink) {
+            struct yetty_ycore_void_result rr = yetty_ytermsink_request_render(vterm->sink);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             }
@@ -2806,4 +2752,4 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_mouse(struct yetty_yclass_
     return YETTY_OK_VOID();
 }
 
-#include "vterm.gen.c"
+#include "yetty/gen/impl/yvterm/vterm.c"

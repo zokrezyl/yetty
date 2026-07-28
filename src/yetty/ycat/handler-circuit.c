@@ -9,7 +9,7 @@
 
 #include <yetty/ycat/ycat.h>
 
-#include <yetty/ycircuit/circuit.h>
+#include "yetty/gen/impl/ycircuit/circuit.h"
 
 /* Error-path teardown is best-effort — absorb a failed destroy so the
  * original error is the one that surfaces. */

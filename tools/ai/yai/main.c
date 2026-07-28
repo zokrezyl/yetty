@@ -69,13 +69,13 @@
 #include "editor-ops.h"
 #include "fzy/match.h"
 
-#include <yetty/yai/claude.h>
-#include <yetty/yai/codex.h>
-#include <yetty/yai/editor-emacs.h>
-#include <yetty/yai/editor-vi.h>
-#include <yetty/yai/editor.h>
-#include <yetty/yai/engine.h>
-#include <yetty/yai/gemini.h>
+#include "yetty/gen/impl/yai/claude.h"
+#include "yetty/gen/impl/yai/codex.h"
+#include "yetty/gen/impl/yai/editor-emacs.h"
+#include "yetty/gen/impl/yai/editor-vi.h"
+#include "yetty/gen/impl/yai/editor.h"
+#include "yetty/gen/impl/yai/engine.h"
+#include "yetty/gen/impl/yai/gemini.h"
 
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>

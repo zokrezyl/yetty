@@ -640,4 +640,4 @@ struct yetty_ycore_int_result yetty_ychrome_in_gesture(struct yetty_yclass_objec
     return YETTY_OK(yetty_ycore_int, (chrome->dragging || chrome->resizing) ? 1 : 0);
 }
 
-#include "chrome.gen.c"
+#include "yetty/gen/impl/ychrome/chrome.c"

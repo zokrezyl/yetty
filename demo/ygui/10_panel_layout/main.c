@@ -75,4 +75,4 @@ int main(int argc, char **argv)
     return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_10_panel_layout_class_get().value);
 }
 
-#include "main.gen.c"
+#include "yetty/gen/impl/demoygui/10_panel_layout/main.c"

@@ -78,4 +78,4 @@ int main(int argc, char **argv)
     return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_13_color_mixer_class_get().value);
 }
 
-#include "main.gen.c"
+#include "yetty/gen/impl/demoygui/13_color_mixer/main.c"

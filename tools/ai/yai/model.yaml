@@ -468,7 +468,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -493,7 +493,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -505,7 +505,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -531,19 +531,3 @@ local_types:
   yetty_yai_gemini_ptr_result: tools/ai/yai/gemini.c
   yetty_yai_turn_engine: tools/ai/yai/turn-engine.c
   yetty_yai_turn_engine_ptr_result: tools/ai/yai/turn-engine.c
-local_typedefs:
-  __int128_t:
-    source_file: tools/ai/yai/claude.c
-    text: typedef __int128 __int128_t;
-  __uint128_t:
-    source_file: tools/ai/yai/claude.c
-    text: typedef unsigned __int128 __uint128_t;
-  __NSConstantString:
-    source_file: tools/ai/yai/claude.c
-    text: typedef struct __NSConstantString_tag __NSConstantString;
-  __builtin_ms_va_list:
-    source_file: tools/ai/yai/claude.c
-    text: "typedef char *__builtin_ms_va_list;"
-  __builtin_va_list:
-    source_file: tools/ai/yai/claude.c
-    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

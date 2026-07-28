@@ -86,7 +86,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -109,19 +109,3 @@ types:
 local_types:
   yetty_yzoo_app: tools/yzoo/app.c
   yetty_yzoo_app_ptr_result: tools/yzoo/app.c
-local_typedefs:
-  __int128_t:
-    source_file: tools/yzoo/app.c
-    text: typedef __int128 __int128_t;
-  __uint128_t:
-    source_file: tools/yzoo/app.c
-    text: typedef unsigned __int128 __uint128_t;
-  __NSConstantString:
-    source_file: tools/yzoo/app.c
-    text: typedef struct __NSConstantString_tag __NSConstantString;
-  __builtin_ms_va_list:
-    source_file: tools/yzoo/app.c
-    text: "typedef char *__builtin_ms_va_list;"
-  __builtin_va_list:
-    source_file: tools/yzoo/app.c
-    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

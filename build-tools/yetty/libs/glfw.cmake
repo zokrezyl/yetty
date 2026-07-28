@@ -145,8 +145,8 @@ if(NOT TARGET yetty_yplatform_window_chrome)
     # submodule register + module aggregator.
     add_library(yetty_yplatform_window_chrome STATIC
         ${YETTY_ROOT}/src/yetty/yplatform/ywindow-chrome/glfw.c
-        ${YETTY_ROOT}/src/yetty/yplatform/ywindow-chrome/rpc.gen.c
-        ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c)
+        ${YETTY_ROOT}/src/yetty/gen/impl/yplatform/ywindow-chrome/rpc.gen.c
+        ${YETTY_ROOT}/src/yetty/gen/impl/yplatform/rpc.gen.c)
     target_include_directories(yetty_yplatform_window_chrome
         PUBLIC ${YETTY_ROOT}/include
         PRIVATE ${YETTY_ROOT}/src)

@@ -55,7 +55,7 @@ transport to write to and a caller pushing input bytes.
 ## Public API sketch
 
 ```c
-#include <yetty/yguiapp/app.h>   /* generated */
+#include <yetty/api/yguiapp/app.h>   /* generated */
 #include <yetty/yguiapp/run.h>   /* hand-written launcher */
 
 struct yetty_ycore_void_result yetty_yguiapp_build(struct yetty_yclass_object *app,

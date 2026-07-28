@@ -24,7 +24,7 @@
 #include <yetty/ycore/memtag.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
-#include <yetty/yvterm/grid.h>
+#include "yetty/gen/impl/yvterm/grid.h"
 
 #include "scroll-tiers.h"
 

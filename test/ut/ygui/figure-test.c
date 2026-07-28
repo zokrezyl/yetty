@@ -26,8 +26,8 @@
 
 #include <yetty/ygui/ygui.h>
 #include <yetty/yplatform/pty.h>
-#include <yetty/yfigure/container.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/container.h"
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfigure/registry.h>
 
 /* Direct access to engine internals for assertions. */
@@ -147,12 +147,14 @@ static struct yetty_yfigure_figure_ptr_result stub_figure_factory(struct yetty_y
 }
 
 /* Build a registry that mints a stub figure for the chrome ygrid and for
- * the yimage widget kind. Caller frees. */
+ * the content-grid kind producer widgets mint ("yscroll" — #685 Phase 2;
+ * "yimage" kept as the deprecated alias hosts still register). Caller
+ * frees. */
 static struct yetty_yfigure_registry *make_registry(struct ytest *test)
 {
     struct yetty_yfigure_registry_ptr_result r = yetty_yfigure_registry_create();
     YTEST_REQUIRE_OK(test, r);
-    const char *const kinds[] = {"ygrid", "yimage"};
+    const char *const kinds[] = {"ygrid", "yscroll", "yimage"};
     for (size_t i = 0; i < sizeof(kinds) / sizeof(kinds[0]); i++) {
         struct yetty_ycore_void_result rr = yetty_yfigure_registry_register(
             r.value, yetty_yfigure_kind_token(kinds[i]), stub_figure_factory, NULL);

@@ -24,10 +24,10 @@
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
-#include <yetty/ycircuit/circuit.h>
-#include <yetty/ymusic/music.h>
+#include <yetty/api/yfigure/figure.h>
+#include <yetty/api/yfigure/container.h>
+#include "yetty/gen/impl/ycircuit/circuit.h"
+#include "yetty/gen/impl/ymusic/music.h"
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/yshadertoy/demo-shaders.h>
@@ -40,14 +40,13 @@
 
 #include "embedded-assets.h"
 
-/* yfigure producer kind IDs used by the registry. Keep these aligned with
- * include/yetty/yfigure/wire.h without depending on the wire parser here. */
+/* yfigure producer kind IDs used by the registry (kind tokens). */
 #define YHELLO_YFIGURE_KIND_YPLOT 5u
 #define YHELLO_YFIGURE_KIND_YIMAGE 6u
 #define YHELLO_YFIGURE_KIND_YVIDEO 7u
 
 #ifdef YETTY_YHELLO_HAS_CHROME
-#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #endif
 
@@ -58,10 +57,10 @@
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
-#include <yetty/yshadertoy/figure.h>
+#include <yetty/api/yshadertoy/figure.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yplatform/platform.h>
-#include <yetty/yapp/app.h>
+#include "yetty/gen/impl/yapp/app.h"
 #include <yetty/yclass/class.h>
 #include <yetty/yrender/render-target.h>
 #endif
@@ -4094,7 +4093,7 @@ static int run_standalone_mode(int argc, char **argv)
 
 /* yclass glue for yhello:app — compiled in every standalone build (desktop, web,
  * Android), outside the __ANDROID__ split above. */
-#include "main.gen.c"
+#include "yetty/gen/impl/yhello/main.c"
 
 #endif /* YETTY_YHELLO_HAS_STANDALONE */
 

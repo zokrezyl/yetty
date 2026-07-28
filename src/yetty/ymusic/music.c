@@ -1632,4 +1632,4 @@ struct yetty_ycore_void_result yetty_ymusic_emit_osc(const struct yetty_ydraw_dr
     return YETTY_OK_VOID();
 }
 
-#include "music.gen.c"
+#include "yetty/gen/impl/ymusic/music.c"

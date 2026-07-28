@@ -7,9 +7,14 @@
 # foot); the per-class <stem>.gen.c files are codegen output (#included into each .c). Pure logic — no GLFW, no
 # rendering. The window_chrome gesture symbols it calls are resolved by the
 # consumer, which links yetty_yplatform_window_chrome.
+add_library(yetty_api_ychrome STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/ychrome/chrome.c
+)
+target_include_directories(yetty_api_ychrome PUBLIC ${YETTY_ROOT}/include)
+target_link_libraries(yetty_api_ychrome PUBLIC yetty_ycore yetty_yclass)
+
 add_library(yetty_ychrome STATIC
     chrome.c
-    rpc.gen.c
     # host.c: reusable glue (engine + pinned caption figure) so any app gets
     # window chrome in a few calls. Plain C, no annotations.
     host.c
@@ -22,6 +27,7 @@ target_include_directories(yetty_ychrome PUBLIC
 target_include_directories(yetty_ychrome PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_ychrome PUBLIC
+    yetty_api_ychrome
     yetty_ycore
     yetty_yclass
     # Framework-level draw primitives (the same layer ygui paints into) so

@@ -252,8 +252,8 @@ classes:
         type: "struct yetty_yclass_object *"
         get: false
         set: false
-      - name: producer_session
-        type: "struct yetty_yfigure_producer_session *"
+      - name: rpc_root
+        type: "struct yetty_yclass_object *"
         get: false
         set: false
     ops:
@@ -2592,7 +2592,7 @@ exposed:
         type: "struct yetty_yclass_object *"
     doc: "/* Public teardown — symmetric to the generated yetty_ygui_framework_create.
  * Runs the destructor chain (framework_destructor frees the widget tree, owned
- * theme, and producer session) then releases the yclass object. Best-effort:
+ * theme, and attached session) then releases the yclass object. Best-effort:
  * both steps run; the first error is surfaced. */"
   - source_file: src/yetty/ygui/framework.c
     name: yetty_ygui_framework_set_container_obj
@@ -2626,16 +2626,16 @@ exposed:
         type: int
     doc: null
   - source_file: src/yetty/ygui/framework.c
-    name: yetty_ygui_framework_attach_transport
+    name: yetty_ygui_framework_attach_connection
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-      - name: transport
-        type: "struct yetty_yclass_transport *"
-    doc: "/* Attach over a caller-provided transport — the endpoint path passes a
- * yetty_ywire_channel-backed transport so the framework rides the multiplexed
- * connection's rpc channel instead of opening its own DCS transport on the fd. */"
+      - name: connection
+        type: "struct yetty_ywire_connection *"
+    doc: "/* Attach over a caller-provided multiplexed connection — the endpoint path.
+ * The framework opens its OWN dynamic RPC channel on the connection (the SSH
+ * model), so it never shares/tears a lane with other clients on the PTY. */"
   - source_file: src/yetty/ygui/framework.c
     name: yetty_ygui_framework_set_viewport
     return_type: struct yetty_ycore_void_result
@@ -4876,7 +4876,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -4893,7 +4893,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -4905,7 +4905,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -4917,7 +4917,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -4929,7 +4929,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -4941,7 +4941,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -4966,7 +4966,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -4978,7 +4978,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -5004,7 +5004,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -5027,7 +5027,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -5039,7 +5039,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -5051,7 +5051,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -5185,7 +5185,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -5367,18 +5367,51 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/ygui/framework.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ygui_key_cb:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/framework-defs.h
+    text: "typedef int (*yetty_ygui_key_cb)(struct yetty_yclass_object *, uint32_t, int, void *);"
+  yetty_ygui_event_cb:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/event.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_event_cb)(struct yetty_yclass_object *, const struct yetty_ygui_event *, void *);"
   yetty_ygui_click_cb:
-    source_file: src/yetty/ygui/mixins/clickable.c
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/mixins/clickable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_object *, void *);"
   yetty_ygui_drag_cb:
-    source_file: src/yetty/ygui/mixins/draggable.c
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/mixins/draggable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *, float, float, void *);"
+  yetty_ygui_constructor_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_object *);"
+  yetty_ygui_destructor_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_object *);"
+  yetty_ygui_widget_on_press_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct yetty_yclass_object *, float, float, int);"
+  yetty_ygui_widget_on_release_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_release_fn)(struct yetty_yclass_object *, float, float, int);"
+  yetty_ygui_widget_on_motion_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(struct yetty_yclass_object *, float, float);"
+  yetty_ygui_widget_emit_body_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
+  yetty_ygui_widget_on_scroll_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_scroll_fn)(struct yetty_yclass_object *, float, float, float, float);"
+  yetty_ygui_widget_paint_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
+  yetty_ygui_widget_emit_container_fn:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_container_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
+  yetty_ygui_menu_item_cb:
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widgets/popup_menu.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *, int, void *);"
   fn_t:
     source_file: src/yetty/ygui/widget.c
     text: "typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_object *);"
-  yetty_ygui_menu_item_cb:
-    source_file: src/yetty/ygui/widgets/popup_menu.c
-    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *, int, void *);"
   yetty_ygui_splitter_change_cb:
     source_file: src/yetty/ygui/widgets/splitter.c
     text: "typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *, float, void *);"
@@ -5389,7 +5422,7 @@ local_typedefs:
     source_file: src/yetty/ygui/widgets/tabbar.c
     text: "typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *, void *);"
   yetty_ygui_ynodes_link_cb:
-    source_file: src/yetty/ygui/widgets/ynodes.c
+    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widgets/ynodes.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, struct yetty_yclass_object *, int, void *);"
 includes:
   src/yetty/ygui/framework.c:

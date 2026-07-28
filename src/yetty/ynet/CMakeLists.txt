@@ -33,10 +33,15 @@ if(NOT YNET_PCAP_FOUND)
     return()
 endif()
 
+add_library(yetty_api_ynet STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/ynet/capture.c
+)
+target_include_directories(yetty_api_ynet PUBLIC ${YETTY_ROOT}/include)
+target_link_libraries(yetty_api_ynet PUBLIC yetty_ycore yetty_yclass)
+
 add_library(yetty_ynet STATIC
     capture.c
     dissect.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_ynet PUBLIC
@@ -46,6 +51,7 @@ target_include_directories(yetty_ynet PUBLIC
 target_include_directories(yetty_ynet PRIVATE ${YETTY_ROOT}/src ${PCAP_INCLUDE_DIRS})
 
 target_link_libraries(yetty_ynet PUBLIC
+    yetty_api_ynet
     yetty_ycore
     yetty_yclass
     yetty_yface       # YDRAW_BIN DCS envelope encoder (topology figure)

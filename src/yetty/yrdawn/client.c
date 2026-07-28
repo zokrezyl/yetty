@@ -25,9 +25,10 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yface/yface.h>
-#include <yetty/yfigure/container.h>
-#include <yetty/yfigure/producer.h>
-#include <yetty/yfigure/registry.h>
+#include <yetty/api/yfigure/container.h>
+#include <yetty/api/yterminal/terminal.h>
+#include <yetty/yclass/rpc.h>
+#include <yetty/yfigure/kind.h>
 #include <yetty/yplatform/io.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yrdawn/wire.h>
@@ -66,7 +67,8 @@ struct yetty_yrdawn_client {
      * create/delete/body over the session via this container proxy. The
      * inbound yrdawn reply/event OSC protocol (72xxxx) is unaffected — it
      * still flows through in_face / yetty_yrdawn_client_pump. */
-    struct yetty_yfigure_producer_session *producer_session;
+    struct yetty_yclass_object *rpc_root; /* session root; its session owns the
+                                          * connection stack (channel/connection/pty). */
     struct yetty_yclass_object *container;
 
     struct yetty_yface *in_face;
@@ -311,17 +313,36 @@ struct yetty_yrdawn_client_ptr_result yetty_yrdawn_client_create(int in_fd, int 
      * (out_fd). compressed=1 (base64+lz4) matches the old figure-tree wire's
      * use of compression for CMD/BULK records. The handshake reads in_fd
      * once here, before any pump loop runs. */
-    struct yetty_yfigure_producer_session_ptr_result attach_res =
-        yetty_yfigure_producer_attach(c->in_fd, c->out_fd, /*compressed=*/1);
-    if (YETTY_IS_ERR(attach_res)) {
+    struct yetty_yclass_object_ptr_result root_res =
+        yetty_yclass_rpc_connect_fds(c->in_fd, c->out_fd);
+    if (YETTY_IS_ERR(root_res)) {
         yetty_yface_destroy(c->in_face);
         free(c->rx_buf);
         free(c);
-        return YETTY_ERR(yetty_yrdawn_client_ptr, "yrdawn_client_create: producer_attach",
-                         attach_res);
+        return YETTY_ERR(yetty_yrdawn_client_ptr, "yrdawn_client_create: connect_fds", root_res);
     }
-    c->producer_session = attach_res.value;
-    c->container = yetty_yfigure_producer_session_container(c->producer_session);
+    c->rpc_root = root_res.value;
+    struct yetty_yclass_object_ptr_result container_res =
+        yetty_yterminal_figure_root_container(c->rpc_root);
+    if (YETTY_IS_ERR(container_res)) {
+        struct yetty_ycore_void_result dr = yetty_yclass_rpc_disconnect(c->rpc_root);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
+        yetty_yface_destroy(c->in_face);
+        free(c->rx_buf);
+        free(c);
+        return YETTY_ERR(yetty_yrdawn_client_ptr, "yrdawn_client_create: figure_root_container",
+                         container_res);
+    }
+    c->container = container_res.value;
+    /* Prime the container's slots while the pipeline is empty (steady-state
+     * pipelined mutations must never mid-stream RESOLVE_SLOT). */
+    struct yetty_ycore_void_result prime_res =
+        yetty_yclass_rpc_session_translate_class(c->rpc_root->session, "yetty_yfigure_container");
+    if (YETTY_IS_ERR(prime_res)) {
+        yetty_ycore_error_destroy(prime_res.error);
+    }
 
     return YETTY_OK(yetty_yrdawn_client_ptr, c);
 }
@@ -341,17 +362,18 @@ struct yetty_ycore_void_result yetty_yrdawn_client_destroy(struct yetty_yrdawn_c
         }
     }
     free(c->canvases);
-    /* Detach the figure-tree producer session (destroys the owned RPC
-     * transport + container proxy). Best-effort at teardown. Done after the
-     * canvases above have emitted their DELETE_CHILD over the session. */
-    if (c->producer_session) {
-        struct yetty_ycore_void_result detach_res =
-            yetty_yfigure_producer_detach(c->producer_session);
+    /* Disconnect the session (CLOSEs our channel, tears down connection + pty)
+     * and free the navigated container proxy. Best-effort at teardown. Done
+     * after the canvases above have emitted their DELETE_CHILD over the
+     * session. */
+    free(c->container);
+    c->container = NULL;
+    if (c->rpc_root) {
+        struct yetty_ycore_void_result detach_res = yetty_yclass_rpc_disconnect(c->rpc_root);
         if (YETTY_IS_ERR(detach_res)) {
             yetty_ycore_error_destroy(detach_res.error);
         }
-        c->producer_session = NULL;
-        c->container = NULL;
+        c->rpc_root = NULL;
     }
     if (c->in_face) {
         yetty_yface_destroy(c->in_face);
@@ -394,7 +416,7 @@ uint64_t yetty_yrdawn_client_alloc_handle(struct yetty_yrdawn_client *c)
  * byte-identical to what the legacy id-targeted record carried after its
  * {length, id} record header, which the figure's process_bytes decodes as
  * `sub_op` followed by the sub-op payload. `compressed` is no longer
- * meaningful here (the producer session owns transport compression) and is
+ * meaningful here (the connection owns transport compression) and is
  * accepted only to keep the call sites unchanged. */
 static struct yetty_ycore_void_result emit_record(struct yetty_yrdawn_client *c, uint32_t figure_id,
                                                   int compressed, uint32_t sub_op, const void *body,

@@ -1,9 +1,9 @@
 /* GENERATED — do not edit. */
-/* Public interface for regular class(es) `plot, function` (module: api_yplot).
- * Fully generated from the source .c — do not edit. This single
- * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), exposed
- * functions, and the public types the signatures use. */
+/* Object API for regular class(es) `plot, function` (implementation module: api_yplot).
+ * Fully generated from the source .c — do not edit. The API does
+ * not encode whether an implementation dispatches in-process or
+ * over RPC; it declares the typed methods, create(), properties,
+ * exposed functions, and the types those signatures use. */
 #ifndef YETTY_YCLASSGEN_API_YPLOT_PLOT_H
 #define YETTY_YCLASSGEN_API_YPLOT_PLOT_H
 
@@ -16,14 +16,13 @@
 extern "C" {
 #endif
 
-struct yetty_yclass_ptr_result yetty_api_yplot_plot_class_get(void);
-struct yetty_yclass_ptr_result yetty_api_yplot_function_class_get(void);
-
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_api_yplot_plot;
+#ifndef YETTY_YCLASSGEN_TYPE_YETTY_API_YPLOT_PLOT_PTR_RESULT
+#define YETTY_YCLASSGEN_TYPE_YETTY_API_YPLOT_PLOT_PTR_RESULT
 struct yetty_api_yplot_plot_ptr_result {
     int ok;
     union {
@@ -31,6 +30,7 @@ struct yetty_api_yplot_plot_ptr_result {
         struct yetty_ycore_error error;
     };
 };
+#endif
 struct yetty_api_yplot_plot_ptr_result yetty_api_yplot_plot_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_api_yplot_plot_to(struct yetty_api_yplot_plot *data);
 
@@ -39,6 +39,8 @@ struct yetty_yclass_object_ptr_result yetty_api_yplot_plot_to(struct yetty_api_y
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_api_yplot_function;
+#ifndef YETTY_YCLASSGEN_TYPE_YETTY_API_YPLOT_FUNCTION_PTR_RESULT
+#define YETTY_YCLASSGEN_TYPE_YETTY_API_YPLOT_FUNCTION_PTR_RESULT
 struct yetty_api_yplot_function_ptr_result {
     int ok;
     union {
@@ -46,6 +48,7 @@ struct yetty_api_yplot_function_ptr_result {
         struct yetty_ycore_error error;
     };
 };
+#endif
 struct yetty_api_yplot_function_ptr_result yetty_api_yplot_function_from(
     struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_api_yplot_function_to(
@@ -86,35 +89,8 @@ struct yetty_ycore_void_result yetty_api_yplot_set_name(struct yetty_yclass_obje
 struct yetty_ycore_void_result yetty_api_yplot_set_color(struct yetty_yclass_object *obj,
                                                          const char *color);
 
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_set_expression_fn)(
-    struct yetty_yclass_object *, const char *);
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_add_function_fn)(
-    struct yetty_yclass_object *, struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_set_title_fn)(struct yetty_yclass_object *,
-                                                                       const char *);
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_set_x_label_fn)(
-    struct yetty_yclass_object *, const char *);
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_set_y_label_fn)(
-    struct yetty_yclass_object *, const char *);
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_set_size_fn)(struct yetty_yclass_object *,
-                                                                      float, float);
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_set_x_range_fn)(
-    struct yetty_yclass_object *, float, float);
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_set_y_range_fn)(
-    struct yetty_yclass_object *, float, float);
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_show_fn)(struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_destroy_fn)(struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_set_body_fn)(struct yetty_yclass_object *,
-                                                                      const char *);
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_set_name_fn)(struct yetty_yclass_object *,
-                                                                      const char *);
-typedef struct yetty_ycore_void_result (*yetty_api_yplot_set_color_fn)(struct yetty_yclass_object *,
-                                                                       const char *);
-
 struct yetty_yclass_object_ptr_result yetty_api_yplot_plot_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_api_yplot_function_create(struct yetty_yclass_ctx *ctx);
-
-struct yetty_ycore_void_result yetty_api_yplot_register(void);
 
 #ifdef __cplusplus
 }

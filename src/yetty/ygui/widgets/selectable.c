@@ -159,4 +159,4 @@ struct yetty_ycore_int_result yetty_ygui_selectable_is_selected(
     return YETTY_OK(yetty_ycore_int, ((struct yetty_ygui_selectable *)data_result.value)->selected);
 }
 
-#include "selectable.gen.c"
+#include "yetty/gen/impl/ygui/widgets/selectable.c"

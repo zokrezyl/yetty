@@ -14,7 +14,7 @@
  *   ynet --dump <file>                  # explicit; same as above
  */
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ynet/capture.h>
+#include "yetty/gen/impl/ynet/capture.h"
 
 #include <stdio.h>
 #include <stdlib.h>

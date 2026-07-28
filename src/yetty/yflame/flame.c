@@ -1118,4 +1118,4 @@ struct yetty_ycore_void_result yetty_yflame_emit_osc(const struct yetty_ydraw_dr
     return YETTY_OK_VOID();
 }
 
-#include "flame.gen.c"
+#include "yetty/gen/impl/yflame/flame.c"

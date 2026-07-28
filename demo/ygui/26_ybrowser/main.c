@@ -346,4 +346,4 @@ int main(int argc, char **argv)
     return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_26_ybrowser_class_get().value);
 }
 
-#include "main.gen.c"
+#include "yetty/gen/impl/demoygui/26_ybrowser/main.c"

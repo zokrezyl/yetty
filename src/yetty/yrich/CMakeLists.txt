@@ -13,13 +13,23 @@
 #                      the ygui demo runner is an OBJECT library.
 # Annotated yclass sources (each #includes its own <stem>.gen.c at the
 # foot); the per-class <stem>.gen.c are generated units (#included into each .c).
+add_library(yetty_api_yrich STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/yrich/app.c
+    ${YETTY_ROOT}/src/yetty/gen/api/yrich/document.c
+    ${YETTY_ROOT}/src/yetty/gen/api/yrich/element.c
+    ${YETTY_ROOT}/src/yetty/gen/api/yrich/slides.c
+    ${YETTY_ROOT}/src/yetty/gen/api/yrich/spreadsheet.c
+    ${YETTY_ROOT}/src/yetty/gen/api/yrich/ydoc.c
+)
+target_include_directories(yetty_api_yrich PUBLIC ${YETTY_ROOT}/include)
+target_link_libraries(yetty_api_yrich PUBLIC yetty_ycore yetty_yclass)
+
 add_library(yetty_yrich STATIC
     element.c
     document.c
     ydoc.c
     spreadsheet.c
     slides.c
-    rpc.gen.c
     yrich-selection.c
     yrich-operation.c
     yrich-command.c
@@ -34,6 +44,7 @@ target_include_directories(yetty_yrich PUBLIC
 )
 
 target_link_libraries(yetty_yrich PUBLIC
+    yetty_api_yrich
     yetty_ycore
     yetty_yclass
     yetty_ydraw_core

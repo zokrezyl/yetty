@@ -15,9 +15,9 @@
  * Input model follows tools/ynetsurf (yface splits stdin into OSC envelopes +
  * raw keystrokes); the figure lifecycle follows tools/yless (yview).
  */
-#include <yetty/yflame/flame.h>
+#include "yetty/gen/impl/yflame/flame.h"
 #include <yetty/yclass/class.h>
-#include <yetty/yview/view.h> /* yetty_yview_configure / _set_content / _set_rect / _destroy */
+#include <yetty/api/yview/view.h> /* yetty_yview_configure / _set_content / _set_rect / _destroy */
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>

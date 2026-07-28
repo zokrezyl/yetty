@@ -32,7 +32,7 @@
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
 
-#include <yetty/yjupyter/protocol.h> /* session + message classes */
+#include "yetty/gen/impl/yjupyter/protocol.h" /* session + message classes */
 
 /*=============================================================================
  * Class data
@@ -697,4 +697,4 @@ static struct yetty_ycore_void_result client_destroy(struct yetty_yclass_object 
     return yetty_yclass_object_free(obj);
 }
 
-#include "client.gen.c"
+#include "yetty/gen/impl/yjupyter/client.c"

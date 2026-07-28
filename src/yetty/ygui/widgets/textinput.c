@@ -840,4 +840,4 @@ struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_yclas
     return YETTY_OK(yetty_ycore_int, consumed);
 }
 
-#include "textinput.gen.c"
+#include "yetty/gen/impl/ygui/widgets/textinput.c"

@@ -177,4 +177,4 @@ struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_yclass_
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "ybrowser.gen.c"
+#include "yetty/gen/impl/ygui/widgets/ybrowser.c"

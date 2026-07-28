@@ -776,4 +776,4 @@ static struct yetty_ycore_void_result capture_destroy(struct yetty_yclass_object
     return yetty_yclass_object_free(obj);
 }
 
-#include "capture.gen.c"
+#include "yetty/gen/impl/ynet/capture.c"

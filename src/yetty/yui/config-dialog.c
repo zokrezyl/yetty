@@ -31,7 +31,6 @@
 
 #include <yetty/yconfig/config.h>
 #include <yetty/ygui/ygui.h>
-#include <yetty/yfigure/wire.h>
 
 #define YUI_CFG_DLG_MAX_DEPTH 8
 #define YUI_CFG_DLG_PATH_MAX 256

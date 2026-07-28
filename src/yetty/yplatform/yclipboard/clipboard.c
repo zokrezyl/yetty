@@ -81,4 +81,4 @@ static struct yetty_ycore_void_result clipboard_default_drain(struct yetty_yclas
     return YETTY_OK_VOID();
 }
 
-#include "clipboard.gen.c"
+#include "yetty/gen/impl/yplatform/yclipboard/clipboard.c"

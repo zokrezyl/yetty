@@ -299,4 +299,4 @@ static struct yetty_ycore_void_result glfw_clipboard_drain(struct yetty_yclass_o
     return YETTY_OK_VOID();
 }
 
-#include "glfw.gen.c"
+#include "yetty/gen/impl/yplatform/yclipboard/glfw.c"

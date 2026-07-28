@@ -277,7 +277,10 @@ struct yetty_yrender_terminal_layer {
  * The pane background colour is read from the config in yetty_context as
  * "terminal/background-color" (hex string: "#RGB", "#RGBA", "#RRGGBB" or
  * "#RRGGBBAA"). Default when unset or unparseable is opaque black. */
-struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
+/* Open a terminal: allocate the yterminal:terminal yclass object and
+ * initialize it. Returns the terminal data pointer (the class data slice;
+ * the RPC layer reaches the object via yetty_yterminal_terminal_to). */
+struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     struct yetty_ycore_grid_size grid_size, const struct yetty_context *yetty_context);
 struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
     struct yetty_yterminal_terminal *terminal);

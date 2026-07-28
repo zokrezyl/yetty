@@ -330,4 +330,4 @@ struct yetty_ycore_void_result yetty_ygui_splitter_on_change(struct yetty_yclass
     return YETTY_OK_VOID();
 }
 
-#include "splitter.gen.c"
+#include "yetty/gen/impl/ygui/widgets/splitter.c"

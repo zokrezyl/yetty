@@ -489,16 +489,24 @@ static struct yetty_yrender_gpu_resource_set_result ms_msdf_get_gpu_resource_set
     }
 
     if (f->dirty) {
-        /* Update atlas texture */
+        /* Update atlas texture. Bump `generation` alongside `dirty`: this
+         * font's resource set is embedded in every binder that renders its
+         * glyphs (the terminal layer plus one per ygrid figure). `dirty`
+         * is cleared by whichever binder updates first, so the others
+         * would never see the grown atlas/metadata and would render freshly
+         * rasterized glyphs as transparent (glyph_size reads 0). The
+         * monotonic generation lets each binder re-upload independently. */
         f->rs.textures[0].data = f->atlas_pixels;
         f->rs.textures[0].width = f->atlas_width;
         f->rs.textures[0].height = f->atlas_height;
         f->rs.textures[0].dirty = 1;
+        f->rs.textures[0].generation++;
 
         /* Update metadata buffer */
         f->rs.buffers[0].data = (uint8_t *)f->meta;
         f->rs.buffers[0].size = (size_t)f->next_slot * sizeof(struct yetty_yfont_glyph_meta_gpu);
         f->rs.buffers[0].dirty = 1;
+        f->rs.buffers[0].generation++;
 
         /* Compute pixel-domain placement values for the shader.
 		 *

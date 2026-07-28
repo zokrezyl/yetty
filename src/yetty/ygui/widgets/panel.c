@@ -118,4 +118,4 @@ struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "panel.gen.c"
+#include "yetty/gen/impl/ygui/widgets/panel.c"

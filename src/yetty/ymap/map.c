@@ -827,4 +827,4 @@ struct yetty_ycore_void_result yetty_ymap_emit_osc(const struct yetty_ydraw_draw
     return YETTY_OK_VOID();
 }
 
-#include "map.gen.c"
+#include "yetty/gen/impl/ymap/map.c"

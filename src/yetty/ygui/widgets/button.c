@@ -414,4 +414,4 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(
     return YETTY_OK(yetty_ycore_const_char_ptr, d->label);
 }
 
-#include "button.gen.c"
+#include "yetty/gen/impl/ygui/widgets/button.c"

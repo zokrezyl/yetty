@@ -36,7 +36,7 @@ struct yetty_ygui_yrich_view_ptr_result yetty_ygui_yrich_view_from(struct yetty_
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/yrich/yrich-types.h>
 
-#include <yetty/yrich/document.h>
+#include <yetty/api/yrich/document.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -547,4 +547,4 @@ struct yetty_ycore_int_result yetty_ygui_yrich_view_feed_double_click(
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-#include "yrich_view.gen.c"
+#include "yetty/gen/impl/ygui/widgets/yrich_view.c"

@@ -15,8 +15,8 @@
 
 #include <yyjson.h>
 
-#include <yetty/ynotebook/notebook.h>
-#include <yetty/ynotebook/mime-bundle.h>
+#include "yetty/gen/impl/ynotebook/notebook.h"
+#include "yetty/gen/impl/ynotebook/mime-bundle.h"
 
 static int failures;
 

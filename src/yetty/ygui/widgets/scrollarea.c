@@ -24,8 +24,7 @@ YETTY_YRESULT_DECLARE(yetty_ygui_scrollarea_ptr, struct yetty_ygui_scrollarea *)
 struct yetty_yclass_ptr_result yetty_ygui_scrollarea_class_get(void);
 struct yetty_ygui_scrollarea_ptr_result yetty_ygui_scrollarea_from(struct yetty_yclass_object *obj);
 #include "paint-helpers.h"
-#include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
+#include <yetty/yfigure/kind.h>
 #include <yetty/ygui/mixins/draggable.h>
 #include <yetty/ygui/widgets/vbox.h>
 
@@ -271,4 +270,4 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     return YETTY_OK_VOID();
 }
 
-#include "scrollarea.gen.c"
+#include "yetty/gen/impl/ygui/widgets/scrollarea.c"

@@ -357,4 +357,4 @@ static struct yetty_ycore_void_result codex_handle_event(struct yetty_yclass_obj
     return YETTY_OK_VOID();
 }
 
-#include "codex.gen.c"
+#include "yetty/gen/impl/yai/codex.c"

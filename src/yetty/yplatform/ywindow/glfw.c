@@ -207,4 +207,4 @@ struct yetty_yplatform_glfw_window_handle_ptr_result yetty_yplatform_glfw_window
     return glfw_window_handle(obj);
 }
 
-#include "glfw.gen.c"
+#include "yetty/gen/impl/yplatform/ywindow/glfw.c"

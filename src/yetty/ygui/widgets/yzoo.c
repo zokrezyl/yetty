@@ -117,4 +117,4 @@ static struct yetty_ycore_void_result yzoo_emit_body(struct yetty_yclass_object 
     return ((fn_t)impl)(yclass_obj, ctx);
 }
 
-#include "yzoo.gen.c"
+#include "yetty/gen/impl/ygui/widgets/yzoo.c"

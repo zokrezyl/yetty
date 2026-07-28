@@ -883,4 +883,4 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_new_tab(struct yetty_ycl
  * overrides the constructor + paint.
  *---------------------------------------------------------------------------*/
 
-#include "tabbar.gen.c"
+#include "yetty/gen/impl/ygui/widgets/tabbar.c"

@@ -18,7 +18,7 @@
  * With no subcommand it prints status. REV defaults to HEAD.
  */
 
-#include <yetty/ygit/repo.h>
+#include "yetty/gen/impl/ygit/repo.h"
 #include <yetty/ygit/git-backend.h>
 #include <yetty/ygit/commit-graph.h>
 #include <yetty/yclass/class.h>

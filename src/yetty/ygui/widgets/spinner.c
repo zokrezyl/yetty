@@ -216,4 +216,4 @@ struct yetty_ycore_float_result yetty_ygui_spinner_get_value(const struct yetty_
     return YETTY_OK(yetty_ycore_float, ((struct yetty_ygui_spinner *)data_result.value)->value);
 }
 
-#include "spinner.gen.c"
+#include "yetty/gen/impl/ygui/widgets/spinner.c"

@@ -563,4 +563,4 @@ static struct yetty_ycore_void_result session_destroy(struct yetty_yclass_object
     return yetty_yclass_object_free(obj);
 }
 
-#include "protocol.gen.c"
+#include "yetty/gen/impl/yjupyter/protocol.c"

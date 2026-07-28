@@ -39,8 +39,7 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
     struct yetty_yclass_object *to, int in_idx, void *userdata);
 #include "paint-helpers.h"
 
-#include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
+#include <yetty/yfigure/kind.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/popup_menu.h>
 #include <yetty/ygui/widgets/ynode.h>
@@ -1019,4 +1018,4 @@ static struct yetty_ycore_int_result ynodes_on_scroll(struct yetty_yclass_object
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-#include "ynodes.gen.c"
+#include "yetty/gen/impl/ygui/widgets/ynodes.c"

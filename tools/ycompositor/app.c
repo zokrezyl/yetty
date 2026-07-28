@@ -28,7 +28,7 @@
 
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yplatform/platform.h>
-#include <yetty/yapp/app.h>
+#include <yetty/api/yapp/app.h>
 #include <yetty/yclass/class.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
@@ -36,16 +36,15 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
+#include <yetty/api/yfigure/figure.h>
+#include <yetty/api/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
-#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #include <yetty/ygrid/ygrid.h>
-#include <yetty/yfigure/figure.h>
+#include <yetty/api/yfigure/figure.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
@@ -699,4 +698,4 @@ struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_
     return yetty_ycompositor_app_create(ctx);
 }
 
-#include "app.gen.c"
+#include "yetty/gen/impl/ycompositor/app.c"

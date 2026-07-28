@@ -89,28 +89,29 @@ add_library(yetty_yplatform_core STATIC
     # run dispatch stubs plus the weak app factory that concrete apps override.
     # In core so the platform can host any yapp:app subclass without naming it.
     ${YETTY_ROOT}/src/yetty/yapp/app.c
-    ${YETTY_ROOT}/src/yetty/yapp/rpc.gen.c
-    # Submodule accessor-lookup registrations. The yplatform module aggregator
-    # (yplatform/rpc.gen.c, compiled into yetty_yplatform_window_chrome) calls
-    # each of these; the references are declared weak so absence is tolerated
-    # on ELF where missing weak externs resolve to NULL. Mach-O's static
-    # linker does not honor that — it rejects any unresolved reference,
-    # weak or not — so the definitions must actually be present in the link.
-    # The lookup tables themselves are guarded by YETTY_PLATFORM_* macros
-    # (which are not globally set), so each definition compiles down to
-    # registering a lookup hook that just returns NULL for class names that
-    # don't belong to it.
-    yclipboard/rpc.gen.c
-    ywindow/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/gen/api/yapp/app.c
+    # Submodule accessor-lookup registrations (split codegen: the standalone
+    # per-submodule aggregators live under src/yetty/gen/impl/yplatform/). The
+    # module aggregator (gen/impl/yplatform/rpc.gen.c, compiled into
+    # yetty_yplatform_window_chrome) calls each of these; the references are
+    # declared weak so absence is tolerated on ELF where missing weak externs
+    # resolve to NULL. Mach-O's static linker does not honor that — it rejects
+    # any unresolved reference, weak or not — so the definitions must actually
+    # be present in the link. The lookup tables themselves are guarded by
+    # YETTY_PLATFORM_* macros (which are not globally set), so each definition
+    # compiles down to registering a lookup hook that just returns NULL for
+    # class names that don't belong to it.
+    ${YETTY_ROOT}/src/yetty/gen/impl/yplatform/yclipboard/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/gen/impl/yplatform/ywindow/rpc.gen.c
     # The window-chrome submodule's accessor-lookup registration. Its base
     # class (window-chrome.c) is already compiled into core above, but the
-    # aggregator (yplatform/rpc.gen.c) now chains every submodule register as a
-    # strong extern, so this shim must be present in every link too — the
-    # desktop build also pulls a YETTY_PLATFORM_GLFW-flavoured copy via
-    # glfw.cmake, which the linker prefers there; targets that don't (webasm,
-    # headless tools) resolve the strong ref from this core copy.
-    ywindow-chrome/rpc.gen.c
-    yplatform/rpc.gen.c
+    # module aggregator now chains every submodule register as a strong extern,
+    # so this shim must be present in every link too — the desktop build also
+    # pulls a YETTY_PLATFORM_GLFW-flavoured copy via glfw.cmake, which the
+    # linker prefers there; targets that don't (webasm, headless tools)
+    # resolve the strong ref from this core copy.
+    ${YETTY_ROOT}/src/yetty/gen/impl/yplatform/ywindow-chrome/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/gen/impl/yplatform/yplatform/rpc.gen.c
     ${_core_per_os}
 )
 
@@ -137,9 +138,23 @@ target_include_directories(yetty_yplatform_core PUBLIC
     ${YETTY_ROOT}/src
 )
 
+# yetty_api_yplatform — the object-API stubs (split codegen, gen/api). GPU- and
+# platform-free by construction (each stub only marshals into the yclass
+# runtime), so the whole tree compiles on every platform. Core PUBLIC-links it
+# so every existing consumer of a yplatform method keeps resolving the stub
+# transitively — no consumer link line changes.
+file(GLOB_RECURSE YETTY_API_YPLATFORM_SOURCES
+    ${YETTY_ROOT}/src/yetty/gen/api/yplatform/*.c)
+add_library(yetty_api_yplatform STATIC ${YETTY_API_YPLATFORM_SOURCES})
+target_include_directories(yetty_api_yplatform PUBLIC
+    ${YETTY_ROOT}/include
+    ${YETTY_ROOT}/src
+)
+target_link_libraries(yetty_api_yplatform PUBLIC yetty_ycore yetty_yclass)
+
 # yetty_ycore provides the result-type macros every API uses; yetty_yclass
 # provides the dispatch runtime the window_chrome method stubs call.
-target_link_libraries(yetty_yplatform_core PUBLIC yetty_ycore yetty_yclass)
+target_link_libraries(yetty_yplatform_core PUBLIC yetty_ycore yetty_yclass yetty_api_yplatform)
 
 # Windows winsock + advapi (used by socket/ipc-socket/process impls).
 if(WIN32)

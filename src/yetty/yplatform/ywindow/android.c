@@ -124,4 +124,4 @@ struct yetty_ycore_void_result yetty_yplatform_android_window_set_metrics(
     return YETTY_OK_VOID();
 }
 
-#include "android.gen.c"
+#include "yetty/gen/impl/yplatform/ywindow/android.c"

@@ -44,12 +44,12 @@
 #include <android/log.h>
 #endif
 #include <yetty/yfigure/registry.h>
-#include <yetty/yshadertoy/figure.h>
+#include "yetty/gen/impl/yshadertoy/figure.h"
 #ifdef YETTY_HAS_YMGUI
-#include <yetty/ymgui/figure.h>
+#include "yetty/gen/impl/ymgui/figure.h"
 #endif
 #ifndef __EMSCRIPTEN__
-#include <yetty/yrdawn/figure.h>
+#include "yetty/gen/impl/yrdawn/figure.h"
 #define YETTY_HAS_YRDAWN_SERVER 1
 #endif
 

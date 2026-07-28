@@ -33,9 +33,8 @@
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yrender/render-target.h>
@@ -1505,27 +1504,27 @@ static struct yetty_ycore_void_result ymgui_figure_process_bytes(struct yetty_yc
  * object and forwards to the object-keyed impl above.
  *=========================================================================*/
 
-YETTY_ANNOTATE("override@ymgui:figure:yfigure:render")
+YETTY_ANNOTATE("override@yfigure:figure:render")
 static struct yetty_ycore_void_result ymgui_figure_render_slot(struct yetty_yclass_object *obj,
                                                                struct yetty_ydraw_target *target)
 {
     return ymgui_figure_render(obj, target);
 }
 
-YETTY_ANNOTATE("override@ymgui:figure:yfigure:destroy")
+YETTY_ANNOTATE("override@yfigure:figure:destroy")
 static struct yetty_ycore_void_result ymgui_figure_destroy_slot(struct yetty_yclass_object *obj)
 {
     return ymgui_figure_destroy(obj);
 }
 
-YETTY_ANNOTATE("override@ymgui:figure:yfigure:process_input")
+YETTY_ANNOTATE("override@yfigure:figure:process_input")
 static struct yetty_ycore_void_result ymgui_figure_process_input_slot(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *statemachine)
 {
     return ymgui_figure_process_input(obj, statemachine);
 }
 
-YETTY_ANNOTATE("override@ymgui:figure:yfigure:process_bytes")
+YETTY_ANNOTATE("override@yfigure:figure:process_bytes")
 static struct yetty_ycore_void_result ymgui_figure_process_bytes_slot(
     struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len)
 {
@@ -1781,4 +1780,4 @@ struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
 
 /* yclass class accessor + slot table + obj→body downcast, generated from
  * the annotations above. */
-#include "figure.gen.c"
+#include "yetty/gen/impl/ymgui/figure.c"

@@ -16,11 +16,11 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yevent/event.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
+#include <yetty/api/yfigure/figure.h>
+#include <yetty/api/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfont/font.h>
-#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yfont/msdf-font.h>
@@ -36,7 +36,7 @@
 #include <yetty/ygui/widgets/popup_menu.h>
 #include <yetty/ygui/widgets/vbox.h>
 #include <yetty/ygui/widgets/yrich_view.h>
-#include <yetty/yapp/app.h>
+#include "yetty/gen/impl/yapp/app.h"
 #include <yetty/yclass/class.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yclipboard/clipboard.h>
@@ -47,9 +47,9 @@
 #include <yetty/yrich/yrich-shell.h>
 #include <yetty/yrich/yrich-types.h>
 
-#include <yetty/ycore/terminal-detect.h> /* yetty_running_under_yetty (dual mode) */
-#include <yetty/yrich/document.h>        /* document_undo / document_redo */
-#include <yetty/yrich/ydoc.h>
+#include <yetty/ycore/terminal-detect.h>   /* yetty_running_under_yetty (dual mode) */
+#include "yetty/gen/impl/yrich/document.h" /* document_undo / document_redo */
+#include "yetty/gen/impl/yrich/ydoc.h"
 #include <yetty/yrich/yrich-keymap.h> /* semantic commands + remappable modal keymap */
 #include <yetty/yrich/yrich-yaml.h>   /* ydoc save */
 
@@ -1582,16 +1582,12 @@ static struct yetty_ycore_void_result yrich_run_terminal(struct yetty_yrich_app 
     }
     app->ygui = fr.value;
 
-    /* Bind the framework's figure output to the connection's rpc channel. */
-    struct yetty_ywire_channel *rpc =
-        yetty_ywire_connection_channel(host.conn, YETTY_YWIRE_CHANNEL_RPC);
-    struct yetty_yclass_transport_ptr_result rpc_tr = yetty_ywire_channel_transport(rpc);
-    if (YETTY_IS_ERR(rpc_tr)) {
-        return YETTY_ERR(yetty_ycore_void, "yrich terminal: rpc transport", rpc_tr);
-    }
+    /* Bind the framework's figure output to its OWN dynamic RPC channel on the
+     * connection (the SSH model): the framework opens the channel, the host
+     * serves it via its accept callback. */
     struct yetty_ycore_void_result attach =
-        yetty_ygui_framework_attach_transport(app->ygui, rpc_tr.value);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, attach, "yrich terminal: attach transport");
+        yetty_ygui_framework_attach_connection(app->ygui, host.conn);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, attach, "yrich terminal: attach connection");
 
     /* Build the same editor tree the standalone path builds. */
     struct yetty_ycore_void_result be = build_editor(app);
@@ -1738,4 +1734,4 @@ struct yetty_ycore_int_result yetty_yrich_app_run(int argc, char **argv,
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-#include "app.gen.c"
+#include "yetty/gen/impl/yrich/app.c"

@@ -151,4 +151,4 @@ struct yetty_ycore_void_result yetty_ygui_breadcrumbs_clear(struct yetty_yclass_
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "breadcrumbs.gen.c"
+#include "yetty/gen/impl/ygui/widgets/breadcrumbs.c"

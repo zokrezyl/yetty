@@ -62,15 +62,18 @@ kind touches no shared header. Figure-kind modules register a factory (plus a
 per-kind user pointer) at terminal create time; the container mints children
 through `yetty_yfigure_registry_mint()` when a CREATE_CHILD arrives.
 
-## producer — out-of-process attach (plain C, no annotations)
+## Out-of-process attach — the connect runtime
 
-`yetty_yfigure_producer_attach(read_fd, write_fd, compressed)` opens a yclass
-RPC session over the in-band DCS transport (`YETTY_DCS_YCLASS_RPC`), runs the
-handshake, and returns the host's root-container **proxy** — the tool then
-calls the same generated typed stubs it would call in-process.
-`_attach_transport()` is the injection seam the multiplexed
-`yetty_ywire_connection` path uses. Users: ygui's framework, ymgui's imgui
-backend, yrdawn's client, yview.
+A wire client connects with the yclass runtime, not a yfigure helper:
+`yetty_yclass_rpc_connect_fds(read_fd, write_fd)` (or
+`yetty_yclass_rpc_connect_channel(connection)` on a multiplexed
+`yetty_ywire_connection`) owns the transport/connection/channel stack and
+returns the session **root** (the host terminal). The client then navigates to
+the root-container **proxy** with `yetty_yterminal_figure_root_container(root)`
+and calls the same generated typed stubs it would call in-process; teardown is
+one `yetty_yclass_rpc_disconnect(root)`. Users: ygui's framework, ymgui's imgui
+backend, yrdawn's client, yview. (The old `yetty_yfigure_producer_*` helper and
+its library are gone — the runtime absorbed them.)
 
 ## Files
 

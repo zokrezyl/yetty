@@ -247,4 +247,4 @@ static struct yetty_ycore_void_result window_chrome_handle_event(
     return YETTY_OK_VOID();
 }
 
-#include "window-chrome.gen.c"
+#include "yetty/gen/impl/yplatform/ywindow-chrome/window-chrome.c"

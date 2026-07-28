@@ -18,13 +18,13 @@
  */
 #include <yetty/ycat/ycat.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yconfig/config.h> /* read brand colours from the yetty config */
-#include <yetty/ymusic/music.h>   /* yetty_ymusic_* — LilyPond score rendering */
+#include <yetty/yconfig/config.h>        /* read brand colours from the yetty config */
+#include "yetty/gen/impl/ymusic/music.h" /* yetty_ymusic_* — LilyPond score rendering */
 #include <yetty/yplatform/getopt.h>
 #include <yetty/yplatform/term.h> /* yetty_yplatform_term_get_size */
 #include <yetty/yplatform/time.h> /* monotonic clock + sleep (--duration) */
 #include <yetty/yplatform/tty.h>  /* raw mode + stdin read, cross-platform */
-#include <yetty/yview/view.h>     /* yetty_yview_configure / _set_content / _scroll_* / _destroy */
+#include <yetty/api/yview/view.h> /* yetty_yview_configure / _set_content / _scroll_* / _destroy */
 
 #include <stdbool.h>
 #include <stdint.h>

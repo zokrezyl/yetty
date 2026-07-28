@@ -212,4 +212,4 @@ struct yetty_yclass_object_ptr_result yetty_yplatform_default_platform_create(
     return yetty_yplatform_webasm_platform_create(ctx);
 }
 
-#include "webasm.gen.c"
+#include "yetty/gen/impl/yplatform/yplatform/webasm.c"

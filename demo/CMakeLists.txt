@@ -23,3 +23,8 @@ add_subdirectory(yplot)
 if(YETTY_ENABLE_FEATURE_YVIDEO)
     add_subdirectory(yvideo)
 endif()
+
+# ydummy demos — client/server halves of the yclass codegen split pilot.
+# The client half is GPU-free and builds everywhere; the server half
+# self-gates on YETTY_ENABLE_LIB_WEBGPU.
+add_subdirectory(ydummy)

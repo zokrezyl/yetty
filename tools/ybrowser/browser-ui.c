@@ -3132,10 +3132,10 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
+#include <yetty/api/yfigure/figure.h>
+#include <yetty/api/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
@@ -3143,7 +3143,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yplatform/platform.h>
-#include <yetty/yapp/app.h>
+#include "yetty/gen/impl/yapp/app.h"
 #include <yetty/yclass/class.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yrender/render-target.h>
@@ -3723,7 +3723,10 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(s->figure_registry, &s->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "ybrowser standalone: ygrid_register_factory");
-        const char *const producer_kind_names[] = {"yplot", "yimage"};
+        /* "yscroll" is the content-grid kind ygui producer widgets mint
+         * (absolute coords here per figure_args); the rest are deprecated
+         * aliases kept for wire compat (#685 Phase 2). */
+        const char *const producer_kind_names[] = {"yscroll", "yplot", "yimage"};
         for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); ++i) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
                 s->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
@@ -3998,6 +4001,6 @@ int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int no_
     return 0;
 }
 
-#include "browser-ui.gen.c"
+#include "yetty/gen/impl/ybrowser/browser-ui.c"
 
 #endif /* YETTY_YBROWSER_HAS_STANDALONE */

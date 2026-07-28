@@ -225,4 +225,4 @@ struct yetty_ycore_void_result yetty_ygui_table_clear_rows(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "table.gen.c"
+#include "yetty/gen/impl/ygui/widgets/table.c"

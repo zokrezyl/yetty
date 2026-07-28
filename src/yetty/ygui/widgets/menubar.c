@@ -154,4 +154,4 @@ struct YETTY_ANNOTATE("class@ygui:menubar") YETTY_ANNOTATE("parent@ygui:hbox") y
     char _empty;
 };
 
-#include "menubar.gen.c"
+#include "yetty/gen/impl/ygui/widgets/menubar.c"

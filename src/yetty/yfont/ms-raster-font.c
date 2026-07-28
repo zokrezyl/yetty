@@ -1559,8 +1559,13 @@ static struct yetty_yrender_gpu_resource_set_result raster_font_get_gpu_resource
     }
 
     if (font->dirty) {
+        /* Bump generation with dirty so every binder embedding this shared
+         * font atlas re-uploads independently — see the buffer/texture
+         * `generation` contract in yrender/types.h. */
         FONT_ATLAS(font).dirty = 1;
+        FONT_ATLAS(font).generation++;
         FONT_UV_BUF(font).dirty = 1;
+        FONT_UV_BUF(font).generation++;
         font->dirty = 0;
     }
 

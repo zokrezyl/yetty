@@ -15,7 +15,7 @@
 
 #include <yetty/ycat/ycat.h>
 
-#include <yetty/ymusic/music.h>
+#include "yetty/gen/impl/ymusic/music.h"
 
 /* Error-path teardown is best-effort — absorb a failed destroy so the
  * original error is the one that surfaces. */

@@ -11,7 +11,6 @@
 add_library(yetty_ymgui STATIC
     figure.c
     pipeline.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_ymgui PUBLIC
@@ -27,6 +26,7 @@ target_include_directories(yetty_ymgui PRIVATE
 )
 
 target_link_libraries(yetty_ymgui PUBLIC
+    yetty_api_ymgui
     yetty_ycore
     yetty_yclass
     yetty_yfigure
@@ -57,3 +57,20 @@ else()
     message(STATUS
         "ymgui: imgui_core target not available — frontend skipped.")
 endif()
+
+# Object-API library (role-split codegen layout): the typed stubs alone,
+# with no strong references to the implementation, accessors, skels or
+# registration. Pure wire consumers link THIS; the impl lib links it too
+# (skels re-enter the public stubs). Header: <yetty/api/ymgui/*.h>.
+add_library(yetty_api_ymgui STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/ymgui/figure.c
+)
+
+target_include_directories(yetty_api_ymgui PUBLIC
+    ${YETTY_ROOT}/include
+)
+
+target_link_libraries(yetty_api_ymgui PUBLIC
+    yetty_ycore
+    yetty_yclass
+)

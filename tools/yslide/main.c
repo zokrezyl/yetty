@@ -17,8 +17,8 @@
 #include <yetty/yrich/yrich-app.h>
 #include <yetty/yrich/yrich-types.h>
 
-#include <yetty/yrich/document.h>
-#include <yetty/yrich/slides.h>
+#include <yetty/api/yrich/document.h>
+#include <yetty/api/yrich/slides.h>
 #include <yetty/yrich/yrich-yaml.h>
 
 #include <stdio.h>

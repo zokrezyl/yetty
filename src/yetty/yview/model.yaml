@@ -168,8 +168,8 @@ classes:
     mixins: []
     data: struct yetty_yview_view
     data_fields:
-      - name: producer_session
-        type: "struct yetty_yfigure_producer_session *"
+      - name: rpc_root
+        type: "struct yetty_yclass_object *"
         get: false
         set: false
       - name: container
@@ -243,7 +243,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value
@@ -282,7 +282,7 @@ types:
     fields:
       - name: ok
         type: int
-      - name: 
+      - name: ""
         kind: union
         fields:
           - name: value

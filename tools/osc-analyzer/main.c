@@ -64,7 +64,7 @@
 #include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
+#include <yetty/api/yfigure/container.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ysdf/handler.h>

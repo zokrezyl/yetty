@@ -182,4 +182,4 @@ struct yetty_ycore_void_result yetty_yrich_element_set_id(struct yetty_yclass_ob
     return YETTY_OK_VOID();
 }
 
-#include "element.gen.c"
+#include "yetty/gen/impl/yrich/element.c"

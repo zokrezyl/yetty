@@ -1912,4 +1912,4 @@ struct yetty_ycore_void_result yetty_ycircuit_emit_osc(const struct yetty_ydraw_
     return YETTY_OK_VOID();
 }
 
-#include "circuit.gen.c"
+#include "yetty/gen/impl/ycircuit/circuit.c"

@@ -20,6 +20,14 @@ struct yetty_yrender_buffer {
     char wgsl_type[YETTY_YRENDER_WGSL_TYPE_MAX];
     int readonly;
     int dirty;
+    /* Monotonic content counter. Bumped by the producer whenever `data`
+     * changes. Unlike `dirty` — which the first binder to consume it
+     * clears, starving every other binder that shares this resource set
+     * (e.g. a font embedded in the terminal layer AND several ygrid
+     * figures) — `generation` is never consumed. Each binder records the
+     * generation it last uploaded and re-uploads on mismatch, so every
+     * binder independently keeps its own GPU copy current. */
+    uint32_t generation;
 };
 
 /* Texture */
@@ -33,6 +41,12 @@ struct yetty_yrender_texture {
     char sampler_name[YETTY_YRENDER_NAME_MAX];
     uint32_t sampler_filter; /* WGPUFilterMode */
     int dirty;
+    /* Monotonic content counter — same contract as
+     * struct yetty_yrender_buffer::generation. Lets each binder that
+     * shares this texture (e.g. a font atlas embedded in several layers)
+     * track its own last-uploaded revision instead of racing over a
+     * single consumed `dirty` flag. */
+    uint32_t generation;
 };
 
 /* Uniform value types */

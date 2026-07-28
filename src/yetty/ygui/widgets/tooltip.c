@@ -141,4 +141,4 @@ static struct yetty_yclass_ptr_result tooltip_get_parent(void)
     return yetty_ygui_primitive_widget_class_get();
 }
 
-#include "tooltip.gen.c"
+#include "yetty/gen/impl/ygui/widgets/tooltip.c"

@@ -182,4 +182,4 @@ struct yetty_ycore_void_result yetty_ygui_ymarkdown_set_file(struct yetty_yclass
     return r;
 }
 
-#include "ymarkdown.gen.c"
+#include "yetty/gen/impl/ygui/widgets/ymarkdown.c"

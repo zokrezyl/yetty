@@ -2,7 +2,6 @@
 
 #include <yetty/ygui/event.h>
 #include <yetty/ygui/ygui.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywire/wire-statemachine.h>
 

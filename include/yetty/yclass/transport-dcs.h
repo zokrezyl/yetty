@@ -32,11 +32,16 @@
 extern "C" {
 #endif
 
+/* The yclass-RPC protocol's own DCS envelope code. Single source of
+ * truth — the terminal's DCS registry (yterminal/dcs-codes.h) aliases
+ * this value; nothing else defines it. */
+#define YETTY_YCLASS_RPC_DCS_CODE 800000
+
 /* `dcs_code` is the DCS code used in both directions for this
- * session — typically `YETTY_DCS_YCLASS_RPC` from
- * <yetty/yterminal/dcs-codes.h>. `compressed`: 0 = b64-only (smaller
- * overhead for tiny frames), 1 = b64+lz4 (worth it for larger
- * frames). */
+ * session — YETTY_YCLASS_RPC_DCS_CODE for the yclass-RPC protocol
+ * (yetty_yclass_transport_default_create passes it for you).
+ * `compressed`: 0 = b64-only (smaller overhead for tiny frames),
+ * 1 = b64+lz4 (worth it for larger frames). */
 struct yetty_yclass_transport_ptr_result yetty_yclass_transport_dcs_create(int read_fd,
                                                                            int write_fd,
                                                                            int dcs_code,

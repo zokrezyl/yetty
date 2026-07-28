@@ -255,4 +255,4 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_yclass_obje
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "rich.gen.c"
+#include "yetty/gen/impl/ygui/widgets/rich.c"

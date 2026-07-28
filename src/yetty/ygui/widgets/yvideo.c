@@ -14,8 +14,7 @@ struct yetty_yclass_ptr_result yetty_ygui_yvideo_class_get(void);
 struct yetty_ygui_yvideo_ptr_result yetty_ygui_yvideo_from(struct yetty_yclass_object *obj);
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
+#include <yetty/yfigure/kind.h>
 #include <yetty/yvideo/yvideo-mp4.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,7 +70,8 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_object 
     struct yetty_ycore_rectangle r = rect_res.value;
     struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yvideo emit_container: id");
-    return yetty_ygui_emit_ensure_child(ctx, id_res.value, yetty_yfigure_kind_token("yvideo"),
+    /* Content-grid kind, not a content-type kind — see yplot.c (#685). */
+    return yetty_ygui_emit_ensure_child(ctx, id_res.value, yetty_yfigure_kind_token("yscroll"),
                                         r.min.x, r.min.y, r.max.x, r.max.y, NULL, 0);
 }
 
@@ -200,4 +200,4 @@ struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "yvideo.gen.c"
+#include "yetty/gen/impl/ygui/widgets/yvideo.c"

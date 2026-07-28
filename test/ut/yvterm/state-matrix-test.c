@@ -19,7 +19,9 @@
  * intentionally not repeated here.
  */
 
-#include <yetty/yvterm/grid.h>
+#include <yetty/api/yvterm/grid.h>
+#include <yetty/api/ytermsink/sink.h>
+#include <yetty/yclass/class.h>
 
 #include "ytest.h"
 
@@ -397,128 +399,211 @@ static void test_mode_2027_clustering(struct ytest *test)
     }
 }
 
+/* Test-local capture sink: a hand-registered ytermsink:sink implementation that
+ * records the grid's pty/clipboard upcalls so assertions can inspect them. This
+ * is test-only and lives here — the production ytermsink module ships only the
+ * interface, no capture impl. */
+struct capture_sink {
+    char pty[512];
+    size_t pty_len;
+    char clip[512];
+    size_t clip_len;
+    int clip_flag;
+    int clip_calls;
+};
+
+static const struct yetty_yclass *capture_sink_class(void);
+
+static struct capture_sink *capture_of(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_void_ptr_result slice = yetty_yclass_object_data(obj, capture_sink_class());
+    return YETTY_IS_OK(slice) ? (struct capture_sink *)slice.value : NULL;
+}
+
+static struct yetty_ycore_void_result capture_pty_write(struct yetty_yclass_object *obj,
+                                                        const char *data, size_t len)
+{
+    struct capture_sink *cap = capture_of(obj);
+    if (cap) {
+        for (size_t i = 0; i < len && cap->pty_len < sizeof(cap->pty) - 1; i++) {
+            cap->pty[cap->pty_len++] = data[i];
+        }
+        cap->pty[cap->pty_len] = 0;
+    }
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result capture_clipboard_write(struct yetty_yclass_object *obj,
+                                                              const char *text, size_t len,
+                                                              int clipboard)
+{
+    struct capture_sink *cap = capture_of(obj);
+    if (cap) {
+        cap->clip_calls++;
+        cap->clip_flag = clipboard;
+        cap->clip_len = len < sizeof(cap->clip) - 1 ? len : sizeof(cap->clip) - 1;
+        memcpy(cap->clip, text, cap->clip_len);
+        cap->clip[cap->clip_len] = 0;
+    }
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result capture_request_render(struct yetty_yclass_object *obj)
+{
+    (void)obj;
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result capture_mouse_sub(struct yetty_yclass_object *obj,
+                                                        int click_enabled, int move_enabled,
+                                                        int key_enabled)
+{
+    (void)obj;
+    (void)click_enabled;
+    (void)move_enabled;
+    (void)key_enabled;
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result capture_sixel_write(struct yetty_yclass_object *obj,
+                                                          const char *data, size_t len)
+{
+    (void)obj;
+    (void)data;
+    (void)len;
+    return YETTY_OK_VOID();
+}
+
+/* Register (once) a standalone class implementing all five ytermsink:sink slots.
+ * The op method_id is the public stub the grid dispatches on; registering the
+ * ops registers the slots, so no base class is needed. */
+static const struct yetty_yclass *capture_sink_class(void)
+{
+    static const struct yetty_yclass *cls = NULL;
+    if (cls) {
+        return cls;
+    }
+    static const struct yetty_yclass_descriptor desc = {
+        .name = "test_capture_sink",
+        .type = YETTY_YCLASS_TYPE_REGULAR,
+        .data_size = sizeof(struct capture_sink),
+        .data_align = _Alignof(struct capture_sink),
+    };
+    static const struct yetty_yclass_op ops[] = {
+        {"yetty_ytermsink", "pty_write", (yetty_yclass_method_id_t)yetty_ytermsink_pty_write,
+         (yetty_yclass_impl_t)capture_pty_write},
+        {"yetty_ytermsink", "clipboard_write",
+         (yetty_yclass_method_id_t)yetty_ytermsink_clipboard_write,
+         (yetty_yclass_impl_t)capture_clipboard_write},
+        {"yetty_ytermsink", "request_render",
+         (yetty_yclass_method_id_t)yetty_ytermsink_request_render,
+         (yetty_yclass_impl_t)capture_request_render},
+        {"yetty_ytermsink", "mouse_sub", (yetty_yclass_method_id_t)yetty_ytermsink_mouse_sub,
+         (yetty_yclass_impl_t)capture_mouse_sub},
+        {"yetty_ytermsink", "sixel_write", (yetty_yclass_method_id_t)yetty_ytermsink_sixel_write,
+         (yetty_yclass_impl_t)capture_sixel_write},
+    };
+    struct yetty_yclass_ptr_result reg =
+        yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]), NULL, NULL, 0);
+    cls = YETTY_IS_OK(reg) ? reg.value : NULL;
+    return cls;
+}
+
+static void capture_reset(struct yetty_yclass_object *sink)
+{
+    struct capture_sink *cap = capture_of(sink);
+    if (cap) {
+        memset(cap, 0, sizeof(*cap));
+    }
+}
+
 /*---------------------------------------------------------------------------
  * Kitty keyboard protocol (CSI ? u query / > push / < pop / = set). The query
  * reply is written back through the grid's pty-write hook, so a small sink
  * captures the emitted bytes for comparison.
  *-------------------------------------------------------------------------*/
-struct kitty_reply_capture {
-    char buf[64];
-    size_t len;
-};
-
-static struct yetty_ycore_void_result kitty_reply_sink(const char *bytes, size_t len,
-                                                       void *userdata)
-{
-    struct kitty_reply_capture *capture = userdata;
-    for (size_t index = 0; index < len && capture->len < sizeof(capture->buf) - 1; index++) {
-        capture->buf[capture->len++] = bytes[index];
-    }
-    capture->buf[capture->len] = 0;
-    return YETTY_OK_VOID();
-}
-
 static void test_kitty_keyboard(struct ytest *test)
 {
-    struct kitty_reply_capture capture = {0};
+    struct yetty_yclass_object_ptr_result sink_res =
+        yetty_yclass_object_alloc(capture_sink_class());
+    YTEST_REQUIRE_OK(test, sink_res);
+    struct yetty_yclass_object *sink = sink_res.value;
     struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
-    struct yetty_ycore_void_result set =
-        yetty_yvterm_grid_set_pty_write(grid, kitty_reply_sink, &capture);
+    struct yetty_ycore_void_result set = yetty_yvterm_grid_set_sink(grid, sink);
     YTEST_REQUIRE_OK(test, set);
 
     /* Empty stack → query (CSI ? u) reports flags 0. */
     feeds(test, grid, "\x1b[?u");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?0u");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[?0u");
 
     /* Push disambiguate (flag 1) via CSI > 1 u; query now reports 1. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b[>1u\x1b[?u");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?1u");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[?1u");
 
     /* CSI = 2 ; 2 u — mode 2 sets (ORs in) report-events bit: 1|2 = 3. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b[=2;2u\x1b[?u");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?3u");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[?3u");
 
     /* CSI = 1 ; 3 u — mode 3 clears the disambiguate bit: 3 & ~1 = 2. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b[=1;3u\x1b[?u");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?2u");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[?2u");
 
     /* CSI < u pops the pushed entry → empty stack → flags 0. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b[<u\x1b[?u");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?0u");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[?0u");
 
     /* CSI = 5 u — mode 1 (default) replaces the whole set; on an empty stack it
      * seeds a base entry. 5 = disambiguate | report-alternates. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b[=5u\x1b[?u");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?5u");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[?5u");
 
     yetty_yvterm_grid_dispose(grid);
+    YTEST_CHECK_OK(test, yetty_yclass_object_free(sink));
 }
 
 /*---------------------------------------------------------------------------
  * OSC 52 clipboard write. libvterm base64-decodes the payload and hands the
  * plain text to the grid's clipboard-write hook; a mock sink captures it.
  *-------------------------------------------------------------------------*/
-struct osc52_capture {
-    char buf[64];
-    size_t len;
-    int clipboard;
-    int calls;
-};
-
-static struct yetty_ycore_void_result osc52_sink(const char *text, size_t len, int clipboard,
-                                                 void *userdata)
-{
-    struct osc52_capture *capture = userdata;
-    capture->calls++;
-    capture->clipboard = clipboard;
-    capture->len = len < sizeof(capture->buf) - 1 ? len : sizeof(capture->buf) - 1;
-    memcpy(capture->buf, text, capture->len);
-    capture->buf[capture->len] = 0;
-    return YETTY_OK_VOID();
-}
-
 static void test_osc52_clipboard(struct ytest *test)
 {
-    struct osc52_capture capture = {0};
     struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
-    struct yetty_ycore_void_result set =
-        yetty_yvterm_grid_set_clipboard_write(grid, osc52_sink, &capture);
-    YTEST_REQUIRE_OK(test, set);
+    struct yetty_yclass_object_ptr_result sink_res =
+        yetty_yclass_object_alloc(capture_sink_class());
+    YTEST_REQUIRE_OK(test, sink_res);
+    struct yetty_yclass_object *sink = sink_res.value;
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_set_sink(grid, sink));
 
     /* OSC 52 ; c ; base64("hello") ST → "hello" to the system clipboard. */
     feeds(test, grid, "\x1b]52;c;aGVsbG8=\x07");
-    YTEST_CHECK_EQ_INT(test, capture.calls, 1);
-    YTEST_CHECK_STR_EQ(test, capture.buf, "hello");
-    YTEST_CHECK_EQ_INT(test, capture.clipboard, 1);
+    YTEST_CHECK_EQ_INT(test, capture_of(sink)->clip_calls, 1);
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->clip, "hello");
+    YTEST_CHECK_EQ_INT(test, capture_of(sink)->clip_flag, 1);
 
     /* Primary-selection target 'p' → same text, clipboard flag 0. */
-    capture = (struct osc52_capture){0};
+    capture_reset(sink);
     feeds(test, grid, "\x1b]52;p;aGVsbG8=\x07");
-    YTEST_CHECK_EQ_INT(test, capture.calls, 1);
-    YTEST_CHECK_STR_EQ(test, capture.buf, "hello");
-    YTEST_CHECK_EQ_INT(test, capture.clipboard, 0);
+    YTEST_CHECK_EQ_INT(test, capture_of(sink)->clip_calls, 1);
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->clip, "hello");
+    YTEST_CHECK_EQ_INT(test, capture_of(sink)->clip_flag, 0);
 
     /* Invalid base64 → no clipboard write (rejected safely, nothing lands). */
-    capture = (struct osc52_capture){0};
+    capture_reset(sink);
     feeds(test, grid, "\x1b]52;c;@@@bad@@@\x07");
-    YTEST_CHECK_EQ_INT(test, capture.calls, 0);
+    YTEST_CHECK_EQ_INT(test, capture_of(sink)->clip_calls, 0);
 
     /* Read request (OSC 52 ; c ; ?) is not wired → no callback, no leak. */
-    capture = (struct osc52_capture){0};
+    capture_reset(sink);
     feeds(test, grid, "\x1b]52;c;?\x07");
-    YTEST_CHECK_EQ_INT(test, capture.calls, 0);
+    YTEST_CHECK_EQ_INT(test, capture_of(sink)->clip_calls, 0);
 
     yetty_yvterm_grid_dispose(grid);
+    YTEST_CHECK_OK(test, yetty_yclass_object_free(sink));
 }
 
 /*---------------------------------------------------------------------------
@@ -527,42 +612,41 @@ static void test_osc52_clipboard(struct ytest *test)
  *-------------------------------------------------------------------------*/
 static void test_osc_dynamic_colors(struct ytest *test)
 {
-    struct kitty_reply_capture capture = {0};
     struct yetty_yclass_object *grid = make_grid(test, 80, 4, 0);
-    struct yetty_ycore_void_result set =
-        yetty_yvterm_grid_set_pty_write(grid, kitty_reply_sink, &capture);
-    YTEST_REQUIRE_OK(test, set);
+    struct yetty_yclass_object_ptr_result sink_res =
+        yetty_yclass_object_alloc(capture_sink_class());
+    YTEST_REQUIRE_OK(test, sink_res);
+    struct yetty_yclass_object *sink = sink_res.value;
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_set_sink(grid, sink));
 
     /* Query the configured default background; remember the reply for the
      * reset check below. Reply shape: OSC 11 ; rgb:RRRR/GGGG/BBBB ST. */
     feeds(test, grid, "\x1b]11;?\x07");
-    YTEST_CHECK(test, strncmp(capture.buf, "\x1b]11;rgb:", 9) == 0);
+    YTEST_CHECK(test, strncmp(capture_of(sink)->pty, "\x1b]11;rgb:", 9) == 0);
     char configured_bg[48];
-    strncpy(configured_bg, capture.buf, sizeof(configured_bg) - 1);
+    strncpy(configured_bg, capture_of(sink)->pty, sizeof(configured_bg) - 1);
     configured_bg[sizeof(configured_bg) - 1] = 0;
 
     /* Set background via #rrggbb; query echoes it, 8-bit scaled to 16-bit. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b]11;#1e1e2e\x07");
     feeds(test, grid, "\x1b]11;?\x07");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b]11;rgb:1e1e/1e1e/2e2e\x1b\\");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b]11;rgb:1e1e/1e1e/2e2e\x1b\\");
 
     /* Set foreground via rgb:rr/gg/bb; query OSC 10 echoes it. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b]10;rgb:ff/80/00\x07");
     feeds(test, grid, "\x1b]10;?\x07");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b]10;rgb:ffff/8080/0000\x1b\\");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b]10;rgb:ffff/8080/0000\x1b\\");
 
     /* OSC 111 resets background to the configured value. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b]111\x07");
     feeds(test, grid, "\x1b]11;?\x07");
-    YTEST_CHECK_STR_EQ(test, capture.buf, configured_bg);
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, configured_bg);
 
     yetty_yvterm_grid_dispose(grid);
+    YTEST_CHECK_OK(test, yetty_yclass_object_free(sink));
 }
 
 /*---------------------------------------------------------------------------
@@ -572,50 +656,48 @@ static void test_osc_dynamic_colors(struct ytest *test)
  *-------------------------------------------------------------------------*/
 static void test_mode_2048_inband_resize(struct ytest *test)
 {
-    struct kitty_reply_capture capture = {0};
     struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
-    struct yetty_ycore_void_result set =
-        yetty_yvterm_grid_set_pty_write(grid, kitty_reply_sink, &capture);
-    YTEST_REQUIRE_OK(test, set);
+    struct yetty_yclass_object_ptr_result sink_res =
+        yetty_yclass_object_alloc(capture_sink_class());
+    YTEST_REQUIRE_OK(test, sink_res);
+    struct yetty_yclass_object *sink = sink_res.value;
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_set_sink(grid, sink));
 
     /* Feed the pixel size before enabling; the mode is off so nothing emits. */
     struct yetty_ycore_void_result px = yetty_yvterm_grid_set_pixel_size(grid, 800, 480);
     YTEST_REQUIRE_OK(test, px);
-    YTEST_CHECK_EQ_INT(test, (int)capture.len, 0);
+    YTEST_CHECK_EQ_INT(test, (int)capture_of(sink)->pty_len, 0);
 
     /* Enable → immediate CSI 48 ; rows ; cols ; height_px ; width_px t. */
     feeds(test, grid, "\x1b[?2048h");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[48;24;80;480;800t");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[48;24;80;480;800t");
 
     /* DECRQM → set. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b[?2048$p");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?2048;1$y");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[?2048;1$y");
 
     /* A pixel-size change emits a fresh notification (cols/rows unchanged). */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     px = yetty_yvterm_grid_set_pixel_size(grid, 1000, 600);
     YTEST_REQUIRE_OK(test, px);
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[48;24;80;600;1000t");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[48;24;80;600;1000t");
 
     /* The same size again is a no-op — no duplicate notification. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     px = yetty_yvterm_grid_set_pixel_size(grid, 1000, 600);
     YTEST_REQUIRE_OK(test, px);
-    YTEST_CHECK_EQ_INT(test, (int)capture.len, 0);
+    YTEST_CHECK_EQ_INT(test, (int)capture_of(sink)->pty_len, 0);
 
     /* Disable → later size changes are silent. */
     feeds(test, grid, "\x1b[?2048l");
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     px = yetty_yvterm_grid_set_pixel_size(grid, 1200, 700);
     YTEST_REQUIRE_OK(test, px);
-    YTEST_CHECK_EQ_INT(test, (int)capture.len, 0);
+    YTEST_CHECK_EQ_INT(test, (int)capture_of(sink)->pty_len, 0);
 
     yetty_yvterm_grid_dispose(grid);
+    YTEST_CHECK_OK(test, yetty_yclass_object_free(sink));
 }
 
 /*---------------------------------------------------------------------------
@@ -625,47 +707,44 @@ static void test_mode_2048_inband_resize(struct ytest *test)
  *-------------------------------------------------------------------------*/
 static void test_mode_2031_color_scheme(struct ytest *test)
 {
-    struct kitty_reply_capture capture = {0};
     struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
-    struct yetty_ycore_void_result set =
-        yetty_yvterm_grid_set_pty_write(grid, kitty_reply_sink, &capture);
-    YTEST_REQUIRE_OK(test, set);
+    struct yetty_yclass_object_ptr_result sink_res =
+        yetty_yclass_object_alloc(capture_sink_class());
+    YTEST_REQUIRE_OK(test, sink_res);
+    struct yetty_yclass_object *sink = sink_res.value;
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_set_sink(grid, sink));
 
     /* Enable, then pin a dark background so the scheme is deterministic. */
     feeds(test, grid, "\x1b[?2031h");
     feeds(test, grid, "\x1b]11;#000000\x07");
 
     /* DSR 996 → color-scheme report. Black background → dark (1). */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b[?996n");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?997;1n");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[?997;1n");
 
     /* DECRQM → set. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b[?2031$p");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?2031;1$y");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[?2031;1$y");
 
     /* A background change to white flips the scheme and notifies: light (2). */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b]11;#ffffff\x07");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?997;2n");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[?997;2n");
 
     /* Setting the same background again does not re-notify. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b]11;#ffffff\x07");
-    YTEST_CHECK_EQ_INT(test, (int)capture.len, 0);
+    YTEST_CHECK_EQ_INT(test, (int)capture_of(sink)->pty_len, 0);
 
     /* Back to black flips it to dark again. */
-    capture.len = 0;
-    capture.buf[0] = 0;
+    capture_reset(sink);
     feeds(test, grid, "\x1b]11;#000000\x07");
-    YTEST_CHECK_STR_EQ(test, capture.buf, "\x1b[?997;1n");
+    YTEST_CHECK_STR_EQ(test, capture_of(sink)->pty, "\x1b[?997;1n");
 
     yetty_yvterm_grid_dispose(grid);
+    YTEST_CHECK_OK(test, yetty_yclass_object_free(sink));
 }
 
 /*---------------------------------------------------------------------------

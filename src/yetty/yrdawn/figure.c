@@ -39,9 +39,8 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yrdawn/server.h>
@@ -885,7 +884,7 @@ static struct yetty_ycore_void_result yrdawn_figure_destroy(struct yetty_yclass_
  *=========================================================================*/
 
 /* yclass cross-domain override of yfigure:render. */
-YETTY_ANNOTATE("override@yrdawn:figure:yfigure:render")
+YETTY_ANNOTATE("override@yfigure:figure:render")
 static struct yetty_ycore_void_result yrdawn_figure_render_slot(struct yetty_yclass_object *obj,
                                                                 struct yetty_ydraw_target *target)
 {
@@ -893,20 +892,20 @@ static struct yetty_ycore_void_result yrdawn_figure_render_slot(struct yetty_ycl
 }
 
 /* yclass cross-domain override of yfigure:destroy. */
-YETTY_ANNOTATE("override@yrdawn:figure:yfigure:destroy")
+YETTY_ANNOTATE("override@yfigure:figure:destroy")
 static struct yetty_ycore_void_result yrdawn_figure_destroy_slot(struct yetty_yclass_object *obj)
 {
     return yrdawn_figure_destroy(obj);
 }
 
-YETTY_ANNOTATE("override@yrdawn:figure:yfigure:process_input")
+YETTY_ANNOTATE("override@yfigure:figure:process_input")
 static struct yetty_ycore_void_result yrdawn_figure_process_input_slot(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *statemachine)
 {
     return yrdawn_figure_process_input(obj, statemachine);
 }
 
-YETTY_ANNOTATE("override@yrdawn:figure:yfigure:process_bytes")
+YETTY_ANNOTATE("override@yfigure:figure:process_bytes")
 static struct yetty_ycore_void_result yrdawn_figure_process_bytes_slot(
     struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len)
 {
@@ -1199,4 +1198,4 @@ void yrdawn_arena_free(struct yrdawn_arena *a)
 }
 
 /* yclass class accessor (yetty_yrdawn_figure_class_get) + registration. */
-#include "figure.gen.c"
+#include "yetty/gen/impl/yrdawn/figure.c"

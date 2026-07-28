@@ -518,4 +518,4 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_filepicker_get_dir(
     return YETTY_OK(yetty_ycore_const_char_ptr, d_dr.value->cwd);
 }
 
-#include "filepicker.gen.c"
+#include "yetty/gen/impl/ygui/widgets/filepicker.c"

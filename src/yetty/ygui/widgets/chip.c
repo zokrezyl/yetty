@@ -126,4 +126,4 @@ struct yetty_ycore_void_result yetty_ygui_chip_set_closable(struct yetty_yclass_
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "chip.gen.c"
+#include "yetty/gen/impl/ygui/widgets/chip.c"

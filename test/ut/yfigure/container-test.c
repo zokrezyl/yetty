@@ -7,8 +7,8 @@
  * figure (counts bytes, no GPU/font) registered under one kind token.
  */
 
-#include <yetty/yfigure/container.h>
-#include <yetty/yfigure/figure.h>
+#include "yetty/gen/impl/yfigure/container.h"
+#include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfigure/registry.h>
 
 #include "ytest.h"

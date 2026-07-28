@@ -15,7 +15,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/yclass/class.h>
-#include <yetty/yapp/app.h>
+#include <yetty/api/yapp/app.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
@@ -142,4 +142,4 @@ struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_
     return yetty_yetty_app_create(ctx);
 }
 
-#include "app.gen.c"
+#include "yetty/gen/impl/yetty/app.c"

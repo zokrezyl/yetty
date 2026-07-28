@@ -33,8 +33,7 @@ struct YETTY_ANNOTATE("expose") yetty_ygui_yplot_config {
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
+#include <yetty/yfigure/kind.h>
 #include <yetty/yplot/yplot.h>
 
 #include <stdlib.h>
@@ -113,7 +112,11 @@ static struct yetty_ycore_void_result yplot_emit_container(struct yetty_yclass_o
     struct yetty_ycore_rectangle r = rect_res.value;
     struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yplot_emit_container: id");
-    return yetty_ygui_emit_ensure_child(ctx, id_res.value, yetty_yfigure_kind_token("yplot"),
+    /* Kind names the renderer config (host-policy-coords content ygrid), not
+     * the content type — the plot itself travels as a composite record in
+     * the child's body (#685 Phase 2). "yplot" stays registered only as a
+     * deprecated alias for external producers. */
+    return yetty_ygui_emit_ensure_child(ctx, id_res.value, yetty_yfigure_kind_token("yscroll"),
                                         r.min.x, r.min.y, r.max.x, r.max.y,
                                         /*init_payload=*/NULL, /*init_payload_bytes=*/0);
 }
@@ -343,4 +346,4 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-#include "yplot.gen.c"
+#include "yetty/gen/impl/ygui/widgets/yplot.c"

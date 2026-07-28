@@ -31,9 +31,11 @@
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yfigure/container.h>
-#include <yetty/yfigure/producer.h>
-#include <yetty/yfigure/registry.h>
+#include <yetty/api/yfigure/container.h>
+#include <yetty/api/yterminal/terminal.h>
+#include <yetty/yclass/rpc.h>
+#include <yetty/ywire/connection.h>
+#include <yetty/yfigure/kind.h>
 #include <yetty/ygui/theme.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/ytrace/ytrace.h>
@@ -167,14 +169,16 @@ struct YETTY_ANNOTATE("class@ygui:framework") YETTY_ANNOTATE("include@yetty/ygui
     struct yetty_yclass_ctx yclass_ctx;
     struct yetty_yclass_object *container_obj;
 
-    /* Owned producer session, set when the framework attaches to a host
+    /* Terminal session root, set when the framework attaches to a host
      * figure container over the yclass RPC transport via
      * yetty_ygui_framework_attach. It owns the underlying transport +
      * RPC session + root-container proxy; container_obj and
      * yclass_ctx.session above point INTO it. NULL when the framework was
      * never attached (in-process host that wired container_obj directly).
-     * Torn down by the destructor via yetty_yfigure_producer_detach. */
-    struct yetty_yfigure_producer_session *producer_session;
+     * Its session owns the connection stack (channel + connection + pty),
+     * all torn down by the destructor via yetty_yclass_rpc_disconnect.
+     * container_obj is a proxy navigated from it. NULL if never attached. */
+    struct yetty_yclass_object *rpc_root;
 };
 
 /* Defined in the appended framework.gen.c (foot of this TU); forward-declared
@@ -257,16 +261,20 @@ static struct yetty_ycore_void_result framework_destructor(struct yetty_yclass_o
         }
         framework->root = NULL;
     }
-    /* Tear down the owned producer session (transport + RPC session + root
-     * container proxy). container_obj / yclass_ctx.session pointed into it,
-     * so clear them first. Best-effort — stash and surface any error after
-     * the rest of teardown. */
+    /* Tear down the attached session (channel + connection + pty, plus the
+     * root proxy). container_obj / yclass_ctx.session pointed into it, so
+     * clear them first. Best-effort — stash and surface any error after the
+     * rest of teardown. */
     struct yetty_ycore_void_result detach_res = YETTY_OK_VOID();
-    if (framework->producer_session) {
+    if (framework->rpc_root) {
+        /* container_obj is a navigated proxy (a plain calloc'd carrier); free
+         * it, then disconnect (session_destroy CLOSEs our channel + tears down
+         * the connection stack the session owns). */
+        free(framework->container_obj);
         framework->container_obj = NULL;
         framework->yclass_ctx.session = NULL;
-        detach_res = yetty_yfigure_producer_detach(framework->producer_session);
-        framework->producer_session = NULL;
+        detach_res = yetty_yclass_rpc_disconnect(framework->rpc_root);
+        framework->rpc_root = NULL;
     }
     free(framework->free_ids);
     free(framework->pending_deletes);
@@ -284,7 +292,7 @@ static struct yetty_ycore_void_result framework_destructor(struct yetty_yclass_o
 
 /* Public teardown — symmetric to the generated yetty_ygui_framework_create.
  * Runs the destructor chain (framework_destructor frees the widget tree, owned
- * theme, and producer session) then releases the yclass object. Best-effort:
+ * theme, and attached session) then releases the yclass object. Best-effort:
  * both steps run; the first error is surfaced. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_yclass_object *obj)
@@ -327,30 +335,52 @@ struct yetty_ycore_void_result yetty_ygui_framework_set_session(
     return YETTY_OK_VOID();
 }
 
-/* Wire the framework's dual-dispatch to an attached producer session. The root
+/* Wire the framework's dual-dispatch to an attached session root. The
  * container proxy carries its own RPC session (set at proxy create), so the
  * typed yfigure_* stubs marshal over the wire from container_obj alone; we
  * mirror that session onto yclass_ctx for callers that consult it. Shared by
  * the fd-based attach and the injected-transport (endpoint) attach. */
-static struct yetty_ycore_void_result framework_wire_producer_session(
-    struct yetty_yclass_object *obj, struct yetty_ygui_framework *framework,
-    struct yetty_yfigure_producer_session *producer_session)
+/* Given the session root (the terminal), navigate to the figure container,
+ * prime its slots (attach window), install the container + session on the
+ * framework, and take ownership of the root for teardown. On any failure the
+ * whole connection stack is disconnected. */
+static struct yetty_ycore_void_result framework_wire_root(struct yetty_yclass_object *obj,
+                                                          struct yetty_ygui_framework *framework,
+                                                          struct yetty_yclass_object *rpc_root)
 {
-    framework->container_obj = yetty_yfigure_producer_session_container(producer_session);
-    struct yetty_yclass_rpc_session *rpc_session =
-        yetty_yfigure_producer_session_rpc(producer_session);
-    struct yetty_ycore_void_result session_install_res =
-        yetty_ygui_framework_set_session(obj, rpc_session);
-    if (YETTY_IS_ERR(session_install_res)) {
-        struct yetty_ycore_void_result detach_res = yetty_yfigure_producer_detach(producer_session);
-        if (YETTY_IS_ERR(detach_res)) {
-            yetty_ycore_error_destroy(detach_res.error);
+    struct yetty_yclass_object_ptr_result container_res =
+        yetty_yterminal_figure_root_container(rpc_root);
+    if (YETTY_IS_ERR(container_res)) {
+        struct yetty_ycore_void_result dr = yetty_yclass_rpc_disconnect(rpc_root);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
         }
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_attach: figure_root_container",
+                         container_res);
+    }
+    framework->container_obj = container_res.value;
+
+    /* Prime the container's slots now (pipeline empty): steady-state pipelined
+     * mutations never mid-stream RESOLVE_SLOT (forbidden in async mode). */
+    struct yetty_ycore_void_result prime_res =
+        yetty_yclass_rpc_session_translate_class(rpc_root->session, "yetty_yfigure_container");
+    if (YETTY_IS_ERR(prime_res)) {
+        yetty_ycore_error_destroy(prime_res.error);
+    }
+
+    struct yetty_ycore_void_result session_install_res =
+        yetty_ygui_framework_set_session(obj, rpc_root->session);
+    if (YETTY_IS_ERR(session_install_res)) {
+        free(framework->container_obj);
         framework->container_obj = NULL;
+        struct yetty_ycore_void_result dr = yetty_yclass_rpc_disconnect(rpc_root);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_attach: set_session",
                          session_install_res);
     }
-    framework->producer_session = producer_session;
+    framework->rpc_root = rpc_root;
     return YETTY_OK_VOID();
 }
 
@@ -361,28 +391,27 @@ struct yetty_ycore_void_result yetty_ygui_framework_attach(struct yetty_yclass_o
 {
     struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_framework_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res, "yetty_ygui_framework_attach: from_obj");
-    struct yetty_yfigure_producer_session_ptr_result session_res =
-        yetty_yfigure_producer_attach(read_fd, write_fd, compressed);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, session_res,
-                        "yetty_ygui_framework_attach: producer attach");
-    return framework_wire_producer_session(obj, framework_res.value, session_res.value);
+    (void)compressed; /* connect_fds picks the connection's compression */
+    struct yetty_yclass_object_ptr_result root_res =
+        yetty_yclass_rpc_connect_fds(read_fd, write_fd);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, root_res, "yetty_ygui_framework_attach: connect_fds");
+    return framework_wire_root(obj, framework_res.value, root_res.value);
 }
 
-/* Attach over a caller-provided transport — the endpoint path passes a
- * yetty_ywire_channel-backed transport so the framework rides the multiplexed
- * connection's rpc channel instead of opening its own DCS transport on the fd. */
+/* Attach over a caller-provided multiplexed connection — the endpoint path.
+ * The framework opens its OWN dynamic RPC channel on the connection (the SSH
+ * model), so it never shares/tears a lane with other clients on the PTY. */
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_ygui_framework_attach_transport(
-    struct yetty_yclass_object *obj, struct yetty_yclass_transport *transport)
+struct yetty_ycore_void_result yetty_ygui_framework_attach_connection(
+    struct yetty_yclass_object *obj, struct yetty_ywire_connection *connection)
 {
     struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_framework_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res,
-                        "yetty_ygui_framework_attach_transport: from_obj");
-    struct yetty_yfigure_producer_session_ptr_result session_res =
-        yetty_yfigure_producer_attach_transport(transport);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, session_res,
-                        "yetty_ygui_framework_attach_transport: producer attach");
-    return framework_wire_producer_session(obj, framework_res.value, session_res.value);
+                        "yetty_ygui_framework_attach_connection: from_obj");
+    struct yetty_yclass_object_ptr_result root_res = yetty_yclass_rpc_connect_channel(connection);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, root_res,
+                        "yetty_ygui_framework_attach_connection: connect_channel");
+    return framework_wire_root(obj, framework_res.value, root_res.value);
 }
 
 /* Membership probe + insert for the minted_figures set. Linear scan —
@@ -2093,4 +2122,4 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_yclass_obj
 /* Codegen-emitted class accessor (yetty_ygui_framework_class_get /
  * _from / _to), the generated create/destroy, and the expose'd public stubs.
  * Appended at the foot like every other yclass module. */
-#include "framework.gen.c"
+#include "yetty/gen/impl/ygui/framework.c"

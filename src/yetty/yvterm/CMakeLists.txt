@@ -14,7 +14,6 @@ add_library(yetty_yvterm STATIC
     # and the cross-class method tables. grid.c/vterm.c each only #include their
     # own <name>.gen.c at the foot, so these are compiled as standalone units —
     # mirrors ygrid/CMakeLists.txt.
-    rpc.gen.c
 )
 
 target_include_directories(yetty_yvterm PUBLIC
@@ -26,9 +25,12 @@ target_include_directories(yetty_yvterm PUBLIC
 target_include_directories(yetty_yvterm PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yvterm PUBLIC
+    yetty_api_yvterm
+    yetty_api_ytermsink  # grid/vterm/shader-glyph-layer dispatch the terminal-host sink
     yetty_ycore
     yetty_yclass
     yetty_yfigure
+    yetty_ysdf           # sdf-layer.c: yetty_ysdf_compute_aabb (record indexing)
     yetty_ydraw_core
     yetty_ydraw_factory  # yetty_ydraw_composite_destroy (anchored composite teardown)
     yetty_ywire          # wire statemachine: default raw-bytes sink → libvterm
@@ -50,3 +52,21 @@ if(NOT MSVC)
         C_STANDARD_REQUIRED ON
     )
 endif()
+
+# Object-API library (role-split codegen layout): the typed stubs alone,
+# with no strong references to the implementation, accessors, skels or
+# registration. Pure wire consumers link THIS; the impl lib links it too
+# (skels re-enter the public stubs). Header: <yetty/api/yvterm/*.h>.
+add_library(yetty_api_yvterm STATIC
+    ${YETTY_ROOT}/src/yetty/gen/api/yvterm/grid.c
+    ${YETTY_ROOT}/src/yetty/gen/api/yvterm/vterm.c
+)
+
+target_include_directories(yetty_api_yvterm PUBLIC
+    ${YETTY_ROOT}/include
+)
+
+target_link_libraries(yetty_api_yvterm PUBLIC
+    yetty_ycore
+    yetty_yclass
+)

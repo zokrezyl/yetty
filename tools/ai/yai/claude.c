@@ -1260,4 +1260,4 @@ static struct yetty_ycore_void_result claude_on_child_eof(struct yetty_yclass_ob
     return YETTY_OK_VOID();
 }
 
-#include "claude.gen.c"
+#include "yetty/gen/impl/yai/claude.c"

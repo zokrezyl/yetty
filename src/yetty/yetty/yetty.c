@@ -679,7 +679,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             if (pane) {
                 struct yetty_ycore_grid_size gs = {.rows = 24, .cols = 80};
                 struct yetty_yterminal_terminal_result tr =
-                    yetty_yterminal_terminal_create(gs, &yetty->context);
+                    yetty_yterminal_terminal_open(gs, &yetty->context);
                 if (YETTY_IS_ERR(tr)) {
                     yerror("yetty: PANE_CREATE: terminal create: %s", tr.error.msg);
                     yetty_ycore_error_destroy(tr.error);
@@ -755,7 +755,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             if (new_pane) {
                 struct yetty_ycore_grid_size gs = {.rows = 24, .cols = 80};
                 struct yetty_yterminal_terminal_result tr =
-                    yetty_yterminal_terminal_create(gs, &yetty->context);
+                    yetty_yterminal_terminal_open(gs, &yetty->context);
                 if (YETTY_IS_ERR(tr)) {
                     yerror("yetty: PANE_SPLIT: terminal create: %s", tr.error.msg);
                     //

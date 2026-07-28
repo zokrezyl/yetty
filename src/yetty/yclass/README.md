@@ -11,10 +11,25 @@ One annotated source → one model → many artefacts. The model is the single s
 of truth; this is the mechanism yetty uses to generate bindings for other
 languages.
 
-- Runtime: `include/yclass/class.h`, `src/yclass/class.c`
-- Generator: `src/yclass/gen/codegen.py`
-- RPC + transports: `src/yclass/rpc.c`, `transport-*.c`, `include/yclass/transport.h`
+- Runtime: `include/yetty/yclass/class.h`, `src/yetty/yclass/class.c`
+- Generator: `src/yetty/yclass/gen/codegen.py`
+- RPC + transports: `src/yetty/yclass/rpc.c`, `transport-*.c`, `include/yetty/yclass/transport.h`
 - Reference example: `poc/class-object-model/` (yanimal · yvehicle · ytuning)
+
+> **Layout note (2026-07):** every module now runs the role-split generator.
+> A module's ONE hand-written file is its annotated `.c` under
+> `src/yetty/<module>/`. Codegen emits, per source stem, three separate roots:
+> the GPU-free object-API stubs at `src/yetty/gen/api/<module>/<stem>.c` with the
+> single public header `include/yetty/api/<module>/<stem>.h`; the implementation
+> glue (accessor, from/to, factory, skels, registration) at
+> `src/yetty/gen/impl/<module>/<stem>.{c,h}`, which the hand-written `.c`
+> foot-`#include`s. There is no per-module `rpc.gen.c`, no `methods.gen.c`, and
+> no `methods.h`; a module whose sources share a stem (only `yplatform`) instead
+> emits standalone per-submodule `rpc.gen.c` aggregators under `gen/impl/`.
+> Remote objects are reached by root/graph navigation (`connect_fds` → typed
+> root → navigate), NOT by a remote public factory. The prose below still
+> describes the older single-artefact layout in places — treat the per-module
+> file names in it as historical.
 
 See [Design Overview](../../../docs/design.md) for where this sits, and
 [FFI Generation](../../../docs/ffi-gen.md) for the per-language emitter design that consumes
@@ -172,7 +187,7 @@ struct [[clang::annotate("class@ytuning:tuned_sportscar")]]
        [[clang::annotate("parent@yvehicle:sportscar")]] tuned_sportscar_data { int boost_level; };
 
 /* override yvehicle's `vehicle_describe` slot from the ytuning module */
-[[clang::annotate("override@ytuning:tuned_sportscar:yvehicle:vehicle_describe")]]
+[[clang::annotate("override@yvehicle:vehicle:vehicle_describe")]]
 static struct str_result tuned_sportscar_describe(struct object *obj, float distance) { ... }
 ```
 
@@ -360,8 +375,8 @@ local and proxy dispatch — the smallest end-to-end view of the whole system.
 
 ## Pointers
 
-- Runtime: `include/yclass/class.h`
-- Generator: `src/yclass/gen/codegen.py` (run via `make codegen`)
-- RPC / transports: `include/yclass/rpc.h`, `transport.h`; `src/yclass/`
+- Runtime: `include/yetty/yclass/class.h`
+- Generator: `src/yetty/yclass/gen/codegen.py` (run via `make codegen`)
+- RPC / transports: `include/yetty/yclass/rpc.h`, `transport.h`; `src/yetty/yclass/`
 - Reference: `poc/class-object-model/`
 - Bindings: [FFI Generation](../../../docs/ffi-gen.md), `tools/ffi-codegen/`, `bindings/`

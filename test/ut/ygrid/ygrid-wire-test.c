@@ -18,8 +18,9 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/container.h>
+#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/api/yfigure/figure.h>
+#include <yetty/api/yfigure/container.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
@@ -492,6 +493,318 @@ static void test_browser_image_delta_pattern(void)
     destroy_grid(g);
 }
 
+/*===========================================================================
+ * Stub composite factory — a headless concrete factory whose instances are
+ * plain calloc'd structs (no GPU, no pipeline). Counters live on the factory
+ * wrapper and are reached through the instance's factory back-pointer, so
+ * the test needs no file-scope state. Exercises the #685 composite-entity
+ * paths: mint-under-entity, CMD_DELETE destroy, CMD_GROUP re-open replace,
+ * CMD_UPDATE routing.
+ *===========================================================================*/
+
+#define STUB_COMPOSITE_TYPE_ID 0x80000042u
+
+struct stub_composite_factory {
+    struct yetty_ydraw_concrete_factory base; /* must stay first: cast target */
+    int instances_destroyed;
+    int updates_received;
+    uint32_t last_update_field;
+    uint32_t last_update_body_len;
+};
+
+static void stub_instance_destroy(struct yetty_ydraw_composite *self)
+{
+    struct stub_composite_factory *wrapper = (struct stub_composite_factory *)self->factory;
+    wrapper->instances_destroyed++;
+    free(self->buffer_data);
+    free(self);
+}
+
+static struct yetty_ycore_void_result stub_instance_update(struct yetty_ydraw_composite *self,
+                                                           uint32_t target_field, const void *body,
+                                                           size_t body_size)
+{
+    struct stub_composite_factory *wrapper = (struct stub_composite_factory *)self->factory;
+    (void)body;
+    wrapper->updates_received++;
+    wrapper->last_update_field = target_field;
+    wrapper->last_update_body_len = (uint32_t)body_size;
+    return YETTY_OK_VOID();
+}
+
+static const struct yetty_ydraw_composite_ops *stub_instance_ops(void)
+{
+    static const struct yetty_ydraw_composite_ops ops = {
+        .destroy = stub_instance_destroy,
+        .update = stub_instance_update,
+    };
+    return &ops;
+}
+
+static struct yetty_ycore_void_result stub_compile_pipeline(
+    struct yetty_ydraw_concrete_factory *self, WGPUDevice device, WGPUQueue queue,
+    WGPUTextureFormat target_format, struct yetty_ydraw_gpu_allocator *allocator)
+{
+    (void)self;
+    (void)device;
+    (void)queue;
+    (void)target_format;
+    (void)allocator;
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ydraw_composite_ptr_result stub_create_instance(
+    struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
+    uint32_t rolling_row)
+{
+    struct yetty_ydraw_composite *instance = calloc(1, sizeof(struct yetty_ydraw_composite));
+    if (!instance) {
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "stub_create_instance: oom");
+    }
+    instance->ops = stub_instance_ops();
+    instance->type = STUB_COMPOSITE_TYPE_ID;
+    instance->factory = self;
+    instance->rolling_row = rolling_row;
+    instance->buffer_data = malloc(size);
+    if (!instance->buffer_data) {
+        free(instance);
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "stub_create_instance: buffer oom");
+    }
+    memcpy(instance->buffer_data, buffer_data, size);
+    instance->buffer_size = size;
+    /* Payload bounds header: [x][y][w][h] floats at payload offset 0. */
+    float bounds[4];
+    memcpy(bounds, (const uint8_t *)buffer_data + 8, sizeof(bounds));
+    instance->bounds.min.x = bounds[0];
+    instance->bounds.min.y = bounds[1];
+    instance->bounds.max.x = bounds[0] + bounds[2];
+    instance->bounds.max.y = bounds[1] + bounds[3];
+    return YETTY_OK(yetty_ydraw_composite_ptr, instance);
+}
+
+static void stub_factory_destroy(struct yetty_ydraw_concrete_factory *self)
+{
+    free(self);
+}
+
+/* Abstract factory with the stub registered. The wrapper is owned by the
+ * abstract factory (registration transfers ownership); read the counters
+ * BEFORE yetty_ydraw_composite_factory_destroy. */
+static struct yetty_ydraw_composite_factory *make_stub_composite_factory(
+    struct stub_composite_factory **out_wrapper)
+{
+    struct yetty_ydraw_composite_factory_ptr_result factory_res =
+        yetty_ydraw_composite_factory_create(NULL, NULL, (WGPUTextureFormat)0, NULL, NULL);
+    if (YETTY_IS_ERR(factory_res)) {
+        fprintf(stderr, "composite_factory_create failed\n");
+        yetty_ycore_error_destroy(factory_res.error);
+        exit(2);
+    }
+    struct stub_composite_factory *wrapper = calloc(1, sizeof(struct stub_composite_factory));
+    if (!wrapper) {
+        fprintf(stderr, "stub wrapper oom\n");
+        exit(2);
+    }
+    wrapper->base.type_id = STUB_COMPOSITE_TYPE_ID;
+    wrapper->base.destroy = stub_factory_destroy;
+    wrapper->base.compile_pipeline = stub_compile_pipeline;
+    wrapper->base.create_instance = stub_create_instance;
+    struct yetty_ycore_void_result reg_res =
+        yetty_ydraw_composite_factory_register(factory_res.value, &wrapper->base);
+    if (YETTY_IS_ERR(reg_res)) {
+        fprintf(stderr, "composite_factory_register failed: %s\n", reg_res.error.msg);
+        yetty_ycore_error_destroy(reg_res.error);
+        exit(2);
+    }
+    *out_wrapper = wrapper;
+    return factory_res.value;
+}
+
+/* Append a stub composite record: [type][payload_size=16][x][y][w][h]. */
+static void add_stub_composite(struct yetty_ydraw_drawable_list *buf, float x, float y, float w,
+                               float h)
+{
+    uint32_t record[6];
+    record[0] = STUB_COMPOSITE_TYPE_ID;
+    record[1] = 16u;
+    memcpy(&record[2], &x, sizeof(float));
+    memcpy(&record[3], &y, sizeof(float));
+    memcpy(&record[4], &w, sizeof(float));
+    memcpy(&record[5], &h, sizeof(float));
+    struct yetty_ydraw_id_result add_res =
+        yetty_ydraw_drawable_list_add_prim(buf, record, sizeof(record));
+    if (YETTY_IS_ERR(add_res)) {
+        fprintf(stderr, "add_stub_composite failed\n");
+        yetty_ycore_error_destroy(add_res.error);
+        exit(2);
+    }
+}
+
+/* Test 9: a composite minted inside CMD_GROUP is owned by that entity;
+ * CMD_DELETE of the entity destroys the instance (no ghost, no leak).
+ * Also pins the reclaimed byte buffer (bytes_len: 0 — the instance keeps
+ * the only copy of the wire record) and the composites dump section. */
+static void test_composite_delete_destroys_instance(void)
+{
+    fprintf(stderr, "\n[test_composite_delete_destroys_instance]\n");
+    g_tests++;
+    struct stub_composite_factory *stub = NULL;
+    struct yetty_ydraw_composite_factory *factory = make_stub_composite_factory(&stub);
+    struct yetty_ygrid_grid *g = make_headless_grid(100, 100);
+    yetty_ygrid_set_composite_factory(g, factory);
+
+    struct yetty_ydraw_drawable_list *buf1 = make_buf();
+    struct yetty_ydraw_id_result m1 = yetty_ydraw_drawable_list_begin_group(buf1, 7u);
+    add_stub_composite(buf1, 20, 30, 32, 16);
+    yetty_ydraw_drawable_list_end_group(buf1, m1.value);
+    feed_grid(g, buf1);
+    yetty_ydraw_drawable_list_destroy(buf1);
+
+    char *dump = dump_grid(g);
+    const char *expected =
+        "kind: ygrid\n"
+        "rect: [0.0, 0.0, 100.0, 100.0]\n"
+        "dirty: 1\n"
+        "grid_cols: 1\n"
+        "grid_rows: 1\n"
+        "prim_count: 0\n"
+        "prim_count_with_tombstones: 0\n"
+        "bytes_len: 0\n"
+        "entity_high_water: 2\n"
+        "composite_count: 1\n"
+        "composites:\n"
+        "  - type: 0x80000042 entity: 7 stream_id: 1 bounds: [20.0, 30.0, 52.0, 46.0]\n"
+        "entities:\n"
+        "  - slot: 0\n"
+        "    external_id: 0\n"
+        "    parent_slot: ~\n"
+        "    prim_count: 0\n"
+        "    children: [1]\n"
+        "  - slot: 1\n"
+        "    external_id: 7\n"
+        "    parent_slot: 0\n"
+        "    prim_count: 0\n"
+        "    children: []\n";
+    ASSERT_STR_EQ("composite_minted_under_entity", dump, expected);
+    free(dump);
+
+    struct yetty_ydraw_drawable_list *buf2 = make_buf();
+    yetty_ydraw_drawable_list_add_cmd_delete(buf2, 7u);
+    feed_grid(g, buf2);
+    yetty_ydraw_drawable_list_destroy(buf2);
+
+    dump = dump_grid(g);
+    int ok = 1;
+    if (strstr(dump, "composite_count") != NULL) {
+        fprintf(stderr, "FAIL composite_delete: instance still dumped\n--- got ---\n%s", dump);
+        ok = 0;
+    }
+    if (stub->instances_destroyed != 1) {
+        fprintf(stderr, "FAIL composite_delete: destroyed=%d want 1\n", stub->instances_destroyed);
+        ok = 0;
+    }
+    if (ok) {
+        fprintf(stderr, "ok   composite_delete_destroys_instance\n");
+    } else {
+        g_failures++;
+    }
+    free(dump);
+    destroy_grid(g);
+    yetty_ydraw_composite_factory_destroy(factory);
+}
+
+/* Test 10: re-opening the CMD_GROUP of an entity that owns a composite
+ * replaces the instance instead of stacking a duplicate. */
+static void test_composite_reopen_no_duplicate(void)
+{
+    fprintf(stderr, "\n[test_composite_reopen_no_duplicate]\n");
+    g_tests++;
+    struct stub_composite_factory *stub = NULL;
+    struct yetty_ydraw_composite_factory *factory = make_stub_composite_factory(&stub);
+    struct yetty_ygrid_grid *g = make_headless_grid(100, 100);
+    yetty_ygrid_set_composite_factory(g, factory);
+
+    for (int round = 0; round < 2; round++) {
+        struct yetty_ydraw_drawable_list *buf = make_buf();
+        struct yetty_ydraw_id_result m = yetty_ydraw_drawable_list_begin_group(buf, 5u);
+        add_stub_composite(buf, 0, 0, 10, 10);
+        yetty_ydraw_drawable_list_end_group(buf, m.value);
+        feed_grid(g, buf);
+        yetty_ydraw_drawable_list_destroy(buf);
+    }
+
+    char *dump = dump_grid(g);
+    int ok = 1;
+    if (strstr(dump, "composite_count: 1\n") == NULL) {
+        fprintf(stderr, "FAIL composite_reopen: want exactly 1 instance\n--- got ---\n%s", dump);
+        ok = 0;
+    }
+    if (stub->instances_destroyed != 1) {
+        fprintf(stderr, "FAIL composite_reopen: destroyed=%d want 1 (old instance)\n",
+                stub->instances_destroyed);
+        ok = 0;
+    }
+    if (ok) {
+        fprintf(stderr, "ok   composite_reopen_no_duplicate\n");
+    } else {
+        g_failures++;
+    }
+    free(dump);
+    destroy_grid(g);
+    yetty_ydraw_composite_factory_destroy(factory);
+}
+
+/* Test 11: CMD_UPDATE in a later body routes to the live composite through
+ * the grid's stream registry (ordinal 1 within the minting body), carrying
+ * target_field + body, mirroring the terminal scrollback path. */
+static void test_composite_cmd_update_routes(void)
+{
+    fprintf(stderr, "\n[test_composite_cmd_update_routes]\n");
+    g_tests++;
+    struct stub_composite_factory *stub = NULL;
+    struct yetty_ydraw_composite_factory *factory = make_stub_composite_factory(&stub);
+    struct yetty_ygrid_grid *g = make_headless_grid(100, 100);
+    yetty_ygrid_set_composite_factory(g, factory);
+
+    struct yetty_ydraw_drawable_list *buf1 = make_buf();
+    add_stub_composite(buf1, 0, 0, 10, 10); /* root scope, stream ordinal 1 */
+    feed_grid(g, buf1);
+    yetty_ydraw_drawable_list_destroy(buf1);
+
+    uint32_t payload[3] = {3u, 0xAABBCCDDu, 0x11223344u}; /* field=3 + 8-byte body */
+    struct yetty_ydraw_drawable_list *buf2 = make_buf();
+    struct yetty_ycore_void_result update_res =
+        yetty_ydraw_drawable_list_add_cmd_update(buf2, /*target_id=*/1u, payload, sizeof(payload));
+    if (YETTY_IS_ERR(update_res)) {
+        fprintf(stderr, "add_cmd_update failed\n");
+        yetty_ycore_error_destroy(update_res.error);
+        exit(2);
+    }
+    feed_grid(g, buf2);
+    yetty_ydraw_drawable_list_destroy(buf2);
+
+    int ok = 1;
+    if (stub->updates_received != 1) {
+        fprintf(stderr, "FAIL cmd_update_routes: updates=%d want 1\n", stub->updates_received);
+        ok = 0;
+    }
+    if (stub->last_update_field != 3u) {
+        fprintf(stderr, "FAIL cmd_update_routes: field=%u want 3\n", stub->last_update_field);
+        ok = 0;
+    }
+    if (stub->last_update_body_len != 8u) {
+        fprintf(stderr, "FAIL cmd_update_routes: body_len=%u want 8\n", stub->last_update_body_len);
+        ok = 0;
+    }
+    if (ok) {
+        fprintf(stderr, "ok   composite_cmd_update_routes\n");
+    } else {
+        g_failures++;
+    }
+    destroy_grid(g);
+    yetty_ydraw_composite_factory_destroy(factory);
+}
+
 int main(void)
 {
     test_empty_grid();
@@ -502,6 +815,9 @@ int main(void)
     test_cmd_delete_drops_entity();
     test_cmd_zero_clears();
     test_browser_image_delta_pattern();
+    test_composite_delete_destroys_instance();
+    test_composite_reopen_no_duplicate();
+    test_composite_cmd_update_routes();
 
     fprintf(stderr, "\nygrid wire test: %d tests, %d failure%s\n", g_tests, g_failures,
             g_failures == 1 ? "" : "s");

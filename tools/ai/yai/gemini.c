@@ -221,4 +221,4 @@ static struct yetty_ycore_void_result gemini_handle_event(struct yetty_yclass_ob
     return YETTY_OK_VOID();
 }
 
-#include "gemini.gen.c"
+#include "yetty/gen/impl/yai/gemini.c"
