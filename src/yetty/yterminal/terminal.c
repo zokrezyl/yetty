@@ -2498,18 +2498,23 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
             yetty_ygrid_register_factory(terminal->figure_registry, &terminal->figure_args);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rf,
                             "terminal_create: ygrid register_factory");
-        /* Producer-widget kinds reuse the ygrid factory today (same SDF /
-         * glyph prim stream) but register under distinct kind tokens — see
-         * yetty_yfigure_kind_token in yfigure/registry.h. The composite
-         * factory in figure_args lets each ygrid render yplot/yimage/etc.
-         * instances embedded in the prim stream. */
-        /* "yscroll": a LOCAL (framebuffer-pixel, non-absolute) ygrid for a
-         * scrollable document producer — content is emitted in document coords,
-         * the figure is sized to the viewport and scrolled natively via
-         * set_child_scroll (view_size = viewport for 1:1 mapping, content =
-         * set_content_size so prims past the viewport are NOT clipped). This is
-         * what ychromium's web page uses; the default "ygrid" kind is absolute
-         * (chrome/widgets) and cannot scroll content taller than its rect. */
+        /* "yscroll" is the CONTENT-GRID kind (#685 Phase 2): an ygrid whose
+         * coordinate mode follows figure_args.absolute_coords (LOCAL here —
+         * framebuffer pixels), suited to producer content: content is emitted
+         * in document coords, the figure is sized to the viewport and
+         * scrolled natively via set_child_scroll (view_size = viewport for
+         * 1:1 mapping, content = set_content_size so prims past the viewport
+         * are NOT clipped). ychromium's web page and every ygui producer
+         * widget (plot / image / video content, shipped as composite records
+         * in the child body) mint this kind. The default "ygrid" kind is
+         * absolute (chrome/widgets) and cannot scroll content taller than
+         * its rect.
+         *
+         * "yplot" / "yimage" / "yvideo" / "yzoo" / "yjungle" are DEPRECATED
+         * aliases of the same registration — kinds name renderer configs,
+         * not content types. Kept one transition window for external
+         * producers that still hash the old strings; new code must not emit
+         * them. */
         static const char *const producer_kind_names[] = {"yplot", "yimage",  "yvideo",
                                                           "yzoo",  "yjungle", "yscroll"};
         for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); i++) {

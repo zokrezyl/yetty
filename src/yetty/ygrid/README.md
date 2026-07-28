@@ -82,9 +82,15 @@ struct yetty_ycore_void_result yetty_ygrid_add_record(
 struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_yclass_object *obj);
 ```
 
-`yetty_ygrid_register_factory_for_kind` registers the same renderer under an
-arbitrary kind token so ygui's producer widgets (yplot / yimage / yvideo /
-yzoo / yjungle) get distinct wire kinds.
+Two honest kinds exist (#685): `"ygrid"` (absolute coords, hard-wired — the
+chrome/widget surface) and `"yscroll"` (registered via
+`yetty_ygrid_register_factory_for_kind`, coordinate mode follows the host's
+`factory_args.absolute_coords` — the content grid every ygui producer widget
+mints; plot/image/video content ships as composite records in the child
+body, not as a kind). The old content-type tokens (`yplot` / `yimage` /
+`yvideo` / `yzoo` / `yjungle`) remain registered only as deprecated aliases
+for external producers that still hash those strings — kinds name renderer
+configurations, not content types.
 
 ## Generated vs hand-written
 

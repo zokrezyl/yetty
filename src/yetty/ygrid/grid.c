@@ -133,6 +133,16 @@ struct ygrid_entity {
     bool in_use;
     uint32_t next_free;
 
+    /* Monotonic first-seen order, stamped once when the entity is minted
+     * and NEVER changed on re-emission (a re-opened scope reuses the same
+     * entity). `slot` is unusable for paint order because the free list
+     * reuses released slots; creation_order is stable, so sorting a cell's
+     * prims by it keeps every group at its original paint depth even when a
+     * group (e.g. the opaque page background) is re-painted and re-emitted
+     * every frame — otherwise its freshly-appended prims composite on top
+     * of already-placed text and bury it. Root entity = 0. */
+    uint32_t creation_order;
+
     /* Direct children of this entity (subtree links). */
     uint32_t *children;
     uint32_t children_count;
@@ -342,6 +352,20 @@ struct YETTY_ANNOTATE("class@ygrid:grid") YETTY_ANNOTATE("parent@yfigure:figure"
     struct yetty_ydraw_composite **figure_instances;
     uint32_t figure_instance_count;
     uint32_t figure_instance_cap;
+    /* Owning entity slot per figure_instances[i] (#685 Phase 1). Parallel to
+     * figure_instances[]; mirrors prim_meta.entity_slot so an entity's
+     * composites are destroyed on CMD_DELETE and on CMD_GROUP re-open instead
+     * of leaking (ghost-render) or duplicating (stacking on re-emit). */
+    uint32_t *figure_instance_entity;
+
+    /* CMD_UPDATE routing (#685 Phase 1) — mirror of the terminal scrollback
+     * path: every composite minted from a process_bytes body registers under
+     * its ordinal within that body (1-based, most-recent-wins), and later
+     * CMD_UPDATE(id) records resolve through this registry to the live
+     * instance's ops->update. Instances unregister themselves on destroy via
+     * the back-pointer composite_destroy clears. */
+    struct yetty_ydraw_stream_registry stream_targets;
+    uint32_t stream_next_ordinal;
 
     /* Entity table — slot 0 is the implicit root, allocated at create
      * time. entity_high_water is one past the highest slot ever issued
@@ -362,6 +386,10 @@ struct YETTY_ANNOTATE("class@ygrid:grid") YETTY_ANNOTATE("parent@yfigure:figure"
      * it attaches a newly-parsed prim to its owning entity. Defaults
      * to YGRID_ROOT_SLOT so plain (no-CMD_GROUP) traffic still works. */
     uint32_t current_entity_slot;
+
+    /* Next value handed to a freshly-minted entity's creation_order.
+     * Starts at 1 (root reserves 0). Monotonic, never rewound. */
+    uint32_t next_creation_order;
 };
 
 /* Result wrapper for the ygrid handle. Declared here (not pulled from
@@ -498,6 +526,9 @@ static struct yetty_ycore_void_result entity_alloc_slot(struct yetty_ygrid_grid 
         g->free_slot_head = g->entities[slot].next_free;
         g->entities[slot].next_free = YGRID_INVALID_SLOT;
         g->entities[slot].in_use = true;
+        /* Fresh entity (slot was free) → new first-seen order. Reusing the
+         * slot does NOT reuse the order; the released entity is gone. */
+        g->entities[slot].creation_order = ++g->next_creation_order;
         *out = slot;
         return YETTY_OK_VOID();
     }
@@ -507,6 +538,7 @@ static struct yetty_ycore_void_result entity_alloc_slot(struct yetty_ygrid_grid 
         YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "entity_alloc_slot: entities_grow");
     }
     g->entities[slot].in_use = true;
+    g->entities[slot].creation_order = ++g->next_creation_order;
     g->entity_high_water = slot + 1u;
     *out = slot;
     return YETTY_OK_VOID();
@@ -705,12 +737,48 @@ static void entity_drop_from_cells(struct yetty_ygrid_grid *g, struct ygrid_enti
     }
 }
 
+/* Destroy every composite instance owned by `slot` and compact
+ * figure_instances[] + the parallel figure_instance_entity[] (#685 Phase 1).
+ * The composite mint stamps figure_instance_entity[i] = current_entity_slot;
+ * this is the sibling of entity_drop_prims for composites. Called on both
+ * CMD_DELETE (via entity_delete_subtree) and CMD_GROUP re-open (via
+ * entity_lookup_or_create), so an entity's embedded plot/image/video no longer
+ * ghost-renders after delete (defect 1) or stacks a duplicate on re-emit
+ * (defect 2). */
+static void entity_drop_composites(struct yetty_ygrid_grid *g, uint32_t slot)
+{
+    if (!g->figure_instances || g->figure_instance_count == 0) {
+        return;
+    }
+    uint32_t write = 0;
+    bool dropped = false;
+    for (uint32_t i = 0; i < g->figure_instance_count; i++) {
+        if (g->figure_instance_entity[i] == slot) {
+            if (g->figure_instances[i]) {
+                yetty_ydraw_composite_destroy(g->figure_instances[i]);
+            }
+            dropped = true;
+            continue; /* omit from the compacted arrays */
+        }
+        g->figure_instances[write] = g->figure_instances[i];
+        g->figure_instance_entity[write] = g->figure_instance_entity[i];
+        write++;
+    }
+    g->figure_instance_count = write;
+    if (dropped) {
+        g->staging_dirty = 1;
+    }
+}
+
 /* Detach this entity's prims from every cell that holds them, then
  * tombstone the prims so the staging rebuild skips them. The cells
  * scan is O(grid cells * entity prims) — acceptable for now;
  * touched_cells optimization will land in Phase 1b. */
 static void entity_drop_prims(struct yetty_ygrid_grid *g, struct ygrid_entity *e)
 {
+    /* Composites first: an entity may own composites with NO SDF prims, so
+     * this must run BEFORE the prim_count early-return (#685). */
+    entity_drop_composites(g, e->slot);
     if (e->prim_count == 0) {
         return;
     }
@@ -1556,17 +1624,44 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
                 return YETTY_ERR(yetty_ycore_void, "ygrid: figure_instances oom");
             }
             g->figure_instances = grown;
+            uint32_t *grown_entity =
+                (uint32_t *)realloc(g->figure_instance_entity, cap * sizeof(uint32_t));
+            if (!grown_entity) {
+                return YETTY_ERR(yetty_ycore_void, "ygrid: figure_instance_entity oom");
+            }
+            g->figure_instance_entity = grown_entity;
             g->figure_instance_cap = cap;
         }
         struct yetty_ydraw_composite_ptr_result ir = yetty_ydraw_composite_factory_create_instance(
             g->composite_factory, hdr, record_len, g->insert_rolling_row);
+        /* Reclaim the grid's copy of the record either way: the instance
+         * keeps its own verbatim copy (buffer_data) and nothing else reads
+         * a composite record out of g->bytes, so retaining it here stored
+         * the payload twice (#685). The record is always the tail of
+         * g->bytes at this point — appended by add_record_local right
+         * before this parse. */
+        if ((size_t)record_offset + record_len == g->bytes_len) {
+            g->bytes_len = record_offset;
+        }
         if (YETTY_IS_ERR(ir)) {
             ydebug("ygrid: composite_factory create_instance failed for type=0x%08x: %s", type,
                    ir.error.msg);
             yetty_ycore_error_destroy(ir.error);
             return YETTY_OK_VOID();
         }
-        g->figure_instances[g->figure_instance_count++] = ir.value;
+        /* Stamp the owning entity (#685): the record is being added under
+         * g->current_entity_slot, exactly as prim_meta.entity_slot is stamped
+         * below for SDF prims. entity_drop_prims() uses this to destroy the
+         * instance on CMD_DELETE / CMD_GROUP re-open. */
+        g->figure_instance_entity[g->figure_instance_count] = g->current_entity_slot;
+        g->figure_instances[g->figure_instance_count] = ir.value;
+        g->figure_instance_count++;
+        /* Make the instance addressable by later CMD_UPDATE records —
+         * ordinal within the current process_bytes body, most-recent-wins,
+         * mirroring the terminal scrollback path's per-envelope ordinals.
+         * The registry entry clears itself in composite_destroy. */
+        g->stream_next_ordinal++;
+        yetty_ydraw_stream_registry_register(&g->stream_targets, g->stream_next_ordinal, ir.value);
         ir.value->dirty = 1;
         {
             struct yetty_yclass_object_ptr_result obj_r = ygrid_obj_from_body(g);
@@ -1655,6 +1750,41 @@ static struct yetty_ycore_void_result ensure_words(uint32_t **buf, size_t *cap, 
     return YETTY_OK_VOID();
 }
 
+/* A prim's paint depth = its owning entity's creation_order. Tombstoned or
+ * out-of-range slots (shouldn't appear in a live cell) sort to the front. */
+static uint32_t prim_creation_order(const struct yetty_ygrid_grid *g, uint32_t prim_index)
+{
+    uint32_t slot = g->prims[prim_index].entity_slot;
+    if (slot >= g->entity_capacity) {
+        return 0u;
+    }
+    return g->entities[slot].creation_order;
+}
+
+/* Stable ascending sort of a cell's prim indices by owning-entity
+ * creation_order. The shader composites a cell front-to-back in list order,
+ * so the list must be depth-ordered. Add-order alone is wrong: the delta
+ * receiver appends a re-emitted group's prims at the array tail, so a
+ * re-painted low-depth group (e.g. the opaque page background, re-emitted
+ * every frame during load) would otherwise land on top of already-placed
+ * text. creation_order is stable across re-emission (the entity is reused by
+ * key), so sorting by it keeps each group at its true paint depth. Insertion
+ * sort is stable — equal creation_order (same group) keeps intra-group paint
+ * order — and cheap: cells hold ~20 prims. */
+static void sort_cell_by_creation(struct yetty_ygrid_grid *g, struct ygrid_cell *cell)
+{
+    for (uint32_t i = 1; i < cell->count; ++i) {
+        uint32_t prim_index = cell->indices[i];
+        uint32_t order = prim_creation_order(g, prim_index);
+        uint32_t j = i;
+        while (j > 0 && prim_creation_order(g, cell->indices[j - 1]) > order) {
+            cell->indices[j] = cell->indices[j - 1];
+            --j;
+        }
+        cell->indices[j] = prim_index;
+    }
+}
+
 static struct yetty_ycore_void_result rebuild_grid_staging(struct yetty_ygrid_grid *g)
 {
     size_t num_cells = (size_t)g->grid_cols * (size_t)g->grid_rows;
@@ -1679,7 +1809,7 @@ static struct yetty_ycore_void_result rebuild_grid_staging(struct yetty_ygrid_gr
 
     uint32_t max_cell_count = 0;
     for (size_t i = 0; i < num_cells; ++i) {
-        const struct ygrid_cell *cell = &g->cells[i];
+        struct ygrid_cell *cell = &g->cells[i];
         if (cell->count == 0) {
             g->grid_staging[i] = sentinel_off;
             continue;
@@ -1687,6 +1817,9 @@ static struct yetty_ycore_void_result rebuild_grid_staging(struct yetty_ygrid_gr
         if (cell->count > max_cell_count) {
             max_cell_count = cell->count;
         }
+        /* Composite in paint-depth order, not append order — see
+         * sort_cell_by_creation. */
+        sort_cell_by_creation(g, cell);
         g->grid_staging[i] = cursor;
         g->grid_staging[cursor++] = cell->count;
         for (uint32_t k = 0; k < cell->count; ++k) {
@@ -1797,6 +1930,7 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
         }
         free(g->figure_instances);
     }
+    free(g->figure_instance_entity);
 
     /* Free the yclass allocation (header + body); the body began at
      * obj + 1, so recover the object header by stepping back one. */
@@ -2189,7 +2323,14 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
      * Each figure opens its OWN render pass and scissors to the full target,
      * so the grid's scissor above does not constrain it. Publish this grid's
      * clamped scissor rect on the target as `clip` so figures (yimage, …)
-     * intersect it — otherwise a scrolled <img> draws over the tab bar. */
+     * intersect it — otherwise a scrolled <img> draws over the tab bar.
+     *
+     * Known z-order limitation (#685 interim): composites always paint
+     * AFTER the whole SDF/glyph pass, in mint order — SDF chrome emitted
+     * later (a popup, a hover overlay) cannot cover a composite hosted by
+     * the same grid. A z-aware interleave needs the SDF draw split into
+     * z-runs with composite passes between them; until then producers must
+     * host over-chrome in a separate, higher-z figure. */
     target->clip.x = sx0;
     target->clip.y = sy0;
     target->clip.w = sx1 - sx0;
@@ -2209,6 +2350,16 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
          * scrolled underneath it. */
         const float cz_x = g->scroll_x;
         const float cz_y = g->scroll_y + g->scroll_anchor_y;
+        /* Rolling-row scroll: mirror the shader's per-prim Y offset
+         * (rolling_row - rolling_row_0) * cell_h so a composite minted into
+         * a rolling grid moves with its creation row exactly like the SDF
+         * prims around it (#685). The uniforms were refreshed above in this
+         * same render call — U_CELL_SIZE.y already carries the
+         * rolling_cell_height override. Both values stay 0 on non-rolling
+         * grids, so the offset is a no-op for compositor/chrome figures. */
+        const float rolling_dy =
+            (float)((int32_t)inst->rolling_row - (int32_t)g->rs.uniforms[U_ROLLING_ROW_0].u32) *
+            g->rs.uniforms[U_CELL_SIZE].vec2[1];
         float sx, sy;
         if (g->absolute_coords) {
             float coord_scale = g->content_scale > 0.0f ? g->content_scale : 1.0f;
@@ -2225,7 +2376,7 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
              * target origin (minus scroll) and the render op supplies the
              * position. The scroll is in content units, so scale it too. */
             sx = -cz_x * coord_scale;
-            sy = -cz_y * coord_scale;
+            sy = (rolling_dy - cz_y) * coord_scale;
             inst->content_scale = coord_scale;
         } else {
             /* Local (scrolling-layer) grid: the figure block is anchored at
@@ -2234,7 +2385,7 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
              * content_scale stays 1. As above, the anchor must NOT include
              * inst->bounds.min — the render op adds the wire origin itself. */
             sx = base_rect.min.x - cz_x;
-            sy = base_rect.min.y - cz_y;
+            sy = base_rect.min.y - cz_y + rolling_dy;
             inst->content_scale = 1.0f;
         }
         /* Go through the generic wrapper (not inst->render directly) so the
@@ -2294,6 +2445,47 @@ static struct yetty_ycore_void_result process_add_record(struct yetty_ygrid_grid
     return ar;
 }
 
+/* Route one CMD_UPDATE to the live composite registered under its stream
+ * id — mirror of the terminal scrollback path (terminal_ydraw_route_update):
+ * the payload's first u32 is the figure-defined target_field, the rest is
+ * the body (yplot: chunked f32 samples; yvideo: NALs). Best-effort like
+ * every per-record problem: failures are logged and absorbed. In-place
+ * update of SDF prims (the other half of CMD_UPDATE) remains open. */
+static void ygrid_route_update(struct yetty_ygrid_grid *g,
+                               const struct yetty_ydraw_command_update *update)
+{
+    if (update->size < sizeof(uint32_t)) {
+        return; /* no target_field word — nothing to dispatch */
+    }
+    struct yetty_ydraw_composite *target =
+        yetty_ydraw_stream_registry_find(&g->stream_targets, update->id);
+    if (!target || !target->ops || !target->ops->update) {
+        ydebug("ygrid: CMD_UPDATE id=%u has no live updatable target", update->id);
+        return;
+    }
+    uint32_t target_field;
+    memcpy(&target_field, update->data, sizeof(target_field));
+    struct yetty_ycore_void_result update_res = target->ops->update(
+        target, target_field, update->data + sizeof(uint32_t), update->size - sizeof(uint32_t));
+    if (YETTY_IS_ERR(update_res)) {
+        ydebug("ygrid: CMD_UPDATE id=%u failed: %s", update->id, update_res.error.msg);
+        yetty_ycore_error_destroy(update_res.error);
+        return;
+    }
+    target->dirty = 1;
+    /* A pure-UPDATE body must still repaint the figure — not every caller
+     * goes through apply_child_body's dirty marking. */
+    struct yetty_yclass_object_ptr_result obj_r = ygrid_obj_from_body(g);
+    if (YETTY_IS_OK(obj_r)) {
+        struct yetty_ycore_void_result set_dirty_r = yetty_yfigure_figure_dirty_set(obj_r.value, 1);
+        if (YETTY_IS_ERR(set_dirty_r)) {
+            yetty_ycore_error_destroy(set_dirty_r.error);
+        }
+    } else {
+        yetty_ycore_error_destroy(obj_r.error);
+    }
+}
+
 /* Walk a stream of records as the body of an entity scope (= parent
  * entity == `parent_slot`). Dispatches CMD_ZERO / CMD_DELETE /
  * CMD_GROUP and routes plain ADD records to process_add_record under
@@ -2321,7 +2513,9 @@ static struct yetty_ycore_void_result process_group_body(struct yetty_ygrid_grid
             continue;
         }
         if (cmd.kind == YETTY_YDRAW_COMMAND_UPDATE) {
-            /* TODO Phase 1b: in-place prim update without delete+re-add. */
+            /* Composite streaming updates route to the live instance;
+             * in-place SDF prim update is still TODO Phase 1b. */
+            ygrid_route_update(g, &cmd.update);
             off += (uint32_t)pr.value;
             continue;
         }
@@ -2389,6 +2583,10 @@ static struct yetty_ycore_void_result ygrid_process_bytes(struct yetty_yfigure_f
     struct yetty_ygrid_grid_ptr_result g_r = ygrid_from_obj((struct yetty_yclass_object *)self - 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, g_r, "ygrid: from_obj");
     struct yetty_ygrid_grid *g = g_r.value;
+    /* Stream-update ordinals restart per body — the process_bytes call is
+     * ygrid's envelope analog (mirrors the terminal's per-envelope ordinals).
+     * A later body's mints overwrite the same ids, most-recent-wins. */
+    g->stream_next_ordinal = 0;
     return process_group_body(g, YGRID_ROOT_SLOT, bytes, bytes_len);
 }
 
@@ -2570,6 +2768,40 @@ static struct yetty_ycore_char_ptr_result ygrid_dump(const struct yetty_yfigure_
         ygrid_dump_appendf(buf, &len, &cap, "%sentity_high_water: %u\n", pad, g->entity_high_water);
     if (!buf) {
         return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
+    }
+    /* Composite instances (#685) — emitted only when present so grids
+     * without composites keep their historical dump shape. `entity` is the
+     * owning entity's EXTERNAL id (the producer-side group id), matching how
+     * the entities section below identifies them. */
+    if (g->figure_instance_count > 0) {
+        buf = ygrid_dump_appendf(buf, &len, &cap, "%scomposite_count: %u\n", pad,
+                                 g->figure_instance_count);
+        if (!buf) {
+            return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
+        }
+        buf = ygrid_dump_appendf(buf, &len, &cap, "%scomposites:\n", pad);
+        if (!buf) {
+            return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
+        }
+        for (uint32_t i = 0; i < g->figure_instance_count; i++) {
+            const struct yetty_ydraw_composite *inst = g->figure_instances[i];
+            if (!inst) {
+                continue;
+            }
+            uint32_t owner_slot = g->figure_instance_entity[i];
+            uint64_t owner_entity_id =
+                (owner_slot < g->entity_capacity && g->entities[owner_slot].in_use)
+                    ? g->entities[owner_slot].external_id
+                    : 0u;
+            buf = ygrid_dump_appendf(
+                buf, &len, &cap,
+                "%s  - type: 0x%08x entity: %llu stream_id: %u bounds: [%.1f, %.1f, %.1f, %.1f]\n",
+                pad, inst->type, (unsigned long long)owner_entity_id, inst->stream_id,
+                inst->bounds.min.x, inst->bounds.min.y, inst->bounds.max.x, inst->bounds.max.y);
+            if (!buf) {
+                return YETTY_ERR(yetty_ycore_char_ptr, "ygrid_dump: out of memory");
+            }
+        }
     }
     /* Entities. Walk every slot up to entity_high_water; skip released
      * (free-list) slots — those have in_use=false. external_id=0 is the

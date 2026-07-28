@@ -849,8 +849,10 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: ygrid register_factory", rf);
         }
-        static const char *const producer_kind_names[] = {"yplot", "yimage", "yvideo", "yzoo",
-                                                          "yjungle"};
+        /* "yscroll" is the content-grid kind ygui producer widgets mint; the
+         * rest are deprecated aliases kept for wire compat (#685 Phase 2). */
+        static const char *const producer_kind_names[] = {"yscroll", "yplot", "yimage",
+                                                          "yvideo",  "yzoo",  "yjungle"};
         for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); i++) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
                 yui->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),

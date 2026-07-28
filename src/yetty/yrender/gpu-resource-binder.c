@@ -144,6 +144,14 @@ struct yetty_yrender_gpu_resource_binder_impl {
     uint32_t last_tex_width[MAX_FLAT_TEXTURES];
     uint32_t last_tex_height[MAX_FLAT_TEXTURES];
 
+    /* Per-flat-resource content generation this binder last uploaded.
+     * A shared source (e.g. a font atlas embedded in several binders)
+     * exposes ONE `dirty` flag, which the first binder to update clears —
+     * starving the others. Tracking the source's `generation` per binder
+     * lets each one re-upload independently on mismatch. */
+    uint32_t last_buffer_gen[MAX_FLAT_BUFFERS];
+    uint32_t last_tex_gen[MAX_FLAT_TEXTURES];
+
     /* Visited resource sets during collection (to avoid duplicates) */
     const struct yetty_yrender_gpu_resource_set *visited_rs[MAX_RESOURCE_SETS * 4];
     size_t visited_rs_count;
@@ -1323,10 +1331,14 @@ static struct yetty_ycore_void_result binder_finalize(
     }
     for (size_t i = 0; i < impl->flat_buffer_count; i++) {
         impl->last_buffer_caps[i] = impl->flat_buffers[i].cap;
+        /* finalize uploaded every buffer unconditionally — this binder's
+         * GPU copy is now current at the source's generation. */
+        impl->last_buffer_gen[i] = impl->flat_buffers[i].src->generation;
     }
     for (size_t i = 0; i < impl->flat_texture_count; i++) {
         impl->last_tex_width[i] = impl->flat_textures[i].src->width;
         impl->last_tex_height[i] = impl->flat_textures[i].src->height;
+        impl->last_tex_gen[i] = impl->flat_textures[i].src->generation;
     }
 
     return YETTY_OK_VOID();
@@ -1404,7 +1416,12 @@ static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_res
     /* Dirty buffers */
     for (size_t i = 0; i < impl->flat_buffer_count; i++) {
         struct flat_buffer *fb = &impl->flat_buffers[i];
-        if (!fb->src->dirty) {
+        /* Re-upload when the source is dirty OR when its content generation
+         * has moved past what THIS binder last uploaded. The generation
+         * check catches the shared-resource case: another binder that
+         * embeds the same source may have already consumed (cleared)
+         * `dirty`, but our last_buffer_gen still lags, so we upload too. */
+        if (!fb->src->dirty && fb->src->generation == impl->last_buffer_gen[i]) {
             continue;
         }
         any_dirty = 1;
@@ -1415,12 +1432,16 @@ static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_res
                                  fb->src->size);
         }
         fb->src->dirty = 0;
+        impl->last_buffer_gen[i] = fb->src->generation;
     }
 
     /* Dirty textures */
     for (size_t i = 0; i < impl->flat_texture_count; i++) {
         struct flat_texture *ft = &impl->flat_textures[i];
-        if (!ft->src->dirty) {
+        /* dirty OR generation moved past our last upload — see the buffer
+         * loop above for why the generation check is needed for shared
+         * resources (font atlases embedded in multiple binders). */
+        if (!ft->src->dirty && ft->src->generation == impl->last_tex_gen[i]) {
             continue;
         }
         any_dirty = 1;
@@ -1428,11 +1449,13 @@ static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_res
         struct texture_atlas *a = &impl->atlases[ft->atlas_index];
         if (!ft->src->data || !a->texture) {
             ft->src->dirty = 0;
+            impl->last_tex_gen[i] = ft->src->generation;
             continue;
         }
         size_t tex_size = yetty_yrender_texture_get_size(ft->src);
         if (tex_size == 0) {
             ft->src->dirty = 0;
+            impl->last_tex_gen[i] = ft->src->generation;
             continue;
         }
 

@@ -112,7 +112,11 @@ static struct yetty_ycore_void_result yplot_emit_container(struct yetty_yclass_o
     struct yetty_ycore_rectangle r = rect_res.value;
     struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yplot_emit_container: id");
-    return yetty_ygui_emit_ensure_child(ctx, id_res.value, yetty_yfigure_kind_token("yplot"),
+    /* Kind names the renderer config (host-policy-coords content ygrid), not
+     * the content type — the plot itself travels as a composite record in
+     * the child's body (#685 Phase 2). "yplot" stays registered only as a
+     * deprecated alias for external producers. */
+    return yetty_ygui_emit_ensure_child(ctx, id_res.value, yetty_yfigure_kind_token("yscroll"),
                                         r.min.x, r.min.y, r.max.x, r.max.y,
                                         /*init_payload=*/NULL, /*init_payload_bytes=*/0);
 }

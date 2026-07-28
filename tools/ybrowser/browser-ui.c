@@ -3639,7 +3639,10 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(s->figure_registry, &s->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "ybrowser standalone: ygrid_register_factory");
-        const char *const producer_kind_names[] = {"yplot", "yimage"};
+        /* "yscroll" is the content-grid kind ygui producer widgets mint
+         * (absolute coords here per figure_args); the rest are deprecated
+         * aliases kept for wire compat (#685 Phase 2). */
+        const char *const producer_kind_names[] = {"yscroll", "yplot", "yimage"};
         for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); ++i) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
                 s->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),

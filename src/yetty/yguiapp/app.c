@@ -716,7 +716,9 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(app->figure_registry, &app->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "yguiapp:run: ygrid_register_factory");
-        const char *const producer_kind_names[] = {"yplot", "yimage"};
+        /* "yscroll" is the content-grid kind ygui producer widgets mint; the
+         * rest are deprecated aliases kept for wire compat (#685 Phase 2). */
+        const char *const producer_kind_names[] = {"yscroll", "yplot", "yimage"};
         for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); ++i) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
                 app->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
