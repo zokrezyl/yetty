@@ -257,12 +257,13 @@ struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r)
 	 * Compiled in only on the Linux x86-64 target; a no-op elsewhere. */
     {
         const char *jit_env = getenv("YBROWSER_JS_JIT");
-        int jit_mode = JS_JIT_MODE_BASELINE;   /* default on */
+        int jit_mode = JS_JIT_MODE_BASELINE; /* default on */
         if (jit_env != NULL && jit_env[0] != '\0') {
-            if (strcmp(jit_env, "eager") == 0)
+            if (strcmp(jit_env, "eager") == 0) {
                 jit_mode = JS_JIT_MODE_EAGER;
-            else if (strcmp(jit_env, "off") == 0 || strcmp(jit_env, "0") == 0)
+            } else if (strcmp(jit_env, "off") == 0 || strcmp(jit_env, "0") == 0) {
                 jit_mode = JS_JIT_MODE_OFF;
+            }
         }
         (void)JS_JITSetMode(rt, jit_mode);
     }
@@ -275,8 +276,7 @@ struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r)
         if (profile_env == NULL) {
             profile_env = getenv("YBROWSER_PROFILE");
         }
-        if (profile_env != NULL && profile_env[0] != '\0' &&
-            strcmp(profile_env, "0") != 0) {
+        if (profile_env != NULL && profile_env[0] != '\0' && strcmp(profile_env, "0") != 0) {
             int sample_hz = 1000;
             const char *hz_env = getenv("YBROWSER_JS_PROFILE_HZ");
             if (hz_env != NULL && atoi(hz_env) > 0) {
@@ -327,13 +327,11 @@ void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r)
         char child_path[160];
         bool owner = JS_ProfileStop((JSRuntime *)r->js_rt) == 0;
         if (dump_path == NULL || dump_path[0] == '\0') {
-            snprintf(default_path, sizeof(default_path),
-                     "tmp/js-profile-%d.tsv", (int)getpid());
+            snprintf(default_path, sizeof(default_path), "tmp/js-profile-%d.tsv", (int)getpid());
             dump_path = default_path;
         }
         if (!owner) {
-            snprintf(child_path, sizeof(child_path), "%s.%p",
-                     dump_path, (void *)r->js_rt);
+            snprintf(child_path, sizeof(child_path), "%s.%p", dump_path, (void *)r->js_rt);
             dump_path = child_path;
         }
         (void)JS_ProfileDump((JSContext *)r->js_ctx, dump_path);

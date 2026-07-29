@@ -35,15 +35,11 @@
 extern "C" {
 #endif
 
-typedef uint8_t *JSLoadFileFunc(JSContext *ctx, size_t *pbuf_len,
-                                const char *filename);
+typedef uint8_t *JSLoadFileFunc(JSContext *ctx, size_t *pbuf_len, const char *filename);
 
-JS_LIBC_EXTERN JSModuleDef *js_init_module_std(JSContext *ctx,
-                                               const char *module_name);
-JS_LIBC_EXTERN JSModuleDef *js_init_module_os(JSContext *ctx,
-                                              const char *module_name);
-JS_LIBC_EXTERN JSModuleDef *js_init_module_bjson(JSContext *ctx,
-                                                 const char *module_name);
+JS_LIBC_EXTERN JSModuleDef *js_init_module_std(JSContext *ctx, const char *module_name);
+JS_LIBC_EXTERN JSModuleDef *js_init_module_os(JSContext *ctx, const char *module_name);
+JS_LIBC_EXTERN JSModuleDef *js_init_module_bjson(JSContext *ctx, const char *module_name);
 JS_LIBC_EXTERN void js_std_add_helpers(JSContext *ctx, int argc, char **argv);
 JS_LIBC_EXTERN int js_std_loop(JSContext *ctx);
 JS_LIBC_EXTERN int js_std_loop_once(JSContext *ctx);
@@ -52,26 +48,21 @@ JS_LIBC_EXTERN JSValue js_std_await(JSContext *ctx, JSValue obj);
 JS_LIBC_EXTERN void js_std_init_handlers(JSRuntime *rt);
 JS_LIBC_EXTERN void js_std_free_handlers(JSRuntime *rt);
 JS_LIBC_EXTERN void js_std_dump_error(JSContext *ctx);
-JS_LIBC_EXTERN uint8_t *js_load_file(JSContext *ctx, size_t *pbuf_len,
-                                     const char *filename);
+JS_LIBC_EXTERN uint8_t *js_load_file(JSContext *ctx, size_t *pbuf_len, const char *filename);
 JS_LIBC_EXTERN int js_module_set_import_meta(JSContext *ctx, JSValueConst func_val,
                                              bool use_realpath, bool is_main);
-JS_LIBC_EXTERN JSModuleDef *js_module_loader(JSContext *ctx,
-                                             const char *module_name, void *opaque,
+JS_LIBC_EXTERN JSModuleDef *js_module_loader(JSContext *ctx, const char *module_name, void *opaque,
                                              JSValueConst attributes);
 // like js_module_loader but does not load .so objects and the file reader
 // is pluggable; js_module_loader is implemented in terms of js_module_load
-JS_LIBC_EXTERN JSModuleDef *js_module_load(JSContext *ctx, const char *module_name,
-                                           void *opaque, JSValueConst attributes,
-                                           JSLoadFileFunc *load_file);
+JS_LIBC_EXTERN JSModuleDef *js_module_load(JSContext *ctx, const char *module_name, void *opaque,
+                                           JSValueConst attributes, JSLoadFileFunc *load_file);
 JS_LIBC_EXTERN int js_module_check_attributes(JSContext *ctx, void *opaque,
                                               JSValueConst attributes);
-JS_LIBC_EXTERN void js_std_eval_binary(JSContext *ctx, const uint8_t *buf,
-                                       size_t buf_len, int flags);
-JS_LIBC_EXTERN void js_std_promise_rejection_tracker(JSContext *ctx,
-                                                     JSValueConst promise,
-                                                     JSValueConst reason,
-                                                     bool is_handled,
+JS_LIBC_EXTERN void js_std_eval_binary(JSContext *ctx, const uint8_t *buf, size_t buf_len,
+                                       int flags);
+JS_LIBC_EXTERN void js_std_promise_rejection_tracker(JSContext *ctx, JSValueConst promise,
+                                                     JSValueConst reason, bool is_handled,
                                                      void *opaque);
 // Defaults to JS_NewRuntime, no-op if compiled without worker support.
 // Call before creating the first worker thread.

@@ -75,21 +75,21 @@ extern "C" {
 #endif
 
 #if defined(_MSC_VER) && !defined(__clang__)
-#  define likely(x)       (x)
-#  define unlikely(x)     (x)
-#  define no_inline __declspec(noinline)
-#  define __maybe_unused
-#  define __attribute__(x)
-#  define __attribute(x)
+#define likely(x) (x)
+#define unlikely(x) (x)
+#define no_inline __declspec(noinline)
+#define __maybe_unused
+#define __attribute__(x)
+#define __attribute(x)
 #else
-#  define likely(x)       __builtin_expect(!!(x), 1)
-#  define unlikely(x)     __builtin_expect(!!(x), 0)
-#  define no_inline __attribute__((noinline))
-#  define __maybe_unused __attribute__((unused))
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+#define no_inline __attribute__((noinline))
+#define __maybe_unused __attribute__((unused))
 #endif
 
 #ifndef offsetof
-#define offsetof(type, field) ((size_t) &((type *)0)->field)
+#define offsetof(type, field) ((size_t)&((type *)0)->field)
 #endif
 #ifndef countof
 #define countof(x) (sizeof(x) / sizeof((x)[0]))
@@ -118,21 +118,21 @@ extern "C" {
 #else
 #define JS_PRINTF_FORMAT
 #if !defined(__clang__) && defined(__GNUC__)
-#define JS_PRINTF_FORMAT_ATTR(format_param, dots_param) \
-  __attribute__((format(gnu_printf, format_param, dots_param)))
+#define JS_PRINTF_FORMAT_ATTR(format_param, dots_param)                                            \
+    __attribute__((format(gnu_printf, format_param, dots_param)))
 #else
-#define JS_PRINTF_FORMAT_ATTR(format_param, dots_param) \
-  __attribute__((format(printf, format_param, dots_param)))
+#define JS_PRINTF_FORMAT_ATTR(format_param, dots_param)                                            \
+    __attribute__((format(printf, format_param, dots_param)))
 #endif
 #endif
 #endif
 
 #if defined(PATH_MAX)
-# define JS__PATH_MAX PATH_MAX
+#define JS__PATH_MAX PATH_MAX
 #elif defined(_WIN32)
-# define JS__PATH_MAX 32767
+#define JS__PATH_MAX 32767
 #else
-# define JS__PATH_MAX 8192
+#define JS__PATH_MAX 8192
 #endif
 
 static inline void js__pstrcpy(char *buf, int buf_size, const char *str);
@@ -140,60 +140,67 @@ static inline char *js__pstrcat(char *buf, int buf_size, const char *s);
 static inline int js__strstart(const char *str, const char *val, const char **ptr);
 static inline int js__has_suffix(const char *str, const char *suffix);
 
-static inline uint8_t is_be(void) {
+static inline uint8_t is_be(void)
+{
     union {
         uint16_t a;
-        uint8_t  b;
-    } u = { 0x100 };
+        uint8_t b;
+    } u = {0x100};
     return u.b;
 }
 
 static inline int max_int(int a, int b)
 {
-    if (a > b)
+    if (a > b) {
         return a;
-    else
+    } else {
         return b;
+    }
 }
 
 static inline int min_int(int a, int b)
 {
-    if (a < b)
+    if (a < b) {
         return a;
-    else
+    } else {
         return b;
+    }
 }
 
 static inline uint32_t max_uint32(uint32_t a, uint32_t b)
 {
-    if (a > b)
+    if (a > b) {
         return a;
-    else
+    } else {
         return b;
+    }
 }
 
 static inline uint32_t min_uint32(uint32_t a, uint32_t b)
 {
-    if (a < b)
+    if (a < b) {
         return a;
-    else
+    } else {
         return b;
+    }
 }
 
 static inline int64_t max_int64(int64_t a, int64_t b)
 {
-    if (a > b)
+    if (a > b) {
         return a;
-    else
+    } else {
         return b;
+    }
 }
 
 static inline int64_t min_int64(int64_t a, int64_t b)
 {
-    if (a < b)
+    if (a < b) {
         return a;
-    else
+    } else {
         return b;
+    }
 }
 
 static inline uint32_t hash32(uint32_t a)
@@ -227,10 +234,11 @@ static inline int clz64(uint64_t a)
     _BitScanReverse64(&index, a);
     return 63 - index;
 #else
-    if (a >> 32)
+    if (a >> 32) {
         return clz32((unsigned)(a >> 32));
-    else
+    } else {
         return clz32((unsigned)a) + 32;
+    }
 #endif
 #else
     return __builtin_clzll(a);
@@ -343,8 +351,8 @@ static inline uint16_t bswap16(uint16_t x)
 #ifndef bswap32
 static inline uint32_t bswap32(uint32_t v)
 {
-    return ((v & 0xff000000) >> 24) | ((v & 0x00ff0000) >>  8) |
-        ((v & 0x0000ff00) <<  8) | ((v & 0x000000ff) << 24);
+    return ((v & 0xff000000) >> 24) | ((v & 0x00ff0000) >> 8) | ((v & 0x0000ff00) << 8) |
+           ((v & 0x000000ff) << 24);
 }
 #endif
 
@@ -352,17 +360,18 @@ static inline uint32_t bswap32(uint32_t v)
 static inline uint64_t bswap64(uint64_t v)
 {
     return ((v & ((uint64_t)0xff << (7 * 8))) >> (7 * 8)) |
-        ((v & ((uint64_t)0xff << (6 * 8))) >> (5 * 8)) |
-        ((v & ((uint64_t)0xff << (5 * 8))) >> (3 * 8)) |
-        ((v & ((uint64_t)0xff << (4 * 8))) >> (1 * 8)) |
-        ((v & ((uint64_t)0xff << (3 * 8))) << (1 * 8)) |
-        ((v & ((uint64_t)0xff << (2 * 8))) << (3 * 8)) |
-        ((v & ((uint64_t)0xff << (1 * 8))) << (5 * 8)) |
-        ((v & ((uint64_t)0xff << (0 * 8))) << (7 * 8));
+           ((v & ((uint64_t)0xff << (6 * 8))) >> (5 * 8)) |
+           ((v & ((uint64_t)0xff << (5 * 8))) >> (3 * 8)) |
+           ((v & ((uint64_t)0xff << (4 * 8))) >> (1 * 8)) |
+           ((v & ((uint64_t)0xff << (3 * 8))) << (1 * 8)) |
+           ((v & ((uint64_t)0xff << (2 * 8))) << (3 * 8)) |
+           ((v & ((uint64_t)0xff << (1 * 8))) << (5 * 8)) |
+           ((v & ((uint64_t)0xff << (0 * 8))) << (7 * 8));
 }
 #endif
 
-static inline double fromfp16(uint16_t v) {
+static inline double fromfp16(uint16_t v)
+{
     double d, s;
     int e;
     if ((v & 0x7C00) == 0x7C00) {
@@ -382,7 +391,8 @@ static inline double fromfp16(uint16_t v) {
     return d * s;
 }
 
-static inline uint16_t tofp16(double d) {
+static inline uint16_t tofp16(double d)
+{
     uint16_t f, s;
     double t;
     int e;
@@ -391,16 +401,20 @@ static inline uint16_t tofp16(double d) {
         d = -d;
         s = 0x8000;
     }
-    if (isinf(d))
+    if (isinf(d)) {
         return s | 0x7C00;
-    if (isnan(d))
+    }
+    if (isnan(d)) {
         return s | 0x7C01;
-    if (d == 0)
+    }
+    if (d == 0) {
         return s | 0;
+    }
     d = 2 * frexp(d, &e);
     e--;
-    if (e > 15)
+    if (e > 15) {
         return s | 0x7C00; // out of range, return +/-infinity
+    }
     if (e < -25) {
         d = 0;
         e = 0;
@@ -414,26 +428,32 @@ static inline uint16_t tofp16(double d) {
     d *= 1024.;
     f = (uint16_t)d;
     t = d - f;
-    if (t < 0.5)
+    if (t < 0.5) {
         goto done;
-    if (t == 0.5)
-        if ((f & 1) == 0)
+    }
+    if (t == 0.5) {
+        if ((f & 1) == 0) {
             goto done;
+        }
+    }
     // adjust for rounding
     if (++f == 1024) {
         f = 0;
-        if (++e == 31)
+        if (++e == 31) {
             return s | 0x7C00; // out of range, return +/-infinity
+        }
     }
 done:
     return s | (e << 10) | f;
 }
 
-static inline int isfp16nan(uint16_t v) {
+static inline int isfp16nan(uint16_t v)
+{
     return (v & 0x7FFF) > 0x7C00;
 }
 
-static inline int isfp16zero(uint16_t v) {
+static inline int isfp16zero(uint16_t v)
+{
     return (v & 0x7FFF) == 0;
 }
 
@@ -461,38 +481,44 @@ static inline int __dbuf_put_u64(DynBuf *s, uint64_t val);
 static inline int dbuf_putstr(DynBuf *s, const char *str);
 static inline int dbuf_putc(DynBuf *s, uint8_t val)
 {
-    if (unlikely((s->allocated_size - s->size) < 1))
+    if (unlikely((s->allocated_size - s->size) < 1)) {
         return __dbuf_putc(s, val);
+    }
     s->buf[s->size++] = val;
     return 0;
 }
 static inline int dbuf_put_u16(DynBuf *s, uint16_t val)
 {
-    if (unlikely((s->allocated_size - s->size) < 2))
+    if (unlikely((s->allocated_size - s->size) < 2)) {
         return __dbuf_put_u16(s, val);
+    }
     put_u16(s->buf + s->size, val);
     s->size += 2;
     return 0;
 }
 static inline int dbuf_put_u32(DynBuf *s, uint32_t val)
 {
-    if (unlikely((s->allocated_size - s->size) < 4))
+    if (unlikely((s->allocated_size - s->size) < 4)) {
         return __dbuf_put_u32(s, val);
+    }
     put_u32(s->buf + s->size, val);
     s->size += 4;
     return 0;
 }
 static inline int dbuf_put_u64(DynBuf *s, uint64_t val)
 {
-    if (unlikely((s->allocated_size - s->size) < 8))
+    if (unlikely((s->allocated_size - s->size) < 8)) {
         return __dbuf_put_u64(s, val);
+    }
     put_u64(s->buf + s->size, val);
     s->size += 8;
     return 0;
 }
-static inline int JS_PRINTF_FORMAT_ATTR(2, 3) dbuf_printf(DynBuf *s, JS_PRINTF_FORMAT const char *fmt, ...);
+static inline int JS_PRINTF_FORMAT_ATTR(2, 3)
+    dbuf_printf(DynBuf *s, JS_PRINTF_FORMAT const char *fmt, ...);
 static inline void dbuf_free(DynBuf *s);
-static inline bool dbuf_error(DynBuf *s) {
+static inline bool dbuf_error(DynBuf *s)
+{
     return s->error;
 }
 static inline void dbuf_set_error(DynBuf *s)
@@ -505,21 +531,25 @@ static inline void dbuf_set_error(DynBuf *s)
 #define UTF8_CHAR_LEN_MAX 4
 
 enum {
-    UTF8_PLAIN_ASCII  = 0,  // 7-bit ASCII plain text
-    UTF8_NON_ASCII    = 1,  // has non ASCII code points (8-bit or more)
-    UTF8_HAS_16BIT    = 2,  // has 16-bit code points
-    UTF8_HAS_NON_BMP1 = 4,  // has non-BMP1 code points, needs UTF-16 surrogate pairs
-    UTF8_HAS_ERRORS   = 8,  // has encoding errors
+    UTF8_PLAIN_ASCII = 0,  // 7-bit ASCII plain text
+    UTF8_NON_ASCII = 1,    // has non ASCII code points (8-bit or more)
+    UTF8_HAS_16BIT = 2,    // has 16-bit code points
+    UTF8_HAS_NON_BMP1 = 4, // has non-BMP1 code points, needs UTF-16 surrogate pairs
+    UTF8_HAS_ERRORS = 8,   // has encoding errors
 };
 static inline int utf8_scan(const char *buf, size_t len, size_t *plen);
 static inline size_t utf8_encode_len(uint32_t c);
 static inline size_t utf8_encode(uint8_t buf[minimum_length(UTF8_CHAR_LEN_MAX)], uint32_t c);
 static inline uint32_t utf8_decode_len(const uint8_t *p, size_t max_len, const uint8_t **pp);
 static inline uint32_t utf8_decode(const uint8_t *p, const uint8_t **pp);
-static inline size_t utf8_decode_buf8(uint8_t *dest, size_t dest_len, const char *src, size_t src_len);
-static inline size_t utf8_decode_buf16(uint16_t *dest, size_t dest_len, const char *src, size_t src_len);
-static inline size_t utf8_encode_buf8(char *dest, size_t dest_len, const uint8_t *src, size_t src_len);
-static inline size_t utf8_encode_buf16(char *dest, size_t dest_len, const uint16_t *src, size_t src_len);
+static inline size_t utf8_decode_buf8(uint8_t *dest, size_t dest_len, const char *src,
+                                      size_t src_len);
+static inline size_t utf8_decode_buf16(uint16_t *dest, size_t dest_len, const char *src,
+                                       size_t src_len);
+static inline size_t utf8_encode_buf8(char *dest, size_t dest_len, const uint8_t *src,
+                                      size_t src_len);
+static inline size_t utf8_encode_buf16(char *dest, size_t dest_len, const uint16_t *src,
+                                       size_t src_len);
 
 static inline bool is_surrogate(uint32_t c)
 {
@@ -553,27 +583,29 @@ static inline uint32_t from_surrogate(uint32_t hi, uint32_t lo)
 
 static inline int from_hex(int c)
 {
-    if (c >= '0' && c <= '9')
+    if (c >= '0' && c <= '9') {
         return c - '0';
-    else if (c >= 'A' && c <= 'F')
+    } else if (c >= 'A' && c <= 'F') {
         return c - 'A' + 10;
-    else if (c >= 'a' && c <= 'f')
+    } else if (c >= 'a' && c <= 'f') {
         return c - 'a' + 10;
-    else
+    } else {
         return -1;
+    }
 }
 
-static inline uint8_t is_upper_ascii(uint8_t c) {
+static inline uint8_t is_upper_ascii(uint8_t c)
+{
     return c >= 'A' && c <= 'Z';
 }
 
-static inline uint8_t to_upper_ascii(uint8_t c) {
+static inline uint8_t to_upper_ascii(uint8_t c)
+{
     return c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c;
 }
 
 static inline void rqsort(void *base, size_t nmemb, size_t size,
-            int (*cmp)(const void *, const void *, void *),
-            void *arg);
+                          int (*cmp)(const void *, const void *, void *), void *arg);
 
 static inline uint64_t float64_as_uint64(double d)
 {
@@ -604,14 +636,15 @@ static inline size_t js__malloc_usable_size(const void *ptr)
     return malloc_size(ptr);
 #elif defined(_WIN32)
     return _msize((void *)ptr);
-#elif defined(__linux__) || defined(__ANDROID__) || defined(__CYGWIN__) || defined(__FreeBSD__) || defined(__GLIBC__)
+#elif defined(__linux__) || defined(__ANDROID__) || defined(__CYGWIN__) || defined(__FreeBSD__) || \
+    defined(__GLIBC__)
     return malloc_usable_size((void *)ptr);
 #else
     return 0;
 #endif
 }
 
-static inline int js_exepath(char* buffer, size_t* size);
+static inline int js_exepath(char *buffer, size_t *size);
 
 /* Cross-platform threading APIs. */
 
@@ -656,8 +689,7 @@ enum {
 };
 
 // creates threads with 2 MB stacks (glibc default)
-static inline int js_thread_create(js_thread_t *thrd, void (*start)(void *), void *arg,
-                     int flags);
+static inline int js_thread_create(js_thread_t *thrd, void (*start)(void *), void *arg, int flags);
 static inline int js_thread_join(js_thread_t thrd);
 
 #endif /* !defined(EMSCRIPTEN) && !defined(__wasi__) */
@@ -667,35 +699,36 @@ static inline int js_thread_join(js_thread_t thrd);
 // results. 0x300 is extended  precision, 0x200 is double precision.
 // Note that `*&cw` in the asm constraints looks redundant but isn't.
 #if defined(__i386__) && !defined(_MSC_VER)
-#define JS_X87_FPCW_SAVE_AND_ADJUST(cw)                                     \
-    unsigned short cw;                                                      \
-    __asm__ __volatile__("fnstcw %0" : "=m"(*&cw));                         \
-    do {                                                                    \
-        unsigned short t = 0x200 | (cw & ~0x300);                           \
-        __asm__ __volatile__("fldcw %0" : /*empty*/ : "m"(*&t));            \
+#define JS_X87_FPCW_SAVE_AND_ADJUST(cw)                                                            \
+    unsigned short cw;                                                                             \
+    __asm__ __volatile__("fnstcw %0" : "=m"(*&cw));                                                \
+    do {                                                                                           \
+        unsigned short t = 0x200 | (cw & ~0x300);                                                  \
+        __asm__ __volatile__("fldcw %0" : /*empty*/ : "m"(*&t));                                   \
     } while (0)
-#define JS_X87_FPCW_RESTORE(cw)                                             \
-    __asm__ __volatile__("fldcw %0" : /*empty*/ : "m"(*&cw))
+#define JS_X87_FPCW_RESTORE(cw) __asm__ __volatile__("fldcw %0" : /*empty*/ : "m"(*&cw))
 #else
 #define JS_X87_FPCW_SAVE_AND_ADJUST(cw)
 #define JS_X87_FPCW_RESTORE(cw)
 #endif
 
 #undef NANOSEC
-#define NANOSEC ((uint64_t) 1e9)
+#define NANOSEC ((uint64_t)1e9)
 
 static inline void js__pstrcpy(char *buf, int buf_size, const char *str)
 {
     int c;
     char *q = buf;
 
-    if (buf_size <= 0)
+    if (buf_size <= 0) {
         return;
+    }
 
-    for(;;) {
+    for (;;) {
         c = *str++;
-        if (c == 0 || q >= buf + buf_size - 1)
+        if (c == 0 || q >= buf + buf_size - 1) {
             break;
+        }
         *q++ = c;
     }
     *q = '\0';
@@ -706,8 +739,9 @@ static inline char *js__pstrcat(char *buf, int buf_size, const char *s)
 {
     int len;
     len = strlen(buf);
-    if (len < buf_size)
+    if (len < buf_size) {
         js__pstrcpy(buf + len, buf_size - len, s);
+    }
     return buf;
 }
 
@@ -717,13 +751,15 @@ static inline int js__strstart(const char *str, const char *val, const char **pt
     p = str;
     q = val;
     while (*q != '\0') {
-        if (*p != *q)
+        if (*p != *q) {
             return 0;
+        }
         p++;
         q++;
     }
-    if (ptr)
+    if (ptr) {
         *ptr = p;
+    }
     return 1;
 }
 
@@ -748,8 +784,9 @@ static void *dbuf_default_realloc(void *opaque, void *ptr, size_t size)
 static inline void dbuf_init2(DynBuf *s, void *opaque, DynBufReallocFunc *realloc_func)
 {
     memset(s, 0, sizeof(*s));
-    if (!realloc_func)
+    if (!realloc_func) {
         realloc_func = dbuf_default_realloc;
+    }
     s->opaque = opaque;
     s->realloc_func = realloc_func;
 }
@@ -765,16 +802,19 @@ static inline int dbuf_claim(DynBuf *s, size_t len)
     size_t new_size, size, new_allocated_size;
     uint8_t *new_buf;
     new_size = s->size + len;
-    if (new_size < len)
+    if (new_size < len) {
         return -1; /* overflow */
+    }
     if (new_size > s->allocated_size) {
-        if (s->error)
+        if (s->error) {
             return -1;
+        }
         size = s->allocated_size + (s->allocated_size / 2);
-        if (size < new_size || size < s->allocated_size) /* overflow test */
+        if (size < new_size || size < s->allocated_size) { /* overflow test */
             new_allocated_size = new_size;
-        else
+        } else {
             new_allocated_size = size;
+        }
         new_buf = s->realloc_func(s->opaque, s->buf, new_allocated_size);
         if (!new_buf) {
             s->error = true;
@@ -789,8 +829,9 @@ static inline int dbuf_claim(DynBuf *s, size_t len)
 static inline int dbuf_put(DynBuf *s, const void *data, size_t len)
 {
     if (unlikely((s->size + len) > s->allocated_size)) {
-        if (dbuf_claim(s, len))
+        if (dbuf_claim(s, len)) {
             return -1;
+        }
     }
     if (len > 0) {
         memcpy(s->buf + s->size, data, len);
@@ -802,8 +843,9 @@ static inline int dbuf_put(DynBuf *s, const void *data, size_t len)
 static inline int dbuf_put_self(DynBuf *s, size_t offset, size_t len)
 {
     if (unlikely((s->size + len) > s->allocated_size)) {
-        if (dbuf_claim(s, len))
+        if (dbuf_claim(s, len)) {
             return -1;
+        }
     }
     if (len > 0) {
         memcpy(s->buf + s->size, s->buf + offset, len);
@@ -837,7 +879,8 @@ static inline int dbuf_putstr(DynBuf *s, const char *str)
     return dbuf_put(s, (const uint8_t *)str, strlen(str));
 }
 
-static inline int JS_PRINTF_FORMAT_ATTR(2, 3) dbuf_printf(DynBuf *s, JS_PRINTF_FORMAT const char *fmt, ...)
+static inline int JS_PRINTF_FORMAT_ATTR(2, 3)
+    dbuf_printf(DynBuf *s, JS_PRINTF_FORMAT const char *fmt, ...)
 {
     va_list ap;
     char buf[128];
@@ -850,11 +893,11 @@ static inline int JS_PRINTF_FORMAT_ATTR(2, 3) dbuf_printf(DynBuf *s, JS_PRINTF_F
         /* fast case */
         return dbuf_put(s, (uint8_t *)buf, len);
     } else {
-        if (dbuf_claim(s, len + 1))
+        if (dbuf_claim(s, len + 1)) {
             return -1;
+        }
         va_start(ap, fmt);
-        vsnprintf((char *)(s->buf + s->size), s->allocated_size - s->size,
-                  fmt, ap);
+        vsnprintf((char *)(s->buf + s->size), s->allocated_size - s->size, fmt, ap);
         va_end(ap);
         s->size += len;
     }
@@ -883,14 +926,18 @@ static inline void dbuf_free(DynBuf *s)
  */
 static inline size_t utf8_encode_len(uint32_t c)
 {
-    if (c < 0x80)
+    if (c < 0x80) {
         return 1;
-    if (c < 0x800)
+    }
+    if (c < 0x800) {
         return 2;
-    if (c < 0x10000)
+    }
+    if (c < 0x10000) {
         return 3;
-    if (c < 0x110000)
+    }
+    if (c < 0x110000) {
         return 4;
+    }
     return 3;
 }
 
@@ -956,15 +1003,37 @@ static inline uint32_t utf8_decode(const uint8_t *p, const uint8_t **pp)
         *pp = p;
         return c;
     }
-    switch(c) {
-    case 0xC2: case 0xC3:
-    case 0xC4: case 0xC5: case 0xC6: case 0xC7:
-    case 0xC8: case 0xC9: case 0xCA: case 0xCB:
-    case 0xCC: case 0xCD: case 0xCE: case 0xCF:
-    case 0xD0: case 0xD1: case 0xD2: case 0xD3:
-    case 0xD4: case 0xD5: case 0xD6: case 0xD7:
-    case 0xD8: case 0xD9: case 0xDA: case 0xDB:
-    case 0xDC: case 0xDD: case 0xDE: case 0xDF:
+    switch (c) {
+    case 0xC2:
+    case 0xC3:
+    case 0xC4:
+    case 0xC5:
+    case 0xC6:
+    case 0xC7:
+    case 0xC8:
+    case 0xC9:
+    case 0xCA:
+    case 0xCB:
+    case 0xCC:
+    case 0xCD:
+    case 0xCE:
+    case 0xCF:
+    case 0xD0:
+    case 0xD1:
+    case 0xD2:
+    case 0xD3:
+    case 0xD4:
+    case 0xD5:
+    case 0xD6:
+    case 0xD7:
+    case 0xD8:
+    case 0xD9:
+    case 0xDA:
+    case 0xDB:
+    case 0xDC:
+    case 0xDD:
+    case 0xDE:
+    case 0xDF:
         if (*p >= 0x80 && *p <= 0xBF) {
             *pp = p + 1;
             return ((c - 0xC0) << 6) + (*p - 0x80);
@@ -972,12 +1041,23 @@ static inline uint32_t utf8_decode(const uint8_t *p, const uint8_t **pp)
         // otherwise encoding error
         break;
     case 0xE0:
-        lower = 0xA0;   /* reject invalid encoding */
+        lower = 0xA0; /* reject invalid encoding */
         goto need2;
-    case 0xE1: case 0xE2: case 0xE3:
-    case 0xE4: case 0xE5: case 0xE6: case 0xE7:
-    case 0xE8: case 0xE9: case 0xEA: case 0xEB:
-    case 0xEC: case 0xED: case 0xEE: case 0xEF:
+    case 0xE1:
+    case 0xE2:
+    case 0xE3:
+    case 0xE4:
+    case 0xE5:
+    case 0xE6:
+    case 0xE7:
+    case 0xE8:
+    case 0xE9:
+    case 0xEA:
+    case 0xEB:
+    case 0xEC:
+    case 0xED:
+    case 0xEE:
+    case 0xEF:
         lower = 0x80;
     need2:
         if (*p >= lower && *p <= 0xBF && p[1] >= 0x80 && p[1] <= 0xBF) {
@@ -987,22 +1067,23 @@ static inline uint32_t utf8_decode(const uint8_t *p, const uint8_t **pp)
         // otherwise encoding error
         break;
     case 0xF0:
-        lower = 0x90;   /* reject invalid encoding */
+        lower = 0x90; /* reject invalid encoding */
         upper = 0xBF;
         goto need3;
     case 0xF4:
         lower = 0x80;
-        upper = 0x8F;   /* reject values above 0x10FFFF */
+        upper = 0x8F; /* reject values above 0x10FFFF */
         goto need3;
-    case 0xF1: case 0xF2: case 0xF3:
+    case 0xF1:
+    case 0xF2:
+    case 0xF3:
         lower = 0x80;
         upper = 0xBF;
     need3:
-        if (*p >= lower && *p <= upper && p[1] >= 0x80 && p[1] <= 0xBF
-        &&  p[2] >= 0x80 && p[2] <= 0xBF) {
+        if (*p >= lower && *p <= upper && p[1] >= 0x80 && p[1] <= 0xBF && p[2] >= 0x80 &&
+            p[2] <= 0xBF) {
             *pp = p + 3;
-            return ((c - 0xF0) << 18) + ((*p - 0x80) << 12) +
-                ((p[1] - 0x80) << 6) + (p[2] - 0x80);
+            return ((c - 0xF0) << 18) + ((*p - 0x80) << 12) + ((p[1] - 0x80) << 6) + (p[2] - 0x80);
         }
         // otherwise encoding error
         break;
@@ -1014,22 +1095,26 @@ static inline uint32_t utf8_decode(const uint8_t *p, const uint8_t **pp)
     return 0xFFFD;
 }
 
-static inline uint32_t utf8_decode_len(const uint8_t *p, size_t max_len, const uint8_t **pp) {
+static inline uint32_t utf8_decode_len(const uint8_t *p, size_t max_len, const uint8_t **pp)
+{
     switch (max_len) {
     case 0:
         *pp = p;
         return 0xFFFD;
     case 1:
-        if (*p < 0x80)
+        if (*p < 0x80) {
             goto good;
+        }
         break;
     case 2:
-        if (*p < 0xE0)
+        if (*p < 0xE0) {
             goto good;
+        }
         break;
     case 3:
-        if (*p < 0xF0)
+        if (*p < 0xF0) {
             goto good;
+        }
         break;
     default:
     good:
@@ -1061,8 +1146,9 @@ static inline int utf8_scan(const char *buf, size_t buf_len, size_t *plen)
     cbits = 0;
     len = buf_len;
     // TODO: handle more than 1 byte at a time
-    for (i = 0; i < buf_len; i++)
+    for (i = 0; i < buf_len; i++) {
         cbits |= buf[i];
+    }
     if (cbits >= 0x80) {
         p = (const uint8_t *)buf;
         p_end = p + buf_len;
@@ -1073,8 +1159,9 @@ static inline int utf8_scan(const char *buf, size_t buf_len, size_t *plen)
             if (*p++ >= 0x80) {
                 /* parse UTF-8 sequence, check for encoding error */
                 uint32_t c = utf8_decode_len(p - 1, p_end - (p - 1), &p_next);
-                if (p_next == p)
+                if (p_next == p) {
                     kind |= UTF8_HAS_ERRORS;
+                }
                 p = p_next;
                 if (c > 0xFF) {
                     kind |= UTF8_HAS_16BIT;
@@ -1098,7 +1185,8 @@ static inline int utf8_scan(const char *buf, size_t buf_len, size_t *plen)
    `dest_len` is the length of the destination array. A null
    terminator is stored at the end of the array unless `dest_len` is `0`.
  */
-static inline size_t utf8_decode_buf8(uint8_t *dest, size_t dest_len, const char *src, size_t src_len)
+static inline size_t utf8_decode_buf8(uint8_t *dest, size_t dest_len, const char *src,
+                                      size_t src_len)
 {
     const uint8_t *p, *p_end;
     size_t i;
@@ -1107,15 +1195,18 @@ static inline size_t utf8_decode_buf8(uint8_t *dest, size_t dest_len, const char
     p_end = p + src_len;
     for (i = 0; p < p_end; i++) {
         uint32_t c = *p++;
-        if (c >= 0xC0)
+        if (c >= 0xC0) {
             c = (c << 6) + *p++ - ((0xC0 << 6) + 0x80);
-        if (i < dest_len)
+        }
+        if (i < dest_len) {
             dest[i] = c;
+        }
     }
-    if (i < dest_len)
+    if (i < dest_len) {
         dest[i] = '\0';
-    else if (dest_len > 0)
+    } else if (dest_len > 0) {
         dest[dest_len - 1] = '\0';
+    }
     return i;
 }
 
@@ -1126,7 +1217,8 @@ static inline size_t utf8_decode_buf8(uint8_t *dest, size_t dest_len, const char
    `dest_len` is the length of the destination array. No null terminator is
    stored at the end of the array.
  */
-static inline size_t utf8_decode_buf16(uint16_t *dest, size_t dest_len, const char *src, size_t src_len)
+static inline size_t utf8_decode_buf16(uint16_t *dest, size_t dest_len, const char *src,
+                                       size_t src_len)
 {
     const uint8_t *p, *p_end;
     size_t i;
@@ -1140,14 +1232,16 @@ static inline size_t utf8_decode_buf16(uint16_t *dest, size_t dest_len, const ch
             c = utf8_decode_len(p - 1, p_end - (p - 1), &p);
             /* encoding errors are converted as 0xFFFD and use a single byte */
             if (c > 0xFFFF) {
-                if (i < dest_len)
+                if (i < dest_len) {
                     dest[i] = get_hi_surrogate(c);
+                }
                 i++;
                 c = get_lo_surrogate(c);
             }
         }
-        if (i < dest_len)
+        if (i < dest_len) {
             dest[i] = c;
+        }
     }
     return i;
 }
@@ -1159,7 +1253,8 @@ static inline size_t utf8_decode_buf16(uint16_t *dest, size_t dest_len, const ch
    `dest_len` is the length in bytes of the destination array. A null
    terminator is stored at the end of the array unless `dest_len` is `0`.
  */
-static inline size_t utf8_encode_buf8(char *dest, size_t dest_len, const uint8_t *src, size_t src_len)
+static inline size_t utf8_encode_buf8(char *dest, size_t dest_len, const uint8_t *src,
+                                      size_t src_len)
 {
     size_t i, j;
     uint32_t c;
@@ -1167,25 +1262,30 @@ static inline size_t utf8_encode_buf8(char *dest, size_t dest_len, const uint8_t
     for (i = j = 0; i < src_len; i++) {
         c = src[i];
         if (c < 0x80) {
-            if (j + 1 >= dest_len)
+            if (j + 1 >= dest_len) {
                 goto overflow;
+            }
             dest[j++] = c;
         } else {
-            if (j + 2 >= dest_len)
+            if (j + 2 >= dest_len) {
                 goto overflow;
+            }
             dest[j++] = (c >> 6) | 0xC0;
             dest[j++] = (c & 0x3F) | 0x80;
         }
     }
-    if (j < dest_len)
+    if (j < dest_len) {
         dest[j] = '\0';
+    }
     return j;
 
 overflow:
-    if (j < dest_len)
+    if (j < dest_len) {
         dest[j] = '\0';
-    while (i < src_len)
+    }
+    while (i < src_len) {
         j += 1 + (src[i++] >= 0x80);
+    }
     return j;
 }
 
@@ -1196,7 +1296,8 @@ overflow:
    `dest_len` is the length in bytes of the destination array. A null
    terminator is stored at the end of the array unless `dest_len` is `0`.
  */
-static inline size_t utf8_encode_buf16(char *dest, size_t dest_len, const uint16_t *src, size_t src_len)
+static inline size_t utf8_encode_buf16(char *dest, size_t dest_len, const uint16_t *src,
+                                       size_t src_len)
 {
     size_t i, j;
     uint32_t c;
@@ -1204,32 +1305,38 @@ static inline size_t utf8_encode_buf16(char *dest, size_t dest_len, const uint16
     for (i = j = 0; i < src_len;) {
         c = src[i++];
         if (c < 0x80) {
-            if (j + 1 >= dest_len)
+            if (j + 1 >= dest_len) {
                 goto overflow;
+            }
             dest[j++] = c;
         } else {
-            if (is_hi_surrogate(c) && i < src_len && is_lo_surrogate(src[i]))
+            if (is_hi_surrogate(c) && i < src_len && is_lo_surrogate(src[i])) {
                 c = from_surrogate(c, src[i++]);
-            if (j + utf8_encode_len(c) >= dest_len)
+            }
+            if (j + utf8_encode_len(c) >= dest_len) {
                 goto overflow;
+            }
             j += utf8_encode((uint8_t *)dest + j, c);
         }
     }
-    if (j < dest_len)
+    if (j < dest_len) {
         dest[j] = '\0';
+    }
     return j;
 
 overflow:
     i -= 1 + (c > 0xFFFF);
-    if (j < dest_len)
+    if (j < dest_len) {
         dest[j] = '\0';
+    }
     while (i < src_len) {
         c = src[i++];
         if (c < 0x80) {
             j++;
         } else {
-            if (is_hi_surrogate(c) && i < src_len && is_lo_surrogate(src[i]))
+            if (is_hi_surrogate(c) && i < src_len && is_lo_surrogate(src[i])) {
                 c = from_surrogate(c, src[i++]);
+            }
             j += utf8_encode_len(c);
         }
     }
@@ -1241,7 +1348,8 @@ overflow:
 typedef void (*exchange_f)(void *a, void *b, size_t size);
 typedef int (*cmp_f)(const void *, const void *, void *opaque);
 
-static void exchange_bytes(void *a, void *b, size_t size) {
+static void exchange_bytes(void *a, void *b, size_t size)
+{
     uint8_t *ap = (uint8_t *)a;
     uint8_t *bp = (uint8_t *)b;
 
@@ -1252,7 +1360,8 @@ static void exchange_bytes(void *a, void *b, size_t size) {
     }
 }
 
-static void exchange_one_byte(void *a, void *b, size_t size) {
+static void exchange_one_byte(void *a, void *b, size_t size)
+{
     uint8_t *ap = (uint8_t *)a;
     uint8_t *bp = (uint8_t *)b;
     uint8_t t = *ap;
@@ -1260,7 +1369,8 @@ static void exchange_one_byte(void *a, void *b, size_t size) {
     *bp = t;
 }
 
-static void exchange_int16s(void *a, void *b, size_t size) {
+static void exchange_int16s(void *a, void *b, size_t size)
+{
     uint16_t *ap = (uint16_t *)a;
     uint16_t *bp = (uint16_t *)b;
 
@@ -1271,7 +1381,8 @@ static void exchange_int16s(void *a, void *b, size_t size) {
     }
 }
 
-static void exchange_one_int16(void *a, void *b, size_t size) {
+static void exchange_one_int16(void *a, void *b, size_t size)
+{
     uint16_t *ap = (uint16_t *)a;
     uint16_t *bp = (uint16_t *)b;
     uint16_t t = *ap;
@@ -1279,7 +1390,8 @@ static void exchange_one_int16(void *a, void *b, size_t size) {
     *bp = t;
 }
 
-static void exchange_int32s(void *a, void *b, size_t size) {
+static void exchange_int32s(void *a, void *b, size_t size)
+{
     uint32_t *ap = (uint32_t *)a;
     uint32_t *bp = (uint32_t *)b;
 
@@ -1290,7 +1402,8 @@ static void exchange_int32s(void *a, void *b, size_t size) {
     }
 }
 
-static void exchange_one_int32(void *a, void *b, size_t size) {
+static void exchange_one_int32(void *a, void *b, size_t size)
+{
     uint32_t *ap = (uint32_t *)a;
     uint32_t *bp = (uint32_t *)b;
     uint32_t t = *ap;
@@ -1298,7 +1411,8 @@ static void exchange_one_int32(void *a, void *b, size_t size) {
     *bp = t;
 }
 
-static void exchange_int64s(void *a, void *b, size_t size) {
+static void exchange_int64s(void *a, void *b, size_t size)
+{
     uint64_t *ap = (uint64_t *)a;
     uint64_t *bp = (uint64_t *)b;
 
@@ -1309,7 +1423,8 @@ static void exchange_int64s(void *a, void *b, size_t size) {
     }
 }
 
-static void exchange_one_int64(void *a, void *b, size_t size) {
+static void exchange_one_int64(void *a, void *b, size_t size)
+{
     uint64_t *ap = (uint64_t *)a;
     uint64_t *bp = (uint64_t *)b;
     uint64_t t = *ap;
@@ -1317,7 +1432,8 @@ static void exchange_one_int64(void *a, void *b, size_t size) {
     *bp = t;
 }
 
-static void exchange_int128s(void *a, void *b, size_t size) {
+static void exchange_int128s(void *a, void *b, size_t size)
+{
     uint64_t *ap = (uint64_t *)a;
     uint64_t *bp = (uint64_t *)b;
 
@@ -1331,7 +1447,8 @@ static void exchange_int128s(void *a, void *b, size_t size) {
     }
 }
 
-static void exchange_one_int128(void *a, void *b, size_t size) {
+static void exchange_one_int128(void *a, void *b, size_t size)
+{
     uint64_t *ap = (uint64_t *)a;
     uint64_t *bp = (uint64_t *)b;
     uint64_t t = ap[0];
@@ -1342,37 +1459,43 @@ static void exchange_one_int128(void *a, void *b, size_t size) {
     bp[1] = u;
 }
 
-static inline exchange_f exchange_func(const void *base, size_t size) {
+static inline exchange_f exchange_func(const void *base, size_t size)
+{
     switch (((uintptr_t)base | (uintptr_t)size) & 15) {
     case 0:
-        if (size == sizeof(uint64_t) * 2)
+        if (size == sizeof(uint64_t) * 2) {
             return exchange_one_int128;
-        else
+        } else {
             return exchange_int128s;
+        }
     case 8:
-        if (size == sizeof(uint64_t))
+        if (size == sizeof(uint64_t)) {
             return exchange_one_int64;
-        else
+        } else {
             return exchange_int64s;
+        }
     case 4:
     case 12:
-        if (size == sizeof(uint32_t))
+        if (size == sizeof(uint32_t)) {
             return exchange_one_int32;
-        else
+        } else {
             return exchange_int32s;
+        }
     case 2:
     case 6:
     case 10:
     case 14:
-        if (size == sizeof(uint16_t))
+        if (size == sizeof(uint16_t)) {
             return exchange_one_int16;
-        else
+        } else {
             return exchange_int16s;
+        }
     default:
-        if (size == 1)
+        if (size == 1) {
             return exchange_one_byte;
-        else
+        } else {
             return exchange_bytes;
+        }
     }
 }
 
@@ -1389,10 +1512,12 @@ static void heapsortx(void *base, size_t nmemb, size_t size, cmp_f cmp, void *op
         while (i > 0) {
             i -= size;
             for (r = i; (c = r * 2 + size) < n; r = c) {
-                if (c < n - size && cmp(basep + c, basep + c + size, opaque) <= 0)
+                if (c < n - size && cmp(basep + c, basep + c + size, opaque) <= 0) {
                     c += size;
-                if (cmp(basep + r, basep + c, opaque) > 0)
+                }
+                if (cmp(basep + r, basep + c, opaque) > 0) {
                     break;
+                }
                 swap(basep + r, basep + c, size);
             }
         }
@@ -1400,10 +1525,12 @@ static void heapsortx(void *base, size_t nmemb, size_t size, cmp_f cmp, void *op
             swap(basep, basep + i, size);
 
             for (r = 0; (c = r * 2 + size) < i; r = c) {
-                if (c < i - size && cmp(basep + c, basep + c + size, opaque) <= 0)
+                if (c < i - size && cmp(basep + c, basep + c + size, opaque) <= 0) {
                     c += size;
-                if (cmp(basep + r, basep + c, opaque) > 0)
+                }
+                if (cmp(basep + r, basep + c, opaque) > 0) {
                     break;
+                }
                 swap(basep + r, basep + c, size);
             }
         }
@@ -1412,23 +1539,27 @@ static void heapsortx(void *base, size_t nmemb, size_t size, cmp_f cmp, void *op
 
 static inline void *med3(void *a, void *b, void *c, cmp_f cmp, void *opaque)
 {
-    return cmp(a, b, opaque) < 0 ?
-        (cmp(b, c, opaque) < 0 ? b : (cmp(a, c, opaque) < 0 ? c : a )) :
-        (cmp(b, c, opaque) > 0 ? b : (cmp(a, c, opaque) < 0 ? a : c ));
+    return cmp(a, b, opaque) < 0 ? (cmp(b, c, opaque) < 0 ? b : (cmp(a, c, opaque) < 0 ? c : a))
+                                 : (cmp(b, c, opaque) > 0 ? b : (cmp(a, c, opaque) < 0 ? a : c));
 }
 
 /* pointer based version with local stack and insertion sort threshhold */
 static inline void rqsort(void *base, size_t nmemb, size_t size, cmp_f cmp, void *opaque)
 {
-    struct { uint8_t *base; size_t count; int depth; } stack[50], *sp = stack;
+    struct {
+        uint8_t *base;
+        size_t count;
+        int depth;
+    } stack[50], *sp = stack;
     uint8_t *ptr, *pi, *pj, *plt, *pgt, *top, *m;
     size_t m4, i, lt, gt, span, span2;
     int c, depth;
     exchange_f swap = exchange_func(base, size);
     exchange_f swap_block = exchange_func(base, size | 128);
 
-    if (nmemb < 2 || size <= 0)
+    if (nmemb < 2 || size <= 0) {
         return;
+    }
 
     sp->base = (uint8_t *)base;
     sp->count = nmemb;
@@ -1452,7 +1583,7 @@ static inline void rqsort(void *base, size_t nmemb, size_t size, cmp_f cmp, void
             /* should use median of 5 or 9? */
             m4 = (nmemb >> 2) * size;
             m = med3(ptr + m4, ptr + 2 * m4, ptr + 3 * m4, cmp, opaque);
-            swap(ptr, m, size);  /* move the pivot to the start or the array */
+            swap(ptr, m, size); /* move the pivot to the start or the array */
             i = lt = 1;
             pi = plt = ptr + size;
             gt = nmemb;
@@ -1474,8 +1605,9 @@ static inline void rqsort(void *base, size_t nmemb, size_t size, cmp_f cmp, void
                         swap(pgt, pj, size);
                     }
                 }
-                if (pi >= pj)
+                if (pi >= pj) {
                     break;
+                }
                 swap(pi, pj, size);
                 i++;
                 pi += size;
@@ -1493,8 +1625,9 @@ static inline void rqsort(void *base, size_t nmemb, size_t size, cmp_f cmp, void
             span = plt - ptr;
             span2 = pi - plt;
             lt = i - lt;
-            if (span > span2)
+            if (span > span2) {
                 span = span2;
+            }
             swap_block(ptr, pi - span, span);
             /* swap values in ranges [gt..top[ and [i..top-(top-gt)[
                swapping the smallest span between top-gt and gt-i is sufficient
@@ -1503,8 +1636,9 @@ static inline void rqsort(void *base, size_t nmemb, size_t size, cmp_f cmp, void
             span2 = pgt - pi;
             pgt = top - span2;
             gt = nmemb - (gt - i);
-            if (span > span2)
+            if (span > span2) {
                 span = span2;
+            }
             swap_block(pi, top - span, span);
 
             /* now array has 3 parts:
@@ -1531,8 +1665,9 @@ static inline void rqsort(void *base, size_t nmemb, size_t size, cmp_f cmp, void
         }
         /* Use insertion sort for small fragments */
         for (pi = ptr + size, top = ptr + nmemb * size; pi < top; pi += size) {
-            for (pj = pi; pj > ptr && cmp(pj - size, pj, opaque) > 0; pj -= size)
+            for (pj = pi; pj > ptr && cmp(pj - size, pj, opaque) > 0; pj -= size) {
                 swap(pj, pj - size, size);
+            }
         }
     }
 }
@@ -1540,66 +1675,73 @@ static inline void rqsort(void *base, size_t nmemb, size_t size, cmp_f cmp, void
 /*---- Portable time functions ----*/
 
 #ifdef _WIN32
- // From: https://stackoverflow.com/a/26085827
+// From: https://stackoverflow.com/a/26085827
 static int gettimeofday_msvc(struct timeval *tp)
 {
-  static const uint64_t EPOCH = ((uint64_t)116444736000000000ULL);
+    static const uint64_t EPOCH = ((uint64_t)116444736000000000ULL);
 
-  SYSTEMTIME  system_time;
-  FILETIME    file_time;
-  uint64_t    time;
+    SYSTEMTIME system_time;
+    FILETIME file_time;
+    uint64_t time;
 
-  GetSystemTime(&system_time);
-  SystemTimeToFileTime(&system_time, &file_time);
-  time = ((uint64_t)file_time.dwLowDateTime);
-  time += ((uint64_t)file_time.dwHighDateTime) << 32;
+    GetSystemTime(&system_time);
+    SystemTimeToFileTime(&system_time, &file_time);
+    time = ((uint64_t)file_time.dwLowDateTime);
+    time += ((uint64_t)file_time.dwHighDateTime) << 32;
 
-  tp->tv_sec = (long)((time - EPOCH) / 10000000L);
-  tp->tv_usec = (long)(system_time.wMilliseconds * 1000);
+    tp->tv_sec = (long)((time - EPOCH) / 10000000L);
+    tp->tv_usec = (long)(system_time.wMilliseconds * 1000);
 
-  return 0;
+    return 0;
 }
 
-static inline uint64_t js__hrtime_ns(void) {
+static inline uint64_t js__hrtime_ns(void)
+{
     LARGE_INTEGER counter, frequency;
     double scaled_freq;
     double result;
 
-    if (!QueryPerformanceFrequency(&frequency))
+    if (!QueryPerformanceFrequency(&frequency)) {
         abort();
+    }
     assert(frequency.QuadPart != 0);
 
-    if (!QueryPerformanceCounter(&counter))
+    if (!QueryPerformanceCounter(&counter)) {
         abort();
+    }
     assert(counter.QuadPart != 0);
 
-  /* Because we have no guarantee about the order of magnitude of the
+    /* Because we have no guarantee about the order of magnitude of the
    * performance counter interval, integer math could cause this computation
    * to overflow. Therefore we resort to floating point math.
    */
-  scaled_freq = (double) frequency.QuadPart / NANOSEC;
-  result = (double) counter.QuadPart / scaled_freq;
-  return (uint64_t) result;
+    scaled_freq = (double)frequency.QuadPart / NANOSEC;
+    result = (double)counter.QuadPart / scaled_freq;
+    return (uint64_t)result;
 }
 #else
-static inline uint64_t js__hrtime_ns(void) {
+static inline uint64_t js__hrtime_ns(void)
+{
 #ifdef __DJGPP
-  struct timeval tv;
-  if (gettimeofday(&tv, NULL))
-    abort();
-  return tv.tv_sec * NANOSEC + tv.tv_usec * 1000;
+    struct timeval tv;
+    if (gettimeofday(&tv, NULL)) {
+        abort();
+    }
+    return tv.tv_sec * NANOSEC + tv.tv_usec * 1000;
 #else
-  struct timespec t;
+    struct timespec t;
 
-  if (clock_gettime(CLOCK_MONOTONIC, &t))
-    abort();
+    if (clock_gettime(CLOCK_MONOTONIC, &t)) {
+        abort();
+    }
 
-  return t.tv_sec * NANOSEC + t.tv_nsec;
+    return t.tv_sec * NANOSEC + t.tv_nsec;
 #endif
 }
 #endif
 
-static inline int64_t js__gettimeofday_us(void) {
+static inline int64_t js__gettimeofday_us(void)
+{
     struct timeval tv;
 #ifdef _WIN32
     gettimeofday_msvc(&tv);
@@ -1610,40 +1752,39 @@ static inline int64_t js__gettimeofday_us(void) {
 }
 
 #if defined(_WIN32)
-static inline int js_exepath(char *buffer, size_t *size_ptr) {
+static inline int js_exepath(char *buffer, size_t *size_ptr)
+{
     int utf8_len, utf16_buffer_len, utf16_len;
-    WCHAR* utf16_buffer;
+    WCHAR *utf16_buffer;
 
-    if (buffer == NULL || size_ptr == NULL || *size_ptr == 0)
-      return -1;
+    if (buffer == NULL || size_ptr == NULL || *size_ptr == 0) {
+        return -1;
+    }
 
     if (*size_ptr > 32768) {
-      /* Windows paths can never be longer than this. */
-      utf16_buffer_len = 32768;
+        /* Windows paths can never be longer than this. */
+        utf16_buffer_len = 32768;
     } else {
-      utf16_buffer_len = (int)*size_ptr;
+        utf16_buffer_len = (int)*size_ptr;
     }
 
     utf16_buffer = malloc(sizeof(WCHAR) * utf16_buffer_len);
-    if (!utf16_buffer)
+    if (!utf16_buffer) {
         return -1;
+    }
 
     /* Get the path as UTF-16. */
     utf16_len = GetModuleFileNameW(NULL, utf16_buffer, utf16_buffer_len);
-    if (utf16_len <= 0)
-      goto error;
+    if (utf16_len <= 0) {
+        goto error;
+    }
 
     /* Convert to UTF-8 */
-    utf8_len = WideCharToMultiByte(CP_UTF8,
-                                   0,
-                                   utf16_buffer,
-                                   -1,
-                                   buffer,
-                                   (int)*size_ptr,
-                                   NULL,
-                                   NULL);
-    if (utf8_len == 0)
-      goto error;
+    utf8_len =
+        WideCharToMultiByte(CP_UTF8, 0, utf16_buffer, -1, buffer, (int)*size_ptr, NULL, NULL);
+    if (utf8_len == 0) {
+        goto error;
+    }
 
     free(utf16_buffer);
 
@@ -1657,30 +1798,36 @@ error:
     return -1;
 }
 #elif defined(__APPLE__)
-static inline int js_exepath(char *buffer, size_t *size) {
+static inline int js_exepath(char *buffer, size_t *size)
+{
     /* realpath(exepath) may be > PATH_MAX so double it to be on the safe side. */
     char abspath[PATH_MAX * 2 + 1];
     char exepath[PATH_MAX + 1];
     uint32_t exepath_size;
     size_t abspath_size;
 
-    if (buffer == NULL || size == NULL || *size == 0)
+    if (buffer == NULL || size == NULL || *size == 0) {
         return -1;
+    }
 
     exepath_size = sizeof(exepath);
-    if (_NSGetExecutablePath(exepath, &exepath_size))
+    if (_NSGetExecutablePath(exepath, &exepath_size)) {
         return -1;
+    }
 
-    if (realpath(exepath, abspath) != abspath)
+    if (realpath(exepath, abspath) != abspath) {
         return -1;
+    }
 
     abspath_size = strlen(abspath);
-    if (abspath_size == 0)
+    if (abspath_size == 0) {
         return -1;
+    }
 
     *size -= 1;
-    if (*size > abspath_size)
+    if (*size > abspath_size) {
         *size = abspath_size;
+    }
 
     memcpy(buffer, abspath, *size);
     buffer[*size] = '\0';
@@ -1688,18 +1835,22 @@ static inline int js_exepath(char *buffer, size_t *size) {
     return 0;
 }
 #elif defined(__linux__) || defined(__GNU__)
-static inline int js_exepath(char *buffer, size_t *size) {
+static inline int js_exepath(char *buffer, size_t *size)
+{
     ssize_t n;
 
-    if (buffer == NULL || size == NULL || *size == 0)
+    if (buffer == NULL || size == NULL || *size == 0) {
         return -1;
+    }
 
     n = *size - 1;
-    if (n > 0)
+    if (n > 0) {
         n = readlink("/proc/self/exe", buffer, n);
+    }
 
-    if (n == -1)
+    if (n == -1) {
         return n;
+    }
 
     buffer[n] = '\0';
     *size = n;
@@ -1707,7 +1858,8 @@ static inline int js_exepath(char *buffer, size_t *size) {
     return 0;
 }
 #else
-static inline int js_exepath(char* buffer, size_t* size_ptr) {
+static inline int js_exepath(char *buffer, size_t *size_ptr)
+{
     return -1;
 }
 #endif
@@ -1722,7 +1874,8 @@ typedef struct {
     js__once_cb callback;
 } js__once_data_t;
 
-static int WINAPI js__once_inner(INIT_ONCE *once, void *param, void **context) {
+static int WINAPI js__once_inner(INIT_ONCE *once, void *param, void **context)
+{
     js__once_data_t *data = param;
 
     data->callback();
@@ -1730,137 +1883,172 @@ static int WINAPI js__once_inner(INIT_ONCE *once, void *param, void **context) {
     return 1;
 }
 
-static inline void js_once(js_once_t *guard, js__once_cb callback) {
-    js__once_data_t data = { .callback = callback };
-    InitOnceExecuteOnce(guard, js__once_inner, (void*) &data, NULL);
+static inline void js_once(js_once_t *guard, js__once_cb callback)
+{
+    js__once_data_t data = {.callback = callback};
+    InitOnceExecuteOnce(guard, js__once_inner, (void *)&data, NULL);
 }
 
-static inline void js_mutex_init(js_mutex_t *mutex) {
+static inline void js_mutex_init(js_mutex_t *mutex)
+{
     InitializeCriticalSection(mutex);
 }
 
-static inline void js_mutex_destroy(js_mutex_t *mutex) {
+static inline void js_mutex_destroy(js_mutex_t *mutex)
+{
     DeleteCriticalSection(mutex);
 }
 
-static inline void js_mutex_lock(js_mutex_t *mutex) {
+static inline void js_mutex_lock(js_mutex_t *mutex)
+{
     EnterCriticalSection(mutex);
 }
 
-static inline void js_mutex_unlock(js_mutex_t *mutex) {
+static inline void js_mutex_unlock(js_mutex_t *mutex)
+{
     LeaveCriticalSection(mutex);
 }
 
-static inline void js_cond_init(js_cond_t *cond) {
+static inline void js_cond_init(js_cond_t *cond)
+{
     InitializeConditionVariable(cond);
 }
 
-static inline void js_cond_destroy(js_cond_t *cond) {
-  /* nothing to do */
-  (void) cond;
+static inline void js_cond_destroy(js_cond_t *cond)
+{
+    /* nothing to do */
+    (void)cond;
 }
 
-static inline void js_cond_signal(js_cond_t *cond) {
+static inline void js_cond_signal(js_cond_t *cond)
+{
     WakeConditionVariable(cond);
 }
 
-static inline void js_cond_broadcast(js_cond_t *cond) {
+static inline void js_cond_broadcast(js_cond_t *cond)
+{
     WakeAllConditionVariable(cond);
 }
 
-static inline void js_cond_wait(js_cond_t *cond, js_mutex_t *mutex) {
-    if (!SleepConditionVariableCS(cond, mutex, INFINITE))
+static inline void js_cond_wait(js_cond_t *cond, js_mutex_t *mutex)
+{
+    if (!SleepConditionVariableCS(cond, mutex, INFINITE)) {
         abort();
+    }
 }
 
-static inline int js_cond_timedwait(js_cond_t *cond, js_mutex_t *mutex, uint64_t timeout) {
-    if (SleepConditionVariableCS(cond, mutex, (DWORD)(timeout / 1e6)))
+static inline int js_cond_timedwait(js_cond_t *cond, js_mutex_t *mutex, uint64_t timeout)
+{
+    if (SleepConditionVariableCS(cond, mutex, (DWORD)(timeout / 1e6))) {
         return 0;
-    if (GetLastError() != ERROR_TIMEOUT)
+    }
+    if (GetLastError() != ERROR_TIMEOUT) {
         abort();
+    }
     return -1;
 }
 
-static inline int js_thread_create(js_thread_t *thrd, void (*start)(void *), void *arg,
-                     int flags)
+static inline int js_thread_create(js_thread_t *thrd, void (*start)(void *), void *arg, int flags)
 {
     HANDLE h, cp;
 
     *thrd = INVALID_HANDLE_VALUE;
-    if (flags & ~JS_THREAD_CREATE_DETACHED)
+    if (flags & ~JS_THREAD_CREATE_DETACHED) {
         return -1;
-    h = (HANDLE)_beginthread(start, /*stacksize*/2<<20, arg);
-    if (!h)
+    }
+    h = (HANDLE)_beginthread(start, /*stacksize*/ 2 << 20, arg);
+    if (!h) {
         return -1;
-    if (flags & JS_THREAD_CREATE_DETACHED)
+    }
+    if (flags & JS_THREAD_CREATE_DETACHED) {
         return 0;
+    }
     // _endthread() automatically closes the handle but we want to wait on
     // it so make a copy. Race-y for very short-lived threads. Can be solved
     // by switching to _beginthreadex(CREATE_SUSPENDED) but means changing
     // |start| from __cdecl to __stdcall.
     cp = GetCurrentProcess();
-    if (DuplicateHandle(cp, h, cp, thrd, 0, FALSE, DUPLICATE_SAME_ACCESS))
+    if (DuplicateHandle(cp, h, cp, thrd, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
         return 0;
+    }
     return -1;
 }
 
 static inline int js_thread_join(js_thread_t thrd)
 {
-    if (WaitForSingleObject(thrd, INFINITE))
+    if (WaitForSingleObject(thrd, INFINITE)) {
         return -1;
+    }
     CloseHandle(thrd);
     return 0;
 }
 
 #else /* !defined(_WIN32) */
 
-static inline void js_once(js_once_t *guard, void (*callback)(void)) {
-    if (pthread_once(guard, callback))
+static inline void js_once(js_once_t *guard, void (*callback)(void))
+{
+    if (pthread_once(guard, callback)) {
         abort();
+    }
 }
 
-static inline void js_mutex_init(js_mutex_t *mutex) {
-    if (pthread_mutex_init(mutex, NULL))
+static inline void js_mutex_init(js_mutex_t *mutex)
+{
+    if (pthread_mutex_init(mutex, NULL)) {
         abort();
+    }
 }
 
-static inline void js_mutex_destroy(js_mutex_t *mutex) {
-    if (pthread_mutex_destroy(mutex))
+static inline void js_mutex_destroy(js_mutex_t *mutex)
+{
+    if (pthread_mutex_destroy(mutex)) {
         abort();
+    }
 }
 
-static inline void js_mutex_lock(js_mutex_t *mutex) {
-    if (pthread_mutex_lock(mutex))
+static inline void js_mutex_lock(js_mutex_t *mutex)
+{
+    if (pthread_mutex_lock(mutex)) {
         abort();
+    }
 }
 
-static inline void js_mutex_unlock(js_mutex_t *mutex) {
-    if (pthread_mutex_unlock(mutex))
+static inline void js_mutex_unlock(js_mutex_t *mutex)
+{
+    if (pthread_mutex_unlock(mutex)) {
         abort();
+    }
 }
 
-static inline void js_cond_init(js_cond_t *cond) {
+static inline void js_cond_init(js_cond_t *cond)
+{
 #if defined(__APPLE__) && defined(__MACH__)
-    if (pthread_cond_init(cond, NULL))
+    if (pthread_cond_init(cond, NULL)) {
         abort();
+    }
 #else
     pthread_condattr_t attr;
 
-    if (pthread_condattr_init(&attr))
+    if (pthread_condattr_init(&attr)) {
         abort();
+    }
 
-    if (pthread_condattr_setclock(&attr, CLOCK_MONOTONIC))
+    if (pthread_condattr_setclock(&attr, CLOCK_MONOTONIC)) {
         abort();
+    }
 
-    if (pthread_cond_init(cond, &attr))
+    if (pthread_cond_init(cond, &attr)) {
         abort();
+    }
 
-    if (pthread_condattr_destroy(&attr))
+    if (pthread_condattr_destroy(&attr)) {
         abort();
+    }
 #endif
 }
 
-static inline void js_cond_destroy(js_cond_t *cond) {
+static inline void js_cond_destroy(js_cond_t *cond)
+{
 #if defined(__APPLE__) && defined(__MACH__)
     /* It has been reported that destroying condition variables that have been
      * signalled but not waited on can sometimes result in application crashes.
@@ -1870,41 +2058,52 @@ static inline void js_cond_destroy(js_cond_t *cond) {
     struct timespec ts;
     int err;
 
-    if (pthread_mutex_init(&mutex, NULL))
+    if (pthread_mutex_init(&mutex, NULL)) {
         abort();
+    }
 
-    if (pthread_mutex_lock(&mutex))
+    if (pthread_mutex_lock(&mutex)) {
         abort();
+    }
 
     ts.tv_sec = 0;
     ts.tv_nsec = 1;
 
     err = pthread_cond_timedwait_relative_np(cond, &mutex, &ts);
-    if (err != 0 && err != ETIMEDOUT)
+    if (err != 0 && err != ETIMEDOUT) {
         abort();
+    }
 
-    if (pthread_mutex_unlock(&mutex))
+    if (pthread_mutex_unlock(&mutex)) {
         abort();
+    }
 
-    if (pthread_mutex_destroy(&mutex))
+    if (pthread_mutex_destroy(&mutex)) {
         abort();
+    }
 #endif /* defined(__APPLE__) && defined(__MACH__) */
 
-    if (pthread_cond_destroy(cond))
+    if (pthread_cond_destroy(cond)) {
         abort();
+    }
 }
 
-static inline void js_cond_signal(js_cond_t *cond) {
-    if (pthread_cond_signal(cond))
+static inline void js_cond_signal(js_cond_t *cond)
+{
+    if (pthread_cond_signal(cond)) {
         abort();
+    }
 }
 
-static inline void js_cond_broadcast(js_cond_t *cond) {
-    if (pthread_cond_broadcast(cond))
+static inline void js_cond_broadcast(js_cond_t *cond)
+{
+    if (pthread_cond_broadcast(cond)) {
         abort();
+    }
 }
 
-static inline void js_cond_wait(js_cond_t *cond, js_mutex_t *mutex) {
+static inline void js_cond_wait(js_cond_t *cond, js_mutex_t *mutex)
+{
 #if defined(__APPLE__) && defined(__MACH__)
     int r;
 
@@ -1914,17 +2113,21 @@ static inline void js_cond_wait(js_cond_t *cond, js_mutex_t *mutex) {
     /* Workaround for a bug in OS X at least up to 13.6
      * See https://github.com/libuv/libuv/issues/4165
      */
-    if (r == EINVAL && errno == EBUSY)
+    if (r == EINVAL && errno == EBUSY) {
         return;
-    if (r)
+    }
+    if (r) {
         abort();
+    }
 #else
-    if (pthread_cond_wait(cond, mutex))
+    if (pthread_cond_wait(cond, mutex)) {
         abort();
+    }
 #endif
 }
 
-static inline int js_cond_timedwait(js_cond_t *cond, js_mutex_t *mutex, uint64_t timeout) {
+static inline int js_cond_timedwait(js_cond_t *cond, js_mutex_t *mutex, uint64_t timeout)
+{
     int r;
     struct timespec ts;
 
@@ -1940,11 +2143,13 @@ static inline int js_cond_timedwait(js_cond_t *cond, js_mutex_t *mutex, uint64_t
     r = pthread_cond_timedwait(cond, mutex, &ts);
 #endif
 
-    if (r == 0)
+    if (r == 0) {
         return 0;
+    }
 
-    if (r == ETIMEDOUT)
+    if (r == ETIMEDOUT) {
         return -1;
+    }
 
     abort();
 
@@ -1952,8 +2157,7 @@ static inline int js_cond_timedwait(js_cond_t *cond, js_mutex_t *mutex, uint64_t
     return -1;
 }
 
-static inline int js_thread_create(js_thread_t *thrd, void (*start)(void *), void *arg,
-                     int flags)
+static inline int js_thread_create(js_thread_t *thrd, void (*start)(void *), void *arg, int flags)
 {
     union {
         void (*x)(void *);
@@ -1962,18 +2166,24 @@ static inline int js_thread_create(js_thread_t *thrd, void (*start)(void *), voi
     pthread_attr_t attr;
     int ret;
 
-    if (flags & ~JS_THREAD_CREATE_DETACHED)
+    if (flags & ~JS_THREAD_CREATE_DETACHED) {
         return -1;
-    if (pthread_attr_init(&attr))
+    }
+    if (pthread_attr_init(&attr)) {
         return -1;
+    }
     ret = -1;
-    if (pthread_attr_setstacksize(&attr, 2<<20))
+    if (pthread_attr_setstacksize(&attr, 2 << 20)) {
         goto fail;
-    if (flags & JS_THREAD_CREATE_DETACHED)
-        if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED))
+    }
+    if (flags & JS_THREAD_CREATE_DETACHED) {
+        if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) {
             goto fail;
-    if (pthread_create(thrd, &attr, u.f, arg))
+        }
+    }
+    if (pthread_create(thrd, &attr, u.f, arg)) {
         goto fail;
+    }
     ret = 0;
 fail:
     pthread_attr_destroy(&attr);
@@ -1982,8 +2192,9 @@ fail:
 
 static inline int js_thread_join(js_thread_t thrd)
 {
-    if (pthread_join(thrd, NULL))
+    if (pthread_join(thrd, NULL)) {
         return -1;
+    }
     return 0;
 }
 
@@ -1994,4 +2205,4 @@ static inline int js_thread_join(js_thread_t thrd)
 } /* extern "C" { */
 #endif
 
-#endif  /* CUTILS_H */
+#endif /* CUTILS_H */

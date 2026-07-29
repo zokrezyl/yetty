@@ -48,8 +48,8 @@
 #include <yetty/ywire/wire-statemachine.h>
 
 #include "ligature-cells.h"
-#include "sdf-layer.h"
-#include "shader-glyph-layer.h"
+#include "grid-sdf-layer.h"
+#include "grid-shader-glyph-layer.h"
 
 /* GPU cell layout the text shader reads: 4 u32 words per cell. */
 enum { YVTERM_WORDS_PER_CELL = 4 };
@@ -260,7 +260,7 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("parent@yfigure:figur
     float visual_zoom_offset_x;
     float visual_zoom_offset_y;
 
-    /* ---- GPU text renderer (ported from poc/yvterm-new) ---- */
+    /* ---- GPU text renderer ---- */
     /* Borrowed from the framework. */
     struct yetty_yframework *runtime; /* shared animation clock (frame_time_sec) */
     WGPUDevice device;
@@ -291,6 +291,10 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("parent@yfigure:figur
      * shader. Owned; the shader module holds no reference after creation. */
     char *combined_shader;
     struct yetty_ycore_buffer effects_lib_code;
+    /* grid-text.wgsl, loaded from the shaders dir in vterm_gpu_init. Unlike
+     * the effects lib there is no stub fallback: without it there is no text
+     * pipeline at all, so a missing asset is a hard pipeline error. */
+    struct yetty_ycore_buffer text_shader_code;
 
     /* Owned wgpu resources. (Per-face atlas/meta live in faces[].) */
     WGPUShaderModule shader_module;
@@ -329,312 +333,16 @@ struct yetty_yvterm_vterm_ptr_result yetty_yvterm_vterm_from(struct yetty_yclass
 struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_to(struct yetty_yvterm_vterm *data);
 
 /*===========================================================================
- * GPU text renderer — ported from poc/yvterm-new. Resolves each cell's glyph
- * against the active MSDF font, packs the 16-byte/cell layout the text shader
- * reads, uploads dirty lines into one pinned storage buffer, and draws a single
- * full-screen quad into the figure's render target. CPU truth stays the model.
+ * GPU text renderer. Resolves each cell's glyph against the active MSDF font,
+ * packs the 16-byte/cell layout the text-grid shader (grid-text.wgsl, staged
+ * shader asset) reads, uploads dirty lines into one pinned storage buffer, and
+ * draws a single full-screen quad into the figure's render target. CPU truth
+ * stays the model.
  *=========================================================================*/
 
 static WGPUStringView vterm_sv(const char *text)
 {
     return (WGPUStringView){.data = text, .length = strlen(text)};
-}
-
-/* The text grid shader (mirror of poc/yvterm-new/text.wgsl). Local static so it
- * is program-lifetime storage without a file-scope symbol. */
-static const char *vterm_text_wgsl(void)
-{
-    static const char src[] =
-        "struct Uniforms {\n"
-        "    grid_size: vec2<f32>,\n"
-        "    cell_size: vec2<f32>,\n"
-        "    scale: f32,\n"
-        "    baseline_y: f32,\n"
-        "    glyph_left: f32,\n"
-        "    pixel_range: f32,\n"
-        "    root_row: u32,\n"
-        "    cursor_col: u32,\n"
-        "    cursor_row: u32,\n"
-        "    cursor_visible: u32,\n"
-        "    sel_active: u32,\n"
-        "    sel_start_row: u32,\n"
-        "    sel_start_col: u32,\n"
-        "    sel_end_row: u32,\n"
-        "    sel_end_col: u32,\n"
-        "    ring_rows: u32,\n"
-        "    visual_zoom_scale: f32,\n"
-        "    visual_zoom_offset_x: f32,\n"
-        "    visual_zoom_offset_y: f32,\n"
-        "    time: f32, mouse_x: f32, mouse_y: f32,\n"
-        "    post_fx_index: u32,\n"
-        "    post_fx_p0: f32, post_fx_p1: f32, post_fx_p2: f32,\n"
-        "    post_fx_p3: f32, post_fx_p4: f32, post_fx_p5: f32,\n"
-        "    coord_fx_index: u32,\n"
-        "    coord_fx_p0: f32, coord_fx_p1: f32, coord_fx_p2: f32,\n"
-        "    coord_fx_p3: f32, coord_fx_p4: f32, coord_fx_p5: f32,\n"
-        "    pad_a: u32, pad_b: u32,\n"
-        "    face_methods: u32, face_pad0: u32, face_pad1: u32, face_pad2: u32,\n"
-        "    face_params: array<vec4<f32>, 4>,\n"
-        "};\n"
-        "@group(0) @binding(0) var<storage, read> cells: array<u32>;\n"
-        "@group(0) @binding(1) var<storage, read> glyph_meta: array<u32>;\n"
-        "@group(0) @binding(2) var atlas_tex: texture_2d<f32>;\n"
-        "@group(0) @binding(3) var atlas_smp: sampler;\n"
-        "@group(0) @binding(4) var<uniform> uni: Uniforms;\n"
-        /* Extra font faces (config range faces). Unused slots are bound to the
-         * face-0 resources, and face_methods routes decoding, so the shader is
-         * compiled once regardless of how many faces the config declares. */
-        "@group(0) @binding(5) var<storage, read> face1_meta: array<u32>;\n"
-        "@group(0) @binding(6) var face1_tex: texture_2d<f32>;\n"
-        "@group(0) @binding(7) var<storage, read> face2_meta: array<u32>;\n"
-        "@group(0) @binding(8) var face2_tex: texture_2d<f32>;\n"
-        "@group(0) @binding(9) var<storage, read> face3_meta: array<u32>;\n"
-        "@group(0) @binding(10) var face3_tex: texture_2d<f32>;\n"
-        "struct VSOut {\n"
-        "    @builtin(position) pos: vec4<f32>,\n"
-        "    @location(0) @interpolate(linear) grid_pixel: vec2<f32>,\n"
-        "};\n"
-        "@vertex\n"
-        "fn vs_main(@builtin(vertex_index) vid: u32) -> VSOut {\n"
-        "    var corners = array<vec2<f32>, 6>(\n"
-        "        vec2<f32>(-1.0,-1.0), vec2<f32>(1.0,-1.0), vec2<f32>(1.0,1.0),\n"
-        "        vec2<f32>(-1.0,-1.0), vec2<f32>(1.0,1.0), vec2<f32>(-1.0,1.0));\n"
-        "    let ndc = corners[vid];\n"
-        "    var out: VSOut;\n"
-        "    out.pos = vec4<f32>(ndc, 0.0, 1.0);\n"
-        "    let grid_w = uni.grid_size.x * uni.cell_size.x;\n"
-        "    let grid_h = uni.grid_size.y * uni.cell_size.y;\n"
-        "    out.grid_pixel = vec2<f32>((ndc.x*0.5+0.5)*grid_w, (0.5-ndc.y*0.5)*grid_h);\n"
-        "    return out;\n"
-        "}\n"
-        "fn median3(r: f32, g: f32, b: f32) -> f32 {\n"
-        "    return max(min(r,g), min(max(r,g), b));\n"
-        "}\n"
-        "fn face_meta(face: u32, index: u32) -> u32 {\n"
-        "    switch face {\n"
-        "        case 1u: { return face1_meta[index]; }\n"
-        "        case 2u: { return face2_meta[index]; }\n"
-        "        case 3u: { return face3_meta[index]; }\n"
-        "        default: { return glyph_meta[index]; }\n"
-        "    }\n"
-        "}\n"
-        "fn face_texel(face: u32, uv: vec2<f32>) -> vec4<f32> {\n"
-        "    switch face {\n"
-        "        case 1u: { return textureSampleLevel(face1_tex, atlas_smp, uv, 0.0); }\n"
-        "        case 2u: { return textureSampleLevel(face2_tex, atlas_smp, uv, 0.0); }\n"
-        "        case 3u: { return textureSampleLevel(face3_tex, atlas_smp, uv, 0.0); }\n"
-        "        default: { return textureSampleLevel(atlas_tex, atlas_smp, uv, 0.0); }\n"
-        "    }\n"
-        "}\n"
-        "fn face_atlas_size(face: u32) -> vec2<f32> {\n"
-        "    switch face {\n"
-        "        case 1u: { return vec2<f32>(textureDimensions(face1_tex)); }\n"
-        "        case 2u: { return vec2<f32>(textureDimensions(face2_tex)); }\n"
-        "        case 3u: { return vec2<f32>(textureDimensions(face3_tex)); }\n"
-        "        default: { return vec2<f32>(textureDimensions(atlas_tex)); }\n"
-        "    }\n"
-        "}\n"
-        /* Raster faces: 4-word meta (uv origin + slot width in cells), glyphs
-         * pre-rasterized at cell size. Returns the raw texel: R8 coverage
-         * lands in .r, color (RGBA8 emoji) texels come through whole. */
-        "fn sample_raster_texel(face: u32, glyph: u32, local_px: vec2<f32>) -> vec4<f32> {\n"
-        "    let base = glyph * 4u;\n"
-        "    let uv0 = vec2<f32>(bitcast<f32>(face_meta(face, base+0u)), "
-        "bitcast<f32>(face_meta(face, base+1u)));\n"
-        "    if (uv0.x < 0.0) { return vec4<f32>(0.0); }\n"
-        "    let width_cells = max(bitcast<f32>(face_meta(face, base+2u)), 1.0);\n"
-        "    let slot_px = vec2<f32>(uni.cell_size.x * width_cells, uni.cell_size.y);\n"
-        "    if (local_px.x < 0.0 || local_px.y < 0.0 || local_px.x >= slot_px.x || "
-        "local_px.y >= slot_px.y) { return vec4<f32>(0.0); }\n"
-        "    let uv = uv0 + local_px / face_atlas_size(face);\n"
-        "    return face_texel(face, uv);\n"
-        "}\n"
-        /* One MSDF coverage tap: median of the three channels, mapped to an
-         * alpha ramp screen_px_range screen-pixels steep around the 0.5
-         * iso-line. */
-        "fn msdf_coverage(face: u32, uv: vec2<f32>, screen_px_range: f32) -> f32 {\n"
-        "    let texel = face_texel(face, uv);\n"
-        "    let sd = median3(texel.r, texel.g, texel.b);\n"
-        "    return clamp((sd - 0.5) * screen_px_range + 0.5, 0.0, 1.0);\n"
-        "}\n"
-        /* MSDF faces: 10-word glyph meta (uv_min, uv_max, size, bearing,
-         * advance, pad), face_params = (pixel_range, scale, baseline_y,
-         * glyph_left). */
-        "fn sample_face_glyph(face: u32, glyph: u32, local_px: vec2<f32>) -> f32 {\n"
-        "    let method = (uni.face_methods >> (face * 4u)) & 0xFu;\n"
-        "    if (method == 1u) {\n"
-        "        return sample_raster_texel(face, glyph, local_px).r;\n"
-        "    }\n"
-        "    let params = uni.face_params[face];\n"
-        "    let base = glyph * 10u;\n"
-        "    let uv_min = vec2<f32>(bitcast<f32>(face_meta(face, base+0u)), "
-        "bitcast<f32>(face_meta(face, base+1u)));\n"
-        "    let uv_max = vec2<f32>(bitcast<f32>(face_meta(face, base+2u)), "
-        "bitcast<f32>(face_meta(face, base+3u)));\n"
-        "    let gsize = vec2<f32>(bitcast<f32>(face_meta(face, base+4u)), "
-        "bitcast<f32>(face_meta(face, base+5u)));\n"
-        "    let bear = vec2<f32>(bitcast<f32>(face_meta(face, base+6u)), "
-        "bitcast<f32>(face_meta(face, base+7u)));\n"
-        "    if (gsize.x <= 0.0 || gsize.y <= 0.0) { return 0.0; }\n"
-        "    let scaled_size = gsize * params.y;\n"
-        "    let scaled_bear = bear * params.y;\n"
-        "    let gtop = params.z - scaled_bear.y;\n"
-        "    let gleft = params.w + scaled_bear.x;\n"
-        "    let gmin = vec2<f32>(gleft, gtop);\n"
-        "    let gmax = vec2<f32>(gleft + scaled_size.x, gtop + scaled_size.y);\n"
-        "    if (local_px.x < gmin.x || local_px.x >= gmax.x || local_px.y < gmin.y || "
-        "local_px.y >= gmax.y) { return 0.0; }\n"
-        "    let gl = (local_px - gmin) / scaled_size;\n"
-        "    let uv = mix(uv_min, uv_max, gl);\n"
-        /* AA width in SCREEN pixels: field range in atlas texels (params.x)
-         * × grid px per texel (params.y) × screen px per grid px (the
-         * visual zoom). Without the zoom factor the ramp is 1 grid px, so a
-         * zoomed-in glyph edge smears across `zoom` screen pixels. Clamped
-         * so deep minification never drops the ramp below one screen px. */
-        "    let zoom = max(uni.visual_zoom_scale, 0.0001);\n"
-        "    let screen_px_range = max(params.x * params.y * zoom, 1.0);\n"
-        "    let texels_per_screen_px = 1.0 / (params.y * zoom);\n"
-        "    if (texels_per_screen_px < 1.25) {\n"
-        "        return msdf_coverage(face, uv, screen_px_range);\n"
-        "    }\n"
-        /* Minified: one screen pixel spans >1.25 atlas texels, and a single
-         * bilinear tap under-resolves the field (stroke-weight wobble,
-         * nicked corners). Box-filter instead: 2x2 taps at ±0.25 screen px,
-         * each with a half-pixel ramp, averaged. */
-        "    let tap_uv = (uv_max - uv_min) / scaled_size * (0.25 / zoom);\n"
-        "    let tap_range = screen_px_range * 2.0;\n"
-        "    var coverage = msdf_coverage(face, uv + vec2<f32>(-tap_uv.x, -tap_uv.y), tap_range);\n"
-        "    coverage += msdf_coverage(face, uv + vec2<f32>(tap_uv.x, -tap_uv.y), tap_range);\n"
-        "    coverage += msdf_coverage(face, uv + vec2<f32>(-tap_uv.x, tap_uv.y), tap_range);\n"
-        "    coverage += msdf_coverage(face, uv + vec2<f32>(tap_uv.x, tap_uv.y), tap_range);\n"
-        "    return coverage * 0.25;\n"
-        "}\n"
-        "@fragment\n"
-        "fn fs_main(in: VSOut) -> @location(0) vec4<f32> {\n"
-        "    let grid_w = uni.grid_size.x * uni.cell_size.x;\n"
-        "    let grid_h = uni.grid_size.y * uni.cell_size.y;\n"
-        /* Invert the visual-zoom transform to find the grid pixel under this
-         * fragment. This is the canonical mouse-anchored zoom shared with the
-         * figure shaders and the zoom controller:
-         *     source = (screen - center)/scale + center + offset
-         * where offset is a SOURCE-space pan (so a drag makes content follow the
-         * cursor) and center is the pane centre. Identity at scale 1 / offset 0.
-         * Text and figures use the same formula, so they zoom, pan and stay
-         * anchored to the same row together. */
-        "    let vz = max(uni.visual_zoom_scale, 0.0001);\n"
-        "    let center = vec2<f32>(grid_w, grid_h) * 0.5;\n"
-        "    let voff = vec2<f32>(uni.visual_zoom_offset_x, uni.visual_zoom_offset_y);\n"
-        "    var px = (in.grid_pixel - center) / vz + center + voff;\n"
-        /* Pointer positions in pane pixels: mouse (falls back to cursor) and
-         * the terminal cursor cell centre. */
-        "    let fx_cursor = vec2<f32>((f32(uni.cursor_col) + 0.5) * uni.cell_size.x,\n"
-        "                              (f32(uni.cursor_row) + 0.5) * uni.cell_size.y);\n"
-        "    let fx_mouse = vec2<f32>(uni.mouse_x, uni.mouse_y);\n"
-        /* Apply coordinate distortion after the zoom inversion. */
-        "    px = fx_coord_apply(uni.coord_fx_index, px, vec2<f32>(grid_w, grid_h),\n"
-        "                        uni.time, fx_mouse, fx_cursor,\n"
-        "                        uni.coord_fx_p0, uni.coord_fx_p1, uni.coord_fx_p2,\n"
-        "                        uni.coord_fx_p3, uni.coord_fx_p4, uni.coord_fx_p5);\n"
-        "    if (px.x < 0.0 || px.y < 0.0 || px.x >= grid_w || px.y >= grid_h) {\n"
-        "        return vec4<f32>(0.0,0.0,0.0,1.0);\n"
-        "    }\n"
-        "    let colf = floor(px.x / uni.cell_size.x);\n"
-        "    let rowf = floor(px.y / uni.cell_size.y);\n"
-        "    let col = u32(colf);\n"
-        "    let row = u32(rowf);\n"
-        "    let gcols = u32(uni.grid_size.x);\n"
-        "    let slot = (row + uni.root_row) % uni.ring_rows;\n"
-        "    let cell_index = slot * gcols + col;\n"
-        "    var local = vec2<f32>(px.x - colf*uni.cell_size.x, px.y - rowf*uni.cell_size.y);\n"
-        "    var glyph = cells[cell_index*4u + 0u];\n"
-        "    let w1 = cells[cell_index*4u + 1u];\n"
-        "    let w2 = cells[cell_index*4u + 2u];\n"
-        "    let attrs = (w2 >> 16u) & 0xFFFFu;\n"
-        "    let fg = vec3<f32>(f32(w1 & 0xFFu)/255.0, f32((w1>>8u)&0xFFu)/255.0, "
-        "f32((w1>>16u)&0xFFu)/255.0);\n"
-        "    let bg = vec3<f32>(f32((w1>>24u)&0xFFu)/255.0, f32(w2 & 0xFFu)/255.0, "
-        "f32((w2>>8u)&0xFFu)/255.0);\n"
-        /* A wide glyph occupies two cells: the head (width 2) holds the glyph,
-         * the spill cell (width 0) to its right is blank. Continue sampling the
-         * head glyph into the spill cell, shifted one cell to the right, so the
-         * right half of CJK/double-width glyphs is drawn. */
-        "    var face = (cells[cell_index*4u + 3u] >> 8u) & 0xFFu;\n"
-        "    if ((cells[cell_index*4u + 3u] & 0xFFu) == 0u && col > 0u) {\n"
-        "        let head = slot * gcols + (col - 1u);\n"
-        "        if ((cells[head*4u + 3u] & 0xFFu) == 2u) {\n"
-        "            glyph = cells[head*4u + 0u];\n"
-        "            face = (cells[head*4u + 3u] >> 8u) & 0xFFu;\n"
-        "            local.x = local.x + uni.cell_size.x;\n"
-        "        }\n"
-        "    }\n"
-        "    var alpha = 0.0;\n"
-        "    var glyph_rgb = vec3<f32>(0.0);\n"
-        "    var glyph_is_color = false;\n"
-        /* 0xFFFFFFFF = notdef sentinel: a codepoint no face could supply. Draw a
-         * hollow box inset from the cell edges (fg-tinted) so a missing glyph is
-         * a visible tofu, never a blank cell. */
-        "    if (glyph == 0xFFFFFFFFu) {\n"
-        "        let inx = uni.cell_size.x * 0.16;\n"
-        "        let iny = uni.cell_size.y * 0.12;\n"
-        "        let th = max(1.0, uni.cell_size.x * 0.07);\n"
-        "        let x0 = inx; let x1 = uni.cell_size.x - inx;\n"
-        "        let y0 = iny; let y1 = uni.cell_size.y - iny;\n"
-        "        let on_box = local.x >= x0 && local.x <= x1 && local.y >= y0 && local.y <= y1;\n"
-        "        let in_hole = local.x >= x0 + th && local.x <= x1 - th &&\n"
-        "                      local.y >= y0 + th && local.y <= y1 - th;\n"
-        "        if (on_box && !in_hole) { alpha = 1.0; }\n"
-        "    } else if (glyph != 0u) {\n"
-        "        let cell_method = (uni.face_methods >> (face * 4u)) & 0xFu;\n"
-        "        if (cell_method == 2u) {\n"
-        "            let texel = sample_raster_texel(face, glyph, local);\n"
-        "            glyph_rgb = texel.rgb;\n"
-        "            alpha = texel.a;\n"
-        "            glyph_is_color = true;\n"
-        "        } else {\n"
-        "            alpha = sample_face_glyph(face, glyph, local);\n"
-        "        }\n"
-        "    }\n"
-        /* Underline (single 0x2 or double 0x4) sits just below the baseline;
-         * strikethrough (0x40) crosses the cell middle. Both paint at full
-         * coverage so they show on blank cells too. */
-        "    let line_h = max(1.0, uni.cell_size.y * 0.07);\n"
-        "    let ul_y = uni.baseline_y + max(1.0, uni.cell_size.y * 0.10);\n"
-        "    if ((attrs & 0x6u) != 0u && local.y >= ul_y && local.y < ul_y + line_h) "
-        "{ alpha = 1.0; }\n"
-        "    let st_y = uni.cell_size.y * 0.5;\n"
-        "    if ((attrs & 0x40u) != 0u && local.y >= st_y && local.y < st_y + line_h) "
-        "{ alpha = 1.0; }\n"
-        "    let is_cursor = uni.cursor_visible != 0u && col == uni.cursor_col && "
-        "row == uni.cursor_row;\n"
-        /* Selection highlight (reading-order stream, start <= end). Inverted
-         * like the cursor — the xterm default look. */
-        "    var selected = false;\n"
-        "    if (uni.sel_active != 0u) {\n"
-        "        if (row > uni.sel_start_row && row < uni.sel_end_row) { selected = true; }\n"
-        "        else if (row == uni.sel_start_row && row == uni.sel_end_row) {\n"
-        "            selected = col >= uni.sel_start_col && col <= uni.sel_end_col;\n"
-        "        } else if (row == uni.sel_start_row) { selected = col >= uni.sel_start_col; }\n"
-        "        else if (row == uni.sel_end_row) { selected = col <= uni.sel_end_col; }\n"
-        "    }\n"
-        "    var composed = mix(bg, fg, alpha);\n"
-        "    if (glyph_is_color) {\n" /* pre-colored emoji texel — no fg tint */
-        "        composed = mix(bg, glyph_rgb, alpha);\n"
-        "    }\n"
-        "    if (is_cursor || selected) {\n"
-        "        composed = mix(fg, bg, alpha);\n" /* inverted: fg fill, glyph punched in bg */
-        "    }\n"
-        /* Post-color effect over the opaque terminal surface. Shared clock in
-         * uni.time keeps animation in phase with every other shader. */
-        "    if (uni.post_fx_index != 0u) {\n"
-        "        let screen = uni.grid_size * uni.cell_size;\n"
-        "        composed = fx_post_apply(uni.post_fx_index, composed, in.grid_pixel, screen,\n"
-        "            uni.time, fx_mouse, fx_cursor, uni.cell_size,\n"
-        "            uni.post_fx_p0, uni.post_fx_p1, uni.post_fx_p2,\n"
-        "            uni.post_fx_p3, uni.post_fx_p4, uni.post_fx_p5);\n"
-        "    }\n"
-        "    return vec4<f32>(composed, 1.0);\n"
-        "}\n";
-    return src;
 }
 
 /* Pick the face for a codepoint: first matching config range wins, face 0
@@ -840,11 +548,16 @@ static const char *vterm_fx_stub(void)
 
 static struct yetty_ycore_void_result vterm_create_pipeline(struct yetty_yvterm_vterm *vterm)
 {
-    /* Combined shader = effects library (or stub) + the text shader. */
+    /* Combined shader = effects library (or stub) + the text-grid shader
+     * (grid-text.wgsl, loaded in vterm_gpu_init). The text shader has no
+     * stub fallback — without it nothing can render, so fail hard. */
+    if (!vterm->text_shader_code.data || vterm->text_shader_code.size == 0) {
+        return YETTY_ERR(yetty_ycore_void, "vterm: grid-text.wgsl not loaded");
+    }
     const char *lib = (vterm->effects_lib_code.data && vterm->effects_lib_code.size > 0)
                           ? (const char *)vterm->effects_lib_code.data
                           : vterm_fx_stub();
-    const char *text = vterm_text_wgsl();
+    const char *text = (const char *)vterm->text_shader_code.data;
     size_t lib_len = strlen(lib);
     size_t text_len = strlen(text);
     free(vterm->combined_shader);
@@ -1492,6 +1205,23 @@ static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *
         }
     }
 
+    /* Load the text-grid shader (grid-text.wgsl). Mandatory — there is no
+     * stub for the terminal surface itself, so a missing asset fails
+     * vterm_create_pipeline below and the terminal renders no text. */
+    if (shaders_dir && shaders_dir[0]) {
+        char text_path[512];
+        snprintf(text_path, sizeof(text_path), "%s/grid-text.wgsl", shaders_dir);
+        struct yetty_ycore_buffer_result text_res = yetty_ycore_read_file(text_path);
+        if (YETTY_IS_OK(text_res)) {
+            free(vterm->text_shader_code.data);
+            vterm->text_shader_code = text_res.value;
+        } else {
+            yerror("vterm: grid-text.wgsl not loaded (%s) — text rendering disabled",
+                   text_res.error.msg ? text_res.error.msg : "read failed");
+            yetty_ycore_error_destroy(text_res.error);
+        }
+    }
+
     struct yetty_ycore_void_result pr = vterm_create_pipeline(vterm);
     if (YETTY_IS_ERR(pr)) {
         ywarn("vterm: pipeline init failed: %s", pr.error.msg);
@@ -1605,6 +1335,8 @@ static void vterm_gpu_destroy(struct yetty_yvterm_vterm *vterm)
     vterm->combined_shader = NULL;
     free(vterm->effects_lib_code.data);
     vterm->effects_lib_code.data = NULL;
+    free(vterm->text_shader_code.data);
+    vterm->text_shader_code.data = NULL;
     free(vterm->row_scratch);
     vterm->row_scratch = NULL;
     vterm->row_scratch_cols = 0;

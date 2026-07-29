@@ -27,7 +27,7 @@
 #include <stddef.h>
 
 #if defined(__linux__)
-#include <time.h>   /* timer_t */
+#include <time.h> /* timer_t */
 #endif
 
 /* ================================================================== */
@@ -42,11 +42,7 @@
 /* Runtime JIT policy. OFF: interpreter only. BASELINE: compile a hot
    function once it crosses the call/backedge threshold. EAGER: compile
    every compilable function on first call (tests/benchmarks). */
-enum {
-    QJS_JIT_MODE_OFF = 0,
-    QJS_JIT_MODE_BASELINE,
-    QJS_JIT_MODE_EAGER
-};
+enum { QJS_JIT_MODE_OFF = 0, QJS_JIT_MODE_BASELINE, QJS_JIT_MODE_EAGER };
 
 /* Per-function compilation state machine. Terminal UNSUPPORTED/FAILED
    never retry. */
@@ -60,9 +56,9 @@ enum {
 
 /* Published native code for one function. */
 typedef struct QJSJitCode {
-    void *entry;        /* QJSJitEntry; call target */
-    void *sljit_code;   /* sljit_generate_code() result, for sljit_free_code */
-    size_t code_size;   /* charged against the runtime/process limits */
+    void *entry;      /* QJSJitEntry; call target */
+    void *sljit_code; /* sljit_generate_code() result, for sljit_free_code */
+    size_t code_size; /* charged against the runtime/process limits */
 } QJSJitCode;
 
 /* The generated-code ABI. A C wrapper in JS_CallInternal builds the
@@ -88,16 +84,16 @@ typedef int (*QJSJitEntry)(QJSJitFrame *frame, struct JSValue *out_ret);
 
 /* Per-runtime JIT accounting/config, embedded in JSRuntime. */
 typedef struct QJSJitRuntime {
-    int mode;                    /* QJS_JIT_MODE_* */
-    int compiling;               /* reentrancy guard: no nested compile */
+    int mode;      /* QJS_JIT_MODE_* */
+    int compiling; /* reentrancy guard: no nested compile */
     uint32_t call_threshold;
     uint32_t backedge_threshold;
-    size_t code_bytes;           /* live native-code bytes in this runtime */
-    size_t code_limit;           /* per-runtime cap */
+    size_t code_bytes; /* live native-code bytes in this runtime */
+    size_t code_limit; /* per-runtime cap */
     uint64_t compiled;
     uint64_t unsupported;
     uint64_t failed;
-    uint64_t jit_calls;          /* invocations that ran native code */
+    uint64_t jit_calls; /* invocations that ran native code */
 } QJSJitRuntime;
 
 #endif /* QJS_ENABLE_JIT */
@@ -109,14 +105,14 @@ typedef struct QJSJitRuntime {
    UNKNOWN is the default for any opcode not consciously classified —
    uncertain time must never inflate the inlineable DISPATCH bucket. */
 enum {
-    QJS_PROF_CAT_DISPATCH = 0,  /* stage-3 inlineable primitives + dispatch */
-    QJS_PROF_CAT_PROP_LOAD,     /* property/element load ops */
-    QJS_PROF_CAT_PROP_WRITE,    /* property/element write ops */
-    QJS_PROF_CAT_CALL,          /* call/constructor dispatch machinery */
-    QJS_PROF_CAT_STRING,        /* string helpers (concat) */
-    QJS_PROF_CAT_VM,            /* other known VM slow helpers */
-    QJS_PROF_CAT_NATIVE,        /* C-function callees (builtins + host bindings) */
-    QJS_PROF_CAT_UNKNOWN,       /* opcode without a conscious classification */
+    QJS_PROF_CAT_DISPATCH = 0, /* stage-3 inlineable primitives + dispatch */
+    QJS_PROF_CAT_PROP_LOAD,    /* property/element load ops */
+    QJS_PROF_CAT_PROP_WRITE,   /* property/element write ops */
+    QJS_PROF_CAT_CALL,         /* call/constructor dispatch machinery */
+    QJS_PROF_CAT_STRING,       /* string helpers (concat) */
+    QJS_PROF_CAT_VM,           /* other known VM slow helpers */
+    QJS_PROF_CAT_NATIVE,       /* C-function callees (builtins + host bindings) */
+    QJS_PROF_CAT_UNKNOWN,      /* opcode without a conscious classification */
     QJS_PROF_CAT_COUNT
 };
 
@@ -125,9 +121,9 @@ enum {
    dump writes the row (drain semantics), so reclaim accounting never
    double-counts dumped functions. */
 typedef struct QJSProfileFuncCounters {
-    uint32_t call_count;                     /* exact, saturating */
-    uint32_t backedge_count;                 /* exact, saturating */
-    uint32_t samples[QJS_PROF_CAT_COUNT];    /* incremented by the signal handler */
+    uint32_t call_count;                  /* exact, saturating */
+    uint32_t backedge_count;              /* exact, saturating */
+    uint32_t samples[QJS_PROF_CAT_COUNT]; /* incremented by the signal handler */
 } QJSProfileFuncCounters;
 
 /* Full per-function record snapshotted when a profiled
@@ -137,7 +133,7 @@ typedef struct QJSProfileFuncCounters {
    verdict. Flushed (exactly once) by the next JS_ProfileDump. */
 typedef struct QJSProfileTombstone {
     struct QJSProfileTombstone *next;
-    void *runtime;                           /* owning JSRuntime at free time */
+    void *runtime; /* owning JSRuntime at free time */
     char name[48];
     char source[64];
     int line;
@@ -151,16 +147,16 @@ typedef struct QJSProfileTombstone {
 
 typedef struct QJSProfileState {
     /* Written by the mutator, read by the same-thread signal handler. */
-    volatile QJSProfileFuncCounters *cur;    /* top JS frame's counters, NULL outside JS */
-    volatile int cat;                        /* current QJS_PROF_CAT_* */
-    volatile int running;                    /* sampler armed */
+    volatile QJSProfileFuncCounters *cur; /* top JS frame's counters, NULL outside JS */
+    volatile int cat;                     /* current QJS_PROF_CAT_* */
+    volatile int running;                 /* sampler armed */
 
-    QJSProfileTombstone *tombstones;         /* freed-before-dump functions */
-    int incomplete;                          /* sticky: a tombstone was lost (OOM) —
+    QJSProfileTombstone *tombstones; /* freed-before-dump functions */
+    int incomplete;                  /* sticky: a tombstone was lost (OOM) —
                                                 per-function data no longer complete */
-    int force_tombstone_oom;                 /* fault injection (env), tests only */
+    int force_tombstone_oom;         /* fault injection (env), tests only */
 
-    struct JSRuntime *owner;                 /* runtime that called JS_ProfileStart */
+    struct JSRuntime *owner; /* runtime that called JS_ProfileStart */
     int sample_hz;
 #if defined(__linux__)
     timer_t timer_id;
@@ -170,7 +166,7 @@ typedef struct QJSProfileState {
     /* Handler-side totals (whole-thread accounting). */
     volatile uint64_t samples_total;
     volatile uint64_t samples_by_cat[QJS_PROF_CAT_COUNT];
-    volatile uint64_t samples_no_frame;      /* cur == NULL: parser, GC, host glue */
+    volatile uint64_t samples_no_frame; /* cur == NULL: parser, GC, host glue */
 
     /* Fallback accounting for functions freed with undumped counts
        when a tombstone could not be allocated: totals stay consistent
@@ -188,17 +184,16 @@ extern uint8_t qjs_prof_opcode_category[256];
 
 static inline void qjs_prof_sat_inc_u32(uint32_t *counter)
 {
-    if (*counter != UINT32_MAX)
+    if (*counter != UINT32_MAX) {
         (*counter)++;
+    }
 }
 
 /* Function entry: count the call, make the callee current. The previous
    (function, category) pair is saved in interpreter locals and restored
    at the single interpreter exit, giving self-time attribution. */
-static inline void qjs_prof_enter(QJSProfileState *ps,
-                                  QJSProfileFuncCounters *func_counters,
-                                  QJSProfileFuncCounters **prev_func,
-                                  int *prev_cat)
+static inline void qjs_prof_enter(QJSProfileState *ps, QJSProfileFuncCounters *func_counters,
+                                  QJSProfileFuncCounters **prev_func, int *prev_cat)
 {
     *prev_func = (QJSProfileFuncCounters *)ps->cur;
     *prev_cat = ps->cat;
@@ -207,8 +202,7 @@ static inline void qjs_prof_enter(QJSProfileState *ps,
     ps->cat = QJS_PROF_CAT_DISPATCH;
 }
 
-static inline void qjs_prof_exit(QJSProfileState *ps,
-                                 QJSProfileFuncCounters *prev_func,
+static inline void qjs_prof_exit(QJSProfileState *ps, QJSProfileFuncCounters *prev_func,
                                  int prev_cat)
 {
     ps->cur = prev_func;
@@ -244,29 +238,27 @@ static inline void qjs_prof_backedge(QJSProfileFuncCounters *func_counters)
    per-op fast path is a register compare, no volatile load. Helper
    marks push/pop around their regions and always restore, so the
    shadow stays coherent; the exception label re-syncs both. */
-#define QJS_PROF_OP_TAP(opcode_fetch)                                   \
-    ((opcode_fetch),                                                    \
-     (unlikely(prof_state) ?                                            \
-         (void)(prof_cat_local ==                                       \
-                    qjs_prof_opcode_category[(uint8_t)opcode] ?         \
-                0 :                                                     \
-                (prof_state->cat = prof_cat_local =                     \
-                     qjs_prof_opcode_category[(uint8_t)opcode])) :      \
-         (void)0),                                                      \
+#define QJS_PROF_OP_TAP(opcode_fetch)                                                              \
+    ((opcode_fetch),                                                                               \
+     (unlikely(prof_state) ? (void)(prof_cat_local == qjs_prof_opcode_category[(uint8_t)opcode]    \
+                                        ? 0                                                        \
+                                        : (prof_state->cat = prof_cat_local =                      \
+                                               qjs_prof_opcode_category[(uint8_t)opcode]))         \
+                           : (void)0),                                                             \
      opcode)
 
 /* Scoped category marking for non-interpreter sites (C-callee paths). */
-#define QJS_PROF_CAT_PUSH_DECL(rt, category, savevar)          \
-    int savevar = 0;                                           \
-    (void)(rt);                                                \
-    if (unlikely(qjs_prof_thread_state))                       \
-        savevar = qjs_prof_cat_push(qjs_prof_thread_state, (category))
+#define QJS_PROF_CAT_PUSH_DECL(rt, category, savevar)                                              \
+    int savevar = 0;                                                                               \
+    (void)(rt);                                                                                    \
+    if (unlikely(qjs_prof_thread_state))                                                           \
+    savevar = qjs_prof_cat_push(qjs_prof_thread_state, (category))
 
-#define QJS_PROF_CAT_POP(rt, savevar)                          \
-    do {                                                       \
-        (void)(rt);                                            \
-        if (unlikely(qjs_prof_thread_state))                   \
-            qjs_prof_cat_pop(qjs_prof_thread_state, savevar);  \
+#define QJS_PROF_CAT_POP(rt, savevar)                                                              \
+    do {                                                                                           \
+        (void)(rt);                                                                                \
+        if (unlikely(qjs_prof_thread_state))                                                       \
+            qjs_prof_cat_pop(qjs_prof_thread_state, savevar);                                      \
     } while (0)
 
 #endif /* QUICKJS_JIT_INTERNAL_H */

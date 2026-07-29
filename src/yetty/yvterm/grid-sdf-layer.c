@@ -1,4 +1,5 @@
-/* sdf-layer.c — yvterm's SDF / glyph / text render backend.
+/* grid-sdf-layer.c — yvterm's SDF / glyph / text render backend
+ * (paints the grid.c line ring; the grid- prefix marks that pairing).
  *
  * Rasterises the raw ydraw drawable records stored per-line on yvterm's grid
  * ring (SDF shapes, GLYPH prims, TEXT_DRAWABLE_LIST runs, FONT resources). Each
@@ -18,7 +19,7 @@
  * visible ring — render is dirty-gated, so for static content it happens once
  * and on each scroll.
  */
-#include "sdf-layer.h"
+#include "grid-sdf-layer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -307,9 +308,9 @@ static struct yetty_ycore_void_result load_sdf_lib(struct yetty_yvterm_sdf_layer
 static struct yetty_ycore_void_result load_layer_shader(struct yetty_yvterm_sdf_layer *layer)
 {
     char path[768];
-    snprintf(path, sizeof(path), "%s/yvterm-sdf-layer.wgsl", layer->shaders_dir);
+    snprintf(path, sizeof(path), "%s/grid-sdf-layer.wgsl", layer->shaders_dir);
     struct yetty_ycore_buffer_result fr = yetty_ycore_read_file(path);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "sdf-layer: read yvterm-sdf-layer.wgsl");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "sdf-layer: read grid-sdf-layer.wgsl");
     layer->layer_shader_code = fr.value;
     return YETTY_OK_VOID();
 }

@@ -1,4 +1,5 @@
-/* sdf-layer.h — yvterm's own SDF / glyph / text render backend.
+/* grid-sdf-layer.h — yvterm's own SDF / glyph / text render backend
+ * (paints the grid.c line ring; the grid- prefix marks that pairing).
  *
  * yvterm stores raw ydraw drawable records (SDF shapes, GLYPH prims,
  * TEXT_DRAWABLE_LIST runs, FONT resources) per line on its grid ring (see
@@ -15,8 +16,8 @@
  * own grid. Plain-C render helper (no object/method surface), so not a
  * yclass class.
  */
-#ifndef YETTY_YVTERM_SDF_LAYER_H
-#define YETTY_YVTERM_SDF_LAYER_H
+#ifndef YETTY_YVTERM_GRID_SDF_LAYER_H
+#define YETTY_YVTERM_GRID_SDF_LAYER_H
 
 #include <stdint.h>
 
@@ -63,4 +64,4 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
 }
 #endif
 
-#endif /* YETTY_YVTERM_SDF_LAYER_H */
+#endif /* YETTY_YVTERM_GRID_SDF_LAYER_H */

@@ -1,5 +1,6 @@
 /*
- * shader-glyph-layer.c — animated procedural "shader glyphs" for yvterm.
+ * grid-shader-glyph-layer.c — animated procedural "shader glyphs" for yvterm
+ * (paints grid.c cells; the grid- prefix marks that pairing).
  *
  * Codepoints in the Supplementary PUA-B window (U+100000..U+100FFF) render as
  * per-cell animated fragment shaders instead of font glyphs. The shader bodies
@@ -16,9 +17,9 @@
  *
  * An event-loop timer repaints while shader glyphs are visible and self-stops
  * when none are, so idle terminals quiesce. Plain-C render helper owned by the
- * yvterm:vterm figure (mirrors sdf-layer); not a yclass class.
+ * yvterm:vterm figure (mirrors grid-sdf-layer); not a yclass class.
  */
-#include "shader-glyph-layer.h"
+#include "grid-shader-glyph-layer.h"
 
 #include <stdint.h>
 #include <stdio.h>

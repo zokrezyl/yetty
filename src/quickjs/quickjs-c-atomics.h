@@ -23,31 +23,23 @@
  */
 
 #if (defined(__GNUC__) || defined(__GNUG__)) && !defined(__clang__)
-   // Use GCC builtins for version < 4.9
-#  if((__GNUC__ << 16) + __GNUC_MINOR__ < ((4) << 16) + 9)
-#    define GCC_BUILTIN_ATOMICS
-#  endif
+// Use GCC builtins for version < 4.9
+#if ((__GNUC__ << 16) + __GNUC_MINOR__ < ((4) << 16) + 9)
+#define GCC_BUILTIN_ATOMICS
+#endif
 #endif
 
 #ifdef GCC_BUILTIN_ATOMICS
-#define atomic_fetch_add(obj, arg) \
-    __atomic_fetch_add(obj, arg, __ATOMIC_SEQ_CST)
-#define atomic_compare_exchange_strong(obj, expected, desired) \
+#define atomic_fetch_add(obj, arg) __atomic_fetch_add(obj, arg, __ATOMIC_SEQ_CST)
+#define atomic_compare_exchange_strong(obj, expected, desired)                                     \
     __atomic_compare_exchange_n(obj, expected, desired, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-#define atomic_exchange(obj, desired) \
-    __atomic_exchange_n (obj, desired, __ATOMIC_SEQ_CST)
-#define atomic_load(obj) \
-    __atomic_load_n(obj, __ATOMIC_SEQ_CST)
-#define atomic_store(obj, desired) \
-    __atomic_store_n(obj, desired, __ATOMIC_SEQ_CST)
-#define atomic_fetch_or(obj, arg) \
-    __atomic_fetch_or(obj, arg, __ATOMIC_SEQ_CST)
-#define atomic_fetch_xor(obj, arg) \
-    __atomic_fetch_xor(obj, arg, __ATOMIC_SEQ_CST)
-#define atomic_fetch_and(obj, arg) \
-    __atomic_fetch_and(obj, arg, __ATOMIC_SEQ_CST)
-#define atomic_fetch_sub(obj, arg) \
-    __atomic_fetch_sub(obj, arg, __ATOMIC_SEQ_CST)
+#define atomic_exchange(obj, desired) __atomic_exchange_n(obj, desired, __ATOMIC_SEQ_CST)
+#define atomic_load(obj) __atomic_load_n(obj, __ATOMIC_SEQ_CST)
+#define atomic_store(obj, desired) __atomic_store_n(obj, desired, __ATOMIC_SEQ_CST)
+#define atomic_fetch_or(obj, arg) __atomic_fetch_or(obj, arg, __ATOMIC_SEQ_CST)
+#define atomic_fetch_xor(obj, arg) __atomic_fetch_xor(obj, arg, __ATOMIC_SEQ_CST)
+#define atomic_fetch_and(obj, arg) __atomic_fetch_and(obj, arg, __ATOMIC_SEQ_CST)
+#define atomic_fetch_sub(obj, arg) __atomic_fetch_sub(obj, arg, __ATOMIC_SEQ_CST)
 #define _Atomic
 #else
 #include <stdatomic.h>

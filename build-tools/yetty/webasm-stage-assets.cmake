@@ -173,12 +173,17 @@ function(yetty_stage_webasm_assets)
             # (ygrid.wgsl, vterm's text shader). Without it staged the loaders
             # fall back to built-in no-op stubs and effects are disabled.
             "${YETTY_ROOT}/src/yetty/yshaders/effects-lib.wgsl"
-            # yvterm-sdf-layer.wgsl — the yvterm "vterm-as-figure" SDF pass that
-            # rasterizes ycat inline rich content (markdown/charts/diagrams). The
-            # refactor made sdf-layer.c load this from <paths/shaders>; without it
+            # grid-sdf-layer.wgsl — the yvterm "vterm-as-figure" SDF pass that
+            # rasterizes ycat inline rich content (markdown/charts/diagrams).
+            # grid-sdf-layer.c loads this from <paths/shaders>; without it
             # staged, sdf_layer_create fails ("load_layer_shader") and ycat rich
             # content is silently disabled on webasm.
-            "${YETTY_ROOT}/src/yetty/yvterm/yvterm-sdf-layer.wgsl")
+            "${YETTY_ROOT}/src/yetty/yvterm/grid-sdf-layer.wgsl"
+            # grid-text.wgsl — the vterm figure's text-grid shader (paints
+            # yvterm's grid.c cell model); vterm.c loads it at GPU init and
+            # prepends effects-lib.wgsl. Mandatory: without it staged the text
+            # pipeline fails hard and the terminal renders no text.
+            "${YETTY_ROOT}/src/yetty/yvterm/grid-text.wgsl")
         get_filename_component(_NAME "${_SHADER}" NAME)
         _stage_one("${_SHADER}" "data/shaders" "${_NAME}" TRUE "/data")
     endforeach()

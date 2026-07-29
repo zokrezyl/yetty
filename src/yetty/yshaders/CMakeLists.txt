@@ -14,10 +14,14 @@ set(MODULE_SHADERS
     ${YETTY_ROOT}/src/yetty/yfont/ms-msdf-font.wgsl
     ${YETTY_ROOT}/src/yetty/yfont/msdf-font.wgsl
     ${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl
-    # yvterm's SDF render pass loads <shaders_dir>/yvterm-sdf-layer.wgsl at
+    # yvterm's SDF render pass loads <shaders_dir>/grid-sdf-layer.wgsl at
     # init; without it the SDF layer is disabled and ycat rich content
     # silently stops rendering.
-    ${YETTY_ROOT}/src/yetty/yvterm/yvterm-sdf-layer.wgsl
+    ${YETTY_ROOT}/src/yetty/yvterm/grid-sdf-layer.wgsl
+    # yvterm's text-grid shader: vterm.c loads <shaders_dir>/grid-text.wgsl at
+    # GPU init and prepends effects-lib.wgsl. Mandatory — without it the
+    # terminal text pipeline fails and no text renders.
+    ${YETTY_ROOT}/src/yetty/yvterm/grid-text.wgsl
     ${YETTY_ROOT}/src/yetty/yrender/blend.wgsl
     # Generated SDF dispatcher + sdf_* functions (gen-sdf-code.py output).
     # ydraw-layer attaches it as a child resource set at runtime; merging

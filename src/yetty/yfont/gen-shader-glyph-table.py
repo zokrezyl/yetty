@@ -6,7 +6,7 @@ Scans `src/yetty/yfont/glyph-shaders/0xNN-name.wgsl` and emits a C header
 with a `static const struct ... TABLE[]` sorted alphabetically by name.
 
 Codepoint = PUA_BASE (0x100000) + local_id (the NNNN from the filename).
-This matches yterm/text-layer.c::resolve_glyph and shader-glyph-layer.h.
+This matches yvterm/grid-shader-glyph-layer.h and its consumers.
 
 PUA-B (U+100000..U+10FFFD) was picked after verifying against the bundled
 DejaVuSansM Nerd Font (13,718 cmap entries): PUA-B has 0 codepoints used

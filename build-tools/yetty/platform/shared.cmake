@@ -703,35 +703,36 @@ function(yetty_embed_assets TARGET)
         YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
 
     # Collect shaders from module locations. yvterm's terminal content is
-    # rendered by the ygrid layer (ygrid.wgsl) + the vterm figure's inlined
-    # text shader, so the old yvterm text-layer/ydraw-layer shaders are gone.
+    # rendered by the ygrid layer (ygrid.wgsl) + the vterm figure's text-grid
+    # shader (grid-text.wgsl below).
     file(COPY "${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     # Pointwise post-color effects library — attached at runtime as a child
     # resource set of the ygrid layer (and the vterm text shader); provides the
     # fx_post_apply() the layer shaders call. See src/yetty/yshaders/effects-lib.wgsl.
     file(COPY "${YETTY_ROOT}/src/yetty/yshaders/effects-lib.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    # grid-text.wgsl — the vterm figure's text-grid shader (paints yvterm's
+    # grid.c cell model). vterm.c loads it from <paths/shaders> at GPU init
+    # and prepends effects-lib.wgsl. Mandatory: without it packaged here the
+    # text pipeline fails hard and the terminal renders no text.
+    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/grid-text.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/ymgui/ymgui-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterminal/background-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     # Generated SDF dispatcher + sdf_* functions — attached at runtime as a
     # child resource set of ydraw-layer; see src/yetty/ysdf/gen-sdf-code.py.
     file(COPY "${YETTY_ROOT}/src/yetty/ysdf/ysdf.gen.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
-    # yvterm-sdf-layer.wgsl — the yvterm "vterm-as-figure" SDF pass that
+    # grid-sdf-layer.wgsl — the yvterm "vterm-as-figure" SDF pass that
     # renders per-line rich records (ycat / ybrowser --osc envelopes).
-    # sdf-layer.c loads it from <paths/shaders>; without it packaged here
+    # grid-sdf-layer.c loads it from <paths/shaders>; without it packaged here
     # sdf_layer_create fails ("load_layer_shader") and every inline rich
     # envelope is silently dropped on desktop. The webasm staging already
     # ships it — this is the desktop counterpart.
-    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/yvterm-sdf-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/grid-sdf-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yrender/blend.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(RENAME "${EMBED_DATA_DIR}/shaders/blend.wgsl" "${EMBED_DATA_DIR}/shaders/blender.wgsl")
     file(COPY "${YETTY_ROOT}/src/yetty/yfont/ms-msdf-font.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yfont/msdf-font.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yfont/ms-raster-font.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yfont/raster-font.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
-    # yvterm's SDF render pass (rich content anchored to text rows) loads
-    # <shaders_dir>/yvterm-sdf-layer.wgsl at init; without it the SDF layer
-    # is disabled and ycat rich content silently stops rendering.
-    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/yvterm-sdf-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     # GPU MSDF compute shader — used by the ymsdf-wgsl generator when the
     # canvas materialises a font-blob FONT prim (PDF embedded / fontconfig
     # substituted). Without this the GPU generator can't init its pipeline

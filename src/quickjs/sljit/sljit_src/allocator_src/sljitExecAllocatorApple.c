@@ -44,35 +44,35 @@
 #define SLJIT_UPDATE_WX_FLAGS(from, to, enable_exec)
 
 #ifdef MAP_JIT
-#define SLJIT_MAP_JIT	(get_map_jit_flag())
+#define SLJIT_MAP_JIT (get_map_jit_flag())
 static SLJIT_INLINE int get_map_jit_flag(void)
 {
-	size_t page_size;
-	void *ptr;
-	struct utsname name;
-	static int map_jit_flag = -1;
+    size_t page_size;
+    void *ptr;
+    struct utsname name;
+    static int map_jit_flag = -1;
 
-	if (map_jit_flag < 0) {
-		map_jit_flag = 0;
-		uname(&name);
+    if (map_jit_flag < 0) {
+        map_jit_flag = 0;
+        uname(&name);
 
-		/* Kernel version for 10.14.0 (Mojave) or later */
-		if (atoi(name.release) >= 18) {
-			page_size = get_page_alignment() + 1;
-			/* Only use MAP_JIT if a hardened runtime is used */
-			ptr = mmap(NULL, page_size, PROT_WRITE | PROT_EXEC,
-					MAP_PRIVATE | MAP_ANON, -1, 0);
+        /* Kernel version for 10.14.0 (Mojave) or later */
+        if (atoi(name.release) >= 18) {
+            page_size = get_page_alignment() + 1;
+            /* Only use MAP_JIT if a hardened runtime is used */
+            ptr = mmap(NULL, page_size, PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON, -1, 0);
 
-			if (ptr != MAP_FAILED)
-				munmap(ptr, page_size);
-			else
-				map_jit_flag = MAP_JIT;
-		}
-	}
-	return map_jit_flag;
+            if (ptr != MAP_FAILED) {
+                munmap(ptr, page_size);
+            } else {
+                map_jit_flag = MAP_JIT;
+            }
+        }
+    }
+    return map_jit_flag;
 }
 #else /* !defined(MAP_JIT) */
-#define SLJIT_MAP_JIT	(0)
+#define SLJIT_MAP_JIT (0)
 #endif
 
 #elif defined(SLJIT_CONFIG_ARM) && SLJIT_CONFIG_ARM
@@ -80,21 +80,20 @@ static SLJIT_INLINE int get_map_jit_flag(void)
 #include <AvailabilityMacros.h>
 #include <pthread.h>
 
-#define SLJIT_MAP_JIT	(MAP_JIT)
-#define SLJIT_UPDATE_WX_FLAGS(from, to, enable_exec) \
-		apple_update_wx_flags(enable_exec)
+#define SLJIT_MAP_JIT (MAP_JIT)
+#define SLJIT_UPDATE_WX_FLAGS(from, to, enable_exec) apple_update_wx_flags(enable_exec)
 
 static SLJIT_INLINE void apple_update_wx_flags(sljit_s32 enable_exec)
 {
 #if MAC_OS_X_VERSION_MIN_REQUIRED < 110000
-	if (__builtin_available(macos 11, *))
+    if (__builtin_available(macos 11, *))
 #endif /* BigSur */
-	pthread_jit_write_protect_np(enable_exec);
+        pthread_jit_write_protect_np(enable_exec);
 }
 
 #elif defined(SLJIT_CONFIG_PPC) && SLJIT_CONFIG_PPC
 
-#define SLJIT_MAP_JIT	(0)
+#define SLJIT_MAP_JIT (0)
 #define SLJIT_UPDATE_WX_FLAGS(from, to, enable_exec)
 
 #else
@@ -104,34 +103,35 @@ static SLJIT_INLINE void apple_update_wx_flags(sljit_s32 enable_exec)
 #else /* !TARGET_OS_OSX */
 
 #ifdef MAP_JIT
-#define SLJIT_MAP_JIT	(MAP_JIT)
+#define SLJIT_MAP_JIT (MAP_JIT)
 #else
-#define SLJIT_MAP_JIT	(0)
+#define SLJIT_MAP_JIT (0)
 #endif
 
 #endif /* TARGET_OS_OSX */
 
-static SLJIT_INLINE void* alloc_chunk(sljit_uw size)
+static SLJIT_INLINE void *alloc_chunk(sljit_uw size)
 {
-	void *retval;
-	int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
-	int flags = MAP_PRIVATE;
-	int fd = -1;
+    void *retval;
+    int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
+    int flags = MAP_PRIVATE;
+    int fd = -1;
 
-	flags |= MAP_ANON | SLJIT_MAP_JIT;
+    flags |= MAP_ANON | SLJIT_MAP_JIT;
 
-	retval = mmap(NULL, size, prot, flags, fd, 0);
-	if (retval == MAP_FAILED)
-		return NULL;
+    retval = mmap(NULL, size, prot, flags, fd, 0);
+    if (retval == MAP_FAILED) {
+        return NULL;
+    }
 
-	SLJIT_UPDATE_WX_FLAGS(retval, (uint8_t *)retval + size, 0);
+    SLJIT_UPDATE_WX_FLAGS(retval, (uint8_t *)retval + size, 0);
 
-	return retval;
+    return retval;
 }
 
 static SLJIT_INLINE void free_chunk(void *chunk, sljit_uw size)
 {
-	munmap(chunk, size);
+    munmap(chunk, size);
 }
 
 #include "sljitExecAllocatorCore.c"

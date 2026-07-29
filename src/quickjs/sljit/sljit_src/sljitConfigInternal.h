@@ -125,13 +125,14 @@
      not use any optional temporary registers.
 */
 
-#if (defined SLJIT_VERBOSE && SLJIT_VERBOSE) \
-	|| (defined SLJIT_DEBUG && SLJIT_DEBUG && (!defined(SLJIT_ASSERT) || !defined(SLJIT_UNREACHABLE)))
+#if (defined SLJIT_VERBOSE && SLJIT_VERBOSE) ||                                                    \
+    (defined SLJIT_DEBUG && SLJIT_DEBUG &&                                                         \
+     (!defined(SLJIT_ASSERT) || !defined(SLJIT_UNREACHABLE)))
 #include <stdio.h>
 #endif
 
-#if (defined SLJIT_DEBUG && SLJIT_DEBUG \
-	&& (!defined(SLJIT_ASSERT) || !defined(SLJIT_UNREACHABLE) || !defined(SLJIT_HALT_PROCESS)))
+#if (defined SLJIT_DEBUG && SLJIT_DEBUG &&                                                         \
+     (!defined(SLJIT_ASSERT) || !defined(SLJIT_UNREACHABLE) || !defined(SLJIT_HALT_PROCESS)))
 #include <stdlib.h>
 #endif
 
@@ -200,11 +201,11 @@ extern "C" {
 #if !defined(SLJIT_LIKELY) && !defined(SLJIT_UNLIKELY)
 
 #if defined(__GNUC__) && (__GNUC__ >= 3)
-#define SLJIT_LIKELY(x)		__builtin_expect((x), 1)
-#define SLJIT_UNLIKELY(x)	__builtin_expect((x), 0)
+#define SLJIT_LIKELY(x) __builtin_expect((x), 1)
+#define SLJIT_UNLIKELY(x) __builtin_expect((x), 0)
 #else
-#define SLJIT_LIKELY(x)		(x)
-#define SLJIT_UNLIKELY(x)	(x)
+#define SLJIT_LIKELY(x) (x)
+#define SLJIT_UNLIKELY(x) (x)
 #endif
 
 #endif /* !defined(SLJIT_LIKELY) && !defined(SLJIT_UNLIKELY) */
@@ -225,7 +226,7 @@ extern "C" {
 #ifndef SLJIT_NOINLINE
 /* Not inline functions. */
 #if defined(__GNUC__)
-#define SLJIT_NOINLINE __attribute__ ((noinline))
+#define SLJIT_NOINLINE __attribute__((noinline))
 #else
 #define SLJIT_NOINLINE
 #endif
@@ -285,8 +286,7 @@ extern "C" {
  * gcc's clear_cache builtin for power is broken
  */
 #if !defined(SLJIT_CONFIG_PPC)
-#define SLJIT_CACHE_FLUSH(from, to) \
-	__builtin___clear_cache((char*)(from), (char*)(to))
+#define SLJIT_CACHE_FLUSH(from, to) __builtin___clear_cache((char *)(from), (char *)(to))
 #endif
 
 #endif /* gcc >= 10 */
@@ -294,8 +294,8 @@ extern "C" {
 
 #ifndef SLJIT_CACHE_FLUSH
 
-#if (defined SLJIT_CONFIG_X86 && SLJIT_CONFIG_X86) \
-	|| (defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X)
+#if (defined SLJIT_CONFIG_X86 && SLJIT_CONFIG_X86) ||                                              \
+    (defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X)
 
 /* Not required to implement on archs with unified caches. */
 #define SLJIT_CACHE_FLUSH(from, to)
@@ -305,38 +305,36 @@ extern "C" {
 /* Supported by all macs since Mac OS 10.5.
    However, it does not work on non-jailbroken iOS devices,
    although the compilation is successful. */
-#define SLJIT_CACHE_FLUSH(from, to) \
-	sys_icache_invalidate((void*)(from), (size_t)((char*)(to) - (char*)(from)))
+#define SLJIT_CACHE_FLUSH(from, to)                                                                \
+    sys_icache_invalidate((void *)(from), (size_t)((char *)(to) - (char *)(from)))
 
 #elif (defined SLJIT_CONFIG_PPC && SLJIT_CONFIG_PPC)
 
 /* The __clear_cache() implementation of GCC is a dummy function on PowerPC. */
-#define SLJIT_CACHE_FLUSH(from, to) \
-	ppc_cache_flush((from), (to))
+#define SLJIT_CACHE_FLUSH(from, to) ppc_cache_flush((from), (to))
 #define SLJIT_CACHE_FLUSH_OWN_IMPL 1
 
 #elif defined(_WIN32)
 
-#define SLJIT_CACHE_FLUSH(from, to) \
-	FlushInstructionCache(GetCurrentProcess(), (void*)(from), (size_t)((char*)(to) - (char*)(from)))
+#define SLJIT_CACHE_FLUSH(from, to)                                                                \
+    FlushInstructionCache(GetCurrentProcess(), (void *)(from),                                     \
+                          (size_t)((char *)(to) - (char *)(from)))
 
-#elif (defined(__GNUC__) && (__GNUC__ >= 5 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 3))) || defined(__clang__)
+#elif (defined(__GNUC__) && (__GNUC__ >= 5 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 3))) ||          \
+    defined(__clang__)
 
-#define SLJIT_CACHE_FLUSH(from, to) \
-	__builtin___clear_cache((char*)(from), (char*)(to))
+#define SLJIT_CACHE_FLUSH(from, to) __builtin___clear_cache((char *)(from), (char *)(to))
 
 #elif defined __ANDROID__
 
 /* Android ARMv7 with gcc lacks __clear_cache; use cacheflush instead. */
 #include <sys/cachectl.h>
-#define SLJIT_CACHE_FLUSH(from, to) \
-	cacheflush((long)(from), (long)(to), 0)
+#define SLJIT_CACHE_FLUSH(from, to) cacheflush((long)(from), (long)(to), 0)
 
 #else
 
 /* Call __ARM_NR_cacheflush on ARM-Linux or the corresponding MIPS syscall. */
-#define SLJIT_CACHE_FLUSH(from, to) \
-	__clear_cache((char*)(from), (char*)(to))
+#define SLJIT_CACHE_FLUSH(from, to) __clear_cache((char *)(from), (char *)(to))
 
 #endif
 
@@ -366,13 +364,13 @@ typedef signed int sljit_s32;
 #define SLJIT_WORD_SHIFT 0
 typedef unsigned int sljit_uw;
 typedef int sljit_sw;
-#elif !(defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64) \
-	&& !(defined SLJIT_CONFIG_ARM_64 && SLJIT_CONFIG_ARM_64) \
-	&& !(defined SLJIT_CONFIG_PPC_64 && SLJIT_CONFIG_PPC_64) \
-	&& !(defined SLJIT_CONFIG_MIPS_64 && SLJIT_CONFIG_MIPS_64) \
-	&& !(defined SLJIT_CONFIG_RISCV_64 && SLJIT_CONFIG_RISCV_64) \
-	&& !(defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X) \
-	&& !(defined SLJIT_CONFIG_LOONGARCH_64 && SLJIT_CONFIG_LOONGARCH_64)
+#elif !(defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64) &&                                     \
+    !(defined SLJIT_CONFIG_ARM_64 && SLJIT_CONFIG_ARM_64) &&                                       \
+    !(defined SLJIT_CONFIG_PPC_64 && SLJIT_CONFIG_PPC_64) &&                                       \
+    !(defined SLJIT_CONFIG_MIPS_64 && SLJIT_CONFIG_MIPS_64) &&                                     \
+    !(defined SLJIT_CONFIG_RISCV_64 && SLJIT_CONFIG_RISCV_64) &&                                   \
+    !(defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X) &&                                         \
+    !(defined SLJIT_CONFIG_LOONGARCH_64 && SLJIT_CONFIG_LOONGARCH_64)
 #define SLJIT_32BIT_ARCHITECTURE 1
 #define SLJIT_WORD_SHIFT 2
 typedef unsigned int sljit_uw;
@@ -389,7 +387,7 @@ typedef long long sljit_sw;
 typedef unsigned __int64 sljit_uw;
 typedef __int64 sljit_sw;
 #endif
-#else /* !_WIN32 */
+#else  /* !_WIN32 */
 typedef unsigned long int sljit_uw;
 typedef long int sljit_sw;
 #endif /* _WIN32 */
@@ -450,12 +448,12 @@ typedef double sljit_f64;
 /* Defining long constants. */
 #if (defined SLJIT_64BIT_ARCHITECTURE && SLJIT_64BIT_ARCHITECTURE)
 #ifdef _WIN64
-#define SLJIT_W(w)	(w##ll)
+#define SLJIT_W(w) (w##ll)
 #else /* !windows */
-#define SLJIT_W(w)	(w##l)
+#define SLJIT_W(w) (w##l)
 #endif /* windows */
-#else /* 32 bit */
-#define SLJIT_W(w)	(w)
+#else  /* 32 bit */
+#define SLJIT_W(w) (w)
 #endif /* unknown */
 
 #endif /* !SLJIT_W */
@@ -465,24 +463,26 @@ typedef double sljit_f64;
 /*************************/
 
 /* Sanity check. */
-#if (defined SLJIT_BIG_ENDIAN && SLJIT_BIG_ENDIAN) && (defined SLJIT_LITTLE_ENDIAN && SLJIT_LITTLE_ENDIAN)
+#if (defined SLJIT_BIG_ENDIAN && SLJIT_BIG_ENDIAN) &&                                              \
+    (defined SLJIT_LITTLE_ENDIAN && SLJIT_LITTLE_ENDIAN)
 #error "Exactly one endianness must be selected"
 #endif
 
-#if !(defined SLJIT_BIG_ENDIAN && SLJIT_BIG_ENDIAN) && !(defined SLJIT_LITTLE_ENDIAN && SLJIT_LITTLE_ENDIAN)
+#if !(defined SLJIT_BIG_ENDIAN && SLJIT_BIG_ENDIAN) &&                                             \
+    !(defined SLJIT_LITTLE_ENDIAN && SLJIT_LITTLE_ENDIAN)
 #error "Exactly one endianness must be selected"
 #endif
 
 #ifndef SLJIT_UNALIGNED
 
-#if (defined SLJIT_CONFIG_X86 && SLJIT_CONFIG_X86) \
-	|| (defined SLJIT_CONFIG_ARM_V7 && SLJIT_CONFIG_ARM_V7) \
-	|| (defined SLJIT_CONFIG_ARM_THUMB2 && SLJIT_CONFIG_ARM_THUMB2) \
-	|| (defined SLJIT_CONFIG_ARM_64 && SLJIT_CONFIG_ARM_64) \
-	|| (defined SLJIT_CONFIG_PPC && SLJIT_CONFIG_PPC) \
-	|| (defined SLJIT_CONFIG_RISCV && SLJIT_CONFIG_RISCV) \
-	|| (defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X) \
-	|| (defined SLJIT_CONFIG_LOONGARCH && SLJIT_CONFIG_LOONGARCH)
+#if (defined SLJIT_CONFIG_X86 && SLJIT_CONFIG_X86) ||                                              \
+    (defined SLJIT_CONFIG_ARM_V7 && SLJIT_CONFIG_ARM_V7) ||                                        \
+    (defined SLJIT_CONFIG_ARM_THUMB2 && SLJIT_CONFIG_ARM_THUMB2) ||                                \
+    (defined SLJIT_CONFIG_ARM_64 && SLJIT_CONFIG_ARM_64) ||                                        \
+    (defined SLJIT_CONFIG_PPC && SLJIT_CONFIG_PPC) ||                                              \
+    (defined SLJIT_CONFIG_RISCV && SLJIT_CONFIG_RISCV) ||                                          \
+    (defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X) ||                                          \
+    (defined SLJIT_CONFIG_LOONGARCH && SLJIT_CONFIG_LOONGARCH)
 #define SLJIT_UNALIGNED 1
 #endif
 
@@ -490,12 +490,12 @@ typedef double sljit_f64;
 
 #ifndef SLJIT_FPU_UNALIGNED
 
-#if (defined SLJIT_CONFIG_X86 && SLJIT_CONFIG_X86) \
-	|| (defined SLJIT_CONFIG_ARM_64 && SLJIT_CONFIG_ARM_64) \
-	|| (defined SLJIT_CONFIG_PPC && SLJIT_CONFIG_PPC) \
-	|| (defined SLJIT_CONFIG_RISCV && SLJIT_CONFIG_RISCV) \
-	|| (defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X) \
-	|| (defined SLJIT_CONFIG_LOONGARCH && SLJIT_CONFIG_LOONGARCH)
+#if (defined SLJIT_CONFIG_X86 && SLJIT_CONFIG_X86) ||                                              \
+    (defined SLJIT_CONFIG_ARM_64 && SLJIT_CONFIG_ARM_64) ||                                        \
+    (defined SLJIT_CONFIG_PPC && SLJIT_CONFIG_PPC) ||                                              \
+    (defined SLJIT_CONFIG_RISCV && SLJIT_CONFIG_RISCV) ||                                          \
+    (defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X) ||                                          \
+    (defined SLJIT_CONFIG_LOONGARCH && SLJIT_CONFIG_LOONGARCH)
 #define SLJIT_FPU_UNALIGNED 1
 #endif
 
@@ -516,8 +516,9 @@ typedef double sljit_f64;
 #endif /* !SLJIT_FUNC */
 
 #ifndef SLJIT_INDIRECT_CALL
-#if ((defined SLJIT_CONFIG_PPC_64 && SLJIT_CONFIG_PPC_64) && (!defined _CALL_ELF || _CALL_ELF == 1)) \
-	|| ((defined SLJIT_CONFIG_PPC_32 && SLJIT_CONFIG_PPC_32) && defined _AIX)
+#if ((defined SLJIT_CONFIG_PPC_64 && SLJIT_CONFIG_PPC_64) &&                                       \
+     (!defined _CALL_ELF || _CALL_ELF == 1)) ||                                                    \
+    ((defined SLJIT_CONFIG_PPC_32 && SLJIT_CONFIG_PPC_32) && defined _AIX)
 /* It seems certain ppc compilers use an indirect addressing for functions
    which makes things complicated. */
 #define SLJIT_INDIRECT_CALL 1
@@ -535,18 +536,20 @@ determine the next executed instruction after return. */
 /***************************************************/
 
 #if (defined SLJIT_EXECUTABLE_ALLOCATOR && SLJIT_EXECUTABLE_ALLOCATOR)
-SLJIT_API_FUNC_ATTRIBUTE void* sljit_malloc_exec(sljit_uw size);
-SLJIT_API_FUNC_ATTRIBUTE void sljit_free_exec(void* ptr);
+SLJIT_API_FUNC_ATTRIBUTE void *sljit_malloc_exec(sljit_uw size);
+SLJIT_API_FUNC_ATTRIBUTE void sljit_free_exec(void *ptr);
 /* Note: sljitLir.h also defines sljit_free_unused_memory_exec() function. */
 #define SLJIT_BUILTIN_MALLOC_EXEC(size, exec_allocator_data) sljit_malloc_exec(size)
 #define SLJIT_BUILTIN_FREE_EXEC(ptr, exec_allocator_data) sljit_free_exec(ptr)
 
 #ifndef SLJIT_MALLOC_EXEC
-#define SLJIT_MALLOC_EXEC(size, exec_allocator_data) SLJIT_BUILTIN_MALLOC_EXEC((size), (exec_allocator_data))
+#define SLJIT_MALLOC_EXEC(size, exec_allocator_data)                                               \
+    SLJIT_BUILTIN_MALLOC_EXEC((size), (exec_allocator_data))
 #endif /* SLJIT_MALLOC_EXEC */
 
 #ifndef SLJIT_FREE_EXEC
-#define SLJIT_FREE_EXEC(ptr, exec_allocator_data) SLJIT_BUILTIN_FREE_EXEC((ptr), (exec_allocator_data))
+#define SLJIT_FREE_EXEC(ptr, exec_allocator_data)                                                  \
+    SLJIT_BUILTIN_FREE_EXEC((ptr), (exec_allocator_data))
 #endif /* SLJIT_FREE_EXEC */
 
 #if (defined SLJIT_PROT_EXECUTABLE_ALLOCATOR && SLJIT_PROT_EXECUTABLE_ALLOCATOR)
@@ -789,23 +792,24 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_sw sljit_exec_offset(void *code);
 
 #define SLJIT_LOCALS_OFFSET (SLJIT_LOCALS_OFFSET_BASE)
 
-#define SLJIT_NUMBER_OF_SCRATCH_REGISTERS \
-	(SLJIT_NUMBER_OF_REGISTERS - SLJIT_NUMBER_OF_SAVED_REGISTERS)
+#define SLJIT_NUMBER_OF_SCRATCH_REGISTERS                                                          \
+    (SLJIT_NUMBER_OF_REGISTERS - SLJIT_NUMBER_OF_SAVED_REGISTERS)
 
-#define SLJIT_NUMBER_OF_SCRATCH_FLOAT_REGISTERS \
-	(SLJIT_NUMBER_OF_FLOAT_REGISTERS - SLJIT_NUMBER_OF_SAVED_FLOAT_REGISTERS)
+#define SLJIT_NUMBER_OF_SCRATCH_FLOAT_REGISTERS                                                    \
+    (SLJIT_NUMBER_OF_FLOAT_REGISTERS - SLJIT_NUMBER_OF_SAVED_FLOAT_REGISTERS)
 
-#define SLJIT_NUMBER_OF_SCRATCH_VECTOR_REGISTERS \
-	(SLJIT_NUMBER_OF_VECTOR_REGISTERS - SLJIT_NUMBER_OF_SAVED_VECTOR_REGISTERS)
+#define SLJIT_NUMBER_OF_SCRATCH_VECTOR_REGISTERS                                                   \
+    (SLJIT_NUMBER_OF_VECTOR_REGISTERS - SLJIT_NUMBER_OF_SAVED_VECTOR_REGISTERS)
 
-#if (defined SLJIT_UPPER_BITS_ZERO_EXTENDED && SLJIT_UPPER_BITS_ZERO_EXTENDED) \
-	+ (defined SLJIT_UPPER_BITS_SIGN_EXTENDED && SLJIT_UPPER_BITS_SIGN_EXTENDED) \
-	+ (defined SLJIT_UPPER_BITS_PRESERVED && SLJIT_UPPER_BITS_PRESERVED) > 1
+#if (defined SLJIT_UPPER_BITS_ZERO_EXTENDED && SLJIT_UPPER_BITS_ZERO_EXTENDED) +                   \
+        (defined SLJIT_UPPER_BITS_SIGN_EXTENDED && SLJIT_UPPER_BITS_SIGN_EXTENDED) +               \
+        (defined SLJIT_UPPER_BITS_PRESERVED && SLJIT_UPPER_BITS_PRESERVED) >                       \
+    1
 #error "Invalid upper bits defintion"
 #endif
 
-#if (defined SLJIT_UPPER_BITS_PRESERVED && SLJIT_UPPER_BITS_PRESERVED) \
-	&& !(defined SLJIT_UPPER_BITS_IGNORED && SLJIT_UPPER_BITS_IGNORED)
+#if (defined SLJIT_UPPER_BITS_PRESERVED && SLJIT_UPPER_BITS_PRESERVED) &&                          \
+    !(defined SLJIT_UPPER_BITS_IGNORED && SLJIT_UPPER_BITS_IGNORED)
 #error "Upper bits preserved requires bits ignored"
 #endif
 
@@ -825,52 +829,52 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_sw sljit_exec_offset(void *code);
    base address for memory operations. */
 
 /* Temporary registers */
-#define SLJIT_TMP_R0		(SLJIT_TMP_REGISTER_BASE + 0)
-#define SLJIT_TMP_R1		(SLJIT_TMP_REGISTER_BASE + 1)
-#define SLJIT_TMP_R2		(SLJIT_TMP_REGISTER_BASE + 2)
-#define SLJIT_TMP_R3		(SLJIT_TMP_REGISTER_BASE + 3)
-#define SLJIT_TMP_R4		(SLJIT_TMP_REGISTER_BASE + 4)
-#define SLJIT_TMP_R5		(SLJIT_TMP_REGISTER_BASE + 5)
-#define SLJIT_TMP_R6		(SLJIT_TMP_REGISTER_BASE + 6)
-#define SLJIT_TMP_R7		(SLJIT_TMP_REGISTER_BASE + 7)
-#define SLJIT_TMP_R8		(SLJIT_TMP_REGISTER_BASE + 8)
-#define SLJIT_TMP_R9		(SLJIT_TMP_REGISTER_BASE + 9)
-#define SLJIT_TMP_R(i)		(SLJIT_TMP_REGISTER_BASE + (i))
+#define SLJIT_TMP_R0 (SLJIT_TMP_REGISTER_BASE + 0)
+#define SLJIT_TMP_R1 (SLJIT_TMP_REGISTER_BASE + 1)
+#define SLJIT_TMP_R2 (SLJIT_TMP_REGISTER_BASE + 2)
+#define SLJIT_TMP_R3 (SLJIT_TMP_REGISTER_BASE + 3)
+#define SLJIT_TMP_R4 (SLJIT_TMP_REGISTER_BASE + 4)
+#define SLJIT_TMP_R5 (SLJIT_TMP_REGISTER_BASE + 5)
+#define SLJIT_TMP_R6 (SLJIT_TMP_REGISTER_BASE + 6)
+#define SLJIT_TMP_R7 (SLJIT_TMP_REGISTER_BASE + 7)
+#define SLJIT_TMP_R8 (SLJIT_TMP_REGISTER_BASE + 8)
+#define SLJIT_TMP_R9 (SLJIT_TMP_REGISTER_BASE + 9)
+#define SLJIT_TMP_R(i) (SLJIT_TMP_REGISTER_BASE + (i))
 
-#define SLJIT_TMP_FR0		(SLJIT_TMP_FREGISTER_BASE + 0)
-#define SLJIT_TMP_FR1		(SLJIT_TMP_FREGISTER_BASE + 1)
-#define SLJIT_TMP_FR2		(SLJIT_TMP_FREGISTER_BASE + 2)
-#define SLJIT_TMP_FR3		(SLJIT_TMP_FREGISTER_BASE + 3)
-#define SLJIT_TMP_FR4		(SLJIT_TMP_FREGISTER_BASE + 4)
-#define SLJIT_TMP_FR5		(SLJIT_TMP_FREGISTER_BASE + 5)
-#define SLJIT_TMP_FR6		(SLJIT_TMP_FREGISTER_BASE + 6)
-#define SLJIT_TMP_FR7		(SLJIT_TMP_FREGISTER_BASE + 7)
-#define SLJIT_TMP_FR8		(SLJIT_TMP_FREGISTER_BASE + 8)
-#define SLJIT_TMP_FR9		(SLJIT_TMP_FREGISTER_BASE + 9)
-#define SLJIT_TMP_FR(i)		(SLJIT_TMP_FREGISTER_BASE + (i))
+#define SLJIT_TMP_FR0 (SLJIT_TMP_FREGISTER_BASE + 0)
+#define SLJIT_TMP_FR1 (SLJIT_TMP_FREGISTER_BASE + 1)
+#define SLJIT_TMP_FR2 (SLJIT_TMP_FREGISTER_BASE + 2)
+#define SLJIT_TMP_FR3 (SLJIT_TMP_FREGISTER_BASE + 3)
+#define SLJIT_TMP_FR4 (SLJIT_TMP_FREGISTER_BASE + 4)
+#define SLJIT_TMP_FR5 (SLJIT_TMP_FREGISTER_BASE + 5)
+#define SLJIT_TMP_FR6 (SLJIT_TMP_FREGISTER_BASE + 6)
+#define SLJIT_TMP_FR7 (SLJIT_TMP_FREGISTER_BASE + 7)
+#define SLJIT_TMP_FR8 (SLJIT_TMP_FREGISTER_BASE + 8)
+#define SLJIT_TMP_FR9 (SLJIT_TMP_FREGISTER_BASE + 9)
+#define SLJIT_TMP_FR(i) (SLJIT_TMP_FREGISTER_BASE + (i))
 
-#define SLJIT_TMP_VR0		(SLJIT_TMP_VREGISTER_BASE + 0)
-#define SLJIT_TMP_VR1		(SLJIT_TMP_VREGISTER_BASE + 1)
-#define SLJIT_TMP_VR2		(SLJIT_TMP_VREGISTER_BASE + 2)
-#define SLJIT_TMP_VR3		(SLJIT_TMP_VREGISTER_BASE + 3)
-#define SLJIT_TMP_VR4		(SLJIT_TMP_VREGISTER_BASE + 4)
-#define SLJIT_TMP_VR5		(SLJIT_TMP_VREGISTER_BASE + 5)
-#define SLJIT_TMP_VR6		(SLJIT_TMP_VREGISTER_BASE + 6)
-#define SLJIT_TMP_VR7		(SLJIT_TMP_VREGISTER_BASE + 7)
-#define SLJIT_TMP_VR8		(SLJIT_TMP_VREGISTER_BASE + 8)
-#define SLJIT_TMP_VR9		(SLJIT_TMP_VREGISTER_BASE + 9)
-#define SLJIT_TMP_VR(i)		(SLJIT_TMP_VREGISTER_BASE + (i))
+#define SLJIT_TMP_VR0 (SLJIT_TMP_VREGISTER_BASE + 0)
+#define SLJIT_TMP_VR1 (SLJIT_TMP_VREGISTER_BASE + 1)
+#define SLJIT_TMP_VR2 (SLJIT_TMP_VREGISTER_BASE + 2)
+#define SLJIT_TMP_VR3 (SLJIT_TMP_VREGISTER_BASE + 3)
+#define SLJIT_TMP_VR4 (SLJIT_TMP_VREGISTER_BASE + 4)
+#define SLJIT_TMP_VR5 (SLJIT_TMP_VREGISTER_BASE + 5)
+#define SLJIT_TMP_VR6 (SLJIT_TMP_VREGISTER_BASE + 6)
+#define SLJIT_TMP_VR7 (SLJIT_TMP_VREGISTER_BASE + 7)
+#define SLJIT_TMP_VR8 (SLJIT_TMP_VREGISTER_BASE + 8)
+#define SLJIT_TMP_VR9 (SLJIT_TMP_VREGISTER_BASE + 9)
+#define SLJIT_TMP_VR(i) (SLJIT_TMP_VREGISTER_BASE + (i))
 
 /********************************/
 /* CPU status flags management. */
 /********************************/
 
-#if (defined SLJIT_CONFIG_ARM && SLJIT_CONFIG_ARM) \
-	|| (defined SLJIT_CONFIG_PPC && SLJIT_CONFIG_PPC) \
-	|| (defined SLJIT_CONFIG_MIPS && SLJIT_CONFIG_MIPS) \
-	|| (defined SLJIT_CONFIG_RISCV && SLJIT_CONFIG_RISCV) \
-	|| (defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X) \
-	|| (defined SLJIT_CONFIG_LOONGARCH && SLJIT_CONFIG_LOONGARCH)
+#if (defined SLJIT_CONFIG_ARM && SLJIT_CONFIG_ARM) ||                                              \
+    (defined SLJIT_CONFIG_PPC && SLJIT_CONFIG_PPC) ||                                              \
+    (defined SLJIT_CONFIG_MIPS && SLJIT_CONFIG_MIPS) ||                                            \
+    (defined SLJIT_CONFIG_RISCV && SLJIT_CONFIG_RISCV) ||                                          \
+    (defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X) ||                                          \
+    (defined SLJIT_CONFIG_LOONGARCH && SLJIT_CONFIG_LOONGARCH)
 #define SLJIT_HAS_STATUS_FLAGS_STATE 1
 #endif
 
@@ -878,13 +882,11 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_sw sljit_exec_offset(void *code);
 /* Floating point register management. */
 /***************************************/
 
-#if (defined SLJIT_CONFIG_ARM_32 && SLJIT_CONFIG_ARM_32) \
-	|| (defined SLJIT_CONFIG_MIPS_32 && SLJIT_CONFIG_MIPS_32)
-#define SLJIT_F64_SECOND(reg) \
-	((reg) + SLJIT_FS0 + SLJIT_NUMBER_OF_TEMPORARY_FLOAT_REGISTERS)
+#if (defined SLJIT_CONFIG_ARM_32 && SLJIT_CONFIG_ARM_32) ||                                        \
+    (defined SLJIT_CONFIG_MIPS_32 && SLJIT_CONFIG_MIPS_32)
+#define SLJIT_F64_SECOND(reg) ((reg) + SLJIT_FS0 + SLJIT_NUMBER_OF_TEMPORARY_FLOAT_REGISTERS)
 #else /* !SLJIT_CONFIG_ARM_32 && !SLJIT_CONFIG_MIPS_32 */
-#define SLJIT_F64_SECOND(reg) \
-	(reg)
+#define SLJIT_F64_SECOND(reg) (reg)
 #endif /* SLJIT_CONFIG_ARM_32 || SLJIT_CONFIG_MIPS_32 */
 
 /*************************************/
@@ -897,8 +899,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_sw sljit_exec_offset(void *code);
 
 /* SLJIT_HALT_PROCESS must halt the process. */
 #ifndef SLJIT_HALT_PROCESS
-#define SLJIT_HALT_PROCESS() \
-	abort();
+#define SLJIT_HALT_PROCESS() abort();
 #endif /* !SLJIT_HALT_PROCESS */
 
 #endif /* !SLJIT_ASSERT || !SLJIT_UNREACHABLE */
@@ -906,23 +907,23 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_sw sljit_exec_offset(void *code);
 /* Feel free to redefine these two macros. */
 #ifndef SLJIT_ASSERT
 
-#define SLJIT_ASSERT(x) \
-	do { \
-		if (SLJIT_UNLIKELY(!(x))) { \
-			printf("Assertion failed at " __FILE__ ":%d\n", __LINE__); \
-			SLJIT_HALT_PROCESS(); \
-		} \
-	} while (0)
+#define SLJIT_ASSERT(x)                                                                            \
+    do {                                                                                           \
+        if (SLJIT_UNLIKELY(!(x))) {                                                                \
+            printf("Assertion failed at " __FILE__ ":%d\n", __LINE__);                             \
+            SLJIT_HALT_PROCESS();                                                                  \
+        }                                                                                          \
+    } while (0)
 
 #endif /* !SLJIT_ASSERT */
 
 #ifndef SLJIT_UNREACHABLE
 
-#define SLJIT_UNREACHABLE() \
-	do { \
-		printf("Should never been reached " __FILE__ ":%d\n", __LINE__); \
-		SLJIT_HALT_PROCESS(); \
-	} while (0)
+#define SLJIT_UNREACHABLE()                                                                        \
+    do {                                                                                           \
+        printf("Should never been reached " __FILE__ ":%d\n", __LINE__);                           \
+        SLJIT_HALT_PROCESS();                                                                      \
+    } while (0)
 
 #endif /* !SLJIT_UNREACHABLE */
 
@@ -932,38 +933,39 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_sw sljit_exec_offset(void *code);
 #undef SLJIT_ASSERT
 #undef SLJIT_UNREACHABLE
 
-#define SLJIT_ASSERT(x) \
-	do { } while (0)
-#define SLJIT_UNREACHABLE() \
-	do { } while (0)
+#define SLJIT_ASSERT(x)                                                                            \
+    do {                                                                                           \
+    } while (0)
+#define SLJIT_UNREACHABLE()                                                                        \
+    do {                                                                                           \
+    } while (0)
 
 #endif /* (defined SLJIT_DEBUG && SLJIT_DEBUG) */
 
 #ifndef SLJIT_COMPILE_ASSERT
 
-#define SLJIT_COMPILE_ASSERT(x, description) \
-	switch(0) { case 0: case ((x) ? 1 : 0): break; }
+#define SLJIT_COMPILE_ASSERT(x, description)                                                       \
+    switch (0) {                                                                                   \
+    case 0: case ((x) ? 1 : 0): break;                                                 \
+    }
 
 #endif /* !SLJIT_COMPILE_ASSERT */
 
 #ifndef SLJIT_FALLTHROUGH
 
-#if defined(__cplusplus) && __cplusplus >= 202002L && \
-	defined(__has_cpp_attribute)
+#if defined(__cplusplus) && __cplusplus >= 202002L && defined(__has_cpp_attribute)
 /* Standards-compatible C++ variant. */
 #if __has_cpp_attribute(fallthrough)
 #define SLJIT_FALLTHROUGH [[fallthrough]];
 #endif
-#elif !defined(__cplusplus) && \
-	  defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L && \
-	  defined(__has_c_attribute)
+#elif !defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L &&         \
+    defined(__has_c_attribute)
 /* Standards-compatible C variant. */
 #if __has_c_attribute(fallthrough)
 #define SLJIT_FALLTHROUGH [[fallthrough]];
 #endif
-#elif ((defined(__clang__) && __clang_major__ >= 10) || \
-	   (defined(__GNUC__) && __GNUC__ >= 7)) && \
-	  defined(__has_attribute)
+#elif ((defined(__clang__) && __clang_major__ >= 10) || (defined(__GNUC__) && __GNUC__ >= 7)) &&   \
+    defined(__has_attribute)
 /* Clang and GCC syntax. Rule out old versions because apparently Clang at
    least has a broken implementation of __has_attribute. */
 #if __has_attribute(fallthrough)

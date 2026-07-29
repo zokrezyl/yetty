@@ -390,14 +390,15 @@ static void mark_dirty_inline_prop(JSContext *ctx, const char *prop_name)
     /* A custom property, or a wholesale cssText replacement (which may add or
      * change custom properties), needs the conservative descendant-affecting
      * invalidation; a plain property only affects this element. */
-    bool conservative = prop_name && ((prop_name[0] == '-' && prop_name[1] == '-') ||
-                                      strcmp(prop_name, "cssText") == 0 ||
-                                      strcmp(prop_name, "css-text") == 0);
+    bool conservative =
+        prop_name && ((prop_name[0] == '-' && prop_name[1] == '-') ||
+                      strcmp(prop_name, "cssText") == 0 || strcmp(prop_name, "css-text") == 0);
     if (conservative) {
         mark_dirty_custom_prop(ctx);
         return;
     }
-    mark_dirty_style_write(ctx, /*affects_layout=*/!prop_name || !css_prop_is_paint_only(prop_name));
+    mark_dirty_style_write(ctx,
+                           /*affects_layout=*/!prop_name || !css_prop_is_paint_only(prop_name));
 }
 
 /* MutationObserver notification — implemented below, forward-declared here so
@@ -2879,7 +2880,8 @@ enum anchor_url_part {
     ANCHOR_ORIGIN,
 };
 
-static JSValue anchor_url_component(JSContext *ctx, JSValueConst this_val, enum anchor_url_part which)
+static JSValue anchor_url_component(JSContext *ctx, JSValueConst this_val,
+                                    enum anchor_url_part which)
 {
     lxb_dom_element_t *el = unwrap_attr_element(ctx, this_val);
     if (!el) {
@@ -2990,7 +2992,8 @@ static JSValue anchor_url_component(JSContext *ctx, JSValueConst this_val, enum 
                 snprintf(out, sizeof(out), "%.*s://%.*s:%.*s", (int)scheme_len, url, (int)host_len,
                          host, (int)port_len, port);
             } else {
-                snprintf(out, sizeof(out), "%.*s://%.*s", (int)scheme_len, url, (int)host_len, host);
+                snprintf(out, sizeof(out), "%.*s://%.*s", (int)scheme_len, url, (int)host_len,
+                         host);
             }
         }
         break;

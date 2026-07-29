@@ -26,15 +26,15 @@
 
 #define SLJIT_UPDATE_WX_FLAGS(from, to, enable_exec)
 
-static SLJIT_INLINE void* alloc_chunk(sljit_uw size)
+static SLJIT_INLINE void *alloc_chunk(sljit_uw size)
 {
-	return VirtualAlloc(NULL, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    return VirtualAlloc(NULL, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
 }
 
 static SLJIT_INLINE void free_chunk(void *chunk, sljit_uw size)
 {
-	SLJIT_UNUSED_ARG(size);
-	VirtualFree(chunk, 0, MEM_RELEASE);
+    SLJIT_UNUSED_ARG(size);
+    VirtualFree(chunk, 0, MEM_RELEASE);
 }
 
 #include "sljitExecAllocatorCore.c"

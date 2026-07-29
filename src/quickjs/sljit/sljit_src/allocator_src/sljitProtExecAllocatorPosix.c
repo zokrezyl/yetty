@@ -28,7 +28,7 @@
 #define SLJIT_HAS_EXECUTABLE_OFFSET
 
 struct sljit_chunk_header {
-	void *executable;
+    void *executable;
 };
 
 #include <sys/stat.h>
@@ -52,121 +52,128 @@ int mkostemp(char *template, int flags);
 
 static SLJIT_INLINE int create_tempfile(void)
 {
-	int fd;
-	char tmp_name[256];
-	size_t tmp_name_len = 0;
-	char *dir;
-	struct stat st;
+    int fd;
+    char tmp_name[256];
+    size_t tmp_name_len = 0;
+    char *dir;
+    struct stat st;
 #if defined(SLJIT_SINGLE_THREADED) && SLJIT_SINGLE_THREADED
-	mode_t mode;
+    mode_t mode;
 #endif
 
 #ifdef HAVE_MEMFD_CREATE
-	/* this is a GNU extension, make sure to use -D_GNU_SOURCE */
-	fd = memfd_create("sljit", MFD_CLOEXEC);
-	if (fd != -1) {
-		fchmod(fd, 0);
-		return fd;
-	}
+    /* this is a GNU extension, make sure to use -D_GNU_SOURCE */
+    fd = memfd_create("sljit", MFD_CLOEXEC);
+    if (fd != -1) {
+        fchmod(fd, 0);
+        return fd;
+    }
 #endif
 
-	dir = secure_getenv("TMPDIR");
+    dir = secure_getenv("TMPDIR");
 
-	if (dir) {
-		size_t len = strlen(dir);
-		if (len > 0 && len < sizeof(tmp_name)) {
-			if ((stat(dir, &st) == 0) && S_ISDIR(st.st_mode)) {
-				memcpy(tmp_name, dir, len + 1);
-				tmp_name_len = len;
-			}
-		}
-	}
+    if (dir) {
+        size_t len = strlen(dir);
+        if (len > 0 && len < sizeof(tmp_name)) {
+            if ((stat(dir, &st) == 0) && S_ISDIR(st.st_mode)) {
+                memcpy(tmp_name, dir, len + 1);
+                tmp_name_len = len;
+            }
+        }
+    }
 
 #ifdef P_tmpdir
-	if (!tmp_name_len) {
-		tmp_name_len = strlen(P_tmpdir);
-		if (tmp_name_len > 0 && tmp_name_len < sizeof(tmp_name))
-			strcpy(tmp_name, P_tmpdir);
-	}
+    if (!tmp_name_len) {
+        tmp_name_len = strlen(P_tmpdir);
+        if (tmp_name_len > 0 && tmp_name_len < sizeof(tmp_name)) {
+            strcpy(tmp_name, P_tmpdir);
+        }
+    }
 #endif
-	if (!tmp_name_len) {
-		strcpy(tmp_name, "/tmp");
-		tmp_name_len = 4;
-	}
+    if (!tmp_name_len) {
+        strcpy(tmp_name, "/tmp");
+        tmp_name_len = 4;
+    }
 
-	SLJIT_ASSERT(tmp_name_len > 0 && tmp_name_len < sizeof(tmp_name));
+    SLJIT_ASSERT(tmp_name_len > 0 && tmp_name_len < sizeof(tmp_name));
 
-	if (tmp_name_len > 1 && tmp_name[tmp_name_len - 1] == '/')
-		tmp_name[--tmp_name_len] = '\0';
+    if (tmp_name_len > 1 && tmp_name[tmp_name_len - 1] == '/') {
+        tmp_name[--tmp_name_len] = '\0';
+    }
 
-	fd = open(tmp_name, O_TMPFILE | O_EXCL | O_RDWR | O_NOATIME | O_CLOEXEC, 0);
-	if (fd != -1)
-		return fd;
+    fd = open(tmp_name, O_TMPFILE | O_EXCL | O_RDWR | O_NOATIME | O_CLOEXEC, 0);
+    if (fd != -1) {
+        return fd;
+    }
 
-	if (tmp_name_len >= sizeof(tmp_name) - 7)
-		return -1;
+    if (tmp_name_len >= sizeof(tmp_name) - 7) {
+        return -1;
+    }
 
-	strcpy(tmp_name + tmp_name_len, "/XXXXXX");
+    strcpy(tmp_name + tmp_name_len, "/XXXXXX");
 #if defined(SLJIT_SINGLE_THREADED) && SLJIT_SINGLE_THREADED
-	mode = umask(0777);
+    mode = umask(0777);
 #endif
-	fd = mkostemp(tmp_name, O_CLOEXEC | O_NOATIME);
+    fd = mkostemp(tmp_name, O_CLOEXEC | O_NOATIME);
 #if defined(SLJIT_SINGLE_THREADED) && SLJIT_SINGLE_THREADED
-	umask(mode);
+    umask(mode);
 #else
-	fchmod(fd, 0);
+    fchmod(fd, 0);
 #endif
 
-	if (fd == -1)
-		return -1;
+    if (fd == -1) {
+        return -1;
+    }
 
-	if (unlink(tmp_name)) {
-		close(fd);
-		return -1;
-	}
+    if (unlink(tmp_name)) {
+        close(fd);
+        return -1;
+    }
 
-	return fd;
+    return fd;
 }
 
-static SLJIT_INLINE struct sljit_chunk_header* alloc_chunk(sljit_uw size)
+static SLJIT_INLINE struct sljit_chunk_header *alloc_chunk(sljit_uw size)
 {
-	struct sljit_chunk_header *retval;
-	int fd;
+    struct sljit_chunk_header *retval;
+    int fd;
 
-	fd = create_tempfile();
-	if (fd == -1)
-		return NULL;
+    fd = create_tempfile();
+    if (fd == -1) {
+        return NULL;
+    }
 
-	if (ftruncate(fd, (off_t)size)) {
-		close(fd);
-		return NULL;
-	}
+    if (ftruncate(fd, (off_t)size)) {
+        close(fd);
+        return NULL;
+    }
 
-	retval = (struct sljit_chunk_header *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    retval =
+        (struct sljit_chunk_header *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
-	if (retval == MAP_FAILED) {
-		close(fd);
-		return NULL;
-	}
+    if (retval == MAP_FAILED) {
+        close(fd);
+        return NULL;
+    }
 
-	retval->executable = mmap(NULL, size, PROT_READ | PROT_EXEC, MAP_SHARED, fd, 0);
+    retval->executable = mmap(NULL, size, PROT_READ | PROT_EXEC, MAP_SHARED, fd, 0);
 
-	if (retval->executable == MAP_FAILED) {
-		munmap((void *)retval, size);
-		close(fd);
-		return NULL;
-	}
+    if (retval->executable == MAP_FAILED) {
+        munmap((void *)retval, size);
+        close(fd);
+        return NULL;
+    }
 
-	close(fd);
-	return retval;
+    close(fd);
+    return retval;
 }
 
 static SLJIT_INLINE void free_chunk(void *chunk, sljit_uw size)
 {
-	struct sljit_chunk_header *header = ((struct sljit_chunk_header *)chunk) - 1;
+    struct sljit_chunk_header *header = ((struct sljit_chunk_header *)chunk) - 1;
 
-	munmap(header->executable, size);
-	munmap((void *)header, size);
+    munmap(header->executable, size);
+    munmap((void *)header, size);
 }
 
 #include "sljitExecAllocatorCore.c"

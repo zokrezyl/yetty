@@ -28,45 +28,46 @@
 #define SLJIT_HAS_EXECUTABLE_OFFSET
 
 struct sljit_chunk_header {
-	void *executable;
+    void *executable;
 };
 
 /*
  * MAP_REMAPDUP is a NetBSD extension available sinde 8.0, make sure to
  * adjust your feature macros (ex: -D_NETBSD_SOURCE) as needed
  */
-static SLJIT_INLINE struct sljit_chunk_header* alloc_chunk(sljit_uw size)
+static SLJIT_INLINE struct sljit_chunk_header *alloc_chunk(sljit_uw size)
 {
-	struct sljit_chunk_header *retval;
+    struct sljit_chunk_header *retval;
 
-	retval = (struct sljit_chunk_header *)mmap(NULL, size,
-			PROT_READ | PROT_WRITE | PROT_MPROTECT(PROT_EXEC),
-			MAP_ANON | MAP_SHARED, -1, 0);
+    retval = (struct sljit_chunk_header *)mmap(NULL, size,
+                                               PROT_READ | PROT_WRITE | PROT_MPROTECT(PROT_EXEC),
+                                               MAP_ANON | MAP_SHARED, -1, 0);
 
-	if (retval == MAP_FAILED)
-		return NULL;
+    if (retval == MAP_FAILED) {
+        return NULL;
+    }
 
-	retval->executable = mremap(retval, size, NULL, size, MAP_REMAPDUP);
-	if (retval->executable == MAP_FAILED) {
-		munmap((void *)retval, size);
-		return NULL;
-	}
+    retval->executable = mremap(retval, size, NULL, size, MAP_REMAPDUP);
+    if (retval->executable == MAP_FAILED) {
+        munmap((void *)retval, size);
+        return NULL;
+    }
 
-	if (mprotect(retval->executable, size, PROT_READ | PROT_EXEC) == -1) {
-		munmap(retval->executable, size);
-		munmap((void *)retval, size);
-		return NULL;
-	}
+    if (mprotect(retval->executable, size, PROT_READ | PROT_EXEC) == -1) {
+        munmap(retval->executable, size);
+        munmap((void *)retval, size);
+        return NULL;
+    }
 
-	return retval;
+    return retval;
 }
 
 static SLJIT_INLINE void free_chunk(void *chunk, sljit_uw size)
 {
-	struct sljit_chunk_header *header = ((struct sljit_chunk_header *)chunk) - 1;
+    struct sljit_chunk_header *header = ((struct sljit_chunk_header *)chunk) - 1;
 
-	munmap(header->executable, size);
-	munmap((void *)header, size);
+    munmap(header->executable, size);
+    munmap((void *)header, size);
 }
 
 #include "sljitExecAllocatorCore.c"

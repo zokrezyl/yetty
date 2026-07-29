@@ -45,10 +45,8 @@ static int supp_selector_match(struct yetty_ylexbor *r, const char *selector_tex
 /* Class-bucketed supplementary-rule index (defined below; used by the
  * per-element table lookups above their definition). */
 #define SUPP_CAND_MAX 2048
-static int supp_index_candidates(struct yetty_ylexbor *r, const void *base,
-                                 size_t stride, int count,
-                                 const lxb_dom_element_t *element,
-                                 int *out, int cap);
+static int supp_index_candidates(struct yetty_ylexbor *r, const void *base, size_t stride,
+                                 int count, const lxb_dom_element_t *element, int *out, int cap);
 
 /* Per-element supplementary-match result cache (defined below). Each of the
  * single-compound-subject tables gets a stable small id; supp_rc_slot returns
@@ -72,7 +70,7 @@ enum {
     SUPP_TBL_FLEX_GAP,
     SUPP_RC_NTABLES
 };
-#define SUPP_RC_UNCOMPUTED ((int16_t) - 2)
+#define SUPP_RC_UNCOMPUTED ((int16_t)-2)
 static int16_t *supp_rc_slot(struct yetty_ylexbor *r, const lxb_dom_element_t *element,
                              int table_id);
 /* Returns the winning (last-in-cascade) matching rule index for `element` in a
@@ -3491,7 +3489,8 @@ int yetty_ylexbor_calc_length_lookup(struct yetty_ylexbor *r, lxb_dom_element_t 
      * `pct/100 * cb_width + offset` is deferred to layout (resolve_pct_metrics)
      * because the containing-block width isn't known at box-build. */
     int cand_buf[SUPP_CAND_MAX];
-    int cand_n = supp_index_candidates(r, r->calc_length_rules, sizeof(r->calc_length_rules[0]), r->calc_length_count, element, cand_buf, SUPP_CAND_MAX);
+    int cand_n = supp_index_candidates(r, r->calc_length_rules, sizeof(r->calc_length_rules[0]),
+                                       r->calc_length_count, element, cand_buf, SUPP_CAND_MAX);
     int cand_total = (cand_n < 0) ? r->calc_length_count : cand_n;
     for (int ci = cand_total; ci-- > 0;) {
         int e = (cand_n < 0) ? ci : cand_buf[ci];
@@ -3725,11 +3724,11 @@ float yetty_ylexbor_aspect_ratio_lookup(struct yetty_ylexbor *r, lxb_dom_element
     if (r == NULL || element == NULL || r->aspect_count == 0) {
         return 0.0f;
     }
-    int won = supp_table_winner(r, element, SUPP_TBL_ASPECT, r->aspect_rules,
-                                sizeof(r->aspect_rules[0]), r->aspect_count,
-                                offsetof(struct yl_aspect_rule, selector),
-                                offsetof(struct yl_aspect_rule, compiled_selector),
-                                offsetof(struct yl_aspect_rule, selector_state));
+    int won =
+        supp_table_winner(r, element, SUPP_TBL_ASPECT, r->aspect_rules, sizeof(r->aspect_rules[0]),
+                          r->aspect_count, offsetof(struct yl_aspect_rule, selector),
+                          offsetof(struct yl_aspect_rule, compiled_selector),
+                          offsetof(struct yl_aspect_rule, selector_state));
     if (won >= 0) {
         return r->aspect_rules[won].ratio;
     }
@@ -3833,7 +3832,8 @@ int yetty_ylexbor_display_none_lookup(struct yetty_ylexbor *r, lxb_dom_element_t
         return 0;
     }
     int cand_buf[SUPP_CAND_MAX];
-    int cand_n = supp_index_candidates(r, r->display_none_rules, sizeof(r->display_none_rules[0]), r->display_none_count, element, cand_buf, SUPP_CAND_MAX);
+    int cand_n = supp_index_candidates(r, r->display_none_rules, sizeof(r->display_none_rules[0]),
+                                       r->display_none_count, element, cand_buf, SUPP_CAND_MAX);
     int cand_total = (cand_n < 0) ? r->display_none_count : cand_n;
     for (int ci = 0; ci < cand_total; ci++) {
         int e = (cand_n < 0) ? ci : cand_buf[ci];
@@ -4372,16 +4372,16 @@ static lxb_status_t supp_selector_match_cb(lxb_dom_node_t *node,
  * Conservative: only rejects when the element provably cannot match. */
 static int supp_ident_char(char c)
 {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-           (c >= '0' && c <= '9') || c == '-' || c == '_' ||
-           (unsigned char)c >= 0x80; /* allow non-ASCII identifier bytes */
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' ||
+           c == '_' || (unsigned char)c >= 0x80; /* allow non-ASCII identifier bytes */
 }
 
 static int supp_selector_prefilter(struct yetty_ylexbor *r, const char *sel,
                                    const lxb_dom_element_t *element)
 {
-    if (sel == NULL)
+    if (sel == NULL) {
         return 0;
+    }
 
     /* Single forward pass: track the subject compound's key. At each
      * top-level combinator the key resets (a new compound begins); an id
@@ -4395,19 +4395,22 @@ static int supp_selector_prefilter(struct yetty_ylexbor *r, const char *sel,
     int depth = 0;
     for (const char *p = sel; *p; p++) {
         char c = *p;
-        if (c == ',')
+        if (c == ',') {
             return 0; /* selector list: run the full match */
+        }
         if (c == '[' || c == '(') {
             depth++;
             continue;
         }
         if (c == ']' || c == ')') {
-            if (depth)
+            if (depth) {
                 depth--;
+            }
             continue;
         }
-        if (depth)
+        if (depth) {
             continue;
+        }
         if (c == ' ' || c == '>' || c == '+' || c == '~') {
             key = NULL; /* new compound begins */
             is_id = 0;
@@ -4418,32 +4421,35 @@ static int supp_selector_prefilter(struct yetty_ylexbor *r, const char *sel,
             key = p + 1;
         }
     }
-    if (key == NULL)
+    if (key == NULL) {
         return 0; /* tag-only / pseudo — run the full match */
+    }
 
     size_t n = 0;
-    while (key[n] && supp_ident_char(key[n]))
+    while (key[n] && supp_ident_char(key[n])) {
         n++;
-    if (n == 0)
+    }
+    if (n == 0) {
         return 0;
+    }
 
     /* Fetch this element's class + id once, memoized by element identity
      * (the side-table loops test many rules against the same element). */
     if (r->supp_cache_element != element) {
         r->supp_cache_element = element;
         r->supp_cache_class = lxb_dom_element_get_attribute(
-            (lxb_dom_element_t *)element, (const lxb_char_t *)"class", 5,
-            &r->supp_cache_class_len);
+            (lxb_dom_element_t *)element, (const lxb_char_t *)"class", 5, &r->supp_cache_class_len);
         r->supp_cache_id = lxb_dom_element_get_attribute(
-            (lxb_dom_element_t *)element, (const lxb_char_t *)"id", 2,
-            &r->supp_cache_id_len);
+            (lxb_dom_element_t *)element, (const lxb_char_t *)"id", 2, &r->supp_cache_id_len);
     }
     const unsigned char *value = is_id ? r->supp_cache_id : r->supp_cache_class;
     size_t vlen = is_id ? r->supp_cache_id_len : r->supp_cache_class_len;
-    if (value == NULL || vlen == 0)
+    if (value == NULL || vlen == 0) {
         return 1; /* element has no id/class at all — cannot match */
-    if (is_id)
+    }
+    if (is_id) {
         return !(vlen == n && memcmp(value, key, n) == 0);
+    }
     /* class: reject only when the key is not even a substring (safe — a
      * token match implies a substring match). */
     return memmem(value, vlen, key, n) == NULL;
@@ -4470,11 +4476,11 @@ struct supp_index_bucket {
 };
 
 struct supp_index {
-    const void *base;   /* identity: the rule array's base pointer */
+    const void *base; /* identity: the rule array's base pointer */
     size_t stride;
-    int built_count;    /* rebuild when the table's rule count changes */
+    int built_count; /* rebuild when the table's rule count changes */
     struct supp_index_bucket *buckets;
-    int nbuckets;       /* power of two */
+    int nbuckets; /* power of two */
     int *universal;
     int universal_count, universal_cap;
 };
@@ -4494,27 +4500,46 @@ static uint64_t supp_hash_bytes(const char *p, size_t n)
  * set for a class key; 0 for id / tag / none / list (→ universal bucket). */
 static int supp_rule_class_key(const char *sel, const char **out, size_t *out_len)
 {
-    if (sel == NULL || memchr(sel, ',', strlen(sel)))
+    if (sel == NULL || memchr(sel, ',', strlen(sel))) {
         return 0;
+    }
     const char *key = NULL;
     int is_id = 0, depth = 0;
     for (const char *p = sel; *p; p++) {
         char c = *p;
-        if (c == '[' || c == '(') { depth++; continue; }
-        if (c == ']' || c == ')') { if (depth) depth--; continue; }
-        if (depth)
+        if (c == '[' || c == '(') {
+            depth++;
             continue;
-        if (c == ' ' || c == '>' || c == '+' || c == '~') { key = NULL; is_id = 0; }
-        else if (c == '#') { key = p + 1; is_id = 1; }
-        else if (c == '.' && key == NULL) { key = p + 1; }
+        }
+        if (c == ']' || c == ')') {
+            if (depth) {
+                depth--;
+            }
+            continue;
+        }
+        if (depth) {
+            continue;
+        }
+        if (c == ' ' || c == '>' || c == '+' || c == '~') {
+            key = NULL;
+            is_id = 0;
+        } else if (c == '#') {
+            key = p + 1;
+            is_id = 1;
+        } else if (c == '.' && key == NULL) {
+            key = p + 1;
+        }
     }
-    if (key == NULL || is_id)
+    if (key == NULL || is_id) {
         return 0;
+    }
     size_t n = 0;
-    while (key[n] && supp_ident_char(key[n]))
+    while (key[n] && supp_ident_char(key[n])) {
         n++;
-    if (n == 0)
+    }
+    if (n == 0) {
         return 0;
+    }
     *out = key;
     *out_len = n;
     return 1;
@@ -4525,8 +4550,9 @@ static void supp_bucket_add(struct supp_index_bucket *b, int idx)
     if (b->count >= b->cap) {
         int cap = b->cap ? b->cap * 2 : 4;
         int *grown = realloc(b->indices, (size_t)cap * sizeof(int));
-        if (!grown)
+        if (!grown) {
             return;
+        }
         b->indices = grown;
         b->cap = cap;
     }
@@ -4549,8 +4575,9 @@ static struct supp_index_bucket *supp_index_slot(struct supp_index *idx, uint64_
 
 static void supp_index_free_one(struct supp_index *idx)
 {
-    for (int i = 0; i < idx->nbuckets; i++)
+    for (int i = 0; i < idx->nbuckets; i++) {
         free(idx->buckets[i].indices);
+    }
     free(idx->buckets);
     free(idx->universal);
     memset(idx, 0, sizeof(*idx));
@@ -4558,22 +4585,27 @@ static void supp_index_free_one(struct supp_index *idx)
 
 /* Find-or-(re)build the index for a table. Returns NULL on OOM (caller then
  * falls back to a full scan). */
-static struct supp_index *supp_index_get(struct yetty_ylexbor *r, const void *base,
-                                         size_t stride, int count)
+static struct supp_index *supp_index_get(struct yetty_ylexbor *r, const void *base, size_t stride,
+                                         int count)
 {
     struct supp_index *arr = (struct supp_index *)r->supp_indexes;
     struct supp_index *idx = NULL;
     for (int i = 0; i < r->supp_index_count; i++) {
-        if (arr[i].base == base) { idx = &arr[i]; break; }
+        if (arr[i].base == base) {
+            idx = &arr[i];
+            break;
+        }
     }
-    if (idx && idx->built_count == count)
+    if (idx && idx->built_count == count) {
         return idx;
+    }
     if (!idx) {
         if (r->supp_index_count >= r->supp_index_cap) {
             int cap = r->supp_index_cap ? r->supp_index_cap * 2 : 8;
             struct supp_index *grown = realloc(arr, (size_t)cap * sizeof(*grown));
-            if (!grown)
+            if (!grown) {
                 return NULL;
+            }
             memset(grown + r->supp_index_cap, 0,
                    (size_t)(cap - r->supp_index_cap) * sizeof(*grown));
             r->supp_indexes = grown;
@@ -4590,8 +4622,9 @@ static struct supp_index *supp_index_get(struct yetty_ylexbor *r, const void *ba
     idx->built_count = count;
 
     int nb = 8;
-    while (nb < count * 2)
+    while (nb < count * 2) {
         nb <<= 1;
+    }
     idx->buckets = calloc((size_t)nb, sizeof(*idx->buckets));
     if (!idx->buckets) {
         idx->built_count = -1; /* force rebuild next time */
@@ -4609,7 +4642,10 @@ static struct supp_index *supp_index_get(struct yetty_ylexbor *r, const void *ba
             if (idx->universal_count >= idx->universal_cap) {
                 int cap = idx->universal_cap ? idx->universal_cap * 2 : 8;
                 int *grown = realloc(idx->universal, (size_t)cap * sizeof(int));
-                if (!grown) { idx->built_count = -1; return NULL; }
+                if (!grown) {
+                    idx->built_count = -1;
+                    return NULL;
+                }
                 idx->universal = grown;
                 idx->universal_cap = cap;
             }
@@ -4627,18 +4663,19 @@ static int supp_int_cmp(const void *a, const void *b)
 
 /* Candidate rule indices for `element`, ascending & deduped. Returns the
  * count, or -1 if it overflows `cap` (caller full-scans). */
-static int supp_index_candidates(struct yetty_ylexbor *r, const void *base,
-                                 size_t stride, int count,
-                                 const lxb_dom_element_t *element,
-                                 int *out, int cap)
+static int supp_index_candidates(struct yetty_ylexbor *r, const void *base, size_t stride,
+                                 int count, const lxb_dom_element_t *element, int *out, int cap)
 {
     struct supp_index *idx = supp_index_get(r, base, stride, count);
-    if (!idx)
+    if (!idx) {
         return -1; /* build failed — full scan */
+    }
 
     int n = 0;
     for (int i = 0; i < idx->universal_count; i++) {
-        if (n >= cap) return -1;
+        if (n >= cap) {
+            return -1;
+        }
         out[n++] = idx->universal[i];
     }
 
@@ -4648,25 +4685,31 @@ static int supp_index_candidates(struct yetty_ylexbor *r, const void *base,
     if (cls != NULL && class_len > 0) {
         size_t i = 0;
         while (i < class_len) {
-            while (i < class_len && (cls[i] == ' ' || cls[i] == '\t' ||
-                                     cls[i] == '\n' || cls[i] == '\r' || cls[i] == '\f'))
+            while (i < class_len && (cls[i] == ' ' || cls[i] == '\t' || cls[i] == '\n' ||
+                                     cls[i] == '\r' || cls[i] == '\f')) {
                 i++;
+            }
             size_t start = i;
-            while (i < class_len && cls[i] != ' ' && cls[i] != '\t' &&
-                   cls[i] != '\n' && cls[i] != '\r' && cls[i] != '\f')
+            while (i < class_len && cls[i] != ' ' && cls[i] != '\t' && cls[i] != '\n' &&
+                   cls[i] != '\r' && cls[i] != '\f') {
                 i++;
-            if (i == start)
+            }
+            if (i == start) {
                 continue;
+            }
             uint64_t h = supp_hash_bytes((const char *)cls + start, i - start);
             int mask = idx->nbuckets - 1;
             int slot = (int)(h & (uint64_t)mask);
             for (;;) {
                 struct supp_index_bucket *b = &idx->buckets[slot];
-                if (b->indices == NULL)
+                if (b->indices == NULL) {
                     break;
+                }
                 if (b->class_hash == h) {
                     for (int k = 0; k < b->count; k++) {
-                        if (n >= cap) return -1;
+                        if (n >= cap) {
+                            return -1;
+                        }
                         out[n++] = b->indices[k];
                     }
                     break;
@@ -4679,9 +4722,11 @@ static int supp_index_candidates(struct yetty_ylexbor *r, const void *base,
     if (n > 1) {
         qsort(out, (size_t)n, sizeof(int), supp_int_cmp);
         int w = 1;
-        for (int i = 1; i < n; i++)
-            if (out[i] != out[w - 1])
+        for (int i = 1; i < n; i++) {
+            if (out[i] != out[w - 1]) {
                 out[w++] = out[i];
+            }
+        }
         n = w;
     }
     return n;
@@ -4690,8 +4735,9 @@ static int supp_index_candidates(struct yetty_ylexbor *r, const void *base,
 void yetty_ylexbor_supp_indexes_free(struct yetty_ylexbor *r)
 {
     struct supp_index *arr = (struct supp_index *)r->supp_indexes;
-    for (int i = 0; i < r->supp_index_count; i++)
+    for (int i = 0; i < r->supp_index_count; i++) {
         supp_index_free_one(&arr[i]);
+    }
     free(arr);
     r->supp_indexes = NULL;
     r->supp_index_count = 0;
@@ -4832,7 +4878,8 @@ void yetty_ylexbor_supp_result_cache_free(struct yetty_ylexbor *r)
                 "[YB_SUPP_STATS] supp_selector_match calls: %llu total = %llu cached-table "
                 "misses + %llu UNCACHED grid/flex loops\n",
                 (unsigned long long)r->supp_match_total_calls,
-                (unsigned long long)r->supp_match_cached_table_calls, (unsigned long long)grid_calls);
+                (unsigned long long)r->supp_match_cached_table_calls,
+                (unsigned long long)grid_calls);
     }
     free(r->supp_rc);
     r->supp_rc = NULL;
@@ -5416,9 +5463,9 @@ struct yl_grid_placement yetty_ylexbor_grid_span_class_lookup(struct yetty_ylexb
         (lxb_dom_element_t *)element, (const lxb_char_t *)"class", 5, &attr_len);
     if (attr != NULL && attr_len != 0) {
         int cand_buf[SUPP_CAND_MAX];
-        int cand_n = supp_index_candidates(r, r->grid_span_classes, sizeof(r->grid_span_classes[0]),
-                                           r->grid_span_class_count, element, cand_buf,
-                                           SUPP_CAND_MAX);
+        int cand_n =
+            supp_index_candidates(r, r->grid_span_classes, sizeof(r->grid_span_classes[0]),
+                                  r->grid_span_class_count, element, cand_buf, SUPP_CAND_MAX);
         int cand_total = (cand_n < 0) ? r->grid_span_class_count : cand_n;
         for (int ci = 0; ci < cand_total; ci++) {
             int e = (cand_n < 0) ? ci : cand_buf[ci];
@@ -5671,7 +5718,9 @@ float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const lxb_dom_eleme
 	 * the LAST simple selector and mis-fires on shared class names. */
     if (element != NULL) {
         int cand_buf[SUPP_CAND_MAX];
-        int cand_n = supp_index_candidates(r, r->flex_gap_classes, sizeof(r->flex_gap_classes[0]), r->flex_gap_class_count, element, cand_buf, SUPP_CAND_MAX);
+        int cand_n =
+            supp_index_candidates(r, r->flex_gap_classes, sizeof(r->flex_gap_classes[0]),
+                                  r->flex_gap_class_count, element, cand_buf, SUPP_CAND_MAX);
         int cand_total = (cand_n < 0) ? r->flex_gap_class_count : cand_n;
         for (int ci = 0; ci < cand_total; ci++) {
             int e = (cand_n < 0) ? ci : cand_buf[ci];

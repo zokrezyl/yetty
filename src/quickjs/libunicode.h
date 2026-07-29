@@ -62,7 +62,8 @@ typedef enum {
     CR_OP_XOR,
 } CharRangeOpEnum;
 
-void cr_init(CharRange *cr, void *mem_opaque, void *(*realloc_func)(void *opaque, void *ptr, size_t size));
+void cr_init(CharRange *cr, void *mem_opaque,
+             void *(*realloc_func)(void *opaque, void *ptr, size_t size));
 void cr_free(CharRange *cr);
 int cr_realloc(CharRange *cr, int size);
 int cr_copy(CharRange *cr, const CharRange *cr1);
@@ -70,8 +71,9 @@ int cr_copy(CharRange *cr, const CharRange *cr1);
 static inline int cr_add_point(CharRange *cr, uint32_t v)
 {
     if (cr->len >= cr->size) {
-        if (cr_realloc(cr, cr->len + 1))
+        if (cr_realloc(cr, cr->len + 1)) {
             return -1;
+        }
     }
     cr->points[cr->len++] = v;
     return 0;
@@ -80,8 +82,9 @@ static inline int cr_add_point(CharRange *cr, uint32_t v)
 static inline int cr_add_interval(CharRange *cr, uint32_t c1, uint32_t c2)
 {
     if ((cr->len + 2) > cr->size) {
-        if (cr_realloc(cr, cr->len + 2))
+        if (cr_realloc(cr, cr->len + 2)) {
             return -1;
+        }
     }
     cr->points[cr->len++] = c1;
     cr->points[cr->len++] = c2;
@@ -98,8 +101,7 @@ static inline int cr_union_interval(CharRange *cr, uint32_t c1, uint32_t c2)
     return cr_union1(cr, b_pt, 2);
 }
 
-int cr_op(CharRange *cr, const uint32_t *a_pt, int a_len,
-          const uint32_t *b_pt, int b_len, int op);
+int cr_op(CharRange *cr, const uint32_t *a_pt, int a_len, const uint32_t *b_pt, int b_len, int op);
 
 int cr_invert(CharRange *cr);
 int cr_regexp_canonicalize(CharRange *cr, bool is_unicode);
@@ -109,13 +111,12 @@ bool lre_is_id_continue(uint32_t c);
 bool lre_is_white_space(uint32_t c);
 
 int unicode_normalize(uint32_t **pdst, const uint32_t *src, int src_len,
-                      UnicodeNormalizationEnum n_type,
-                      void *opaque, void *(*realloc_func)(void *opaque, void *ptr, size_t size));
+                      UnicodeNormalizationEnum n_type, void *opaque,
+                      void *(*realloc_func)(void *opaque, void *ptr, size_t size));
 
 /* Unicode character range functions */
 
-int unicode_script(CharRange *cr,
-                   const char *script_name, bool is_ext);
+int unicode_script(CharRange *cr, const char *script_name, bool is_ext);
 int unicode_general_category(CharRange *cr, const char *gc_name);
 int unicode_prop(CharRange *cr, const char *prop_name);
 

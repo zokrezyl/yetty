@@ -1,4 +1,5 @@
-/* shader-glyph-layer.h — yvterm's animated procedural "shader glyph" backend.
+/* grid-shader-glyph-layer.h — yvterm's animated procedural "shader glyph"
+ * backend (paints grid.c cells; the grid- prefix marks that pairing).
  *
  * A small set of codepoints in the Supplementary Private-Use-Area-B window
  * (U+100000..U+100FFF) render not as font glyphs but as per-cell animated
@@ -15,10 +16,10 @@
  * screen and self-stops when none are, so idle terminals cost nothing.
  *
  * Plain-C render helper (no object/method surface), owned by the yvterm:vterm
- * figure exactly like sdf-layer — NOT a yclass class.
+ * figure exactly like grid-sdf-layer — NOT a yclass class.
  */
-#ifndef YETTY_YVTERM_SHADER_GLYPH_LAYER_H
-#define YETTY_YVTERM_SHADER_GLYPH_LAYER_H
+#ifndef YETTY_YVTERM_GRID_SHADER_GLYPH_LAYER_H
+#define YETTY_YVTERM_GRID_SHADER_GLYPH_LAYER_H
 
 #include <stdint.h>
 
@@ -68,4 +69,4 @@ struct yetty_ycore_void_result yetty_yvterm_shader_glyph_layer_render(
 }
 #endif
 
-#endif /* YETTY_YVTERM_SHADER_GLYPH_LAYER_H */
+#endif /* YETTY_YVTERM_GRID_SHADER_GLYPH_LAYER_H */

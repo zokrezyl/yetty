@@ -30,22 +30,32 @@
 /* compile time instead of miscompiling.                               */
 /* ------------------------------------------------------------------ */
 
-_Static_assert(JS_TAG_FIRST == -9,          "JSValue tag layout changed");
-_Static_assert(JS_TAG_OBJECT == -1,         "JSValue tag layout changed");
-_Static_assert(JS_TAG_INT == 0,             "JSValue tag layout changed");
-_Static_assert(JS_TAG_BOOL == 1,            "JSValue tag layout changed");
-_Static_assert(JS_TAG_NULL == 2,            "JSValue tag layout changed");
-_Static_assert(JS_TAG_UNDEFINED == 3,       "JSValue tag layout changed");
-_Static_assert(JS_TAG_SHORT_BIG_INT == 7,   "JSValue tag layout changed");
-_Static_assert(JS_TAG_FLOAT64 == 8,         "JSValue tag layout changed");
+_Static_assert(JS_TAG_FIRST == -9, "JSValue tag layout changed");
+_Static_assert(JS_TAG_OBJECT == -1, "JSValue tag layout changed");
+_Static_assert(JS_TAG_INT == 0, "JSValue tag layout changed");
+_Static_assert(JS_TAG_BOOL == 1, "JSValue tag layout changed");
+_Static_assert(JS_TAG_NULL == 2, "JSValue tag layout changed");
+_Static_assert(JS_TAG_UNDEFINED == 3, "JSValue tag layout changed");
+_Static_assert(JS_TAG_SHORT_BIG_INT == 7, "JSValue tag layout changed");
+_Static_assert(JS_TAG_FLOAT64 == 8, "JSValue tag layout changed");
 
 #if INTPTR_MAX == INT64_MAX && !defined(JS_NAN_BOXING)
 /* 64-bit two-word representation: 8-byte payload union + 8-byte tag. */
-_Static_assert(sizeof(JSValue) == 16,       "64-bit JSValue is not two words");
+_Static_assert(sizeof(JSValue) == 16, "64-bit JSValue is not two words");
 _Static_assert(offsetof(JSValue, tag) == 8, "JSValue tag offset changed");
+#if !defined(_WIN32)
 /* JSFunctionBytecode fields the profiler/translator touch (the Stage 0
    profile block sits at the struct tail, so these hold with or without
-   QJS_ENABLE_PROFILE). A rebase moving them must update these pins. */
+   QJS_ENABLE_PROFILE). A rebase moving them must update these pins.
+
+   Not pinned on Windows: every Windows toolchain (MSVC, clang-cl, mingw's
+   default -mms-bitfields) uses the MS bitfield ABI, which starts a new
+   storage unit whenever a bitfield's base type changes. JSGCObjectHeader
+   mixes an enum-typed bitfield with uint8_t bitfields, so there the header
+   is 32 bytes instead of 24 and every offset below shifts by +8. That is a
+   permanent ABI difference, not the upstream-rebase layout change these
+   tripwires exist to catch — and the translator that hardcodes the offsets
+   only targets SysV-layout platforms (the sampler backend is Linux-only). */
 _Static_assert(offsetof(JSFunctionBytecode, byte_code_buf) == 32,
                "JSFunctionBytecode.byte_code_buf offset changed");
 _Static_assert(offsetof(JSFunctionBytecode, byte_code_len) == 40,
@@ -58,6 +68,7 @@ _Static_assert(offsetof(JSFunctionBytecode, stack_size) == 70,
                "JSFunctionBytecode.stack_size offset changed");
 _Static_assert(offsetof(JSFunctionBytecode, cpool) == 88,
                "JSFunctionBytecode.cpool offset changed");
+#endif /* !_WIN32 */
 #endif
 
 /* ------------------------------------------------------------------ */
@@ -68,10 +79,10 @@ uint64_t JS_JITBytecodeFingerprint(void)
 {
     /* FNV-1a over everything the translator would hardcode. */
     uint64_t hash = UINT64_C(0xcbf29ce484222325);
-#define QJS_FP_MIX(byte_expr)                                  \
-    do {                                                       \
-        hash ^= (uint8_t)(byte_expr);                          \
-        hash *= UINT64_C(0x100000001b3);                       \
+#define QJS_FP_MIX(byte_expr)                                                                      \
+    do {                                                                                           \
+        hash ^= (uint8_t)(byte_expr);                                                              \
+        hash *= UINT64_C(0x100000001b3);                                                           \
     } while (0)
     int op;
     QJS_FP_MIX(OP_COUNT);
@@ -137,25 +148,25 @@ static bool qjs_jit_opcode_unsupported(uint16_t op)
 
 enum {
     QJS_JIT_ELIGIBLE = 0,
-    QJS_JIT_INELIGIBLE_FUNC_KIND,     /* generator / async / async generator */
-    QJS_JIT_INELIGIBLE_OPCODE,        /* contains an unsupported opcode */
-    QJS_JIT_INELIGIBLE_MALFORMED,     /* decode error (should not happen) */
+    QJS_JIT_INELIGIBLE_FUNC_KIND, /* generator / async / async generator */
+    QJS_JIT_INELIGIBLE_OPCODE,    /* contains an unsupported opcode */
+    QJS_JIT_INELIGIBLE_MALFORMED, /* decode error (should not happen) */
 };
 
 /* Walk the final (short-opcode) bytecode of `b`, validating sizes and
    classifying. Decode-only: no emission, no stack modeling yet. On
    ineligibility, *detail receives the offending opcode (or 0).
    The later emission stages reuse exactly this walk. */
-static int qjs_jit_classify_function(const JSFunctionBytecode *b, int *detail,
-                                     int *detail_offset)
+static int qjs_jit_classify_function(const JSFunctionBytecode *b, int *detail, int *detail_offset)
 {
     const uint8_t *bytecode = b->byte_code_buf;
     int position = 0;
 
     *detail = 0;
     *detail_offset = 0;
-    if (b->func_kind != JS_FUNC_NORMAL)
+    if (b->func_kind != JS_FUNC_NORMAL) {
         return QJS_JIT_INELIGIBLE_FUNC_KIND;
+    }
 
     while (position < b->byte_code_len) {
         uint8_t op = bytecode[position];
@@ -187,10 +198,14 @@ static int qjs_jit_classify_function(const JSFunctionBytecode *b, int *detail,
 static const char *qjs_jit_verdict_name(int verdict)
 {
     switch (verdict) {
-    case QJS_JIT_ELIGIBLE:              return "eligible";
-    case QJS_JIT_INELIGIBLE_FUNC_KIND:  return "async-or-generator";
-    case QJS_JIT_INELIGIBLE_OPCODE:     return "unsupported-opcode";
-    default:                            return "malformed";
+    case QJS_JIT_ELIGIBLE:
+        return "eligible";
+    case QJS_JIT_INELIGIBLE_FUNC_KIND:
+        return "async-or-generator";
+    case QJS_JIT_INELIGIBLE_OPCODE:
+        return "unsupported-opcode";
+    default:
+        return "malformed";
     }
 }
 
@@ -236,7 +251,7 @@ static uint8_t qjs_prof_stage3_opcode_category(unsigned op)
     case OP_swap2:
     case OP_rot3l ... OP_rot5l:
     /* --- arguments / locals / closure variable slots ---------------- */
-    case OP_get_loc ... OP_set_var_ref:            /* long forms */
+    case OP_get_loc ... OP_set_var_ref: /* long forms */
     case OP_set_loc_uninitialized:
     case OP_get_loc_check:
     case OP_put_loc_check:
@@ -248,7 +263,7 @@ static uint8_t qjs_prof_stage3_opcode_category(unsigned op)
     case OP_put_loc8:
     case OP_set_loc8:
     case OP_get_loc0_loc1:
-    case OP_get_loc0 ... OP_set_var_ref3:          /* short forms */
+    case OP_get_loc0 ... OP_set_var_ref3: /* short forms */
     /* --- branches ---------------------------------------------------- */
     case OP_if_false:
     case OP_if_true:
@@ -271,7 +286,7 @@ static uint8_t qjs_prof_stage3_opcode_category(unsigned op)
     case OP_add_loc:
     case OP_not:
     case OP_lnot:
-    case OP_mul ... OP_or:            /* mul div mod add sub shl sar shr and xor or */
+    case OP_mul ... OP_or: /* mul div mod add sub shl sar shr and xor or */
     case OP_lt ... OP_gte:
     case OP_eq ... OP_strict_neq:
     case OP_is_undefined_or_null:
@@ -414,12 +429,14 @@ static void qjs_prof_signal_handler(int signum)
     int cat;
 
     (void)signum;
-    if (!state || !state->running)
+    if (!state || !state->running) {
         return;
+    }
     func_counters = state->cur;
     cat = state->cat;
-    if (cat < 0 || cat >= QJS_PROF_CAT_COUNT)
+    if (cat < 0 || cat >= QJS_PROF_CAT_COUNT) {
         cat = QJS_PROF_CAT_DISPATCH;
+    }
     state->samples_total++;
     if (func_counters) {
         func_counters->samples[cat]++;
@@ -437,22 +454,25 @@ static int qjs_prof_sampler_start(QJSProfileState *state, int sample_hz)
     clockid_t thread_clock;
     long period_ns;
 
-    if (pthread_getcpuclockid(pthread_self(), &thread_clock) != 0)
+    if (pthread_getcpuclockid(pthread_self(), &thread_clock) != 0) {
         return -1;
+    }
 
     memset(&action, 0, sizeof(action));
     action.sa_handler = qjs_prof_signal_handler;
     action.sa_flags = SA_RESTART;
     sigemptyset(&action.sa_mask);
-    if (sigaction(SIGPROF, &action, NULL) != 0)
+    if (sigaction(SIGPROF, &action, NULL) != 0) {
         return -1;
+    }
 
     memset(&event, 0, sizeof(event));
     event.sigev_notify = SIGEV_THREAD_ID;
     event.sigev_signo = SIGPROF;
     event.sigev_notify_thread_id = (pid_t)syscall(SYS_gettid);
-    if (timer_create(thread_clock, &event, &state->timer_id) != 0)
+    if (timer_create(thread_clock, &event, &state->timer_id) != 0) {
         return -1;
+    }
     state->timer_created = 1;
 
     period_ns = 1000000000L / sample_hz;
@@ -483,23 +503,26 @@ int JS_ProfileStart(JSRuntime *rt, int sample_hz)
     QJSProfileState *state;
     int op;
 
-    if (rt->prof || sample_hz <= 0 || sample_hz > 100000)
+    if (rt->prof || sample_hz <= 0 || sample_hz > 100000) {
         return -1;
-    if (qjs_prof_thread_state)
-        return -1;  /* one active profile per thread */
+    }
+    if (qjs_prof_thread_state) {
+        return -1; /* one active profile per thread */
+    }
 
-    for (op = 0; op < 256; op++)
+    for (op = 0; op < 256; op++) {
         qjs_prof_opcode_category[op] = qjs_prof_stage3_opcode_category(op);
+    }
 
     state = js_mallocz_rt(rt, sizeof(*state));
-    if (!state)
+    if (!state) {
         return -1;
+    }
     state->owner = rt;
     state->sample_hz = sample_hz;
     state->cur = NULL;
     state->cat = QJS_PROF_CAT_DISPATCH;
-    state->force_tombstone_oom =
-        getenv("QJS_PROFILE_FORCE_TOMBSTONE_OOM") != NULL;
+    state->force_tombstone_oom = getenv("QJS_PROFILE_FORCE_TOMBSTONE_OOM") != NULL;
 
     qjs_prof_thread_state = state;
     if (qjs_prof_sampler_start(state, sample_hz) != 0) {
@@ -521,8 +544,9 @@ int JS_ProfileStop(JSRuntime *rt)
 {
 #if defined(__linux__)
     QJSProfileState *state = rt->prof;
-    if (!state)
+    if (!state) {
         return -1;
+    }
     state->running = 0;
     qjs_prof_sampler_stop(state);
     return 0;
@@ -551,13 +575,15 @@ static void qjs_prof_free(JSRuntime *rt)
 {
     QJSProfileState *state = rt->prof;
     QJSProfileTombstone *tombstone, *next;
-    if (!state)
+    if (!state) {
         return;
+    }
     state->running = 0;
 #if defined(__linux__)
     qjs_prof_sampler_stop(state);
-    if (qjs_prof_thread_state == state)
+    if (qjs_prof_thread_state == state) {
         qjs_prof_thread_state = NULL;
+    }
 #endif
     for (tombstone = state->tombstones; tombstone; tombstone = next) {
         next = tombstone->next;
@@ -577,8 +603,9 @@ static void qjs_prof_reclaim_fold(QJSProfileState *state,
     state->reclaimed_functions++;
     state->reclaimed_calls += func_counters->call_count;
     state->reclaimed_backedges += func_counters->backedge_count;
-    for (cat = 0; cat < QJS_PROF_CAT_COUNT; cat++)
+    for (cat = 0; cat < QJS_PROF_CAT_COUNT; cat++) {
         state->reclaimed_samples[cat] += func_counters->samples[cat];
+    }
 }
 
 /* Called from free_function_bytecode while a thread profile exists: a
@@ -587,8 +614,7 @@ static void qjs_prof_reclaim_fold(QJSProfileState *state,
    eligibility verdict — the gate metric is per-function, so aggregate
    totals are not enough. The bytecode is still intact at this point,
    so the classifier can run. */
-static void qjs_prof_function_freed(QJSProfileState *state, JSRuntime *rt,
-                                    JSFunctionBytecode *b)
+static void qjs_prof_function_freed(QJSProfileState *state, JSRuntime *rt, JSFunctionBytecode *b)
 {
     QJSProfileTombstone *tombstone;
     QJSProfileFuncCounters *fc = &b->prof;
@@ -597,15 +623,18 @@ static void qjs_prof_function_freed(QJSProfileState *state, JSRuntime *rt,
     uint32_t activity = fc->call_count + fc->backedge_count;
     int cat;
 
-    for (cat = 0; cat < QJS_PROF_CAT_COUNT; cat++)
+    for (cat = 0; cat < QJS_PROF_CAT_COUNT; cat++) {
         activity += fc->samples[cat];
-    if (activity == 0)
+    }
+    if (activity == 0) {
         return; /* never executed (or already drained by a dump) */
+    }
 
-    if (state->force_tombstone_oom)
+    if (state->force_tombstone_oom) {
         tombstone = NULL; /* fault injection: exercise the loss path */
-    else
+    } else {
         tombstone = js_mallocz_rt(state->owner, sizeof(*tombstone));
+    }
     if (!tombstone) {
         /* Sticky: per-function data is now incomplete; the analyzer
            must reject the dataset for go/no-go purposes. The aggregate
@@ -625,8 +654,8 @@ static void qjs_prof_function_freed(QJSProfileState *state, JSRuntime *rt,
     tombstone->bc_size = b->byte_code_len;
     tombstone->func_kind = b->func_kind;
     tombstone->counters = *fc;
-    tombstone->verdict = qjs_jit_classify_function(b, &tombstone->detail,
-                                                   &tombstone->detail_offset);
+    tombstone->verdict =
+        qjs_jit_classify_function(b, &tombstone->detail, &tombstone->detail_offset);
     tombstone->next = state->tombstones;
     state->tombstones = tombstone;
 }
@@ -635,8 +664,7 @@ static void qjs_prof_function_freed(QJSProfileState *state, JSRuntime *rt,
 /* Histogram dump                                                      */
 /* ------------------------------------------------------------------ */
 
-static void qjs_prof_dump_atom(FILE *out, JSContext *ctx, JSAtom atom,
-                               const char *fallback)
+static void qjs_prof_dump_atom(FILE *out, JSContext *ctx, JSAtom atom, const char *fallback)
 {
     const char *cstring;
     const char *cursor;
@@ -650,8 +678,9 @@ static void qjs_prof_dump_atom(FILE *out, JSContext *ctx, JSAtom atom,
         return;
     }
     /* TSV field: neutralize separators. */
-    for (cursor = cstring; *cursor; cursor++)
+    for (cursor = cstring; *cursor; cursor++) {
         fputc((*cursor == '\t' || *cursor == '\n') ? ' ' : *cursor, out);
+    }
     JS_FreeCString(ctx, cstring);
 }
 
@@ -663,58 +692,60 @@ int JS_ProfileDump(JSContext *ctx, const char *path)
     FILE *out;
     int cat;
 
-    if (!state || !path)
+    if (!state || !path) {
         return -1;
+    }
 
     out = fopen(path, "w");
-    if (!out)
+    if (!out) {
         return -1;
+    }
 
     fprintf(out, "# qjs-profile v3\n");
     fprintf(out, "# fingerprint\t%016" PRIx64 "\n", JS_JITBytecodeFingerprint());
     fprintf(out, "# runtime\t%p\towner=%d\n", (void *)rt, rt == state->owner);
-    fprintf(out, "# layout\tjsvalue=%zu\tbc_buf=%zu\tbc_len=%zu\tcpool=%zu"
-                 "\targ_count=%zu\tvar_count=%zu\tstack_size=%zu\n",
-            sizeof(JSValue),
-            offsetof(JSFunctionBytecode, byte_code_buf),
-            offsetof(JSFunctionBytecode, byte_code_len),
-            offsetof(JSFunctionBytecode, cpool),
-            offsetof(JSFunctionBytecode, arg_count),
-            offsetof(JSFunctionBytecode, var_count),
+    fprintf(out,
+            "# layout\tjsvalue=%zu\tbc_buf=%zu\tbc_len=%zu\tcpool=%zu"
+            "\targ_count=%zu\tvar_count=%zu\tstack_size=%zu\n",
+            sizeof(JSValue), offsetof(JSFunctionBytecode, byte_code_buf),
+            offsetof(JSFunctionBytecode, byte_code_len), offsetof(JSFunctionBytecode, cpool),
+            offsetof(JSFunctionBytecode, arg_count), offsetof(JSFunctionBytecode, var_count),
             offsetof(JSFunctionBytecode, stack_size));
     fprintf(out, "# sample_hz\t%d\n", state->sample_hz);
     fprintf(out, "# samples_total\t%" PRIu64 "\n", state->samples_total);
     fprintf(out, "# samples_no_frame\t%" PRIu64 "\n", state->samples_no_frame);
-    fprintf(out, "# samples_by_cat\tdispatch=%" PRIu64 "\tprop_load=%" PRIu64
-                 "\tprop_write=%" PRIu64 "\tcall=%" PRIu64 "\tstring=%" PRIu64
-                 "\tvm=%" PRIu64 "\tnative=%" PRIu64 "\tunknown=%" PRIu64 "\n",
-            state->samples_by_cat[0], state->samples_by_cat[1],
-            state->samples_by_cat[2], state->samples_by_cat[3],
-            state->samples_by_cat[4], state->samples_by_cat[5],
+    fprintf(out,
+            "# samples_by_cat\tdispatch=%" PRIu64 "\tprop_load=%" PRIu64 "\tprop_write=%" PRIu64
+            "\tcall=%" PRIu64 "\tstring=%" PRIu64 "\tvm=%" PRIu64 "\tnative=%" PRIu64
+            "\tunknown=%" PRIu64 "\n",
+            state->samples_by_cat[0], state->samples_by_cat[1], state->samples_by_cat[2],
+            state->samples_by_cat[3], state->samples_by_cat[4], state->samples_by_cat[5],
             state->samples_by_cat[6], state->samples_by_cat[7]);
     fprintf(out, "# incomplete\t%d\n", state->incomplete);
-    fprintf(out, "# reclaimed\tfunctions=%" PRIu64 "\tcalls=%" PRIu64
-                 "\tbackedges=%" PRIu64 "\n",
-            state->reclaimed_functions, state->reclaimed_calls,
-            state->reclaimed_backedges);
+    fprintf(out, "# reclaimed\tfunctions=%" PRIu64 "\tcalls=%" PRIu64 "\tbackedges=%" PRIu64 "\n",
+            state->reclaimed_functions, state->reclaimed_calls, state->reclaimed_backedges);
     fprintf(out, "name\tsource\tbc_size\tfunc_kind\tcalls\tbackedges"
                  "\ts_dispatch\ts_prop_load\ts_prop_write\ts_call\ts_string"
                  "\ts_vm\ts_native\ts_unknown\teligible\treason\truntime\n");
 
-    list_for_each(el, &rt->gc_obj_list) {
+    list_for_each(el, &rt->gc_obj_list)
+    {
         JSGCObjectHeader *gc_header = list_entry(el, JSGCObjectHeader, link);
         JSFunctionBytecode *b;
         int verdict, detail, detail_offset;
 
-        if (gc_header->gc_obj_type != JS_GC_OBJ_TYPE_FUNCTION_BYTECODE)
+        if (gc_header->gc_obj_type != JS_GC_OBJ_TYPE_FUNCTION_BYTECODE) {
             continue;
+        }
         b = (JSFunctionBytecode *)gc_header;
         if (b->prof.call_count == 0 && b->prof.backedge_count == 0) {
             uint32_t sample_sum = 0;
-            for (cat = 0; cat < QJS_PROF_CAT_COUNT; cat++)
+            for (cat = 0; cat < QJS_PROF_CAT_COUNT; cat++) {
                 sample_sum += b->prof.samples[cat];
-            if (sample_sum == 0)
+            }
+            if (sample_sum == 0) {
                 continue; /* never executed while profiled — skip the row */
+            }
         }
 
         verdict = qjs_jit_classify_function(b, &detail, &detail_offset);
@@ -723,16 +754,15 @@ int JS_ProfileDump(JSContext *ctx, const char *path)
         fputc('\t', out);
         qjs_prof_dump_atom(out, ctx, b->filename, "<unknown>");
         fprintf(out, ":%d", b->line_num);
-        fprintf(out, "\t%d\t%d\t%u\t%u",
-                b->byte_code_len, (int)b->func_kind,
-                b->prof.call_count, b->prof.backedge_count);
-        for (cat = 0; cat < QJS_PROF_CAT_COUNT; cat++)
+        fprintf(out, "\t%d\t%d\t%u\t%u", b->byte_code_len, (int)b->func_kind, b->prof.call_count,
+                b->prof.backedge_count);
+        for (cat = 0; cat < QJS_PROF_CAT_COUNT; cat++) {
             fprintf(out, "\t%u", b->prof.samples[cat]);
-        fprintf(out, "\t%d\t%s", verdict == QJS_JIT_ELIGIBLE,
-                qjs_jit_verdict_name(verdict));
-        if (verdict == QJS_JIT_INELIGIBLE_OPCODE ||
-            verdict == QJS_JIT_INELIGIBLE_MALFORMED)
+        }
+        fprintf(out, "\t%d\t%s", verdict == QJS_JIT_ELIGIBLE, qjs_jit_verdict_name(verdict));
+        if (verdict == QJS_JIT_INELIGIBLE_OPCODE || verdict == QJS_JIT_INELIGIBLE_MALFORMED) {
             fprintf(out, ":%d@%d", detail, detail_offset);
+        }
         fprintf(out, "\t%p", (void *)rt);
         /* Drain: a dumped row is consumed, so later tombstones/dumps
            never double-count this function. */
@@ -741,8 +771,9 @@ int JS_ProfileDump(JSContext *ctx, const char *path)
         if (getenv("QJS_PROFILE_DUMP_BC") && b->byte_code_len <= 128) {
             int bc_index;
             fputs("\tbc=", out);
-            for (bc_index = 0; bc_index < b->byte_code_len; bc_index++)
+            for (bc_index = 0; bc_index < b->byte_code_len; bc_index++) {
                 fprintf(out, "%02x", b->byte_code_buf[bc_index]);
+            }
         }
         fputc('\n', out);
     }
@@ -753,30 +784,32 @@ int JS_ProfileDump(JSContext *ctx, const char *path)
         QJSProfileTombstone *tombstone = state->tombstones;
         const char *cursor;
         state->tombstones = tombstone->next;
-        for (cursor = tombstone->name; *cursor; cursor++)
+        for (cursor = tombstone->name; *cursor; cursor++) {
             fputc((*cursor == '\t' || *cursor == '\n') ? ' ' : *cursor, out);
+        }
         fputc('\t', out);
-        for (cursor = tombstone->source; *cursor; cursor++)
+        for (cursor = tombstone->source; *cursor; cursor++) {
             fputc((*cursor == '\t' || *cursor == '\n') ? ' ' : *cursor, out);
+        }
         fprintf(out, ":%d", tombstone->line);
-        fprintf(out, "\t%d\t%d\t%u\t%u",
-                tombstone->bc_size, tombstone->func_kind,
-                tombstone->counters.call_count,
-                tombstone->counters.backedge_count);
-        for (cat = 0; cat < QJS_PROF_CAT_COUNT; cat++)
+        fprintf(out, "\t%d\t%d\t%u\t%u", tombstone->bc_size, tombstone->func_kind,
+                tombstone->counters.call_count, tombstone->counters.backedge_count);
+        for (cat = 0; cat < QJS_PROF_CAT_COUNT; cat++) {
             fprintf(out, "\t%u", tombstone->counters.samples[cat]);
+        }
         fprintf(out, "\t%d\t%s", tombstone->verdict == QJS_JIT_ELIGIBLE,
                 qjs_jit_verdict_name(tombstone->verdict));
         if (tombstone->verdict == QJS_JIT_INELIGIBLE_OPCODE ||
-            tombstone->verdict == QJS_JIT_INELIGIBLE_MALFORMED)
-            fprintf(out, ":%d@%d", tombstone->detail,
-                    tombstone->detail_offset);
+            tombstone->verdict == QJS_JIT_INELIGIBLE_MALFORMED) {
+            fprintf(out, ":%d@%d", tombstone->detail, tombstone->detail_offset);
+        }
         fprintf(out, "\t%p\n", tombstone->runtime);
         js_free_rt(state->owner, tombstone);
     }
 
-    if (fclose(out) != 0)
+    if (fclose(out) != 0) {
         return -1;
+    }
     return 0;
 }
 
@@ -834,8 +867,8 @@ int JS_JITAvailable(void)
     return 0;
 }
 
-int JS_JITGetStats(JSRuntime *rt, uint64_t *compiled, uint64_t *unsupported,
-                   uint64_t *failed, uint64_t *jit_calls)
+int JS_JITGetStats(JSRuntime *rt, uint64_t *compiled, uint64_t *unsupported, uint64_t *failed,
+                   uint64_t *jit_calls)
 {
     (void)rt;
     (void)compiled;
