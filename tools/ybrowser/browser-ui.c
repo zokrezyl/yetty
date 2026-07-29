@@ -1229,8 +1229,7 @@ static void navigate_post(struct app *a, struct tab *t, char *url, char *method,
     size_t len = 0;
     char *eff = NULL;
     char *ctype = NULL;
-    char *data =
-        ybrowser_slurp_request(a->loader, url, method, body, body_len, &len, &eff, &ctype);
+    char *data = ybrowser_slurp_request(a->loader, url, method, body, body_len, &len, &eff, &ctype);
     /* Land on the redirected URL (consent save 302s to the continue= target)
 	 * so the address bar, base URL, and history reflect the real page. */
     const char *final_url = eff ? eff : url;

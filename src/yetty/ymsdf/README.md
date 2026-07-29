@@ -70,7 +70,7 @@ referenced by a drawable list has no cached `.cdb` yet:
 
 - `../ydraw/scrolling-canvas.c` — font materialisation for scrolling ydraw
   content ([ydraw](../ydraw/README.md)).
-- `../yvterm/sdf-layer.c` — the SDF layer's named-font path
+- `../yvterm/grid-sdf-layer.c` — the SDF layer's named-font path
   ([yvterm](../yvterm/README.md)).
 - `../ygrid/grid.c` — the ygrid figure's font slots
   ([ygrid](../ygrid/README.md)).

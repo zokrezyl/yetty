@@ -279,10 +279,10 @@ DEF(ID_Start, "IDS")
 DEF(Case_Ignorable, "CI")
 
 /* other binary properties */
-DEF(ASCII,"")
+DEF(ASCII, "")
 DEF(Alphabetic, "Alpha")
 DEF(Any, "")
-DEF(Assigned,"")
+DEF(Assigned, "")
 DEF(Cased, "")
 DEF(Changes_When_Casefolded, "CWCF")
 DEF(Changes_When_Casemapped, "CWCM")

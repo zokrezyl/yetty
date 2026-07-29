@@ -166,11 +166,13 @@ char *strdup_len(const char *str, int len)
     return p;
 }
 
-static inline int str_equal(const char *a, const char *b) {
+static inline int str_equal(const char *a, const char *b)
+{
     return !strcmp(a, b);
 }
 
-static inline int str_count(const char *a, const char *b) {
+static inline int str_count(const char *a, const char *b)
+{
     int count = 0;
     while ((a = strstr(a, b))) {
         a += strlen(b);
@@ -179,7 +181,8 @@ static inline int str_count(const char *a, const char *b) {
     return count;
 }
 
-char *str_append(char **pp, const char *sep, const char *str) {
+char *str_append(char **pp, const char *sep, const char *str)
+{
     char *res, *p;
     size_t len = 0;
     p = *pp;
@@ -199,10 +202,12 @@ char *str_append(char **pp, const char *sep, const char *str) {
 char *str_strip(char *p)
 {
     size_t len = strlen(p);
-    while (len > 0 && isspace((unsigned char)p[len - 1]))
+    while (len > 0 && isspace((unsigned char)p[len - 1])) {
         p[--len] = '\0';
-    while (isspace((unsigned char)*p))
+    }
+    while (isspace((unsigned char)*p)) {
         p++;
+    }
     return p;
 }
 
@@ -215,12 +220,13 @@ char *skip_prefix(const char *str, const char *prefix)
 {
     int i;
     for (i = 0;; i++) {
-        if (prefix[i] == '\0') {  /* skip the prefix */
+        if (prefix[i] == '\0') { /* skip the prefix */
             str += i;
             break;
         }
-        if (str[i] != prefix[i])
+        if (str[i] != prefix[i]) {
             break;
+        }
     }
     return (char *)str;
 }
@@ -228,8 +234,9 @@ char *skip_prefix(const char *str, const char *prefix)
 char *get_basename(const char *filename)
 {
     const char *p = strrchr(filename, '/');
-    if (!p)
+    if (!p) {
         return NULL;
+    }
     return strdup_len(filename, p - filename);
 }
 
@@ -248,8 +255,9 @@ char *compose_path(const char *path, const char *name)
             q = d;
             memcpy(q, path, path_len);
             q += path_len;
-            if (path[path_len - 1] != '/')
+            if (path[path_len - 1] != '/') {
                 *q++ = '/';
+            }
             memcpy(q, name, name_len + 1);
         }
     }
@@ -265,21 +273,28 @@ int namelist_cmp(const char *a, const char *b)
         if (isdigit(ca) && isdigit(cb)) {
             int na = ca - '0';
             int nb = cb - '0';
-            while (isdigit(ca = (unsigned char)*a++))
+            while (isdigit(ca = (unsigned char)*a++)) {
                 na = na * 10 + ca - '0';
-            while (isdigit(cb = (unsigned char)*b++))
+            }
+            while (isdigit(cb = (unsigned char)*b++)) {
                 nb = nb * 10 + cb - '0';
-            if (na < nb)
+            }
+            if (na < nb) {
                 return -1;
-            if (na > nb)
+            }
+            if (na > nb) {
                 return +1;
+            }
         }
-        if (ca < cb)
+        if (ca < cb) {
             return -1;
-        if (ca > cb)
+        }
+        if (ca > cb) {
             return +1;
-        if (ca == '\0')
+        }
+        if (ca == '\0') {
             return 0;
+        }
     }
 }
 
@@ -312,12 +327,13 @@ int namelist_find(const namelist_t *lp, const char *name)
     for (a = 0, b = lp->count; a < b;) {
         m = a + (b - a) / 2;
         cmp = namelist_cmp(lp->array[m], name);
-        if (cmp < 0)
+        if (cmp < 0) {
             a = m + 1;
-        else if (cmp > 0)
+        } else if (cmp > 0) {
             b = m;
-        else
+        } else {
             return m;
+        }
     }
     return -1;
 }
@@ -327,13 +343,15 @@ void namelist_add(namelist_t *lp, const char *base, const char *name)
     char *s;
 
     s = compose_path(base, name);
-    if (!s)
+    if (!s) {
         goto fail;
+    }
     if (lp->count == lp->size) {
         size_t newsize = lp->size + (lp->size >> 1) + 4;
         char **a = realloc(lp->array, sizeof(lp->array[0]) * newsize);
-        if (!a)
+        if (!a) {
             goto fail;
+        }
         lp->array = a;
         lp->size = newsize;
     }
@@ -358,8 +376,9 @@ void namelist_load(namelist_t *lp, const char *filename)
 
     while (fgets(buf, sizeof(buf), f) != NULL) {
         char *p = str_strip(buf);
-        if (*p == '#' || *p == ';' || *p == '\0')
-            continue;  /* line comment */
+        if (*p == '#' || *p == ';' || *p == '\0') {
+            continue; /* line comment */
+        }
 
         namelist_add(lp, base_name, p);
     }
@@ -373,8 +392,9 @@ void namelist_add_from_error_file(namelist_t *lp, const char *file)
     char *pp;
 
     for (p = file; (p = strstr(p, ".js:")) != NULL; p++) {
-        for (p0 = p; p0 > file && p0[-1] != '\n'; p0--)
+        for (p0 = p; p0 > file && p0[-1] != '\n'; p0--) {
             continue;
+        }
         pp = strdup_len(p0, p + 3 - p0);
         namelist_add(lp, NULL, pp);
         free(pp);
@@ -394,8 +414,9 @@ void namelist_free(namelist_t *lp)
 static int add_test_file(const char *filename)
 {
     namelist_t *lp = &test_list;
-    if (js__has_suffix(filename, ".js") && !js__has_suffix(filename, "_FIXTURE.js"))
+    if (js__has_suffix(filename, ".js") && !js__has_suffix(filename, "_FIXTURE.js")) {
         namelist_add(lp, NULL, filename);
+    }
     return 0;
 }
 
@@ -411,21 +432,25 @@ static void consider_test_file(const char *path, const char *name, int is_dir)
     size_t pathlen;
     char s[1024];
 
-    if (str_equal(name, ".") || str_equal(name, ".."))
+    if (str_equal(name, ".") || str_equal(name, "..")) {
         return;
+    }
     pathlen = strlen(path);
-    while (pathlen > 0 && ispathsep(path[pathlen-1]))
+    while (pathlen > 0 && ispathsep(path[pathlen - 1])) {
         pathlen--;
+    }
     snprintf(s, sizeof(s), "%.*s/%s", (int)pathlen, path, name);
 #if !defined(_WIN32) && !defined(DT_DIR)
     struct stat st;
-    if (is_dir < 0)
+    if (is_dir < 0) {
         is_dir = !stat(s, &st) && S_ISDIR(st.st_mode);
+    }
 #endif
-    if (is_dir)
+    if (is_dir) {
         find_test_files(s);
-    else
+    } else {
         add_test_file(s);
+    }
 }
 
 static void find_test_files(const char *path)
@@ -439,9 +464,7 @@ static void find_test_files(const char *path)
     h = FindFirstFileA(s, &d);
     if (h != INVALID_HANDLE_VALUE) {
         do {
-            consider_test_file(path,
-                               d.cFileName,
-                               d.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+            consider_test_file(path, d.cFileName, d.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
         } while (FindNextFileA(h, &d));
         FindClose(h);
     }
@@ -469,12 +492,10 @@ static void enumerate_tests(const char *path)
     namelist_t *lp = &test_list;
     int start = lp->count;
     find_test_files(path);
-    qsort(lp->array + start, lp->count - start, sizeof(*lp->array),
-          namelist_cmp_indirect);
+    qsort(lp->array + start, lp->count - start, sizeof(*lp->array), namelist_cmp_indirect);
 }
 
-static JSValue js_print_262(JSContext *ctx, JSValueConst this_val,
-                            int argc, JSValueConst *argv)
+static JSValue js_print_262(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     ThreadLocalStorage *tls = JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
     const char *s;
@@ -491,20 +512,23 @@ static JSValue js_print_262(JSContext *ctx, JSValueConst this_val,
             s = JS_ToCString(ctx, t);
             JS_FreeValue(ctx, t);
         }
-        if (!s)
+        if (!s) {
             return JS_EXCEPTION;
+        }
         if (!strcmp(s, "Test262:AsyncTestComplete")) {
             tls->async_done++;
         } else if (js__strstart(s, "Test262:AsyncTestFailure", NULL)) {
             tls->async_done = 2; /* force an error */
         }
         if (outfile) {
-            if (i != 0)
+            if (i != 0) {
                 fputc(' ', outfile);
+            }
             fputs(s, outfile);
         }
-        if (verbose > 1)
+        if (verbose > 1) {
             printf("%s%s", &" "[i < 1], s);
+        }
         JS_FreeCString(ctx, s);
         if (verbose > 2 && JS_IsError(v)) {
             JSValue stack = JS_GetPropertyStr(ctx, v, "stack");
@@ -516,29 +540,32 @@ static JSValue js_print_262(JSContext *ctx, JSValueConst this_val,
             }
         }
     }
-    if (outfile)
+    if (outfile) {
         fputc('\n', outfile);
-    if (verbose > 1)
+    }
+    if (verbose > 1) {
         printf("\n");
+    }
     return JS_UNDEFINED;
 }
 
-static JSValue js_detachArrayBuffer(JSContext *ctx, JSValueConst this_val,
-                                    int argc, JSValueConst *argv)
+static JSValue js_detachArrayBuffer(JSContext *ctx, JSValueConst this_val, int argc,
+                                    JSValueConst *argv)
 {
     JS_DetachArrayBuffer(ctx, argv[0]);
     return JS_UNDEFINED;
 }
 
-static JSValue js_evalScript_262(JSContext *ctx, JSValueConst this_val,
-                             int argc, JSValueConst *argv)
+static JSValue js_evalScript_262(JSContext *ctx, JSValueConst this_val, int argc,
+                                 JSValueConst *argv)
 {
     const char *str;
     size_t len;
     JSValue ret;
     str = JS_ToCStringLen(ctx, &len, argv[0]);
-    if (!str)
+    if (!str) {
         return JS_EXCEPTION;
+    }
     ret = JS_Eval(ctx, str, len, "<evalScript>", JS_EVAL_TYPE_GLOBAL);
     JS_FreeCString(ctx, str);
     return ret;
@@ -552,9 +579,11 @@ static long cpu_count(void)
     int i;
 
     count = 0;
-    if (GetProcessAffinityMask(GetCurrentProcess(), &procmask, &sysmask))
-        for (i = 0; i < 8 * sizeof(procmask); i++)
+    if (GetProcessAffinityMask(GetCurrentProcess(), &procmask, &sysmask)) {
+        for (i = 0; i < 8 * sizeof(procmask); i++) {
             count += 1 & (procmask >> i);
+        }
+    }
     return count;
 #else
     return sysconf(_SC_NPROCESSORS_ONLN);
@@ -618,15 +647,16 @@ static void agent_start(void *arg)
     JS_SetCanBlock(rt, true);
 
     add_helpers(ctx);
-    ret_val = JS_Eval(ctx, agent->script, strlen(agent->script),
-                      "<evalScript>", JS_EVAL_TYPE_GLOBAL);
+    ret_val =
+        JS_Eval(ctx, agent->script, strlen(agent->script), "<evalScript>", JS_EVAL_TYPE_GLOBAL);
     free(agent->script);
     agent->script = NULL;
-    if (JS_IsException(ret_val))
+    if (JS_IsException(ret_val)) {
         js_std_dump_error(ctx);
+    }
     JS_FreeValue(ctx, ret_val);
 
-    for(;;) {
+    for (;;) {
         JSContext *ctx1;
         ret = JS_ExecutePendingJob(JS_GetRuntime(ctx), &ctx1);
         if (ret < 0) {
@@ -649,15 +679,15 @@ static void agent_start(void *arg)
                 js_mutex_unlock(&tls->agent_mutex);
 
                 args[0] = JS_NewArrayBuffer(ctx, agent->broadcast_sab_buf,
-                                            agent->broadcast_sab_size,
-                                            NULL, NULL, true);
+                                            agent->broadcast_sab_size, NULL, NULL, true);
                 args[1] = JS_NewInt32(ctx, agent->broadcast_val);
-                ret_val = JS_Call(ctx, agent->broadcast_func, JS_UNDEFINED,
-                                  2, (JSValueConst *)args);
+                ret_val =
+                    JS_Call(ctx, agent->broadcast_func, JS_UNDEFINED, 2, (JSValueConst *)args);
                 JS_FreeValue(ctx, args[0]);
                 JS_FreeValue(ctx, args[1]);
-                if (JS_IsException(ret_val))
+                if (JS_IsException(ret_val)) {
                     js_std_dump_error(ctx);
+                }
                 JS_FreeValue(ctx, ret_val);
                 JS_FreeValue(ctx, agent->broadcast_func);
                 agent->broadcast_func = JS_UNDEFINED;
@@ -670,19 +700,20 @@ static void agent_start(void *arg)
     JS_FreeRuntime(rt);
 }
 
-static JSValue js_agent_start(JSContext *ctx, JSValueConst this_val,
-                              int argc, JSValueConst *argv)
+static JSValue js_agent_start(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     ThreadLocalStorage *tls = JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
     const char *script;
     Test262Agent *agent;
 
-    if (JS_GetContextOpaque(ctx) != NULL)
+    if (JS_GetContextOpaque(ctx) != NULL) {
         return JS_ThrowTypeError(ctx, "cannot be called inside an agent");
+    }
 
     script = JS_ToCString(ctx, argv[0]);
-    if (!script)
+    if (!script) {
         return JS_EXCEPTION;
+    }
     agent = malloc(sizeof(*agent));
     memset(agent, 0, sizeof(*agent));
     agent->broadcast_func = JS_UNDEFINED;
@@ -691,7 +722,7 @@ static JSValue js_agent_start(JSContext *ctx, JSValueConst this_val,
     agent->tls = tls;
     JS_FreeCString(ctx, script);
     list_add_tail(&agent->link, &tls->agent_list);
-    js_thread_create(&agent->tid, agent_start, agent, /*flags*/0);
+    js_thread_create(&agent->tid, agent_start, agent, /*flags*/ 0);
     return JS_UNDEFINED;
 }
 
@@ -701,7 +732,8 @@ static void js_agent_free(JSContext *ctx)
     struct list_head *el, *el1;
     Test262Agent *agent;
 
-    list_for_each_safe(el, el1, &tls->agent_list) {
+    list_for_each_safe(el, el1, &tls->agent_list)
+    {
         agent = list_entry(el, Test262Agent, link);
         js_thread_join(agent->tid);
         JS_FreeValue(ctx, agent->broadcast_sab);
@@ -710,12 +742,12 @@ static void js_agent_free(JSContext *ctx)
     }
 }
 
-static JSValue js_agent_leaving(JSContext *ctx, JSValueConst this_val,
-                                int argc, JSValueConst *argv)
+static JSValue js_agent_leaving(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     Test262Agent *agent = JS_GetContextOpaque(ctx);
-    if (!agent)
+    if (!agent) {
         return JS_ThrowTypeError(ctx, "must be called inside an agent");
+    }
     /* nothing to do */
     return JS_UNDEFINED;
 }
@@ -724,16 +756,18 @@ static bool is_broadcast_pending(ThreadLocalStorage *tls)
 {
     struct list_head *el;
     Test262Agent *agent;
-    list_for_each(el, &tls->agent_list) {
+    list_for_each(el, &tls->agent_list)
+    {
         agent = list_entry(el, Test262Agent, link);
-        if (agent->broadcast_pending)
+        if (agent->broadcast_pending) {
             return true;
+        }
     }
     return false;
 }
 
-static JSValue js_agent_broadcast(JSContext *ctx, JSValueConst this_val,
-                                  int argc, JSValueConst *argv)
+static JSValue js_agent_broadcast(JSContext *ctx, JSValueConst this_val, int argc,
+                                  JSValueConst *argv)
 {
     ThreadLocalStorage *tls = JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
     JSValueConst sab = argv[0];
@@ -743,19 +777,23 @@ static JSValue js_agent_broadcast(JSContext *ctx, JSValueConst this_val,
     size_t buf_size;
     int32_t val;
 
-    if (JS_GetContextOpaque(ctx) != NULL)
+    if (JS_GetContextOpaque(ctx) != NULL) {
         return JS_ThrowTypeError(ctx, "cannot be called inside an agent");
+    }
 
     buf = JS_GetArrayBuffer(ctx, &buf_size, sab);
-    if (!buf)
+    if (!buf) {
         return JS_EXCEPTION;
-    if (JS_ToInt32(ctx, &val, argv[1]))
+    }
+    if (JS_ToInt32(ctx, &val, argv[1])) {
         return JS_EXCEPTION;
+    }
 
     /* broadcast the values and wait until all agents have started
        calling their callbacks */
     js_mutex_lock(&tls->agent_mutex);
-    list_for_each(el, &tls->agent_list) {
+    list_for_each(el, &tls->agent_list)
+    {
         agent = list_entry(el, Test262Agent, link);
         agent->broadcast_pending = true;
         /* the shared array buffer is used by the thread, so increment
@@ -774,25 +812,27 @@ static JSValue js_agent_broadcast(JSContext *ctx, JSValueConst this_val,
     return JS_UNDEFINED;
 }
 
-static JSValue js_agent_receiveBroadcast(JSContext *ctx, JSValueConst this_val,
-                                         int argc, JSValueConst *argv)
+static JSValue js_agent_receiveBroadcast(JSContext *ctx, JSValueConst this_val, int argc,
+                                         JSValueConst *argv)
 {
     Test262Agent *agent = JS_GetContextOpaque(ctx);
-    if (!agent)
+    if (!agent) {
         return JS_ThrowTypeError(ctx, "must be called inside an agent");
-    if (!JS_IsFunction(ctx, argv[0]))
+    }
+    if (!JS_IsFunction(ctx, argv[0])) {
         return JS_ThrowTypeError(ctx, "expecting function");
+    }
     JS_FreeValue(ctx, agent->broadcast_func);
     agent->broadcast_func = JS_DupValue(ctx, argv[0]);
     return JS_UNDEFINED;
 }
 
-static JSValue js_agent_sleep(JSContext *ctx, JSValueConst this_val,
-                              int argc, JSValueConst *argv)
+static JSValue js_agent_sleep(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     uint32_t duration;
-    if (JS_ToUint32(ctx, &duration, argv[0]))
+    if (JS_ToUint32(ctx, &duration, argv[0])) {
         return JS_EXCEPTION;
+    }
 #ifdef _WIN32
     Sleep(duration);
 #else
@@ -812,14 +852,14 @@ static int64_t get_clock_ms(void)
 #endif
 }
 
-static JSValue js_agent_monotonicNow(JSContext *ctx, JSValueConst this_val,
-                                     int argc, JSValueConst *argv)
+static JSValue js_agent_monotonicNow(JSContext *ctx, JSValueConst this_val, int argc,
+                                     JSValueConst *argv)
 {
     return JS_NewInt64(ctx, get_clock_ms());
 }
 
-static JSValue js_agent_getReport(JSContext *ctx, JSValueConst this_val,
-                                  int argc, JSValueConst *argv)
+static JSValue js_agent_getReport(JSContext *ctx, JSValueConst this_val, int argc,
+                                  JSValueConst *argv)
 {
     ThreadLocalStorage *tls = JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
     AgentReport *rep;
@@ -843,16 +883,16 @@ static JSValue js_agent_getReport(JSContext *ctx, JSValueConst this_val,
     return ret;
 }
 
-static JSValue js_agent_report(JSContext *ctx, JSValueConst this_val,
-                               int argc, JSValueConst *argv)
+static JSValue js_agent_report(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     ThreadLocalStorage *tls = JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
     const char *str;
     AgentReport *rep;
 
     str = JS_ToCString(ctx, argv[0]);
-    if (!str)
+    if (!str) {
         return JS_EXCEPTION;
+    }
     rep = malloc(sizeof(*rep));
     rep->str = strdup(str);
     JS_FreeCString(ctx, str);
@@ -865,50 +905,47 @@ static JSValue js_agent_report(JSContext *ctx, JSValueConst this_val,
 
 static const JSCFunctionListEntry js_agent_funcs[] = {
     /* only in main */
-    JS_CFUNC_DEF("start", 1, js_agent_start ),
-    JS_CFUNC_DEF("getReport", 0, js_agent_getReport ),
-    JS_CFUNC_DEF("broadcast", 2, js_agent_broadcast ),
+    JS_CFUNC_DEF("start", 1, js_agent_start),
+    JS_CFUNC_DEF("getReport", 0, js_agent_getReport),
+    JS_CFUNC_DEF("broadcast", 2, js_agent_broadcast),
     /* only in agent */
-    JS_CFUNC_DEF("report", 1, js_agent_report ),
-    JS_CFUNC_DEF("leaving", 0, js_agent_leaving ),
-    JS_CFUNC_DEF("receiveBroadcast", 1, js_agent_receiveBroadcast ),
+    JS_CFUNC_DEF("report", 1, js_agent_report),
+    JS_CFUNC_DEF("leaving", 0, js_agent_leaving),
+    JS_CFUNC_DEF("receiveBroadcast", 1, js_agent_receiveBroadcast),
     /* in both */
-    JS_CFUNC_DEF("sleep", 1, js_agent_sleep ),
-    JS_CFUNC_DEF("monotonicNow", 0, js_agent_monotonicNow ),
+    JS_CFUNC_DEF("sleep", 1, js_agent_sleep),
+    JS_CFUNC_DEF("monotonicNow", 0, js_agent_monotonicNow),
 };
 
 static JSValue js_new_agent(JSContext *ctx)
 {
     JSValue agent;
     agent = JS_NewObject(ctx);
-    JS_SetPropertyFunctionList(ctx, agent, js_agent_funcs,
-                               countof(js_agent_funcs));
+    JS_SetPropertyFunctionList(ctx, agent, js_agent_funcs, countof(js_agent_funcs));
     return agent;
 }
 
-static JSValue js_createRealm(JSContext *ctx, JSValueConst this_val,
-                              int argc, JSValueConst *argv)
+static JSValue js_createRealm(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     JSContext *ctx1;
     JSValue ret;
 
     ctx1 = JS_NewContext(JS_GetRuntime(ctx));
-    if (!ctx1)
+    if (!ctx1) {
         return JS_ThrowOutOfMemory(ctx);
+    }
     ret = add_helpers1(ctx1);
     /* ctx1 has a refcount so it stays alive */
     JS_FreeContext(ctx1);
     return ret;
 }
 
-static JSValue js_IsHTMLDDA(JSContext *ctx, JSValueConst this_val,
-                            int argc, JSValueConst *argv)
+static JSValue js_IsHTMLDDA(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     return JS_NULL;
 }
 
-static JSValue js_gc(JSContext *ctx, JSValueConst this_val,
-                     int argc, JSValueConst *argv)
+static JSValue js_gc(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     JS_RunGC(JS_GetRuntime(ctx));
     return JS_UNDEFINED;
@@ -921,17 +958,15 @@ static JSValue add_helpers1(JSContext *ctx)
 
     global_obj = JS_GetGlobalObject(ctx);
 
-    JS_SetPropertyStr(ctx, global_obj, "print",
-                      JS_NewCFunction(ctx, js_print_262, "print", 1));
-    JS_SetPropertyStr(ctx, global_obj, "gc",
-                      JS_NewCFunction(ctx, js_gc, "gc", 0));
+    JS_SetPropertyStr(ctx, global_obj, "print", JS_NewCFunction(ctx, js_print_262, "print", 1));
+    JS_SetPropertyStr(ctx, global_obj, "gc", JS_NewCFunction(ctx, js_gc, "gc", 0));
 
     is_html_dda = JS_NewCFunction(ctx, js_IsHTMLDDA, "IsHTMLDDA", 0);
     JS_SetIsHTMLDDA(ctx, is_html_dda);
 #define N 7
     static const char *props[N] = {
-        "detachArrayBuffer", "evalScript", "codePointRange",
-        "agent", "global", "createRealm", "IsHTMLDDA",
+        "detachArrayBuffer", "evalScript", "codePointRange", "agent", "global",
+        "createRealm",       "IsHTMLDDA",
     };
     JSValue values[N] = {
         JS_NewCFunction(ctx, js_detachArrayBuffer, "detachArrayBuffer", 1),
@@ -961,15 +996,16 @@ static char *load_file(const char *filename, size_t *lenp)
     char *buf;
     size_t buf_len;
     buf = (char *)js_load_file(NULL, &buf_len, filename);
-    if (!buf)
+    if (!buf) {
         perror_exit(1, filename);
-    if (lenp)
+    }
+    if (lenp) {
         *lenp = buf_len;
+    }
     return buf;
 }
 
-static JSModuleDef *js_module_loader_test(JSContext *ctx,
-                                          const char *module_name, void *opaque,
+static JSModuleDef *js_module_loader_test(JSContext *ctx, const char *module_name, void *opaque,
                                           JSValueConst attributes)
 {
     char *filename, *slash, path[1024];
@@ -980,8 +1016,7 @@ static JSModuleDef *js_module_loader_test(JSContext *ctx,
     if (!strchr(module_name, '/')) {
         slash = strrchr(filename, '/');
         if (slash) {
-            snprintf(path, sizeof(path), "%.*s/%s",
-                     (int) (slash - filename), filename, module_name);
+            snprintf(path, sizeof(path), "%.*s/%s", (int)(slash - filename), filename, module_name);
             module_name = path;
         }
     }
@@ -999,8 +1034,9 @@ char *find_line(const char *str, const char *line)
         const char *p;
         int len = strlen(line);
         for (p = str; (p = strstr(p, line)) != NULL; p += len + 1) {
-            if ((p == str || is_line_sep(p[-1])) && is_line_sep(p[len]))
+            if ((p == str || is_line_sep(p[-1])) && is_line_sep(p[len])) {
                 return (char *)p;
+            }
         }
     }
     return NULL;
@@ -1017,8 +1053,9 @@ char *find_word(const char *str, const char *word)
     int len = strlen(word);
     if (str && len) {
         for (p = str; (p = strstr(p, word)) != NULL; p += len) {
-            if ((p == str || is_word_sep(p[-1])) && is_word_sep(p[len]))
+            if ((p == str || is_word_sep(p[-1])) && is_word_sep(p[len])) {
                 return (char *)p;
+            }
         }
     }
     return NULL;
@@ -1054,10 +1091,12 @@ void update_exclude_dirs(void)
         include = exclude = 0;
         for (j = 0; j < dp->count; j++) {
             path = dp->array[j];
-            if (has_prefix(name, path))
+            if (has_prefix(name, path)) {
                 exclude = strlen(path);
-            if (*path == '!' && has_prefix(name, &path[1]))
+            }
+            if (*path == '!' && has_prefix(name, &path[1])) {
                 include = strlen(&path[1]);
+            }
         }
         // most specific include/exclude wins
         if (exclude > include) {
@@ -1094,23 +1133,25 @@ void load_config(const char *filename, const char *ignore)
         char *p, *q;
         lineno++;
         p = str_strip(buf);
-        if (*p == '#' || *p == ';' || *p == '\0')
-            continue;  /* line comment */
+        if (*p == '#' || *p == ';' || *p == '\0') {
+            continue; /* line comment */
+        }
 
         if (*p == "[]"[0]) {
             /* new section */
             p++;
             p[strcspn(p, "]")] = '\0';
-            if (str_equal(p, "config"))
+            if (str_equal(p, "config")) {
                 section = SECTION_CONFIG;
-            else if (str_equal(p, "exclude"))
+            } else if (str_equal(p, "exclude")) {
                 section = SECTION_EXCLUDE;
-            else if (str_equal(p, "features"))
+            } else if (str_equal(p, "features")) {
                 section = SECTION_FEATURES;
-            else if (str_equal(p, "tests"))
+            } else if (str_equal(p, "tests")) {
                 section = SECTION_TESTS;
-            else
+            } else {
                 section = SECTION_NONE;
+            }
             continue;
         }
         q = strchr(p, '=');
@@ -1156,28 +1197,31 @@ void load_config(const char *filename, const char *ignore)
                 continue;
             }
             if (str_equal(p, "mode")) {
-                if (str_equal(q, "default") || str_equal(q, "default-nostrict"))
+                if (str_equal(q, "default") || str_equal(q, "default-nostrict")) {
                     test_mode = TEST_DEFAULT_NOSTRICT;
-                else if (str_equal(q, "default-strict"))
+                } else if (str_equal(q, "default-strict")) {
                     test_mode = TEST_DEFAULT_STRICT;
-                else if (str_equal(q, "nostrict"))
+                } else if (str_equal(q, "nostrict")) {
                     test_mode = TEST_NOSTRICT;
-                else if (str_equal(q, "strict"))
+                } else if (str_equal(q, "strict")) {
                     test_mode = TEST_STRICT;
-                else if (str_equal(q, "all") || str_equal(q, "both"))
+                } else if (str_equal(q, "all") || str_equal(q, "both")) {
                     test_mode = TEST_ALL;
-                else
+                } else {
                     fatal(2, "unknown test mode: %s", q);
+                }
                 continue;
             }
             if (str_equal(p, "strict")) {
-                if (str_equal(q, "skip") || str_equal(q, "no"))
+                if (str_equal(q, "skip") || str_equal(q, "no")) {
                     test_mode = TEST_NOSTRICT;
+                }
                 continue;
             }
             if (str_equal(p, "nostrict")) {
-                if (str_equal(q, "skip") || str_equal(q, "no"))
+                if (str_equal(q, "skip") || str_equal(q, "no")) {
                     test_mode = TEST_STRICT;
+                }
                 continue;
             }
             if (str_equal(p, "async")) {
@@ -1207,10 +1251,11 @@ void load_config(const char *filename, const char *ignore)
             namelist_add(&exclude_list, base_name, p);
             break;
         case SECTION_FEATURES:
-            if (!q || str_equal(q, "yes") || (!CC_IS_TCC && str_equal(q, "!tcc")))
+            if (!q || str_equal(q, "yes") || (!CC_IS_TCC && str_equal(q, "!tcc"))) {
                 str_append(&harness_features, " ", p);
-            else
+            } else {
                 str_append(&harness_skip_features, " ", p);
+            }
             break;
         case SECTION_TESTS:
             namelist_add(&test_list, base_name, p);
@@ -1236,24 +1281,27 @@ char *find_error(const char *filename, int *pline, int is_strict)
                 q = p + len;
                 line = 1;
                 if (*q == ':') {
-                    line = strtol(q + 1, (char**)&q, 10);
-                    if (*q == ':')
+                    line = strtol(q + 1, (char **)&q, 10);
+                    if (*q == ':') {
                         q++;
+                    }
                 }
                 while (*q == ' ') {
                     q++;
                 }
                 /* check strict mode indicator */
-                if (!js__strstart(q, "strict mode: ", &q) != !is_strict)
+                if (!js__strstart(q, "strict mode: ", &q) != !is_strict) {
                     continue;
+                }
                 r = q = skip_prefix(q, "unexpected error: ");
                 r += strcspn(r, "\n");
                 while (r[0] == '\n' && r[1] && strncmp(r + 1, filename, 8)) {
                     r++;
                     r += strcspn(r, "\n");
                 }
-                if (pline)
+                if (pline) {
                     *pline = line;
+                }
                 return strdup_len(q, r - q);
             }
         }
@@ -1269,13 +1317,15 @@ int skip_comments(const char *str, int line, int *pline)
     p = str;
     while ((c = (unsigned char)*p++) != '\0') {
         if (isspace(c)) {
-            if (c == '\n')
+            if (c == '\n') {
                 line++;
+            }
             continue;
         }
         if (c == '/' && *p == '/') {
-            while (*++p && *p != '\n')
+            while (*++p && *p != '\n') {
                 continue;
+            }
             continue;
         }
         if (c == '/' && *p == '*') {
@@ -1293,8 +1343,9 @@ int skip_comments(const char *str, int line, int *pline)
         }
         break;
     }
-    if (pline)
+    if (pline) {
         *pline = line;
+    }
 
     return p - str;
 }
@@ -1309,29 +1360,33 @@ int longest_match(const char *str, const char *find, int pos, int *ppos, int lin
         const char *p;
         for (p = str + pos; *p; p++) {
             if (*p == *find) {
-                for (len = 1; p[len] && p[len] == find[len]; len++)
+                for (len = 1; p[len] && p[len] == find[len]; len++) {
                     continue;
+                }
                 if (len > maxlen) {
                     maxlen = len;
-                    if (ppos)
+                    if (ppos) {
                         *ppos = p - str;
-                    if (pline)
+                    }
+                    if (pline) {
                         *pline = line;
-                    if (!find[len])
+                    }
+                    if (!find[len]) {
                         break;
+                    }
                 }
             }
-            if (*p == '\n')
+            if (*p == '\n') {
                 line++;
+            }
         }
     }
     return maxlen;
 }
 
-static int eval_buf(JSContext *ctx, const char *buf, size_t buf_len,
-                    const char *filename, int is_test, int is_negative,
-                    const char *error_type, int eval_flags, int is_async,
-                    int *msec)
+static int eval_buf(JSContext *ctx, const char *buf, size_t buf_len, const char *filename,
+                    int is_test, int is_negative, const char *error_type, int eval_flags,
+                    int is_async, int *msec)
 {
     ThreadLocalStorage *tls = JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
     JSValue res_val, exception_val;
@@ -1360,7 +1415,7 @@ static int eval_buf(JSContext *ctx, const char *buf, size_t buf_len,
         } else {
             JS_FreeValue(ctx, res_val);
         }
-        for(;;) {
+        for (;;) {
             JSContext *ctx1;
             ret = JS_ExecutePendingJob(JS_GetRuntime(ctx), &ctx1);
             if (ret < 0) {
@@ -1377,12 +1432,13 @@ static int eval_buf(JSContext *ctx, const char *buf, size_t buf_len,
                 } else {
                     /* check that the returned promise is fulfilled */
                     JSPromiseStateEnum state = JS_PromiseState(ctx, promise);
-                    if (state == JS_PROMISE_FULFILLED)
+                    if (state == JS_PROMISE_FULFILLED) {
                         res_val = JS_UNDEFINED;
-                    else if (state == JS_PROMISE_REJECTED)
+                    } else if (state == JS_PROMISE_REJECTED) {
                         res_val = JS_Throw(ctx, JS_PromiseResult(ctx, promise));
-                    else
+                    } else {
                         res_val = JS_ThrowTypeError(ctx, "promise is pending");
+                    }
                 }
                 break;
             }
@@ -1433,8 +1489,9 @@ static int eval_buf(JSContext *ctx, const char *buf, size_t buf_len,
                     ret = -1;
                 } else {
                     error_class = strdup_len(msg, strcspn(msg, ":"));
-                    if (!str_equal(error_class, error_type))
+                    if (!str_equal(error_class, error_type)) {
                         ret = -1;
+                    }
                     free(error_class);
                     JS_FreeCString(ctx, msg);
                 }
@@ -1443,10 +1500,11 @@ static int eval_buf(JSContext *ctx, const char *buf, size_t buf_len,
             ret = -1;
         }
     } else {
-        if (is_negative)
+        if (is_negative) {
             ret = -1;
-        else
+        } else {
             ret = 0;
+        }
     }
 
     if (verbose && is_test) {
@@ -1461,33 +1519,33 @@ static int eval_buf(JSContext *ctx, const char *buf, size_t buf_len,
             msg_val = JS_ToString(ctx, exception_val);
             msg = JS_ToCString(ctx, msg_val);
         }
-        if (is_negative) {  // expect error
+        if (is_negative) { // expect error
             if (ret == 0) {
                 if (msg && s &&
                     (str_equal(s, "expected error") ||
                      js__strstart(s, "unexpected error type:", NULL) ||
-                     str_equal(s, msg))) {     // did not have error yet
+                     str_equal(s, msg))) { // did not have error yet
                     if (!has_error_line) {
                         longest_match(buf, msg, pos, &pos, pos_line, &error_line);
                     }
-                    printf("%s:%d: %sOK, now has error %s\n",
-                           filename, error_line, strict_mode, msg);
+                    printf("%s:%d: %sOK, now has error %s\n", filename, error_line, strict_mode,
+                           msg);
                     atomic_inc(&fixed_errors);
                     is_unexpected_error = false;
                 }
             } else {
-                if (!s) {   // not yet reported
+                if (!s) { // not yet reported
                     if (msg) {
-                        fprintf(error_out, "%s:%d: %sunexpected error type: %s\n",
-                                filename, error_line, strict_mode, msg);
+                        fprintf(error_out, "%s:%d: %sunexpected error type: %s\n", filename,
+                                error_line, strict_mode, msg);
                     } else {
-                        fprintf(error_out, "%s:%d: %sexpected error\n",
-                                filename, error_line, strict_mode);
+                        fprintf(error_out, "%s:%d: %sexpected error\n", filename, error_line,
+                                strict_mode);
                     }
                     atomic_inc(&new_errors);
                 }
             }
-        } else {            // should not have error
+        } else { // should not have error
             if (msg) {
                 if (!s || !str_equal(s, msg)) {
                     if (!has_error_line) {
@@ -1518,12 +1576,11 @@ static int eval_buf(JSContext *ctx, const char *buf, size_t buf_len,
         }
         if (is_unexpected_error && verbose > 1 && JS_IsException(exception_val)) {
             JSValue val = JS_GetPropertyStr(ctx, exception_val, "stack");
-            if (!JS_IsException(val) &&
-                !JS_IsUndefined(val) &&
-                !JS_IsNull(val)) {
+            if (!JS_IsException(val) && !JS_IsUndefined(val) && !JS_IsNull(val)) {
                 const char *str = JS_ToCString(ctx, val);
-                if (str)
+                if (str) {
                     printf("%s\n", str);
+                }
                 JS_FreeCString(ctx, str);
                 JS_FreeValue(ctx, val);
             }
@@ -1535,8 +1592,9 @@ static int eval_buf(JSContext *ctx, const char *buf, size_t buf_len,
 
     if (local) {
         ret = js_std_loop(ctx);
-        if (ret)
+        if (ret) {
             js_std_dump_error(ctx);
+        }
     }
 
     JS_FreeCString(ctx, error_name);
@@ -1545,8 +1603,7 @@ static int eval_buf(JSContext *ctx, const char *buf, size_t buf_len,
     return ret;
 }
 
-static int eval_file(JSContext *ctx, const char *base, const char *p,
-                     int eval_flags)
+static int eval_file(JSContext *ctx, const char *base, const char *p, int eval_flags)
 {
     char *buf;
     size_t buf_len;
@@ -1558,8 +1615,7 @@ static int eval_file(JSContext *ctx, const char *base, const char *p,
         warning("cannot load %s", filename);
         goto fail;
     }
-    if (eval_buf(ctx, buf, buf_len, filename, false, false, NULL,
-                 eval_flags, false, &msec)) {
+    if (eval_buf(ctx, buf, buf_len, filename, false, false, NULL, eval_flags, false, &msec)) {
         warning("error evaluating %s", filename);
         goto fail;
     }
@@ -1584,8 +1640,9 @@ char *extract_desc(const char *buf)
         if (p[0] == '/' && p[1] == '*' && p[2] == '-' && p[3] != '/') {
             p += 3;
             desc_start = p;
-            while (*p != '\0' && (p[0] != '*' || p[1] != '/'))
+            while (*p != '\0' && (p[0] != '*' || p[1] != '/')) {
                 p++;
+            }
             if (*p == '\0') {
                 warning("Expecting end of desc comment");
                 return NULL;
@@ -1624,8 +1681,9 @@ static char *get_option(char **pp, int *state)
                 continue;
             case ']':
                 *state -= 1;
-                if (*state > 0)
+                if (*state > 0) {
                     continue;
+                }
                 p = NULL;
                 break;
             case ' ':
@@ -1635,8 +1693,9 @@ static char *get_option(char **pp, int *state)
             case '-':
                 continue;
             case '\n':
-                if (*state > 0 || p[1] == ' ')
+                if (*state > 0 || p[1] == ' ') {
                     continue;
+                }
                 p = NULL;
                 break;
             case '\0':
@@ -1655,7 +1714,8 @@ static char *get_option(char **pp, int *state)
     return option;
 }
 
-void update_stats(JSRuntime *rt, const char *filename) {
+void update_stats(JSRuntime *rt, const char *filename)
+{
     JSMemoryUsage stats;
     JS_ComputeMemoryUsage(rt, &stats);
     js_mutex_lock(&stats_mutex);
@@ -1677,7 +1737,7 @@ void update_stats(JSRuntime *rt, const char *filename) {
             stats_min_filename = strdup(filename);
         }
 
-#define update(f)  stats_avg.f = (stats_all.f += stats.f) / stats_count
+#define update(f) stats_avg.f = (stats_all.f += stats.f) / stats_count
         update(malloc_count);
         update(malloc_size);
         update(memory_used_count);
@@ -1706,14 +1766,14 @@ void update_stats(JSRuntime *rt, const char *filename) {
     js_mutex_unlock(&stats_mutex);
 }
 
-static JSValue qjs_black_box(JSContext *ctx, JSValueConst this_val,
-                            int argc, JSValueConst argv[], int magic)
+static JSValue qjs_black_box(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst argv[],
+                             int magic)
 {
     return JS_NewInt32(ctx, js_std_cmd(magic, ctx, &argv[0]));
 }
 
 static const JSCFunctionListEntry qjs_methods[] = {
-    JS_CFUNC_MAGIC_DEF("getStringKind", 1, qjs_black_box, /*GetStringKind*/3),
+    JS_CFUNC_MAGIC_DEF("getStringKind", 1, qjs_black_box, /*GetStringKind*/ 3),
 };
 
 static const JSCFunctionListEntry qjs_object =
@@ -1736,10 +1796,9 @@ JSContext *JS_NewCustomContext(JSRuntime *rt)
     return ctx;
 }
 
-int run_test_buf(ThreadLocalStorage *tls, const char *filename, char *harness,
-                 namelist_t *ip, char *buf, size_t buf_len,
-                 const char* error_type, int eval_flags, bool is_negative,
-                 bool is_async, bool can_block, bool track_promise_rejections,
+int run_test_buf(ThreadLocalStorage *tls, const char *filename, char *harness, namelist_t *ip,
+                 char *buf, size_t buf_len, const char *error_type, int eval_flags,
+                 bool is_negative, bool is_async, bool can_block, bool track_promise_rejections,
                  int *msec)
 {
     JSRuntime *rt;
@@ -1763,10 +1822,11 @@ int run_test_buf(ThreadLocalStorage *tls, const char *filename, char *harness,
     JS_SetCanBlock(rt, can_block);
 
     /* loader for ES6 modules */
-    JS_SetModuleLoaderFunc2(rt, NULL, js_module_loader_test, NULL, (void *) filename);
+    JS_SetModuleLoaderFunc2(rt, NULL, js_module_loader_test, NULL, (void *)filename);
 
-    if (track_promise_rejections)
+    if (track_promise_rejections) {
         JS_SetHostPromiseRejectionTracker(rt, js_std_promise_rejection_tracker, NULL);
+    }
 
     add_helpers(ctx);
 
@@ -1781,12 +1841,12 @@ int run_test_buf(ThreadLocalStorage *tls, const char *filename, char *harness,
                 "globalThis.Test262Error = class Test262Error extends Error {};"
                 "globalThis.Test262Error.thrower = C.thrower;"
                 "})(Test262Error)";
-            JS_FreeValue(ctx, JS_Eval(ctx, hack, sizeof(hack)-1, "sta.js", JS_EVAL_TYPE_GLOBAL));
+            JS_FreeValue(ctx, JS_Eval(ctx, hack, sizeof(hack) - 1, "sta.js", JS_EVAL_TYPE_GLOBAL));
         }
     }
 
-    ret = eval_buf(ctx, buf, buf_len, filename, true, is_negative,
-                   error_type, eval_flags, is_async, msec);
+    ret = eval_buf(ctx, buf, buf_len, filename, true, is_negative, error_type, eval_flags, is_async,
+                   msec);
     ret = (ret != 0);
 
     if (dump_memory) {
@@ -1798,8 +1858,9 @@ int run_test_buf(ThreadLocalStorage *tls, const char *filename, char *harness,
     JS_FreeRuntime(rt);
 
     atomic_inc(&test_count);
-    if (ret)
+    if (ret) {
         atomic_inc(&test_failed);
+    }
     return ret;
 }
 
@@ -1816,7 +1877,7 @@ int run_test(ThreadLocalStorage *tls, const char *filename, int *msec)
     bool detect_module = true;
     bool track_promise_rejections = false;
     bool can_block;
-    namelist_t include_list = { 0 }, *ip = &include_list;
+    namelist_t include_list = {0}, *ip = &include_list;
 
     is_nostrict = is_onlystrict = is_negative = is_async = is_module = skip = false;
     can_block = true;
@@ -1828,8 +1889,8 @@ int run_test(ThreadLocalStorage *tls, const char *filename, int *msec)
     if (!harness) {
         const char *p1 = strstr(filename, "test/");
         if (p1) {
-            snprintf(harnessbuf, sizeof(harnessbuf), "%.*s%s",
-                     (int)(p1 - filename), filename, "harness");
+            snprintf(harnessbuf, sizeof(harnessbuf), "%.*s%s", (int)(p1 - filename), filename,
+                     "harness");
         }
         harness = harnessbuf;
     }
@@ -1857,30 +1918,23 @@ int run_test(ThreadLocalStorage *tls, const char *filename, int *msec)
         p = find_tag(desc, "flags:", &state);
         if (p) {
             while ((option = get_option(&p, &state)) != NULL) {
-                if (str_equal(option, "noStrict") ||
-                    str_equal(option, "raw")) {
+                if (str_equal(option, "noStrict") || str_equal(option, "raw")) {
                     is_nostrict = true;
                     skip |= (test_mode == TEST_STRICT);
-                }
-                else if (str_equal(option, "onlyStrict")) {
+                } else if (str_equal(option, "onlyStrict")) {
                     is_onlystrict = true;
                     skip |= (test_mode == TEST_NOSTRICT);
-                }
-                else if (str_equal(option, "async")) {
+                } else if (str_equal(option, "async")) {
                     is_async = true;
                     skip |= skip_async;
-                }
-                else if (str_equal(option, "qjs:no-detect-module")) {
+                } else if (str_equal(option, "qjs:no-detect-module")) {
                     detect_module = false;
-                }
-                else if (str_equal(option, "qjs:track-promise-rejections")) {
+                } else if (str_equal(option, "qjs:track-promise-rejections")) {
                     track_promise_rejections = true;
-                }
-                else if (str_equal(option, "module")) {
+                } else if (str_equal(option, "module")) {
                     is_module = true;
                     skip |= skip_module;
-                }
-                else if (str_equal(option, "CanBlockIsFalse")) {
+                } else if (str_equal(option, "CanBlockIsFalse")) {
                     can_block = false;
                 }
                 free(option);
@@ -1891,8 +1945,9 @@ int run_test(ThreadLocalStorage *tls, const char *filename, int *msec)
             /* XXX: should extract the phase */
             char *q = find_tag(p, "type:", &state);
             if (q) {
-                while (isspace((unsigned char)*q))
+                while (isspace((unsigned char)*q)) {
                     q++;
+                }
                 error_type = strdup_len(q, strcspn(q, " \r\n"));
             }
             is_negative = true;
@@ -1915,41 +1970,48 @@ int run_test(ThreadLocalStorage *tls, const char *filename, int *msec)
         }
         free(desc);
     }
-    if (is_async)
+    if (is_async) {
         namelist_add(ip, NULL, "doneprintHandle.js");
+    }
 
     use_strict = use_nostrict = 0;
     /* XXX: should remove 'test_mode' or simplify it just to force
        strict or non strict mode for single file tests */
     switch (test_mode) {
     case TEST_DEFAULT_NOSTRICT:
-        if (is_onlystrict)
+        if (is_onlystrict) {
             use_strict = 1;
-        else
+        } else {
             use_nostrict = 1;
+        }
         break;
     case TEST_DEFAULT_STRICT:
-        if (is_nostrict)
+        if (is_nostrict) {
             use_nostrict = 1;
-        else
+        } else {
             use_strict = 1;
+        }
         break;
     case TEST_NOSTRICT:
-        if (!is_onlystrict)
+        if (!is_onlystrict) {
             use_nostrict = 1;
+        }
         break;
     case TEST_STRICT:
-        if (!is_nostrict)
+        if (!is_nostrict) {
             use_strict = 1;
+        }
         break;
     case TEST_ALL:
         if (is_module) {
             use_nostrict = 1;
         } else {
-            if (!is_nostrict)
+            if (!is_nostrict) {
                 use_strict = 1;
-            if (!is_onlystrict)
+            }
+            if (!is_onlystrict) {
                 use_nostrict = 1;
+            }
         }
         break;
     }
@@ -1968,14 +2030,12 @@ int run_test(ThreadLocalStorage *tls, const char *filename, int *msec)
         }
         ret = 0;
         if (use_nostrict) {
-            ret = run_test_buf(tls, filename, harness, ip, buf, buf_len,
-                               error_type, eval_flags, is_negative, is_async,
-                               can_block, track_promise_rejections, msec);
+            ret = run_test_buf(tls, filename, harness, ip, buf, buf_len, error_type, eval_flags,
+                               is_negative, is_async, can_block, track_promise_rejections, msec);
         }
         if (use_strict) {
-            ret |= run_test_buf(tls, filename, harness, ip, buf, buf_len,
-                                error_type, eval_flags | JS_EVAL_FLAG_STRICT,
-                                is_negative, is_async, can_block,
+            ret |= run_test_buf(tls, filename, harness, ip, buf, buf_len, error_type,
+                                eval_flags | JS_EVAL_FLAG_STRICT, is_negative, is_async, can_block,
                                 track_promise_rejections, msec);
         }
     }
@@ -1987,8 +2047,8 @@ int run_test(ThreadLocalStorage *tls, const char *filename, int *msec)
 }
 
 /* run a test when called by test262-harness+eshost */
-int run_test262_harness_test(ThreadLocalStorage *tls, const char *filename,
-                             bool is_module, bool can_block)
+int run_test262_harness_test(ThreadLocalStorage *tls, const char *filename, bool is_module,
+                             bool can_block)
 {
     JSRuntime *rt;
     JSContext *ctx;
@@ -2015,22 +2075,22 @@ int run_test262_harness_test(ThreadLocalStorage *tls, const char *filename,
     JS_SetCanBlock(rt, can_block);
 
     /* loader for ES6 modules */
-    JS_SetModuleLoaderFunc2(rt, NULL, js_module_loader_test, NULL, (void *) filename);
+    JS_SetModuleLoaderFunc2(rt, NULL, js_module_loader_test, NULL, (void *)filename);
 
     add_helpers(ctx);
 
     buf = load_file(filename, &buf_len);
 
     if (is_module) {
-      eval_flags = JS_EVAL_TYPE_MODULE;
+        eval_flags = JS_EVAL_TYPE_MODULE;
     } else {
-      eval_flags = JS_EVAL_TYPE_GLOBAL;
+        eval_flags = JS_EVAL_TYPE_GLOBAL;
     }
     res_val = JS_Eval(ctx, buf, buf_len, filename, eval_flags);
     ret_code = 0;
     if (JS_IsException(res_val)) {
-       js_std_dump_error(ctx);
-       ret_code = 1;
+        js_std_dump_error(ctx);
+        ret_code = 1;
     } else {
         JSValue promise = JS_UNDEFINED;
         if (is_module) {
@@ -2038,7 +2098,7 @@ int run_test262_harness_test(ThreadLocalStorage *tls, const char *filename,
         } else {
             JS_FreeValue(ctx, res_val);
         }
-        for(;;) {
+        for (;;) {
             JSContext *ctx1;
             ret = JS_ExecutePendingJob(JS_GetRuntime(ctx), &ctx1);
             if (ret < 0) {
@@ -2047,17 +2107,17 @@ int run_test262_harness_test(ThreadLocalStorage *tls, const char *filename,
             } else if (ret == 0) {
                 break;
             }
-         }
-         /* dump the error if the module returned an error. */
-         if (is_module) {
-             JSPromiseStateEnum state = JS_PromiseState(ctx, promise);
-             if (state == JS_PROMISE_REJECTED) {
-                 JS_Throw(ctx, JS_PromiseResult(ctx, promise));
-                 js_std_dump_error(ctx);
-                 ret_code = 1;
-             }
-         }
-         JS_FreeValue(ctx, promise);
+        }
+        /* dump the error if the module returned an error. */
+        if (is_module) {
+            JSPromiseStateEnum state = JS_PromiseState(ctx, promise);
+            if (state == JS_PROMISE_REJECTED) {
+                JS_Throw(ctx, JS_PromiseResult(ctx, promise));
+                js_std_dump_error(ctx);
+                ret_code = 1;
+            }
+        }
+        JS_FreeValue(ctx, promise);
     }
     free(buf);
     js_agent_free(ctx);
@@ -2068,15 +2128,14 @@ int run_test262_harness_test(ThreadLocalStorage *tls, const char *filename,
 
 clock_t last_clock;
 
-void show_progress(void *unused) {
-    int interval = 1000*1000*1000 / 4; // 250 ms
+void show_progress(void *unused)
+{
+    int interval = 1000 * 1000 * 1000 / 4; // 250 ms
 
     js_mutex_lock(&progress_mutex);
     while (js_cond_timedwait(&progress_cond, &progress_mutex, interval)) {
         /* output progress indicator: erase end of line and return to col 0 */
-        fprintf(stderr, "%d/%d/%d        \r",
-                atomic_load(&test_failed),
-                atomic_load(&test_count),
+        fprintf(stderr, "%d/%d/%d        \r", atomic_load(&test_failed), atomic_load(&test_count),
                 atomic_load(&test_skipped));
         fflush(stderr);
     }
@@ -2087,12 +2146,15 @@ enum { INCLUDE, EXCLUDE, SKIP };
 
 int include_exclude_or_skip(int i) // naming is hard...
 {
-    if (namelist_find(&exclude_list, test_list.array[i]) >= 0)
+    if (namelist_find(&exclude_list, test_list.array[i]) >= 0) {
         return EXCLUDE;
-    if (i < start_index)
+    }
+    if (i < start_index) {
         return SKIP;
-    if (stop_index >= 0 && i > stop_index)
+    }
+    if (stop_index >= 0 && i > stop_index) {
         return SKIP;
+    }
     return INCLUDE;
 }
 
@@ -2105,13 +2167,15 @@ void run_test_dir_list(void *arg)
     init_thread_local_storage(tls);
 
     for (i = (uintptr_t)arg; i < test_list.count; i += nthreads) {
-        if (INCLUDE != include_exclude_or_skip(i))
+        if (INCLUDE != include_exclude_or_skip(i)) {
             continue;
+        }
         p = test_list.array[i];
         msec = 0;
         run_test(tls, p, &msec);
-        if (verbose > 1 || (slow_test_threshold && msec >= slow_test_threshold))
+        if (verbose > 1 || (slow_test_threshold && msec >= slow_test_threshold)) {
             fprintf(stderr, "%s (%d ms)\n", p, msec);
+        }
     }
 }
 
@@ -2177,13 +2241,16 @@ int main(int argc, char **argv)
     optind = 1;
     while (optind < argc) {
         char *arg = argv[optind];
-        if (*arg != '-')
+        if (*arg != '-') {
             break;
+        }
         optind++;
-        if (strstr("-c -d -e -x -f -E -T -t", arg))
+        if (strstr("-c -d -e -x -f -E -T -t", arg)) {
             optind++;
-        if (strstr("-d -f", arg))
+        }
+        if (strstr("-d -f", arg)) {
             ignore = "testdir"; // run only the tests from -d or -f
+        }
     }
 
     /* cannot use getopt because we want to pass the command line to
@@ -2192,8 +2259,9 @@ int main(int argc, char **argv)
     is_dir_list = true;
     while (optind < argc) {
         char *arg = argv[optind];
-        if (*arg != '-')
+        if (*arg != '-') {
             break;
+        }
         optind++;
         if (str_equal(arg, "-h")) {
             help();
@@ -2235,8 +2303,9 @@ int main(int argc, char **argv)
         }
     }
 
-    if (optind >= argc && !test_list.count)
+    if (optind >= argc && !test_list.count) {
         help();
+    }
 
     if (is_test262_harness) {
         return run_test262_harness_test(tls, argv[optind], is_module, can_block);
@@ -2299,14 +2368,14 @@ int main(int argc, char **argv)
         js_cond_init(&progress_cond);
         js_mutex_init(&progress_mutex);
         if (enable_progress) {
-            js_thread_create(&progress_thread, show_progress, NULL, /*flags*/0);
+            js_thread_create(&progress_thread, show_progress, NULL, /*flags*/ 0);
         }
         for (i = 0; i < nthreads; i++) {
-            js_thread_create(&threads[i], run_test_dir_list,
-                             (void *)(uintptr_t)i, /*flags*/0);
+            js_thread_create(&threads[i], run_test_dir_list, (void *)(uintptr_t)i, /*flags*/ 0);
         }
-        for (i = 0; i < nthreads; i++)
+        for (i = 0; i < nthreads; i++) {
             js_thread_join(threads[i]);
+        }
         js_mutex_lock(&progress_mutex);
         js_cond_signal(&progress_cond);
         js_mutex_unlock(&progress_mutex);
@@ -2335,19 +2404,24 @@ int main(int argc, char **argv)
     }
 
     if (is_dir_list) {
-        fprintf(stderr, "Result: %d/%d error%s",
-                test_failed, test_count, test_count != 1 ? "s" : "");
-        if (test_excluded)
+        fprintf(stderr, "Result: %d/%d error%s", test_failed, test_count,
+                test_count != 1 ? "s" : "");
+        if (test_excluded) {
             fprintf(stderr, ", %d excluded", test_excluded);
-        if (test_skipped)
+        }
+        if (test_skipped) {
             fprintf(stderr, ", %d skipped", test_skipped);
+        }
         if (error_file) {
-            if (new_errors)
+            if (new_errors) {
                 fprintf(stderr, ", %d new", new_errors);
-            if (changed_errors)
+            }
+            if (changed_errors) {
                 fprintf(stderr, ", %d changed", changed_errors);
-            if (fixed_errors)
+            }
+            if (fixed_errors) {
                 fprintf(stderr, ", %d fixed", fixed_errors);
+            }
         }
         fprintf(stderr, "\n");
     }

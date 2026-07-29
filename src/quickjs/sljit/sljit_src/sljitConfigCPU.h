@@ -54,41 +54,42 @@
 /* Sanity check. */
 /*****************/
 
-#if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32) \
-	+ (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64) \
-	+ (defined SLJIT_CONFIG_ARM_V6 && SLJIT_CONFIG_ARM_V6) \
-	+ (defined SLJIT_CONFIG_ARM_V7 && SLJIT_CONFIG_ARM_V7) \
-	+ (defined SLJIT_CONFIG_ARM_THUMB2 && SLJIT_CONFIG_ARM_THUMB2) \
-	+ (defined SLJIT_CONFIG_ARM_64 && SLJIT_CONFIG_ARM_64) \
-	+ (defined SLJIT_CONFIG_PPC_32 && SLJIT_CONFIG_PPC_32) \
-	+ (defined SLJIT_CONFIG_PPC_64 && SLJIT_CONFIG_PPC_64) \
-	+ (defined SLJIT_CONFIG_MIPS_32 && SLJIT_CONFIG_MIPS_32) \
-	+ (defined SLJIT_CONFIG_MIPS_64 && SLJIT_CONFIG_MIPS_64) \
-	+ (defined SLJIT_CONFIG_RISCV_32 && SLJIT_CONFIG_RISCV_32) \
-	+ (defined SLJIT_CONFIG_RISCV_64 && SLJIT_CONFIG_RISCV_64) \
-	+ (defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X) \
-	+ (defined SLJIT_CONFIG_LOONGARCH_64 && SLJIT_CONFIG_LOONGARCH_64) \
-	+ (defined SLJIT_CONFIG_AUTO && SLJIT_CONFIG_AUTO) \
-	+ (defined SLJIT_CONFIG_UNSUPPORTED && SLJIT_CONFIG_UNSUPPORTED) >= 2
+#if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32) +                                         \
+        (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64) +                                     \
+        (defined SLJIT_CONFIG_ARM_V6 && SLJIT_CONFIG_ARM_V6) +                                     \
+        (defined SLJIT_CONFIG_ARM_V7 && SLJIT_CONFIG_ARM_V7) +                                     \
+        (defined SLJIT_CONFIG_ARM_THUMB2 && SLJIT_CONFIG_ARM_THUMB2) +                             \
+        (defined SLJIT_CONFIG_ARM_64 && SLJIT_CONFIG_ARM_64) +                                     \
+        (defined SLJIT_CONFIG_PPC_32 && SLJIT_CONFIG_PPC_32) +                                     \
+        (defined SLJIT_CONFIG_PPC_64 && SLJIT_CONFIG_PPC_64) +                                     \
+        (defined SLJIT_CONFIG_MIPS_32 && SLJIT_CONFIG_MIPS_32) +                                   \
+        (defined SLJIT_CONFIG_MIPS_64 && SLJIT_CONFIG_MIPS_64) +                                   \
+        (defined SLJIT_CONFIG_RISCV_32 && SLJIT_CONFIG_RISCV_32) +                                 \
+        (defined SLJIT_CONFIG_RISCV_64 && SLJIT_CONFIG_RISCV_64) +                                 \
+        (defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X) +                                       \
+        (defined SLJIT_CONFIG_LOONGARCH_64 && SLJIT_CONFIG_LOONGARCH_64) +                         \
+        (defined SLJIT_CONFIG_AUTO && SLJIT_CONFIG_AUTO) +                                         \
+        (defined SLJIT_CONFIG_UNSUPPORTED && SLJIT_CONFIG_UNSUPPORTED) >=                          \
+    2
 #error "Multiple architectures are selected"
 #endif
 
-#if !(defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32) \
-	&& !(defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64) \
-	&& !(defined SLJIT_CONFIG_ARM_V6 && SLJIT_CONFIG_ARM_V6) \
-	&& !(defined SLJIT_CONFIG_ARM_V7 && SLJIT_CONFIG_ARM_V7) \
-	&& !(defined SLJIT_CONFIG_ARM_THUMB2 && SLJIT_CONFIG_ARM_THUMB2) \
-	&& !(defined SLJIT_CONFIG_ARM_64 && SLJIT_CONFIG_ARM_64) \
-	&& !(defined SLJIT_CONFIG_PPC_32 && SLJIT_CONFIG_PPC_32) \
-	&& !(defined SLJIT_CONFIG_PPC_64 && SLJIT_CONFIG_PPC_64) \
-	&& !(defined SLJIT_CONFIG_MIPS_32 && SLJIT_CONFIG_MIPS_32) \
-	&& !(defined SLJIT_CONFIG_MIPS_64 && SLJIT_CONFIG_MIPS_64) \
-	&& !(defined SLJIT_CONFIG_RISCV_32 && SLJIT_CONFIG_RISCV_32) \
-	&& !(defined SLJIT_CONFIG_RISCV_64 && SLJIT_CONFIG_RISCV_64) \
-	&& !(defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X) \
-	&& !(defined SLJIT_CONFIG_LOONGARCH_64 && SLJIT_CONFIG_LOONGARCH_64) \
-	&& !(defined SLJIT_CONFIG_UNSUPPORTED && SLJIT_CONFIG_UNSUPPORTED) \
-	&& !(defined SLJIT_CONFIG_AUTO && SLJIT_CONFIG_AUTO)
+#if !(defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32) &&                                       \
+    !(defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64) &&                                       \
+    !(defined SLJIT_CONFIG_ARM_V6 && SLJIT_CONFIG_ARM_V6) &&                                       \
+    !(defined SLJIT_CONFIG_ARM_V7 && SLJIT_CONFIG_ARM_V7) &&                                       \
+    !(defined SLJIT_CONFIG_ARM_THUMB2 && SLJIT_CONFIG_ARM_THUMB2) &&                               \
+    !(defined SLJIT_CONFIG_ARM_64 && SLJIT_CONFIG_ARM_64) &&                                       \
+    !(defined SLJIT_CONFIG_PPC_32 && SLJIT_CONFIG_PPC_32) &&                                       \
+    !(defined SLJIT_CONFIG_PPC_64 && SLJIT_CONFIG_PPC_64) &&                                       \
+    !(defined SLJIT_CONFIG_MIPS_32 && SLJIT_CONFIG_MIPS_32) &&                                     \
+    !(defined SLJIT_CONFIG_MIPS_64 && SLJIT_CONFIG_MIPS_64) &&                                     \
+    !(defined SLJIT_CONFIG_RISCV_32 && SLJIT_CONFIG_RISCV_32) &&                                   \
+    !(defined SLJIT_CONFIG_RISCV_64 && SLJIT_CONFIG_RISCV_64) &&                                   \
+    !(defined SLJIT_CONFIG_S390X && SLJIT_CONFIG_S390X) &&                                         \
+    !(defined SLJIT_CONFIG_LOONGARCH_64 && SLJIT_CONFIG_LOONGARCH_64) &&                           \
+    !(defined SLJIT_CONFIG_UNSUPPORTED && SLJIT_CONFIG_UNSUPPORTED) &&                             \
+    !(defined SLJIT_CONFIG_AUTO && SLJIT_CONFIG_AUTO)
 #if defined SLJIT_CONFIG_AUTO && !SLJIT_CONFIG_AUTO
 #error "An architecture must be selected"
 #else /* SLJIT_CONFIG_AUTO */
@@ -111,26 +112,28 @@
 #define SLJIT_CONFIG_ARM_64 1
 #elif defined(__thumb2__)
 #define SLJIT_CONFIG_ARM_THUMB2 1
-#elif (defined(__ARM_ARCH) && __ARM_ARCH >= 7) || \
-	((defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7S__)) \
-	 || (defined(__ARM_ARCH_8A__) || defined(__ARM_ARCH_8R__)) \
-	 || (defined(__ARM_ARCH_9A__)))
+#elif (defined(__ARM_ARCH) && __ARM_ARCH >= 7) ||                                                  \
+    ((defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__) ||           \
+      defined(__ARM_ARCH_7S__)) ||                                                                 \
+     (defined(__ARM_ARCH_8A__) || defined(__ARM_ARCH_8R__)) || (defined(__ARM_ARCH_9A__)))
 #define SLJIT_CONFIG_ARM_V7 1
-#elif defined(__arm__) || defined (__ARM__)
+#elif defined(__arm__) || defined(__ARM__)
 #define SLJIT_CONFIG_ARM_V6 1
-#elif defined(__ppc64__) || defined(__powerpc64__) || (defined(_ARCH_PPC64) && defined(__64BIT__)) || (defined(_POWER) && defined(__64BIT__))
+#elif defined(__ppc64__) || defined(__powerpc64__) ||                                              \
+    (defined(_ARCH_PPC64) && defined(__64BIT__)) || (defined(_POWER) && defined(__64BIT__))
 #define SLJIT_CONFIG_PPC_64 1
-#elif defined(__ppc__) || defined(__powerpc__) || defined(_ARCH_PPC) || defined(_ARCH_PWR) || defined(_ARCH_PWR2) || defined(_POWER)
+#elif defined(__ppc__) || defined(__powerpc__) || defined(_ARCH_PPC) || defined(_ARCH_PWR) ||      \
+    defined(_ARCH_PWR2) || defined(_POWER)
 #define SLJIT_CONFIG_PPC_32 1
 #elif defined(__mips__) && !defined(_LP64)
 #define SLJIT_CONFIG_MIPS_32 1
 #elif defined(__mips64)
 #define SLJIT_CONFIG_MIPS_64 1
-#elif defined (__riscv_xlen) && (__riscv_xlen == 32)
+#elif defined(__riscv_xlen) && (__riscv_xlen == 32)
 #define SLJIT_CONFIG_RISCV_32 1
-#elif defined (__riscv_xlen) && (__riscv_xlen == 64)
+#elif defined(__riscv_xlen) && (__riscv_xlen == 64)
 #define SLJIT_CONFIG_RISCV_64 1
-#elif defined (__loongarch_lp64)
+#elif defined(__loongarch_lp64)
 #define SLJIT_CONFIG_LOONGARCH_64 1
 #elif defined(__s390x__)
 #define SLJIT_CONFIG_S390X 1
@@ -166,20 +169,26 @@
 /* CPU family type detection. */
 /******************************/
 
-#if (defined SLJIT_CONFIG_ARM_V6 && SLJIT_CONFIG_ARM_V6) || (defined SLJIT_CONFIG_ARM_V7 && SLJIT_CONFIG_ARM_V7) \
-	|| (defined SLJIT_CONFIG_ARM_THUMB2 && SLJIT_CONFIG_ARM_THUMB2)
+#if (defined SLJIT_CONFIG_ARM_V6 && SLJIT_CONFIG_ARM_V6) ||                                        \
+    (defined SLJIT_CONFIG_ARM_V7 && SLJIT_CONFIG_ARM_V7) ||                                        \
+    (defined SLJIT_CONFIG_ARM_THUMB2 && SLJIT_CONFIG_ARM_THUMB2)
 #define SLJIT_CONFIG_ARM_32 1
 #endif /* SLJIT_CONFIG_ARM_V6 || SLJIT_CONFIG_ARM_V7 || SLJIT_CONFIG_ARM_THUMB2 */
 
-#if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32) || (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
+#if (defined SLJIT_CONFIG_X86_32 && SLJIT_CONFIG_X86_32) ||                                        \
+    (defined SLJIT_CONFIG_X86_64 && SLJIT_CONFIG_X86_64)
 #define SLJIT_CONFIG_X86 1
-#elif (defined SLJIT_CONFIG_ARM_32 && SLJIT_CONFIG_ARM_32) || (defined SLJIT_CONFIG_ARM_64 && SLJIT_CONFIG_ARM_64)
+#elif (defined SLJIT_CONFIG_ARM_32 && SLJIT_CONFIG_ARM_32) ||                                      \
+    (defined SLJIT_CONFIG_ARM_64 && SLJIT_CONFIG_ARM_64)
 #define SLJIT_CONFIG_ARM 1
-#elif (defined SLJIT_CONFIG_PPC_32 && SLJIT_CONFIG_PPC_32) || (defined SLJIT_CONFIG_PPC_64 && SLJIT_CONFIG_PPC_64)
+#elif (defined SLJIT_CONFIG_PPC_32 && SLJIT_CONFIG_PPC_32) ||                                      \
+    (defined SLJIT_CONFIG_PPC_64 && SLJIT_CONFIG_PPC_64)
 #define SLJIT_CONFIG_PPC 1
-#elif (defined SLJIT_CONFIG_MIPS_32 && SLJIT_CONFIG_MIPS_32) || (defined SLJIT_CONFIG_MIPS_64 && SLJIT_CONFIG_MIPS_64)
+#elif (defined SLJIT_CONFIG_MIPS_32 && SLJIT_CONFIG_MIPS_32) ||                                    \
+    (defined SLJIT_CONFIG_MIPS_64 && SLJIT_CONFIG_MIPS_64)
 #define SLJIT_CONFIG_MIPS 1
-#elif (defined SLJIT_CONFIG_RISCV_32 && SLJIT_CONFIG_RISCV_32) || (defined SLJIT_CONFIG_RISCV_64 && SLJIT_CONFIG_RISCV_64)
+#elif (defined SLJIT_CONFIG_RISCV_32 && SLJIT_CONFIG_RISCV_32) ||                                  \
+    (defined SLJIT_CONFIG_RISCV_64 && SLJIT_CONFIG_RISCV_64)
 #define SLJIT_CONFIG_RISCV 1
 #elif (defined SLJIT_CONFIG_LOONGARCH_64 && SLJIT_CONFIG_LOONGARCH_64)
 #define SLJIT_CONFIG_LOONGARCH 1
@@ -222,8 +231,7 @@
 #define SLJIT_MIPS_REV 6
 #elif defined(__mips_isa_rev) && __mips_isa_rev >= 1
 #define SLJIT_MIPS_REV __mips_isa_rev
-#elif defined(__clang__) \
-	&& (defined(_MIPS_ARCH_OCTEON) || defined(_MIPS_ARCH_P5600))
+#elif defined(__clang__) && (defined(_MIPS_ARCH_OCTEON) || defined(_MIPS_ARCH_P5600))
 /* clang either forgets to define (clang-7) __mips_isa_rev at all
  * or sets it to zero (clang-8,-9) for -march=octeon (MIPS64 R2+)
  * and -march=p5600 (MIPS32 R5).
@@ -247,8 +255,8 @@
 
 #endif /* !defined(SLJIT_BIG_ENDIAN) && !defined(SLJIT_LITTLE_ENDIAN) */
 
-#if (defined(SLJIT_CONFIG_ARM_64) && SLJIT_CONFIG_ARM_64) \
-	&& (defined(SLJIT_BIG_ENDIAN) && SLJIT_BIG_ENDIAN)
+#if (defined(SLJIT_CONFIG_ARM_64) && SLJIT_CONFIG_ARM_64) &&                                       \
+    (defined(SLJIT_BIG_ENDIAN) && SLJIT_BIG_ENDIAN)
 
 #undef SLJIT_CONFIG_ARM_64
 #define SLJIT_CONFIG_UNSUPPORTED 1

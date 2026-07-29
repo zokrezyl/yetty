@@ -57,9 +57,9 @@ JS_EXTERN uint64_t JS_JITBytecodeFingerprint(void);
    (compile every compilable function on first call — tests/benchmarks).
    Returns 0 on success, -1 if the mode is invalid or the JIT is
    compiled out / unavailable on this platform. */
-#define JS_JIT_MODE_OFF      0
+#define JS_JIT_MODE_OFF 0
 #define JS_JIT_MODE_BASELINE 1
-#define JS_JIT_MODE_EAGER    2
+#define JS_JIT_MODE_EAGER 2
 JS_EXTERN int JS_JITSetMode(JSRuntime *rt, int mode);
 
 /* Whether the JIT is compiled in and available on this platform (1/0). */
@@ -67,9 +67,8 @@ JS_EXTERN int JS_JITAvailable(void);
 
 /* Read JIT counters (each pointer may be NULL). Returns 0, or -1 when
    the JIT is compiled out. */
-JS_EXTERN int JS_JITGetStats(JSRuntime *rt, uint64_t *compiled,
-                             uint64_t *unsupported, uint64_t *failed,
-                             uint64_t *jit_calls);
+JS_EXTERN int JS_JITGetStats(JSRuntime *rt, uint64_t *compiled, uint64_t *unsupported,
+                             uint64_t *failed, uint64_t *jit_calls);
 
 #ifdef __cplusplus
 } /* extern "C" */

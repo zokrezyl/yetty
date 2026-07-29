@@ -224,7 +224,7 @@ DEF(BigInt, "BigInt")
 DEF(WeakRef, "WeakRef")
 DEF(FinalizationRegistry, "FinalizationRegistry")
 DEF(Map, "Map")
-DEF(Set, "Set") /* Map + 1 */
+DEF(Set, "Set")         /* Map + 1 */
 DEF(WeakMap, "WeakMap") /* Map + 2 */
 DEF(WeakSet, "WeakSet") /* Map + 3 */
 DEF(Iterator, "Iterator")

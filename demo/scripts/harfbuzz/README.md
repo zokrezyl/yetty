@@ -35,7 +35,7 @@ make build-desktop-ytrace-release
 Text echoed by these scripts arrives on the **terminal grid**, which cannot
 shape (one codepoint → one glyph, each hard-clipped to its cell). So the shaped
 runs are handed off to the **ydraw free-position path**: `vterm_pack_line`
-suppresses the covered grid cells and the SDF layer (`sdf-layer.c`,
+suppresses the covered grid cells and the SDF layer (`grid-sdf-layer.c`,
 `shape_row_cells` for complex scripts, `shape_row_ligatures` for ligatures)
 re-draws them as HarfBuzz-shaped glyphs placed by advance + GPOS offset, on top
 of the grid. Complex-script runs use the matching bundled Noto face; ligatures

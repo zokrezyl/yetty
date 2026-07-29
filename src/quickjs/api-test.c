@@ -11,8 +11,9 @@ static JSRuntime *new_runtime(void)
 {
     JSRuntime *rt = JS_NewRuntime();
 
-    if (rt)
+    if (rt) {
         JS_SetDumpFlags(rt, JS_ABORT_ON_LEAKS);
+    }
     return rt;
 }
 
@@ -21,32 +22,30 @@ static JSValue eval(JSContext *ctx, const char *code)
     return JS_Eval(ctx, code, strlen(code), "<input>", JS_EVAL_TYPE_GLOBAL);
 }
 
-static JSValue cfunc_callback(JSContext *ctx, JSValueConst this_val,
-                              int argc, JSValueConst *argv)
+static JSValue cfunc_callback(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     return JS_ThrowTypeError(ctx, "from cfunc");
 }
 
-static JSValue cfuncdata_callback(JSContext *ctx, JSValueConst this_val,
-                                  int argc, JSValueConst *argv,
-                                  int magic, JSValueConst *func_data)
+static JSValue cfuncdata_callback(JSContext *ctx, JSValueConst this_val, int argc,
+                                  JSValueConst *argv, int magic, JSValueConst *func_data)
 {
     return JS_ThrowTypeError(ctx, "from cfuncdata");
 }
 
-static JSValue cclosure_callback(JSContext *ctx, JSValueConst this_val,
-                                 int argc, JSValueConst *argv,
-                                 int magic, void *func_data)
+static JSValue cclosure_callback(JSContext *ctx, JSValueConst this_val, int argc,
+                                 JSValueConst *argv, int magic, void *func_data)
 {
-  return JS_ThrowTypeError(ctx, "from cclosure");
+    return JS_ThrowTypeError(ctx, "from cclosure");
 }
 
 static bool closure_finalized = false;
 
 static void cclosure_opaque_finalize(void *opaque)
 {
-    if ((intptr_t)opaque == 12)
+    if ((intptr_t)opaque == 12) {
         closure_finalized = true;
+    }
 }
 
 static void cfunctions(void)
@@ -58,12 +57,10 @@ static void cfunctions(void)
     JSRuntime *rt = new_runtime();
     JSContext *ctx = JS_NewContext(rt);
     JSValue cfunc = JS_NewCFunction(ctx, cfunc_callback, "cfunc", 42);
-    JSValue cfuncdata =
-        JS_NewCFunctionData2(ctx, cfuncdata_callback, "cfuncdata",
-                             /*length*/1337, /*magic*/0, /*data_len*/0, NULL);
-    JSValue cclosure =
-        JS_NewCClosure(ctx, cclosure_callback, "cclosure", cclosure_opaque_finalize,
-                       /*length*/0xC0DE, /*magic*/11, /*opaque*/(void*)12);
+    JSValue cfuncdata = JS_NewCFunctionData2(ctx, cfuncdata_callback, "cfuncdata",
+                                             /*length*/ 1337, /*magic*/ 0, /*data_len*/ 0, NULL);
+    JSValue cclosure = JS_NewCClosure(ctx, cclosure_callback, "cclosure", cclosure_opaque_finalize,
+                                      /*length*/ 0xC0DE, /*magic*/ 11, /*opaque*/ (void *)12);
     JSValue global = JS_GetGlobalObject(ctx);
     JS_SetPropertyStr(ctx, global, "cfunc", cfunc);
     JS_SetPropertyStr(ctx, global, "cfuncdata", cfuncdata);
@@ -174,15 +171,15 @@ static void cfunctions(void)
 static int timeout_interrupt_handler(JSRuntime *rt, void *opaque)
 {
     int *time = (int *)opaque;
-    if (*time <= MAX_TIME)
+    if (*time <= MAX_TIME) {
         *time += 1;
+    }
     return *time > MAX_TIME;
 }
 
 static void sync_call(void)
 {
-    static const char code[] =
-"(function() { \
+    static const char code[] = "(function() { \
     try { \
         while (true) {} \
     } catch (e) {} \
@@ -206,8 +203,7 @@ static void sync_call(void)
 
 static void async_call(void)
 {
-    static const char code[] =
-"(async function() { \
+    static const char code[] = "(async function() { \
     const loop = async () => { \
         await Promise.resolve(); \
         while (true) {} \
@@ -237,8 +233,7 @@ static void async_call(void)
     JS_FreeRuntime(rt);
 }
 
-static JSValue save_value(JSContext *ctx, JSValueConst this_val,
-                          int argc, JSValueConst *argv)
+static JSValue save_value(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     assert(argc == 1);
     JSValue *p = (JSValue *)JS_GetContextOpaque(ctx);
@@ -248,8 +243,7 @@ static JSValue save_value(JSContext *ctx, JSValueConst this_val,
 
 static void async_call_stack_overflow(void)
 {
-    static const char code[] =
-"(async function() { \
+    static const char code[] = "(async function() { \
     const f = () => f(); \
     try { \
         await Promise.resolve(); \
@@ -345,8 +339,8 @@ static JSModuleDef *loader(JSContext *ctx, const char *name, void *opaque)
     loader_calls++;
     assert(!strcmp(name, "b"));
     static const char code[] = "export function f(x){}";
-    JSValue ret = JS_Eval(ctx, code, strlen(code), "b",
-                          JS_EVAL_TYPE_MODULE|JS_EVAL_FLAG_COMPILE_ONLY);
+    JSValue ret =
+        JS_Eval(ctx, code, strlen(code), "b", JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     assert(!JS_IsException(ret));
     JSModuleDef *m = JS_VALUE_GET_PTR(ret);
     assert(m);
@@ -362,14 +356,13 @@ static void module_serde(void)
     JSContext *ctx = JS_NewContext(rt);
     static const char code[] = "import {f} from 'b'; f()";
     assert(loader_calls == 0);
-    JSValue mod = JS_Eval(ctx, code, strlen(code), "a",
-                          JS_EVAL_TYPE_MODULE|JS_EVAL_FLAG_COMPILE_ONLY);
+    JSValue mod =
+        JS_Eval(ctx, code, strlen(code), "a", JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     assert(loader_calls == 1);
     assert(!JS_IsException(mod));
     assert(JS_IsModule(mod));
     size_t len = 0;
-    uint8_t *buf = JS_WriteObject(ctx, &len, mod,
-                                  JS_WRITE_OBJ_BYTECODE|JS_WRITE_OBJ_REFERENCE);
+    uint8_t *buf = JS_WriteObject(ctx, &len, mod, JS_WRITE_OBJ_BYTECODE | JS_WRITE_OBJ_REFERENCE);
     assert(buf);
     assert(len > 0);
     JS_FreeValue(ctx, mod);
@@ -443,7 +436,7 @@ static void utf16_string(void)
         JS_FreeValue(ctx, v);
     }
     {
-        JSValue v = JS_NewStringUTF16(ctx, (uint16_t[]){'o','k'}, 2);
+        JSValue v = JS_NewStringUTF16(ctx, (uint16_t[]){'o', 'k'}, 2);
         assert(!JS_IsException(v));
         const char *s = JS_ToCString(ctx, v);
         assert(s);
@@ -503,8 +496,7 @@ static void utf16_string(void)
 
 static void weak_map_gc_check(void)
 {
-    static const char init_code[] =
-"const map = new WeakMap(); \
+    static const char init_code[] = "const map = new WeakMap(); \
 function addItem() { \
     const k = { \
         text: 'a', \
@@ -547,20 +539,16 @@ struct {
     int hook_type_call_count[4];
 } promise_hook_state;
 
-static void promise_hook_cb(JSContext *ctx, JSPromiseHookType type,
-                            JSValueConst promise, JSValueConst parent_promise,
-                            void *opaque)
+static void promise_hook_cb(JSContext *ctx, JSPromiseHookType type, JSValueConst promise,
+                            JSValueConst parent_promise, void *opaque)
 {
-    assert(type == JS_PROMISE_HOOK_INIT ||
-           type == JS_PROMISE_HOOK_BEFORE ||
-           type == JS_PROMISE_HOOK_AFTER ||
-           type == JS_PROMISE_HOOK_RESOLVE);
+    assert(type == JS_PROMISE_HOOK_INIT || type == JS_PROMISE_HOOK_BEFORE ||
+           type == JS_PROMISE_HOOK_AFTER || type == JS_PROMISE_HOOK_RESOLVE);
     promise_hook_state.hook_type_call_count[type]++;
     assert(opaque == (void *)&promise_hook_state);
     if (!JS_IsUndefined(parent_promise)) {
         JSValue global_object = JS_GetGlobalObject(ctx);
-        JS_SetPropertyStr(ctx, global_object, "actual",
-                          JS_DupValue(ctx, parent_promise));
+        JS_SetPropertyStr(ctx, global_object, "actual", JS_DupValue(ctx, parent_promise));
         JS_FreeValue(ctx, global_object);
     }
 }
@@ -637,11 +625,10 @@ static void promise_hook(void)
     memset(&promise_hook_state, 0, sizeof(promise_hook_state));
     {
         // module with promise chain
-        static const char code[] =
-            "globalThis.count = 0;"
-            "globalThis.actual = undefined;" // set by promise_hook_cb
-            "globalThis.expected = new Promise(resolve => resolve());"
-            "expected.then(_ => count++)";
+        static const char code[] = "globalThis.count = 0;"
+                                   "globalThis.actual = undefined;" // set by promise_hook_cb
+                                   "globalThis.expected = new Promise(resolve => resolve());"
+                                   "expected.then(_ => count++)";
         JSValue ret = JS_Eval(ctx, code, strlen(code), "<input>", JS_EVAL_TYPE_MODULE);
         assert(!JS_IsException(ret));
         assert(JS_IsPromise(ret));
@@ -681,8 +668,7 @@ static void promise_hook(void)
     memset(&promise_hook_state, 0, sizeof(promise_hook_state));
     {
         // module with thenable; fires before and after hooks
-        static const char code[] =
-            "new Promise(resolve => resolve({then(resolve){ resolve() }}))";
+        static const char code[] = "new Promise(resolve => resolve({then(resolve){ resolve() }}))";
         JSValue ret = JS_Eval(ctx, code, strlen(code), "<input>", JS_EVAL_TYPE_MODULE);
         assert(!JS_IsException(ret));
         assert(JS_IsPromise(ret));
@@ -718,11 +704,10 @@ static void dump_memory_usage(void)
 
     //JS_SetDumpFlags(rt, JS_DUMP_PROMISE);
 
-    static const char code[] =
-    "globalThis.count = 0;"
-    "globalThis.actual = undefined;" // set by promise_hook_cb
-    "globalThis.expected = new Promise(resolve => resolve());"
-    "expected.then(_ => count++)";
+    static const char code[] = "globalThis.count = 0;"
+                               "globalThis.actual = undefined;" // set by promise_hook_cb
+                               "globalThis.expected = new Promise(resolve => resolve());"
+                               "expected.then(_ => count++)";
 
     JSValue evalVal = JS_Eval(ctx, code, strlen(code), "<input>", 0);
     JS_FreeValue(ctx, evalVal);
@@ -745,12 +730,9 @@ static void new_errors(void)
         JSValue (*func)(JSContext *, const char *, ...);
     } Entry;
     static const Entry entries[] = {
-        {"Error",           JS_NewPlainError},
-        {"InternalError",   JS_NewInternalError},
-        {"RangeError",      JS_NewRangeError},
-        {"ReferenceError",  JS_NewReferenceError},
-        {"SyntaxError",     JS_NewSyntaxError},
-        {"TypeError",       JS_NewTypeError},
+        {"Error", JS_NewPlainError},        {"InternalError", JS_NewInternalError},
+        {"RangeError", JS_NewRangeError},   {"ReferenceError", JS_NewReferenceError},
+        {"SyntaxError", JS_NewSyntaxError}, {"TypeError", JS_NewTypeError},
     };
     const Entry *e;
 
@@ -807,16 +789,17 @@ static void backtrace_oom_current_exception(void)
     JS_FreeRuntime(rt);
 }
 
-static int gop_get_own_property(JSContext *ctx, JSPropertyDescriptor *desc,
-                                JSValueConst obj, JSAtom prop)
+static int gop_get_own_property(JSContext *ctx, JSPropertyDescriptor *desc, JSValueConst obj,
+                                JSAtom prop)
 {
     const char *name;
     int found;
 
     found = 0;
     name = JS_AtomToCString(ctx, prop);
-    if (!name)
+    if (!name) {
         return -1;
+    }
     if (!strcmp(name, "answer")) {
         found = 1;
         *desc = (JSPropertyDescriptor){
@@ -935,11 +918,11 @@ static void immutable_array_buffer(void)
     assert(!JS_IsImmutableArrayBuffer(obj));
     for (i = 1; i <= 3; i++) {
         immutable = (i == 2);
-        if (i > 1)
+        if (i > 1) {
             JS_SetImmutableArrayBuffer(obj, immutable);
+        }
         assert(immutable == JS_IsImmutableArrayBuffer(obj));
-        snprintf(buf, sizeof(buf),
-                 "var ta = new Uint8Array(ab); ta[0] = %d; ta[0]", i);
+        snprintf(buf, sizeof(buf), "var ta = new Uint8Array(ab); ta[0] = %d; ta[0]", i);
         ret = eval(ctx, buf);
         assert(!JS_IsException(ret));
         assert(JS_IsNumber(ret));
@@ -963,7 +946,7 @@ static void get_uint8array(void)
     JSValue val;
     uint8_t *p;
     size_t size;
-    uint8_t buf[3] = { 1, 2, 3 };
+    uint8_t buf[3] = {1, 2, 3};
 
     val = eval(ctx, "new Uint8Array(0)");
     assert(!JS_IsException(val));
@@ -1026,7 +1009,8 @@ static void new_symbol(void)
     assert(JS_IsSymbol(sym));
     JS_SetPropertyStr(ctx, global, "sym_local_null", sym);
 
-    ret = eval(ctx, "typeof sym_local_null === 'symbol' && sym_local_null.description === undefined && Symbol.keyFor(sym_local_null) === undefined");
+    ret = eval(ctx, "typeof sym_local_null === 'symbol' && sym_local_null.description === "
+                    "undefined && Symbol.keyFor(sym_local_null) === undefined");
     assert(JS_IsBool(ret));
     assert(JS_VALUE_GET_BOOL(ret));
     JS_FreeValue(ctx, ret);
@@ -1037,7 +1021,8 @@ static void new_symbol(void)
     assert(JS_IsSymbol(sym));
     JS_SetPropertyStr(ctx, global, "sym_global_null", sym);
 
-    ret = eval(ctx, "typeof sym_global_null === 'symbol' && sym_global_null.description === 'undefined' && Symbol.keyFor(sym_global_null) === 'undefined'");
+    ret = eval(ctx, "typeof sym_global_null === 'symbol' && sym_global_null.description === "
+                    "'undefined' && Symbol.keyFor(sym_global_null) === 'undefined'");
     assert(JS_IsBool(ret));
     assert(JS_VALUE_GET_BOOL(ret));
     JS_FreeValue(ctx, ret);
@@ -1048,7 +1033,9 @@ static void new_symbol(void)
     assert(JS_IsSymbol(sym));
     JS_SetPropertyStr(ctx, global, "sym_local_str", sym);
 
-    ret = eval(ctx, "sym_local_str.description === 'test_local' && Symbol.keyFor(sym_local_str) === undefined");
+    ret = eval(
+        ctx,
+        "sym_local_str.description === 'test_local' && Symbol.keyFor(sym_local_str) === undefined");
     assert(JS_IsBool(ret));
     assert(JS_VALUE_GET_BOOL(ret));
     JS_FreeValue(ctx, ret);
@@ -1059,7 +1046,8 @@ static void new_symbol(void)
     assert(JS_IsSymbol(sym));
     JS_SetPropertyStr(ctx, global, "sym_global_str", sym);
 
-    ret = eval(ctx, "sym_global_str.description === 'test_global' && Symbol.keyFor(sym_global_str) === 'test_global'");
+    ret = eval(ctx, "sym_global_str.description === 'test_global' && Symbol.keyFor(sym_global_str) "
+                    "=== 'test_global'");
     assert(JS_IsBool(ret));
     assert(JS_VALUE_GET_BOOL(ret));
     JS_FreeValue(ctx, ret);

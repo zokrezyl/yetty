@@ -6,10 +6,10 @@ add_library(yetty_yvterm STATIC
     scroll-tiers.c
     # yvterm's own SDF/glyph/text renderer for the raw ydraw records (ycat
     # PDF/SVG/markdown) stored on the grid ring. Standalone — does not use ygrid.
-    sdf-layer.c
+    grid-sdf-layer.c
     # Animated procedural "shader glyphs" for PUA-B cells. Plain-C sub-renderer
-    # owned by the vterm figure, like sdf-layer.
-    shader-glyph-layer.c
+    # owned by the vterm figure, like grid-sdf-layer.
+    grid-shader-glyph-layer.c
     # Module-level registration + RPC dispatch (yetty_yvterm_register lives here)
     # and the cross-class method tables. grid.c/vterm.c each only #include their
     # own <name>.gen.c at the foot, so these are compiled as standalone units —
@@ -26,11 +26,11 @@ target_include_directories(yetty_yvterm PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yvterm PUBLIC
     yetty_api_yvterm
-    yetty_api_ytermsink  # grid/vterm/shader-glyph-layer dispatch the terminal-host sink
+    yetty_api_ytermsink  # grid/vterm/grid-shader-glyph-layer dispatch the terminal-host sink
     yetty_ycore
     yetty_yclass
     yetty_yfigure
-    yetty_ysdf           # sdf-layer.c: yetty_ysdf_compute_aabb (record indexing)
+    yetty_ysdf           # grid-sdf-layer.c: yetty_ysdf_compute_aabb (record indexing)
     yetty_ydraw_core
     yetty_ydraw_factory  # yetty_ydraw_composite_destroy (anchored composite teardown)
     yetty_ywire          # wire statemachine: default raw-bytes sink → libvterm

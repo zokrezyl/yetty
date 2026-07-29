@@ -6,7 +6,7 @@
  * ligature by suppressing the covered cells on the grid (which cannot shape,
  * see vterm_pack_line) and re-drawing the shaped glyph through the SDF
  * free-position path against a ligature-capable face (Fira Code). Both the
- * suppression pass (vterm.c) and the shaping pass (sdf-layer.c) consult this
+ * suppression pass (vterm.c) and the shaping pass (grid-sdf-layer.c) consult this
  * table, so they agree — without communicating — on exactly which cells a
  * ligature covers, the same contract the shaping-script classifier gives the
  * complex-script path.

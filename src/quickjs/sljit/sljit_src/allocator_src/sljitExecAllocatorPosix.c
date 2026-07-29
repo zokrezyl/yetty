@@ -27,36 +27,38 @@
 #include <sys/types.h>
 #include <sys/mman.h>
 
-static SLJIT_INLINE void* alloc_chunk(sljit_uw size)
+static SLJIT_INLINE void *alloc_chunk(sljit_uw size)
 {
-	void *retval;
-	int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
-	int flags = MAP_PRIVATE;
-	int fd = -1;
+    void *retval;
+    int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
+    int flags = MAP_PRIVATE;
+    int fd = -1;
 
 #ifdef PROT_MAX
-	prot |= PROT_MAX(prot);
+    prot |= PROT_MAX(prot);
 #endif
 
 #ifdef MAP_ANON
-	flags |= MAP_ANON;
-#else /* !MAP_ANON */
-	if (SLJIT_UNLIKELY((dev_zero < 0) && open_dev_zero()))
-		return NULL;
+    flags |= MAP_ANON;
+#else  /* !MAP_ANON */
+    if (SLJIT_UNLIKELY((dev_zero < 0) && open_dev_zero())) {
+        return NULL;
+    }
 
-	fd = dev_zero;
+    fd = dev_zero;
 #endif /* MAP_ANON */
 
-	retval = mmap(NULL, size, prot, flags, fd, 0);
-	if (retval == MAP_FAILED)
-		return NULL;
+    retval = mmap(NULL, size, prot, flags, fd, 0);
+    if (retval == MAP_FAILED) {
+        return NULL;
+    }
 
-	return retval;
+    return retval;
 }
 
 static SLJIT_INLINE void free_chunk(void *chunk, sljit_uw size)
 {
-	munmap(chunk, size);
+    munmap(chunk, size);
 }
 
 #include "sljitExecAllocatorCore.c"

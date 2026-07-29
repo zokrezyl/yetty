@@ -14,7 +14,7 @@ loads individual `.wgsl` files from it.
    structure preserved).
 2. **Module shaders owned elsewhere**, copied flat into `assets/shaders/`:
    `yfont/{ms-raster,raster,ms-msdf,msdf}-font.wgsl`, `ygrid/ygrid.wgsl`,
-   `yvterm/yvterm-sdf-layer.wgsl`, `yrender/blend.wgsl`,
+   `yvterm/grid-sdf-layer.wgsl`, `yvterm/grid-text.wgsl`, `yrender/blend.wgsl`,
    `ysdf/ysdf.gen.wgsl` (the generated SDF library),
    `ymsdf-wgsl/shaders/msdf_gen.wgsl` (the GPU MSDF compute shader).
 3. **Per-glyph shaders** from `yfont/glyph-shaders/*.wgsl` into

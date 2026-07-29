@@ -7,7 +7,7 @@
  * agree, without communicating, on exactly which cells a ligature covers:
  *
  *   - vterm_pack_line (vterm.c)     — sets the grid glyph to 0 for those cells.
- *   - shape_row_ligatures (sdf-layer.c) — shapes the span and draws the glyph.
+ *   - shape_row_ligatures (grid-sdf-layer.c) — shapes the span and draws the glyph.
  *
  * Both call yetty_yvterm_ligature_run_length() so the decision is made in one
  * place: it combines the HarfBuzz-free codepoint table

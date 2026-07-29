@@ -65,7 +65,7 @@ There are two independent text paths, with very different shaping-readiness:
 | Path | Where | Positioning | Shaping-ready? |
 |---|---|---|---|
 | **Terminal grid** | `yvterm/vterm.c` `vterm_pack_line` + fragment shader, atlas in `yfont/ms-raster-font.c` / `ms-msdf-font.c` | rigid cell grid — one glyph baked per cell slot, fixed advance | **No** — 4-word cell format has no per-glyph x/y offset or advance; the shader addresses glyphs by cell, not by a glyph list |
-| **ydraw drawable text** | `yvterm/sdf-layer.c` `expand_text_span`, atlas in `yfont/raster-font.c` / `msdf-font.c` | free — emits a GLYPH record with explicit float `glyph_x`/`glyph_y` and per-glyph advance | **Structurally yes** — already expresses non-cell-aligned positions; just runs no shaper |
+| **ydraw drawable text** | `yvterm/grid-sdf-layer.c` `expand_text_span`, atlas in `yfont/raster-font.c` / `msdf-font.c` | free — emits a GLYPH record with explicit float `glyph_x`/`glyph_y` and per-glyph advance | **Structurally yes** — already expresses non-cell-aligned positions; just runs no shaper |
 
 What is already good:
 
@@ -214,7 +214,7 @@ Phasing:
     `get_glyph_index_by_gid` + a `gid_map`, rasterizing by glyph index via the
     shared `rasterize_gid_into_slot` core (the face is the font object, so the
     key reduces to the gid). (#616)
-  - The render path — `sdf-layer.c` `expand_text_span` now detects complex
+  - The render path — `grid-sdf-layer.c` `expand_text_span` now detects complex
     runs and emits shaped glyphs through the existing free-position glyph
     records (`expand_shaped_run`): per shaped glyph it resolves the gid to an
     atlas slot and places it at `pen + (bearing + GPOS_offset) * scale`,

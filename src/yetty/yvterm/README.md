@@ -22,9 +22,9 @@ machine; keyboard input (`on_key`/`on_char`) and libvterm query responses go
 back to the child through a registered `pty_write` callback. **vterm.c is
 the renderer**: it reads the grid through bulk accessors (`line_cells`,
 `slot_cells`, `slot_composites`, `slot_primitive_words`, …), uploads a
-4-u32-per-cell buffer to the text shader (MSDF glyphs, cursor, selection
-highlight, visual zoom, OSC-driven post-color/coordinate effects), and draws
-the anchored figures. The public `yetty_yvterm_vterm_*` model entry points
+4-u32-per-cell buffer to the text-grid shader (`grid-text.wgsl`, a staged
+shader asset — MSDF glyphs, cursor, selection highlight, visual zoom,
+OSC-driven post-color/coordinate effects), and draws the anchored figures. The public `yetty_yvterm_vterm_*` model entry points
 are thin delegators to the composed grid, so the terminal keeps one API
 surface.
 
@@ -61,13 +61,13 @@ Config keys are in [yconfig](../yconfig/README.md).
 
 ## Sub-renderers owned by the vterm figure
 
-- **sdf-layer.c** — rasterises the raw ydraw records stored per line (SDF
+- **grid-sdf-layer.c** — rasterises the raw ydraw records stored per line (SDF
   shapes, GLYPH primitives, `TEXT_DRAWABLE_LIST` runs, FONT resources — the
   ycat PDF/SVG/markdown path). Reuses the shared machinery (yrender
   gpu-resource-binder, the generated `ysdf.gen.wgsl`, the font dispatcher)
   but is standalone — it does not use [ygrid](../ygrid/README.md). Plain-C
   helper, not a yclass class.
-- **shader-glyph-layer.c** — animated procedural "shader glyphs":
+- **grid-shader-glyph-layer.c** — animated procedural "shader glyphs":
   PUA-B codepoints (U+100000..U+100FFF) render as per-cell fragment shaders
   (spinner, plasma, …) assembled from `<paths/shaders>/glyph-shaders/*.wgsl`.
   An event-loop timer repaints while any are on screen and self-stops when
@@ -99,9 +99,10 @@ The generated `grid.h` / `vterm.h` publish the full class surface;
 | `grid.c` | the model class: rings, libvterm callbacks, input, selection, view, tier integration |
 | `vterm.c` | the figure class: text shader + uniforms, composite/SDF/shader-glyph passes, zoom + effects |
 | `scroll-tiers.c` / `scroll-tiers.h` | archive engine: line (de)serialization, lz4 warm segments, cold spill file, materialization cache |
-| `sdf-layer.c` / `sdf-layer.h` | SDF/glyph/text renderer for per-line raw ydraw records |
-| `shader-glyph-layer.c` / `shader-glyph-layer.h` | PUA-B animated shader-glyph renderer |
-| `yvterm-sdf-layer.wgsl` | the SDF layer's shader |
+| `grid-sdf-layer.c` / `grid-sdf-layer.h` | SDF/glyph/text renderer for per-line raw ydraw records |
+| `grid-shader-glyph-layer.c` / `grid-shader-glyph-layer.h` | PUA-B animated shader-glyph renderer |
+| `grid-sdf-layer.wgsl` | the SDF layer's shader (staged shader asset) |
+| `grid-text.wgsl` | the text-grid shader vterm.c compiles (staged shader asset; effects-lib.wgsl is prepended at load) |
 | `grid.gen.c`, `vterm.gen.c`, `rpc.gen.c`, `model.yaml` | codegen output — never hand-edit ([yclass](../yclass/README.md)) |
 
 Generated public headers: `include/yetty/yvterm/{grid.h,vterm.h}`;

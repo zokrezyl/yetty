@@ -53,13 +53,13 @@
 #include <sys/types.h>
 #include <sys/mman.h>
 
-#define SLJIT_UPDATE_WX_FLAGS(from, to, enable_exec) \
-	sljit_update_wx_flags((from), (to), (enable_exec))
+#define SLJIT_UPDATE_WX_FLAGS(from, to, enable_exec)                                               \
+    sljit_update_wx_flags((from), (to), (enable_exec))
 
 #if !(defined SLJIT_SINGLE_THREADED && SLJIT_SINGLE_THREADED)
 #include <pthread.h>
-#define SLJIT_SE_LOCK()		pthread_mutex_lock(&se_lock)
-#define SLJIT_SE_UNLOCK()	pthread_mutex_unlock(&se_lock)
+#define SLJIT_SE_LOCK() pthread_mutex_lock(&se_lock)
+#define SLJIT_SE_UNLOCK() pthread_mutex_unlock(&se_lock)
 #else
 #define SLJIT_SE_LOCK()
 #define SLJIT_SE_UNLOCK()
@@ -69,76 +69,79 @@
 
 static SLJIT_INLINE int generic_check_is_wx_block(void *ptr, sljit_uw size)
 {
-	if (SLJIT_LIKELY(!mprotect(ptr, size, PROT_EXEC)))
-		return !!mprotect(ptr, size, PROT_READ | PROT_WRITE);
+    if (SLJIT_LIKELY(!mprotect(ptr, size, PROT_EXEC))) {
+        return !!mprotect(ptr, size, PROT_READ | PROT_WRITE);
+    }
 
-	return 1;
+    return 1;
 }
 
-SLJIT_API_FUNC_ATTRIBUTE void* sljit_malloc_exec(sljit_uw size)
+SLJIT_API_FUNC_ATTRIBUTE void *sljit_malloc_exec(sljit_uw size)
 {
 #if !(defined SLJIT_SINGLE_THREADED && SLJIT_SINGLE_THREADED)
-	static pthread_mutex_t se_lock = PTHREAD_MUTEX_INITIALIZER;
+    static pthread_mutex_t se_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif
-	static int wx_block = -1;
-	int prot = PROT_READ | PROT_WRITE;
-	sljit_uw* ptr;
+    static int wx_block = -1;
+    int prot = PROT_READ | PROT_WRITE;
+    sljit_uw *ptr;
 
-	if (SLJIT_UNLIKELY(wx_block > 0))
-		return NULL;
+    if (SLJIT_UNLIKELY(wx_block > 0)) {
+        return NULL;
+    }
 
 #ifdef PROT_MAX
-	prot |= PROT_MAX(PROT_READ | PROT_WRITE | PROT_EXEC);
+    prot |= PROT_MAX(PROT_READ | PROT_WRITE | PROT_EXEC);
 #endif
 #ifdef PROT_MPROTECT
-	prot |= PROT_MPROTECT(PROT_EXEC);
+    prot |= PROT_MPROTECT(PROT_EXEC);
 #endif
 
-	size += sizeof(sljit_uw);
-	ptr = (sljit_uw*)mmap(NULL, size, prot, MAP_PRIVATE | MAP_ANON, -1, 0);
+    size += sizeof(sljit_uw);
+    ptr = (sljit_uw *)mmap(NULL, size, prot, MAP_PRIVATE | MAP_ANON, -1, 0);
 
-	if (ptr == MAP_FAILED)
-		return NULL;
+    if (ptr == MAP_FAILED) {
+        return NULL;
+    }
 
-	if (SLJIT_UNLIKELY(wx_block < 0)) {
-		SLJIT_SE_LOCK();
-		wx_block = SLJIT_WX_IS_BLOCK(ptr, size);
-		SLJIT_SE_UNLOCK();
-		if (SLJIT_UNLIKELY(wx_block)) {
-			munmap((void *)ptr, size);
-			return NULL;
-		}
-	}
+    if (SLJIT_UNLIKELY(wx_block < 0)) {
+        SLJIT_SE_LOCK();
+        wx_block = SLJIT_WX_IS_BLOCK(ptr, size);
+        SLJIT_SE_UNLOCK();
+        if (SLJIT_UNLIKELY(wx_block)) {
+            munmap((void *)ptr, size);
+            return NULL;
+        }
+    }
 
-	*ptr++ = size;
-	return ptr;
+    *ptr++ = size;
+    return ptr;
 }
 
 #undef SLJIT_SE_UNLOCK
 #undef SLJIT_SE_LOCK
 
-SLJIT_API_FUNC_ATTRIBUTE void sljit_free_exec(void* ptr)
+SLJIT_API_FUNC_ATTRIBUTE void sljit_free_exec(void *ptr)
 {
-	sljit_uw *start_ptr = ((sljit_uw*)ptr) - 1;
-	munmap((void*)start_ptr, *start_ptr);
+    sljit_uw *start_ptr = ((sljit_uw *)ptr) - 1;
+    munmap((void *)start_ptr, *start_ptr);
 }
 
 static void sljit_update_wx_flags(void *from, void *to, int enable_exec)
 {
-	sljit_uw page_mask = (sljit_uw)get_page_alignment();
-	sljit_uw start = (sljit_uw)from;
-	sljit_uw end = (sljit_uw)to;
-	int prot = PROT_READ | (enable_exec ? PROT_EXEC : PROT_WRITE);
+    sljit_uw page_mask = (sljit_uw)get_page_alignment();
+    sljit_uw start = (sljit_uw)from;
+    sljit_uw end = (sljit_uw)to;
+    int prot = PROT_READ | (enable_exec ? PROT_EXEC : PROT_WRITE);
 
-	SLJIT_ASSERT(start < end);
+    SLJIT_ASSERT(start < end);
 
-	start &= ~page_mask;
-	end = (end + page_mask) & ~page_mask;
+    start &= ~page_mask;
+    end = (end + page_mask) & ~page_mask;
 
-	mprotect((void*)start, end - start, prot);
+    mprotect((void *)start, end - start, prot);
 }
 
 SLJIT_API_FUNC_ATTRIBUTE void sljit_free_unused_memory_exec(void)
 {
-	/* This allocator does not keep unused memory for future allocations. */
+    /* This allocator does not keep unused memory for future allocations. */
 }

@@ -2496,19 +2496,18 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 size_t itlen = 0;
                 const lxb_char_t *itype =
                     lxb_dom_element_get_attribute(iel, (const lxb_char_t *)"type", 4, &itlen);
-                bool texty =
-                    itype == NULL ||
-                    (itlen == 4 && strncasecmp((const char *)itype, "text", 4) == 0) ||
-                    (itlen == 6 && strncasecmp((const char *)itype, "search", 6) == 0) ||
-                    (itlen == 5 && strncasecmp((const char *)itype, "email", 5) == 0) ||
-                    (itlen == 3 && strncasecmp((const char *)itype, "url", 3) == 0) ||
-                    (itlen == 3 && strncasecmp((const char *)itype, "tel", 3) == 0) ||
-                    (itlen == 8 && strncasecmp((const char *)itype, "password", 8) == 0) ||
-                    (itlen == 6 && strncasecmp((const char *)itype, "number", 6) == 0);
+                bool texty = itype == NULL ||
+                             (itlen == 4 && strncasecmp((const char *)itype, "text", 4) == 0) ||
+                             (itlen == 6 && strncasecmp((const char *)itype, "search", 6) == 0) ||
+                             (itlen == 5 && strncasecmp((const char *)itype, "email", 5) == 0) ||
+                             (itlen == 3 && strncasecmp((const char *)itype, "url", 3) == 0) ||
+                             (itlen == 3 && strncasecmp((const char *)itype, "tel", 3) == 0) ||
+                             (itlen == 8 && strncasecmp((const char *)itype, "password", 8) == 0) ||
+                             (itlen == 6 && strncasecmp((const char *)itype, "number", 6) == 0);
                 if (texty) {
                     size_t vlen = 0;
-                    const lxb_char_t *val = lxb_dom_element_get_attribute(
-                        iel, (const lxb_char_t *)"value", 5, &vlen);
+                    const lxb_char_t *val =
+                        lxb_dom_element_get_attribute(iel, (const lxb_char_t *)"value", 5, &vlen);
                     if (val != NULL && vlen > 0) {
                         inline_buf_open_seg(&ib, &s);
                         inline_buf_append(&ib, (const char *)val, vlen);
@@ -3037,7 +3036,6 @@ struct yetty_ycore_void_result yetty_ylexbor_box_build(struct yetty_ylexbor *r)
 	 * one, so a cached element's class/id could be stale. */
     r->supp_cache_element = NULL;
     r->box_build_count++;
-
 
     /* Free per-box heap (segs) from the previous build. wrap_inline_box
 	 * clears segs on consumption, but a relayout path that skips painting

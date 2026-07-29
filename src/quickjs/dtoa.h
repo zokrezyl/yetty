@@ -31,30 +31,30 @@
 
 /* radix != 10 is only supported with flags = JS_DTOA_FORMAT_FREE */
 /* use as many digits as necessary */
-#define JS_DTOA_FORMAT_FREE  (0 << 0)
+#define JS_DTOA_FORMAT_FREE (0 << 0)
 /* use n_digits significant digits (1 <= n_digits <= JS_DTOA_MAX_DIGITS) */
 #define JS_DTOA_FORMAT_FIXED (1 << 0)
 /* force fractional format: [-]dd.dd with n_digits fractional digits.
    0 <= n_digits <= JS_DTOA_MAX_DIGITS */
-#define JS_DTOA_FORMAT_FRAC  (2 << 0)
-#define JS_DTOA_FORMAT_MASK  (3 << 0)
+#define JS_DTOA_FORMAT_FRAC (2 << 0)
+#define JS_DTOA_FORMAT_MASK (3 << 0)
 
 /* select exponential notation either in fixed or free format */
-#define JS_DTOA_EXP_AUTO     (0 << 2)
-#define JS_DTOA_EXP_ENABLED  (1 << 2)
+#define JS_DTOA_EXP_AUTO (0 << 2)
+#define JS_DTOA_EXP_ENABLED (1 << 2)
 #define JS_DTOA_EXP_DISABLED (2 << 2)
-#define JS_DTOA_EXP_MASK     (3 << 2)
+#define JS_DTOA_EXP_MASK (3 << 2)
 
-#define JS_DTOA_MINUS_ZERO   (1 << 4) /* show the minus sign for -0 */
+#define JS_DTOA_MINUS_ZERO (1 << 4) /* show the minus sign for -0 */
 
 /* only accepts integers (no dot, no exponent) */
-#define JS_ATOD_INT_ONLY       (1 << 0)
+#define JS_ATOD_INT_ONLY (1 << 0)
 /* accept Oo and Ob prefixes in addition to 0x prefix if radix = 0 */
 #define JS_ATOD_ACCEPT_BIN_OCT (1 << 1)
 /* accept O prefix as octal if radix == 0 and properly formed (Annex B) */
-#define JS_ATOD_ACCEPT_LEGACY_OCTAL  (1 << 2)
+#define JS_ATOD_ACCEPT_LEGACY_OCTAL (1 << 2)
 /* accept _ between digits as a digit separator */
-#define JS_ATOD_ACCEPT_UNDERSCORES  (1 << 3)
+#define JS_ATOD_ACCEPT_UNDERSCORES (1 << 3)
 
 typedef struct {
     uint64_t mem[37];
@@ -67,10 +67,8 @@ typedef struct {
 /* return a maximum bound of the string length */
 int js_dtoa_max_len(double d, int radix, int n_digits, int flags);
 /* return the string length */
-int js_dtoa(char *buf, double d, int radix, int n_digits, int flags,
-            JSDTOATempMem *tmp_mem);
-double js_atod(const char *str, const char **pnext, int radix, int flags,
-               JSATODTempMem *tmp_mem);
+int js_dtoa(char *buf, double d, int radix, int n_digits, int flags, JSDTOATempMem *tmp_mem);
+double js_atod(const char *str, const char **pnext, int radix, int flags, JSATODTempMem *tmp_mem);
 
 #ifdef JS_DTOA_DUMP_STATS
 void js_dtoa_dump_stats(void);

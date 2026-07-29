@@ -1045,8 +1045,8 @@ struct yetty_ylexbor {
 	 * cache stores the winning rule index per (element, table); it is wiped
 	 * whenever the epoch advances. */
     uint64_t supp_match_epoch;
-    void *supp_rc;        /* struct supp_rc_entry * (open-addressed hash) */
-    int supp_rc_cap;      /* power of two, or 0 */
+    void *supp_rc;   /* struct supp_rc_entry * (open-addressed hash) */
+    int supp_rc_cap; /* power of two, or 0 */
     int supp_rc_count;
     uint64_t supp_rc_epoch;
     /* Diagnostics (printed on destroy when YB_SUPP_STATS is set): how often the
@@ -1067,7 +1067,7 @@ struct yetty_ylexbor {
 	 * inline-hash. Cache owns the styles; callers borrow (release is a no-op).
 	 * Wiped on epoch or viewport change. */
     uint64_t style_epoch;
-    void *style_rc;       /* struct style_rc_entry * (open-addressed hash) */
+    void *style_rc; /* struct style_rc_entry * (open-addressed hash) */
     int style_rc_cap;
     int style_rc_count;
     uint64_t style_rc_epoch;

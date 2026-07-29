@@ -85,7 +85,7 @@ include.
 - `../yrender/` (`pipeline.c`, `gpu-resource-binder.c`,
   `render-target-texture.c`) — validation scopes around shader compiles and
   resource creation.
-- `../yvterm/shader-glyph-layer.c`, `../yvnc/vnc-server.c` — scopes around
+- `../yvterm/grid-shader-glyph-layer.c`, `../yvnc/vnc-server.c` — scopes around
   runtime-assembled shaders.
 - `tools/msdf/gen-msdf-gpu`, `tools/msdf/render-atlas` — headless GPU
   bring-up in CLI tools.
