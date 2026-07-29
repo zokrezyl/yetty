@@ -353,13 +353,39 @@ static int pick_pane_px(int *w, int *h)
     return 0;
 }
 
+/* Encode a Unicode codepoint to UTF-8. Returns the byte count (1..4).
+ * Used by both the client-mode key_cb and the standalone input path, so
+ * it lives in the common section, outside YETTY_YBROWSER_HAS_STANDALONE. */
+static size_t utf8_encode(uint32_t cp, char *out)
+{
+    if (cp < 0x80) {
+        out[0] = (char)cp;
+        return 1;
+    }
+    if (cp < 0x800) {
+        out[0] = (char)(0xC0 | (cp >> 6));
+        out[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    }
+    if (cp < 0x10000) {
+        out[0] = (char)(0xE0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+    out[0] = (char)(0xF0 | (cp >> 18));
+    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    out[3] = (char)(0x80 | (cp & 0x3F));
+    return 4;
+}
+
 /* Forward declarations — callbacks reference the tab/navigation helpers
  * defined further down. */
 static void ui_new_tab(struct app *a);
 static void ui_close_tab(struct app *a, int idx);
 static void switch_tab(struct app *a, int idx);
 static void navigate(struct app *a, struct tab *t, char *url, int push_to_back);
-static size_t utf8_encode(uint32_t cp, char *out);
 static void nav_abort(struct tab *t);
 static void go_back(struct app *a);
 static void go_forward(struct app *a);
@@ -3230,7 +3256,6 @@ static void *sa_prefetch_main(void *arg)
     return NULL;
 }
 
-static size_t utf8_encode(uint32_t cp, char *out);
 static const char *encode_special_key(uint32_t key, int glfw_mods, char *scratch, size_t scratch_n,
                                       size_t *out_len);
 
@@ -3512,31 +3537,6 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
     }
     sa_request_render(s);
     return YETTY_OK(yetty_ycore_int, 0);
-}
-
-/* Encode a Unicode codepoint to UTF-8. Returns the byte count (1..4). */
-static size_t utf8_encode(uint32_t cp, char *out)
-{
-    if (cp < 0x80) {
-        out[0] = (char)cp;
-        return 1;
-    }
-    if (cp < 0x800) {
-        out[0] = (char)(0xC0 | (cp >> 6));
-        out[1] = (char)(0x80 | (cp & 0x3F));
-        return 2;
-    }
-    if (cp < 0x10000) {
-        out[0] = (char)(0xE0 | (cp >> 12));
-        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
-        out[2] = (char)(0x80 | (cp & 0x3F));
-        return 3;
-    }
-    out[0] = (char)(0xF0 | (cp >> 18));
-    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
-    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
-    out[3] = (char)(0x80 | (cp & 0x3F));
-    return 4;
 }
 
 /* GLFW navigation/editing keycode → terminal byte sequence. Printable text

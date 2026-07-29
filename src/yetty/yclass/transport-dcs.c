@@ -17,6 +17,10 @@
 #include <string.h>
 #ifdef _WIN32
 #include <io.h> /* read/write/close — MSVC ships no <unistd.h> */
+#ifndef STDIN_FILENO
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#endif
 #else
 #include <poll.h>
 #include <unistd.h>
