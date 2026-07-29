@@ -16,6 +16,11 @@ if(WIN32)
     # tools/msdf/gen-msdf-gpu.
     return()
 endif()
+if(YETTY_IOS OR YETTY_TVOS)
+    # fork/execl are prohibited by the iOS/tvOS SDKs — the spawn-a-client
+    # harness cannot exist there.
+    return()
+endif()
 
 add_executable(ydummy-server
     main.c
