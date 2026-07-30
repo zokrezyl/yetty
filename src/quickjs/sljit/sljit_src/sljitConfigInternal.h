@@ -946,7 +946,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_sw sljit_exec_offset(void *code);
 
 #define SLJIT_COMPILE_ASSERT(x, description)                                                       \
     switch (0) {                                                                                   \
-    case 0: case ((x) ? 1 : 0): break;                                                 \
+    case 0: case ((x) ? 1 : 0): break;                                                             \
     }
 
 #endif /* !SLJIT_COMPILE_ASSERT */

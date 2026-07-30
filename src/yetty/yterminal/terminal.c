@@ -40,7 +40,7 @@
 #include <yetty/ydraw-core/drawable-iterator.h>
 #include <yetty/ydraw-core/drawable-list-registry.h>
 #include <yetty/ydraw-core/font-resource.h>
-#include <yetty/ygrid/ygrid.h>
+#include <yetty/api/ygrid/grid.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yshadertoy/prim.h>
@@ -81,7 +81,6 @@ struct yetty_yclass_object_ptr_result yetty_yterminal_terminal_to(
     struct yetty_yterminal_terminal *data);
 struct yetty_yclass_object_ptr_result yetty_yterminal_terminal_create(struct yetty_yclass_ctx *ctx);
 struct yetty_ycore_void_result yetty_yterminal_register(void);
-#include <yetty/ygrid/ygrid.h>
 #include "yetty/gen/impl/ygrid/grid.h"
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>

@@ -33,7 +33,7 @@
  * pinned ygrid figures the app renders itself — needs it. The WIRE sink emits
  * figure-tree records over a producer and is GPU-free, so the headless
  * no-WebGPU cross targets (riscv guest) build the wire path without ygrid. */
-#include <yetty/ygrid/ygrid.h>
+#include <yetty/api/ygrid/grid.h>
 #endif
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>

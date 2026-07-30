@@ -70,6 +70,13 @@ else()
     include(${YETTY_ROOT}/build-tools/yetty/platform/linux/cmake.cmake)
 endif()
 
+# yclass codegen as an on-demand ninja target (`yclass-codegen`) — never part
+# of ALL; `make codegen` builds it. Needs this build's compile_commands.json,
+# so only builds that export one can actually run it (the desktop builds do).
+if(CMAKE_EXPORT_COMPILE_COMMANDS)
+    include(${YETTY_ROOT}/build-tools/yetty/yclass-codegen.cmake)
+endif()
+
 # Tools
 add_subdirectory(${YETTY_ROOT}/tools ${CMAKE_BINARY_DIR}/tools)
 

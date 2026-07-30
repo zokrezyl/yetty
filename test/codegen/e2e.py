@@ -172,7 +172,7 @@ def _run_codegen(sources: dict, module: str):
             "directory": str(tmp), "file": str(path),
             "command": f"{CLANG} -I{REPO}/include -I{REPO}/src -std=gnu2x -c {path}"})
     (tmp / "compile_commands.json").write_text(json.dumps(entries))
-    env = dict(os.environ, PYTHONHASHSEED="0", YCLASS_SPLIT="1",
+    env = dict(os.environ, PYTHONHASHSEED="0",
                YCLASS_COMPILE_DB=str(tmp / "compile_commands.json"))
     argv = [sys.executable, str(GEN), module, str(tmp / "include" / "yetty"),
             str(src_dir), *[str(p) for p in paths]]

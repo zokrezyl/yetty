@@ -21,7 +21,7 @@
 #include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/api/yfigure/figure.h>
 #include <yetty/api/yfigure/container.h>
-#include <yetty/ygrid/ygrid.h>
+#include <yetty/api/ygrid/grid.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
