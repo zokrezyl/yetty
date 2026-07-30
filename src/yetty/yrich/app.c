@@ -25,7 +25,7 @@
 #include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
-#include <yetty/ygrid/ygrid.h>
+#include <yetty/api/ygrid/grid.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/ygui/ygui.h>

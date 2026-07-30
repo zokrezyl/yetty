@@ -43,7 +43,7 @@
 #include <yetty/yfont/msdf-font.h>
 #include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
-#include <yetty/ygrid/ygrid.h>
+#include <yetty/api/ygrid/grid.h>
 #include <yetty/api/yfigure/figure.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ytrace/ytrace.h>

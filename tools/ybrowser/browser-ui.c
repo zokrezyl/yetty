@@ -3164,7 +3164,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/ychrome/host.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
-#include <yetty/ygrid/ygrid.h>
+#include <yetty/api/ygrid/grid.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yplatform/platform.h>

@@ -230,6 +230,8 @@ types:
         type: int
       - name: dirty
         type: int
+      - name: generation
+        type: uint32_t
   - name: yetty_yrender_gpu_resource_set
     kind: struct
     fields:
@@ -287,6 +289,8 @@ types:
         type: uint32_t
       - name: dirty
         type: int
+      - name: generation
+        type: uint32_t
   - name: yetty_yrender_uniform
     kind: struct
     fields:

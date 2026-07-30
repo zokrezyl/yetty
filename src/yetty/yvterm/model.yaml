@@ -394,6 +394,10 @@ classes:
         type: struct yetty_ycore_buffer
         get: false
         set: false
+      - name: text_shader_code
+        type: struct yetty_ycore_buffer
+        get: false
+        set: false
       - name: shader_module
         type: WGPUShaderModule
         get: false

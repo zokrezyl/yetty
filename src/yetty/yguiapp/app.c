@@ -43,7 +43,7 @@
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yfont/msdf-font.h>
-#include <yetty/ygrid/ygrid.h>
+#include <yetty/api/ygrid/grid.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ygui/framework.h>
 #include <yetty/ygui/widget.h>

@@ -23,7 +23,7 @@
 #include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
-#include <yetty/ygrid/ygrid.h>
+#include <yetty/api/ygrid/grid.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/memstats.h>
 #include <yetty/ycore/types.h>

@@ -143,160 +143,37 @@ GRADLE_OPTS_X86_64_YTRACE_RELEASE := --project-cache-dir=../../$(BUILD_DIR_ANDRO
 all: help
 
 #=============================================================================
-# yclass codegen — standalone, NOT part of any platform build
+# yclass codegen
 #=============================================================================
 #
-# Generates, per module, model.yaml plus the role-split output: object-API
-# stubs at src/yetty/gen/api/<module>/<stem>.c with the public header
+# ONE generator (src/yetty/yclass/gen/codegen.py), ONE layout (role-split):
+# per module, model.yaml plus object-API stubs at
+# src/yetty/gen/api/<module>/<stem>.c with the public header
 # include/yetty/api/<module>/<stem>.h, and implementation glue at
-# src/yetty/gen/impl/<module>/<stem>.{c,h} (foot-#included by the hand-written
-# <stem>.c). No per-module rpc.gen.c / methods.gen.* except the standalone
-# per-submodule rpc.gen.c aggregators a duplicate-stem module (yplatform) emits
-# under gen/impl/.
+# src/yetty/gen/impl/<module>/<stem>.{c,h} (foot-#included by the
+# hand-written <stem>.c).
 #
-# Output is committed to git. Platform builds compile what is in the
-# tree — they NEVER invoke this. Re-run when annotated sources change.
+# Output is committed to git. Platform builds compile what is in the tree —
+# they never regenerate it implicitly.
 #
-# Module discovery: every .c under src/yetty/<module>/ (excluding
-# *.gen.c) that contains a `class@<module>:` or `mixin@<module>:`
-# clang annotation is included as a source for that module.
+# The module table (names, source dirs, per-module parse defines,
+# compat-header flags) lives in src/yetty/yclass/gen/driver.py. The work is
+# a ninja target (`yclass-codegen`, build-tools/yetty/yclass-codegen.cmake)
+# in the desktop ytrace release build: codegen re-runs ONLY for modules
+# whose annotated sources (or the generator) changed; an unchanged tree is
+# a no-op. That build also supplies compile_commands.json — the exact flags
+# the codegen clang parse uses (codegen FAILS on an unresolved header/type
+# instead of degrading it to `int`, so the configured build is a hard
+# prerequisite and is configured on demand below).
 #
-# Codegen derives its clang include paths from the include/ and src/ roots
-# it is passed; its -fsyntax-only step tolerates missing third-party headers —
-# it needs the annotation AST nodes, not a clean compile.
+# Regenerate a single module by hand:
+#   python3 src/yetty/yclass/gen/driver.py --run <module> --repo-root . \
+#       --compile-db $(BUILD_DIR_DESKTOP_YTRACE_RELEASE)/compile_commands.json
 
-# A module entry is either a bare name (sources under src/yetty/<name>/)
-# or <name>=<path> for yclass modules living elsewhere (yclass-based tools).
-YCLASS_MODULES := yapp yetty yfigure ygrid ygit ygui yguiapp ymgui yrdawn yshadertoy yvterm yflame ymap ynotebook yjupyter yview yplatform ychrome ymusic ycircuit yai=tools/ai/yai yrich yzoo=tools/yzoo ymaze=tools/ymaze yjungle=tools/yjungle demoygui=demo/ygui ycompositor=tools/ycompositor yaudio=tools/yaudio ycompositorygui=tools/ycompositor-ygui ybrowser=tools/ybrowser yhello=tools/yhello ygreeter=tools/ygreeter ynet api_yplot=src/api/yplot ydummy ytermsink yterminal
-
-# Modules whose generated public headers are written NEXT TO their source instead
-# of under include/yetty/<module>/ (codegen --headers-local). Used for modules
-# whose sources live outside the shared include tree — the ygui demos under
-# demo/ygui/, where each demo dir stays self-contained (main.c + main.gen.c +
-# main.h + rpc.gen.c together) rather than scattering headers into include/.
-YCLASS_LOCAL_HEADERS :=
-
-# Bare module names (strip any "=<srcdir>" suffix used by out-of-tree modules).
-YCLASS_MODNAMES := $(foreach spec,$(YCLASS_MODULES),$(firstword $(subst =, ,$(spec))))
-# Codegen fan-out width. Override: `make CODEGEN_JOBS=8 codegen`.
-CODEGEN_JOBS ?= $(shell nproc 2>/dev/null || echo 4)
-
-# Regenerate ONE module by name: resolve its spec (for the `yai=<dir>` form),
-# its annotated sources, and the --headers-local flag, then run the generator.
-# Feature guards a module keeps its annotated class/overrides behind. codegen
-# can't see annotations under an #ifdef unless the macro is defined for its parse
-# (the generated output is committed and compiled under the real CMake define).
-# Space-separate multiple macros. Keep in sync with each tool's CMake define.
-YCLASS_DEFINES_ybrowser := YETTY_YBROWSER_HAS_STANDALONE YETTY_YGUI_HAS_UV
-YCLASS_DEFINES_yhello := YETTY_YHELLO_HAS_STANDALONE
-YCLASS_DEFINES_ygreeter := YETTY_YGREETER_HAS_STANDALONE YETTY_YGUI_HAS_UV
-
-# The codegen parse takes its include roots and defines from the build's
-# compile_commands.json (the same flags CMake computed at configure time), so
-# third-party headers — <webgpu/webgpu.h> from the Dawn fetch, <yyjson.h>,
-# <vterm.h> — resolve without a committed copy or hand-maintained path. Codegen
-# now FAILS on an unresolved header/type instead of silently substituting `int`,
-# so a configured build (compile_commands.json) is a prerequisite for `make
-# codegen`. YCLASS_INCLUDE_DIRS_<module> / YCLASS_DEFINES_<module> below are the
-# fallback used only for a source with no compile-database entry.
-
-# Role-split codegen. Every module runs the split generator
-# (src/yetty/yclass/gen/codegen.py): raw annotated source in
-# src/yetty/<module>/, generated object API in src/yetty/gen/api/<mod>/ (+
-# header under include/yetty/api/<mod>/), generated impl glue in
-# src/yetty/gen/impl/<module>/, remote slots resolved by canonical qualified
-# name, local-only factory, no constructor skel, no module-level rpc.gen.c.
-# The per-module YCLASS_SPLIT_<mod> := 1 markers below are the rollout residue
-# — all modules are migrated, so the markers are uniformly set; they still gate
-# split mode (YCLASS_SPLIT env) and pair with YCLASS_COMPAT_HEADER_<mod> for the
-# modules whose legacy-path headers still have un-flipped consumers.
-YCLASS_SPLIT_ydummy := 1
-YCLASS_SPLIT_ytermsink := 1
-YCLASS_SPLIT_yview := 1
-YCLASS_SPLIT_ynet := 1
-YCLASS_SPLIT_ymusic := 1
-YCLASS_SPLIT_ycircuit := 1
-YCLASS_SPLIT_yflame := 1
-YCLASS_SPLIT_ymap := 1
-YCLASS_SPLIT_ygit := 1
-YCLASS_SPLIT_ychrome := 1
-YCLASS_SPLIT_yjupyter := 1
-YCLASS_SPLIT_ynotebook := 1
-YCLASS_SPLIT_yapp := 1
-YCLASS_SPLIT_yetty := 1
-YCLASS_SPLIT_yguiapp := 1
-YCLASS_COMPAT_HEADER_yguiapp := 1
-YCLASS_SPLIT_yrich := 1
-YCLASS_COMPAT_HEADER_yrich := 1
-YCLASS_SPLIT_ygui := 1
-YCLASS_COMPAT_HEADER_ygui := 1
-YCLASS_SPLIT_yfigure := 1
-YCLASS_SPLIT_ygrid := 1
-YCLASS_SPLIT_yrdawn := 1
-YCLASS_SPLIT_yshadertoy := 1
-YCLASS_SPLIT_ymgui := 1
-YCLASS_SPLIT_yvterm := 1
-YCLASS_SPLIT_yterminal := 1
-YCLASS_SPLIT_yplatform := 1
-YCLASS_COMPAT_HEADER_yplatform := 1
-YCLASS_SPLIT_yhello := 1
-YCLASS_SPLIT_yzoo := 1
-YCLASS_SPLIT_ymaze := 1
-YCLASS_SPLIT_yjungle := 1
-YCLASS_SPLIT_ycompositor := 1
-YCLASS_SPLIT_yaudio := 1
-YCLASS_SPLIT_ycompositorygui := 1
-YCLASS_SPLIT_ybrowser := 1
-YCLASS_SPLIT_ygreeter := 1
-YCLASS_SPLIT_yai := 1
-YCLASS_SPLIT_api_yplot := 1
-YCLASS_SPLIT_demoygui := 1
-
-# Every module now runs the single role-split generator (codegen.py). The
-# per-module YCLASS_SPLIT_<mod> markers are all set and still gate split mode +
-# the compat-header emission; this list is simply every module.
-YCLASS_SPLIT_MODNAMES := $(YCLASS_MODNAMES)
-
-define codegen_one
-mod="$(1)"; spec="$$mod"; \
-for s in $(YCLASS_MODULES); do case "$$s" in "$$mod"=*) spec="$$s";; esac; done; \
-case "$$spec" in *=*) src_dir=$${spec#*=};; *) src_dir="src/yetty/$$mod";; esac; \
-sources=$$(grep -lrE '(clang::annotate|YETTY_ANNOTATE)\("(class|mixin)@'"$$mod"':' "$$src_dir" --include='*.c' --exclude='*.gen.c' | LC_ALL=C sort); \
-if [ -z "$$sources" ]; then echo "ERROR: no annotated sources under $$src_dir"; exit 1; fi; \
-local_headers=""; case " $(YCLASS_LOCAL_HEADERS) " in *" $$mod "*) local_headers="--headers-local";; esac; \
-generator="src/yetty/yclass/gen/codegen.py"; \
-echo "  codegen: $$mod ($${generator##*/})"; \
-YCLASS_DEFINES="$(YCLASS_DEFINES_$(1))" YCLASS_INCLUDE_DIRS="$(YCLASS_INCLUDE_DIRS_$(1))" YCLASS_SPLIT="$(YCLASS_SPLIT_$(1))" YCLASS_COMPAT_HEADER="$(YCLASS_COMPAT_HEADER_$(1))" PYTHONHASHSEED=0 uv run $$generator "$$mod" "$(CURDIR)/include/yetty" "$(CURDIR)/$$src_dir" $$local_headers $$sources
-endef
-
-# NB: the per-module _cg1-%/_cg2-% targets are deliberately NOT .PHONY — GNU
-# make skips pattern-rule (implicit) recipes for phony targets. They never
-# correspond to real files, so the pattern rule runs them every time anyway.
-.PHONY: codegen codegen-new _codegen_new_pass1 _codegen_new_pass2
-
-codegen: ## Run yclass codegen for ALL modules (every module is on the split generator)
-	@$(MAKE) --no-print-directory codegen-new
-
-codegen-new: ## Run yclass codegen for all modules (codegen.py, role-split layout)
-	@# Each module writes only its OWN files, so within a pass the modules run
-	@# in parallel. Two passes with a barrier between them: a header-destined
-	@# type (exposed arg, callback typedef, vtable struct) becomes visible to
-	@# consumers in OTHER modules only once pass 1 has written the owning header;
-	@# pass 2 re-parses with all headers present. codegen writes atomically, so
-	@# a consumer never reads a half-written header mid-pass. (A cross-module
-	@# type chain deeper than one level would need a 3rd pass.)
-	@$(MAKE) --no-print-directory -j$(CODEGEN_JOBS) _codegen_new_pass1
-	@$(MAKE) --no-print-directory -j$(CODEGEN_JOBS) _codegen_new_pass2
-
-_codegen_new_pass1: $(foreach m,$(YCLASS_SPLIT_MODNAMES),_cg1-$(m))
-	@echo "==> yclass codegen: pass 1 done ($(words $(YCLASS_SPLIT_MODNAMES)) modules)"
-_codegen_new_pass2: $(foreach m,$(YCLASS_SPLIT_MODNAMES),_cg2-$(m))
-	@echo "==> yclass codegen: pass 2 done"
-
-_cg1-%:
-	@$(call codegen_one,$*)
-_cg2-%:
-	@$(call codegen_one,$*)
+.PHONY: codegen
+codegen: ## Regenerate yclass outputs (incremental — only changed modules re-run)
+	@if [ ! -f "$(BUILD_DIR_DESKTOP_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-desktop-ytrace-release; fi
+	PATH="$(SYSTEM_PATH)" $(CMAKE) --build $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --target yclass-codegen
 
 .PHONY: ffi
 ffi: ## Generate FFI language bindings from the per-module model.yaml (run after codegen)

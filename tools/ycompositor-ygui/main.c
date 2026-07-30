@@ -47,7 +47,7 @@
 #include "yetty/gen/impl/yfigure/figure.h"
 #include "yetty/gen/impl/yfigure/container.h"
 #include <yetty/yfigure/registry.h>
-#include <yetty/ygrid/ygrid.h>
+#include <yetty/api/ygrid/grid.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
 #include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */

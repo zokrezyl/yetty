@@ -241,6 +241,16 @@ def _write_atomic(path, content: str):
         content = content.rstrip() + "\n"
         if path.suffix in (".c", ".h"):
             content = _clang_format(content, path)
+    # Content-identical writes are SKIPPED so the file's mtime moves only on
+    # a real change. The build graph leans on this: ninja/pass-2 staleness is
+    # judged by generated-header mtimes, so an unchanged tree is a no-op and
+    # a one-module edit doesn't cascade re-parses through every consumer.
+    try:
+        with open(path) as existing:
+            if existing.read() == content:
+                return
+    except OSError:
+        pass
     tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}")
     with open(tmp, "w") as handle:
         handle.write(content)
@@ -3620,10 +3630,9 @@ def main():
     include_module = include_base / module_include_subpath(module)
     module_src.mkdir(parents=True, exist_ok=True)
 
-    # Role-split layout (YCLASS_SPLIT=1, per-module via the Makefile): raw
-    # annotated source, generated object API and generated implementation
-    # glue live in three separate roots (the directory is the role
-    # boundary):
+    # Role-split layout — the ONLY layout. Raw annotated source, generated
+    # object API and generated implementation glue live in three separate
+    # roots (the directory is the role boundary):
     #   src/yetty/<module>/<stem>.c            hand-written source
     #   src/yetty/gen/api/<api>/<stem>.c       object-API stubs
     #   src/yetty/gen/impl/<module>/<stem>.c   impl glue (#included by the
@@ -3631,11 +3640,10 @@ def main():
     #   include/yetty/api/<api>/<stem>.h       the ONE public header
     # Remote slots resolve by canonical qualified name (no client-side slot
     # table), the factory is local-only, the constructor lifecycle slot gets
-    # no skel, and there is no module-level rpc.gen.c. This flag gates the
-    # MIGRATION of the layout, not whether API code is emitted — once every
-    # module is over, the flag and the legacy layout go away. Non-split
-    # modules produce byte-identical output to before.
-    split = os.environ.get("YCLASS_SPLIT", "") == "1"
+    # no skel, and there is no module-level rpc.gen.c. The pre-split legacy
+    # layout is retired; the `split` conditionals below are dead branches
+    # kept only until the next mechanical sweep deletes them.
+    split = True
 
     # Pre-touch placeholders so clang -fsyntax-only can resolve the
     # #includes the annotated sources pull in before the real generated
@@ -3727,13 +3735,14 @@ def main():
         emit_class_public_headers(model, module,
                                   gen_root / "impl" / module,
                                   module_src, headers_local)
-    # Compatibility headers for a split module with un-migrated dependents
-    # (YCLASS_COMPAT_HEADER=1): ALSO emit the legacy-content header at the
-    # legacy path include/yetty/<module>/<stem>.h. Cross-module subclasses
-    # still on codegen-old hardcode that path in their generated output
-    # (parent accessor, slot stubs, `_fn` override typedefs), and serving
-    # hosts take register()'s declaration from it. The compat header dies
-    # per-module once its last dependent migrates.
+    # Compatibility headers for a module with un-flipped dependents
+    # (YCLASS_COMPAT_HEADER=1, per-module in driver.py): ALSO emit the
+    # legacy-content header at the legacy path
+    # include/yetty/<module>/<stem>.h. Hand-written consumers that still
+    # include that path (and serving hosts that take register()'s
+    # declaration from it) keep compiling until they move to
+    # include/yetty/api/. The compat header dies per-module once its last
+    # dependent flips.
     if split and os.environ.get("YCLASS_COMPAT_HEADER", "") == "1":
         emit_class_public_headers(model, module, include_module, module_src,
                                   headers_local)

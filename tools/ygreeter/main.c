@@ -74,7 +74,7 @@
 #include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
-#include <yetty/ygrid/ygrid.h>
+#include <yetty/api/ygrid/grid.h>
 #include <yetty/api/yshadertoy/figure.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yplatform/platform.h>

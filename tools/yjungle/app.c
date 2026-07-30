@@ -30,7 +30,7 @@
 #include <yetty/api/yfigure/figure.h>
 #include <yetty/api/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/ygrid/ygrid.h>
+#include <yetty/api/ygrid/grid.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ysdf/types.gen.h>
