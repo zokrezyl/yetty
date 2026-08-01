@@ -146,6 +146,11 @@ add_subdirectory(yshadertoy)
 # and glyphs. First migration target for ygui's scene content.
 add_subdirectory(ygrid)
 
+# yscene — retained scene graph replacing ygrid (#691): `dom` (GPU-free
+# content tree, scene-internal) + `scene` (renderer figure kind). Built
+# alongside ygrid until parity; producers migrate one at a time.
+add_subdirectory(yscene)
+
 # ygit — read-only Git history/inspection component (yclass `repo` class over
 # libgit2). Reusable by the tools/ygit app and any future interactive pane.
 # Desktop-only: libgit2 prebuilts are published only for linux/macOS/Windows

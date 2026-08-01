@@ -347,5 +347,5 @@ local_types:
   yetty_ybrowser_app_ptr_result: tools/ybrowser/browser-ui.c
 local_typedefs:
   yetty_ylexbor_dom_visit_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ybrowser/ybrowser.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ybrowser/ybrowser.h
     text: "typedef int (*yetty_ylexbor_dom_visit_fn)(void *, int, int, const char *);"

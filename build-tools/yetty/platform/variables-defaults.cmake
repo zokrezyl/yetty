@@ -168,6 +168,7 @@ option(YETTY_ENABLE_TOOL_YCAT            "ycat tool"                         ON)
 option(YETTY_ENABLE_TOOL_YMCAT           "ymcat tool (raw file → terminal-side render)" ON)
 option(YETTY_ENABLE_TOOL_YNB_CAT         "ynb-cat tool (render a .ipynb notebook's MIME outputs)" ON)
 option(YETTY_ENABLE_TOOL_YLESS           "yless pager tool"                  ON)
+option(YETTY_ENABLE_TOOL_YSCENE_DEMO     "yscene-demo tool (retained-scene card producer)" ON)
 
 # FFI shared library (libyetty_ffi.so). OFF for the normal static build so the
 # fast non-PIC application archives stay uncompromised; turned ON only in the

@@ -5368,46 +5368,46 @@ local_typedefs:
     source_file: src/yetty/ygui/framework.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_ygui_key_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/framework-defs.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/framework-defs.h
     text: "typedef int (*yetty_ygui_key_cb)(struct yetty_yclass_object *, uint32_t, int, void *);"
   yetty_ygui_event_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/event.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/event.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_event_cb)(struct yetty_yclass_object *, const struct yetty_ygui_event *, void *);"
   yetty_ygui_click_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/mixins/clickable.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/mixins/clickable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_object *, void *);"
   yetty_ygui_drag_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/mixins/draggable.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/mixins/draggable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *, float, float, void *);"
   yetty_ygui_constructor_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_object *);"
   yetty_ygui_destructor_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_object *);"
   yetty_ygui_widget_on_press_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct yetty_yclass_object *, float, float, int);"
   yetty_ygui_widget_on_release_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_release_fn)(struct yetty_yclass_object *, float, float, int);"
   yetty_ygui_widget_on_motion_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(struct yetty_yclass_object *, float, float);"
   yetty_ygui_widget_emit_body_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
   yetty_ygui_widget_on_scroll_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_scroll_fn)(struct yetty_yclass_object *, float, float, float, float);"
   yetty_ygui_widget_paint_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
   yetty_ygui_widget_emit_container_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_container_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
   yetty_ygui_menu_item_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widgets/popup_menu.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widgets/popup_menu.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *, int, void *);"
   fn_t:
     source_file: src/yetty/ygui/widget.c
@@ -5422,7 +5422,7 @@ local_typedefs:
     source_file: src/yetty/ygui/widgets/tabbar.c
     text: "typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *, void *);"
   yetty_ygui_ynodes_link_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widgets/ynodes.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widgets/ynodes.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, struct yetty_yclass_object *, int, void *);"
 includes:
   src/yetty/ygui/framework.c:

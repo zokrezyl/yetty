@@ -35,6 +35,10 @@ if(YETTY_ENABLE_TOOL_YLESS)
     add_subdirectory(yless)
 endif()
 
+if(YETTY_ENABLE_TOOL_YSCENE_DEMO)
+    add_subdirectory(yscene-demo)
+endif()
+
 if(YETTY_ENABLE_TOOL_YECHO)
     add_subdirectory(yecho)
 endif()
