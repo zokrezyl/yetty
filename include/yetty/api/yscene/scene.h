@@ -18,10 +18,23 @@ extern "C" {
 
 struct yetty_context;
 struct yetty_ycore_rectangle;
+struct yetty_ydraw_composite_factory;
 struct yetty_ydraw_drawable_list_registry;
 struct yetty_yfigure_figure;
 struct yetty_yfigure_registry;
+struct yetty_yfont_font;
 struct yetty_yscene_scene;
+
+#ifndef YETTY_YCLASSGEN_TYPE_YETTY_YSCENE_FACTORY_ARGS
+#define YETTY_YCLASSGEN_TYPE_YETTY_YSCENE_FACTORY_ARGS
+/* Host inputs every wire-minted scene borrows. Lifetime: owned by the
+ * host (terminal), outliving every scene minted through the registry —
+ * the same contract as ygrid's factory args bundle. */
+struct yetty_yscene_factory_args {
+    struct yetty_ydraw_composite_factory *composite_factory;
+    struct yetty_yfont_font *default_font;
+};
+#endif
 
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
@@ -93,9 +106,17 @@ struct yetty_yclass_object_ptr_result yetty_yscene_scene_create(struct yetty_ycl
 struct yetty_yscene_scene_ptr_result yetty_yscene_create(struct yetty_ycore_rectangle rect,
                                                          const struct yetty_context *context);
 /* Register the "yscene" figure kind so containers can mint scenes from
- * wire CREATE_CHILD records. Call at terminal/host create time. */
+ * wire CREATE_CHILD records. `args` is BORROWED for the registry's
+ * lifetime (host-owned bundle); NULL registers a bare scene (no
+ * composites, no default font). Call at terminal/host create time. */
 struct yetty_ycore_void_result yetty_yscene_register_factory(
-    struct yetty_yfigure_registry *registry);
+    struct yetty_yfigure_registry *registry, const struct yetty_yscene_factory_args *args);
+/* Host-side default font (slot 0) for a hand-created scene. Borrowed. */
+struct yetty_ycore_void_result yetty_yscene_set_default_font(struct yetty_yclass_object *obj,
+                                                             struct yetty_yfont_font *font);
+/* Host-side complex renderer for a hand-created scene. Borrowed. */
+struct yetty_ycore_void_result yetty_yscene_set_composite_factory(
+    struct yetty_yclass_object *obj, struct yetty_ydraw_composite_factory *factory);
 /* The figure base of this scene (the container's handle on it). */
 struct yetty_yfigure_figure *yetty_yscene_as_figure(struct yetty_yscene_scene *scene);
 /* Rebuild the derived world state from the latest committed generation

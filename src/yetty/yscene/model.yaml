@@ -283,12 +283,48 @@ classes:
         type: uint32_t
         get: false
         set: false
+      - name: leaves_scratch
+        type: "struct yscene_leaf *"
+        get: false
+        set: false
+      - name: leaf_scratch_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: leaf_scratch_capacity
+        type: uint32_t
+        get: false
+        set: false
       - name: derived_generation
         type: uint64_t
         get: false
         set: false
       - name: derived_valid
         type: bool
+        get: false
+        set: false
+      - name: pending_poisoned
+        type: bool
+        get: false
+        set: false
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
+        get: false
+        set: false
+      - name: complexes
+        type: "struct yscene_complex_instance *"
+        get: false
+        set: false
+      - name: complex_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: complex_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: stream_next_ordinal
+        type: uint32_t
         get: false
         set: false
       - name: runtime
@@ -349,6 +385,78 @@ classes:
         set: false
       - name: binder_finalized
         type: bool
+        get: false
+        set: false
+      - name: fonts
+        type: "struct yetty_yfont_font *[63]"
+        get: false
+        set: false
+      - name: font_handles
+        type: "yetty_yfont_cache_handle[63]"
+        get: false
+        set: false
+      - name: font_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: font_generation
+        type: uint32_t
+        get: false
+        set: false
+      - name: last_emitted_font_generation
+        type: uint32_t
+        get: false
+        set: false
+      - name: font_cache
+        type: "struct yetty_yfont_cache *"
+        get: false
+        set: false
+      - name: msdf_generator
+        type: "struct yetty_ymsdf_generator *"
+        get: false
+        set: false
+      - name: shaders_dir
+        type: "char[512]"
+        get: false
+        set: false
+      - name: cache_dir
+        type: "char[512]"
+        get: false
+        set: false
+      - name: data_dir
+        type: "char[512]"
+        get: false
+        set: false
+      - name: wire_font_slot
+        type: "int32_t[64]"
+        get: false
+        set: false
+      - name: next_font_slot
+        type: uint32_t
+        get: false
+        set: false
+      - name: staging_scratch
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: staging_scratch_len
+        type: size_t
+        get: false
+        set: false
+      - name: staging_scratch_cap
+        type: size_t
+        get: false
+        set: false
+      - name: staged_records
+        type: "struct yscene_staged_record *"
+        get: false
+        set: false
+      - name: staged_record_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: staged_record_cap
+        type: uint32_t
         get: false
         set: false
       - name: grid_staging
@@ -483,13 +591,43 @@ exposed:
  * drawable registry and builds its GPU pipeline (shared ydraw-layer
  * machinery: binder + ygrid.wgsl + ysdf/effects libs). */"
   - source_file: src/yetty/yscene/scene.c
+    type_text: "struct yetty_yscene_factory_args {
+    struct yetty_ydraw_composite_factory * composite_factory;
+    struct yetty_yfont_font * default_font;
+};"
+    doc: "/* Host inputs every wire-minted scene borrows. Lifetime: owned by the
+ * host (terminal), outliving every scene minted through the registry —
+ * the same contract as ygrid's factory args bundle. */"
+  - source_file: src/yetty/yscene/scene.c
     name: yetty_yscene_register_factory
     return_type: struct yetty_ycore_void_result
     args:
       - name: registry
         type: "struct yetty_yfigure_registry *"
+      - name: args
+        type: "const struct yetty_yscene_factory_args *"
     doc: "/* Register the \"yscene\" figure kind so containers can mint scenes from
- * wire CREATE_CHILD records. Call at terminal/host create time. */"
+ * wire CREATE_CHILD records. `args` is BORROWED for the registry's
+ * lifetime (host-owned bundle); NULL registers a bare scene (no
+ * composites, no default font). Call at terminal/host create time. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_set_default_font
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: font
+        type: "struct yetty_yfont_font *"
+    doc: "/* Host-side default font (slot 0) for a hand-created scene. Borrowed. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_set_composite_factory
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: factory
+        type: "struct yetty_ydraw_composite_factory *"
+    doc: "/* Host-side complex renderer for a hand-created scene. Borrowed. */"
   - source_file: src/yetty/yscene/scene.c
     name: yetty_yscene_as_figure
     return_type: "struct yetty_yfigure_figure *"
@@ -795,6 +933,8 @@ local_types:
   yscene_leaf_kind: src/yetty/yscene/scene.c
   yscene_leaf: src/yetty/yscene/scene.c
   yetty_yscene_scene: src/yetty/yscene/scene.c
+  yscene_complex_instance: src/yetty/yscene/scene.c
+  yscene_staged_record: src/yetty/yscene/scene.c
   yscene_cell: src/yetty/yscene/scene.c
   yetty_yscene_scene_ptr_result: src/yetty/yscene/scene.c
   yscene_transform: src/yetty/yscene/scene.c
@@ -802,6 +942,7 @@ local_types:
   yscene_body_walk: src/yetty/yscene/scene.c
   scene_transform_argument: src/yetty/yscene/scene.c
   scene_dump_buffer: src/yetty/yscene/scene.c
+  yetty_yscene_factory_args: src/yetty/yscene/scene.c
 local_typedefs:
   __int128_t:
     source_file: src/yetty/yscene/scene.c

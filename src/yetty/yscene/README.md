@@ -72,9 +72,31 @@ Also done (post-review hardening + the ychromium unblockers):
   the master spans stay verbatim.
 - `yetty_yscene_render_plan()`: headless staging snapshot for tests.
 
-Next increments: complex leaves (composite/yimage staging at their z
-cut points, CMD_UPDATE routing, z-run interleave with per-run scissors,
-yrdawn in-page adapter), per-prim effective clip in a yscene shader
-fork, rotation/shear + anisotropic text in staging, incremental
-(dirty-subtree) derive, compact leaf records, producer migration (ygui),
-then ygrid retirement per the #691 parity list.
+Also done (second hardening round + complex leaves):
+- One registry binding through every path (constructor dom + runtime +
+  headless fallback + setter); rebind rejected once content exists.
+- Transactional envelopes: semantic pre-validation (self-nested groups
+  rejected before any mutation) + pending-poison on a partial apply —
+  commits refuse until a full reset (CMD_ZERO / reset_content).
+- Failure-atomic publish: derive builds into a scratch snapshot and
+  swaps only on success.
+- Font lifecycle: cache handles tracked per slot; reset/navigation
+  releases wire fonts and clears producer-id maps; slot-0 default font
+  arrives via the factory args bundle (terminal wires composite factory
+  + compositor font).
+- Complex (composite/image) leaves: instances minted at ingest (keyed
+  by their immutable span location, so same-body CMD_UPDATE targets
+  them), refreshed at staging, swept when their span leaves the
+  committed scene, drawn after the prim pass in paint-key order
+  (ygrid-parity interim — the z-run interleave that lets prims cover a
+  complex is the follow-up). CMD_UPDATE routes to live instances.
+- Gradient fills fold inherited opacity (linear + radial payload
+  colors), not just the style-header colors.
+
+Next increments: z-run interleave with per-run scissors, per-prim
+effective clip in a yscene shader fork, the content-addressed resource
+channel for heavy payloads (#691 "Heavy payloads"), exact render-plan /
+logical-dom serialization, rotation/shear + anisotropic text in staging,
+incremental (dirty-subtree) derive, compact leaf records, spatial
+hit-test, yrdawn in-page adapter, producer migration (ygui), then ygrid
+retirement per the #691 parity list.

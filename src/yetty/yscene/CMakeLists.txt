@@ -47,6 +47,7 @@ target_link_libraries(yetty_yscene PUBLIC
     yetty_yclass
     yetty_yfigure
     yetty_ydraw_core
+    yetty_ydraw_factory   # complex (composite) instances at paint cut points
     yetty_ysdf
     yetty_yrender
     yetty_yfont_core      # font cache: materialise wire-shipped fonts

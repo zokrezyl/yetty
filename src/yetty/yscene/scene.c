@@ -59,6 +59,7 @@
 #include <yetty/ydraw-core/drawable-list-registry.h>
 #include <yetty/ydraw-core/font-resource.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/font-cache.h>
 #include <yetty/yframework/yframework.h>
@@ -168,12 +169,46 @@ struct YETTY_ANNOTATE("class@yscene:scene") YETTY_ANNOTATE("parent@yfigure:figur
     float content_w;
     float content_h;
 
-    /* Derived flat paint-ordered leaves (valid for derived_generation). */
+    /* Derived flat paint-ordered leaves (valid for derived_generation).
+     * `leaves` is the PUBLISHED snapshot; derive builds into the
+     * scratch pair and swaps only on full success, so a failed publish
+     * leaves the previous snapshot intact (review M1). */
     struct yscene_leaf *leaves;
     uint32_t leaf_count;
     uint32_t leaf_capacity;
+    struct yscene_leaf *leaves_scratch;
+    uint32_t leaf_scratch_count;
+    uint32_t leaf_scratch_capacity;
     uint64_t derived_generation;
     bool derived_valid;
+
+    /* Wire-envelope transaction guard (review H2): a partial apply
+     * (semantic rejection or allocation failure mid-body) poisons the
+     * pending state — commits refuse until a full reset (CMD_ZERO /
+     * reset_content) rebuilds from scratch. */
+    bool pending_poisoned;
+
+    /* Complex (composite) leaves — own-pipeline draws at their paint
+     * position. Instances are minted when their record enters the dom
+     * (so same-envelope CMD_UPDATE can target them, ygrid semantics),
+     * keyed by their immutable span location, swept when staging no
+     * longer references that span. */
+    struct yetty_ydraw_composite_factory *composite_factory; /* borrowed */
+    struct yscene_complex_instance {
+        struct yetty_ydraw_composite *instance;
+        uint32_t batch_slot;
+        uint32_t record_offset;
+        uint32_t stream_ordinal; /* CMD_UPDATE address, per-body 1-based */
+        /* Paint key + world anchor, refreshed at staging. */
+        int32_t paint_z;
+        uint32_t paint_seq;
+        uint32_t record_index;
+        float translate_x, translate_y;
+        bool seen;
+    } *complexes;
+    uint32_t complex_count;
+    uint32_t complex_capacity;
+    uint32_t stream_next_ordinal;
 
     /*--- GPU state (absent in headless mode: binder == NULL) ---------*/
     struct yetty_yframework *runtime; /* borrowed — frame clock */
@@ -200,6 +235,9 @@ struct YETTY_ANNOTATE("class@yscene:scene") YETTY_ANNOTATE("parent@yfigure:figur
      * font_ids map through wire_font_slot to installed slots. The
      * dispatcher/children rebuild when font_generation moves. */
     struct yetty_yfont_font *fonts[YETTY_YRENDER_RS_MAX_CHILDREN - 1];
+    /* Cache handle per wire-installed slot (0 for slot 0 / uninstalled):
+     * released on reset so navigation cannot leak or resurrect fonts. */
+    yetty_yfont_cache_handle font_handles[YETTY_YRENDER_RS_MAX_CHILDREN - 1];
     uint32_t font_count;
     uint32_t font_generation;
     uint32_t last_emitted_font_generation;
@@ -278,18 +316,51 @@ static struct yetty_yscene_dom_ptr_result scene_dom(struct yetty_yscene_scene *s
     return YETTY_OK(yetty_yscene_dom_ptr, scene->dom);
 }
 
+/* THE one registry-binding path (review H1): binds scene AND dom
+ * together so validation, derive, and staging always step records with
+ * the same strides. `owns` transfers ownership to the scene. */
+static struct yetty_ycore_void_result scene_bind_registry(
+    struct yetty_yscene_scene *scene, struct yetty_ydraw_drawable_list_registry *registry,
+    bool owns)
+{
+    struct yetty_yscene_dom_ptr_result dom_res = scene_dom(scene);
+    if (YETTY_IS_ERR(dom_res)) {
+        if (owns) {
+            yetty_ydraw_drawable_list_registry_destroy(registry);
+        }
+        return YETTY_ERR(yetty_ycore_void, "yscene bind_registry: dom", dom_res);
+    }
+    struct yetty_ycore_void_result bind_res =
+        yetty_yscene_dom_set_registry(dom_res.value, registry);
+    if (YETTY_IS_ERR(bind_res)) {
+        if (owns) {
+            yetty_ydraw_drawable_list_registry_destroy(registry);
+        }
+        return YETTY_ERR(yetty_ycore_void, "yscene bind_registry: dom bind", bind_res);
+    }
+    if (scene->owns_registry && scene->registry && scene->registry != registry) {
+        yetty_ydraw_drawable_list_registry_destroy(scene->registry);
+    }
+    scene->registry = registry;
+    scene->owns_registry = owns;
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ydraw_drawable_list_registry_ptr_result scene_registry(
     struct yetty_yscene_scene *scene)
 {
     if (scene->registry) {
         return YETTY_OK(yetty_ydraw_drawable_list_registry_ptr, scene->registry);
     }
+    /* Headless fallback: ONE owned default, bound to scene + dom alike. */
     struct yetty_ydraw_drawable_list_registry_ptr_result created_res =
         yetty_ydraw_drawable_list_registry_create_default();
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list_registry_ptr, created_res,
                         "yscene: default registry create");
-    scene->registry = created_res.value;
-    scene->owns_registry = true;
+    struct yetty_ycore_void_result bind_res =
+        scene_bind_registry(scene, created_res.value, /*owns=*/true);
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list_registry_ptr, bind_res,
+                        "yscene: default registry bind");
     return YETTY_OK(yetty_ydraw_drawable_list_registry_ptr, scene->registry);
 }
 
@@ -365,9 +436,10 @@ static bool rect_contains(struct yetty_ycore_rectangle rect, float x, float y)
 }
 
 /* Defined with the wire-font machinery below; derive installs FONT
- * resources as it encounters them. */
+ * resources as it encounters them, resets drop them. */
 static struct yetty_ycore_void_result scene_install_wire_font(
     struct yetty_yscene_scene *scene, const struct yetty_ydraw_font_resource_view *view);
+static void scene_reset_wire_fonts(struct yetty_yscene_scene *scene);
 
 /*===========================================================================
  * Derive — tree in, flat paint-ordered world leaves out
@@ -376,17 +448,18 @@ static struct yetty_ycore_void_result scene_install_wire_font(
 static struct yetty_ycore_void_result scene_leaf_append(struct yetty_yscene_scene *scene,
                                                         const struct yscene_leaf *leaf)
 {
-    if (scene->leaf_count == scene->leaf_capacity) {
-        uint32_t new_capacity = scene->leaf_capacity ? scene->leaf_capacity * 2 : 64;
+    if (scene->leaf_scratch_count == scene->leaf_scratch_capacity) {
+        uint32_t new_capacity = scene->leaf_scratch_capacity ? scene->leaf_scratch_capacity * 2
+                                                             : 64;
         struct yscene_leaf *grown =
-            realloc(scene->leaves, (size_t)new_capacity * sizeof(struct yscene_leaf));
+            realloc(scene->leaves_scratch, (size_t)new_capacity * sizeof(struct yscene_leaf));
         if (!grown) {
             return YETTY_ERR(yetty_ycore_void, "yscene derive: leaf array alloc failed");
         }
-        scene->leaves = grown;
-        scene->leaf_capacity = new_capacity;
+        scene->leaves_scratch = grown;
+        scene->leaf_scratch_capacity = new_capacity;
     }
-    scene->leaves[scene->leaf_count++] = *leaf;
+    scene->leaves_scratch[scene->leaf_scratch_count++] = *leaf;
     return YETTY_OK_VOID();
 }
 
@@ -535,7 +608,9 @@ static struct yetty_ycore_void_result scene_derive(struct yetty_yscene_scene *sc
     struct yetty_ydraw_drawable_list_registry_ptr_result registry_res = scene_registry(scene);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, registry_res, "yscene derive: registry");
 
-    scene->leaf_count = 0;
+    /* Build the NEW snapshot in the scratch pair; the published one
+     * stays intact until the swap below (failure-atomic publish). */
+    scene->leaf_scratch_count = 0;
 
     /* Iterative DFS with an explicit stack (producer trees can be
      * arbitrarily deep). */
@@ -610,7 +685,18 @@ static struct yetty_ycore_void_result scene_derive(struct yetty_yscene_scene *sc
     free(stack);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, walk_result, "yscene derive: walk");
 
-    qsort(scene->leaves, scene->leaf_count, sizeof(struct yscene_leaf), scene_leaf_compare);
+    qsort(scene->leaves_scratch, scene->leaf_scratch_count, sizeof(struct yscene_leaf),
+          scene_leaf_compare);
+
+    /* Full success — publish by swapping the pairs. */
+    struct yscene_leaf *previous_leaves = scene->leaves;
+    uint32_t previous_capacity = scene->leaf_capacity;
+    scene->leaves = scene->leaves_scratch;
+    scene->leaf_count = scene->leaf_scratch_count;
+    scene->leaf_capacity = scene->leaf_scratch_capacity;
+    scene->leaves_scratch = previous_leaves;
+    scene->leaf_scratch_count = 0;
+    scene->leaf_scratch_capacity = previous_capacity;
 
     scene->derived_generation = dom->committed_generation;
     scene->derived_valid = true;
@@ -630,6 +716,11 @@ static struct yetty_ycore_void_result scene_derive(struct yetty_yscene_scene *sc
  * because this snapshot was derived from the post-retirement lists. */
 static struct yetty_ycore_uint64_result scene_commit_and_publish(struct yetty_yscene_scene *scene)
 {
+    if (scene->pending_poisoned) {
+        return YETTY_ERR(yetty_ycore_uint64,
+                         "yscene commit: pending state poisoned by a failed envelope — "
+                         "a full reset (CMD_ZERO / reset_content) is required");
+    }
     struct yetty_yscene_dom_ptr_result dom_res = scene_dom(scene);
     YETTY_RETURN_IF_ERR(yetty_ycore_uint64, dom_res, "yscene commit: dom");
     struct yetty_yscene_dom *dom = dom_res.value;
@@ -692,9 +783,22 @@ static struct yetty_ycore_void_result scene_apply_body(struct yscene_body_walk *
  * would resume against deleted targets), and over-deep nesting. After
  * this pass the applier cannot fail on input shape — only on
  * allocation. */
+static struct yetty_ycore_void_result scene_validate_body_chain(
+    struct yscene_body_walk *walk, const uint8_t *bytes, size_t bytes_len, uint32_t depth,
+    uint32_t *group_chain);
+
 static struct yetty_ycore_void_result scene_validate_body(struct yscene_body_walk *walk,
                                                           const uint8_t *bytes, size_t bytes_len,
                                                           uint32_t depth)
+{
+    uint32_t group_chain[YSCENE_ADAPTER_MAX_DEPTH + 1];
+    (void)depth;
+    return scene_validate_body_chain(walk, bytes, bytes_len, 0, group_chain);
+}
+
+static struct yetty_ycore_void_result scene_validate_body_chain(
+    struct yscene_body_walk *walk, const uint8_t *bytes, size_t bytes_len, uint32_t depth,
+    uint32_t *group_chain)
 {
     if (depth > YSCENE_ADAPTER_MAX_DEPTH) {
         return YETTY_ERR(yetty_ycore_void, "yscene adapter: CMD_GROUP nesting too deep");
@@ -711,9 +815,10 @@ static struct yetty_ycore_void_result scene_validate_body(struct yscene_body_wal
         uint32_t record_type = 0;
         memcpy(&record_type, bytes + cursor, sizeof(record_type));
         if (command.kind == YETTY_YDRAW_COMMAND_UPDATE) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yscene adapter: CMD_UPDATE unsupported until complex routing "
-                             "lands (rejected, not dropped)");
+            /* Routed at apply (complex-instance streaming); shape was
+             * already checked by command_parse above. */
+            cursor += parse_res.value;
+            continue;
         }
         if (record_type == YETTY_YDRAW_CMD_GROUP_REF) {
             return YETTY_ERR(yetty_ycore_void, "yscene adapter: CMD_GROUP_REF unsupported");
@@ -723,10 +828,22 @@ static struct yetty_ycore_void_result scene_validate_body(struct yscene_body_wal
                              "yscene adapter: CMD_ZERO inside a group body is not allowed");
         }
         if (record_type == YETTY_YDRAW_CMD_GROUP) {
+            uint32_t group_id;
             uint32_t payload_size;
+            memcpy(&group_id, bytes + cursor + 4, sizeof(group_id));
             memcpy(&payload_size, bytes + cursor + 8, sizeof(payload_size));
-            struct yetty_ycore_void_result nested_res =
-                scene_validate_body(walk, bytes + cursor + 12, payload_size, depth + 1);
+            /* Semantic guard (review H2): a group nested anywhere inside
+             * its own scope would fail declare() mid-apply — reject it
+             * BEFORE any mutation. */
+            for (uint32_t i = 0; i < depth; i++) {
+                if (group_chain[i] == group_id) {
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "yscene adapter: group nested inside itself");
+                }
+            }
+            group_chain[depth] = group_id;
+            struct yetty_ycore_void_result nested_res = scene_validate_body_chain(
+                walk, bytes + cursor + 12, payload_size, depth + 1, group_chain);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, nested_res, "yscene adapter: validate group");
         }
         cursor += parse_res.value;
@@ -735,6 +852,131 @@ static struct yetty_ycore_void_result scene_validate_body(struct yscene_body_wal
         return YETTY_ERR(yetty_ycore_void, "yscene adapter: body ends mid-record");
     }
     return YETTY_OK_VOID();
+}
+
+/* Find (or mint) the complex instance for the composite record at
+ * (batch_slot, record_offset). Minting happens at INGEST so a
+ * CMD_UPDATE later in the same body can already target it — ygrid's
+ * semantics. Returns NULL quietly when no factory is wired (headless). */
+static struct yetty_ycore_void_result scene_complex_mint(struct yetty_yscene_scene *scene,
+                                                         uint32_t batch_slot,
+                                                         uint32_t record_offset,
+                                                         const uint32_t *record,
+                                                         size_t record_len)
+{
+    if (!scene->composite_factory) {
+        return YETTY_OK_VOID();
+    }
+    for (uint32_t i = 0; i < scene->complex_count; i++) {
+        if (scene->complexes[i].batch_slot == batch_slot &&
+            scene->complexes[i].record_offset == record_offset) {
+            return YETTY_OK_VOID(); /* already minted for this span */
+        }
+    }
+    if (scene->complex_count == scene->complex_capacity) {
+        uint32_t new_capacity = scene->complex_capacity ? scene->complex_capacity * 2 : 8;
+        struct yscene_complex_instance *grown = realloc(
+            scene->complexes, (size_t)new_capacity * sizeof(struct yscene_complex_instance));
+        if (!grown) {
+            return YETTY_ERR(yetty_ycore_void, "yscene complex: instance array alloc failed");
+        }
+        scene->complexes = grown;
+        scene->complex_capacity = new_capacity;
+    }
+    struct yetty_ydraw_composite_ptr_result instance_res =
+        yetty_ydraw_composite_factory_create_instance(scene->composite_factory, record,
+                                                      record_len, /*rolling_row=*/0);
+    if (YETTY_IS_ERR(instance_res)) {
+        /* Per-record best-effort, like ygrid: an unknown/failed complex
+         * drops that record, not the frame. */
+        ydebug("yscene complex: create_instance failed for type=0x%08x: %s", record[0],
+               instance_res.error.msg);
+        yetty_ycore_error_destroy(instance_res.error);
+        return YETTY_OK_VOID();
+    }
+    struct yscene_complex_instance *slot = &scene->complexes[scene->complex_count++];
+    memset(slot, 0, sizeof(*slot));
+    slot->instance = instance_res.value;
+    slot->batch_slot = batch_slot;
+    slot->record_offset = record_offset;
+    slot->stream_ordinal = ++scene->stream_next_ordinal;
+    return YETTY_OK_VOID();
+}
+
+/* Mint complex instances for every composite record in `batch_slot`.
+ * Called right after a span enters the dom (append/replace/set). */
+static struct yetty_ycore_void_result scene_complex_scan_batch(struct yetty_yscene_scene *scene,
+                                                               uint32_t batch_slot)
+{
+    const struct yetty_yscene_dom_batch *batch = &scene->dom->batches[batch_slot];
+    for (uint32_t i = 0; i < batch->record_count; i++) {
+        uint32_t record_offset = batch->record_offsets[i];
+        uint32_t record_type;
+        memcpy(&record_type, batch->bytes + record_offset, sizeof(record_type));
+        if (!yetty_ydraw_is_composite(record_type)) {
+            continue;
+        }
+        size_t record_len = (i + 1 < batch->record_count ? batch->record_offsets[i + 1]
+                                                         : (uint32_t)batch->bytes_len) -
+                            record_offset;
+        struct yetty_ycore_void_result mint_res = scene_complex_mint(
+            scene, batch_slot, record_offset,
+            (const uint32_t *)(batch->bytes + record_offset), record_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, mint_res, "yscene complex: mint");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Route one CMD_UPDATE to the live instance registered under its
+ * per-body ordinal (most recent wins). Unroutable updates drop with
+ * trace — stale ids are normal in streaming producers. Payload shape:
+ * first u32 = target_field, rest = body (same contract as ygrid). */
+static void scene_complex_route_update(struct yetty_yscene_scene *scene,
+                                       const struct yetty_ydraw_command_update *update)
+{
+    if (update->size < sizeof(uint32_t)) {
+        return;
+    }
+    struct yscene_complex_instance *target = NULL;
+    for (uint32_t i = 0; i < scene->complex_count; i++) {
+        if (scene->complexes[i].stream_ordinal == update->id) {
+            target = &scene->complexes[i]; /* keep scanning: latest wins */
+        }
+    }
+    if (!target || !target->instance || !target->instance->ops ||
+        !target->instance->ops->update) {
+        ydebug("yscene: CMD_UPDATE id=%u has no live updatable target", update->id);
+        return;
+    }
+    uint32_t target_field;
+    memcpy(&target_field, update->data, sizeof(target_field));
+    struct yetty_ycore_void_result update_res =
+        target->instance->ops->update(target->instance, target_field,
+                                      update->data + sizeof(uint32_t),
+                                      update->size - sizeof(uint32_t));
+    if (YETTY_IS_ERR(update_res)) {
+        ydebug("yscene: CMD_UPDATE id=%u failed: %s", update->id, update_res.error.msg);
+        yetty_ycore_error_destroy(update_res.error);
+        return;
+    }
+    target->instance->dirty = 1;
+}
+
+/* Destroy instances whose source span is gone (sweep after staging
+ * marked the live ones). */
+static void scene_complex_sweep(struct yetty_yscene_scene *scene)
+{
+    uint32_t write = 0;
+    for (uint32_t i = 0; i < scene->complex_count; i++) {
+        if (!scene->complexes[i].seen) {
+            if (scene->complexes[i].instance) {
+                yetty_ydraw_composite_destroy(scene->complexes[i].instance);
+            }
+            continue;
+        }
+        scene->complexes[write++] = scene->complexes[i];
+    }
+    scene->complex_count = write;
 }
 
 /* Flush [run_start, run_end) as the next content run of `target_id`. */
@@ -747,13 +989,27 @@ static struct yetty_ycore_void_result scene_flush_run(struct yscene_body_walk *w
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result apply_res;
-    if (reopen && *run_index < reopen_batches) {
+    bool replaced = reopen && *run_index < reopen_batches;
+    if (replaced) {
         apply_res = yetty_yscene_dom_node_replace_batch(walk->dom, target_id, *run_index,
                                                         run_start, run_len);
     } else {
         apply_res = yetty_yscene_dom_node_append_batch(walk->dom, target_id, run_start, run_len);
     }
     YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "yscene adapter: content run");
+    /* Mint complex instances for any composite record in the span that
+     * just landed, so same-body CMD_UPDATEs can target them. */
+    {
+        struct yetty_ycore_uint32_result slot_res =
+            yetty_yscene_dom_lookup(walk->dom, target_id);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_res, "yscene adapter: run target");
+        const struct yetty_yscene_dom_node *node = &walk->dom->nodes[slot_res.value];
+        uint32_t batch_slot =
+            replaced ? node->batch_slots[*run_index] : node->batch_slots[node->batch_count - 1];
+        struct yetty_ycore_void_result mint_res =
+            scene_complex_scan_batch(walk->scene, batch_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, mint_res, "yscene adapter: complex mint");
+    }
     (*run_index)++;
     return YETTY_OK_VOID();
 }
@@ -822,14 +1078,14 @@ static struct yetty_ycore_void_result scene_apply_body(struct yscene_body_walk *
                 yetty_ycore_error_destroy(known_res.error);
             }
         } else if (command.kind == YETTY_YDRAW_COMMAND_UPDATE) {
-            /* The validator rejects these before apply; reaching here
-             * means a caller skipped validation. Fail loudly — a
-             * dropped update is silent data loss. */
-            return YETTY_ERR(yetty_ycore_void,
-                             "yscene adapter: CMD_UPDATE unsupported until complex routing");
+            scene_complex_route_update(walk->scene, &command.update);
         } else if (record_type == YETTY_YDRAW_CMD_ZERO) {
             struct yetty_ycore_void_result zero_res = yetty_yscene_dom_zero(walk->dom);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, zero_res, "yscene adapter: zero");
+            /* A full reset rebuilds from scratch: poison + wire fonts
+             * from the previous document are gone. */
+            walk->scene->pending_poisoned = false;
+            scene_reset_wire_fonts(walk->scene);
             /* Everything after CMD_ZERO lands in the fresh root scope —
              * mirror the ygrid contract. */
             cursor += parse_res.value;
@@ -889,13 +1145,19 @@ static struct yetty_ycore_void_result scene_apply_body(struct yscene_body_walk *
  * repaints.
  *=========================================================================*/
 
-/* Resolve scene + dom for a method body; shared preamble. */
+/* Resolve scene + dom for a method body; shared preamble. Ensures the
+ * ONE registry binding exists before any content can land — otherwise
+ * the dom would lazily mint its own default and the scene another
+ * (review H1), and a later bind would be rejected. */
 static struct yetty_yscene_scene_ptr_result scene_for_method(struct yetty_yclass_object *obj)
 {
     struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_yscene_scene_ptr, scene_res, "yscene method: object");
     struct yetty_yscene_dom_ptr_result dom_res = scene_dom(scene_res.value);
     YETTY_RETURN_IF_ERR(yetty_yscene_scene_ptr, dom_res, "yscene method: dom");
+    struct yetty_ydraw_drawable_list_registry_ptr_result registry_res =
+        scene_registry(scene_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yscene_scene_ptr, registry_res, "yscene method: registry");
     return scene_res;
 }
 
@@ -934,17 +1196,7 @@ static struct yetty_ycore_void_result scene_set_registry(
     struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene set_registry: object");
     struct yetty_yscene_scene *scene = scene_res.value;
-    struct yetty_yscene_dom_ptr_result dom_res = scene_dom(scene);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dom_res, "yscene set_registry: dom");
-    struct yetty_ycore_void_result bind_res =
-        yetty_yscene_dom_set_registry(dom_res.value, registry);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, bind_res, "yscene set_registry: dom bind");
-    if (scene->owns_registry && scene->registry && scene->registry != registry) {
-        yetty_ydraw_drawable_list_registry_destroy(scene->registry);
-    }
-    scene->registry = registry;
-    scene->owns_registry = false;
-    return YETTY_OK_VOID();
+    return scene_bind_registry(scene, registry, /*owns=*/false);
 }
 
 YETTY_ANNOTATE("virtual@yscene:scene:node_declare")
@@ -1148,6 +1400,8 @@ static struct yetty_ycore_void_result scene_zero(struct yetty_yclass_object *obj
     YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene zero");
     struct yetty_ycore_void_result apply_res = yetty_yscene_dom_zero(scene_res.value->dom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "yscene zero");
+    scene_res.value->pending_poisoned = false;
+    scene_reset_wire_fonts(scene_res.value);
     return yetty_yfigure_figure_dirty_set(obj, 1);
 }
 
@@ -1258,6 +1512,34 @@ static struct yetty_ycore_void_result scene_set_font(struct yetty_yscene_scene *
     return YETTY_OK_VOID();
 }
 
+/* Drop every wire-installed font: release cache references, clear the
+ * producer-id → slot map, keep only the host default in slot 0. Called
+ * on reset/navigation so page B's font_id 3 cannot silently reuse page
+ * A's font (review H3). */
+static void scene_reset_wire_fonts(struct yetty_yscene_scene *scene)
+{
+    bool changed = false;
+    for (uint32_t slot = 1; slot < scene->font_count; slot++) {
+        if (scene->fonts[slot]) {
+            if (scene->font_cache && scene->font_handles[slot]) {
+                yetty_yfont_cache_release_font(scene->font_cache, scene->font_handles[slot]);
+            }
+            scene->fonts[slot] = NULL;
+            scene->font_handles[slot] = 0;
+            changed = true;
+        }
+    }
+    scene->font_count = scene->fonts[0] ? 1 : 0;
+    scene->next_font_slot = 1;
+    for (size_t i = 0; i < sizeof(scene->wire_font_slot) / sizeof(scene->wire_font_slot[0]);
+         i++) {
+        scene->wire_font_slot[i] = -1;
+    }
+    if (changed) {
+        scene->font_generation++;
+    }
+}
+
 /* FONT_RESOURCE record → MSDF slot. Reference shapes (same contract as
  * the ygrid/terminal receivers): a non-hash name = pre-installed font
  * under <data>/msdf-fonts/; a 16-hex name = hash-ref to a previously
@@ -1350,6 +1632,7 @@ static struct yetty_ycore_void_result scene_install_wire_font(
         yetty_yfont_cache_release_font(scene->font_cache, ref_res.value.handle);
         return YETTY_ERR(yetty_ycore_void, "yscene wire font: set_font", set_res);
     }
+    scene->font_handles[slot] = ref_res.value.handle;
     scene->wire_font_slot[view->font_id] = (int32_t)slot;
     scene->next_font_slot = slot + 1;
     ydebug("yscene: installed wire font_id=%d -> slot=%u key=%s", view->font_id, slot, cache_key);
@@ -1759,6 +2042,9 @@ static struct yetty_ycore_void_result scene_rebuild_staging(struct yetty_yscene_
     scene_cells_clear(scene);
     scene->staging_scratch_len = 0;
     scene->staged_record_count = 0;
+    for (uint32_t i = 0; i < scene->complex_count; i++) {
+        scene->complexes[i].seen = false;
+    }
 
     /* Pass 1 — emit every stageable record into the scratch stream. */
     for (uint32_t i = 0; i < scene->leaf_count; i++) {
@@ -1773,8 +2059,28 @@ static struct yetty_ycore_void_result scene_rebuild_staging(struct yetty_yscene_
             YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "yscene staging: text leaf");
             continue;
         }
+        if (leaf->kind == YSCENE_LEAF_COMPLEX) {
+            /* Own-pipeline draw: mark the instance live and refresh its
+             * paint key + world anchor; drawn after the prim pass (the
+             * z-run interleave is the follow-up). */
+            for (uint32_t complex_index = 0; complex_index < scene->complex_count;
+                 complex_index++) {
+                struct yscene_complex_instance *entry = &scene->complexes[complex_index];
+                if (entry->batch_slot == leaf->batch_slot &&
+                    entry->record_offset == leaf->record_offset) {
+                    entry->seen = true;
+                    entry->paint_z = leaf->paint_z;
+                    entry->paint_seq = leaf->paint_seq;
+                    entry->record_index = leaf->record_index;
+                    entry->translate_x = leaf->translate_x;
+                    entry->translate_y = leaf->translate_y;
+                    break;
+                }
+            }
+            continue;
+        }
         if (leaf->kind != YSCENE_LEAF_PRIMITIVE) {
-            continue; /* COMPLEX — the next increment's cut points */
+            continue;
         }
         uint32_t record_words = leaf->record_size / sizeof(uint32_t);
         struct yetty_ycore_void_result stage_res = scene_stage_record(
@@ -1794,6 +2100,17 @@ static struct yetty_ycore_void_result scene_rebuild_staging(struct yetty_yscene_
         if (leaf->world_opacity < 1.0f && record_words > 3) {
             staged[2] = scene_fold_opacity(staged[2], leaf->world_opacity);
             staged[3] = scene_fold_opacity(staged[3], leaf->world_opacity);
+            /* Gradient prims carry their colors in type-specific payload
+             * words (record layout: style header then geometry). Fold
+             * those too or node opacity misses gradient fills. */
+            if (leaf->record_type == YETTY_YSDF_LINEAR_GRADIENT_BOX && record_words > 15) {
+                staged[14] = scene_fold_opacity(staged[14], leaf->world_opacity);
+                staged[15] = scene_fold_opacity(staged[15], leaf->world_opacity);
+            } else if (leaf->record_type == YETTY_YSDF_RADIAL_GRADIENT_BOX &&
+                       record_words > 14) {
+                staged[13] = scene_fold_opacity(staged[13], leaf->world_opacity);
+                staged[14] = scene_fold_opacity(staged[14], leaf->world_opacity);
+            }
         }
     }
 
@@ -1873,7 +2190,27 @@ static struct yetty_ycore_void_result scene_rebuild_staging(struct yetty_yscene_
     scene->grid_staging_words = grid_words_needed;
     scene->staging_generation = scene->derived_generation;
     scene->staging_valid = true;
+
+    /* Instances whose source span left the committed scene die here. */
+    scene_complex_sweep(scene);
     return YETTY_OK_VOID();
+}
+
+/* Paint-key order for the complex render pass. */
+static int scene_complex_compare(const void *first_ptr, const void *second_ptr)
+{
+    const struct yscene_complex_instance *first = first_ptr;
+    const struct yscene_complex_instance *second = second_ptr;
+    if (first->paint_z != second->paint_z) {
+        return first->paint_z < second->paint_z ? -1 : 1;
+    }
+    if (first->paint_seq != second->paint_seq) {
+        return first->paint_seq < second->paint_seq ? -1 : 1;
+    }
+    if (first->record_index != second->record_index) {
+        return first->record_index < second->record_index ? -1 : 1;
+    }
+    return 0;
 }
 
 /*===========================================================================
@@ -2030,6 +2367,44 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
     wgpuCommandBufferRelease(command_buffer);
     wgpuCommandEncoderRelease(encoder);
 
+    /* Complex pass — own-pipeline draws in paint-key order, AFTER the
+     * whole prim pass (ygrid-parity interim; the z-run interleave that
+     * lets prims cover a complex is the follow-up). Anchor math: the
+     * composite render op adds the record's node-LOCAL bounds scaled by
+     * content_scale, so the anchor carries rect origin + (node world
+     * translate − scroll) in screen units and content_scale carries the
+     * view scale. Publish the figure scissor as target->clip so the
+     * instance's own pass clips to this card. */
+    if (scene->complex_count > 0) {
+        qsort(scene->complexes, scene->complex_count, sizeof(struct yscene_complex_instance),
+              scene_complex_compare);
+        float view_scale = scene->view_scale > 0.0f ? scene->view_scale : 1.0f;
+        target->clip.x = scissor_min_x;
+        target->clip.y = scissor_min_y;
+        target->clip.w = scissor_max_x - scissor_min_x;
+        target->clip.h = scissor_max_y - scissor_min_y;
+        for (uint32_t i = 0; i < scene->complex_count; i++) {
+            struct yscene_complex_instance *entry = &scene->complexes[i];
+            if (!entry->instance || !entry->instance->render) {
+                continue;
+            }
+            float anchor_x =
+                rect.min.x + (entry->translate_x - scene->scroll_x) * view_scale;
+            float anchor_y =
+                rect.min.y + (entry->translate_y - scene->scroll_y) * view_scale;
+            entry->instance->content_scale = view_scale;
+            struct yetty_ycore_void_result render_res =
+                yetty_ydraw_composite_render(entry->instance, target, anchor_x, anchor_y);
+            if (YETTY_IS_ERR(render_res)) {
+                ydebug("yscene render: complex instance failed: %s", render_res.error.msg);
+                yetty_ycore_error_destroy(render_res.error);
+            }
+            entry->instance->dirty = 0;
+        }
+        target->clip.w = 0;
+        target->clip.h = 0;
+    }
+
     return yetty_yfigure_figure_dirty_set(obj, 0);
 }
 
@@ -2053,6 +2428,14 @@ static struct yetty_ycore_void_result scene_destroy_slot(struct yetty_yclass_obj
         free(scene->effects_lib_code.data);
         free(scene->layer_shader_code.data);
         free(scene->combined_shader);
+        for (uint32_t i = 0; i < scene->complex_count; i++) {
+            if (scene->complexes[i].instance) {
+                yetty_ydraw_composite_destroy(scene->complexes[i].instance);
+            }
+        }
+        free(scene->complexes);
+        scene->complexes = NULL;
+        scene->complex_count = 0;
         if (scene->font_cache) {
             /* After the binder (which referenced the font resource
              * sets). */
@@ -2077,6 +2460,8 @@ static struct yetty_ycore_void_result scene_destroy_slot(struct yetty_yclass_obj
         scene->dom = NULL;
         free(scene->leaves);
         scene->leaves = NULL;
+        free(scene->leaves_scratch);
+        scene->leaves_scratch = NULL;
         if (scene->owns_registry && scene->registry) {
             yetty_ydraw_drawable_list_registry_destroy(scene->registry);
             scene->registry = NULL;
@@ -2117,8 +2502,18 @@ static struct yetty_ycore_void_result scene_process_bytes_slot(struct yetty_ycla
     struct yetty_ycore_void_result validate_res =
         scene_validate_body(&walk, bytes, bytes_len, /*depth=*/0);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, validate_res, "yscene process_bytes: validate");
+    /* Stream-update ordinals restart per body (ygrid's envelope analog:
+     * a later body's mints overwrite the same ids, most-recent-wins). */
+    scene->stream_next_ordinal = 0;
     struct yetty_ycore_void_result body_res = scene_apply_body(&walk, 0, false, bytes, bytes_len);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "yscene process_bytes: body");
+    if (YETTY_IS_ERR(body_res)) {
+        /* Validation makes this allocation-only, but a partial apply is
+         * a partial apply: poison the pending state so no later commit
+         * can publish it. A full reset clears the poison. */
+        scene->pending_poisoned = true;
+        return YETTY_ERR(yetty_ycore_void, "yscene process_bytes: body (pending poisoned — "
+                                           "reset required)", body_res);
+    }
     /* One envelope = one produced frame — publish it. */
     struct yetty_ycore_uint64_result commit_res = scene_commit_and_publish(scene);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, commit_res, "yscene process_bytes: commit");
@@ -2132,6 +2527,8 @@ static struct yetty_ycore_void_result scene_reset_content_slot(struct yetty_ycla
     YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene reset_content");
     struct yetty_ycore_void_result zero_res = yetty_yscene_dom_zero(scene_res.value->dom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, zero_res, "yscene reset_content: zero");
+    scene_res.value->pending_poisoned = false;
+    scene_reset_wire_fonts(scene_res.value);
     struct yetty_ycore_uint64_result commit_res = scene_commit_and_publish(scene_res.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, commit_res, "yscene reset_content: commit");
     return yetty_yfigure_figure_dirty_set(obj, 1);
@@ -2331,8 +2728,16 @@ struct yetty_yscene_scene_ptr_result yetty_yscene_create(struct yetty_ycore_rect
         scene->queue = context->runtime->gpu.queue;
         scene->target_format = context->runtime->gpu.surface_format;
         scene->allocator = context->runtime->gpu.allocator;
-        scene->registry = context->runtime->drawable_registry;
-        scene->owns_registry = false;
+        struct yetty_ycore_void_result registry_bind_res = scene_bind_registry(
+            scene, context->runtime->drawable_registry, /*owns=*/false);
+        if (YETTY_IS_ERR(registry_bind_res)) {
+            struct yetty_ycore_void_result teardown_res = scene_destroy_slot(obj);
+            if (YETTY_IS_ERR(teardown_res)) {
+                yetty_ycore_error_destroy(teardown_res.error);
+            }
+            return YETTY_ERR(yetty_yscene_scene_ptr, "yscene create: registry bind",
+                             registry_bind_res);
+        }
         /* HiDPI: the view scale, never baked into wire coordinates. */
         float content_scale = context->runtime->gpu.app_gpu_context.content_scale;
         if (content_scale > 0.0f) {
@@ -2377,29 +2782,76 @@ struct yetty_yscene_scene_ptr_result yetty_yscene_create(struct yetty_ycore_rect
     return YETTY_OK(yetty_yscene_scene_ptr, scene);
 }
 
+/* Host inputs every wire-minted scene borrows. Lifetime: owned by the
+ * host (terminal), outliving every scene minted through the registry —
+ * the same contract as ygrid's factory args bundle. */
+struct YETTY_ANNOTATE("expose") yetty_yscene_factory_args {
+    /* Complex renderer (yplot / yimage / yvideo / …). NULL → composite
+     * records drop with trace. */
+    struct yetty_ydraw_composite_factory *composite_factory;
+    /* Slot-0 font for TEXT spans with the default/negative font id.
+     * NULL → such spans drop until a wire font arrives. */
+    struct yetty_yfont_font *default_font;
+};
+
 /* Wire factory: mint a scene for a CREATE_CHILD of kind "yscene". The
  * envelope body (typed structure via the adapter) flows in afterwards
  * through process_bytes. */
 static struct yetty_yfigure_figure_ptr_result scene_wire_factory(
     struct yetty_ycore_rectangle rect, const struct yetty_context *context, void *user)
 {
-    (void)user;
+    const struct yetty_yscene_factory_args *args = user;
     struct yetty_yscene_scene_ptr_result scene_res = yetty_yscene_create(rect, context);
     YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, scene_res, "yscene factory: create");
-    struct yetty_yclass_object_ptr_result object_res = yetty_yscene_scene_to(scene_res.value);
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (args) {
+        scene->composite_factory = args->composite_factory;
+        if (args->default_font) {
+            struct yetty_ycore_void_result font_res =
+                scene_set_font(scene, 0, args->default_font);
+            if (YETTY_IS_ERR(font_res)) {
+                ydebug("yscene factory: default font install failed: %s", font_res.error.msg);
+                yetty_ycore_error_destroy(font_res.error);
+            }
+        }
+    }
+    struct yetty_yclass_object_ptr_result object_res = yetty_yscene_scene_to(scene);
     YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, object_res, "yscene factory: object");
     return YETTY_OK(yetty_yfigure_figure_ptr,
                     (struct yetty_yfigure_figure *)(object_res.value + 1));
 }
 
 /* Register the "yscene" figure kind so containers can mint scenes from
- * wire CREATE_CHILD records. Call at terminal/host create time. */
+ * wire CREATE_CHILD records. `args` is BORROWED for the registry's
+ * lifetime (host-owned bundle); NULL registers a bare scene (no
+ * composites, no default font). Call at terminal/host create time. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yscene_register_factory(
-    struct yetty_yfigure_registry *registry)
+    struct yetty_yfigure_registry *registry, const struct yetty_yscene_factory_args *args)
 {
     return yetty_yfigure_registry_register(registry, yetty_yfigure_kind_token("yscene"),
-                                           scene_wire_factory, NULL);
+                                           scene_wire_factory, (void *)args);
+}
+
+/* Host-side default font (slot 0) for a hand-created scene. Borrowed. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yscene_set_default_font(struct yetty_yclass_object *obj,
+                                                             struct yetty_yfont_font *font)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene set_default_font: object");
+    return scene_set_font(scene_res.value, 0, font);
+}
+
+/* Host-side complex renderer for a hand-created scene. Borrowed. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yscene_set_composite_factory(
+    struct yetty_yclass_object *obj, struct yetty_ydraw_composite_factory *factory)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene set_composite_factory: object");
+    scene_res.value->composite_factory = factory;
+    return YETTY_OK_VOID();
 }
 
 /* The figure base of this scene (the container's handle on it). */

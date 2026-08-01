@@ -527,7 +527,9 @@ static void test_structural_rejections(void)
 {
     struct yetty_yclass_object *obj = make_scene();
 
-    /* CMD_UPDATE is rejected, not silently dropped. */
+    /* CMD_UPDATE is ROUTED to complex instances now; an unroutable id
+     * (stale target — normal in streaming producers) drops with trace
+     * while the rest of the envelope lands. */
     struct yetty_ydraw_drawable_list *with_update = make_list();
     add_box(with_update, 0, 0, 4, 4);
     {
@@ -541,11 +543,11 @@ static void test_structural_rejections(void)
     struct yetty_ycore_void_result feed_res = yetty_yfigure_process_bytes(
         obj, (const uint8_t *)yetty_ydraw_drawable_list_data(with_update),
         yetty_ydraw_drawable_list_size(with_update));
-    CHECK("CMD_UPDATE rejected", YETTY_IS_ERR(feed_res));
+    CHECK("envelope with unroutable CMD_UPDATE lands", YETTY_IS_OK(feed_res));
     if (YETTY_IS_ERR(feed_res)) {
         yetty_ycore_error_destroy(feed_res.error);
     }
-    CHECK("rejected envelope left nothing", leaf_count(obj) == 0);
+    CHECK("box record published", leaf_count(obj) == 1);
 
     /* Nested CMD_ZERO is rejected. */
     struct yetty_ydraw_drawable_list *nested_zero = make_list();
@@ -569,8 +571,43 @@ static void test_structural_rejections(void)
         yetty_ycore_error_destroy(feed_res.error);
     }
 
+    /* The review-H2 counterexample: a group nested inside itself must
+     * be rejected BEFORE any mutation. */
+    struct yetty_ydraw_drawable_list *self_nested = make_list();
+    add_box(self_nested, 0, 0, 4, 4);
+    {
+        struct yetty_ydraw_id_result outer_res =
+            yetty_ydraw_drawable_list_begin_group(self_nested, 1);
+        if (YETTY_IS_ERR(outer_res)) {
+            exit(2);
+        }
+        struct yetty_ydraw_id_result inner_res =
+            yetty_ydraw_drawable_list_begin_group(self_nested, 1);
+        if (YETTY_IS_ERR(inner_res)) {
+            exit(2);
+        }
+        yetty_ydraw_drawable_list_end_group(self_nested, inner_res.value);
+        yetty_ydraw_drawable_list_end_group(self_nested, outer_res.value);
+    }
+    feed_res = yetty_yfigure_process_bytes(
+        obj, (const uint8_t *)yetty_ydraw_drawable_list_data(self_nested),
+        yetty_ydraw_drawable_list_size(self_nested));
+    CHECK("self-nested group rejected pre-apply", YETTY_IS_ERR(feed_res));
+    if (YETTY_IS_ERR(feed_res)) {
+        yetty_ycore_error_destroy(feed_res.error);
+    }
+    CHECK("no prefix state from semantic reject", leaf_count(obj) == 1);
+    /* Nothing was applied, so the scene is NOT poisoned: the next clean
+     * envelope commits normally. */
+    struct yetty_ydraw_drawable_list *after = make_list();
+    add_box(after, 10, 10, 4, 4);
+    feed(obj, after);
+    CHECK("clean envelope after semantic reject", leaf_count(obj) == 2);
+
     yetty_ydraw_drawable_list_destroy(with_update);
     yetty_ydraw_drawable_list_destroy(nested_zero);
+    yetty_ydraw_drawable_list_destroy(self_nested);
+    yetty_ydraw_drawable_list_destroy(after);
     struct yetty_ycore_void_result destroy_res = yetty_yfigure_destroy(obj);
     if (YETTY_IS_ERR(destroy_res)) {
         yetty_ycore_error_destroy(destroy_res.error);

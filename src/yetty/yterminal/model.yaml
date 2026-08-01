@@ -185,6 +185,10 @@ classes:
         type: struct yetty_ygrid_factory_args
         get: false
         set: false
+      - name: yscene_factory_args
+        type: struct yetty_yscene_factory_args
+        get: false
+        set: false
       - name: sel_active
         type: int
         get: false
@@ -312,6 +316,13 @@ types:
         type: "struct yetty_ydraw_composite_factory *"
       - name: absolute_coords
         type: int
+  - name: yetty_yscene_factory_args
+    kind: struct
+    fields:
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
+      - name: default_font
+        type: "struct yetty_yfont_font *"
   - name: yetty_yterminal_terminal_context
     kind: struct
     fields:
