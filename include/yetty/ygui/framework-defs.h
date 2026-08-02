@@ -160,8 +160,12 @@ struct yetty_ygui_emit_ctx {
      * Content is document-space: the receiver keeps the whole document and
      * scrolls it on the GPU, so body-emitting widgets subtract figure_origin
      * (the boundary widget's unclipped rect.min) instead of emitting absolute
-     * coords, and skip viewport culling. */
+     * coords, and skip viewport culling. figure_content_reset is raised when
+     * THIS body starts the receiver from scratch (leading CMD_ZERO, or the
+     * figure was created/re-created this tick) — incremental emitters must
+     * drop their diff state and ship everything. */
     int figure_retained;
+    int figure_content_reset;
     float figure_origin_x;
     float figure_origin_y;
 };

@@ -38,6 +38,17 @@ struct yetty_ygui_ydraw_embed_ptr_result yetty_ygui_ydraw_embed_from(
 
 #define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
 
+/* Per-chunk diff state for the retained progressive path: the source-byte
+ * hash the chunk last shipped with, and every group id that ship carried
+ * (the chunk's own group + any nested content groups), so an unchanged —
+ * and therefore unwalked — chunk can still vouch for its ids in the
+ * stale-group delete diff. */
+struct embed_chunk_state {
+    uint64_t content_hash;
+    uint32_t *group_ids;
+    uint32_t group_id_count;
+};
+
 struct YETTY_ANNOTATE("class@ygui:ydraw_embed") YETTY_ANNOTATE("parent@ygui:primitive_widget")
     yetty_ygui_ydraw_embed {
     struct yetty_ydraw_drawable_list *buf;
@@ -49,7 +60,22 @@ struct YETTY_ANNOTATE("class@ygui:ydraw_embed") YETTY_ANNOTATE("parent@ygui:prim
     uint32_t *retained_group_ids;
     uint32_t retained_group_count;
     uint32_t retained_group_cap;
+    /* Progressive ship state: one entry per stable content chunk. */
+    struct embed_chunk_state *chunk_states;
+    uint32_t chunk_state_count;
+    uint32_t chunk_state_cap;
 };
+
+static void embed_chunk_states_free(struct yetty_ygui_ydraw_embed *d)
+{
+    for (uint32_t i = 0; i < d->chunk_state_count; i++) {
+        free(d->chunk_states[i].group_ids);
+    }
+    free(d->chunk_states);
+    d->chunk_states = NULL;
+    d->chunk_state_count = 0;
+    d->chunk_state_cap = 0;
+}
 
 /* Group ids collected while walking one retained emission. */
 struct embed_group_log {
@@ -89,6 +115,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     d->retained_group_ids = NULL;
     d->retained_group_count = 0;
     d->retained_group_cap = 0;
+    d->chunk_states = NULL;
+    d->chunk_state_count = 0;
+    d->chunk_state_cap = 0;
     return YETTY_OK_VOID();
 }
 
@@ -107,6 +136,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
     d->retained_group_ids = NULL;
     d->retained_group_count = 0;
     d->retained_group_cap = 0;
+    embed_chunk_states_free(d);
     return yetty_ygui_super_void(obj, yetty_ygui_ydraw_embed_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
@@ -173,6 +203,58 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
         fprim[2] += dx;
         fprim[3] += dy;
     }
+}
+
+/* Size of one TOP-LEVEL record (leaf prim or addressable cmd) at `p`, or 0
+ * on a malformed/truncated stream. Mirrors the cmd matching in
+ * embed_emit_range — the 0x8XXXXXXX cmd type words must be matched by exact
+ * constant BEFORE the generic prim_size path. */
+static size_t embed_record_size(const uint8_t *p, size_t remaining)
+{
+    if (remaining < sizeof(uint32_t)) {
+        return 0;
+    }
+    uint32_t type = ((const uint32_t *)p)[0];
+    if (type == YETTY_YDRAW_CMD_ZERO || type == YETTY_YDRAW_CMD_GROUP_REF) {
+        if (remaining < 2 * sizeof(uint32_t)) {
+            return 0;
+        }
+        size_t s = 2 * sizeof(uint32_t);
+        if (type == YETTY_YDRAW_CMD_ZERO) {
+            s += ((const uint32_t *)p)[1];
+        }
+        return s <= remaining ? s : 0;
+    }
+    if (type == YETTY_YDRAW_CMD_GROUP || type == YETTY_YDRAW_CMD_UPDATE ||
+        type == YETTY_YDRAW_CMD_DELETE) {
+        if (remaining < 3 * sizeof(uint32_t)) {
+            return 0;
+        }
+        size_t s = 3 * sizeof(uint32_t);
+        if (type != YETTY_YDRAW_CMD_DELETE) {
+            s += ((const uint32_t *)p)[2];
+        }
+        return s <= remaining ? s : 0;
+    }
+    return prim_size((const uint32_t *)p, remaining);
+}
+
+/* FNV-1a over a chunk's SOURCE bytes, seeded with the translation offset —
+ * the emitted bytes depend on (dx, dy), so a widget move must miss. */
+static uint64_t embed_chunk_hash(const uint8_t *bytes, size_t len, float dx, float dy)
+{
+    uint64_t hash = 1469598103934665603ull;
+    uint32_t seed[2];
+    memcpy(&seed[0], &dx, sizeof(float));
+    memcpy(&seed[1], &dy, sizeof(float));
+    const uint8_t *seed_bytes = (const uint8_t *)seed;
+    for (size_t i = 0; i < sizeof(seed); i++) {
+        hash = (hash ^ seed_bytes[i]) * 1099511628211ull;
+    }
+    for (size_t i = 0; i < len; i++) {
+        hash = (hash ^ bytes[i]) * 1099511628211ull;
+    }
+    return hash;
 }
 
 /* Vertical viewport cull for the emit walk. When an embed lives inside a
@@ -409,6 +491,183 @@ static struct yetty_ycore_void_result embed_emit_range(struct yetty_ydraw_drawab
     return YETTY_OK_VOID();
 }
 
+/* Progressive retained emission: split the buffer into stable ~16 KiB
+ * chunks of whole top-level records, each shipped as its own group with a
+ * position-stable id in a reserved band. Re-emission replaces a chunk's
+ * content in place at its original paint depth (yscene's group-update
+ * semantics), so a body carries ONLY the chunks whose bytes changed — an
+ * in-place page update ships O(changed), not O(page). Identity is by
+ * position, so an insertion shifts (and re-ships) every later chunk,
+ * while in-place mutations — JS text updates, image pixel arrivals —
+ * ship one chunk. Unchanged chunks are not walked at all; their group
+ * ids are carried forward from the cached state so the stale-group
+ * delete diff cannot mistake them for removed content. */
+#define EMBED_CHUNK_BUDGET (16u * 1024u)
+#define EMBED_CHUNK_INDEX_MAX 0x3FFu
+
+static struct yetty_ycore_void_result embed_emit_retained(
+    struct yetty_ygui_ydraw_embed *d, struct yetty_ygui_emit_ctx *ctx, uint32_t widget_id,
+    const uint8_t *src, size_t src_size, float dx, float dy, uint8_t *stack, size_t stack_sz,
+    uint8_t **heap, size_t *heap_cap, struct embed_cull *cull, uint32_t *changed_out,
+    uint32_t *total_out)
+{
+    /* A body that starts the receiver from scratch (CMD_ZERO / fresh
+     * figure) invalidates every cached chunk — ship everything. */
+    if (ctx->figure_content_reset) {
+        embed_chunk_states_free(d);
+        free(d->retained_group_ids);
+        d->retained_group_ids = NULL;
+        d->retained_group_count = 0;
+        d->retained_group_cap = 0;
+    }
+
+    /* Pass 1 — chunk boundaries over whole top-level records. */
+    struct embed_chunk_range {
+        size_t offset;
+        size_t length;
+    };
+    struct embed_chunk_range *ranges = NULL;
+    uint32_t range_count = 0;
+    uint32_t range_cap = 0;
+    size_t cursor = 0;
+    while (cursor < src_size) {
+        size_t chunk_start = cursor;
+        size_t chunk_len = 0;
+        while (cursor < src_size &&
+               (chunk_len < EMBED_CHUNK_BUDGET || range_count == EMBED_CHUNK_INDEX_MAX)) {
+            size_t record_size = embed_record_size(src + cursor, src_size - cursor);
+            if (record_size == 0) {
+                free(ranges);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "ydraw_embed retained: malformed record stream");
+            }
+            cursor += record_size;
+            chunk_len += record_size;
+        }
+        if (range_count == range_cap) {
+            uint32_t new_cap = range_cap ? range_cap * 2 : 16;
+            struct embed_chunk_range *grown =
+                realloc(ranges, (size_t)new_cap * sizeof(struct embed_chunk_range));
+            if (!grown) {
+                free(ranges);
+                return YETTY_ERR(yetty_ycore_void, "ydraw_embed retained: range alloc");
+            }
+            ranges = grown;
+            range_cap = new_cap;
+        }
+        ranges[range_count].offset = chunk_start;
+        ranges[range_count].length = chunk_len;
+        range_count++;
+    }
+
+    /* Pass 2 — per chunk: unchanged carries its cached ids forward,
+     * changed re-ships as a reopened group. New states build in scratch;
+     * commit only on full success (a failed walk ships nothing, so the
+     * previous state still matches the receiver). */
+    struct embed_chunk_state *scratch =
+        range_count ? calloc(range_count, sizeof(struct embed_chunk_state)) : NULL;
+    if (range_count && !scratch) {
+        free(ranges);
+        return YETTY_ERR(yetty_ycore_void, "ydraw_embed retained: state alloc");
+    }
+    struct embed_group_log group_log = {0};
+    struct yetty_ycore_void_result walk = YETTY_OK_VOID();
+    uint32_t changed = 0;
+    for (uint32_t i = 0; i < range_count && YETTY_IS_OK(walk); i++) {
+        uint64_t content_hash = embed_chunk_hash(src + ranges[i].offset, ranges[i].length, dx, dy);
+        scratch[i].content_hash = content_hash;
+        if (i < d->chunk_state_count && d->chunk_states[i].content_hash == content_hash) {
+            /* Unchanged — receiver already holds it; vouch for its ids. */
+            const struct embed_chunk_state *cached = &d->chunk_states[i];
+            for (uint32_t j = 0; j < cached->group_id_count && YETTY_IS_OK(walk); j++) {
+                walk = embed_group_log_add(&group_log, cached->group_ids[j]);
+            }
+            if (YETTY_IS_OK(walk) && cached->group_id_count) {
+                scratch[i].group_ids =
+                    malloc((size_t)cached->group_id_count * sizeof(uint32_t));
+                if (!scratch[i].group_ids) {
+                    walk = YETTY_ERR(yetty_ycore_void, "ydraw_embed retained: id copy alloc");
+                } else {
+                    memcpy(scratch[i].group_ids, cached->group_ids,
+                           (size_t)cached->group_id_count * sizeof(uint32_t));
+                    scratch[i].group_id_count = cached->group_id_count;
+                }
+            }
+            continue;
+        }
+        changed++;
+        uint32_t chunk_id = 0xFFE00000u | ((widget_id & 0x3FFu) << 10) | i;
+        uint32_t log_start = group_log.count;
+        walk = embed_group_log_add(&group_log, chunk_id);
+        struct yetty_ydraw_id_result marker = {0};
+        if (YETTY_IS_OK(walk)) {
+            marker = yetty_ydraw_drawable_list_begin_group(ctx->ygrid_drawable_list, chunk_id);
+            if (YETTY_IS_ERR(marker)) {
+                walk = YETTY_ERR(yetty_ycore_void, "ydraw_embed retained: chunk begin", marker);
+            }
+        }
+        if (YETTY_IS_OK(walk)) {
+            walk = embed_emit_range(ctx->ygrid_drawable_list, src + ranges[i].offset,
+                                    ranges[i].length, dx, dy, stack, stack_sz, heap, heap_cap,
+                                    cull, &group_log);
+        }
+        if (YETTY_IS_OK(walk)) {
+            walk = yetty_ydraw_drawable_list_end_group(ctx->ygrid_drawable_list, marker.value);
+        }
+        if (YETTY_IS_OK(walk)) {
+            uint32_t id_count = group_log.count - log_start;
+            scratch[i].group_ids = malloc((size_t)id_count * sizeof(uint32_t));
+            if (!scratch[i].group_ids) {
+                walk = YETTY_ERR(yetty_ycore_void, "ydraw_embed retained: id slice alloc");
+            } else {
+                memcpy(scratch[i].group_ids, group_log.ids + log_start,
+                       (size_t)id_count * sizeof(uint32_t));
+                scratch[i].group_id_count = id_count;
+            }
+        }
+    }
+    free(ranges);
+
+    /* Stale groups: ids the receiver holds from the previous body that no
+     * current chunk vouches for (removed content groups, trailing chunks
+     * of a page that shrank) — delete them. */
+    if (YETTY_IS_OK(walk)) {
+        for (uint32_t i = 0; i < d->retained_group_count && YETTY_IS_OK(walk); i++) {
+            uint32_t prev_id = d->retained_group_ids[i];
+            int still_present = 0;
+            for (uint32_t j = 0; j < group_log.count; j++) {
+                if (group_log.ids[j] == prev_id) {
+                    still_present = 1;
+                    break;
+                }
+            }
+            if (!still_present) {
+                walk = yetty_ydraw_drawable_list_add_cmd_delete(ctx->ygrid_drawable_list, prev_id);
+            }
+        }
+    }
+
+    if (YETTY_IS_ERR(walk)) {
+        for (uint32_t i = 0; i < range_count; i++) {
+            free(scratch[i].group_ids);
+        }
+        free(scratch);
+        free(group_log.ids);
+        return walk;
+    }
+    embed_chunk_states_free(d);
+    d->chunk_states = scratch;
+    d->chunk_state_count = range_count;
+    d->chunk_state_cap = range_count;
+    free(d->retained_group_ids);
+    d->retained_group_ids = group_log.ids;
+    d->retained_group_count = group_log.count;
+    d->retained_group_cap = group_log.cap;
+    *changed_out = changed;
+    *total_out = range_count;
+    return YETTY_OK_VOID();
+}
+
 YETTY_ANNOTATE("override@ygui:ydraw_embed:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
@@ -462,64 +721,26 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     uint8_t stack[4096];
     uint8_t *heap = NULL;
     size_t heap_cap = 0;
+    uint32_t chunks_changed = 0;
+    uint32_t chunks_total = 0;
     struct yetty_ycore_void_result walk;
     if (ctx->figure_retained) {
-        /* Retained body: bracket the whole emission in ONE stable group so
-         * re-emission REPLACES this embed's content in place (same paint
-         * depth — the retained receiver's flicker-free contract) instead of
-         * appending to the root scope forever. The wrapper id lives in a
-         * reserved high band so it can never collide with content group ids
-         * (producer gids count up from 1). */
         struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "ydraw_embed paint: widget id");
-        uint32_t wrapper_id = 0xFFF00000u | (id_res.value & 0x000FFFFFu);
-        struct embed_group_log group_log = {0};
-        struct yetty_ydraw_id_result marker =
-            yetty_ydraw_drawable_list_begin_group(ctx->ygrid_drawable_list, wrapper_id);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, marker, "ydraw_embed paint: wrapper begin");
-        walk = embed_emit_range(ctx->ygrid_drawable_list, src, src_size, dx, dy, stack,
-                                sizeof(stack), &heap, &heap_cap, &cull, &group_log);
-        if (YETTY_IS_OK(walk)) {
-            walk = yetty_ydraw_drawable_list_end_group(ctx->ygrid_drawable_list, marker.value);
-        }
-        /* Stale groups: ids shipped last body but absent from this one
-         * would persist on the retained receiver — delete them (top
-         * level, after the wrapper, so run structure is unaffected). */
-        if (YETTY_IS_OK(walk)) {
-            for (uint32_t i = 0; i < d->retained_group_count && YETTY_IS_OK(walk); i++) {
-                uint32_t prev_id = d->retained_group_ids[i];
-                int still_present = 0;
-                for (uint32_t j = 0; j < group_log.count; j++) {
-                    if (group_log.ids[j] == prev_id) {
-                        still_present = 1;
-                        break;
-                    }
-                }
-                if (!still_present) {
-                    walk =
-                        yetty_ydraw_drawable_list_add_cmd_delete(ctx->ygrid_drawable_list, prev_id);
-                }
-            }
-        }
-        if (YETTY_IS_OK(walk)) {
-            free(d->retained_group_ids);
-            d->retained_group_ids = group_log.ids;
-            d->retained_group_count = group_log.count;
-            d->retained_group_cap = group_log.cap;
-        } else {
-            free(group_log.ids);
-        }
+        walk = embed_emit_retained(d, ctx, id_res.value, src, src_size, dx, dy, stack,
+                                   sizeof(stack), &heap, &heap_cap, &cull, &chunks_changed,
+                                   &chunks_total);
     } else {
         walk = embed_emit_range(ctx->ygrid_drawable_list, src, src_size, dx, dy, stack,
                                 sizeof(stack), &heap, &heap_cap, &cull, NULL);
     }
     free(heap);
     size_t after = yetty_ydraw_drawable_list_size(ctx->ygrid_drawable_list);
-    ydebug("ydraw_embed cull active=%d retained=%d clip=[%.0f..%.0f] rect=[%.0f..%.0f] dy=%.0f "
-           "scene_min=%.0f src=%zuB emitted=%zuB culled=%zu/%zu leaf",
-           cull.active, ctx->figure_retained, cull.y_min, cull.y_max, r.min.y, r.max.y, dy,
-           yetty_ydraw_drawable_list_scene_min_y(d->buf), src_size, after - before, cull.culled,
-           cull.leaf_total);
+    ydebug("ydraw_embed cull active=%d retained=%d chunks=%u/%u clip=[%.0f..%.0f] "
+           "rect=[%.0f..%.0f] dy=%.0f scene_min=%.0f src=%zuB emitted=%zuB culled=%zu/%zu leaf",
+           cull.active, ctx->figure_retained, chunks_changed, chunks_total, cull.y_min, cull.y_max,
+           r.min.y, r.max.y, dy, yetty_ydraw_drawable_list_scene_min_y(d->buf), src_size,
+           after - before, cull.culled, cull.leaf_total);
     return walk;
 }
 

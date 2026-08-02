@@ -1986,6 +1986,18 @@ classes:
         type: uint32_t
         get: false
         set: false
+      - name: chunk_states
+        type: "struct embed_chunk_state *"
+        get: false
+        set: false
+      - name: chunk_state_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: chunk_state_cap
+        type: uint32_t
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -5448,9 +5460,11 @@ local_types:
   yetty_ygui_ydiagram_ptr_result: src/yetty/ygui/widgets/ydiagram.c
   yetty_ygui_ydiagram: src/yetty/ygui/widgets/ydiagram.c
   yetty_ygui_ydraw_embed_ptr_result: src/yetty/ygui/widgets/ydraw_embed.c
+  embed_chunk_state: src/yetty/ygui/widgets/ydraw_embed.c
   yetty_ygui_ydraw_embed: src/yetty/ygui/widgets/ydraw_embed.c
   embed_group_log: src/yetty/ygui/widgets/ydraw_embed.c
   embed_cull: src/yetty/ygui/widgets/ydraw_embed.c
+  embed_chunk_range: src/yetty/ygui/widgets/ydraw_embed.c
   yetty_ygui_yimage_ptr_result: src/yetty/ygui/widgets/yimage.c
   yetty_ygui_yimage: src/yetty/ygui/widgets/yimage.c
   yetty_ygui_yjungle_ptr_result: src/yetty/ygui/widgets/yjungle.c
