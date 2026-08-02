@@ -36,6 +36,12 @@
 #else
 #include <process.h>
 #define YSCENE_DEMO_GETPID() ((uint32_t)_getpid())
+#ifndef STDIN_FILENO
+#define STDIN_FILENO 0 /* MSVC ships no <unistd.h>; stdin is fd 0 */
+#endif
+#ifndef STDOUT_FILENO
+#define STDOUT_FILENO 1
+#endif
 #endif
 
 #include <yetty/api/yfigure/container.h>
