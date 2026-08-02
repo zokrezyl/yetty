@@ -133,6 +133,12 @@ if(TARGET yetty_ygrid)
     add_subdirectory(ut/ygrid)
 endif()
 
+# yscene — retained scene graph (#691): dom tree contract + scene
+# behavioral tests, both headless.
+if(TARGET yetty_yscene)
+    add_subdirectory(ut/yscene)
+endif()
+
 # ybrowser geometry + headless render tests (the render smoke test carries the
 # "network" label and is excluded from the fast lane).
 if(TARGET yetty_ybrowser)

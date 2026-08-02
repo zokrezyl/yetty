@@ -505,7 +505,13 @@ struct yetty_ycore_size_result yetty_ydraw_drawable_command_parse(
     struct yetty_ycore_size_result size_res = fw_res.value->ops->size((const uint32_t *)bytes);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, size_res, "command_parse: ops->size");
     if (size_res.value == 0 || size_res.value > bytes_len) {
-        return YETTY_ERR(yetty_ycore_size, "command_parse: bad size");
+        /* Name the offender — "bad size" alone is undiagnosable from a
+         * producer trace. */
+        uint32_t bad_type;
+        memcpy(&bad_type, bytes, sizeof(bad_type));
+        yerror("command_parse: bad size: type=0x%08x sized=%zu remaining=%u", bad_type,
+               size_res.value, bytes_len);
+        return YETTY_ERR(yetty_ycore_size, "command_parse: bad size (type/sizes in log)");
     }
     out_command->kind = YETTY_YDRAW_COMMAND_ADD;
     out_command->entry.data = (const uint32_t *)bytes;

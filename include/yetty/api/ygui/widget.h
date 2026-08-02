@@ -166,6 +166,28 @@ struct yetty_ycore_void_result yetty_ygui_widget_make_figure(struct yetty_yclass
                                                              uint32_t kind, int32_t z);
 struct yetty_ycore_void_result yetty_ygui_widget_set_figure_z(struct yetty_yclass_object *obj,
                                                               int32_t z);
+/* Retained-figure scroll offset. Marks the FRAMEWORK dirty (a walk must
+ * push SET_CHILD_SCROLL) but NOT the widget — a scroll tick must not
+ * re-ship the figure's retained body. */
+struct yetty_ycore_void_result yetty_ygui_widget_figure_scroll_set(struct yetty_yclass_object *obj,
+                                                                   float scroll_x, float scroll_y);
+struct yetty_ycore_void_result yetty_ygui_widget_figure_scroll_get(
+    const struct yetty_yclass_object *obj, float *scroll_x, float *scroll_y);
+/* Retained-figure content extent (document size the receiver can scroll
+ * over). Same dirty contract as the scroll setter. */
+struct yetty_ycore_void_result yetty_ygui_widget_figure_content_size_set(
+    struct yetty_yclass_object *obj, float content_w, float content_h);
+struct yetty_ycore_void_result yetty_ygui_widget_figure_content_size_get(
+    const struct yetty_yclass_object *obj, float *content_w, float *content_h);
+/* Request a full receiver-side reset with the next figure body (document
+ * replace on a retained figure). Dirties the widget so the body is
+ * guaranteed to ship. */
+struct yetty_ycore_void_result yetty_ygui_widget_figure_reset_request(
+    struct yetty_yclass_object *obj);
+/* Consume the pending reset: returns 1 exactly once per request (the
+ * body walk prepends CMD_ZERO for that ship). */
+struct yetty_ycore_int_result yetty_ygui_widget_figure_reset_consume(
+    struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_widget_set_floating(struct yetty_yclass_object *obj,
                                                               int floating);
 struct yetty_ycore_int_result yetty_ygui_widget_is_floating(const struct yetty_yclass_object *obj);

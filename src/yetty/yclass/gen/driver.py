@@ -53,6 +53,7 @@ MODULES = [
     {"name": "yrdawn"},
     {"name": "yshadertoy"},
     {"name": "yvterm"},
+    {"name": "yscene"},
     {"name": "yflame"},
     {"name": "ymap"},
     {"name": "ynotebook"},

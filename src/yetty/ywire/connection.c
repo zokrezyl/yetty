@@ -20,6 +20,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yterminal/client-input.h>
 #include <yetty/yterminal/dcs-codes.h>
+#include <yetty/ytrace/ytrace.h>
 #include <yetty/ywire/channel.h>
 #include <yetty/ywire/wire-statemachine.h>
 
@@ -244,10 +245,14 @@ struct yetty_ycore_void_result yetty_ywire_connection_grant_credit(
     }
     channel->recv_consumed += (int64_t)consumed;
     if (channel->recv_consumed < channel->recv_window_initial / 2) {
+        ydebug("ywire: channel %u consumed+=%zu acc=%lld (grant deferred, threshold %lld)",
+               channel->id, consumed, (long long)channel->recv_consumed,
+               (long long)(channel->recv_window_initial / 2));
         return YETTY_OK_VOID();
     }
     uint32_t grant = (uint32_t)channel->recv_consumed;
     channel->recv_consumed = 0;
+    ydebug("ywire: channel %u grant %u", channel->id, grant);
     return yetty_ywire_connection_send_control(
         channel->connection, YETTY_YWIRE_CHANNEL_MSG_WINDOW_ADJUST, channel->id, grant);
 }
@@ -369,6 +374,8 @@ static struct yetty_ycore_void_result on_channel_envelope(void *userdata,
         return on_channel_close(connection, channel);
     case YETTY_YWIRE_CHANNEL_MSG_WINDOW_ADJUST:
         channel->send_window += (int64_t)header.window;
+        ydebug("ywire: channel %u credit +%u send_window=%lld", channel->id, header.window,
+               (long long)channel->send_window);
         /* Credit may unblock pending DATA — run the scheduler now. */
         return yetty_ywire_connection_pump_outbound(connection);
     default:
@@ -414,6 +421,8 @@ static struct yetty_ycore_size_result emit_one(struct yetty_ywire_connection *co
         chunk = (size_t)channel->send_window;
     }
     if (chunk == 0) {
+        ydebug("ywire: channel %u window-blocked pending=%zu send_window=%lld", channel->id,
+               pending, (long long)channel->send_window);
         return YETTY_OK(yetty_ycore_size, 0); /* window-blocked — WINDOW_ADJUST will wake us */
     }
 

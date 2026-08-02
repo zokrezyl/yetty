@@ -344,6 +344,14 @@ void yetty_yclass_rpc_session_set_error_sink(struct yetty_yclass_rpc_session *s,
  * non-blocking, never touches the wire. No-op on sync sessions. */
 struct yetty_ycore_void_result yetty_yclass_rpc_session_pump(struct yetty_yclass_rpc_session *s);
 
+/* The multiplexed connection a zero-arg connect built under this session,
+ * or NULL when the caller supplied the transport/connection itself. The
+ * session's OWNER registers connection_fd()/out_fd() with its event loop
+ * and calls the connection pumps on readiness — the session never reads
+ * the fd behind the loop's back. */
+struct yetty_ywire_connection *yetty_yclass_rpc_session_connection(
+    struct yetty_yclass_rpc_session *s);
+
 /* Void wire CALL. Sync session: lockstep send + await + decode (the
  * remote error chain becomes the Result's cause). Async session: pump,
  * send, enqueue the completion, return — failures surface via the error

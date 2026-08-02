@@ -46,6 +46,7 @@ target_link_libraries(yetty_yterminal
     yetty_yrdawn
     yetty_yfigure
     yetty_ygrid
+    yetty_yscene
     lz4_static
 )
 

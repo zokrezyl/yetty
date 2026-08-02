@@ -1,0 +1,961 @@
+methods:
+  - slot: constructor
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: set_registry
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: registry
+        type: "struct yetty_ydraw_drawable_list_registry *"
+    doc: "/* Bind the shared wire-record registry (borrowed — the framework's
+ * instance) to the scene AND its dom, as one binding. Rejected once the
+ * dom holds content — record strides must not change under existing
+ * spans. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: node_declare
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: external_id
+        type: uint64_t
+      - name: parent_external_id
+        type: uint64_t
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: node_set_transform
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: external_id
+        type: uint64_t
+      - name: m00
+        type: float
+      - name: m01
+        type: float
+      - name: m10
+        type: float
+      - name: m11
+        type: float
+      - name: translate_x
+        type: float
+      - name: translate_y
+        type: float
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: node_set_clip
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: external_id
+        type: uint64_t
+      - name: min_x
+        type: float
+      - name: min_y
+        type: float
+      - name: max_x
+        type: float
+      - name: max_y
+        type: float
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: node_clear_clip
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: external_id
+        type: uint64_t
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: node_set_opacity
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: external_id
+        type: uint64_t
+      - name: opacity
+        type: float
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: node_set_z
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: external_id
+        type: uint64_t
+      - name: paint_z
+        type: int32_t
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: node_set_content
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: external_id
+        type: uint64_t
+      - name: content
+        type: struct yetty_ycore_buffer
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: node_append_batch
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: external_id
+        type: uint64_t
+      - name: content
+        type: struct yetty_ycore_buffer
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: node_replace_batch
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: external_id
+        type: uint64_t
+      - name: batch_index
+        type: uint32_t
+      - name: content
+        type: struct yetty_ycore_buffer
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: node_remove_batch
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: external_id
+        type: uint64_t
+      - name: batch_index
+        type: uint32_t
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: node_delete
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: external_id
+        type: uint64_t
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: zero
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: commit
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: uint64_t
+classes:
+  - name: scene
+    domain: yscene
+    accessor: yetty_yscene_scene_class_get
+    type: regular
+    source_file: src/yetty/yscene/scene.c
+    parent:
+      domain: yfigure
+      name: figure
+    mixins: []
+    data: struct yetty_yscene_scene
+    data_fields:
+      - name: dom
+        type: "struct yetty_yscene_dom *"
+        get: false
+        set: false
+      - name: registry
+        type: "struct yetty_ydraw_drawable_list_registry *"
+        get: false
+        set: false
+      - name: owns_registry
+        type: bool
+        get: false
+        set: false
+      - name: scroll_x
+        type: float
+        get: false
+        set: false
+      - name: scroll_y
+        type: float
+        get: false
+        set: false
+      - name: view_scale
+        type: float
+        get: false
+        set: false
+      - name: content_w
+        type: float
+        get: false
+        set: false
+      - name: content_h
+        type: float
+        get: false
+        set: false
+      - name: leaves
+        type: "struct yscene_leaf *"
+        get: false
+        set: false
+      - name: leaf_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: leaf_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: leaves_scratch
+        type: "struct yscene_leaf *"
+        get: false
+        set: false
+      - name: leaf_scratch_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: leaf_scratch_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: derived_generation
+        type: uint64_t
+        get: false
+        set: false
+      - name: derived_valid
+        type: bool
+        get: false
+        set: false
+      - name: pending_poisoned
+        type: bool
+        get: false
+        set: false
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
+        get: false
+        set: false
+      - name: complexes
+        type: "struct yscene_complex_instance *"
+        get: false
+        set: false
+      - name: complex_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: complex_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: stream_next_ordinal
+        type: uint32_t
+        get: false
+        set: false
+      - name: runtime
+        type: "struct yetty_yframework *"
+        get: false
+        set: false
+      - name: device
+        type: WGPUDevice
+        get: false
+        set: false
+      - name: queue
+        type: WGPUQueue
+        get: false
+        set: false
+      - name: target_format
+        type: WGPUTextureFormat
+        get: false
+        set: false
+      - name: allocator
+        type: "struct yetty_ydraw_gpu_allocator *"
+        get: false
+        set: false
+      - name: rs
+        type: struct yetty_yrender_gpu_resource_set
+        get: false
+        set: false
+      - name: sdf_lib_rs
+        type: struct yetty_yrender_gpu_resource_set
+        get: false
+        set: false
+      - name: sdf_lib_code
+        type: struct yetty_ycore_buffer
+        get: false
+        set: false
+      - name: effects_lib_rs
+        type: struct yetty_yrender_gpu_resource_set
+        get: false
+        set: false
+      - name: effects_lib_code
+        type: struct yetty_ycore_buffer
+        get: false
+        set: false
+      - name: layer_shader_code
+        type: struct yetty_ycore_buffer
+        get: false
+        set: false
+      - name: combined_shader
+        type: "char *"
+        get: false
+        set: false
+      - name: combined_shader_size
+        type: size_t
+        get: false
+        set: false
+      - name: binder
+        type: "struct yetty_yrender_gpu_resource_binder *"
+        get: false
+        set: false
+      - name: binder_finalized
+        type: bool
+        get: false
+        set: false
+      - name: fonts
+        type: "struct yetty_yfont_font *[63]"
+        get: false
+        set: false
+      - name: font_handles
+        type: "yetty_yfont_cache_handle[63]"
+        get: false
+        set: false
+      - name: font_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: font_generation
+        type: uint32_t
+        get: false
+        set: false
+      - name: last_emitted_font_generation
+        type: uint32_t
+        get: false
+        set: false
+      - name: font_cache
+        type: "struct yetty_yfont_cache *"
+        get: false
+        set: false
+      - name: msdf_generator
+        type: "struct yetty_ymsdf_generator *"
+        get: false
+        set: false
+      - name: shaders_dir
+        type: "char[512]"
+        get: false
+        set: false
+      - name: cache_dir
+        type: "char[512]"
+        get: false
+        set: false
+      - name: data_dir
+        type: "char[512]"
+        get: false
+        set: false
+      - name: wire_font_slot
+        type: "int32_t[64]"
+        get: false
+        set: false
+      - name: next_font_slot
+        type: uint32_t
+        get: false
+        set: false
+      - name: staging_scratch
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: staging_scratch_len
+        type: size_t
+        get: false
+        set: false
+      - name: staging_scratch_cap
+        type: size_t
+        get: false
+        set: false
+      - name: staged_records
+        type: "struct yscene_staged_record *"
+        get: false
+        set: false
+      - name: staged_record_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: staged_record_cap
+        type: uint32_t
+        get: false
+        set: false
+      - name: grid_staging
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: grid_staging_words
+        type: size_t
+        get: false
+        set: false
+      - name: grid_staging_cap
+        type: size_t
+        get: false
+        set: false
+      - name: prim_staging
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: prim_staging_words
+        type: size_t
+        get: false
+        set: false
+      - name: prim_staging_cap
+        type: size_t
+        get: false
+        set: false
+      - name: staged_prim_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: staging_generation
+        type: uint64_t
+        get: false
+        set: false
+      - name: staged_content_w
+        type: float
+        get: false
+        set: false
+      - name: staged_content_h
+        type: float
+        get: false
+        set: false
+      - name: staging_valid
+        type: bool
+        get: false
+        set: false
+      - name: cells
+        type: "struct yscene_cell[256]"
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: yscene
+        impl: scene_constructor
+      - slot: set_registry
+        slot_domain: yscene
+        impl: scene_set_registry
+      - slot: node_declare
+        slot_domain: yscene
+        impl: scene_node_declare
+      - slot: node_set_transform
+        slot_domain: yscene
+        impl: scene_node_set_transform
+      - slot: node_set_clip
+        slot_domain: yscene
+        impl: scene_node_set_clip
+      - slot: node_clear_clip
+        slot_domain: yscene
+        impl: scene_node_clear_clip
+      - slot: node_set_opacity
+        slot_domain: yscene
+        impl: scene_node_set_opacity
+      - slot: node_set_z
+        slot_domain: yscene
+        impl: scene_node_set_z
+      - slot: node_set_content
+        slot_domain: yscene
+        impl: scene_node_set_content
+      - slot: node_append_batch
+        slot_domain: yscene
+        impl: scene_node_append_batch
+      - slot: node_replace_batch
+        slot_domain: yscene
+        impl: scene_node_replace_batch
+      - slot: node_remove_batch
+        slot_domain: yscene
+        impl: scene_node_remove_batch
+      - slot: node_delete
+        slot_domain: yscene
+        impl: scene_node_delete
+      - slot: zero
+        slot_domain: yscene
+        impl: scene_zero
+      - slot: commit
+        slot_domain: yscene
+        impl: scene_commit
+      - slot: render
+        slot_domain: yfigure
+        impl: scene_render_slot
+      - slot: destroy
+        slot_domain: yfigure
+        impl: scene_destroy_slot
+      - slot: process_bytes
+        slot_domain: yfigure
+        impl: scene_process_bytes_slot
+      - slot: reset_content
+        slot_domain: yfigure
+        impl: scene_reset_content_slot
+      - slot: set_scroll
+        slot_domain: yfigure
+        impl: scene_set_scroll_slot
+      - slot: set_content_size
+        slot_domain: yfigure
+        impl: scene_set_content_size_slot
+      - slot: dump_state
+        slot_domain: yfigure
+        impl: scene_dump_state_slot
+    doc: null
+exposed:
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_create
+    return_type: struct yetty_yscene_scene_ptr_result
+    args:
+      - name: rect
+        type: struct yetty_ycore_rectangle
+      - name: context
+        type: "const struct yetty_context *"
+    doc: "/* Create a scene figure. `context == NULL` (or a context without a
+ * runtime) is HEADLESS mode — tests/tooling: no shader load, no binder;
+ * the tree, adapter, derive and hit-test all work, render draws
+ * nothing. With a real context the scene binds the framework's shared
+ * drawable registry and builds its GPU pipeline (shared ydraw-layer
+ * machinery: binder + ygrid.wgsl + ysdf/effects libs). */"
+  - source_file: src/yetty/yscene/scene.c
+    type_text: "struct yetty_yscene_factory_args {
+    struct yetty_ydraw_composite_factory * composite_factory;
+    struct yetty_yfont_font * default_font;
+};"
+    doc: "/* Host inputs every wire-minted scene borrows. Lifetime: owned by the
+ * host (terminal), outliving every scene minted through the registry —
+ * the same contract as ygrid's factory args bundle. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_register_factory
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: registry
+        type: "struct yetty_yfigure_registry *"
+      - name: args
+        type: "const struct yetty_yscene_factory_args *"
+    doc: "/* Register the \"yscene\" figure kind so containers can mint scenes from
+ * wire CREATE_CHILD records. `args` is BORROWED for the registry's
+ * lifetime (host-owned bundle); NULL registers a bare scene (no
+ * composites, no default font). Call at terminal/host create time. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_set_default_font
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: font
+        type: "struct yetty_yfont_font *"
+    doc: "/* Host-side default font (slot 0) for a hand-created scene. Borrowed. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_set_composite_factory
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: factory
+        type: "struct yetty_ydraw_composite_factory *"
+    doc: "/* Host-side complex renderer for a hand-created scene. Borrowed. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_as_figure
+    return_type: "struct yetty_yfigure_figure *"
+    args:
+      - name: scene
+        type: "struct yetty_yscene_scene *"
+    doc: "/* The figure base of this scene (the container's handle on it). */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_derive
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Rebuild the derived world state from the latest committed generation
+ * (no-op when already current). Render does this implicitly; tests and
+ * hit-test callers may want it explicitly. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_leaf_count
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Number of derived paint leaves (after derive). */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_hit_test
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: screen_x
+        type: float
+      - name: screen_y
+        type: float
+    doc: "/* Hit-test a SCREEN point against the derived scene: reverse paint
+ * order over world AABBs + effective clips. Returns the owning node's
+ * external id; 0 = no leaf hit (the document root / background). */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_render_plan
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Render-plan snapshot for headless tests: derive, build staging
+ * against the CURRENT rect/content extent (staging is pure CPU — no
+ * binder needed), and dump the exact data destined for GPU upload:
+ * staged count, extent, per-prim word summaries, cell occupancy, and
+ * the view mapping. Caller frees the string. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_set_view_scale
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: view_scale
+        type: float
+    doc: "/* View scale (HiDPI / zoom) — derive/view state, never baked into wire
+ * coordinates. */"
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_buffer
+    kind: struct
+    fields:
+      - name: data
+        type: "uint8_t *"
+      - name: capacity
+        type: size_t
+      - name: size
+        type: size_t
+  - name: yetty_ycore_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: "char *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_pixel_coord
+    kind: struct
+    fields:
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - name: yetty_ycore_pixel_size
+    kind: struct
+    fields:
+      - name: width
+        type: float
+      - name: height
+        type: float
+  - name: yetty_ycore_rectangle
+    kind: struct
+    fields:
+      - name: min
+        type: struct yetty_ycore_pixel_coord
+      - name: max
+        type: struct yetty_ycore_pixel_coord
+  - name: yetty_ycore_uint32_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: uint32_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_uint64_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: uint64_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yrender_buffer
+    kind: struct
+    fields:
+      - name: data
+        type: "uint8_t *"
+      - name: size
+        type: size_t
+      - name: capacity
+        type: size_t
+      - name: name
+        type: "char[64]"
+      - name: wgsl_type
+        type: "char[64]"
+      - name: readonly
+        type: int
+      - name: dirty
+        type: int
+      - name: generation
+        type: uint32_t
+  - name: yetty_yrender_gpu_resource_set
+    kind: struct
+    fields:
+      - name: namespace
+        type: "char[64]"
+      - name: pixel_size
+        type: struct yetty_ycore_pixel_size
+      - name: textures
+        type: "struct yetty_yrender_texture[4]"
+      - name: texture_count
+        type: size_t
+      - name: buffers
+        type: "struct yetty_yrender_buffer[4]"
+      - name: buffer_count
+        type: size_t
+      - name: uniforms
+        type: "struct yetty_yrender_uniform[64]"
+      - name: uniform_count
+        type: size_t
+      - name: shader
+        type: struct yetty_yrender_shader_code
+      - name: children
+        type: "struct yetty_yrender_gpu_resource_set *[64]"
+      - name: children_count
+        type: size_t
+      - name: instance_count
+        type: uint32_t
+  - name: yetty_yrender_shader_code
+    kind: struct
+    fields:
+      - name: data
+        type: "const char *"
+      - name: size
+        type: size_t
+      - name: hash
+        type: uint64_t
+  - name: yetty_yrender_texture
+    kind: struct
+    fields:
+      - name: data
+        type: "uint8_t *"
+      - name: width
+        type: uint32_t
+      - name: height
+        type: uint32_t
+      - name: format
+        type: uint32_t
+      - name: name
+        type: "char[64]"
+      - name: wgsl_type
+        type: "char[64]"
+      - name: sampler_name
+        type: "char[64]"
+      - name: sampler_filter
+        type: uint32_t
+      - name: dirty
+        type: int
+      - name: generation
+        type: uint32_t
+  - name: yetty_yrender_uniform
+    kind: struct
+    fields:
+      - name: name
+        type: "char[64]"
+      - name: type
+        type: enum yetty_yrender_uniform_type
+      - name: ""
+        kind: union
+        fields:
+          - name: f32
+            type: float
+          - name: vec2
+            type: "float[2]"
+          - name: vec3
+            type: "float[3]"
+          - name: vec4
+            type: "float[4]"
+          - name: mat4
+            type: "float[16]"
+          - name: u32
+            type: uint32_t
+          - name: i32
+            type: int32_t
+  - name: yetty_yrender_uniform_type
+    kind: enum
+    values:
+      - name: YETTY_YRENDER_UNIFORM_F32
+        value: 0
+      - name: YETTY_YRENDER_UNIFORM_VEC2
+        value: 1
+      - name: YETTY_YRENDER_UNIFORM_VEC3
+        value: 2
+      - name: YETTY_YRENDER_UNIFORM_VEC4
+        value: 3
+      - name: YETTY_YRENDER_UNIFORM_MAT4
+        value: 4
+      - name: YETTY_YRENDER_UNIFORM_U32
+        value: 5
+      - name: YETTY_YRENDER_UNIFORM_I32
+        value: 6
+  - name: yetty_yscene_scene_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yscene_scene *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yscene_cell
+    kind: struct
+    fields:
+      - name: indices
+        type: "uint32_t *"
+      - name: count
+        type: uint32_t
+      - name: capacity
+        type: uint32_t
+local_types:
+  yscene_leaf_kind: src/yetty/yscene/scene.c
+  yscene_leaf: src/yetty/yscene/scene.c
+  yetty_yscene_scene: src/yetty/yscene/scene.c
+  yscene_complex_instance: src/yetty/yscene/scene.c
+  yscene_staged_record: src/yetty/yscene/scene.c
+  yscene_cell: src/yetty/yscene/scene.c
+  yetty_yscene_scene_ptr_result: src/yetty/yscene/scene.c
+  yscene_transform: src/yetty/yscene/scene.c
+  yscene_derive_frame: src/yetty/yscene/scene.c
+  yscene_body_walk: src/yetty/yscene/scene.c
+  scene_transform_argument: src/yetty/yscene/scene.c
+  scene_dump_buffer: src/yetty/yscene/scene.c
+  yetty_yscene_factory_args: src/yetty/yscene/scene.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/yscene/scene.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/yscene/scene.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/yscene/scene.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/yscene/scene.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/yscene/scene.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

@@ -41,6 +41,7 @@
 #include <yetty/ydraw-core/drawable-list-registry.h>
 #include <yetty/ydraw-core/font-resource.h>
 #include <yetty/api/ygrid/grid.h>
+#include <yetty/api/yscene/scene.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yshadertoy/prim.h>
@@ -291,6 +292,7 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
      * and the host has to outlive every ygrid the registry might still
      * mint. */
     struct yetty_ygrid_factory_args figure_args;
+    struct yetty_yscene_factory_args yscene_factory_args;
 
     /* The figure tree is reached via
      * yetty_yfigure_container_as_figure(root_container); producers drive it
@@ -2522,6 +2524,18 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
                 &terminal->figure_args);
             YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, kr,
                                 "terminal_create: ygrid register_factory_for_kind");
+        }
+
+        /* "yscene" — the retained scene graph (#691), built alongside
+         * ygrid until parity. Producers opt in per figure. The args bundle
+         * lives on the terminal (same lifetime contract as figure_args). */
+        {
+            terminal->yscene_factory_args.composite_factory = terminal->composite_factory;
+            terminal->yscene_factory_args.default_font = terminal->compositor_font;
+            struct yetty_ycore_void_result scene_reg_res = yetty_yscene_register_factory(
+                terminal->figure_registry, &terminal->yscene_factory_args);
+            YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, scene_reg_res,
+                                "terminal_create: yscene register_factory");
         }
 
         /* Framework-owned figure kinds (ymgui, yrdawn; ygui as it

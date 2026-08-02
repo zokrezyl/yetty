@@ -23,6 +23,14 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_scrollarea_ptr, struct yetty_ygui_scrollarea *);
 struct yetty_yclass_ptr_result yetty_ygui_scrollarea_class_get(void);
 struct yetty_ygui_scrollarea_ptr_result yetty_ygui_scrollarea_from(struct yetty_yclass_object *obj);
+
+/* Retained-figure view-state setters defined in widget.c. Declared here
+ * (identically to the generated widget.h) so the codegen source parse of
+ * this TU resolves them regardless of generation order. */
+struct yetty_ycore_void_result yetty_ygui_widget_figure_scroll_set(struct yetty_yclass_object *obj,
+                                                                   float scroll_x, float scroll_y);
+struct yetty_ycore_void_result yetty_ygui_widget_figure_content_size_set(
+    struct yetty_yclass_object *obj, float content_w, float content_h);
 #include "paint-helpers.h"
 #include <yetty/yfigure/kind.h>
 #include <yetty/ygui/mixins/draggable.h>
@@ -38,6 +46,14 @@ struct YETTY_ANNOTATE("class@ygui:scrollarea") YETTY_ANNOTATE("parent@ygui:vbox"
     float offset;       /* scroll position in px (0 = top) */
     float max_offset;   /* content_h - viewport_h, clamped >= 0 (cached) */
     float thumb_travel; /* track_h - thumb_h, clamped >= 0 (cached) */
+    /* Retained-scene mode: the figure kind is "yscene" instead of
+     * "ygrid". The receiver keeps the whole document and scrolls it on
+     * the GPU — scrolling pushes SET_CHILD_SCROLL instead of sliding
+     * the children through scroll_main, and a scroll tick re-ships
+     * nothing. No gutter scrollbar is painted (a viewport-fixed thumb
+     * cannot live inside the scrolled document; an overlay scrollbar in
+     * the chrome layer is the follow-up). */
+    int scene_mode;
 };
 
 static struct yetty_yclass_ptr_result scrollarea_class(void)
@@ -46,7 +62,9 @@ static struct yetty_yclass_ptr_result scrollarea_class(void)
 }
 
 /* Apply a clamped offset: store it, push it to the base scroll offset (so
- * the layout slides the children), and request a frame. */
+ * the layout slides the children), and request a frame. In scene mode the
+ * children stay put — the offset goes to the retained figure's view state
+ * (SET_CHILD_SCROLL on the next walk) and no body is re-shipped. */
 static struct yetty_ycore_void_result scrollarea_set_offset(struct yetty_yclass_object *obj,
                                                             struct yetty_ygui_scrollarea *d,
                                                             float off)
@@ -58,6 +76,9 @@ static struct yetty_ycore_void_result scrollarea_set_offset(struct yetty_yclass_
         off = d->max_offset;
     }
     d->offset = off;
+    if (d->scene_mode) {
+        return yetty_ygui_widget_figure_scroll_set(obj, 0.0f, off);
+    }
     struct yetty_ycore_void_result sr = yetty_ygui_widget_scroll_main_set(obj, off);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "scrollarea: scroll_main");
     return yetty_ygui_widget_set_dirty(obj);
@@ -230,6 +251,14 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     }
     float off = d->offset;
 
+    /* Scene mode: publish the document extent for the retained figure
+     * (the walk pushes it as SET_CHILD_CONTENT_SIZE) and paint no
+     * gutter — the receiver scrolls the retained document on the GPU. */
+    if (d->scene_mode) {
+        d->thumb_travel = 0.0f;
+        return yetty_ygui_widget_figure_content_size_set(obj, w, content_h);
+    }
+
     /* Track + thumb in absolute coords (the grid renders this figure's
      * content absolute and scissor-clips to the rect). Track spans the
      * content box vertically at the gutter. */
@@ -268,6 +297,64 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
         yguix_box(ctx, track_x, thumb_y, SCROLLBAR_W, thumb_h, COLOR_THUMB, SCROLLBAR_W * 0.5f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_215, "scrollarea: thumb");
     return YETTY_OK_VOID();
+}
+
+/* Switch this scrollarea to RETAINED-SCENE mode: its figure kind becomes
+ * "yscene" (must be called before the first emit mints the figure). The
+ * receiver keeps the whole document across bodies and scrolls it on the
+ * GPU — content inside is emitted in document space, scrolling ships a
+ * SET_CHILD_SCROLL instead of a body, and the gutter scrollbar is not
+ * painted. The gutter padding is released back to the content. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_scrollarea_enable_scene(struct yetty_yclass_object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_scrollarea_enable_scene: NULL obj");
+    }
+    struct yetty_ygui_scrollarea_ptr_result d_dr = yetty_ygui_scrollarea_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_scrollarea_enable_scene: data_get");
+    struct yetty_ygui_scrollarea *d = d_dr.value;
+    d->scene_mode = 1;
+    struct yetty_ycore_void_result fr =
+        yetty_ygui_widget_make_figure(obj, yetty_yfigure_kind_token("yscene"), 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "yetty_ygui_scrollarea_enable_scene: make_figure");
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res,
+                        "yetty_ygui_scrollarea_enable_scene: layout_get");
+    struct yetty_ygui_layout layout = *layout_res.value;
+    layout.padding_right = layout.padding_left;
+    struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &layout);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "yetty_ygui_scrollarea_enable_scene: layout_set");
+    /* Undo any offset a previous ygrid-mode scroll pushed into the
+     * layout — scene-mode children stay at their laid-out positions. */
+    return yetty_ygui_widget_scroll_main_set(obj, 0.0f);
+}
+
+/* Programmatic scroll (navigation reset, restore). Clamped like every
+ * other scroll path. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_scrollarea_scroll_set(struct yetty_yclass_object *obj,
+                                                                float offset)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_scrollarea_scroll_set: NULL obj");
+    }
+    struct yetty_ygui_scrollarea_ptr_result d_dr = yetty_ygui_scrollarea_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_scrollarea_scroll_set: data_get");
+    return scrollarea_set_offset(obj, d_dr.value, offset);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_float_result yetty_ygui_scrollarea_scroll_get(
+    const struct yetty_yclass_object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_float, "yetty_ygui_scrollarea_scroll_get: NULL obj");
+    }
+    struct yetty_ygui_scrollarea_ptr_result d_dr =
+        yetty_ygui_scrollarea_from((struct yetty_yclass_object *)obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_float, d_dr, "yetty_ygui_scrollarea_scroll_get: data_get");
+    return YETTY_OK(yetty_ycore_float, d_dr.value->offset);
 }
 
 #include "yetty/gen/impl/ygui/widgets/scrollarea.c"

@@ -26,6 +26,7 @@
 #include <yetty/ywire/channel.h>
 #include <yetty/ywire/connection.h>
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,7 +50,31 @@ struct rpc_channel_server {
     uint8_t *inbuf;
     size_t inlen;
     size_t incap;
+    /* Set on the first unrecoverable stream fault; bytes still in
+     * flight (until the peer's CLOSE returns) are discarded unparsed. */
+    bool dead;
 };
+
+/* Poison + tear down. A length-prefixed stream has NO resync point: after
+ * a framing violation (or a half-written response) every subsequent byte
+ * parses as garbage headers, so "drop the buffer and continue" only
+ * manufactures an endless cascade of bogus frames. The one sound
+ * recovery is closing the channel; the client re-opens a fresh one. */
+static void rpc_channel_kill(struct rpc_channel_server *server, const char *reason)
+{
+    if (server->dead) {
+        return;
+    }
+    ywarn("rpc-conn: channel id=%u unrecoverable (%s) — closing",
+          yetty_ywire_channel_id(server->channel), reason);
+    server->dead = true;
+    server->inlen = 0;
+    struct yetty_ycore_void_result close_res = yetty_ywire_channel_close(server->channel);
+    if (YETTY_IS_ERR(close_res)) {
+        yetty_ycore_error_print(stderr, "[rpc-conn] channel close", close_res.error);
+        yetty_ycore_error_destroy(close_res.error);
+    }
+}
 
 /* Peel and dispatch every complete request frame currently buffered. */
 static void rpc_channel_drain(struct rpc_channel_server *server)
@@ -61,13 +86,11 @@ static void rpc_channel_drain(struct rpc_channel_server *server)
         memcpy(&header, server->inbuf + consumed, 4);
         memcpy(&body_len, server->inbuf + consumed + 4, 4);
         if (body_len > RPC_CHANNEL_FRAME_MAX) {
-            /* Untrusted length past the protocol cap — the stream is corrupt or
-             * hostile and can never be reassembled (raw_sink refuses to grow
-             * past the cap). Drop everything buffered and stop; the channel
-             * layer surfaces the desync as its own error. */
-            ywarn("rpc-conn: request body_len %u exceeds cap %u — dropping channel buffer",
-                  body_len, RPC_CHANNEL_FRAME_MAX);
-            server->inlen = 0;
+            /* Untrusted length past the protocol cap — corrupt, hostile,
+             * or a producer frame bigger than the protocol allows. Either
+             * way the stream can never be reassembled from here. */
+            ywarn("rpc-conn: request body_len %u exceeds cap %u", body_len, RPC_CHANNEL_FRAME_MAX);
+            rpc_channel_kill(server, "frame length exceeds protocol cap");
             return;
         }
         if (server->inlen - consumed - 8 < body_len) {
@@ -96,13 +119,18 @@ static void rpc_channel_drain(struct rpc_channel_server *server)
             continue;
         }
 
+        /* A response write/flush failure is ALSO unrecoverable: the
+         * client's read stream now holds a truncated response, so its
+         * next resp_len parse is garbage — same desync class as a bad
+         * request frame, just in the other direction. */
         uint32_t resp_len_wire = (uint32_t)resp_len;
         struct yetty_ycore_size_result write_len_res =
             yetty_ywire_channel_write(server->channel, &resp_len_wire, 4);
         if (YETTY_IS_ERR(write_len_res)) {
             yetty_ycore_error_print(stderr, "[rpc-conn] write resp_len", write_len_res.error);
             yetty_ycore_error_destroy(write_len_res.error);
-            break;
+            rpc_channel_kill(server, "response length write failed");
+            return;
         }
         if (resp_len) {
             struct yetty_ycore_size_result write_body_res =
@@ -110,14 +138,16 @@ static void rpc_channel_drain(struct rpc_channel_server *server)
             if (YETTY_IS_ERR(write_body_res)) {
                 yetty_ycore_error_print(stderr, "[rpc-conn] write resp", write_body_res.error);
                 yetty_ycore_error_destroy(write_body_res.error);
-                break;
+                rpc_channel_kill(server, "response body write failed");
+                return;
             }
         }
         struct yetty_ycore_void_result flush_res = yetty_ywire_channel_flush(server->channel);
         if (YETTY_IS_ERR(flush_res)) {
             yetty_ycore_error_print(stderr, "[rpc-conn] flush", flush_res.error);
             yetty_ycore_error_destroy(flush_res.error);
-            break;
+            rpc_channel_kill(server, "response flush failed");
+            return;
         }
     }
     if (consumed) {
@@ -135,19 +165,24 @@ static void rpc_channel_raw_sink(void *user, const uint8_t *bytes, size_t n)
     if (!server || !bytes || n == 0) {
         return;
     }
+    if (server->dead) {
+        /* Poisoned: the CLOSE handshake is in flight; whatever the peer
+         * already pumped into the connection is discarded unparsed. */
+        return;
+    }
     if (server->incap - server->inlen < n) {
         /* Overflow-guard the size arithmetic, then cap the buffer: a client
-         * cannot force the reassembly allocation past one protocol frame. */
+         * cannot force the reassembly allocation past one protocol frame.
+         * Every fault here strands a PARTIAL frame — continuing would
+         * append later chunks mid-frame, so the channel dies. */
         if (n > SIZE_MAX - server->inlen) {
-            ywarn("rpc-conn: reassembly size overflow — dropping channel buffer");
-            server->inlen = 0;
+            rpc_channel_kill(server, "reassembly size overflow");
             return;
         }
         size_t want = server->inlen + n;
         if (want > RPC_CHANNEL_FRAME_MAX) {
-            ywarn("rpc-conn: reassembly want %zu exceeds cap %u — dropping channel buffer", want,
-                  RPC_CHANNEL_FRAME_MAX);
-            server->inlen = 0;
+            ywarn("rpc-conn: reassembly want %zu exceeds cap %u", want, RPC_CHANNEL_FRAME_MAX);
+            rpc_channel_kill(server, "reassembly exceeds protocol cap");
             return;
         }
         size_t grown = server->incap ? server->incap : 8192;
@@ -160,10 +195,7 @@ static void rpc_channel_raw_sink(void *user, const uint8_t *bytes, size_t n)
         }
         uint8_t *bigger = realloc(server->inbuf, grown);
         if (!bigger) {
-            /* Drop the whole partial frame — keeping it would append the next
-             * chunk into a corrupted, mis-aligned buffer. */
-            ywarn("rpc-conn: reassembly grow failed (%zu bytes) — dropping channel buffer", grown);
-            server->inlen = 0;
+            rpc_channel_kill(server, "reassembly grow failed");
             return;
         }
         server->inbuf = bigger;

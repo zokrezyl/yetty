@@ -86,6 +86,7 @@ if(YBROWSER_STANDALONE)
         yetty_ywire
         yetty_yfigure
         yetty_ygrid
+        yetty_yscene
         yetty_yfont_core
         yetty_ydraw_factory
         yetty_yimage

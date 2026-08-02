@@ -421,6 +421,26 @@ classes:
         type: int32_t
         get: false
         set: false
+      - name: figure_scroll_x
+        type: float
+        get: false
+        set: false
+      - name: figure_scroll_y
+        type: float
+        get: false
+        set: false
+      - name: figure_content_w
+        type: float
+        get: false
+        set: false
+      - name: figure_content_h
+        type: float
+        get: false
+        set: false
+      - name: figure_reset_pending
+        type: int
+        get: false
+        set: false
       - name: floating
         type: int
         get: false
@@ -1232,6 +1252,10 @@ classes:
         type: float
         get: false
         set: false
+      - name: scene_mode
+        type: int
+        get: false
+        set: false
     ops:
       - slot: widget_on_scroll
         slot_domain: ygui
@@ -1948,6 +1972,18 @@ classes:
     data_fields:
       - name: buf
         type: "struct yetty_ydraw_drawable_list *"
+        get: false
+        set: false
+      - name: retained_group_ids
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: retained_group_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: retained_group_cap
+        type: uint32_t
         get: false
         set: false
     ops:
@@ -2943,6 +2979,70 @@ exposed:
         type: int32_t
     doc: null
   - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_figure_scroll_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: scroll_x
+        type: float
+      - name: scroll_y
+        type: float
+    doc: "/* Retained-figure scroll offset. Marks the FRAMEWORK dirty (a walk must
+ * push SET_CHILD_SCROLL) but NOT the widget — a scroll tick must not
+ * re-ship the figure's retained body. */"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_figure_scroll_get
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+      - name: scroll_x
+        type: "float *"
+      - name: scroll_y
+        type: "float *"
+    doc: null
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_figure_content_size_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: content_w
+        type: float
+      - name: content_h
+        type: float
+    doc: "/* Retained-figure content extent (document size the receiver can scroll
+ * over). Same dirty contract as the scroll setter. */"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_figure_content_size_get
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+      - name: content_w
+        type: "float *"
+      - name: content_h
+        type: "float *"
+    doc: null
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_figure_reset_request
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Request a full receiver-side reset with the next figure body (document
+ * replace on a retained figure). Dirties the widget so the body is
+ * guaranteed to ship. */"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_figure_reset_consume
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Consume the pending reset: returns 1 exactly once per request (the
+ * body walk prepends CMD_ZERO for that ship). */"
+  - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_set_floating
     return_type: struct yetty_ycore_void_result
     args:
@@ -3849,6 +3949,35 @@ exposed:
         type: float
       - name: color_rgba
         type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui/widgets/scrollarea.c
+    name: yetty_ygui_scrollarea_enable_scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Switch this scrollarea to RETAINED-SCENE mode: its figure kind becomes
+ * \"yscene\" (must be called before the first emit mints the figure). The
+ * receiver keeps the whole document across bodies and scrolls it on the
+ * GPU — content inside is emitted in document space, scrolling ships a
+ * SET_CHILD_SCROLL instead of a body, and the gutter scrollbar is not
+ * painted. The gutter padding is released back to the content. */"
+  - source_file: src/yetty/ygui/widgets/scrollarea.c
+    name: yetty_ygui_scrollarea_scroll_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: offset
+        type: float
+    doc: "/* Programmatic scroll (navigation reset, restore). Clamped like every
+ * other scroll path. */"
+  - source_file: src/yetty/ygui/widgets/scrollarea.c
+    name: yetty_ygui_scrollarea_scroll_get
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/ygui/widgets/selectable.c
     name: yetty_ygui_selectable_set_text
@@ -5320,6 +5449,7 @@ local_types:
   yetty_ygui_ydiagram: src/yetty/ygui/widgets/ydiagram.c
   yetty_ygui_ydraw_embed_ptr_result: src/yetty/ygui/widgets/ydraw_embed.c
   yetty_ygui_ydraw_embed: src/yetty/ygui/widgets/ydraw_embed.c
+  embed_group_log: src/yetty/ygui/widgets/ydraw_embed.c
   embed_cull: src/yetty/ygui/widgets/ydraw_embed.c
   yetty_ygui_yimage_ptr_result: src/yetty/ygui/widgets/yimage.c
   yetty_ygui_yimage: src/yetty/ygui/widgets/yimage.c
@@ -5368,46 +5498,46 @@ local_typedefs:
     source_file: src/yetty/ygui/framework.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_ygui_key_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/framework-defs.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/framework-defs.h
     text: "typedef int (*yetty_ygui_key_cb)(struct yetty_yclass_object *, uint32_t, int, void *);"
   yetty_ygui_event_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/event.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/event.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_event_cb)(struct yetty_yclass_object *, const struct yetty_ygui_event *, void *);"
   yetty_ygui_click_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/mixins/clickable.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/mixins/clickable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_object *, void *);"
   yetty_ygui_drag_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/mixins/draggable.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/mixins/draggable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *, float, float, void *);"
   yetty_ygui_constructor_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_object *);"
   yetty_ygui_destructor_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_object *);"
   yetty_ygui_widget_on_press_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct yetty_yclass_object *, float, float, int);"
   yetty_ygui_widget_on_release_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_release_fn)(struct yetty_yclass_object *, float, float, int);"
   yetty_ygui_widget_on_motion_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(struct yetty_yclass_object *, float, float);"
   yetty_ygui_widget_emit_body_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
   yetty_ygui_widget_on_scroll_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_scroll_fn)(struct yetty_yclass_object *, float, float, float, float);"
   yetty_ygui_widget_paint_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
   yetty_ygui_widget_emit_container_fn:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_container_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
   yetty_ygui_menu_item_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widgets/popup_menu.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widgets/popup_menu.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *, int, void *);"
   fn_t:
     source_file: src/yetty/ygui/widget.c
@@ -5422,7 +5552,7 @@ local_typedefs:
     source_file: src/yetty/ygui/widgets/tabbar.c
     text: "typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *, void *);"
   yetty_ygui_ynodes_link_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/ygui/widgets/ynodes.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/ygui/widgets/ynodes.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, struct yetty_yclass_object *, int, void *);"
 includes:
   src/yetty/ygui/framework.c:

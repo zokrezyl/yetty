@@ -3317,16 +3317,16 @@ local_typedefs:
     source_file: src/yetty/yrich/app.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_yrich_element_id:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yrich/yrich-types.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/yrich/yrich-types.h
     text: typedef uint64_t yetty_yrich_element_id;
   yetty_yrich_sync_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yrich/yrich-types.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/yrich/yrich-types.h
     text: "typedef void (*yetty_yrich_sync_cb)(struct yetty_yclass_object *, struct yetty_yrich_operation *const *, size_t, void *);"
   yetty_yrich_dirty_cb:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yrich/yrich-types.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/yrich/yrich-types.h
     text: "typedef void (*yetty_yrich_dirty_cb)(struct yetty_yclass_object *, void *);"
   yetty_yrich_session_id:
-    source_file: /home/misi/work/my/yetty-yrpc/include/yetty/yrich/yrich-operation.h
+    source_file: /home/misi/work/my/yetty-yscene/include/yetty/yrich/yrich-operation.h
     text: typedef uint64_t yetty_yrich_session_id;
   fn_t:
     source_file: src/yetty/yrich/document.c

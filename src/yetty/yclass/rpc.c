@@ -567,6 +567,14 @@ struct yetty_yclass_rpc_session {
     struct yetty_yclass_transport_pty *owned_pty;
 };
 
+struct yetty_ywire_connection *yetty_yclass_rpc_session_connection(
+    struct yetty_yclass_rpc_session *s)
+{
+    /* NULL when the caller supplied the transport/connection — then the
+     * caller already holds the connection and pumps it itself. */
+    return s ? s->owned_connection : NULL;
+}
+
 struct yetty_yclass_rpc_session_ptr_result yetty_yclass_rpc_session_create(
     struct yetty_yclass_transport *transport)
 {
