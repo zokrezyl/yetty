@@ -268,6 +268,27 @@ static void test_world_inheritance_and_hit(void)
     CHECK("hit inside clip", hit(obj, 122, 55) == 2);
     CHECK("clipped part misses", hit(obj, 128, 55) == 0);
 
+    /* Navigation regression: a full reset must drop the previous
+     * document's view scroll — a stale offset strands the next page
+     * above the viewport (the "clicked link shows a blank page" bug). */
+    CHECK_OK("scroll before reset", yetty_yfigure_set_scroll(obj, 0, 400));
+    struct yetty_ycore_void_result reset_res = yetty_yfigure_reset_content(obj);
+    CHECK("reset_content", YETTY_IS_OK(reset_res));
+    if (YETTY_IS_ERR(reset_res)) {
+        yetty_ycore_error_destroy(reset_res.error);
+    }
+    CHECK_OK("re-declare after reset", yetty_yscene_node_declare(obj, 1, 0));
+    CHECK_OK("re-content after reset", yetty_yscene_node_set_content(obj, 1, list_buffer(box)));
+    {
+        struct yetty_ycore_uint64_result commit_res = yetty_yscene_commit(obj);
+        if (YETTY_IS_ERR(commit_res)) {
+            yetty_ycore_error_destroy(commit_res.error);
+        }
+    }
+    /* box spans document (0,0)-(10,10); with the stale scroll (y=400)
+     * this screen point would map to document (5,405) and miss. */
+    CHECK("fresh document visible at scroll 0", hit(obj, 5, 5) == 1);
+
     yetty_ydraw_drawable_list_destroy(box);
     struct yetty_ycore_void_result destroy_res = yetty_yfigure_destroy(obj);
     if (YETTY_IS_ERR(destroy_res)) {

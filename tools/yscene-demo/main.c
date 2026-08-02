@@ -15,7 +15,7 @@
  *   2. update: RE-EMIT the chip group with moved content — the retained
  *      tree replaces the node's content in place, keeping its paint
  *      depth (the flicker class ygrid needed a band-aid for);
- *   3. scroll: content taller than the card + set_child_scroll — the
+ *   3. scroll: content taller than the figure + set_child_scroll — the
  *      scene scrolls on the GPU, nothing is re-emitted.
  *
  *   usage: yscene-demo [x y w h]     (default 40 40 680 520)
@@ -128,7 +128,7 @@ int main(int argc, char **argv)
         height = (float)atof(argv[4]);
     }
     uint32_t child_id = YSCENE_DEMO_GETPID();
-    /* Content is taller than the card so phase 3 has something to
+    /* Content is taller than the figure so phase 3 has something to
      * scroll to. */
     float content_h = height * 2.0f;
 
@@ -276,7 +276,7 @@ int main(int argc, char **argv)
     }
 
     fprintf(stderr,
-            "yscene-demo: scene card %u shipped (%.0fx%.0f at %.0f,%.0f), chip re-emitted, "
+            "yscene-demo: scene figure %u shipped (%.0fx%.0f at %.0f,%.0f), chip re-emitted, "
             "scrolled to bottom — the bright marker should be visible\n",
             child_id, width, height, origin_x, origin_y);
     exit_code = 0;
@@ -289,7 +289,7 @@ out:
         yetty_ydraw_drawable_list_destroy(update_body);
     }
     if (rpc_root) {
-        /* Tears down the session + transport; the card stays on screen
+        /* Tears down the session + transport; the figure stays on screen
          * (host-owned) after this producer exits. */
         struct yetty_ycore_void_result disconnect_res = yetty_yclass_rpc_disconnect(rpc_root);
         if (YETTY_IS_ERR(disconnect_res)) {

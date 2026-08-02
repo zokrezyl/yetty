@@ -144,6 +144,22 @@ struct YETTY_ANNOTATE("class@ygui:widget") yetty_ygui_widget {
     /* Stacking order for this widget's figure (only meaningful when
      * figure_kind != 0). Emitted as SET_CHILD_Z. */
     int32_t figure_z;
+    /* Retained-figure (yscene) view state, meaningful only when the
+     * figure kind is a retained scene. The container walk pushes these
+     * to the child figure every emit (SET_CHILD_SCROLL /
+     * SET_CHILD_CONTENT_SIZE). A scroll change marks the framework
+     * dirty WITHOUT dirtying the widget, so a scroll tick re-emits
+     * neither this figure's body nor its subtree — the receiver scrolls
+     * its retained content on the GPU. */
+    float figure_scroll_x;
+    float figure_scroll_y;
+    float figure_content_w;
+    float figure_content_h;
+    /* One-shot: prepend CMD_ZERO to the next figure body shipped for
+     * this widget (document replace on a retained figure — the receiver
+     * wipes content, wire fonts, complex instances, and its scroll
+     * view). Consumed by the body walk. */
+    int figure_reset_pending;
     /* Floating overlay (dialog / debug window): a press inside it moves it to
      * the end of its parent's child list (paints last, wins hit-test). */
     int floating;
@@ -197,6 +213,7 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_ob
 /* Defined lower in this file (the widget tree/lifecycle block), but the
  * geometry setters above it mark the widget dirty — forward-declare. */
 struct yetty_ycore_void_result yetty_ygui_widget_set_dirty(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_ygui_widget_framework(struct yetty_yclass_object *obj);
 
 /* The widget base-data slice (the flat tree/framework fields) is reached
  * through yetty_ygui_widget_from(obj), whose Result is checked and propagated
@@ -570,6 +587,129 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_figure_z(struct yetty_yclas
         return yetty_ygui_widget_set_dirty(obj);
     }
     return YETTY_OK_VOID();
+}
+
+/* Retained-figure scroll offset. Marks the FRAMEWORK dirty (a walk must
+ * push SET_CHILD_SCROLL) but NOT the widget — a scroll tick must not
+ * re-ship the figure's retained body. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_widget_figure_scroll_set(struct yetty_yclass_object *obj,
+                                                                   float scroll_x, float scroll_y)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_figure_scroll_set: NULL obj");
+    }
+    struct yetty_ygui_widget_ptr_result wd_res = yetty_ygui_widget_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_res, "yetty_ygui_widget_figure_scroll_set: data_get");
+    if (wd_res.value->figure_scroll_x == scroll_x && wd_res.value->figure_scroll_y == scroll_y) {
+        /* Unchanged — do NOT mark the framework dirty. Widget paint calls
+         * this every frame (offset clamping); an unconditional mark would
+         * re-arm the emit cycle forever. */
+        return YETTY_OK_VOID();
+    }
+    wd_res.value->figure_scroll_x = scroll_x;
+    wd_res.value->figure_scroll_y = scroll_y;
+    struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res,
+                        "yetty_ygui_widget_figure_scroll_set: framework");
+    if (framework_res.value) {
+        yetty_ygui_framework_mark_dirty(framework_res.value);
+    }
+    return YETTY_OK_VOID();
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_widget_figure_scroll_get(
+    const struct yetty_yclass_object *obj, float *scroll_x, float *scroll_y)
+{
+    if (!obj || !scroll_x || !scroll_y) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_figure_scroll_get: NULL arg");
+    }
+    struct yetty_ygui_widget_ptr_result wd_res =
+        yetty_ygui_widget_from((struct yetty_yclass_object *)obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_res, "yetty_ygui_widget_figure_scroll_get: data_get");
+    *scroll_x = wd_res.value->figure_scroll_x;
+    *scroll_y = wd_res.value->figure_scroll_y;
+    return YETTY_OK_VOID();
+}
+
+/* Retained-figure content extent (document size the receiver can scroll
+ * over). Same dirty contract as the scroll setter. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_widget_figure_content_size_set(
+    struct yetty_yclass_object *obj, float content_w, float content_h)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_figure_content_size_set: NULL obj");
+    }
+    struct yetty_ygui_widget_ptr_result wd_res = yetty_ygui_widget_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_res,
+                        "yetty_ygui_widget_figure_content_size_set: data_get");
+    if (wd_res.value->figure_content_w == content_w &&
+        wd_res.value->figure_content_h == content_h) {
+        /* Unchanged — see figure_scroll_set: paint-path callers must not
+         * re-arm the emit cycle. */
+        return YETTY_OK_VOID();
+    }
+    wd_res.value->figure_content_w = content_w;
+    wd_res.value->figure_content_h = content_h;
+    struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res,
+                        "yetty_ygui_widget_figure_content_size_set: framework");
+    if (framework_res.value) {
+        yetty_ygui_framework_mark_dirty(framework_res.value);
+    }
+    return YETTY_OK_VOID();
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_widget_figure_content_size_get(
+    const struct yetty_yclass_object *obj, float *content_w, float *content_h)
+{
+    if (!obj || !content_w || !content_h) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_figure_content_size_get: NULL arg");
+    }
+    struct yetty_ygui_widget_ptr_result wd_res =
+        yetty_ygui_widget_from((struct yetty_yclass_object *)obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_res,
+                        "yetty_ygui_widget_figure_content_size_get: data_get");
+    *content_w = wd_res.value->figure_content_w;
+    *content_h = wd_res.value->figure_content_h;
+    return YETTY_OK_VOID();
+}
+
+/* Request a full receiver-side reset with the next figure body (document
+ * replace on a retained figure). Dirties the widget so the body is
+ * guaranteed to ship. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_widget_figure_reset_request(
+    struct yetty_yclass_object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_figure_reset_request: NULL obj");
+    }
+    struct yetty_ygui_widget_ptr_result wd_res = yetty_ygui_widget_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_res,
+                        "yetty_ygui_widget_figure_reset_request: data_get");
+    wd_res.value->figure_reset_pending = 1;
+    return yetty_ygui_widget_set_dirty(obj);
+}
+
+/* Consume the pending reset: returns 1 exactly once per request (the
+ * body walk prepends CMD_ZERO for that ship). */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ygui_widget_figure_reset_consume(
+    struct yetty_yclass_object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_figure_reset_consume: NULL obj");
+    }
+    struct yetty_ygui_widget_ptr_result wd_res = yetty_ygui_widget_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, wd_res,
+                        "yetty_ygui_widget_figure_reset_consume: data_get");
+    int pending = wd_res.value->figure_reset_pending;
+    wd_res.value->figure_reset_pending = 0;
+    return YETTY_OK(yetty_ycore_int, pending);
 }
 
 YETTY_ANNOTATE("expose")

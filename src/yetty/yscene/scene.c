@@ -196,6 +196,12 @@ struct YETTY_ANNOTATE("class@yscene:scene") YETTY_ANNOTATE("parent@yfigure:figur
     struct yetty_ydraw_composite_factory *composite_factory; /* borrowed */
     struct yscene_complex_instance {
         struct yetty_ydraw_composite *instance;
+        /* Identity = (batch_stamp, record_offset). The stamp is the
+         * batch's immutable ALLOCATION id — slots recycle after zero/
+         * navigation, and a slot-keyed instance would collide with the
+         * next page's span at the same coordinates (the leaked-images
+         * nav bug: old image marked live, new image never minted). */
+        uint64_t batch_stamp;
         uint32_t batch_slot;
         uint32_t record_offset;
         uint32_t stream_ordinal; /* CMD_UPDATE address, per-body 1-based */
@@ -440,6 +446,20 @@ static bool rect_contains(struct yetty_ycore_rectangle rect, float x, float y)
 static struct yetty_ycore_void_result scene_install_wire_font(
     struct yetty_yscene_scene *scene, const struct yetty_ydraw_font_resource_view *view);
 static void scene_reset_wire_fonts(struct yetty_yscene_scene *scene);
+static void scene_reset_complexes(struct yetty_yscene_scene *scene);
+
+/* A full reset replaces the DOCUMENT — the view offset into the old
+ * document is meaningless for the new one. Leaving it in place strands
+ * a shorter page's content above the viewport ("clicked link shows a
+ * blank page" from the ychromium bridge). view_scale is NOT reset: it
+ * is a host/display property, not document state. */
+static void scene_reset_view(struct yetty_yscene_scene *scene)
+{
+    scene->scroll_x = 0.0f;
+    scene->scroll_y = 0.0f;
+    scene->content_w = 0.0f;
+    scene->content_h = 0.0f;
+}
 
 /*===========================================================================
  * Derive — tree in, flat paint-ordered world leaves out
@@ -808,7 +828,12 @@ static struct yetty_ycore_void_result scene_validate_body_chain(
         struct yetty_ydraw_command command;
         struct yetty_ycore_size_result parse_res = yetty_ydraw_drawable_command_parse(
             walk->registry, bytes + cursor, (uint32_t)(bytes_len - cursor), &command);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, parse_res, "yscene adapter: validate parse");
+        if (YETTY_IS_ERR(parse_res)) {
+            /* Locate the offender for the producer's trace. */
+            yerror("yscene adapter: validate parse failed at depth=%u offset=%zu of %zu",
+                   depth, cursor, bytes_len);
+            return YETTY_ERR(yetty_ycore_void, "yscene adapter: validate parse", parse_res);
+        }
         if (parse_res.value == 0) {
             return YETTY_ERR(yetty_ycore_void, "yscene adapter: validate no progress");
         }
@@ -867,8 +892,9 @@ static struct yetty_ycore_void_result scene_complex_mint(struct yetty_yscene_sce
     if (!scene->composite_factory) {
         return YETTY_OK_VOID();
     }
+    uint64_t batch_stamp = scene->dom->batches[batch_slot].batch_stamp;
     for (uint32_t i = 0; i < scene->complex_count; i++) {
-        if (scene->complexes[i].batch_slot == batch_slot &&
+        if (scene->complexes[i].batch_stamp == batch_stamp &&
             scene->complexes[i].record_offset == record_offset) {
             return YETTY_OK_VOID(); /* already minted for this span */
         }
@@ -897,6 +923,7 @@ static struct yetty_ycore_void_result scene_complex_mint(struct yetty_yscene_sce
     struct yscene_complex_instance *slot = &scene->complexes[scene->complex_count++];
     memset(slot, 0, sizeof(*slot));
     slot->instance = instance_res.value;
+    slot->batch_stamp = batch_stamp;
     slot->batch_slot = batch_slot;
     slot->record_offset = record_offset;
     slot->stream_ordinal = ++scene->stream_next_ordinal;
@@ -960,6 +987,25 @@ static void scene_complex_route_update(struct yetty_yscene_scene *scene,
         return;
     }
     target->instance->dirty = 1;
+}
+
+/* Destroy EVERY complex instance immediately — the reset/navigation
+ * path (reset_content, typed zero, wire CMD_ZERO). Complexes live
+ * outside the dom, so a dom zero alone leaves the previous page's
+ * images alive and painting over the new page, accumulating per
+ * navigation (the ygrid #685 class, reported live from the ychromium
+ * bridge). */
+static void scene_reset_complexes(struct yetty_yscene_scene *scene)
+{
+    if (scene->complex_count > 0) {
+        ydebug("yscene: reset destroying %u complex instance(s)", scene->complex_count);
+    }
+    for (uint32_t i = 0; i < scene->complex_count; i++) {
+        if (scene->complexes[i].instance) {
+            yetty_ydraw_composite_destroy(scene->complexes[i].instance);
+        }
+    }
+    scene->complex_count = 0;
 }
 
 /* Destroy instances whose source span is gone (sweep after staging
@@ -1082,10 +1128,13 @@ static struct yetty_ycore_void_result scene_apply_body(struct yscene_body_walk *
         } else if (record_type == YETTY_YDRAW_CMD_ZERO) {
             struct yetty_ycore_void_result zero_res = yetty_yscene_dom_zero(walk->dom);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, zero_res, "yscene adapter: zero");
-            /* A full reset rebuilds from scratch: poison + wire fonts
-             * from the previous document are gone. */
+            /* A full reset rebuilds from scratch: poison, wire fonts,
+             * and complex instances from the previous document are
+             * gone. */
             walk->scene->pending_poisoned = false;
             scene_reset_wire_fonts(walk->scene);
+            scene_reset_complexes(walk->scene);
+            scene_reset_view(walk->scene);
             /* Everything after CMD_ZERO lands in the fresh root scope —
              * mirror the ygrid contract. */
             cursor += parse_res.value;
@@ -1402,6 +1451,8 @@ static struct yetty_ycore_void_result scene_zero(struct yetty_yclass_object *obj
     YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "yscene zero");
     scene_res.value->pending_poisoned = false;
     scene_reset_wire_fonts(scene_res.value);
+    scene_reset_complexes(scene_res.value);
+    scene_reset_view(scene_res.value);
     return yetty_yfigure_figure_dirty_set(obj, 1);
 }
 
@@ -2063,10 +2114,11 @@ static struct yetty_ycore_void_result scene_rebuild_staging(struct yetty_yscene_
             /* Own-pipeline draw: mark the instance live and refresh its
              * paint key + world anchor; drawn after the prim pass (the
              * z-run interleave is the follow-up). */
+            uint64_t leaf_batch_stamp = dom->batches[leaf->batch_slot].batch_stamp;
             for (uint32_t complex_index = 0; complex_index < scene->complex_count;
                  complex_index++) {
                 struct yscene_complex_instance *entry = &scene->complexes[complex_index];
-                if (entry->batch_slot == leaf->batch_slot &&
+                if (entry->batch_stamp == leaf_batch_stamp &&
                     entry->record_offset == leaf->record_offset) {
                     entry->seen = true;
                     entry->paint_z = leaf->paint_z;
@@ -2264,6 +2316,12 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
         YETTY_RETURN_IF_ERR(yetty_ycore_void, staging_res, "yscene render: staging");
         staging_rebuilt = true;
     }
+    ydebug("yscene_render: rect=(%.1f,%.1f)-(%.1f,%.1f) content=%.0fx%.0f leaves=%u staged=%u "
+           "complexes=%u gen=%llu rebuilt=%d scroll=(%.1f,%.1f)",
+           rect.min.x, rect.min.y, rect.max.x, rect.max.y, content_w, content_h,
+           scene->leaf_count, scene->staged_prim_count, scene->complex_count,
+           (unsigned long long)scene->derived_generation, staging_rebuilt ? 1 : 0,
+           scene->scroll_x, scene->scroll_y);
 
     /* Pointers refresh every frame (realloc moves them); UPLOAD dirt is
      * set only when staging actually changed — a scroll-only frame
@@ -2374,7 +2432,7 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
      * content_scale, so the anchor carries rect origin + (node world
      * translate − scroll) in screen units and content_scale carries the
      * view scale. Publish the figure scissor as target->clip so the
-     * instance's own pass clips to this card. */
+     * instance's own pass clips to this figure. */
     if (scene->complex_count > 0) {
         qsort(scene->complexes, scene->complex_count, sizeof(struct yscene_complex_instance),
               scene_complex_compare);
@@ -2529,6 +2587,8 @@ static struct yetty_ycore_void_result scene_reset_content_slot(struct yetty_ycla
     YETTY_RETURN_IF_ERR(yetty_ycore_void, zero_res, "yscene reset_content: zero");
     scene_res.value->pending_poisoned = false;
     scene_reset_wire_fonts(scene_res.value);
+    scene_reset_complexes(scene_res.value);
+    scene_reset_view(scene_res.value);
     struct yetty_ycore_uint64_result commit_res = scene_commit_and_publish(scene_res.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, commit_res, "yscene reset_content: commit");
     return yetty_yfigure_figure_dirty_set(obj, 1);

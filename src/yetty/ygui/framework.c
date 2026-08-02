@@ -52,6 +52,16 @@
  * id is a placeholder constant. */
 #define YGUI_framework_YGRID_ID_BASE 0xFE000001u
 
+/* Retained-figure view-state accessors defined in widget.c. Declared here
+ * (identically to the generated widget.h) so the codegen source parse of
+ * this TU resolves them regardless of generation order. */
+struct yetty_ycore_void_result yetty_ygui_widget_figure_scroll_get(
+    const struct yetty_yclass_object *obj, float *scroll_x, float *scroll_y);
+struct yetty_ycore_void_result yetty_ygui_widget_figure_content_size_get(
+    const struct yetty_yclass_object *obj, float *content_w, float *content_h);
+struct yetty_ycore_int_result yetty_ygui_widget_figure_reset_consume(
+    struct yetty_yclass_object *obj);
+
 /*===========================================================================
  * Class data slice — the framework is a root yclass class. Its per-instance
  * state lives in this slice; the object itself is a yetty_yclass_object. The
@@ -532,6 +542,20 @@ struct yetty_ygui_theme *yetty_ygui_framework_theme(struct yetty_yclass_object *
 {
     struct yetty_ygui_framework *framework = framework_data(obj);
     return framework ? framework->theme : NULL;
+}
+
+struct yetty_yclass_rpc_session *yetty_ygui_framework_rpc_session(struct yetty_yclass_object *obj)
+{
+    struct yetty_ygui_framework *framework = framework_data(obj);
+    if (!framework || !framework->rpc_root) {
+        return NULL;
+    }
+    return framework->rpc_root->session;
+}
+
+struct yetty_ywire_connection *yetty_ygui_framework_wire_connection(struct yetty_yclass_object *obj)
+{
+    return yetty_yclass_rpc_session_connection(yetty_ygui_framework_rpc_session(obj));
 }
 
 struct yetty_yfont_font *yetty_ygui_framework_font(struct yetty_yclass_object *obj)
@@ -1470,6 +1494,40 @@ struct yetty_ycore_void_result yetty_ygui_emit_set_child_hidden(struct yetty_ygu
                                           hidden ? 1u : 0u);
 }
 
+struct yetty_ycore_void_result yetty_ygui_emit_set_child_scroll(struct yetty_ygui_emit_ctx *ctx,
+                                                                uint32_t child_id, float scroll_x,
+                                                                float scroll_y)
+{
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_scroll: NULL ctx");
+    }
+    if (!ctx->framework || !ctx->framework->container_obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_scroll: no container");
+    }
+    return yetty_yfigure_set_child_scroll(ctx->framework->container_obj, child_id, scroll_x,
+                                          scroll_y);
+}
+
+struct yetty_ycore_void_result yetty_ygui_emit_set_child_content_size(
+    struct yetty_ygui_emit_ctx *ctx, uint32_t child_id, float content_w, float content_h)
+{
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_content_size: NULL ctx");
+    }
+    if (!ctx->framework || !ctx->framework->container_obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_content_size: no container");
+    }
+    return yetty_yfigure_set_child_content_size(ctx->framework->container_obj, child_id, content_w,
+                                                content_h);
+}
+
+/* A retained-scene figure kind: the receiver keeps the whole document
+ * across bodies (no per-ship CMD_ZERO) and scrolls it on the GPU. */
+static int figure_kind_is_retained(uint32_t kind)
+{
+    return kind == yetty_yfigure_kind_token("yscene");
+}
+
 /*===========================================================================
  * Tree walkers.
  *=========================================================================*/
@@ -1672,6 +1730,35 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
         struct yetty_ycore_void_result hr = yetty_ygui_emit_set_child_hidden(ctx, fid, 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hr,
                             "yetty_ygui_framework_walk_emit_container: figure show");
+        /* Retained-scene figure: push the document extent + scroll offset
+         * every walk (same unconditional re-sync model as the rect above —
+         * a few floats over the typed stub). The receiver scrolls its
+         * retained content on the GPU; the body is NOT re-shipped. */
+        if (figure_kind_is_retained(fkind)) {
+            float content_w = 0.0f;
+            float content_h = 0.0f;
+            struct yetty_ycore_void_result content_res =
+                yetty_ygui_widget_figure_content_size_get(node, &content_w, &content_h);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, content_res,
+                                "yetty_ygui_framework_walk_emit_container: figure content size");
+            if (content_w > 0.0f || content_h > 0.0f) {
+                struct yetty_ycore_void_result size_res =
+                    yetty_ygui_emit_set_child_content_size(ctx, fid, content_w, content_h);
+                YETTY_RETURN_IF_ERR(
+                    yetty_ycore_void, size_res,
+                    "yetty_ygui_framework_walk_emit_container: SET_CHILD_CONTENT_SIZE");
+            }
+            float scroll_x = 0.0f;
+            float scroll_y = 0.0f;
+            struct yetty_ycore_void_result scroll_res =
+                yetty_ygui_widget_figure_scroll_get(node, &scroll_x, &scroll_y);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, scroll_res,
+                                "yetty_ygui_framework_walk_emit_container: figure scroll");
+            struct yetty_ycore_void_result push_res =
+                yetty_ygui_emit_set_child_scroll(ctx, fid, scroll_x, scroll_y);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, push_res,
+                                "yetty_ygui_framework_walk_emit_container: SET_CHILD_SCROLL");
+        }
         /* Narrow the clip for this figure's subtree. */
         ctx->fig_clip = fr;
         ctx->fig_clip_active = 1;
@@ -1784,34 +1871,58 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
     /* Figure boundary: swap in a fresh draw list, paint the whole
      * subtree into it, ship it as the figure's body, then restore. The
      * leading CMD_ZERO wipes this figure's prims on the receiver each
-     * frame (full-redraw model, same as the chrome ygrid). */
+     * frame (full-redraw model, same as the chrome ygrid) — EXCEPT for a
+     * retained-scene figure, whose receiver keeps the document across
+     * bodies (re-emission replaces content in place, preserving paint
+     * depth) and resets only on an explicit request (document replace). */
+    int retained = figure_kind_is_retained(fkind_res.value);
     struct yetty_ydraw_drawable_list_result dlr =
         yetty_ydraw_drawable_list_config_buffer_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dlr,
                         "yetty_ygui_framework_walk_emit_body: figure drawable_list create");
     struct yetty_ydraw_drawable_list *figure_dl = dlr.value;
-    struct yetty_ycore_void_result zr = yetty_ydraw_drawable_list_add_cmd_zero(figure_dl);
-    if (YETTY_IS_ERR(zr)) {
-        yetty_ydraw_drawable_list_destroy(figure_dl);
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_walk_emit_body: figure CMD_ZERO",
-                         zr);
+    int want_zero = 1;
+    if (retained) {
+        struct yetty_ycore_int_result reset_res = yetty_ygui_widget_figure_reset_consume(node);
+        if (YETTY_IS_ERR(reset_res)) {
+            yetty_ydraw_drawable_list_destroy(figure_dl);
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_ygui_framework_walk_emit_body: figure reset_consume",
+                             reset_res);
+        }
+        want_zero = reset_res.value;
+    }
+    if (want_zero) {
+        struct yetty_ycore_void_result zr = yetty_ydraw_drawable_list_add_cmd_zero(figure_dl);
+        if (YETTY_IS_ERR(zr)) {
+            yetty_ydraw_drawable_list_destroy(figure_dl);
+            return YETTY_ERR(yetty_ycore_void,
+                             "yetty_ygui_framework_walk_emit_body: figure CMD_ZERO", zr);
+        }
     }
 
     struct yetty_ydraw_drawable_list *saved_dl = ctx->ygrid_drawable_list;
     uint32_t saved_fid = ctx->current_figure_id;
     int saved_clip_active = ctx->fig_clip_active;
     struct yetty_ycore_rectangle saved_clip = ctx->fig_clip;
+    int saved_retained = ctx->figure_retained;
+    float saved_origin_x = ctx->figure_origin_x;
+    float saved_origin_y = ctx->figure_origin_y;
     ctx->ygrid_drawable_list = figure_dl;
     ctx->current_figure_id = node_id;
+    ctx->figure_retained = retained;
 
     /* Narrow the clip to this figure's rect (a scrollarea's viewport) for the
      * duration of its subtree body paint, mirroring the container walk. The
      * figure GPU-scissors to this rect anyway, so a body-emitting widget
      * (ydraw_embed) can drop primitives outside it up front instead of emitting
-     * the whole tall page every frame. Nested figures intersect with this. */
+     * the whole tall page every frame. Nested figures intersect with this.
+     * The UNCLIPPED rect.min is the retained figure's document origin. */
     struct yetty_ycore_rectangle_result frect_res = yetty_ygui_widget_rect(node);
     if (YETTY_IS_OK(frect_res)) {
         struct yetty_ycore_rectangle frect = frect_res.value;
+        ctx->figure_origin_x = frect.min.x;
+        ctx->figure_origin_y = frect.min.y;
         if (ctx->fig_clip_active) {
             frect = emit_rect_intersect(frect, ctx->fig_clip);
         }
@@ -1819,6 +1930,8 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
         ctx->fig_clip_active = 1;
     } else {
         yetty_ycore_error_destroy(frect_res.error);
+        ctx->figure_origin_x = 0.0f;
+        ctx->figure_origin_y = 0.0f;
     }
 
     struct yetty_ycore_void_result br = walk_emit_body_inline(node, ctx);
@@ -1827,6 +1940,9 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
     ctx->current_figure_id = saved_fid;
     ctx->fig_clip = saved_clip;
     ctx->fig_clip_active = saved_clip_active;
+    ctx->figure_retained = saved_retained;
+    ctx->figure_origin_x = saved_origin_x;
+    ctx->figure_origin_y = saved_origin_y;
 
     if (YETTY_IS_ERR(br)) {
         yetty_ydraw_drawable_list_destroy(figure_dl);

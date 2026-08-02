@@ -51,7 +51,7 @@ Done:
   binder + ygrid.wgsl pipeline, world-baked translate/scale geometry,
   GPU-side scroll (`cz_off`).
 - Wire integration: the `yscene` figure kind registers with the
-  terminal's registry; `tools/yscene-demo` ships a card end-to-end
+  terminal's registry; `tools/yscene-demo` ships a scene figure end-to-end
   (verified live: mint → adapter → derive → staging → draw).
 - Headless tests: `test/ut/yscene/` (dom contract + scene behavior).
 
@@ -93,10 +93,23 @@ Also done (second hardening round + complex leaves):
 - Gradient fills fold inherited opacity (linear + radial payload
   colors), not just the style-header colors.
 
+Also done (first ygui producer migration — the ybrowser page):
+- The browser page scrollarea renders into a retained `yscene` figure
+  (`yetty_ygui_scrollarea_enable_scene`): the whole document ships once
+  in document space (no viewport culling), the scene scrolls it on the
+  GPU via `set_child_scroll` (a scroll tick re-ships nothing), and
+  navigation resets with a leading CMD_ZERO. The ygui framework ships
+  retained figure bodies WITHOUT the per-frame CMD_ZERO — the embed
+  wraps its emission in one stable group so re-emission replaces content
+  in place at its original paint depth, and deletes stale child groups.
+  Follow-ups: overlay scrollbar in the chrome layer (a viewport-fixed
+  thumb cannot live inside the scrolled document), per-tab scroll
+  save/restore.
+
 Next increments: z-run interleave with per-run scissors, per-prim
 effective clip in a yscene shader fork, the content-addressed resource
 channel for heavy payloads (#691 "Heavy payloads"), exact render-plan /
 logical-dom serialization, rotation/shear + anisotropic text in staging,
 incremental (dirty-subtree) derive, compact leaf records, spatial
-hit-test, yrdawn in-page adapter, producer migration (ygui), then ygrid
-retirement per the #691 parity list.
+hit-test, yrdawn in-page adapter, remaining producer migration (ygui
+chrome), then ygrid retirement per the #691 parity list.

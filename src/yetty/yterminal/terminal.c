@@ -2527,7 +2527,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
         }
 
         /* "yscene" — the retained scene graph (#691), built alongside
-         * ygrid until parity. Producers opt in per card. The args bundle
+         * ygrid until parity. Producers opt in per figure. The args bundle
          * lives on the terminal (same lifetime contract as figure_args). */
         {
             terminal->yscene_factory_args.composite_factory = terminal->composite_factory;

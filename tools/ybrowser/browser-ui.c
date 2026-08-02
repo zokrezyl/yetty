@@ -50,9 +50,23 @@
 #include <yetty/yplatform/yworkpool.h>
 #include <yetty/yterminal/client-input.h>
 #include <yetty/yterminal/dcs-codes.h>
+#include <yetty/yclass/rpc.h>
+#include <yetty/ywire/channel.h>
+#include <yetty/ywire/connection.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include "browser-ui.h"
+
+/* Retained-scene page plumbing defined in ygui widget.c / scrollarea.c.
+ * Declared here (identically to the generated ygui headers) so the codegen
+ * source parse of this TU resolves them regardless of generation order. */
+struct yetty_ycore_void_result yetty_ygui_widget_figure_reset_request(
+    struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_scrollarea_enable_scene(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_scrollarea_scroll_set(struct yetty_yclass_object *obj,
+                                                                float offset);
+struct yetty_ycore_float_result yetty_ygui_scrollarea_scroll_get(
+    const struct yetty_yclass_object *obj);
 
 /* ===========================================================================
  * Brand palette. Backgrounds use the packed 0xAABBGGRR form the widget
@@ -805,9 +819,23 @@ static int tab_ensure_engine(struct app *a, struct tab *t)
 
 /* Install fetched content into the tab, detecting whether it's HTML (→
  * ylexbor), an SVG (→ ysvg) or a raster image (→ yimage). */
+/* The page figure shows a NEW document (navigation / tab switch): reset
+ * the retained scene with the next body (CMD_ZERO wipes content, wire
+ * fonts, complex instances, and the receiver's scroll view) and zero the
+ * scrollarea's own offset so producer and receiver agree at scroll 0. */
+static void page_scene_reset(struct app *a)
+{
+    if (!a->scroll) {
+        return;
+    }
+    err_ok(yetty_ygui_scrollarea_scroll_set(a->scroll, 0.0f));
+    err_ok(yetty_ygui_widget_figure_reset_request(a->scroll));
+}
+
 static void tab_set_document(struct app *a, struct tab *t, const char *data, size_t len,
                              const char *base_url, const char *content_type)
 {
+    page_scene_reset(a);
     t->kind = detect_kind(content_type, (const uint8_t *)data, len);
     free(t->raw);
     t->raw = NULL;
@@ -1297,7 +1325,9 @@ static void switch_tab(struct app *a, int idx)
     a->active = idx;
     struct tab *t = &a->tabs[idx];
     /* The shared embed currently holds another tab's buffer — force a
-	 * re-render of this tab's engine into it. */
+	 * re-render of this tab's engine into it, and reset the retained
+	 * scene (another document's content + group ids live there). */
+    page_scene_reset(a);
     t->needs_render = 1;
     t->rendered_w = 0.0f;
     sync_active_ui(a);
@@ -1649,11 +1679,20 @@ static void page_click(struct app *a, float x, float y)
     if (!t->engine) {
         return;
     }
-    /* The embed rect already includes the scroll slide, so subtracting
-	 * rect.min yields document coords. A plain <a href> navigates;
-	 * otherwise dispatch a JS click. */
+    /* The embed's children no longer slide with the scroll (the retained
+     * scene scrolls on the GPU), so document coords are the viewport
+     * point relative to the unshifted embed rect PLUS the scroll offset. */
+    float scroll_offset = 0.0f;
+    {
+        struct yetty_ycore_float_result offset_res = yetty_ygui_scrollarea_scroll_get(a->scroll);
+        if (YETTY_IS_OK(offset_res)) {
+            scroll_offset = offset_res.value;
+        } else {
+            yetty_ycore_error_destroy(offset_res.error);
+        }
+    }
     float lx = x - pr.min.x;
-    float ly = y - pr.min.y;
+    float ly = y - pr.min.y + scroll_offset;
     char *href = yetty_ylexbor_link_at(t->engine, lx, ly);
     if (href) {
         char *unwrapped = unwrap_gnews_read_link(t->engine, href, lx, ly);
@@ -2132,7 +2171,33 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         if (payload_len < sizeof(struct yetty_client_input_mouse)) {
             return;
         }
-        const struct yetty_client_input_mouse *m = (const struct yetty_client_input_mouse *)payload;
+        struct yetty_client_input_mouse mouse_copy;
+        memcpy(&mouse_copy, payload, sizeof(mouse_copy));
+        ydebug("client mouse in: osc=%d kind=%d figure=%u xy=(%.1f,%.1f) pressed=%d",
+               osc_code, mouse_copy.kind, mouse_copy.figure_id, mouse_copy.x, mouse_copy.y,
+               mouse_copy.pressed);
+        /* The retained yscene page figure is a LOCAL-coords figure: the
+         * host reports its pointer events relative to the figure's rect
+         * (the old ygrid page figure was absolute-coords and reported
+         * pane-root points). The ygui framework and page_click expect
+         * app-root coords — map back by adding the scrollarea's rect. */
+        if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE && a->scroll &&
+            mouse_copy.figure_id != 0) {
+            struct yetty_ycore_uint32_result page_figure_res = yetty_ygui_widget_id(a->scroll);
+            if (YETTY_IS_OK(page_figure_res) && mouse_copy.figure_id == page_figure_res.value) {
+                struct yetty_ycore_rectangle_result scroll_rect_res =
+                    yetty_ygui_widget_rect(a->scroll);
+                if (YETTY_IS_OK(scroll_rect_res)) {
+                    mouse_copy.x += scroll_rect_res.value.min.x;
+                    mouse_copy.y += scroll_rect_res.value.min.y;
+                } else {
+                    yetty_ycore_error_destroy(scroll_rect_res.error);
+                }
+            } else if (YETTY_IS_ERR(page_figure_res)) {
+                yetty_ycore_error_destroy(page_figure_res.error);
+            }
+        }
+        const struct yetty_client_input_mouse *m = &mouse_copy;
         if (m->kind == YETTY_YMGUI_INPUT_MOUSE_POS) {
             struct yetty_ycore_int_result fr =
                 yetty_ygui_framework_feed_mouse_motion(a->fw, m->x, m->y);
@@ -2186,6 +2251,19 @@ static void on_raw(void *user, const char *bytes, size_t n)
         }
     }
     err_ok(yetty_ygui_framework_feed_input(a->fw, bytes, n));
+}
+
+/* ywire input/raw lane sinks — the connection's demux delivers the same
+ * payloads the legacy yface handlers consumed, so these are thin shims. */
+static void client_input_envelope_sink(void *user, int wire_code, const uint8_t *args,
+                                       size_t args_len, const uint8_t *payload, size_t payload_len)
+{
+    on_osc(user, wire_code, args, args_len, payload, payload_len);
+}
+
+static void client_raw_byte_sink(void *user, const uint8_t *bytes, size_t n)
+{
+    on_raw(user, (const char *)bytes, n);
 }
 
 /* ===========================================================================
@@ -2549,6 +2627,10 @@ static int build_ui(struct app *a)
         return -1;
     }
     a->scroll = sr.value;
+    /* The page renders into a RETAINED yscene figure: the whole document
+     * ships once (no viewport culling, no per-scroll re-ship) and the
+     * receiver scrolls it on the GPU via SET_CHILD_SCROLL. */
+    err_ok(yetty_ygui_scrollarea_enable_scene(a->scroll));
     {
         struct yetty_ygui_layout_const_ptr_result layout_res =
             yetty_ygui_widget_layout_get(a->scroll);
@@ -2753,14 +2835,20 @@ static int try_image_delta(struct app *a, struct tab *t)
     }
     /* The delta lands directly on the page figure, so it must carry the same
 	 * content offset the embed applies on a full render: the page widget's
-	 * top-left (its buffer scene origin is 0,0). */
+	 * top-left in DOCUMENT space — the retained scene's origin is the
+	 * scrollarea figure's rect.min, not the screen. */
     struct yetty_ycore_rectangle_result page_rect_res = yetty_ygui_widget_rect(a->page);
     if (YETTY_IS_ERR(page_rect_res)) {
         yetty_ycore_error_destroy(page_rect_res.error);
         return 0;
     }
-    float dx = page_rect_res.value.min.x;
-    float dy = page_rect_res.value.min.y;
+    struct yetty_ycore_rectangle_result scroll_rect_res = yetty_ygui_widget_rect(a->scroll);
+    if (YETTY_IS_ERR(scroll_rect_res)) {
+        yetty_ycore_error_destroy(scroll_rect_res.error);
+        return 0;
+    }
+    float dx = page_rect_res.value.min.x - scroll_rect_res.value.min.x;
+    float dy = page_rect_res.value.min.y - scroll_rect_res.value.min.y;
 
     struct yetty_ydraw_drawable_list_result delta_res =
         yetty_ydraw_drawable_list_config_buffer_create(NULL);
@@ -3027,13 +3115,41 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 
     open_first_tab(&a, initial_url);
 
+    /* ONE stdin consumer. The attach built a multiplexed ywire connection
+     * over stdin/stdout whose statemachine demuxes EVERYTHING: dynamic
+     * channels (RPC responses + flow-control credit), client-input OSC
+     * envelopes (mouse/resize), and raw keystrokes. Reading stdin behind
+     * its back with a private yface steals whichever envelopes land while
+     * this loop is in select — a WINDOW_ADJUST credit grant eaten that way
+     * parks every channel write past the 256 KiB window forever (the
+     * "whole-document page body never arrives, images missing" deadlock).
+     * So the loop drives the connection's reactor seam instead: sinks on
+     * the input/raw lanes, pump_readable on stdin readiness, pump_writable
+     * while queued outbound remains. The yface path stays only as a
+     * fallback for a session without an owned connection. */
+    struct yetty_ywire_connection *wire_connection = yetty_ygui_framework_wire_connection(a.fw);
+    struct yetty_yclass_rpc_session *wire_session = yetty_ygui_framework_rpc_session(a.fw);
     struct yetty_yface *yf = NULL;
-    struct yetty_yface_ptr_result yr = yetty_yface_create();
-    if (YETTY_IS_OK(yr)) {
-        yf = yr.value;
-        yetty_yface_set_handlers(yf, on_osc, on_raw, &a);
+    if (wire_connection) {
+        struct yetty_ywire_channel *input_channel =
+            yetty_ywire_connection_channel(wire_connection, YETTY_YWIRE_CHANNEL_INPUT);
+        struct yetty_ywire_channel *raw_channel =
+            yetty_ywire_connection_channel(wire_connection, YETTY_YWIRE_CHANNEL_RAW);
+        if (input_channel) {
+            err_ok(yetty_ywire_channel_set_envelope_sink(input_channel, client_input_envelope_sink,
+                                                         &a));
+        }
+        if (raw_channel) {
+            err_ok(yetty_ywire_channel_set_raw_sink(raw_channel, client_raw_byte_sink, &a));
+        }
     } else {
-        yetty_ycore_error_destroy(yr.error);
+        struct yetty_yface_ptr_result yr = yetty_yface_create();
+        if (YETTY_IS_OK(yr)) {
+            yf = yr.value;
+            yetty_yface_set_handlers(yf, on_osc, on_raw, &a);
+        } else {
+            yetty_ycore_error_destroy(yr.error);
+        }
     }
 
     set_mouse_forwarding(1);
@@ -3050,6 +3166,16 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
             a.tabs[a.active].needs_render = 1;
             a.pending_render = 1;
             yetty_ygui_framework_mark_dirty(a.fw);
+        }
+
+        /* Surface pipelined RPC completions the connection pump delivered
+         * since the last tick (errors reach the sink; pending_count drains). */
+        if (wire_session) {
+            struct yetty_ycore_void_result session_pump_res =
+                yetty_yclass_rpc_session_pump(wire_session);
+            if (YETTY_IS_ERR(session_pump_res)) {
+                yetty_ycore_error_destroy(session_pump_res.error);
+            }
         }
 
         /* Pump the active tab's JS timers; cap the select wait so timers
@@ -3075,38 +3201,78 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
         }
 
         fd_set rfds;
+        fd_set wfds;
         FD_ZERO(&rfds);
-        FD_SET(STDIN_FILENO, &rfds);
-        int max_fd = STDIN_FILENO;
+        FD_ZERO(&wfds);
+        int stdin_fd = STDIN_FILENO;
+        if (wire_connection) {
+            int connection_fd = yetty_ywire_connection_fd(wire_connection);
+            if (connection_fd >= 0) {
+                stdin_fd = connection_fd;
+            }
+        }
+        FD_SET(stdin_fd, &rfds);
+        int max_fd = stdin_fd;
         if (pipe_loop.read_fd >= 0) {
             FD_SET(pipe_loop.read_fd, &rfds);
             if (pipe_loop.read_fd > max_fd) {
                 max_fd = pipe_loop.read_fd;
             }
         }
+        /* Queued outbound (a body past the channel window, a partial
+         * envelope the pty didn't take) — wait for writability so the
+         * tail flushes instead of sitting until the next unrelated write. */
+        int write_fd = -1;
+        if (wire_connection && yetty_ywire_connection_want_write(wire_connection)) {
+            write_fd = yetty_ywire_connection_out_fd(wire_connection);
+            if (write_fd >= 0) {
+                FD_SET(write_fd, &wfds);
+                if (write_fd > max_fd) {
+                    max_fd = write_fd;
+                }
+            }
+        }
         struct timeval tv = {wait_ms / 1000, (wait_ms % 1000) * 1000};
-        int rc = select(max_fd + 1, &rfds, NULL, NULL, &tv);
+        int rc = select(max_fd + 1, &rfds, write_fd >= 0 ? &wfds : NULL, NULL, &tv);
         if (rc < 0) {
             if (errno == EINTR) {
                 continue;
             }
             break;
         }
+        if (rc > 0 && write_fd >= 0 && FD_ISSET(write_fd, &wfds)) {
+            struct yetty_ycore_size_result write_pump_res =
+                yetty_ywire_connection_pump_writable(wire_connection);
+            if (YETTY_IS_ERR(write_pump_res)) {
+                yetty_ycore_error_destroy(write_pump_res.error);
+            }
+        }
         if (rc > 0 && pipe_loop.read_fd >= 0 && FD_ISSET(pipe_loop.read_fd, &rfds)) {
             /* Worker completions: nav results + image arrivals. They set
 			 * repaint/apply state consumed at the top of the next tick. */
             (void)client_pipe_drain(&pipe_loop);
         }
-        if (rc > 0 && FD_ISSET(STDIN_FILENO, &rfds)) {
-            ssize_t got = read(STDIN_FILENO, buf, sizeof(buf));
-            if (got > 0) {
-                if (yf) {
-                    err_ok(yetty_yface_feed_bytes(yf, buf, (size_t)got));
+        if (rc > 0 && FD_ISSET(stdin_fd, &rfds)) {
+            if (wire_connection) {
+                struct yetty_ycore_size_result read_pump_res =
+                    yetty_ywire_connection_pump_readable(wire_connection);
+                if (YETTY_IS_ERR(read_pump_res)) {
+                    yetty_ycore_error_destroy(read_pump_res.error);
                 }
-            } else if (got == 0) {
-                a.running = 0; /* host closed the pty */
-            } else if (errno != EAGAIN && errno != EINTR) {
-                a.running = 0;
+                if (yetty_ywire_connection_is_eof(wire_connection)) {
+                    a.running = 0; /* host closed the pty */
+                }
+            } else {
+                ssize_t got = read(STDIN_FILENO, buf, sizeof(buf));
+                if (got > 0) {
+                    if (yf) {
+                        err_ok(yetty_yface_feed_bytes(yf, buf, (size_t)got));
+                    }
+                } else if (got == 0) {
+                    a.running = 0; /* host closed the pty */
+                } else if (errno != EAGAIN && errno != EINTR) {
+                    a.running = 0;
+                }
             }
         }
     }
@@ -3165,6 +3331,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/api/ygrid/grid.h>
+#include <yetty/api/yscene/scene.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yplatform/platform.h>
@@ -3192,6 +3359,7 @@ struct YETTY_ANNOTATE("class@ybrowser:app") YETTY_ANNOTATE("parent@yapp:app") ye
     struct yetty_yfont_font *font;
     struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
     struct yetty_ygrid_factory_args figure_args;
+    struct yetty_yscene_factory_args yscene_args;
     struct yetty_yevent_event_listener listener;
     struct yetty_ydraw_target *render_target;
     const char *initial_url;
@@ -3733,6 +3901,14 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
             YETTY_RETURN_IF_ERR(yetty_ycore_void, kr,
                                 "ybrowser standalone: register_factory_for_kind");
         }
+        /* "yscene" — the retained scene the page scrollarea renders into
+         * (in-yetty the terminal registers it; standalone must too). */
+        s->yscene_args.composite_factory = s->composite_factory;
+        s->yscene_args.default_font = s->font;
+        struct yetty_ycore_void_result yscene_res =
+            yetty_yscene_register_factory(s->figure_registry, &s->yscene_args);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, yscene_res,
+                            "ybrowser standalone: yscene_register_factory");
     }
 
     /* Local container. */

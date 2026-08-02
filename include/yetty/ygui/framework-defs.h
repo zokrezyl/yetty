@@ -25,6 +25,8 @@ struct yetty_yclass_object;
 struct yetty_ygui_theme;
 struct yetty_ygui_framework;
 struct yetty_yfont_font;
+struct yetty_yclass_rpc_session;
+struct yetty_ywire_connection;
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,6 +39,17 @@ extern "C" {
  * return). Each takes the framework yclass object.
  *---------------------------------------------------------------------------*/
 struct yetty_ygui_theme *yetty_ygui_framework_theme(struct yetty_yclass_object *obj);
+
+/* The RPC session / multiplexed wire connection behind a framework that was
+ * attached over fds (yetty_ygui_framework_attach). NULL when the framework is
+ * in-process (set_container_obj) or attached over a caller-owned connection.
+ * The app's event loop owns the fds: select on connection_fd()/out_fd() and
+ * call the connection pumps on readiness — reading the fd directly (a private
+ * yface) races the connection's demux and drops its envelopes (credit grants,
+ * RPC responses). */
+struct yetty_yclass_rpc_session *yetty_ygui_framework_rpc_session(struct yetty_yclass_object *obj);
+struct yetty_ywire_connection *yetty_ygui_framework_wire_connection(
+    struct yetty_yclass_object *obj);
 
 /* Borrowed measurement font (see the `font` field in the framework struct).
  * yetty_ygui_framework_font returns NULL until the app calls set_font; widgets
@@ -142,6 +155,15 @@ struct yetty_ygui_emit_ctx {
      * Inactive at the root (no clipping). */
     struct yetty_ycore_rectangle fig_clip;
     int fig_clip_active;
+
+    /* Set while emitting a RETAINED-scene (yscene) figure boundary's body.
+     * Content is document-space: the receiver keeps the whole document and
+     * scrolls it on the GPU, so body-emitting widgets subtract figure_origin
+     * (the boundary widget's unclipped rect.min) instead of emitting absolute
+     * coords, and skip viewport culling. */
+    int figure_retained;
+    float figure_origin_x;
+    float figure_origin_y;
 };
 
 /* True when the receiver already holds `child_id` from a PREVIOUS successful
@@ -174,6 +196,16 @@ struct yetty_ycore_void_result yetty_ygui_emit_set_child_z(struct yetty_ygui_emi
  * re-ship. */
 struct yetty_ycore_void_result yetty_ygui_emit_set_child_hidden(struct yetty_ygui_emit_ctx *ctx,
                                                                 uint32_t child_id, int hidden);
+
+/* Retained-scene figure view state: the receiver scrolls its retained content
+ * on the GPU (SET_CHILD_SCROLL) over the declared document extent
+ * (SET_CHILD_CONTENT_SIZE). Nothing is re-emitted for a scroll change. */
+struct yetty_ycore_void_result yetty_ygui_emit_set_child_scroll(struct yetty_ygui_emit_ctx *ctx,
+                                                                uint32_t child_id, float scroll_x,
+                                                                float scroll_y);
+
+struct yetty_ycore_void_result yetty_ygui_emit_set_child_content_size(
+    struct yetty_ygui_emit_ctx *ctx, uint32_t child_id, float content_w, float content_h);
 
 /* Idempotent helper for figure widgets: on first call for `child_id` emits
  * CREATE_CHILD; on subsequent calls emits SET_CHILD_RECT. Tracks per-framework

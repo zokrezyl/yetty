@@ -41,7 +41,38 @@ struct yetty_ygui_ydraw_embed_ptr_result yetty_ygui_ydraw_embed_from(
 struct YETTY_ANNOTATE("class@ygui:ydraw_embed") YETTY_ANNOTATE("parent@ygui:primitive_widget")
     yetty_ygui_ydraw_embed {
     struct yetty_ydraw_drawable_list *buf;
+    /* Retained-figure bookkeeping: the group ids this embed emitted in
+     * its previous body. A retained receiver keeps child groups until
+     * an explicit CMD_DELETE, so ids present last time but absent from
+     * the current buffer (an image element removed by the page) must be
+     * deleted or they linger painted forever. */
+    uint32_t *retained_group_ids;
+    uint32_t retained_group_count;
+    uint32_t retained_group_cap;
 };
+
+/* Group ids collected while walking one retained emission. */
+struct embed_group_log {
+    uint32_t *ids;
+    uint32_t count;
+    uint32_t cap;
+};
+
+static struct yetty_ycore_void_result embed_group_log_add(struct embed_group_log *log,
+                                                          uint32_t group_id)
+{
+    if (log->count == log->cap) {
+        uint32_t new_cap = log->cap ? log->cap * 2 : 16;
+        uint32_t *grown = realloc(log->ids, (size_t)new_cap * sizeof(uint32_t));
+        if (!grown) {
+            return YETTY_ERR(yetty_ycore_void, "ydraw_embed: group log alloc");
+        }
+        log->ids = grown;
+        log->cap = new_cap;
+    }
+    log->ids[log->count++] = group_id;
+    return YETTY_OK_VOID();
+}
 
 YETTY_ANNOTATE("override@ygui:ydraw_embed:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
@@ -55,6 +86,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
     struct yetty_ygui_ydraw_embed *d = d_dr.value;
     d->buf = NULL;
+    d->retained_group_ids = NULL;
+    d->retained_group_count = 0;
+    d->retained_group_cap = 0;
     return YETTY_OK_VOID();
 }
 
@@ -69,6 +103,10 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
         yetty_ydraw_drawable_list_destroy(d->buf);
     }
     d->buf = NULL;
+    free(d->retained_group_ids);
+    d->retained_group_ids = NULL;
+    d->retained_group_count = 0;
+    d->retained_group_cap = 0;
     return yetty_ygui_super_void(obj, yetty_ygui_ydraw_embed_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
@@ -234,7 +272,8 @@ static struct yetty_ycore_void_result embed_emit_range(struct yetty_ydraw_drawab
                                                        const uint8_t *p, size_t len, float dx,
                                                        float dy, uint8_t *stack, size_t stack_sz,
                                                        uint8_t **heap, size_t *heap_cap,
-                                                       struct embed_cull *cull)
+                                                       struct embed_cull *cull,
+                                                       struct embed_group_log *group_log)
 {
     size_t remaining = len;
     while (remaining >= sizeof(uint32_t)) {
@@ -267,11 +306,15 @@ static struct yetty_ycore_void_result embed_emit_range(struct yetty_ydraw_drawab
             if (s > remaining) {
                 return YETTY_ERR(yetty_ycore_void, "ydraw_embed paint: CMD_GROUP overruns buffer");
             }
+            if (group_log) {
+                struct yetty_ycore_void_result log_res = embed_group_log_add(group_log, gid);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, log_res, "ydraw_embed paint: group log");
+            }
             struct yetty_ydraw_id_result marker = yetty_ydraw_drawable_list_begin_group(dst, gid);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, marker, "ydraw_embed paint: begin_group");
             struct yetty_ycore_void_result body_res =
                 embed_emit_range(dst, p + 3 * sizeof(uint32_t), payload, dx, dy, stack, stack_sz,
-                                 heap, heap_cap, cull);
+                                 heap, heap_cap, cull, group_log);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "ydraw_embed paint: group body");
             struct yetty_ycore_void_result end_res =
                 yetty_ydraw_drawable_list_end_group(dst, marker.value);
@@ -384,12 +427,20 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
      * laid out around a non-zero origin (e.g. ydiagram, whose layout pads
      * the scene bounds and can start slightly negative) would otherwise be
      * offset from the widget rect. Buffers authored from (0,0) — ymarkdown,
-     * ypdf — have scene_min == 0, so this is a no-op for them. */
+     * ypdf — have scene_min == 0, so this is a no-op for them.
+     *
+     * Inside a RETAINED-scene figure the body is document-space: subtract
+     * the figure origin so the buffer lands at the widget's position
+     * WITHIN the document, and the receiver's GPU scroll does the rest. */
     struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "ydraw_embed paint: rect");
     struct yetty_ycore_rectangle r = rect_res.value;
     float dx = r.min.x - yetty_ydraw_drawable_list_scene_min_x(d->buf);
     float dy = r.min.y - yetty_ydraw_drawable_list_scene_min_y(d->buf);
+    if (ctx->figure_retained) {
+        dx -= ctx->figure_origin_x;
+        dy -= ctx->figure_origin_y;
+    }
     const uint8_t *src = (const uint8_t *)yetty_ydraw_drawable_list_data(d->buf);
     size_t src_size = yetty_ydraw_drawable_list_size(d->buf);
     if (!src || src_size == 0) {
@@ -397,9 +448,11 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     }
     /* Cull to the visible band when a figure ancestor (e.g. a scrollarea) has
      * narrowed the clip. Pad by a chunk so a partially-scrolled row at either
-     * edge is always present and small scrolls don't churn the whole emit. */
+     * edge is always present and small scrolls don't churn the whole emit.
+     * A retained figure keeps the WHOLE document on the receiver (that is
+     * what makes scrolling free) — never cull it. */
     struct embed_cull cull = {0};
-    if (ctx->fig_clip_active) {
+    if (ctx->fig_clip_active && !ctx->figure_retained) {
         const float margin = 256.0f;
         cull.active = 1;
         cull.y_min = ctx->fig_clip.min.y - margin;
@@ -409,14 +462,62 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     uint8_t stack[4096];
     uint8_t *heap = NULL;
     size_t heap_cap = 0;
-    struct yetty_ycore_void_result walk =
-        embed_emit_range(ctx->ygrid_drawable_list, src, src_size, dx, dy, stack, sizeof(stack),
-                         &heap, &heap_cap, &cull);
+    struct yetty_ycore_void_result walk;
+    if (ctx->figure_retained) {
+        /* Retained body: bracket the whole emission in ONE stable group so
+         * re-emission REPLACES this embed's content in place (same paint
+         * depth — the retained receiver's flicker-free contract) instead of
+         * appending to the root scope forever. The wrapper id lives in a
+         * reserved high band so it can never collide with content group ids
+         * (producer gids count up from 1). */
+        struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "ydraw_embed paint: widget id");
+        uint32_t wrapper_id = 0xFFF00000u | (id_res.value & 0x000FFFFFu);
+        struct embed_group_log group_log = {0};
+        struct yetty_ydraw_id_result marker =
+            yetty_ydraw_drawable_list_begin_group(ctx->ygrid_drawable_list, wrapper_id);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, marker, "ydraw_embed paint: wrapper begin");
+        walk = embed_emit_range(ctx->ygrid_drawable_list, src, src_size, dx, dy, stack,
+                                sizeof(stack), &heap, &heap_cap, &cull, &group_log);
+        if (YETTY_IS_OK(walk)) {
+            walk = yetty_ydraw_drawable_list_end_group(ctx->ygrid_drawable_list, marker.value);
+        }
+        /* Stale groups: ids shipped last body but absent from this one
+         * would persist on the retained receiver — delete them (top
+         * level, after the wrapper, so run structure is unaffected). */
+        if (YETTY_IS_OK(walk)) {
+            for (uint32_t i = 0; i < d->retained_group_count && YETTY_IS_OK(walk); i++) {
+                uint32_t prev_id = d->retained_group_ids[i];
+                int still_present = 0;
+                for (uint32_t j = 0; j < group_log.count; j++) {
+                    if (group_log.ids[j] == prev_id) {
+                        still_present = 1;
+                        break;
+                    }
+                }
+                if (!still_present) {
+                    walk = yetty_ydraw_drawable_list_add_cmd_delete(ctx->ygrid_drawable_list,
+                                                                    prev_id);
+                }
+            }
+        }
+        if (YETTY_IS_OK(walk)) {
+            free(d->retained_group_ids);
+            d->retained_group_ids = group_log.ids;
+            d->retained_group_count = group_log.count;
+            d->retained_group_cap = group_log.cap;
+        } else {
+            free(group_log.ids);
+        }
+    } else {
+        walk = embed_emit_range(ctx->ygrid_drawable_list, src, src_size, dx, dy, stack,
+                                sizeof(stack), &heap, &heap_cap, &cull, NULL);
+    }
     free(heap);
     size_t after = yetty_ydraw_drawable_list_size(ctx->ygrid_drawable_list);
-    ydebug("ydraw_embed cull active=%d clip=[%.0f..%.0f] rect=[%.0f..%.0f] dy=%.0f scene_min=%.0f "
-           "src=%zuB emitted=%zuB culled=%zu/%zu leaf",
-           cull.active, cull.y_min, cull.y_max, r.min.y, r.max.y, dy,
+    ydebug("ydraw_embed cull active=%d retained=%d clip=[%.0f..%.0f] rect=[%.0f..%.0f] dy=%.0f "
+           "scene_min=%.0f src=%zuB emitted=%zuB culled=%zu/%zu leaf",
+           cull.active, ctx->figure_retained, cull.y_min, cull.y_max, r.min.y, r.max.y, dy,
            yetty_ydraw_drawable_list_scene_min_y(d->buf), src_size, after - before, cull.culled,
            cull.leaf_total);
     return walk;

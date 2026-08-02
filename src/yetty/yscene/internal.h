@@ -129,6 +129,13 @@ struct yetty_yscene_dom_batch {
     uint32_t *record_offsets;
     uint32_t record_count;
 
+    /* Immutable ALLOCATION identity — monotonic, never reused, minted
+     * at dom_batch_alloc. Batch SLOTS recycle through the free list, so
+     * (slot, offset) is not a stable identity for derived state that
+     * outlives a span (the scene's complex instances); (stamp, offset)
+     * is. Distinct from paint_seq, which replace deliberately
+     * preserves. */
+    uint64_t batch_stamp;
     /* Paint-order component #2 for every record in this span. Minted at
      * the batch's structural creation; PRESERVED by replace — content
      * re-emission never changes where the span sorts. */
@@ -194,6 +201,8 @@ struct yetty_yscene_dom {
     uint32_t dirty_slot_count;
     uint32_t dirty_slot_capacity;
 
+    /* Next immutable batch-allocation stamp (see batch_stamp). */
+    uint64_t next_batch_stamp;
     /* The ONE seq counter behind both node_seq and batch paint_seq.
      * Monotonic, never rewound (not even by zero() — keeps historic
      * paint keys unambiguous). Root reserves 0. */

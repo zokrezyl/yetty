@@ -411,6 +411,7 @@ static struct yetty_ycore_uint32_result dom_batch_alloc(struct yetty_yscene_dom 
     struct yetty_yscene_dom_batch *batch = &dom->batches[slot];
     memset(batch, 0, sizeof(*batch));
     batch->in_use = true;
+    batch->batch_stamp = ++dom->next_batch_stamp;
     batch->next_free = YETTY_YSCENE_DOM_INVALID_SLOT;
     batch->next_retired = YETTY_YSCENE_DOM_INVALID_SLOT;
     dom->live_batch_count++;
