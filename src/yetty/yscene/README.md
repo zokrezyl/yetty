@@ -99,12 +99,24 @@ Also done (first ygui producer migration — the ybrowser page):
   in document space (no viewport culling), the scene scrolls it on the
   GPU via `set_child_scroll` (a scroll tick re-ships nothing), and
   navigation resets with a leading CMD_ZERO. The ygui framework ships
-  retained figure bodies WITHOUT the per-frame CMD_ZERO — the embed
-  wraps its emission in one stable group so re-emission replaces content
-  in place at its original paint depth, and deletes stale child groups.
+  retained figure bodies WITHOUT the per-frame CMD_ZERO.
+- PROGRESSIVE updates through the group-update contract: the embed
+  splits the page into ~16 KiB chunks of whole records, each a group
+  with a position-stable id; a body carries only the chunks whose bytes
+  changed (replace-in-place keeps their paint depth), plus CMD_DELETEs
+  for groups no longer vouched for. An in-place page mutation (JS
+  ticker, image pixels arriving) ships one chunk, not the page; an
+  unchanged frame ships nothing.
+- The in-yetty client loop drives the ywire connection's reactor seam
+  as the SINGLE stdin consumer (input/raw lane sinks + readable/
+  writable pumps) — the previous private-yface reader raced the
+  connection and ate WINDOW_ADJUST credit grants, deadlocking any body
+  larger than the 256 KiB channel window (pages with images).
   Follow-ups: overlay scrollbar in the chrome layer (a viewport-fixed
   thumb cannot live inside the scrolled document), per-tab scroll
-  save/restore.
+  save/restore, content-keyed (element-identity) chunking so an
+  insertion re-ships only the insertion point instead of every later
+  chunk.
 
 Next increments: z-run interleave with per-run scissors, per-prim
 effective clip in a yscene shader fork, the content-addressed resource

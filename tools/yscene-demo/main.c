@@ -9,7 +9,7 @@
  * adapter maps the flat wire body (plain records + CMD_GROUP bodies)
  * onto its retained tree.
  *
- * It ships three phases to exercise the retained model end to end:
+ * It exercises the retained model end to end through three phases:
  *   1. create: page background + a panel group + a nested accent chip
  *      + a trailing run (the run/child/run interleave);
  *   2. update: RE-EMIT the chip group with moved content — the retained
@@ -18,8 +18,15 @@
  *   3. scroll: content taller than the figure + set_child_scroll — the
  *      scene scrolls on the GPU, nothing is re-emitted.
  *
+ * On a tty the demo is interactive: the Right/Left arrow keys navigate
+ * the phases forward/back and Ctrl-C exits (stdin is raw for the RPC
+ * transport, so the 0x03 byte is handled here — no SIGINT). On a
+ * non-tty stdin it keeps the original scripted behaviour: ship all
+ * three phases and exit.
+ *
  *   usage: yscene-demo [x y w h]     (default 40 40 680 520)
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -115,6 +122,92 @@ static int add_chip_group(struct yetty_ydraw_drawable_list *list, float offset_x
     return 0;
 }
 
+/* Re-emit the chip group at `offset_x` — the retained in-place update
+ * (phase 2 forward, and its inverse when navigating back). Returns 0 on
+ * success, -1 on failure (error already reported). */
+static int ship_chip(struct yetty_yclass_object *container, uint32_t child_id, float offset_x)
+{
+    struct yetty_ydraw_drawable_list *body = make_list();
+    if (!body) {
+        return -1;
+    }
+    int status = -1;
+    if (add_chip_group(body, offset_x) == 0) {
+        struct yetty_ycore_void_result body_res =
+            yetty_yfigure_apply_child_body(container, child_id, list_buffer(body));
+        if (YETTY_IS_ERR(body_res)) {
+            fprintf(stderr, "yscene-demo: apply_child_body failed: %s\n", body_res.error.msg);
+            yetty_ycore_error_destroy(body_res.error);
+        } else {
+            status = 0;
+        }
+    }
+    yetty_ydraw_drawable_list_destroy(body);
+    return status;
+}
+
+/* GPU-side scroll — nothing is re-emitted. Returns 0 on success. */
+static int ship_scroll(struct yetty_yclass_object *container, uint32_t child_id, float scroll_y)
+{
+    struct yetty_ycore_void_result scroll_res =
+        yetty_yfigure_set_child_scroll(container, child_id, 0.0f, scroll_y);
+    if (YETTY_IS_ERR(scroll_res)) {
+        fprintf(stderr, "yscene-demo: set_child_scroll failed: %s\n", scroll_res.error.msg);
+        yetty_ycore_error_destroy(scroll_res.error);
+        return -1;
+    }
+    return 0;
+}
+
+enum demo_key {
+    DEMO_KEY_NONE,
+    DEMO_KEY_QUIT,
+    DEMO_KEY_BACK,    /* Left arrow */
+    DEMO_KEY_FORWARD, /* Right arrow */
+};
+
+/* Feed one raw stdin byte through a minimal escape decoder. Recognizes
+ * Ctrl-C (raw mode delivers it as the 0x03 byte, no SIGINT) and the
+ * Left/Right arrows in both normal (ESC [ C/D) and application
+ * (ESC O C/D) cursor modes. `escape_state`: 0 = ground, 1 = after ESC,
+ * 2 = after ESC[ or ESCO. */
+static enum demo_key demo_key_feed(int *escape_state, uint8_t input_byte)
+{
+    switch (*escape_state) {
+    case 1:
+        *escape_state = (input_byte == '[' || input_byte == 'O') ? 2 : 0;
+        return DEMO_KEY_NONE;
+    case 2:
+        *escape_state = 0;
+        if (input_byte == 'C') {
+            return DEMO_KEY_FORWARD;
+        }
+        if (input_byte == 'D') {
+            return DEMO_KEY_BACK;
+        }
+        return DEMO_KEY_NONE;
+    default:
+        if (input_byte == 0x03) {
+            return DEMO_KEY_QUIT;
+        }
+        if (input_byte == 0x1b) {
+            *escape_state = 1;
+        }
+        return DEMO_KEY_NONE;
+    }
+}
+
+/* Status line per phase. Raw tty output: \r\n, not bare \n. */
+static void demo_report_phase(int phase)
+{
+    static const char *const descriptions[] = {
+        "phase 1/3: initial scene — chip at rest",
+        "phase 2/3: chip group re-emitted in place (moved right)",
+        "phase 3/3: scrolled to the bottom on the GPU",
+    };
+    fprintf(stderr, "yscene-demo: %s\r\n", descriptions[phase]);
+}
+
 int main(int argc, char **argv)
 {
     float origin_x = 40.0f;
@@ -146,7 +239,6 @@ int main(int argc, char **argv)
     int exit_code = 1;
     struct yetty_yclass_object *rpc_root = NULL;
     struct yetty_ydraw_drawable_list *create_body = NULL;
-    struct yetty_ydraw_drawable_list *update_body = NULL;
 
     /* Connect: PTY fds → session → typed terminal root → the host's
      * root figure container (the same navigation the ychromium bridge
@@ -232,30 +324,9 @@ int main(int argc, char **argv)
         }
     }
 
-    /* Phase 2 — retained update: re-emit ONLY the chip group, shifted
-     * right. The scene replaces node 2's content in place (same paint
-     * seq), so it stays above the panel body and below the trailing
-     * run — no full-frame re-send. */
-    update_body = make_list();
-    if (!update_body) {
-        goto out;
-    }
-    if (add_chip_group(update_body, /*offset_x=*/240.0f) != 0) {
-        goto out;
-    }
-    {
-        struct yetty_ycore_void_result body_res =
-            yetty_yfigure_apply_child_body(container, child_id, list_buffer(update_body));
-        if (YETTY_IS_ERR(body_res)) {
-            fprintf(stderr, "yscene-demo: apply_child_body failed: %s\n", body_res.error.msg);
-            yetty_ycore_error_destroy(body_res.error);
-            goto out;
-        }
-    }
-
-    /* Phase 3 — scroll on the GPU: declare the taller content extent,
-     * then move the viewport. Nothing is re-emitted — the retained
-     * scene's whole point. */
+    /* Declare the taller content extent up front so scrolling works
+     * whenever a navigation step asks for it. View state only — the
+     * initial appearance is unchanged (scroll stays at 0). */
     {
         struct yetty_ycore_void_result size_res =
             yetty_yfigure_set_child_content_size(container, child_id, width, content_h);
@@ -264,27 +335,94 @@ int main(int argc, char **argv)
             yetty_ycore_error_destroy(size_res.error);
             goto out;
         }
-        struct yetty_ycore_void_result scroll_res =
-            yetty_yfigure_set_child_scroll(container, child_id, 0.0f, content_h - height);
-        if (YETTY_IS_ERR(scroll_res)) {
-            fprintf(stderr, "yscene-demo: set_child_scroll failed: %s\n", scroll_res.error.msg);
-            yetty_ycore_error_destroy(scroll_res.error);
-            goto out;
-        }
     }
 
+    if (!stdin_tty) {
+        /* Scripted (non-tty) mode — ship phases 2 and 3 back to back and
+         * exit, the original end-to-end smoke behaviour. */
+        if (ship_chip(container, child_id, /*offset_x=*/240.0f) != 0) {
+            goto out;
+        }
+        if (ship_scroll(container, child_id, content_h - height) != 0) {
+            goto out;
+        }
+        fprintf(stderr,
+                "yscene-demo: scene figure %u shipped (%.0fx%.0f at %.0f,%.0f), chip re-emitted, "
+                "scrolled to bottom — the bright marker should be visible\n",
+                child_id, width, height, origin_x, origin_y);
+        exit_code = 0;
+        goto out;
+    }
+
+    /* Interactive mode — Right/Left arrows navigate the phases forward/
+     * back, Ctrl-C exits. Keys are drained into our own buffer before a
+     * transition issues its RPC call, so queued keystrokes never mix
+     * into the lockstep response read. */
     fprintf(stderr,
-            "yscene-demo: scene figure %u shipped (%.0fx%.0f at %.0f,%.0f), chip re-emitted, "
-            "scrolled to bottom — the bright marker should be visible\n",
+            "yscene-demo: scene figure %u shipped (%.0fx%.0f at %.0f,%.0f) — "
+            "Right/Left arrows navigate the phases forward/back, Ctrl-C exits\r\n",
             child_id, width, height, origin_x, origin_y);
-    exit_code = 0;
+    demo_report_phase(0);
+    {
+        int phase = 0; /* 0 = created, 1 = chip re-emitted, 2 = scrolled */
+        int escape_state = 0;
+        int quit = 0;
+        int step_failed = 0;
+        while (!quit && !step_failed) {
+            int wait_status = yetty_yplatform_tty_stdin_wait(200);
+            if (wait_status < 0) {
+                break;
+            }
+            if (wait_status == 0) {
+                continue;
+            }
+            uint8_t input_bytes[64];
+            int bytes_read = yetty_yplatform_tty_stdin_read(input_bytes, sizeof(input_bytes));
+            if (bytes_read <= 0) {
+                /* Readable with nothing to read on a VMIN=0 tty means the
+                 * peer hung up; negative is a hard error. Either way the
+                 * link is gone. */
+                break;
+            }
+            for (int i = 0; i < bytes_read && !quit && !step_failed; i++) {
+                enum demo_key key = demo_key_feed(&escape_state, input_bytes[i]);
+                if (key == DEMO_KEY_QUIT) {
+                    quit = 1;
+                    break;
+                }
+                int next_phase = phase;
+                if (key == DEMO_KEY_FORWARD && phase < 2) {
+                    next_phase = phase + 1;
+                } else if (key == DEMO_KEY_BACK && phase > 0) {
+                    next_phase = phase - 1;
+                }
+                if (next_phase == phase) {
+                    continue;
+                }
+                if (next_phase == 0) {
+                    step_failed = ship_chip(container, child_id, /*offset_x=*/0.0f) != 0;
+                } else if (next_phase == 1 && phase == 0) {
+                    step_failed = ship_chip(container, child_id, /*offset_x=*/240.0f) != 0;
+                } else if (next_phase == 1) {
+                    step_failed = ship_scroll(container, child_id, 0.0f) != 0;
+                } else {
+                    step_failed = ship_scroll(container, child_id, content_h - height) != 0;
+                }
+                if (step_failed) {
+                    break;
+                }
+                phase = next_phase;
+                demo_report_phase(phase);
+            }
+        }
+        if (!step_failed) {
+            exit_code = 0;
+        }
+    }
 
 out:
     if (create_body) {
         yetty_ydraw_drawable_list_destroy(create_body);
-    }
-    if (update_body) {
-        yetty_ydraw_drawable_list_destroy(update_body);
     }
     if (rpc_root) {
         /* Tears down the session + transport; the figure stays on screen

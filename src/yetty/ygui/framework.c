@@ -1882,6 +1882,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
                         "yetty_ygui_framework_walk_emit_body: figure drawable_list create");
     struct yetty_ydraw_drawable_list *figure_dl = dlr.value;
     int want_zero = 1;
+    int content_reset = 1;
     if (retained) {
         struct yetty_ycore_int_result reset_res = yetty_ygui_widget_figure_reset_consume(node);
         if (YETTY_IS_ERR(reset_res)) {
@@ -1891,6 +1892,12 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
                              reset_res);
         }
         want_zero = reset_res.value;
+        /* A figure created (or re-created) this tick starts empty on the
+         * receiver — CREATE on a still-existing id runs the reset_content
+         * fast path. Incremental emitters must treat that exactly like an
+         * explicit CMD_ZERO and ship everything. */
+        content_reset =
+            want_zero || !(ctx->framework && figure_is_minted(ctx->framework, node_id));
     }
     if (want_zero) {
         struct yetty_ycore_void_result zr = yetty_ydraw_drawable_list_add_cmd_zero(figure_dl);
@@ -1906,11 +1913,13 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
     int saved_clip_active = ctx->fig_clip_active;
     struct yetty_ycore_rectangle saved_clip = ctx->fig_clip;
     int saved_retained = ctx->figure_retained;
+    int saved_content_reset = ctx->figure_content_reset;
     float saved_origin_x = ctx->figure_origin_x;
     float saved_origin_y = ctx->figure_origin_y;
     ctx->ygrid_drawable_list = figure_dl;
     ctx->current_figure_id = node_id;
     ctx->figure_retained = retained;
+    ctx->figure_content_reset = content_reset;
 
     /* Narrow the clip to this figure's rect (a scrollarea's viewport) for the
      * duration of its subtree body paint, mirroring the container walk. The
@@ -1941,6 +1950,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
     ctx->fig_clip = saved_clip;
     ctx->fig_clip_active = saved_clip_active;
     ctx->figure_retained = saved_retained;
+    ctx->figure_content_reset = saved_content_reset;
     ctx->figure_origin_x = saved_origin_x;
     ctx->figure_origin_y = saved_origin_y;
 
