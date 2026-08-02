@@ -302,9 +302,9 @@ static void test_world_inheritance_and_hit(void)
 
 static void feed(struct yetty_yclass_object *obj, const struct yetty_ydraw_drawable_list *list)
 {
-    struct yetty_ycore_void_result feed_res = yetty_yfigure_process_bytes(
-        obj, (const uint8_t *)yetty_ydraw_drawable_list_data(list),
-        yetty_ydraw_drawable_list_size(list));
+    struct yetty_ycore_void_result feed_res =
+        yetty_yfigure_process_bytes(obj, (const uint8_t *)yetty_ydraw_drawable_list_data(list),
+                                    yetty_ydraw_drawable_list_size(list));
     if (YETTY_IS_ERR(feed_res)) {
         fprintf(stderr, "process_bytes failed: %s\n", feed_res.error.msg);
         yetty_ycore_error_destroy(feed_res.error);
@@ -384,8 +384,7 @@ static void test_wire_adapter(void)
      * root. */
     struct yetty_ydraw_drawable_list *zero_list = make_list();
     {
-        struct yetty_ycore_void_result zero_res =
-            yetty_ydraw_drawable_list_add_cmd_zero(zero_list);
+        struct yetty_ycore_void_result zero_res = yetty_ydraw_drawable_list_add_cmd_zero(zero_list);
         if (YETTY_IS_ERR(zero_res)) {
             exit(2);
         }
@@ -468,8 +467,7 @@ static void test_envelope_atomicity(void)
     const uint8_t *bytes = (const uint8_t *)yetty_ydraw_drawable_list_data(poisoned);
     size_t full_len = yetty_ydraw_drawable_list_size(poisoned);
     /* Truncate mid-record: the trailing group record is cut short. */
-    struct yetty_ycore_void_result feed_res =
-        yetty_yfigure_process_bytes(obj, bytes, full_len - 5);
+    struct yetty_ycore_void_result feed_res = yetty_yfigure_process_bytes(obj, bytes, full_len - 5);
     CHECK("poisoned envelope rejected", YETTY_IS_ERR(feed_res));
     if (YETTY_IS_ERR(feed_res)) {
         yetty_ycore_error_destroy(feed_res.error);
@@ -525,8 +523,7 @@ static void test_view_scale_parity_and_plan(void)
 
     /* Extent change re-buckets staging without a dom generation change:
      * the plan's cell size must follow the new extent. */
-    CHECK_OK("grow content extent",
-             yetty_yfigure_set_content_size(obj, 1600.0f, 1200.0f));
+    CHECK_OK("grow content extent", yetty_yfigure_set_content_size(obj, 1600.0f, 1200.0f));
     plan_res = yetty_yscene_render_plan(obj);
     CHECK("plan rebuilt for new extent",
           YETTY_IS_OK(plan_res) && strstr(plan_res.value, "extent=1600.0x1200.0") != NULL &&
@@ -555,8 +552,8 @@ static void test_structural_rejections(void)
     add_box(with_update, 0, 0, 4, 4);
     {
         uint32_t update_record[3] = {YETTY_YDRAW_CMD_UPDATE, 9, 0};
-        struct yetty_ydraw_id_result raw_res = yetty_ydraw_drawable_list_add_prim(
-            with_update, update_record, sizeof(update_record));
+        struct yetty_ydraw_id_result raw_res =
+            yetty_ydraw_drawable_list_add_prim(with_update, update_record, sizeof(update_record));
         if (YETTY_IS_ERR(raw_res)) {
             yetty_ycore_error_destroy(raw_res.error);
         }

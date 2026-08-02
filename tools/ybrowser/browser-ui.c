@@ -2173,8 +2173,8 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         }
         struct yetty_client_input_mouse mouse_copy;
         memcpy(&mouse_copy, payload, sizeof(mouse_copy));
-        ydebug("client mouse in: osc=%d kind=%d figure=%u xy=(%.1f,%.1f) pressed=%d",
-               osc_code, mouse_copy.kind, mouse_copy.figure_id, mouse_copy.x, mouse_copy.y,
+        ydebug("client mouse in: osc=%d kind=%d figure=%u xy=(%.1f,%.1f) pressed=%d", osc_code,
+               mouse_copy.kind, mouse_copy.figure_id, mouse_copy.x, mouse_copy.y,
                mouse_copy.pressed);
         /* The retained yscene page figure is a LOCAL-coords figure: the
          * host reports its pointer events relative to the figure's rect

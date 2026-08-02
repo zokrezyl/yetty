@@ -162,8 +162,7 @@ int main(int argc, char **argv)
     struct yetty_yclass_object_ptr_result container_res =
         yetty_yterminal_figure_root_container(rpc_root);
     if (YETTY_IS_ERR(container_res)) {
-        fprintf(stderr, "yscene-demo: figure_root_container failed: %s\n",
-                container_res.error.msg);
+        fprintf(stderr, "yscene-demo: figure_root_container failed: %s\n", container_res.error.msg);
         yetty_ycore_error_destroy(container_res.error);
         goto out;
     }
@@ -172,8 +171,8 @@ int main(int argc, char **argv)
      * pipeline is empty — the typed stubs below resolve remote slot ids
      * through this table (same step yview performs). */
     {
-        struct yetty_ycore_void_result prime_res = yetty_yclass_rpc_session_translate_class(
-            rpc_root->session, "yetty_yfigure_container");
+        struct yetty_ycore_void_result prime_res =
+            yetty_yclass_rpc_session_translate_class(rpc_root->session, "yetty_yfigure_container");
         if (YETTY_IS_ERR(prime_res)) {
             fprintf(stderr, "yscene-demo: translate_class failed: %s\n", prime_res.error.msg);
             yetty_ycore_error_destroy(prime_res.error);
@@ -212,8 +211,8 @@ int main(int argc, char **argv)
         }
         /* A marker near the content bottom: visible only after phase-3
          * scrolling. */
-        if (add_box(create_body, 80, content_h - 120.0f, 220, 48, DEMO_COLOR_ACCENT_BRIGHT,
-                    8.0f) != 0) {
+        if (add_box(create_body, 80, content_h - 120.0f, 220, 48, DEMO_COLOR_ACCENT_BRIGHT, 8.0f) !=
+            0) {
             goto out;
         }
         yetty_ydraw_drawable_list_end_group(create_body, panel_res.value);
@@ -261,8 +260,7 @@ int main(int argc, char **argv)
         struct yetty_ycore_void_result size_res =
             yetty_yfigure_set_child_content_size(container, child_id, width, content_h);
         if (YETTY_IS_ERR(size_res)) {
-            fprintf(stderr, "yscene-demo: set_child_content_size failed: %s\n",
-                    size_res.error.msg);
+            fprintf(stderr, "yscene-demo: set_child_content_size failed: %s\n", size_res.error.msg);
             yetty_ycore_error_destroy(size_res.error);
             goto out;
         }

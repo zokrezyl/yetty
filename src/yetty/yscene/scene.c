@@ -469,8 +469,8 @@ static struct yetty_ycore_void_result scene_leaf_append(struct yetty_yscene_scen
                                                         const struct yscene_leaf *leaf)
 {
     if (scene->leaf_scratch_count == scene->leaf_scratch_capacity) {
-        uint32_t new_capacity = scene->leaf_scratch_capacity ? scene->leaf_scratch_capacity * 2
-                                                             : 64;
+        uint32_t new_capacity =
+            scene->leaf_scratch_capacity ? scene->leaf_scratch_capacity * 2 : 64;
         struct yscene_leaf *grown =
             realloc(scene->leaves_scratch, (size_t)new_capacity * sizeof(struct yscene_leaf));
         if (!grown) {
@@ -658,7 +658,7 @@ static struct yetty_ycore_void_result scene_derive(struct yetty_yscene_scene *sc
         struct yscene_derive_frame frame = stack[--stack_count];
         const struct yetty_yscene_dom_node *node = &dom->nodes[frame.slot];
 
-        struct yscene_transform local = {node->m00, node->m01, node->m10,
+        struct yscene_transform local = {node->m00, node->m01,         node->m10,
                                          node->m11, node->translate_x, node->translate_y};
         struct yscene_transform world = transform_compose(&frame.parent_world, &local);
 
@@ -672,8 +672,8 @@ static struct yetty_ycore_void_result scene_derive(struct yetty_yscene_scene *sc
         }
         float opacity = frame.parent_opacity * node->opacity;
 
-        walk_result = scene_derive_node_content(scene, dom, registry_res.value, frame.slot,
-                                                &world, has_clip, clip, opacity);
+        walk_result = scene_derive_node_content(scene, dom, registry_res.value, frame.slot, &world,
+                                                has_clip, clip, opacity);
         if (YETTY_IS_ERR(walk_result)) {
             break;
         }
@@ -803,9 +803,10 @@ static struct yetty_ycore_void_result scene_apply_body(struct yscene_body_walk *
  * would resume against deleted targets), and over-deep nesting. After
  * this pass the applier cannot fail on input shape — only on
  * allocation. */
-static struct yetty_ycore_void_result scene_validate_body_chain(
-    struct yscene_body_walk *walk, const uint8_t *bytes, size_t bytes_len, uint32_t depth,
-    uint32_t *group_chain);
+static struct yetty_ycore_void_result scene_validate_body_chain(struct yscene_body_walk *walk,
+                                                                const uint8_t *bytes,
+                                                                size_t bytes_len, uint32_t depth,
+                                                                uint32_t *group_chain);
 
 static struct yetty_ycore_void_result scene_validate_body(struct yscene_body_walk *walk,
                                                           const uint8_t *bytes, size_t bytes_len,
@@ -816,9 +817,10 @@ static struct yetty_ycore_void_result scene_validate_body(struct yscene_body_wal
     return scene_validate_body_chain(walk, bytes, bytes_len, 0, group_chain);
 }
 
-static struct yetty_ycore_void_result scene_validate_body_chain(
-    struct yscene_body_walk *walk, const uint8_t *bytes, size_t bytes_len, uint32_t depth,
-    uint32_t *group_chain)
+static struct yetty_ycore_void_result scene_validate_body_chain(struct yscene_body_walk *walk,
+                                                                const uint8_t *bytes,
+                                                                size_t bytes_len, uint32_t depth,
+                                                                uint32_t *group_chain)
 {
     if (depth > YSCENE_ADAPTER_MAX_DEPTH) {
         return YETTY_ERR(yetty_ycore_void, "yscene adapter: CMD_GROUP nesting too deep");
@@ -830,8 +832,8 @@ static struct yetty_ycore_void_result scene_validate_body_chain(
             walk->registry, bytes + cursor, (uint32_t)(bytes_len - cursor), &command);
         if (YETTY_IS_ERR(parse_res)) {
             /* Locate the offender for the producer's trace. */
-            yerror("yscene adapter: validate parse failed at depth=%u offset=%zu of %zu",
-                   depth, cursor, bytes_len);
+            yerror("yscene adapter: validate parse failed at depth=%u offset=%zu of %zu", depth,
+                   cursor, bytes_len);
             return YETTY_ERR(yetty_ycore_void, "yscene adapter: validate parse", parse_res);
         }
         if (parse_res.value == 0) {
@@ -886,8 +888,7 @@ static struct yetty_ycore_void_result scene_validate_body_chain(
 static struct yetty_ycore_void_result scene_complex_mint(struct yetty_yscene_scene *scene,
                                                          uint32_t batch_slot,
                                                          uint32_t record_offset,
-                                                         const uint32_t *record,
-                                                         size_t record_len)
+                                                         const uint32_t *record, size_t record_len)
 {
     if (!scene->composite_factory) {
         return YETTY_OK_VOID();
@@ -910,8 +911,8 @@ static struct yetty_ycore_void_result scene_complex_mint(struct yetty_yscene_sce
         scene->complex_capacity = new_capacity;
     }
     struct yetty_ydraw_composite_ptr_result instance_res =
-        yetty_ydraw_composite_factory_create_instance(scene->composite_factory, record,
-                                                      record_len, /*rolling_row=*/0);
+        yetty_ydraw_composite_factory_create_instance(scene->composite_factory, record, record_len,
+                                                      /*rolling_row=*/0);
     if (YETTY_IS_ERR(instance_res)) {
         /* Per-record best-effort, like ygrid: an unknown/failed complex
          * drops that record, not the frame. */
@@ -946,9 +947,9 @@ static struct yetty_ycore_void_result scene_complex_scan_batch(struct yetty_ysce
         size_t record_len = (i + 1 < batch->record_count ? batch->record_offsets[i + 1]
                                                          : (uint32_t)batch->bytes_len) -
                             record_offset;
-        struct yetty_ycore_void_result mint_res = scene_complex_mint(
-            scene, batch_slot, record_offset,
-            (const uint32_t *)(batch->bytes + record_offset), record_len);
+        struct yetty_ycore_void_result mint_res =
+            scene_complex_mint(scene, batch_slot, record_offset,
+                               (const uint32_t *)(batch->bytes + record_offset), record_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, mint_res, "yscene complex: mint");
     }
     return YETTY_OK_VOID();
@@ -970,17 +971,15 @@ static void scene_complex_route_update(struct yetty_yscene_scene *scene,
             target = &scene->complexes[i]; /* keep scanning: latest wins */
         }
     }
-    if (!target || !target->instance || !target->instance->ops ||
-        !target->instance->ops->update) {
+    if (!target || !target->instance || !target->instance->ops || !target->instance->ops->update) {
         ydebug("yscene: CMD_UPDATE id=%u has no live updatable target", update->id);
         return;
     }
     uint32_t target_field;
     memcpy(&target_field, update->data, sizeof(target_field));
-    struct yetty_ycore_void_result update_res =
-        target->instance->ops->update(target->instance, target_field,
-                                      update->data + sizeof(uint32_t),
-                                      update->size - sizeof(uint32_t));
+    struct yetty_ycore_void_result update_res = target->instance->ops->update(
+        target->instance, target_field, update->data + sizeof(uint32_t),
+        update->size - sizeof(uint32_t));
     if (YETTY_IS_ERR(update_res)) {
         ydebug("yscene: CMD_UPDATE id=%u failed: %s", update->id, update_res.error.msg);
         yetty_ycore_error_destroy(update_res.error);
@@ -1037,8 +1036,8 @@ static struct yetty_ycore_void_result scene_flush_run(struct yscene_body_walk *w
     struct yetty_ycore_void_result apply_res;
     bool replaced = reopen && *run_index < reopen_batches;
     if (replaced) {
-        apply_res = yetty_yscene_dom_node_replace_batch(walk->dom, target_id, *run_index,
-                                                        run_start, run_len);
+        apply_res = yetty_yscene_dom_node_replace_batch(walk->dom, target_id, *run_index, run_start,
+                                                        run_len);
     } else {
         apply_res = yetty_yscene_dom_node_append_batch(walk->dom, target_id, run_start, run_len);
     }
@@ -1046,14 +1045,12 @@ static struct yetty_ycore_void_result scene_flush_run(struct yscene_body_walk *w
     /* Mint complex instances for any composite record in the span that
      * just landed, so same-body CMD_UPDATEs can target them. */
     {
-        struct yetty_ycore_uint32_result slot_res =
-            yetty_yscene_dom_lookup(walk->dom, target_id);
+        struct yetty_ycore_uint32_result slot_res = yetty_yscene_dom_lookup(walk->dom, target_id);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_res, "yscene adapter: run target");
         const struct yetty_yscene_dom_node *node = &walk->dom->nodes[slot_res.value];
         uint32_t batch_slot =
             replaced ? node->batch_slots[*run_index] : node->batch_slots[node->batch_count - 1];
-        struct yetty_ycore_void_result mint_res =
-            scene_complex_scan_batch(walk->scene, batch_slot);
+        struct yetty_ycore_void_result mint_res = scene_complex_scan_batch(walk->scene, batch_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, mint_res, "yscene adapter: complex mint");
     }
     (*run_index)++;
@@ -1068,8 +1065,7 @@ static struct yetty_ycore_void_result scene_apply_body(struct yscene_body_walk *
      * replace these in place, index by index. */
     uint32_t reopen_batches = 0;
     if (reopen) {
-        struct yetty_ycore_uint32_result slot_res =
-            yetty_yscene_dom_lookup(walk->dom, target_id);
+        struct yetty_ycore_uint32_result slot_res = yetty_yscene_dom_lookup(walk->dom, target_id);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_res, "yscene adapter: reopen target");
         reopen_batches = walk->dom->nodes[slot_res.value].batch_count;
     }
@@ -1090,10 +1086,10 @@ static struct yetty_ycore_void_result scene_apply_body(struct yscene_body_walk *
         uint32_t record_type = 0;
         memcpy(&record_type, bytes + cursor, sizeof(record_type));
 
-        bool is_structural =
-            command.kind == YETTY_YDRAW_COMMAND_DELETE ||
-            command.kind == YETTY_YDRAW_COMMAND_UPDATE ||
-            record_type == YETTY_YDRAW_CMD_GROUP || record_type == YETTY_YDRAW_CMD_ZERO;
+        bool is_structural = command.kind == YETTY_YDRAW_COMMAND_DELETE ||
+                             command.kind == YETTY_YDRAW_COMMAND_UPDATE ||
+                             record_type == YETTY_YDRAW_CMD_GROUP ||
+                             record_type == YETTY_YDRAW_CMD_ZERO;
 
         if (!is_structural) {
             if (!run_open) {
@@ -1155,8 +1151,8 @@ static struct yetty_ycore_void_result scene_apply_body(struct yscene_body_walk *
             struct yetty_ycore_void_result declare_res =
                 yetty_yscene_dom_node_declare(walk->dom, child_id, target_id);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, declare_res, "yscene adapter: declare");
-            struct yetty_ycore_void_result body_res = scene_apply_body(
-                walk, child_id, child_reopen, bytes + cursor + 12, payload_size);
+            struct yetty_ycore_void_result body_res =
+                scene_apply_body(walk, child_id, child_reopen, bytes + cursor + 12, payload_size);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "yscene adapter: group body");
         }
         cursor += parse_res.value;
@@ -1164,21 +1160,20 @@ static struct yetty_ycore_void_result scene_apply_body(struct yscene_body_walk *
 
     if (run_open) {
         struct yetty_ycore_void_result flush_res =
-            scene_flush_run(walk, target_id, reopen, &run_index, reopen_batches,
-                            bytes + run_start, cursor - run_start);
+            scene_flush_run(walk, target_id, reopen, &run_index, reopen_batches, bytes + run_start,
+                            cursor - run_start);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "yscene adapter: flush");
     }
 
     /* A reopened node that emitted fewer runs than it had batches drops
      * the surplus (the re-emission IS the node's new content). */
     if (reopen) {
-        struct yetty_ycore_uint32_result slot_res =
-            yetty_yscene_dom_lookup(walk->dom, target_id);
+        struct yetty_ycore_uint32_result slot_res = yetty_yscene_dom_lookup(walk->dom, target_id);
         if (YETTY_IS_OK(slot_res)) {
             struct yetty_yscene_dom_node *node = &walk->dom->nodes[slot_res.value];
             while (node->batch_count > run_index) {
-                struct yetty_ycore_void_result remove_res = yetty_yscene_dom_node_remove_batch(
-                    walk->dom, target_id, node->batch_count - 1);
+                struct yetty_ycore_void_result remove_res =
+                    yetty_yscene_dom_node_remove_batch(walk->dom, target_id, node->batch_count - 1);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, remove_res, "yscene adapter: trim");
             }
         } else {
@@ -1217,8 +1212,7 @@ static struct yetty_ycore_void_result scene_constructor(struct yetty_yclass_obje
     YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene constructor: object");
     struct yetty_yscene_scene *scene = scene_res.value;
     scene->view_scale = 1.0f;
-    for (size_t i = 0; i < sizeof(scene->wire_font_slot) / sizeof(scene->wire_font_slot[0]);
-         i++) {
+    for (size_t i = 0; i < sizeof(scene->wire_font_slot) / sizeof(scene->wire_font_slot[0]); i++) {
         scene->wire_font_slot[i] = -1;
     }
     /* Slot 0 is reserved for the host default font. */
@@ -1314,8 +1308,7 @@ YETTY_ANNOTATE("virtual@yscene:scene:node_set_transform")
 static struct yetty_ycore_void_result scene_node_set_transform(struct yetty_yclass_object *obj,
                                                                uint64_t external_id, float m00,
                                                                float m01, float m10, float m11,
-                                                               float translate_x,
-                                                               float translate_y)
+                                                               float translate_x, float translate_y)
 {
     struct scene_transform_argument transform = {m00, m01, m10, m11, translate_x, translate_y};
     return scene_patch_placement(obj, external_id, scene_patch_transform, &transform);
@@ -1352,8 +1345,7 @@ static struct yetty_ycore_void_result scene_node_clear_clip(struct yetty_yclass_
     return scene_patch_placement(obj, external_id, scene_patch_clear_clip, NULL);
 }
 
-static void scene_patch_opacity(struct yetty_yscene_dom_placement *placement,
-                                const void *argument)
+static void scene_patch_opacity(struct yetty_yscene_dom_placement *placement, const void *argument)
 {
     placement->opacity = *(const float *)argument;
 }
@@ -1549,8 +1541,7 @@ static uint32_t scene_decode_utf8(const uint8_t **ptr, const uint8_t *end)
 /* Install `font` (borrowed) into `slot`; bumps the generation so render
  * regenerates the dispatcher + children before the next draw. */
 static struct yetty_ycore_void_result scene_set_font(struct yetty_yscene_scene *scene,
-                                                     uint32_t slot,
-                                                     struct yetty_yfont_font *font)
+                                                     uint32_t slot, struct yetty_yfont_font *font)
 {
     if (slot >= sizeof(scene->fonts) / sizeof(scene->fonts[0])) {
         return YETTY_ERR(yetty_ycore_void, "yscene set_font: slot out of range");
@@ -1582,8 +1573,7 @@ static void scene_reset_wire_fonts(struct yetty_yscene_scene *scene)
     }
     scene->font_count = scene->fonts[0] ? 1 : 0;
     scene->next_font_slot = 1;
-    for (size_t i = 0; i < sizeof(scene->wire_font_slot) / sizeof(scene->wire_font_slot[0]);
-         i++) {
+    for (size_t i = 0; i < sizeof(scene->wire_font_slot) / sizeof(scene->wire_font_slot[0]); i++) {
         scene->wire_font_slot[i] = -1;
     }
     if (changed) {
@@ -1822,8 +1812,7 @@ static struct yetty_ycore_void_result scene_load_shader_libs(struct yetty_yscene
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sdf_res, "yscene: read ysdf.gen.wgsl");
     scene->sdf_lib_code = sdf_res.value;
     strncpy(scene->sdf_lib_rs.namespace, "ysdf_lib", YETTY_YRENDER_NAME_MAX - 1);
-    yetty_yrender_shader_code_set(&scene->sdf_lib_rs.shader,
-                                  (const char *)scene->sdf_lib_code.data,
+    yetty_yrender_shader_code_set(&scene->sdf_lib_rs.shader, (const char *)scene->sdf_lib_code.data,
                                   scene->sdf_lib_code.size);
 
     /* Effects lib: attach a no-op fallback when the asset is missing so
@@ -1874,8 +1863,8 @@ static struct yetty_ycore_void_result scene_build_binder(struct yetty_yscene_sce
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatcher_res, "yscene: initial dispatcher");
 
     struct yetty_yrender_gpu_resource_binder_result binder_res =
-        yetty_yrender_gpu_resource_binder_create(scene->device, scene->queue,
-                                                 scene->target_format, scene->allocator);
+        yetty_yrender_gpu_resource_binder_create(scene->device, scene->queue, scene->target_format,
+                                                 scene->allocator);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, binder_res, "yscene: binder create");
     scene->binder = binder_res.value;
     return YETTY_OK_VOID();
@@ -1995,8 +1984,8 @@ static struct yetty_ycore_void_result scene_stage_text_leaf(struct yetty_yscene_
         slot = (span.font_id < 0) ? 0u : (uint32_t)span.font_id;
     }
     if (slot >= scene->font_count || !scene->fonts[slot]) {
-        ydebug("yscene staging: TEXT font_id=%d -> slot %u has no font; span dropped",
-               span.font_id, slot);
+        ydebug("yscene staging: TEXT font_id=%d -> slot %u has no font; span dropped", span.font_id,
+               slot);
         return YETTY_OK_VOID();
     }
     struct yetty_yfont_font *font = scene->fonts[slot];
@@ -2027,8 +2016,7 @@ static struct yetty_ycore_void_result scene_stage_text_leaf(struct yetty_yscene_
         uint32_t glyph_index = glyph_idx_res.value;
         /* Re-fetch metadata AFTER get_glyph_index — lazy slot allocation
          * may have grown it. */
-        struct yetty_yrender_gpu_resource_set_result rs_res =
-            font->ops->get_gpu_resource_set(font);
+        struct yetty_yrender_gpu_resource_set_result rs_res = font->ops->get_gpu_resource_set(font);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rs_res, "yscene staging: font rs");
         const float *meta = (const float *)rs_res.value->buffers[0].data;
         uint32_t meta_count = (uint32_t)(rs_res.value->buffers[0].size / (6u * sizeof(float)));
@@ -2135,9 +2123,9 @@ static struct yetty_ycore_void_result scene_rebuild_staging(struct yetty_yscene_
             continue;
         }
         uint32_t record_words = leaf->record_size / sizeof(uint32_t);
-        struct yetty_ycore_void_result stage_res = scene_stage_record(
-            scene, (const uint32_t *)(batch->bytes + leaf->record_offset), record_words,
-            leaf->world_aabb);
+        struct yetty_ycore_void_result stage_res =
+            scene_stage_record(scene, (const uint32_t *)(batch->bytes + leaf->record_offset),
+                               record_words, leaf->world_aabb);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, stage_res, "yscene staging: prim");
         /* The scratch copy is mutable derived data: bake the world
          * transform into the geometry words (after the style header
@@ -2145,9 +2133,8 @@ static struct yetty_ycore_void_result scene_rebuild_staging(struct yetty_yscene_
          * opacity into the colors. */
         uint32_t *staged = &scene->staging_scratch[scene->staging_scratch_len - record_words];
         if (record_words > 5) {
-            yetty_ysdf_geometry_transform(leaf->record_type, (float *)&staged[5],
-                                          leaf->translate_x, leaf->translate_y, leaf->m00,
-                                          leaf->m11);
+            yetty_ysdf_geometry_transform(leaf->record_type, (float *)&staged[5], leaf->translate_x,
+                                          leaf->translate_y, leaf->m00, leaf->m11);
         }
         if (leaf->world_opacity < 1.0f && record_words > 3) {
             staged[2] = scene_fold_opacity(staged[2], leaf->world_opacity);
@@ -2158,8 +2145,7 @@ static struct yetty_ycore_void_result scene_rebuild_staging(struct yetty_yscene_
             if (leaf->record_type == YETTY_YSDF_LINEAR_GRADIENT_BOX && record_words > 15) {
                 staged[14] = scene_fold_opacity(staged[14], leaf->world_opacity);
                 staged[15] = scene_fold_opacity(staged[15], leaf->world_opacity);
-            } else if (leaf->record_type == YETTY_YSDF_RADIAL_GRADIENT_BOX &&
-                       record_words > 14) {
+            } else if (leaf->record_type == YETTY_YSDF_RADIAL_GRADIENT_BOX && record_words > 14) {
                 staged[13] = scene_fold_opacity(staged[13], leaf->world_opacity);
                 staged[14] = scene_fold_opacity(staged[14], leaf->world_opacity);
             }
@@ -2206,8 +2192,8 @@ static struct yetty_ycore_void_result scene_rebuild_staging(struct yetty_yscene_
         }
         for (int32_t row = row_min; row <= row_max; row++) {
             for (int32_t col = col_min; col <= col_max; col++) {
-                struct yetty_ycore_void_result push_res = scene_cell_push(
-                    &scene->cells[(size_t)row * YSCENE_GRID_COLS + (size_t)col], i);
+                struct yetty_ycore_void_result push_res =
+                    scene_cell_push(&scene->cells[(size_t)row * YSCENE_GRID_COLS + (size_t)col], i);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, push_res, "yscene staging: bucket");
             }
         }
@@ -2318,10 +2304,10 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
     }
     ydebug("yscene_render: rect=(%.1f,%.1f)-(%.1f,%.1f) content=%.0fx%.0f leaves=%u staged=%u "
            "complexes=%u gen=%llu rebuilt=%d scroll=(%.1f,%.1f)",
-           rect.min.x, rect.min.y, rect.max.x, rect.max.y, content_w, content_h,
-           scene->leaf_count, scene->staged_prim_count, scene->complex_count,
-           (unsigned long long)scene->derived_generation, staging_rebuilt ? 1 : 0,
-           scene->scroll_x, scene->scroll_y);
+           rect.min.x, rect.min.y, rect.max.x, rect.max.y, content_w, content_h, scene->leaf_count,
+           scene->staged_prim_count, scene->complex_count,
+           (unsigned long long)scene->derived_generation, staging_rebuilt ? 1 : 0, scene->scroll_x,
+           scene->scroll_y);
 
     /* Pointers refresh every frame (realloc moves them); UPLOAD dirt is
      * set only when staging actually changed — a scroll-only frame
@@ -2354,8 +2340,8 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
     scene->rs.pixel_size.width = rect_w;
     scene->rs.pixel_size.height = rect_h;
 
-    struct yetty_ycore_void_result submit_res = scene->binder->ops->submit(scene->binder,
-                                                                           &scene->rs);
+    struct yetty_ycore_void_result submit_res =
+        scene->binder->ops->submit(scene->binder, &scene->rs);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, submit_res, "yscene render: binder submit");
     if (!scene->binder_finalized) {
         struct yetty_ycore_void_result finalize_res = scene->binder->ops->finalize(scene->binder);
@@ -2446,10 +2432,8 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
             if (!entry->instance || !entry->instance->render) {
                 continue;
             }
-            float anchor_x =
-                rect.min.x + (entry->translate_x - scene->scroll_x) * view_scale;
-            float anchor_y =
-                rect.min.y + (entry->translate_y - scene->scroll_y) * view_scale;
+            float anchor_x = rect.min.x + (entry->translate_x - scene->scroll_x) * view_scale;
+            float anchor_y = rect.min.y + (entry->translate_y - scene->scroll_y) * view_scale;
             entry->instance->content_scale = view_scale;
             struct yetty_ycore_void_result render_res =
                 yetty_ydraw_composite_render(entry->instance, target, anchor_x, anchor_y);
@@ -2474,9 +2458,8 @@ static struct yetty_ycore_void_result scene_destroy_slot(struct yetty_yclass_obj
     struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
     struct yetty_yscene_scene *scene = YETTY_IS_OK(scene_res) ? scene_res.value : NULL;
     struct yetty_ycore_void_result result =
-        YETTY_IS_ERR(scene_res)
-            ? YETTY_ERR(yetty_ycore_void, "yscene destroy: object", scene_res)
-            : YETTY_OK_VOID();
+        YETTY_IS_ERR(scene_res) ? YETTY_ERR(yetty_ycore_void, "yscene destroy: object", scene_res)
+                                : YETTY_OK_VOID();
     if (scene) {
         if (scene->binder) {
             scene->binder->ops->destroy(scene->binder);
@@ -2569,8 +2552,10 @@ static struct yetty_ycore_void_result scene_process_bytes_slot(struct yetty_ycla
          * a partial apply: poison the pending state so no later commit
          * can publish it. A full reset clears the poison. */
         scene->pending_poisoned = true;
-        return YETTY_ERR(yetty_ycore_void, "yscene process_bytes: body (pending poisoned — "
-                                           "reset required)", body_res);
+        return YETTY_ERR(yetty_ycore_void,
+                         "yscene process_bytes: body (pending poisoned — "
+                         "reset required)",
+                         body_res);
     }
     /* One envelope = one produced frame — publish it. */
     struct yetty_ycore_uint64_result commit_res = scene_commit_and_publish(scene);
@@ -2608,8 +2593,7 @@ static struct yetty_ycore_void_result scene_set_scroll_slot(struct yetty_yclass_
 
 YETTY_ANNOTATE("override@yfigure:figure:set_content_size")
 static struct yetty_ycore_void_result scene_set_content_size_slot(struct yetty_yclass_object *obj,
-                                                                  float content_w,
-                                                                  float content_h)
+                                                                  float content_w, float content_h)
 {
     struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene set_content_size: object");
@@ -2670,10 +2654,10 @@ static struct yetty_ycore_void_result scene_dump_node(const struct yetty_yscene_
     for (uint32_t i = 0; i < node->batch_count; i++) {
         record_total += dom->batches[node->batch_slots[i]].record_count;
     }
-    struct yetty_ycore_void_result append_res = scene_dump_appendf(
-        buffer, "%*snode id=%llu seq=%u z=%d batches=%u records=%u children=%u", indent, "",
-        (unsigned long long)node->external_id, node->node_seq, node->paint_z, node->batch_count,
-        record_total, node->child_count);
+    struct yetty_ycore_void_result append_res =
+        scene_dump_appendf(buffer, "%*snode id=%llu seq=%u z=%d batches=%u records=%u children=%u",
+                           indent, "", (unsigned long long)node->external_id, node->node_seq,
+                           node->paint_z, node->batch_count, record_total, node->child_count);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, append_res, "yscene dump: node line");
     if (node->has_clip) {
         append_res = scene_dump_appendf(buffer, " clip=(%.1f,%.1f,%.1f,%.1f)", node->clip.min.x,
@@ -2718,17 +2702,18 @@ static struct yetty_ycore_char_ptr_result scene_dump_state_slot(struct yetty_ycl
         append_res = scene_dump_node(scene->dom, YETTY_YSCENE_DOM_ROOT_SLOT, indent + 2, &buffer);
     }
     if (YETTY_IS_OK(append_res) && scene->derived_valid) {
-        append_res = scene_dump_appendf(&buffer, "%*sleaves count=%u\n", indent + 2, "",
-                                        scene->leaf_count);
+        append_res =
+            scene_dump_appendf(&buffer, "%*sleaves count=%u\n", indent + 2, "", scene->leaf_count);
         for (uint32_t i = 0; YETTY_IS_OK(append_res) && i < scene->leaf_count; i++) {
             const struct yscene_leaf *leaf = &scene->leaves[i];
-            append_res = scene_dump_appendf(
-                &buffer, "%*sleaf z=%d seq=%u idx=%u type=0x%08x node=%llu "
-                         "aabb=(%.1f,%.1f,%.1f,%.1f)\n",
-                indent + 4, "", leaf->paint_z, leaf->paint_seq, leaf->record_index,
-                leaf->record_type, (unsigned long long)leaf->node_external_id,
-                leaf->world_aabb.min.x, leaf->world_aabb.min.y, leaf->world_aabb.max.x,
-                leaf->world_aabb.max.y);
+            append_res = scene_dump_appendf(&buffer,
+                                            "%*sleaf z=%d seq=%u idx=%u type=0x%08x node=%llu "
+                                            "aabb=(%.1f,%.1f,%.1f,%.1f)\n",
+                                            indent + 4, "", leaf->paint_z, leaf->paint_seq,
+                                            leaf->record_index, leaf->record_type,
+                                            (unsigned long long)leaf->node_external_id,
+                                            leaf->world_aabb.min.x, leaf->world_aabb.min.y,
+                                            leaf->world_aabb.max.x, leaf->world_aabb.max.y);
         }
     }
     if (YETTY_IS_ERR(append_res)) {
@@ -2788,8 +2773,8 @@ struct yetty_yscene_scene_ptr_result yetty_yscene_create(struct yetty_ycore_rect
         scene->queue = context->runtime->gpu.queue;
         scene->target_format = context->runtime->gpu.surface_format;
         scene->allocator = context->runtime->gpu.allocator;
-        struct yetty_ycore_void_result registry_bind_res = scene_bind_registry(
-            scene, context->runtime->drawable_registry, /*owns=*/false);
+        struct yetty_ycore_void_result registry_bind_res =
+            scene_bind_registry(scene, context->runtime->drawable_registry, /*owns=*/false);
         if (YETTY_IS_ERR(registry_bind_res)) {
             struct yetty_ycore_void_result teardown_res = scene_destroy_slot(obj);
             if (YETTY_IS_ERR(teardown_res)) {
@@ -2867,8 +2852,7 @@ static struct yetty_yfigure_figure_ptr_result scene_wire_factory(
     if (args) {
         scene->composite_factory = args->composite_factory;
         if (args->default_font) {
-            struct yetty_ycore_void_result font_res =
-                scene_set_font(scene, 0, args->default_font);
+            struct yetty_ycore_void_result font_res = scene_set_font(scene, 0, args->default_font);
             if (YETTY_IS_ERR(font_res)) {
                 ydebug("yscene factory: default font install failed: %s", font_res.error.msg);
                 yetty_ycore_error_destroy(font_res.error);

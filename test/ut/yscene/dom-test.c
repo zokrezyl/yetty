@@ -151,9 +151,9 @@ static void test_tree_shape(void)
     uint32_t slot_3 = must_slot(dom, 3);
     CHECK("parent of 1 is root", dom->nodes[slot_1].parent_slot == YETTY_YSCENE_DOM_ROOT_SLOT);
     CHECK("parent of 2 is 1", dom->nodes[slot_2].parent_slot == slot_1);
-    CHECK("child order preserved",
-          dom->nodes[slot_1].child_count == 2 && dom->nodes[slot_1].children[0] == slot_2 &&
-              dom->nodes[slot_1].children[1] == slot_3);
+    CHECK("child order preserved", dom->nodes[slot_1].child_count == 2 &&
+                                       dom->nodes[slot_1].children[0] == slot_2 &&
+                                       dom->nodes[slot_1].children[1] == slot_3);
     CHECK("seq monotonic in declare order",
           dom->nodes[slot_1].node_seq < dom->nodes[slot_2].node_seq &&
               dom->nodes[slot_2].node_seq < dom->nodes[slot_3].node_seq);
@@ -175,8 +175,7 @@ static void test_tree_shape(void)
     CHECK_ERR("cycle move rejected", yetty_yscene_dom_node_declare(dom, 1, 3));
     /* Reserved / root ids. */
     CHECK_ERR("declare id 0 rejected", yetty_yscene_dom_node_declare(dom, 0, 1));
-    CHECK_ERR("declare UINT64_MAX rejected",
-              yetty_yscene_dom_node_declare(dom, UINT64_MAX, 0));
+    CHECK_ERR("declare UINT64_MAX rejected", yetty_yscene_dom_node_declare(dom, UINT64_MAX, 0));
     CHECK_ERR("unknown parent rejected", yetty_yscene_dom_node_declare(dom, 9, 777));
 
     /* Subtree delete: 1 takes 2 and 3 with it. */
@@ -206,17 +205,15 @@ static void test_content_and_paint_seq(void)
 
     CHECK_OK("declare node 1", yetty_yscene_dom_node_declare(dom, 1, 0));
     CHECK_OK("set_content 2 boxes",
-             yetty_yscene_dom_node_set_content(dom, 1, span_bytes(two_boxes),
-                                               span_len(two_boxes)));
+             yetty_yscene_dom_node_set_content(dom, 1, span_bytes(two_boxes), span_len(two_boxes)));
     uint32_t slot_1 = must_slot(dom, 1);
-    CHECK("one batch, two records", dom->nodes[slot_1].batch_count == 1 &&
-                                        dom->batches[dom->nodes[slot_1].batch_slots[0]]
-                                                .record_count == 2);
+    CHECK("one batch, two records",
+          dom->nodes[slot_1].batch_count == 1 &&
+              dom->batches[dom->nodes[slot_1].batch_slots[0]].record_count == 2);
     uint32_t first_seq = dom->batches[dom->nodes[slot_1].batch_slots[0]].paint_seq;
     CHECK("first batch anchors at node seq", first_seq == dom->nodes[slot_1].node_seq);
     CHECK("owner_seq stamps node identity",
-          dom->batches[dom->nodes[slot_1].batch_slots[0]].owner_seq ==
-              dom->nodes[slot_1].node_seq);
+          dom->batches[dom->nodes[slot_1].batch_slots[0]].owner_seq == dom->nodes[slot_1].node_seq);
 
     /* Interleave: batch A < child < batch B, expressible by seq. */
     CHECK_OK("declare child 2 mid-content", yetty_yscene_dom_node_declare(dom, 2, 1));
@@ -240,18 +237,16 @@ static void test_content_and_paint_seq(void)
              yetty_yscene_dom_node_append_batch(dom, 1, span_bytes(one_box), span_len(one_box)));
     uint32_t appended_seq = dom->batches[dom->nodes[slot_1].batch_slots[1]].paint_seq;
     CHECK("append mints fresh seq", appended_seq > batch_b_seq);
-    CHECK_OK("replace batch 0",
-             yetty_yscene_dom_node_replace_batch(dom, 1, 0, span_bytes(two_boxes),
-                                                 span_len(two_boxes)));
+    CHECK_OK("replace batch 0", yetty_yscene_dom_node_replace_batch(
+                                    dom, 1, 0, span_bytes(two_boxes), span_len(two_boxes)));
     CHECK("replace preserves seq",
           dom->batches[dom->nodes[slot_1].batch_slots[0]].paint_seq == first_seq);
     CHECK_OK("remove batch 0", yetty_yscene_dom_node_remove_batch(dom, 1, 0));
-    CHECK("remove shifts list", dom->nodes[slot_1].batch_count == 1 &&
-                                    dom->batches[dom->nodes[slot_1].batch_slots[0]].paint_seq ==
-                                        appended_seq);
-    CHECK_ERR("replace out of range",
-              yetty_yscene_dom_node_replace_batch(dom, 1, 7, span_bytes(one_box),
-                                                  span_len(one_box)));
+    CHECK("remove shifts list",
+          dom->nodes[slot_1].batch_count == 1 &&
+              dom->batches[dom->nodes[slot_1].batch_slots[0]].paint_seq == appended_seq);
+    CHECK_ERR("replace out of range", yetty_yscene_dom_node_replace_batch(
+                                          dom, 1, 7, span_bytes(one_box), span_len(one_box)));
 
     /* Span lifecycle: commit, then reclaim frees retired spans. */
     uint32_t retired_before = yetty_yscene_dom_retired_batch_count(dom);
@@ -280,20 +275,18 @@ static void test_span_validation(void)
     /* Structural commands inside a content span are rejected. */
     struct yetty_ydraw_drawable_list *with_group = make_list();
     add_box(with_group, 0, 0, 4, 4);
-    struct yetty_ydraw_id_result marker_res =
-        yetty_ydraw_drawable_list_begin_group(with_group, 42);
+    struct yetty_ydraw_id_result marker_res = yetty_ydraw_drawable_list_begin_group(with_group, 42);
     if (YETTY_IS_OK(marker_res)) {
         yetty_ydraw_drawable_list_end_group(with_group, marker_res.value);
     }
-    CHECK_ERR("embedded CMD_GROUP rejected",
-              yetty_yscene_dom_node_set_content(dom, 1, span_bytes(with_group),
-                                                span_len(with_group)));
+    CHECK_ERR(
+        "embedded CMD_GROUP rejected",
+        yetty_yscene_dom_node_set_content(dom, 1, span_bytes(with_group), span_len(with_group)));
     uint32_t slot_1 = must_slot(dom, 1);
     CHECK("rejected span leaves node untouched", dom->nodes[slot_1].batch_count == 0);
 
     /* NULL bytes with a size. */
-    CHECK_ERR("NULL bytes with size rejected",
-              yetty_yscene_dom_node_set_content(dom, 1, NULL, 64));
+    CHECK_ERR("NULL bytes with size rejected", yetty_yscene_dom_node_set_content(dom, 1, NULL, 64));
 
     /* Truncated record tail. */
     struct yetty_ydraw_drawable_list *good = make_list();

@@ -89,8 +89,7 @@ static void rpc_channel_drain(struct rpc_channel_server *server)
             /* Untrusted length past the protocol cap — corrupt, hostile,
              * or a producer frame bigger than the protocol allows. Either
              * way the stream can never be reassembled from here. */
-            ywarn("rpc-conn: request body_len %u exceeds cap %u", body_len,
-                  RPC_CHANNEL_FRAME_MAX);
+            ywarn("rpc-conn: request body_len %u exceeds cap %u", body_len, RPC_CHANNEL_FRAME_MAX);
             rpc_channel_kill(server, "frame length exceeds protocol cap");
             return;
         }

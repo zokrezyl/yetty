@@ -496,8 +496,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
                     }
                 }
                 if (!still_present) {
-                    walk = yetty_ydraw_drawable_list_add_cmd_delete(ctx->ygrid_drawable_list,
-                                                                    prev_id);
+                    walk =
+                        yetty_ydraw_drawable_list_add_cmd_delete(ctx->ygrid_drawable_list, prev_id);
                 }
             }
         }

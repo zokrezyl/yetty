@@ -285,8 +285,8 @@ static struct yetty_ycore_uint32_result dom_node_alloc(struct yetty_yscene_dom *
     } else {
         if (dom->node_high_water == dom->node_capacity) {
             uint32_t new_capacity = dom->node_capacity ? dom->node_capacity * 2 : 32;
-            struct yetty_yscene_dom_node *grown = realloc(
-                dom->nodes, (size_t)new_capacity * sizeof(struct yetty_yscene_dom_node));
+            struct yetty_yscene_dom_node *grown =
+                realloc(dom->nodes, (size_t)new_capacity * sizeof(struct yetty_yscene_dom_node));
             if (!grown) {
                 return YETTY_ERR(yetty_ycore_uint32, "yscene dom: node arena alloc failed");
             }
@@ -395,8 +395,8 @@ static struct yetty_ycore_uint32_result dom_batch_alloc(struct yetty_yscene_dom 
     } else {
         if (dom->batch_high_water == dom->batch_capacity) {
             uint32_t new_capacity = dom->batch_capacity ? dom->batch_capacity * 2 : 32;
-            struct yetty_yscene_dom_batch *grown = realloc(
-                dom->batches, (size_t)new_capacity * sizeof(struct yetty_yscene_dom_batch));
+            struct yetty_yscene_dom_batch *grown =
+                realloc(dom->batches, (size_t)new_capacity * sizeof(struct yetty_yscene_dom_batch));
             if (!grown) {
                 return YETTY_ERR(yetty_ycore_uint32, "yscene dom: batch table alloc failed");
             }
