@@ -1,6 +1,6 @@
 /* ygui-yvideo.c — same shape as yimage, figure_kind = YVIDEO. */
 #include "../internal.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine

@@ -16,7 +16,7 @@
  * Standalone-mode ygui demo. Press 'q' (or Ctrl-C / Ctrl-D) to quit.
  */
 
-#include <yetty/yguiapp/app.h>
+#include <yetty/api/yguiapp/app.h>
 #include <yetty/yguiapp/run.h>
 #include <yetty/ygui/ygui.h>
 

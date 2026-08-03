@@ -19,13 +19,13 @@
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ygui/framework.h>
+#include "yetty/gen/impl/ygui/framework.h"
 #include <yetty/ygui/event.h>
 /* Deliberately NOT including <yetty/ygui/widget.h> here: that is the base
  * widget class's own generated public header. widget.c includes this
  * internal.h, and a TU must not pull in its own generated header (its
  * YETTY_YRESULT_DECLARE would clash with the one the TU declares manually).
- * Widgets that need the base-widget API include <yetty/ygui/widget.h>
+ * Widgets that need the base-widget API include "yetty/gen/impl/ygui/widget.h"
  * directly — it is their parent header, which is always fine. */
 
 #ifdef __cplusplus

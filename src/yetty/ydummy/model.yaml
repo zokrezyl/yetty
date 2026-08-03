@@ -295,3 +295,18 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/ydummy/canvas.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ydummy_constructor_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ydummy/canvas.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydummy_constructor_fn)(struct yetty_yclass_object *);"
+  yetty_ydummy_set_shader_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ydummy/canvas.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydummy_set_shader_fn)(struct yetty_yclass_object *, struct yetty_ycore_buffer);"
+  yetty_ydummy_set_rect_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ydummy/canvas.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydummy_set_rect_fn)(struct yetty_yclass_object *, float, float, float, float);"
+  yetty_ydummy_set_time_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ydummy/canvas.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydummy_set_time_fn)(struct yetty_yclass_object *, float);"
+  yetty_ydummy_destroy_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ydummy/canvas.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydummy_destroy_fn)(struct yetty_yclass_object *);"

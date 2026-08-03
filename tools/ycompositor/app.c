@@ -5,9 +5,9 @@
  * Subclass of yapp:app: the shared yplatform entry brings up the
  * window/surface/GPU/channels and hands the runtime to run, which builds a
  * ycompositor
- * with a single full-window ygrid figure, and pushes a parameter-sweep
- * of SDF primitives directly into the grid via yetty_ygrid_add_record.
- * No terminal, no yui, no ygui — the compositor and ygrid render path
+ * with a single full-window yscene figure, and pushes a parameter-sweep
+ * of SDF primitives directly into the scene via its process_bytes slot.
+ * No terminal, no yui, no ygui — the compositor and yscene render path
  * are exercised in isolation.
  *
  * Event loop:
@@ -43,7 +43,7 @@
 #include <yetty/yfont/msdf-font.h>
 #include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
-#include <yetty/api/ygrid/grid.h>
+#include <yetty/api/yscene/scene.h>
 #include <yetty/api/yfigure/figure.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ytrace/ytrace.h>
@@ -62,7 +62,7 @@ struct YETTY_ANNOTATE("class@ycompositor:app") YETTY_ANNOTATE("parent@yapp:app")
     struct yetty_ydraw_target *target; /* our own texture target, bypasses
                                          * yframework's x11-tile choice */
     struct yetty_yclass_object *root;
-    struct yetty_ygrid_grid *grid;
+    struct yetty_yscene_scene *scene;
     /* Default font loaded once at startup and attached to every
      * rebuilt grid at slot 0. Owned here, destroyed in teardown. */
     struct yetty_yfont_font *font;
@@ -97,12 +97,13 @@ static uint32_t f32_bits(float f)
     return u;
 }
 
-/* Build one SDF record into `out` and feed it to the grid. The caller
+/* Build one SDF record into `out` and feed it to the scene figure. The caller
  * fills the geometry words after the 5-word header (type, z_order, fill,
  * stroke, stroke_width). Returns the void result so failures propagate. */
-static struct yetty_ycore_void_result push_sdf(struct yetty_ygrid_grid *g, uint32_t type,
-                                               uint32_t z_order, uint32_t fill, uint32_t stroke,
-                                               float stroke_w, const float *geom, size_t geom_words)
+static struct yetty_ycore_void_result push_sdf(struct yetty_yclass_object *figure_obj,
+                                               uint32_t type, uint32_t z_order, uint32_t fill,
+                                               uint32_t stroke, float stroke_w, const float *geom,
+                                               size_t geom_words)
 {
     /* Max SDF prim today is LINEAR_GRADIENT_BOX at 16 words. */
     uint32_t buf[32];
@@ -117,91 +118,94 @@ static struct yetty_ycore_void_result push_sdf(struct yetty_ygrid_grid *g, uint3
     for (size_t i = 0; i < geom_words; i++) {
         memcpy(&buf[5 + i], &geom[i], sizeof(float));
     }
-    return yetty_ygrid_add_record_local(g, (const uint8_t *)buf,
-                                        (5u + geom_words) * sizeof(uint32_t));
+    return yetty_yfigure_process_bytes(figure_obj, (const uint8_t *)buf,
+                                       (5u + geom_words) * sizeof(uint32_t));
 }
 
 /* Convenience wrappers — one per SDF kind we exercise. */
-static struct yetty_ycore_void_result emit_rounded_box(struct yetty_ygrid_grid *g, uint32_t fill,
-                                                       uint32_t stroke, float sw, float cx,
-                                                       float cy, float hw, float hh, float r)
+static struct yetty_ycore_void_result emit_rounded_box(struct yetty_yclass_object *figure_obj,
+                                                       uint32_t fill, uint32_t stroke, float sw,
+                                                       float cx, float cy, float hw, float hh,
+                                                       float r)
 {
     float geom[8] = {cx, cy, hw, hh, r, r, r, r};
-    return push_sdf(g, YETTY_YSDF_ROUNDED_BOX, 0, fill, stroke, sw, geom, 8);
+    return push_sdf(figure_obj, YETTY_YSDF_ROUNDED_BOX, 0, fill, stroke, sw, geom, 8);
 }
 
-static struct yetty_ycore_void_result emit_box(struct yetty_ygrid_grid *g, uint32_t fill,
-                                               uint32_t stroke, float sw, float cx, float cy,
-                                               float hw, float hh)
+static struct yetty_ycore_void_result emit_box(struct yetty_yclass_object *figure_obj,
+                                               uint32_t fill, uint32_t stroke, float sw, float cx,
+                                               float cy, float hw, float hh)
 {
     float geom[5] = {cx, cy, hw, hh, 0.0f};
-    return push_sdf(g, YETTY_YSDF_BOX, 0, fill, stroke, sw, geom, 5);
+    return push_sdf(figure_obj, YETTY_YSDF_BOX, 0, fill, stroke, sw, geom, 5);
 }
 
-static struct yetty_ycore_void_result emit_circle(struct yetty_ygrid_grid *g, uint32_t fill,
-                                                  uint32_t stroke, float sw, float cx, float cy,
-                                                  float r)
+static struct yetty_ycore_void_result emit_circle(struct yetty_yclass_object *figure_obj,
+                                                  uint32_t fill, uint32_t stroke, float sw,
+                                                  float cx, float cy, float r)
 {
     float geom[3] = {cx, cy, r};
-    return push_sdf(g, YETTY_YSDF_CIRCLE, 0, fill, stroke, sw, geom, 3);
+    return push_sdf(figure_obj, YETTY_YSDF_CIRCLE, 0, fill, stroke, sw, geom, 3);
 }
 
-static struct yetty_ycore_void_result emit_ellipse(struct yetty_ygrid_grid *g, uint32_t fill,
-                                                   uint32_t stroke, float sw, float cx, float cy,
-                                                   float rx, float ry)
+static struct yetty_ycore_void_result emit_ellipse(struct yetty_yclass_object *figure_obj,
+                                                   uint32_t fill, uint32_t stroke, float sw,
+                                                   float cx, float cy, float rx, float ry)
 {
     float geom[4] = {cx, cy, rx, ry};
-    return push_sdf(g, YETTY_YSDF_ELLIPSE, 0, fill, stroke, sw, geom, 4);
+    return push_sdf(figure_obj, YETTY_YSDF_ELLIPSE, 0, fill, stroke, sw, geom, 4);
 }
 
-static struct yetty_ycore_void_result emit_triangle(struct yetty_ygrid_grid *g, uint32_t fill,
-                                                    uint32_t stroke, float sw, float ax, float ay,
-                                                    float bx, float by, float cx, float cy)
+static struct yetty_ycore_void_result emit_triangle(struct yetty_yclass_object *figure_obj,
+                                                    uint32_t fill, uint32_t stroke, float sw,
+                                                    float ax, float ay, float bx, float by,
+                                                    float cx, float cy)
 {
     float geom[6] = {ax, ay, bx, by, cx, cy};
-    return push_sdf(g, YETTY_YSDF_TRIANGLE, 0, fill, stroke, sw, geom, 6);
+    return push_sdf(figure_obj, YETTY_YSDF_TRIANGLE, 0, fill, stroke, sw, geom, 6);
 }
 
-static struct yetty_ycore_void_result emit_segment(struct yetty_ygrid_grid *g, uint32_t stroke,
-                                                   float sw, float x0, float y0, float x1, float y1)
+static struct yetty_ycore_void_result emit_segment(struct yetty_yclass_object *figure_obj,
+                                                   uint32_t stroke, float sw, float x0, float y0,
+                                                   float x1, float y1)
 {
     float geom[4] = {x0, y0, x1, y1};
-    return push_sdf(g, YETTY_YSDF_SEGMENT, 0, 0, stroke, sw, geom, 4);
+    return push_sdf(figure_obj, YETTY_YSDF_SEGMENT, 0, 0, stroke, sw, geom, 4);
 }
 
-static struct yetty_ycore_void_result emit_star(struct yetty_ygrid_grid *g, uint32_t fill,
-                                                uint32_t stroke, float sw, float cx, float cy,
-                                                float r, float points, float inner_ratio)
+static struct yetty_ycore_void_result emit_star(struct yetty_yclass_object *figure_obj,
+                                                uint32_t fill, uint32_t stroke, float sw, float cx,
+                                                float cy, float r, float points, float inner_ratio)
 {
     float geom[5] = {cx, cy, r, points, inner_ratio};
-    return push_sdf(g, YETTY_YSDF_STAR, 0, fill, stroke, sw, geom, 5);
+    return push_sdf(figure_obj, YETTY_YSDF_STAR, 0, fill, stroke, sw, geom, 5);
 }
 
-static struct yetty_ycore_void_result emit_hexagon(struct yetty_ygrid_grid *g, uint32_t fill,
-                                                   uint32_t stroke, float sw, float cx, float cy,
-                                                   float r)
+static struct yetty_ycore_void_result emit_hexagon(struct yetty_yclass_object *figure_obj,
+                                                   uint32_t fill, uint32_t stroke, float sw,
+                                                   float cx, float cy, float r)
 {
     float geom[3] = {cx, cy, r};
-    return push_sdf(g, YETTY_YSDF_HEXAGON, 0, fill, stroke, sw, geom, 3);
+    return push_sdf(figure_obj, YETTY_YSDF_HEXAGON, 0, fill, stroke, sw, geom, 3);
 }
 
-static struct yetty_ycore_void_result emit_heart(struct yetty_ygrid_grid *g, uint32_t fill,
-                                                 uint32_t stroke, float sw, float cx, float cy,
-                                                 float scale)
+static struct yetty_ycore_void_result emit_heart(struct yetty_yclass_object *figure_obj,
+                                                 uint32_t fill, uint32_t stroke, float sw, float cx,
+                                                 float cy, float scale)
 {
     float geom[3] = {cx, cy, scale};
-    return push_sdf(g, YETTY_YSDF_HEART, 0, fill, stroke, sw, geom, 3);
+    return push_sdf(figure_obj, YETTY_YSDF_HEART, 0, fill, stroke, sw, geom, 3);
 }
 
-static struct yetty_ycore_void_result emit_capsule(struct yetty_ygrid_grid *g, uint32_t fill,
-                                                   uint32_t stroke, float sw, float x0, float y0,
-                                                   float x1, float y1, float r)
+static struct yetty_ycore_void_result emit_capsule(struct yetty_yclass_object *figure_obj,
+                                                   uint32_t fill, uint32_t stroke, float sw,
+                                                   float x0, float y0, float x1, float y1, float r)
 {
     float geom[5] = {x0, y0, x1, y1, r};
-    return push_sdf(g, YETTY_YSDF_CAPSULE, 0, fill, stroke, sw, geom, 5);
+    return push_sdf(figure_obj, YETTY_YSDF_CAPSULE, 0, fill, stroke, sw, geom, 5);
 }
 
-/* Emit a TEXT_DRAWABLE_LIST record. ygrid expands it into one GLYPH record per
+/* Emit a TEXT_DRAWABLE_LIST record. The scene expands it into one glyph per
  * codepoint at index time (same flow scene-canvas uses), so layout,
  * bearings, and advances come from the actual font metrics — the
  * caller just hands over the UTF-8 string.
@@ -212,14 +216,14 @@ static struct yetty_ycore_void_result emit_capsule(struct yetty_ygrid_grid *g, u
  *   u32 payload_size    (bytes of payload, padded to 4)
  *   f32 x, y, font_size, rotation
  *   u32 color, layer
- *   i32 font_id         (matches the slot set via yetty_ygrid_set_font,
+ *   i32 font_id         (matches the slot set via the scene font install,
  *                         -1 means "default" → slot 0)
  *   u32 text_len
  *   f32 char_spacing, word_spacing
  *   u8  text[text_len]
  *   u8  pad[0..3]
  */
-static struct yetty_ycore_void_result emit_text_span(struct yetty_ygrid_grid *grid,
+static struct yetty_ycore_void_result emit_text_span(struct yetty_yclass_object *figure_obj,
                                                      int32_t font_slot, const char *utf8, float x,
                                                      float y, float font_size, uint32_t color)
 {
@@ -258,7 +262,7 @@ static struct yetty_ycore_void_result emit_text_span(struct yetty_ygrid_grid *gr
     }
 
     struct yetty_ycore_void_result add_result =
-        yetty_ygrid_add_record_local(grid, record, record_size);
+        yetty_yfigure_process_bytes(figure_obj, record, record_size);
     free(record);
     return add_result;
 }
@@ -266,17 +270,17 @@ static struct yetty_ycore_void_result emit_text_span(struct yetty_ygrid_grid *gr
 /* Lay out a parameter-sweep grid: one column per SDF kind, three rows
  * showing fill / stroke-only / stroke+fill variants, plus a TEXT_DRAWABLE_LIST
  * header at the top to exercise the font dispatcher path. Coordinates
- * are LOCAL to the ygrid figure (the figure's rect handles translation
+ * are LOCAL to the scene figure (the figure's rect handles translation
  * into target space). `has_text` gates the TEXT_DRAWABLE_LIST emission — set
  * when a font has been attached at slot 0 so the expansion path can
  * resolve glyphs. */
-static struct yetty_ycore_void_result populate_grid(struct yetty_ygrid_grid *grid, int has_text,
-                                                    float w, float h)
+static struct yetty_ycore_void_result populate_scene(struct yetty_yclass_object *figure_obj,
+                                                     int has_text, float w, float h)
 {
     /* Background — one big rounded-box covers the figure. */
     {
         struct yetty_ycore_void_result r =
-            emit_rounded_box(grid, COL_BG_LIFTED, COL_BORDER, 2.0f, w * 0.5f, h * 0.5f,
+            emit_rounded_box(figure_obj, COL_BG_LIFTED, COL_BORDER, 2.0f, w * 0.5f, h * 0.5f,
                              w * 0.5f - 8.0f, h * 0.5f - 8.0f, 16.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "bg rounded box");
     }
@@ -317,39 +321,39 @@ static struct yetty_ycore_void_result populate_grid(struct yetty_ygrid_grid *gri
             int kind = col + (row * cols);
             switch (kind % 10) {
             case 0:
-                r = emit_rounded_box(grid, fill, stroke, sw, cx, cy, half, half * 0.7f, 8.0f);
+                r = emit_rounded_box(figure_obj, fill, stroke, sw, cx, cy, half, half * 0.7f, 8.0f);
                 break;
             case 1:
-                r = emit_box(grid, fill, stroke, sw, cx, cy, half, half * 0.6f);
+                r = emit_box(figure_obj, fill, stroke, sw, cx, cy, half, half * 0.6f);
                 break;
             case 2:
-                r = emit_circle(grid, fill, stroke, sw, cx, cy, half * 0.9f);
+                r = emit_circle(figure_obj, fill, stroke, sw, cx, cy, half * 0.9f);
                 break;
             case 3:
-                r = emit_ellipse(grid, fill, stroke, sw, cx, cy, half, half * 0.55f);
+                r = emit_ellipse(figure_obj, fill, stroke, sw, cx, cy, half, half * 0.55f);
                 break;
             case 4:
-                r = emit_triangle(grid, fill, stroke, sw, cx, cy - half, cx - half,
+                r = emit_triangle(figure_obj, fill, stroke, sw, cx, cy - half, cx - half,
                                   cy + half * 0.7f, cx + half, cy + half * 0.7f);
                 break;
             case 5:
-                r = emit_hexagon(grid, fill, stroke, sw, cx, cy, half);
+                r = emit_hexagon(figure_obj, fill, stroke, sw, cx, cy, half);
                 break;
             case 6:
-                r = emit_star(grid, fill, stroke, sw, cx, cy, half, 5.0f, 0.5f);
+                r = emit_star(figure_obj, fill, stroke, sw, cx, cy, half, 5.0f, 0.5f);
                 break;
             case 7:
-                r = emit_heart(grid, fill, stroke, sw, cx, cy + half * 0.2f, half * 0.9f);
+                r = emit_heart(figure_obj, fill, stroke, sw, cx, cy + half * 0.2f, half * 0.9f);
                 break;
             case 8:
-                r = emit_capsule(grid, fill, stroke, sw, cx - half * 0.7f, cy, cx + half * 0.7f, cy,
-                                 half * 0.4f);
+                r = emit_capsule(figure_obj, fill, stroke, sw, cx - half * 0.7f, cy,
+                                 cx + half * 0.7f, cy, half * 0.4f);
                 break;
             default:
-                r = emit_rounded_box(grid, fill, stroke, sw, cx, cy, half, half * 0.5f, 4.0f);
+                r = emit_rounded_box(figure_obj, fill, stroke, sw, cx, cy, half, half * 0.5f, 4.0f);
                 break;
             }
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "populate_grid: emit prim");
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "populate_scene: emit prim");
         }
     }
 
@@ -358,8 +362,8 @@ static struct yetty_ycore_void_result populate_grid(struct yetty_ygrid_grid *gri
     for (int i = 0; i < 8; i++) {
         float x0 = pad_x + (float)i * (w - 2.0f * pad_x) / 8.0f;
         float x1 = x0 + (w - 2.0f * pad_x) / 9.0f;
-        r = emit_segment(grid, COL_ACCENT_HI, 1.0f + (float)i * 0.8f, x0, line_y, x1, line_y);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "populate_grid: line");
+        r = emit_segment(figure_obj, COL_ACCENT_HI, 1.0f + (float)i * 0.8f, x0, line_y, x1, line_y);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "populate_scene: line");
     }
 
     /* Header TEXT_DRAWABLE_LIST — exercises the TEXT_DRAWABLE_LIST → glyph expansion +
@@ -368,21 +372,29 @@ static struct yetty_ycore_void_result populate_grid(struct yetty_ygrid_grid *gri
      * keeps rendering. font_id = -1 addresses the default slot. */
     if (has_text) {
         struct yetty_ycore_void_result text_result =
-            emit_text_span(grid, /*font_slot=*/-1, "ycompositor: ygrid + TEXT_DRAWABLE_LIST", pad_x,
-                           36.0f, 28.0f, COL_TEXT_PRI);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, text_result, "populate_grid: header text");
+            emit_text_span(figure_obj, /*font_slot=*/-1, "ycompositor: yscene + TEXT_DRAWABLE_LIST",
+                           pad_x, 36.0f, 28.0f, COL_TEXT_PRI);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, text_result, "populate_scene: header text");
     }
     return YETTY_OK_VOID();
 }
 
-/* (Re)build the single ygrid figure to cover the whole drawable area
+/* (Re)build the single scene figure to cover the whole drawable area
  * minus a small margin. Called at startup and on RESIZE. */
 static struct yetty_ycore_void_result rebuild_figure(struct yetty_ycompositor_app *app)
 {
     const float margin = 20.0f;
+    /* The scene's document space is logical px; the surface size is
+     * framebuffer px. Author the rect (and therefore all content laid
+     * out from it) in logical px so HiDPI displays render 1:1. */
+    float content_scale = app->yrt->gpu.app_gpu_context.content_scale;
+    if (content_scale <= 0.0f) {
+        content_scale = 1.0f;
+    }
     struct yetty_ycore_rectangle rect = {
         .min = {.x = margin, .y = margin},
-        .max = {.x = (float)app->surface_w - margin, .y = (float)app->surface_h - margin},
+        .max = {.x = (float)app->surface_w / content_scale - margin,
+                .y = (float)app->surface_h / content_scale - margin},
     };
     float w = rect.max.x - rect.min.x;
     float h = rect.max.y - rect.min.y;
@@ -392,33 +404,33 @@ static struct yetty_ycore_void_result rebuild_figure(struct yetty_ycompositor_ap
 
     /* Drop the old figure if present. remove_child_by_id destroys the
      * child as part of the same call (uthash entry + figure cascade). */
-    if (app->grid) {
+    if (app->scene) {
         struct yetty_ycore_void_result rr =
             yetty_yfigure_container_remove_child_by_id(app->root, 1u);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "rebuild_figure: remove old");
-        app->grid = NULL;
+        app->scene = NULL;
     }
 
-    /* Grid bucket count — coarse is fine; the GPU pipeline handles
-     * dispatch. 32×16 keeps the per-cell list short for our handful of
-     * prims. */
-    struct yetty_ygrid_grid_ptr_result gr = yetty_ygrid_create(rect, 32u, 16u, &app->ctx);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "rebuild_figure: ygrid_create");
-    app->grid = gr.value;
+    struct yetty_yscene_scene_ptr_result gr = yetty_yscene_create(rect, &app->ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "rebuild_figure: yscene_create");
+    app->scene = gr.value;
+    struct yetty_yfigure_figure *figure = yetty_yscene_as_figure(app->scene);
+    struct yetty_yclass_object *figure_obj = (struct yetty_yclass_object *)(figure)-1;
 
-    /* Attach the default font at slot 0 before populating so GLYPH
-     * records emitted during populate_grid can address it directly. */
+    /* Attach the default font at slot 0 before populating so text
+     * records emitted during populate_scene can address it directly. */
     if (app->font) {
-        struct yetty_ycore_void_result font_result = yetty_ygrid_set_font(app->grid, 0u, app->font);
+        struct yetty_ycore_void_result font_result =
+            yetty_yscene_set_default_font(figure_obj, app->font);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, font_result, "rebuild_figure: set_font");
     }
 
     struct yetty_ycore_void_result pr =
-        populate_grid(app->grid, /*has_text=*/app->font != NULL, w, h);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "rebuild_figure: populate_grid");
+        populate_scene(figure_obj, /*has_text=*/app->font != NULL, w, h);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "rebuild_figure: populate_scene");
 
     struct yetty_ycore_void_result ar =
-        yetty_yfigure_container_add_child(app->root, yetty_ygrid_as_figure(app->grid), /*id=*/1u);
+        yetty_yfigure_container_add_child(app->root, figure, /*id=*/1u);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "rebuild_figure: add_child");
 
     yinfo("ycompositor: figure rebuilt for %ux%u (rect %.1fx%.1f)", app->surface_w, app->surface_h,
@@ -526,7 +538,7 @@ static struct yetty_ycore_void_result ycompositor_app_run(struct yetty_yclass_ob
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yframework_create failed");
     app->yrt = yr.value;
 
-    /* Build the context the compositor + ygrid expect. pty_factory is
+    /* Build the context the compositor + yscene expect. pty_factory is
      * absent (no terminal); event_loop comes from yframework. */
     app->ctx.runtime = app->yrt;
     app->ctx.pty_factory = NULL;
@@ -557,8 +569,8 @@ static struct yetty_ycore_void_result ycompositor_app_run(struct yetty_yclass_ob
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "texture target create failed");
     app->target = tr.value;
 
-    /* Root container — owns the demo's ygrid figure. No registry
-     * needed: this tool adds the ygrid directly via add_child rather
+    /* Root container — owns the demo's scene figure. No registry
+     * needed: this tool adds the scene directly via add_child rather
      * than going through wire admin CREATE_CHILD. */
     struct yetty_ycore_rectangle root_rect = {
         .min = {.x = 0.0f, .y = 0.0f},
@@ -573,7 +585,7 @@ static struct yetty_ycore_void_result ycompositor_app_run(struct yetty_yclass_ob
     yetty_yfigure_container_set_rect(app->root, root_rect);
 
     /* Load the default MSDF font once and pre-cache basic-latin glyphs
-     * so populate_grid's text emission can resolve every codepoint
+     * so populate_scene's text emission can resolve every codepoint
      * without a per-glyph atlas miss / re-upload. Same path layout
      * scrolling-canvas uses: `<paths/fonts>/../msdf-fonts/<family>-Regular.cdb`
      * for the CDB, `<paths/shaders>/msdf-font.wgsl` for the shader. */
@@ -674,12 +686,12 @@ static struct yetty_ycore_void_result ycompositor_app_run(struct yetty_yclass_ob
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
     }
     app->root = NULL;
-    app->grid = NULL; /* destroyed by root cascade */
+    app->scene = NULL; /* destroyed by root cascade */
 
     app->target->ops->destroy(app->target);
     app->target = NULL;
 
-    /* Font outlived every ygrid that borrowed it via set_font, so it's
+    /* Font outlived every scene that borrowed it via set_font, so it's
      * safe to destroy after the compositor cascade above. */
     if (app->font) {
         app->font->ops->destroy(app->font);

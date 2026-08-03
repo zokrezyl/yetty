@@ -16,6 +16,15 @@
 extern "C" {
 #endif
 
+/*
+ * yclass app wrapper. The standalone window host is a yapp:app subclass; the
+ * heavy per-run state stays in `struct app` (shared with client mode), which the
+ * data block embeds. codegen sees this class because the Makefile passes
+ * YETTY_YGREETER_HAS_STANDALONE via YCLASS_DEFINES; main.gen.c is #included at
+ * the foot, inside the same guard, so reduced builds never compile it.
+ */
+struct yetty_yclass_ptr_result yetty_ygreeter_app_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

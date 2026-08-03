@@ -51,7 +51,7 @@ flags from `compile_commands.json`, so it requires a configured build. See
 
 A heavyweight non-primitive [ydraw](#ydraw) entry: plot, image, video,
 mesh, shader-backed content. Composites occupy the top wire type-id tier and
-are not lowered into [ygrid](#ygrid) primitives by the basic primitive path —
+are not lowered into [yscene](#yscene) primitives by the basic primitive path —
 they carry their own payload and, eventually, a runtime scene object. The old
 `raw_figure` / `complex_drawable` wire record names mean this. Do not call a
 composite a "figure" (see [figure](#figure)).
@@ -93,7 +93,7 @@ dirty state; a clean frame costs almost nothing. See
 ## domain
 
 The first segment of a yclass name, `class@<domain>:<class>` — normally the
-module name (`yfigure`, `ygrid`, `yterminal`, …). Domain plus class form the
+module name (`yfigure`, `yscene`, `yterminal`, …). Domain plus class form the
 qualified name (e.g. `yetty_yfigure_container`) that keys RPC name
 resolution. See [yclass](../src/yetty/yclass/README.md).
 
@@ -118,7 +118,7 @@ payload. [yface](#yface) defines the semantic layer and codec;
 The rich-content unit hosted by the [compositor](#compositor): a yclass
 object deriving from `yfigure:figure`, with rect, z, hidden/dirty state, and
 input routing. Concrete figure [kinds](#kind) are renderer implementations
-(ygrid, ymgui, yrdawn, vterm). Never "card". Avoid "figure" for entries
+(yscene, ymgui, yrdawn, vterm). Never "card". Avoid "figure" for entries
 inside a ydraw stream — those are [primitives](#primitive),
 [composites](#composite), or [resources](#resource). See
 [yfigure](../src/yetty/yfigure/README.md).
@@ -142,7 +142,7 @@ type. A kind is identified by `yetty_yfigure_kind_token("<name>")` (a
 header-inline hash; no central enum) and maps to a factory in the yfigure
 registry. Content types live in the [ydraw](#ydraw) stream as wire type
 words; producer content ships as [composite](#composite) records inside a
-[ygrid](#ygrid) stream. New kinds are reserved for genuinely different
+[yscene](#yscene) stream. New kinds are reserved for genuinely different
 renderers. See [yfigure](../src/yetty/yfigure/README.md).
 
 ## libvterm
@@ -170,7 +170,7 @@ legacy `card=` keyword lives at this layer.
 
 ## primitive
 
-A direct [ygrid](#ygrid) render atom: an SDF shape or a glyph — already in
+A direct [yscene](#yscene) render atom: an SDF shape or a glyph — already in
 the form the render staging path can place and render, needing no
 materialization into a separate scene object. Fonts are
 [resources](#resource), text runs are a
@@ -182,7 +182,7 @@ materialization into a separate scene object. Fonts are
 A process or module that emits [ydraw](#ydraw)/figure content into a
 terminal: ychart, ydiagram, ysvg, ymarkdown, ymusic, ygui apps, the `tools/*`
 CLIs. Producer-side code builds [drawable lists](#ydraw-list) and drives
-figures over [yrpc](#yrpc); receiver-side code (yvterm, ygrid) decodes and
+figures over [yrpc](#yrpc); receiver-side code (yvterm, yscene) decodes and
 renders them.
 
 ## resource
@@ -336,13 +336,6 @@ allocator, MSDF generator, render target, and the optional VNC and RPC
 servers. Sits between platform bootstrap and the application. See
 [yframework](../src/yetty/yframework/README.md).
 
-## ygrid
-
-The general-purpose figure [kind](#kind) for [ydraw](#ydraw) content: a
-spatial-bucketed batch of SDF [primitives](#primitive) and glyphs, with
-addressable render objects (entities) supporting update/delete/grouping.
-See [ygrid](../src/yetty/ygrid/README.md).
-
 ## ygui
 
 The native widget toolkit (buttons, menus, tables, dialogs, …). ygui runs
@@ -388,6 +381,16 @@ The in-app yclass RPC / remote-object layer: [sessions](#session),
 typed call site drive a local object or a remote one over the multiplexed
 [ywire](#ywire) connection. Not the external control client — that is
 [yctl](#yctl). See [yclass](../src/yetty/yclass/README.md).
+
+## yscene
+
+The general-purpose figure [kind](#kind) for [ydraw](#ydraw) content: the
+retained scene graph — a dom of nodes (groups) holding verbatim wire
+spans, derived into one paint-ordered leaf list, rendered as SDF
+[primitives](#primitive), expanded glyphs, and [composites](#composite),
+with update/delete/grouping addressable by node id. Also answers to the
+legacy wire kind token "ygrid". See
+[yscene](../src/yetty/yscene/README.md).
 
 ## ysdf
 

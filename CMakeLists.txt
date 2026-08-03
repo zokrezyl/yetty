@@ -48,6 +48,15 @@ endif()
 unset(_CPM_EXPECTED_DIR)
 include(${YETTY_ROOT}/build-tools/yetty/CPM.cmake)
 
+# yclass codegen: defines yetty_yclass_module() (every yclass module's own
+# CMakeLists registers itself with it) and schedules the deferred finalizer
+# that turns the registrations into the on-demand `yclass-codegen` ninja
+# target (`make codegen` builds it; needs this build's compile_commands.json,
+# so only exporting builds get the target — the desktop builds do). Included
+# BEFORE the platform tree so the registration function exists when the
+# module CMakeLists run.
+include(${YETTY_ROOT}/build-tools/yetty/yclass-codegen.cmake)
+
 # Detect platform and include appropriate target.
 # Each platform cmake.cmake applies its own variable overrides then builds.
 # tvOS check comes BEFORE iOS — tvOS sets YETTY_IOS=1 internally to share
@@ -68,13 +77,6 @@ elseif(APPLE)
 else()
     # Linux and other Unix
     include(${YETTY_ROOT}/build-tools/yetty/platform/linux/cmake.cmake)
-endif()
-
-# yclass codegen as an on-demand ninja target (`yclass-codegen`) — never part
-# of ALL; `make codegen` builds it. Needs this build's compile_commands.json,
-# so only builds that export one can actually run it (the desktop builds do).
-if(CMAKE_EXPORT_COMPILE_COMMANDS)
-    include(${YETTY_ROOT}/build-tools/yetty/yclass-codegen.cmake)
 endif()
 
 # Tools

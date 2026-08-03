@@ -275,7 +275,7 @@ target_link_libraries(ygreeter PRIVATE
     yetty_ycircuit
     yetty_ymusic
     yetty_yfigure
-    yetty_ygrid
+    yetty_yscene
     yetty_yshadertoy
     yetty_yfont_core
     yetty_ydraw_factory
@@ -430,7 +430,7 @@ target_link_libraries(yhello PRIVATE
     yetty_ycircuit
     yetty_ymusic
     yetty_yfigure
-    yetty_ygrid
+    yetty_yscene
     yetty_yshadertoy
     yetty_yfont_core
     yetty_ydraw_factory

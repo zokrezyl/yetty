@@ -142,13 +142,9 @@ add_subdirectory(yfigure)
 # (yterm) link it to register the YSHADERTOY factory.
 add_subdirectory(yshadertoy)
 
-# ygrid — concrete figure kind: spatial-bucketed batch of SDF prims
-# and glyphs. First migration target for ygui's scene content.
-add_subdirectory(ygrid)
-
-# yscene — retained scene graph replacing ygrid (#691): `dom` (GPU-free
-# content tree, scene-internal) + `scene` (renderer figure kind). Built
-# alongside ygrid until parity; producers migrate one at a time.
+# yscene — retained scene graph (#691): `dom` (GPU-free content tree,
+# scene-internal) + `scene` (renderer figure kind). Renders every wire
+# figure kind (SDF prims, glyphs/text, composites), replacing ygrid.
 add_subdirectory(yscene)
 
 # ygit — read-only Git history/inspection component (yclass `repo` class over

@@ -54,7 +54,7 @@ mixins, cross-module overrides, and **location-transparent RPC** (the same call
 works on a local object or a remote proxy) — yetty uses **yclass**, where the
 vtable, dispatch, RPC skeletons, and a binding model are *generated* from C23
 `[[clang::annotate(...)]]` annotations on the source. The figure modules
-(`yfigure`, `ygui`, `ymgui`, `yrdawn`, `ygrid`, `yterm`) are built this way. See
+(`yfigure`, `ygui`, `ymgui`, `yrdawn`, `yscene`, `yterm`) are built this way. See
 [yclass](../src/yetty/yclass/README.md).
 
 ## Error Propagation

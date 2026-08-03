@@ -57,7 +57,11 @@ classes:
         get: false
         set: false
       - name: figure_args
-        type: struct yetty_ygrid_factory_args
+        type: struct yetty_yscene_factory_args
+        get: false
+        set: false
+      - name: local_figure_args
+        type: struct yetty_yscene_factory_args
         get: false
         set: false
       - name: render_target
@@ -85,7 +89,7 @@ classes:
         get: false
         set: false
       - name: chrome_caption
-        type: "struct yetty_ygrid_grid *"
+        type: "struct yetty_yscene_scene *"
         get: false
         set: false
       - name: chrome_last_hover
@@ -162,9 +166,11 @@ types:
     fields:
       - name: handler
         type: yetty_ycore_event_handler
-  - name: yetty_ygrid_factory_args
+  - name: yetty_yscene_factory_args
     kind: struct
     fields:
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
       - name: default_font
         type: "struct yetty_yfont_font *"
       - name: bold_font
@@ -173,8 +179,6 @@ types:
         type: "struct yetty_yfont_font *"
       - name: bold_italic_font
         type: "struct yetty_yfont_font *"
-      - name: composite_factory
-        type: "struct yetty_ydraw_composite_factory *"
       - name: absolute_coords
         type: int
 local_types:
@@ -196,3 +200,6 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/yguiapp/app.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_yguiapp_build_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yguiapp/app.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yguiapp_build_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *);"

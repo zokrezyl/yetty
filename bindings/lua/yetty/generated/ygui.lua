@@ -814,6 +814,21 @@ function Textinput.new()
   rt.check(res)
   return setmetatable({ handle = res.value }, Textinput)
 end
+function Textinput:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
+  rt.check(res)
+  return res.value
+end
+function Textinput:widget_on_motion(y)
+  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, y)
+  rt.check(res)
+  return res.value
+end
+function Textinput:widget_on_release(y, button)
+  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, y, button)
+  rt.check(res)
+  return res.value
+end
 function Textinput:constructor()
   local res = rt.C().yetty_ygui_constructor(nil, self.handle)
   rt.check(res)

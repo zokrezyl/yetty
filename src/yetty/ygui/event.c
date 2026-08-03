@@ -10,7 +10,7 @@
  */
 
 #include "internal.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 #include <stdlib.h>
 

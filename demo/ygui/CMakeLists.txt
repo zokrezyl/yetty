@@ -74,7 +74,7 @@ target_link_libraries(demo_ygui_platform PUBLIC
     yetty_ygui
     yetty_ywire
     yetty_yfigure
-    yetty_ygrid
+    yetty_yscene
     yetty_yshadertoy
     yetty_yfont_core
     yetty_ydraw_factory
@@ -118,7 +118,7 @@ function(demo_ygui_add name)
         yetty_ygui
         yetty_ywire
         yetty_yfigure
-        yetty_ygrid
+        yetty_yscene
         yetty_yshadertoy
         yetty_yfont_core
         yetty_ydraw_factory
@@ -209,3 +209,7 @@ demo_ygui_add(44-textinput 44_textinput)
 # Window-chrome POC: standalone window gains drag/resize/maximize via ychrome
 # (now enabled by default in the shared yguiapp host).
 demo_ygui_add(42-window-chrome 42_window_chrome)
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(demoygui)

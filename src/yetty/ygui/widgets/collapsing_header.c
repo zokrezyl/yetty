@@ -13,7 +13,7 @@
  * restore the remembered height and clear the children's `hidden` flag.
  */
 #include "paint-helpers.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -26,7 +26,7 @@ YETTY_YRESULT_DECLARE(yetty_ygui_collapsing_header_ptr, struct yetty_ygui_collap
 struct yetty_yclass_ptr_result yetty_ygui_collapsing_header_class_get(void);
 struct yetty_ygui_collapsing_header_ptr_result yetty_ygui_collapsing_header_from(
     struct yetty_yclass_object *obj);
-#include <yetty/ygui/widgets/vbox.h>
+#include "yetty/gen/impl/ygui/widgets/vbox.h"
 #include <stdlib.h>
 
 #define HEADER_H 28.0f

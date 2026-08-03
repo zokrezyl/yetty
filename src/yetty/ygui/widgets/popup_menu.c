@@ -14,7 +14,7 @@
 
 #include "../internal.h"
 #include <yetty/ygui/framework-defs.h>
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 #include <yetty/yfigure/kind.h>
 
 /* This TU deliberately does NOT include its own generated header — that
@@ -42,7 +42,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_yclas
                                                               void *userdata);
 
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ygui/primitive-widget.h>
+#include "yetty/gen/impl/ygui/primitive-widget.h"
 #include <yetty/ysdf/funcs.gen.h>
 
 #include <stdlib.h>

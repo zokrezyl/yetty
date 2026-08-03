@@ -24,7 +24,7 @@
 
 #include <yetty/ygui/framework-defs.h>
 #include <yetty/ygui/ygui.h>
-#include <yetty/yguiapp/app.h>
+#include <yetty/api/yguiapp/app.h>
 #include <yetty/yguiapp/run.h>
 
 static inline void err_ok(struct yetty_ycore_void_result r)

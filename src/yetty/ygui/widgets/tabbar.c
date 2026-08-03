@@ -14,7 +14,7 @@
  */
 
 #include "../internal.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -40,9 +40,9 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_yclass_
                                                             int index);
 
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ygui/mixins/clickable.h>
-#include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/hbox.h>
+#include "yetty/gen/impl/ygui/mixins/clickable.h"
+#include "yetty/gen/impl/ygui/primitive-widget.h"
+#include "yetty/gen/impl/ygui/widgets/hbox.h"
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ytrace/ytrace.h>
 

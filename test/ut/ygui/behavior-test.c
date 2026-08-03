@@ -14,14 +14,14 @@
  * Pure event/state logic — no GPU/display/network.
  */
 
-#include <yetty/ygui/mixins/clickable.h>
-#include <yetty/ygui/mixins/draggable.h>
-#include <yetty/ygui/widgets/panel.h>
-#include <yetty/ygui/widgets/radio.h>
-#include <yetty/ygui/widgets/scrollarea.h>
-#include <yetty/ygui/widgets/selectable.h>
-#include <yetty/ygui/widgets/slider.h>
-#include <yetty/ygui/widgets/tabbar.h>
+#include "yetty/gen/impl/ygui/mixins/clickable.h"
+#include "yetty/gen/impl/ygui/mixins/draggable.h"
+#include "yetty/gen/impl/ygui/widgets/panel.h"
+#include "yetty/gen/impl/ygui/widgets/radio.h"
+#include "yetty/gen/impl/ygui/widgets/scrollarea.h"
+#include "yetty/gen/impl/ygui/widgets/selectable.h"
+#include "yetty/gen/impl/ygui/widgets/slider.h"
+#include "yetty/gen/impl/ygui/widgets/tabbar.h"
 #include <yetty/ygui/ygui.h>
 
 #include "ytest.h"

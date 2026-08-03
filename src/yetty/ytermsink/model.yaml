@@ -171,3 +171,18 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/ytermsink/sink.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ytermsink_pty_write_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ytermsink/sink.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ytermsink_pty_write_fn)(struct yetty_yclass_object *, const char *, size_t);"
+  yetty_ytermsink_request_render_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ytermsink/sink.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ytermsink_request_render_fn)(struct yetty_yclass_object *);"
+  yetty_ytermsink_mouse_sub_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ytermsink/sink.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ytermsink_mouse_sub_fn)(struct yetty_yclass_object *, int, int, int);"
+  yetty_ytermsink_clipboard_write_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ytermsink/sink.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ytermsink_clipboard_write_fn)(struct yetty_yclass_object *, const char *, size_t, int);"
+  yetty_ytermsink_sixel_write_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ytermsink/sink.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ytermsink_sixel_write_fn)(struct yetty_yclass_object *, const char *, size_t);"

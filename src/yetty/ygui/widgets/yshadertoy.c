@@ -12,7 +12,7 @@
  * set_source — to avoid making the figure recompile every frame.
  */
 #include "../internal.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine

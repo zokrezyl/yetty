@@ -83,10 +83,10 @@ Every test belongs to exactly one layer.
   builders/parsers, `ywire`/`yface` framing, `yvterm` parser pieces, `yrich`
   document/selection/YAML where pure.
 - **L2 — headless component.** Real modules through in-process seams:
-  `yfigure`/`ygrid`/`ygui` with a NULL context/framework, and terminal core via
+  `yfigure`/`yscene`/`ygui` with a NULL context/framework, and terminal core via
   the memory-PTY seam (§7).
 - **L3 — golden / oracle.** Deterministic serializable artifacts:
-  drawable-list byte dumps, `yfigure`/`ygrid` YAML dumps, ybrowser box geometry,
+  drawable-list byte dumps, `yfigure`/`yscene` state dumps, ybrowser box geometry,
   `ypdf` text positions, parser/IR dumps for chart/circuit/music/diagram/
   markdown/SVG, `yclass` generated-model snapshots. Screenshots are **not** the
   first assertion layer — cover the deterministic intermediate layer first.
@@ -189,9 +189,9 @@ function name.
 
 ```cmake
 yetty_add_c_test(
-    NAME    ygrid_wire
-    SOURCES ygrid-wire-test.c
-    LIBS    yetty_ygrid yetty_ydraw_factory yetty_ydraw_core yetty_ysdf yetty_yfigure
+    NAME    yscene_wire_parity
+    SOURCES wire-parity-test.c
+    LIBS    yetty_yscene yetty_ydraw_factory yetty_ydraw_core yetty_ysdf yetty_yfigure
     SHIMS   trace platform_thread platform_term
     LABELS  contract wire
     TIMEOUT 30)
@@ -239,7 +239,7 @@ Reserve L4 E2E for cases that genuinely need a real process, window, or GPU.
 ## 8. Naming conventions
 
 - Source: `test/ut/<module>/<component>-test.c`.
-- CTest name: `<module>_<component>` (e.g. `ygrid_wire`, `ycore_base64`).
+- CTest name: `<module>_<component>` (e.g. `yscene_scene`, `ycore_base64`).
 - One assertion vocabulary (`ytest.h`); `assert()` is not used in tests.
 
 ## 9. CI lanes
@@ -314,8 +314,8 @@ Expand in this order (highest structural risk first):
    large-payload chunking.
 3. **ydraw-core** — command builder/parser roundtrips, groups, delete, clear,
    invalid lengths, truncated buffers, stable textual dumps for goldens.
-4. **yfigure / ygrid** — child create/delete/clear, rect update, z-order, hit
-   testing, dirty propagation, body forwarding, local-vs-RPC dispatch; ygrid
+4. **yfigure / yscene** — child create/delete/clear, rect update, z-order, hit
+   testing, dirty propagation, body forwarding, local-vs-RPC dispatch; yscene
    spatial buckets, tombstone reuse, group-hierarchy changes, dump stability.
 5. **ygui** — hbox/vbox sizing, padding/margin/gap, flex grow/shrink,
    align/justify combinations, nested layouts, click/hover/focus state machines,
@@ -354,4 +354,4 @@ Fast-follow: migrate `test/ybrowser/ut` and `test/integration/ylexbor` to the
 helper/label conventions.
 
 **Then, coverage** in the §11 order: yclass → ywire/yface → ydraw-core →
-yfigure/ygrid → ygui → yvterm/yterminal → parser/render modules → render/E2E.
+yfigure/yscene → ygui → yvterm/yterminal → parser/render modules → render/E2E.

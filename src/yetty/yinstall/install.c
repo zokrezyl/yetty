@@ -427,6 +427,24 @@ static void write_marker(const char *version, const struct yetty_yplatform_paths
     }
 }
 
+/* Read the installed-version marker into `out`. Returns 1 when a marker
+ * was read, 0 when none exists (first install). */
+static int read_marker(char *out, size_t out_size, const struct yetty_yplatform_paths *paths)
+{
+    char path[PATH_MAX];
+    marker_path(path, sizeof(path), paths);
+    FILE *file = fopen(path, "r");
+    if (!file) {
+        return 0;
+    }
+    int have_line = fgets(out, (int)out_size, file) != NULL;
+    fclose(file);
+    if (have_line) {
+        out[strcspn(out, "\n")] = 0;
+    }
+    return have_line;
+}
+
 /* ------------------------------------------------------------------ */
 /* Entry point                                                        */
 /* ------------------------------------------------------------------ */
@@ -450,14 +468,36 @@ struct yetty_ycore_void_result yetty_yinstall_run(const struct yetty_yinstall_op
     }
     struct yetty_yplatform_paths *paths = paths_res.value;
 
+    /* Refresh policy. The per-file skip in the writer only checks
+     * EXISTENCE for compressed entries, so changed content under an
+     * existing name would never land. The version marker is the rewrite
+     * gate: a marker mismatch (upgrade) forces a full rewrite, and a
+     * "-dirty" development build always does — its version string does
+     * not move between rebuilds, so existence is no evidence of
+     * freshness. A matching stable version keeps the cheap
+     * fill-missing-files pass. */
+    struct yetty_yinstall_options effective_options = *options;
+    if (!effective_options.force) {
+        char installed_version[64] = {0};
+        int have_marker = read_marker(installed_version, sizeof(installed_version), paths);
+        size_t version_len = strlen(version);
+        int dirty_build = version_len >= 6 && strcmp(version + version_len - 6, "-dirty") == 0;
+        if (!have_marker || dirty_build || strcmp(installed_version, version) != 0) {
+            effective_options.force = 1;
+            printf("Refreshing every file (%s).\n\n", !have_marker  ? "no install marker"
+                                                      : dirty_build ? "development build"
+                                                                    : "installed version differs");
+        }
+    }
+
     size_t component_count = 0;
     const struct yetty_yinstall_component *components = yinstall_components(&component_count);
 
     uint64_t total_bytes = 0;
     size_t total_files = 0;
     for (size_t index = 0; index < component_count; index++) {
-        struct yetty_ycore_void_result result =
-            install_component(&components[index], options, paths, &total_bytes, &total_files);
+        struct yetty_ycore_void_result result = install_component(
+            &components[index], &effective_options, paths, &total_bytes, &total_files);
         if (YETTY_IS_ERR(result)) {
             printf("\n  %s: install failed.\n", components[index].name);
             yetty_yplatform_paths_destroy(paths);

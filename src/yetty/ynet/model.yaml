@@ -423,6 +423,48 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/ynet/capture.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ynet_load_file_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ynet_load_file_fn)(struct yetty_yclass_object *, const char *);"
+  yetty_ynet_packet_count_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_uint32_result (*yetty_ynet_packet_count_fn)(struct yetty_yclass_object *);"
+  yetty_ynet_packet_time_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_float_result (*yetty_ynet_packet_time_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_ynet_packet_length_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_uint32_result (*yetty_ynet_packet_length_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_ynet_packet_protocol_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynet_packet_protocol_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_ynet_packet_source_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynet_packet_source_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_ynet_packet_destination_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynet_packet_destination_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_ynet_packet_info_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynet_packet_info_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_ynet_packet_bytes_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_const_uint8_ptr_result (*yetty_ynet_packet_bytes_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_ynet_packet_caplen_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_uint32_result (*yetty_ynet_packet_caplen_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_ynet_flow_count_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_uint32_result (*yetty_ynet_flow_count_fn)(struct yetty_yclass_object *);"
+  yetty_ynet_flow_summary_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynet_flow_summary_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_ynet_render_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ydraw_drawable_list_result (*yetty_ynet_render_fn)(struct yetty_yclass_object *, uint32_t, uint32_t);"
+  yetty_ynet_destroy_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ynet/capture.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ynet_destroy_fn)(struct yetty_yclass_object *);"
 includes:
   src/yetty/ynet/capture.c:
     - yetty/ydraw-core/drawable-list.h

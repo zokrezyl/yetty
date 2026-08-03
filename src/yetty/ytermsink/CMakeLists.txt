@@ -48,3 +48,7 @@ if(NOT MSVC)
         C_STANDARD_REQUIRED ON
     )
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(ytermsink)

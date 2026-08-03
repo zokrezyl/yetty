@@ -19,6 +19,34 @@ extern "C" {
 struct yetty_ydraw_target;
 struct yetty_ywire_wire_statemachine;
 
+/* ---- figure base data slice (PRIVATE) -----------------------------------
+ * The yclass data slice for the figure base class — the first slice in every
+ * figure object (right after the yclass object header). The layout is not
+ * exported: figure.h only forward-declares the struct. Members that other
+ * classes legitimately read/write carry a `property` annotation, which makes
+ * codegen emit the standardized get/set accessors plus the opaque data-block
+ * handle (yetty_yfigure_figure_data_get); unannotated members stay private to
+ * this TU. There is deliberately no `self_obj` member — the owning object of
+ * a base handle is simply `(struct yetty_yclass_object *)handle - 1`, since
+ * the base is always the first slice.
+ *
+ *   rect   : AABB in target pixel space; moves go through the parent's
+ *            set_rect so damage tracking stays correct. (No `id` field — id is
+ *            a parent-scoped name the container assigns.)
+ *   z      : stacking order within the parent (higher renders later / wins
+ *            hit-tests); ties break on insertion order.
+ *   hidden : parent skips this child entirely (no render, no hit).
+ *   dirty  : contents changed without geometry moving; the parent ORs this
+ *            into its damage region next render pass and clears it.
+ *   absolute_coords : the figure lays out / hit-tests / paints its content
+ *            in pane-root pixel space and only scissor-clips to its rect —
+ *            no per-figure re-origin (ygui chrome + scrolling sub-figures).
+ *            When 0 (the default for every producer figure: yplot/yimage/…),
+ *            content is local to the figure rect. The parent's hit-test reads
+ *            this to decide whether to report the cursor in pane-local space
+ *            (absolute) or re-origined to the figure rect (local). */
+struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

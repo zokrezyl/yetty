@@ -20,6 +20,8 @@ struct yetty_context;
 struct yetty_ycore_rectangle;
 struct yetty_yfigure_registry;
 
+struct yetty_yclass_ptr_result yetty_yshadertoy_figure_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

@@ -16,6 +16,12 @@
 extern "C" {
 #endif
 
+/*===========================================================================
+ * Class data slice. The host owns the whole environment; the per-instance
+ * pointers below are created in run() and torn down at the end of run().
+ *=========================================================================*/
+struct yetty_yclass_ptr_result yetty_yguiapp_app_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

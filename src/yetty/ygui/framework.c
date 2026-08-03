@@ -22,12 +22,12 @@
  */
 
 #include "internal.h"
-#include <yetty/ygui/mixins/clickable.h>
-#include <yetty/ygui/mixins/draggable.h>
-#include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widget.h>
-#include <yetty/ygui/widgets/menubar.h>
-#include <yetty/ygui/widgets/popup_menu.h>
+#include "yetty/gen/impl/ygui/mixins/clickable.h"
+#include "yetty/gen/impl/ygui/mixins/draggable.h"
+#include "yetty/gen/impl/ygui/primitive-widget.h"
+#include "yetty/gen/impl/ygui/widget.h"
+#include "yetty/gen/impl/ygui/widgets/menubar.h"
+#include "yetty/gen/impl/ygui/widgets/popup_menu.h"
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
@@ -60,6 +60,8 @@ struct yetty_ycore_void_result yetty_ygui_widget_figure_scroll_get(
 struct yetty_ycore_void_result yetty_ygui_widget_figure_content_size_get(
     const struct yetty_yclass_object *obj, float *content_w, float *content_h);
 struct yetty_ycore_int_result yetty_ygui_widget_figure_reset_consume(
+    struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_ygui_widget_figure_retained_get(
     struct yetty_yclass_object *obj);
 
 /*===========================================================================
@@ -1521,11 +1523,19 @@ struct yetty_ycore_void_result yetty_ygui_emit_set_child_content_size(
                                                 content_h);
 }
 
-/* A retained-scene figure kind: the receiver keeps the whole document
- * across bodies (no per-ship CMD_ZERO) and scrolls it on the GPU. */
-static int figure_kind_is_retained(uint32_t kind)
+/* Whether this figure widget follows the RETAINED contract: the
+ * receiver keeps the whole document across bodies (no per-ship
+ * CMD_ZERO) and scrolls it on the GPU. A widget property (set by
+ * scrollarea's scene mode), NOT a kind-token attribute — kind tokens
+ * are pure factory names. */
+static int figure_widget_is_retained(struct yetty_yclass_object *node)
 {
-    return kind == yetty_yfigure_kind_token("yscene");
+    struct yetty_ycore_int_result retained_res = yetty_ygui_widget_figure_retained_get(node);
+    if (YETTY_IS_ERR(retained_res)) {
+        yetty_ycore_error_destroy(retained_res.error);
+        return 0;
+    }
+    return retained_res.value;
 }
 
 /*===========================================================================
@@ -1734,7 +1744,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
          * every walk (same unconditional re-sync model as the rect above —
          * a few floats over the typed stub). The receiver scrolls its
          * retained content on the GPU; the body is NOT re-shipped. */
-        if (figure_kind_is_retained(fkind)) {
+        if (figure_widget_is_retained(node)) {
             float content_w = 0.0f;
             float content_h = 0.0f;
             struct yetty_ycore_void_result content_res =
@@ -1875,7 +1885,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
      * retained-scene figure, whose receiver keeps the document across
      * bodies (re-emission replaces content in place, preserving paint
      * depth) and resets only on an explicit request (document replace). */
-    int retained = figure_kind_is_retained(fkind_res.value);
+    int retained = figure_widget_is_retained(node);
     struct yetty_ydraw_drawable_list_result dlr =
         yetty_ydraw_drawable_list_config_buffer_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dlr,
@@ -1896,8 +1906,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
          * receiver — CREATE on a still-existing id runs the reset_content
          * fast path. Incremental emitters must treat that exactly like an
          * explicit CMD_ZERO and ship everything. */
-        content_reset =
-            want_zero || !(ctx->framework && figure_is_minted(ctx->framework, node_id));
+        content_reset = want_zero || !(ctx->framework && figure_is_minted(ctx->framework, node_id));
     }
     if (want_zero) {
         struct yetty_ycore_void_result zr = yetty_ydraw_drawable_list_add_cmd_zero(figure_dl);

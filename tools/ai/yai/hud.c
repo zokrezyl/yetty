@@ -4,18 +4,18 @@
 #include "hud.h"
 #include "render.h"
 
-#include <yetty/ygui/framework.h>
-#include <yetty/ygui/widget.h>
-#include <yetty/ygui/widgets/checkbox.h>
-#include <yetty/ygui/widgets/dialog.h>
-#include <yetty/ygui/widgets/hbox.h>
-#include <yetty/ygui/widgets/label.h>
-#include <yetty/ygui/widgets/radio.h>
-#include <yetty/ygui/widgets/slider.h>
-#include <yetty/ygui/widgets/tabbar.h>
-#include <yetty/ygui/widgets/textarea.h>
-#include <yetty/ygui/widgets/vbox.h>
-#include <yetty/ygui/widgets/window.h>
+#include "yetty/gen/impl/ygui/framework.h"
+#include "yetty/gen/impl/ygui/widget.h"
+#include "yetty/gen/impl/ygui/widgets/checkbox.h"
+#include "yetty/gen/impl/ygui/widgets/dialog.h"
+#include "yetty/gen/impl/ygui/widgets/hbox.h"
+#include "yetty/gen/impl/ygui/widgets/label.h"
+#include "yetty/gen/impl/ygui/widgets/radio.h"
+#include "yetty/gen/impl/ygui/widgets/slider.h"
+#include "yetty/gen/impl/ygui/widgets/tabbar.h"
+#include "yetty/gen/impl/ygui/widgets/textarea.h"
+#include "yetty/gen/impl/ygui/widgets/vbox.h"
+#include "yetty/gen/impl/ygui/widgets/window.h"
 #include <yetty/yplatform/pty.h>
 
 #include <yetty/ytrace/ytrace.h>

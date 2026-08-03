@@ -271,6 +271,10 @@ classes:
         type: float
         get: false
         set: false
+      - name: scroll_anchor_y
+        type: float
+        get: false
+        set: false
       - name: leaves
         type: "struct yscene_leaf *"
         get: false
@@ -571,6 +575,9 @@ classes:
       - slot: set_content_size
         slot_domain: yfigure
         impl: scene_set_content_size_slot
+      - slot: apply_scroll_anchor
+        slot_domain: yfigure
+        impl: scene_apply_scroll_anchor_slot
       - slot: dump_state
         slot_domain: yfigure
         impl: scene_dump_state_slot
@@ -589,11 +596,15 @@ exposed:
  * the tree, adapter, derive and hit-test all work, render draws
  * nothing. With a real context the scene binds the framework's shared
  * drawable registry and builds its GPU pipeline (shared ydraw-layer
- * machinery: binder + ygrid.wgsl + ysdf/effects libs). */"
+ * machinery: binder + yscene.wgsl + ysdf/effects libs). */"
   - source_file: src/yetty/yscene/scene.c
     type_text: "struct yetty_yscene_factory_args {
     struct yetty_ydraw_composite_factory * composite_factory;
     struct yetty_yfont_font * default_font;
+    struct yetty_yfont_font * bold_font;
+    struct yetty_yfont_font * italic_font;
+    struct yetty_yfont_font * bold_italic_font;
+    int absolute_coords;
 };"
     doc: "/* Host inputs every wire-minted scene borrows. Lifetime: owned by the
  * host (terminal), outliving every scene minted through the registry —
@@ -610,6 +621,21 @@ exposed:
  * wire CREATE_CHILD records. `args` is BORROWED for the registry's
  * lifetime (host-owned bundle); NULL registers a bare scene (no
  * composites, no default font). Call at terminal/host create time. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_register_factory_for_kind
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: registry
+        type: "struct yetty_yfigure_registry *"
+      - name: kind
+        type: uint32_t
+      - name: args
+        type: "const struct yetty_yscene_factory_args *"
+    doc: "/* Register the scene factory under an arbitrary kind code — the ygrid
+ * migration path: apps re-point their legacy figure kinds (\"ygrid\" and
+ * the producer kinds yplot / yimage / …) at the retained scene renderer
+ * without touching the producers' wire output. Args has the same
+ * borrowed-lifetime contract as register_factory. */"
   - source_file: src/yetty/yscene/scene.c
     name: yetty_yscene_set_default_font
     return_type: struct yetty_ycore_void_result
@@ -959,3 +985,48 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/yscene/scene.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_yscene_constructor_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_constructor_fn)(struct yetty_yclass_object *);"
+  yetty_yscene_set_registry_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_set_registry_fn)(struct yetty_yclass_object *, struct yetty_ydraw_drawable_list_registry *);"
+  yetty_yscene_node_declare_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_declare_fn)(struct yetty_yclass_object *, uint64_t, uint64_t);"
+  yetty_yscene_node_set_transform_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_set_transform_fn)(struct yetty_yclass_object *, uint64_t, float, float, float, float, float, float);"
+  yetty_yscene_node_set_clip_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_set_clip_fn)(struct yetty_yclass_object *, uint64_t, float, float, float, float);"
+  yetty_yscene_node_clear_clip_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_clear_clip_fn)(struct yetty_yclass_object *, uint64_t);"
+  yetty_yscene_node_set_opacity_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_set_opacity_fn)(struct yetty_yclass_object *, uint64_t, float);"
+  yetty_yscene_node_set_z_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_set_z_fn)(struct yetty_yclass_object *, uint64_t, int32_t);"
+  yetty_yscene_node_set_content_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_set_content_fn)(struct yetty_yclass_object *, uint64_t, struct yetty_ycore_buffer);"
+  yetty_yscene_node_append_batch_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_append_batch_fn)(struct yetty_yclass_object *, uint64_t, struct yetty_ycore_buffer);"
+  yetty_yscene_node_replace_batch_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_replace_batch_fn)(struct yetty_yclass_object *, uint64_t, uint32_t, struct yetty_ycore_buffer);"
+  yetty_yscene_node_remove_batch_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_remove_batch_fn)(struct yetty_yclass_object *, uint64_t, uint32_t);"
+  yetty_yscene_node_delete_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_delete_fn)(struct yetty_yclass_object *, uint64_t);"
+  yetty_yscene_zero_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_zero_fn)(struct yetty_yclass_object *);"
+  yetty_yscene_commit_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_uint64_result (*yetty_yscene_commit_fn)(struct yetty_yclass_object *);"

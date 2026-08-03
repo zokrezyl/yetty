@@ -18,6 +18,8 @@ extern "C" {
 
 typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *, float, void *);
 
+struct yetty_yclass_ptr_result yetty_ygui_splitter_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

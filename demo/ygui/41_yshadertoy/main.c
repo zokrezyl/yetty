@@ -18,10 +18,10 @@
 
 #include <string.h>
 
-#include <yetty/yguiapp/app.h>
+#include <yetty/api/yguiapp/app.h>
 #include <yetty/yguiapp/run.h>
 #include <yetty/ygui/ygui.h>
-#include <yetty/ygui/widgets/yshadertoy.h>
+#include "yetty/gen/impl/ygui/widgets/yshadertoy.h"
 #include <yetty/yshadertoy/demo-shaders.h>
 
 /* Single demo instance — the tab handler reaches the shader widget here. */

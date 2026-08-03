@@ -20,7 +20,7 @@
  */
 
 #include "../internal.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -40,9 +40,9 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
 #include "paint-helpers.h"
 
 #include <yetty/yfigure/kind.h>
-#include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/popup_menu.h>
-#include <yetty/ygui/widgets/ynode.h>
+#include "yetty/gen/impl/ygui/primitive-widget.h"
+#include "yetty/gen/impl/ygui/widgets/popup_menu.h"
+#include "yetty/gen/impl/ygui/widgets/ynode.h"
 
 #include <math.h>
 #include <stdint.h>

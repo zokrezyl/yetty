@@ -51,6 +51,12 @@ struct yetty_yplatform_gpu_context_const_ptr_result {
 };
 #endif
 
+/* The platform's bring-up results live on the base so every subclass shares one
+ * shape. The data block is opaque outside this TU: the per-OS subclass producer
+ * sets these during platform_run through the setters below, and yframework plus
+ * the app read them back through the getters. */
+struct yetty_yclass_ptr_result yetty_yplatform_platform_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

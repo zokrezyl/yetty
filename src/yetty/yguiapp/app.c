@@ -43,10 +43,10 @@
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yfont/msdf-font.h>
-#include <yetty/api/ygrid/grid.h>
+#include <yetty/api/yscene/scene.h>
 #include <yetty/ygui/ygui.h>
-#include <yetty/ygui/framework.h>
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/framework.h"
+#include "yetty/gen/impl/ygui/widget.h"
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yplatform/platform.h>
@@ -92,7 +92,11 @@ yetty_yguiapp_app {
     struct yetty_yfigure_registry *figure_registry;
     struct yetty_ydraw_composite_factory *composite_factory;
     struct yetty_yfont_font *font;
-    struct yetty_ygrid_factory_args figure_args;
+    /* Two yscene factory-args bundles: the shared "ygrid"-token chrome
+     * surface carries absolute (logical-pane) coordinates; the producer
+     * kinds and the retained "yscene" kind carry figure-local content. */
+    struct yetty_yscene_factory_args figure_args;
+    struct yetty_yscene_factory_args local_figure_args;
     struct yetty_ydraw_target *render_target;
     struct yetty_yevent_event_listener listener;
 
@@ -105,9 +109,9 @@ yetty_yguiapp_app {
      * draws a caption strip and routes unclaimed mouse events through `chrome`
      * to move/resize/maximize the borderless OS window. */
     int chrome_enabled;
-    struct yetty_yclass_object *chrome;      /* ychrome:chrome object, or NULL */
-    struct yetty_ygrid_grid *chrome_caption; /* pinned figure compositing chrome's bar */
-    int chrome_last_hover;                   /* last hovered control — repaint on change */
+    struct yetty_yclass_object *chrome;        /* ychrome:chrome object, or NULL */
+    struct yetty_yscene_scene *chrome_caption; /* pinned figure compositing chrome's bar */
+    int chrome_last_hover;                     /* last hovered control — repaint on change */
 };
 
 /* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
@@ -285,7 +289,7 @@ struct yetty_ycore_void_result yetty_yguiapp_app_quit(struct yetty_yclass_object
 
 /* Re-paint the chrome caption: ask ychrome to render its titlebar+buttons into
  * a drawable list (pure ydraw, no ygui), then load that record stream into the
- * pinned ygrid figure that composites it. Called on create + on resize. */
+ * pinned scene figure that composites it. Called on create + on resize. */
 static void yguiapp_chrome_caption_refresh(struct yetty_yguiapp_app *app)
 {
     if (!app->chrome || !app->chrome_caption) {
@@ -299,7 +303,7 @@ static void yguiapp_chrome_caption_refresh(struct yetty_yguiapp_app *app)
     struct yetty_ydraw_drawable_list *list = lr.value;
     const uint8_t *data = (const uint8_t *)yetty_ydraw_drawable_list_data(list);
     size_t size = yetty_ydraw_drawable_list_size(list);
-    struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(app->chrome_caption);
+    struct yetty_yfigure_figure *fig = yetty_yscene_as_figure(app->chrome_caption);
     struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig)-1;
     struct yetty_ycore_void_result rc = yetty_yfigure_reset_content(fobj);
     if (YETTY_IS_ERR(rc)) {
@@ -318,26 +322,26 @@ static void yguiapp_chrome_caption_refresh(struct yetty_yguiapp_app *app)
     yetty_ydraw_drawable_list_destroy(list);
 }
 
-/* Create the pinned ygrid figure that composites chrome's self-rendered caption
+/* Create the pinned scene figure that composites chrome's self-rendered caption
  * on top of the app content. The caption pixels come entirely from ychrome
- * (ydraw), not ygui — a ygrid is just the framework's drawable-list→GPU figure. */
+ * (ydraw), not ygui — a scene is just the framework's drawable-list→GPU figure. */
 static struct yetty_ycore_void_result yguiapp_chrome_caption_create(struct yetty_yguiapp_app *app,
                                                                     const struct yetty_context *ctx,
                                                                     float width)
 {
     struct yetty_ycore_rectangle rect = {.min = {0.0f, 0.0f},
                                          .max = {width, YGUIAPP_CHROME_CAPTION_H}};
-    struct yetty_ygrid_grid_ptr_result gr = yetty_ygrid_create(rect, 1, 1, ctx);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "yguiapp: chrome caption grid");
+    struct yetty_yscene_scene_ptr_result gr = yetty_yscene_create(rect, ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "yguiapp: chrome caption scene");
     app->chrome_caption = gr.value;
+    struct yetty_yfigure_figure *fig = yetty_yscene_as_figure(app->chrome_caption);
+    struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig)-1;
     if (app->font) {
-        struct yetty_ycore_void_result fr = yetty_ygrid_set_font(app->chrome_caption, 0, app->font);
+        struct yetty_ycore_void_result fr = yetty_yscene_set_default_font(fobj, app->font);
         if (YETTY_IS_ERR(fr)) {
             yetty_ycore_error_destroy(fr.error);
         }
     }
-    struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(app->chrome_caption);
-    struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig)-1;
     /* Pin to the top (no scroll) and force on top of the app content. */
     struct yetty_ycore_void_result ar = yetty_yfigure_figure_absolute_coords_set(fobj, 1);
     if (YETTY_IS_ERR(ar)) {
@@ -471,7 +475,7 @@ static struct yetty_ycore_int_result yguiapp_event(struct yetty_yevent_event_lis
                 yetty_ycore_error_destroy(csz.error);
             }
             if (app->chrome_caption) {
-                struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(app->chrome_caption);
+                struct yetty_yfigure_figure *fig = yetty_yscene_as_figure(app->chrome_caption);
                 struct yetty_ycore_rectangle rect = {
                     .min = {0.0f, 0.0f},
                     .max = {(float)ev->resize.width, YGUIAPP_CHROME_CAPTION_H}};
@@ -659,7 +663,7 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
     app->yframework = frr.value;
     app->render_target = app->yframework->render_target;
 
-    /* MSDF font for the receiver-side ygrid. */
+    /* MSDF font for the receiver-side scene figures. */
     {
         struct yetty_yconfig_config *config = app->yframework->config;
         const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
@@ -706,26 +710,35 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
         }
     }
 
-    /* Figure registry. */
+    /* Figure registry — every kind renders through the retained yscene
+     * engine. The legacy kind tokens stay on the wire; only the factory
+     * behind them changed. */
     {
         struct yetty_yfigure_registry_ptr_result reg = yetty_yfigure_registry_create();
         YETTY_RETURN_IF_ERR(yetty_ycore_void, reg, "yguiapp:run: registry_create");
         app->figure_registry = reg.value;
+        /* The shared "ygrid"-token chrome surface: absolute (logical-pane)
+         * coordinates, scaled to framebuffer by content_scale. */
         app->figure_args.default_font = app->font;
         app->figure_args.composite_factory = app->composite_factory;
-        struct yetty_ycore_void_result rf =
-            yetty_ygrid_register_factory(app->figure_registry, &app->figure_args);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "yguiapp:run: ygrid_register_factory");
-        /* "yscroll" is the content-grid kind ygui producer widgets mint; the
-         * rest are deprecated aliases kept for wire compat (#685 Phase 2). */
-        const char *const producer_kind_names[] = {"yscroll", "yplot", "yimage"};
-        for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); ++i) {
-            struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                app->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
-                &app->figure_args);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, kr, "yguiapp:run: register_factory_for_kind");
-        }
-        /* yshadertoy has its own factory + renderer (not the ygrid path). */
+        app->figure_args.absolute_coords = 1;
+        struct yetty_ycore_void_result rf = yetty_yscene_register_factory_for_kind(
+            app->figure_registry, yetty_yfigure_kind_token("ygrid"), &app->figure_args);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "yguiapp:run: yscene chrome factory");
+        /* "yscroll" is the content kind ygui producer widgets mint;
+         * their bodies emit at the absolute widget rect (logical px),
+         * same as the chrome surface — one absolute bundle serves both. */
+        struct yetty_ycore_void_result kr = yetty_yscene_register_factory_for_kind(
+            app->figure_registry, yetty_yfigure_kind_token("yscroll"), &app->figure_args);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, kr, "yguiapp:run: yscroll factory");
+        /* The retained "yscene" kind (scrollarea scene mode): document-
+         * space content, GPU scroll. Figure-local coordinates. */
+        app->local_figure_args.default_font = app->font;
+        app->local_figure_args.composite_factory = app->composite_factory;
+        struct yetty_ycore_void_result sceneres =
+            yetty_yscene_register_factory(app->figure_registry, &app->local_figure_args);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sceneres, "yguiapp:run: yscene_register_factory");
+        /* yshadertoy has its own factory + renderer (not the yscene path). */
         struct yetty_ycore_void_result sr = yetty_yshadertoy_register_factory(app->figure_registry);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yguiapp:run: yshadertoy_register_factory");
     }
@@ -758,7 +771,7 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
         if (YETTY_IS_ERR(vr)) {
             yetty_ycore_error_destroy(vr.error);
         }
-        /* Hand the framework the SAME font the ygrid figure renders text with
+        /* Hand the framework the SAME font the scene figure renders text with
          * (font_id 0), so widget carets and click hit-tests measure against real
          * glyph advances instead of the fixed per-char fallback. Borrowed — the
          * app owns app->font and destroys it in teardown. */

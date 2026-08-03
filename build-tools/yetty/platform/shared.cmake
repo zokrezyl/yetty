@@ -702,12 +702,12 @@ function(yetty_embed_assets TARGET)
     target_compile_definitions(${TARGET} PRIVATE
         YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
 
-    # Collect shaders from module locations. yvterm's terminal content is
-    # rendered by the ygrid layer (ygrid.wgsl) + the vterm figure's text-grid
-    # shader (grid-text.wgsl below).
-    file(COPY "${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    # Collect shaders from module locations. Scene figures (chrome, rich
+    # content) render through yscene.wgsl; the vterm figure's text grid uses
+    # grid-text.wgsl below.
+    file(COPY "${YETTY_ROOT}/src/yetty/yscene/yscene.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     # Pointwise post-color effects library — attached at runtime as a child
-    # resource set of the ygrid layer (and the vterm text shader); provides the
+    # resource set of the scene layer (and the vterm text shader); provides the
     # fx_post_apply() the layer shaders call. See src/yetty/yshaders/effects-lib.wgsl.
     file(COPY "${YETTY_ROOT}/src/yetty/yshaders/effects-lib.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     # grid-text.wgsl — the vterm figure's text-grid shader (paints yvterm's

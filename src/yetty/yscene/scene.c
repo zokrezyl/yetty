@@ -27,16 +27,15 @@
  * array — buffer order IS paint order, so the shader composites
  * correctly with no per-cell sort and no creation-order band-aid. The
  * staging layout, uniforms, and shader contract are ydraw-layer's
- * (shared machinery: binder + ygrid.wgsl + ysdf lib), which keeps the
+ * (shared machinery: binder + yscene.wgsl + ysdf lib), which keeps the
  * scene renderable by the existing pipeline while the yscene-specific
  * shader evolution (per-prim effective clip, z-run interleave for
  * complex leaves) lands in the next increments.
  *
- * NOT here yet: complex-leaf instances and CMD_UPDATE routing,
- * font-resource installation + TEXT→glyph expansion, rotation/shear in
- * the staging transform (derive/hit-test already handle them; the
- * staging path bakes translate+scale only), incremental (dirty-subtree)
- * derive — the dom already tracks the dirt for it.
+ * NOT here yet: rotation/shear in the staging transform (derive/
+ * hit-test already handle them; the staging path bakes translate+scale
+ * only) and incremental (dirty-subtree) derive — the dom already tracks
+ * the dirt for it.
  */
 #include <yetty/yclass/class.h>
 
@@ -92,7 +91,7 @@
 #define YSCENE_GRID_ROWS 16u
 
 /* Uniform block — mirrors ydraw-layer.c / ygrid: same names, same
- * order, same shader (ygrid.wgsl). */
+ * order, same shader (yscene.wgsl). */
 #define U_GRID_SIZE 0
 #define U_CELL_SIZE 1
 #define U_ROLLING_ROW_0 2
@@ -168,6 +167,12 @@ struct YETTY_ANNOTATE("class@yscene:scene") YETTY_ANNOTATE("parent@yfigure:figur
     float view_scale;
     float content_w;
     float content_h;
+    /* Terminal scroll anchor (framebuffer px): the container re-anchors a
+     * producer-minted figure each frame so its content slides with the
+     * surrounding terminal text. Absolute-coords figures only; folded
+     * into the cz_off sampling origin at render (divided by view_scale —
+     * the anchor arrives in framebuffer px, document space is logical). */
+    float scroll_anchor_y;
 
     /* Derived flat paint-ordered leaves (valid for derived_generation).
      * `leaves` is the PUBLISHED snapshot; derive builds into the
@@ -223,7 +228,7 @@ struct YETTY_ANNOTATE("class@yscene:scene") YETTY_ANNOTATE("parent@yfigure:figur
     WGPUTextureFormat target_format;
     struct yetty_ydraw_gpu_allocator *allocator;
 
-    /* Resource set + shader libs — ydraw-layer's shape, so ygrid.wgsl
+    /* Resource set + shader libs — ydraw-layer's shape, so yscene.wgsl
      * renders the scene's staging without modification. */
     struct yetty_yrender_gpu_resource_set rs;
     struct yetty_yrender_gpu_resource_set sdf_lib_rs;
@@ -1464,7 +1469,7 @@ static struct yetty_ycore_uint64_result scene_commit(struct yetty_yclass_object 
 
 /*===========================================================================
  * GPU — shader/lib loading, binder, staging, draw. The staging layout
- * and uniform block are ydraw-layer's contract (see ygrid.wgsl):
+ * and uniform block are ydraw-layer's contract (see yscene.wgsl):
  *
  *   grid buffer : [per-cell offset table][sentinel count=0]
  *                 [per-cell blocks: count, prim_index...]
@@ -1838,9 +1843,9 @@ static struct yetty_ycore_void_result scene_load_shader_libs(struct yetty_yscene
                                       scene->effects_lib_code.size);
     }
 
-    snprintf(path, sizeof(path), "%s/ygrid.wgsl", shaders_dir);
+    snprintf(path, sizeof(path), "%s/yscene.wgsl", shaders_dir);
     struct yetty_ycore_buffer_result layer_res = yetty_ycore_read_file(path);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, layer_res, "yscene: read ygrid.wgsl");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layer_res, "yscene: read yscene.wgsl");
     scene->layer_shader_code = layer_res.value;
     return YETTY_OK_VOID();
 }
@@ -2278,9 +2283,29 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
     if (rect_w <= 0.0f || rect_h <= 0.0f) {
         return yetty_yfigure_figure_dirty_set(obj, 0);
     }
+    /* Absolute-coords figures (ygui chrome / yrich documents — the
+     * migrated ygrid contract): content is in logical PANE coordinates,
+     * the figure rect only scissors + hit-tests. Document space is the
+     * whole pane, so the cull grid and the NDC quad span the target,
+     * not the rect. */
+    struct yetty_ycore_int_result absolute_res = yetty_yfigure_figure_absolute_coords_get(obj);
+    bool absolute = YETTY_IS_OK(absolute_res) && absolute_res.value != 0;
+    float view_scale = scene->view_scale > 0.0f ? scene->view_scale : 1.0f;
     float content_w;
     float content_h;
     scene_content_extent(scene, rect, &content_w, &content_h);
+    if (absolute) {
+        /* Pane extent in document (logical) units. Content overrides
+         * larger than the pane (scrollable documents) survive the max. */
+        float pane_doc_w = target->viewport.w / view_scale;
+        float pane_doc_h = target->viewport.h / view_scale;
+        if (pane_doc_w > content_w) {
+            content_w = pane_doc_w;
+        }
+        if (pane_doc_h > content_h) {
+            content_h = pane_doc_h;
+        }
+    }
 
     /* Font set changed (wire installs during derive) — regenerate the
      * dispatcher + children; the shader-hash change refinalizes the
@@ -2325,14 +2350,24 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
     scene->rs.uniforms[U_GRID_SIZE].vec2[1] = (float)YSCENE_GRID_ROWS;
     scene->rs.uniforms[U_CELL_SIZE].vec2[0] = content_w / (float)YSCENE_GRID_COLS;
     scene->rs.uniforms[U_CELL_SIZE].vec2[1] = content_h / (float)YSCENE_GRID_ROWS;
-    scene->rs.uniforms[U_VIEW_SIZE].vec2[0] = rect_w;
-    scene->rs.uniforms[U_VIEW_SIZE].vec2[1] = rect_h;
+    /* View size = what the NDC quad maps onto: the figure rect for local
+     * figures, the whole target for absolute ones (their document space
+     * is the pane). */
+    /* View size = what the NDC quad maps onto, in FRAMEBUFFER px: the
+     * scaled figure rect for local figures, the whole target for
+     * absolute ones (their document space is the pane). Document space
+     * is LOGICAL either way; the shader divides by cz_scale. */
+    scene->rs.uniforms[U_VIEW_SIZE].vec2[0] = absolute ? target->viewport.w : rect_w * view_scale;
+    scene->rs.uniforms[U_VIEW_SIZE].vec2[1] = absolute ? target->viewport.h : rect_h * view_scale;
     /* View transform on the GPU — no staging rebuild. Shader mapping is
      * document = screen / cz_scale + cz_off, the same formula hit-test
      * uses, so pixels and hits agree at every scale. */
-    scene->rs.uniforms[U_CZ_SCALE].f32 = scene->view_scale > 0.0f ? scene->view_scale : 1.0f;
+    scene->rs.uniforms[U_CZ_SCALE].f32 = view_scale;
     scene->rs.uniforms[U_CZ_OFF].vec2[0] = scene->scroll_x;
-    scene->rs.uniforms[U_CZ_OFF].vec2[1] = scene->scroll_y;
+    /* scroll_anchor_y slides an absolute-coords figure with terminal
+     * scrolling; it adds to the app scroll here (converted to document
+     * units), so it never disturbs cell_size/bucketing. */
+    scene->rs.uniforms[U_CZ_OFF].vec2[1] = scene->scroll_y + scene->scroll_anchor_y / view_scale;
     scene->rs.uniforms[U_PRIM_COUNT].u32 = scene->staged_prim_count;
     if (scene->runtime) {
         scene->rs.uniforms[U_TIME].f32 = (float)scene->runtime->frame_time_sec;
@@ -2370,16 +2405,33 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
     pass_desc.colorAttachments = &color_attachment;
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &pass_desc);
 
-    wgpuRenderPassEncoderSetViewport(pass, rect.min.x, rect.min.y, rect_w, rect_h, 0.0f, 1.0f);
-    /* Scissor: the figure rect clamped to the target. */
+    /* Absolute figures span the whole target (their document space is
+     * the pane); local figures map the NDC quad onto their own rect. The
+     * scissor clips to the figure rect either way — for absolute figures
+     * the rect arrives in LOGICAL pixels, so scale it to framebuffer
+     * pixels the same way the shader scales the content. */
+    if (absolute) {
+        wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
+                                         target->viewport.w, target->viewport.h, 0.0f, 1.0f);
+    } else {
+        wgpuRenderPassEncoderSetViewport(pass, rect.min.x * view_scale, rect.min.y * view_scale,
+                                         rect_w * view_scale, rect_h * view_scale, 0.0f, 1.0f);
+    }
+    /* The figure rect arrives in LOGICAL px in both modes; viewport and
+     * scissor are framebuffer px. */
+    float rect_scale = view_scale;
     float target_min_x = target->viewport.x;
     float target_min_y = target->viewport.y;
     float target_max_x = target->viewport.x + target->viewport.w;
     float target_max_y = target->viewport.y + target->viewport.h;
-    float scissor_min_x = rect.min.x > target_min_x ? rect.min.x : target_min_x;
-    float scissor_min_y = rect.min.y > target_min_y ? rect.min.y : target_min_y;
-    float scissor_max_x = rect.max.x < target_max_x ? rect.max.x : target_max_x;
-    float scissor_max_y = rect.max.y < target_max_y ? rect.max.y : target_max_y;
+    float rect_fb_min_x = rect.min.x * rect_scale;
+    float rect_fb_min_y = rect.min.y * rect_scale;
+    float rect_fb_max_x = rect.max.x * rect_scale;
+    float rect_fb_max_y = rect.max.y * rect_scale;
+    float scissor_min_x = rect_fb_min_x > target_min_x ? rect_fb_min_x : target_min_x;
+    float scissor_min_y = rect_fb_min_y > target_min_y ? rect_fb_min_y : target_min_y;
+    float scissor_max_x = rect_fb_max_x < target_max_x ? rect_fb_max_x : target_max_x;
+    float scissor_max_y = rect_fb_max_y < target_max_y ? rect_fb_max_y : target_max_y;
     if (scissor_max_x <= scissor_min_x || scissor_max_y <= scissor_min_y) {
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
@@ -2422,18 +2474,23 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
     if (scene->complex_count > 0) {
         qsort(scene->complexes, scene->complex_count, sizeof(struct yscene_complex_instance),
               scene_complex_compare);
-        float view_scale = scene->view_scale > 0.0f ? scene->view_scale : 1.0f;
         target->clip.x = scissor_min_x;
         target->clip.y = scissor_min_y;
         target->clip.w = scissor_max_x - scissor_min_x;
         target->clip.h = scissor_max_y - scissor_min_y;
+        /* Anchor base: local figures re-origin at their rect (scaled to
+         * framebuffer px); absolute figures' node translates are already
+         * pane coordinates. */
+        float anchor_base_x = absolute ? 0.0f : rect.min.x * view_scale;
+        float anchor_base_y = absolute ? 0.0f : rect.min.y * view_scale;
         for (uint32_t i = 0; i < scene->complex_count; i++) {
             struct yscene_complex_instance *entry = &scene->complexes[i];
             if (!entry->instance || !entry->instance->render) {
                 continue;
             }
-            float anchor_x = rect.min.x + (entry->translate_x - scene->scroll_x) * view_scale;
-            float anchor_y = rect.min.y + (entry->translate_y - scene->scroll_y) * view_scale;
+            float anchor_x = anchor_base_x + (entry->translate_x - scene->scroll_x) * view_scale;
+            float anchor_y = anchor_base_y + (entry->translate_y - scene->scroll_y) * view_scale -
+                             scene->scroll_anchor_y;
             entry->instance->content_scale = view_scale;
             struct yetty_ycore_void_result render_res =
                 yetty_ydraw_composite_render(entry->instance, target, anchor_x, anchor_y);
@@ -2602,6 +2659,33 @@ static struct yetty_ycore_void_result scene_set_content_size_slot(struct yetty_y
     return yetty_yfigure_figure_dirty_set(obj, 1);
 }
 
+/* Track terminal scroll: slide an absolute-coords figure's content with
+ * the surrounding text by offsetting the sampling origin. The shift is
+ * (content_root_row - creation_row) rows in framebuffer px, applied as a
+ * cz_off delta before the cell lookup — it never touches cell geometry
+ * or bucketing. Local figures draw relative to their own rect, which the
+ * container moves directly, so they ignore the anchor. */
+YETTY_ANNOTATE("override@yfigure:figure:apply_scroll_anchor")
+static struct yetty_ycore_void_result scene_apply_scroll_anchor_slot(
+    struct yetty_yclass_object *obj, int32_t rolling_row_offset, float cell_height)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene apply_scroll_anchor: object");
+    struct yetty_ycore_int_result absolute_res = yetty_yfigure_figure_absolute_coords_get(obj);
+    if (YETTY_IS_ERR(absolute_res) || !absolute_res.value) {
+        if (YETTY_IS_ERR(absolute_res)) {
+            yetty_ycore_error_destroy(absolute_res.error);
+        }
+        return YETTY_OK_VOID();
+    }
+    float anchor_y = (float)rolling_row_offset * cell_height;
+    if (scene_res.value->scroll_anchor_y == anchor_y) {
+        return YETTY_OK_VOID();
+    }
+    scene_res.value->scroll_anchor_y = anchor_y;
+    return yetty_yfigure_figure_dirty_set(obj, 1);
+}
+
 /*===========================================================================
  * dump_state — deterministic text snapshot for tests: the tree, then
  * (when derived) the flat paint-ordered leaves.
@@ -2732,7 +2816,7 @@ static struct yetty_ycore_char_ptr_result scene_dump_state_slot(struct yetty_ycl
  * the tree, adapter, derive and hit-test all work, render draws
  * nothing. With a real context the scene binds the framework's shared
  * drawable registry and builds its GPU pipeline (shared ydraw-layer
- * machinery: binder + ygrid.wgsl + ysdf/effects libs). */
+ * machinery: binder + yscene.wgsl + ysdf/effects libs). */
 YETTY_ANNOTATE("expose")
 struct yetty_yscene_scene_ptr_result yetty_yscene_create(struct yetty_ycore_rectangle rect,
                                                          const struct yetty_context *context)
@@ -2837,6 +2921,21 @@ struct YETTY_ANNOTATE("expose") yetty_yscene_factory_args {
     /* Slot-0 font for TEXT spans with the default/negative font id.
      * NULL → such spans drop until a wire font arrives. */
     struct yetty_yfont_font *default_font;
+    /* Optional styled faces registered at font slots 1/2/3 so producers
+     * that emit those font_ids (yrich bold/italic runs) get real styled
+     * glyphs. NULL leaves the slot unregistered — spans referencing it
+     * drop, so producers must only emit a styled font_id when its face
+     * is present. */
+    struct yetty_yfont_font *bold_font;
+    struct yetty_yfont_font *italic_font;
+    struct yetty_yfont_font *bold_italic_font;
+    /* Coordinate mode for minted scenes, mirrored onto the figure base.
+     * 0 (default) = local: document space starts at the figure origin.
+     * 1 = absolute: content is in logical pane coordinates — the ygui
+     * chrome path (ygreeter / yguiapp / ybrowser), where widgets emit at
+     * their absolute widget rect; the figure rect only scissors and
+     * hit-tests. Must match how the hosting app's producers emit. */
+    int absolute_coords;
 };
 
 /* Wire factory: mint a scene for a CREATE_CHILD of kind "yscene". The
@@ -2849,20 +2948,39 @@ static struct yetty_yfigure_figure_ptr_result scene_wire_factory(
     struct yetty_yscene_scene_ptr_result scene_res = yetty_yscene_create(rect, context);
     YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, scene_res, "yscene factory: create");
     struct yetty_yscene_scene *scene = scene_res.value;
+    struct yetty_yclass_object_ptr_result object_res = yetty_yscene_scene_to(scene);
+    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, object_res, "yscene factory: object");
+    struct yetty_yclass_object *obj = object_res.value;
     if (args) {
         scene->composite_factory = args->composite_factory;
-        if (args->default_font) {
-            struct yetty_ycore_void_result font_res = scene_set_font(scene, 0, args->default_font);
+        /* Slot 0 = default face; slots 1/2/3 = bold / italic /
+         * bold-italic, the same layout the ygrid factory installed so
+         * producer font_ids resolve identically. */
+        struct yetty_yfont_font *slot_fonts[4] = {args->default_font, args->bold_font,
+                                                  args->italic_font, args->bold_italic_font};
+        for (uint32_t slot = 0; slot < 4; slot++) {
+            if (!slot_fonts[slot]) {
+                continue;
+            }
+            struct yetty_ycore_void_result font_res = scene_set_font(scene, slot, slot_fonts[slot]);
             if (YETTY_IS_ERR(font_res)) {
-                ydebug("yscene factory: default font install failed: %s", font_res.error.msg);
+                ydebug("yscene factory: font slot %u install failed: %s", slot, font_res.error.msg);
                 yetty_ycore_error_destroy(font_res.error);
             }
         }
+        if (args->absolute_coords) {
+            /* Mirror onto the figure base so the container's hit-test
+             * reports pane-local coords and render picks the
+             * whole-target viewport path. */
+            struct yetty_ycore_void_result absolute_res =
+                yetty_yfigure_figure_absolute_coords_set(obj, 1);
+            if (YETTY_IS_ERR(absolute_res)) {
+                ydebug("yscene factory: absolute_coords set failed: %s", absolute_res.error.msg);
+                yetty_ycore_error_destroy(absolute_res.error);
+            }
+        }
     }
-    struct yetty_yclass_object_ptr_result object_res = yetty_yscene_scene_to(scene);
-    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, object_res, "yscene factory: object");
-    return YETTY_OK(yetty_yfigure_figure_ptr,
-                    (struct yetty_yfigure_figure *)(object_res.value + 1));
+    return YETTY_OK(yetty_yfigure_figure_ptr, (struct yetty_yfigure_figure *)(obj + 1));
 }
 
 /* Register the "yscene" figure kind so containers can mint scenes from
@@ -2875,6 +2993,19 @@ struct yetty_ycore_void_result yetty_yscene_register_factory(
 {
     return yetty_yfigure_registry_register(registry, yetty_yfigure_kind_token("yscene"),
                                            scene_wire_factory, (void *)args);
+}
+
+/* Register the scene factory under an arbitrary kind code — the ygrid
+ * migration path: apps re-point their legacy figure kinds ("ygrid" and
+ * the producer kinds yplot / yimage / …) at the retained scene renderer
+ * without touching the producers' wire output. Args has the same
+ * borrowed-lifetime contract as register_factory. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yscene_register_factory_for_kind(
+    struct yetty_yfigure_registry *registry, uint32_t kind,
+    const struct yetty_yscene_factory_args *args)
+{
+    return yetty_yfigure_registry_register(registry, kind, scene_wire_factory, (void *)args);
 }
 
 /* Host-side default font (slot 0) for a hand-created scene. Borrowed. */
@@ -2945,7 +3076,7 @@ struct yetty_ycore_uint64_result yetty_yscene_hit_test(struct yetty_yclass_objec
 
     float scale = scene->view_scale > 0.0f ? scene->view_scale : 1.0f;
     float document_x = screen_x / scale + scene->scroll_x;
-    float document_y = screen_y / scale + scene->scroll_y;
+    float document_y = screen_y / scale + scene->scroll_y + scene->scroll_anchor_y / scale;
 
     for (uint32_t i = scene->leaf_count; i-- > 0;) {
         const struct yscene_leaf *leaf = &scene->leaves[i];

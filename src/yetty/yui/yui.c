@@ -23,7 +23,7 @@
 #include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
-#include <yetty/api/ygrid/grid.h>
+#include <yetty/api/yscene/scene.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/memstats.h>
 #include <yetty/ycore/types.h>
@@ -72,7 +72,7 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
 }
 
 struct yetty_yui {
-    /* yui's own root container — owns the per-widget ygrid figures that
+    /* yui's own root container — owns the per-widget scene figures that
      * ygui's emit creates through the typed yfigure yclass stubs. Renders
      * LAST in the frame so the chrome sits above terminal panes painted
      * earlier. */
@@ -85,7 +85,11 @@ struct yetty_yui {
     struct yetty_yfont_font *font;
 
     struct yetty_ydraw_composite_factory *composite_factory;
-    struct yetty_ygrid_factory_args figure_args;
+    /* Two yscene factory-args bundles: the "ygrid"-token chrome kind
+     * carries absolute (logical-pane) coordinates; the producer kinds and
+     * the retained "yscene" kind carry figure-local content. */
+    struct yetty_yscene_factory_args figure_args;
+    struct yetty_yscene_factory_args local_figure_args;
 
     /* Producer engine (new yclass framework). framework_emit lays out the
      * widget tree and ships the envelope into root_container. */
@@ -166,7 +170,7 @@ struct yetty_yui {
      * captured from the gpu context at create. The figure container and
      * the terminal workspace live in framebuffer pixels, but the ygui
      * chrome (tabbar/statusbar/dialogs/splitters) is authored and laid
-     * out in display-independent LOGICAL pixels: the receiver-side ygrid
+     * out in display-independent LOGICAL pixels: the receiver-side scene
      * multiplies every chrome coordinate back up by this factor. So the
      * boundary code here divides framebuffer-pixel inputs (viewport,
      * pointer events, tile-derived splitter bounds) by content_scale on
@@ -764,7 +768,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     yui->cell_w = cell_w;
     yui->cell_h = cell_h;
 
-    /* Default MSDF font handed to every ygrid figure the root mints. */
+    /* Default MSDF font handed to every scene figure the root mints. */
     {
         struct yetty_yconfig_config *config = context->runtime->config;
         const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
@@ -796,7 +800,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         }
     }
 
-    /* Build registry + register ygrid factory, then the root container
+    /* Build registry + register the yscene factories, then the root container
      * that consumes ygui's records. */
     {
         struct yetty_ydraw_composite_factory_ptr_result ffr = yetty_ydraw_composite_factory_create(
@@ -840,29 +844,42 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             return YETTY_ERR(yetty_yui_ptr, "yui_create: registry", reg_res);
         }
         yui->figure_registry = reg_res.value;
-        struct yetty_ycore_void_result rf =
-            yetty_ygrid_register_factory(yui->figure_registry, &yui->figure_args);
+        /* The "ygrid" kind token is the legacy chrome-surface kind:
+         * absolute coordinates, minted as a retained scene. */
+        yui->figure_args.absolute_coords = 1;
+        struct yetty_ycore_void_result rf = yetty_yscene_register_factory_for_kind(
+            yui->figure_registry, yetty_yfigure_kind_token("ygrid"), &yui->figure_args);
         if (!YETTY_IS_OK(rf)) {
             (void)yetty_yfigure_registry_destroy(yui->figure_registry);
             yetty_ydraw_composite_factory_destroy(yui->composite_factory);
             yui->font->ops->destroy(yui->font);
             free(yui);
-            return YETTY_ERR(yetty_yui_ptr, "yui_create: ygrid register_factory", rf);
+            return YETTY_ERR(yetty_yui_ptr, "yui_create: yscene chrome-kind register", rf);
         }
-        /* "yscroll" is the content-grid kind ygui producer widgets mint; the
-         * rest are deprecated aliases kept for wire compat (#685 Phase 2). */
-        static const char *const producer_kind_names[] = {"yscroll", "yplot", "yimage",
-                                                          "yvideo",  "yzoo",  "yjungle"};
-        for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); i++) {
-            struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                yui->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
-                &yui->figure_args);
-            if (!YETTY_IS_OK(kr)) {
+        /* "yscroll" is the content kind ygui producer widgets mint.
+         * Figure-local coordinates. The same bundle serves the retained
+         * "yscene" kind below. The old alias kinds are RETIRED. */
+        yui->local_figure_args.default_font = yui->font;
+        yui->local_figure_args.composite_factory = yui->composite_factory;
+        struct yetty_ycore_void_result kr = yetty_yscene_register_factory_for_kind(
+            yui->figure_registry, yetty_yfigure_kind_token("yscroll"), &yui->local_figure_args);
+        if (!YETTY_IS_OK(kr)) {
+            (void)yetty_yfigure_registry_destroy(yui->figure_registry);
+            yetty_ydraw_composite_factory_destroy(yui->composite_factory);
+            yui->font->ops->destroy(yui->font);
+            free(yui);
+            return YETTY_ERR(yetty_yui_ptr, "yui_create: yscene yscroll register", kr);
+        }
+        /* The retained "yscene" kind (document-space content, GPU scroll). */
+        {
+            struct yetty_ycore_void_result sr =
+                yetty_yscene_register_factory(yui->figure_registry, &yui->local_figure_args);
+            if (!YETTY_IS_OK(sr)) {
                 (void)yetty_yfigure_registry_destroy(yui->figure_registry);
                 yetty_ydraw_composite_factory_destroy(yui->composite_factory);
                 yui->font->ops->destroy(yui->font);
                 free(yui);
-                return YETTY_ERR(yetty_yui_ptr, "yui_create: ygrid register_factory_for_kind", kr);
+                return YETTY_ERR(yetty_yui_ptr, "yui_create: yscene register_factory", sr);
             }
         }
         {
@@ -904,7 +921,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         yetty_ycore_error_destroy_safe(
             yetty_ygui_framework_set_container_obj(yui->engine, yui->container_obj));
         /* Logical viewport: the chrome lays out in display-independent
-         * pixels; the ygrid receiver scales back to framebuffer pixels. */
+         * pixels; the scene receiver scales back to framebuffer pixels. */
         yetty_ycore_error_destroy_safe(
             yetty_ygui_framework_set_viewport(yui->engine, (float)surface_w / yui->content_scale,
                                               (float)surface_h / yui->content_scale));

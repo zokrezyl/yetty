@@ -144,7 +144,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND YETTY_ENABLE_LIB_WEBGPU)
     set(YRICH_APP_LINK_LIBS
         yetty_yrich
         yetty_ygui
-        yetty_ygrid
+        yetty_yscene
         yetty_yfigure
         yetty_ymgui
         yetty_yface
@@ -183,3 +183,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND YETTY_ENABLE_LIB_WEBGPU)
         target_compile_options(yetty_yrich_app PRIVATE -Wall -Wextra)
     endif()
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(yrich)

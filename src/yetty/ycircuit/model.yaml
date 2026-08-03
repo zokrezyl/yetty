@@ -399,6 +399,42 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/ycircuit/circuit.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ycircuit_configure_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ycircuit/circuit.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ycircuit_configure_fn)(struct yetty_yclass_object *, float, uint32_t);"
+  yetty_ycircuit_parse_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ycircuit/circuit.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ycircuit_parse_fn)(struct yetty_yclass_object *, const char *, size_t);"
+  yetty_ycircuit_clear_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ycircuit/circuit.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ycircuit_clear_fn)(struct yetty_yclass_object *);"
+  yetty_ycircuit_add_component_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ycircuit/circuit.c
+    text: "typedef struct yetty_ycore_int_result (*yetty_ycircuit_add_component_fn)(struct yetty_yclass_object *, const char *, float, float, int32_t, const char *, const char *);"
+  yetty_ycircuit_add_ic_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ycircuit/circuit.c
+    text: "typedef struct yetty_ycore_int_result (*yetty_ycircuit_add_ic_fn)(struct yetty_yclass_object *, float, float, int32_t, const char *, const char *, const char *, const char *, const char *, const char *);"
+  yetty_ycircuit_add_wire_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ycircuit/circuit.c
+    text: "typedef struct yetty_ycore_int_result (*yetty_ycircuit_add_wire_fn)(struct yetty_yclass_object *, float, float, float, float);"
+  yetty_ycircuit_add_junction_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ycircuit/circuit.c
+    text: "typedef struct yetty_ycore_int_result (*yetty_ycircuit_add_junction_fn)(struct yetty_yclass_object *, float, float);"
+  yetty_ycircuit_add_label_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ycircuit/circuit.c
+    text: "typedef struct yetty_ycore_int_result (*yetty_ycircuit_add_label_fn)(struct yetty_yclass_object *, float, float, const char *);"
+  yetty_ycircuit_render_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ycircuit/circuit.c
+    text: "typedef struct yetty_ydraw_drawable_list_result (*yetty_ycircuit_render_fn)(struct yetty_yclass_object *);"
+  yetty_ycircuit_hit_test_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ycircuit/circuit.c
+    text: "typedef struct yetty_ycore_int_result (*yetty_ycircuit_hit_test_fn)(struct yetty_yclass_object *, float, float);"
+  yetty_ycircuit_set_highlight_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ycircuit/circuit.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ycircuit_set_highlight_fn)(struct yetty_yclass_object *, int32_t);"
+  yetty_ycircuit_destroy_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ycircuit/circuit.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ycircuit_destroy_fn)(struct yetty_yclass_object *);"
 includes:
   src/yetty/ycircuit/circuit.c:
     - yetty/ydraw-core/drawable-list.h

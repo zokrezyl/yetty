@@ -160,6 +160,13 @@ struct YETTY_ANNOTATE("class@ygui:widget") yetty_ygui_widget {
      * wipes content, wire fonts, complex instances, and its scroll
      * view). Consumed by the body walk. */
     int figure_reset_pending;
+    /* Retained figure contract: bodies ship WITHOUT a per-frame CMD_ZERO
+     * (content persists on the receiver; deltas replace groups in
+     * place), and the walk publishes content size + scroll for it. Set
+     * by widgets that own their receiver-side document (scrollarea scene
+     * mode); immediate-mode figure widgets leave it 0 and get the
+     * full-redraw CMD_ZERO body each ship. */
+    int figure_retained;
     /* Floating overlay (dialog / debug window): a press inside it moves it to
      * the end of its parent's child list (paints last, wins hit-test). */
     int floating;
@@ -693,6 +700,35 @@ struct yetty_ycore_void_result yetty_ygui_widget_figure_reset_request(
                         "yetty_ygui_widget_figure_reset_request: data_get");
     wd_res.value->figure_reset_pending = 1;
     return yetty_ygui_widget_set_dirty(obj);
+}
+
+/* Mark this widget's figure as RETAINED: bodies ship without the
+ * per-frame CMD_ZERO and the walk publishes content size + scroll.
+ * One-way — a retained document has no immediate-mode fallback. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_widget_figure_retained_set(
+    struct yetty_yclass_object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_figure_retained_set: NULL obj");
+    }
+    struct yetty_ygui_widget_ptr_result wd_res = yetty_ygui_widget_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_res,
+                        "yetty_ygui_widget_figure_retained_set: data_get");
+    wd_res.value->figure_retained = 1;
+    return YETTY_OK_VOID();
+}
+
+/* Whether this widget's figure follows the retained contract. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_ygui_widget_figure_retained_get(struct yetty_yclass_object *obj)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_figure_retained_get: NULL obj");
+    }
+    struct yetty_ygui_widget_ptr_result wd_res = yetty_ygui_widget_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, wd_res, "yetty_ygui_widget_figure_retained_get: data_get");
+    return YETTY_OK(yetty_ycore_int, wd_res.value->figure_retained);
 }
 
 /* Consume the pending reset: returns 1 exactly once per request (the

@@ -1,6 +1,6 @@
 # tools/yzoo — standalone animated-zoo app.
 #
-# Drives a single full-window ygrid figure straight from C (no terminal,
+# Drives a single full-window yscene figure straight from C (no terminal,
 # no yui, no ygui widget tree), rendering the yetty_yzoo each frame.
 # Modeled on tools/ymaze.
 
@@ -57,7 +57,7 @@ pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
 target_link_libraries(yzoo PRIVATE
     yetty_yzoo
     yetty_ysdf
-    yetty_ygrid
+    yetty_yscene
     yetty_yfigure
     yetty_ydraw_core
     yetty_yframework
@@ -90,3 +90,7 @@ set_target_properties(yzoo PROPERTIES LINKER_LANGUAGE CXX)
 if(NOT MSVC)
     target_compile_options(yzoo PRIVATE -Wall -Wextra)
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(yzoo)

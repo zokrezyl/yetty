@@ -1,6 +1,6 @@
 /* ygui-choicebox.c — multi-select list with check markers. */
 #include "paint-helpers.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -12,7 +12,7 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_choicebox_ptr, struct yetty_ygui_choicebox *);
 struct yetty_yclass_ptr_result yetty_ygui_choicebox_class_get(void);
 struct yetty_ygui_choicebox_ptr_result yetty_ygui_choicebox_from(struct yetty_yclass_object *obj);
-#include <yetty/ygui/primitive-widget.h>
+#include "yetty/gen/impl/ygui/primitive-widget.h"
 #include <stdlib.h>
 
 #define COLOR_BG 0xFF14100Bu

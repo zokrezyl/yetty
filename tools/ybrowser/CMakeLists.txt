@@ -85,7 +85,6 @@ if(YBROWSER_STANDALONE)
     target_link_libraries(ybrowser PRIVATE
         yetty_ywire
         yetty_yfigure
-        yetty_ygrid
         yetty_yscene
         yetty_yfont_core
         yetty_ydraw_factory
@@ -107,3 +106,7 @@ if(YBROWSER_STANDALONE)
     # libwebgpu_dawn is C++, so the final link needs the C++ runtime.
     set_target_properties(ybrowser PROPERTIES LINKER_LANGUAGE CXX)
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(ybrowser DEFINES YETTY_YBROWSER_HAS_STANDALONE YETTY_YGUI_HAS_UV)

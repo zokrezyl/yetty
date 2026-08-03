@@ -19,6 +19,8 @@ extern "C" {
 struct yetty_ycore_xthread_event_pipe;
 struct yetty_yui_event;
 
+struct yetty_yclass_ptr_result yetty_yplatform_window_chrome_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

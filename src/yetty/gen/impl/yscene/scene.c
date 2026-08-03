@@ -139,6 +139,9 @@ YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_content_size_fn yetty_yscene_scene_yetty_yfigure_set_content_size_check =
     scene_set_content_size_slot;
 YETTY_MAYBE_UNUSED
+static yetty_yfigure_apply_scroll_anchor_fn
+    yetty_yscene_scene_yetty_yfigure_apply_scroll_anchor_check = scene_apply_scroll_anchor_slot;
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_dump_state_fn yetty_yscene_scene_yetty_yfigure_dump_state_check =
     scene_dump_state_slot;
 
@@ -206,6 +209,9 @@ struct yetty_yclass_ptr_result yetty_yscene_scene_class_get(void)
         {"yetty_yfigure", "set_content_size",
          (yetty_yclass_method_id_t)yetty_yfigure_set_content_size,
          (yetty_yclass_impl_t)scene_set_content_size_slot},
+        {"yetty_yfigure", "apply_scroll_anchor",
+         (yetty_yclass_method_id_t)yetty_yfigure_apply_scroll_anchor,
+         (yetty_yclass_impl_t)scene_apply_scroll_anchor_slot},
         {"yetty_yfigure", "dump_state", (yetty_yclass_method_id_t)yetty_yfigure_dump_state,
          (yetty_yclass_impl_t)scene_dump_state_slot},
     };

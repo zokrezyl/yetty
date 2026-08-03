@@ -6,7 +6,7 @@
  * copy-pasting it.
  *
  * Two sinks, one engine:
- *   - LOCAL (standalone): the backdrop + caption are pinned ygrid figures
+ *   - LOCAL (standalone): the backdrop + caption are pinned scene figures
  *     owned by a yfigure_container the app renders itself.
  *   - WIRE (client / in-terminal): the same two figures are driven on the
  *     hosting yetty's root figure container PROXY via the generated typed
@@ -29,11 +29,11 @@
 #include <yetty/api/yfigure/figure.h>
 #include <yetty/yfigure/kind.h>
 #ifdef YETTY_YCHROME_HAS_LOCAL
-/* ygrid is GPU-backed (composites through a pipeline). Only the LOCAL sink —
- * pinned ygrid figures the app renders itself — needs it. The WIRE sink emits
+/* yscene is GPU-backed (composites through a pipeline). Only the LOCAL sink —
+ * pinned scene figures the app renders itself — needs it. The WIRE sink emits
  * figure-tree records over a producer and is GPU-free, so the headless
- * no-WebGPU cross targets (riscv guest) build the wire path without ygrid. */
-#include <yetty/api/ygrid/grid.h>
+ * no-WebGPU cross targets (riscv guest) build the wire path without yscene. */
+#include <yetty/api/yscene/scene.h>
 #endif
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
@@ -57,7 +57,7 @@ enum {
 #define YCHROME_LOCAL_CAPTION_ID 0x7FFF0001u
 /* Fixed child ids for the wire-sink figures. A distinct high range so they
  * never collide with a ygui framework's id space on the same pane (widget ids
- * climb from 1; its ygrid is 0xFE000001). */
+ * climb from 1; its chrome surface is 0xFE000001). */
 #define YCHROME_WIRE_BACKDROP_ID 0x7FFE0001u
 #define YCHROME_WIRE_CAPTION_ID 0x7FFE0002u
 
@@ -66,9 +66,9 @@ struct yetty_ychrome_host {
 
 #ifdef YETTY_YCHROME_HAS_LOCAL
     /* LOCAL sink — pinned figures owned by the app's container (NULL in wire
-     * mode). Only built when ygrid is available (GPU targets). */
-    struct yetty_ygrid_grid *caption;
-    struct yetty_ygrid_grid *backdrop;
+     * mode). Only built when yscene is available (GPU targets). */
+    struct yetty_yscene_scene *caption;
+    struct yetty_yscene_scene *backdrop;
 #endif
 
     /* WIRE sink — figures driven on the host's root container proxy via the
@@ -86,9 +86,9 @@ struct yetty_ychrome_host {
 #ifdef YETTY_YCHROME_HAS_LOCAL
 /* The figure's yclass object sits one slot before the figure pointer (the data
  * slice follows the object header) — same accessor the runner/figure code uses. */
-static struct yetty_yclass_object *grid_figure_obj(struct yetty_ygrid_grid *grid)
+static struct yetty_yclass_object *scene_figure_obj(struct yetty_yscene_scene *scene)
 {
-    struct yetty_yfigure_figure *figure = yetty_ygrid_as_figure(grid);
+    struct yetty_yfigure_figure *figure = yetty_yscene_as_figure(scene);
     return (struct yetty_yclass_object *)(figure)-1;
 }
 #endif
@@ -119,8 +119,8 @@ static struct yetty_ydraw_drawable_list_result host_make_backdrop_list(float wid
 }
 
 /*===========================================================================
- * LOCAL sink. Pinned ygrid figures — GPU-backed, so built only on targets
- * that have ygrid (YETTY_YCHROME_HAS_LOCAL).
+ * LOCAL sink. Pinned scene figures — GPU-backed, so built only on targets
+ * that have yscene (YETTY_YCHROME_HAS_LOCAL).
  *=========================================================================*/
 #ifdef YETTY_YCHROME_HAS_LOCAL
 
@@ -140,36 +140,36 @@ static struct yetty_ycore_void_result host_local_load(struct yetty_yclass_object
     return YETTY_OK_VOID();
 }
 
-/* Create a pinned ygrid figure under `container`, load `body` into it, set its
+/* Create a pinned scene figure under `container`, load `body` into it, set its
  * z + absolute-coords flag, and add it as `id`. */
-static struct yetty_ygrid_grid_ptr_result host_pin_grid(struct yetty_yclass_object *container_obj,
-                                                        const struct yetty_context *ctx,
-                                                        struct yetty_yfont_font *font,
-                                                        struct yetty_ycore_rectangle rect,
-                                                        const uint8_t *body, size_t body_len, int z,
-                                                        uint32_t id)
+static struct yetty_yscene_scene_ptr_result host_pin_scene(
+    struct yetty_yclass_object *container_obj, const struct yetty_context *ctx,
+    struct yetty_yfont_font *font, struct yetty_ycore_rectangle rect, const uint8_t *body,
+    size_t body_len, int z, uint32_t id)
 {
-    struct yetty_ygrid_grid_ptr_result grid_result = yetty_ygrid_create(rect, 1, 1, ctx);
-    YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, grid_result, "chrome host pin: grid create");
-    struct yetty_ygrid_grid *grid = grid_result.value;
+    struct yetty_yscene_scene_ptr_result scene_result = yetty_yscene_create(rect, ctx);
+    YETTY_RETURN_IF_ERR(yetty_yscene_scene_ptr, scene_result, "chrome host pin: scene create");
+    struct yetty_yscene_scene *scene = scene_result.value;
+    struct yetty_yclass_object *figure_obj = scene_figure_obj(scene);
     if (font) {
-        struct yetty_ycore_void_result font_result = yetty_ygrid_set_font(grid, 0, font);
-        YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, font_result, "chrome host pin: set_font");
+        struct yetty_ycore_void_result font_result =
+            yetty_yscene_set_default_font(figure_obj, font);
+        YETTY_RETURN_IF_ERR(yetty_yscene_scene_ptr, font_result, "chrome host pin: set_font");
     }
-    struct yetty_yclass_object *figure_obj = grid_figure_obj(grid);
     struct yetty_ycore_void_result absolute_result =
         yetty_yfigure_figure_absolute_coords_set(figure_obj, 1);
-    YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, absolute_result, "chrome host pin: absolute_coords");
+    YETTY_RETURN_IF_ERR(yetty_yscene_scene_ptr, absolute_result,
+                        "chrome host pin: absolute_coords");
     struct yetty_ycore_void_result z_result = yetty_yfigure_figure_z_set(figure_obj, z);
-    YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, z_result, "chrome host pin: z_set");
+    YETTY_RETURN_IF_ERR(yetty_yscene_scene_ptr, z_result, "chrome host pin: z_set");
     if (body && body_len > 0) {
         struct yetty_ycore_void_result load_result = host_local_load(figure_obj, body, body_len);
-        YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, load_result, "chrome host pin: load");
+        YETTY_RETURN_IF_ERR(yetty_yscene_scene_ptr, load_result, "chrome host pin: load");
     }
     struct yetty_ycore_void_result add_result =
-        yetty_yfigure_container_add_child(container_obj, yetty_ygrid_as_figure(grid), id);
-    YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, add_result, "chrome host pin: add_child");
-    return YETTY_OK(yetty_ygrid_grid_ptr, grid);
+        yetty_yfigure_container_add_child(container_obj, yetty_yscene_as_figure(scene), id);
+    YETTY_RETURN_IF_ERR(yetty_yscene_scene_ptr, add_result, "chrome host pin: add_child");
+    return YETTY_OK(yetty_yscene_scene_ptr, scene);
 }
 
 #endif /* YETTY_YCHROME_HAS_LOCAL */
@@ -243,12 +243,12 @@ static struct yetty_ycore_void_result host_caption_refresh(struct yetty_ychrome_
     }
 #ifdef YETTY_YCHROME_HAS_LOCAL
     /* LOCAL: ychrome renders its caption to a drawable list (pure ydraw); load
-     * that record stream into the pinned ygrid figure. */
+     * that record stream into the pinned scene figure. */
     struct yetty_ydraw_drawable_list_result render_result = yetty_ychrome_render(host->chrome);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, render_result, "chrome host caption refresh: render");
     struct yetty_ydraw_drawable_list *list = render_result.value;
     struct yetty_ycore_void_result load_result = host_local_load(
-        grid_figure_obj(host->caption), (const uint8_t *)yetty_ydraw_drawable_list_data(list),
+        scene_figure_obj(host->caption), (const uint8_t *)yetty_ydraw_drawable_list_data(list),
         yetty_ydraw_drawable_list_size(list));
     yetty_ydraw_drawable_list_destroy(list);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, load_result, "chrome host caption refresh: load");
@@ -349,9 +349,9 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
     /* Caption — empty for now; host_caption_refresh paints it with hover state. */
     struct yetty_ycore_rectangle caption_rect = {.min = {0.0f, 0.0f},
                                                  .max = {width, caption_height}};
-    struct yetty_ygrid_grid_ptr_result caption_pin =
-        host_pin_grid(container_obj, ctx, font, caption_rect, NULL, 0, YCHROME_CAPTION_Z,
-                      YCHROME_LOCAL_CAPTION_ID);
+    struct yetty_yscene_scene_ptr_result caption_pin =
+        host_pin_scene(container_obj, ctx, font, caption_rect, NULL, 0, YCHROME_CAPTION_Z,
+                       YCHROME_LOCAL_CAPTION_ID);
     if (YETTY_IS_ERR(caption_pin)) {
         return host_build_fail(host, "ychrome_host_create: caption pin",
                                YETTY_ERR(yetty_ycore_void, "caption pin", caption_pin));
@@ -476,14 +476,14 @@ struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_h
     if (host->backdrop) {
         struct yetty_ycore_rectangle full = {.min = {0.0f, 0.0f}, .max = {width, height}};
         result = yetty_ycore_void_chain(
-            result, yetty_yfigure_figure_rect_set(grid_figure_obj(host->backdrop), full));
+            result, yetty_yfigure_figure_rect_set(scene_figure_obj(host->backdrop), full));
         struct yetty_ydraw_drawable_list_result backdrop_list_result =
             host_make_backdrop_list(width, height);
         if (YETTY_IS_OK(backdrop_list_result)) {
             result = yetty_ycore_void_chain(
                 result,
                 host_local_load(
-                    grid_figure_obj(host->backdrop),
+                    scene_figure_obj(host->backdrop),
                     (const uint8_t *)yetty_ydraw_drawable_list_data(backdrop_list_result.value),
                     yetty_ydraw_drawable_list_size(backdrop_list_result.value)));
             yetty_ydraw_drawable_list_destroy(backdrop_list_result.value);
@@ -497,7 +497,7 @@ struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_h
         struct yetty_ycore_rectangle caption_rect = {.min = {0.0f, 0.0f},
                                                      .max = {width, host->caption_height}};
         result = yetty_ycore_void_chain(
-            result, yetty_yfigure_figure_rect_set(grid_figure_obj(host->caption), caption_rect));
+            result, yetty_yfigure_figure_rect_set(scene_figure_obj(host->caption), caption_rect));
     }
     result = yetty_ycore_void_chain(result, host_caption_refresh(host));
     return result;

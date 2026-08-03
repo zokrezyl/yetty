@@ -16,6 +16,8 @@
 extern "C" {
 #endif
 
+struct yetty_yclass_ptr_result yetty_ygui_scrollarea_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members
@@ -36,12 +38,6 @@ struct yetty_yclass_object_ptr_result yetty_ygui_scrollarea_to(struct yetty_ygui
 
 struct yetty_yclass_object_ptr_result yetty_ygui_scrollarea_create(struct yetty_yclass_ctx *ctx);
 
-/* Switch this scrollarea to RETAINED-SCENE mode: its figure kind becomes
- * "yscene" (must be called before the first emit mints the figure). The
- * receiver keeps the whole document across bodies and scrolls it on the
- * GPU — content inside is emitted in document space, scrolling ships a
- * SET_CHILD_SCROLL instead of a body, and the gutter scrollbar is not
- * painted. The gutter padding is released back to the content. */
 struct yetty_ycore_void_result yetty_ygui_scrollarea_enable_scene(struct yetty_yclass_object *obj);
 /* Programmatic scroll (navigation reset, restore). Clamped like every
  * other scroll path. */

@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <yetty/yguiapp/app.h>
+#include <yetty/api/yguiapp/app.h>
 #include <yetty/yguiapp/run.h>
 #include <yetty/ygui/event.h>
 #include <yetty/ygui/ygui.h>

@@ -62,7 +62,7 @@ pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
 target_link_libraries(ycompositor-ygui PRIVATE
 
     yetty_ygui
-    yetty_ygrid
+    yetty_yscene
     yetty_yfigure
     yetty_ymgui
     yetty_yface
@@ -98,3 +98,7 @@ set_target_properties(ycompositor-ygui PROPERTIES LINKER_LANGUAGE CXX)
 if(NOT MSVC)
     target_compile_options(ycompositor-ygui PRIVATE -Wall -Wextra)
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(ycompositorygui)

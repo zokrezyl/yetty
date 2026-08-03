@@ -27,6 +27,7 @@ struct yetty_ycore_void_result yetty_yfigure_process_bytes(struct yetty_yclass_o
 struct yetty_ycore_void_result yetty_yfigure_reset_content(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_yfigure_set_scroll(struct yetty_yclass_object *, float, float);
 struct yetty_ycore_void_result yetty_yfigure_set_content_size(struct yetty_yclass_object *, float, float);
+struct yetty_ycore_void_result yetty_yfigure_apply_scroll_anchor(struct yetty_yclass_object *, int32_t, float);
 ]]
 local M = {}
 local Container = {}
@@ -144,6 +145,10 @@ function Figure:set_scroll(scroll_y)
 end
 function Figure:set_content_size(content_h)
   local res = rt.C().yetty_yfigure_set_content_size(nil, self.handle, content_h)
+  rt.check(res)
+end
+function Figure:apply_scroll_anchor(cell_height)
+  local res = rt.C().yetty_yfigure_apply_scroll_anchor(nil, self.handle, cell_height)
   rt.check(res)
 end
 M.Figure = Figure

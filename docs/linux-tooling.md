@@ -240,7 +240,7 @@ following reusable pieces are part of the tooling initiative:
 - Snapshot/export path for terminal scrollback.
 - Consistent application chrome, theme, shortcuts, and status reporting.
 
-Likely existing building blocks include `ygui`, `ygrid`, `yplot`, `ychart`,
+Likely existing building blocks include `ygui`, `yscene`, `yplot`, `ychart`,
 `yflame`, `ymap`, `ydraw`, `yimage`, `ypdf`, `ysvg`, and the `yfigure`/yclass
 transport path. New primitives should remain general enough for more than one
 tool whenever practical.

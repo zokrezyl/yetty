@@ -52,7 +52,7 @@ classes:
         get: false
         set: false
       - name: figure_args
-        type: struct yetty_ygrid_factory_args
+        type: struct yetty_yscene_factory_args
         get: false
         set: false
       - name: ymgui_factory_args
@@ -158,9 +158,18 @@ types:
         type: int
       - name: cause
         type: "struct yetty_ycore_error *"
-  - name: yetty_ygrid_factory_args
+  - name: yetty_ymgui_factory_args
     kind: struct
     fields:
+      - name: context
+        type: "const struct yetty_context *"
+      - name: pipeline
+        type: "struct yetty_ymgui_pipeline *"
+  - name: yetty_yscene_factory_args
+    kind: struct
+    fields:
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
       - name: default_font
         type: "struct yetty_yfont_font *"
       - name: bold_font
@@ -169,17 +178,8 @@ types:
         type: "struct yetty_yfont_font *"
       - name: bold_italic_font
         type: "struct yetty_yfont_font *"
-      - name: composite_factory
-        type: "struct yetty_ydraw_composite_factory *"
       - name: absolute_coords
         type: int
-  - name: yetty_ymgui_factory_args
-    kind: struct
-    fields:
-      - name: context
-        type: "const struct yetty_context *"
-      - name: pipeline
-        type: "struct yetty_ymgui_pipeline *"
 local_types:
   yetty_ycompositorygui_app: tools/ycompositor-ygui/main.c
   yetty_ycompositorygui_app_ptr_result: tools/ycompositor-ygui/main.c

@@ -16,6 +16,10 @@
 extern "C" {
 #endif
 
+/* Engine-private state: the tool_use_id -> tool name ring (to label
+ * results) and the interrupt request counter. */
+struct yetty_yclass_ptr_result yetty_yai_claude_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

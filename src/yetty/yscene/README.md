@@ -1,7 +1,8 @@
 # yscene — retained scene graph (#691)
 
-The retained-scene replacement for `ygrid`, built alongside it until
-parity. One module, one public yclass class, one internal tree:
+The renderer behind every wire figure kind (it replaced and retired the
+old `ygrid` module; the "ygrid" kind TOKEN survives on the wire as a
+legacy name). One module, one public yclass class, one internal tree:
 
 | piece | file | what it is |
 |---|---|---|
@@ -48,7 +49,7 @@ Done:
   transform/clip/opacity inheritance, hit-test, dump.
 - GPU primitive rendering: staging from the sorted leaf array (buffer
   order IS paint order — no per-cell sort), 16×16 cull buckets, shared
-  binder + ygrid.wgsl pipeline, world-baked translate/scale geometry,
+  binder + yscene.wgsl pipeline, world-baked translate/scale geometry,
   GPU-side scroll (`cz_off`).
 - Wire integration: the `yscene` figure kind registers with the
   terminal's registry; `tools/yscene-demo` ships a scene figure end-to-end
@@ -118,10 +119,47 @@ Also done (first ygui producer migration — the ybrowser page):
   insertion re-ships only the insertion point instead of every later
   chunk.
 
+Also done (the app migration off ygrid — ygui chrome and every
+standalone app host):
+- Factory parity with ygrid: styled font slots 1/2/3 (bold / italic /
+  bold-italic — the yrich path), `register_factory_for_kind`, and an
+  `absolute_coords` factory flag mirrored onto the figure base.
+- Absolute coordinate mode (the migrated ygrid contract): content in
+  logical PANE coordinates; the NDC quad + cull extent span the target,
+  the figure rect only scissors (scaled by view_scale) + hit-tests, and
+  complex anchors drop the rect origin.
+- Every app host re-points its legacy figure kinds at the scene factory
+  — the "ygrid" kind token and the producer kinds (yplot / yimage /
+  yvideo / yscroll aliases) stay on the wire as legacy names, but mint
+  scenes: ygreeter, yguiapp, yrich (ydoc / yslide /
+  ysheet), ychrome host pins (caption / backdrop), ybrowser standalone,
+  yhello, ycompositor-ygui. Direct-driver demos (ycompositor, yzoo,
+  ymaze, yjungle) hand-create scenes and ship bodies through the
+  figure's process_bytes slot. All live-verified on GPU.
+Also done (ygrid retirement):
+- apply_scroll_anchor override: an absolute-coords figure minted by a
+  wire producer inside a terminal pane slides with the terminal text —
+  the container's per-frame re-anchor lands as a cz_off delta in
+  framebuffer px (divided by view_scale; document space is logical),
+  folded into render, the complex pass, and hit-test alike. (Inline
+  ycat/ypdf/markdown content is unrelated — it lives on yvterm's own
+  line ring and never touches yscene.)
+- terminal.c and yui.c re-pointed their registrations: the "ygrid"
+  chrome kind (absolute), the "yscroll" content kind + deprecated
+  producer aliases (local), and the canonical "yscene" kind all mint
+  scenes now.
+- The shared shader moved in-module (yscene.wgsl — packaged by yshaders
+  and the embed/webasm asset stages under that name).
+- The ygrid receiver test suite was ported (test/ut/yscene/
+  wire-parity-test.c): nested groups + hit routing, the multi-group
+  delta pattern, dirty/reset lifecycle, malformed-body recovery + dump
+  stability, and the composite-instance lifecycle (mint under a node,
+  CMD_DELETE destroys, re-open replaces, CMD_UPDATE routes).
+- src/yetty/ygrid is deleted.
+
 Next increments: z-run interleave with per-run scissors, per-prim
 effective clip in a yscene shader fork, the content-addressed resource
 channel for heavy payloads (#691 "Heavy payloads"), exact render-plan /
 logical-dom serialization, rotation/shear + anisotropic text in staging,
 incremental (dirty-subtree) derive, compact leaf records, spatial
-hit-test, yrdawn in-page adapter, remaining producer migration (ygui
-chrome), then ygrid retirement per the #691 parity list.
+hit-test, yrdawn in-page adapter.

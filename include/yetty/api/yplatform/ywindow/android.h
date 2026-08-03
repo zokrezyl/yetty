@@ -16,6 +16,9 @@
 extern "C" {
 #endif
 
+/* Cached framebuffer metrics pushed from the NDK glue. */
+struct yetty_yclass_ptr_result yetty_yplatform_android_window_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

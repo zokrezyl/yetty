@@ -45,7 +45,6 @@ target_link_libraries(yetty_yterminal
     yetty_ywire
     yetty_yrdawn
     yetty_yfigure
-    yetty_ygrid
     yetty_yscene
     lz4_static
 )
@@ -127,3 +126,7 @@ endif()
 incbin_add_resources(yetty_yterminal
     background_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/background-layer.wgsl"
 )
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(yterminal)

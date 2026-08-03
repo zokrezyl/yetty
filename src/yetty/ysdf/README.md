@@ -5,7 +5,7 @@ One YAML file (`sdf-drawables.yaml`) defines every shape — its numeric type
 id, geometry fields, WGSL distance function and C AABB code — and
 `gen-sdf-code.py` generates matching C and WGSL from it. Everything that
 emits or consumes SDF records (ychart, ydiagram, ycircuit, ygui widgets,
-ybrowser/ylexbor paint, ygrid, the terminal SDF layer, …) builds on this
+ybrowser/ylexbor paint, yscene, the terminal SDF layer, …) builds on this
 module. Depends only on `ycore` and `ydraw-core` (plus libyaml for the YAML
 parse path).
 
@@ -40,7 +40,7 @@ reads `sdf-drawables.yaml` and writes (all marked DO NOT EDIT):
 - `aabb.gen.c` — `yetty_ysdf_compute_aabb` (per-shape C code from the YAML).
 - `ysdf.gen.wgsl` — the WGSL `sdf_*` functions plus the `evaluate_sdf_2d`
   dispatcher (NaN-safe `length` for fast-math backends). Staged into the
-  shader assets by [../yshaders](../yshaders/README.md); ygrid and the
+  shader assets by [../yshaders](../yshaders/README.md); yscene and the
   vterm SDF layer attach it as a child resource set.
 - `yaml-factory.gen.h` + `yaml-factory.gen.c` — per-shape factories for the
   ydraw-yaml scene parser (`yetty_ysdf_register_yaml_factories`).

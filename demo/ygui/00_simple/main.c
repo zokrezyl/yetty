@@ -7,10 +7,10 @@
  * label; press 'q' (or Ctrl-C / Ctrl-D) to quit.
  */
 
-#include <yetty/yguiapp/app.h>
+#include <yetty/api/yguiapp/app.h>
 #include <yetty/yguiapp/run.h>
 #include <yetty/ygui/ygui.h>
-#include <yetty/ygui/mixins/clickable.h>
+#include "yetty/gen/impl/ygui/mixins/clickable.h"
 
 /* Demo app class: a yguiapp:app subclass with no extra state. */
 struct [[clang::annotate("class@demoygui:00_simple")]] [[clang::annotate("parent@yguiapp:app")]]
