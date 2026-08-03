@@ -12,8 +12,8 @@
  */
 
 #include <yetty/ygui/ygui.h>
-#include <yetty/ygui/widgets/checkbox.h>
-#include <yetty/ygui/widgets/toggle.h>
+#include "yetty/gen/impl/ygui/widgets/checkbox.h"
+#include "yetty/gen/impl/ygui/widgets/toggle.h"
 
 #include "ytest.h"
 

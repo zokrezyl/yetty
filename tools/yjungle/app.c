@@ -3,9 +3,9 @@
  *
  * Subclass of yapp:app: the shared yplatform entry brings up the
  * window/surface/GPU/channels and hands the assembled runtime to run, which
- * builds a single full-window ygrid figure and renders the yetty_yjungle into it
+ * builds a single full-window yscene figure and renders the yetty_yjungle into it
  * every frame via the flat full-redraw path (yetty_yjungle_render). No terminal,
- * no ygui widget tree — the jungle drives the ygrid / compositor render path
+ * no ygui widget tree — the jungle drives the yscene / compositor render path
  * directly. Modeled on tools/ymaze.
  *
  * yclass: the only hand-written file is this annotated .c; app.gen.c is
@@ -30,7 +30,7 @@
 #include <yetty/api/yfigure/figure.h>
 #include <yetty/api/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/api/ygrid/grid.h>
+#include <yetty/api/yscene/scene.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ysdf/types.gen.h>
@@ -49,7 +49,7 @@ struct YETTY_ANNOTATE("class@yjungle:app") YETTY_ANNOTATE("parent@yapp:app") yet
     struct yetty_yframework *yrt;
     struct yetty_ydraw_target *target;
     struct yetty_yclass_object *root;
-    struct yetty_ygrid_grid *grid;
+    struct yetty_yscene_scene *scene;
     struct yetty_yjungle *jungle;
     struct yetty_ydraw_drawable_list *buf;
     double start_time;
@@ -67,44 +67,27 @@ struct yetty_yclass_ptr_result yetty_yjungle_app_class_get(void);
 struct yetty_yjungle_app_ptr_result yetty_yjungle_app_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_yjungle_app_create(struct yetty_yclass_ctx *ctx);
 
-#define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
-
-static struct yetty_ycore_void_result push_buffer_to_grid(
-    struct yetty_ygrid_grid *grid, const struct yetty_ydraw_drawable_list *buf)
+static struct yetty_ycore_void_result push_buffer_to_scene(
+    struct yetty_yscene_scene *scene, const struct yetty_ydraw_drawable_list *buf)
 {
     const uint8_t *data = (const uint8_t *)yetty_ydraw_drawable_list_data(buf);
     size_t total = yetty_ydraw_drawable_list_size(buf);
-    size_t off = 0;
-    while (off + sizeof(uint32_t) <= total) {
-        const uint32_t *prim = (const uint32_t *)(data + off);
-        size_t remaining = total - off;
-        uint32_t type = prim[0];
-        size_t sdf_bytes = yetty_ysdf_primitive_size(RICH_TYPE_BASE(type));
-        size_t psize;
-        if (sdf_bytes > 0) {
-            psize = sdf_bytes + ((type & YETTY_YDRAW_HAS_ID_FLAG) ? sizeof(uint32_t) : 0);
-        } else {
-            if (remaining < 2 * sizeof(uint32_t)) {
-                break;
-            }
-            psize = 2 * sizeof(uint32_t) + prim[1];
-        }
-        if (psize == 0 || psize > remaining) {
-            break;
-        }
-        struct yetty_ycore_void_result r = yetty_ygrid_add_record_local(grid, data + off, psize);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "push_buffer_to_grid: add_record");
-        off += psize;
+    if (!data || total == 0) {
+        return YETTY_OK_VOID();
     }
-    return YETTY_OK_VOID();
+    struct yetty_yfigure_figure *figure = yetty_yscene_as_figure(scene);
+    struct yetty_yclass_object *figure_obj = (struct yetty_yclass_object *)(figure)-1;
+    return yetty_yfigure_process_bytes(figure_obj, data, total);
 }
 
 static struct yetty_ycore_void_result render_jungle(struct yetty_yjungle_app *app)
 {
-    if (!app->grid || !app->jungle || !app->buf) {
+    if (!app->scene || !app->jungle || !app->buf) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result cr = yetty_ygrid_clear_local(app->grid);
+    struct yetty_yfigure_figure *figure = yetty_yscene_as_figure(app->scene);
+    struct yetty_yclass_object *figure_obj = (struct yetty_yclass_object *)(figure)-1;
+    struct yetty_ycore_void_result cr = yetty_yfigure_reset_content(figure_obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "render_jungle: grid clear");
 
     uint64_t now_ms =
@@ -112,7 +95,7 @@ static struct yetty_ycore_void_result render_jungle(struct yetty_yjungle_app *ap
     struct yetty_ycore_void_result rr = yetty_yjungle_render(app->jungle, app->buf, now_ms);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "render_jungle: yjungle_render");
 
-    struct yetty_ycore_void_result pr = push_buffer_to_grid(app->grid, app->buf);
+    struct yetty_ycore_void_result pr = push_buffer_to_scene(app->scene, app->buf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "render_jungle: push to grid");
 
     yetty_yfigure_figure_dirty_set(app->root, 1);
@@ -121,30 +104,37 @@ static struct yetty_ycore_void_result render_jungle(struct yetty_yjungle_app *ap
 
 static struct yetty_ycore_void_result rebuild_figure(struct yetty_yjungle_app *app)
 {
-    struct yetty_ycore_rectangle rect = {
-        .min = {.x = 0.0f, .y = 0.0f},
-        .max = {.x = (float)app->surface_w, .y = (float)app->surface_h}};
+    /* The scene's document space is logical px; the surface size is
+     * framebuffer px. Author the rect (and therefore all content laid
+     * out from it) in logical px so HiDPI displays render 1:1. */
+    float content_scale = app->yrt->gpu.app_gpu_context.content_scale;
+    if (content_scale <= 0.0f) {
+        content_scale = 1.0f;
+    }
+    struct yetty_ycore_rectangle rect = {.min = {.x = 0.0f, .y = 0.0f},
+                                         .max = {.x = (float)app->surface_w / content_scale,
+                                                 .y = (float)app->surface_h / content_scale}};
     float w = rect.max.x - rect.min.x;
     float h = rect.max.y - rect.min.y;
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
 
-    if (app->grid) {
+    if (app->scene) {
         struct yetty_ycore_void_result rr =
             yetty_yfigure_container_remove_child_by_id(app->root, 1u);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "rebuild_figure: remove old");
-        app->grid = NULL;
+        app->scene = NULL;
     }
 
-    struct yetty_ygrid_grid_ptr_result gr = yetty_ygrid_create(rect, 32u, 16u, &app->ctx);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "rebuild_figure: ygrid_create");
-    app->grid = gr.value;
+    struct yetty_yscene_scene_ptr_result gr = yetty_yscene_create(rect, &app->ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "rebuild_figure: yscene_create");
+    app->scene = gr.value;
 
     (void)yetty_yjungle_set_scene_size(app->jungle, w, h);
 
     struct yetty_ycore_void_result ar =
-        yetty_yfigure_container_add_child(app->root, yetty_ygrid_as_figure(app->grid), /*id=*/1u);
+        yetty_yfigure_container_add_child(app->root, yetty_yscene_as_figure(app->scene), /*id=*/1u);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "rebuild_figure: add_child");
 
     struct yetty_ycore_void_result mr = render_jungle(app);
@@ -362,7 +352,7 @@ static struct yetty_ycore_void_result yjungle_app_run(struct yetty_yclass_object
         app->chrome = NULL;
     }
     app->root = NULL;
-    app->grid = NULL;
+    app->scene = NULL;
     yetty_ydraw_drawable_list_destroy(app->buf);
     app->buf = NULL;
     yetty_yjungle_destroy(app->jungle);

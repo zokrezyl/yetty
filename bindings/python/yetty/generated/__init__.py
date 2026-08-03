@@ -4,11 +4,11 @@ from . import api_yplot as api_yplot
 from . import yapp as yapp
 from . import ychrome as ychrome
 from . import ycircuit as ycircuit
+from . import ydummy as ydummy
 from . import yetty as yetty
 from . import yfigure as yfigure
 from . import yflame as yflame
 from . import ygit as ygit
-from . import ygrid as ygrid
 from . import ygui as ygui
 from . import yguiapp as yguiapp
 from . import yjupyter as yjupyter
@@ -20,6 +20,9 @@ from . import ynotebook as ynotebook
 from . import yplatform as yplatform
 from . import yrdawn as yrdawn
 from . import yrich as yrich
+from . import yscene as yscene
 from . import yshadertoy as yshadertoy
+from . import yterminal as yterminal
+from . import ytermsink as ytermsink
 from . import yview as yview
 from . import yvterm as yvterm

@@ -13,7 +13,7 @@ loads individual `.wgsl` files from it.
 1. **Everything under this directory** (recursive glob, subdirectory
    structure preserved).
 2. **Module shaders owned elsewhere**, copied flat into `assets/shaders/`:
-   `yfont/{ms-raster,raster,ms-msdf,msdf}-font.wgsl`, `ygrid/ygrid.wgsl`,
+   `yfont/{ms-raster,raster,ms-msdf,msdf}-font.wgsl`, `yscene/yscene.wgsl`,
    `yvterm/grid-sdf-layer.wgsl`, `yvterm/grid-text.wgsl`, `yrender/blend.wgsl`,
    `ysdf/ysdf.gen.wgsl` (the generated SDF library),
    `ymsdf-wgsl/shaders/msdf_gen.wgsl` (the GPU MSDF compute shader).
@@ -29,7 +29,7 @@ serves.
 
 | file | consumed by |
 |------|-------------|
-| `effects-lib.wgsl` | the runtime effects library — `fx_post_apply()` (post-color: scanlines, crt, chromatic, matrix, thermal, glitch, …) and `fx_coord_apply()` (coordinate distortion: fisheye, swirl, jello, melt, …), each taking an effect index (0 = none) + 6 params. Prepended to the vterm text shader (`../yvterm/vterm.c`) and attached as a binder child resource set by `../ygrid/grid.c`; both call sites must stay in sync with its signatures. Effect indices match the OSC protocol and `demo/scripts/effects/`. |
+| `effects-lib.wgsl` | the runtime effects library — `fx_post_apply()` (post-color: scanlines, crt, chromatic, matrix, thermal, glitch, …) and `fx_coord_apply()` (coordinate distortion: fisheye, swirl, jello, melt, …), each taking an effect index (0 = none) + 6 params. Prepended to the vterm text shader (`../yvterm/vterm.c`) and attached as a binder child resource set by `../yscene/scene.c`; both call sites must stay in sync with its signatures. Effect indices match the OSC protocol and `demo/scripts/effects/`. |
 
 ## Reference / legacy content
 

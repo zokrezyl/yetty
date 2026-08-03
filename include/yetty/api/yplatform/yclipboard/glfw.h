@@ -18,6 +18,9 @@ extern "C" {
 
 struct yetty_ycore_xthread_event_pipe;
 
+/* Private subclass state: the cross-thread pipes, borrowed (owned by caller). */
+struct yetty_yclass_ptr_result yetty_yplatform_glfw_clipboard_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

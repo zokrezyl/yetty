@@ -16,6 +16,9 @@
 extern "C" {
 #endif
 
+/* Demo app class: a yguiapp:app subclass with no extra state. */
+struct yetty_yclass_ptr_result yetty_demoygui_20_tree_view_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

@@ -9,7 +9,7 @@
  */
 
 #include "../internal.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -23,7 +23,7 @@ struct yetty_yclass_ptr_result yetty_ygui_rich_class_get(void);
 struct yetty_ygui_rich_ptr_result yetty_ygui_rich_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ygui/primitive-widget.h>
+#include "yetty/gen/impl/ygui/primitive-widget.h"
 
 #include <stdlib.h>
 #include <string.h>

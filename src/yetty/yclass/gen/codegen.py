@@ -1456,11 +1456,17 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
         # owned set is small and bounded, so it does not bloat the model; the
         # per-header emitter reproduces only the owned typedefs its own content
         # actually names (a regex scan over the emitted structs/protos/stubs).
-        owned_marker = f"/yetty/{module_include_subpath(module)}/"
+        subpath = module_include_subpath(module)
+        owned_markers = (
+            f"/yetty/{subpath}/",          # module sources + hand headers
+            f"/gen/impl/{subpath}/",       # generated impl reproductions
+            f"/yetty/api/{subpath}/",      # generated object-API reproductions
+        )
         owned_typedefs = {
             name: info
             for name, info in local_typedefs.items()
-            if owned_marker in ("/" + info.get("source_file", ""))}
+            if any(marker in ("/" + info.get("source_file", ""))
+                   for marker in owned_markers)}
         if owned_typedefs:
             model["local_typedefs"] = owned_typedefs
     if includes_by_file:
@@ -2403,9 +2409,11 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         guard_scope = f"API_{api_name.upper()}" if split else module.upper()
         guard = (f"YETTY_YCLASSGEN_{guard_scope}_"
                  f"{guard_path.upper().replace('-', '_')}_H")
-        # Class accessors are implementation-facing — absent from the
-        # role-split object-API header.
-        decls = "" if split else "\n".join(
+        # Class accessors are part of the public surface in BOTH layouts:
+        # apps hand class objects to composition APIs (ygui's
+        # widget_add(parent, class)), so the object-API header must
+        # declare them or every app is forced onto the impl headers.
+        decls = "\n".join(
             _doc_prefix(c.get("doc"))
             + f"struct yetty_yclass_ptr_result {qualified_class(c)}"
             f"{'_mixin_get' if c['type'] == 'mixin' else '_class_get'}"

@@ -87,3 +87,7 @@ if(NOT MSVC)
     set_source_files_properties(picohttpparser/picohttpparser.c PROPERTIES COMPILE_OPTIONS "-w")
     set_source_files_properties(fzy/match.c PROPERTIES COMPILE_OPTIONS "-w")
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(yai)

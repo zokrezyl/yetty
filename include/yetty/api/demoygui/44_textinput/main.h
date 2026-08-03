@@ -16,6 +16,9 @@
 extern "C" {
 #endif
 
+/* Demo app class: holds the edit box, the live labels, and a copy buffer. */
+struct yetty_yclass_ptr_result yetty_demoygui_44_textinput_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

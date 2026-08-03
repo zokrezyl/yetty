@@ -12,6 +12,12 @@ struct yetty_ycore_void_result yetty_yflame_focus(struct yetty_yclass_object *, 
 struct yetty_ycore_void_result yetty_yflame_focus_parent(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_yflame_reset(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_yflame_set_highlight(struct yetty_yclass_object *, int32_t);
+struct yetty_ycore_void_result yetty_yflame_highlight_name(struct yetty_yclass_object *, const char *, size_t);
+struct yetty_ycore_void_result yetty_yflame_focus_name(struct yetty_yclass_object *, const char *, size_t);
+struct yetty_ycore_void_result yetty_yflame_set_baseline(struct yetty_yclass_object *, const char *, size_t);
+struct yetty_ycore_const_char_ptr_result yetty_yflame_node_name(struct yetty_yclass_object *, int32_t);
+struct yetty_ycore_uint64_result yetty_yflame_node_value(struct yetty_yclass_object *, int32_t);
+struct yetty_ycore_uint64_result yetty_yflame_root_value(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_yflame_destroy(struct yetty_yclass_object *);
 ]]
 local M = {}
@@ -55,6 +61,33 @@ end
 function Flame:set_highlight()
   local res = rt.C().yetty_yflame_set_highlight(nil, self.handle)
   rt.check(res)
+end
+function Flame:highlight_name(len)
+  local res = rt.C().yetty_yflame_highlight_name(nil, self.handle, len)
+  rt.check(res)
+end
+function Flame:focus_name(len)
+  local res = rt.C().yetty_yflame_focus_name(nil, self.handle, len)
+  rt.check(res)
+end
+function Flame:set_baseline(len)
+  local res = rt.C().yetty_yflame_set_baseline(nil, self.handle, len)
+  rt.check(res)
+end
+function Flame:node_name()
+  local res = rt.C().yetty_yflame_node_name(nil, self.handle)
+  rt.check(res)
+  return res.value
+end
+function Flame:node_value()
+  local res = rt.C().yetty_yflame_node_value(nil, self.handle)
+  rt.check(res)
+  return res.value
+end
+function Flame:root_value()
+  local res = rt.C().yetty_yflame_root_value(nil, self.handle)
+  rt.check(res)
+  return res.value
 end
 function Flame:destroy()
   local res = rt.C().yetty_yflame_destroy(nil, self.handle)

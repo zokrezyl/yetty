@@ -1,6 +1,6 @@
 /*
  * Demo 40_ymaze: ymaze — animated maze rendered via the ygui ydraw_embed
- * → ygrid path (same infrastructure as ymarkdown / yjungle).
+ * → yscene path (same infrastructure as ymarkdown / yjungle).
  *
  * Standalone-mode ygui demo. The runner brings up window + GPU +
  * receiver-side container; this file only populates the widget tree.
@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <yetty/yguiapp/app.h>
+#include <yetty/api/yguiapp/app.h>
 #include <yetty/yguiapp/run.h>
 #include <yetty/ygui/ygui.h>
 

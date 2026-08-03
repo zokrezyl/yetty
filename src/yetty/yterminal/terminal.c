@@ -40,7 +40,6 @@
 #include <yetty/ydraw-core/drawable-iterator.h>
 #include <yetty/ydraw-core/drawable-list-registry.h>
 #include <yetty/ydraw-core/font-resource.h>
-#include <yetty/api/ygrid/grid.h>
 #include <yetty/api/yscene/scene.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
@@ -82,7 +81,7 @@ struct yetty_yclass_object_ptr_result yetty_yterminal_terminal_to(
     struct yetty_yterminal_terminal *data);
 struct yetty_yclass_object_ptr_result yetty_yterminal_terminal_create(struct yetty_yclass_ctx *ctx);
 struct yetty_ycore_void_result yetty_yterminal_register(void);
-#include "yetty/gen/impl/ygrid/grid.h"
+#include "yetty/gen/impl/yscene/scene.h"
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
 
@@ -263,17 +262,17 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
      * figure in the root container too. NULL until terminal_create wires it. */
     struct yetty_yclass_object *grid;
 
-    /* Default MSDF font attached to every ygrid the root container
-     * mints (registered as user-data on KIND_YGRID factory). Borrowed
-     * by each ygrid; terminal owns lifetime. Teardown destroys the
-     * root container first (cascades into per-figure ygrids that hold
-     * borrowed refs to this font) then the font. */
+    /* Default MSDF font attached to every scene figure the root
+     * container mints (registered as user-data on the figure factories).
+     * Borrowed by each figure; terminal owns lifetime. Teardown destroys
+     * the root container first (cascades into per-figure scenes that
+     * hold borrowed refs to this font) then the font. */
     struct yetty_yfont_font *compositor_font;
 
     /* Complex-prim factory (yplot / yimage / yvideo / yzoo / yjungle …).
-     * One instance per terminal — every ygrid the root container mints
-     * borrows the same pointer via figure_args (below) so they all share
-     * the same per-type pipeline cache. */
+     * One instance per terminal — every scene the root container mints
+     * borrows the same pointer via the factory args (below) so they all
+     * share the same per-type pipeline cache. */
     struct yetty_ydraw_composite_factory *composite_factory;
 
     /* Drawable-list registry for parsing inbound YDRAW_BIN record streams into
@@ -287,11 +286,12 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
      * instance. Instances unregister themselves on destroy. */
     struct yetty_ydraw_stream_registry stream_targets;
 
-    /* Bundle handed as registry user-data on every kind ygrid handles.
-     * Lives on the terminal because the registry stores a pointer to it,
-     * and the host has to outlive every ygrid the registry might still
-     * mint. */
-    struct yetty_ygrid_factory_args figure_args;
+    /* Bundles handed as registry user-data — one per coordinate mode.
+     * Live on the terminal because the registry stores pointers to them,
+     * and the host has to outlive every figure the registry might still
+     * mint. figure_args serves the absolute "ygrid" chrome kind;
+     * yscene_factory_args serves the local content kinds + "yscene". */
+    struct yetty_yscene_factory_args figure_args;
     struct yetty_yscene_factory_args yscene_factory_args;
 
     /* The figure tree is reached via
@@ -1420,7 +1420,7 @@ struct terminal_ydraw_ingest_state {
 /* Anchor rich content on the cursor's current visible line in yvterm's OWN
  * grid. The grid owns a primitive/composite list per line on its scroll
  * ring, so whatever sits at that line scrolls with the text for free — no
- * separate ygrid, no rolling-row bookkeeping. Composites render via vterm's
+ * separate figure, no rolling-row bookkeeping. Composites render via vterm's
  * rich pass; raw SDF / text records are stored on the line for the SDF pass. */
 static struct yetty_ycore_void_result terminal_ydraw_ingest_begin(
     struct yetty_yterminal_terminal *terminal, struct terminal_ydraw_ingest_state *state)
@@ -1589,11 +1589,11 @@ static void terminal_ydraw_ingest_finish(struct yetty_yterminal_terminal *termin
     }
 }
 
-/* Ingest one YDRAW_BIN envelope into the scrolling rich-content ygrid. Records
- * are streamed via the drawable iterator and handed verbatim to the ygrid, which
- * rasterises SDF shapes, text-drawable-lists (with wire-shipped fonts), and
- * composite figures alike — the same renderer the chrome uses. ycat/ypdf/
- * markdown all flow through here. */
+/* Ingest one YDRAW_BIN envelope into yvterm's own grid. Records are
+ * streamed via the drawable iterator and anchored per line on the grid's
+ * scroll ring — SDF shapes, text-drawable-lists (with wire-shipped
+ * fonts), and composite figures alike; whatever sits on a line scrolls
+ * with the text for free. ycat/ypdf/markdown all flow through here. */
 static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
     struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
 {
@@ -2369,10 +2369,10 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
      * mutate it through the yclass-RPC DCS server registered below.
      *
      * Default MSDF font: ygui-emitting subprocesses (ygreeter, ytop, …)
-     * ship widget labels as TEXT_DRAWABLE_LIST records; each ygrid figure the
-     * container mints (KIND_YGRID factory) needs a font at slot 0 to
-     * expand them into renderable glyphs. Font load failure is
-     * non-fatal — labels won't render, but the terminal stays up. */
+     * ship widget labels as TEXT_DRAWABLE_LIST records; each scene figure
+     * the container mints needs a font at slot 0 to expand them into
+     * renderable glyphs. Font load failure is non-fatal — labels won't
+     * render, but the terminal stays up. */
     {
         struct yetty_yconfig_config *config = yetty_context->runtime->config;
         const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
@@ -2495,43 +2495,37 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
                         "terminal_create: figure registry create failed");
     terminal->figure_registry = reg_res.value;
     {
-        struct yetty_ycore_void_result rf =
-            yetty_ygrid_register_factory(terminal->figure_registry, &terminal->figure_args);
+        /* The "ygrid" kind token is the legacy chrome-surface kind: absolute
+         * coordinates (client widgets emit at their absolute rect), minted
+         * as a retained scene. The token stays on the wire for compat. */
+        terminal->figure_args.absolute_coords = 1;
+        struct yetty_ycore_void_result rf = yetty_yscene_register_factory_for_kind(
+            terminal->figure_registry, yetty_yfigure_kind_token("ygrid"), &terminal->figure_args);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rf,
-                            "terminal_create: ygrid register_factory");
-        /* "yscroll" is the CONTENT-GRID kind (#685 Phase 2): an ygrid whose
-         * coordinate mode follows figure_args.absolute_coords (LOCAL here —
-         * framebuffer pixels), suited to producer content: content is emitted
-         * in document coords, the figure is sized to the viewport and
-         * scrolled natively via set_child_scroll (view_size = viewport for
-         * 1:1 mapping, content = set_content_size so prims past the viewport
-         * are NOT clipped). ychromium's web page and every ygui producer
-         * widget (plot / image / video content, shipped as composite records
-         * in the child body) mint this kind. The default "ygrid" kind is
-         * absolute (chrome/widgets) and cannot scroll content taller than
-         * its rect.
+                            "terminal_create: yscene chrome-kind register");
+        /* "yscroll" is the CONTENT kind (#685 Phase 2): LOCAL coordinates,
+         * suited to producer content — content is emitted in document
+         * coords, the figure is sized to the viewport and scrolled natively
+         * via set_child_scroll (content = set_content_size so records past
+         * the viewport are NOT clipped). ychromium's web page and every
+         * ygui producer widget (plot / image / video content, shipped as
+         * composite records in the child body) mint this kind. The default
+         * "ygrid" kind is absolute (chrome/widgets) and cannot scroll
+         * content taller than its rect.
          *
-         * "yplot" / "yimage" / "yvideo" / "yzoo" / "yjungle" are DEPRECATED
-         * aliases of the same registration — kinds name renderer configs,
-         * not content types. Kept one transition window for external
-         * producers that still hash the old strings; new code must not emit
-         * them. */
-        static const char *const producer_kind_names[] = {"yplot", "yimage",  "yvideo",
-                                                          "yzoo",  "yjungle", "yscroll"};
-        for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); i++) {
-            struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                terminal->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
-                &terminal->figure_args);
-            YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, kr,
-                                "terminal_create: ygrid register_factory_for_kind");
-        }
+         * The old "yplot"/"yimage"/"yvideo"/"yzoo"/"yjungle" alias kinds
+         * are RETIRED — nothing mints them. */
+        terminal->yscene_factory_args.composite_factory = terminal->composite_factory;
+        terminal->yscene_factory_args.default_font = terminal->compositor_font;
+        struct yetty_ycore_void_result kr = yetty_yscene_register_factory_for_kind(
+            terminal->figure_registry, yetty_yfigure_kind_token("yscroll"),
+            &terminal->yscene_factory_args);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, kr,
+                            "terminal_create: yscene yscroll register");
 
-        /* "yscene" — the retained scene graph (#691), built alongside
-         * ygrid until parity. Producers opt in per figure. The args bundle
-         * lives on the terminal (same lifetime contract as figure_args). */
+        /* "yscene" — the retained scene graph (#691), the canonical kind.
+         * Local coordinates, same args bundle as the content kinds. */
         {
-            terminal->yscene_factory_args.composite_factory = terminal->composite_factory;
-            terminal->yscene_factory_args.default_font = terminal->compositor_font;
             struct yetty_ycore_void_result scene_reg_res = yetty_yscene_register_factory(
                 terminal->figure_registry, &terminal->yscene_factory_args);
             YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, scene_reg_res,
@@ -2609,7 +2603,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
 
     /* Rich content (ycat/ypdf/markdown/plots) is owned by yvterm's own grid —
      * composites + raw SDF/text records are anchored per line on its scroll ring
-     * and drawn by vterm's render. No separate ygrid surface. */
+     * and drawn by vterm's render. No separate figure surface. */
 
     /* On a full-screen erase / reset (CSI 2J/3J or RIS — e.g. `clear`, Ctrl-L,
      * `reset`) the content grid wipes the text grid and ydraw canvas, but the
@@ -2721,8 +2715,8 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     {
         struct yetty_ycore_void_result reg_r = yetty_yfigure_register();
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_r, "terminal_create: yfigure_register");
-        reg_r = yetty_ygrid_register();
-        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_r, "terminal_create: ygrid_register");
+        reg_r = yetty_yscene_register();
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_r, "terminal_create: yscene_register");
         reg_r = yetty_yvterm_register();
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_r, "terminal_create: yvterm_register");
         /* The session-root facade — its figure_root_container skel must be
@@ -2859,7 +2853,7 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
         }
         terminal->figure_registry = NULL;
     }
-    /* The composite factory outlives the registry — every ygrid the
+    /* The composite factory outlives the registry — every scene the
      * registry minted borrowed our factory pointer, and they must be
      * gone (via root_container destroy above) before we tear it down. */
     if (terminal->composite_factory) {

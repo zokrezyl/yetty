@@ -32,7 +32,7 @@ Every module directory under `src/yetty/<module>/` carries its own
    per terminal:          content layer       +    root yfigure compositor
                               (text + ydraw)            (z-ordered figures)
                                       │                         │
-                         libvterm, SDF canvas     ygui, ymgui, yrdawn, ygrid,
+                         libvterm, SDF canvas     ygui, ymgui, yrdawn, yscene,
                                                   yplot, yimage, yvideo, …
 ```
 
@@ -82,7 +82,7 @@ The full startup/ownership chain and context structs are in
 | `ydraw-yaml` | YAML-driven figure construction | ✓ |
 | `ydraw-gen` | Schema-driven composite generator (`generate.py`; run manually) | ◐ |
 | `yfigure` | Figure/container model — the compositor that hosts rich content | ✓ |
-| `ygrid` | Figure: spatial-bucketed batch of SDF primitives + glyphs | ✓ |
+| `yscene` | Figure: retained scene graph — SDF primitives, glyphs, composites | ✓ |
 | `yshaders` | WGSL asset staging (effects-lib + collected module shaders; legacy reference content) | ◐ |
 | `ysdf` | SDF primitive handler (shape parse + construction) | ✓ |
 | `ywebgpu` | WebGPU request/limits/utils glue ([webgpu](webgpu.md)) | ✓ |
@@ -184,7 +184,7 @@ The full startup/ownership chain and context structs are in
   `yfigure` compositor → `yrender` → screen.
 - **Rich content:** a child process emits DCS figure records; `ywire` dispatches
   them to the root `yfigure` container. The figure (yplot, yimage, ymgui,
-  yrdawn, ygrid, …) composites by z-order after the terminal content layer.
+  yrdawn, yscene, …) composites by z-order after the terminal content layer.
 - **Remote rendering:** `yrdawn` lets a remote (or WebAssembly) process render
   WebGPU content that yetty composites as a figure; `yctl` exposes an RPC control
   plane; `yvnc`/`ydvnc` bring remote desktops in as content.

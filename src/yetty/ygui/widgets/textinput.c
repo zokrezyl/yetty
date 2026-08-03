@@ -7,7 +7,7 @@
  */
 
 #include "../internal.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -22,7 +22,7 @@ struct yetty_ygui_textinput_ptr_result yetty_ygui_textinput_from(struct yetty_yc
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfont/font.h>
-#include <yetty/ygui/primitive-widget.h>
+#include "yetty/gen/impl/ygui/primitive-widget.h"
 #include <yetty/yplatform/time.h>
 #include <yetty/ysdf/funcs.gen.h>
 

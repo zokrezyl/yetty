@@ -16,6 +16,7 @@ struct yetty_ycore_int_result yetty_ymap_get_zoom(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ymap_geolocate(struct yetty_yclass_object *);
 struct yetty_ycore_const_char_ptr_result yetty_ymap_attribution(struct yetty_yclass_object *);
 struct yetty_ycore_int_result yetty_ymap_is_vector(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ymap_overlay_geojson(struct yetty_yclass_object *, const char *);
 struct yetty_ydraw_drawable_list_result yetty_ymap_render(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ymap_destroy(struct yetty_yclass_object *);
 ]]
@@ -78,6 +79,10 @@ function Map:is_vector()
   local res = rt.C().yetty_ymap_is_vector(nil, self.handle)
   rt.check(res)
   return res.value
+end
+function Map:overlay_geojson()
+  local res = rt.C().yetty_ymap_overlay_geojson(nil, self.handle)
+  rt.check(res)
 end
 function Map:render()
   local res = rt.C().yetty_ymap_render(nil, self.handle)

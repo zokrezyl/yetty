@@ -129,10 +129,6 @@ endif()
 if(TARGET yetty_yfigure)
     add_subdirectory(ut/yfigure)
 endif()
-if(TARGET yetty_ygrid)
-    add_subdirectory(ut/ygrid)
-endif()
-
 # yscene — retained scene graph (#691): dom tree contract + scene
 # behavioral tests, both headless.
 if(TARGET yetty_yscene)

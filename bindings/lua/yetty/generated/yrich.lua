@@ -47,8 +47,13 @@ struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_cell_value(struct yet
 struct yetty_ycore_void_result yetty_yrich_ydoc_toggle_format(struct yetty_yclass_object *, uint32_t);
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_text_color(struct yetty_yclass_object *, uint32_t);
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_alignment(struct yetty_yclass_object *, uint32_t);
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_line_spacing(struct yetty_yclass_object *, float);
+struct yetty_ycore_void_result yetty_yrich_ydoc_adjust_indent(struct yetty_yclass_object *, int32_t);
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_highlight(struct yetty_yclass_object *, uint32_t);
+struct yetty_ycore_void_result yetty_yrich_ydoc_clear_format(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_heading(struct yetty_yclass_object *, uint32_t);
 struct yetty_ycore_void_result yetty_yrich_ydoc_change_font_size(struct yetty_yclass_object *, float);
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_font_size(struct yetty_yclass_object *, float);
 ]]
 local M = {}
 local App = {}
@@ -503,12 +508,32 @@ function Ydoc:ydoc_set_alignment()
   local res = rt.C().yetty_yrich_ydoc_set_alignment(nil, self.handle)
   rt.check(res)
 end
+function Ydoc:ydoc_set_line_spacing()
+  local res = rt.C().yetty_yrich_ydoc_set_line_spacing(nil, self.handle)
+  rt.check(res)
+end
+function Ydoc:ydoc_adjust_indent()
+  local res = rt.C().yetty_yrich_ydoc_adjust_indent(nil, self.handle)
+  rt.check(res)
+end
+function Ydoc:ydoc_set_highlight()
+  local res = rt.C().yetty_yrich_ydoc_set_highlight(nil, self.handle)
+  rt.check(res)
+end
+function Ydoc:ydoc_clear_format()
+  local res = rt.C().yetty_yrich_ydoc_clear_format(nil, self.handle)
+  rt.check(res)
+end
 function Ydoc:ydoc_set_heading()
   local res = rt.C().yetty_yrich_ydoc_set_heading(nil, self.handle)
   rt.check(res)
 end
 function Ydoc:ydoc_change_font_size()
   local res = rt.C().yetty_yrich_ydoc_change_font_size(nil, self.handle)
+  rt.check(res)
+end
+function Ydoc:ydoc_set_font_size()
+  local res = rt.C().yetty_yrich_ydoc_set_font_size(nil, self.handle)
   rt.check(res)
 end
 M.Ydoc = Ydoc

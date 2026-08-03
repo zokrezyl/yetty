@@ -30,7 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <yetty/yguiapp/app.h>
+#include <yetty/api/yguiapp/app.h>
 #include <yetty/yguiapp/run.h>
 #include <yetty/ygui/event.h>
 #include <yetty/ygui/ygui.h>
@@ -293,7 +293,7 @@ static void build_fits_scene(struct yetty_yclass_object *content)
 
 /* Scene 5 — three scrollables nested. The outer scrolls; the middle box
  * (fixed height inside the outer) scrolls its own content; the inner box
- * (fixed height inside the middle) scrolls too. Each is its own ygrid
+ * (fixed height inside the middle) scrolls too. Each is its own scene
  * figure and clips to the intersection of its ancestors' boxes. */
 static void build_nested_scene(struct yetty_yclass_object *content)
 {

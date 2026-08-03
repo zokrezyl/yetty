@@ -35,7 +35,7 @@ target_link_libraries(yetty_yguiapp PUBLIC
     yetty_yclass
     yetty_ygui
     yetty_yfigure
-    yetty_ygrid
+    yetty_yscene
     yetty_yframework
     yetty_ydraw_factory
     yetty_yevent
@@ -73,3 +73,7 @@ if(NOT MSVC)
         C_STANDARD_REQUIRED ON
     )
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(yguiapp)

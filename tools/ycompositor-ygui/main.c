@@ -11,7 +11,7 @@
  *  1. headless ygui demo (default, no args)
  *     Mirrors the platform setup of tools/ycompositor (glfw + texture
  *     render target + compositor render loop) but instead of a hand-
- *     built ygrid full of SDF primitives spins up a headless ygui
+ *     built scene figure full of SDF primitives spins up a headless ygui
  *     framework, builds a tiny widget tree, and emits it into the root
  *     container in-process via the typed yfigure stubs (the framework's
  *     container_obj is the root, so emit marshals straight onto it with
@@ -47,7 +47,7 @@
 #include "yetty/gen/impl/yfigure/figure.h"
 #include "yetty/gen/impl/yfigure/container.h"
 #include <yetty/yfigure/registry.h>
-#include <yetty/api/ygrid/grid.h>
+#include <yetty/api/yscene/scene.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
 #include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
@@ -107,14 +107,14 @@ struct YETTY_ANNOTATE("class@ycompositorygui:app") YETTY_ANNOTATE("parent@yapp:a
     /* Borrowed pointer to the outer window — it is the framework root,
      * so the layout pass stretches it to the viewport automatically. */
     struct yetty_yclass_object *win;
-    /* Default font handed to the compositor; every per-group ygrid the
+    /* Default font handed to the compositor; every per-group scene the
      * compositor creates borrows this at slot 0 so TEXT_DRAWABLE_LIST records
      * (button labels, etc.) expand into renderable glyphs. */
     struct yetty_yfont_font *font;
-    /* ygrid factory bundle — borrowed by every ygrid the registry mints;
-     * must outlive every ygrid (i.e. outlive the container). */
-    struct yetty_ygrid_factory_args figure_args;
-    /* YMGUI factory bundle — registered alongside ygrid in interpose
+    /* yscene factory bundle — borrowed by every scene the registry mints;
+     * must outlive every scene (i.e. outlive the container). */
+    struct yetty_yscene_factory_args figure_args;
+    /* YMGUI factory bundle — registered alongside yscene in interpose
      * mode so client apps that ship CREATE_CHILD records with
      * kind=YETTY_YFIGURE_KIND_YMGUI (the ymgui demo, ygui, …) get
      * their figures created instead of failing in registry_mint. */
@@ -737,7 +737,7 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "texture target create failed");
     app->target = tr.value;
 
-    /* Load font first — it's needed as user-data for the ygrid factory. */
+    /* Load font first — it's needed as user-data for the yscene factory. */
     {
         struct yetty_yconfig_config *config = app->yrt->config;
         const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
@@ -768,9 +768,12 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
      * factory at this layer — tool is a minimal POC. */
     app->figure_args.default_font = app->font;
     app->figure_args.composite_factory = NULL;
-    struct yetty_ycore_void_result rf =
-        yetty_ygrid_register_factory(app->registry, &app->figure_args);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "ygrid_register_factory failed");
+    /* The legacy "ygrid" kind token renders through yscene. Absolute
+     * (logical-pane) coordinates — the mode the ygrid factory forced. */
+    app->figure_args.absolute_coords = 1;
+    struct yetty_ycore_void_result rf = yetty_yscene_register_factory_for_kind(
+        app->registry, yetty_yfigure_kind_token("ygrid"), &app->figure_args);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "yscene_register_factory_for_kind failed");
 
     if (app->child_argv) {
         app->ymgui_factory_args.context = &app->ctx;

@@ -85,3 +85,7 @@ set_target_properties(yaudio PROPERTIES LINKER_LANGUAGE CXX)
 if(NOT MSVC)
     target_compile_options(yaudio PRIVATE -Wall -Wextra)
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(yaudio)

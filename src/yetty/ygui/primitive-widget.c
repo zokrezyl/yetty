@@ -27,7 +27,7 @@
 #include "internal.h"
 
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 #include <yetty/ysdf/funcs.gen.h>
 
 /* This TU deliberately does NOT include its own generated header

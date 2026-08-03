@@ -49,13 +49,13 @@ target_link_libraries(yetty_ychrome PUBLIC
     yetty_yplatform_core
 )
 
-# The LOCAL sink composites the caption as a pinned ygrid figure. ygrid is
+# The LOCAL sink composites the caption as a pinned scene figure. yscene is
 # GPU-backed and not built on the no-WebGPU cross targets (riscv guest), so the
-# local path is compiled in only where ygrid exists. The WIRE sink — all the
+# local path is compiled in only where yscene exists. The WIRE sink — all the
 # in-terminal/client chrome an app needs — builds without it, so an app running
 # inside a hosting yetty gets its backdrop + caption even on a headless guest.
 if(YETTY_ENABLE_LIB_WEBGPU)
-    target_link_libraries(yetty_ychrome PUBLIC yetty_ygrid)
+    target_link_libraries(yetty_ychrome PUBLIC yetty_yscene)
     target_compile_definitions(yetty_ychrome PUBLIC YETTY_YCHROME_HAS_LOCAL)
 endif()
 
@@ -66,3 +66,7 @@ if(NOT MSVC)
         C_STANDARD_REQUIRED ON
     )
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(ychrome)

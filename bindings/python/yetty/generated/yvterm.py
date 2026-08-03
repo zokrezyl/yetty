@@ -72,33 +72,15 @@ def grid_dispose(obj: Any) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
-def grid_set_pty_write(obj: Any, fn: Any, userdata: Any) -> _rt.Result[None]:
-    """Call `yetty_yvterm_grid_set_pty_write`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_set_pty_write", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
-    res = _fn(_rt.handle(obj), _rt.handle(fn), _rt.handle(userdata))
-    return _rt.result_from_c(res)
-
-def grid_set_clipboard_write(obj: Any, fn: Any, userdata: Any) -> _rt.Result[None]:
-    """Call `yetty_yvterm_grid_set_clipboard_write`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_set_clipboard_write", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
-    res = _fn(_rt.handle(obj), _rt.handle(fn), _rt.handle(userdata))
-    return _rt.result_from_c(res)
-
-def grid_set_sixel_write(obj: Any, fn: Any, userdata: Any) -> _rt.Result[None]:
-    """Call `yetty_yvterm_grid_set_sixel_write`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_set_sixel_write", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
-    res = _fn(_rt.handle(obj), _rt.handle(fn), _rt.handle(userdata))
+def grid_set_sink(obj: Any, sink: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_set_sink`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_set_sink", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(sink))
     return _rt.result_from_c(res)
 
 def grid_set_clear_hook(obj: Any, fn: Any, userdata: Any) -> _rt.Result[None]:
     """Call `yetty_yvterm_grid_set_clear_hook`."""
     _fn = _rt.cfn("yetty_yvterm_grid_set_clear_hook", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
-    res = _fn(_rt.handle(obj), _rt.handle(fn), _rt.handle(userdata))
-    return _rt.result_from_c(res)
-
-def grid_set_card_sub(obj: Any, fn: Any, userdata: Any) -> _rt.Result[None]:
-    """Call `yetty_yvterm_grid_set_card_sub`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_set_card_sub", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
     res = _fn(_rt.handle(obj), _rt.handle(fn), _rt.handle(userdata))
     return _rt.result_from_c(res)
 
@@ -359,10 +341,10 @@ def grid_slot_dirty(obj: Any, slot: int) -> _rt.Result[int]:
     res = _fn(_rt.handle(obj), slot)
     return _rt.result_from_c(res)
 
-def vterm_figure_create(cols: int, rows: int, context: Any, pty_write_fn: Any, pty_write_userdata: Any, request_render_fn: Any, request_render_userdata: Any, mouse_sub_fn: Any, mouse_sub_userdata: Any, clipboard_write_fn: Any, clipboard_write_userdata: Any, sixel_write_fn: Any, sixel_write_userdata: Any) -> _rt.Result[Any]:
+def vterm_figure_create(cols: int, rows: int, context: Any, sink: Any) -> _rt.Result[Any]:
     """Call `yetty_yvterm_vterm_figure_create`."""
-    _fn = _rt.cfn("yetty_yvterm_vterm_figure_create", _t.yetty_yclass_object_ptr_result, [c_uint32, c_uint32, c_void_p, c_void_p, c_void_p, c_void_p, c_void_p, c_void_p, c_void_p, c_void_p, c_void_p, c_void_p, c_void_p])
-    res = _fn(cols, rows, _rt.handle(context), _rt.handle(pty_write_fn), _rt.handle(pty_write_userdata), _rt.handle(request_render_fn), _rt.handle(request_render_userdata), _rt.handle(mouse_sub_fn), _rt.handle(mouse_sub_userdata), _rt.handle(clipboard_write_fn), _rt.handle(clipboard_write_userdata), _rt.handle(sixel_write_fn), _rt.handle(sixel_write_userdata))
+    _fn = _rt.cfn("yetty_yvterm_vterm_figure_create", _t.yetty_yclass_object_ptr_result, [c_uint32, c_uint32, c_void_p, c_void_p])
+    res = _fn(cols, rows, _rt.handle(context), _rt.handle(sink))
     return _rt.result_from_c(res)
 
 def vterm_as_figure(obj: Any) -> _rt.Result[Any]:

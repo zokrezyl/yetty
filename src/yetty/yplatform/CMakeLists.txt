@@ -192,3 +192,8 @@ endif()
 # the transitive deps. Tools that need server-side facets can't link
 # them today — they have to be moved into yetty_yplatform_core first
 # or get their own targeted shim library.
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(yapp SOURCE_DIR src/yetty/yapp)
+yetty_yclass_module(yplatform)

@@ -33,8 +33,14 @@ struct yetty_yscene_scene;
 struct yetty_yscene_factory_args {
     struct yetty_ydraw_composite_factory *composite_factory;
     struct yetty_yfont_font *default_font;
+    struct yetty_yfont_font *bold_font;
+    struct yetty_yfont_font *italic_font;
+    struct yetty_yfont_font *bold_italic_font;
+    int absolute_coords;
 };
 #endif
+
+struct yetty_yclass_ptr_result yetty_yscene_scene_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
@@ -102,7 +108,7 @@ struct yetty_yclass_object_ptr_result yetty_yscene_scene_create(struct yetty_ycl
  * the tree, adapter, derive and hit-test all work, render draws
  * nothing. With a real context the scene binds the framework's shared
  * drawable registry and builds its GPU pipeline (shared ydraw-layer
- * machinery: binder + ygrid.wgsl + ysdf/effects libs). */
+ * machinery: binder + yscene.wgsl + ysdf/effects libs). */
 struct yetty_yscene_scene_ptr_result yetty_yscene_create(struct yetty_ycore_rectangle rect,
                                                          const struct yetty_context *context);
 /* Register the "yscene" figure kind so containers can mint scenes from
@@ -111,6 +117,14 @@ struct yetty_yscene_scene_ptr_result yetty_yscene_create(struct yetty_ycore_rect
  * composites, no default font). Call at terminal/host create time. */
 struct yetty_ycore_void_result yetty_yscene_register_factory(
     struct yetty_yfigure_registry *registry, const struct yetty_yscene_factory_args *args);
+/* Register the scene factory under an arbitrary kind code — the ygrid
+ * migration path: apps re-point their legacy figure kinds ("ygrid" and
+ * the producer kinds yplot / yimage / …) at the retained scene renderer
+ * without touching the producers' wire output. Args has the same
+ * borrowed-lifetime contract as register_factory. */
+struct yetty_ycore_void_result yetty_yscene_register_factory_for_kind(
+    struct yetty_yfigure_registry *registry, uint32_t kind,
+    const struct yetty_yscene_factory_args *args);
 /* Host-side default font (slot 0) for a hand-created scene. Borrowed. */
 struct yetty_ycore_void_result yetty_yscene_set_default_font(struct yetty_yclass_object *obj,
                                                              struct yetty_yfont_font *font);

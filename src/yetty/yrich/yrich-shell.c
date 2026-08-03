@@ -13,15 +13,15 @@
  * subscribe to CLICK and drive the document through its public API.
  */
 #include <yetty/ygui/event.h>
-#include <yetty/ygui/widget.h>
-#include <yetty/ygui/widgets/button.h>
-#include <yetty/ygui/widgets/hbox.h>
-#include <yetty/ygui/widgets/menubar.h>
-#include <yetty/ygui/widgets/popup_menu.h>
-#include <yetty/ygui/widgets/scrollarea.h>
-#include <yetty/ygui/widgets/statusbar.h>
-#include <yetty/ygui/widgets/vbox.h>
-#include <yetty/ygui/widgets/yrich_view.h>
+#include "yetty/gen/impl/ygui/widget.h"
+#include "yetty/gen/impl/ygui/widgets/button.h"
+#include "yetty/gen/impl/ygui/widgets/hbox.h"
+#include "yetty/gen/impl/ygui/widgets/menubar.h"
+#include "yetty/gen/impl/ygui/widgets/popup_menu.h"
+#include "yetty/gen/impl/ygui/widgets/scrollarea.h"
+#include "yetty/gen/impl/ygui/widgets/statusbar.h"
+#include "yetty/gen/impl/ygui/widgets/vbox.h"
+#include "yetty/gen/impl/ygui/widgets/yrich_view.h"
 #include <yetty/yrich/yrich-shell.h>
 
 #include <yetty/yrich/yrich-operation.h>

@@ -13,7 +13,7 @@ set(MODULE_SHADERS
     ${YETTY_ROOT}/src/yetty/yfont/raster-font.wgsl
     ${YETTY_ROOT}/src/yetty/yfont/ms-msdf-font.wgsl
     ${YETTY_ROOT}/src/yetty/yfont/msdf-font.wgsl
-    ${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl
+    ${YETTY_ROOT}/src/yetty/yscene/yscene.wgsl
     # yvterm's SDF render pass loads <shaders_dir>/grid-sdf-layer.wgsl at
     # init; without it the SDF layer is disabled and ycat rich content
     # silently stops rendering.

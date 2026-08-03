@@ -31,6 +31,8 @@ enum yetty_yflame_constant {
 };
 #endif
 
+struct yetty_yclass_ptr_result yetty_yflame_flame_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

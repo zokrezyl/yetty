@@ -15,7 +15,7 @@
  */
 
 #include <yetty/ygui/framework-defs.h>
-#include <yetty/ygui/widgets/textinput.h>
+#include "yetty/gen/impl/ygui/widgets/textinput.h"
 #include <yetty/ygui/ygui.h>
 
 #include "ytest.h"

@@ -8,7 +8,7 @@
  */
 
 #include "../internal.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -26,7 +26,7 @@ struct yetty_ygui_ydraw_embed_ptr_result yetty_ygui_ydraw_embed_from(
 #include <yetty/ydraw-core/composite.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
-#include <yetty/ygui/primitive-widget.h>
+#include "yetty/gen/impl/ygui/primitive-widget.h"
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/handler.h>
 #include <yetty/ysdf/types.gen.h>
@@ -538,8 +538,7 @@ static struct yetty_ycore_void_result embed_emit_retained(
             size_t record_size = embed_record_size(src + cursor, src_size - cursor);
             if (record_size == 0) {
                 free(ranges);
-                return YETTY_ERR(yetty_ycore_void,
-                                 "ydraw_embed retained: malformed record stream");
+                return YETTY_ERR(yetty_ycore_void, "ydraw_embed retained: malformed record stream");
             }
             cursor += record_size;
             chunk_len += record_size;
@@ -583,8 +582,7 @@ static struct yetty_ycore_void_result embed_emit_retained(
                 walk = embed_group_log_add(&group_log, cached->group_ids[j]);
             }
             if (YETTY_IS_OK(walk) && cached->group_id_count) {
-                scratch[i].group_ids =
-                    malloc((size_t)cached->group_id_count * sizeof(uint32_t));
+                scratch[i].group_ids = malloc((size_t)cached->group_id_count * sizeof(uint32_t));
                 if (!scratch[i].group_ids) {
                     walk = YETTY_ERR(yetty_ycore_void, "ydraw_embed retained: id copy alloc");
                 } else {
@@ -607,9 +605,9 @@ static struct yetty_ycore_void_result embed_emit_retained(
             }
         }
         if (YETTY_IS_OK(walk)) {
-            walk = embed_emit_range(ctx->ygrid_drawable_list, src + ranges[i].offset,
-                                    ranges[i].length, dx, dy, stack, stack_sz, heap, heap_cap,
-                                    cull, &group_log);
+            walk =
+                embed_emit_range(ctx->ygrid_drawable_list, src + ranges[i].offset, ranges[i].length,
+                                 dx, dy, stack, stack_sz, heap, heap_cap, cull, &group_log);
         }
         if (YETTY_IS_OK(walk)) {
             walk = yetty_ydraw_drawable_list_end_group(ctx->ygrid_drawable_list, marker.value);
@@ -727,9 +725,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     if (ctx->figure_retained) {
         struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "ydraw_embed paint: widget id");
-        walk = embed_emit_retained(d, ctx, id_res.value, src, src_size, dx, dy, stack,
-                                   sizeof(stack), &heap, &heap_cap, &cull, &chunks_changed,
-                                   &chunks_total);
+        walk =
+            embed_emit_retained(d, ctx, id_res.value, src, src_size, dx, dy, stack, sizeof(stack),
+                                &heap, &heap_cap, &cull, &chunks_changed, &chunks_total);
     } else {
         walk = embed_emit_range(ctx->ygrid_drawable_list, src, src_size, dx, dy, stack,
                                 sizeof(stack), &heap, &heap_cap, &cull, NULL);

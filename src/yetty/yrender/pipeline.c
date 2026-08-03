@@ -448,7 +448,7 @@ static struct yetty_ycore_void_result create_pipeline(struct yetty_yrender_pipel
     vb.attributes = &pos;
 
     /* Premultiplied-alpha src-over. Shaders ship their fragments
-     * pre-multiplied (see ygrid.wgsl / ydraw-layer.wgsl: the final
+     * pre-multiplied (see yscene.wgsl / ydraw-layer.wgsl: the final
      * `return vec4(result_color * result_alpha, result_alpha)`),
      * so the blend factor for the source must be ONE — not SrcAlpha,
      * which would multiply the pre-multiplied RGB by the alpha a

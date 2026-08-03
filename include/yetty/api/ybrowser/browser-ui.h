@@ -16,6 +16,16 @@
 extern "C" {
 #endif
 
+/*
+ * Standalone browser UI as a yclass class `ybrowser:app` (subclass of yapp:app).
+ * The whole block is gated by YETTY_YBROWSER_HAS_STANDALONE (only the
+ * standalone, GPU-windowed build): in client / one-shot modes ybrowser has no
+ * window. codegen sees this class because the Makefile passes the guard macro
+ * via YCLASS_DEFINES; the generated browser-ui.gen.c is #included at the foot,
+ * inside the same guard, so reduced builds never compile it.
+ */
+struct yetty_yclass_ptr_result yetty_ybrowser_app_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

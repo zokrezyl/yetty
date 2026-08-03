@@ -86,7 +86,7 @@ endif()
 
 target_link_libraries(yhello PRIVATE
     yetty_yfigure
-    yetty_ygrid
+    yetty_yscene
     yetty_yshadertoy
     yetty_yfont_core
     yetty_ydraw_factory
@@ -168,3 +168,7 @@ if(YETTY_ENABLE_LIB_INCBIN)
         incbin_add_directory(yhello "data" "${_YHELLO_EMBED_DIR}" "*" TRUE)
     endif()
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(yhello DEFINES YETTY_YHELLO_HAS_STANDALONE)

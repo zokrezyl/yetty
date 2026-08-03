@@ -206,6 +206,14 @@ struct yetty_ycore_void_result yetty_ygui_widget_figure_content_size_get(
  * guaranteed to ship. */
 struct yetty_ycore_void_result yetty_ygui_widget_figure_reset_request(
     struct yetty_yclass_object *obj);
+/* Mark this widget's figure as RETAINED: bodies ship without the
+ * per-frame CMD_ZERO and the walk publishes content size + scroll.
+ * One-way — a retained document has no immediate-mode fallback. */
+struct yetty_ycore_void_result yetty_ygui_widget_figure_retained_set(
+    struct yetty_yclass_object *obj);
+/* Whether this widget's figure follows the retained contract. */
+struct yetty_ycore_int_result yetty_ygui_widget_figure_retained_get(
+    struct yetty_yclass_object *obj);
 /* Consume the pending reset: returns 1 exactly once per request (the
  * body walk prepends CMD_ZERO for that ship). */
 struct yetty_ycore_int_result yetty_ygui_widget_figure_reset_consume(

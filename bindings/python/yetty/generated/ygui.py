@@ -1568,10 +1568,10 @@ def framework_attach(obj: Any, read_fd: int, write_fd: int, compressed: int) -> 
     res = _fn(_rt.handle(obj), read_fd, write_fd, compressed)
     return _rt.result_from_c(res)
 
-def framework_attach_transport(obj: Any, transport: Any) -> _rt.Result[None]:
-    """Call `yetty_ygui_framework_attach_transport`."""
-    _fn = _rt.cfn("yetty_ygui_framework_attach_transport", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
-    res = _fn(_rt.handle(obj), _rt.handle(transport))
+def framework_attach_connection(obj: Any, connection: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_attach_connection`."""
+    _fn = _rt.cfn("yetty_ygui_framework_attach_connection", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(connection))
     return _rt.result_from_c(res)
 
 def framework_set_viewport(obj: Any, width_px: float, height_px: float) -> _rt.Result[None]:
@@ -1763,6 +1763,42 @@ def widget_set_figure_z(obj: Any, z: int) -> _rt.Result[None]:
     """Call `yetty_ygui_widget_set_figure_z`."""
     _fn = _rt.cfn("yetty_ygui_widget_set_figure_z", _t.yetty_ycore_void_result, [c_void_p, c_int32])
     res = _fn(_rt.handle(obj), z)
+    return _rt.result_from_c(res)
+
+def widget_figure_scroll_set(obj: Any, scroll_x: float, scroll_y: float) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_figure_scroll_set`."""
+    _fn = _rt.cfn("yetty_ygui_widget_figure_scroll_set", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float])
+    res = _fn(_rt.handle(obj), scroll_x, scroll_y)
+    return _rt.result_from_c(res)
+
+def widget_figure_scroll_get(obj: Any, scroll_x: Any, scroll_y: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_figure_scroll_get`."""
+    _fn = _rt.cfn("yetty_ygui_widget_figure_scroll_get", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(scroll_x), _rt.handle(scroll_y))
+    return _rt.result_from_c(res)
+
+def widget_figure_content_size_set(obj: Any, content_w: float, content_h: float) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_figure_content_size_set`."""
+    _fn = _rt.cfn("yetty_ygui_widget_figure_content_size_set", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float])
+    res = _fn(_rt.handle(obj), content_w, content_h)
+    return _rt.result_from_c(res)
+
+def widget_figure_content_size_get(obj: Any, content_w: Any, content_h: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_figure_content_size_get`."""
+    _fn = _rt.cfn("yetty_ygui_widget_figure_content_size_get", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(content_w), _rt.handle(content_h))
+    return _rt.result_from_c(res)
+
+def widget_figure_reset_request(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_figure_reset_request`."""
+    _fn = _rt.cfn("yetty_ygui_widget_figure_reset_request", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def widget_figure_reset_consume(obj: Any) -> _rt.Result[int]:
+    """Call `yetty_ygui_widget_figure_reset_consume`."""
+    _fn = _rt.cfn("yetty_ygui_widget_figure_reset_consume", _t.yetty_ycore_int_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
 def widget_set_floating(obj: Any, floating: int) -> _rt.Result[None]:
@@ -2326,6 +2362,24 @@ def rich_add_span(obj: Any, text: str | bytes | None, font_size: float, color_rg
     """Call `yetty_ygui_rich_add_span`."""
     _fn = _rt.cfn("yetty_ygui_rich_add_span", _t.yetty_ycore_void_result, [c_void_p, c_char_p, c_float, c_uint32])
     res = _fn(_rt.handle(obj), _rt.cstr(text), font_size, color_rgba)
+    return _rt.result_from_c(res)
+
+def scrollarea_enable_scene(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_scrollarea_enable_scene`."""
+    _fn = _rt.cfn("yetty_ygui_scrollarea_enable_scene", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def scrollarea_scroll_set(obj: Any, offset: float) -> _rt.Result[None]:
+    """Call `yetty_ygui_scrollarea_scroll_set`."""
+    _fn = _rt.cfn("yetty_ygui_scrollarea_scroll_set", _t.yetty_ycore_void_result, [c_void_p, c_float])
+    res = _fn(_rt.handle(obj), offset)
+    return _rt.result_from_c(res)
+
+def scrollarea_scroll_get(obj: Any) -> _rt.Result[float]:
+    """Call `yetty_ygui_scrollarea_scroll_get`."""
+    _fn = _rt.cfn("yetty_ygui_scrollarea_scroll_get", _t.yetty_ycore_float_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
 def selectable_set_text(obj: Any, t: str | bytes | None) -> _rt.Result[None]:

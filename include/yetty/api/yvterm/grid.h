@@ -91,6 +91,9 @@ struct yetty_yvterm_text_cell_const_ptr_result {
 };
 #endif
 
+/* The unified terminal grid — the yclass data block. */
+struct yetty_yclass_ptr_result yetty_yvterm_grid_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

@@ -324,6 +324,24 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/ychrome/chrome.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ychrome_configure_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ychrome/chrome.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ychrome_configure_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *, float, float, uint32_t);"
+  yetty_ychrome_set_size_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ychrome/chrome.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ychrome_set_size_fn)(struct yetty_yclass_object *, float, float);"
+  yetty_ychrome_destroy_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ychrome/chrome.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ychrome_destroy_fn)(struct yetty_yclass_object *);"
+  yetty_ychrome_edge_cursor_at_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ychrome/chrome.c
+    text: "typedef struct yetty_ycore_int_result (*yetty_ychrome_edge_cursor_at_fn)(struct yetty_yclass_object *, float, float);"
+  yetty_ychrome_render_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ychrome/chrome.c
+    text: "typedef struct yetty_ydraw_drawable_list_result (*yetty_ychrome_render_fn)(struct yetty_yclass_object *);"
+  yetty_ychrome_handle_event_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ychrome/chrome.c
+    text: "typedef struct yetty_ycore_int_result (*yetty_ychrome_handle_event_fn)(struct yetty_yclass_object *, const struct yetty_yui_event *);"
 includes:
   src/yetty/ychrome/chrome.c:
     - yetty/ydraw-core/drawable-list.h

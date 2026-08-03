@@ -74,7 +74,7 @@
 #include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
-#include <yetty/api/ygrid/grid.h>
+#include <yetty/api/yscene/scene.h>
 #include <yetty/api/yshadertoy/figure.h>
 #include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/yplatform/platform.h>
@@ -271,9 +271,9 @@ struct app {
      * the pointer, not a copy) and to the chrome host. It MUST outlive the
      * worker: on webasm standalone_worker returns immediately after the
      * emscripten main loop is registered, and the container mints its
-     * ygrid figures lazily on the first render tick — long after the
+     * scene figures lazily on the first render tick — long after the
      * worker's stack frame is gone. A stack-local context would dangle and
-     * the lazy ygrid_create would read freed memory (OOB). Living on the
+     * the lazy yscene_create would read freed memory (OOB). Living on the
      * heap-allocated, program-lifetime `app` keeps it valid. */
     struct yetty_context ctx;
     struct yetty_yclass_object *root_container;
@@ -281,7 +281,11 @@ struct app {
     struct yetty_ydraw_composite_factory *composite_factory;
     struct yetty_yfont_font *font;
     struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
-    struct yetty_ygrid_factory_args figure_args;
+    /* Two factory-args bundles for the yscene figure factory: the ygui
+     * chrome / producer kinds carry absolute (logical-pane) coordinates;
+     * the retained "yscene" kind carries document-space content. */
+    struct yetty_yscene_factory_args figure_args;
+    struct yetty_yscene_factory_args retained_figure_args;
     struct yetty_yevent_event_listener listener;
     /* ~30 fps animation pump for self-animating widgets (ymaze, …). */
     struct yetty_yevent_event_listener frame_listener;
@@ -3857,7 +3861,7 @@ static struct yetty_ycore_int_result standalone_frame_tick(
 }
 
 /* HiDPI scale (framebuffer px / logical px) of the local display, 1.0 if
- * unset. The ygui chrome is authored in logical pixels and the ygrid
+ * unset. The ygui chrome is authored in logical pixels and the scene
  * receiver scales it back up, so the standalone platform path divides
  * framebuffer-pixel viewport/pointer values by this on the way into ygui. */
 static float app_content_scale(const struct app *app)
@@ -4129,7 +4133,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
     app->yframework = frr.value;
     app->render_target = app->yframework->render_target;
 
-    /* MSDF font for the receiver-side ygrid (glyph expansion). */
+    /* MSDF font for the receiver-side scene figures (glyph expansion). */
     {
         const char *fonts_dir =
             app->yframework->config->ops->get_string(app->yframework->config, "paths/fonts", "");
@@ -4192,30 +4196,38 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
         }
     }
 
-    /* Figure registry — primitive widgets land in ygrid; producer
-     * widgets (yimage, yplot) get their own kind→factory binding. */
+    /* Figure registry — every figure kind the ygui chrome mints renders
+     * through the retained yscene engine. The legacy "ygrid" kind token
+     * (the shared chrome surface) and the producer kinds (yimage, yplot,
+     * yvideo) stay on the wire; only the factory behind them changed. */
     {
         struct yetty_yfigure_registry_ptr_result reg = yetty_yfigure_registry_create();
         YETTY_RETURN_IF_ERR(yetty_ycore_void, reg, "standalone: registry_create");
         app->figure_registry = reg.value;
         app->figure_args.default_font = app->font;
         app->figure_args.composite_factory = app->composite_factory;
-        /* ygui chrome: producer figures (yplot/yimage/yvideo) are laid out in
-         * logical pixels and must be scaled to framebuffer by content_scale
+        /* ygui chrome: chrome + producer figures are laid out in logical
+         * pixels and must be scaled to framebuffer by content_scale
          * (HiDPI). Their widgets emit at the absolute widget rect to match. */
         app->figure_args.absolute_coords = 1;
-        struct yetty_ycore_void_result rf =
-            yetty_ygrid_register_factory(app->figure_registry, &app->figure_args);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "standalone: ygrid_register_factory");
-        static const char *const producer_kind_names[] = {"yplot", "yimage", "yvideo"};
-        for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); ++i) {
-            struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                app->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
+        /* "ygrid" is the shared chrome surface; "yscroll" is the content
+         * kind ygui producer widgets mint. Both absolute. */
+        static const char *const chrome_kind_names[] = {"ygrid", "yscroll"};
+        for (size_t i = 0; i < sizeof(chrome_kind_names) / sizeof(chrome_kind_names[0]); ++i) {
+            struct yetty_ycore_void_result kr = yetty_yscene_register_factory_for_kind(
+                app->figure_registry, yetty_yfigure_kind_token(chrome_kind_names[i]),
                 &app->figure_args);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, kr,
-                                "standalone: ygrid_register_factory_for_kind");
+                                "standalone: yscene_register_factory_for_kind");
         }
-        /* yshadertoy has its own factory + renderer (not the ygrid path). */
+        /* The retained "yscene" kind (scrollarea scene mode — the browser
+         * page): document-space content, GPU scroll. Local coordinates. */
+        app->retained_figure_args.default_font = app->font;
+        app->retained_figure_args.composite_factory = app->composite_factory;
+        struct yetty_ycore_void_result rf =
+            yetty_yscene_register_factory(app->figure_registry, &app->retained_figure_args);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "standalone: yscene_register_factory");
+        /* yshadertoy has its own factory + renderer (not the yscene path). */
         struct yetty_ycore_void_result sfr =
             yetty_yshadertoy_register_factory(app->figure_registry);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sfr, "standalone: yshadertoy_register_factory");
@@ -4223,7 +4235,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
 
     /* Local container. The context lives on `app` (program-lifetime) so it
      * outlives this worker — the container stores the pointer and mints its
-     * ygrid figures lazily, after the worker has returned on webasm. */
+     * scene figures lazily, after the worker has returned on webasm. */
     app->ctx = (struct yetty_context){.runtime = app->yframework,
                                       .event_loop = app->yframework->event_loop};
     {
@@ -4263,7 +4275,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
         struct yetty_ycore_void_result scr =
             yetty_ygui_framework_set_container_obj(app->engine, app->root_container);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "standalone: set_container_obj");
-        /* Logical viewport: chrome is authored in logical px, the ygrid
+        /* Logical viewport: chrome is authored in logical px, the scene
          * receiver scales back to framebuffer px (see app_content_scale). */
         float cs = app_content_scale(app);
         struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(

@@ -170,7 +170,7 @@ else()
     target_link_libraries(ygreeter PRIVATE rt util)
 endif()
 
-# Standalone-mode link line — Dawn-bound libs (ygrid/yimage/yplot
+# Standalone-mode link line — Dawn-bound libs (yscene/yimage/yplot
 # call wgpu functions), the GLFW window helper, the full YETTY_LIBS
 # (yetty_yrender / yetty_ywebgpu / yetty_yterm are only declared
 # when webgpu is on), fontconfig for font discovery, ydraw-factory
@@ -178,7 +178,7 @@ endif()
 if(YETTY_ENABLE_LIB_WEBGPU)
     target_link_libraries(ygreeter PRIVATE
         yetty_yfigure
-        yetty_ygrid
+        yetty_yscene
         yetty_yshadertoy
         yetty_yfont_core
         yetty_ydraw_factory
@@ -260,3 +260,7 @@ if(YETTY_ENABLE_LIB_INCBIN)
         incbin_add_directory(ygreeter "data" "${_YGREETER_EMBED_DIR}" "*" TRUE)
     endif()
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(ygreeter DEFINES YETTY_YGREETER_HAS_STANDALONE YETTY_YGUI_HAS_UV)

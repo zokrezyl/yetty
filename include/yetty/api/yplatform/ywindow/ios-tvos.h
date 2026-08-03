@@ -16,6 +16,11 @@
 extern "C" {
 #endif
 
+/* Cached metrics pushed from the UIKit bootstrap. framebuffer_* is in physical
+ * pixels; content_scale is UIScreen.nativeScale. Logical size is derived as
+ * framebuffer / scale. */
+struct yetty_yclass_ptr_result yetty_yplatform_ios_window_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

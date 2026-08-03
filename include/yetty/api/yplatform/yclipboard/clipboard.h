@@ -16,6 +16,10 @@
 extern "C" {
 #endif
 
+/* Base clipboard data slice. Abstract — holds no shared state; each subclass
+ * keeps its own pipes (response channel, and on GLFW the marshalling bus). */
+struct yetty_yclass_ptr_result yetty_yplatform_clipboard_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

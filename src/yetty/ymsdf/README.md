@@ -72,8 +72,8 @@ referenced by a drawable list has no cached `.cdb` yet:
   content ([ydraw](../ydraw/README.md)).
 - `../yvterm/grid-sdf-layer.c` — the SDF layer's named-font path
   ([yvterm](../yvterm/README.md)).
-- `../ygrid/grid.c` — the ygrid figure's font slots
-  ([ygrid](../ygrid/README.md)).
+- `../yscene/scene.c` — the scene figure's font slots
+  ([yscene](../yscene/README.md)).
 
 ## Layout of the module
 

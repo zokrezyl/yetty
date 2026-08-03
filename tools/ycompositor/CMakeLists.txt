@@ -1,6 +1,6 @@
 # tools/ycompositor — standalone ycompositor test harness.
 #
-# Drives a ycompositor + one ygrid figure straight from C (no terminal,
+# Drives a ycompositor + one yscene figure straight from C (no terminal,
 # no yui, no ygui), so the new compositor render path can be exercised
 # in isolation. Builds on Linux and Windows (standalone GPU window).
 
@@ -71,7 +71,7 @@ if(NOT WIN32)
 endif()
 
 target_link_libraries(ycompositor PRIVATE
-    yetty_ygrid
+    yetty_yscene
     yetty_yfigure
     yetty_ydraw_core
     yetty_yframework
@@ -115,3 +115,7 @@ if(WIN32)
     include(${YETTY_ROOT}/build-tools/yetty/dawn-runtime-dlls.cmake)
     yetty_copy_dawn_runtime_dlls(ycompositor)
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(ycompositor)

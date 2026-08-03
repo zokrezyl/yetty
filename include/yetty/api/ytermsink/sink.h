@@ -16,6 +16,12 @@
 extern "C" {
 #endif
 
+/* Pure abstract interface — no per-instance data. The implementing host (the
+ * terminal) carries the real state; these slots dispatch onto its object. The
+ * single reserved member keeps the data slice a well-formed (non-empty) C
+ * struct without implying any state. */
+struct yetty_yclass_ptr_result yetty_ytermsink_sink_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

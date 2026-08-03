@@ -7,7 +7,7 @@
  * after every emit so the framework keeps re-emitting — that animates the
  * growing chain. */
 #include "../internal.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -19,8 +19,8 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_yjungle_ptr, struct yetty_ygui_yjungle *);
 struct yetty_yclass_ptr_result yetty_ygui_yjungle_class_get(void);
 struct yetty_ygui_yjungle_ptr_result yetty_ygui_yjungle_from(struct yetty_yclass_object *obj);
-#include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/ydraw_embed.h>
+#include "yetty/gen/impl/ygui/primitive-widget.h"
+#include "yetty/gen/impl/ygui/widgets/ydraw_embed.h"
 #include <yetty/yjungle/yjungle.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yplatform/time.h>

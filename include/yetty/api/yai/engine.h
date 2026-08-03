@@ -19,6 +19,12 @@ extern "C" {
 struct yai_app;
 struct yyjson_val;
 
+/* The class@ annotation needs a struct to sit on; the engine carries
+ * no instance state of its own (per-engine state lives in the subclass
+ * data structs, shared turn state in struct yai_app). The struct's
+ * size contributes 1 byte to the instance layout, which is harmless. */
+struct yetty_yclass_ptr_result yetty_yai_engine_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

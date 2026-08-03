@@ -1,6 +1,6 @@
 /* ygui-combobox.c — textinput + chevron + popup_menu. */
 #include "paint-helpers.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -12,9 +12,9 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_combobox_ptr, struct yetty_ygui_combobox *);
 struct yetty_yclass_ptr_result yetty_ygui_combobox_class_get(void);
 struct yetty_ygui_combobox_ptr_result yetty_ygui_combobox_from(struct yetty_yclass_object *obj);
-#include <yetty/ygui/mixins/clickable.h>
-#include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/popup_menu.h>
+#include "yetty/gen/impl/ygui/mixins/clickable.h"
+#include "yetty/gen/impl/ygui/primitive-widget.h"
+#include "yetty/gen/impl/ygui/widgets/popup_menu.h"
 #include <stdlib.h>
 
 #define COLOR_BG 0xFF1F1A14u

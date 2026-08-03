@@ -16,7 +16,7 @@
 
 #include "../internal.h"
 #include <yetty/ygui/event.h>
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* The click callback type. Defined here in the owning .c; codegen reproduces
  * it into the generated header for any public signature that references it. */

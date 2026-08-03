@@ -92,7 +92,9 @@ types:
       - name: chrome
         type: "struct yetty_ychrome_host *"
       - name: figure_args
-        type: struct yetty_ygrid_factory_args
+        type: struct yetty_yscene_factory_args
+      - name: retained_figure_args
+        type: struct yetty_yscene_factory_args
       - name: listener
         type: struct yetty_yevent_event_listener
       - name: frame_listener
@@ -188,9 +190,11 @@ types:
     fields:
       - name: handler
         type: yetty_ycore_event_handler
-  - name: yetty_ygrid_factory_args
+  - name: yetty_yscene_factory_args
     kind: struct
     fields:
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
       - name: default_font
         type: "struct yetty_yfont_font *"
       - name: bold_font
@@ -199,8 +203,6 @@ types:
         type: "struct yetty_yfont_font *"
       - name: bold_italic_font
         type: "struct yetty_yfont_font *"
-      - name: composite_factory
-        type: "struct yetty_ydraw_composite_factory *"
       - name: absolute_coords
         type: int
 local_types:

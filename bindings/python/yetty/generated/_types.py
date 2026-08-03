@@ -6,15 +6,6 @@ from ctypes import (Structure, Union, c_bool, c_char, c_char_p, c_double,
     c_void_p)
 from enum import IntEnum
 
-class yetty_yrender_uniform_type(IntEnum):
-    YETTY_YRENDER_UNIFORM_F32 = 0
-    YETTY_YRENDER_UNIFORM_VEC2 = 1
-    YETTY_YRENDER_UNIFORM_VEC3 = 2
-    YETTY_YRENDER_UNIFORM_VEC4 = 3
-    YETTY_YRENDER_UNIFORM_MAT4 = 4
-    YETTY_YRENDER_UNIFORM_U32 = 5
-    YETTY_YRENDER_UNIFORM_I32 = 6
-
 class yetty_ygui_csi_state(IntEnum):
     YETTY_YGUI_CSI_NORMAL = 0
     YETTY_YGUI_CSI_ESC = 1
@@ -69,6 +60,15 @@ class yetty_yrich_edit_mode(IntEnum):
     YETTY_YRICH_MODE_VI_NORMAL = 1
     YETTY_YRICH_MODE_VI_INSERT = 2
     YETTY_YRICH_MODE_COUNT = 3
+
+class yetty_yrender_uniform_type(IntEnum):
+    YETTY_YRENDER_UNIFORM_F32 = 0
+    YETTY_YRENDER_UNIFORM_VEC2 = 1
+    YETTY_YRENDER_UNIFORM_VEC3 = 2
+    YETTY_YRENDER_UNIFORM_VEC4 = 3
+    YETTY_YRENDER_UNIFORM_MAT4 = 4
+    YETTY_YRENDER_UNIFORM_U32 = 5
+    YETTY_YRENDER_UNIFORM_I32 = 6
 
 class yvterm_font_method(IntEnum):
     YVTERM_FONT_METHOD_MSDF = 0
@@ -299,6 +299,10 @@ class yetty_ydraw_drawable_list_result(Structure):
 yetty_ydraw_drawable_list_result._anonymous_ = ('_anon1',)
 yetty_ydraw_drawable_list_result._fields_ = [("ok", c_int), ("_anon1", yetty_ydraw_drawable_list_result_u1)]
 
+class yetty_ydraw_stream_registry(Structure):
+    pass
+yetty_ydraw_stream_registry._fields_ = [("targets", (c_void_p * 16))]
+
 class yetty_yevent_event_listener(Structure):
     pass
 yetty_yevent_event_listener._fields_ = [("handler", c_void_p)]
@@ -371,10 +375,6 @@ class yetty_ygit_status_ptr_result(Structure):
 yetty_ygit_status_ptr_result._anonymous_ = ('_anon1',)
 yetty_ygit_status_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ygit_status_ptr_result_u1)]
 
-class yetty_ygrid_factory_args(Structure):
-    pass
-yetty_ygrid_factory_args._fields_ = [("default_font", c_void_p), ("bold_font", c_void_p), ("italic_font", c_void_p), ("bold_italic_font", c_void_p), ("composite_factory", c_void_p), ("absolute_coords", c_int)]
-
 class yetty_ygui_input_state(Structure):
     pass
 yetty_ygui_input_state._fields_ = [("st", c_int), ("params", (c_char * 16)), ("params_len", c_int)]
@@ -405,7 +405,7 @@ yetty_ymgui_figure_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ymgui_
 
 class yetty_yplatform_gpu_context(Structure):
     pass
-yetty_yplatform_gpu_context._fields_ = [("instance", c_int), ("surface", c_int), ("surface_width", c_uint32), ("surface_height", c_uint32), ("content_scale", c_float), ("x11_display", c_void_p), ("x11_window", c_ulong)]
+yetty_yplatform_gpu_context._fields_ = [("instance", c_void_p), ("surface", c_void_p), ("surface_width", c_uint32), ("surface_height", c_uint32), ("content_scale", c_float), ("x11_display", c_void_p), ("x11_window", c_ulong)]
 
 class yetty_yplatform_gpu_context_const_ptr_result_u1(Union):
     pass
@@ -425,7 +425,7 @@ yetty_yrdawn_figure_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_yrdaw
 
 class yetty_yrender_buffer(Structure):
     pass
-yetty_yrender_buffer._fields_ = [("data", c_void_p), ("size", c_size_t), ("capacity", c_size_t), ("name", (c_char * 64)), ("wgsl_type", (c_char * 64)), ("readonly", c_int), ("dirty", c_int)]
+yetty_yrender_buffer._fields_ = [("data", c_void_p), ("size", c_size_t), ("capacity", c_size_t), ("name", (c_char * 64)), ("wgsl_type", (c_char * 64)), ("readonly", c_int), ("dirty", c_int), ("generation", c_uint32)]
 
 class yetty_yrender_shader_code(Structure):
     pass
@@ -433,7 +433,7 @@ yetty_yrender_shader_code._fields_ = [("data", c_char_p), ("size", c_size_t), ("
 
 class yetty_yrender_texture(Structure):
     pass
-yetty_yrender_texture._fields_ = [("data", c_void_p), ("width", c_uint32), ("height", c_uint32), ("format", c_uint32), ("name", (c_char * 64)), ("wgsl_type", (c_char * 64)), ("sampler_name", (c_char * 64)), ("sampler_filter", c_uint32), ("dirty", c_int)]
+yetty_yrender_texture._fields_ = [("data", c_void_p), ("width", c_uint32), ("height", c_uint32), ("format", c_uint32), ("name", (c_char * 64)), ("wgsl_type", (c_char * 64)), ("sampler_name", (c_char * 64)), ("sampler_filter", c_uint32), ("dirty", c_int), ("generation", c_uint32)]
 
 class yetty_yrender_uniform_u1(Union):
     pass
@@ -546,6 +546,30 @@ class yetty_yrich_text_style(Structure):
     pass
 yetty_yrich_text_style._fields_ = [("font_size", c_float), ("color", c_uint32), ("bg_color", c_uint32), ("format", c_uint32), ("font_id", c_int32)]
 
+class yetty_yscene_factory_args(Structure):
+    pass
+yetty_yscene_factory_args._fields_ = [("composite_factory", c_void_p), ("default_font", c_void_p), ("bold_font", c_void_p), ("italic_font", c_void_p), ("bold_italic_font", c_void_p), ("absolute_coords", c_int)]
+
+class yetty_yscene_scene_ptr_result_u1(Union):
+    pass
+yetty_yscene_scene_ptr_result_u1._fields_ = [("value", c_void_p), ("error", yetty_ycore_error)]
+class yetty_yscene_scene_ptr_result(Structure):
+    pass
+yetty_yscene_scene_ptr_result._anonymous_ = ('_anon1',)
+yetty_yscene_scene_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_yscene_scene_ptr_result_u1)]
+
+class yetty_yterminal_terminal_context(Structure):
+    pass
+yetty_yterminal_terminal_context._fields_ = [("yetty_context", yetty_context), ("pty", c_void_p)]
+
+class yetty_yui_rect(Structure):
+    pass
+yetty_yui_rect._fields_ = [("x", c_float), ("y", c_float), ("w", c_float), ("h", c_float)]
+
+class yetty_yui_view(Structure):
+    pass
+yetty_yui_view._fields_ = [("ops", c_void_p), ("id", c_void_p), ("bounds", yetty_yui_rect)]
+
 class yetty_yvterm_line(Structure):
     pass
 yetty_yvterm_line._fields_ = [("text_cells", c_void_p), ("primitives", c_void_p), ("primitive_count", c_uint32), ("primitive_capacity", c_uint32), ("arena", c_void_p), ("arena_count", c_uint32), ("arena_capacity", c_uint32), ("composites", c_void_p), ("composite_count", c_uint32), ("composite_capacity", c_uint32), ("rich_span_rows", c_uint32), ("envelope_count", c_uint32), ("view_stamp", c_uint32), ("dirty", c_int), ("continuation", c_int)]
@@ -578,9 +602,13 @@ class ymusic_staff(Structure):
     pass
 ymusic_staff._fields_ = [("clef", c_int), ("key_fifths", c_int), ("time_num", c_int), ("time_den", c_int), ("measures", c_void_p), ("count", c_size_t), ("cap", c_size_t)]
 
+class yscene_cell(Structure):
+    pass
+yscene_cell._fields_ = [("indices", c_void_p), ("count", c_uint32), ("capacity", c_uint32)]
+
 class yvterm_font_face(Structure):
     pass
-yvterm_font_face._fields_ = [("font", c_void_p), ("method", c_int), ("name", (c_char * 64)), ("meta_buffer", c_int), ("meta_capacity", c_size_t), ("atlas_texture", c_int), ("atlas_view", c_int), ("atlas_width", c_uint32), ("atlas_height", c_uint32), ("atlas_format", c_uint32), ("bytes_per_pixel", c_uint32)]
+yvterm_font_face._fields_ = [("font", c_void_p), ("method", c_int), ("name", (c_char * 64)), ("meta_buffer", c_void_p), ("meta_capacity", c_size_t), ("atlas_texture", c_void_p), ("atlas_view", c_void_p), ("atlas_width", c_uint32), ("atlas_height", c_uint32), ("atlas_format", c_uint32), ("bytes_per_pixel", c_uint32)]
 
 class yvterm_font_range(Structure):
     pass

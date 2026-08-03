@@ -11,7 +11,7 @@
  * overflow. The thumb sits at the gutter and tracks the offset.
  */
 #include "../internal.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -33,8 +33,8 @@ struct yetty_ycore_void_result yetty_ygui_widget_figure_content_size_set(
     struct yetty_yclass_object *obj, float content_w, float content_h);
 #include "paint-helpers.h"
 #include <yetty/yfigure/kind.h>
-#include <yetty/ygui/mixins/draggable.h>
-#include <yetty/ygui/widgets/vbox.h>
+#include "yetty/gen/impl/ygui/mixins/draggable.h"
+#include "yetty/gen/impl/ygui/widgets/vbox.h"
 
 #define COLOR_TRACK 0xFF1F1A14u
 #define COLOR_THUMB 0xFF474A36u
@@ -305,6 +305,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
  * GPU — content inside is emitted in document space, scrolling ships a
  * SET_CHILD_SCROLL instead of a body, and the gutter scrollbar is not
  * painted. The gutter padding is released back to the content. */
+struct yetty_ycore_void_result yetty_ygui_widget_figure_retained_set(
+    struct yetty_yclass_object *obj);
+
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_scrollarea_enable_scene(struct yetty_yclass_object *obj)
 {
@@ -318,6 +321,12 @@ struct yetty_ycore_void_result yetty_ygui_scrollarea_enable_scene(struct yetty_y
     struct yetty_ycore_void_result fr =
         yetty_ygui_widget_make_figure(obj, yetty_yfigure_kind_token("yscene"), 0);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "yetty_ygui_scrollarea_enable_scene: make_figure");
+    /* Retained contract: bodies ship without the per-frame CMD_ZERO and
+     * the walk publishes content size + scroll. The widget flag drives
+     * the framework; the kind token above is only the factory name. */
+    struct yetty_ycore_void_result retained_res = yetty_ygui_widget_figure_retained_set(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, retained_res,
+                        "yetty_ygui_scrollarea_enable_scene: retained_set");
     struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res,
                         "yetty_ygui_scrollarea_enable_scene: layout_get");

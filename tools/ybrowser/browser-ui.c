@@ -3330,7 +3330,6 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/ychrome/host.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
-#include <yetty/api/ygrid/grid.h>
 #include <yetty/api/yscene/scene.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yplatform/gpu-context.h>
@@ -3358,7 +3357,7 @@ struct YETTY_ANNOTATE("class@ybrowser:app") YETTY_ANNOTATE("parent@yapp:app") ye
     struct yetty_ydraw_composite_factory *composite_factory;
     struct yetty_yfont_font *font;
     struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
-    struct yetty_ygrid_factory_args figure_args;
+    struct yetty_yscene_factory_args figure_args;
     struct yetty_yscene_factory_args yscene_args;
     struct yetty_yevent_event_listener listener;
     struct yetty_ydraw_target *render_target;
@@ -3839,7 +3838,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
     yetty_ylexbor_prof("yframework_create %.0f ms (GPU device/queue/allocator/targets)",
                        yetty_ylexbor_prof_now_ms() - t_fw);
 
-    /* MSDF font for the receiver-side ygrid. */
+    /* MSDF font for the receiver-side scene figures. */
     {
         const char *fonts_dir =
             s->yframework->config->ops->get_string(s->yframework->config, "paths/fonts", "");
@@ -3877,7 +3876,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         }
     }
 
-    /* Figure registry (ygrid + producer kinds). */
+    /* Figure registry — every kind renders through yscene. */
     {
         struct yetty_yfigure_registry_ptr_result reg = yetty_yfigure_registry_create();
         YETTY_RETURN_IF_ERR(yetty_ycore_void, reg, "ybrowser standalone: registry_create");
@@ -3887,16 +3886,13 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         /* ygui chrome: producer figures laid out in logical px, scaled to
          * framebuffer by content_scale; widgets emit at absolute widget rect. */
         s->figure_args.absolute_coords = 1;
-        struct yetty_ycore_void_result rf =
-            yetty_ygrid_register_factory(s->figure_registry, &s->figure_args);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "ybrowser standalone: ygrid_register_factory");
-        /* "yscroll" is the content-grid kind ygui producer widgets mint
-         * (absolute coords here per figure_args); the rest are deprecated
-         * aliases kept for wire compat (#685 Phase 2). */
-        const char *const producer_kind_names[] = {"yscroll", "yplot", "yimage"};
-        for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); ++i) {
-            struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                s->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
+        /* "ygrid" is the legacy shared-chrome kind token; "yscroll" is the
+         * content kind ygui producer widgets mint (absolute coords here per
+         * figure_args). Both render through yscene. */
+        const char *const chrome_kind_names[] = {"ygrid", "yscroll"};
+        for (size_t i = 0; i < sizeof(chrome_kind_names) / sizeof(chrome_kind_names[0]); ++i) {
+            struct yetty_ycore_void_result kr = yetty_yscene_register_factory_for_kind(
+                s->figure_registry, yetty_yfigure_kind_token(chrome_kind_names[i]),
                 &s->figure_args);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, kr,
                                 "ybrowser standalone: register_factory_for_kind");
@@ -3962,7 +3958,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "ybrowser standalone: framework_create");
         s->app.fw = fr.value;
-        /* Hand the framework the same font the ygrid renders text with (font_id
+        /* Hand the framework the same font the scene renders text with (font_id
          * 0) so widgets — the address bar in particular — place carets and map
          * clicks against real glyph advances instead of a fixed approximation. */
         yetty_ygui_framework_set_font(s->app.fw, s->font);

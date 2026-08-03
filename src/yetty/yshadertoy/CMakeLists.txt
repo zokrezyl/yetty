@@ -106,3 +106,7 @@ target_link_libraries(yetty_api_yshadertoy PUBLIC
     yetty_ycore
     yetty_yclass
 )
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(yshadertoy)

@@ -308,3 +308,30 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/yview/view.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_yview_configure_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yview/view.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yview_configure_fn)(struct yetty_yclass_object *, int, uint32_t, uint32_t, uint32_t, float, float, float, float);"
+  yetty_yview_set_content_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yview/view.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yview_set_content_fn)(struct yetty_yclass_object *, const struct yetty_ydraw_drawable_list *);"
+  yetty_yview_set_text_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yview/view.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yview_set_text_fn)(struct yetty_yclass_object *, const char *, float);"
+  yetty_yview_set_plot_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yview/view.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yview_set_plot_fn)(struct yetty_yclass_object *, const char *, float, float, float, float);"
+  yetty_yview_set_content_size_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yview/view.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yview_set_content_size_fn)(struct yetty_yclass_object *, float, float);"
+  yetty_yview_scroll_to_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yview/view.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yview_scroll_to_fn)(struct yetty_yclass_object *, float, float);"
+  yetty_yview_scroll_by_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yview/view.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yview_scroll_by_fn)(struct yetty_yclass_object *, float, float);"
+  yetty_yview_set_rect_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yview/view.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yview_set_rect_fn)(struct yetty_yclass_object *, float, float, float, float);"
+  yetty_yview_destroy_fn:
+    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yview/view.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yview_destroy_fn)(struct yetty_yclass_object *);"

@@ -31,8 +31,8 @@ classes:
         type: "struct yetty_yclass_object *"
         get: false
         set: false
-      - name: grid
-        type: "struct yetty_ygrid_grid *"
+      - name: scene
+        type: "struct yetty_yscene_scene *"
         get: false
         set: false
       - name: jungle

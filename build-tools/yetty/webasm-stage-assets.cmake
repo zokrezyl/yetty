@@ -163,14 +163,14 @@ function(yetty_stage_webasm_assets)
             "${YETTY_ROOT}/src/yetty/yfont/ms-raster-font.wgsl"
             "${YETTY_ROOT}/src/yetty/yfont/raster-font.wgsl"
             "${YETTY_ROOT}/src/yetty/ymsdf-wgsl/shaders/msdf_gen.wgsl"
-            # ygrid.wgsl — the yui chrome (titlebar/tabbar/statusbar) renders
-            # through an ygrid figure since the yui→ygui refactor; without its
-            # shader staged here the chrome ygrid fails to create on webasm and
-            # the whole UI silently fails to render.
-            "${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl"
+            # yscene.wgsl — the yui chrome (titlebar/tabbar/statusbar) renders
+            # through a scene figure; without its shader staged here the chrome
+            # scene fails to create on webasm and the whole UI silently fails
+            # to render.
+            "${YETTY_ROOT}/src/yetty/yscene/yscene.wgsl"
             # effects-lib.wgsl — pointwise post/coord effect library defining
             # the fx_post_apply()/fx_coord_apply() the layer shaders call
-            # (ygrid.wgsl, vterm's text shader). Without it staged the loaders
+            # (yscene.wgsl, vterm's text shader). Without it staged the loaders
             # fall back to built-in no-op stubs and effects are disabled.
             "${YETTY_ROOT}/src/yetty/yshaders/effects-lib.wgsl"
             # grid-sdf-layer.wgsl — the yvterm "vterm-as-figure" SDF pass that

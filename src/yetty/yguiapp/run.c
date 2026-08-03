@@ -33,9 +33,9 @@
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygui/framework-defs.h>
-#include <yetty/ygui/framework.h>
+#include "yetty/gen/impl/ygui/framework.h"
 #include <yetty/ygui/ygui.h>
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 #include <yetty/yplatform/paths.h>
 #include <yetty/ytrace/ytrace.h>
 

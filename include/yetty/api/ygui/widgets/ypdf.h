@@ -16,6 +16,10 @@
 extern "C" {
 #endif
 
+/* ypdf adds no ops or state on top of ydraw_embed; the class exists only
+ * so callers can name it in yetty_ygui_add. The 1-byte slice is unused. */
+struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

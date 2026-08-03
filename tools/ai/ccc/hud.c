@@ -3,11 +3,11 @@
  */
 #include "hud.h"
 
-#include <yetty/ygui/framework.h>
-#include <yetty/ygui/widget.h>
-#include <yetty/ygui/widgets/label.h>
-#include <yetty/ygui/widgets/vbox.h>
-#include <yetty/ygui/widgets/window.h>
+#include "yetty/gen/impl/ygui/framework.h"
+#include "yetty/gen/impl/ygui/widget.h"
+#include "yetty/gen/impl/ygui/widgets/label.h"
+#include "yetty/gen/impl/ygui/widgets/vbox.h"
+#include "yetty/gen/impl/ygui/widgets/window.h"
 #include <yetty/yplatform/pty.h>
 
 #include <yetty/ytrace/ytrace.h>

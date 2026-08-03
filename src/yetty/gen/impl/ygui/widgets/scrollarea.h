@@ -40,12 +40,6 @@ struct yetty_yclass_object_ptr_result yetty_ygui_scrollarea_create(struct yetty_
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-/* Switch this scrollarea to RETAINED-SCENE mode: its figure kind becomes
- * "yscene" (must be called before the first emit mints the figure). The
- * receiver keeps the whole document across bodies and scrolls it on the
- * GPU — content inside is emitted in document space, scrolling ships a
- * SET_CHILD_SCROLL instead of a body, and the gutter scrollbar is not
- * painted. The gutter padding is released back to the content. */
 struct yetty_ycore_void_result yetty_ygui_scrollarea_enable_scene(struct yetty_yclass_object *obj);
 /* Programmatic scroll (navigation reset, restore). Clamped like every
  * other scroll path. */

@@ -19,3 +19,7 @@ target_include_directories(yetty_yetty INTERFACE
 target_link_libraries(yetty_yetty INTERFACE
     webgpu
 )
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(yetty)

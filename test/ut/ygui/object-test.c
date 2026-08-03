@@ -17,9 +17,10 @@
  */
 
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ygui/mixins/draggable.h>
+#include "yetty/gen/impl/ygui/mixins/draggable.h"
+#include "yetty/gen/impl/ygui/widget.h"
 #include <yetty/ygui/ygui.h>
-#include <yetty/ygui/widgets/tooltip.h>
+#include "yetty/gen/impl/ygui/widgets/tooltip.h"
 
 /* This test pokes at internals — it hand-registers a probe class via
  * yclass and needs ygui's slot domain (YETTY_YGUI_DOMAIN). */

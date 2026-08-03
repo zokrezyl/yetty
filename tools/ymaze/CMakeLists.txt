@@ -1,6 +1,6 @@
 # tools/ymaze — standalone animated-maze app.
 #
-# Drives a single full-window ygrid figure straight from C (no terminal,
+# Drives a single full-window yscene figure straight from C (no terminal,
 # no yui, no ygui widget tree), rendering the yetty_ymaze each frame.
 # The independent-app counterpart to the ygui ymaze widget. Modeled on
 # tools/ycompositor.
@@ -58,7 +58,7 @@ pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
 target_link_libraries(ymaze PRIVATE
     yetty_ymaze
     yetty_ysdf
-    yetty_ygrid
+    yetty_yscene
     yetty_yfigure
     yetty_ydraw_core
     yetty_yframework
@@ -91,3 +91,7 @@ set_target_properties(ymaze PROPERTIES LINKER_LANGUAGE CXX)
 if(NOT MSVC)
     target_compile_options(ymaze PRIVATE -Wall -Wextra)
 endif()
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(ymaze)

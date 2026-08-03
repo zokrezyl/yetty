@@ -7,7 +7,7 @@
  * a flex-grow body vbox inside).
  */
 #include "paint-helpers.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -20,10 +20,10 @@ YETTY_YRESULT_DECLARE(yetty_ygui_window_ptr, struct yetty_ygui_window *);
 struct yetty_yclass_ptr_result yetty_ygui_window_class_get(void);
 struct yetty_ygui_window_ptr_result yetty_ygui_window_from(struct yetty_yclass_object *obj);
 #include <yetty/ygui/event.h>
-#include <yetty/ygui/framework.h>
-#include <yetty/ygui/widget.h>
-#include <yetty/ygui/widgets/popup_menu.h>
-#include <yetty/ygui/widgets/vbox.h>
+#include "yetty/gen/impl/ygui/framework.h"
+#include "yetty/gen/impl/ygui/widget.h"
+#include "yetty/gen/impl/ygui/widgets/popup_menu.h"
+#include "yetty/gen/impl/ygui/widgets/vbox.h"
 #include <stdlib.h>
 #include <string.h>
 

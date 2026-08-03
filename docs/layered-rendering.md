@@ -29,7 +29,7 @@ terminal_render_frame(terminal, target, force)
     │     └── shader-glyph fig  text-owned figure pass
     │
     └── root yfigure container ─────────────────────────► target (LoadOp_Load)
-          └── z-ordered figures: ygui, ymgui, yrdawn, ygrid,
+          └── z-ordered figures: ygui, ymgui, yrdawn, yscene,
                                  yplot, yimage, yvideo, ...
 ```
 
@@ -58,7 +58,7 @@ wipe is the one global clear before panes render.
 | **content layer** | One `yetty_yvterm_content_layer` owned by `yterminal`. It internally renders the text grid, ydraw canvas, and shader-glyph figure. |
 | **root `yfigure` container** | The generic compositor for rich content. Figures are positioned in pane pixels and composed by z-order after the content layer. |
 
-`ymgui`, `yrdawn`, `ygrid`, `ygui`, and other rich views are figures, not
+`ymgui`, `yrdawn`, `yscene`, `ygui`, and other rich views are figures, not
 terminal layers. `ymgui-layer.c` and `yrdawn-layer.c` are gone. A visual object
 that should anchor to terminal rows belongs in the ydraw canvas; a visual object
 that should float above terminal content belongs in the root `yfigure` tree.

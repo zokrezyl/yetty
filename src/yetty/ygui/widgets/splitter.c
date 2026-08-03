@@ -6,7 +6,7 @@
  * even when it leaves the thin strip.
  */
 #include "../internal.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -23,7 +23,7 @@ struct yetty_ygui_splitter_ptr_result yetty_ygui_splitter_from(struct yetty_ycla
 typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *splitter, float delta,
                                               void *userdata);
 #include "paint-helpers.h"
-#include <yetty/ygui/primitive-widget.h>
+#include "yetty/gen/impl/ygui/primitive-widget.h"
 
 #define COLOR_TRACK 0xFF2C261Eu
 #define COLOR_GRIP 0xFF92A86Bu

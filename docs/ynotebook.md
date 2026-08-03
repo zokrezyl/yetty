@@ -65,7 +65,7 @@ notebook UI.
 +------+-------+
        |
        v
- ymarkdown, yimage, ysvg, ypdf, ygrid, ygui, sanitized ybrowser, text fallback
+ ymarkdown, yimage, ysvg, ypdf, yscene, ygui, sanitized ybrowser, text fallback
 
  ymime (leaf): native-kind classification + bundle data model, shared by
  ynotebook (model), yrender-mime (selection), and the terminal/ycat detect path.

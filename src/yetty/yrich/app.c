@@ -25,17 +25,17 @@
 #include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
-#include <yetty/api/ygrid/grid.h>
+#include <yetty/api/yscene/scene.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ygui/event.h>
-#include <yetty/ygui/mixins/clickable.h>
-#include <yetty/ygui/widgets/button.h>
-#include <yetty/ygui/widgets/menubar.h>
-#include <yetty/ygui/widgets/popup_menu.h>
-#include <yetty/ygui/widgets/vbox.h>
-#include <yetty/ygui/widgets/yrich_view.h>
+#include "yetty/gen/impl/ygui/mixins/clickable.h"
+#include "yetty/gen/impl/ygui/widgets/button.h"
+#include "yetty/gen/impl/ygui/widgets/menubar.h"
+#include "yetty/gen/impl/ygui/widgets/popup_menu.h"
+#include "yetty/gen/impl/ygui/widgets/vbox.h"
+#include "yetty/gen/impl/ygui/widgets/yrich_view.h"
 #include "yetty/gen/impl/yapp/app.h"
 #include <yetty/yclass/class.h>
 #include <yetty/yplatform/gpu-context.h>
@@ -99,14 +99,14 @@ struct YETTY_ANNOTATE("class@yrich:app") YETTY_ANNOTATE("parent@yapp:app") yetty
     struct yetty_yclass_object *ygui;
     struct yetty_yclass_object *win; /* framework root widget */
     struct yetty_yfont_font *font;
-    /* Styled faces (bold / italic / bold-italic) registered at ygrid font slots
+    /* Styled faces (bold / italic / bold-italic) registered at scene font slots
      * 1/2/3 so ydoc renders real bold + italic glyphs. NULL if a face fails to
      * load (ydoc then falls back to the Regular face for that style). */
     struct yetty_yfont_font *font_bold;
     struct yetty_yfont_font *font_italic;
     struct yetty_yfont_font *font_bold_italic;
     struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
-    struct yetty_ygrid_factory_args figure_args;
+    struct yetty_yscene_factory_args figure_args;
     /* Composite figure factory (yimage/yplot) so ydoc inline images render as
      * real decoded textures rather than placeholder boxes. Owned. */
     struct yetty_ydraw_composite_factory *composite_factory;
@@ -228,7 +228,7 @@ static struct yetty_ycore_void_result build_editor(struct yetty_yrich_app *app)
         struct yetty_ycore_void_result mf = yetty_yrich_ydoc_set_metrics_font(app->doc, app->font);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, mf, "build_editor: metrics font");
         /* Tell the document which styled faces are registered on the render
-         * ygrid (slots 1/2/3), so bold/italic runs use the real face. Bits:
+         * scene (slots 1/2/3), so bold/italic runs use the real face. Bits:
          * 1 = bold, 2 = italic, 4 = bold-italic. */
         uint32_t styled_mask = (app->font_bold ? 1u : 0u) | (app->font_italic ? 2u : 0u) |
                                (app->font_bold_italic ? 4u : 0u);
@@ -916,7 +916,7 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "texture target create failed");
     app->target = tr.value;
 
-    /* Font for the ygrid factory (text spans → glyphs). The Regular face is
+    /* Font for the scene factory (text spans → glyphs). The Regular face is
      * required; the styled faces (Bold/Oblique/BoldOblique) are best-effort so
      * ydoc can render real bold + italic glyphs — a face that fails to load
      * just leaves ydoc falling back to Regular for that style. */
@@ -941,7 +941,7 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_224, "font load_basic_latin failed");
 
         /* Best-effort styled faces. Each is an independent MSDF font over its
-         * own .cdb; slot assignment (1/2/3) happens in the ygrid factory. */
+         * own .cdb; slot assignment (1/2/3) happens in the scene factory. */
         struct {
             const char *suffix; /* face style suffix, e.g. "-Bold" */
             const char *name;
@@ -980,12 +980,12 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
         }
     }
 
-    /* Registry + ygrid factory + in-process root container. */
+    /* Registry + yscene factory + in-process root container. */
     struct yetty_yfigure_registry_ptr_result reg_r = yetty_yfigure_registry_create();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reg_r, "yfigure_registry_create failed");
     app->registry = reg_r.value;
     /* Composite factory so ydoc inline images (and plots) render as real
-     * decoded figures through the ygrid's composite pass. */
+     * decoded figures through the scene's composite pass. */
     {
         struct yetty_ydraw_composite_factory_ptr_result factory_res =
             yetty_ydraw_composite_factory_create(app->yrt->gpu.device, app->yrt->gpu.queue,
@@ -1019,9 +1019,13 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
     app->figure_args.italic_font = app->font_italic;
     app->figure_args.bold_italic_font = app->font_bold_italic;
     app->figure_args.composite_factory = app->composite_factory;
-    struct yetty_ycore_void_result result_234 =
-        yetty_ygrid_register_factory(app->registry, &app->figure_args);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_234, "ygrid_register_factory failed");
+    /* The legacy "ygrid" kind token renders through the retained yscene
+     * engine. Absolute (logical-pane) coordinates — the same mode the
+     * ygrid factory forced for this kind. */
+    app->figure_args.absolute_coords = 1;
+    struct yetty_ycore_void_result result_234 = yetty_yscene_register_factory_for_kind(
+        app->registry, yetty_yfigure_kind_token("ygrid"), &app->figure_args);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result_234, "yscene_register_factory_for_kind failed");
 
     struct yetty_ycore_rectangle root_rect = {
         .min = {.x = 0.0f, .y = 0.0f},

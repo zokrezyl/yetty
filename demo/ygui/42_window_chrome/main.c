@@ -20,11 +20,11 @@
  * object against yframework->window_chrome, draw a caption strip, feed it
  * set_size on resize, and route unclaimed mouse events through it.
  */
-#include <yetty/yguiapp/app.h>
+#include <yetty/api/yguiapp/app.h>
 #include <yetty/yguiapp/run.h>
 #include <yetty/ygui/ygui.h>
-#include <yetty/ygui/widgets/button.h>
-#include <yetty/ygui/widgets/label.h>
+#include "yetty/gen/impl/ygui/widgets/button.h"
+#include "yetty/gen/impl/ygui/widgets/label.h"
 
 /* Demo app class: a yguiapp:app subclass with no extra state. */
 struct [[clang::annotate("class@demoygui:42_window_chrome")]] [[clang::annotate(

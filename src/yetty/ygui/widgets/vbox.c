@@ -4,7 +4,7 @@
  */
 
 #include "../internal.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -17,7 +17,7 @@ YETTY_YRESULT_DECLARE(yetty_ygui_vbox_ptr, struct yetty_ygui_vbox *);
 struct yetty_yclass_ptr_result yetty_ygui_vbox_class_get(void);
 struct yetty_ygui_vbox_ptr_result yetty_ygui_vbox_from(struct yetty_yclass_object *obj);
 
-#include <yetty/ygui/primitive-widget.h>
+#include "yetty/gen/impl/ygui/primitive-widget.h"
 
 YETTY_ANNOTATE("override@ygui:vbox:constructor")
 static struct yetty_ycore_void_result vbox_constructor(struct yetty_yclass_object *yclass_obj)

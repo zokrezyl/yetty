@@ -17,6 +17,6 @@
 #include <yetty/yrich/document.h>
 #include <yetty/yrich/spreadsheet.h>
 #include <yetty/yrich/slides.h>
-#include <yetty/yrich/ydoc.h>
+#include <yetty/api/yrich/ydoc.h>
 
 #endif /* YETTY_YRICH_YRICH_H */

@@ -16,6 +16,10 @@
 extern "C" {
 #endif
 
+/* Base window data slice. The base is abstract — it owns no state (the native
+ * handle, if any, is private to each subclass), so this slice is empty. */
+struct yetty_yclass_ptr_result yetty_yplatform_window_class_get(void);
+
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
  * bad object surfaces rather than corrupting. Reach members

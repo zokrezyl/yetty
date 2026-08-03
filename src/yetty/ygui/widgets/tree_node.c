@@ -1,7 +1,7 @@
 /* ygui-tree_node.c — collapsible nested node (same pattern as
  * collapsing_header but with smaller header strip + indent). */
 #include "paint-helpers.h"
-#include <yetty/ygui/widget.h>
+#include "yetty/gen/impl/ygui/widget.h"
 
 /* This TU deliberately does NOT include its own generated header — that
  * header is a downstream artifact for other modules and would redefine
@@ -13,14 +13,20 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_tree_node_ptr, struct yetty_ygui_tree_node *);
 struct yetty_yclass_ptr_result yetty_ygui_tree_node_class_get(void);
 struct yetty_ygui_tree_node_ptr_result yetty_ygui_tree_node_from(struct yetty_yclass_object *obj);
-#include <yetty/ygui/mixins/clickable.h>
-#include <yetty/ygui/widgets/vbox.h>
+#include "yetty/gen/impl/ygui/mixins/clickable.h"
+#include "yetty/gen/impl/ygui/widgets/vbox.h"
 #include <stdlib.h>
 
 #define HEADER_H 22.0f
 #define INDENT 16.0f
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_CHEV 0xFFA8A79Fu
+
+/* The click callback type — authored in mixins/clickable.c; repeated
+ * here so this TU parses before the regenerated headers re-carry it
+ * (identical typedef redefinition is well-formed). */
+typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_object *obj,
+                                                              void *userdata);
 
 struct YETTY_ANNOTATE("class@ygui:tree_node") YETTY_ANNOTATE("parent@ygui:vbox")
     yetty_ygui_tree_node {

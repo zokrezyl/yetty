@@ -1045,7 +1045,7 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(
     vb_layout.attributes = &pos_attr;
 
     /* Premultiplied-alpha src-over — shaders that drive this pipeline
-     * (ygrid.wgsl, ydraw-layer.wgsl) emit premultiplied fragments
+     * (yscene.wgsl, ydraw-layer.wgsl) emit premultiplied fragments
      * `vec4(rgb * a, a)`. Source factor must be ONE so the blend
      * doesn't multiply by alpha a second time; otherwise sub-pixel SDF
      * edges and thin bars (the chrome accent underline) collapse to

@@ -172,3 +172,7 @@ install(TARGETS yetty_ygui ARCHIVE DESTINATION lib)
 install(DIRECTORY ${YETTY_ROOT}/include/yetty/ygui/
         DESTINATION include/yetty/ygui
         FILES_MATCHING PATTERN "*.h")
+
+# Register with the yclass codegen graph — the module list IS these
+# call sites (see build-tools/yetty/yclass-codegen.cmake).
+yetty_yclass_module(ygui)
