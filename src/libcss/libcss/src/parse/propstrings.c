@@ -41,6 +41,7 @@ const stringmap_entry stringmap[LAST_KNOWN] = {SMAP("*"),
                                                SMAP("namespace"),
                                                SMAP("font-face"),
                                                SMAP("page"),
+                                               SMAP("layer"),
 
                                                SMAP("aural"),
                                                SMAP("braille"),

@@ -1022,14 +1022,6 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
 	 * where real pages set flex. The rewritten copy (when any expansion
 	 * happened) feeds every consumer below: scanners, libcss, lexbor. */
     size_t expanded_len = 0;
-    /* Flatten @layer first — everything downstream (var scan, libcss)
-	 * then sees plain top-level rules in correct source order. */
-    size_t delayered_len = 0;
-    char *delayered_css = yetty_ybrowser_css_flatten_layers(css, css_len, &delayered_len);
-    if (delayered_css != NULL) {
-        css = delayered_css;
-        css_len = delayered_len;
-    }
     char *expanded_css = yetty_ylexbor_css_expand_flex(css, css_len, &expanded_len);
     if (expanded_css != NULL) {
         css = expanded_css;
@@ -1043,27 +1035,40 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
         css_len = grid_expanded_len;
     }
 
+    /* libcss understands @layer natively now, so it reads the layered `css`
+     * directly. The text scanners below don't track @layer nesting, so give
+     * THEM a flattened copy; flattening only strips the wrappers, leaving each
+     * selector -> side-table mapping identical to the un-layered case. */
+    const char *scan_css = css;
+    size_t scan_css_len = css_len;
+    size_t delayered_len = 0;
+    char *delayered_css = yetty_ybrowser_css_flatten_layers(css, css_len, &delayered_len);
+    if (delayered_css != NULL) {
+        scan_css = delayered_css;
+        scan_css_len = delayered_len;
+    }
+
     /* Pre-scan for `:root { --x: y; }` etc. before lexbor parses,
 	 * so var() lookups see the latest definitions. */
-    yetty_ylexbor_css_vars_scan(r, css, css_len);
+    yetty_ylexbor_css_vars_scan(r, scan_css, scan_css_len);
     /* Build the @media-active map once for this source so each per-declaration
      * scanner below tests media context in O(log n) instead of re-walking the
      * prefix (which is O(n^2) per sheet — the dominant cost on big pages). */
-    yetty_ylexbor_css_media_map_begin(r, css, css_len);
+    yetty_ylexbor_css_media_map_begin(r, scan_css, scan_css_len);
     /* Also note any grid content-column cap (minmax(0, Nrem)) — applied as
      * a max-width on display:grid containers since we don't lay out grid
      * tracks. */
-    yetty_ylexbor_css_scan_grid_content_width(r, css, css_len);
-    yetty_ylexbor_css_scan_grid_templates(r, css, css_len);
-    yetty_ylexbor_css_scan_grid_spans(r, css, css_len);
-    yetty_ylexbor_css_scan_flex_gaps(r, css, css_len);
-    yetty_ylexbor_css_scan_var_heights(r, css, css_len);
-    yetty_ylexbor_css_scan_width_keywords(r, css, css_len);
-    yetty_ylexbor_css_scan_calc_lengths(r, css, css_len);
-    yetty_ylexbor_css_scan_aspect_ratios(r, css, css_len);
-    yetty_ylexbor_css_scan_display_none(r, css, css_len);
-    yetty_ylexbor_css_scan_line_clamps(r, css, css_len);
-    yetty_ylexbor_css_scan_transforms(r, css, css_len);
+    yetty_ylexbor_css_scan_grid_content_width(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_grid_templates(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_grid_spans(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_flex_gaps(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_var_heights(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_width_keywords(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_calc_lengths(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_aspect_ratios(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_display_none(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_line_clamps(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_transforms(r, scan_css, scan_css_len);
     yetty_ylexbor_css_media_map_end(r);
 
     /* Push the CSS through libcss — this is the cascade box-build actually

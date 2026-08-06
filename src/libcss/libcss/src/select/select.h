@@ -25,6 +25,7 @@ typedef struct reject_item {
 
 typedef struct prop_state {
     uint32_t specificity;                 /* Specificity of property in result */
+    uint64_t layer;                       /* Cascade layer key of property in result */
     unsigned int set : 1,                 /* Whether property is set in result */
         origin : 2,                       /* Origin of property in result */
         important : 1;                    /* Importance of property in result */
@@ -82,6 +83,7 @@ typedef struct css_select_state {
 
     css_origin current_origin;    /* Origin of current sheet */
     uint32_t current_specificity; /* Specificity of current rule */
+    uint64_t current_layer;       /* Cascade layer key of current rule */
 
     css_qname element;    /* Element we're selecting for */
     lwc_string *id;       /* Node id, if any */

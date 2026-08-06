@@ -29,6 +29,7 @@ enum {
     NAMESPACE,
     FONT_FACE,
     PAGE,
+    LAYER,
 
     /* Media types */
     AURAL,
