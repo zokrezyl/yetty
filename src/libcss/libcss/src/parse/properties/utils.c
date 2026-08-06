@@ -895,22 +895,41 @@ css_error css__parse_hash_colour(lwc_string *data, uint32_t *result)
     size_t len = lwc_string_length(data);
     const char *input = lwc_string_data(data);
 
-    if (len == 3 && isHex(input[0]) && isHex(input[1]) && isHex(input[2])) {
+    /* CSS Color Level 4 allows a 4th channel (alpha) in both the short
+     * (#RGBA) and long (#RRGGBBAA) hex forms. Modern design systems rely on
+     * these heavily — e.g. `#0000` as a transparent override and 8-digit
+     * translucent tokens (GitHub's `--header-bgColor: #151b23f2`). Without
+     * them the whole declaration is dropped, so an earlier opaque rule wins
+     * (GitHub's header rendered as white bars). */
+    bool all_hex = true;
+    for (size_t hex_i = 0; hex_i < len; hex_i++) {
+        if (!isHex(input[hex_i])) {
+            all_hex = false;
+            break;
+        }
+    }
+    if (all_hex && (len == 3 || len == 4)) {
         r = charToHex(input[0]);
         g = charToHex(input[1]);
         b = charToHex(input[2]);
-
         r |= (r << 4);
         g |= (g << 4);
         b |= (b << 4);
-    } else if (len == 6 && isHex(input[0]) && isHex(input[1]) && isHex(input[2]) &&
-               isHex(input[3]) && isHex(input[4]) && isHex(input[5])) {
+        if (len == 4) {
+            a = charToHex(input[3]);
+            a |= (a << 4);
+        }
+    } else if (all_hex && (len == 6 || len == 8)) {
         r = (charToHex(input[0]) << 4);
         r |= charToHex(input[1]);
         g = (charToHex(input[2]) << 4);
         g |= charToHex(input[3]);
         b = (charToHex(input[4]) << 4);
         b |= charToHex(input[5]);
+        if (len == 8) {
+            a = (charToHex(input[6]) << 4);
+            a |= charToHex(input[7]);
+        }
     } else {
         return CSS_INVALID;
     }
