@@ -1022,6 +1022,14 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
 	 * where real pages set flex. The rewritten copy (when any expansion
 	 * happened) feeds every consumer below: scanners, libcss, lexbor. */
     size_t expanded_len = 0;
+    /* Flatten @layer first — everything downstream (var scan, libcss)
+	 * then sees plain top-level rules in correct source order. */
+    size_t delayered_len = 0;
+    char *delayered_css = yetty_ybrowser_css_flatten_layers(css, css_len, &delayered_len);
+    if (delayered_css != NULL) {
+        css = delayered_css;
+        css_len = delayered_len;
+    }
     char *expanded_css = yetty_ylexbor_css_expand_flex(css, css_len, &expanded_len);
     if (expanded_css != NULL) {
         css = expanded_css;
@@ -1068,6 +1076,7 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
 
     free(grid_expanded_css);
     free(expanded_css);
+    free(delayered_css);
     return YETTY_OK_VOID();
 }
 

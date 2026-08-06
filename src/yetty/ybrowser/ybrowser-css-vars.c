@@ -5923,6 +5923,152 @@ static int flex_token_is_number(const char *token, size_t token_len)
  *                                            (+ grid-auto-columns:<size>)
  * Values without a top-level `/` pass through untouched. Returns a fresh
  * malloc'd string when an expansion happened, else NULL. */
+/* Flatten CSS Cascade Layers (@layer). libcss 0.9 has no @layer support: it
+ * parses the rules INSIDE an `@layer name { ... }` block but assigns them a
+ * broken cascade order, so equal-specificity rules stop honoring source order
+ * (an earlier rule wrongly beats a later one). Modern design systems wrap
+ * their whole stylesheet in a layer — GitHub ships all of primer-react-brand
+ * inside `@layer primer-brand{...}`, which made its primary button lose its
+ * green background to the earlier `.Button{background:0 0}` reset (rendered
+ * as a transparent, unusable signup button).
+ *
+ * We strip the layer machinery textually, hoisting the inner rules to the top
+ * level so they get normal sequential rule indices and cascade by source
+ * order again:
+ *   - `@layer a, b;`            (statement, just orders names)  -> removed
+ *   - `@layer name { ...rules }`(block)                         -> keep rules
+ *   - `@layer { ...rules }`     (anonymous block)               -> keep rules
+ * Layer PRIORITY (later layer wins, unlayered beats layered) is not modelled;
+ * for the dominant "framework wrapped in one layer" case, plain source order
+ * is the correct result. Strings and comments are skipped so their braces and
+ * `@layer` byte sequences are never treated as structural. Returns a fresh
+ * malloc'd string when anything was stripped, else NULL. */
+/* Flatten CSS Cascade Layers (@layer). libcss 0.9 has no @layer support: it
+ * parses the rules INSIDE an `@layer name { ... }` block but assigns them a
+ * broken cascade order, so equal-specificity rules stop honoring source order
+ * (an earlier rule wrongly beats a later one). Modern design systems wrap
+ * their whole stylesheet in a layer — GitHub ships all of primer-react-brand
+ * inside `@layer primer-brand{...}`, which made its primary button lose its
+ * green background to the earlier `.Button{background:0 0}` reset (the signup
+ * button rendered transparent/unusable).
+ *
+ * We strip the layer machinery textually, hoisting the inner rules to the top
+ * level so they get normal sequential rule indices and cascade by source
+ * order again:
+ *   - `@layer a, b;`             (statement)          -> removed
+ *   - `@layer name { ...rules }` (block)              -> keep rules only
+ *   - `@layer { ...rules }`      (anonymous block)    -> keep rules only
+ * Nested layers are handled by tracking brace depth so each layer's matching
+ * close brace is removed too. Layer PRIORITY (later layer wins, unlayered
+ * beats layered) is not modelled; for the dominant "framework wrapped in one
+ * layer" case plain source order is the correct result. Strings and comments
+ * are skipped so their braces / `@layer` byte sequences are never structural.
+ * Returns a fresh malloc'd string when anything was stripped, else NULL. */
+char *yetty_ybrowser_css_flatten_layers(const char *css, size_t len, size_t *out_len)
+{
+    if (css == NULL || len < 6) {
+        return NULL;
+    }
+    if (css_find_substr(css, len, "@layer", 6) == NULL) {
+        return NULL;
+    }
+    struct css_text_out out = {0};
+    int changed = 0;
+    int depth = 0;               /* current brace nesting (copied + layer) */
+    int layer_depths[64];        /* nesting depths at which a layer opened */
+    int layer_sp = 0;
+    size_t i = 0;
+    while (i < len) {
+        char c = css[i];
+        /* Strings — copy verbatim. */
+        if (c == '"' || c == '\'') {
+            char quote = c;
+            css_text_append(&out, css + i, 1);
+            i++;
+            while (i < len) {
+                css_text_append(&out, css + i, 1);
+                if (css[i] == '\\' && i + 1 < len) {
+                    i++;
+                    css_text_append(&out, css + i, 1);
+                    i++;
+                    continue;
+                }
+                if (css[i] == quote) {
+                    i++;
+                    break;
+                }
+                i++;
+            }
+            continue;
+        }
+        /* Comments — copy verbatim. */
+        if (c == '/' && i + 1 < len && css[i + 1] == '*') {
+            size_t start = i;
+            i += 2;
+            while (i + 1 < len && !(css[i] == '*' && css[i + 1] == '/')) {
+                i++;
+            }
+            i = (i + 1 < len) ? i + 2 : len;
+            css_text_append(&out, css + start, i - start);
+            continue;
+        }
+        /* `@layer` at a rule position. */
+        if (c == '@' && i + 6 <= len && strncasecmp(css + i, "@layer", 6) == 0 &&
+            (i + 6 == len || css[i + 6] == ' ' || css[i + 6] == '\t' || css[i + 6] == '\n' ||
+             css[i + 6] == '{' || css[i + 6] == ';')) {
+            size_t j = i + 6;
+            while (j < len && css[j] != ';' && css[j] != '{') {
+                j++;
+            }
+            if (j < len && css[j] == ';') {
+                i = j + 1; /* statement form — drop entirely */
+                changed = 1;
+                continue;
+            }
+            if (j < len && css[j] == '{') {
+                if (layer_sp < (int)(sizeof(layer_depths) / sizeof(layer_depths[0]))) {
+                    layer_depths[layer_sp++] = depth; /* remember this level */
+                }
+                depth++;   /* the layer brace is open (not copied) */
+                i = j + 1; /* skip `@layer <prelude> {` */
+                changed = 1;
+                continue;
+            }
+            css_text_append(&out, css + i, 1); /* malformed — copy '@' */
+            i++;
+            continue;
+        }
+        if (c == '{') {
+            depth++;
+            css_text_append(&out, css + i, 1);
+            i++;
+            continue;
+        }
+        if (c == '}') {
+            depth--;
+            if (layer_sp > 0 && layer_depths[layer_sp - 1] == depth) {
+                /* This brace closes a hoisted layer — drop it. */
+                layer_sp--;
+                i++;
+                continue;
+            }
+            css_text_append(&out, css + i, 1);
+            i++;
+            continue;
+        }
+        css_text_append(&out, css + i, 1);
+        i++;
+    }
+    if (out.oom || !changed) {
+        free(out.buf);
+        return NULL;
+    }
+    if (out_len) {
+        *out_len = out.len;
+    }
+    return out.buf;
+}
+
 char *yetty_ybrowser_css_expand_grid_template(const char *css, size_t len, size_t *out_len)
 {
     struct css_text_out out = {0};
