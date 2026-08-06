@@ -754,6 +754,10 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
         return -1;
     }
 
+    /* Document-wide @layer tree. Non-fatal if it can't be created — sheets
+	 * then fall back to private per-sheet layer ordering. */
+    (void)css_layer_registry_create(&lc->layer_registry);
+
     /* Viewport / unit context. Values are in CSS pixels (1 CSS px =
      * 1/96 of an inch). We don't have a real DPI for the renderer; the
      * standard "96" works for em/rem/% but means cm/mm/in/pt are off
@@ -939,6 +943,9 @@ void yetty_ybrowser_libcss_destroy(struct yetty_ylexbor *r)
         css_stylesheet_destroy(lc->sheets[i]);
     }
     free(lc->sheets);
+    if (lc->layer_registry != NULL) {
+        css_layer_registry_destroy(lc->layer_registry);
+    }
     free(lc);
     r->libcss = NULL;
 }
@@ -969,6 +976,15 @@ int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, si
         ydebug("libcss stylesheet_create -> %d", (int)err);
         return -1;
     }
+
+    /* Share the document-wide @layer tree so a layer name means the same
+	 * priority across every sheet. base_layer is the layer this whole sheet
+	 * sits in — nonzero only for a sheet pulled in by `@import ... layer(x)`
+	 * (see libcss_load_imports). */
+    if (lc->layer_registry != NULL) {
+        css_stylesheet_set_layer_registry(sheet, lc->layer_registry, lc->pending_import_layer);
+    }
+    lc->pending_import_layer = 0;
     /* Pre-resolve var(--name) references in the source. libcss 0.9.x
      * has no CSS-custom-properties support — declarations whose value
      * contains var() get dropped as invalid. We textually substitute
@@ -1111,6 +1127,10 @@ static void libcss_load_imports(struct yetty_ylexbor *r, css_stylesheet *parent,
     struct yetty_ybrowser_libcss *lc = r->libcss;
     lwc_string *pending = NULL;
     while (css_stylesheet_next_pending_import(parent, &pending) == CSS_OK && pending) {
+        /* Cascade layer this @import assigns its sheet to (0 == none). */
+        uint64_t import_layer = 0;
+        (void)css_stylesheet_next_pending_import_layer(parent, &import_layer);
+
         /* lwc strings are length-counted, not NUL-guaranteed — copy. */
         size_t raw_len = lwc_string_length(pending);
         char raw_url[1024];
@@ -1150,8 +1170,12 @@ static void libcss_load_imports(struct yetty_ylexbor *r, css_stylesheet *parent,
                 yetty_ycore_error_destroy(fetch_res.error);
             }
             if (response.body && response.status >= 200 && response.status < 300) {
+                /* add_sheet (inside child_build) stamps this on the imported
+				 * sheet as its base layer, then clears it. */
+                lc->pending_import_layer = import_layer;
                 child = libcss_import_child_build(r, response.body, response.body_len, origin,
                                                   absolute);
+                lc->pending_import_layer = 0;
                 r->css_sheets_loaded++;
             } else {
                 ydebug("@import fetch failed status=%ld %s", response.status, absolute);

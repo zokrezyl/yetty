@@ -1324,6 +1324,11 @@ css_error css_select_style(css_select_ctx *ctx, void *node, const css_unit_ctx *
             state.current_pseudo = CSS_PSEUDO_ELEMENT_NONE;
             state.computed = state.results->styles[CSS_PSEUDO_ELEMENT_NONE];
 
+            /* The style attribute is not part of any cascade layer; treated
+			 * as unlayered it beats every layered author rule (correct for
+			 * normal declarations, and the common case). */
+            state.current_layer = 0;
+
             error = cascade_style(sel->style, &state);
             if (error != CSS_OK) {
                 goto cleanup;
@@ -1622,6 +1627,7 @@ css_error set_hint(css_select_state *state, css_hint *hint)
     /* Keep selection state in sync with reality */
     existing->set = 1;
     existing->specificity = 0;
+    existing->layer = 0; /* presentational hints are unlayered */
     existing->origin = CSS_ORIGIN_AUTHOR;
     existing->important = 0;
     existing->explicit_default = (hint->status == 0) ? FLAG_VALUE_INHERIT : FLAG_VALUE__NONE;
@@ -2137,6 +2143,7 @@ css_error match_selector_chain(css_select_ctx *ctx, const css_selector *selector
 
     /* If we got here, then the entire selector chain matched, so cascade */
     state->current_specificity = selector->specificity;
+    state->current_layer = selector->rule->layer;
 
     /* Ensure that the appropriate computed style exists */
     if (state->results->styles[pseudo] == NULL) {
@@ -2628,6 +2635,36 @@ css_error cascade_style(const css_style *style, css_select_state *state)
     return CSS_OK;
 }
 
+/* Effective cascade-layer priority (higher wins) within one origin+importance
+ * bucket. Unlayered normal rules beat every layer; among normal layers a
+ * later-declared layer beats an earlier one. Importance reverses this: an
+ * earlier layer beats a later one, and unlayered important is the weakest. */
+static inline uint64_t layer_cascade_key(uint64_t layer, bool important)
+{
+    if (layer == 0) {
+        return important ? 0u : 0xFFFFFFFFFFFFFFFFull;
+    }
+
+    return important ? (0xFFFFFFFFFFFFFFFFull - layer) : layer;
+}
+
+/* True when the current rule's (layer, specificity) is at least the existing
+ * one's. Layer priority dominates specificity; specificity breaks ties, with
+ * source order handled by application order (>=). */
+static inline bool current_outranks_on_layer_and_specificity(const css_select_state *state,
+                                                             const prop_state *existing,
+                                                             bool important)
+{
+    uint64_t cur_key = layer_cascade_key(state->current_layer, important);
+    uint64_t existing_key = layer_cascade_key(existing->layer, important);
+
+    if (cur_key != existing_key) {
+        return cur_key > existing_key;
+    }
+
+    return state->current_specificity >= existing->specificity;
+}
+
 bool css__outranks_existing(uint16_t op, bool important, css_select_state *state,
                             enum flag_value explicit_default)
 {
@@ -2689,7 +2726,7 @@ bool css__outranks_existing(uint16_t op, bool important, css_select_state *state
 			 * for UA stylesheets, when specificity is always
 			 * considered (as importance is meaningless) */
             if (existing->origin == CSS_ORIGIN_UA) {
-                if (state->current_specificity >= existing->specificity) {
+                if (current_outranks_on_layer_and_specificity(state, existing, important)) {
                     outranks = true;
                 }
             } else if (existing->important == 0 && important) {
@@ -2698,8 +2735,8 @@ bool css__outranks_existing(uint16_t op, bool important, css_select_state *state
             } else if (existing->important && important == false) {
                 /* Old is more important than new */
             } else {
-                /* Same importance, consider specificity */
-                if (state->current_specificity >= existing->specificity) {
+                /* Same importance, consider layer then specificity */
+                if (current_outranks_on_layer_and_specificity(state, existing, important)) {
                     outranks = true;
                 }
             }
@@ -2718,6 +2755,7 @@ bool css__outranks_existing(uint16_t op, bool important, css_select_state *state
 		 * Update our state to reflect this. */
         existing->set = 1;
         existing->specificity = state->current_specificity;
+        existing->layer = state->current_layer;
         existing->origin = state->current_origin;
         existing->important = important;
         existing->explicit_default = explicit_default;
