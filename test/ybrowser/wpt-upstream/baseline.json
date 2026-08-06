@@ -89,6 +89,7 @@
   "css/css-grid/alignment/grid-row-axis-alignment-positioned-items-001.html",
   "css/css-grid/alignment/grid-row-axis-alignment-positioned-items-002.html",
   "css/css-grid/alignment/grid-row-axis-alignment-positioned-items-003.html",
+  "css/css-grid/alignment/grid-row-axis-alignment-positioned-items-004.html",
   "css/css-grid/alignment/grid-row-axis-alignment-positioned-items-005.html",
   "css/css-grid/alignment/grid-row-axis-alignment-positioned-items-006.html",
   "css/css-grid/alignment/grid-row-axis-alignment-positioned-items-007.html",
@@ -96,6 +97,13 @@
   "css/css-grid/alignment/grid-row-axis-alignment-positioned-items-009.html",
   "css/css-grid/alignment/grid-row-axis-alignment-positioned-items-017.html",
   "css/css-grid/alignment/grid-row-axis-alignment-sticky-positioned-items-001.html",
+  "css/css-grid/alignment/grid-self-alignment-non-static-positioned-items-001.html",
+  "css/css-grid/alignment/grid-self-alignment-non-static-positioned-items-003.html",
+  "css/css-grid/alignment/grid-self-alignment-non-static-positioned-items-004.html",
+  "css/css-grid/alignment/grid-self-alignment-positioned-items-with-margin-border-padding-001.html",
+  "css/css-grid/alignment/grid-self-alignment-positioned-items-with-margin-border-padding-002.html",
+  "css/css-grid/alignment/grid-self-alignment-positioned-items-with-margin-border-padding-003.html",
+  "css/css-grid/alignment/grid-self-alignment-positioned-items-with-margin-border-padding-005.html",
   "css/css-grid/alignment/grid-self-alignment-stretch-001.html",
   "css/css-grid/alignment/grid-self-alignment-stretch-002.html",
   "css/css-grid/alignment/grid-self-alignment-stretch-003.html",
@@ -117,7 +125,7 @@
   "css/css-grid/grid-model/grid-container-ignores-first-line-001.html",
   "css/css-grid/layout-algorithm/grid-content-distribution-must-account-for-track-sizing-003.html"
  ],
- "subtests_green": 19129,
+ "subtests_green": 19203,
  "subtests_total": 34960,
  "wpt_commit": "0e4473863a78276e64f55d3ff1b895a6e9a660e1"
 }
