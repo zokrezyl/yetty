@@ -3,6 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Google Analytics (gtag.js). The script itself is NOT loaded here:
+         consent-mode defaults everything to denied and the consent banner
+         at the foot of the page injects gtag.js only after an explicit
+         opt-in, so no analytics cookie exists before the visitor agrees. -->
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('consent', 'default', {
+          ad_storage: 'denied',
+          ad_user_data: 'denied',
+          ad_personalization: 'denied',
+          analytics_storage: 'denied'
+      });
+      gtag('js', new Date());
+      gtag('config', 'G-EX8DDXB9NK');
+    </script>
     <title>yetty - WebGPU Terminal</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="apple-touch-icon" href="apple-touch-icon.jpg">
@@ -437,6 +453,55 @@
             line-height: 1.5;
         }
         #config-hint code { color: #9FA7A8; }
+        /* ---- Cookie-consent banner (gates Google Analytics) ---- */
+        #consent-banner {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: 16px;
+            width: min(560px, calc(100vw - 32px));
+            display: none;
+            background: #141A1F;
+            border: 1px solid #364A47;
+            border-radius: 8px;
+            padding: 14px 16px;
+            z-index: 400;
+        }
+        #consent-banner.visible { display: block; }
+        #consent-banner .consent-text {
+            font-size: 12px;
+            color: #9FA7A8;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+        #consent-banner .consent-text strong { color: #E0E5E4; }
+        .consent-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        /* Accept and decline are deliberately the same size — declining
+           must be as easy as accepting. */
+        #consent-accept, #consent-decline {
+            flex: 1 1 0;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: bold;
+            padding: 9px;
+            cursor: pointer;
+        }
+        #consent-accept {
+            background: #6BA892;
+            border: 1px solid #6BA892;
+            color: #0B1014;
+        }
+        #consent-accept:hover { background: #74C5A5; border-color: #74C5A5; }
+        #consent-decline {
+            background: #1E262C;
+            border: 1px solid #364A47;
+            color: #E0E5E4;
+        }
+        #consent-decline:hover { border-color: #6BA892; }
     </style>
 </head>
 <body>
@@ -444,6 +509,8 @@
         <a href="https://github.com/zokrezyl/yetty" target="_blank" rel="noopener">github.com/zokrezyl/yetty</a>
         <span class="sep">·</span>
         <a href="https://github.com/zokrezyl/yetty/releases/tag/@YETTY_RELEASE_TAG@" target="_blank" rel="noopener">@YETTY_RELEASE_TAG@</a>
+        <span class="sep">·</span>
+        <a href="#" id="consent-reopen">cookies</a>
     </div>
 
     <!-- Verdict of the page-load WebGPU health probe. States: checking /
@@ -662,6 +729,104 @@
             <div id="config-hint"></div>
         </div>
     </div>
+
+    <!-- ============ Cookie-consent banner ============ -->
+    <div id="consent-banner">
+        <div class="consent-text">
+            <strong>Cookies:</strong> yetty.dev uses Google Analytics to count
+            visits. It sets cookies only if you allow it — nothing is loaded
+            or stored before you choose. You can change your choice anytime
+            via the <strong>cookies</strong> link at the top of the page.
+        </div>
+        <div class="consent-buttons">
+            <button id="consent-decline" type="button">Decline</button>
+            <button id="consent-accept" type="button">Allow analytics</button>
+        </div>
+    </div>
+
+    <script>
+        // Consent gate for Google Analytics. gtag.js is injected only after
+        // an explicit opt-in; the decision persists in localStorage and can
+        // be revisited via the "cookies" topbar link. Withdrawing consent
+        // also expires any _ga* cookies already set.
+        (function () {
+            const CONSENT_STORAGE_KEY = 'yetty-analytics-consent';
+            const ANALYTICS_MEASUREMENT_ID = 'G-EX8DDXB9NK';
+            const banner = document.getElementById('consent-banner');
+            const acceptButton = document.getElementById('consent-accept');
+            const declineButton = document.getElementById('consent-decline');
+            const reopenLink = document.getElementById('consent-reopen');
+            let analyticsLoaded = false;
+
+            function loadAnalytics() {
+                gtag('consent', 'update', { analytics_storage: 'granted' });
+                if (analyticsLoaded)
+                    return;
+                analyticsLoaded = true;
+                const scriptElement = document.createElement('script');
+                scriptElement.async = true;
+                scriptElement.src =
+                    'https://www.googletagmanager.com/gtag/js?id=' +
+                    ANALYTICS_MEASUREMENT_ID;
+                document.head.appendChild(scriptElement);
+            }
+
+            function deleteAnalyticsCookies() {
+                const hostname = window.location.hostname;
+                for (const cookiePair of document.cookie.split(';')) {
+                    const cookieName = cookiePair.split('=')[0].trim();
+                    if (!cookieName.startsWith('_ga'))
+                        continue;
+                    /* GA sets its cookies on the registrable domain; try
+                     * both spellings so deletion works on yetty.dev and on
+                     * localhost test servers alike. */
+                    const expiry = '=; Max-Age=0; path=/';
+                    document.cookie = cookieName + expiry;
+                    document.cookie = cookieName + expiry +
+                        '; domain=' + hostname;
+                    document.cookie = cookieName + expiry +
+                        '; domain=.' + hostname;
+                }
+            }
+
+            function rememberChoice(choice) {
+                try {
+                    localStorage.setItem(CONSENT_STORAGE_KEY, choice);
+                } catch (storageError) {
+                    /* Blocked storage just means we ask again next visit. */
+                }
+            }
+
+            acceptButton.addEventListener('click', function () {
+                rememberChoice('granted');
+                banner.classList.remove('visible');
+                loadAnalytics();
+            });
+
+            declineButton.addEventListener('click', function () {
+                rememberChoice('denied');
+                banner.classList.remove('visible');
+                gtag('consent', 'update', { analytics_storage: 'denied' });
+                deleteAnalyticsCookies();
+            });
+
+            reopenLink.addEventListener('click', function (clickEvent) {
+                clickEvent.preventDefault();
+                banner.classList.add('visible');
+            });
+
+            let storedChoice = null;
+            try {
+                storedChoice = localStorage.getItem(CONSENT_STORAGE_KEY);
+            } catch (storageError) {
+                storedChoice = null;
+            }
+            if (storedChoice === 'granted')
+                loadAnalytics();
+            else if (storedChoice !== 'denied')
+                banner.classList.add('visible');
+        })();
+    </script>
 
     <!-- WebGPU health probe (tools/webasm-webgpu-health) — copied next to
          this page by the webasm cmake glue. Loaded before the shell script
