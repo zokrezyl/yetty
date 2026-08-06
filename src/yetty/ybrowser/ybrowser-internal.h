@@ -1775,6 +1775,11 @@ char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href);
  * the IMPORTING stylesheet's URL, not the document base. */
 char *yetty_ylexbor_resolve_url_against(const char *base_url, const char *href);
 
+/* Set document.currentScript to `node`'s wrapper (or null) for the duration of
+ * a classic script's execution, so inline scripts can locate themselves (e.g.
+ * document.currentScript.previousElementSibling as a mount anchor). */
+void yetty_ylexbor_js_set_current_script(struct yetty_ylexbor *r, lxb_dom_node_t *node);
+
 /* Rebuild the import map from the document's <script type="importmap"> (if any).
  * Call once per document before module scripts run. */
 void yetty_ylexbor_js_importmap_scan(struct yetty_ylexbor *r);

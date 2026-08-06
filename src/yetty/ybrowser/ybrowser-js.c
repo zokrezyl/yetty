@@ -981,7 +981,8 @@ struct script_entry {
     char *url;         /* owned; external script when non-NULL */
     char *inline_body; /* owned when url == NULL */
     size_t inline_len;
-    bool is_module;    /* <script type="module"> — evaluate as an ES module */
+    bool is_module;             /* <script type="module"> — evaluate as an ES module */
+    lxb_dom_node_t *element;    /* the <script> element (for document.currentScript) */
 };
 
 /* True iff the <script> is type="module" (evaluated as an ES module). */
@@ -1045,7 +1046,8 @@ static void collect_scripts_recursive(struct yetty_ylexbor *r, lxb_dom_node_t *n
                     free(url);
                     continue;
                 }
-                struct script_entry entry = {.url = url, .is_module = is_module_script_type(el)};
+                struct script_entry entry = {
+                    .url = url, .is_module = is_module_script_type(el), .element = c};
                 script_collect_push(collect, entry);
                 continue;
             }
@@ -1054,7 +1056,8 @@ static void collect_scripts_recursive(struct yetty_ylexbor *r, lxb_dom_node_t *n
             if (inline_src) {
                 struct script_entry entry = {.inline_body = inline_src,
                                              .inline_len = slen,
-                                             .is_module = is_module_script_type(el)};
+                                             .is_module = is_module_script_type(el),
+                                             .element = c};
                 script_collect_push(collect, entry);
             }
             continue; /* don't recurse into <script> children */
@@ -1220,7 +1223,10 @@ static void run_collected_scripts(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
                 if (entry->is_module) {
                     eval_module(r, ctx, response->body, response->body_len, entry->url);
                 } else {
+                    /* Classic scripts see document.currentScript; modules do not. */
+                    yetty_ylexbor_js_set_current_script(r, entry->element);
                     eval_buf(r, ctx, response->body, response->body_len, entry->url);
+                    yetty_ylexbor_js_set_current_script(r, NULL);
                 }
             } else {
                 ydebug("js script-load %s status=%ld", entry->url,
@@ -1235,7 +1241,9 @@ static void run_collected_scripts(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
                 eval_module(r, ctx, entry->inline_body, entry->inline_len,
                             r->base_url ? r->base_url : "<inline>");
             } else {
+                yetty_ylexbor_js_set_current_script(r, entry->element);
                 eval_buf(r, ctx, entry->inline_body, entry->inline_len, "<inline>");
+                yetty_ylexbor_js_set_current_script(r, NULL);
             }
             free(entry->inline_body);
         }

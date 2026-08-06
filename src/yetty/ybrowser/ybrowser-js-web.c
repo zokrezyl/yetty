@@ -5277,6 +5277,146 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
     }
     JS_FreeValue(ctx, stub_v);
 
+    /* Intl polyfill. QuickJS-ng ships no Internationalization API (it needs
+	 * ICU), so `Intl` is undefined and any bundle that touches it dies with a
+	 * ReferenceError — on nytimes that killed the MAIN bundle. This provides a
+	 * functional en-US approximation of the common surface (DateTimeFormat,
+	 * NumberFormat, Collator, PluralRules, RelativeTimeFormat, ListFormat,
+	 * Locale, Segmenter) so such bundles run. Not locale-accurate. */
+    static const char *intl_polyfill =
+        "if (typeof globalThis.Intl === 'undefined') { (function(){"
+        "  var I = {};"
+        "  var MON=['January','February','March','April','May','June','July','August',"
+        "           'September','October','November','December'];"
+        "  var DAY=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];"
+        "  function pad(n){ return (n<10?'0':'')+n; }"
+        "  I.getCanonicalLocales=function(l){ if(l==null)return[]; "
+        "    return Array.isArray(l)?l.map(String):[String(l)]; };"
+        "  I.supportedValuesOf=function(){ return []; };"
+        /* DateTimeFormat */
+        "  function DTF(loc,opt){ if(!(this instanceof DTF))return new DTF(loc,opt);"
+        "    this._o=opt||{}; this._l=Array.isArray(loc)?loc[0]:(loc||'en-US'); }"
+        "  DTF.prototype.resolvedOptions=function(){ var o=this._o; return {locale:this._l||'en-US',"
+        "    calendar:'gregory',numberingSystem:'latn',timeZone:o.timeZone||'UTC',year:o.year,"
+        "    month:o.month,day:o.day,hour:o.hour,minute:o.minute,second:o.second}; };"
+        "  DTF.prototype.format=function(d){ d=(d==null)?new Date():(d instanceof Date?d:new Date(d));"
+        "    if(isNaN(d.getTime()))return'Invalid Date'; var o=this._o;"
+        "    var y=d.getFullYear(),mo=d.getMonth(),da=d.getDate(),h=d.getHours(),"
+        "        mi=d.getMinutes(),se=d.getSeconds();"
+        "    var hasDate=!!(o.year||o.month||o.day||o.dateStyle||o.weekday);"
+        "    var hasTime=(o.hour!=null||o.minute!=null||o.second!=null||o.timeStyle!=null);"
+        "    if(!hasDate&&!hasTime){ return MON[mo]+' '+da+', '+y; }"
+        "    var out=[];"
+        "    if(o.weekday){ out.push(DAY[d.getDay()]); }"
+        "    if(hasDate){ var mn=(o.month==='short')?MON[mo].slice(0,3)"
+        "      :((o.month==='numeric')?(mo+1):((o.month==='2-digit')?pad(mo+1):MON[mo]));"
+        "      var dp=(o.day==='2-digit')?pad(da):da; out.push(mn+' '+dp+(o.year?', '+y:'')); }"
+        "    if(hasTime){ var hr=(o.hour12===false)?h:((h%12)||12);"
+        "      var t=hr+':'+pad(mi)+(o.second!=null?':'+pad(se):'');"
+        "      if(o.hour12!==false)t+=' '+(h<12?'AM':'PM'); out.push(t); }"
+        "    return out.join(o.weekday?', ':' '); };"
+        "  DTF.prototype.formatToParts=function(d){ return [{type:'literal',value:this.format(d)}]; };"
+        "  DTF.prototype.formatRange=function(a,b){ return this.format(a)+' \\u2013 '+this.format(b); };"
+        "  DTF.prototype.formatRangeToParts=function(a,b){"
+        "    return [{type:'literal',value:this.formatRange(a,b)}]; };"
+        "  DTF.supportedLocalesOf=function(l){ return I.getCanonicalLocales(l); };"
+        "  I.DateTimeFormat=DTF;"
+        /* NumberFormat */
+        "  function NF(loc,opt){ if(!(this instanceof NF))return new NF(loc,opt);"
+        "    this._o=opt||{}; this._l=Array.isArray(loc)?loc[0]:(loc||'en-US'); }"
+        "  NF.prototype.resolvedOptions=function(){ return Object.assign({locale:this._l||'en-US',"
+        "    numberingSystem:'latn',style:'decimal'},this._o); };"
+        "  NF.prototype.format=function(n){ n=Number(n); if(!isFinite(n))return String(n); var o=this._o;"
+        "    if(o.style==='percent')n=n*100; var neg=n<0; n=Math.abs(n);"
+        "    var maxF=(o.maximumFractionDigits!=null)?o.maximumFractionDigits"
+        "      :((o.style==='currency')?2:((o.minimumFractionDigits!=null)?o.minimumFractionDigits:3));"
+        "    var minF=(o.minimumFractionDigits!=null)?o.minimumFractionDigits"
+        "      :((o.style==='currency')?2:0);"
+        "    var fixed=n.toFixed(Math.min(20,Math.max(minF,maxF)));"
+        "    var sp=fixed.split('.'); var ip=sp[0]; var fp=sp[1]||'';"
+        "    while(fp.length>minF && fp.charAt(fp.length-1)==='0'){ fp=fp.slice(0,-1); }"
+        "    if(o.useGrouping!==false){ ip=ip.replace(/\\B(?=(\\d{3})+(?!\\d))/g,','); }"
+        "    var res=ip+(fp?('.'+fp):'');"
+        "    if(o.style==='percent')res+='%';"
+        "    if(o.style==='currency')res=((!o.currency||o.currency==='USD')?'$':(o.currency+'\\u00a0'))+res;"
+        "    return (neg?'-':'')+res; };"
+        "  NF.prototype.formatToParts=function(n){ return [{type:'literal',value:this.format(n)}]; };"
+        "  NF.prototype.formatRange=function(a,b){ return this.format(a)+'\\u2013'+this.format(b); };"
+        "  NF.supportedLocalesOf=function(l){ return I.getCanonicalLocales(l); };"
+        "  I.NumberFormat=NF;"
+        /* Collator */
+        "  function COL(l,o){ if(!(this instanceof COL))return new COL(l,o); }"
+        "  COL.prototype.compare=function(a,b){ a=String(a); b=String(b);"
+        "    return a<b?-1:(a>b?1:0); };"
+        "  COL.prototype.resolvedOptions=function(){ return {locale:'en-US'}; };"
+        "  COL.supportedLocalesOf=function(l){ return I.getCanonicalLocales(l); };"
+        "  I.Collator=COL;"
+        /* PluralRules */
+        "  function PR(l,o){ if(!(this instanceof PR))return new PR(l,o); this._o=o||{}; }"
+        "  PR.prototype.select=function(n){ n=Number(n);"
+        "    if(this._o.type==='ordinal'){ var a=n%10,b=n%100;"
+        "      if(a===1&&b!==11)return'one'; if(a===2&&b!==12)return'two';"
+        "      if(a===3&&b!==13)return'few'; return'other'; }"
+        "    return n===1?'one':'other'; };"
+        "  PR.prototype.resolvedOptions=function(){ return {locale:'en-US',type:this._o.type||'cardinal'}; };"
+        "  PR.supportedLocalesOf=function(l){ return I.getCanonicalLocales(l); };"
+        "  I.PluralRules=PR;"
+        /* RelativeTimeFormat */
+        "  function RTF(l,o){ if(!(this instanceof RTF))return new RTF(l,o); this._o=o||{}; }"
+        "  RTF.prototype.format=function(v,unit){ v=Number(v); var u=String(unit).replace(/s$/,'');"
+        "    var p=Math.abs(v)===1?u:u+'s'; if(v===0)return'now';"
+        "    return v<0?(Math.abs(v)+' '+p+' ago'):('in '+v+' '+p); };"
+        "  RTF.prototype.formatToParts=function(v,unit){"
+        "    return [{type:'literal',value:this.format(v,unit)}]; };"
+        "  RTF.prototype.resolvedOptions=function(){ return {locale:'en-US',"
+        "    numeric:this._o.numeric||'always',style:this._o.style||'long'}; };"
+        "  RTF.supportedLocalesOf=function(l){ return I.getCanonicalLocales(l); };"
+        "  I.RelativeTimeFormat=RTF;"
+        /* ListFormat */
+        "  function LF(l,o){ if(!(this instanceof LF))return new LF(l,o); this._o=o||{}; }"
+        "  LF.prototype.format=function(arr){ arr=Array.from(arr||[]); if(arr.length===0)return'';"
+        "    if(arr.length===1)return String(arr[0]);"
+        "    var conj=(this._o.type==='disjunction')?'or':'and';"
+        "    return arr.slice(0,-1).join(', ')+(arr.length>2?', ':' ')+conj+' '+arr[arr.length-1]; };"
+        "  LF.prototype.formatToParts=function(arr){ return [{type:'element',value:this.format(arr)}]; };"
+        "  LF.prototype.resolvedOptions=function(){ return {locale:'en-US',"
+        "    type:this._o.type||'conjunction',style:this._o.style||'long'}; };"
+        "  LF.supportedLocalesOf=function(l){ return I.getCanonicalLocales(l); };"
+        "  I.ListFormat=LF;"
+        /* Locale */
+        "  function LOC(tag,o){ if(!(this instanceof LOC))return new LOC(tag,o);"
+        "    tag=String(tag||'en-US'); var p=tag.split('-'); this.baseName=tag;"
+        "    this.language=p[0]||'en'; this.region=p[1]; this.maximize=function(){return this;};"
+        "    this.minimize=function(){return this;}; this.toString=function(){return tag;}; }"
+        "  I.Locale=LOC;"
+        /* Segmenter */
+        "  function SEG(l,o){ if(!(this instanceof SEG))return new SEG(l,o); this._o=o||{}; }"
+        "  SEG.prototype.segment=function(s){ s=String(s); var g=this._o.granularity||'grapheme';"
+        "    var arr=(g==='word')?s.split(/(\\s+)/).filter(function(x){return x.length;})"
+        "      :((g==='sentence')?[s]:Array.from(s));"
+        "    var segs=arr.map(function(x,i){return {segment:x,index:i,input:s,"
+        "      isWordLike:/\\w/.test(x)};});"
+        "    segs[Symbol.iterator]=function(){ var i=0; return {next:function(){"
+        "      return i<segs.length?{value:segs[i++],done:false}:{value:undefined,done:true}; }}; };"
+        "    return segs; };"
+        "  SEG.prototype.resolvedOptions=function(){ return {locale:'en-US',"
+        "    granularity:this._o.granularity||'grapheme'}; };"
+        "  I.Segmenter=SEG;"
+        "  globalThis.Intl=I;"
+        "})(); }";
+    JSValue intl_v =
+        JS_Eval(ctx, intl_polyfill, strlen(intl_polyfill), "<intl-polyfill>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(intl_v)) {
+        JSValue ex = JS_GetException(ctx);
+        const char *m = JS_ToCString(ctx, ex);
+        ydebug("js intl-polyfill: %s", m ? m : "?");
+        if (m) {
+            JS_FreeCString(ctx, m);
+        }
+        JS_FreeValue(ctx, ex);
+    }
+    JS_FreeValue(ctx, intl_v);
+
     JS_FreeValue(ctx, global);
 }
 

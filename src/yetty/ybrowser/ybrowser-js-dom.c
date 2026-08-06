@@ -3378,6 +3378,20 @@ static JSValue js_el_nextElementSibling_get(JSContext *ctx, JSValueConst this_va
     return JS_NULL;
 }
 
+static JSValue js_el_previousElementSibling_get(JSContext *ctx, JSValueConst this_val)
+{
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
+    if (!n) {
+        return JS_NULL;
+    }
+    for (lxb_dom_node_t *c = n->prev; c; c = c->prev) {
+        if (c->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+            return wrap_element(ctx, lxb_dom_interface_element(c));
+        }
+    }
+    return JS_NULL;
+}
+
 static JSValue js_el_children_get(JSContext *ctx, JSValueConst this_val)
 {
     lxb_dom_node_t *n = unwrap_node(ctx, this_val);
@@ -5899,6 +5913,7 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_CGETSET_DEF("parentNode", js_el_parentNode_get, NULL),
         JS_CGETSET_DEF("childNodes", js_el_childNodes_get, NULL),
         JS_CGETSET_DEF("nextElementSibling", js_el_nextElementSibling_get, NULL),
+        JS_CGETSET_DEF("previousElementSibling", js_el_previousElementSibling_get, NULL),
         JS_CGETSET_DEF("children", js_el_children_get, NULL),
         JS_CGETSET_DEF("style", js_el_style_get, NULL),
         JS_CGETSET_DEF("classList", js_el_classList_get, NULL),
@@ -6118,10 +6133,10 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
         JS_SetPropertyStr(ctx, doc_obj, "head", wrap_element(ctx, lxb_dom_interface_element(head)));
     }
 
-    /* Webpack's runtime publicPath probe reads:
-	 *   document.currentScript || document.getElementsByTagName("script")[N-1]
-	 * Provide both: currentScript=null is acceptable; the GEBTN
-	 * fallback then works because we now expose .src on elements. */
+    /* document.currentScript starts null; it is set to the executing <script>
+	 * element for the duration of each classic script run (see
+	 * yetty_ylexbor_js_set_current_script). Inline scripts use it to anchor a
+	 * mount (currentScript.previousElementSibling) — a common SSR pattern. */
     JS_SetPropertyStr(ctx, doc_obj, "currentScript", JS_NULL);
 
     /* document.defaultView === window. Many libraries reach window
@@ -6903,11 +6918,32 @@ void yetty_ylexbor_js_fire_element_event(struct yetty_ylexbor *r, lxb_dom_elemen
     JS_FreeValue(ctx, wrapper);
 }
 
+void yetty_ylexbor_js_set_current_script(struct yetty_ylexbor *r, lxb_dom_node_t *node)
+{
+    if (r == NULL || r->js_ctx == NULL) {
+        return;
+    }
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue doc = JS_GetPropertyStr(ctx, global, "document");
+    if (JS_IsObject(doc)) {
+        JSValue value = (node != NULL) ? wrap_element(ctx, lxb_dom_interface_element(node)) : JS_NULL;
+        JS_SetPropertyStr(ctx, doc, "currentScript", value);
+    }
+    JS_FreeValue(ctx, doc);
+    JS_FreeValue(ctx, global);
+}
+
 #else /* !YETTY_HAVE_QUICKJS */
 
 void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
 {
     (void)r;
+}
+void yetty_ylexbor_js_set_current_script(struct yetty_ylexbor *r, lxb_dom_node_t *node)
+{
+    (void)r;
+    (void)node;
 }
 int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
 {
