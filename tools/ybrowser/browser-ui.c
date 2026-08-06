@@ -1673,10 +1673,13 @@ static void page_click(struct app *a, float x, float y)
     }
     struct yetty_ycore_rectangle pr = page_rect_res.value;
     if (!pt_in_rect(pr, x, y)) {
+        ydebug("page_click (%.1f,%.1f): outside page rect (%.1f,%.1f)-(%.1f,%.1f)", x, y, pr.min.x,
+               pr.min.y, pr.max.x, pr.max.y);
         return;
     }
     struct tab *t = &a->tabs[a->active];
     if (!t->engine) {
+        ydebug("page_click (%.1f,%.1f): active tab has no engine", x, y);
         return;
     }
     /* The embed's children no longer slide with the scroll (the retained
@@ -1694,6 +1697,9 @@ static void page_click(struct app *a, float x, float y)
     float lx = x - pr.min.x;
     float ly = y - pr.min.y + scroll_offset;
     char *href = yetty_ylexbor_link_at(t->engine, lx, ly);
+    ydebug("page_click app=(%.1f,%.1f) page_rect_min=(%.1f,%.1f) scroll=%.1f doc=(%.1f,%.1f) "
+           "href=%s",
+           x, y, pr.min.x, pr.min.y, scroll_offset, lx, ly, href ? href : "(none)");
     if (href) {
         char *unwrapped = unwrap_gnews_read_link(t->engine, href, lx, ly);
         if (unwrapped) {

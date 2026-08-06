@@ -9,17 +9,23 @@ each test through `ybrowser --dump-wpt`, which emits each asserted element's
 expected attrs alongside ybrowser's actual geometry, and compare (±1px, the WPT
 tolerance). A test PASSES iff every asserted element matches.
 
-    run.py <wpt-root> [suite-subdir ...]   # default: css/css-flexbox css/css-grid
+    run.py [--baseline FILE] [--write-baseline FILE] <wpt-root> [suite-subdir ...]
+    # default suites: css/css-flexbox css/css-grid
 
 Env: YBROWSER=<path>, WPT_TOL=<px> (default 1), WPT_WIDTH=<px> (default 800),
      WPT_MODE=offset|size|both (default both — which assertions to enforce).
 
-Offset note: data-offset-x/y are relative to the element's offsetParent. We
-compare against absolute document coords, which is exact when the offsetParent
-is the body (the overwhelmingly common layout-test shape: a container that is a
-direct, statically-positioned child of body). Tests that anchor to a positioned
-sub-container will mis-report; those are filtered by --strict off by default.
+Ratchet: `--write-baseline baseline.json` records the current green-test list;
+`--baseline baseline.json` fails (exit 1) if ANY baselined-green test is no
+longer green — the conformance score can only go up. Newly-green tests are
+reported so the baseline gets re-recorded and committed with the fix.
+
+Offset note: data-offset-x/y assert against the element's offsetLeft/offsetTop
+(offsetParent-relative). `--dump-wpt` emits exactly those via CSSOM-View
+semantics (positioned-ancestor padding edge; absolute document coords when the
+offsetParent is the body), so the comparison is direct.
 """
+import json
 import os
 import re
 import subprocess
@@ -31,6 +37,7 @@ TOL = float(os.environ.get("WPT_TOL", "1"))
 WIDTH = os.environ.get("WPT_WIDTH", "800")
 MODE = os.environ.get("WPT_MODE", "both")
 JOBS = int(os.environ.get("WPT_JOBS", str(min(16, (os.cpu_count() or 4)))))
+WPT_ROOT = ""  # set in main() before the pool spawns
 
 
 def run_test(path):
@@ -44,6 +51,9 @@ def run_test(path):
     env = dict(os.environ)
     env.pop("DISPLAY", None)
     env.setdefault("YLEXBOR_BOOT_BUDGET_MS", "300")
+    # WPT tests reference support CSS by server-absolute path
+    # (/css/support/grid.css); map those onto the checkout root.
+    env.setdefault("YBROWSER_FILE_ROOT", WPT_ROOT)
     try:
         p = subprocess.run([YB, "--once", "--dump-wpt", "-w", WIDTH, path],
                            capture_output=True, env=env, timeout=20)
@@ -94,11 +104,25 @@ def run_test(path):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("usage: run.py <wpt-root> [suite-subdir ...]", file=sys.stderr)
+    args = sys.argv[1:]
+    baseline_path = None
+    write_baseline = None
+    if "--baseline" in args:
+        flag_at = args.index("--baseline")
+        baseline_path = args[flag_at + 1]
+        del args[flag_at:flag_at + 2]
+    if "--write-baseline" in args:
+        flag_at = args.index("--write-baseline")
+        write_baseline = args[flag_at + 1]
+        del args[flag_at:flag_at + 2]
+    if not args:
+        print("usage: run.py [--baseline FILE] [--write-baseline FILE] "
+              "<wpt-root> [suite-subdir ...]", file=sys.stderr)
         return 2
-    root = sys.argv[1]
-    suites = sys.argv[2:] or ["css/css-flexbox", "css/css-grid"]
+    root = args[0]
+    global WPT_ROOT
+    WPT_ROOT = os.path.abspath(root)
+    suites = args[1:] or ["css/css-flexbox", "css/css-grid"]
     tests = []
     for s in suites:
         d = os.path.join(root, s)
@@ -159,6 +183,32 @@ def main():
     print("\nfirst 30 failures:")
     for name, detail in failed[:30]:
         print(f"  FAIL  {name}\n        {detail}")
+
+    green = sorted(os.path.relpath(t, root)
+                   for t, (st, _, _, _) in zip(tests, results) if st == "pass")
+    if write_baseline:
+        with open(write_baseline, "w") as fh:
+            json.dump({"suites": suites, "green": green,
+                       "subtests_green": sub_pass, "subtests_total": sub_total}, fh, indent=1)
+        print(f"\nbaseline written: {write_baseline} ({len(green)} green tests)")
+    if baseline_path:
+        with open(baseline_path) as fh:
+            baseline = json.load(fh)
+        green_set = set(green)
+        regressed = [name for name in baseline["green"] if name not in green_set]
+        newly_green = [name for name in green if name not in set(baseline["green"])]
+        if newly_green:
+            print(f"\n{len(newly_green)} NEWLY green (re-record the baseline "
+                  f"with --write-baseline to ratchet them in):")
+            for name in newly_green[:20]:
+                print(f"  +  {name}")
+        if regressed:
+            print(f"\nRATCHET VIOLATION — {len(regressed)} previously-green "
+                  f"tests now fail:")
+            for name in regressed:
+                print(f"  -  {name}")
+            return 1
+        print(f"\nratchet OK: all {len(baseline['green'])} baselined tests still green")
     return 0
 
 

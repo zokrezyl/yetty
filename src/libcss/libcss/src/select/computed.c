@@ -1023,6 +1023,16 @@ uint8_t css_computed_align_self(const css_computed_style *style)
     return get_align_self(style);
 }
 
+uint8_t css_computed_justify_self(const css_computed_style *style)
+{
+    return get_justify_self(style);
+}
+
+uint8_t css_computed_justify_items(const css_computed_style *style)
+{
+    return get_justify_items(style);
+}
+
 uint8_t css_computed_flex_basis(const css_computed_style *style, css_fixed *length, css_unit *unit)
 {
     return get_flex_basis(style, length, unit);

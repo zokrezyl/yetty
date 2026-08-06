@@ -106,7 +106,29 @@ char *yetty_ylexbor_resolve_url_against(const char *base_url, const char *href)
         return out;
     }
     if (href[0] == '/') {
-        /* absolute path — splice scheme://host/ */
+        /* Absolute path. A file:// document has no server root — approximate
+		 * one: YBROWSER_FILE_ROOT names the directory the "site" is served
+		 * from (the WPT runner sets it to the checkout root so
+		 * /css/support/*.css resolves like it does on a real wptserve). */
+        if (strncmp(base_url, "file://", 7) == 0) {
+            const char *file_root = getenv("YBROWSER_FILE_ROOT");
+            if (file_root && *file_root) {
+                size_t root_len = strlen(file_root);
+                while (root_len > 1 && file_root[root_len - 1] == '/') {
+                    root_len--;
+                }
+                size_t hl = strlen(href);
+                char *out = malloc(7 + root_len + hl + 1);
+                if (!out) {
+                    return NULL;
+                }
+                memcpy(out, "file://", 7);
+                memcpy(out + 7, file_root, root_len);
+                memcpy(out + 7 + root_len, href, hl + 1);
+                return out;
+            }
+        }
+        /* splice scheme://host/ */
         const char *p = strstr(base_url, "://");
         if (!p) {
             return strdup(href);
@@ -2123,7 +2145,13 @@ int yetty_ylexbor_pump(struct yetty_ylexbor *r)
     if (!r->js_ctx) {
         return -1;
     }
+    yetty_ylexbor_js_update_stack_top(r);
     JSContext *ctx = (JSContext *)r->js_ctx;
+
+    /* Dynamically-inserted external <script>s fetch + execute here — after
+	 * the inserting script's turn ended, before timers (a loaded script may
+	 * schedule the timers this same pump then fires). */
+    int scripts_executed = yetty_ylexbor_js_run_pending_scripts(r);
 
     int64_t now = now_ms();
     while (r->timer_count > 0 && r->timers[0]->deadline_ms <= now) {
@@ -2205,7 +2233,10 @@ int yetty_ylexbor_pump(struct yetty_ylexbor *r)
     }
     yetty_ylexbor_js_drain_jobs(r);
     if (r->timer_count == 0) {
-        return -1;
+        /* Executed or still-queued dynamic scripts want another tick soon —
+		 * returning -1 ("no timers") would let a boot loop stop before a
+		 * loader chain finishes. */
+        return (scripts_executed > 0 || r->pending_script_count > 0) ? 0 : -1;
     }
     int64_t delta = r->timers[0]->deadline_ms - now;
     return delta < 0 ? 0 : (int)delta;
@@ -2439,6 +2470,7 @@ static void js_fetch_job_done(void *job_ptr)
     int reloaded = (job->generation != r->fetch_generation);
     int stale = reloaded || r->destroy_pending;
     if (!stale && r->js_ctx) {
+        yetty_ylexbor_js_update_stack_top(r);
         js_fetch_deliver(job->ctx, &job->response, job->resolve_func, job->reject_func);
         yetty_ylexbor_js_drain_jobs(r);
         if (r->on_resource_ready) {
@@ -2465,6 +2497,120 @@ static void js_fetch_job_done(void *job_ptr)
             yetty_ycore_error_destroy(destroy_res.error);
         }
     }
+}
+
+/* ===========================================================================
+ * Dynamically-inserted external <script> as a worker-pool job — the same
+ * lifecycle as js_fetch_job: run() fetches on a worker thread (generation-
+ * cancellable), done() delivers on the loop thread where the generation
+ * guard decides whether the element/context are still the live document's.
+ * Submitted from yetty_ylexbor_js_queue_script when a pool is available;
+ * without a pool the pump's small per-tick batch handles the queue instead
+ * (same degraded mode the image path uses).
+ * ===========================================================================*/
+struct js_script_job {
+    struct yetty_ylexbor *r;
+    uint64_t generation;
+    struct yetty_ybrowser_loader *loader;
+    char *url;                  /* owned */
+    char *referer;              /* owned */
+    lxb_dom_element_t *element; /* weak — document-owned; generation-guarded */
+    struct yetty_ybrowser_response response;
+};
+
+/* WORKER THREAD. */
+static void js_script_job_run(void *job_ptr)
+{
+    struct js_script_job *job = job_ptr;
+    ydebug("dynamic script fetch %.140s", job->url);
+    struct yetty_ybrowser_request request = {
+        .url = job->url,
+        .kind = YETTY_YBROWSER_REQUEST_SCRIPT,
+        .referer = job->referer,
+        .generation = job->generation,
+        .cancel_generation = &job->r->fetch_generation,
+    };
+    struct yetty_ycore_void_result fetch_res =
+        yetty_ybrowser_fetch(job->loader, &request, &job->response);
+    if (YETTY_IS_ERR(fetch_res)) {
+        yetty_ycore_error_destroy(fetch_res.error);
+    }
+}
+
+/* LOOP THREAD. Evaluate the script and fire load/error on its element.
+ * Signature dictated by the work pool (void (*)(void *)) — absorb inner
+ * Results at this boundary. */
+YETTY_EXTERNAL_CALLBACK
+static void js_script_job_done(void *job_ptr)
+{
+    struct js_script_job *job = job_ptr;
+    struct yetty_ylexbor *r = job->r;
+    r->img_jobs_in_flight--;
+
+    /* Same staleness rules as js_fetch_job_done: a navigation freed the
+	 * context this job was minted for — the element pointer and JSContext
+	 * are the OLD document's, touch neither. */
+    int reloaded = (job->generation != r->fetch_generation);
+    int stale = reloaded || r->destroy_pending;
+    if (!stale && r->js_ctx) {
+        if (job->response.body && job->response.status >= 200 && job->response.status < 300) {
+            yetty_ylexbor_js_eval_script_body(r, job->response.body, job->response.body_len,
+                                              job->url);
+            yetty_ylexbor_js_fire_element_event(r, job->element, "load");
+        } else {
+            ydebug("dynamic script %.140s status=%ld", job->url, job->response.status);
+            yetty_ylexbor_js_fire_element_event(r, job->element, "error");
+        }
+        yetty_ylexbor_js_drain_jobs(r);
+        if (r->on_resource_ready) {
+            r->on_resource_ready(r->resource_ready_user);
+        }
+    }
+    yetty_ybrowser_response_dispose(&job->response);
+    free(job->url);
+    free(job->referer);
+    free(job);
+
+    if (r->destroy_pending && r->img_jobs_in_flight == 0) {
+        struct yetty_ycore_void_result destroy_res = _yetty_ylexbor_destroy_now(r);
+        if (YETTY_IS_ERR(destroy_res)) {
+            ydebug("js_script_job_done: deferred destroy failed: %s", destroy_res.error.msg);
+            yetty_ycore_error_destroy(destroy_res.error);
+        }
+    }
+}
+
+int yetty_ylexbor_js_submit_script_job(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                       char *url)
+{
+    if (r == NULL || r->img_pool == NULL || r->loader == NULL) {
+        return 0;
+    }
+    struct js_script_job *job = calloc(1, sizeof(*job));
+    if (job == NULL) {
+        return 0;
+    }
+    job->r = r;
+    job->generation = r->fetch_generation;
+    job->loader = r->loader;
+    job->url = url; /* ownership moves to the job on successful submit */
+    job->referer = r->base_url ? strdup(r->base_url) : NULL;
+    job->element = element;
+    struct yetty_yplatform_yworkpool_job pool_job = {
+        .run = js_script_job_run,
+        .done = js_script_job_done,
+        .ctx = job,
+    };
+    struct yetty_ycore_void_result submit_res =
+        yetty_yplatform_yworkpool_submit(r->img_pool, pool_job);
+    if (YETTY_IS_ERR(submit_res)) {
+        yetty_ycore_error_destroy(submit_res.error);
+        free(job->referer);
+        free(job); /* url stays with the caller on failure */
+        return 0;
+    }
+    r->img_jobs_in_flight++;
+    return 1;
 }
 
 static JSValue js_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -3510,6 +3656,7 @@ static JSValue js_form_navigate(JSContext *ctx, JSValueConst this_val, int argc,
     if (!action) {
         return JS_UNDEFINED;
     }
+    ydebug("form_navigate: action=%s argc=%d", action, argc);
     char *resolved = yetty_ylexbor_resolve_url(r, action);
     free(r->pending_navigation);
     r->pending_navigation = resolved ? resolved : strdup(action);
@@ -5039,7 +5186,8 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.__ybFormNavigate(action.split('#')[0]+(action.indexOf('?')<0?'?':'&')+body,'"
         "GET',''); }"
         "    else{ globalThis.__ybFormNavigate(action,method,body); }"
-        "  }catch(e){} };"
+        "  }catch(e){ try{ console.error('__ybSubmitForm: '+(e&&e.message?e.message:e)); "
+        "}catch(x){} } };"
         "  var ep=Object.getPrototypeOf(document.createElement('form'));"
         "  if(ep){"
         "    ep.submit=function(){ globalThis.__ybSubmitForm(this,null); };"

@@ -179,6 +179,10 @@ css_error css__parse_height(css_language *c, const parserutils_vector *vector, i
                             css_style *result);
 css_error css__parse_justify_content(css_language *c, const parserutils_vector *vector,
                                      int32_t *ctx, css_style *result);
+css_error css__parse_justify_items(css_language *c, const parserutils_vector *vector,
+                                     int32_t *ctx, css_style *result);
+css_error css__parse_justify_self(css_language *c, const parserutils_vector *vector,
+                                     int32_t *ctx, css_style *result);
 css_error css__parse_left(css_language *c, const parserutils_vector *vector, int32_t *ctx,
                           css_style *result);
 css_error css__parse_letter_spacing(css_language *c, const parserutils_vector *vector, int32_t *ctx,
@@ -429,6 +433,8 @@ extern const uint32_t property_unit_mask[CSS_N_PROPERTIES];
 #define UNIT_MASK_FLEX_SHRINK (0)
 #define UNIT_MASK_FLEX_WRAP (0)
 #define UNIT_MASK_JUSTIFY_CONTENT (0)
+#define UNIT_MASK_JUSTIFY_ITEMS (0)
+#define UNIT_MASK_JUSTIFY_SELF (0)
 #define UNIT_MASK_ORDER (0)
 
 #endif

@@ -72,7 +72,12 @@ surface is well past "static documents". What works:
   generation-based cancellation on navigation. JS `fetch()`/XHR run async off
   the worker pool with method/headers/body.
 - **JavaScript** — QuickJS-NG with timers, microtasks, a DOM API, and enough
-  of the web platform to boot mainstream SPA shells.
+  of the web platform to boot mainstream SPA shells. Dynamically-inserted
+  `<script>` elements execute: inline ones synchronously at insertion,
+  external ones queued and drained by the pump (fetch → eval → `load`/`error`
+  event on the element) — the tag-manager / chunk-loader / challenge-page
+  pattern. Entering JS from a coroutine stack is safe: every C→JS entry
+  re-anchors QuickJS's stack watermark (`yetty_ylexbor_js_update_stack_top`).
 
 Still missing: real font shaping (metrics are approximated, which is the main
 source of anchor-suite wrap drift); full CSS Grid conformance (intrinsic track

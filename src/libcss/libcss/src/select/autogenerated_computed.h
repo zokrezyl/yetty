@@ -203,7 +203,7 @@ struct css_computed_style_i {
  * list_style_image; flex_shrink; flex_grow; fill_opacity; counter_reset;
  * counter_increment; color; background_image
  */
-    uint32_t bits[15];
+    uint32_t bits[16]; /* [15] added for justify-self/justify-items */
 
     css_color background_color;
     lwc_string *background_image;
