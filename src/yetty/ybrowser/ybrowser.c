@@ -1027,6 +1027,13 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
         css = expanded_css;
         css_len = expanded_len;
     }
+    size_t grid_expanded_len = 0;
+    char *grid_expanded_css =
+        yetty_ybrowser_css_expand_grid_template(css, css_len, &grid_expanded_len);
+    if (grid_expanded_css != NULL) {
+        css = grid_expanded_css;
+        css_len = grid_expanded_len;
+    }
 
     /* Pre-scan for `:root { --x: y; }` etc. before lexbor parses,
 	 * so var() lookups see the latest definitions. */
@@ -1059,6 +1066,7 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
      * cost on large pages. */
     (void)yetty_ybrowser_libcss_add_sheet(r, css, css_len, CSS_ORIGIN_AUTHOR, sheet_url);
 
+    free(grid_expanded_css);
     free(expanded_css);
     return YETTY_OK_VOID();
 }
@@ -1293,6 +1301,43 @@ int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x
                 tag_out[n] = '\0';
             }
         }
+    }
+    return 0;
+}
+
+/* offsetLeft/offsetTop of the box's element (CSSOM-View): the border-edge
+ * position relative to the nearest POSITIONED ancestor's padding edge. With
+ * no positioned ancestor the offsetParent is the body, where the legacy
+ * behavior is initial-containing-block coordinates — i.e. the absolute
+ * document position. check-layout-th.js compares data-offset-x/-y against
+ * exactly node.offsetLeft/offsetTop, so the WPT dump must emit THESE, not
+ * raw document coordinates. */
+int yetty_ylexbor_test_box_offset_at(const struct yetty_ylexbor *r, int index, float *offset_left,
+                                     float *offset_top)
+{
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    float base_x = 0.0f;
+    float base_y = 0.0f;
+    for (uint32_t ancestor = b->parent; ancestor != 0;
+         ancestor = r->boxes.data[ancestor].parent) {
+        const struct yetty_ylexbor_box *ancestor_box = &r->boxes.data[ancestor];
+        if (ancestor_box->position != YL_POS_STATIC) {
+            base_x = ancestor_box->x + ancestor_box->border_left;
+            base_y = ancestor_box->y + ancestor_box->border_top;
+            break;
+        }
+        if (r->boxes.data[ancestor].parent == ancestor) {
+            break; /* malformed self-parent — never spin */
+        }
+    }
+    if (offset_left) {
+        *offset_left = b->x - base_x;
+    }
+    if (offset_top) {
+        *offset_top = b->y - base_y;
     }
     return 0;
 }

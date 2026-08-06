@@ -31,6 +31,25 @@ steps:
       # that yetty built. Excludes network/gpu/display/slow (see docs/testing.md).
       - make test-fast
 
+  # Upstream Web-Platform-Tests conformance ratchet: run the real WPT
+  # layout suites (check-layout-th.js geometry assertions) against the
+  # freshly-built ybrowser and REQUIRE every test in the committed
+  # baseline (test/ybrowser/wpt-upstream/baseline.json) to stay green —
+  # the score only goes up. The WPT checkout is pinned to the commit
+  # recorded in the baseline so upstream churn can't move the goalposts.
+  # After a layout fix turns tests green, re-record with
+  #   run.py --write-baseline test/ybrowser/wpt-upstream/baseline.json tmp/wpt
+  # and commit the refreshed baseline alongside the fix.
+  wpt-ratchet:
+    image: yetty-build:latest
+    commands:
+      - |
+        WPT_COMMIT=$(python3 -c "import json; print(json.load(open('test/ybrowser/wpt-upstream/baseline.json'))['wpt_commit'])")
+        git clone --no-checkout --filter=blob:none --sparse https://github.com/web-platform-tests/wpt tmp/wpt
+        git -C tmp/wpt sparse-checkout set css/css-flexbox css/css-grid css/support resources
+        git -C tmp/wpt checkout "$WPT_COMMIT"
+        python3 test/ybrowser/wpt-upstream/run.py --baseline test/ybrowser/wpt-upstream/baseline.json tmp/wpt
+
   # Regression corpus check (issue #454): compare deterministic ycat/
   # decode-ydraw scenario output against the accepted reference corpus
   # published as a GitHub Release asset. Read-only — this step never

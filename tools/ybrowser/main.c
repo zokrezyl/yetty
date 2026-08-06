@@ -743,10 +743,11 @@ int main(int argc, char **argv)
          * document-coord geometry. The runner compares present expectations
          * against the actuals. */
         int count = yetty_ylexbor_test_box_count(yl);
-        /* check-layout-th.js's data-offset-x/-y are ABSOLUTE document
-         * coordinates (the harness sums offsetLeft/offsetTop up the offsetParent
-         * chain). ybrowser already applies the UA `body{margin:8px}`, so its
-         * absolute box coords compare directly — no rebasing needed. */
+        /* check-layout-th.js's data-offset-x/-y assert against the element's
+         * OWN offsetLeft/offsetTop — offsetParent-relative, NOT absolute
+         * document coordinates. The ax/ay columns therefore carry the
+         * CSSOM-View offset values (test_box_offset_at); aw/ah stay the
+         * border-box size (offsetWidth/offsetHeight). */
         printf("#tag\tox\toy\tew\teh\tax\tay\taw\tah\n");
         for (int bi = 0; bi < count; bi++) {
             float x = 0, y = 0, w = 0, h = 0;
@@ -754,6 +755,8 @@ int main(int argc, char **argv)
             if (yetty_ylexbor_test_box_at(yl, bi, &x, &y, &w, &h, tag, sizeof(tag)) != 0) {
                 continue;
             }
+            float offset_left = x, offset_top = y;
+            (void)yetty_ylexbor_test_box_offset_at(yl, bi, &offset_left, &offset_top);
             char ox[32] = {0}, oy[32] = {0}, ew[32] = {0}, eh[32] = {0};
             (void)yetty_ylexbor_test_box_attr_at(yl, bi, "data-offset-x", ox, sizeof(ox));
             (void)yetty_ylexbor_test_box_attr_at(yl, bi, "data-offset-y", oy, sizeof(oy));
@@ -763,8 +766,8 @@ int main(int argc, char **argv)
                 continue; /* no assertion on this element */
             }
             printf("%s\t%s\t%s\t%s\t%s\t%.1f\t%.1f\t%.1f\t%.1f\n", tag[0] ? tag : "-",
-                   ox[0] ? ox : "-", oy[0] ? oy : "-", ew[0] ? ew : "-", eh[0] ? eh : "-", x, y, w,
-                   h);
+                   ox[0] ? ox : "-", oy[0] ? oy : "-", ew[0] ? ew : "-", eh[0] ? eh : "-",
+                   offset_left, offset_top, w, h);
         }
         fflush(stdout);
         yetty_ylexbor_destroy(yl);

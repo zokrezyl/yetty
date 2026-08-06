@@ -40,6 +40,18 @@ css_error css__cascade_justify_content(uint32_t opv, css_style *style, css_selec
         case JUSTIFY_CONTENT_SPACE_EVENLY:
             value = CSS_JUSTIFY_CONTENT_SPACE_EVENLY;
             break;
+        case JUSTIFY_CONTENT_START:
+            value = CSS_JUSTIFY_CONTENT_START;
+            break;
+        case JUSTIFY_CONTENT_END:
+            value = CSS_JUSTIFY_CONTENT_END;
+            break;
+        case JUSTIFY_CONTENT_LEFT:
+            value = CSS_JUSTIFY_CONTENT_LEFT;
+            break;
+        case JUSTIFY_CONTENT_RIGHT:
+            value = CSS_JUSTIFY_CONTENT_RIGHT;
+            break;
         }
     }
 

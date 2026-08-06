@@ -178,6 +178,17 @@ int yetty_ybrowser_libcss_order(const css_computed_style *style, int32_t *out);
  * CSS_ALIGN_SELF_AUTO when unset. */
 int yetty_ybrowser_libcss_align_self(const css_computed_style *style);
 
+/* css-align grid inline-axis alignment (CSS_JUSTIFY_SELF_* /
+ * CSS_JUSTIFY_ITEMS_* values; AUTO / STRETCH defaults when unset). */
+int yetty_ybrowser_libcss_justify_self(const css_computed_style *style);
+int yetty_ybrowser_libcss_justify_items(const css_computed_style *style);
+
+/* CSS_DIRECTION_* — LTR when unset. */
+int yetty_ybrowser_libcss_direction(const css_computed_style *style);
+
+/* CSS_WRITING_MODE_* — horizontal-tb when unset. */
+int yetty_ybrowser_libcss_writing_mode(const css_computed_style *style);
+
 /* Float / clear. Returns the CSS_FLOAT_* / CSS_CLEAR_* enum. */
 int yetty_ybrowser_libcss_float(const css_computed_style *style);
 int yetty_ybrowser_libcss_clear(const css_computed_style *style);

@@ -1056,6 +1056,31 @@ static void ce_react_connect(JSContext *ctx, lxb_dom_node_t *inserted)
     }
 }
 
+/* Dynamically-inserted <script> handling: a script element (or a subtree
+ * containing script elements) that lands CONNECTED in the document must
+ * execute (inline, synchronously) or queue for async fetch (external) — see
+ * yetty_ylexbor_js_queue_script. Walks the inserted subtree because
+ * frameworks insert prebuilt trees wholesale. Called by every insertion
+ * path alongside ce_react_connect. innerHTML deliberately does NOT come
+ * through here — spec: innerHTML-created scripts never execute. */
+static void script_element_ingest(JSContext *ctx, lxb_dom_node_t *inserted)
+{
+    if (inserted == NULL || !node_is_connected(inserted)) {
+        return;
+    }
+    struct yetty_ylexbor *r = runtime_ylex(ctx);
+    if (r == NULL) {
+        return;
+    }
+    if (inserted->type == LXB_DOM_NODE_TYPE_ELEMENT && inserted->local_name == LXB_TAG_SCRIPT) {
+        yetty_ylexbor_js_queue_script(r, lxb_dom_interface_element(inserted));
+        return; /* a script's children are its source text, not a subtree */
+    }
+    for (lxb_dom_node_t *child = inserted->first_child; child != NULL; child = child->next) {
+        script_element_ingest(ctx, child);
+    }
+}
+
 /* Upgrade a freshly-created element in place (document.createElement of a
  * defined custom tag). Unlike connect, the element is detached, so only the
  * constructor + observed-attribute reactions run; connectedCallback waits for a
@@ -1178,6 +1203,7 @@ static void insert_fragment_children(JSContext *ctx, lxb_dom_node_t *parent,
         style_element_ingest(ctx, sub);
         dom_mo_notify_child_list(ctx, parent, sub, NULL, sub->prev, sub->next);
         ce_react_connect(ctx, sub);
+        script_element_ingest(ctx, sub);
     }
 }
 
@@ -1228,6 +1254,7 @@ static JSValue js_el_appendChild(JSContext *ctx, JSValueConst this_val, int argc
     mark_dirty(ctx);
     dom_mo_notify_child_list(ctx, parent, child, NULL, last, NULL);
     ce_react_connect(ctx, child);
+    script_element_ingest(ctx, child);
     return JS_DupValue(ctx, argv[0]);
 }
 
@@ -1335,6 +1362,7 @@ static JSValue js_el_before(JSContext *ctx, JSValueConst this_val, int argc, JSV
         }
         detach(n);
         lxb_dom_node_insert_before(self, n);
+        script_element_ingest(ctx, n);
     }
     mark_dirty(ctx);
     return JS_UNDEFINED;
@@ -1361,6 +1389,7 @@ static JSValue js_el_after(JSContext *ctx, JSValueConst this_val, int argc, JSVa
         }
         detach(n);
         lxb_dom_node_insert_after(anchor, n);
+        script_element_ingest(ctx, n);
         anchor = n;
     }
     mark_dirty(ctx);
@@ -1385,6 +1414,7 @@ static JSValue js_el_replaceWith(JSContext *ctx, JSValueConst this_val, int argc
         }
         detach(n);
         lxb_dom_node_insert_before(self, n);
+        script_element_ingest(ctx, n);
     }
     node_remove_safe(self);
     mark_dirty(ctx);
@@ -1415,6 +1445,7 @@ static JSValue js_el_prepend(JSContext *ctx, JSValueConst this_val, int argc, JS
         } else {
             lxb_dom_node_insert_child(parent, n);
         }
+        script_element_ingest(ctx, n);
     }
     mark_dirty(ctx);
     return JS_UNDEFINED;
@@ -1437,6 +1468,7 @@ static JSValue js_el_append(JSContext *ctx, JSValueConst this_val, int argc, JSV
         }
         detach(n);
         lxb_dom_node_insert_child(parent, n);
+        script_element_ingest(ctx, n);
     }
     mark_dirty(ctx);
     return JS_UNDEFINED;
@@ -1488,6 +1520,7 @@ static JSValue js_el_insertBefore(JSContext *ctx, JSValueConst this_val, int arg
     mark_dirty(ctx);
     dom_mo_notify_child_list(ctx, parent, node, NULL, node->prev, node->next);
     ce_react_connect(ctx, node);
+    script_element_ingest(ctx, node);
     return JS_DupValue(ctx, argv[0]);
 }
 
@@ -1536,6 +1569,7 @@ static JSValue js_el_replaceChild(JSContext *ctx, JSValueConst this_val, int arg
     dom_mo_notify_child_list(ctx, parent, node, old, old_prev, old_next);
     ce_react_disconnect(ctx, old);
     ce_react_connect(ctx, node);
+    script_element_ingest(ctx, node);
     return JS_DupValue(ctx, argv[1]);
 }
 
@@ -6345,6 +6379,7 @@ static void maybe_submit_activated_form(JSContext *ctx, lxb_dom_element_t *targe
         break; /* first button/input ancestor decides; stop regardless */
     }
     if (submit_el == NULL) {
+        ydebug("submit_activated_form: no submit control on click target path");
         return;
     }
     /* Find the owning form: nearest <form> ancestor. (We don't model the
@@ -6364,8 +6399,10 @@ static void maybe_submit_activated_form(JSContext *ctx, lxb_dom_element_t *targe
         }
     }
     if (form_el == NULL) {
+        ydebug("submit_activated_form: submit control has no ancestor <form>");
         return;
     }
+    ydebug("submit_activated_form: submitting owning form");
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue submit_fn = JS_GetPropertyStr(ctx, global, "__ybSubmitForm");
     if (JS_IsFunction(ctx, submit_fn)) {
@@ -6373,9 +6410,20 @@ static void maybe_submit_activated_form(JSContext *ctx, lxb_dom_element_t *targe
         JSValue btn_wrap = wrap_element(ctx, submit_el);
         JSValue args[2] = {form_wrap, btn_wrap};
         JSValue ret = JS_Call(ctx, submit_fn, global, 2, args);
+        if (JS_IsException(ret)) {
+            JSValue exception = JS_GetException(ctx);
+            const char *message = JS_ToCString(ctx, exception);
+            ydebug("submit_activated_form: __ybSubmitForm threw: %s", message ? message : "?");
+            if (message) {
+                JS_FreeCString(ctx, message);
+            }
+            JS_FreeValue(ctx, exception);
+        }
         JS_FreeValue(ctx, ret);
         JS_FreeValue(ctx, form_wrap);
         JS_FreeValue(ctx, btn_wrap);
+    } else {
+        ydebug("submit_activated_form: __ybSubmitForm missing");
     }
     JS_FreeValue(ctx, submit_fn);
     JS_FreeValue(ctx, global);
@@ -6442,12 +6490,19 @@ static void maybe_navigate_anchor(JSContext *ctx, lxb_dom_element_t *target)
 int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
 {
     if (!r || !r->js_ctx || !r->js_rt) {
+        ydebug("dispatch_click (%.1f,%.1f): no js runtime", x, y);
         return 0;
     }
+    yetty_ylexbor_js_update_stack_top(r);
     struct js_dom_state *state = JS_GetRuntimeOpaque((JSRuntime *)r->js_rt);
-    if (!state || state->listener_count == 0) {
+    if (!state) {
+        ydebug("dispatch_click (%.1f,%.1f): no dom state", x, y);
         return 0;
     }
+    /* NOTE: listener_count == 0 must NOT bail here — the native default
+	 * actions below (submit-button form submission, anchor navigation,
+	 * focus) apply to plain-HTML pages that never registered a JS
+	 * listener. */
     if (state->dispatch_depth > 32) {
         return 0;
     }
@@ -6476,7 +6531,16 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
         }
     }
     if (target == NULL) {
+        ydebug("dispatch_click (%.1f,%.1f): no box hit (%u boxes)", x, y, r->boxes.size);
         return 0;
+    }
+    {
+        size_t tag_len = 0;
+        const lxb_char_t *tag_name = lxb_dom_element_qualified_name(target, &tag_len);
+        struct yetty_ylexbor_box *hit_box = &r->boxes.data[best_index];
+        ydebug("dispatch_click (%.1f,%.1f): hit box %u <%.*s> rect=(%.1f,%.1f)+%.1fx%.1f", x, y,
+               best_index, (int)tag_len, tag_name ? (const char *)tag_name : "?", hit_box->x,
+               hit_box->y, hit_box->w, hit_box->h);
     }
 
     JSContext *ctx = (JSContext *)r->js_ctx;
@@ -6597,6 +6661,7 @@ int yetty_ylexbor_has_page_focus(struct yetty_ylexbor *r)
     if (!r || !r->js_ctx) {
         return 0;
     }
+    yetty_ylexbor_js_update_stack_top(r);
     JSContext *ctx = (JSContext *)r->js_ctx;
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue fn = JS_GetPropertyStr(ctx, global, "__ybHasPageFocus");
@@ -6618,6 +6683,7 @@ void yetty_ylexbor_dispatch_text(struct yetty_ylexbor *r, const char *utf8)
     if (!r || !r->js_ctx || !utf8 || !*utf8) {
         return;
     }
+    yetty_ylexbor_js_update_stack_top(r);
     JSContext *ctx = (JSContext *)r->js_ctx;
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue fn = JS_GetPropertyStr(ctx, global, "__ybInsertText");
@@ -6641,6 +6707,7 @@ int yetty_ylexbor_dispatch_key(struct yetty_ylexbor *r, const char *key_name)
     if (!r || !r->js_ctx || !key_name) {
         return 0;
     }
+    yetty_ylexbor_js_update_stack_top(r);
     JSContext *ctx = (JSContext *)r->js_ctx;
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue fn = JS_GetPropertyStr(ctx, global, "__ybEditKey");
@@ -6746,6 +6813,7 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r, const char *t
     if (!r || !r->js_ctx || !type) {
         return;
     }
+    yetty_ylexbor_js_update_stack_top(r);
     JSContext *ctx = (JSContext *)r->js_ctx;
     struct js_dom_state *state = dom_state(ctx);
     if (!state) {
@@ -6796,6 +6864,45 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r, const char *t
     JS_FreeValue(ctx, doc_target);
 }
 
+void yetty_ylexbor_js_fire_element_event(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                         const char *type)
+{
+    if (!r || !r->js_ctx || !element || !type) {
+        return;
+    }
+    yetty_ylexbor_js_update_stack_top(r);
+    /* addEventListener path… */
+    yetty_ylexbor_js_dispatch_event_type(r, type, element);
+    /* …and the on<type> property path (script loaders overwhelmingly use
+	 * `el.onload = fn`; the wrapper cache keeps that property alive). */
+    JSContext *ctx = (JSContext *)r->js_ctx;
+    char prop_name[32];
+    snprintf(prop_name, sizeof(prop_name), "on%s", type);
+    JSValue wrapper = wrap_element(ctx, element);
+    JSValue handler = JS_GetPropertyStr(ctx, wrapper, prop_name);
+    if (JS_IsFunction(ctx, handler)) {
+        JSValue event = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, event, "type", JS_NewString(ctx, type));
+        JS_SetPropertyStr(ctx, event, "target", JS_DupValue(ctx, wrapper));
+        JS_SetPropertyStr(ctx, event, "currentTarget", JS_DupValue(ctx, wrapper));
+        JSValue ret = JS_Call(ctx, handler, wrapper, 1, (JSValueConst[]){event});
+        if (JS_IsException(ret)) {
+            JSValue exception = JS_GetException(ctx);
+            const char *message = JS_ToCString(ctx, exception);
+            ydebug("js %s handler: %s", prop_name, message ? message : "?");
+            if (message) {
+                JS_FreeCString(ctx, message);
+            }
+            JS_FreeValue(ctx, exception);
+            r->js_error_count++;
+        }
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, event);
+    }
+    JS_FreeValue(ctx, handler);
+    JS_FreeValue(ctx, wrapper);
+}
+
 #else /* !YETTY_HAVE_QUICKJS */
 
 void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
@@ -6808,6 +6915,13 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
     (void)x;
     (void)y;
     return 0;
+}
+void yetty_ylexbor_js_fire_element_event(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                         const char *type)
+{
+    (void)r;
+    (void)element;
+    (void)type;
 }
 void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r, const char *type,
                                           void *target_element_ptr_or_null)

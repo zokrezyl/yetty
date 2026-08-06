@@ -338,6 +338,15 @@ void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r)
     }
     yetty_ylexbor_js_web_shutdown(r);
     yetty_ylexbor_js_dom_reset(r);
+    /* Queued dynamic scripts hold element pointers into the dying document —
+	 * drop them (urls are owned; elements are the document's). */
+    for (int i = 0; i < r->pending_script_count; i++) {
+        free(r->pending_scripts[i].url);
+    }
+    free(r->pending_scripts);
+    r->pending_scripts = NULL;
+    r->pending_script_count = 0;
+    r->pending_script_cap = 0;
     if (r->js_rt) {
         void *opaque = JS_GetRuntimeOpaque((JSRuntime *)r->js_rt);
         free(opaque);
@@ -724,6 +733,157 @@ static void run_collected_scripts(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
     free(collect.items);
 }
 
+/* ===========================================================================
+ * Dynamically-inserted <script> execution.
+ *
+ * The DOM insertion paths (appendChild & friends, ybrowser-js-dom.c) call
+ * queue_script for every <script> element that lands connected in the
+ * document. Per spec a dynamic INLINE script runs synchronously at
+ * insertion; a dynamic EXTERNAL script loads without blocking the inserting
+ * script. Delivery mirrors the fetch()/image split: with a worker pool the
+ * fetch runs as an async pool job (js_script_job, ybrowser-js-web.c); the
+ * pool-less hosts (one-shot render, in-yetty client) queue on
+ * r->pending_scripts and the pump executes a small batch per tick. This is
+ * the script-loader pattern every tag manager, SPA chunk loader and
+ * challenge page uses; without it a createElement('script') site renders an
+ * empty shell.
+ * ===========================================================================*/
+void yetty_ylexbor_js_eval_script_body(struct yetty_ylexbor *r, const char *body, size_t body_len,
+                                       const char *url)
+{
+    if (r == NULL || r->js_ctx == NULL || body == NULL) {
+        return;
+    }
+    yetty_ylexbor_js_update_stack_top(r);
+    eval_buf(r, (JSContext *)r->js_ctx, body, body_len, url);
+}
+void yetty_ylexbor_js_queue_script(struct yetty_ylexbor *r, lxb_dom_element_t *element)
+{
+    if (r == NULL || element == NULL || r->js_ctx == NULL) {
+        return;
+    }
+    if (!is_js_script_type(element)) {
+        return;
+    }
+    size_t srclen = 0;
+    const lxb_char_t *src_attr =
+        lxb_dom_element_get_attribute(element, (const lxb_char_t *)"src", 3, &srclen);
+    if (src_attr && srclen > 0) {
+        char *href = malloc(srclen + 1);
+        if (!href) {
+            return;
+        }
+        memcpy(href, src_attr, srclen);
+        href[srclen] = '\0';
+        char *url = yetty_ylexbor_resolve_url(r, href);
+        free(href);
+        if (!url) {
+            return;
+        }
+        if (is_tracking_script_url(url)) {
+            ydebug("dynamic script skip tracking %.120s", url);
+            free(url);
+            return;
+        }
+        /* Pool available (standalone browser): async worker-pool job, same
+		 * lifecycle as fetch() — nothing blocks, delivery is generation-
+		 * guarded. Ownership of url moves to the job on success. */
+        ydebug("dynamic script queued %.140s", url);
+        if (yetty_ylexbor_js_submit_script_job(r, element, url)) {
+            return;
+        }
+        /* No pool (one-shot render, in-yetty client): queue for the pump's
+		 * per-tick batch. The same element re-inserted (moved) must not run
+		 * twice. */
+        for (int i = 0; i < r->pending_script_count; i++) {
+            if (r->pending_scripts[i].element == element) {
+                free(url);
+                return;
+            }
+        }
+        if (r->pending_script_count == r->pending_script_cap) {
+            int new_cap = r->pending_script_cap ? r->pending_script_cap * 2 : 4;
+            struct yetty_ylexbor_pending_script *grown =
+                realloc(r->pending_scripts, (size_t)new_cap * sizeof(*grown));
+            if (!grown) {
+                free(url);
+                return;
+            }
+            r->pending_scripts = grown;
+            r->pending_script_cap = new_cap;
+        }
+        r->pending_scripts[r->pending_script_count].element = element;
+        r->pending_scripts[r->pending_script_count].url = url;
+        r->pending_script_count++;
+        return;
+    }
+    size_t slen = 0;
+    char *inline_src = collect_script_text(lxb_dom_interface_node(element), &slen);
+    if (inline_src) {
+        ydebug("dynamic inline script %zu bytes", slen);
+        eval_buf(r, (JSContext *)r->js_ctx, inline_src, slen, "<dynamic>");
+        free(inline_src);
+    }
+}
+
+int yetty_ylexbor_js_run_pending_scripts(struct yetty_ylexbor *r)
+{
+    if (r == NULL || r->js_ctx == NULL || r->pending_script_count == 0) {
+        return 0;
+    }
+    if (r->loader == NULL) {
+        /* String-loaded document with no network — drop the queue. */
+        for (int i = 0; i < r->pending_script_count; i++) {
+            free(r->pending_scripts[i].url);
+        }
+        r->pending_script_count = 0;
+        return 0;
+    }
+    yetty_ylexbor_js_update_stack_top(r);
+    /* Pool-less degraded mode, same shape as the client image path: ONE
+	 * small multiplexed batch per pump tick. Scripts an executed batch
+	 * enqueues run next tick — the pump reports pending work so the host
+	 * keeps ticking. */
+    enum { SCRIPT_BATCH_MAX = 4 };
+    int batch_count = r->pending_script_count;
+    if (batch_count > SCRIPT_BATCH_MAX) {
+        batch_count = SCRIPT_BATCH_MAX;
+    }
+    struct yetty_ylexbor_pending_script batch[SCRIPT_BATCH_MAX];
+    memcpy(batch, r->pending_scripts, (size_t)batch_count * sizeof(*batch));
+    r->pending_script_count -= batch_count;
+    memmove(r->pending_scripts, r->pending_scripts + batch_count,
+            (size_t)r->pending_script_count * sizeof(*batch));
+
+    struct yetty_ybrowser_request requests[SCRIPT_BATCH_MAX] = {0};
+    struct yetty_ybrowser_response responses[SCRIPT_BATCH_MAX] = {0};
+    for (int i = 0; i < batch_count; i++) {
+        requests[i].url = batch[i].url;
+        requests[i].kind = YETTY_YBROWSER_REQUEST_SCRIPT;
+        requests[i].referer = r->base_url;
+    }
+    struct yetty_ycore_void_result many_res = yetty_ybrowser_fetch_many(
+        r->loader, requests, batch_count, responses, /*host_connection_cap=*/8);
+    if (YETTY_IS_ERR(many_res)) {
+        yetty_ycore_error_destroy(many_res.error);
+    }
+    int executed = 0;
+    for (int i = 0; i < batch_count; i++) {
+        struct yetty_ybrowser_response *response = &responses[i];
+        if (response->body && response->status >= 200 && response->status < 300) {
+            eval_buf(r, (JSContext *)r->js_ctx, response->body, response->body_len, batch[i].url);
+            executed++;
+            yetty_ylexbor_js_fire_element_event(r, batch[i].element, "load");
+        } else {
+            ydebug("dynamic script %.140s status=%ld", batch[i].url, response->status);
+            yetty_ylexbor_js_fire_element_event(r, batch[i].element, "error");
+        }
+        yetty_ybrowser_response_dispose(response);
+        free(batch[i].url);
+    }
+    return executed;
+}
+
 /* Update document.readyState (plain data property on the document object). */
 static void js_doc_set_ready_state(struct yetty_ylexbor *r, const char *ready_state)
 {
@@ -738,6 +898,13 @@ static void js_doc_set_ready_state(struct yetty_ylexbor *r, const char *ready_st
     }
     JS_FreeValue(ctx, doc);
     JS_FreeValue(ctx, global);
+}
+
+void yetty_ylexbor_js_update_stack_top(struct yetty_ylexbor *r)
+{
+    if (r != NULL && r->js_rt != NULL) {
+        JS_UpdateStackTop((JSRuntime *)r->js_rt);
+    }
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(struct yetty_ylexbor *r)
@@ -755,6 +922,7 @@ struct yetty_ycore_void_result yetty_ylexbor_js_run_all_scripts(struct yetty_yle
     if (YETTY_IS_ERR(ir)) {
         return ir;
     }
+    yetty_ylexbor_js_update_stack_top(r);
 
     /* Investigation prelude (YBROWSER_PRELUDE=<file>): evaluate a JS file in the
      * page context after the environment is initialised but before any page
@@ -912,6 +1080,7 @@ struct yetty_ycore_char_ptr_result yetty_ylexbor_eval_js(struct yetty_ylexbor *r
     }
     struct yetty_ycore_void_result init_res = yetty_ylexbor_js_init(r);
     YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, init_res, "eval_js: JS init");
+    yetty_ylexbor_js_update_stack_top(r);
 
     JSContext *ctx = (JSContext *)r->js_ctx;
     yetty_ylexbor_console_push(r, YETTY_YLEXBOR_CONSOLE_INPUT, src);
@@ -940,6 +1109,20 @@ struct yetty_ycore_char_ptr_result yetty_ylexbor_eval_js(struct yetty_ylexbor *r
 
 #else /* !YETTY_HAVE_QUICKJS — compile-out */
 
+void yetty_ylexbor_js_update_stack_top(struct yetty_ylexbor *r)
+{
+    (void)r;
+}
+void yetty_ylexbor_js_queue_script(struct yetty_ylexbor *r, lxb_dom_element_t *element)
+{
+    (void)r;
+    (void)element;
+}
+int yetty_ylexbor_js_run_pending_scripts(struct yetty_ylexbor *r)
+{
+    (void)r;
+    return 0;
+}
 struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r)
 {
     (void)r;

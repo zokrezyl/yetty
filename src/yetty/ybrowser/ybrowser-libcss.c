@@ -1006,6 +1006,13 @@ int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, si
         eff_len = strlen(calc_rewritten);
     }
 
+    /* Two-token css-align baseline values would be dropped whole. */
+    char *baseline_rewritten = yetty_ybrowser_css_rewrite_baseline_alignment(eff, eff_len);
+    if (baseline_rewritten) {
+        eff = baseline_rewritten;
+        eff_len = strlen(baseline_rewritten);
+    }
+
     err = css_stylesheet_append_data(sheet, (const uint8_t *)eff, eff_len);
     /* CSS_NEEDDATA is normal — parser is asking for more bytes. We
      * close the stream below with data_done. */
@@ -1013,6 +1020,7 @@ int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, si
         ydebug("libcss append_data -> %d", (int)err);
     }
     err = css_stylesheet_data_done(sheet);
+    free(baseline_rewritten);
     free(calc_rewritten);
     free(not_rewritten);
     free(mq_rewritten);
@@ -1349,8 +1357,15 @@ css_computed_style *yetty_ybrowser_libcss_select(struct yetty_ylexbor *r, lxb_do
                 yetty_ylexbor_css_vars_resolve_for_element(r, el, inline_css, inline_css_len);
             const char *ieff = iresolved ? iresolved : inline_css;
             size_t ieff_len = iresolved ? strlen(iresolved) : inline_css_len;
+            /* Same two-token baseline rewrite the sheet path applies. */
+            char *ibaseline = yetty_ybrowser_css_rewrite_baseline_alignment(ieff, ieff_len);
+            if (ibaseline) {
+                ieff = ibaseline;
+                ieff_len = strlen(ibaseline);
+            }
             css_stylesheet_append_data(inline_sheet, (const uint8_t *)ieff, ieff_len);
             css_stylesheet_data_done(inline_sheet);
+            free(ibaseline);
             free(iresolved);
         }
     }
@@ -2222,6 +2237,38 @@ int yetty_ybrowser_libcss_align_self(const css_computed_style *style)
         return CSS_ALIGN_SELF_AUTO;
     }
     return (int)css_computed_align_self(style);
+}
+
+int yetty_ybrowser_libcss_justify_self(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_JUSTIFY_SELF_AUTO;
+    }
+    return (int)css_computed_justify_self(style);
+}
+
+int yetty_ybrowser_libcss_justify_items(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_JUSTIFY_ITEMS_STRETCH;
+    }
+    return (int)css_computed_justify_items(style);
+}
+
+int yetty_ybrowser_libcss_direction(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_DIRECTION_LTR;
+    }
+    return (int)css_computed_direction(style);
+}
+
+int yetty_ybrowser_libcss_writing_mode(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_WRITING_MODE_HORIZONTAL_TB;
+    }
+    return (int)css_computed_writing_mode(style);
 }
 
 int yetty_ybrowser_libcss_list_style_type(const css_computed_style *style)
