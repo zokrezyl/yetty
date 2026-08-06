@@ -1620,6 +1620,11 @@ char *yetty_ybrowser_css_rewrite_baseline_alignment(const char *css, size_t len)
  * understand. Fresh malloc'd string when expanded, else NULL. */
 char *yetty_ybrowser_css_expand_grid_template(const char *css, size_t len, size_t *out_len);
 
+/* Flatten @layer wrappers (libcss 0.9 has no cascade-layer support and
+ * mis-orders rules inside a layer). Hoists inner rules to top level so
+ * source-order cascade works. Fresh string when stripped, else NULL. */
+char *yetty_ybrowser_css_flatten_layers(const char *css, size_t len, size_t *out_len);
+
 /* Drop the customs table — called from destroy. */
 void yetty_ylexbor_css_vars_destroy(struct yetty_ylexbor *r);
 
