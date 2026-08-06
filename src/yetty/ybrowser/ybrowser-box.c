@@ -2790,6 +2790,10 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 				 * its default font-size from font_size. */
                 ib->fg = s.fg;
                 ib->font_size = s.font_size;
+                /* Opacity/visibility inherit too: an <img> inside a hidden or
+					 * transparent subtree must not paint. */
+                ib->opacity = s.opacity;
+                ib->vis_hidden = s.vis_hidden;
 
                 /* HTML width/height attrs (in px) take priority
 				 * — the spec calls these the "presentation
@@ -3027,6 +3031,14 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 svg_box->element = el;
                 svg_box->fg = s.fg;
                 svg_box->font_size = s.font_size;
+                /* Inherit the folded group opacity and the visibility state
+				 * from the ancestor chain — a replaced element inside a
+				 * visibility:hidden / opacity:0 subtree must not paint (the
+				 * icons in GitHub's collapsed nav dropdown panels painted
+				 * scattered across the hero because these were left at the
+				 * defaults). */
+                svg_box->opacity = s.opacity;
+                svg_box->vis_hidden = s.vis_hidden;
 
                 float attr_w = 0.0f, attr_h = 0.0f;
                 float view_w = 0.0f, view_h = 0.0f;
