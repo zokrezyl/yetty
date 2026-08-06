@@ -803,6 +803,20 @@ struct yetty_ylexbor_console_entry {
     char *text; /* owned */
 };
 
+/* One import-map entry: bare specifier (or trailing-slash prefix) -> URL. */
+struct yetty_ylexbor_importmap_entry {
+    char *from; /* owned */
+    char *to;   /* owned */
+};
+
+/* A prefetched ES-module source (from <link rel="modulepreload">), so the
+ * synchronous module loader compiles from memory instead of a serial fetch. */
+struct yetty_ylexbor_module_source {
+    char *url;  /* owned, resolved absolute URL (loader lookup key) */
+    char *body; /* owned */
+    size_t len;
+};
+
 struct yetty_ylexbor {
     /* Network loader (share handle, Alt-Svc cache). Either borrowed from
 	 * the host via config (owns_loader = 0) or created privately at
@@ -887,7 +901,23 @@ struct yetty_ylexbor {
 	 * have been encountered yet. */
     struct JSRuntime *js_rt;
     struct JSContext *js_ctx;
-    int js_error_count; /* uncaught exceptions encountered */
+    int js_error_count;   /* uncaught exceptions encountered */
+    double js_deadline_ms; /* wall-clock abort deadline for the current script
+						 * run (0 == no limit). Bounds heavy-SPA JS so a
+						 * one-shot render of a page whose scripts never idle
+						 * (timers/rAF/hydration) still terminates. */
+
+    /* ES-module import map (<script type="importmap">). Bare import specifiers
+	 * are resolved through these entries before URL resolution. Rebuilt per
+	 * document. A `from` ending in '/' is a prefix mapping. */
+    struct yetty_ylexbor_importmap_entry *importmap;
+    int importmap_count;
+    int importmap_cap;
+
+    /* Prefetched module sources (see prefetch_module_graph), keyed by URL. */
+    struct yetty_ylexbor_module_source *module_srcs;
+    int module_src_count;
+    int module_src_cap;
 
     /* DevTools console ring (lazily allocated on first push, CAP slots).
      * console_head is the next write slot; console_count is the number of
@@ -1744,6 +1774,14 @@ char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href);
 /* Same resolution against an explicit base — @import URLs resolve against
  * the IMPORTING stylesheet's URL, not the document base. */
 char *yetty_ylexbor_resolve_url_against(const char *base_url, const char *href);
+
+/* Rebuild the import map from the document's <script type="importmap"> (if any).
+ * Call once per document before module scripts run. */
+void yetty_ylexbor_js_importmap_scan(struct yetty_ylexbor *r);
+
+/* Resolve a bare import specifier through the import map. Returns a malloc'd
+ * URL/specifier the caller frees, or NULL if the map does not cover it. */
+char *yetty_ylexbor_js_importmap_resolve(struct yetty_ylexbor *r, const char *specifier);
 
 /* Publish decoded RGBA pixels onto the loader's resource cache entry for
  * `url` (copies), so the next navigation reuses the decode as well as
