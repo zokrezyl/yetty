@@ -2423,8 +2423,20 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 					 * ABSOLUTE/FIXED pull it out of flow and place it against
 					 * a containing block. STICKY collapses to RELATIVE. */
                     {
+                        /* visibility is INHERITED, but each element's style is
+						 * selected independently (no parent computed style
+						 * threaded into libcss), so an inherited `hidden` never
+						 * reaches descendants through the cascade. Propagate it
+						 * through the box-build state instead: once an ancestor
+						 * is hidden the subtree stays hidden. (A `visibility:
+						 * visible` child re-showing inside a hidden parent is not
+						 * distinguishable here without explicit-vs-default info
+						 * and is rare; the common case — icons/labels inside a
+						 * visibility:hidden dropdown panel — is what matters, and
+						 * without this GitHub painted the collapsed nav menus'
+						 * octicons scattered across the hero.) */
                         int visibility = yetty_ybrowser_libcss_visibility(cs);
-                        s.vis_hidden = visibility == CSS_VISIBILITY_HIDDEN ||
+                        s.vis_hidden = s.vis_hidden || visibility == CSS_VISIBILITY_HIDDEN ||
                                        visibility == CSS_VISIBILITY_COLLAPSE;
                         b->vis_hidden = s.vis_hidden;
                     }
@@ -3211,9 +3223,11 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         s.nowrap = true;
                     }
                     {
+                        /* Sticky like the block path: inherited hidden state
+						 * survives; an inline element only ADDS hidden. */
                         int inl_vis = yetty_ybrowser_libcss_visibility(inl_cs);
-                        s.vis_hidden =
-                            inl_vis == CSS_VISIBILITY_HIDDEN || inl_vis == CSS_VISIBILITY_COLLAPSE;
+                        s.vis_hidden = s.vis_hidden || inl_vis == CSS_VISIBILITY_HIDDEN ||
+                                       inl_vis == CSS_VISIBILITY_COLLAPSE;
                     }
                     yetty_ybrowser_libcss_release(inl_cs);
                 }
