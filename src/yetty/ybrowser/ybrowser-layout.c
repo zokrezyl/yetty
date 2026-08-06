@@ -4405,8 +4405,10 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         } else if (x_align == CSS_ALIGN_ITEMS_RIGHT) {
             x_align = CSS_ALIGN_ITEMS_FLEX_END;
         }
-        if (y_align == CSS_ALIGN_ITEMS_LEFT || y_align == CSS_ALIGN_ITEMS_RIGHT) {
+        if (y_align == CSS_ALIGN_ITEMS_LEFT) {
             y_align = CSS_ALIGN_ITEMS_FLEX_START;
+        } else if (y_align == CSS_ALIGN_ITEMS_RIGHT) {
+            y_align = CSS_ALIGN_ITEMS_FLEX_END;
         }
         /* The MARGIN box aligns in the area: start adds the start margin,
 		 * end subtracts the end margin, center splits the margin-exclusive
@@ -4438,13 +4440,26 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
 		 * box with horizontal line metrics. */
         if (grid_vertical && child->position == YL_POS_ABSOLUTE &&
             (child->grid_col_start > 0 || child->grid_row_start > 0)) {
-            child->x = child->static_x;
-            child->y = child->static_y;
             if (hyp_w > 0.0f) {
                 child->w = hyp_w;
             }
             if (hyp_h > 0.0f) {
                 child->h = hyp_h;
+            }
+            /* Insets resolve against the grid AREA and override the
+			 * alignment static position (CSS abspos rule); start-side wins
+			 * over end-side. */
+            child->x = child->static_x;
+            if (inset_is_set(child, 3)) {
+                child->x = area_x + inset_value(child, 3, area_w, area_h);
+            } else if (inset_is_set(child, 1)) {
+                child->x = area_x + area_w - inset_value(child, 1, area_w, area_h) - child->w;
+            }
+            child->y = child->static_y;
+            if (inset_is_set(child, 0)) {
+                child->y = area_y + inset_value(child, 0, area_w, area_h);
+            } else if (inset_is_set(child, 2)) {
+                child->y = area_y + area_h - inset_value(child, 2, area_w, area_h) - child->h;
             }
             child->abs_grid_area_placed = 1;
         } else if ((child->grid_col_start > 0 || child->grid_row_start > 0) &&
