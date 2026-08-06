@@ -2433,6 +2433,23 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     s.opacity = s.opacity * yetty_ybrowser_libcss_opacity(cs);
                     b->opacity = s.opacity;
                     b->clip_overflow = yetty_ybrowser_libcss_clips_overflow(cs);
+                    /* Visually-hidden accessibility idiom (`.sr-only` /
+					 * `.visually-hidden`): a 1x1 box that clips its overflow —
+					 * the skip-links, "Navigation Menu" headings, and live
+					 * regions on essentially every site. We have no per-pixel
+					 * scissor, so the clipped-away text would otherwise paint at
+					 * full size (white bars + stray labels over GitHub's
+					 * header). Collapsing to a 1px box that clips overflow is an
+					 * unambiguous "hide me visually, keep me for a11y" signal:
+					 * suppress the subtree's paint like visibility:hidden while
+					 * keeping its (tiny) layout box. Gate on BOTH axes tiny so a
+					 * genuine 1px rule/hairline (clips nothing meaningful) is
+					 * unaffected. */
+                    if (b->clip_overflow && b->css_width > 0.0f && b->css_width <= 2.0f &&
+                        b->css_height_set && b->css_height > 0.0f && b->css_height <= 2.0f) {
+                        b->vis_hidden = 1;
+                        s.vis_hidden = true; /* inherit to the flushed text runs */
+                    }
                     int pos = yetty_ybrowser_libcss_position(cs);
                     if (pos == CSS_POSITION_RELATIVE || pos == CSS_POSITION_STICKY) {
                         b->position = YL_POS_RELATIVE;
