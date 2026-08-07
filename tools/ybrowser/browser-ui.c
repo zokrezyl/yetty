@@ -2172,6 +2172,75 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
     (void)args_len;
     struct app *a = user;
 
+    /* Forwarded keyboard: once a figure is click-focused, yetty stops writing
+	 * raw keystroke bytes and instead delivers keys as client-input key
+	 * envelopes (same as it does for yrich/ymgui). Decode them into the
+	 * key_cb path so typing into a page field (e.g. YouTube's search box) and
+	 * editing chords work. Without this, every keystroke to the browser figure
+	 * was silently dropped. */
+    if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_KEY ||
+        osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY) {
+        if (payload_len < sizeof(struct yetty_client_input_key)) {
+            return;
+        }
+        struct yetty_client_input_key key_msg;
+        memcpy(&key_msg, payload, sizeof(key_msg));
+        if (key_msg.magic != YETTY_CLIENT_INPUT_KEY_MAGIC) {
+            return;
+        }
+        /* GLFW mod bits (shift=1, ctrl=2, alt=4) -> ygui mod bits. */
+        int ygui_mods = 0;
+        if (key_msg.mods & 0x1) {
+            ygui_mods |= YETTY_YGUI_MOD_SHIFT;
+        }
+        if (key_msg.mods & 0x2) {
+            ygui_mods |= YETTY_YGUI_MOD_CTRL;
+        }
+        if (key_msg.mods & 0x4) {
+            ygui_mods |= YETTY_YGUI_MOD_ALT;
+        }
+        /* key_cb consumes a byte-ish key: printable codepoints insert as text,
+		 * a handful of control codes drive editing/chords. CHAR carries text;
+		 * DOWN carries GLFW keycodes we map to those control codes (plain
+		 * printable DOWN is ignored — its text arrives via the CHAR event). */
+        uint32_t cb_key = 0;
+        if (key_msg.kind == YETTY_YMGUI_INPUT_KEY_CHAR) {
+            cb_key = key_msg.codepoint;
+        } else if (key_msg.kind == YETTY_YMGUI_INPUT_KEY_DOWN) {
+            switch (key_msg.key) {
+            case 256: /* GLFW_KEY_ESCAPE */
+                cb_key = 0x1B;
+                break;
+            case 257: /* GLFW_KEY_ENTER */
+            case 335: /* GLFW_KEY_KP_ENTER */
+                cb_key = '\r';
+                break;
+            case 259: /* GLFW_KEY_BACKSPACE */
+                cb_key = 0x08;
+                break;
+            case 258: /* GLFW_KEY_TAB */
+                cb_key = '\t';
+                break;
+            case 301: /* GLFW_KEY_F12 */
+                cb_key = YETTY_YGUI_KEY_F12;
+                break;
+            default:
+                /* Ctrl+<letter>: GLFW letter keycodes are ASCII 'A'..'Z'.
+				 * Deliver the control byte the chord handlers expect
+				 * (Ctrl-C=0x03, Ctrl-L=0x0C, …). */
+                if ((ygui_mods & YETTY_YGUI_MOD_CTRL) && key_msg.key >= 'A' &&
+                    key_msg.key <= 'Z') {
+                    cb_key = (uint32_t)(key_msg.key - 'A' + 1);
+                }
+                break;
+            }
+        }
+        if (cb_key != 0) {
+            (void)key_cb(a->fw, cb_key, ygui_mods, a);
+        }
+        return;
+    }
+
     if (osc_code == YETTY_OSC_SC_CLIENT_INPUT_MOUSE ||
         osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE) {
         if (payload_len < sizeof(struct yetty_client_input_mouse)) {

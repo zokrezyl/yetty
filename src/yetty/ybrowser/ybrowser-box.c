@@ -663,6 +663,26 @@ static void link_child(struct yetty_ylexbor *r, uint32_t parent_idx, uint32_t ci
     p->child_count++;
 }
 
+/* True when a box's extent on an axis was decided by flex distribution. A flex
+ * item can collapse to sub-pixel when a definite main-size never reached its
+ * flex container; such a degenerate overflow-clip rect is a layout artifact,
+ * not an intentional clip (see box_clipped_out). */
+static bool clip_axis_is_flex_sized(uint8_t source)
+{
+    switch (source) {
+    case YL_SRC_FLEX_BASIS:
+    case YL_SRC_FLEX_EVEN:
+    case YL_SRC_FLEX_SHARE:
+    case YL_SRC_FLEX_GROW:
+    case YL_SRC_FLEX_SHRINK:
+    case YL_SRC_FLEX_MIN:
+    case YL_SRC_FLEX_STRETCH:
+        return true;
+    default:
+        return false;
+    }
+}
+
 bool yetty_ylexbor_box_clipped_out(const struct yetty_ylexbor *r, uint32_t idx)
 {
     if (r == NULL || idx >= r->boxes.size) {
@@ -695,18 +715,21 @@ bool yetty_ylexbor_box_clipped_out(const struct yetty_ylexbor *r, uint32_t idx)
             skip = true; /* absolute: static ancestors below its CB do not clip */
         }
         /* Per-axis clip validity. An overflow-clip ancestor that collapsed to
-			 * sub-pixel on an axis because its flex-basis never grew (flex:1 1 0 in
-			 * a flex column whose definite main-size did not propagate — YouTube's
-			 * guide scroll container inside the app-drawer) is a layout artifact,
-			 * not an intentional clip; using its degenerate rect would hide the
-			 * whole correctly-laid-out guide. So an axis whose extent is <1px AND
-			 * came from an ungrown flex-basis does not clip. Everything else is
-			 * unchanged: a real overflow strip still clips, and a deliberate
-			 * height:0 (exactly 0) was already non-clipping via anc->h>0. */
+			 * sub-pixel on an axis because it is a flex item whose definite
+			 * main-size never propagated (flex:1 1 0 in a flex column — YouTube's
+			 * guide scroll container inside the position:fixed app-drawer, whose
+			 * height comes from flex distribution) is a layout artifact, not an
+			 * intentional clip; using its degenerate rect would hide the whole
+			 * correctly-laid-out guide. So an axis whose extent is <1px AND was
+			 * sized by ANY flex provenance (the drawer content collapses via
+			 * FLEX_SHRINK, not only FLEX_BASIS) does not clip. Everything else is
+			 * unchanged: a real overflow strip (>=1px) still clips, and a
+			 * deliberate height:0 (exactly 0) was already non-clipping via
+			 * anc->h>0. */
         bool clip_h_ok =
-            anc->w > 0.0f && !(anc->w < 1.0f && anc->width_source == YL_SRC_FLEX_BASIS);
+            anc->w > 0.0f && !(anc->w < 1.0f && clip_axis_is_flex_sized(anc->width_source));
         bool clip_v_ok =
-            anc->h > 0.0f && !(anc->h < 1.0f && anc->height_source == YL_SRC_FLEX_BASIS);
+            anc->h > 0.0f && !(anc->h < 1.0f && clip_axis_is_flex_sized(anc->height_source));
         if (!skip && cur != idx && anc->clip_overflow && (clip_h_ok || clip_v_ok)) {
             const float slack = 0.5f;
             bool out_h =

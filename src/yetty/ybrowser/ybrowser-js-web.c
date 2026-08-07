@@ -5213,15 +5213,26 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         /* Called from dispatch_click. Focus the nearest text field ancestor of
 		 * the clicked element, or blur the current one. Returns true if a field
 		 * took focus. */
-        "  globalThis.__ybFocusHit=function(el){ var e=el;"
-        "    while(e&&e.nodeType===1){ if(isTextField(e)){"
-        "      if(globalThis.__ybPageFocus!==e){"
+        "  globalThis.__ybFocusHit=function(el){ var e=el, hops=0, field=null;"
+        /* Walk up from the clicked element. At each level, take the element
+			 * itself if it is a text field, else the FIRST text field inside it.
+			 * The descendant search is what makes a click on a wrapped input work:
+			 * Material/outlined text fields (Google sign-in) layer a label/notch
+			 * overlay over the <input>, so the click target is the wrapper, not the
+			 * input. Bounded to a few hops so we don't grab an unrelated input from
+			 * a distant ancestor. */
+        "    while(e&&e.nodeType===1&&hops<6){"
+        "      if(isTextField(e)){ field=e; break; }"
+        "      if(e.querySelector){ var q=e.querySelector('input,textarea');"
+        "        if(q&&isTextField(q)){ field=q; break; } }"
+        "      e=e.parentNode; hops++; }"
+        "    if(field){"
+        "      if(globalThis.__ybPageFocus!==field){"
         "        if(globalThis.__ybPageFocus){ fire(globalThis.__ybPageFocus,'blur',false); }"
-        "        globalThis.__ybPageFocus=e; try{ if(typeof e.focus==='function')e.focus(); "
-        "}catch(x){}"
-        "        fire(e,'focus',false); fire(e,'focusin',true); }"
+        "        globalThis.__ybPageFocus=field;"
+        "        try{ if(typeof field.focus==='function')field.focus(); }catch(x){}"
+        "        fire(field,'focus',false); fire(field,'focusin',true); }"
         "      return true; }"
-        "      e=e.parentNode; }"
         "    if(globalThis.__ybPageFocus){ fire(globalThis.__ybPageFocus,'blur',false);"
         "      fire(globalThis.__ybPageFocus,'focusout',true); globalThis.__ybPageFocus=null; }"
         "    return false; };"

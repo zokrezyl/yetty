@@ -553,6 +553,16 @@ static void css_collect_push(struct css_collect *cc, struct css_entry e)
 static void css_collect_walk(struct yetty_ylexbor *r, lxb_dom_node_t *node, struct css_collect *cc)
 {
     for (lxb_dom_node_t *c = node->first_child; c != NULL; c = c->next) {
+        /* Scripting is enabled: <noscript> content is a JS-disabled fallback
+		 * and is inert — its <style>/<link> must NOT contribute to the cascade.
+		 * lexbor parses noscript children as real elements when scripting is on,
+		 * so without this skip a `<noscript><style>body{opacity:0}</style>
+		 * </noscript>` FOUC guard would apply and hide the whole page (this is
+		 * exactly what blanked accounts.google.com). Skip the subtree entirely. */
+        if (c->type == LXB_DOM_NODE_TYPE_ELEMENT && c->local_name == LXB_TAG_NOSCRIPT &&
+            getenv("YBROWSER_NO_JS") == NULL) {
+            continue;
+        }
         if (c->type == LXB_DOM_NODE_TYPE_ELEMENT) {
             lxb_dom_element_t *el = lxb_dom_interface_element(c);
             if (c->local_name == LXB_TAG_LINK) {

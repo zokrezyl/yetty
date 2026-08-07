@@ -3265,6 +3265,22 @@ static JSValue js_el_hidden_set(JSContext *ctx, JSValueConst this_val, JSValueCo
         return JS_UNDEFINED;
     }
     int on = JS_ToBool(ctx, val);
+    /* YouTube's PolySi/Closure component framework passes the string sentinel
+	 * "zClosurez" for a binding whose source value is unresolved/undefined
+	 * (e.g. `hidden="[[data.hideContents]]"` before hideContents resolves).
+	 * As a non-empty string it is truthy, so it would spuriously hide the
+	 * element — hiding whole subtrees (the search-results container, yt-icon,
+	 * …). Chrome never sees it: its binding resolves to a real `false`. Treat
+	 * the sentinel as "no value" (not hidden) so the content renders. */
+    if (on && JS_IsString(val)) {
+        const char *sentinel = JS_ToCString(ctx, val);
+        if (sentinel && strcmp(sentinel, "zClosurez") == 0) {
+            on = 0;
+        }
+        if (sentinel) {
+            JS_FreeCString(ctx, sentinel);
+        }
+    }
     size_t vlen = 0;
     bool already =
         lxb_dom_element_get_attribute(el, (const lxb_char_t *)"hidden", 6, &vlen) != NULL;
