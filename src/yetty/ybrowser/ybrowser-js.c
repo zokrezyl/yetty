@@ -265,6 +265,20 @@ static double js_script_budget_ms(void)
     return 15000.0;
 }
 
+/* Milliseconds the parallel module-graph prefetch may run before giving up and
+ * letting the synchronous loader fetch the rest on demand. */
+static double module_prefetch_budget_ms(void)
+{
+    const char *env = getenv("YBROWSER_MODULE_PREFETCH_MS");
+    if (env != NULL && env[0] != '\0') {
+        int v = atoi(env);
+        if (v > 0) {
+            return (double)v;
+        }
+    }
+    return 2500.0;
+}
+
 struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r)
 {
     if (r->js_rt) {
@@ -1108,42 +1122,220 @@ static void collect_modulepreload_recursive(struct yetty_ylexbor *r, lxb_dom_nod
  * loader then hits cache instead of a serial network round-trip per import —
  * turning a page like github.com (75 preloaded chunks) from dozens of blocking
  * fetches into one multiplexed batch. */
+/* A growable, de-duplicated URL work-list for the module-graph BFS. */
+struct url_queue {
+    char **urls; /* owned */
+    int count, cap;
+};
+
+static bool url_queue_has(const struct url_queue *queue, const char *url)
+{
+    for (int i = 0; i < queue->count; i++) {
+        if (strcmp(queue->urls[i], url) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void url_queue_push(struct url_queue *queue, char *url /* transferred */)
+{
+    if (queue->count == queue->cap) {
+        int cap = queue->cap ? queue->cap * 2 : 32;
+        char **grown = realloc(queue->urls, (size_t)cap * sizeof(*grown));
+        if (grown == NULL) {
+            free(url);
+            return;
+        }
+        queue->urls = grown;
+        queue->cap = cap;
+    }
+    queue->urls[queue->count++] = url;
+}
+
+static void url_queue_free(struct url_queue *queue)
+{
+    for (int i = 0; i < queue->count; i++) {
+        free(queue->urls[i]);
+    }
+    free(queue->urls);
+    queue->urls = NULL;
+    queue->count = queue->cap = 0;
+}
+
+/* Scan a module's source for static import specifiers (`import"x"`, `from"x"`,
+ * `import("x")`) and enqueue each resolved, not-yet-cached URL. Heuristic but
+ * matches minified ES modules: requires a non-identifier char before the
+ * keyword so `transform`/`important` don't false-match. */
+static void scan_module_imports(struct yetty_ylexbor *r, const char *base_url, const char *src,
+                                size_t len, struct url_queue *next)
+{
+    for (size_t i = 0; i < len; i++) {
+        size_t kwlen = 0;
+        if (i + 4 <= len && memcmp(src + i, "from", 4) == 0) {
+            kwlen = 4;
+        } else if (i + 6 <= len && memcmp(src + i, "import", 6) == 0) {
+            kwlen = 6;
+        } else {
+            continue;
+        }
+        if (i > 0) {
+            char prev = src[i - 1];
+            if ((prev >= 'a' && prev <= 'z') || (prev >= 'A' && prev <= 'Z') ||
+                (prev >= '0' && prev <= '9') || prev == '_' || prev == '$' || prev == '.') {
+                continue;
+            }
+        }
+        size_t j = i + kwlen;
+        while (j < len && (src[j] == ' ' || src[j] == '\t' || src[j] == '\n' || src[j] == '\r')) {
+            j++;
+        }
+        if (j < len && src[j] == '(') {
+            j++;
+            while (j < len && (src[j] == ' ' || src[j] == '\t')) {
+                j++;
+            }
+        }
+        if (j >= len || (src[j] != '"' && src[j] != '\'')) {
+            continue;
+        }
+        char quote = src[j++];
+        size_t start = j;
+        while (j < len && src[j] != quote) {
+            j++;
+        }
+        if (j >= len) {
+            break;
+        }
+        size_t spec_len = j - start;
+        i = j; /* advance past the string literal */
+        if (spec_len == 0 || spec_len > 1024) {
+            continue;
+        }
+
+        char *spec = strndup(src + start, spec_len);
+        if (spec == NULL) {
+            continue;
+        }
+        char *absolute = NULL;
+        if (strncmp(spec, "http://", 7) == 0 || strncmp(spec, "https://", 8) == 0) {
+            absolute = strdup(spec);
+        } else if (spec[0] == '.' || spec[0] == '/') {
+            absolute = yetty_ylexbor_resolve_url_against(base_url, spec);
+        }
+        /* Bare specifiers (import maps) are rare here and resolved at load. */
+        free(spec);
+        if (absolute == NULL) {
+            continue;
+        }
+        size_t cached_len = 0;
+        if (module_src_lookup(r, absolute, &cached_len) != NULL || url_queue_has(next, absolute)) {
+            free(absolute);
+            continue;
+        }
+        url_queue_push(next, absolute);
+    }
+}
+
+/* Warm the module cache with the WHOLE import graph in parallel BFS waves,
+ * seeded by <link rel="modulepreload"> and <script type="module" src>. Without
+ * this the synchronous module loader fetches each of a code-split SPA's chunks
+ * one at a time (nytimes: 378 chunks, ~3.5s serial). Bounded by wave/total caps
+ * so a pathological graph can't run away. */
 static void prefetch_module_graph(struct yetty_ylexbor *r, lxb_dom_node_t *node)
 {
-    struct script_collect preload = {0};
-    collect_modulepreload_recursive(r, node, &preload);
-    if (preload.count == 0) {
-        free(preload.items);
+    enum { MAX_MODULES = 1200, MAX_WAVES = 20, MAX_WAVE = 256 };
+
+    struct script_collect seeds = {0};
+    collect_modulepreload_recursive(r, node, &seeds);
+    /* Also seed top-level <script type="module" src> entry points. */
+    {
+        struct script_collect scripts = {0};
+        collect_scripts_recursive(r, node, &scripts);
+        for (int i = 0; i < scripts.count; i++) {
+            if (scripts.items[i].is_module && scripts.items[i].url != NULL) {
+                struct script_entry entry = {.url = strdup(scripts.items[i].url)};
+                if (entry.url != NULL) {
+                    script_collect_push(&seeds, entry);
+                }
+            }
+            free(scripts.items[i].url);
+            free(scripts.items[i].inline_body);
+        }
+        free(scripts.items);
+    }
+    if (seeds.count == 0) {
+        free(seeds.items);
         return;
     }
 
-    struct yetty_ybrowser_request *requests = calloc((size_t)preload.count, sizeof(*requests));
-    struct yetty_ybrowser_response *responses = calloc((size_t)preload.count, sizeof(*responses));
-    if (requests != NULL && responses != NULL) {
-        for (int i = 0; i < preload.count; i++) {
-            requests[i].url = preload.items[i].url;
-            requests[i].kind = YETTY_YBROWSER_REQUEST_SCRIPT;
-            requests[i].referer = r->base_url;
+    struct url_queue current = {0};
+    for (int i = 0; i < seeds.count; i++) {
+        if (seeds.items[i].url != NULL && !url_queue_has(&current, seeds.items[i].url)) {
+            url_queue_push(&current, seeds.items[i].url); /* transfers */
+        } else {
+            free(seeds.items[i].url);
         }
-        struct yetty_ycore_void_result res = yetty_ybrowser_fetch_many(
-            r->loader, requests, preload.count, responses, /*host_connection_cap=*/8);
-        if (YETTY_IS_ERR(res)) {
-            yetty_ycore_error_destroy(res.error);
+        free(seeds.items[i].inline_body);
+    }
+    free(seeds.items);
+
+    /* Wall-clock cap: this prefetch runs BEFORE the JS execution budget arms,
+	 * so it must bound itself. It pays off when static-import scanning catches
+	 * the graph (nytimes: 378 chunks -> 0 serial); when a site hides chunks
+	 * behind webpack dynamic import() by id (github), scanning misses them and
+	 * the prefetch is pure overhead — stop early rather than fetch a huge graph
+	 * speculatively. The synchronous loader then fetches the rest on demand. */
+    double prefetch_deadline = yetty_ylexbor_prof_now_ms() + module_prefetch_budget_ms();
+
+    int fetched_total = 0;
+    for (int wave = 0; wave < MAX_WAVES && current.count > 0 && fetched_total < MAX_MODULES &&
+                       yetty_ylexbor_prof_now_ms() < prefetch_deadline;
+         wave++) {
+        int n = current.count;
+        if (n > MAX_WAVE) {
+            n = MAX_WAVE;
         }
-        for (int i = 0; i < preload.count; i++) {
-            if (responses[i].body != NULL && responses[i].status >= 200 &&
-                responses[i].status < 300) {
-                module_src_store(r, requests[i].url, responses[i].body, responses[i].body_len);
+        struct yetty_ybrowser_request *requests = calloc((size_t)n, sizeof(*requests));
+        struct yetty_ybrowser_response *responses = calloc((size_t)n, sizeof(*responses));
+        struct url_queue next = {0};
+        if (requests != NULL && responses != NULL) {
+            for (int i = 0; i < n; i++) {
+                requests[i].url = current.urls[i];
+                requests[i].kind = YETTY_YBROWSER_REQUEST_SCRIPT;
+                requests[i].referer = r->base_url;
             }
-            yetty_ybrowser_response_dispose(&responses[i]);
+            struct yetty_ycore_void_result res = yetty_ybrowser_fetch_many(
+                r->loader, requests, n, responses, /*host_connection_cap=*/8);
+            if (YETTY_IS_ERR(res)) {
+                yetty_ycore_error_destroy(res.error);
+            }
+            for (int i = 0; i < n; i++) {
+                if (responses[i].body != NULL && responses[i].status >= 200 &&
+                    responses[i].status < 300) {
+                    module_src_store(r, requests[i].url, responses[i].body, responses[i].body_len);
+                    fetched_total++;
+                    if (fetched_total < MAX_MODULES) {
+                        scan_module_imports(r, requests[i].url, responses[i].body,
+                                            responses[i].body_len, &next);
+                    }
+                }
+                yetty_ybrowser_response_dispose(&responses[i]);
+            }
         }
+        free(requests);
+        free(responses);
+        /* Drop the URLs consumed this wave; carry the leftover + newly found. */
+        for (int i = 0; i < n; i++) {
+            free(current.urls[i]);
+        }
+        for (int i = n; i < current.count; i++) {
+            url_queue_push(&next, current.urls[i]); /* transfers leftover */
+        }
+        free(current.urls);
+        current = next;
     }
-    free(requests);
-    free(responses);
-    for (int i = 0; i < preload.count; i++) {
-        free(preload.items[i].url);
-    }
-    free(preload.items);
+    url_queue_free(&current);
 }
 
 /* Two-phase script run — same shape as the stylesheet loader:
