@@ -28,6 +28,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 #include <string.h>
 
 #ifndef YETTY_HAVE_QUICKJS
@@ -1083,6 +1084,41 @@ static void collect_scripts_recursive(struct yetty_ylexbor *r, lxb_dom_node_t *n
 }
 
 /* Collect the hrefs of every <link rel="modulepreload"> in document order. */
+/* Collect <script type="module" src> URLs (no inline-body copy) as prefetch
+ * seeds — unlike collect_scripts_recursive, which copies every inline <script>
+ * body (pages embed huge SSR-state blobs). */
+static void collect_module_script_urls_recursive(struct yetty_ylexbor *r, lxb_dom_node_t *node,
+                                                 struct script_collect *collect)
+{
+    for (lxb_dom_node_t *c = node->first_child; c != NULL; c = c->next) {
+        if (c->type == LXB_DOM_NODE_TYPE_ELEMENT && c->local_name == LXB_TAG_SCRIPT) {
+            lxb_dom_element_t *el = lxb_dom_interface_element(c);
+            if (is_module_script_type(el)) {
+                size_t slen = 0;
+                const lxb_char_t *src =
+                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"src", 3, &slen);
+                if (src != NULL && slen > 0) {
+                    char *raw = malloc(slen + 1);
+                    if (raw != NULL) {
+                        memcpy(raw, src, slen);
+                        raw[slen] = '\0';
+                        char *url = yetty_ylexbor_resolve_url(r, raw);
+                        free(raw);
+                        if (url != NULL) {
+                            struct script_entry entry = {.url = url};
+                            script_collect_push(collect, entry);
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        if (c->first_child) {
+            collect_module_script_urls_recursive(r, c, collect);
+        }
+    }
+}
+
 static void collect_modulepreload_recursive(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                                             struct script_collect *collect)
 {
@@ -1242,43 +1278,36 @@ static void scan_module_imports(struct yetty_ylexbor *r, const char *base_url, c
  * this the synchronous module loader fetches each of a code-split SPA's chunks
  * one at a time (nytimes: 378 chunks, ~3.5s serial). Bounded by wave/total caps
  * so a pathological graph can't run away. */
-static void prefetch_module_graph(struct yetty_ylexbor *r, lxb_dom_node_t *node)
+/* Collect module-graph prefetch seeds (modulepreload links + module <script
+ * src>) into a de-duplicated queue. Walks the DOM, so run on the main thread
+ * while the DOM is stable (before any script mutates it). */
+static struct url_queue prefetch_collect_seeds(struct yetty_ylexbor *r, lxb_dom_node_t *node)
 {
-    enum { MAX_MODULES = 1200, MAX_WAVES = 20, MAX_WAVE = 256 };
-
     struct script_collect seeds = {0};
     collect_modulepreload_recursive(r, node, &seeds);
-    /* Also seed top-level <script type="module" src> entry points. */
-    {
-        struct script_collect scripts = {0};
-        collect_scripts_recursive(r, node, &scripts);
-        for (int i = 0; i < scripts.count; i++) {
-            if (scripts.items[i].is_module && scripts.items[i].url != NULL) {
-                struct script_entry entry = {.url = strdup(scripts.items[i].url)};
-                if (entry.url != NULL) {
-                    script_collect_push(&seeds, entry);
-                }
-            }
-            free(scripts.items[i].url);
-            free(scripts.items[i].inline_body);
-        }
-        free(scripts.items);
-    }
-    if (seeds.count == 0) {
-        free(seeds.items);
-        return;
-    }
+    collect_module_script_urls_recursive(r, node, &seeds);
 
-    struct url_queue current = {0};
+    struct url_queue queue = {0};
     for (int i = 0; i < seeds.count; i++) {
-        if (seeds.items[i].url != NULL && !url_queue_has(&current, seeds.items[i].url)) {
-            url_queue_push(&current, seeds.items[i].url); /* transfers */
+        if (seeds.items[i].url != NULL && !url_queue_has(&queue, seeds.items[i].url)) {
+            url_queue_push(&queue, seeds.items[i].url); /* transfers */
         } else {
             free(seeds.items[i].url);
         }
         free(seeds.items[i].inline_body);
     }
     free(seeds.items);
+    return queue;
+}
+
+/* Run the BFS graph fetch from a pre-collected seed queue (consumes it). Only
+ * touches the loader (thread-safe central scheduler), r->base_url (const during
+ * load), and r->module_srcs (written exclusively here until the caller joins),
+ * so it is safe to run on a background thread overlapping the main thread's
+ * classic/inline script compile+run. */
+static void prefetch_run_graph(struct yetty_ylexbor *r, struct url_queue current)
+{
+    enum { MAX_MODULES = 1200, MAX_WAVES = 20, MAX_WAVE = 256 };
 
     /* Wall-clock cap: this prefetch runs BEFORE the JS execution budget arms,
 	 * so it must bound itself. It pays off when static-import scanning catches
@@ -1338,6 +1367,48 @@ static void prefetch_module_graph(struct yetty_ylexbor *r, lxb_dom_node_t *node)
     url_queue_free(&current);
 }
 
+/* Background-thread wrapper: overlaps the module-graph fetch with the main
+ * thread's classic/inline script compile+run. */
+struct module_prefetch_args {
+    struct yetty_ylexbor *r;
+    struct url_queue seeds;
+};
+
+static void *module_prefetch_thread_fn(void *arg)
+{
+    struct module_prefetch_args *args = arg;
+    prefetch_run_graph(args->r, args->seeds); /* consumes seeds */
+    free(args);
+    return NULL;
+}
+
+/* Kick off the module-graph prefetch on a background thread. Seeds are gathered
+ * here (main thread, DOM stable); the thread only fetches/scans/writes the
+ * module-source cache. Returns true and fills *thread when started; the caller
+ * MUST join before the first module script evaluates (the loader reads the
+ * cache). Falls back to a synchronous run if the thread can't be created. */
+static bool start_module_prefetch(struct yetty_ylexbor *r, lxb_dom_node_t *node, pthread_t *thread)
+{
+    struct url_queue seeds = prefetch_collect_seeds(r, node);
+    if (seeds.count == 0) {
+        url_queue_free(&seeds);
+        return false;
+    }
+    struct module_prefetch_args *args = malloc(sizeof(*args));
+    if (args == NULL) {
+        prefetch_run_graph(r, seeds); /* seeds consumed */
+        return false;
+    }
+    args->r = r;
+    args->seeds = seeds;
+    if (pthread_create(thread, NULL, module_prefetch_thread_fn, args) != 0) {
+        prefetch_run_graph(r, args->seeds); /* seeds consumed */
+        free(args);
+        return false;
+    }
+    return true;
+}
+
 /* Two-phase script run — same shape as the stylesheet loader:
  *   1) DOM walk → collect external + inline scripts in document order.
  *   2) Parallel-fetch every external URL (one HTTP/2-multiplexed batch
@@ -1358,7 +1429,12 @@ static void run_collected_scripts(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
 
     /* Warm the cache with the module dependency graph in parallel so the
 	 * synchronous module loader below doesn't serialize network fetches. */
-    prefetch_module_graph(r, node);
+    /* Warm the module-source cache with the whole import graph on a background
+     * thread; it overlaps the fetch with the main thread compiling+running the
+     * classic/inline scripts. Joined lazily before the first module evaluates,
+     * since the synchronous loader reads that cache. */
+    pthread_t prefetch_thread;
+    bool prefetch_running = start_module_prefetch(r, node, &prefetch_thread);
 
     int external_count = 0;
     for (int i = 0; i < collect.count; i++) {
@@ -1413,6 +1489,10 @@ static void run_collected_scripts(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
                 entry_to_slot ? &fetch_responses[entry_to_slot[i]] : NULL;
             if (response && response->body && response->status >= 200 && response->status < 300) {
                 if (entry->is_module) {
+                    if (prefetch_running) {
+                        pthread_join(prefetch_thread, NULL);
+                        prefetch_running = false;
+                    }
                     eval_module(r, ctx, response->body, response->body_len, entry->url);
                 } else {
                     /* Classic scripts see document.currentScript; modules do not. */
@@ -1430,6 +1510,10 @@ static void run_collected_scripts(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
             free(entry->url);
         } else {
             if (entry->is_module) {
+                if (prefetch_running) {
+                    pthread_join(prefetch_thread, NULL);
+                    prefetch_running = false;
+                }
                 eval_module(r, ctx, entry->inline_body, entry->inline_len,
                             r->base_url ? r->base_url : "<inline>");
             } else {
@@ -1442,6 +1526,10 @@ static void run_collected_scripts(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
     }
 
     r->js_deadline_ms = 0.0; /* disarm outside the script run */
+    if (prefetch_running) {
+        pthread_join(prefetch_thread, NULL);
+        prefetch_running = false;
+    }
     free(fetch_requests);
     free(fetch_responses);
     free(entry_to_slot);
