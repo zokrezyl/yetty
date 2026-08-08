@@ -5280,6 +5280,29 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "    var has=this.hasAttribute(n);var on=(arguments.length>1)?!!f:!has;"
         "    if(on){if(!has)this.setAttribute(n,'');}else if(has)this.removeAttribute(n);return on;};}"
         "}"
+        /* Node.compareDocumentPosition — a core DOM method boq calls to test
+		 * whether a node is connected to the document
+		 * (`doc.compareDocumentPosition(a)&16` = CONTAINED_BY). Missing, it threw
+		 * the caught "not a function" that stalled Google sign-in. Returns the
+		 * standard bitmask. */
+        "if(typeof Node!=='undefined'&&Node.prototype&&!Node.prototype.compareDocumentPosition){"
+        "  Node.prototype.compareDocumentPosition=function(other){"
+        "    if(this===other)return 0;"
+        "    if(!other||typeof other.nodeType!=='number')return 1;"
+        "    for(var n=other.parentNode;n;n=n.parentNode){if(n===this)return 20;}"
+        "    for(var n2=this.parentNode;n2;n2=n2.parentNode){if(n2===other)return 10;}"
+        "    var ca=[];for(var a1=this;a1;a1=a1.parentNode)ca.unshift(a1);"
+        "    var cb=[];for(var b1=other;b1;b1=b1.parentNode)cb.unshift(b1);"
+        "    if(ca[0]!==cb[0])return 35;"
+        "    var i=0;while(i<ca.length&&i<cb.length&&ca[i]===cb[i])i++;"
+        "    var parent=ca[i-1],pa=ca[i],pb=cb[i];"
+        "    for(var c=parent.firstChild;c;c=c.nextSibling){"
+        "      if(c===pa)return 4;"
+        "      if(c===pb)return 2;}"
+        "    return 1;};}"
+        "if(typeof Node!=='undefined'&&Node.prototype&&!Node.prototype.contains){"
+        "  Node.prototype.contains=function(other){"
+        "    for(var n=other;n;n=n.parentNode){if(n===this)return true;}return false;};}"
         "if(typeof document!=='undefined'&&!document.elementFromPoint){"
         "  document.elementFromPoint=function(){return null;};"
         "  document.elementsFromPoint=function(){return [];};}"
