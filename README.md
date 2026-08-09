@@ -2,7 +2,7 @@
   <img src="docs/pres.gif" alt="Yetty demo: terminal text, rich figures, plots, documents, and GUI surfaces" width="900">
 </p>
 
-# Yetty
+# Yetty (https://yetty.dev)
 
 Yetty is a GPU-accelerated terminal and rich-content runtime. It keeps normal
 terminal workflows intact, but lets programs place plots, images, diagrams,
