@@ -126,8 +126,8 @@ terminal:
       padding:
         left:   -0.05
         right:  -0.05
-        top:    -0.04
-        bottom: -0.04
+        top:    0.0
+        bottom: 0.0
       # Codepoint-range → font routing. Codepoints outside every range use
       # the base font above; ranges are matched in order, first hit wins.
       # Each entry:
