@@ -50,8 +50,6 @@
 #include <yetty/ytrace/ytrace.h>
 #include "yetty/gen/impl/yvterm/grid.h"
 
-#include "ligature-cells.h"
-
 /* GLYPH primitive type — matches the shader's YDRAW_SDF_GLYPH (and ygrid). */
 #define YVTERM_SDF_GLYPH_TYPE 200u
 
@@ -1011,14 +1009,6 @@ static struct sdf_shaping_face *sdf_shaping_face_for(struct yetty_yvterm_sdf_lay
     return sdf_face_load_or_get(layer, file);
 }
 
-/* The bundled programming-ligature face (Fira Code), loaded on the first
- * ligature seen. Staged unconditionally in assets/fonts, so it is present in
- * any build that defines YETTY_ENABLE_LIB_HARFBUZZ. */
-static struct sdf_shaping_face *sdf_ligature_face(struct yetty_yvterm_sdf_layer *layer)
-{
-    return sdf_face_load_or_get(layer, "FiraCode-Regular.ttf");
-}
-
 /* Scan one terminal row's cells for complex-script runs and emit shaped glyphs
  * for each over the cells' positions. The grid suppresses those cells' glyphs
  * (vterm_pack_line), so this is the only glyph drawn there. Called per window
@@ -1093,82 +1083,6 @@ static struct yetty_ycore_void_result shape_row_cells(struct yetty_yvterm_sdf_la
     return YETTY_OK_VOID();
 }
 
-/* Scan one terminal row's cells for programming-ligature spans (=>, !=, ===)
- * and draw each as a shaped glyph over its cells with the Fira Code face. The
- * grid suppresses the same spans (vterm_pack_line calls the identical
- * yetty_yvterm_ligature_run_length), so this is the only glyph drawn there.
- * Complex-script cells never match the ASCII-only ligature table, so the two
- * shaping passes cover disjoint cells. */
-static struct yetty_ycore_void_result shape_row_ligatures(struct yetty_yvterm_sdf_layer *layer,
-                                                          struct yetty_yclass_object *grid_obj,
-                                                          uint32_t slot, float cell_width,
-                                                          float cell_height, uint32_t cols)
-{
-    struct yetty_yvterm_text_cell_const_ptr_result cells_res =
-        yetty_yvterm_grid_slot_cells(grid_obj, slot);
-    if (YETTY_IS_ERR(cells_res)) {
-        yetty_ycore_error_destroy(cells_res.error);
-        return YETTY_OK_VOID();
-    }
-    const struct yetty_yvterm_text_cell *cells = cells_res.value;
-    if (!cells) {
-        return YETTY_OK_VOID();
-    }
-
-    struct sdf_shaping_face *face = NULL; /* loaded lazily on the first ligature */
-
-    uint32_t col = 0;
-    while (col < cols) {
-        size_t ligature_len = yetty_yvterm_ligature_run_length(cells, cols, col);
-        if (ligature_len < 2u) {
-            col++;
-            continue;
-        }
-
-        if (!face) {
-            face = sdf_ligature_face(layer);
-        }
-        if (!face) {
-            /* Ligature font unavailable this frame — the grid already suppressed
-             * these cells, so nothing more to try; skip past the span. */
-            col += (uint32_t)ligature_len;
-            continue;
-        }
-
-        uint32_t run_codepoints[YETTY_YFONT_LIGATURE_MAX_LEN];
-        for (size_t offset = 0; offset < ligature_len; offset++) {
-            run_codepoints[offset] = cells[col + offset].codepoint;
-        }
-
-        /* Scale the monospace ligature face so one character advance equals the
-         * grid cell width: the ligature's own advance then spans exactly its
-         * cells, and any non-ligated fallback glyphs stay cell-aligned too. */
-        float base_size = face->font->ops->get_base_size(face->font);
-        float advance_base = base_size * 0.6f;
-        struct float_result adv_res =
-            face->font->ops->get_advance(face->font, (uint32_t)'M', base_size);
-        if (YETTY_IS_OK(adv_res) && adv_res.value > 0.0f) {
-            advance_base = adv_res.value;
-        }
-        float font_size = cell_width * base_size / advance_base;
-
-        struct sdf_shaped_run_style style = {
-            .layer_id = 0u,
-            .color = (cells[col].fg & 0x00FFFFFFu) | 0xFF000000u,
-            .font_size = font_size,
-            .base_size = base_size,
-            .char_spacing = 0.0f,
-            .baseline_y = cell_height * 0.75f,
-        };
-        float cursor_x = (float)col * cell_width;
-        struct yetty_ycore_void_result er = emit_shaped_glyphs(
-            layer, face->font, face->slot, run_codepoints, ligature_len, &style, &cursor_x);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "sdf-layer: shape row ligatures");
-
-        col += (uint32_t)ligature_len;
-    }
-    return YETTY_OK_VOID();
-}
 #endif /* YETTY_ENABLE_LIB_HARFBUZZ */
 
 /* Expand a TEXT_DRAWABLE_LIST into one GLYPH record per codepoint, anchored at
@@ -1574,15 +1488,13 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
         }
 #ifdef YETTY_ENABLE_LIB_HARFBUZZ
         /* Shape any complex-script runs in this row's terminal cells. The grid
-         * suppresses those cells' own glyphs, so this draws them shaped. */
+         * suppresses those cells' own glyphs, so this draws them shaped.
+         * (Programming ligatures are NOT handled here: they are cell-aligned
+         * N-wide glyphs drawn directly by the grid shader — see vterm.c
+         * vterm_pack_line + grid-text.wgsl.) */
         struct yetty_ycore_void_result shape_res =
             shape_row_cells(layer, grid_obj, slot, cell_width, cell_height, cols);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, shape_res, "sdf-layer: shape row cells");
-        /* Draw programming ligatures (=>, !=, ===) for this row's cells; the
-         * grid suppresses the same spans (identical ligature-run decision). */
-        struct yetty_ycore_void_result lig_res =
-            shape_row_ligatures(layer, grid_obj, slot, cell_width, cell_height, cols);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, lig_res, "sdf-layer: shape row ligatures");
 #endif
     }
     ydebug("sdf-layer: render prim_count=%u font_count=%u rows=%u cols=%u", layer->prim_count,

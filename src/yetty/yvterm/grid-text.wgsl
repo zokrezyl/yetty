@@ -40,7 +40,7 @@ struct Uniforms {
     coord_fx_p3: f32, coord_fx_p4: f32, coord_fx_p5: f32,
     pad_a: u32, pad_b: u32,
     face_methods: u32, face_pad0: u32, face_pad1: u32, face_pad2: u32,
-    face_params: array<vec4<f32>, 4>,
+    face_params: array<vec4<f32>, 6>,
 };
 @group(0) @binding(0) var<storage, read> cells: array<u32>;
 @group(0) @binding(1) var<storage, read> glyph_meta: array<u32>;
@@ -56,6 +56,10 @@ struct Uniforms {
 @group(0) @binding(8) var face2_tex: texture_2d<f32>;
 @group(0) @binding(9) var<storage, read> face3_meta: array<u32>;
 @group(0) @binding(10) var face3_tex: texture_2d<f32>;
+@group(0) @binding(11) var<storage, read> face4_meta: array<u32>;
+@group(0) @binding(12) var face4_tex: texture_2d<f32>;
+@group(0) @binding(13) var<storage, read> face5_meta: array<u32>;
+@group(0) @binding(14) var face5_tex: texture_2d<f32>;
 struct VSOut {
     @builtin(position) pos: vec4<f32>,
     @location(0) @interpolate(linear) grid_pixel: vec2<f32>,
@@ -81,6 +85,8 @@ fn face_meta(face: u32, index: u32) -> u32 {
         case 1u: { return face1_meta[index]; }
         case 2u: { return face2_meta[index]; }
         case 3u: { return face3_meta[index]; }
+        case 4u: { return face4_meta[index]; }
+        case 5u: { return face5_meta[index]; }
         default: { return glyph_meta[index]; }
     }
 }
@@ -89,6 +95,8 @@ fn face_texel(face: u32, uv: vec2<f32>) -> vec4<f32> {
         case 1u: { return textureSampleLevel(face1_tex, atlas_smp, uv, 0.0); }
         case 2u: { return textureSampleLevel(face2_tex, atlas_smp, uv, 0.0); }
         case 3u: { return textureSampleLevel(face3_tex, atlas_smp, uv, 0.0); }
+        case 4u: { return textureSampleLevel(face4_tex, atlas_smp, uv, 0.0); }
+        case 5u: { return textureSampleLevel(face5_tex, atlas_smp, uv, 0.0); }
         default: { return textureSampleLevel(atlas_tex, atlas_smp, uv, 0.0); }
     }
 }
@@ -97,6 +105,8 @@ fn face_atlas_size(face: u32) -> vec2<f32> {
         case 1u: { return vec2<f32>(textureDimensions(face1_tex)); }
         case 2u: { return vec2<f32>(textureDimensions(face2_tex)); }
         case 3u: { return vec2<f32>(textureDimensions(face3_tex)); }
+        case 4u: { return vec2<f32>(textureDimensions(face4_tex)); }
+        case 5u: { return vec2<f32>(textureDimensions(face5_tex)); }
         default: { return vec2<f32>(textureDimensions(atlas_tex)); }
     }
 }

@@ -70,7 +70,15 @@ enum { YVTERM_GLYPH_TOFU = 0xFFFFFFFFu };
  * shader picks the face per cell (packed next to the cell width) and decodes
  * per the face's render method.
  *=========================================================================*/
-enum { YVTERM_MAX_FONT_FACES = 4 };
+/* Face 0 = base font; face 1 = the bundled programming-ligature face (Fira
+ * Code, present only when the shaper is built in); faces 2+ = config range
+ * faces (CJK/emoji/…). Sized so a realistic config (base + ligature + a few
+ * ranges) never evicts the ligature slot. Each face costs two shader bindings,
+ * so the count also sizes the bind-group arrays below. */
+enum { YVTERM_MAX_FONT_FACES = 6 };
+/* Fixed bindings 0..4 (cells, base meta, base atlas, sampler, uniforms) plus
+ * two per extra face (meta buffer + atlas texture). */
+enum { YVTERM_BIND_ENTRY_COUNT = 5 + 2 * (YVTERM_MAX_FONT_FACES - 1) };
 enum { YVTERM_MAX_FONT_RANGES = 64 };
 enum { YVTERM_FONT_FACE_NAME_MAX = 64 };
 
@@ -271,6 +279,10 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("parent@yfigure:figur
      * codepoint→face routing table is matched in config order at pack time. */
     struct yvterm_font_face faces[YVTERM_MAX_FONT_FACES];
     uint32_t face_count;
+    /* Index into faces[] of the bundled programming-ligature face (Fira Code),
+     * or 0 when none is loaded (0 is always the base font, never a ligature
+     * face, so 0 unambiguously means "no ligature face"). */
+    uint32_t ligature_face_index;
     struct yvterm_font_range font_ranges[YVTERM_MAX_FONT_RANGES];
     uint32_t font_range_count;
 
@@ -405,9 +417,15 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm,
                             uint32_t *out)
 {
 #ifdef YETTY_ENABLE_LIB_HARFBUZZ
-    /* Cells still covered by a programming ligature the SDF layer draws over
-     * the grid (see ligature-cells.h). Counts down across the span. */
-    uint32_t ligature_remaining = 0u;
+    /* Programming-ligature span state. A monospace ligature shapes to one
+     * substituted component glyph per cell (Fira Code's calt pieces that tile
+     * into the ligature), so each covered cell gets its own ordinary width-1
+     * glyph from the ligature face — no wide/spill glyph, and the ligature
+     * inverts/selects/scrolls like any other grid text. */
+    uint32_t ligature_remaining = 0u; /* cells left in the current span */
+    uint32_t ligature_index = 0u;     /* index of the next cell's component slot */
+    uint32_t ligature_face = 0u;      /* face the components live in */
+    uint32_t ligature_slots[YETTY_YFONT_LIGATURE_MAX_LEN];
 #endif
     for (uint32_t col = 0; col < cols; ++col) {
         const struct yetty_yvterm_text_cell *cell = &cells[col];
@@ -417,18 +435,37 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm,
         uint32_t face = 0u;
         int resolve_glyph = cell->codepoint && !(cell->attrs & YETTY_YVTERM_ATTR_CONCEAL);
 #ifdef YETTY_ENABLE_LIB_HARFBUZZ
+        /* Start of a ligature run: shape it and stash the per-cell component
+         * glyphs. Consumed cell-by-cell just below. */
+        if (ligature_remaining == 0u && resolve_glyph && vterm->ligature_face_index) {
+            size_t ligature_len = yetty_yvterm_ligature_run_length(cells, cols, col);
+            struct yetty_yfont_ms_font *ligfont =
+                ligature_len >= 2u ? vterm->faces[vterm->ligature_face_index].font : NULL;
+            if (ligfont && ligfont->ops->get_glyph_index_ligature) {
+                uint32_t seq[YETTY_YFONT_LIGATURE_MAX_LEN];
+                for (size_t k = 0; k < ligature_len; ++k) {
+                    seq[k] = cells[col + k].codepoint;
+                }
+                struct uint32_result lig_res = ligfont->ops->get_glyph_index_ligature(
+                    ligfont, seq, ligature_len, ligature_slots);
+                if (YETTY_IS_OK(lig_res)) {
+                    ligature_remaining = (uint32_t)ligature_len;
+                    ligature_index = 0u;
+                    ligature_face = vterm->ligature_face_index;
+                } else {
+                    /* Sequence does not ligate in the face — draw the operator
+                     * characters individually (fall through to normal resolve). */
+                    yetty_ycore_error_destroy(lig_res.error);
+                }
+            }
+        }
         if (ligature_remaining > 0u) {
-            /* Interior cell of a programming ligature: the SDF layer shapes the
-             * whole ligature and draws its glyph on top, so paint background
-             * only here — same contract as complex-script / shader-glyph cells. */
+            /* Cell of a ligature run: draw its component glyph (an ordinary
+             * width-1 grid glyph) from the ligature face. */
+            glyph = ligature_slots[ligature_index++];
+            face = ligature_face;
             ligature_remaining--;
             resolve_glyph = 0;
-        } else if (resolve_glyph) {
-            size_t ligature_len = yetty_yvterm_ligature_run_length(cells, cols, col);
-            if (ligature_len >= 2u) {
-                ligature_remaining = (uint32_t)(ligature_len - 1u);
-                resolve_glyph = 0;
-            }
         }
 #endif
         if (resolve_glyph) {
@@ -581,7 +618,7 @@ static struct yetty_ycore_void_result vterm_create_pipeline(struct yetty_yvterm_
         return YETTY_ERR(yetty_ycore_void, "vterm: shader module");
     }
 
-    WGPUBindGroupLayoutEntry entries[11] = {0};
+    WGPUBindGroupLayoutEntry entries[YVTERM_BIND_ENTRY_COUNT] = {0};
     entries[0].binding = 0;
     entries[0].visibility = WGPUShaderStage_Fragment;
     entries[0].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
@@ -610,7 +647,7 @@ static struct yetty_ycore_void_result vterm_create_pipeline(struct yetty_yvterm_
         entries[4 + i * 2].texture.viewDimension = WGPUTextureViewDimension_2D;
     }
     WGPUBindGroupLayoutDescriptor bgl_desc = {0};
-    bgl_desc.entryCount = 11;
+    bgl_desc.entryCount = YVTERM_BIND_ENTRY_COUNT;
     bgl_desc.entries = entries;
     vterm->bind_group_layout = wgpuDeviceCreateBindGroupLayout(vterm->device, &bgl_desc);
     if (!vterm->bind_group_layout) {
@@ -884,7 +921,7 @@ static struct yetty_ycore_void_result vterm_ensure_bind_group(struct yetty_yvter
         !vterm->uniform_buffer) {
         return YETTY_ERR(yetty_ycore_void, "vterm_ensure_bind_group: missing resource");
     }
-    WGPUBindGroupEntry entries[11] = {0};
+    WGPUBindGroupEntry entries[YVTERM_BIND_ENTRY_COUNT] = {0};
     entries[0].binding = 0;
     entries[0].buffer = vterm->cell_buffer;
     entries[0].size = WGPU_WHOLE_SIZE;
@@ -911,7 +948,7 @@ static struct yetty_ycore_void_result vterm_ensure_bind_group(struct yetty_yvter
     }
     WGPUBindGroupDescriptor bg_desc = {0};
     bg_desc.layout = vterm->bind_group_layout;
-    bg_desc.entryCount = 11;
+    bg_desc.entryCount = YVTERM_BIND_ENTRY_COUNT;
     bg_desc.entries = entries;
     vterm->bind_group = wgpuDeviceCreateBindGroup(vterm->device, &bg_desc);
     if (!vterm->bind_group) {
@@ -1036,6 +1073,43 @@ static uint32_t vterm_face_find_or_create(struct yetty_yvterm_vterm *vterm,
     }
     return index;
 }
+
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+/* Load the bundled programming-ligature face (Fira Code) into a dedicated grid
+ * face right after the base font — before the config range faces, so it always
+ * keeps its slot. A ligature run is then drawn as ONE N-wide grid glyph from
+ * this face (vterm_pack_line resolves it via get_glyph_index_ligature; the
+ * grid shader's wide-glyph spill draws it across the covered cells). Sized so
+ * one character advance equals the cell width, so a ligature spans exactly its
+ * N cells. Best-effort: on any failure ligatures stay off and the grid renders
+ * the operator characters individually. Sets vterm->ligature_face_index. */
+static void vterm_load_ligature_face(struct yetty_yvterm_vterm *vterm,
+                                     struct yetty_yconfig_config *config)
+{
+    if (!config || vterm->face_count == 0u || vterm->face_count >= YVTERM_MAX_FONT_FACES) {
+        return;
+    }
+    struct pixel_size_result cell = vterm->faces[0].font->ops->get_cell_size(vterm->faces[0].font);
+    if (YETTY_IS_ERR(cell)) {
+        yetty_ycore_error_destroy(cell.error);
+        return;
+    }
+    struct yetty_font_ms_font_result font_res = yetty_yfont_ms_raster_font_create_ligature(
+        config, "FiraCode", cell.value.width, cell.value.height);
+    if (YETTY_IS_ERR(font_res)) {
+        ywarn("vterm: ligature face (FiraCode) not loaded, ligatures disabled: %s",
+              font_res.error.msg);
+        yetty_ycore_error_destroy(font_res.error);
+        return;
+    }
+    uint32_t index = vterm->face_count++;
+    struct yvterm_font_face *face = &vterm->faces[index];
+    face->font = font_res.value;
+    face->method = YVTERM_FONT_METHOD_RASTER; /* Fira Code is monochrome (R8) */
+    strncpy(face->name, "FiraCode-ligatures", YVTERM_FONT_FACE_NAME_MAX - 1);
+    vterm->ligature_face_index = index;
+}
+#endif
 
 /* Build the codepoint-range → face routing table from the config list
  * (terminal/text-layer/font/ranges: {from, to, font, render-method}). */
@@ -1181,6 +1255,12 @@ static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *
     if (YETTY_IS_OK(cell)) {
         vterm->cell_size = cell.value;
     }
+
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+    /* Programming-ligature face (face 1) — loaded before the range faces so it
+     * keeps a dedicated slot regardless of how many ranges the config adds. */
+    vterm_load_ligature_face(vterm, config);
+#endif
 
     /* Config codepoint-range faces (CJK/emoji/etc.) — created after the base
      * font so raster faces inherit its cell size. Best-effort: a face that
