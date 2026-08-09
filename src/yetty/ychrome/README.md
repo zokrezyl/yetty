@@ -12,9 +12,10 @@ bare tool) gets draggable / resizable / maximizable windows.
 ## The engine (`ychrome:chrome`)
 
 Pure logic — no GLFW, no widgets, no rendering pipeline of its own. The
-app decides the caption height and resize-border thickness and feeds raw
-mouse events in; the engine hit-tests them and drives a
-`yplatform:window_chrome` yclass object:
+app decides the caption height and resize-border thickness (both in
+**logical px**) and feeds mouse events in **logical coordinates**; the
+engine hit-tests them and drives a `yplatform:window_chrome` yclass
+object:
 
 - press + drag inside the caption strip → interactive move
 - double-click on the caption → toggle maximize
@@ -55,7 +56,12 @@ plus a backdrop and a caption figure, with two sinks over one engine:
 Surface: `yetty_ychrome_host_create` / `_create_wire`, `_handle_event`
 (forwards to the engine and repaints the caption when the hover highlight
 changes), `_resized`, `_clear` / `_resync` (wire-mode figure removal and
-re-emission), `_chrome` (the underlying engine object), `_destroy`.
+re-emission), `_chrome` (the underlying engine object), `_destroy`. The
+host is the fb→logical adapter: window dimensions and mouse events come
+in as **framebuffer px** (what the caller naturally has from the GPU
+context and platform mouse plumbing) plus a `content_scale` captured at
+create time; the host divides once and speaks pure logical to the
+wrapped engine.
 
 ## Codegen layout
 

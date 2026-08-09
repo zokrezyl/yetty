@@ -15,17 +15,27 @@
  * Usage:
  *   struct yetty_ychrome_host *chrome =
  *       yetty_ychrome_host_create(container, font, &ctx, rt->window_chrome,
- *                                 width, height, 34.0f, 8.0f,
+ *                                 fb_width, fb_height, content_scale,
+ *                                 34.0f, 8.0f,
  *                                 YETTY_YCHROME_FLAG_ALL).value;
  *   // in the mouse path, after your own controls had their chance:
- *   yetty_ychrome_handle_event(NULL, yetty_ychrome_host_chrome(chrome), &ev);
+ *   yetty_ychrome_host_handle_event(chrome, &ev);
  *   // on resize:
- *   yetty_ychrome_host_resized(chrome, width, height);
+ *   yetty_ychrome_host_resized(chrome, fb_width, fb_height);
  *   // teardown:
  *   yetty_ychrome_host_destroy(chrome);
  *
- * Coordinates are in the same pixel space the app feeds mouse events / sizes the
- * viewport in (framebuffer px in yetty's stack).
+ * Coordinate contract — this is the fb→logical adapter for ychrome:
+ *   - Inputs from callers (width, height on create/resized; event.mouse.x/y)
+ *     are in FRAMEBUFFER pixels — what the caller naturally has from the GPU
+ *     context and the platform mouse plumbing.
+ *   - Internally the host divides by `content_scale` and speaks pure LOGICAL
+ *     px to the wrapped ychrome:chrome engine, which authors its rendered
+ *     drawable list in logical px as well; the receiving ygrid multiplies
+ *     each coordinate by content_scale at add-record time for display.
+ *   - Everything hardcoded on chrome (button width, edge thickness, caption
+ *     row height) is authored in logical px, so a Retina/HiDPI display
+ *     renders at the correct physical size without any per-caller math.
  */
 
 #include <yetty/ycore/result.h>
@@ -45,14 +55,17 @@ struct yetty_yui_event;
 YETTY_YRESULT_DECLARE(yetty_ychrome_host_ptr, struct yetty_ychrome_host *);
 
 /* Create the chrome engine + its pinned caption figure under `container`.
- * `caption_height` / `edge_size` are in px; `flags` is YETTY_YCHROME_FLAG_*
- * (see <yetty/ychrome/chrome.h>). `window_chrome` is the yplatform yclass
- * object (yframework->window_chrome); pass NULL to render the bar without live
- * OS-window control (e.g. in-terminal). All pointers are borrowed. */
+ * `width` / `height` are the current window size in FRAMEBUFFER pixels;
+ * `content_scale` is the HiDPI factor (framebuffer_px / logical_px,
+ * 1.0 on non-HiDPI). `caption_height` / `edge_size` are in LOGICAL pixels.
+ * `flags` is YETTY_YCHROME_FLAG_* (see <yetty/ychrome/chrome.h>).
+ * `window_chrome` is the yplatform yclass object (yframework->window_chrome);
+ * pass NULL to render the bar without live OS-window control (e.g. in-terminal).
+ * All pointers are borrowed. */
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
     struct yetty_yclass_object *container_obj, struct yetty_yfont_font *font,
     const struct yetty_context *ctx, struct yetty_yclass_object *window_chrome, float width,
-    float height, float caption_height, float edge_size, unsigned int flags);
+    float height, float content_scale, float caption_height, float edge_size, unsigned int flags);
 
 /* Wire variant for client / in-terminal mode: instead of pinning figures into
  * a local container, DRIVE the backdrop + caption onto the hosting yetty's root
@@ -62,10 +75,11 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
  * proxy (yetty_yterminal_figure_root_container) and passes it in here; it is
  * borrowed — the owner disconnects the session after this host is destroyed.
  * `window_chrome` is typically a wire adapter (close/min/max → pane ops) or
- * NULL. */
+ * NULL. `width` / `height` / `content_scale` follow the same contract as
+ * yetty_ychrome_host_create: framebuffer px in, logical px on the wire. */
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
     struct yetty_yclass_object *container, struct yetty_yclass_object *window_chrome, float width,
-    float height, float caption_height, float edge_size, unsigned int flags);
+    float height, float content_scale, float caption_height, float edge_size, unsigned int flags);
 
 /* Explicitly remove the wire chrome's figures (backdrop + caption) from the
  * host pane via the typed delete_child stubs. Each flushes its request
@@ -89,7 +103,9 @@ struct yetty_yclass_object *yetty_ychrome_host_chrome(struct yetty_ychrome_host 
 /* Forward one event to the chrome engine and re-paint the caption if the hover
  * highlight changed. Returns 1 if chrome claimed the event (the app should stop
  * processing it), 0 otherwise. Prefer this over calling
- * yetty_ychrome_handle_event directly so the hover highlight tracks the pointer. */
+ * yetty_ychrome_handle_event directly so the hover highlight tracks the pointer.
+ * Pass the raw framebuffer-pixel event as it arrives from the platform layer —
+ * the host converts to logical px internally before feeding chrome. */
 struct yetty_ycore_int_result yetty_ychrome_host_handle_event(struct yetty_ychrome_host *host,
                                                               const struct yetty_yui_event *event);
 
@@ -99,7 +115,9 @@ struct yetty_ycore_int_result yetty_ychrome_host_handle_event(struct yetty_ychro
 struct yetty_ycore_int_result yetty_ychrome_host_in_gesture(struct yetty_ychrome_host *host);
 
 /* Update the window size: re-sizes the engine's edge bands and repositions +
- * repaints the caption figure. Call on every resize. */
+ * repaints the caption figure. `width` / `height` are in FRAMEBUFFER pixels —
+ * the host divides by `content_scale` (captured at create time) internally.
+ * Call on every resize. */
 struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_host *host,
                                                           float width, float height);
 

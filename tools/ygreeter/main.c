@@ -3109,6 +3109,14 @@ struct client_state {
     struct yetty_ywire_connection *conn;          /* multiplexed link */
     struct app *app;
     int running;
+    /* Host display's HiDPI factor (framebuffer px / logical px), learned from
+     * yetty_client_input_resize.content_scale on the RESIZE envelope. ygui and
+     * ychrome author in LOGICAL px and the host's yscene multiplies
+     * absolute-coords figures back up by this, so every framebuffer-px input
+     * from the host (pane size, forwarded pointer coords) is divided by it on
+     * the way in. 1.0 until the first RESIZE envelope arrives, and for a host
+     * too old to populate the field. */
+    float content_scale;
 #ifdef YETTY_YGREETER_HAS_CHROME
     /* Window chrome over the wire — the same ychrome the standalone window
      * gets, but driven onto the hosting yetty's root figure container proxy via
@@ -3119,10 +3127,21 @@ struct client_state {
     struct yetty_yclass_object *chrome_root;      /* terminal (session root) */
     struct yetty_yclass_object *chrome_container; /* navigated container proxy */
     struct yetty_ychrome_host *chrome_host;
+    /* content_scale the live chrome_host was created with — the host captures
+     * it once, so a change means rebuild (see client_chrome_sync). */
+    float chrome_scale;
     int chrome_width;
     int chrome_height;
 #endif
 };
+
+/* Host HiDPI factor with the 1.0 guard — see client_state::content_scale. The
+ * standalone counterpart is app_content_scale(); this is the client-mode one,
+ * fed by the host over the wire instead of read from a local GPU context. */
+static float client_content_scale(const struct client_state *cs)
+{
+    return (cs && cs->content_scale > 0.0f) ? cs->content_scale : 1.0f;
+}
 
 /*-----------------------------------------------------------------------------
  * Raw channel sink — bytes outside any envelope are real keyboard input from
@@ -3162,12 +3181,35 @@ static struct yetty_ycore_void_result client_chrome_sync(struct client_state *cs
     if (!cs || !cs->chrome_container || width <= 0.0f || height <= 0.0f) {
         return YETTY_OK_VOID();
     }
+    float scale = client_content_scale(cs);
+    /* The host captures content_scale at create time, but the first sync can
+     * fire from TIOCGWINSZ before the RESIZE envelope has told us the real
+     * factor (and the factor changes for real when the window moves to a
+     * display of a different density). Rebuild rather than render the caption
+     * at a stale scale. */
+    if (cs->chrome_host && scale != cs->chrome_scale) {
+        struct yetty_ycore_void_result clear_result = yetty_ychrome_host_clear(cs->chrome_host);
+        if (YETTY_IS_ERR(clear_result)) {
+            yetty_ycore_error_destroy(clear_result.error);
+        }
+        struct yetty_ycore_void_result destroy_result =
+            yetty_ychrome_host_destroy(cs->chrome_host);
+        if (YETTY_IS_ERR(destroy_result)) {
+            yetty_ycore_error_destroy(destroy_result.error);
+        }
+        cs->chrome_host = NULL;
+    }
     if (!cs->chrome_host) {
-        struct yetty_ychrome_host_ptr_result host_result =
-            yetty_ychrome_host_create_wire(cs->chrome_container, /*window_chrome=*/NULL, width,
-                                           height, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
+        /* Wire mode has no local GPU context; the host's HiDPI factor arrives
+         * on the resize envelope (yetty_client_input_resize.content_scale), so
+         * chrome authors LOGICAL px and the host's receiving yscene scales it
+         * back up for display. */
+        struct yetty_ychrome_host_ptr_result host_result = yetty_ychrome_host_create_wire(
+            cs->chrome_container, /*window_chrome=*/NULL, width, height, scale, 34.0f, 8.0f,
+            YETTY_YCHROME_FLAG_ALL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, host_result, "client_chrome_sync: create wire host");
         cs->chrome_host = host_result.value;
+        cs->chrome_scale = scale;
         cs->chrome_width = (int)width;
         cs->chrome_height = (int)height;
         return YETTY_OK_VOID();
@@ -3262,6 +3304,12 @@ static void client_input_sink(void *userdata, int wire_code, const uint8_t *args
         if (msg->magic != YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
             return;
         }
+        /* The host forwards pointer coords in FRAMEBUFFER px; ygui hit-tests in
+         * logical px (same divide the viewport gets), so scale once here or
+         * every click lands content_scale× too far right and down. */
+        float scale = client_content_scale(cs);
+        float mx = msg->x / scale;
+        float my = msg->y / scale;
         /* ygreeter's UI (tabs/buttons) gets first refusal; only events it
          * does not consume fall through to the window chrome — mirrors the
          * standalone client-first / chrome-fallback ordering, so the chrome
@@ -3270,7 +3318,7 @@ static void client_input_sink(void *userdata, int wire_code, const uint8_t *args
         switch (msg->kind) {
         case YETTY_YMGUI_INPUT_MOUSE_BUTTON: {
             struct yetty_ycore_int_result feed_result = yetty_ygui_framework_feed_mouse_button(
-                app->engine, msg->x, msg->y, msg->button, msg->pressed, 0);
+                app->engine, mx, my, msg->button, msg->pressed, 0);
             ygui_consumed = YETTY_IS_OK(feed_result) && feed_result.value;
             if (YETTY_IS_ERR(feed_result)) {
                 yetty_ycore_error_destroy(feed_result.error);
@@ -3279,7 +3327,7 @@ static void client_input_sink(void *userdata, int wire_code, const uint8_t *args
         }
         case YETTY_YMGUI_INPUT_MOUSE_POS: {
             struct yetty_ycore_int_result feed_result =
-                yetty_ygui_framework_feed_mouse_motion(app->engine, msg->x, msg->y);
+                yetty_ygui_framework_feed_mouse_motion(app->engine, mx, my);
             ygui_consumed = YETTY_IS_OK(feed_result) && feed_result.value;
             if (YETTY_IS_ERR(feed_result)) {
                 yetty_ycore_error_destroy(feed_result.error);
@@ -3310,15 +3358,31 @@ static void client_input_sink(void *userdata, int wire_code, const uint8_t *args
             msg->height <= 0.0f) {
             return;
         }
+        /* Learn the host's HiDPI factor before anything consumes the size: the
+         * envelope carries framebuffer px, ygui and ychrome author in logical
+         * px, and the host's yscene scales absolute-coords figures back up by
+         * exactly this factor. Divide once here and the whole client-mode UI
+         * lands 1:1 on the pane; skip it and every coordinate is multiplied by
+         * content_scale a second time (plots pushed right and off the pane on
+         * any HiDPI display). A host too old to populate the field sends 0 —
+         * fall back to 1.0 and keep the pre-field behaviour. */
+        if (msg->content_scale > 0.0f) {
+            app->client->content_scale = msg->content_scale;
+        }
+        float cs = app->client->content_scale > 0.0f ? app->client->content_scale : 1.0f;
+        float logical_w = msg->width / cs;
+        float logical_h = msg->height / cs;
         struct yetty_ycore_void_result r =
-            yetty_ygui_framework_set_viewport(app->engine, msg->width, msg->height);
+            yetty_ygui_framework_set_viewport(app->engine, logical_w, logical_h);
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
         }
         yetty_ygui_framework_mark_dirty(app->engine);
 #ifdef YETTY_YGREETER_HAS_CHROME
         /* Event-loop callback boundary: a transient chrome-sync failure must
-         * not kill input handling — surface it to the trace log and move on. */
+         * not kill input handling — surface it to the trace log and move on.
+         * chrome_sync takes FRAMEBUFFER px; the host wrapper divides by the
+         * content_scale it was created with. */
         struct yetty_ycore_void_result chrome_sync_result =
             client_chrome_sync(app->client, msg->width, msg->height);
         if (YETTY_IS_ERR(chrome_sync_result)) {
@@ -3424,8 +3488,12 @@ static void client_resize_cb(void *user, int width_px, int height_px, int cols, 
     if (width_px <= 0 || height_px <= 0) {
         return;
     }
-    struct yetty_ycore_void_result r =
-        yetty_ygui_framework_set_viewport(cs->app->engine, (float)width_px, (float)height_px);
+    /* TIOCGWINSZ pixels are FRAMEBUFFER px (cols × cell, and the cell stride
+     * already carries content_scale). Same divide as the RESIZE envelope so
+     * this fallback can't clobber the logical viewport with device px. */
+    float scale = client_content_scale(cs);
+    struct yetty_ycore_void_result r = yetty_ygui_framework_set_viewport(
+        cs->app->engine, (float)width_px / scale, (float)height_px / scale);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
     }
@@ -4297,8 +4365,8 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
             app->root_container, app->font, &app->ctx, app->yframework->window_chrome,
-            (float)gpu->surface_width, (float)gpu->surface_height, 36.0f, 8.0f,
-            YETTY_YCHROME_FLAG_ALL);
+            (float)gpu->surface_width, (float)gpu->surface_height, app_content_scale(app), 36.0f,
+            8.0f, YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
         } else {

@@ -259,6 +259,15 @@ struct app {
     float viewport_w, viewport_h;
     float font_size;
 
+    /* HiDPI factor learned from the host via SC_CLIENT_INPUT_FIGURE_RESIZE.
+     * 1.0 until the first envelope arrives — everything the client authors
+     * in logical px (ygui viewport, mouse hit-test) divides framebuffer-px
+     * inputs (ws_xpixel, forwarded mouse coords) by this. The very first
+     * frame ships at framebuffer scale (mismatched on HiDPI, but visible)
+     * because we don't have a local way to observe the host's scale until
+     * the RESIZE OSC arrives after the mouse-subscribe handshake. */
+    float host_content_scale;
+
     /* Standalone (own-window) mode only — set so the quit shortcut can stop
 	 * the GPU event loop. NULL in the in-yetty client loop. */
     struct yetty_yevent_event_loop *event_loop;
@@ -338,11 +347,31 @@ static uint64_t fnv1a(const void *data, size_t len)
     return h;
 }
 
-/* Current pane pixel size from the controlling tty. The host updates the
- * pty winsize as the pane resizes, so polling this each tick tracks the
- * real size even when no pane-wide resize OSC is delivered. Prefers the
- * pixel fields; falls back to a cell-grid approximation. */
-static int pick_pane_px(int *w, int *h)
+/* Host display HiDPI factor (framebuffer_px / logical_px), learned from the
+ * SC_CLIENT_INPUT_FIGURE_RESIZE OSC. Falls back to 1.0 before the envelope
+ * arrives — the very first frame renders at framebuffer scale, then RESIZE
+ * lands and the viewport snaps to logical. The ygui widget layer + lexbor's
+ * CSS viewport both run in LOGICAL px once RESIZE has arrived; the host's
+ * absolute-coords ygrid multiplies our records by content_scale at add-record
+ * time to reach framebuffer. So the only places that divide by this scale
+ * are the fb→logical boundaries: pick_pane_px (ws_xpixel), on_osc for RESIZE
+ * (rz->width) and MOUSE (m->x). Widget-rect reads are already logical and
+ * pass through render_doc / page_click unmodified. */
+static float pane_host_scale_from(const struct app *a)
+{
+    if (!a) {
+        return 1.0f;
+    }
+    return a->host_content_scale > 0.0f ? a->host_content_scale : 1.0f;
+}
+
+/* Current pane LOGICAL pixel size (framebuffer / host_content_scale) from
+ * the controlling tty. The host writes ws_xpixel / ws_ypixel in framebuffer
+ * pixels each time the pane resizes; ygui runs in logical, so divide by the
+ * host scale (learned from the resize OSC — 1.0 before it arrives, in which
+ * case this returns framebuffer, matching the framebuffer-sized initial
+ * viewport seeded by ybrowser_ui_run). */
+static int pick_pane_px(const struct app *a, int *w, int *h)
 {
     int fds[] = {STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
     for (size_t i = 0; i < sizeof(fds) / sizeof(fds[0]); i++) {
@@ -353,9 +382,10 @@ static int pick_pane_px(int *w, int *h)
         if (ioctl(fds[i], TIOCGWINSZ, &ws) != 0) {
             continue;
         }
+        float scale = pane_host_scale_from(a);
         if (ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
-            *w = ws.ws_xpixel;
-            *h = ws.ws_ypixel;
+            *w = (int)((float)ws.ws_xpixel / scale);
+            *h = (int)((float)ws.ws_ypixel / scale);
             return 1;
         }
         if (ws.ws_col > 0 && ws.ws_row > 0) {
@@ -2273,25 +2303,30 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
             }
         }
         const struct yetty_client_input_mouse *m = &mouse_copy;
+        /* Host forwards mouse coords in framebuffer px; widgets hit-test in
+         * logical, so divide by the host content_scale learned from the
+         * resize OSC. */
+        float scale = pane_host_scale_from(a);
+        float mx = (float)m->x / scale;
+        float my = (float)m->y / scale;
         if (m->kind == YETTY_YMGUI_INPUT_MOUSE_POS) {
             struct yetty_ycore_int_result fr =
-                yetty_ygui_framework_feed_mouse_motion(a->fw, m->x, m->y);
+                yetty_ygui_framework_feed_mouse_motion(a->fw, mx, my);
             if (YETTY_IS_ERR(fr)) {
                 yetty_ycore_error_destroy(fr.error);
             }
         } else if (m->kind == YETTY_YMGUI_INPUT_MOUSE_BUTTON) {
             struct yetty_ycore_int_result fr =
-                yetty_ygui_framework_feed_mouse_button(a->fw, m->x, m->y, m->button, m->pressed, 0);
+                yetty_ygui_framework_feed_mouse_button(a->fw, mx, my, m->button, m->pressed, 0);
             if (YETTY_IS_ERR(fr)) {
                 yetty_ycore_error_destroy(fr.error);
             }
             if (m->pressed) {
-                page_click(a, m->x, m->y);
+                page_click(a, mx, my);
             }
             yetty_ygui_framework_mark_dirty(a->fw);
         } else if (m->kind == YETTY_YMGUI_INPUT_MOUSE_WHEEL) {
-            err_ok_int(
-                yetty_ygui_framework_feed_mouse_scroll(a->fw, m->x, m->y, 0.0f, m->wheel_dy));
+            err_ok_int(yetty_ygui_framework_feed_mouse_scroll(a->fw, mx, my, 0.0f, m->wheel_dy));
         }
         return;
     }
@@ -2303,10 +2338,23 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         }
         const struct yetty_client_input_resize *rz =
             (const struct yetty_client_input_resize *)payload;
+        /* Learn the host's HiDPI factor first so pane_host_scale_from below
+         * sees the new value. The host's default-kind ygrid factory runs in
+         * absolute-coords mode: our LOGICAL-px widget prims get scaled up to
+         * framebuffer at receiver add-record time, so the viewport we hand
+         * ygui must ALSO be logical (fb / scale). Widget rects come back
+         * from ygui in the same logical space and feed lexbor's CSS viewport
+         * directly — no second divide (render_doc). */
+        if (rz->content_scale > 0.0f) {
+            a->host_content_scale = rz->content_scale;
+        }
         if (rz->width > 0 && rz->height > 0) {
-            a->viewport_w = rz->width;
-            a->viewport_h = rz->height;
-            err_ok(yetty_ygui_framework_set_viewport(a->fw, rz->width, rz->height));
+            float scale = pane_host_scale_from(a);
+            float logical_w = rz->width / scale;
+            float logical_h = rz->height / scale;
+            a->viewport_w = logical_w;
+            a->viewport_h = logical_h;
+            err_ok(yetty_ygui_framework_set_viewport(a->fw, logical_w, logical_h));
             a->pending_render = 1; /* content width may have changed */
             yetty_ygui_framework_mark_dirty(a->fw);
         }
@@ -2804,8 +2852,20 @@ static void render_doc(struct app *a, struct tab *t)
             return;
         }
         if (w != t->rendered_w) {
+            /* w and h are ygui widget-rect coords, already in LOGICAL px
+             * because the ygui framework viewport is set from
+             * ws_xpixel/host_content_scale (see pick_pane_px + on_osc).
+             * Lexbor's CSS viewport IS logical, so pass them through. Any
+             * further /scale divide here halves the CSS canvas on HiDPI. */
+            int vw = (int)w;
             int vh = (int)(h > a->viewport_h ? h : a->viewport_h);
-            err_ok(yetty_ylexbor_set_viewport(t->engine, (int)w, vh));
+            if (vw < 1) {
+                vw = 1;
+            }
+            if (vh < 1) {
+                vh = 1;
+            }
+            err_ok(yetty_ylexbor_set_viewport(t->engine, vw, vh));
         }
         err_ok(yetty_ylexbor_relayout(t->engine));
         struct yetty_ydraw_drawable_list_result dlr =
@@ -3108,6 +3168,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 
     struct app a = {0};
     a.running = 1;
+    a.host_content_scale = 1.0f;
     a.viewport_w = (float)viewport_w;
     a.viewport_h = (float)viewport_h;
     a.font_size = font_size > 0.0f ? font_size : 16.0f;
@@ -3156,6 +3217,16 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
         return 1;
     }
     a.fw = fr.value;
+    /* Initial viewport in FRAMEBUFFER px (probe_terminal_size reads raw
+     * ws_xpixel). host_content_scale isn't known until the RESIZE OSC
+     * arrives; on HiDPI the very first frame therefore lays chrome out at
+     * the framebuffer size and the receiving ygrid scales it x content_scale
+     * — visibly wrong for a tick, then RESIZE OSC arrives and everything
+     * snaps to logical. Shipping a wrong-scale first frame is still better
+     * than the alternative of not shipping widgets at all: without a
+     * viewport set the framework layouts at its 800x600 default and every
+     * downstream consumer (build_ui-time widget size hints, engine viewport)
+     * uses stale numbers. */
     err_ok(yetty_ygui_framework_set_viewport(a.fw, (float)viewport_w, (float)viewport_h));
     yetty_ygui_framework_set_key_cb(a.fw, key_cb, &a);
 
@@ -3231,16 +3302,25 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 
     char buf[8192];
     while (a.running) {
-        /* Track the real pane size from the tty (the host may never send a
-		 * pane-wide resize OSC, and the initial size is a guess). */
-        int pw = 0, ph = 0;
-        if (pick_pane_px(&pw, &ph) && ((float)pw != a.viewport_w || (float)ph != a.viewport_h)) {
-            a.viewport_w = (float)pw;
-            a.viewport_h = (float)ph;
-            err_ok(yetty_ygui_framework_set_viewport(a.fw, (float)pw, (float)ph));
-            a.tabs[a.active].needs_render = 1;
-            a.pending_render = 1;
-            yetty_ygui_framework_mark_dirty(a.fw);
+        /* Poll pane size from the tty ONLY while we have no RESIZE OSC yet.
+		 * Once host_content_scale is real, the RESIZE OSC carries the whole
+		 * pane in fb (host publishes applied_w / applied_h) — trust it. The
+		 * tty's ws_xpixel is `cols * cell_width`, i.e. only the character
+		 * grid area, so it undercounts the pane by up to one cell of chrome
+		 * padding. A yetty host sends RESIZE on every pane resize (the
+		 * mouse-subscribe path in terminal.c), so we don't lose live resize
+		 * either; foreign hosts that never send it fall back to this poll. */
+        if (a.host_content_scale <= 0.0f || a.host_content_scale == 1.0f) {
+            int pw = 0, ph = 0;
+            if (pick_pane_px(&a, &pw, &ph) &&
+                ((float)pw != a.viewport_w || (float)ph != a.viewport_h)) {
+                a.viewport_w = (float)pw;
+                a.viewport_h = (float)ph;
+                err_ok(yetty_ygui_framework_set_viewport(a.fw, (float)pw, (float)ph));
+                a.tabs[a.active].needs_render = 1;
+                a.pending_render = 1;
+                yetty_ygui_framework_mark_dirty(a.fw);
+            }
         }
 
         /* Surface pipelined RPC completions the connection pump delivered
@@ -3522,6 +3602,21 @@ static struct yetty_ycore_int_result sa_frame_tick(struct yetty_yevent_event_lis
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
+/* HiDPI factor (framebuffer_px / logical_px). ygui + the ychrome engine both
+ * author in logical px; the receiving yscene multiplies by this on
+ * absolute-coords figures to hit framebuffer resolution. Every ygui
+ * feed_mouse_* + set_viewport call and the chrome-host create take LOGICAL
+ * inputs, so this is the divisor used at each of those boundaries. Falls back
+ * to 1.0f before the yframework is up so the pre-init path stays valid. */
+static float sa_content_scale(const struct yetty_ybrowser_app *s)
+{
+    if (!s->yframework) {
+        return 1.0f;
+    }
+    float scale = s->yframework->gpu.app_gpu_context.content_scale;
+    return scale > 0.0f ? scale : 1.0f;
+}
+
 static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_listener *listener,
                                                       const struct yetty_yui_event *ev)
 {
@@ -3642,18 +3737,22 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
             err_ok(s->yframework->event_loop->ops->stop(s->yframework->event_loop));
         }
         return YETTY_OK(yetty_ycore_int, 1);
-    case YETTY_YCORE_RESIZE:
+    case YETTY_YCORE_RESIZE: {
         yetty_yframework_reconfigure_surface(s->yframework, (uint32_t)ev->resize.width,
                                              (uint32_t)ev->resize.height);
         if (s->render_target && s->render_target->ops->resize) {
             struct yetty_yrender_viewport vp = {0, 0, ev->resize.width, ev->resize.height};
             s->render_target->ops->resize(s->render_target, vp);
         }
-        s->app.viewport_w = (float)ev->resize.width;
-        s->app.viewport_h = (float)ev->resize.height;
-        err_ok(yetty_ygui_framework_set_viewport(s->app.fw, (float)ev->resize.width,
-                                                 (float)ev->resize.height));
+        /* ygui viewport authors in LOGICAL px — divide the framebuffer resize
+         * once here (previously the raw framebuffer size leaked through and the
+         * whole layout ended up laid out for a 2× canvas on HiDPI). */
+        float cs = sa_content_scale(s);
+        s->app.viewport_w = (float)ev->resize.width / cs;
+        s->app.viewport_h = (float)ev->resize.height / cs;
+        err_ok(yetty_ygui_framework_set_viewport(s->app.fw, s->app.viewport_w, s->app.viewport_h));
         if (s->chrome) {
+            /* Chrome host takes framebuffer inputs and converts internally. */
             struct yetty_ycore_void_result cr = yetty_ychrome_host_resized(
                 s->chrome, (float)ev->resize.width, (float)ev->resize.height);
             if (YETTY_IS_ERR(cr)) {
@@ -3675,6 +3774,7 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         yetty_ygui_framework_mark_dirty(s->app.fw);
         sa_request_render(s);
         return YETTY_OK(yetty_ycore_int, 1);
+    }
     case YETTY_YCORE_PASTE: {
         /* Async clipboard paste response (from a Ctrl-V request) — payload is a
 		 * malloc'd string we own. Drop it into the address bar when focused. */
@@ -3724,8 +3824,13 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
     case YETTY_YCORE_MOUSE_DOWN:
     case YETTY_YCORE_MOUSE_UP: {
         int press = ev->type == YETTY_YCORE_MOUSE_DOWN ? 1 : 0;
+        /* ygui hit-tests in LOGICAL px — scale the framebuffer event once. The
+         * chrome-host feed below stays raw: it does its own fb→logical divide. */
+        float cs = sa_content_scale(s);
+        float logical_x = ev->mouse.x / cs;
+        float logical_y = ev->mouse.y / cs;
         struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
-            s->app.fw, ev->mouse.x, ev->mouse.y, ev->mouse.button, press, ev->mouse.mods);
+            s->app.fw, logical_x, logical_y, ev->mouse.button, press, ev->mouse.mods);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, fr, "ybrowser: feed button");
         /* Client-first: only if no browser widget (tab / toolbar) took it does
          * the window chrome get the event (empty title-bar drag, edges,
@@ -3737,7 +3842,7 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
             }
         }
         if (press) {
-            page_click(&s->app, ev->mouse.x, ev->mouse.y);
+            page_click(&s->app, logical_x, logical_y);
         }
         yetty_ygui_framework_mark_dirty(s->app.fw);
         sa_request_render(s);
@@ -3761,8 +3866,9 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         return YETTY_OK(yetty_ycore_int, 1);
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG: {
-        struct yetty_ycore_int_result fr =
-            yetty_ygui_framework_feed_mouse_motion(s->app.fw, ev->mouse.x, ev->mouse.y);
+        float cs = sa_content_scale(s);
+        struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_motion(
+            s->app.fw, ev->mouse.x / cs, ev->mouse.y / cs);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, fr, "ybrowser: feed motion");
         if (!fr.value && s->chrome) {
             struct yetty_ycore_int_result cr = yetty_ychrome_host_handle_event(s->chrome, ev);
@@ -4000,7 +4106,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
             s->root_container, s->font, &ctx, s->yframework->window_chrome,
-            (float)gpu->surface_width, (float)gpu->surface_height, 36.0f, 8.0f,
+            (float)gpu->surface_width, (float)gpu->surface_height, sa_content_scale(s), 36.0f, 8.0f,
             YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             s->chrome = chrome_r.value;
@@ -4053,10 +4159,15 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
                 yetty_ycore_error_destroy(pr.error);
             }
         }
-        s->app.viewport_w = (float)gpu->surface_width;
-        s->app.viewport_h = (float)gpu->surface_height;
-        err_ok(yetty_ygui_framework_set_viewport(s->app.fw, (float)gpu->surface_width,
-                                                 (float)gpu->surface_height));
+        /* ygui viewport in LOGICAL px so the browser layout maps 1:1 to the
+         * physical window on HiDPI. The compositor container (set above) stays
+         * in framebuffer px — ygrid absolute-coord children (widgets, chrome
+         * caption) scissor against their own logical rects scaled by
+         * content_scale, so the container rect is not the limiter here. */
+        float cs = sa_content_scale(s);
+        s->app.viewport_w = (float)gpu->surface_width / cs;
+        s->app.viewport_h = (float)gpu->surface_height / cs;
+        err_ok(yetty_ygui_framework_set_viewport(s->app.fw, s->app.viewport_w, s->app.viewport_h));
     }
 
     yetty_ygui_framework_set_key_cb(s->app.fw, key_cb, &s->app);

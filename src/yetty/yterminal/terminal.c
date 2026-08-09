@@ -720,10 +720,16 @@ static struct yetty_ycore_void_result terminal_emit_card_focus(
 static struct yetty_ycore_void_result terminal_emit_card_resize(
     struct yetty_yterminal_terminal *terminal, uint32_t figure_id, float width, float height)
 {
+    /* Publish the host display's HiDPI factor alongside the framebuffer-px
+     * size so clients that author in logical px (browser CSS viewport, ygui
+     * layout) can divide once and render 1:1 with the physical pane. */
+    float content_scale =
+        terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
     struct yetty_client_input_resize msg = {
         .magic = YETTY_CLIENT_INPUT_RESIZE_MAGIC,
         .version = YMGUI_WIRE_VERSION,
         .figure_id = figure_id,
+        .content_scale = content_scale,
         .width = width,
         .height = height,
     };
@@ -793,6 +799,21 @@ static struct yetty_yfigure_hit_result terminal_resolve_figure_hit(
         return YETTY_OK(yetty_yfigure_hit, hit);
     }
 
+    /* The pointer arrives in FRAMEBUFFER px, but child figure rects are stored
+     * in LOGICAL px — the container adds viewport_offset to each rect_local and
+     * that offset is itself divided by layout_content_scale (see
+     * terminal_set_bounds). Hit-testing raw framebuffer coords against logical
+     * rects picks the wrong figure by a factor of content_scale, and the
+     * reported local_* then carries a (rect_origin - rect_origin/scale) error
+     * — 7 px at 1.25, ~18 at 2.0, invisible at 1.0. Test in the rects' own
+     * space, then scale the figure-local result back OUT to framebuffer px:
+     * the client-input wire contract is device px and every ygui client
+     * divides by the content_scale it learned from the resize envelope. */
+    const float hit_scale =
+        terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
+    const float logical_x = lx / hit_scale;
+    const float logical_y = ly / hit_scale;
+
     if (captured_figure_id != 0) {
         /* Drag: route to the captured figure; project the cursor into
          * its local space even when the cursor leaves the figure's rect.
@@ -800,17 +821,27 @@ static struct yetty_yfigure_hit_result terminal_resolve_figure_hit(
          * use the natural local coords; otherwise fall back to the raw
          * pane coords tagged with the captured id. */
         struct yetty_yfigure_hit_result hit_res =
-            yetty_yfigure_container_hit_test(terminal->root_container_obj, lx, ly);
+            yetty_yfigure_container_hit_test(terminal->root_container_obj, logical_x, logical_y);
         YETTY_RETURN_IF_ERR(yetty_yfigure_hit, hit_res, "resolve_figure_hit: hit_test");
         hit = hit_res.value;
         if (hit.figure_id == captured_figure_id) {
+            hit.local_x *= hit_scale;
+            hit.local_y *= hit_scale;
             return YETTY_OK(yetty_yfigure_hit, hit);
         }
+        /* Cursor left the captured figure: ship the raw pane coords (already
+         * framebuffer px) tagged with the captured id, as before. */
         struct yetty_yfigure_hit captured = {captured_figure_id, lx, ly};
         return YETTY_OK(yetty_yfigure_hit, captured);
     }
 
-    return yetty_yfigure_container_hit_test(terminal->root_container_obj, lx, ly);
+    struct yetty_yfigure_hit_result plain_res =
+        yetty_yfigure_container_hit_test(terminal->root_container_obj, logical_x, logical_y);
+    YETTY_RETURN_IF_ERR(yetty_yfigure_hit, plain_res, "resolve_figure_hit: hit_test");
+    hit = plain_res.value;
+    hit.local_x *= hit_scale;
+    hit.local_y *= hit_scale;
+    return YETTY_OK(yetty_yfigure_hit, hit);
 }
 
 /* Emit a keyboard event for the focused figure. Returns 1 if delivered
@@ -3257,10 +3288,20 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
      * producers (ygreeter, ygui) emit pane-local rects. Push the pane
      * origin into the compositor so it can shift incoming rects, keeping
      * the rendered pixels aligned with the mouse coords the input
-     * pipeline subtracts (bounds.x/y) on the way down to the producer. */
+     * pipeline subtracts (bounds.x/y) on the way down to the producer.
+     *
+     * bounds is in FRAMEBUFFER px (yui composes its chrome in fb). Divide by
+     * layout_content_scale so the offset is in LOGICAL — client-authored ygui
+     * figures ship their CREATE_CHILD rect in LOGICAL, and the container
+     * stores rect_local + viewport_offset on each child. Storing them in a
+     * single unit system means the ygrid scissor (rect * content_scale) reaches
+     * the right fb region on HiDPI. On non-HiDPI (scale == 1.0) fb == logical
+     * and this divide is a no-op, matching pre-HiDPI behaviour. */
+    float offset_scale = terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
     if (terminal->root_container_obj) {
-        yetty_yfigure_container_set_viewport_offset(terminal->root_container_obj, bounds.x,
-                                                    bounds.y);
+        yetty_yfigure_container_set_viewport_offset(terminal->root_container_obj,
+                                                    bounds.x / offset_scale,
+                                                    bounds.y / offset_scale);
     }
 
     /* Actually resize the terminal when the pixel size changes. The

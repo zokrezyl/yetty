@@ -170,8 +170,23 @@ struct yetty_yguiapp_client {
      * framework in teardown. NULL when the font could not be loaded, in which
      * case widgets fall back to the fixed per-char advance. */
     struct yetty_yfont_font *measure_font;
+    /* Host display's HiDPI factor (framebuffer px / logical px), learned from
+     * yetty_client_input_resize.content_scale. Everything the host sends us —
+     * TIOCGWINSZ pane pixels, forwarded pointer coordinates — is in FRAMEBUFFER
+     * px, while ygui lays out in LOGICAL px and the host's yscene multiplies
+     * absolute-coords figures back up by exactly this factor. Divide once at
+     * each inbound boundary or the whole UI is built for a content_scale-times
+     * canvas and overflows the pane. 1.0 until the first RESIZE envelope, and
+     * for a host too old to populate the field. */
+    float content_scale;
     int running;
 };
+
+/* Host HiDPI factor with the 1.0 guard — see content_scale above. */
+static float yguiapp_client_scale(const struct yetty_yguiapp_client *cs)
+{
+    return (cs && cs->content_scale > 0.0f) ? cs->content_scale : 1.0f;
+}
 
 static int yguiapp_client_on_key(struct yetty_yclass_object *engine, uint32_t key, int mods,
                                  void *userdata)
@@ -300,6 +315,31 @@ static void yguiapp_client_input_sink(void *user, int wire_code, const uint8_t *
         yguiapp_client_feed_figure_key(cs, key_msg);
         return;
     }
+    if (wire_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE ||
+        wire_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE) {
+        if (payload_len < sizeof(struct yetty_client_input_resize)) {
+            return;
+        }
+        const struct yetty_client_input_resize *rz =
+            (const struct yetty_client_input_resize *)payload;
+        if (rz->magic != YETTY_CLIENT_INPUT_RESIZE_MAGIC || rz->width <= 0.0f ||
+            rz->height <= 0.0f) {
+            return;
+        }
+        /* Learn the host's HiDPI factor before the size is consumed; this is
+         * also the only size signal over transports whose TIOCGWINSZ carries
+         * no pixels (telnet/guest). */
+        if (rz->content_scale > 0.0f) {
+            cs->content_scale = rz->content_scale;
+        }
+        float scale = yguiapp_client_scale(cs);
+        struct yetty_ycore_void_result vr =
+            yetty_ygui_framework_set_viewport(cs->engine, rz->width / scale, rz->height / scale);
+        if (YETTY_IS_ERR(vr)) {
+            yetty_ycore_error_destroy(vr.error);
+        }
+        return;
+    }
     if (wire_code != YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE &&
         wire_code != YETTY_OSC_SC_CLIENT_INPUT_MOUSE) {
         return;
@@ -311,10 +351,15 @@ static void yguiapp_client_input_sink(void *user, int wire_code, const uint8_t *
     if (msg->magic != YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
         return;
     }
+    /* Host forwards pointer coords in FRAMEBUFFER px; ygui hit-tests in
+     * logical px — same divide the viewport gets. */
+    const float scale = yguiapp_client_scale(cs);
+    const float mx = msg->x / scale;
+    const float my = msg->y / scale;
     switch (msg->kind) {
     case YETTY_YMGUI_INPUT_MOUSE_BUTTON: {
         struct yetty_ycore_int_result r = yetty_ygui_framework_feed_mouse_button(
-            cs->engine, msg->x, msg->y, msg->button, msg->pressed, 0);
+            cs->engine, mx, my, msg->button, msg->pressed, 0);
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
         }
@@ -322,7 +367,7 @@ static void yguiapp_client_input_sink(void *user, int wire_code, const uint8_t *
     }
     case YETTY_YMGUI_INPUT_MOUSE_POS: {
         struct yetty_ycore_int_result r =
-            yetty_ygui_framework_feed_mouse_motion(cs->engine, msg->x, msg->y);
+            yetty_ygui_framework_feed_mouse_motion(cs->engine, mx, my);
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
         }
@@ -331,9 +376,11 @@ static void yguiapp_client_input_sink(void *user, int wire_code, const uint8_t *
     case YETTY_YMGUI_INPUT_MOUSE_WHEEL: {
         /* Offer the wheel to ygui first (a scrollarea under the cursor takes
          * it); if nothing consumes it, bounce it back so the terminal scrolls
-         * its scrollback and the inline cards track the scroll. */
+         * its scrollback and the inline cards track the scroll. The reinject
+         * below re-ships the ORIGINAL framebuffer-px envelope, so the host
+         * still sees the coordinates in its own space. */
         struct yetty_ycore_int_result consumed =
-            yetty_ygui_framework_feed_mouse_scroll(cs->engine, msg->x, msg->y, 0.0f, msg->wheel_dy);
+            yetty_ygui_framework_feed_mouse_scroll(cs->engine, mx, my, 0.0f, msg->wheel_dy);
         if (YETTY_IS_ERR(consumed)) {
             yetty_ycore_error_destroy(consumed.error);
             break;
@@ -359,8 +406,12 @@ static void yguiapp_client_resize_cb(void *user, int width_px, int height_px, in
     (void)rows;
     struct yetty_yguiapp_client *cs = (struct yetty_yguiapp_client *)user;
     if (width_px > 0 && height_px > 0) {
-        struct yetty_ycore_void_result r =
-            yetty_ygui_framework_set_viewport(cs->engine, (float)width_px, (float)height_px);
+        /* TIOCGWINSZ pixels are FRAMEBUFFER px (cols x cell, and the cell
+         * stride already carries content_scale) — divide like the RESIZE
+         * envelope so this fallback cannot clobber the logical viewport. */
+        const float scale = yguiapp_client_scale(cs);
+        struct yetty_ycore_void_result r = yetty_ygui_framework_set_viewport(
+            cs->engine, (float)width_px / scale, (float)height_px / scale);
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
         }
