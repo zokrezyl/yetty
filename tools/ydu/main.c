@@ -15,7 +15,10 @@
  *   Keys: [j/k] move · [enter/l] open · [u/h] up · [s] sort · [r] rescan · [q] quit
  */
 
+#include <yetty/yface/yface.h>
+#include <yetty/ymgui/wire.h> /* YMGUI_WIRE_VERSION */
 #include <yetty/ygui/ygui.h>
+#include <yetty/yterminal/client-input.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <signal.h>
@@ -160,8 +163,18 @@ struct ydu_client {
     uv_poll_t stdin_poll;
     uv_signal_t sigwinch;
     uv_prepare_t prep;
+    /* Stdin is fronted by a yface: it splits the byte stream into OSC
+     * envelopes (pane geometry from the host) and raw keystrokes, which is
+     * how the host's content_scale reaches us at all. */
+    struct yetty_yface *yface;
     struct ydu_app *app;
 };
+
+/* Host HiDPI factor with the 1.0 guard — see ydu_app::content_scale. */
+static float ydu_scale(const struct ydu_app *app)
+{
+    return (app && app->content_scale > 0.0f) ? app->content_scale : 1.0f;
+}
 
 static int on_key(struct yetty_yclass_object *engine, uint32_t key, int mods, void *user)
 {
@@ -231,18 +244,88 @@ static void ydu_stdin_cb(uv_poll_t *handle, int status, int events)
     char buf[1024];
     ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
     if (n > 0) {
-        error_absorb(yetty_ygui_framework_feed_input(client->app->engine, buf, (size_t)n));
+        /* Split envelopes from keystrokes: on_raw feeds the framework, on_osc
+         * picks up the pane geometry + HiDPI factor. */
+        yetty_yface_feed_bytes(client->yface, (const uint8_t *)buf, (size_t)n);
     } else if (n == 0 && !isatty(STDIN_FILENO)) {
         client->app->running = 0;
     }
+}
+
+/* Raw keystrokes (everything outside an envelope) go straight to ygui. */
+static void ydu_on_raw(void *user, const char *bytes, size_t n)
+{
+    struct ydu_client *client = user;
+    error_absorb(yetty_ygui_framework_feed_input(client->app->engine, bytes, n));
+}
+
+/* Pane geometry from the host. width/height are FRAMEBUFFER px and
+ * content_scale is the display's HiDPI factor; ygui lays out in LOGICAL px and
+ * the host scales absolute-coords figures back up when rendering, so divide
+ * once here. Without this the tree is built for a content_scale-times canvas
+ * and overflows the pane. */
+static void ydu_on_osc(void *user, int osc_code, const uint8_t *args, size_t args_len,
+                       const uint8_t *payload, size_t payload_len)
+{
+    (void)args;
+    (void)args_len;
+    struct ydu_client *client = user;
+    if (osc_code != YETTY_OSC_SC_CLIENT_INPUT_RESIZE &&
+        osc_code != YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE) {
+        return;
+    }
+    if (payload_len < sizeof(struct yetty_client_input_resize)) {
+        return;
+    }
+    const struct yetty_client_input_resize *rz =
+        (const struct yetty_client_input_resize *)payload;
+    if (rz->magic != YETTY_CLIENT_INPUT_RESIZE_MAGIC || rz->width <= 0.0f || rz->height <= 0.0f) {
+        return;
+    }
+    if (rz->content_scale > 0.0f) {
+        client->app->content_scale = rz->content_scale;
+    }
+    const float scale = ydu_scale(client->app);
+    error_absorb(yetty_ygui_framework_set_viewport(client->app->engine, rz->width / scale,
+                                                   rz->height / scale));
+    ydu_ui_relayout(client->app);
+    ydu_ui_refresh(client->app);
+}
+
+/* Ask the host for pane geometry only: size + HiDPI factor, no mouse or key
+ * forwarding (that would take the wheel away from the terminal's scrollback
+ * and reroute our keystrokes). Written as a bare envelope on stdout — the
+ * same transport every client-to-host emit uses. */
+static void ydu_subscribe_geometry(void)
+{
+    struct yetty_client_input_sub msg = {
+        .magic = YETTY_CLIENT_INPUT_SUB_MAGIC,
+        .version = YMGUI_WIRE_VERSION,
+        .flags = YETTY_CLIENT_INPUT_SUB_RESIZE,
+        ._pad0 = 0,
+    };
+    struct yetty_ycore_buffer envelope = {0};
+    struct yetty_ycore_void_result emitted = yetty_yface_emit(
+        YETTY_OSC_CS_CLIENT_INPUT_SUB, /*compressed=*/0, NULL, 0, &msg, sizeof(msg), &envelope);
+    if (YETTY_IS_OK(emitted) && envelope.size > 0) {
+        ssize_t written = write(STDOUT_FILENO, envelope.data, envelope.size);
+        (void)written;
+    } else if (YETTY_IS_ERR(emitted)) {
+        yetty_ycore_error_destroy(emitted.error);
+    }
+    yetty_ycore_buffer_destroy(&envelope);
 }
 
 static void ydu_pickup_winsz(struct ydu_client *client)
 {
     struct winsize ws;
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
-        error_absorb(yetty_ygui_framework_set_viewport(client->app->engine, (float)ws.ws_xpixel,
-                                                       (float)ws.ws_ypixel));
+        /* TIOCGWINSZ pixels are FRAMEBUFFER px (cols x cell, and the cell
+         * stride already carries content_scale) — divide like the resize
+         * envelope so this fallback can't clobber the logical viewport. */
+        const float scale = ydu_scale(client->app);
+        error_absorb(yetty_ygui_framework_set_viewport(
+            client->app->engine, (float)ws.ws_xpixel / scale, (float)ws.ws_ypixel / scale));
         ydu_ui_relayout(client->app);
         ydu_ui_refresh(client->app);
     }
@@ -325,6 +408,21 @@ static int ydu_run_client(struct ydu_app *app)
         yetty_ycore_error_destroy(root_res.error);
     }
 
+    /* Envelope splitter in front of stdin, then ask the host for pane geometry.
+     * The subscription must go out before the first winsz pickup so the scale
+     * is known by the time anything sizes itself. */
+    {
+        struct yetty_yface_ptr_result yface_res = yetty_yface_create();
+        if (YETTY_IS_ERR(yface_res)) {
+            fprintf(stderr, "ydu: yface_create failed: %s\n", yface_res.error.msg);
+            yetty_ycore_error_destroy(yface_res.error);
+            goto cleanup_loop;
+        }
+        client.yface = yface_res.value;
+        yetty_yface_set_handlers(client.yface, ydu_on_osc, ydu_on_raw, &client);
+        ydu_subscribe_geometry();
+    }
+
     if (uv_poll_init(&client.loop, &client.stdin_poll, STDIN_FILENO) == 0) {
         client.stdin_poll.data = &client;
         uv_poll_start(&client.stdin_poll, UV_READABLE, ydu_stdin_cb);
@@ -357,6 +455,10 @@ static int ydu_run_client(struct ydu_app *app)
     error_absorb(yetty_ygui_framework_destroy(app->engine));
 
 cleanup_loop:
+    if (client.yface) {
+        yetty_yface_destroy(client.yface);
+        client.yface = NULL;
+    }
     uv_loop_close(&client.loop);
 cleanup:
     if (tty_raw_ok) {

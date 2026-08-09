@@ -191,6 +191,9 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
     /* Same trick for the content-rect wire handler. */
     struct yetty_yterminal_terminal *content_rect_handler_self;
 
+    /* Same trick for the pane-wide subscription wire handler. */
+    struct yetty_yterminal_terminal *client_sub_handler_self;
+
     /* Content reservation requested by the client (YETTY_OSC_CS_CONTENT_RECT,
      * or the legacy _INSET converted to the same form), in pane-local pixels
      * with edge-anchored extents: spec w/h > 0 are absolute; <= 0 anchor to
@@ -229,6 +232,10 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
     int mouse_click_subscribed;
     int mouse_move_subscribed;
     int key_subscribed;
+    /* Geometry-only subscription: the client wants pane size + content_scale
+     * on the resize envelope, with no input forwarding. Latched from the
+     * pane-wide subscription envelope. */
+    int resize_subscribed;
     int mouse_buttons_held; /* OR of (1 << button) for currently-down buttons */
 
     /* Long-lived yface for emitting input events to the inferior over the
@@ -1287,6 +1294,85 @@ static struct yetty_ycore_void_result terminal_content_inset_process_input(
         struct yetty_ycore_void_result envelope_res =
             terminal_content_inset_consume_envelope(terminal, sm);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, envelope_res, "terminal_content_inset_process_input");
+        yetty_yplatform_coro_yield();
+    }
+}
+
+/*-----------------------------------------------------------------------
+ * Pane-wide input subscription — YETTY_OSC_CS_CLIENT_INPUT_SUB.
+ *
+ * Today only the geometry bit is honoured here: a client that lays out in
+ * logical pixels asks to be told the pane size AND the display's HiDPI
+ * factor, without opting into mouse or key forwarding (which would steal
+ * the wheel from scrollback and reroute its keystrokes). The mouse/key
+ * bits stay driven by the DEC private modes, which is where every existing
+ * subscriber sets them.
+ *----------------------------------------------------------------------*/
+
+/* Read one subscription envelope off the SM and latch the geometry bit.
+ * Emits the current size immediately on the rising edge so the client can
+ * lay out without waiting for the next pane resize. */
+static struct yetty_ycore_void_result terminal_client_sub_consume_envelope(
+    struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_client_input_sub msg;
+    uint8_t *cursor = (uint8_t *)&msg;
+    size_t have = 0;
+    while (have < sizeof(msg)) {
+        struct yetty_ycore_size_result read_res =
+            yetty_ywire_wire_statemachine_read(sm, cursor + have, sizeof(msg) - have);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, read_res, "terminal_client_sub: sm read");
+        if (read_res.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                if (have == 0) {
+                    return YETTY_OK_VOID(); /* empty envelope: nothing to do */
+                }
+                return YETTY_ERR(yetty_ycore_void, "terminal_client_sub: short payload at EOE");
+            }
+            yetty_yplatform_coro_yield();
+            continue;
+        }
+        have += read_res.value;
+    }
+    /* Drain any excess to keep the stream aligned. */
+    for (;;) {
+        uint8_t scratch[256];
+        struct yetty_ycore_size_result drain_res =
+            yetty_ywire_wire_statemachine_read(sm, scratch, sizeof(scratch));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drain_res, "terminal_client_sub: sm drain");
+        if (drain_res.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                break;
+            }
+            yetty_yplatform_coro_yield();
+        }
+    }
+    if (msg.magic != YETTY_CLIENT_INPUT_SUB_MAGIC) {
+        return YETTY_ERR(yetty_ycore_void, "terminal_client_sub: bad payload magic");
+    }
+    int want_resize = (msg.flags & YETTY_CLIENT_INPUT_SUB_RESIZE) != 0;
+    int was_subscribed = terminal->resize_subscribed;
+    terminal->resize_subscribed = want_resize;
+    ydebug("terminal: client sub flags=0x%x resize=%d", msg.flags, want_resize);
+    if (want_resize && !was_subscribed && terminal->applied_w > 0.0f &&
+        terminal->applied_h > 0.0f) {
+        struct yetty_ycore_void_result rr = terminal_emit_card_resize(
+            terminal, terminal->focused_figure_id, terminal->applied_w, terminal->applied_h);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_ycore_error_destroy(rr.error);
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result terminal_client_sub_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_yterminal_terminal *terminal = *(struct yetty_yterminal_terminal **)userdata;
+    for (;;) {
+        struct yetty_ycore_void_result envelope_res =
+            terminal_client_sub_consume_envelope(terminal, sm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, envelope_res, "terminal_client_sub_process_input");
         yetty_yplatform_coro_yield();
     }
 }
@@ -2678,6 +2764,17 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register content inset");
     ydebug("terminal_create: content inset registered for DCS %d", YETTY_OSC_CS_CONTENT_INSET);
 
+    /* Pane-wide subscription — today only the geometry bit is honoured: a
+     * logical-pixel client asks for size + content_scale without taking over
+     * mouse or key routing. */
+    terminal->client_sub_handler_self = terminal;
+    rr = yetty_ywire_wire_statemachine_register(
+        terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CLIENT_INPUT_SUB, /*has_args=*/1,
+        terminal_client_sub_process_input, &terminal->client_sub_handler_self);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register client sub");
+    ydebug("terminal_create: client input sub registered for DCS %d",
+           YETTY_OSC_CS_CLIENT_INPUT_SUB);
+
     /* Content rect — the inset's generalisation: the client places the text
      * surface on an explicit (edge-anchored) rect inside the pane. */
     terminal->content_rect_handler_self = terminal;
@@ -3197,7 +3294,8 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
      * place its overlay in the reserved band — it needs the whole pane, not
      * the inset content rect. Telnet/guest clients have no TIOCGWINSZ pixels,
      * so this OSC is their only resize signal. Best-effort (drop the error). */
-    if (terminal->mouse_move_subscribed || terminal->mouse_click_subscribed) {
+    if (terminal->mouse_move_subscribed || terminal->mouse_click_subscribed ||
+        terminal->resize_subscribed) {
         struct yetty_ycore_void_result er =
             terminal_emit_card_resize(terminal, terminal->focused_figure_id, pane_w, pane_h);
         if (YETTY_IS_ERR(er)) {
