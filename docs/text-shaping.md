@@ -254,32 +254,47 @@ Phasing:
     binder-supplied `__NS___texture_region` vec4, exactly like `msdf-font.wgsl`.
     The rolling-row scroll anchors each shaped row for O(1) scroll. Verified
     live for all five families via `demo/scripts/harfbuzz/`.
-- **Phase 2 — programming ligatures (Fira Code `=>`, `!=`, `===`, …) — DONE.**
-  Rather than extend the grid cell format/shader to carry arbitrary-width
-  ligature spans (the grid glyph sampler hard-clips each glyph to its cell and
-  supports only a fixed 2-cell wide-glyph spill), ligatures reuse the same
-  suppress-then-redraw machinery as complex scripts: the covered cells are
-  suppressed on the grid and the ligature is drawn as one shaped glyph through
-  the SDF free-position path against a bundled ligature face. Details:
+- **Phase 2 — programming ligatures (Fira Code `=>`, `!=`, `===`, …) — DONE,
+  grid-native.** A monospace ligature font does NOT collapse an operator run to
+  one wide glyph. Fira Code's `calt` keeps **one glyph per input cell** and
+  substitutes each character with a ligature-*piece* glyph that tiles with its
+  neighbours (`->` shapes to an extended-bar glyph + an arrowhead glyph, each
+  one cell wide; `===` to three pieces). Every entry in the table shapes
+  one-glyph-per-cell (verified). So each covered cell simply gets its own
+  substituted glyph from the ligature face — an ordinary width-1 grid glyph —
+  drawn in the grid's own pass, no free-position SDF overlay and no wide/spill
+  glyph. Details:
   - A HarfBuzz-free, deterministic ligature table (`yfont/ligature.c`,
     `yetty_yfont_ligature_length_at`) — punctuation-only, so it never fires on
     ordinary words/numbers. A shared cell-level wrapper
     (`yvterm/ligature-cells.h`, `yetty_yvterm_ligature_run_length`) combines it
     with a shapeability check (single-width, unconcealed, mark-free cells).
-  - `vterm_pack_line` suppresses a ligature span's grid glyphs; the SDF layer's
-    `shape_row_ligatures` shapes the same span (both call the shared wrapper, so
-    they cover identical cells with no cross-talk) against the bundled Fira Code
-    face (`assets/fonts/FiraCode-Regular.ttf`, SIL OFL), loaded via the same
-    `sdf_face_load_or_get` as the complex-script faces.
-  - The face is width-scaled (`get_advance` → `font_size = cell_width·base/adv`)
-    so one character advance equals the grid cell, making a ligature span its
-    cells exactly and keeping following grid text cell-aligned. The ASCII-only
-    ligature table never overlaps the complex-script codepoint ranges, so the
-    two shaping passes are disjoint. Verified live via
-    `demo/scripts/harfbuzz/ligatures.sh`; table pinned by `yfont_ligature` test.
+  - A bundled Fira Code face (`assets/fonts/FiraCode-Regular.ttf`, SIL OFL) is
+    loaded as a dedicated grid **raster face** (`vterm.c`
+    `vterm_load_ligature_face`, face slot 1). It is sized so one character
+    advance equals the cell width (`ms-raster-font.c` `size_to_cell_width`), so
+    each ligature piece fills exactly one cell and following text stays aligned.
+  - The grid ms-raster-font gained a `get_glyph_index_ligature` op: it shapes the
+    operator run through the face's GSUB/calt tables with HarfBuzz (standalone
+    FT↔HB over the SFNT tables, same bridge as the SDF backend), requires the
+    output to be one glyph per cell, rasterizes each component gid at width 1
+    (keyed by gid), and returns the per-cell atlas slots. Cached by the codepoint
+    sequence so the steady state (the grid re-packs every visible row each frame)
+    is a linear-scan hit with no reshaping.
+  - `vterm_pack_line` calls that op at the start of a run and assigns each covered
+    cell its own component glyph (ordinary width-1 cell, ligature face). No second
+    pass, no per-face binder namespace, no width-scaling at draw time — and
+    because each ligature piece is an ordinary grid glyph, the ligature inverts
+    under the block cursor, punches out under selection, and scrolls with the
+    rolling-row ring for free, which the old SDF-overlay path did not do.
+  - The ASCII-only ligature table never overlaps the complex-script codepoint
+    ranges, so ligatures and the complex-script SDF pass stay disjoint. Verified
+    live via `demo/scripts/harfbuzz/ligatures.sh`; table pinned by
+    `yfont_ligature` test.
   - Gated on `YETTY_ENABLE_LIB_HARFBUZZ` like the rest of the track (now ON by
-    default, so ligatures are on for every build). A runtime on/off config key
-    to let users disable them is a follow-up.
+    default, so ligatures are on for every build). Without the shaper the grid
+    face is never loaded and the operator characters render individually. A
+    runtime on/off config key to let users disable them is a follow-up.
 
 If Phase 1's webasm spike fails to link, the fallback is to gate
 `YETTY_ENABLE_LIB_HARFBUZZ` OFF on webasm (complex scripts fall back to the
@@ -309,11 +324,15 @@ override.
    windows are published in the `lib-harfbuzz-8.5.0-1` release, so the
    cache-first fetch resolves everywhere. Desktop, `yetty.wasm`, and android
    arm64-v8a were all built locally with it on. (#617)
-5. **Programming-ligature shaping on the terminal grid** — DONE (Phase 2). The
-   grid glyph sampler hard-clips glyphs to their cell, so instead of widening
-   the cell format, ligature spans are suppressed on the grid and drawn as one
-   shaped glyph via the SDF free-position path against a bundled Fira Code face
-   (`yfont/ligature.c` table + `yvterm/ligature-cells.h` shared decision +
-   `shape_row_ligatures`). Width-scaled to the cell so spans align. Verified
-   live (`demo/scripts/harfbuzz/ligatures.sh`); table pinned by the
-   `yfont_ligature` test. (#618)
+5. **Programming-ligature shaping on the terminal grid** — DONE (Phase 2),
+   grid-native. Fira Code keeps one substituted glyph per input cell (its calt
+   pieces tile into the ligature), so each covered cell gets its own ordinary
+   width-1 component glyph from a dedicated Fira Code grid raster face, drawn by
+   the grid shader itself — not through the SDF free-position path. The face is
+   sized so one advance equals the cell (`ms-raster-font.c`
+   `get_glyph_index_ligature` returns per-cell slots + `size_to_cell_width`);
+   `vterm_pack_line` assigns each cell its component glyph (`yfont/ligature.c`
+   table + `yvterm/ligature-cells.h` shared decision). One pass, and the
+   ligature inverts/selects/scrolls as ordinary grid text. Verified live
+   (`demo/scripts/harfbuzz/ligatures.sh`); table pinned by the `yfont_ligature`
+   test.

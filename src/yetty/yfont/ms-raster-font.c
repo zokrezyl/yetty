@@ -4,6 +4,7 @@
 
 #include <yetty/yfont/ms-raster-font.h>
 #include <yetty/yfont/ms-font.h>
+#include <yetty/yfont/font.h> /* YETTY_YFONT_LIGATURE_MAX_LEN */
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
@@ -14,7 +15,11 @@
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
-#include FT_TRUETYPE_TABLES_H
+#include FT_TRUETYPE_TABLES_H /* FT_Load_Sfnt_Table — feeds tables to HarfBuzz */
+
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+#include <hb.h>
+#endif
 
 #include <limits.h>
 #include <stdlib.h>
@@ -70,6 +75,18 @@ struct yetty_yfont_cluster_slot {
     uint32_t slot;
 };
 
+/* Cache entry for a shaped programming ligature. A monospace ligature font
+ * keeps one glyph per input cell (the calt substitutes each character with a
+ * ligature-piece glyph), so `slots[i]` is the atlas slot for cell i of the run.
+ * The key is the codepoint sequence itself, so a repeated ligature (the steady
+ * state — the grid re-packs every visible row each frame) is a tiny linear-scan
+ * hit with no reshaping. Only populated on the dedicated ligature face. */
+struct yetty_yfont_ligature_slot {
+    uint32_t codepoints[YETTY_YFONT_LIGATURE_MAX_LEN];
+    uint8_t count;
+    uint32_t slots[YETTY_YFONT_LIGATURE_MAX_LEN];
+};
+
 struct yetty_yfont_raster_font {
     struct yetty_yfont_ms_font base;
 
@@ -120,6 +137,21 @@ struct yetty_yfont_raster_font {
     size_t cluster_slots_count[4];
     size_t cluster_slots_capacity[4];
 
+    /* Ligature face: size the font so one character advance equals cell_width
+     * (rather than the line box filling cell_height), so a ligature that
+     * shapes to one glyph spans exactly its N cells. Set only on the dedicated
+     * programming-ligature face. */
+    int size_to_cell_width;
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+    /* Lazily-built HarfBuzz font (hb_font_t *) over this face's SFNT tables,
+     * plus the gid->slot cache for shaped ligature glyphs. void* so the struct
+     * layout does not depend on the HarfBuzz headers. */
+    void *hb_font;
+    struct yetty_yfont_ligature_slot *ligature_slots;
+    size_t ligature_slot_count;
+    size_t ligature_slot_capacity;
+#endif
+
     int dirty;
 };
 
@@ -133,6 +165,9 @@ static struct uint32_result raster_font_get_glyph_index_styled(struct yetty_yfon
                                                                enum yetty_yfont_ms_style style);
 static struct uint32_result raster_font_get_codepoint(struct yetty_yfont_ms_font *self,
                                                       uint32_t glyph_index);
+static struct uint32_result raster_font_get_glyph_index_ligature(struct yetty_yfont_ms_font *self,
+                                                                 const uint32_t *codepoints,
+                                                                 size_t count, uint32_t *out_slots);
 static struct yetty_ycore_void_result raster_font_resize(struct yetty_yfont_ms_font *self,
                                                          float font_size);
 static struct yetty_ycore_void_result raster_font_load_glyphs(struct yetty_yfont_ms_font *self,
@@ -173,6 +208,10 @@ static void raster_font_grow_atlas(struct yetty_yfont_raster_font *font);
 static struct yetty_ycore_void_result raster_font_set_cell_size(
     struct yetty_yfont_ms_font *self, struct yetty_ycore_pixel_size cell_size);
 
+static struct yetty_font_ms_font_result raster_font_create_named_impl(
+    struct yetty_yconfig_config *config, const char *font_name, float cell_width, float cell_height,
+    int size_to_cell_width);
+
 static const struct yetty_yfont_ms_font_ops raster_font_ops = {
     .destroy = raster_font_destroy,
     .get_cell_size = raster_font_get_cell_size,
@@ -181,6 +220,7 @@ static const struct yetty_yfont_ms_font_ops raster_font_ops = {
     .get_glyph_index_styled = raster_font_get_glyph_index_styled,
     .get_glyph_index_cluster = raster_font_get_glyph_index_cluster,
     .get_codepoint = raster_font_get_codepoint,
+    .get_glyph_index_ligature = raster_font_get_glyph_index_ligature,
     .resize = raster_font_resize,
     .load_glyphs = raster_font_load_glyphs,
     .load_basic_latin = raster_font_load_basic_latin,
@@ -476,6 +516,32 @@ static void raster_font_update_font_size(struct yetty_yfont_raster_font *font)
     }
     for (size_t i = 0; i < font->fallback_count; i++) {
         raster_font_apply_size_to_face(font, font->fallback_faces[i]);
+    }
+
+    /* Ligature face: override the line-box sizing so one character advance
+     * equals the cell width. A monospace ligature's advance is then N cell
+     * widths, so the shaped glyph spans exactly its N cells and following grid
+     * text stays cell-aligned — the same effect the cell grid gives ordinary
+     * glyphs, achieved by matching the reference advance rather than clipping. */
+    if (font->size_to_cell_width) {
+        FT_Set_Pixel_Sizes(regular_face, 0, (FT_UInt)font->cell_height);
+        FT_UInt ref_gid = FT_Get_Char_Index(regular_face, 'M');
+        float advance_px = 0.0f;
+        if (ref_gid && FT_Load_Glyph(regular_face, ref_gid, FT_LOAD_DEFAULT) == 0) {
+            advance_px = (float)regular_face->glyph->advance.x / 64.0f;
+        }
+        if (advance_px > 0.0f) {
+            font->font_size =
+                (uint32_t)(font->cell_width * (float)font->cell_height / advance_px + 0.5f);
+        }
+        if (font->font_size == 0) {
+            font->font_size = (uint32_t)font->cell_height;
+        }
+        for (int i = 0; i < 4; i++) {
+            if (font->ft_faces[i]) {
+                FT_Set_Pixel_Sizes(font->ft_faces[i], 0, font->font_size);
+            }
+        }
     }
 
     /* Recalculate metrics at new size (same typographic-box substitution). */
@@ -990,6 +1056,11 @@ static void raster_font_rasterize_all(struct yetty_yfont_raster_font *font)
         font->cluster_slots_count[i] = 0;       /* stale cluster slots die with the atlas */
         raster_font_add_slot(font, i, 0x20, 0); /* Map space to slot 0 */
     }
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+    /* Shaped ligature slots reference atlas positions the reset just cleared —
+     * drop the cache so they re-rasterize on next use at the new cell size. */
+    font->ligature_slot_count = 0;
+#endif
 
     for (int s = 0; s < 4; s++) {
         for (size_t i = 0; i < font->codepoint_slots_count[s]; i++) {
@@ -1006,8 +1077,328 @@ static void raster_font_rasterize_all(struct yetty_yfont_raster_font *font)
     font->dirty = 1;
 }
 
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+/* HarfBuzz table-reference callback: hands a raw SFNT table from the FreeType
+ * face to HarfBuzz. Standalone FT<->HB bridge — HarfBuzz reads cmap/GSUB/GDEF
+ * directly from these blobs and never touches FreeType outlines (rasterization
+ * stays with FreeType), so the two libraries are decoupled. */
+static hb_blob_t *raster_font_hb_reference_table(hb_face_t *hb_face, hb_tag_t tag, void *user_data)
+{
+    (void)hb_face;
+    FT_Face ft_face = (FT_Face)user_data;
+    FT_ULong length = 0;
+    if (FT_Load_Sfnt_Table(ft_face, tag, 0, NULL, &length) != 0 || length == 0) {
+        return NULL;
+    }
+    FT_Byte *buffer = malloc(length);
+    if (!buffer) {
+        return NULL;
+    }
+    if (FT_Load_Sfnt_Table(ft_face, tag, 0, buffer, &length) != 0) {
+        free(buffer);
+        return NULL;
+    }
+    return hb_blob_create((const char *)buffer, (unsigned)length, HB_MEMORY_MODE_WRITABLE, buffer,
+                          free);
+}
+
+/* Lazily build (and cache) the HarfBuzz font over the regular face's SFNT
+ * tables. Only GSUB substitution is used (to collapse an operator run to its
+ * ligature glyph id), so the hb scale is irrelevant and left at the default. */
+static hb_font_t *raster_font_hb_font_get(struct yetty_yfont_raster_font *font)
+{
+    if (font->hb_font) {
+        return (hb_font_t *)font->hb_font;
+    }
+    FT_Face ft_face = font->ft_faces[YETTY_YFONT_MS_STYLE_REGULAR];
+    if (!ft_face) {
+        return NULL;
+    }
+    hb_face_t *hb_face = hb_face_create_for_tables(raster_font_hb_reference_table, ft_face, NULL);
+    if (!hb_face) {
+        return NULL;
+    }
+    hb_face_set_index(hb_face, (unsigned)(ft_face->face_index & 0xFFFF));
+    hb_face_set_upem(hb_face, (unsigned)ft_face->units_per_EM);
+    if (hb_face_get_glyph_count(hb_face) == 0) {
+        hb_face_destroy(hb_face);
+        return NULL;
+    }
+    hb_font_t *hb_font = hb_font_create(hb_face);
+    hb_face_destroy(hb_face); /* hb_font retains a reference */
+    if (!hb_font) {
+        return NULL;
+    }
+    font->hb_font = hb_font;
+    return hb_font;
+}
+
+/* Rasterize a shaped glyph id (a ligature component) at a forced width of
+ * `width_cells` cells into the R8 atlas. Mirrors the monochrome path of
+ * raster_font_rasterize_glyph but keys on the gid rather than a codepoint (the
+ * component glyph has no cmap entry) and fixes the slot width. Fira Code's
+ * pieces are each one cell wide, so callers pass width_cells = 1. Ligature
+ * faces are never color. Returns the new slot index. */
+static struct uint32_result raster_font_rasterize_ligature_gid(struct yetty_yfont_raster_font *font,
+                                                               FT_UInt gid, uint32_t width_cells)
+{
+    FT_Face face = font->ft_faces[YETTY_YFONT_MS_STYLE_REGULAR];
+    if (!face) {
+        return YETTY_ERR(uint32, "ligature face has no regular style");
+    }
+    if (FT_Load_Glyph(face, gid, FT_LOAD_RENDER) != 0) {
+        return YETTY_ERR(uint32, "FT_Load_Glyph failed for ligature gid");
+    }
+    FT_GlyphSlot slot = face->glyph;
+    FT_Bitmap *bitmap = &slot->bitmap;
+
+    uint32_t slot_idx = (uint32_t)font->next_slot_idx;
+    size_t needed = (slot_idx + 1) * sizeof(struct yetty_yfont_raster_glyph_uv);
+    if (needed > FONT_UV_BUF(font).capacity) {
+        size_t new_cap = FONT_UV_BUF(font).capacity * 2;
+        if (new_cap < needed) {
+            new_cap = needed;
+        }
+        void *grown = realloc(FONT_UV_BUF(font).data, new_cap);
+        if (!grown) {
+            return YETTY_ERR(uint32, "ligature UV realloc failed");
+        }
+        FONT_UV_BUF(font).data = grown;
+        FONT_UV_BUF(font).capacity = new_cap;
+    }
+    if (needed > FONT_UV_BUF(font).size) {
+        FONT_UV_BUF(font).size = needed;
+    }
+    struct yetty_yfont_raster_glyph_uv *uvs = FONT_UVS(font);
+
+    int cell_w = (int)font->cell_width;
+    int cell_h = (int)font->cell_height;
+    uint32_t glyph_width = (uint32_t)cell_w * width_cells + RASTER_FONT_ATLAS_PADDING * 2;
+    uint32_t glyph_height = (uint32_t)cell_h + RASTER_FONT_ATLAS_PADDING * 2;
+    uint32_t aw = FONT_ATLAS(font).width;
+    uint32_t ah = FONT_ATLAS(font).height;
+    size_t atlas_size = (size_t)aw * ah;
+
+    if (font->shelf_x + glyph_width > aw) {
+        font->shelf_x = font->shelf_min_x + RASTER_FONT_ATLAS_PADDING;
+        font->shelf_y += font->shelf_height + RASTER_FONT_ATLAS_PADDING;
+        font->shelf_height = 0;
+    }
+    while (font->shelf_y + glyph_height > ah) {
+        uint32_t old_width = aw;
+        uint32_t old_height = ah;
+        raster_font_grow_atlas(font);
+        aw = FONT_ATLAS(font).width;
+        ah = FONT_ATLAS(font).height;
+        atlas_size = (size_t)aw * ah;
+        if (aw == old_width && ah == old_height) {
+            return YETTY_ERR(uint32, "atlas full, cannot fit ligature glyph");
+        }
+    }
+
+    uint32_t atlas_x = font->shelf_x;
+    uint32_t atlas_y = font->shelf_y;
+    uint8_t *pixels = FONT_ATLAS(font).data;
+
+    for (uint32_t y = 0; y < glyph_height; y++) {
+        for (uint32_t x = 0; x < glyph_width; x++) {
+            uint32_t dst_idx = (atlas_y + y) * aw + (atlas_x + x);
+            if (dst_idx < atlas_size) {
+                pixels[dst_idx] = 0u;
+            }
+        }
+    }
+
+    int glyph_w = (int)bitmap->width;
+    int glyph_h = (int)bitmap->rows;
+
+    int offset_x = slot->bitmap_left + RASTER_FONT_ATLAS_PADDING;
+    if (offset_x < RASTER_FONT_ATLAS_PADDING) {
+        offset_x = RASTER_FONT_ATLAS_PADDING;
+    }
+    if (glyph_w > 0 &&
+        offset_x > (int)(glyph_width - (uint32_t)glyph_w - RASTER_FONT_ATLAS_PADDING)) {
+        offset_x = (int)(glyph_width - (uint32_t)glyph_w - RASTER_FONT_ATLAS_PADDING);
+    }
+    if (offset_x < RASTER_FONT_ATLAS_PADDING) {
+        offset_x = RASTER_FONT_ATLAS_PADDING;
+    }
+
+    int offset_y = font->baseline - slot->bitmap_top + RASTER_FONT_ATLAS_PADDING;
+    if (offset_y < RASTER_FONT_ATLAS_PADDING) {
+        offset_y = RASTER_FONT_ATLAS_PADDING;
+    }
+    if (glyph_h > 0 &&
+        offset_y > (int)(glyph_height - (uint32_t)glyph_h - RASTER_FONT_ATLAS_PADDING)) {
+        offset_y = (int)(glyph_height - (uint32_t)glyph_h - RASTER_FONT_ATLAS_PADDING);
+    }
+    if (offset_y < RASTER_FONT_ATLAS_PADDING) {
+        offset_y = RASTER_FONT_ATLAS_PADDING;
+    }
+
+    /* Copy coverage bitmap into the slot, clipped to the slot box (a ligature
+     * antialiasing overhang must not bleed into the neighbouring slot). */
+    for (int y = 0; y < glyph_h; y++) {
+        if (offset_y + y >= (int)glyph_height) {
+            break;
+        }
+        for (int x = 0; x < glyph_w; x++) {
+            if (offset_x + x >= (int)glyph_width) {
+                break;
+            }
+            uint32_t dst_idx = (atlas_y + (uint32_t)offset_y + (uint32_t)y) * aw +
+                               (atlas_x + (uint32_t)offset_x + (uint32_t)x);
+            if (dst_idx < atlas_size) {
+                pixels[dst_idx] = bitmap->buffer[y * bitmap->pitch + x];
+            }
+        }
+    }
+
+    uvs[slot_idx].uv_x = (float)(atlas_x + RASTER_FONT_ATLAS_PADDING) / (float)aw;
+    uvs[slot_idx].uv_y = (float)(atlas_y + RASTER_FONT_ATLAS_PADDING) / (float)ah;
+    uvs[slot_idx].width_cells = (float)width_cells;
+    uvs[slot_idx].pad = 0.0f;
+
+    font->shelf_x = atlas_x + glyph_width + RASTER_FONT_ATLAS_PADDING;
+    if (glyph_height > font->shelf_height) {
+        font->shelf_height = glyph_height;
+    }
+
+    font->next_slot_idx++;
+    font->dirty = 1;
+    return YETTY_OK(uint32, slot_idx);
+}
+
+static struct uint32_result raster_font_get_glyph_index_ligature(struct yetty_yfont_ms_font *self,
+                                                                 const uint32_t *codepoints,
+                                                                 size_t count, uint32_t *out_slots)
+{
+    struct yetty_yfont_raster_font *font = container_of(self, struct yetty_yfont_raster_font, base);
+    if (!codepoints || !out_slots || count < 2u || count > YETTY_YFONT_LIGATURE_MAX_LEN) {
+        return YETTY_ERR(uint32, "invalid ligature run");
+    }
+
+    /* Steady-state fast path: the same ligature reappears every frame (the grid
+     * re-packs each visible row), so serve a known sequence from the cache
+     * without touching HarfBuzz or allocating a shaping buffer. */
+    for (size_t i = 0; i < font->ligature_slot_count; i++) {
+        const struct yetty_yfont_ligature_slot *entry = &font->ligature_slots[i];
+        if (entry->count != count) {
+            continue;
+        }
+        int same = 1;
+        for (size_t k = 0; k < count; k++) {
+            if (entry->codepoints[k] != codepoints[k]) {
+                same = 0;
+                break;
+            }
+        }
+        if (same) {
+            for (size_t k = 0; k < count; k++) {
+                out_slots[k] = entry->slots[k];
+            }
+            return YETTY_OK(uint32, (uint32_t)count);
+        }
+    }
+
+    hb_font_t *hb_font = raster_font_hb_font_get(font);
+    if (!hb_font) {
+        return YETTY_ERR(uint32, "harfbuzz font unavailable for ligature face");
+    }
+
+    hb_buffer_t *buffer = hb_buffer_create();
+    if (!buffer || !hb_buffer_allocation_successful(buffer)) {
+        if (buffer) {
+            hb_buffer_destroy(buffer);
+        }
+        return YETTY_ERR(uint32, "hb_buffer_create failed");
+    }
+    for (size_t i = 0; i < count; i++) {
+        hb_buffer_add(buffer, (hb_codepoint_t)codepoints[i], (unsigned)i);
+    }
+    hb_buffer_set_content_type(buffer, HB_BUFFER_CONTENT_TYPE_UNICODE);
+    hb_buffer_set_direction(buffer, HB_DIRECTION_LTR);
+    hb_buffer_set_script(buffer, HB_SCRIPT_LATIN);
+    /* Default features apply liga/calt — the programming ligatures live in the
+     * face's calt table. */
+    hb_shape(hb_font, buffer, NULL, 0);
+
+    unsigned glyph_count = 0;
+    hb_glyph_info_t *infos = hb_buffer_get_glyph_infos(buffer, &glyph_count);
+    /* Monospace ligature fonts substitute each cell's character with a
+     * ligature-piece glyph and keep the glyph count equal to the cell count
+     * (each piece advances one cell). If the run did not shape one-glyph-per-
+     * cell, treat it as non-ligating and let the grid draw the characters
+     * individually. */
+    if (!infos || glyph_count != count) {
+        hb_buffer_destroy(buffer);
+        return YETTY_ERR(uint32, "run does not shape to one glyph per cell");
+    }
+    uint32_t gids[YETTY_YFONT_LIGATURE_MAX_LEN];
+    for (size_t i = 0; i < count; i++) {
+        gids[i] = infos[i].codepoint; /* after shaping, .codepoint holds the gid */
+    }
+    hb_buffer_destroy(buffer);
+
+    /* Rasterize each cell's component glyph (width 1) into the atlas. */
+    uint32_t new_slots[YETTY_YFONT_LIGATURE_MAX_LEN];
+    for (size_t i = 0; i < count; i++) {
+        if (gids[i] == 0u) {
+            return YETTY_ERR(uint32, "ligature component resolved to notdef");
+        }
+        struct uint32_result slot_res =
+            raster_font_rasterize_ligature_gid(font, (FT_UInt)gids[i], 1u);
+        if (YETTY_IS_ERR(slot_res)) {
+            return slot_res;
+        }
+        new_slots[i] = slot_res.value;
+    }
+
+    if (font->ligature_slot_count >= font->ligature_slot_capacity) {
+        size_t new_cap = font->ligature_slot_capacity ? font->ligature_slot_capacity * 2 : 32;
+        struct yetty_yfont_ligature_slot *grown =
+            realloc(font->ligature_slots, new_cap * sizeof(struct yetty_yfont_ligature_slot));
+        if (!grown) {
+            return YETTY_ERR(uint32, "ligature slot cache realloc failed");
+        }
+        font->ligature_slots = grown;
+        font->ligature_slot_capacity = new_cap;
+    }
+    struct yetty_yfont_ligature_slot *new_entry = &font->ligature_slots[font->ligature_slot_count];
+    for (size_t k = 0; k < count; k++) {
+        new_entry->codepoints[k] = codepoints[k];
+        new_entry->slots[k] = new_slots[k];
+        out_slots[k] = new_slots[k];
+    }
+    new_entry->count = (uint8_t)count;
+    font->ligature_slot_count++;
+    return YETTY_OK(uint32, (uint32_t)count);
+}
+#else  /* !YETTY_ENABLE_LIB_HARFBUZZ */
+static struct uint32_result raster_font_get_glyph_index_ligature(struct yetty_yfont_ms_font *self,
+                                                                 const uint32_t *codepoints,
+                                                                 size_t count, uint32_t *out_slots)
+{
+    (void)self;
+    (void)codepoints;
+    (void)count;
+    (void)out_slots;
+    return YETTY_ERR(uint32, "ligature shaping requires HarfBuzz");
+}
+#endif /* YETTY_ENABLE_LIB_HARFBUZZ */
+
 static void raster_font_cleanup(struct yetty_yfont_raster_font *font)
 {
+#ifdef YETTY_ENABLE_LIB_HARFBUZZ
+    if (font->hb_font) {
+        hb_font_destroy((hb_font_t *)font->hb_font);
+        font->hb_font = NULL;
+    }
+    free(font->ligature_slots);
+    font->ligature_slots = NULL;
+    font->ligature_slot_count = 0;
+    font->ligature_slot_capacity = 0;
+#endif
     for (int i = 0; i < 4; i++) {
         if (font->ft_faces[i]) {
             FT_Done_Face(font->ft_faces[i]);
@@ -1139,6 +1530,19 @@ struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create(
 struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create_named(
     struct yetty_yconfig_config *config, const char *font_name, float cell_width, float cell_height)
 {
+    return raster_font_create_named_impl(config, font_name, cell_width, cell_height, 0);
+}
+
+struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create_ligature(
+    struct yetty_yconfig_config *config, const char *font_name, float cell_width, float cell_height)
+{
+    return raster_font_create_named_impl(config, font_name, cell_width, cell_height, 1);
+}
+
+static struct yetty_font_ms_font_result raster_font_create_named_impl(
+    struct yetty_yconfig_config *config, const char *font_name, float cell_width, float cell_height,
+    int size_to_cell_width)
+{
     const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     const char *font_family = font_name;
@@ -1262,6 +1666,7 @@ struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create_named(
         font->atlas_bpp = 1;
     }
 
+    font->size_to_cell_width = size_to_cell_width;
     raster_font_update_font_size(font);
 
     /* Shelf packer */

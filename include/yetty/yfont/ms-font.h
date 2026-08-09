@@ -83,6 +83,23 @@ struct yetty_yfont_ms_font_ops {
      * error result for an unknown glyph_index. */
     struct uint32_result (*get_codepoint)(struct yetty_yfont_ms_font *self, uint32_t glyph_index);
 
+    /* Shape a programming-ligature codepoint sequence through the face's
+     * OpenType GSUB/calt tables and rasterize its per-cell component glyphs.
+     * Monospace ligature fonts (Fira Code) keep one glyph per input cell — the
+     * calt substitutes each character with a ligature-piece glyph that tiles
+     * with its neighbours to form the ligature (e.g. `->` becomes an extended
+     * bar + an arrowhead, one per cell) — so this fills out_slots[0..count-1]
+     * with the atlas glyph index for each cell and returns the number of cells
+     * filled (== count on success). out_slots must have room for at least
+     * `count` entries. Returns an error result when the run does not shape
+     * cleanly to one glyph per cell (the caller then renders the characters
+     * individually). Optional: left NULL by backends with no live rasterizer +
+     * shaper (the MSDF backend bakes SDFs offline and cannot render a shaped
+     * gid). */
+    struct uint32_result (*get_glyph_index_ligature)(struct yetty_yfont_ms_font *self,
+                                                     const uint32_t *codepoints, size_t count,
+                                                     uint32_t *out_slots);
+
     /* Resize — changes font size, recalculates cell size */
     struct yetty_ycore_void_result (*resize)(struct yetty_yfont_ms_font *self, float font_size);
 
