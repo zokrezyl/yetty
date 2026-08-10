@@ -18,6 +18,14 @@ struct yperf_app {
     /* ygui engine + root of the widget tree. */
     struct yetty_yclass_object *engine;
     struct yetty_yclass_object *root_widget;
+
+    /* Host display's HiDPI factor (framebuffer px / logical px), learned from
+     * yetty_client_input_resize.content_scale. The host sends pane size and
+     * pointer coords in FRAMEBUFFER px while ygui lays out in LOGICAL px and
+     * the host's yscene scales absolute-coords figures back up by this — so
+     * divide once at each inbound boundary. 1.0 until the first RESIZE
+     * envelope, and for a host too old to populate the field. */
+    float content_scale;
     struct yperf_ui *ui; /* opaque widget handles, owned by ui.c */
 
     /* Flame render + profile model. */

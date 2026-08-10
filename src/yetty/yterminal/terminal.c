@@ -191,6 +191,9 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
     /* Same trick for the content-rect wire handler. */
     struct yetty_yterminal_terminal *content_rect_handler_self;
 
+    /* Same trick for the pane-wide subscription wire handler. */
+    struct yetty_yterminal_terminal *client_sub_handler_self;
+
     /* Content reservation requested by the client (YETTY_OSC_CS_CONTENT_RECT,
      * or the legacy _INSET converted to the same form), in pane-local pixels
      * with edge-anchored extents: spec w/h > 0 are absolute; <= 0 anchor to
@@ -229,6 +232,10 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
     int mouse_click_subscribed;
     int mouse_move_subscribed;
     int key_subscribed;
+    /* Geometry-only subscription: the client wants pane size + content_scale
+     * on the resize envelope, with no input forwarding. Latched from the
+     * pane-wide subscription envelope. */
+    int resize_subscribed;
     int mouse_buttons_held; /* OR of (1 << button) for currently-down buttons */
 
     /* Long-lived yface for emitting input events to the inferior over the
@@ -720,10 +727,16 @@ static struct yetty_ycore_void_result terminal_emit_card_focus(
 static struct yetty_ycore_void_result terminal_emit_card_resize(
     struct yetty_yterminal_terminal *terminal, uint32_t figure_id, float width, float height)
 {
+    /* Publish the host display's HiDPI factor alongside the framebuffer-px
+     * size so clients that author in logical px (browser CSS viewport, ygui
+     * layout) can divide once and render 1:1 with the physical pane. */
+    float content_scale =
+        terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
     struct yetty_client_input_resize msg = {
         .magic = YETTY_CLIENT_INPUT_RESIZE_MAGIC,
         .version = YMGUI_WIRE_VERSION,
         .figure_id = figure_id,
+        .content_scale = content_scale,
         .width = width,
         .height = height,
     };
@@ -793,6 +806,21 @@ static struct yetty_yfigure_hit_result terminal_resolve_figure_hit(
         return YETTY_OK(yetty_yfigure_hit, hit);
     }
 
+    /* The pointer arrives in FRAMEBUFFER px, but child figure rects are stored
+     * in LOGICAL px — the container adds viewport_offset to each rect_local and
+     * that offset is itself divided by layout_content_scale (see
+     * terminal_set_bounds). Hit-testing raw framebuffer coords against logical
+     * rects picks the wrong figure by a factor of content_scale, and the
+     * reported local_* then carries a (rect_origin - rect_origin/scale) error
+     * — 7 px at 1.25, ~18 at 2.0, invisible at 1.0. Test in the rects' own
+     * space, then scale the figure-local result back OUT to framebuffer px:
+     * the client-input wire contract is device px and every ygui client
+     * divides by the content_scale it learned from the resize envelope. */
+    const float hit_scale =
+        terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
+    const float logical_x = lx / hit_scale;
+    const float logical_y = ly / hit_scale;
+
     if (captured_figure_id != 0) {
         /* Drag: route to the captured figure; project the cursor into
          * its local space even when the cursor leaves the figure's rect.
@@ -800,17 +828,27 @@ static struct yetty_yfigure_hit_result terminal_resolve_figure_hit(
          * use the natural local coords; otherwise fall back to the raw
          * pane coords tagged with the captured id. */
         struct yetty_yfigure_hit_result hit_res =
-            yetty_yfigure_container_hit_test(terminal->root_container_obj, lx, ly);
+            yetty_yfigure_container_hit_test(terminal->root_container_obj, logical_x, logical_y);
         YETTY_RETURN_IF_ERR(yetty_yfigure_hit, hit_res, "resolve_figure_hit: hit_test");
         hit = hit_res.value;
         if (hit.figure_id == captured_figure_id) {
+            hit.local_x *= hit_scale;
+            hit.local_y *= hit_scale;
             return YETTY_OK(yetty_yfigure_hit, hit);
         }
+        /* Cursor left the captured figure: ship the raw pane coords (already
+         * framebuffer px) tagged with the captured id, as before. */
         struct yetty_yfigure_hit captured = {captured_figure_id, lx, ly};
         return YETTY_OK(yetty_yfigure_hit, captured);
     }
 
-    return yetty_yfigure_container_hit_test(terminal->root_container_obj, lx, ly);
+    struct yetty_yfigure_hit_result plain_res =
+        yetty_yfigure_container_hit_test(terminal->root_container_obj, logical_x, logical_y);
+    YETTY_RETURN_IF_ERR(yetty_yfigure_hit, plain_res, "resolve_figure_hit: hit_test");
+    hit = plain_res.value;
+    hit.local_x *= hit_scale;
+    hit.local_y *= hit_scale;
+    return YETTY_OK(yetty_yfigure_hit, hit);
 }
 
 /* Emit a keyboard event for the focused figure. Returns 1 if delivered
@@ -1256,6 +1294,85 @@ static struct yetty_ycore_void_result terminal_content_inset_process_input(
         struct yetty_ycore_void_result envelope_res =
             terminal_content_inset_consume_envelope(terminal, sm);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, envelope_res, "terminal_content_inset_process_input");
+        yetty_yplatform_coro_yield();
+    }
+}
+
+/*-----------------------------------------------------------------------
+ * Pane-wide input subscription — YETTY_OSC_CS_CLIENT_INPUT_SUB.
+ *
+ * Today only the geometry bit is honoured here: a client that lays out in
+ * logical pixels asks to be told the pane size AND the display's HiDPI
+ * factor, without opting into mouse or key forwarding (which would steal
+ * the wheel from scrollback and reroute its keystrokes). The mouse/key
+ * bits stay driven by the DEC private modes, which is where every existing
+ * subscriber sets them.
+ *----------------------------------------------------------------------*/
+
+/* Read one subscription envelope off the SM and latch the geometry bit.
+ * Emits the current size immediately on the rising edge so the client can
+ * lay out without waiting for the next pane resize. */
+static struct yetty_ycore_void_result terminal_client_sub_consume_envelope(
+    struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_client_input_sub msg;
+    uint8_t *cursor = (uint8_t *)&msg;
+    size_t have = 0;
+    while (have < sizeof(msg)) {
+        struct yetty_ycore_size_result read_res =
+            yetty_ywire_wire_statemachine_read(sm, cursor + have, sizeof(msg) - have);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, read_res, "terminal_client_sub: sm read");
+        if (read_res.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                if (have == 0) {
+                    return YETTY_OK_VOID(); /* empty envelope: nothing to do */
+                }
+                return YETTY_ERR(yetty_ycore_void, "terminal_client_sub: short payload at EOE");
+            }
+            yetty_yplatform_coro_yield();
+            continue;
+        }
+        have += read_res.value;
+    }
+    /* Drain any excess to keep the stream aligned. */
+    for (;;) {
+        uint8_t scratch[256];
+        struct yetty_ycore_size_result drain_res =
+            yetty_ywire_wire_statemachine_read(sm, scratch, sizeof(scratch));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drain_res, "terminal_client_sub: sm drain");
+        if (drain_res.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                break;
+            }
+            yetty_yplatform_coro_yield();
+        }
+    }
+    if (msg.magic != YETTY_CLIENT_INPUT_SUB_MAGIC) {
+        return YETTY_ERR(yetty_ycore_void, "terminal_client_sub: bad payload magic");
+    }
+    int want_resize = (msg.flags & YETTY_CLIENT_INPUT_SUB_RESIZE) != 0;
+    int was_subscribed = terminal->resize_subscribed;
+    terminal->resize_subscribed = want_resize;
+    ydebug("terminal: client sub flags=0x%x resize=%d", msg.flags, want_resize);
+    if (want_resize && !was_subscribed && terminal->applied_w > 0.0f &&
+        terminal->applied_h > 0.0f) {
+        struct yetty_ycore_void_result rr = terminal_emit_card_resize(
+            terminal, terminal->focused_figure_id, terminal->applied_w, terminal->applied_h);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_ycore_error_destroy(rr.error);
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result terminal_client_sub_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_yterminal_terminal *terminal = *(struct yetty_yterminal_terminal **)userdata;
+    for (;;) {
+        struct yetty_ycore_void_result envelope_res =
+            terminal_client_sub_consume_envelope(terminal, sm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, envelope_res, "terminal_client_sub_process_input");
         yetty_yplatform_coro_yield();
     }
 }
@@ -2647,6 +2764,17 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register content inset");
     ydebug("terminal_create: content inset registered for DCS %d", YETTY_OSC_CS_CONTENT_INSET);
 
+    /* Pane-wide subscription — today only the geometry bit is honoured: a
+     * logical-pixel client asks for size + content_scale without taking over
+     * mouse or key routing. */
+    terminal->client_sub_handler_self = terminal;
+    rr = yetty_ywire_wire_statemachine_register(
+        terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CLIENT_INPUT_SUB, /*has_args=*/1,
+        terminal_client_sub_process_input, &terminal->client_sub_handler_self);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register client sub");
+    ydebug("terminal_create: client input sub registered for DCS %d",
+           YETTY_OSC_CS_CLIENT_INPUT_SUB);
+
     /* Content rect — the inset's generalisation: the client places the text
      * surface on an explicit (edge-anchored) rect inside the pane. */
     terminal->content_rect_handler_self = terminal;
@@ -3166,7 +3294,8 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
      * place its overlay in the reserved band — it needs the whole pane, not
      * the inset content rect. Telnet/guest clients have no TIOCGWINSZ pixels,
      * so this OSC is their only resize signal. Best-effort (drop the error). */
-    if (terminal->mouse_move_subscribed || terminal->mouse_click_subscribed) {
+    if (terminal->mouse_move_subscribed || terminal->mouse_click_subscribed ||
+        terminal->resize_subscribed) {
         struct yetty_ycore_void_result er =
             terminal_emit_card_resize(terminal, terminal->focused_figure_id, pane_w, pane_h);
         if (YETTY_IS_ERR(er)) {
@@ -3257,10 +3386,20 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
      * producers (ygreeter, ygui) emit pane-local rects. Push the pane
      * origin into the compositor so it can shift incoming rects, keeping
      * the rendered pixels aligned with the mouse coords the input
-     * pipeline subtracts (bounds.x/y) on the way down to the producer. */
+     * pipeline subtracts (bounds.x/y) on the way down to the producer.
+     *
+     * bounds is in FRAMEBUFFER px (yui composes its chrome in fb). Divide by
+     * layout_content_scale so the offset is in LOGICAL — client-authored ygui
+     * figures ship their CREATE_CHILD rect in LOGICAL, and the container
+     * stores rect_local + viewport_offset on each child. Storing them in a
+     * single unit system means the ygrid scissor (rect * content_scale) reaches
+     * the right fb region on HiDPI. On non-HiDPI (scale == 1.0) fb == logical
+     * and this divide is a no-op, matching pre-HiDPI behaviour. */
+    float offset_scale = terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
     if (terminal->root_container_obj) {
-        yetty_yfigure_container_set_viewport_offset(terminal->root_container_obj, bounds.x,
-                                                    bounds.y);
+        yetty_yfigure_container_set_viewport_offset(terminal->root_container_obj,
+                                                    bounds.x / offset_scale,
+                                                    bounds.y / offset_scale);
     }
 
     /* Actually resize the terminal when the pixel size changes. The

@@ -113,7 +113,20 @@ struct YETTY_ANNOTATE("class@yrich:app") YETTY_ANNOTATE("parent@yapp:app") yetty
     void *surface;
     uint32_t surface_w;
     uint32_t surface_h;
+    /* HiDPI factor (framebuffer px / logical px). Standalone reads it from the
+     * GPU context at startup; the in-terminal client learns it from
+     * yetty_client_input_resize.content_scale. ygui and ychrome author in
+     * LOGICAL px and the receiving yscene multiplies absolute-coords figures
+     * back up by this, so every framebuffer-px input (surface size, pane size,
+     * pointer coords) is divided by it on the way in. 1.0 on non-HiDPI. */
+    float content_scale;
 };
+
+/* HiDPI factor with the 1.0 guard — see yetty_yrich_app::content_scale. */
+static float yrich_scale(const struct yetty_yrich_app *app)
+{
+    return (app && app->content_scale > 0.0f) ? app->content_scale : 1.0f;
+}
 
 /* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
  * include its own generated header). */
@@ -308,8 +321,11 @@ static struct yetty_ycore_void_result push_scene(struct yetty_yrich_app *app)
     if (!app->ygui) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result vr =
-        yetty_ygui_framework_set_viewport(app->ygui, (float)app->surface_w, (float)app->surface_h);
+    /* surface_w/h are FRAMEBUFFER px; ygui lays out in LOGICAL px and the
+     * receiving yscene scales absolute-coords figures back up. */
+    const float scale = yrich_scale(app);
+    struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
+        app->ygui, (float)app->surface_w / scale, (float)app->surface_h / scale);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "push_scene: set_viewport");
     yetty_ygui_framework_mark_dirty(app->ygui);
     return yetty_ygui_framework_emit(app->ygui);
@@ -762,9 +778,11 @@ static struct yetty_ycore_void_result handle_event(struct yetty_yrich_app *app,
         return refit_and_push(app);
     }
     case YETTY_YCORE_MOUSE_SCROLL: {
+        /* Positions are framebuffer px and scale like the viewport; the wheel
+         * deltas are notches and do not. */
         struct yetty_ycore_int_result scroll_res = yetty_ygui_framework_feed_mouse_scroll(
-            app->ygui, ev->mouse_scroll.x, ev->mouse_scroll.y, ev->mouse_scroll.dx,
-            ev->mouse_scroll.dy);
+            app->ygui, ev->mouse_scroll.x / yrich_scale(app),
+            ev->mouse_scroll.y / yrich_scale(app), ev->mouse_scroll.dx, ev->mouse_scroll.dy);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scroll_res, "yrich: scroll");
         struct yetty_ycore_void_result scene_r = push_scene(app);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_r, "yrich: push scene");
@@ -797,7 +815,8 @@ static struct yetty_ycore_void_result handle_event(struct yetty_yrich_app *app,
     case YETTY_YCORE_MOUSE_UP: {
         int is_down = ev->type == YETTY_YCORE_MOUSE_DOWN;
         struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_button(
-            app->ygui, ev->mouse.x, ev->mouse.y, ev->mouse.button, is_down, ev->mouse.mods);
+            app->ygui, ev->mouse.x / yrich_scale(app), ev->mouse.y / yrich_scale(app),
+            ev->mouse.button, is_down, ev->mouse.mods);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, feed_r, "yrich: mouse button");
         if (!feed_r.value && app->chrome && !chrome_offered) {
             /* The UI declined — offer chrome its caption-drag / edge-resize /
@@ -843,8 +862,8 @@ static struct yetty_ycore_void_result handle_event(struct yetty_yrich_app *app,
     }
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG: {
-        struct yetty_ycore_int_result feed_r =
-            yetty_ygui_framework_feed_mouse_motion(app->ygui, ev->mouse.x, ev->mouse.y);
+        struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_motion(
+            app->ygui, ev->mouse.x / yrich_scale(app), ev->mouse.y / yrich_scale(app));
         YETTY_RETURN_IF_ERR(yetty_ycore_void, feed_r, "yrich: mouse move");
         struct yetty_ycore_void_result scene_r = push_scene(app);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_r, "yrich: push scene");
@@ -904,6 +923,9 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
     app->surface = gpu->surface;
     app->surface_w = gpu->surface_width;
     app->surface_h = gpu->surface_height;
+    /* Standalone reads the HiDPI factor straight off the GPU context; the
+     * in-terminal path overwrites it from the RESIZE envelope. */
+    app->content_scale = gpu->content_scale > 0.0f ? gpu->content_scale : 1.0f;
 
     /* Texture target that blits to the GLFW surface on present. */
     app->yrt->render_target->ops->destroy(app->yrt->render_target);
@@ -1058,7 +1080,8 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
             app->root_obj, app->font, &app->ctx, app->yrt->window_chrome, (float)app->surface_w,
-            (float)app->surface_h, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
+            (float)app->surface_h, app->yrt->gpu.app_gpu_context.content_scale, 34.0f, 8.0f,
+            YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
         } else {
@@ -1213,8 +1236,11 @@ static void yrich_terminal_resize_cb(void *user, int width_px, int height_px, in
          * 0x0 and collapse the whole editor to nothing. */
         host->app->surface_w = (uint32_t)width_px;
         host->app->surface_h = (uint32_t)height_px;
-        struct yetty_ycore_void_result r =
-            yetty_ygui_framework_set_viewport(host->app->ygui, (float)width_px, (float)height_px);
+        /* TIOCGWINSZ pixels are FRAMEBUFFER px; ygui wants LOGICAL. The scale
+         * arrives on the RESIZE envelope (1.0 until then). */
+        const float scale = yrich_scale(host->app);
+        struct yetty_ycore_void_result r = yetty_ygui_framework_set_viewport(
+            host->app->ygui, (float)width_px / scale, (float)height_px / scale);
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
         }
@@ -1467,6 +1493,28 @@ static void yrich_terminal_input_sink(void *user, int wire_code, const uint8_t *
         return;
     }
 
+    if (wire_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE ||
+        wire_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE) {
+        if (payload_len < sizeof(struct yetty_client_input_resize)) {
+            return;
+        }
+        const struct yetty_client_input_resize *rz =
+            (const struct yetty_client_input_resize *)payload;
+        if (rz->magic != YETTY_CLIENT_INPUT_RESIZE_MAGIC || rz->width <= 0.0f ||
+            rz->height <= 0.0f) {
+            return;
+        }
+        /* Learn the host's HiDPI factor. surface_w/h stay FRAMEBUFFER px —
+         * push_scene() divides when it applies the viewport. */
+        if (rz->content_scale > 0.0f) {
+            app->content_scale = rz->content_scale;
+        }
+        app->surface_w = (uint32_t)rz->width;
+        app->surface_h = (uint32_t)rz->height;
+        destroy_safe(push_scene(app));
+        return;
+    }
+
     if (wire_code != YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE &&
         wire_code != YETTY_OSC_SC_CLIENT_INPUT_MOUSE) {
         return;
@@ -1478,18 +1526,21 @@ static void yrich_terminal_input_sink(void *user, int wire_code, const uint8_t *
     if (msg->magic != YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
         return;
     }
+    /* Host forwards pointer coords in FRAMEBUFFER px; ygui hit-tests logical. */
+    const float mscale = yrich_scale(app);
     struct yetty_ycore_int_result r = YETTY_OK(yetty_ycore_int, 0);
     switch (msg->kind) {
     case YETTY_YMGUI_INPUT_MOUSE_BUTTON:
-        r = yetty_ygui_framework_feed_mouse_button(host->app->ygui, msg->x, msg->y, msg->button,
-                                                   msg->pressed, 0);
+        r = yetty_ygui_framework_feed_mouse_button(host->app->ygui, msg->x / mscale,
+                                                   msg->y / mscale, msg->button, msg->pressed, 0);
         break;
     case YETTY_YMGUI_INPUT_MOUSE_POS:
-        r = yetty_ygui_framework_feed_mouse_motion(host->app->ygui, msg->x, msg->y);
+        r = yetty_ygui_framework_feed_mouse_motion(host->app->ygui, msg->x / mscale,
+                                                   msg->y / mscale);
         break;
     case YETTY_YMGUI_INPUT_MOUSE_WHEEL:
-        r = yetty_ygui_framework_feed_mouse_scroll(host->app->ygui, msg->x, msg->y, 0.0f,
-                                                   msg->wheel_dy);
+        r = yetty_ygui_framework_feed_mouse_scroll(host->app->ygui, msg->x / mscale,
+                                                   msg->y / mscale, 0.0f, msg->wheel_dy);
         break;
     default:
         break;

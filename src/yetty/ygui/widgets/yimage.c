@@ -137,10 +137,11 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_objec
         return YETTY_OK_VOID();
     }
     struct yetty_yimage_render_config cfg = {
-        /* Absolute widget rect — see yplot.c (producer figure is absolute in
-         * the ygui chrome, content scaled by content_scale). */
-        .bounds_x = r.min.x,
-        .bounds_y = r.min.y,
+        /* FIGURE-LOCAL bounds — see yplot.c: the "yscroll" child is a
+         * local-coordinate figure and the receiver already anchors it at its
+         * own rect origin, so an absolute rect here double-adds that origin. */
+        .bounds_x = 0.0f,
+        .bounds_y = 0.0f,
         .bounds_w = r.max.x - r.min.x,
         .bounds_h = r.max.y - r.min.y,
     };

@@ -143,11 +143,16 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_object
         return YETTY_OK_VOID();
     }
     struct yetty_yplot_render_config cfg = {
-        /* Emit at the widget's absolute rect: the producer figure is absolute
-         * (ygui chrome), so its content is in pane-root logical pixels scaled
-         * by content_scale — NOT figure-local from (0,0). */
-        .bounds_x = r.min.x,
-        .bounds_y = r.min.y,
+        /* FIGURE-LOCAL bounds. emit_container mints this body's child as kind
+         * "yscroll", which is a LOCAL-coordinate figure (#685 Phase 2): the
+         * receiving scene anchors the composite at the child's own rect origin
+         * (yscene scene.c, anchor = (translate - scroll) * view_scale) and the
+         * record's bounds are added on top of that anchor. Baking the absolute
+         * widget rect in here adds the origin a SECOND time — the plot lands
+         * one widget-origin down and to the right of its pane, magnified by
+         * content_scale on HiDPI so it also overflows the far edges. */
+        .bounds_x = 0.0f,
+        .bounds_y = 0.0f,
         .bounds_w = w,
         .bounds_h = h,
         .x_min = d->has_cfg ? d->cfg.x_min : -3.14159f,

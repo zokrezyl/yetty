@@ -122,6 +122,10 @@ struct YETTY_ANNOTATE("class@ycompositorygui:app") YETTY_ANNOTATE("parent@yapp:a
     void *surface;
     uint32_t surface_w;
     uint32_t surface_h;
+    /* HiDPI factor (framebuffer px / logical px) from the GPU context. ygui
+     * authors in LOGICAL px; every framebuffer-px input (surface size, pointer
+     * coords) is divided by this on the way in. 1.0 on non-HiDPI. */
+    float content_scale;
 
     /* Interpose mode: forkpty + wire statemachine RPC server. argv slice
      * borrowed from the process argv vector; NULL/0 means "headless demo
@@ -315,6 +319,12 @@ static struct yetty_ycore_void_result build_scene(struct yetty_ycompositorygui_a
  * — that's engine_render's job, and engine_render also tries to ship
  * over OSC which we don't want in-process. So we wipe + lead with
  * CMD_ZERO manually here. */
+/* HiDPI factor with the 1.0 guard — see yetty_ycompositorygui_app::content_scale. */
+static float ycompositor_ygui_scale(const struct yetty_ycompositorygui_app *app)
+{
+    return (app && app->content_scale > 0.0f) ? app->content_scale : 1.0f;
+}
+
 static struct yetty_ycore_void_result push_ygui_scene(struct yetty_ycompositorygui_app *app)
 {
     if (!app->ygui) {
@@ -325,8 +335,11 @@ static struct yetty_ycore_void_result push_ygui_scene(struct yetty_ycompositoryg
      * and emit. framework_emit lays out, walks the tree, and ships the
      * record stream straight into app->root via the in-process yclass
      * slot path (set_container_obj was wired at startup). */
-    struct yetty_ycore_void_result vr =
-        yetty_ygui_framework_set_viewport(app->ygui, (float)app->surface_w, (float)app->surface_h);
+    /* surface_w/h are FRAMEBUFFER px; ygui authors in LOGICAL px and the
+     * receiving yscene scales absolute-coords figures back up by content_scale. */
+    const float scale = ycompositor_ygui_scale(app);
+    struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
+        app->ygui, (float)app->surface_w / scale, (float)app->surface_h / scale);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "push_ygui_scene: set_viewport");
     yetty_ygui_framework_mark_dirty(app->ygui);
     return yetty_ygui_framework_emit(app->ygui);
@@ -625,7 +638,9 @@ static void handle_event(struct yetty_ycompositorygui_app *app, const struct yet
         if (app->ygui) {
             {
                 struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
-                    app->ygui, ev->mouse.x, ev->mouse.y, ev->mouse.button, 1, ev->mouse.mods);
+                    app->ygui, ev->mouse.x / ycompositor_ygui_scale(app),
+                    ev->mouse.y / ycompositor_ygui_scale(app), ev->mouse.button, 1,
+                    ev->mouse.mods);
                 if (YETTY_IS_ERR(fr)) {
                     yetty_ycore_error_destroy(fr.error);
                 }
@@ -643,7 +658,9 @@ static void handle_event(struct yetty_ycompositorygui_app *app, const struct yet
         if (app->ygui) {
             {
                 struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
-                    app->ygui, ev->mouse.x, ev->mouse.y, ev->mouse.button, 0, ev->mouse.mods);
+                    app->ygui, ev->mouse.x / ycompositor_ygui_scale(app),
+                    ev->mouse.y / ycompositor_ygui_scale(app), ev->mouse.button, 0,
+                    ev->mouse.mods);
                 if (YETTY_IS_ERR(fr)) {
                     yetty_ycore_error_destroy(fr.error);
                 }
@@ -659,8 +676,9 @@ static void handle_event(struct yetty_ycompositorygui_app *app, const struct yet
     case YETTY_YCORE_MOUSE_DRAG:
         if (app->ygui) {
             {
-                struct yetty_ycore_int_result fr =
-                    yetty_ygui_framework_feed_mouse_motion(app->ygui, ev->mouse.x, ev->mouse.y);
+                struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_motion(
+                    app->ygui, ev->mouse.x / ycompositor_ygui_scale(app),
+                    ev->mouse.y / ycompositor_ygui_scale(app));
                 if (YETTY_IS_ERR(fr)) {
                     yetty_ycore_error_destroy(fr.error);
                 }
@@ -719,6 +737,7 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
     app->surface = gpu->surface;
     app->surface_w = gpu->surface_width;
     app->surface_h = gpu->surface_height;
+    app->content_scale = gpu->content_scale > 0.0f ? gpu->content_scale : 1.0f;
 
     /* Replace yframework's render target with a texture target that
      * blits to the GLFW surface on present — same setup as
@@ -876,7 +895,8 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
             app->root, app->font, &app->ctx, app->yrt->window_chrome, (float)app->surface_w,
-            (float)app->surface_h, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
+            (float)app->surface_h, app->yrt->gpu.app_gpu_context.content_scale, 34.0f, 8.0f,
+            YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
         } else {

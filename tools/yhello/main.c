@@ -3639,8 +3639,8 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
             app->root_container, app->font, &app->ctx, app->yframework->window_chrome,
-            (float)gpu->surface_width, (float)gpu->surface_height, 36.0f, 8.0f,
-            YETTY_YCHROME_FLAG_ALL);
+            (float)gpu->surface_width, (float)gpu->surface_height, app_content_scale(app), 36.0f,
+            8.0f, YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
         } else {

@@ -18,6 +18,15 @@ struct ydu_app {
     /* ygui engine + root of the widget tree. */
     struct yetty_yclass_object *engine;
     struct yetty_yclass_object *root_widget;
+
+    /* Host display's HiDPI factor (framebuffer px / logical px). The host
+     * reports pane geometry in FRAMEBUFFER px (TIOCGWINSZ pixels are
+     * cols x cell and the cell stride already carries the scale) while the
+     * widget tree is laid out in LOGICAL px and the host scales it back up
+     * when rendering — so divide once wherever a size comes in. Learned from
+     * the resize envelope; 1.0 until it arrives, and on a host too old to
+     * send it. */
+    float content_scale;
     struct ydu_ui *ui; /* opaque widget handles, owned by ui.c */
 
     /* Scan model + navigation cursor. */

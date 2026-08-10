@@ -105,6 +105,15 @@ extern "C" {
 #define YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE (1u << 1)
 #define YETTY_CLIENT_INPUT_SUB_MOUSE_WHEEL (1u << 2)
 #define YETTY_CLIENT_INPUT_SUB_KEY (1u << 3)
+/* Geometry only: pane size + the display's HiDPI factor, delivered as
+ * YETTY_OSC_SC_CLIENT_INPUT_RESIZE, with NO input forwarding and no change to
+ * key or wheel routing. A client that lays out in logical pixels needs the
+ * content_scale carried on that envelope; without this bit its only size
+ * signal is TIOCGWINSZ, which reports framebuffer pixels and says nothing
+ * about the scale, so the layout comes out content_scale times too large on
+ * a HiDPI display. Subscribing to mouse forwarding purely to learn the
+ * number would steal the wheel from the terminal's scrollback. */
+#define YETTY_CLIENT_INPUT_SUB_RESIZE (1u << 4)
 
 struct yetty_client_input_sub {
     uint32_t magic;   /* YETTY_CLIENT_INPUT_SUB_MAGIC */
@@ -198,12 +207,22 @@ struct yetty_client_input_mouse {
  * edge. For pane-wide events, sent on pane resize.
  *
  * The client uses (width, height) as DisplaySize for the target's
- * rendering context. */
+ * rendering context. Coordinate units: FRAMEBUFFER pixels.
+ *
+ * `content_scale` is the host display's HiDPI factor (framebuffer_px /
+ * logical_px). A client that authors in LOGICAL px (browser CSS viewport,
+ * ygui widget layout) divides (width, height) by this before feeding its
+ * layout / viewport. On a non-HiDPI display the field is 1.0; a value of
+ * 0.0 (older host that did not populate it) is treated as 1.0 for
+ * backwards compatibility — clients that fell back to raw framebuffer
+ * before this field existed keep the same (Retina-broken but stable)
+ * behaviour. Occupies the former `_pad0` slot, so the struct size and
+ * layout of the other fields are unchanged. */
 struct yetty_client_input_resize {
     uint32_t magic;   /* YETTY_CLIENT_INPUT_RESIZE_MAGIC */
     uint32_t version; /* YMGUI_WIRE_VERSION */
     uint32_t figure_id;
-    uint32_t _pad0;
+    float content_scale;
     float width;
     float height;
 };

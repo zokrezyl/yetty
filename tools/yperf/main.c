@@ -561,16 +561,23 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         payload_len >= sizeof(struct yetty_client_input_mouse)) {
         const struct yetty_client_input_mouse *mouse =
             (const struct yetty_client_input_mouse *)payload;
-        yperf_ui_flame_mouse(app, mouse->kind, mouse->x, mouse->y, mouse->button, mouse->pressed,
-                             mouse->wheel_dy);
+        /* Pointer arrives in FRAMEBUFFER px; the widget tree hit-tests in
+         * LOGICAL px — same divide the viewport gets below. */
+        const float scale = app->content_scale > 0.0f ? app->content_scale : 1.0f;
+        yperf_ui_flame_mouse(app, mouse->kind, mouse->x / scale, mouse->y / scale, mouse->button,
+                             mouse->pressed, mouse->wheel_dy);
     } else if ((osc_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE ||
                 osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE) &&
                payload_len >= sizeof(struct yetty_client_input_resize)) {
         const struct yetty_client_input_resize *resize =
             (const struct yetty_client_input_resize *)payload;
+        if (resize->content_scale > 0.0f) {
+            app->content_scale = resize->content_scale;
+        }
         if (resize->width > 0.0f && resize->height > 0.0f) {
-            error_absorb(
-                yetty_ygui_framework_set_viewport(app->engine, resize->width, resize->height));
+            const float scale = app->content_scale > 0.0f ? app->content_scale : 1.0f;
+            error_absorb(yetty_ygui_framework_set_viewport(app->engine, resize->width / scale,
+                                                           resize->height / scale));
             yperf_ui_relayout(app);
             yperf_ui_refresh(app);
         }
@@ -637,8 +644,12 @@ static void yperf_pickup_winsz(struct yperf_client *client)
 {
     struct winsize ws;
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
-        error_absorb(yetty_ygui_framework_set_viewport(client->app->engine, (float)ws.ws_xpixel,
-                                                       (float)ws.ws_ypixel));
+        /* TIOCGWINSZ pixels are FRAMEBUFFER px (cols x cell, cell stride already
+         * carries content_scale) — divide like the RESIZE envelope. */
+        const float scale =
+            client->app->content_scale > 0.0f ? client->app->content_scale : 1.0f;
+        error_absorb(yetty_ygui_framework_set_viewport(
+            client->app->engine, (float)ws.ws_xpixel / scale, (float)ws.ws_ypixel / scale));
         yperf_ui_relayout(client->app);
         yperf_ui_refresh(client->app);
     }
