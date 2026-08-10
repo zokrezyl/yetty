@@ -460,6 +460,13 @@ int yetty_ylexbor_test_box_count(const struct yetty_ylexbor *r);
 int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x, float *y,
                               float *w, float *h, char *tag_out, int tag_cap);
 
+/* Test-only: the element's offsetLeft/offsetTop per CSSOM-View — border-edge
+ * position relative to the nearest positioned ancestor's padding edge, or
+ * absolute document coordinates when the offsetParent is the body. This is
+ * what check-layout-th.js data-offset-x/-y assert against. */
+int yetty_ylexbor_test_box_offset_at(const struct yetty_ylexbor *r, int index, float *offset_left,
+                                     float *offset_top);
+
 /* Box-kind constants returned in *kind_out by yetty_ylexbor_test_box_info_at.
  * Map directly to the internal yetty_ylexbor_box_kind enum. */
 #define YETTY_YLEXBOR_BOX_KIND_BLOCK 0

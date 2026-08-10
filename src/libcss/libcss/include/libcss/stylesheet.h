@@ -141,6 +141,14 @@ css_error css_stylesheet_data_done(css_stylesheet *sheet);
 css_error css_stylesheet_next_pending_import(css_stylesheet *parent, lwc_string **url);
 css_error css_stylesheet_register_import(css_stylesheet *parent, css_stylesheet *child);
 
+/**
+ * Cascade-layer key of the next pending import (the same import
+ * css_stylesheet_next_pending_import() returns), or 0 if it has no
+ * `layer`/`layer(name)` clause. The client stamps this on the imported sheet
+ * as its base layer so the imported rules land in the right layer.
+ */
+css_error css_stylesheet_next_pending_import_layer(css_stylesheet *parent, uint64_t *layer);
+
 css_error css_stylesheet_get_language_level(css_stylesheet *sheet, css_language_level *level);
 css_error css_stylesheet_get_url(css_stylesheet *sheet, const char **url);
 css_error css_stylesheet_get_title(css_stylesheet *sheet, const char **title);
@@ -151,6 +159,43 @@ css_error css_stylesheet_get_disabled(css_stylesheet *sheet, bool *disabled);
 css_error css_stylesheet_set_disabled(css_stylesheet *sheet, bool disabled);
 
 css_error css_stylesheet_size(css_stylesheet *sheet, size_t *size);
+
+/**
+ * Cascade-layer registry.
+ *
+ * Cascade layers (@layer) are ordered document-wide: the same layer name
+ * must map to one priority across every author sheet of a document, and a
+ * layer's sub-layers are ordered within its slot. A registry holds that
+ * shared layer tree. Create one per document, hand it to every author sheet
+ * with css_stylesheet_set_layer_registry() before feeding data, and destroy
+ * it once the sheets are gone. A sheet with no registry falls back to a
+ * private one (correct for a single standalone sheet).
+ */
+typedef struct css_layer_registry css_layer_registry;
+
+css_error css_layer_registry_create(css_layer_registry **registry);
+css_error css_layer_registry_destroy(css_layer_registry *registry);
+
+/**
+ * Attach a shared layer registry to a sheet. Must be called after
+ * css_stylesheet_create() and before any css_stylesheet_append_data().
+ *
+ * \param base_layer  Optional layer key (from a prior parse, e.g. the
+ *                    layer named by `@import ... layer(name)`) that the whole
+ *                    sheet is nested inside; 0 for a top-level sheet.
+ */
+css_error css_stylesheet_set_layer_registry(css_stylesheet *sheet, css_layer_registry *registry,
+                                            uint64_t base_layer);
+
+/**
+ * Resolve a layer name path (e.g. "framework.base") to its sort key in a
+ * registry, creating the layer if needed. Used to translate an
+ * `@import ... layer(name)` prelude into the base_layer for the imported
+ * sheet. \a names is a '.'-separated path; NULL/empty means an anonymous
+ * layer. Returns the key via \a key (0 only if registry is NULL).
+ */
+css_error css_layer_registry_resolve(css_layer_registry *registry, const char *names,
+                                     uint64_t base_layer, uint64_t *key);
 
 #ifdef __cplusplus
 }

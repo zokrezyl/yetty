@@ -15,6 +15,7 @@
 #include "ytest.h"
 
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
 static struct yetty_ylexbor *load(struct ytest *test, const char *html)
@@ -175,6 +176,66 @@ static void test_siblings(struct ytest *test)
     yetty_ylexbor_destroy(yl);
 }
 
+/*---------------------------------------------------------------------------
+ * Constraint Validation API (HTML forms) on form controls.
+ *
+ * Regression pin for the accounts.google.com / YouTube sign-in flow: the
+ * GlifWebSignIn identifier step reads `input.validity.badInput`. When the whole
+ * Constraint Validation API was missing, that read threw
+ * `TypeError: cannot read property 'badInput' of undefined`; boq caught it
+ * (reporting to /jserror) and the flow never advanced past the email screen —
+ * clicking "Next" silently did nothing. The API is installed on
+ * Element.prototype (gated to listed form controls). One JS program covers the
+ * surface and semantics and returns "PASS" or a "FAIL …" reason.
+ *-------------------------------------------------------------------------*/
+static void test_constraint_validation(struct ytest *test)
+{
+    /* A <script> forces the JS context to initialize even on a static page. */
+    struct yetty_ylexbor *yl = load(test, "<html><body><script>1;</script></body></html>");
+
+    static const char *program =
+        "(function(){"
+        "  var i=document.createElement('input');"
+        "  if(typeof i.validity!=='object')return 'FAIL validity-type '+typeof i.validity;"
+        "  if(i.validity.badInput!==false)return 'FAIL badInput';"
+        "  if(i.validity.valid!==true)return 'FAIL default-valid';"
+        "  if(typeof i.checkValidity!=='function')return 'FAIL checkValidity-missing';"
+        "  if(typeof i.setCustomValidity!=='function')return 'FAIL setCustomValidity-missing';"
+        "  if(document.createElement('div').validity!==undefined)return 'FAIL div-gate';"
+        "  var r=document.createElement('input');r.setAttribute('required','');"
+        "  if(r.validity.valueMissing!==true||r.validity.valid!==false)return 'FAIL required-empty';"
+        "  r.value='x';if(r.validity.valueMissing!==false||r.validity.valid!==true)"
+        "    return 'FAIL required-filled';"
+        "  var em=document.createElement('input');em.type='email';em.value='bad';"
+        "  if(em.validity.typeMismatch!==true)return 'FAIL email-bad';"
+        "  em.value='a@b.com';if(em.validity.typeMismatch!==false)return 'FAIL email-good';"
+        "  var c=document.createElement('input');c.setCustomValidity('nope');"
+        "  if(c.validity.customError!==true||c.validationMessage!=='nope')return 'FAIL custom-set';"
+        "  var fired=false;c.addEventListener('invalid',function(){fired=true;});"
+        "  if(c.checkValidity()!==false||fired!==true)return 'FAIL invalid-event';"
+        "  c.setCustomValidity('');if(c.validity.customError!==false||c.validity.valid!==true)"
+        "    return 'FAIL custom-clear';"
+        "  return 'PASS';"
+        "})()";
+
+    struct yetty_ycore_char_ptr_result ev = yetty_ylexbor_eval_js(yl, program);
+    YTEST_REQUIRE_OK(test, ev);
+    YTEST_REQUIRE(test, ev.value != NULL);
+    /* eval_js stringifies the JS result JSON-style, so a string result arrives
+     * quoted (`"PASS"`). On any assertion miss the program returns a
+     * "FAIL <reason>" string instead; matching on the PASS substring is robust
+     * to the quoting and never matches a FAIL result. */
+    YTEST_CHECK(test, strstr(ev.value, "PASS") != NULL);
+    if (strstr(ev.value, "PASS") == NULL) {
+        fprintf(stderr, "constraint-validation FAILED: %s\n", ev.value);
+    }
+    if (ev.value) {
+        free(ev.value);
+    }
+
+    yetty_ylexbor_destroy(yl);
+}
+
 int main(void)
 {
     struct ytest test = ytest_begin("ybrowser_dom");
@@ -182,5 +243,6 @@ int main(void)
     YTEST_RUN(&test, test_textcontent);
     YTEST_RUN(&test, test_structure);
     YTEST_RUN(&test, test_siblings);
+    YTEST_RUN(&test, test_constraint_validation);
     return ytest_end(&test);
 }

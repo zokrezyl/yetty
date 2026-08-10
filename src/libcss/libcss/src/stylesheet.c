@@ -422,6 +422,33 @@ css_error css_stylesheet_next_pending_import(css_stylesheet *parent, lwc_string 
     return CSS_INVALID;
 }
 
+css_error css_stylesheet_next_pending_import_layer(css_stylesheet *parent, uint64_t *layer)
+{
+    const css_rule *r;
+
+    if (parent == NULL || layer == NULL) {
+        return CSS_BADPARM;
+    }
+
+    *layer = 0;
+
+    for (r = parent->rule_list; r != NULL; r = r->next) {
+        const css_rule_import *i = (const css_rule_import *)r;
+
+        if (r->type != CSS_RULE_UNKNOWN && r->type != CSS_RULE_CHARSET &&
+            r->type != CSS_RULE_IMPORT) {
+            break;
+        }
+
+        if (r->type == CSS_RULE_IMPORT && i->sheet == NULL) {
+            *layer = i->layer;
+            return CSS_OK;
+        }
+    }
+
+    return CSS_INVALID;
+}
+
 /**
  * Register an imported stylesheet with its parent
  *
@@ -622,6 +649,19 @@ css_error css_stylesheet_size(css_stylesheet *sheet, size_t *size)
 
     *size = bytes;
 
+    return CSS_OK;
+}
+
+css_error css_stylesheet_set_layer_registry(css_stylesheet *sheet, css_layer_registry *registry,
+                                            uint64_t base_layer)
+{
+    if (sheet == NULL) {
+        return CSS_BADPARM;
+    }
+
+    /* Borrow the pointer; the parser takes its own ref while it needs it. */
+    sheet->layer_registry = registry;
+    sheet->base_layer = base_layer;
     return CSS_OK;
 }
 
@@ -1106,6 +1146,9 @@ css_error css__stylesheet_rule_create(css_stylesheet *sheet, css_rule_type type,
     case CSS_RULE_PAGE:
         required = sizeof(css_rule_page);
         break;
+    case CSS_RULE_LAYER:
+        required = sizeof(css_rule_layer);
+        break;
     }
 
     r = malloc(required);
@@ -1213,6 +1256,21 @@ css_error css__stylesheet_rule_destroy(css_stylesheet *sheet, css_rule *rule)
 
         if (page->style != NULL) {
             css__stylesheet_style_destroy(page->style);
+        }
+    } break;
+    case CSS_RULE_LAYER: {
+        css_rule_layer *layer = (css_rule_layer *)rule;
+        css_rule *c, *d;
+
+        for (c = layer->first_child; c != NULL; c = d) {
+            d = c->next;
+
+            /* Detach from list */
+            c->parent = NULL;
+            c->prev = NULL;
+            c->next = NULL;
+
+            css__stylesheet_rule_destroy(sheet, c);
         }
     } break;
     }
@@ -1452,24 +1510,38 @@ css_error css__stylesheet_add_rule(css_stylesheet *sheet, css_rule *rule, css_ru
     sheet->size += _rule_size(rule);
 
     if (parent != NULL) {
-        css_rule_media *media = (css_rule_media *)parent;
+        css_rule **first_child;
+        css_rule **last_child;
 
-        /* Parent must be an @media rule, or NULL */
-        assert(parent->type == CSS_RULE_MEDIA);
+        /* Parent must be an @media or @layer grouping rule, or NULL.
+		 * The two rule structs place their child-list pointers at
+		 * different offsets, so resolve them per type rather than
+		 * casting blindly. */
+        assert(parent->type == CSS_RULE_MEDIA || parent->type == CSS_RULE_LAYER);
+
+        if (parent->type == CSS_RULE_MEDIA) {
+            css_rule_media *media = (css_rule_media *)parent;
+            first_child = &media->first_child;
+            last_child = &media->last_child;
+        } else {
+            css_rule_layer *layer = (css_rule_layer *)parent;
+            first_child = &layer->first_child;
+            last_child = &layer->last_child;
+        }
 
         /* Add rule to parent */
         rule->ptype = CSS_RULE_PARENT_RULE;
         rule->parent = parent;
         sheet->rule_count++;
 
-        if (media->last_child == NULL) {
+        if (*last_child == NULL) {
             rule->prev = rule->next = NULL;
-            media->first_child = media->last_child = rule;
+            *first_child = *last_child = rule;
         } else {
-            media->last_child->next = rule;
-            rule->prev = media->last_child;
+            (*last_child)->next = rule;
+            rule->prev = *last_child;
             rule->next = NULL;
-            media->last_child = rule;
+            *last_child = rule;
         }
     } else {
         /* Add rule to sheet */
@@ -1603,6 +1675,22 @@ css_error _add_selectors(css_stylesheet *sheet, css_rule *rule)
             }
         }
     } break;
+    case CSS_RULE_LAYER: {
+        css_rule_layer *layer = (css_rule_layer *)rule;
+        css_rule *r;
+
+        for (r = layer->first_child; r != NULL; r = r->next) {
+            error = _add_selectors(sheet, r);
+            if (error != CSS_OK) {
+                /* Failed, revert our changes */
+                for (r = r->prev; r != NULL; r = r->prev) {
+                    _remove_selectors(sheet, r);
+                }
+
+                return error;
+            }
+        }
+    } break;
     }
 
     return CSS_OK;
@@ -1642,6 +1730,17 @@ css_error _remove_selectors(css_stylesheet *sheet, css_rule *rule)
         css_rule *r;
 
         for (r = m->first_child; r != NULL; r = r->next) {
+            error = _remove_selectors(sheet, r);
+            if (error != CSS_OK) {
+                return error;
+            }
+        }
+    } break;
+    case CSS_RULE_LAYER: {
+        css_rule_layer *layer = (css_rule_layer *)rule;
+        css_rule *r;
+
+        for (r = layer->first_child; r != NULL; r = r->next) {
             error = _remove_selectors(sheet, r);
             if (error != CSS_OK) {
                 return error;

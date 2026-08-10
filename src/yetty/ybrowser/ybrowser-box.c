@@ -52,6 +52,39 @@ struct yl_default_style {
 
 #define INHERIT_RGB 0xffffffffu
 
+/* Collapse the css-align keyword space (CSS_JUSTIFY_SELF_* /
+ * CSS_JUSTIFY_ITEMS_* / CSS_ALIGN_ITEMS_*, which share numbering for the
+ * common entries) onto the ALIGN_ITEMS-style values used by grid layout.
+ * Grid has no reversed axes, so start≡flex-start≡left, end≡flex-end≡right;
+ * baseline approximates start until real baseline alignment lands.
+ * Returns 0 for auto/inherit/unset (= defer to the container default). */
+static int8_t grid_axis_align_normalize(int css_align_value)
+{
+    switch (css_align_value) {
+    case CSS_JUSTIFY_SELF_STRETCH:
+        return (int8_t)CSS_ALIGN_ITEMS_STRETCH;
+    case CSS_JUSTIFY_SELF_FLEX_START:
+    case CSS_JUSTIFY_SELF_BASELINE:
+    case CSS_JUSTIFY_SELF_START:
+        return (int8_t)CSS_ALIGN_ITEMS_FLEX_START;
+    case CSS_JUSTIFY_SELF_FLEX_END:
+    case CSS_JUSTIFY_SELF_END:
+        return (int8_t)CSS_ALIGN_ITEMS_FLEX_END;
+    case CSS_JUSTIFY_SELF_CENTER:
+        return (int8_t)CSS_ALIGN_ITEMS_CENTER;
+    /* Physical keywords survive normalization as the distinct LEFT /
+	 * RIGHT codes so the direction/writing-mode flips (which act on
+	 * LOGICAL start/end only) skip them; consumers resolve them to the
+	 * physical edge at the end. */
+    case CSS_JUSTIFY_SELF_LEFT:
+        return (int8_t)CSS_ALIGN_ITEMS_LEFT;
+    case CSS_JUSTIFY_SELF_RIGHT:
+        return (int8_t)CSS_ALIGN_ITEMS_RIGHT;
+    default: /* auto, inherit, unknown */
+        return 0;
+    }
+}
+
 /* Match lexbor tag IDs; values pulled from <lexbor/tag/const.h>. */
 static const struct yl_default_style *default_for(lxb_tag_id_t tag)
 {
@@ -630,6 +663,26 @@ static void link_child(struct yetty_ylexbor *r, uint32_t parent_idx, uint32_t ci
     p->child_count++;
 }
 
+/* True when a box's extent on an axis was decided by flex distribution. A flex
+ * item can collapse to sub-pixel when a definite main-size never reached its
+ * flex container; such a degenerate overflow-clip rect is a layout artifact,
+ * not an intentional clip (see box_clipped_out). */
+static bool clip_axis_is_flex_sized(uint8_t source)
+{
+    switch (source) {
+    case YL_SRC_FLEX_BASIS:
+    case YL_SRC_FLEX_EVEN:
+    case YL_SRC_FLEX_SHARE:
+    case YL_SRC_FLEX_GROW:
+    case YL_SRC_FLEX_SHRINK:
+    case YL_SRC_FLEX_MIN:
+    case YL_SRC_FLEX_STRETCH:
+        return true;
+    default:
+        return false;
+    }
+}
+
 bool yetty_ylexbor_box_clipped_out(const struct yetty_ylexbor *r, uint32_t idx)
 {
     if (r == NULL || idx >= r->boxes.size) {
@@ -662,18 +715,21 @@ bool yetty_ylexbor_box_clipped_out(const struct yetty_ylexbor *r, uint32_t idx)
             skip = true; /* absolute: static ancestors below its CB do not clip */
         }
         /* Per-axis clip validity. An overflow-clip ancestor that collapsed to
-			 * sub-pixel on an axis because its flex-basis never grew (flex:1 1 0 in
-			 * a flex column whose definite main-size did not propagate — YouTube's
-			 * guide scroll container inside the app-drawer) is a layout artifact,
-			 * not an intentional clip; using its degenerate rect would hide the
-			 * whole correctly-laid-out guide. So an axis whose extent is <1px AND
-			 * came from an ungrown flex-basis does not clip. Everything else is
-			 * unchanged: a real overflow strip still clips, and a deliberate
-			 * height:0 (exactly 0) was already non-clipping via anc->h>0. */
+			 * sub-pixel on an axis because it is a flex item whose definite
+			 * main-size never propagated (flex:1 1 0 in a flex column — YouTube's
+			 * guide scroll container inside the position:fixed app-drawer, whose
+			 * height comes from flex distribution) is a layout artifact, not an
+			 * intentional clip; using its degenerate rect would hide the whole
+			 * correctly-laid-out guide. So an axis whose extent is <1px AND was
+			 * sized by ANY flex provenance (the drawer content collapses via
+			 * FLEX_SHRINK, not only FLEX_BASIS) does not clip. Everything else is
+			 * unchanged: a real overflow strip (>=1px) still clips, and a
+			 * deliberate height:0 (exactly 0) was already non-clipping via
+			 * anc->h>0. */
         bool clip_h_ok =
-            anc->w > 0.0f && !(anc->w < 1.0f && anc->width_source == YL_SRC_FLEX_BASIS);
+            anc->w > 0.0f && !(anc->w < 1.0f && clip_axis_is_flex_sized(anc->width_source));
         bool clip_v_ok =
-            anc->h > 0.0f && !(anc->h < 1.0f && anc->height_source == YL_SRC_FLEX_BASIS);
+            anc->h > 0.0f && !(anc->h < 1.0f && clip_axis_is_flex_sized(anc->height_source));
         if (!skip && cur != idx && anc->clip_overflow && (clip_h_ok || clip_v_ok)) {
             const float slack = 0.5f;
             bool out_h =
@@ -1829,7 +1885,90 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                              : YL_LAYOUT_FLEX_ROW;
                         b->main_reverse = (fd == CSS_FLEX_DIRECTION_ROW_REVERSE ||
                                            fd == CSS_FLEX_DIRECTION_COLUMN_REVERSE);
+                        /* direction: rtl mirrors the ROW main axis — geometry-
+						 * wise identical to toggling row-reverse (rtl +
+						 * row-reverse = LTR order again), so fold it into
+						 * main_reverse; every downstream consumer (item
+						 * packing, line mirroring, abspos static position)
+						 * follows. The inline-start keywords below resolve
+						 * their physical edge against dir_rtl. */
+                        int dir_rtl =
+                            yetty_ybrowser_libcss_direction(cs) == CSS_DIRECTION_RTL;
+                        if (dir_rtl && b->layout_mode == YL_LAYOUT_FLEX_ROW) {
+                            b->main_reverse = !b->main_reverse;
+                        }
+                        /* Vertical writing modes swap the flex axes
+						 * geometrically: a vertical `row` container's main axis
+						 * is the (vertical) inline axis — run the COLUMN
+						 * algorithm; a vertical `column` container's main axis
+						 * is the (horizontal) block axis — run the ROW
+						 * algorithm, mirrored for vertical-rl. The cross axis
+						 * flip of a vertical-rl row container is exactly
+						 * wrap-reverse. CSS width/height stay physical, so the
+						 * swapped algorithm runs unchanged. */
+                        int cross_flip_vertical = 0;
+                        {
+                            int flex_wm = yetty_ybrowser_libcss_writing_mode(cs);
+                            int flex_vertical_rl = flex_wm == CSS_WRITING_MODE_VERTICAL_RL;
+                            if (flex_wm == CSS_WRITING_MODE_VERTICAL_LR ||
+                                flex_vertical_rl) {
+                                if (b->layout_mode == YL_LAYOUT_FLEX_ROW) {
+                                    b->layout_mode = YL_LAYOUT_FLEX_COLUMN;
+                                    /* cross axis = block, mirrored for rl;
+									 * applied AFTER flex-wrap parses below. */
+                                    cross_flip_vertical = flex_vertical_rl;
+                                } else {
+                                    b->layout_mode = YL_LAYOUT_FLEX_ROW;
+                                    if (flex_vertical_rl) {
+                                        b->main_reverse = !b->main_reverse;
+                                    }
+                                }
+                            }
+                        }
                         b->justify_content = yetty_ybrowser_libcss_justify_content(cs);
+                        /* css-align content-position keywords are physical /
+						 * writing-mode relative, NOT flex-relative. Normalize
+						 * them onto flex-start/flex-end HERE, accounting for
+						 * the main axis + reversal, so every downstream
+						 * consumer (item packing, abspos static position)
+						 * keeps its flex-relative view. LTR horizontal
+						 * writing mode assumed: start≡left, end≡right; in a
+						 * column container left/right have no main-axis
+						 * meaning and behave as `start` (css-align §5.3). */
+                        {
+                            int jc = b->justify_content;
+                            int column_main =
+                                (b->layout_mode == YL_LAYOUT_FLEX_COLUMN);
+                            int wants_main_start;
+                            switch (jc) {
+                            case CSS_JUSTIFY_CONTENT_START:
+                                /* inline-start: right edge under rtl. */
+                                wants_main_start = column_main ? 1 : !dir_rtl;
+                                break;
+                            case CSS_JUSTIFY_CONTENT_END:
+                                wants_main_start = column_main ? 0 : dir_rtl;
+                                break;
+                            case CSS_JUSTIFY_CONTENT_LEFT:
+                            case CSS_JUSTIFY_CONTENT_RIGHT:
+                                if (column_main) {
+                                    wants_main_start = 1; /* behaves as start */
+                                } else {
+                                    wants_main_start =
+                                        (jc == CSS_JUSTIFY_CONTENT_LEFT);
+                                }
+                                break;
+                            default:
+                                wants_main_start = -1; /* flex-relative already */
+                                break;
+                            }
+                            if (wants_main_start >= 0) {
+                                int start_is_main_start = !b->main_reverse;
+                                b->justify_content =
+                                    (wants_main_start == start_is_main_start)
+                                        ? CSS_JUSTIFY_CONTENT_FLEX_START
+                                        : CSS_JUSTIFY_CONTENT_FLEX_END;
+                            }
+                        }
                         b->align_items = yetty_ybrowser_libcss_align_items(cs);
                         /* flex-wrap + align-content from the CASCADE (stylesheet),
 						 * not just inline — WPT tests and real sites set these via
@@ -1838,6 +1977,21 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         if (fw == CSS_FLEX_WRAP_WRAP || fw == CSS_FLEX_WRAP_WRAP_REVERSE) {
                             b->flex_wrap = 1;
                             b->wrap_reverse = (fw == CSS_FLEX_WRAP_WRAP_REVERSE);
+                        }
+                        if (cross_flip_vertical) {
+                            b->wrap_reverse = !b->wrap_reverse;
+                        }
+                        /* Cross-axis css-align keywords: start/end are physical
+						 * (top for row, left for column in LTR); flex-relative
+						 * cross-start flips under wrap-reverse. Normalized here
+						 * (after wrap_reverse is known) so downstream stays
+						 * flex-relative. */
+                        if (b->align_items == CSS_ALIGN_ITEMS_START) {
+                            b->align_items = b->wrap_reverse ? CSS_ALIGN_ITEMS_FLEX_END
+                                                             : CSS_ALIGN_ITEMS_FLEX_START;
+                        } else if (b->align_items == CSS_ALIGN_ITEMS_END) {
+                            b->align_items = b->wrap_reverse ? CSS_ALIGN_ITEMS_FLEX_START
+                                                             : CSS_ALIGN_ITEMS_FLEX_END;
                         }
                         b->align_content = yetty_ybrowser_libcss_align_content(cs);
                         /* Flex `gap` (stored in grid_col_gap — a box is flex OR
@@ -1883,6 +2037,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             b->table_fixed = 1;
                         }
                     } else if (disp == CSS_DISPLAY_GRID || disp == CSS_DISPLAY_INLINE_GRID) {
+                        b->grid_inline = (disp == CSS_DISPLAY_INLINE_GRID);
                         /* No real grid track layout. The dominant visual
 						 * effect of the modern content-column grid idiom
 						 * (grid-template-columns: ... minmax(0, Nrem) ...)
@@ -1930,6 +2085,12 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                     b->grid_ntracks = (uint8_t)element_children;
                                     b->grid_col_gap = gt->col_gap;
                                     b->grid_row_gap = gt->row_gap;
+                                    memcpy(b->grid_row_tracks, gt->row_tracks,
+                                           sizeof(b->grid_row_tracks));
+                                    b->grid_nrow_tracks = gt->nrow_tracks;
+                                    b->grid_auto_col_w = gt->auto_col_w;
+                                    b->grid_auto_row_h = gt->auto_row_h;
+                                    b->grid_repeat_auto = 1;
                                 }
                             } else if (gt && gt->ntracks >= 1 &&
                                        gt->ntracks <= YL_GRID_MAX_TRACKS) {
@@ -1938,6 +2099,11 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                 b->grid_ntracks = gt->ntracks;
                                 b->grid_col_gap = gt->col_gap;
                                 b->grid_row_gap = gt->row_gap;
+                                memcpy(b->grid_row_tracks, gt->row_tracks,
+                                       sizeof(b->grid_row_tracks));
+                                b->grid_nrow_tracks = gt->nrow_tracks;
+                                b->grid_auto_col_w = gt->auto_col_w;
+                                b->grid_auto_row_h = gt->auto_row_h;
                             } else if (gt && gt->inherit_template) {
                                 /* `grid-template-columns: inherit` — copy the
 								 * parent box's resolved tracks (CSS inherit =
@@ -2045,10 +2211,72 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     }
                     (void)yetty_ybrowser_libcss_order(cs, &b->flex_order);
                     int self_align = yetty_ybrowser_libcss_align_self(cs);
+                    /* css-align start/end are physical; flip to flex-relative
+					 * using the PARENT container's wrap-reverse (parent boxes
+					 * build before their children, so it's resolved). */
+                    if (self_align == CSS_ALIGN_SELF_START || self_align == CSS_ALIGN_SELF_END) {
+                        int parent_wrap_reverse = r->boxes.data[parent_idx].wrap_reverse;
+                        int wants_cross_start = (self_align == CSS_ALIGN_SELF_START);
+                        self_align = (wants_cross_start != parent_wrap_reverse)
+                                         ? CSS_ALIGN_SELF_FLEX_START
+                                         : CSS_ALIGN_SELF_FLEX_END;
+                    }
                     b->align_self =
                         (self_align == CSS_ALIGN_SELF_AUTO || self_align == CSS_ALIGN_SELF_INHERIT)
                             ? 0
                             : (int8_t)self_align;
+                    /* Grid inline-axis alignment. Grid has no reversed axes,
+					 * so the whole css-align keyword space collapses onto the
+					 * ALIGN_ITEMS-style values (start≡flex-start≡left,
+					 * end≡flex-end≡right, baseline≈start). 0 = auto/unset. */
+                    b->justify_self =
+                        grid_axis_align_normalize(yetty_ybrowser_libcss_justify_self(cs));
+                    /* Inside an rtl grid the inline-start keywords flip to
+					 * the right edge (approximation: physical left/right also
+					 * flip here — rare in practice). */
+                    {
+                        /* b->parent may not be linked yet at this point of
+						 * the walk — the walk's parent_idx parameter is the
+						 * authoritative container. */
+                        const struct yetty_ylexbor_box *parent_box =
+                            &r->boxes.data[parent_idx];
+                        if (parent_box->layout_mode == YL_LAYOUT_GRID &&
+                            parent_box->main_reverse) {
+                            if (b->justify_self == CSS_ALIGN_ITEMS_FLEX_START) {
+                                b->justify_self = CSS_ALIGN_ITEMS_FLEX_END;
+                            } else if (b->justify_self == CSS_ALIGN_ITEMS_FLEX_END) {
+                                b->justify_self = CSS_ALIGN_ITEMS_FLEX_START;
+                            }
+                        }
+                    }
+                    if (b->layout_mode == YL_LAYOUT_GRID) {
+                        b->justify_items = grid_axis_align_normalize(
+                            yetty_ybrowser_libcss_justify_items(cs));
+                        if (b->align_items == 0) {
+                            b->align_items = grid_axis_align_normalize(
+                                yetty_ybrowser_libcss_align_items(cs));
+                        }
+                        /* direction: rtl on a grid — column order mirrors
+						 * (line 1 = right edge). main_reverse doubles as the
+						 * rtl marker (grids have no flex reverse); the
+						 * normalized inline-axis keywords stay PHYSICAL, so
+						 * inline-start flips to the right edge here. */
+                        if (yetty_ybrowser_libcss_direction(cs) == CSS_DIRECTION_RTL) {
+                            b->main_reverse = 1;
+                            int tmp_justify = b->justify_items;
+                            if (tmp_justify == CSS_ALIGN_ITEMS_FLEX_START) {
+                                b->justify_items = CSS_ALIGN_ITEMS_FLEX_END;
+                            } else if (tmp_justify == CSS_ALIGN_ITEMS_FLEX_END) {
+                                b->justify_items = CSS_ALIGN_ITEMS_FLEX_START;
+                            }
+                        }
+                        int wm = yetty_ybrowser_libcss_writing_mode(cs);
+                        if (wm == CSS_WRITING_MODE_VERTICAL_LR) {
+                            b->grid_vertical = 1;
+                        } else if (wm == CSS_WRITING_MODE_VERTICAL_RL) {
+                            b->grid_vertical = 2;
+                        }
+                    }
                     /* flex-shrink: -1 sentinel = unset (solver uses the CSS
 					 * initial 1.0); a definite value (incl. 0 = `shrink-0`) is
 					 * stored as-is so fixed sidebars don't collapse. */
@@ -2218,8 +2446,20 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 					 * ABSOLUTE/FIXED pull it out of flow and place it against
 					 * a containing block. STICKY collapses to RELATIVE. */
                     {
+                        /* visibility is INHERITED, but each element's style is
+						 * selected independently (no parent computed style
+						 * threaded into libcss), so an inherited `hidden` never
+						 * reaches descendants through the cascade. Propagate it
+						 * through the box-build state instead: once an ancestor
+						 * is hidden the subtree stays hidden. (A `visibility:
+						 * visible` child re-showing inside a hidden parent is not
+						 * distinguishable here without explicit-vs-default info
+						 * and is rare; the common case — icons/labels inside a
+						 * visibility:hidden dropdown panel — is what matters, and
+						 * without this GitHub painted the collapsed nav menus'
+						 * octicons scattered across the hero.) */
                         int visibility = yetty_ybrowser_libcss_visibility(cs);
-                        s.vis_hidden = visibility == CSS_VISIBILITY_HIDDEN ||
+                        s.vis_hidden = s.vis_hidden || visibility == CSS_VISIBILITY_HIDDEN ||
                                        visibility == CSS_VISIBILITY_COLLAPSE;
                         b->vis_hidden = s.vis_hidden;
                     }
@@ -2228,6 +2468,23 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     s.opacity = s.opacity * yetty_ybrowser_libcss_opacity(cs);
                     b->opacity = s.opacity;
                     b->clip_overflow = yetty_ybrowser_libcss_clips_overflow(cs);
+                    /* Visually-hidden accessibility idiom (`.sr-only` /
+					 * `.visually-hidden`): a 1x1 box that clips its overflow —
+					 * the skip-links, "Navigation Menu" headings, and live
+					 * regions on essentially every site. We have no per-pixel
+					 * scissor, so the clipped-away text would otherwise paint at
+					 * full size (white bars + stray labels over GitHub's
+					 * header). Collapsing to a 1px box that clips overflow is an
+					 * unambiguous "hide me visually, keep me for a11y" signal:
+					 * suppress the subtree's paint like visibility:hidden while
+					 * keeping its (tiny) layout box. Gate on BOTH axes tiny so a
+					 * genuine 1px rule/hairline (clips nothing meaningful) is
+					 * unaffected. */
+                    if (b->clip_overflow && b->css_width > 0.0f && b->css_width <= 2.0f &&
+                        b->css_height_set && b->css_height > 0.0f && b->css_height <= 2.0f) {
+                        b->vis_hidden = 1;
+                        s.vis_hidden = true; /* inherit to the flushed text runs */
+                    }
                     int pos = yetty_ybrowser_libcss_position(cs);
                     if (pos == CSS_POSITION_RELATIVE || pos == CSS_POSITION_STICKY) {
                         b->position = YL_POS_RELATIVE;
@@ -2556,6 +2813,10 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 				 * its default font-size from font_size. */
                 ib->fg = s.fg;
                 ib->font_size = s.font_size;
+                /* Opacity/visibility inherit too: an <img> inside a hidden or
+					 * transparent subtree must not paint. */
+                ib->opacity = s.opacity;
+                ib->vis_hidden = s.vis_hidden;
 
                 /* HTML width/height attrs (in px) take priority
 				 * — the spec calls these the "presentation
@@ -2793,6 +3054,14 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 svg_box->element = el;
                 svg_box->fg = s.fg;
                 svg_box->font_size = s.font_size;
+                /* Inherit the folded group opacity and the visibility state
+				 * from the ancestor chain — a replaced element inside a
+				 * visibility:hidden / opacity:0 subtree must not paint (the
+				 * icons in GitHub's collapsed nav dropdown panels painted
+				 * scattered across the hero because these were left at the
+				 * defaults). */
+                svg_box->opacity = s.opacity;
+                svg_box->vis_hidden = s.vis_hidden;
 
                 float attr_w = 0.0f, attr_h = 0.0f;
                 float view_w = 0.0f, view_h = 0.0f;
@@ -2989,9 +3258,11 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         s.nowrap = true;
                     }
                     {
+                        /* Sticky like the block path: inherited hidden state
+						 * survives; an inline element only ADDS hidden. */
                         int inl_vis = yetty_ybrowser_libcss_visibility(inl_cs);
-                        s.vis_hidden =
-                            inl_vis == CSS_VISIBILITY_HIDDEN || inl_vis == CSS_VISIBILITY_COLLAPSE;
+                        s.vis_hidden = s.vis_hidden || inl_vis == CSS_VISIBILITY_HIDDEN ||
+                                       inl_vis == CSS_VISIBILITY_COLLAPSE;
                     }
                     yetty_ybrowser_libcss_release(inl_cs);
                 }

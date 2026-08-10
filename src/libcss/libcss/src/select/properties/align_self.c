@@ -40,6 +40,18 @@ css_error css__cascade_align_self(uint32_t opv, css_style *style, css_select_sta
         case ALIGN_SELF_AUTO:
             value = CSS_ALIGN_SELF_AUTO;
             break;
+        case ALIGN_SELF_START:
+            value = CSS_ALIGN_SELF_START;
+            break;
+        case ALIGN_SELF_END:
+            value = CSS_ALIGN_SELF_END;
+            break;
+        case ALIGN_SELF_LEFT:
+            value = CSS_ALIGN_SELF_LEFT;
+            break;
+        case ALIGN_SELF_RIGHT:
+            value = CSS_ALIGN_SELF_RIGHT;
+            break;
         }
     }
 

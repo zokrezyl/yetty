@@ -74,6 +74,8 @@ PROPERTY_FUNCS(display);
 PROPERTY_FUNCS(elevation);
 PROPERTY_FUNCS(empty_cells);
 PROPERTY_FUNCS(fill_opacity);
+PROPERTY_FUNCS(justify_self);
+PROPERTY_FUNCS(justify_items);
 PROPERTY_FUNCS(flex_basis);
 PROPERTY_FUNCS(flex_direction);
 PROPERTY_FUNCS(flex_grow);

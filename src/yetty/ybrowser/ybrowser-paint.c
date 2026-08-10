@@ -1129,6 +1129,107 @@ char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el)
         }
     }
 
+    /* <picture><source srcset="..."><img loading="lazy"></picture>: the <img>
+	 * carries no source of its own — the URL lives in a sibling <source>. This
+	 * is nytimes's dominant pattern (article thumbnails), so fall back to the
+	 * parent <picture>'s first <source srcset> when the <img> has nothing. */
+    /* Lazy images whose URL is not yet in the accessible DOM (no img src, and
+	 * the <picture>'s <source>s carry only media/class — nytimes computes the
+	 * real srcset in JS on scroll). The real URL is in the no-JS fallback the
+	 * page ships for SEO: a sibling <noscript><img src="…"> (or <source
+	 * srcset>). With scripting enabled the <noscript> body is a raw text node,
+	 * so scan it. This is what makes a lazy-loaded site's images appear in a
+	 * one-shot render instead of staying blank. */
+    char *picture_url = NULL;
+    if (!src && !lazy && !srcset_url) {
+        lxb_dom_node_t *parent = ((lxb_dom_node_t *)el)->parent;
+        /* First: any <source srcset> the page did put in the DOM. */
+        if (parent != NULL && parent->local_name == LXB_TAG_PICTURE) {
+            for (lxb_dom_node_t *sib = parent->first_child; sib != NULL && !picture_url;
+                 sib = sib->next) {
+                if (sib->type != LXB_DOM_NODE_TYPE_ELEMENT || sib->local_name != LXB_TAG_SOURCE) {
+                    continue;
+                }
+                size_t l = 0;
+                const lxb_char_t *ss = lxb_dom_element_get_attribute(
+                    lxb_dom_interface_element(sib), (const lxb_char_t *)"srcset", 6, &l);
+                if (ss && l > 0) {
+                    const char *p = (const char *)ss;
+                    const char *end = p + l;
+                    while (p < end && (*p == ' ' || *p == '\t' || *p == '\n')) {
+                        p++;
+                    }
+                    const char *start = p;
+                    while (p < end && *p != ' ' && *p != '\t' && *p != '\n') {
+                        p++;
+                    }
+                    if (p > start) {
+                        picture_url = strndup(start, p - start);
+                    }
+                }
+            }
+        }
+        /* Then: the <noscript> SEO fallback. With scripting enabled lexbor
+		 * parses its body as real elements, so find the fallback <img src>
+		 * (or <source srcset>) element inside a sibling <noscript>. Search the
+		 * <picture> and the img's grandparent scope. */
+        if (!picture_url && parent != NULL) {
+            lxb_dom_node_t *scopes[2] = {parent, ((lxb_dom_node_t *)el)->parent
+                                                     ? ((lxb_dom_node_t *)el)->parent->parent
+                                                     : NULL};
+            for (int si = 0; si < 2 && !picture_url; si++) {
+                if (scopes[si] == NULL) {
+                    continue;
+                }
+                for (lxb_dom_node_t *sib = scopes[si]->first_child; sib != NULL && !picture_url;
+                     sib = sib->next) {
+                    if (sib->type != LXB_DOM_NODE_TYPE_ELEMENT ||
+                        sib->local_name != LXB_TAG_NOSCRIPT) {
+                        continue;
+                    }
+                    /* Walk the noscript subtree for the first usable URL. */
+                    lxb_dom_node_t *stack[32];
+                    int sp = 0;
+                    stack[sp++] = sib->first_child;
+                    while (sp > 0 && !picture_url) {
+                        lxb_dom_node_t *node = stack[--sp];
+                        for (; node != NULL && !picture_url; node = node->next) {
+                            if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+                                continue;
+                            }
+                            if (node->local_name == LXB_TAG_IMG) {
+                                picture_url = attr_strdup(lxb_dom_interface_element(node), "src", 3);
+                            }
+                            if (!picture_url && node->local_name == LXB_TAG_SOURCE) {
+                                size_t l = 0;
+                                const lxb_char_t *ss = lxb_dom_element_get_attribute(
+                                    lxb_dom_interface_element(node), (const lxb_char_t *)"srcset", 6,
+                                    &l);
+                                if (ss && l > 0) {
+                                    const char *p = (const char *)ss;
+                                    const char *end = p + l;
+                                    while (p < end && (*p == ' ' || *p == '\t' || *p == '\n')) {
+                                        p++;
+                                    }
+                                    const char *st = p;
+                                    while (p < end && *p != ' ' && *p != '\t' && *p != '\n') {
+                                        p++;
+                                    }
+                                    if (p > st) {
+                                        picture_url = strndup(st, p - st);
+                                    }
+                                }
+                            }
+                            if (!picture_url && node->first_child != NULL && sp < 32) {
+                                stack[sp++] = node->first_child;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     const char *pick = NULL;
     if (lazy) {
         pick = lazy;
@@ -1136,6 +1237,8 @@ char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el)
         pick = srcset_url;
     } else if (src) {
         pick = src;
+    } else if (picture_url) {
+        pick = picture_url;
     }
 
     /* If we picked plain `src` but it's a tiny data: URI placeholder,
@@ -1155,6 +1258,7 @@ char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el)
     free(src);
     free(lazy);
     free(srcset_url);
+    free(picture_url);
     return abs;
 }
 

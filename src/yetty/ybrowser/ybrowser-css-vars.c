@@ -2116,6 +2116,48 @@ char *yetty_ybrowser_css_simplify_calc(const char *css, size_t len)
     return out.buf;
 }
 
+/* See header: `first baseline` → `baseline`, `last baseline` → `end`, only
+ * in value position (a ':' precedes the token, whitespace-skipped) so string
+ * contents stay untouched. Same-length space padding — no re-layout of the
+ * buffer. */
+char *yetty_ybrowser_css_rewrite_baseline_alignment(const char *css, size_t len)
+{
+    static const char first_kw[] = "first baseline";
+    static const char last_kw[] = "last baseline";
+    char *copy = NULL;
+    for (size_t i = 0; i + sizeof(last_kw) - 1 <= len; i++) {
+        int is_first = (i + sizeof(first_kw) - 1 <= len) &&
+                       strncmp(css + i, first_kw, sizeof(first_kw) - 1) == 0;
+        int is_last = strncmp(css + i, last_kw, sizeof(last_kw) - 1) == 0;
+        if (!is_first && !is_last) {
+            continue;
+        }
+        /* Value position: skip whitespace backwards, require ':'. */
+        size_t back = i;
+        while (back > 0 && (css[back - 1] == ' ' || css[back - 1] == '\t' ||
+                            css[back - 1] == '\n' || css[back - 1] == '\r')) {
+            back--;
+        }
+        if (back == 0 || css[back - 1] != ':') {
+            continue;
+        }
+        if (!copy) {
+            copy = malloc(len + 1);
+            if (!copy) {
+                return NULL;
+            }
+            memcpy(copy, css, len);
+            copy[len] = '\0';
+        }
+        if (is_first) {
+            memcpy(copy + i, "baseline      ", sizeof(first_kw) - 1);
+        } else {
+            memcpy(copy + i, "end          ", sizeof(last_kw) - 1);
+        }
+    }
+    return copy;
+}
+
 /* ===========================================================================
  * Class-scoped CSS Grid template scanning.
  *
@@ -2815,7 +2857,10 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
         /* `grid-template-columns: inherit` (subgrid idiom): register an
          * inherit entry — box-build copies the parent's tracks. */
         int inherit_template = 0;
-        if (ntracks < 2 && !repeat_auto) {
+        /* Single-track grids used to be skipped as "just a block" — but
+		 * item alignment (justify-self/items) and fixed row tracks make even
+		 * one explicit column behaviorally distinct from block flow. */
+        if (ntracks < 1 && !repeat_auto) {
             size_t v = val_start;
             while (v < val_end && (src[v] == ' ' || src[v] == '\t')) {
                 v++;
@@ -2840,6 +2885,32 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
         }
         const char *block = src + brace;
         size_t blen = block_end - brace;
+        /* Row template from the same rule block. Fixed-px rows pin the
+		 * row-band heights (grid-template-rows: 150px 100px). */
+        struct yl_grid_track row_tracks[YL_GRID_MAX_TRACKS];
+        int nrow_tracks = 0;
+        {
+            const char *rows_decl =
+                css_find_substr(block, blen, "grid-template-rows:", 19);
+            if (rows_decl != NULL) {
+                const char *rows_val = rows_decl + 19;
+                size_t rows_avail = blen - (size_t)(rows_val - block);
+                size_t rows_len = 0;
+                while (rows_len < rows_avail && rows_val[rows_len] != ';' &&
+                       rows_val[rows_len] != '}') {
+                    rows_len++;
+                }
+                int rows_repeat_auto = 0;
+                nrow_tracks =
+                    grid_parse_tracks_ex(rows_val, rows_len, row_tracks, YL_GRID_MAX_TRACKS,
+                                         /*allow_named=*/0, &rows_repeat_auto);
+                if (nrow_tracks < 0) {
+                    nrow_tracks = 0;
+                }
+            }
+        }
+        float auto_col_w = grid_find_len(block, blen, "grid-auto-columns", 0);
+        float auto_row_h = grid_find_len(block, blen, "grid-auto-rows", 0);
         float col_gap = grid_find_len(block, blen, "column-gap", 0);
         float row_gap = -1.0f;
         if (col_gap < 0.0f) {
@@ -2920,6 +2991,10 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
             }
             memcpy(entry->tracks, tracks, sizeof(tracks));
             entry->ntracks = (uint8_t)ntracks;
+            memcpy(entry->row_tracks, row_tracks, sizeof(row_tracks));
+            entry->nrow_tracks = (uint8_t)nrow_tracks;
+            entry->auto_col_w = auto_col_w;
+            entry->auto_row_h = auto_row_h;
             entry->inherit_template = (uint8_t)inherit_template;
             entry->repeat_auto = (uint8_t)repeat_auto;
             entry->col_gap = col_gap > 0.0f ? col_gap : 0.0f;
@@ -5838,6 +5913,257 @@ static int flex_token_is_number(const char *token, size_t token_len)
     }
     return digits;
 }
+
+/* Expand the `grid:` / `grid-template:` shorthands into the longhands every
+ * scanner (and libcss) understands. Handled forms:
+ *   grid[-template]: <rows> / <cols>       → grid-template-rows + -columns
+ *   grid: auto-flow [<size>] / <cols>      → grid-template-columns
+ *                                            (+ grid-auto-rows:<size>)
+ *   grid: <rows> / auto-flow [<size>]      → grid-template-rows
+ *                                            (+ grid-auto-columns:<size>)
+ * Values without a top-level `/` pass through untouched. Returns a fresh
+ * malloc'd string when an expansion happened, else NULL. */
+/* Flatten CSS Cascade Layers (@layer). libcss 0.9 has no @layer support: it
+ * parses the rules INSIDE an `@layer name { ... }` block but assigns them a
+ * broken cascade order, so equal-specificity rules stop honoring source order
+ * (an earlier rule wrongly beats a later one). Modern design systems wrap
+ * their whole stylesheet in a layer — GitHub ships all of primer-react-brand
+ * inside `@layer primer-brand{...}`, which made its primary button lose its
+ * green background to the earlier `.Button{background:0 0}` reset (rendered
+ * as a transparent, unusable signup button).
+ *
+ * We strip the layer machinery textually, hoisting the inner rules to the top
+ * level so they get normal sequential rule indices and cascade by source
+ * order again:
+ *   - `@layer a, b;`            (statement, just orders names)  -> removed
+ *   - `@layer name { ...rules }`(block)                         -> keep rules
+ *   - `@layer { ...rules }`     (anonymous block)               -> keep rules
+ * Layer PRIORITY (later layer wins, unlayered beats layered) is not modelled;
+ * for the dominant "framework wrapped in one layer" case, plain source order
+ * is the correct result. Strings and comments are skipped so their braces and
+ * `@layer` byte sequences are never treated as structural. Returns a fresh
+ * malloc'd string when anything was stripped, else NULL. */
+/* Flatten CSS Cascade Layers (@layer). libcss 0.9 has no @layer support: it
+ * parses the rules INSIDE an `@layer name { ... }` block but assigns them a
+ * broken cascade order, so equal-specificity rules stop honoring source order
+ * (an earlier rule wrongly beats a later one). Modern design systems wrap
+ * their whole stylesheet in a layer — GitHub ships all of primer-react-brand
+ * inside `@layer primer-brand{...}`, which made its primary button lose its
+ * green background to the earlier `.Button{background:0 0}` reset (the signup
+ * button rendered transparent/unusable).
+ *
+ * We strip the layer machinery textually, hoisting the inner rules to the top
+ * level so they get normal sequential rule indices and cascade by source
+ * order again:
+ *   - `@layer a, b;`             (statement)          -> removed
+ *   - `@layer name { ...rules }` (block)              -> keep rules only
+ *   - `@layer { ...rules }`      (anonymous block)    -> keep rules only
+ * Nested layers are handled by tracking brace depth so each layer's matching
+ * close brace is removed too. Layer PRIORITY (later layer wins, unlayered
+ * beats layered) is not modelled; for the dominant "framework wrapped in one
+ * layer" case plain source order is the correct result. Strings and comments
+ * are skipped so their braces / `@layer` byte sequences are never structural.
+ * Returns a fresh malloc'd string when anything was stripped, else NULL. */
+char *yetty_ybrowser_css_flatten_layers(const char *css, size_t len, size_t *out_len)
+{
+    if (css == NULL || len < 6) {
+        return NULL;
+    }
+    if (css_find_substr(css, len, "@layer", 6) == NULL) {
+        return NULL;
+    }
+    struct css_text_out out = {0};
+    int changed = 0;
+    int depth = 0;               /* current brace nesting (copied + layer) */
+    int layer_depths[64];        /* nesting depths at which a layer opened */
+    int layer_sp = 0;
+    size_t i = 0;
+    while (i < len) {
+        char c = css[i];
+        /* Strings — copy verbatim. */
+        if (c == '"' || c == '\'') {
+            char quote = c;
+            css_text_append(&out, css + i, 1);
+            i++;
+            while (i < len) {
+                css_text_append(&out, css + i, 1);
+                if (css[i] == '\\' && i + 1 < len) {
+                    i++;
+                    css_text_append(&out, css + i, 1);
+                    i++;
+                    continue;
+                }
+                if (css[i] == quote) {
+                    i++;
+                    break;
+                }
+                i++;
+            }
+            continue;
+        }
+        /* Comments — copy verbatim. */
+        if (c == '/' && i + 1 < len && css[i + 1] == '*') {
+            size_t start = i;
+            i += 2;
+            while (i + 1 < len && !(css[i] == '*' && css[i + 1] == '/')) {
+                i++;
+            }
+            i = (i + 1 < len) ? i + 2 : len;
+            css_text_append(&out, css + start, i - start);
+            continue;
+        }
+        /* `@layer` at a rule position. */
+        if (c == '@' && i + 6 <= len && strncasecmp(css + i, "@layer", 6) == 0 &&
+            (i + 6 == len || css[i + 6] == ' ' || css[i + 6] == '\t' || css[i + 6] == '\n' ||
+             css[i + 6] == '{' || css[i + 6] == ';')) {
+            size_t j = i + 6;
+            while (j < len && css[j] != ';' && css[j] != '{') {
+                j++;
+            }
+            if (j < len && css[j] == ';') {
+                i = j + 1; /* statement form — drop entirely */
+                changed = 1;
+                continue;
+            }
+            if (j < len && css[j] == '{') {
+                if (layer_sp < (int)(sizeof(layer_depths) / sizeof(layer_depths[0]))) {
+                    layer_depths[layer_sp++] = depth; /* remember this level */
+                }
+                depth++;   /* the layer brace is open (not copied) */
+                i = j + 1; /* skip `@layer <prelude> {` */
+                changed = 1;
+                continue;
+            }
+            css_text_append(&out, css + i, 1); /* malformed — copy '@' */
+            i++;
+            continue;
+        }
+        if (c == '{') {
+            depth++;
+            css_text_append(&out, css + i, 1);
+            i++;
+            continue;
+        }
+        if (c == '}') {
+            depth--;
+            if (layer_sp > 0 && layer_depths[layer_sp - 1] == depth) {
+                /* This brace closes a hoisted layer — drop it. */
+                layer_sp--;
+                i++;
+                continue;
+            }
+            css_text_append(&out, css + i, 1);
+            i++;
+            continue;
+        }
+        css_text_append(&out, css + i, 1);
+        i++;
+    }
+    if (out.oom || !changed) {
+        free(out.buf);
+        return NULL;
+    }
+    if (out_len) {
+        *out_len = out.len;
+    }
+    return out.buf;
+}
+
+char *yetty_ybrowser_css_expand_grid_template(const char *css, size_t len, size_t *out_len)
+{
+    struct css_text_out out = {0};
+    int changed = 0;
+    size_t i = 0;
+    while (i < len) {
+        /* Declaration-position match of `grid:` or `grid-template:`. */
+        int is_grid = 0;
+        int is_template = 0;
+        if (i + 5 <= len && strncmp(css + i, "grid", 4) == 0 &&
+            (i == 0 || css[i - 1] == '{' || css[i - 1] == ';' || css[i - 1] == ' ' ||
+             css[i - 1] == '\t' || css[i - 1] == '\n')) {
+            if (css[i + 4] == ':') {
+                is_grid = 1;
+            } else if (i + 14 <= len && strncmp(css + i + 4, "-template:", 10) == 0) {
+                is_template = 1;
+            }
+        }
+        if (!is_grid && !is_template) {
+            css_text_append(&out, css + i, 1);
+            i++;
+            continue;
+        }
+        size_t val_start = i + (is_grid ? 5 : 14);
+        size_t val_end = val_start;
+        int depth = 0;
+        long slash_at = -1;
+        while (val_end < len && (depth > 0 || (css[val_end] != ';' && css[val_end] != '}'))) {
+            if (css[val_end] == '(') {
+                depth++;
+            } else if (css[val_end] == ')') {
+                depth--;
+            } else if (css[val_end] == '/' && depth == 0 && slash_at < 0) {
+                slash_at = (long)val_end;
+            }
+            val_end++;
+        }
+        if (slash_at < 0) {
+            css_text_append(&out, css + i, val_end - i);
+            i = val_end;
+            continue;
+        }
+        const char *rows_part = css + val_start;
+        size_t rows_len = (size_t)slash_at - val_start;
+        const char *cols_part = css + slash_at + 1;
+        size_t cols_len = val_end - (size_t)slash_at - 1;
+        while (rows_len > 0 && (rows_part[0] == ' ' || rows_part[0] == '\t')) {
+            rows_part++;
+            rows_len--;
+        }
+        while (rows_len > 0 &&
+               (rows_part[rows_len - 1] == ' ' || rows_part[rows_len - 1] == '\t')) {
+            rows_len--;
+        }
+        while (cols_len > 0 && (cols_part[0] == ' ' || cols_part[0] == '\t')) {
+            cols_part++;
+            cols_len--;
+        }
+        int rows_auto_flow = rows_len >= 9 && memcmp(rows_part, "auto-flow", 9) == 0;
+        int cols_auto_flow = cols_len >= 9 && memcmp(cols_part, "auto-flow", 9) == 0;
+        if (rows_auto_flow) {
+            if (rows_len > 9) { /* auto-flow <size> → implicit row size */
+                css_text_append_str(&out, "grid-auto-rows:");
+                css_text_append(&out, rows_part + 9, rows_len - 9);
+                css_text_append_str(&out, ";");
+            }
+            css_text_append_str(&out, "grid-template-columns:");
+            css_text_append(&out, cols_part, cols_len);
+        } else if (cols_auto_flow) {
+            if (cols_len > 9) {
+                css_text_append_str(&out, "grid-auto-columns:");
+                css_text_append(&out, cols_part + 9, cols_len - 9);
+                css_text_append_str(&out, ";");
+            }
+            css_text_append_str(&out, "grid-template-rows:");
+            css_text_append(&out, rows_part, rows_len);
+        } else {
+            css_text_append_str(&out, "grid-template-rows:");
+            css_text_append(&out, rows_part, rows_len);
+            css_text_append_str(&out, ";grid-template-columns:");
+            css_text_append(&out, cols_part, cols_len);
+        }
+        changed = 1;
+        i = val_end;
+    }
+    if (out.oom || !changed) {
+        free(out.buf);
+        return NULL;
+    }
+    if (out_len) {
+        *out_len = out.len;
+    }
+    return out.buf;
+}
+
 
 char *yetty_ylexbor_css_expand_flex(const char *src, size_t len, size_t *out_len)
 {

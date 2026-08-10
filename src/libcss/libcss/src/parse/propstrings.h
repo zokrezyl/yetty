@@ -29,6 +29,7 @@ enum {
     NAMESPACE,
     FONT_FACE,
     PAGE,
+    LAYER,
 
     /* Media types */
     AURAL,
@@ -157,6 +158,8 @@ enum {
     FONT_WEIGHT,
     HEIGHT,
     JUSTIFY_CONTENT,
+    JUSTIFY_ITEMS,
+    JUSTIFY_SELF,
     LEFT,
     LETTER_SPACING,
     LINE_HEIGHT,
@@ -474,6 +477,10 @@ enum {
     SPACE_BETWEEN,
     SPACE_AROUND,
     SPACE_EVENLY,
+    START,
+    END,
+    SELF_START,
+    SELF_END,
     ROW,
     ROW_REVERSE,
     COLUMN_REVERSE,

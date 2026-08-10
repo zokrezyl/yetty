@@ -15,6 +15,7 @@
 #include "parse/font_face.h"
 #include "parse/important.h"
 #include "parse/language.h"
+#include "parse/layer.h"
 #include "parse/mq.h"
 #include "parse/parse.h"
 #include "parse/propstrings.h"
@@ -126,6 +127,11 @@ css_error css__language_create(css_stylesheet *sheet, css_parser *parser, void *
     c->num_namespaces = 0;
     c->strings = sheet->propstrings;
 
+    c->layer_registry = NULL;
+    c->owns_layer_registry = false;
+    c->current_layer_node = NULL;
+    c->layer_sp = 0;
+
     *language = c;
 
     return CSS_OK;
@@ -156,6 +162,10 @@ css_error css__language_destroy(css_language *language)
         }
 
         free(language->namespaces);
+    }
+
+    if (language->layer_registry != NULL) {
+        css__layer_registry_unref(language->layer_registry);
     }
 
     parserutils_stack_destroy(language->context);
@@ -271,6 +281,11 @@ css_error handleStartRuleset(css_language *c, const parserutils_vector *vector)
         return error;
     }
 
+    /* Stamp the cascade layer this ruleset lives in. Rules outside any
+	 * @layer take the sheet's base layer (0 == unlayered, or the layer named
+	 * by an `@import ... layer(name)` that pulled this sheet in). */
+    rule->layer = (c->current_layer_node != NULL) ? c->current_layer_node->key : c->sheet->base_layer;
+
     if (vector != NULL) {
         /* Parse selectors, if there are any */
         error = parseSelectorList(c, vector, rule);
@@ -321,6 +336,181 @@ css_error handleEndRuleset(css_language *c, const parserutils_vector *vector)
     perror = parserutils_stack_pop(c->context, NULL);
     if (perror != PARSERUTILS_OK) {
         return css_error_from_parserutils_error(perror);
+    }
+
+    return CSS_OK;
+}
+
+/**
+ * Bind the parser to a layer registry on first use: the sheet's shared one if
+ * present (so a layer name means the same thing across all of a document's
+ * sheets), else a private one created here.
+ */
+static css_error language_ensure_layer_registry(css_language *c)
+{
+    if (c->layer_registry != NULL) {
+        return CSS_OK;
+    }
+
+    if (c->sheet->layer_registry != NULL) {
+        c->layer_registry = c->sheet->layer_registry;
+        css__layer_registry_ref(c->layer_registry);
+        c->owns_layer_registry = false;
+    } else {
+        css_error error = css__layer_registry_create(&c->layer_registry);
+        if (error != CSS_OK) {
+            return error;
+        }
+        c->owns_layer_registry = true;
+    }
+
+    /* A sheet pulled in by `@import ... layer(x)` carries x as its base layer.
+	 * Begin parsing inside x's node so BOTH its top-level rules and any nested
+	 * @layer blocks resolve under x (a nested `@layer sub` becomes x.sub). */
+    if (c->current_layer_node == NULL && c->sheet->base_layer != 0) {
+        c->current_layer_node = css__layer_find_by_key(c->layer_registry, c->sheet->base_layer);
+    }
+
+    return CSS_OK;
+}
+
+/**
+ * Parse the prelude of an @layer at-rule and intern every layer named in it
+ * (comma-separated statement form, or the single/nested/anonymous name of the
+ * block form). Each comma segment is a '.'-separated path resolved relative to
+ * the enclosing layer (c->current_layer_node); a dotted name builds the full
+ * sub-layer chain.
+ *
+ * \param first_leaf  Receives the leaf node of the first (or only) segment, or
+ *                    a fresh anonymous node for `@layer { }`; NULL on failure.
+ */
+static css_error register_layer_prelude(css_language *c, const parserutils_vector *vector,
+                                        int32_t *ctx, struct css_layer_node **first_leaf)
+{
+    const css_token *token;
+    struct css_layer_node *segment_base = c->current_layer_node;
+    bool have_first = false;
+
+    *first_leaf = NULL;
+
+    while ((token = parserutils_vector_iterate(vector, ctx)) != NULL) {
+        if (tokenIsChar(token, ',')) {
+            /* End of this segment; the next path is a fresh sibling. */
+            segment_base = c->current_layer_node;
+            continue;
+        }
+
+        if (token->type == CSS_TOKEN_IDENT) {
+            struct css_layer_node *node =
+                css__layer_intern_child(c->layer_registry, segment_base, token->idata);
+            if (node == NULL) {
+                return CSS_NOMEM;
+            }
+            /* Nest the next dotted component under this one. */
+            segment_base = node;
+            if (have_first == false) {
+                *first_leaf = node;
+                have_first = true;
+            }
+        }
+
+        /* Whitespace and '.' separators just advance within the segment. */
+    }
+
+    if (have_first == false) {
+        /* Anonymous @layer { } — a fresh node under the enclosing layer. */
+        struct css_layer_node *node =
+            css__layer_intern_child(c->layer_registry, c->current_layer_node, NULL);
+        if (node == NULL) {
+            return CSS_NOMEM;
+        }
+        *first_leaf = node;
+    }
+
+    return CSS_OK;
+}
+
+/**
+ * Parse an optional `layer` / `layer(name)` clause after an @import URL and
+ * resolve it to a layer key in the sheet's shared registry. Leaves \a ctx
+ * unmoved (and *layer_key == 0) when no layer clause is present.
+ */
+static css_error parse_import_layer(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+                                    uint64_t *layer_key)
+{
+    const css_token *token;
+    bool match = false;
+    css_error error;
+
+    *layer_key = 0;
+
+    token = parserutils_vector_peek(vector, *ctx);
+    if (token == NULL) {
+        return CSS_OK;
+    }
+
+    if (token->type == CSS_TOKEN_IDENT &&
+        lwc_string_caseless_isequal(token->idata, c->strings[LAYER], &match) == lwc_error_ok &&
+        match) {
+        /* `@import url layer;` — a fresh anonymous layer, under the enclosing
+		 * layer if this @import is itself in one. */
+        struct css_layer_node *node;
+        error = language_ensure_layer_registry(c);
+        if (error != CSS_OK) {
+            return error;
+        }
+        node = css__layer_intern_child(c->layer_registry, c->current_layer_node, NULL);
+        if (node == NULL) {
+            return CSS_NOMEM;
+        }
+        *layer_key = node->key;
+        parserutils_vector_iterate(vector, ctx); /* consume 'layer' */
+        consumeWhitespace(vector, ctx);
+        return CSS_OK;
+    }
+
+    if (token->type == CSS_TOKEN_FUNCTION &&
+        lwc_string_caseless_isequal(token->idata, c->strings[LAYER], &match) == lwc_error_ok &&
+        match) {
+        /* `@import url layer(name)` — the imported sheet joins that layer,
+		 * resolved under the enclosing layer if this @import is itself in one. */
+        struct css_layer_node *base;
+        struct css_layer_node *leaf = NULL;
+        const css_token *inner;
+
+        error = language_ensure_layer_registry(c);
+        if (error != CSS_OK) {
+            return error;
+        }
+        base = c->current_layer_node;
+        parserutils_vector_iterate(vector, ctx); /* consume 'layer(' */
+
+        while ((inner = parserutils_vector_peek(vector, *ctx)) != NULL) {
+            if (tokenIsChar(inner, ')')) {
+                parserutils_vector_iterate(vector, ctx); /* consume ')' */
+                break;
+            }
+            if (inner->type == CSS_TOKEN_IDENT) {
+                struct css_layer_node *node =
+                    css__layer_intern_child(c->layer_registry, base, inner->idata);
+                if (node == NULL) {
+                    return CSS_NOMEM;
+                }
+                base = node;
+                leaf = node;
+            }
+            parserutils_vector_iterate(vector, ctx);
+        }
+
+        if (leaf == NULL) {
+            leaf = css__layer_intern_child(c->layer_registry, c->current_layer_node, NULL);
+            if (leaf == NULL) {
+                return CSS_NOMEM;
+            }
+        }
+        *layer_key = leaf->key;
+        consumeWhitespace(vector, ctx);
+        return CSS_OK;
     }
 
     return CSS_OK;
@@ -400,6 +590,7 @@ css_error handleStartAtRule(css_language *c, const parserutils_vector *vector)
         if (c->state <= IMPORT_PERMITTED) {
             lwc_string *url;
             css_mq_query *media = NULL;
+            uint64_t import_layer_key = 0;
 
             /* any0 = (STRING | URI) ws (media query)? */
             const css_token *uri = parserutils_vector_iterate(vector, &ctx);
@@ -408,6 +599,12 @@ css_error handleStartAtRule(css_language *c, const parserutils_vector *vector)
             }
 
             consumeWhitespace(vector, &ctx);
+
+            /* Optional `layer` / `layer(name)` clause (CSS Cascade 5). */
+            error = parse_import_layer(c, vector, &ctx, &import_layer_key);
+            if (error != CSS_OK) {
+                return error;
+            }
 
             /* Parse media list */
             error = css__mq_parse_media_list(c->strings, vector, &ctx, &media);
@@ -428,6 +625,8 @@ css_error handleStartAtRule(css_language *c, const parserutils_vector *vector)
                 css__mq_query_destroy(media);
                 return error;
             }
+
+            ((css_rule_import *)rule)->layer = import_layer_key;
 
             /* Resolve import URI */
             error = c->sheet->resolve(c->sheet->resolve_pw, c->sheet->url, uri->idata, &url);
@@ -609,6 +808,56 @@ css_error handleStartAtRule(css_language *c, const parserutils_vector *vector)
 		 * so no need to destroy it */
 
         c->state = HAD_RULE;
+    } else if (lwc_string_caseless_isequal(atkeyword->idata, c->strings[LAYER], &match) ==
+                   lwc_error_ok &&
+               match) {
+        struct css_layer_node *leaf = NULL;
+        context_entry *cur;
+        css_rule *parent_rule = NULL;
+
+        error = language_ensure_layer_registry(c);
+        if (error != CSS_OK) {
+            return error;
+        }
+
+        /* any0 = layer name list (statement `@layer a, b;`) or a single
+		 * name / nothing (block form `@layer a { }` / `@layer { }`). */
+        error = register_layer_prelude(c, vector, &ctx, &leaf);
+        if (error != CSS_OK) {
+            return error;
+        }
+
+        error = css__stylesheet_rule_create(c->sheet, CSS_RULE_LAYER, &rule);
+        if (error != CSS_OK) {
+            return error;
+        }
+
+        /* Carry the layer's own order so the block-open handler can make
+		 * it the current layer for the rules nested inside. */
+        rule->layer = (leaf != NULL) ? leaf->key : 0;
+        ((css_rule_layer *)rule)->node = leaf;
+
+        /* Nest under an enclosing @media or @layer, if any, so the tree
+		 * is destroyed correctly; other parents are not valid here. */
+        cur = parserutils_stack_get_current(c->context);
+        if (cur != NULL && cur->type != CSS_PARSER_START_STYLESHEET) {
+            parent_rule = cur->data;
+        }
+        if (parent_rule != NULL && parent_rule->type != CSS_RULE_MEDIA &&
+            parent_rule->type != CSS_RULE_LAYER) {
+            parent_rule = NULL;
+        }
+
+        error = css__stylesheet_add_rule(c->sheet, rule, parent_rule);
+        if (error != CSS_OK) {
+            css__stylesheet_rule_destroy(c->sheet, rule);
+            return error;
+        }
+
+        /* Rule is now owned by the sheet,
+		 * so no need to destroy it */
+
+        c->state = HAD_RULE;
     } else {
         return CSS_INVALID;
     }
@@ -661,6 +910,16 @@ css_error handleStartBlock(css_language *c, const parserutils_vector *vector)
         entry.data = cur->data;
     }
 
+    /* Entering an @layer block makes that layer current for the rules
+	 * nested inside it. Save the enclosing layer so the matching block
+	 * end can restore it. */
+    if (entry.data != NULL && ((css_rule *)entry.data)->type == CSS_RULE_LAYER) {
+        if (c->layer_sp < CSS_LAYER_MAX_DEPTH) {
+            c->layer_node_stack[c->layer_sp++] = c->current_layer_node;
+            c->current_layer_node = ((css_rule_layer *)entry.data)->node;
+        }
+    }
+
     perror = parserutils_stack_push(c->context, (void *)&entry);
     if (perror != PARSERUTILS_OK) {
         return css_error_from_parserutils_error(perror);
@@ -685,6 +944,15 @@ css_error handleEndBlock(css_language *c, const parserutils_vector *vector)
     perror = parserutils_stack_pop(c->context, NULL);
     if (perror != PARSERUTILS_OK) {
         return css_error_from_parserutils_error(perror);
+    }
+
+    /* Leaving an @layer block restores the enclosing layer. */
+    if (rule != NULL && rule->type == CSS_RULE_LAYER) {
+        if (c->layer_sp > 0) {
+            c->current_layer_node = c->layer_node_stack[--c->layer_sp];
+        } else {
+            c->current_layer_node = NULL;
+        }
     }
 
     /* If the block we just popped off the stack was associated with a
@@ -715,11 +983,12 @@ css_error handleBlockContent(css_language *c, const parserutils_vector *vector)
 
     rule = entry->data;
     if (rule == NULL || (rule->type != CSS_RULE_SELECTOR && rule->type != CSS_RULE_PAGE &&
-                         rule->type != CSS_RULE_MEDIA && rule->type != CSS_RULE_FONT_FACE)) {
+                         rule->type != CSS_RULE_MEDIA && rule->type != CSS_RULE_FONT_FACE &&
+                         rule->type != CSS_RULE_LAYER)) {
         return CSS_INVALID;
     }
 
-    if (rule->type == CSS_RULE_MEDIA) {
+    if (rule->type == CSS_RULE_MEDIA || rule->type == CSS_RULE_LAYER) {
         /* Expect rulesets */
         return handleStartRuleset(c, vector);
     } else {

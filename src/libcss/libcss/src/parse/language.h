@@ -18,6 +18,9 @@
 #include "parse/parse.h"
 #include "parse/propstrings.h"
 
+struct css_layer_registry;
+struct css_layer_node;
+
 /**
  * CSS namespace mapping
  */
@@ -48,6 +51,14 @@ typedef struct css_language {
     lwc_string *default_namespace; /**< Default namespace URI */
     css_namespace *namespaces;     /**< Array of namespace mappings */
     uint32_t num_namespaces;       /**< Number of namespace mappings */
+
+/* Cascade-layer (@layer) bookkeeping, parse-time only. */
+#define CSS_LAYER_MAX_DEPTH 32
+    struct css_layer_registry *layer_registry; /**< Shared (from sheet) or private */
+    bool owns_layer_registry;       /**< Whether we created the registry */
+    struct css_layer_node *current_layer_node;   /**< Current layer, NULL == unlayered */
+    struct css_layer_node *layer_node_stack[CSS_LAYER_MAX_DEPTH]; /**< Saved per open block */
+    uint32_t layer_sp;              /**< Depth of open @layer blocks */
 } css_language;
 
 css_error css__language_create(css_stylesheet *sheet, css_parser *parser, void **language);

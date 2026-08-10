@@ -190,6 +190,14 @@ struct yl_grid_class {
     int context_count;
     struct yl_grid_track tracks[YL_GRID_MAX_TRACKS];
     uint8_t ntracks;
+    /* `grid-template-rows` from the same rule block (0 = none declared).
+	 * Fixed-px rows pin the row-band heights in layout_grid. */
+    struct yl_grid_track row_tracks[YL_GRID_MAX_TRACKS];
+    uint8_t nrow_tracks;
+    /* grid-auto-columns / grid-auto-rows fixed px (<=0 = unset):
+	 * sizes for IMPLICIT tracks beyond the explicit template. */
+    float auto_col_w;
+    float auto_row_h;
     /* `grid-template-columns: inherit` (gnews subgrid idiom
 	 * `.Oc0wGc{display:inherit;grid-template-columns:inherit}`): ntracks
 	 * is 0 here — box-build copies the tracks from the parent box. */
@@ -510,6 +518,10 @@ struct yetty_ylexbor_box {
     /* item: CSS align-self as a CSS_ALIGN_ITEMS_-compatible value
 	 * (the libcss enums alias); 0 / AUTO = defer to the container. */
     int8_t align_self;
+    /* item: CSS justify-self (grid inline axis), CSS_JUSTIFY_SELF_*
+	 * normalized to start/end/center/stretch at box-build; 0 / AUTO =
+	 * defer to the container's justify-items. */
+    int8_t justify_self;
 
     /* Flex-container properties (meaningful when this box has
 	 * layout_mode == YL_LAYOUT_FLEX_ROW/COLUMN). Values are the
@@ -518,6 +530,10 @@ struct yetty_ylexbor_box {
 	 * stretch for align). */
     int justify_content;
     int align_items;
+    /* Grid container: CSS justify-items (inline-axis default for the
+	 * items), CSS_JUSTIFY_ITEMS_*, normalized at box-build; 0 = unset
+	 * (treated as stretch). */
+    int justify_items;
     /* CSS_ALIGN_CONTENT_* — distributes/sizes flex LINES on the cross axis when
 		 * the container wraps. 0 = default (stretch). */
     int align_content;
@@ -527,6 +543,27 @@ struct yetty_ylexbor_box {
 	 * of it). grid_ntracks == 0 means "not a resolved grid". */
     struct yl_grid_track grid_tracks[YL_GRID_MAX_TRACKS];
     uint8_t grid_ntracks;
+    /* Explicit row tracks (grid-template-rows); 0 = rows sized by
+	 * content. Fixed-px rows pin the row-band heights. */
+    struct yl_grid_track grid_row_tracks[YL_GRID_MAX_TRACKS];
+    uint8_t grid_nrow_tracks;
+    /* Implicit track sizes (grid-auto-columns/rows), <=0 = unset. */
+    float grid_auto_col_w;
+    float grid_auto_row_h;
+    /* Grid container writing mode: 0 horizontal, 1 vertical-lr,
+	 * 2 vertical-rl. Only the abspos grid-area pass consults it (the
+	 * in-flow row loop stays horizontal). */
+    uint8_t grid_vertical;
+    /* Item: the grid-area abspos pass already placed this box against
+	 * its area — the generic abs pass must not re-place it. */
+    uint8_t abs_grid_area_placed;
+    /* Container: repeat(auto-fit/fill, <track>) — grid_tracks[0] is the
+	 * repeated track; layout re-counts one track per IN-FLOW child (the
+	 * box-build replication counted abspos children too). */
+    uint8_t grid_repeat_auto;
+    /* Container: display:inline-grid — shrink-wraps to its track extent
+	 * when width is auto (block-level grids fill the available width). */
+    uint8_t grid_inline;
     float grid_col_gap;
     float grid_row_gap;
 
@@ -766,6 +803,20 @@ struct yetty_ylexbor_console_entry {
     char *text; /* owned */
 };
 
+/* One import-map entry: bare specifier (or trailing-slash prefix) -> URL. */
+struct yetty_ylexbor_importmap_entry {
+    char *from; /* owned */
+    char *to;   /* owned */
+};
+
+/* A prefetched ES-module source (from <link rel="modulepreload">), so the
+ * synchronous module loader compiles from memory instead of a serial fetch. */
+struct yetty_ylexbor_module_source {
+    char *url;  /* owned, resolved absolute URL (loader lookup key) */
+    char *body; /* owned */
+    size_t len;
+};
+
 struct yetty_ylexbor {
     /* Network loader (share handle, Alt-Svc cache). Either borrowed from
 	 * the host via config (owns_loader = 0) or created privately at
@@ -831,12 +882,42 @@ struct yetty_ylexbor {
     int timer_count, timer_cap;
     int next_timer_id;
 
+    /* Dynamically-inserted external <script src=…> elements awaiting
+	 * fetch + execution (script-loader pattern: createElement('script') +
+	 * appendChild — tag managers, SPA chunk loaders, Cloudflare's challenge
+	 * orchestrator). Spec: such scripts load async, NOT blocking the
+	 * inserting script — queued at insertion, drained by the pump, then the
+	 * element gets its load/error event. The element pointer is weak (owned
+	 * by the document; DOM removal only detaches, teardown clears the
+	 * queue). `url` is owned (resolved absolute). */
+    struct yetty_ylexbor_pending_script {
+        lxb_dom_element_t *element;
+        char *url;
+    } *pending_scripts;
+    int pending_script_count, pending_script_cap;
+
     /* QuickJS — created lazily on the first <script> seen. NULL if
 	 * QuickJS isn't compiled in (YETTY_HAVE_QUICKJS=0) or no scripts
 	 * have been encountered yet. */
     struct JSRuntime *js_rt;
     struct JSContext *js_ctx;
-    int js_error_count; /* uncaught exceptions encountered */
+    int js_error_count;   /* uncaught exceptions encountered */
+    double js_deadline_ms; /* wall-clock abort deadline for the current script
+						 * run (0 == no limit). Bounds heavy-SPA JS so a
+						 * one-shot render of a page whose scripts never idle
+						 * (timers/rAF/hydration) still terminates. */
+
+    /* ES-module import map (<script type="importmap">). Bare import specifiers
+	 * are resolved through these entries before URL resolution. Rebuilt per
+	 * document. A `from` ending in '/' is a prefix mapping. */
+    struct yetty_ylexbor_importmap_entry *importmap;
+    int importmap_count;
+    int importmap_cap;
+
+    /* Prefetched module sources (see prefetch_module_graph), keyed by URL. */
+    struct yetty_ylexbor_module_source *module_srcs;
+    int module_src_count;
+    int module_src_cap;
 
     /* DevTools console ring (lazily allocated on first push, CAP slots).
      * console_head is the next write slot; console_count is the number of
@@ -1556,6 +1637,24 @@ char *yetty_ybrowser_css_desugar_selectors(const char *css, size_t len);
  * string when a rewrite happened, else NULL (caller keeps the original). */
 char *yetty_ybrowser_css_simplify_calc(const char *css, size_t len);
 
+/* Rewrite the css-align two-token <baseline-position> values — the generated
+ * single-ident property parsers cannot express them, so libcss drops the
+ * whole declaration. `first baseline` → `baseline`; `last baseline` → `end`
+ * (its fallback alignment). Same-length space padding keeps every other byte
+ * offset stable. Returns a freshly malloc'd string when a rewrite happened,
+ * else NULL (caller keeps the original buffer). */
+char *yetty_ybrowser_css_rewrite_baseline_alignment(const char *css, size_t len);
+
+/* Expand `grid:` / `grid-template:` shorthands (rows / columns, incl. the
+ * auto-flow forms) into the longhand declarations the scanners and libcss
+ * understand. Fresh malloc'd string when expanded, else NULL. */
+char *yetty_ybrowser_css_expand_grid_template(const char *css, size_t len, size_t *out_len);
+
+/* Flatten @layer wrappers (libcss 0.9 has no cascade-layer support and
+ * mis-orders rules inside a layer). Hoists inner rules to top level so
+ * source-order cascade works. Fresh string when stripped, else NULL. */
+char *yetty_ybrowser_css_flatten_layers(const char *css, size_t len, size_t *out_len);
+
 /* Drop the customs table — called from destroy. */
 void yetty_ylexbor_css_vars_destroy(struct yetty_ylexbor *r);
 
@@ -1584,6 +1683,41 @@ struct yetty_ycore_void_result _yetty_ylexbor_box_vec_reserve(struct yetty_ylexb
 struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r);
 void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r);
 struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(struct yetty_ylexbor *r);
+
+/* Dynamically-inserted <script> support. `queue_script` is called by the DOM
+ * insertion paths for every <script> element that lands CONNECTED in the
+ * document: an inline body executes synchronously (spec: dynamic inline
+ * scripts run at insertion), an external src loads WITHOUT blocking the
+ * inserting script. External delivery mirrors the fetch()/image split:
+ * with a worker pool, `submit_script_job` (ybrowser-js-web.c) runs the
+ * fetch as an async generation-guarded pool job; pool-less hosts queue on
+ * pending_scripts and the pump's `run_pending_scripts` executes one small
+ * batch per tick (returns how many ran). `eval_script_body` is the shared
+ * execute step. queue/run/eval defined in ybrowser-js.c. */
+void yetty_ylexbor_js_queue_script(struct yetty_ylexbor *r, lxb_dom_element_t *element);
+int yetty_ylexbor_js_run_pending_scripts(struct yetty_ylexbor *r);
+void yetty_ylexbor_js_eval_script_body(struct yetty_ylexbor *r, const char *body, size_t body_len,
+                                       const char *url);
+/* Takes ownership of `url` ONLY on success (returns 1); on 0 the caller
+ * still owns it and falls back to the queue. */
+int yetty_ylexbor_js_submit_script_job(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                       char *url);
+
+/* Fire `type` at one element through BOTH delivery paths a page can use:
+ * addEventListener listeners AND the element wrapper's on<type> property
+ * (script loaders overwhelmingly use `el.onload = fn`). Defined in
+ * ybrowser-js-dom.c. */
+void yetty_ylexbor_js_fire_element_event(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                         const char *type);
+
+/* Re-anchor QuickJS's stack-overflow watermark to the CURRENT stack. QuickJS
+ * records the stack top once at runtime creation and measures recursion depth
+ * as the distance from that address; when the embedder later enters JS from a
+ * different stack (the in-yetty client dispatches input from a ywire handler
+ * coroutine with its own heap-allocated stack), that distance is garbage and
+ * every JS_Call dies with "Maximum call stack size exceeded". Every C→JS
+ * entry point must call this first. No-op without a live runtime. */
+void yetty_ylexbor_js_update_stack_top(struct yetty_ylexbor *r);
 
 /* Recover the owning engine from a QuickJS context. The engine pointer is
  * stashed as the runtime opaque (js_dom_state.r) by the DOM install, so this
@@ -1640,6 +1774,19 @@ char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href);
 /* Same resolution against an explicit base — @import URLs resolve against
  * the IMPORTING stylesheet's URL, not the document base. */
 char *yetty_ylexbor_resolve_url_against(const char *base_url, const char *href);
+
+/* Set document.currentScript to `node`'s wrapper (or null) for the duration of
+ * a classic script's execution, so inline scripts can locate themselves (e.g.
+ * document.currentScript.previousElementSibling as a mount anchor). */
+void yetty_ylexbor_js_set_current_script(struct yetty_ylexbor *r, lxb_dom_node_t *node);
+
+/* Rebuild the import map from the document's <script type="importmap"> (if any).
+ * Call once per document before module scripts run. */
+void yetty_ylexbor_js_importmap_scan(struct yetty_ylexbor *r);
+
+/* Resolve a bare import specifier through the import map. Returns a malloc'd
+ * URL/specifier the caller frees, or NULL if the map does not cover it. */
+char *yetty_ylexbor_js_importmap_resolve(struct yetty_ylexbor *r, const char *specifier);
 
 /* Publish decoded RGBA pixels onto the loader's resource cache entry for
  * `url` (copies), so the next navigation reuses the decode as well as

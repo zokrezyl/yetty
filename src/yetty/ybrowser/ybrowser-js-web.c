@@ -106,7 +106,29 @@ char *yetty_ylexbor_resolve_url_against(const char *base_url, const char *href)
         return out;
     }
     if (href[0] == '/') {
-        /* absolute path — splice scheme://host/ */
+        /* Absolute path. A file:// document has no server root — approximate
+		 * one: YBROWSER_FILE_ROOT names the directory the "site" is served
+		 * from (the WPT runner sets it to the checkout root so
+		 * /css/support/*.css resolves like it does on a real wptserve). */
+        if (strncmp(base_url, "file://", 7) == 0) {
+            const char *file_root = getenv("YBROWSER_FILE_ROOT");
+            if (file_root && *file_root) {
+                size_t root_len = strlen(file_root);
+                while (root_len > 1 && file_root[root_len - 1] == '/') {
+                    root_len--;
+                }
+                size_t hl = strlen(href);
+                char *out = malloc(7 + root_len + hl + 1);
+                if (!out) {
+                    return NULL;
+                }
+                memcpy(out, "file://", 7);
+                memcpy(out + 7, file_root, root_len);
+                memcpy(out + 7 + root_len, href, hl + 1);
+                return out;
+            }
+        }
+        /* splice scheme://host/ */
         const char *p = strstr(base_url, "://");
         if (!p) {
             return strdup(href);
@@ -2123,7 +2145,13 @@ int yetty_ylexbor_pump(struct yetty_ylexbor *r)
     if (!r->js_ctx) {
         return -1;
     }
+    yetty_ylexbor_js_update_stack_top(r);
     JSContext *ctx = (JSContext *)r->js_ctx;
+
+    /* Dynamically-inserted external <script>s fetch + execute here — after
+	 * the inserting script's turn ended, before timers (a loaded script may
+	 * schedule the timers this same pump then fires). */
+    int scripts_executed = yetty_ylexbor_js_run_pending_scripts(r);
 
     int64_t now = now_ms();
     while (r->timer_count > 0 && r->timers[0]->deadline_ms <= now) {
@@ -2205,7 +2233,10 @@ int yetty_ylexbor_pump(struct yetty_ylexbor *r)
     }
     yetty_ylexbor_js_drain_jobs(r);
     if (r->timer_count == 0) {
-        return -1;
+        /* Executed or still-queued dynamic scripts want another tick soon —
+		 * returning -1 ("no timers") would let a boot loop stop before a
+		 * loader chain finishes. */
+        return (scripts_executed > 0 || r->pending_script_count > 0) ? 0 : -1;
     }
     int64_t delta = r->timers[0]->deadline_ms - now;
     return delta < 0 ? 0 : (int)delta;
@@ -2439,6 +2470,7 @@ static void js_fetch_job_done(void *job_ptr)
     int reloaded = (job->generation != r->fetch_generation);
     int stale = reloaded || r->destroy_pending;
     if (!stale && r->js_ctx) {
+        yetty_ylexbor_js_update_stack_top(r);
         js_fetch_deliver(job->ctx, &job->response, job->resolve_func, job->reject_func);
         yetty_ylexbor_js_drain_jobs(r);
         if (r->on_resource_ready) {
@@ -2465,6 +2497,120 @@ static void js_fetch_job_done(void *job_ptr)
             yetty_ycore_error_destroy(destroy_res.error);
         }
     }
+}
+
+/* ===========================================================================
+ * Dynamically-inserted external <script> as a worker-pool job — the same
+ * lifecycle as js_fetch_job: run() fetches on a worker thread (generation-
+ * cancellable), done() delivers on the loop thread where the generation
+ * guard decides whether the element/context are still the live document's.
+ * Submitted from yetty_ylexbor_js_queue_script when a pool is available;
+ * without a pool the pump's small per-tick batch handles the queue instead
+ * (same degraded mode the image path uses).
+ * ===========================================================================*/
+struct js_script_job {
+    struct yetty_ylexbor *r;
+    uint64_t generation;
+    struct yetty_ybrowser_loader *loader;
+    char *url;                  /* owned */
+    char *referer;              /* owned */
+    lxb_dom_element_t *element; /* weak — document-owned; generation-guarded */
+    struct yetty_ybrowser_response response;
+};
+
+/* WORKER THREAD. */
+static void js_script_job_run(void *job_ptr)
+{
+    struct js_script_job *job = job_ptr;
+    ydebug("dynamic script fetch %.140s", job->url);
+    struct yetty_ybrowser_request request = {
+        .url = job->url,
+        .kind = YETTY_YBROWSER_REQUEST_SCRIPT,
+        .referer = job->referer,
+        .generation = job->generation,
+        .cancel_generation = &job->r->fetch_generation,
+    };
+    struct yetty_ycore_void_result fetch_res =
+        yetty_ybrowser_fetch(job->loader, &request, &job->response);
+    if (YETTY_IS_ERR(fetch_res)) {
+        yetty_ycore_error_destroy(fetch_res.error);
+    }
+}
+
+/* LOOP THREAD. Evaluate the script and fire load/error on its element.
+ * Signature dictated by the work pool (void (*)(void *)) — absorb inner
+ * Results at this boundary. */
+YETTY_EXTERNAL_CALLBACK
+static void js_script_job_done(void *job_ptr)
+{
+    struct js_script_job *job = job_ptr;
+    struct yetty_ylexbor *r = job->r;
+    r->img_jobs_in_flight--;
+
+    /* Same staleness rules as js_fetch_job_done: a navigation freed the
+	 * context this job was minted for — the element pointer and JSContext
+	 * are the OLD document's, touch neither. */
+    int reloaded = (job->generation != r->fetch_generation);
+    int stale = reloaded || r->destroy_pending;
+    if (!stale && r->js_ctx) {
+        if (job->response.body && job->response.status >= 200 && job->response.status < 300) {
+            yetty_ylexbor_js_eval_script_body(r, job->response.body, job->response.body_len,
+                                              job->url);
+            yetty_ylexbor_js_fire_element_event(r, job->element, "load");
+        } else {
+            ydebug("dynamic script %.140s status=%ld", job->url, job->response.status);
+            yetty_ylexbor_js_fire_element_event(r, job->element, "error");
+        }
+        yetty_ylexbor_js_drain_jobs(r);
+        if (r->on_resource_ready) {
+            r->on_resource_ready(r->resource_ready_user);
+        }
+    }
+    yetty_ybrowser_response_dispose(&job->response);
+    free(job->url);
+    free(job->referer);
+    free(job);
+
+    if (r->destroy_pending && r->img_jobs_in_flight == 0) {
+        struct yetty_ycore_void_result destroy_res = _yetty_ylexbor_destroy_now(r);
+        if (YETTY_IS_ERR(destroy_res)) {
+            ydebug("js_script_job_done: deferred destroy failed: %s", destroy_res.error.msg);
+            yetty_ycore_error_destroy(destroy_res.error);
+        }
+    }
+}
+
+int yetty_ylexbor_js_submit_script_job(struct yetty_ylexbor *r, lxb_dom_element_t *element,
+                                       char *url)
+{
+    if (r == NULL || r->img_pool == NULL || r->loader == NULL) {
+        return 0;
+    }
+    struct js_script_job *job = calloc(1, sizeof(*job));
+    if (job == NULL) {
+        return 0;
+    }
+    job->r = r;
+    job->generation = r->fetch_generation;
+    job->loader = r->loader;
+    job->url = url; /* ownership moves to the job on successful submit */
+    job->referer = r->base_url ? strdup(r->base_url) : NULL;
+    job->element = element;
+    struct yetty_yplatform_yworkpool_job pool_job = {
+        .run = js_script_job_run,
+        .done = js_script_job_done,
+        .ctx = job,
+    };
+    struct yetty_ycore_void_result submit_res =
+        yetty_yplatform_yworkpool_submit(r->img_pool, pool_job);
+    if (YETTY_IS_ERR(submit_res)) {
+        yetty_ycore_error_destroy(submit_res.error);
+        free(job->referer);
+        free(job); /* url stays with the caller on failure */
+        return 0;
+    }
+    r->img_jobs_in_flight++;
+    return 1;
 }
 
 static JSValue js_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -3510,6 +3656,7 @@ static JSValue js_form_navigate(JSContext *ctx, JSValueConst this_val, int argc,
     if (!action) {
         return JS_UNDEFINED;
     }
+    ydebug("form_navigate: action=%s argc=%d", action, argc);
     char *resolved = yetty_ylexbor_resolve_url(r, action);
     free(r->pending_navigation);
     r->pending_navigation = resolved ? resolved : strdup(action);
@@ -5039,7 +5186,8 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.__ybFormNavigate(action.split('#')[0]+(action.indexOf('?')<0?'?':'&')+body,'"
         "GET',''); }"
         "    else{ globalThis.__ybFormNavigate(action,method,body); }"
-        "  }catch(e){} };"
+        "  }catch(e){ try{ console.error('__ybSubmitForm: '+(e&&e.message?e.message:e)); "
+        "}catch(x){} } };"
         "  var ep=Object.getPrototypeOf(document.createElement('form'));"
         "  if(ep){"
         "    ep.submit=function(){ globalThis.__ybSubmitForm(this,null); };"
@@ -5065,15 +5213,26 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         /* Called from dispatch_click. Focus the nearest text field ancestor of
 		 * the clicked element, or blur the current one. Returns true if a field
 		 * took focus. */
-        "  globalThis.__ybFocusHit=function(el){ var e=el;"
-        "    while(e&&e.nodeType===1){ if(isTextField(e)){"
-        "      if(globalThis.__ybPageFocus!==e){"
+        "  globalThis.__ybFocusHit=function(el){ var e=el, hops=0, field=null;"
+        /* Walk up from the clicked element. At each level, take the element
+			 * itself if it is a text field, else the FIRST text field inside it.
+			 * The descendant search is what makes a click on a wrapped input work:
+			 * Material/outlined text fields (Google sign-in) layer a label/notch
+			 * overlay over the <input>, so the click target is the wrapper, not the
+			 * input. Bounded to a few hops so we don't grab an unrelated input from
+			 * a distant ancestor. */
+        "    while(e&&e.nodeType===1&&hops<6){"
+        "      if(isTextField(e)){ field=e; break; }"
+        "      if(e.querySelector){ var q=e.querySelector('input,textarea');"
+        "        if(q&&isTextField(q)){ field=q; break; } }"
+        "      e=e.parentNode; hops++; }"
+        "    if(field){"
+        "      if(globalThis.__ybPageFocus!==field){"
         "        if(globalThis.__ybPageFocus){ fire(globalThis.__ybPageFocus,'blur',false); }"
-        "        globalThis.__ybPageFocus=e; try{ if(typeof e.focus==='function')e.focus(); "
-        "}catch(x){}"
-        "        fire(e,'focus',false); fire(e,'focusin',true); }"
+        "        globalThis.__ybPageFocus=field;"
+        "        try{ if(typeof field.focus==='function')field.focus(); }catch(x){}"
+        "        fire(field,'focus',false); fire(field,'focusin',true); }"
         "      return true; }"
-        "      e=e.parentNode; }"
         "    if(globalThis.__ybPageFocus){ fire(globalThis.__ybPageFocus,'blur',false);"
         "      fire(globalThis.__ybPageFocus,'focusout',true); globalThis.__ybPageFocus=null; }"
         "    return false; };"
@@ -5101,6 +5260,90 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "}catch(x){}"
         "    return true; };"
         "})();"
+        /* Standard Web APIs some frameworks call unconditionally at boot; a
+		 * missing one throws "not a function" and (when caught) silently kills
+		 * the framework — Google's boq AccountsSignInUi threw exactly that,
+		 * blocking the sign-in identifier flow. All are real APIs. */
+        "if(typeof Element!=='undefined'&&Element.prototype){"
+        "  if(!Element.prototype.replaceChildren){Element.prototype.replaceChildren=function(){"
+        "    while(this.firstChild)this.removeChild(this.firstChild);"
+        "    for(var i=0;i<arguments.length;i++){var n=arguments[i];"
+        "      this.appendChild(typeof n==='string'?document.createTextNode(n):n);} };}"
+        /* We don't run the Web Animations timeline; return an inert Animation so
+		 * `el.animate(...)` (Material ripples etc.) doesn't throw. */
+        "  if(!Element.prototype.animate){Element.prototype.animate=function(){var noop=function(){};"
+        "    return {cancel:noop,finish:noop,play:noop,pause:noop,reverse:noop,updatePlaybackRate:noop,"
+        "      addEventListener:noop,removeEventListener:noop,finished:Promise.resolve(),"
+        "      onfinish:null,oncancel:null,playState:'finished',currentTime:0,startTime:0,"
+        "      effect:null,timeline:null,playbackRate:1}; };}"
+        "  if(!Element.prototype.toggleAttribute){Element.prototype.toggleAttribute=function(n,f){"
+        "    var has=this.hasAttribute(n);var on=(arguments.length>1)?!!f:!has;"
+        "    if(on){if(!has)this.setAttribute(n,'');}else if(has)this.removeAttribute(n);return on;};}"
+        "}"
+        /* Node.compareDocumentPosition — a core DOM method boq calls to test
+		 * whether a node is connected to the document
+		 * (`doc.compareDocumentPosition(a)&16` = CONTAINED_BY). Missing, it threw
+		 * the caught "not a function" that stalled Google sign-in. Returns the
+		 * standard bitmask. */
+        "if(typeof Node!=='undefined'&&Node.prototype&&!Node.prototype.compareDocumentPosition){"
+        "  Node.prototype.compareDocumentPosition=function(other){"
+        "    if(this===other)return 0;"
+        "    if(!other||typeof other.nodeType!=='number')return 1;"
+        "    for(var n=other.parentNode;n;n=n.parentNode){if(n===this)return 20;}"
+        "    for(var n2=this.parentNode;n2;n2=n2.parentNode){if(n2===other)return 10;}"
+        "    var ca=[];for(var a1=this;a1;a1=a1.parentNode)ca.unshift(a1);"
+        "    var cb=[];for(var b1=other;b1;b1=b1.parentNode)cb.unshift(b1);"
+        "    if(ca[0]!==cb[0])return 35;"
+        "    var i=0;while(i<ca.length&&i<cb.length&&ca[i]===cb[i])i++;"
+        "    var parent=ca[i-1],pa=ca[i],pb=cb[i];"
+        "    for(var c=parent.firstChild;c;c=c.nextSibling){"
+        "      if(c===pa)return 4;"
+        "      if(c===pb)return 2;}"
+        "    return 1;};}"
+        "if(typeof Node!=='undefined'&&Node.prototype&&!Node.prototype.contains){"
+        "  Node.prototype.contains=function(other){"
+        "    for(var n=other;n;n=n.parentNode){if(n===this)return true;}return false;};}"
+        "if(typeof document!=='undefined'&&!document.elementFromPoint){"
+        "  document.elementFromPoint=function(){return null;};"
+        "  document.elementsFromPoint=function(){return [];};}"
+        "if(typeof globalThis.CSS==='undefined'){globalThis.CSS={"
+        "  supports:function(){return true;},"
+        "  escape:function(s){return String(s).replace(/[^a-zA-Z0-9_-]/g,function(c){"
+        "    return '\\\\'+c;});}};}"
+        "if(typeof globalThis.reportError!=='function'){globalThis.reportError=function(e){"
+        "  try{console.error(e&&(e.stack||e.message)||e);}catch(x){}};}"
+        /* More boot-time Web APIs frameworks (Google boq/Material) call
+		 * unconditionally; a missing one throws the caught "not a function" that
+		 * blocked the sign-in identifier flow. Inert but correctly-shaped stubs. */
+        "if(typeof document!=='undefined'&&!document.fonts){document.fonts={"
+        "  ready:Promise.resolve(),status:'loaded',size:0,"
+        "  load:function(){return Promise.resolve([]);},check:function(){return true;},"
+        "  add:function(){return this;},delete:function(){return false;},clear:function(){},"
+        "  forEach:function(){},addEventListener:function(){},removeEventListener:function(){},"
+        "  onloadingdone:null};}"
+        "if(typeof window!=='undefined'&&!window.visualViewport){window.visualViewport={"
+        "  width:(window.innerWidth||0),height:(window.innerHeight||0),offsetLeft:0,offsetTop:0,"
+        "  pageLeft:0,pageTop:0,scale:1,addEventListener:function(){},removeEventListener:function(){},"
+        "  dispatchEvent:function(){return true;}};}"
+        "if(typeof HTMLElement!=='undefined'&&HTMLElement.prototype&&"
+        "   !HTMLElement.prototype.attachInternals){HTMLElement.prototype.attachInternals=function(){"
+        "  return {shadowRoot:null,form:null,willValidate:true,validity:{valid:true},"
+        "    validationMessage:'',labels:[],setFormValue:function(){},setValidity:function(){},"
+        "    checkValidity:function(){return true;},reportValidity:function(){return true;},"
+        "    role:null,ariaLabel:null};};}"
+        "if(typeof globalThis.scheduler==='undefined'){globalThis.scheduler={"
+        "  postTask:function(cb){try{return Promise.resolve().then(cb);}catch(e){"
+        "    return Promise.reject(e);}},yield:function(){return Promise.resolve();}};}"
+        "try{if(typeof navigator!=='undefined'&&!navigator.locks){navigator.locks={"
+        "  request:function(name,opts,cb){var f=(typeof opts==='function')?opts:cb;"
+        "    return Promise.resolve().then(function(){return f&&f({name:name,mode:'exclusive'});});},"
+        "  query:function(){return Promise.resolve({held:[],pending:[]});}};}}catch(e){}"
+        "if(typeof globalThis.trustedTypes==='undefined'){globalThis.trustedTypes={"
+        "  createPolicy:function(name,rules){rules=rules||{};return {name:name,"
+        "    createHTML:function(s){return rules.createHTML?rules.createHTML(s):s;},"
+        "    createScript:function(s){return rules.createScript?rules.createScript(s):s;},"
+        "    createScriptURL:function(s){return rules.createScriptURL?rules.createScriptURL(s):s;}};},"
+        "  getPropertyType:function(){return null;},defaultPolicy:null,emptyHTML:'',emptyScript:''};}"
         "globalThis.HTMLCanvasElement = function(){};"
         "globalThis.OffscreenCanvas = function(){ this.getContext = () => null; };"
         /* requestIdleCallback must hand the callback an IdleDeadline; code that
@@ -5116,6 +5359,89 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "if(globalThis.requestAnimationFrame){ var nativeRaf=globalThis.requestAnimationFrame;"
         "  globalThis.requestAnimationFrame = (cb) => nativeRaf(function(){"
         "    cb((globalThis.performance&&performance.now)?performance.now():0); }); }"
+        /* Constraint Validation API (HTML forms). Google's GlifWebSignIn
+         * identifier step reads `input.validity.badInput`; with no `validity`
+         * the read throws, boq swallows it (reporting to /jserror) and the
+         * flow never advances from the email screen to the password screen.
+         * Installed on Element.prototype — the actual prototype every element
+         * wrapper inherits from here — and gated to listed form controls so
+         * `div.validity` stays undefined, matching the spec. */
+        "if(typeof Element!=='undefined'&&Element.prototype&&!Element.prototype.__ybCV){(function(){"
+        "  Element.prototype.__ybCV=1;"
+        "  var CUSTOM=(typeof WeakMap==='function')?new WeakMap():null;"
+        "  var LISTED={INPUT:1,SELECT:1,TEXTAREA:1};"
+        "  var NOVAL={hidden:1,reset:1,button:1,submit:1,image:1};"
+        "  function attr(el,n){return (el&&el.getAttribute)?el.getAttribute(n):null;}"
+        "  function isCtl(el){return !!(el&&el.tagName&&LISTED[el.tagName]);}"
+        "  function candidate(el){"
+        "    if(!isCtl(el))return false;"
+        "    var t=(el.type||'text').toLowerCase();"
+        "    if(el.tagName==='INPUT'&&NOVAL[t])return false;"
+        "    if(el.disabled===true||attr(el,'disabled')!=null)return false;"
+        "    if(el.readOnly===true||attr(el,'readonly')!=null)return false;"
+        "    return true;}"
+        "  var EMAIL=/^[a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}"
+        "[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;"
+        "  function state(el){"
+        "    var s={valueMissing:false,typeMismatch:false,patternMismatch:false,tooLong:false,"
+        "tooShort:false,rangeUnderflow:false,rangeOverflow:false,stepMismatch:false,badInput:false,"
+        "customError:false,valid:true};"
+        "    var cm=CUSTOM&&CUSTOM.get(el);if(cm)s.customError=true;"
+        "    if(candidate(el)){"
+        "      var val=(el.value!=null)?String(el.value):'';"
+        "      var t=(el.type||'text').toLowerCase();"
+        "      var req=el.required===true||attr(el,'required')!=null;"
+        "      if(req){"
+        "        if(el.tagName==='SELECT'){if(val==='')s.valueMissing=true;}"
+        "        else if(t==='checkbox'||t==='radio'){if(el.checked===false)s.valueMissing=true;}"
+        "        else if(val==='')s.valueMissing=true;}"
+        "      if(val!==''){"
+        "        if(t==='email'){var mult=attr(el,'multiple')!=null;var ps=mult?val.split(','):[val];"
+        "          for(var i=0;i<ps.length;i++){if(!EMAIL.test((''+ps[i]).replace(/^\\s+|\\s+$/g,''))){"
+        "            s.typeMismatch=true;break;}}}"
+        "        else if(t==='url'){if(typeof URL==='function'){try{new URL(val);}catch(e){"
+        "          s.typeMismatch=true;}}}"
+        "        var pat=attr(el,'pattern');"
+        "        if(pat&&t!=='checkbox'&&t!=='radio'){try{if(!(new RegExp('^(?:'+pat+')$','u')).test(val))"
+        "          s.patternMismatch=true;}catch(e){try{if(!(new RegExp('^(?:'+pat+')$')).test(val))"
+        "          s.patternMismatch=true;}catch(e2){}}}"
+        "        var mx=attr(el,'maxlength');if(mx!=null&&mx!==''&&(+mx)>=0&&val.length>(+mx))s.tooLong=true;"
+        "        var mn=attr(el,'minlength');if(mn!=null&&mn!==''&&(+mn)>=0&&val.length<(+mn))s.tooShort=true;"
+        "        if(t==='number'||t==='range'){var num=parseFloat(val);if(num!==num){s.badInput=true;}"
+        "          else{var lo=attr(el,'min'),hi=attr(el,'max');if(lo!=null&&lo!==''&&num<(+lo))"
+        "            s.rangeUnderflow=true;if(hi!=null&&hi!==''&&num>(+hi))s.rangeOverflow=true;}}"
+        "      }}"
+        "    s.valid=!(s.valueMissing||s.typeMismatch||s.patternMismatch||s.tooLong||s.tooShort||"
+        "      s.rangeUnderflow||s.rangeOverflow||s.stepMismatch||s.badInput||s.customError);"
+        "    return s;}"
+        "  function formBad(form){var out=[];var els=form.querySelectorAll?"
+        "    form.querySelectorAll('input,select,textarea'):[];"
+        "    for(var i=0;i<els.length;i++){if(candidate(els[i])&&!state(els[i]).valid)out.push(els[i]);}"
+        "    return out;}"
+        "  Object.defineProperty(Element.prototype,'validity',{configurable:true,"
+        "    get:function(){return isCtl(this)?state(this):undefined;}});"
+        "  Object.defineProperty(Element.prototype,'willValidate',{configurable:true,"
+        "    get:function(){return isCtl(this)?candidate(this):false;}});"
+        "  Object.defineProperty(Element.prototype,'validationMessage',{configurable:true,"
+        "    get:function(){if(!isCtl(this))return '';var cm=CUSTOM&&CUSTOM.get(this);if(cm)return cm;"
+        "      var v=state(this);if(v.valid)return '';"
+        "      if(v.valueMissing)return 'Please fill out this field.';"
+        "      if(v.typeMismatch)return 'Please enter a valid value.';"
+        "      if(v.patternMismatch)return 'Please match the requested format.';"
+        "      if(v.tooLong)return 'Please shorten this text.';"
+        "      if(v.tooShort)return 'Please lengthen this text.';"
+        "      if(v.rangeUnderflow||v.rangeOverflow)return 'Value out of range.';return 'Invalid value.';}});"
+        "  Element.prototype.setCustomValidity=function(m){if(!CUSTOM)return;m=(m==null)?'':String(m);"
+        "    if(m==='')CUSTOM.delete(this);else CUSTOM.set(this,m);};"
+        "  Element.prototype.checkValidity=function(){"
+        "    if(this.tagName==='FORM'){var bad=formBad(this);for(var i=0;i<bad.length;i++){"
+        "      try{bad[i].dispatchEvent(new Event('invalid',{cancelable:true}));}catch(e){}}"
+        "      return bad.length===0;}"
+        "    if(!isCtl(this))return true;var v=state(this);"
+        "    if(!v.valid){try{this.dispatchEvent(new Event('invalid',{cancelable:true}));}catch(e){}}"
+        "    return v.valid;};"
+        "  Element.prototype.reportValidity=function(){return this.checkValidity();};"
+        "})();}"
         "";
     JSValue stub_v = JS_Eval(ctx, stubs, strlen(stubs), "<webapi-stubs>", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(stub_v)) {
@@ -5128,6 +5454,146 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         JS_FreeValue(ctx, ex);
     }
     JS_FreeValue(ctx, stub_v);
+
+    /* Intl polyfill. QuickJS-ng ships no Internationalization API (it needs
+	 * ICU), so `Intl` is undefined and any bundle that touches it dies with a
+	 * ReferenceError — on nytimes that killed the MAIN bundle. This provides a
+	 * functional en-US approximation of the common surface (DateTimeFormat,
+	 * NumberFormat, Collator, PluralRules, RelativeTimeFormat, ListFormat,
+	 * Locale, Segmenter) so such bundles run. Not locale-accurate. */
+    static const char *intl_polyfill =
+        "if (typeof globalThis.Intl === 'undefined') { (function(){"
+        "  var I = {};"
+        "  var MON=['January','February','March','April','May','June','July','August',"
+        "           'September','October','November','December'];"
+        "  var DAY=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];"
+        "  function pad(n){ return (n<10?'0':'')+n; }"
+        "  I.getCanonicalLocales=function(l){ if(l==null)return[]; "
+        "    return Array.isArray(l)?l.map(String):[String(l)]; };"
+        "  I.supportedValuesOf=function(){ return []; };"
+        /* DateTimeFormat */
+        "  function DTF(loc,opt){ if(!(this instanceof DTF))return new DTF(loc,opt);"
+        "    this._o=opt||{}; this._l=Array.isArray(loc)?loc[0]:(loc||'en-US'); }"
+        "  DTF.prototype.resolvedOptions=function(){ var o=this._o; return {locale:this._l||'en-US',"
+        "    calendar:'gregory',numberingSystem:'latn',timeZone:o.timeZone||'UTC',year:o.year,"
+        "    month:o.month,day:o.day,hour:o.hour,minute:o.minute,second:o.second}; };"
+        "  DTF.prototype.format=function(d){ d=(d==null)?new Date():(d instanceof Date?d:new Date(d));"
+        "    if(isNaN(d.getTime()))return'Invalid Date'; var o=this._o;"
+        "    var y=d.getFullYear(),mo=d.getMonth(),da=d.getDate(),h=d.getHours(),"
+        "        mi=d.getMinutes(),se=d.getSeconds();"
+        "    var hasDate=!!(o.year||o.month||o.day||o.dateStyle||o.weekday);"
+        "    var hasTime=(o.hour!=null||o.minute!=null||o.second!=null||o.timeStyle!=null);"
+        "    if(!hasDate&&!hasTime){ return MON[mo]+' '+da+', '+y; }"
+        "    var out=[];"
+        "    if(o.weekday){ out.push(DAY[d.getDay()]); }"
+        "    if(hasDate){ var mn=(o.month==='short')?MON[mo].slice(0,3)"
+        "      :((o.month==='numeric')?(mo+1):((o.month==='2-digit')?pad(mo+1):MON[mo]));"
+        "      var dp=(o.day==='2-digit')?pad(da):da; out.push(mn+' '+dp+(o.year?', '+y:'')); }"
+        "    if(hasTime){ var hr=(o.hour12===false)?h:((h%12)||12);"
+        "      var t=hr+':'+pad(mi)+(o.second!=null?':'+pad(se):'');"
+        "      if(o.hour12!==false)t+=' '+(h<12?'AM':'PM'); out.push(t); }"
+        "    return out.join(o.weekday?', ':' '); };"
+        "  DTF.prototype.formatToParts=function(d){ return [{type:'literal',value:this.format(d)}]; };"
+        "  DTF.prototype.formatRange=function(a,b){ return this.format(a)+' \\u2013 '+this.format(b); };"
+        "  DTF.prototype.formatRangeToParts=function(a,b){"
+        "    return [{type:'literal',value:this.formatRange(a,b)}]; };"
+        "  DTF.supportedLocalesOf=function(l){ return I.getCanonicalLocales(l); };"
+        "  I.DateTimeFormat=DTF;"
+        /* NumberFormat */
+        "  function NF(loc,opt){ if(!(this instanceof NF))return new NF(loc,opt);"
+        "    this._o=opt||{}; this._l=Array.isArray(loc)?loc[0]:(loc||'en-US'); }"
+        "  NF.prototype.resolvedOptions=function(){ return Object.assign({locale:this._l||'en-US',"
+        "    numberingSystem:'latn',style:'decimal'},this._o); };"
+        "  NF.prototype.format=function(n){ n=Number(n); if(!isFinite(n))return String(n); var o=this._o;"
+        "    if(o.style==='percent')n=n*100; var neg=n<0; n=Math.abs(n);"
+        "    var maxF=(o.maximumFractionDigits!=null)?o.maximumFractionDigits"
+        "      :((o.style==='currency')?2:((o.minimumFractionDigits!=null)?o.minimumFractionDigits:3));"
+        "    var minF=(o.minimumFractionDigits!=null)?o.minimumFractionDigits"
+        "      :((o.style==='currency')?2:0);"
+        "    var fixed=n.toFixed(Math.min(20,Math.max(minF,maxF)));"
+        "    var sp=fixed.split('.'); var ip=sp[0]; var fp=sp[1]||'';"
+        "    while(fp.length>minF && fp.charAt(fp.length-1)==='0'){ fp=fp.slice(0,-1); }"
+        "    if(o.useGrouping!==false){ ip=ip.replace(/\\B(?=(\\d{3})+(?!\\d))/g,','); }"
+        "    var res=ip+(fp?('.'+fp):'');"
+        "    if(o.style==='percent')res+='%';"
+        "    if(o.style==='currency')res=((!o.currency||o.currency==='USD')?'$':(o.currency+'\\u00a0'))+res;"
+        "    return (neg?'-':'')+res; };"
+        "  NF.prototype.formatToParts=function(n){ return [{type:'literal',value:this.format(n)}]; };"
+        "  NF.prototype.formatRange=function(a,b){ return this.format(a)+'\\u2013'+this.format(b); };"
+        "  NF.supportedLocalesOf=function(l){ return I.getCanonicalLocales(l); };"
+        "  I.NumberFormat=NF;"
+        /* Collator */
+        "  function COL(l,o){ if(!(this instanceof COL))return new COL(l,o); }"
+        "  COL.prototype.compare=function(a,b){ a=String(a); b=String(b);"
+        "    return a<b?-1:(a>b?1:0); };"
+        "  COL.prototype.resolvedOptions=function(){ return {locale:'en-US'}; };"
+        "  COL.supportedLocalesOf=function(l){ return I.getCanonicalLocales(l); };"
+        "  I.Collator=COL;"
+        /* PluralRules */
+        "  function PR(l,o){ if(!(this instanceof PR))return new PR(l,o); this._o=o||{}; }"
+        "  PR.prototype.select=function(n){ n=Number(n);"
+        "    if(this._o.type==='ordinal'){ var a=n%10,b=n%100;"
+        "      if(a===1&&b!==11)return'one'; if(a===2&&b!==12)return'two';"
+        "      if(a===3&&b!==13)return'few'; return'other'; }"
+        "    return n===1?'one':'other'; };"
+        "  PR.prototype.resolvedOptions=function(){ return {locale:'en-US',type:this._o.type||'cardinal'}; };"
+        "  PR.supportedLocalesOf=function(l){ return I.getCanonicalLocales(l); };"
+        "  I.PluralRules=PR;"
+        /* RelativeTimeFormat */
+        "  function RTF(l,o){ if(!(this instanceof RTF))return new RTF(l,o); this._o=o||{}; }"
+        "  RTF.prototype.format=function(v,unit){ v=Number(v); var u=String(unit).replace(/s$/,'');"
+        "    var p=Math.abs(v)===1?u:u+'s'; if(v===0)return'now';"
+        "    return v<0?(Math.abs(v)+' '+p+' ago'):('in '+v+' '+p); };"
+        "  RTF.prototype.formatToParts=function(v,unit){"
+        "    return [{type:'literal',value:this.format(v,unit)}]; };"
+        "  RTF.prototype.resolvedOptions=function(){ return {locale:'en-US',"
+        "    numeric:this._o.numeric||'always',style:this._o.style||'long'}; };"
+        "  RTF.supportedLocalesOf=function(l){ return I.getCanonicalLocales(l); };"
+        "  I.RelativeTimeFormat=RTF;"
+        /* ListFormat */
+        "  function LF(l,o){ if(!(this instanceof LF))return new LF(l,o); this._o=o||{}; }"
+        "  LF.prototype.format=function(arr){ arr=Array.from(arr||[]); if(arr.length===0)return'';"
+        "    if(arr.length===1)return String(arr[0]);"
+        "    var conj=(this._o.type==='disjunction')?'or':'and';"
+        "    return arr.slice(0,-1).join(', ')+(arr.length>2?', ':' ')+conj+' '+arr[arr.length-1]; };"
+        "  LF.prototype.formatToParts=function(arr){ return [{type:'element',value:this.format(arr)}]; };"
+        "  LF.prototype.resolvedOptions=function(){ return {locale:'en-US',"
+        "    type:this._o.type||'conjunction',style:this._o.style||'long'}; };"
+        "  LF.supportedLocalesOf=function(l){ return I.getCanonicalLocales(l); };"
+        "  I.ListFormat=LF;"
+        /* Locale */
+        "  function LOC(tag,o){ if(!(this instanceof LOC))return new LOC(tag,o);"
+        "    tag=String(tag||'en-US'); var p=tag.split('-'); this.baseName=tag;"
+        "    this.language=p[0]||'en'; this.region=p[1]; this.maximize=function(){return this;};"
+        "    this.minimize=function(){return this;}; this.toString=function(){return tag;}; }"
+        "  I.Locale=LOC;"
+        /* Segmenter */
+        "  function SEG(l,o){ if(!(this instanceof SEG))return new SEG(l,o); this._o=o||{}; }"
+        "  SEG.prototype.segment=function(s){ s=String(s); var g=this._o.granularity||'grapheme';"
+        "    var arr=(g==='word')?s.split(/(\\s+)/).filter(function(x){return x.length;})"
+        "      :((g==='sentence')?[s]:Array.from(s));"
+        "    var segs=arr.map(function(x,i){return {segment:x,index:i,input:s,"
+        "      isWordLike:/\\w/.test(x)};});"
+        "    segs[Symbol.iterator]=function(){ var i=0; return {next:function(){"
+        "      return i<segs.length?{value:segs[i++],done:false}:{value:undefined,done:true}; }}; };"
+        "    return segs; };"
+        "  SEG.prototype.resolvedOptions=function(){ return {locale:'en-US',"
+        "    granularity:this._o.granularity||'grapheme'}; };"
+        "  I.Segmenter=SEG;"
+        "  globalThis.Intl=I;"
+        "})(); }";
+    JSValue intl_v =
+        JS_Eval(ctx, intl_polyfill, strlen(intl_polyfill), "<intl-polyfill>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(intl_v)) {
+        JSValue ex = JS_GetException(ctx);
+        const char *m = JS_ToCString(ctx, ex);
+        ydebug("js intl-polyfill: %s", m ? m : "?");
+        if (m) {
+            JS_FreeCString(ctx, m);
+        }
+        JS_FreeValue(ctx, ex);
+    }
+    JS_FreeValue(ctx, intl_v);
 
     JS_FreeValue(ctx, global);
 }

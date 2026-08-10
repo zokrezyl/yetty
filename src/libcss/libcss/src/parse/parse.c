@@ -1334,7 +1334,20 @@ css_error parseBlockContent(css_parser *parser)
             }
 
             if (token->type == CSS_TOKEN_ATKEYWORD) {
-                state->substate = WS;
+                /* A nested at-rule (e.g. @media or @layer inside an @layer or
+				 * @media grouping rule). Dispatch it through the at-rule
+				 * machinery instead of swallowing it as anonymous block
+				 * content; invalid nested at-rules still recover via the
+				 * malformed-at-rule path. */
+                parser_state to = {sAtRule, Initial};
+                parser_state subsequent = {sBlockContent, Initial};
+
+                error = pushBack(parser, token);
+                if (error != CSS_OK) {
+                    return error;
+                }
+
+                return transition(parser, to, subsequent);
             } else if (token->type == CSS_TOKEN_CHAR) {
                 if (lwc_string_length(token->idata) == 1 &&
                     lwc_string_data(token->idata)[0] == '{') {

@@ -35,6 +35,15 @@ struct yetty_ybrowser_libcss {
     /* Back-pointer for callbacks that need viewport metrics / lookups. */
     struct yetty_ylexbor *r;
 
+    /* Document-wide cascade-layer (@layer) tree, shared by every author
+	 * sheet so a layer name maps to one priority across all of them. Reset
+	 * per document load. */
+    css_layer_registry *layer_registry;
+
+    /* Layer key to stamp on the NEXT sheet created (for `@import ... layer(x)`);
+	 * consumed and reset to 0 by add_sheet. */
+    uint64_t pending_import_layer;
+
     /* @import recursion state: absolute URLs currently being loaded, so a
 	 * cyclic import (a imports b imports a) terminates instead of looping.
 	 * Bounded — deeper chains are cut off. */
@@ -177,6 +186,17 @@ int yetty_ybrowser_libcss_order(const css_computed_style *style, int32_t *out);
 /* CSS `align-self` — CSS_ALIGN_SELF_* (aliases CSS_ALIGN_ITEMS_*);
  * CSS_ALIGN_SELF_AUTO when unset. */
 int yetty_ybrowser_libcss_align_self(const css_computed_style *style);
+
+/* css-align grid inline-axis alignment (CSS_JUSTIFY_SELF_* /
+ * CSS_JUSTIFY_ITEMS_* values; AUTO / STRETCH defaults when unset). */
+int yetty_ybrowser_libcss_justify_self(const css_computed_style *style);
+int yetty_ybrowser_libcss_justify_items(const css_computed_style *style);
+
+/* CSS_DIRECTION_* — LTR when unset. */
+int yetty_ybrowser_libcss_direction(const css_computed_style *style);
+
+/* CSS_WRITING_MODE_* — horizontal-tb when unset. */
+int yetty_ybrowser_libcss_writing_mode(const css_computed_style *style);
 
 /* Float / clear. Returns the CSS_FLOAT_* / CSS_CLEAR_* enum. */
 int yetty_ybrowser_libcss_float(const css_computed_style *style);

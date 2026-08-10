@@ -248,6 +248,10 @@ uint8_t css_computed_opacity(const css_computed_style *style, css_fixed *opacity
 
 uint8_t css_computed_fill_opacity(const css_computed_style *style, css_fixed *fill_opacity);
 
+uint8_t css_computed_justify_self(const css_computed_style *style);
+
+uint8_t css_computed_justify_items(const css_computed_style *style);
+
 uint8_t css_computed_stroke_opacity(const css_computed_style *style, css_fixed *stroke_opacity);
 
 uint8_t css_computed_text_transform(const css_computed_style *style);

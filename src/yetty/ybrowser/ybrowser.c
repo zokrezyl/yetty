@@ -553,6 +553,16 @@ static void css_collect_push(struct css_collect *cc, struct css_entry e)
 static void css_collect_walk(struct yetty_ylexbor *r, lxb_dom_node_t *node, struct css_collect *cc)
 {
     for (lxb_dom_node_t *c = node->first_child; c != NULL; c = c->next) {
+        /* Scripting is enabled: <noscript> content is a JS-disabled fallback
+		 * and is inert — its <style>/<link> must NOT contribute to the cascade.
+		 * lexbor parses noscript children as real elements when scripting is on,
+		 * so without this skip a `<noscript><style>body{opacity:0}</style>
+		 * </noscript>` FOUC guard would apply and hide the whole page (this is
+		 * exactly what blanked accounts.google.com). Skip the subtree entirely. */
+        if (c->type == LXB_DOM_NODE_TYPE_ELEMENT && c->local_name == LXB_TAG_NOSCRIPT &&
+            getenv("YBROWSER_NO_JS") == NULL) {
+            continue;
+        }
         if (c->type == LXB_DOM_NODE_TYPE_ELEMENT) {
             lxb_dom_element_t *el = lxb_dom_interface_element(c);
             if (c->local_name == LXB_TAG_LINK) {
@@ -1027,28 +1037,48 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
         css = expanded_css;
         css_len = expanded_len;
     }
+    size_t grid_expanded_len = 0;
+    char *grid_expanded_css =
+        yetty_ybrowser_css_expand_grid_template(css, css_len, &grid_expanded_len);
+    if (grid_expanded_css != NULL) {
+        css = grid_expanded_css;
+        css_len = grid_expanded_len;
+    }
+
+    /* libcss understands @layer natively now, so it reads the layered `css`
+     * directly. The text scanners below don't track @layer nesting, so give
+     * THEM a flattened copy; flattening only strips the wrappers, leaving each
+     * selector -> side-table mapping identical to the un-layered case. */
+    const char *scan_css = css;
+    size_t scan_css_len = css_len;
+    size_t delayered_len = 0;
+    char *delayered_css = yetty_ybrowser_css_flatten_layers(css, css_len, &delayered_len);
+    if (delayered_css != NULL) {
+        scan_css = delayered_css;
+        scan_css_len = delayered_len;
+    }
 
     /* Pre-scan for `:root { --x: y; }` etc. before lexbor parses,
 	 * so var() lookups see the latest definitions. */
-    yetty_ylexbor_css_vars_scan(r, css, css_len);
+    yetty_ylexbor_css_vars_scan(r, scan_css, scan_css_len);
     /* Build the @media-active map once for this source so each per-declaration
      * scanner below tests media context in O(log n) instead of re-walking the
      * prefix (which is O(n^2) per sheet — the dominant cost on big pages). */
-    yetty_ylexbor_css_media_map_begin(r, css, css_len);
+    yetty_ylexbor_css_media_map_begin(r, scan_css, scan_css_len);
     /* Also note any grid content-column cap (minmax(0, Nrem)) — applied as
      * a max-width on display:grid containers since we don't lay out grid
      * tracks. */
-    yetty_ylexbor_css_scan_grid_content_width(r, css, css_len);
-    yetty_ylexbor_css_scan_grid_templates(r, css, css_len);
-    yetty_ylexbor_css_scan_grid_spans(r, css, css_len);
-    yetty_ylexbor_css_scan_flex_gaps(r, css, css_len);
-    yetty_ylexbor_css_scan_var_heights(r, css, css_len);
-    yetty_ylexbor_css_scan_width_keywords(r, css, css_len);
-    yetty_ylexbor_css_scan_calc_lengths(r, css, css_len);
-    yetty_ylexbor_css_scan_aspect_ratios(r, css, css_len);
-    yetty_ylexbor_css_scan_display_none(r, css, css_len);
-    yetty_ylexbor_css_scan_line_clamps(r, css, css_len);
-    yetty_ylexbor_css_scan_transforms(r, css, css_len);
+    yetty_ylexbor_css_scan_grid_content_width(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_grid_templates(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_grid_spans(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_flex_gaps(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_var_heights(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_width_keywords(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_calc_lengths(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_aspect_ratios(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_display_none(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_line_clamps(r, scan_css, scan_css_len);
+    yetty_ylexbor_css_scan_transforms(r, scan_css, scan_css_len);
     yetty_ylexbor_css_media_map_end(r);
 
     /* Push the CSS through libcss — this is the cascade box-build actually
@@ -1059,7 +1089,9 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css_from(struct yetty_ylexbor *
      * cost on large pages. */
     (void)yetty_ybrowser_libcss_add_sheet(r, css, css_len, CSS_ORIGIN_AUTHOR, sheet_url);
 
+    free(grid_expanded_css);
     free(expanded_css);
+    free(delayered_css);
     return YETTY_OK_VOID();
 }
 
@@ -1293,6 +1325,43 @@ int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x
                 tag_out[n] = '\0';
             }
         }
+    }
+    return 0;
+}
+
+/* offsetLeft/offsetTop of the box's element (CSSOM-View): the border-edge
+ * position relative to the nearest POSITIONED ancestor's padding edge. With
+ * no positioned ancestor the offsetParent is the body, where the legacy
+ * behavior is initial-containing-block coordinates — i.e. the absolute
+ * document position. check-layout-th.js compares data-offset-x/-y against
+ * exactly node.offsetLeft/offsetTop, so the WPT dump must emit THESE, not
+ * raw document coordinates. */
+int yetty_ylexbor_test_box_offset_at(const struct yetty_ylexbor *r, int index, float *offset_left,
+                                     float *offset_top)
+{
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    float base_x = 0.0f;
+    float base_y = 0.0f;
+    for (uint32_t ancestor = b->parent; ancestor != 0;
+         ancestor = r->boxes.data[ancestor].parent) {
+        const struct yetty_ylexbor_box *ancestor_box = &r->boxes.data[ancestor];
+        if (ancestor_box->position != YL_POS_STATIC) {
+            base_x = ancestor_box->x + ancestor_box->border_left;
+            base_y = ancestor_box->y + ancestor_box->border_top;
+            break;
+        }
+        if (r->boxes.data[ancestor].parent == ancestor) {
+            break; /* malformed self-parent — never spin */
+        }
+    }
+    if (offset_left) {
+        *offset_left = b->x - base_x;
+    }
+    if (offset_top) {
+        *offset_top = b->y - base_y;
     }
     return 0;
 }

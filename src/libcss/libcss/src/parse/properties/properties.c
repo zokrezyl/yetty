@@ -90,6 +90,8 @@ const css_prop_handler property_handlers[LAST_PROP + 1 - FIRST_PROP] = {
     css__parse_font_weight,
     css__parse_height,
     css__parse_justify_content,
+    css__parse_justify_items,
+    css__parse_justify_self,
     css__parse_left,
     css__parse_letter_spacing,
     css__parse_line_height,

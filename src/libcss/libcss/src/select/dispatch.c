@@ -518,4 +518,12 @@ struct prop_table prop_dispatch[CSS_N_PROPERTIES] = {{
                                                      {
                                                          PROPERTY_FUNCS(stroke_opacity),
                                                          1,
+                                                     },
+                                                     {
+                                                         PROPERTY_FUNCS(justify_self),
+                                                         0,
+                                                     },
+                                                     {
+                                                         PROPERTY_FUNCS(justify_items),
+                                                         0,
                                                      }};

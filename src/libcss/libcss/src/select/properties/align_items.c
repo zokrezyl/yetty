@@ -37,6 +37,18 @@ css_error css__cascade_align_items(uint32_t opv, css_style *style, css_select_st
         case ALIGN_ITEMS_BASELINE:
             value = CSS_ALIGN_ITEMS_BASELINE;
             break;
+        case ALIGN_ITEMS_START:
+            value = CSS_ALIGN_ITEMS_START;
+            break;
+        case ALIGN_ITEMS_END:
+            value = CSS_ALIGN_ITEMS_END;
+            break;
+        case ALIGN_ITEMS_LEFT:
+            value = CSS_ALIGN_ITEMS_LEFT;
+            break;
+        case ALIGN_ITEMS_RIGHT:
+            value = CSS_ALIGN_ITEMS_RIGHT;
+            break;
         }
     }
 

@@ -754,6 +754,10 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
         return -1;
     }
 
+    /* Document-wide @layer tree. Non-fatal if it can't be created — sheets
+	 * then fall back to private per-sheet layer ordering. */
+    (void)css_layer_registry_create(&lc->layer_registry);
+
     /* Viewport / unit context. Values are in CSS pixels (1 CSS px =
      * 1/96 of an inch). We don't have a real DPI for the renderer; the
      * standard "96" works for em/rem/% but means cm/mm/in/pt are off
@@ -939,6 +943,9 @@ void yetty_ybrowser_libcss_destroy(struct yetty_ylexbor *r)
         css_stylesheet_destroy(lc->sheets[i]);
     }
     free(lc->sheets);
+    if (lc->layer_registry != NULL) {
+        css_layer_registry_destroy(lc->layer_registry);
+    }
     free(lc);
     r->libcss = NULL;
 }
@@ -969,6 +976,15 @@ int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, si
         ydebug("libcss stylesheet_create -> %d", (int)err);
         return -1;
     }
+
+    /* Share the document-wide @layer tree so a layer name means the same
+	 * priority across every sheet. base_layer is the layer this whole sheet
+	 * sits in — nonzero only for a sheet pulled in by `@import ... layer(x)`
+	 * (see libcss_load_imports). */
+    if (lc->layer_registry != NULL) {
+        css_stylesheet_set_layer_registry(sheet, lc->layer_registry, lc->pending_import_layer);
+    }
+    lc->pending_import_layer = 0;
     /* Pre-resolve var(--name) references in the source. libcss 0.9.x
      * has no CSS-custom-properties support — declarations whose value
      * contains var() get dropped as invalid. We textually substitute
@@ -1006,6 +1022,13 @@ int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, si
         eff_len = strlen(calc_rewritten);
     }
 
+    /* Two-token css-align baseline values would be dropped whole. */
+    char *baseline_rewritten = yetty_ybrowser_css_rewrite_baseline_alignment(eff, eff_len);
+    if (baseline_rewritten) {
+        eff = baseline_rewritten;
+        eff_len = strlen(baseline_rewritten);
+    }
+
     err = css_stylesheet_append_data(sheet, (const uint8_t *)eff, eff_len);
     /* CSS_NEEDDATA is normal — parser is asking for more bytes. We
      * close the stream below with data_done. */
@@ -1013,6 +1036,7 @@ int yetty_ybrowser_libcss_add_sheet(struct yetty_ylexbor *r, const char *css, si
         ydebug("libcss append_data -> %d", (int)err);
     }
     err = css_stylesheet_data_done(sheet);
+    free(baseline_rewritten);
     free(calc_rewritten);
     free(not_rewritten);
     free(mq_rewritten);
@@ -1103,6 +1127,10 @@ static void libcss_load_imports(struct yetty_ylexbor *r, css_stylesheet *parent,
     struct yetty_ybrowser_libcss *lc = r->libcss;
     lwc_string *pending = NULL;
     while (css_stylesheet_next_pending_import(parent, &pending) == CSS_OK && pending) {
+        /* Cascade layer this @import assigns its sheet to (0 == none). */
+        uint64_t import_layer = 0;
+        (void)css_stylesheet_next_pending_import_layer(parent, &import_layer);
+
         /* lwc strings are length-counted, not NUL-guaranteed — copy. */
         size_t raw_len = lwc_string_length(pending);
         char raw_url[1024];
@@ -1142,8 +1170,12 @@ static void libcss_load_imports(struct yetty_ylexbor *r, css_stylesheet *parent,
                 yetty_ycore_error_destroy(fetch_res.error);
             }
             if (response.body && response.status >= 200 && response.status < 300) {
+                /* add_sheet (inside child_build) stamps this on the imported
+				 * sheet as its base layer, then clears it. */
+                lc->pending_import_layer = import_layer;
                 child = libcss_import_child_build(r, response.body, response.body_len, origin,
                                                   absolute);
+                lc->pending_import_layer = 0;
                 r->css_sheets_loaded++;
             } else {
                 ydebug("@import fetch failed status=%ld %s", response.status, absolute);
@@ -1349,8 +1381,15 @@ css_computed_style *yetty_ybrowser_libcss_select(struct yetty_ylexbor *r, lxb_do
                 yetty_ylexbor_css_vars_resolve_for_element(r, el, inline_css, inline_css_len);
             const char *ieff = iresolved ? iresolved : inline_css;
             size_t ieff_len = iresolved ? strlen(iresolved) : inline_css_len;
+            /* Same two-token baseline rewrite the sheet path applies. */
+            char *ibaseline = yetty_ybrowser_css_rewrite_baseline_alignment(ieff, ieff_len);
+            if (ibaseline) {
+                ieff = ibaseline;
+                ieff_len = strlen(ibaseline);
+            }
             css_stylesheet_append_data(inline_sheet, (const uint8_t *)ieff, ieff_len);
             css_stylesheet_data_done(inline_sheet);
+            free(ibaseline);
             free(iresolved);
         }
     }
@@ -2222,6 +2261,38 @@ int yetty_ybrowser_libcss_align_self(const css_computed_style *style)
         return CSS_ALIGN_SELF_AUTO;
     }
     return (int)css_computed_align_self(style);
+}
+
+int yetty_ybrowser_libcss_justify_self(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_JUSTIFY_SELF_AUTO;
+    }
+    return (int)css_computed_justify_self(style);
+}
+
+int yetty_ybrowser_libcss_justify_items(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_JUSTIFY_ITEMS_STRETCH;
+    }
+    return (int)css_computed_justify_items(style);
+}
+
+int yetty_ybrowser_libcss_direction(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_DIRECTION_LTR;
+    }
+    return (int)css_computed_direction(style);
+}
+
+int yetty_ybrowser_libcss_writing_mode(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_WRITING_MODE_HORIZONTAL_TB;
+    }
+    return (int)css_computed_writing_mode(style);
 }
 
 int yetty_ybrowser_libcss_list_style_type(const css_computed_style *style)

@@ -102,7 +102,8 @@ typedef enum css_rule_type {
     CSS_RULE_IMPORT,
     CSS_RULE_MEDIA,
     CSS_RULE_FONT_FACE,
-    CSS_RULE_PAGE
+    CSS_RULE_PAGE,
+    CSS_RULE_LAYER
 } css_rule_type;
 
 typedef enum css_rule_parent_type {
@@ -118,6 +119,16 @@ struct css_rule {
     css_rule *prev; /**< previous in list */
 
     uint32_t index; /**< index in sheet */
+    uint64_t layer; /**< cascade-layer sort key (0 == unlayered).
+					 * A packed hierarchical key: byte 0 (MSB) is the
+					 * root layer's declaration index, byte 1 the next
+					 * nesting level, etc., trailing bytes padded 0xFF so
+					 * a shorter path (rules directly in a layer) outranks
+					 * a longer one (its sub-layers). Higher key == higher
+					 * cascade priority; compared before specificity, with
+					 * importance reversing the order. Keys are assigned
+					 * from a document-wide layer registry so the same
+					 * layer name shares one key across all sheets. */
     uint16_t items; /**< number of items (selectors) in rule */
     uint8_t type;   /**< css_rule_type */
     uint8_t ptype;  /**< css_rule_parent_type */
@@ -145,6 +156,24 @@ typedef struct css_rule_font_face {
     css_font_face *font_face;
 } css_rule_font_face;
 
+struct css_layer_node;
+struct css_layer_registry;
+
+/* A cascade-layer grouping rule (@layer name { ... }). Holds its child
+ * rulesets so the tree can be walked/destroyed uniformly with @media. It
+ * is transparent at selection time: the layer priority lives on each child
+ * rule's base.layer, stamped at parse time. `node` points into the shared
+ * layer registry so the block-open handler can make it the current layer
+ * (and resolve sub-layers relative to it). */
+typedef struct css_rule_layer {
+    css_rule base;
+
+    css_rule *first_child;
+    css_rule *last_child;
+
+    struct css_layer_node *node;
+} css_rule_layer;
+
 typedef struct css_rule_page {
     css_rule base;
 
@@ -159,6 +188,9 @@ typedef struct css_rule_import {
     css_mq_query *media;
 
     css_stylesheet *sheet;
+
+    uint64_t layer; /**< Layer key from `@import ... layer(name)` (0 == none),
+					 * resolved against the sheet's registry at parse time. */
 } css_rule_import;
 
 typedef struct css_rule_charset {
@@ -214,6 +246,11 @@ struct css_stylesheet {
 						 * length in entries */
     uint32_t string_vector_c;   /**< The number of string
 						 * vector entries used */
+
+    struct css_layer_registry *layer_registry; /**< Shared @layer tree, or NULL
+                                               * (parser then uses a private one) */
+    uint64_t base_layer; /**< Layer key the whole sheet is nested in via
+                          * `@import ... layer(name)`; 0 == top level */
 };
 
 css_error css__stylesheet_style_create(css_stylesheet *sheet, css_style **style);
