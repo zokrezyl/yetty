@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp>=1.2.0"]
+# dependencies = ["mcp>=1.2.0,<2"]
 # ///
 """
 yetty-mcp — let an AI agent draw rich content into a yetty terminal.
