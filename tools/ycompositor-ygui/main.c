@@ -639,8 +639,7 @@ static void handle_event(struct yetty_ycompositorygui_app *app, const struct yet
             {
                 struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
                     app->ygui, ev->mouse.x / ycompositor_ygui_scale(app),
-                    ev->mouse.y / ycompositor_ygui_scale(app), ev->mouse.button, 1,
-                    ev->mouse.mods);
+                    ev->mouse.y / ycompositor_ygui_scale(app), ev->mouse.button, 1, ev->mouse.mods);
                 if (YETTY_IS_ERR(fr)) {
                     yetty_ycore_error_destroy(fr.error);
                 }
@@ -659,8 +658,7 @@ static void handle_event(struct yetty_ycompositorygui_app *app, const struct yet
             {
                 struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
                     app->ygui, ev->mouse.x / ycompositor_ygui_scale(app),
-                    ev->mouse.y / ycompositor_ygui_scale(app), ev->mouse.button, 0,
-                    ev->mouse.mods);
+                    ev->mouse.y / ycompositor_ygui_scale(app), ev->mouse.button, 0, ev->mouse.mods);
                 if (YETTY_IS_ERR(fr)) {
                     yetty_ycore_error_destroy(fr.error);
                 }

@@ -6943,7 +6943,8 @@ void yetty_ylexbor_js_set_current_script(struct yetty_ylexbor *r, lxb_dom_node_t
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue doc = JS_GetPropertyStr(ctx, global, "document");
     if (JS_IsObject(doc)) {
-        JSValue value = (node != NULL) ? wrap_element(ctx, lxb_dom_interface_element(node)) : JS_NULL;
+        JSValue value =
+            (node != NULL) ? wrap_element(ctx, lxb_dom_interface_element(node)) : JS_NULL;
         JS_SetPropertyStr(ctx, doc, "currentScript", value);
     }
     JS_FreeValue(ctx, doc);

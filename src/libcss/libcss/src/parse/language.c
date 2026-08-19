@@ -284,7 +284,8 @@ css_error handleStartRuleset(css_language *c, const parserutils_vector *vector)
     /* Stamp the cascade layer this ruleset lives in. Rules outside any
 	 * @layer take the sheet's base layer (0 == unlayered, or the layer named
 	 * by an `@import ... layer(name)` that pulled this sheet in). */
-    rule->layer = (c->current_layer_node != NULL) ? c->current_layer_node->key : c->sheet->base_layer;
+    rule->layer =
+        (c->current_layer_node != NULL) ? c->current_layer_node->key : c->sheet->base_layer;
 
     if (vector != NULL) {
         /* Parse selectors, if there are any */

@@ -1345,8 +1345,7 @@ int yetty_ylexbor_test_box_offset_at(const struct yetty_ylexbor *r, int index, f
     const struct yetty_ylexbor_box *b = &r->boxes.data[index];
     float base_x = 0.0f;
     float base_y = 0.0f;
-    for (uint32_t ancestor = b->parent; ancestor != 0;
-         ancestor = r->boxes.data[ancestor].parent) {
+    for (uint32_t ancestor = b->parent; ancestor != 0; ancestor = r->boxes.data[ancestor].parent) {
         const struct yetty_ylexbor_box *ancestor_box = &r->boxes.data[ancestor];
         if (ancestor_box->position != YL_POS_STATIC) {
             base_x = ancestor_box->x + ancestor_box->border_left;

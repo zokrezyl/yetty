@@ -2258,8 +2258,7 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
                 /* Ctrl+<letter>: GLFW letter keycodes are ASCII 'A'..'Z'.
 				 * Deliver the control byte the chord handlers expect
 				 * (Ctrl-C=0x03, Ctrl-L=0x0C, …). */
-                if ((ygui_mods & YETTY_YGUI_MOD_CTRL) && key_msg.key >= 'A' &&
-                    key_msg.key <= 'Z') {
+                if ((ygui_mods & YETTY_YGUI_MOD_CTRL) && key_msg.key >= 'A' && key_msg.key <= 'Z') {
                     cb_key = (uint32_t)(key_msg.key - 'A' + 1);
                 }
                 break;
@@ -3867,8 +3866,8 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG: {
         float cs = sa_content_scale(s);
-        struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_motion(
-            s->app.fw, ev->mouse.x / cs, ev->mouse.y / cs);
+        struct yetty_ycore_int_result fr =
+            yetty_ygui_framework_feed_mouse_motion(s->app.fw, ev->mouse.x / cs, ev->mouse.y / cs);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, fr, "ybrowser: feed motion");
         if (!fr.value && s->chrome) {
             struct yetty_ycore_int_result cr = yetty_ychrome_host_handle_event(s->chrome, ev);

@@ -671,8 +671,9 @@ static struct yetty_ycore_void_result container_do_create_child(
         HASH_FIND_INT(container->children, &child_id, entry);
         if (entry) {
             int is_absolute = 0;
-            struct yetty_yclass_object *child_obj = (struct yetty_yclass_object *)(child) - 1;
-            struct yetty_ycore_int_result abs_r = yetty_yfigure_figure_absolute_coords_get(child_obj);
+            struct yetty_yclass_object *child_obj = (struct yetty_yclass_object *)(child)-1;
+            struct yetty_ycore_int_result abs_r =
+                yetty_yfigure_figure_absolute_coords_get(child_obj);
             if (YETTY_IS_OK(abs_r)) {
                 is_absolute = abs_r.value;
             } else {

@@ -3395,11 +3395,11 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
      * single unit system means the ygrid scissor (rect * content_scale) reaches
      * the right fb region on HiDPI. On non-HiDPI (scale == 1.0) fb == logical
      * and this divide is a no-op, matching pre-HiDPI behaviour. */
-    float offset_scale = terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
+    float offset_scale =
+        terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
     if (terminal->root_container_obj) {
-        yetty_yfigure_container_set_viewport_offset(terminal->root_container_obj,
-                                                    bounds.x / offset_scale,
-                                                    bounds.y / offset_scale);
+        yetty_yfigure_container_set_viewport_offset(
+            terminal->root_container_obj, bounds.x / offset_scale, bounds.y / offset_scale);
     }
 
     /* Actually resize the terminal when the pixel size changes. The

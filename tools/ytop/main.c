@@ -212,8 +212,7 @@ static void ytop_on_osc(void *user, int osc_code, const uint8_t *args, size_t ar
     if (payload_len < sizeof(struct yetty_client_input_resize)) {
         return;
     }
-    const struct yetty_client_input_resize *rz =
-        (const struct yetty_client_input_resize *)payload;
+    const struct yetty_client_input_resize *rz = (const struct yetty_client_input_resize *)payload;
     if (rz->magic != YETTY_CLIENT_INPUT_RESIZE_MAGIC || rz->width <= 0.0f || rz->height <= 0.0f) {
         return;
     }

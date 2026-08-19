@@ -646,8 +646,7 @@ static void yperf_pickup_winsz(struct yperf_client *client)
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
         /* TIOCGWINSZ pixels are FRAMEBUFFER px (cols x cell, cell stride already
          * carries content_scale) — divide like the RESIZE envelope. */
-        const float scale =
-            client->app->content_scale > 0.0f ? client->app->content_scale : 1.0f;
+        const float scale = client->app->content_scale > 0.0f ? client->app->content_scale : 1.0f;
         error_absorb(yetty_ygui_framework_set_viewport(
             client->app->engine, (float)ws.ws_xpixel / scale, (float)ws.ws_ypixel / scale));
         yperf_ui_relayout(client->app);

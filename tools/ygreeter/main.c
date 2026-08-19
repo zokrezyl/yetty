@@ -3192,8 +3192,7 @@ static struct yetty_ycore_void_result client_chrome_sync(struct client_state *cs
         if (YETTY_IS_ERR(clear_result)) {
             yetty_ycore_error_destroy(clear_result.error);
         }
-        struct yetty_ycore_void_result destroy_result =
-            yetty_ychrome_host_destroy(cs->chrome_host);
+        struct yetty_ycore_void_result destroy_result = yetty_ychrome_host_destroy(cs->chrome_host);
         if (YETTY_IS_ERR(destroy_result)) {
             yetty_ycore_error_destroy(destroy_result.error);
         }
@@ -3204,9 +3203,9 @@ static struct yetty_ycore_void_result client_chrome_sync(struct client_state *cs
          * on the resize envelope (yetty_client_input_resize.content_scale), so
          * chrome authors LOGICAL px and the host's receiving yscene scales it
          * back up for display. */
-        struct yetty_ychrome_host_ptr_result host_result = yetty_ychrome_host_create_wire(
-            cs->chrome_container, /*window_chrome=*/NULL, width, height, scale, 34.0f, 8.0f,
-            YETTY_YCHROME_FLAG_ALL);
+        struct yetty_ychrome_host_ptr_result host_result =
+            yetty_ychrome_host_create_wire(cs->chrome_container, /*window_chrome=*/NULL, width,
+                                           height, scale, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, host_result, "client_chrome_sync: create wire host");
         cs->chrome_host = host_result.value;
         cs->chrome_scale = scale;

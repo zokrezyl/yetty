@@ -2890,8 +2890,7 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
         struct yl_grid_track row_tracks[YL_GRID_MAX_TRACKS];
         int nrow_tracks = 0;
         {
-            const char *rows_decl =
-                css_find_substr(block, blen, "grid-template-rows:", 19);
+            const char *rows_decl = css_find_substr(block, blen, "grid-template-rows:", 19);
             if (rows_decl != NULL) {
                 const char *rows_val = rows_decl + 19;
                 size_t rows_avail = blen - (size_t)(rows_val - block);
@@ -5974,8 +5973,8 @@ char *yetty_ybrowser_css_flatten_layers(const char *css, size_t len, size_t *out
     }
     struct css_text_out out = {0};
     int changed = 0;
-    int depth = 0;               /* current brace nesting (copied + layer) */
-    int layer_depths[64];        /* nesting depths at which a layer opened */
+    int depth = 0;        /* current brace nesting (copied + layer) */
+    int layer_depths[64]; /* nesting depths at which a layer opened */
     int layer_sp = 0;
     size_t i = 0;
     while (i < len) {
@@ -6163,7 +6162,6 @@ char *yetty_ybrowser_css_expand_grid_template(const char *css, size_t len, size_
     }
     return out.buf;
 }
-
 
 char *yetty_ylexbor_css_expand_flex(const char *src, size_t len, size_t *out_len)
 {

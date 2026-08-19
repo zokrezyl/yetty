@@ -1198,13 +1198,14 @@ char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el)
                                 continue;
                             }
                             if (node->local_name == LXB_TAG_IMG) {
-                                picture_url = attr_strdup(lxb_dom_interface_element(node), "src", 3);
+                                picture_url =
+                                    attr_strdup(lxb_dom_interface_element(node), "src", 3);
                             }
                             if (!picture_url && node->local_name == LXB_TAG_SOURCE) {
                                 size_t l = 0;
                                 const lxb_char_t *ss = lxb_dom_element_get_attribute(
-                                    lxb_dom_interface_element(node), (const lxb_char_t *)"srcset", 6,
-                                    &l);
+                                    lxb_dom_interface_element(node), (const lxb_char_t *)"srcset",
+                                    6, &l);
                                 if (ss && l > 0) {
                                     const char *p = (const char *)ss;
                                     const char *end = p + l;

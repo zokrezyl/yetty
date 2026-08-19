@@ -179,10 +179,10 @@ css_error css__parse_height(css_language *c, const parserutils_vector *vector, i
                             css_style *result);
 css_error css__parse_justify_content(css_language *c, const parserutils_vector *vector,
                                      int32_t *ctx, css_style *result);
-css_error css__parse_justify_items(css_language *c, const parserutils_vector *vector,
-                                     int32_t *ctx, css_style *result);
-css_error css__parse_justify_self(css_language *c, const parserutils_vector *vector,
-                                     int32_t *ctx, css_style *result);
+css_error css__parse_justify_items(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+                                   css_style *result);
+css_error css__parse_justify_self(css_language *c, const parserutils_vector *vector, int32_t *ctx,
+                                  css_style *result);
 css_error css__parse_left(css_language *c, const parserutils_vector *vector, int32_t *ctx,
                           css_style *result);
 css_error css__parse_letter_spacing(css_language *c, const parserutils_vector *vector, int32_t *ctx,

@@ -1892,8 +1892,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 						 * packing, line mirroring, abspos static position)
 						 * follows. The inline-start keywords below resolve
 						 * their physical edge against dir_rtl. */
-                        int dir_rtl =
-                            yetty_ybrowser_libcss_direction(cs) == CSS_DIRECTION_RTL;
+                        int dir_rtl = yetty_ybrowser_libcss_direction(cs) == CSS_DIRECTION_RTL;
                         if (dir_rtl && b->layout_mode == YL_LAYOUT_FLEX_ROW) {
                             b->main_reverse = !b->main_reverse;
                         }
@@ -1910,8 +1909,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         {
                             int flex_wm = yetty_ybrowser_libcss_writing_mode(cs);
                             int flex_vertical_rl = flex_wm == CSS_WRITING_MODE_VERTICAL_RL;
-                            if (flex_wm == CSS_WRITING_MODE_VERTICAL_LR ||
-                                flex_vertical_rl) {
+                            if (flex_wm == CSS_WRITING_MODE_VERTICAL_LR || flex_vertical_rl) {
                                 if (b->layout_mode == YL_LAYOUT_FLEX_ROW) {
                                     b->layout_mode = YL_LAYOUT_FLEX_COLUMN;
                                     /* cross axis = block, mirrored for rl;
@@ -1937,8 +1935,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 						 * meaning and behave as `start` (css-align §5.3). */
                         {
                             int jc = b->justify_content;
-                            int column_main =
-                                (b->layout_mode == YL_LAYOUT_FLEX_COLUMN);
+                            int column_main = (b->layout_mode == YL_LAYOUT_FLEX_COLUMN);
                             int wants_main_start;
                             switch (jc) {
                             case CSS_JUSTIFY_CONTENT_START:
@@ -1953,8 +1950,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                 if (column_main) {
                                     wants_main_start = 1; /* behaves as start */
                                 } else {
-                                    wants_main_start =
-                                        (jc == CSS_JUSTIFY_CONTENT_LEFT);
+                                    wants_main_start = (jc == CSS_JUSTIFY_CONTENT_LEFT);
                                 }
                                 break;
                             default:
@@ -1963,10 +1959,9 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             }
                             if (wants_main_start >= 0) {
                                 int start_is_main_start = !b->main_reverse;
-                                b->justify_content =
-                                    (wants_main_start == start_is_main_start)
-                                        ? CSS_JUSTIFY_CONTENT_FLEX_START
-                                        : CSS_JUSTIFY_CONTENT_FLEX_END;
+                                b->justify_content = (wants_main_start == start_is_main_start)
+                                                         ? CSS_JUSTIFY_CONTENT_FLEX_START
+                                                         : CSS_JUSTIFY_CONTENT_FLEX_END;
                             }
                         }
                         b->align_items = yetty_ybrowser_libcss_align_items(cs);
@@ -2238,10 +2233,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         /* b->parent may not be linked yet at this point of
 						 * the walk — the walk's parent_idx parameter is the
 						 * authoritative container. */
-                        const struct yetty_ylexbor_box *parent_box =
-                            &r->boxes.data[parent_idx];
-                        if (parent_box->layout_mode == YL_LAYOUT_GRID &&
-                            parent_box->main_reverse) {
+                        const struct yetty_ylexbor_box *parent_box = &r->boxes.data[parent_idx];
+                        if (parent_box->layout_mode == YL_LAYOUT_GRID && parent_box->main_reverse) {
                             if (b->justify_self == CSS_ALIGN_ITEMS_FLEX_START) {
                                 b->justify_self = CSS_ALIGN_ITEMS_FLEX_END;
                             } else if (b->justify_self == CSS_ALIGN_ITEMS_FLEX_END) {
@@ -2250,11 +2243,11 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         }
                     }
                     if (b->layout_mode == YL_LAYOUT_GRID) {
-                        b->justify_items = grid_axis_align_normalize(
-                            yetty_ybrowser_libcss_justify_items(cs));
+                        b->justify_items =
+                            grid_axis_align_normalize(yetty_ybrowser_libcss_justify_items(cs));
                         if (b->align_items == 0) {
-                            b->align_items = grid_axis_align_normalize(
-                                yetty_ybrowser_libcss_align_items(cs));
+                            b->align_items =
+                                grid_axis_align_normalize(yetty_ybrowser_libcss_align_items(cs));
                         }
                         /* direction: rtl on a grid — column order mirrors
 						 * (line 1 = right edge). main_reverse doubles as the
