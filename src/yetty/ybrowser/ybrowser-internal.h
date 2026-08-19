@@ -901,7 +901,7 @@ struct yetty_ylexbor {
 	 * have been encountered yet. */
     struct JSRuntime *js_rt;
     struct JSContext *js_ctx;
-    int js_error_count;   /* uncaught exceptions encountered */
+    int js_error_count;    /* uncaught exceptions encountered */
     double js_deadline_ms; /* wall-clock abort deadline for the current script
 						 * run (0 == no limit). Bounds heavy-SPA JS so a
 						 * one-shot render of a page whose scripts never idle

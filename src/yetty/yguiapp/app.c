@@ -525,8 +525,8 @@ static struct yetty_ycore_int_result yguiapp_event(struct yetty_yevent_event_lis
             }
             if (app->chrome_caption) {
                 struct yetty_yfigure_figure *fig = yetty_yscene_as_figure(app->chrome_caption);
-                struct yetty_ycore_rectangle rect = {
-                    .min = {0.0f, 0.0f}, .max = {logical_w, YGUIAPP_CHROME_CAPTION_H}};
+                struct yetty_ycore_rectangle rect = {.min = {0.0f, 0.0f},
+                                                     .max = {logical_w, YGUIAPP_CHROME_CAPTION_H}};
                 struct yetty_ycore_void_result rr =
                     yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(fig)-1, rect);
                 if (YETTY_IS_ERR(rr)) {

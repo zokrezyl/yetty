@@ -704,8 +704,7 @@ void yetty_ylexbor_js_importmap_scan(struct yetty_ylexbor *r)
 
 /* ---- prefetched module-source cache ------------------------------------ */
 
-static void module_src_store(struct yetty_ylexbor *r, const char *url, const char *body,
-                             size_t len)
+static void module_src_store(struct yetty_ylexbor *r, const char *url, const char *body, size_t len)
 {
     if (url == NULL || body == NULL) {
         return;
@@ -996,8 +995,8 @@ struct script_entry {
     char *url;         /* owned; external script when non-NULL */
     char *inline_body; /* owned when url == NULL */
     size_t inline_len;
-    bool is_module;             /* <script type="module"> — evaluate as an ES module */
-    lxb_dom_node_t *element;    /* the <script> element (for document.currentScript) */
+    bool is_module;          /* <script type="module"> — evaluate as an ES module */
+    lxb_dom_node_t *element; /* the <script> element (for document.currentScript) */
 };
 
 /* True iff the <script> is type="module" (evaluated as an ES module). */

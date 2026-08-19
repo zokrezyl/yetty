@@ -55,10 +55,10 @@ typedef struct css_language {
 /* Cascade-layer (@layer) bookkeeping, parse-time only. */
 #define CSS_LAYER_MAX_DEPTH 32
     struct css_layer_registry *layer_registry; /**< Shared (from sheet) or private */
-    bool owns_layer_registry;       /**< Whether we created the registry */
-    struct css_layer_node *current_layer_node;   /**< Current layer, NULL == unlayered */
+    bool owns_layer_registry;                  /**< Whether we created the registry */
+    struct css_layer_node *current_layer_node; /**< Current layer, NULL == unlayered */
     struct css_layer_node *layer_node_stack[CSS_LAYER_MAX_DEPTH]; /**< Saved per open block */
-    uint32_t layer_sp;              /**< Depth of open @layer blocks */
+    uint32_t layer_sp; /**< Depth of open @layer blocks */
 } css_language;
 
 css_error css__language_create(css_stylesheet *sheet, css_parser *parser, void **language);

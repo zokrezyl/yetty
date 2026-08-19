@@ -659,8 +659,8 @@ static void flex_abspos_static_position(const struct yetty_ylexbor_box *containe
 		 * (column container); not parallel otherwise → start. Skips the
 		 * wrap-reverse flip below. */
         if (container->layout_mode == YL_LAYOUT_FLEX_COLUMN) {
-            cross_align = cross_value == CSS_ALIGN_ITEMS_RIGHT ? STATIC_ALIGN_END
-                                                               : STATIC_ALIGN_START;
+            cross_align =
+                cross_value == CSS_ALIGN_ITEMS_RIGHT ? STATIC_ALIGN_END : STATIC_ALIGN_START;
             cross_physical = 1;
         }
     }
@@ -685,13 +685,13 @@ static void flex_abspos_static_position(const struct yetty_ylexbor_box *containe
     /* Hypothetical border-box size from the explicit CSS size. */
     float hyp_w = child->css_width > 0.0f ? child->css_width : 0.0f;
     if (hyp_w > 0.0f && !child->border_box) {
-        hyp_w += child->padding_left + child->padding_right + child->border_left +
-                 child->border_right;
+        hyp_w +=
+            child->padding_left + child->padding_right + child->border_left + child->border_right;
     }
     float hyp_h = (child->css_height_set && child->css_height > 0.0f) ? child->css_height : 0.0f;
     if (hyp_h > 0.0f && !child->border_box) {
-        hyp_h += child->padding_top + child->padding_bottom + child->border_top +
-                 child->border_bottom;
+        hyp_h +=
+            child->padding_top + child->padding_bottom + child->border_top + child->border_bottom;
     }
 
     if (x_align == STATIC_ALIGN_CENTER) {
@@ -790,9 +790,8 @@ static struct yetty_ycore_void_result flex_layout_absolute_children(struct yetty
             if (container_content_w < 0.0f) {
                 container_content_w = 0.0f;
             }
-            flex_abspos_static_position(self, &r->boxes.data[child_idx],
-                                        cb_x + self->padding_left, cb_y + self->padding_top,
-                                        container_content_w,
+            flex_abspos_static_position(self, &r->boxes.data[child_idx], cb_x + self->padding_left,
+                                        cb_y + self->padding_top, container_content_w,
                                         cb_h - self->padding_top - self->padding_bottom);
         }
         if (child_pos == YL_POS_ABSOLUTE && !is_containing_block) {
@@ -988,8 +987,7 @@ static float flex_item_column_baseline(const struct yetty_ylexbor *r, uint32_t i
 {
     const struct yetty_ylexbor_box *box = &r->boxes.data[idx];
     float ascent = box->font_size > 0.0f ? box->font_size * 0.8f : 12.8f;
-    for (uint32_t child = box->first_child; child != 0;
-         child = r->boxes.data[child].next_sibling) {
+    for (uint32_t child = box->first_child; child != 0; child = r->boxes.data[child].next_sibling) {
         const struct yetty_ylexbor_box *child_box = &r->boxes.data[child];
         if (child_box->kind == YL_BOX_INLINE_TEXT && child_box->font_size > 0.0f) {
             ascent = child_box->font_size * 0.8f;
@@ -1848,8 +1846,8 @@ static struct float_result layout_flex_run(struct yetty_ylexbor *r, uint32_t idx
                  src_main[i] == YL_SRC_FLEX_GROW || src_main[i] == YL_SRC_FLEX_SHRINK)) {
                 float inner_h = main_size[i];
                 if (!c->border_box) {
-                    inner_h -= c->border_top + c->border_bottom + c->padding_top +
-                               c->padding_bottom;
+                    inner_h -=
+                        c->border_top + c->border_bottom + c->padding_top + c->padding_bottom;
                 }
                 if (inner_h > 0.0f) {
                     c->css_height = inner_h;
@@ -2261,8 +2259,7 @@ static float text_longest_line_width(const struct yetty_ylexbor *r,
         if (i == text_box->text_len || text_box->text[i] == '\n') {
             if (i > line_start) {
                 float line = yetty_ylexbor_naive_text_width(
-                    text_box->text + line_start, i - line_start, text_box->font_size,
-                    advance);
+                    text_box->text + line_start, i - line_start, text_box->font_size, advance);
                 if (line > best) {
                     best = line;
                 }
@@ -3093,7 +3090,6 @@ static struct grid_item_height grid_item_used_height(const struct yetty_ylexbor_
  * height fill their row (the tallest cell sets the row height). Text and
  * replaced items keep their content height, matching Chrome. */
 
-
 static void grid_stretch_row_members(struct yetty_ylexbor *r, const uint32_t *members,
                                      int member_count, float row_height, int container_align)
 {
@@ -3114,8 +3110,8 @@ static void grid_stretch_row_members(struct yetty_ylexbor *r, const uint32_t *me
 			 * auto) stretches to the row track. Mirrors the flex "pin
 			 * definite, stretch only auto". Stretch fills the band MINUS
 			 * the item's block-axis margins. */
-            bool item_pinned = (member->css_height_set && member->css_height >= 0.0f) ||
-                               member->css_height > 0.0f;
+            bool item_pinned =
+                (member->css_height_set && member->css_height >= 0.0f) || member->css_height > 0.0f;
             float stretch_h = row_height - margin_block;
             if (stretch_h < 0.0f) {
                 stretch_h = 0.0f;
@@ -3250,8 +3246,7 @@ static float grid_layout_vertical_items(struct yetty_ylexbor *r, uint32_t idx,
     float y_cursor = content_origin_y;
     for (int band = 0; band < nbands; band++) {
         const struct yl_grid_track *track = &r->boxes.data[idx].grid_tracks[band];
-        float extent =
-            (!track->is_fr && !track->is_auto && !track->is_pct) ? track->value : 0.0f;
+        float extent = (!track->is_fr && !track->is_auto && !track->is_pct) ? track->value : 0.0f;
         band_y[band] = y_cursor;
         band_h[band] = extent;
         y_cursor += extent + col_gap;
@@ -3270,8 +3265,7 @@ static float grid_layout_vertical_items(struct yetty_ylexbor *r, uint32_t idx,
     float total_block_extent = 0.0f;
     for (int strip = 0; strip < nstrips; strip++) {
         const struct yl_grid_track *track = &r->boxes.data[idx].grid_row_tracks[strip];
-        float extent =
-            (!track->is_fr && !track->is_auto && !track->is_pct) ? track->value : 0.0f;
+        float extent = (!track->is_fr && !track->is_auto && !track->is_pct) ? track->value : 0.0f;
         total_block_extent += extent + (strip + 1 < nstrips ? row_gap : 0.0f);
     }
     float mirror_width = content_width;
@@ -3282,12 +3276,10 @@ static float grid_layout_vertical_items(struct yetty_ylexbor *r, uint32_t idx,
     float x_offset = 0.0f;
     for (int strip = 0; strip < nstrips; strip++) {
         const struct yl_grid_track *track = &r->boxes.data[idx].grid_row_tracks[strip];
-        float extent =
-            (!track->is_fr && !track->is_auto && !track->is_pct) ? track->value : 0.0f;
+        float extent = (!track->is_fr && !track->is_auto && !track->is_pct) ? track->value : 0.0f;
         strip_w[strip] = extent;
-        strip_x[strip] = vertical_rl
-                             ? content_origin_x + mirror_width - x_offset - extent
-                             : content_origin_x + x_offset;
+        strip_x[strip] = vertical_rl ? content_origin_x + mirror_width - x_offset - extent
+                                     : content_origin_x + x_offset;
         x_offset += extent + row_gap;
     }
 
@@ -3341,11 +3333,10 @@ static float grid_layout_vertical_items(struct yetty_ylexbor *r, uint32_t idx,
 
         /* Alignment: justify-self governs the INLINE axis (y here), align-
 		 * self the BLOCK axis (x, start on the right for vertical-rl). */
-        int justify = item->justify_self != 0
-                          ? item->justify_self
-                          : (r->boxes.data[idx].justify_items != 0
-                                 ? r->boxes.data[idx].justify_items
-                                 : CSS_ALIGN_ITEMS_STRETCH);
+        int justify = item->justify_self != 0 ? item->justify_self
+                                              : (r->boxes.data[idx].justify_items != 0
+                                                     ? r->boxes.data[idx].justify_items
+                                                     : CSS_ALIGN_ITEMS_STRETCH);
         int align = item->align_self != 0
                         ? item->align_self
                         : (r->boxes.data[idx].align_items != 0 ? r->boxes.data[idx].align_items
@@ -3503,8 +3494,7 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         /* auto-fit/fill: one repeated track per IN-FLOW child (box-build
 		 * counted every element child, including abspos ones). */
         int in_flow = 0;
-        for (uint32_t cc = self->first_child; cc != 0;
-             cc = r->boxes.data[cc].next_sibling) {
+        for (uint32_t cc = self->first_child; cc != 0; cc = r->boxes.data[cc].next_sibling) {
             const struct yetty_ylexbor_box *ch = &r->boxes.data[cc];
             if (ch->position == YL_POS_ABSOLUTE || ch->position == YL_POS_FIXED ||
                 ch->float_side != 0) {
@@ -3545,8 +3535,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
             fixed_extent += (float)(ncols - 1) * col_gap;
             if (fixed_extent > 0.0f && fixed_extent < content_width) {
                 content_width = fixed_extent;
-                r->boxes.data[idx].w = fixed_extent + pad_left + pad_right +
-                                       self->border_left + self->border_right;
+                r->boxes.data[idx].w =
+                    fixed_extent + pad_left + pad_right + self->border_left + self->border_right;
             }
         }
     }
@@ -3555,8 +3545,7 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
 	 * the placement clamps below use the extended grid. */
     if (self->grid_auto_col_w > 0.0f) {
         int needed = ncols;
-        for (uint32_t cc = self->first_child; cc != 0;
-             cc = r->boxes.data[cc].next_sibling) {
+        for (uint32_t cc = self->first_child; cc != 0; cc = r->boxes.data[cc].next_sibling) {
             const struct yetty_ylexbor_box *ch = &r->boxes.data[cc];
             if (ch->position == YL_POS_ABSOLUTE || ch->position == YL_POS_FIXED ||
                 ch->float_side != 0 || ch->grid_col_start <= 0) {
@@ -3771,8 +3760,7 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
 	 * column band inside the content box. */
     if (self->main_reverse) {
         for (int c = 0; c < ncols; c++) {
-            col_x[c] =
-                2.0f * content_origin_x + content_width - col_x[c] - col_w[c];
+            col_x[c] = 2.0f * content_origin_x + content_width - col_x[c] - col_w[c];
         }
     }
 
@@ -3949,9 +3937,9 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
     int grid_vertical = r->boxes.data[idx].grid_vertical;
     if (grid_vertical) {
         /* Vertical writing mode: dedicated axis-swapped placement. */
-        last_row_bottom = grid_layout_vertical_items(r, idx, items, item_count,
-                                                     content_origin_x, content_origin_y,
-                                                     content_width, col_gap, row_gap);
+        last_row_bottom =
+            grid_layout_vertical_items(r, idx, items, item_count, content_origin_x,
+                                       content_origin_y, content_width, col_gap, row_gap);
     }
     for (int rr = 0; !grid_vertical && rr < max_row_end; rr++) {
         float row_h = 0.0f;
@@ -4044,8 +4032,7 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                 c->x = item_x;
                 c->y = item_y;
                 c->w = item_w;
-                c->width_source =
-                    item_w < cell_w ? YL_SRC_CSS : YL_SRC_GRID_TRACKS;
+                c->width_source = item_w < cell_w ? YL_SRC_CSS : YL_SRC_GRID_TRACKS;
                 struct float_result block_res = layout_block(r, cidx, item_x, item_y, item_w);
                 if (YETTY_IS_ERR(block_res)) {
                     free(items);
@@ -4147,13 +4134,11 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         if (explicit_rows > YL_GRID_ABS_BAND_MAX) {
             explicit_rows = YL_GRID_ABS_BAND_MAX;
         }
-        float synth_y = band_count > 0
-                            ? band_y[band_count - 1] + band_h[band_count - 1] + row_gap
-                            : content_origin_y;
+        float synth_y = band_count > 0 ? band_y[band_count - 1] + band_h[band_count - 1] + row_gap
+                                       : content_origin_y;
         for (int rt = band_count; rt < explicit_rows; rt++) {
             const struct yl_grid_track *row_track = &r->boxes.data[idx].grid_row_tracks[rt];
-            float band_height = (!row_track->is_fr && !row_track->is_auto &&
-                                 !row_track->is_pct)
+            float band_height = (!row_track->is_fr && !row_track->is_auto && !row_track->is_pct)
                                     ? row_track->value
                                     : 0.0f;
             band_y[rt] = synth_y;
@@ -4171,13 +4156,12 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         if (child->position != YL_POS_ABSOLUTE && child->position != YL_POS_FIXED) {
             continue;
         }
-        int abs_justify = child->justify_self != 0 ? child->justify_self
-                                                   : r->boxes.data[idx].justify_items;
+        int abs_justify =
+            child->justify_self != 0 ? child->justify_self : r->boxes.data[idx].justify_items;
         if (abs_justify == 0 || abs_justify == CSS_ALIGN_ITEMS_STRETCH) {
             abs_justify = CSS_ALIGN_ITEMS_FLEX_START;
         }
-        int abs_align = child->align_self != 0 ? child->align_self
-                                               : r->boxes.data[idx].align_items;
+        int abs_align = child->align_self != 0 ? child->align_self : r->boxes.data[idx].align_items;
         if (abs_align == 0 || abs_align == CSS_ALIGN_ITEMS_STRETCH) {
             abs_align = CSS_ALIGN_ITEMS_FLEX_START;
         }
@@ -4185,9 +4169,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
 		 * the area model adds nothing — keep the flow-recorded static
 		 * position. */
         if (child->grid_col_start <= 0 && child->grid_row_start <= 0 &&
-            abs_justify == CSS_ALIGN_ITEMS_FLEX_START &&
-            abs_align == CSS_ALIGN_ITEMS_FLEX_START && !grid_vertical &&
-            child->margin_left == 0.0f && child->margin_top == 0.0f) {
+            abs_justify == CSS_ALIGN_ITEMS_FLEX_START && abs_align == CSS_ALIGN_ITEMS_FLEX_START &&
+            !grid_vertical && child->margin_left == 0.0f && child->margin_top == 0.0f) {
             continue;
         }
         float area_x = content_origin_x;
@@ -4293,8 +4276,7 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                 if (grid_vertical == 1) {
                     area_x = content_origin_x + row_extent_before;
                 } else {
-                    area_x = content_origin_x + abs_mirror_width - row_extent_before -
-                             row_extent;
+                    area_x = content_origin_x + abs_mirror_width - row_extent_before - row_extent;
                 }
             } else {
                 area_x = content_origin_x;
@@ -4354,8 +4336,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
             int measure_budget = YL_CELL_MEASURE_BUDGET;
             float fit = measure_cell_content_width(r, abs_idx, &measure_budget);
             if (fit > 0.0f) {
-                hyp_w = fit + child->padding_left + child->padding_right +
-                        child->border_left + child->border_right;
+                hyp_w = fit + child->padding_left + child->padding_right + child->border_left +
+                        child->border_right;
                 if (hyp_w > area_w) {
                     hyp_w = area_w;
                 }
@@ -4416,18 +4398,16 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         if (x_align == CSS_ALIGN_ITEMS_FLEX_END) {
             child->static_x = area_x + area_w - hyp_w - child->margin_right;
         } else if (x_align == CSS_ALIGN_ITEMS_CENTER) {
-            child->static_x =
-                area_x + child->margin_left +
-                (area_w - hyp_w - child->margin_left - child->margin_right) * 0.5f;
+            child->static_x = area_x + child->margin_left +
+                              (area_w - hyp_w - child->margin_left - child->margin_right) * 0.5f;
         } else {
             child->static_x = area_x + child->margin_left;
         }
         if (y_align == CSS_ALIGN_ITEMS_FLEX_END) {
             child->static_y = area_y + area_h - hyp_h - child->margin_bottom;
         } else if (y_align == CSS_ALIGN_ITEMS_CENTER) {
-            child->static_y =
-                area_y + child->margin_top +
-                (area_h - hyp_h - child->margin_top - child->margin_bottom) * 0.5f;
+            child->static_y = area_y + child->margin_top +
+                              (area_h - hyp_h - child->margin_top - child->margin_bottom) * 0.5f;
         } else {
             child->static_y = area_y + child->margin_top;
         }

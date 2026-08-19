@@ -781,8 +781,8 @@ static struct yetty_ycore_void_result handle_event(struct yetty_yrich_app *app,
         /* Positions are framebuffer px and scale like the viewport; the wheel
          * deltas are notches and do not. */
         struct yetty_ycore_int_result scroll_res = yetty_ygui_framework_feed_mouse_scroll(
-            app->ygui, ev->mouse_scroll.x / yrich_scale(app),
-            ev->mouse_scroll.y / yrich_scale(app), ev->mouse_scroll.dx, ev->mouse_scroll.dy);
+            app->ygui, ev->mouse_scroll.x / yrich_scale(app), ev->mouse_scroll.y / yrich_scale(app),
+            ev->mouse_scroll.dx, ev->mouse_scroll.dy);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scroll_res, "yrich: scroll");
         struct yetty_ycore_void_result scene_r = push_scene(app);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_r, "yrich: push scene");

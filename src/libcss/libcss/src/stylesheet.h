@@ -249,7 +249,7 @@ struct css_stylesheet {
 
     struct css_layer_registry *layer_registry; /**< Shared @layer tree, or NULL
                                                * (parser then uses a private one) */
-    uint64_t base_layer; /**< Layer key the whole sheet is nested in via
+    uint64_t base_layer;                       /**< Layer key the whole sheet is nested in via
                           * `@import ... layer(name)`; 0 == top level */
 };
 
