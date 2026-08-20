@@ -12,6 +12,7 @@
 #include <stdlib.h> /* malloc/free for buffer marshalling */
 #include <string.h> /* memcpy/strlen */
 
+struct yetty_yclass_object_ptr_result;
 struct yetty_ycore_char_ptr_result;
 struct yetty_ycore_rectangle;
 struct yetty_ycore_void_result;
@@ -39,8 +40,15 @@ struct yetty_ycore_void_result yetty_yfigure_set_child_rect(struct yetty_yclass_
                                                             struct yetty_ycore_rectangle rect);
 struct yetty_ycore_void_result yetty_yfigure_set_rect(struct yetty_yclass_object *obj,
                                                       struct yetty_ycore_rectangle rect);
+struct yetty_yclass_object_ptr_result yetty_yfigure_child_object(struct yetty_yclass_object *obj,
+                                                                 uint32_t child_id);
+struct yetty_ycore_void_result yetty_yfigure_seat_overlay(struct yetty_yclass_object *obj,
+                                                          uint32_t id,
+                                                          struct yetty_ycore_rectangle rect);
 struct yetty_ycore_void_result yetty_yfigure_set_child_z(struct yetty_yclass_object *obj,
                                                          uint32_t id, int32_t z);
+struct yetty_ycore_void_result yetty_yfigure_set_child_input_passthrough(
+    struct yetty_yclass_object *obj, uint32_t id, uint32_t passthrough);
 struct yetty_ycore_void_result yetty_yfigure_set_child_hidden(struct yetty_yclass_object *obj,
                                                               uint32_t id, uint32_t hidden);
 struct yetty_ycore_void_result yetty_yfigure_set_child_scroll(struct yetty_yclass_object *obj,
@@ -76,8 +84,14 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_rect_fn)(
     struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_rect_fn)(struct yetty_yclass_object *,
                                                                     struct yetty_ycore_rectangle);
+typedef struct yetty_yclass_object_ptr_result (*yetty_yfigure_child_object_fn)(
+    struct yetty_yclass_object *, uint32_t);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_seat_overlay_fn)(
+    struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_z_fn)(struct yetty_yclass_object *,
                                                                        uint32_t, int32_t);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_input_passthrough_fn)(
+    struct yetty_yclass_object *, uint32_t, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_hidden_fn)(
     struct yetty_yclass_object *, uint32_t, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_scroll_fn)(
@@ -483,6 +497,142 @@ struct yetty_ycore_void_result yetty_yfigure_set_rect(struct yetty_yclass_object
     }
 }
 
+struct yetty_yclass_object_ptr_result yetty_yfigure_child_object(struct yetty_yclass_object *obj,
+                                                                 uint32_t child_id)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yfigure_child_object: NULL object");
+    }
+
+    if (obj->session) {
+        struct uint32_result remote_id_r = yetty_yclass_rpc_session_ensure_remote_id_by_name(
+            obj->session, "yetty_yfigure_child_object");
+        YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, remote_id_r,
+                            "yetty_yfigure_child_object: ensure_remote_id_by_name failed");
+        uint32_t remote_id = remote_id_r.value;
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
+            uint64_t obj_handle;
+            uint32_t child_id;
+        } wire_args = {
+            container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
+                ->handle,
+            child_id};
+#pragma pack(pop)
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
+        YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, rpc_call_r,
+                            "yetty_yfigure_child_object: RPC call failed");
+        if (response_len < 1) {
+            free(resp_buf);
+            return YETTY_ERR(yetty_yclass_object_ptr,
+                             "yetty_yfigure_child_object: short RPC response");
+        }
+        if (resp_buf[0] != 0) {
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_yclass_object_ptr_result remote_error = YETTY_ERR(
+                yetty_yclass_object_ptr, "yetty_yfigure_child_object: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
+        }
+        if (response_len != 1 + sizeof(uint64_t)) {
+            free(resp_buf);
+            return YETTY_ERR(yetty_yclass_object_ptr,
+                             "yetty_yfigure_child_object: truncated RPC payload");
+        }
+        uint64_t remote_handle;
+        memcpy(&remote_handle, resp_buf + 1, sizeof(remote_handle));
+        free(resp_buf);
+        if (remote_handle == 0) {
+            return YETTY_OK(yetty_yclass_object_ptr, NULL);
+        }
+        return yetty_yclass_object_proxy_create(obj->session, remote_handle, NULL);
+    } else {
+        static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+        if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+            struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+                "yetty_yfigure", (yetty_yclass_method_id_t)yetty_yfigure_child_object);
+            if (YETTY_IS_ERR(method_slot_r)) {
+                return YETTY_ERR(yetty_yclass_object_ptr,
+                                 "yetty_yfigure_child_object: method_slot_get failed",
+                                 method_slot_r);
+            }
+            method_slot = method_slot_r.value;
+        }
+        struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+        YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, object_class_r,
+                            "yetty_yfigure_child_object: object_class failed");
+        struct yetty_yclass_impl_t_result dispatch_impl_r =
+            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, dispatch_impl_r,
+                            "yetty_yfigure_child_object: dispatch_lookup failed");
+        return ((yetty_yfigure_child_object_fn)dispatch_impl_r.value)(obj, child_id);
+    }
+}
+
+struct yetty_ycore_void_result yetty_yfigure_seat_overlay(struct yetty_yclass_object *obj,
+                                                          uint32_t id,
+                                                          struct yetty_ycore_rectangle rect)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_seat_overlay: NULL object");
+    }
+
+    if (obj->session) {
+        struct uint32_result remote_id_r = yetty_yclass_rpc_session_ensure_remote_id_by_name(
+            obj->session, "yetty_yfigure_seat_overlay");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r,
+                            "yetty_yfigure_seat_overlay: ensure_remote_id_by_name failed");
+        uint32_t remote_id = remote_id_r.value;
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
+            uint64_t obj_handle;
+            uint32_t id;
+            struct yetty_ycore_rectangle rect;
+        } wire_args = {
+            container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
+                ->handle,
+            id, rect};
+#pragma pack(pop)
+        struct yetty_ycore_void_result rpc_call_r = yetty_yclass_rpc_call_void(
+            obj->session, remote_id, "yetty_yfigure_seat_overlay", &wire_args, sizeof(wire_args));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
+                            "yetty_yfigure_seat_overlay: RPC call failed");
+        return YETTY_OK_VOID();
+    } else {
+        static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+        if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+            struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+                "yetty_yfigure", (yetty_yclass_method_id_t)yetty_yfigure_seat_overlay);
+            if (YETTY_IS_ERR(method_slot_r)) {
+                return YETTY_ERR(yetty_ycore_void,
+                                 "yetty_yfigure_seat_overlay: method_slot_get failed",
+                                 method_slot_r);
+            }
+            method_slot = method_slot_r.value;
+        }
+        struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                            "yetty_yfigure_seat_overlay: object_class failed");
+        struct yetty_yclass_impl_t_result dispatch_impl_r =
+            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                            "yetty_yfigure_seat_overlay: dispatch_lookup failed");
+        return ((yetty_yfigure_seat_overlay_fn)dispatch_impl_r.value)(obj, id, rect);
+    }
+}
+
 struct yetty_ycore_void_result yetty_yfigure_set_child_z(struct yetty_yclass_object *obj,
                                                          uint32_t id, int32_t z)
 {
@@ -534,6 +684,66 @@ struct yetty_ycore_void_result yetty_yfigure_set_child_z(struct yetty_yclass_obj
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                             "yetty_yfigure_set_child_z: dispatch_lookup failed");
         return ((yetty_yfigure_set_child_z_fn)dispatch_impl_r.value)(obj, id, z);
+    }
+}
+
+struct yetty_ycore_void_result yetty_yfigure_set_child_input_passthrough(
+    struct yetty_yclass_object *obj, uint32_t id, uint32_t passthrough)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_yfigure_set_child_input_passthrough: NULL object");
+    }
+
+    if (obj->session) {
+        struct uint32_result remote_id_r = yetty_yclass_rpc_session_ensure_remote_id_by_name(
+            obj->session, "yetty_yfigure_set_child_input_passthrough");
+        YETTY_RETURN_IF_ERR(
+            yetty_ycore_void, remote_id_r,
+            "yetty_yfigure_set_child_input_passthrough: ensure_remote_id_by_name failed");
+        uint32_t remote_id = remote_id_r.value;
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
+            uint64_t obj_handle;
+            uint32_t id;
+            uint32_t passthrough;
+        } wire_args = {
+            container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
+                ->handle,
+            id, passthrough};
+#pragma pack(pop)
+        struct yetty_ycore_void_result rpc_call_r = yetty_yclass_rpc_call_void(
+            obj->session, remote_id, "yetty_yfigure_set_child_input_passthrough", &wire_args,
+            sizeof(wire_args));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
+                            "yetty_yfigure_set_child_input_passthrough: RPC call failed");
+        return YETTY_OK_VOID();
+    } else {
+        static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+        if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+            struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+                "yetty_yfigure",
+                (yetty_yclass_method_id_t)yetty_yfigure_set_child_input_passthrough);
+            if (YETTY_IS_ERR(method_slot_r)) {
+                return YETTY_ERR(
+                    yetty_ycore_void,
+                    "yetty_yfigure_set_child_input_passthrough: method_slot_get failed",
+                    method_slot_r);
+            }
+            method_slot = method_slot_r.value;
+        }
+        struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                            "yetty_yfigure_set_child_input_passthrough: object_class failed");
+        struct yetty_yclass_impl_t_result dispatch_impl_r =
+            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                            "yetty_yfigure_set_child_input_passthrough: dispatch_lookup failed");
+        return ((yetty_yfigure_set_child_input_passthrough_fn)dispatch_impl_r.value)(obj, id,
+                                                                                     passthrough);
     }
 }
 

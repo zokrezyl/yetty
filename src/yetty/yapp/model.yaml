@@ -64,6 +64,7 @@ classes:
       - slot: quit
         slot_domain: yapp
         impl: yapp_default_quit
+    internal: false
     doc: null
 exposed:
   - source_file: src/yetty/yapp/app.c
@@ -137,11 +138,11 @@ local_typedefs:
     source_file: src/yetty/yapp/app.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_yapp_init_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yapp/app.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yapp/app.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yapp_init_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *);"
   yetty_yapp_run_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yapp/app.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yapp/app.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yapp_run_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *);"
   yetty_yapp_quit_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yapp/app.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yapp/app.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yapp_quit_fn)(struct yetty_yclass_object *);"

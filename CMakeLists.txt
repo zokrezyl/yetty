@@ -57,6 +57,19 @@ include(${YETTY_ROOT}/build-tools/yetty/CPM.cmake)
 # module CMakeLists run.
 include(${YETTY_ROOT}/build-tools/yetty/yclass-codegen.cmake)
 
+# ymux (#699) is a POSIX-only subsystem — the daemon uses unix-domain sockets,
+# poll(2) and forkpty(3), none of which exist on the Windows or WebASM targets
+# (and it is not run on the mobile/macOS targets). Gate its module, tool, and
+# tests to desktop Linux so the non-POSIX builds compile. Must be set BEFORE the
+# platform include below: that include pulls in src/yetty (via shared.cmake's
+# add_subdirectory(src/yetty)), where the gate is read. The test dirs already
+# guard on `TARGET yetty_ymux`, so they skip automatically when it is absent.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT EMSCRIPTEN AND NOT ANDROID AND NOT YETTY_ANDROID)
+    set(YETTY_YMUX_SUPPORTED TRUE)
+else()
+    set(YETTY_YMUX_SUPPORTED FALSE)
+endif()
+
 # Detect platform and include appropriate target.
 # Each platform cmake.cmake applies its own variable overrides then builds.
 # tvOS check comes BEFORE iOS — tvOS sets YETTY_IOS=1 internally to share

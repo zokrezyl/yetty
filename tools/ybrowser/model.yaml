@@ -114,6 +114,7 @@ classes:
       - slot: run
         slot_domain: yapp
         impl: sa_worker
+    internal: false
     doc: "/*
  * Standalone browser UI as a yclass class `ybrowser:app` (subclass of yapp:app).
  * The whole block is gated by YETTY_YBROWSER_HAS_STANDALONE (only the
@@ -195,6 +196,8 @@ types:
       - name: viewport_h
         type: float
       - name: font_size
+        type: float
+      - name: host_content_scale
         type: float
       - name: event_loop
         type: "struct yetty_yevent_event_loop *"
@@ -351,5 +354,5 @@ local_types:
   yetty_ybrowser_app_ptr_result: tools/ybrowser/browser-ui.c
 local_typedefs:
   yetty_ylexbor_dom_visit_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/include/yetty/ybrowser/ybrowser.h
+    source_file: /home/misi/work/my/yetty-ymux/include/yetty/ybrowser/ybrowser.h
     text: "typedef int (*yetty_ylexbor_dom_visit_fn)(void *, int, int, const char *);"

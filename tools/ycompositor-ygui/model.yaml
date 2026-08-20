@@ -71,6 +71,10 @@ classes:
         type: uint32_t
         get: false
         set: false
+      - name: content_scale
+        type: float
+        get: false
+        set: false
       - name: child_argv
         type: "char **"
         get: false
@@ -122,6 +126,7 @@ classes:
       - slot: run
         slot_domain: yapp
         impl: ycompositorygui_app_run
+    internal: false
     doc: null
 types:
   - name: yetty_context

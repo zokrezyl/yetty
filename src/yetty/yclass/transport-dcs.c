@@ -60,7 +60,23 @@ struct dcs_transport {
     struct yetty_ycore_buffer inbuf;
     size_t inbuf_off;
     int eof;
+
+    /* Optional sink for raw (non-envelope) bytes seen on read_fd — lets a pane
+     * app recover keystrokes that arrive during a synchronous recv() instead of
+     * dropping them. NULL = discard (the historical behaviour). */
+    yetty_ywire_raw_cb raw_sink;
+    void *raw_user;
 };
+
+/* SM default-sink wrapper: forward raw runs to the installed sink, if any. */
+static struct yetty_ycore_void_result dcs_on_raw(void *userdata, const uint8_t *bytes, size_t n)
+{
+    struct dcs_transport *t = userdata;
+    if (t->raw_sink) {
+        return t->raw_sink(t->raw_user, bytes, n);
+    }
+    return YETTY_OK_VOID();
+}
 
 /* Buffered handler — fires once per inbound envelope with the full
  * decoded body. Append it to inbuf for the next recv() call. */
@@ -326,7 +342,33 @@ struct yetty_yclass_transport_ptr_result yetty_yclass_transport_dcs_create(int r
         free(t);
         return YETTY_ERR(yetty_yclass_transport_ptr, "transport_dcs_create: sm register", rr);
     }
+
+    /* Raw (non-envelope) bytes go to our sink wrapper; it no-ops until a caller
+     * installs a real sink, so existing users are unaffected. */
+    struct yetty_ycore_void_result raw_rr =
+        yetty_ywire_wire_statemachine_set_default_buffered(t->sm, dcs_on_raw, t);
+    if (YETTY_IS_ERR(raw_rr)) {
+        struct yetty_ycore_void_result dr = yetty_ywire_wire_statemachine_destroy(t->sm);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
+        free(t);
+        return YETTY_ERR(yetty_yclass_transport_ptr, "transport_dcs_create: sm raw register",
+                         raw_rr);
+    }
     return YETTY_OK(yetty_yclass_transport_ptr, &t->base);
+}
+
+struct yetty_ycore_void_result yetty_yclass_transport_dcs_set_raw_sink(
+    struct yetty_yclass_transport *transport, yetty_ywire_raw_cb cb, void *userdata)
+{
+    if (!transport) {
+        return YETTY_ERR(yetty_ycore_void, "transport_dcs_set_raw_sink: NULL transport");
+    }
+    struct dcs_transport *t = (struct dcs_transport *)transport;
+    t->raw_sink = cb;
+    t->raw_user = userdata;
+    return YETTY_OK_VOID();
 }
 
 struct yetty_yclass_transport_ptr_result yetty_yclass_transport_default_create(void)

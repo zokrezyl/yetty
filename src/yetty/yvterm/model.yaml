@@ -262,6 +262,7 @@ classes:
         get: false
         set: false
     ops: []
+    internal: false
     doc: "/* The unified terminal grid — the yclass data block. */"
   - name: vterm
     domain: yvterm
@@ -343,10 +344,14 @@ classes:
         get: false
         set: false
       - name: faces
-        type: "struct yvterm_font_face[4]"
+        type: "struct yvterm_font_face[6]"
         get: false
         set: false
       - name: face_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: ligature_face_index
         type: uint32_t
         get: false
         set: false
@@ -465,6 +470,7 @@ classes:
       - slot: destroy
         slot_domain: yfigure
         impl: vterm_destroy_slot
+    internal: false
     doc: null
 exposed:
   - source_file: src/yetty/yvterm/grid.c
@@ -1530,7 +1536,7 @@ types:
       - name: face_pad2
         type: uint32_t
       - name: face_params
-        type: "float[4][4]"
+        type: "float[6][4]"
   - name: yetty_yclass_object_ptr_result
     kind: result
     fields:

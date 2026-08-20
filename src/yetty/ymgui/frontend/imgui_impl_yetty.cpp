@@ -212,9 +212,8 @@ static bool ensure_attached(void)
     g_state.container = container_result.value;
     /* Prime the container's slots while the pipeline is empty (steady-state
      * pipelined mutations must never mid-stream RESOLVE_SLOT). */
-    struct yetty_ycore_void_result prime_result =
-        yetty_yclass_rpc_session_translate_class(g_state.rpc_root->session,
-                                                 "yetty_yfigure_container");
+    struct yetty_ycore_void_result prime_result = yetty_yclass_rpc_session_translate_class(
+        g_state.rpc_root->session, "yetty_yfigure_container");
     if (YETTY_IS_ERR(prime_result)) {
         yetty_ycore_error_destroy(prime_result.error);
     }
@@ -1188,6 +1187,22 @@ bool yetty_ymgui_ImGui_ImplYetty_PlatformInit(void)
         (void)w;
     }
     yetty_ycore_buffer_destroy(&sub);
+
+    /* Figure-key fan-out opt-in (CLIENT_INPUT_SUB_KEY_FANOUT). The mouse modes
+     * above only ask for pointer events; a focused ymgui figure needs KEYBOARD
+     * too, delivered as structured CLIENT_INPUT_FIGURE_KEY envelopes. Since the
+     * host gates that fan-out on this opt-in, without it a click-focused figure
+     * receives no keys at all (they are not consumed for a non-subscriber, but
+     * ymgui reads no raw PTY either). Same envelope ccc/yai/ybrowser emit. */
+    struct yetty_client_input_sub key_sub = {};
+    key_sub.magic = YETTY_CLIENT_INPUT_SUB_MAGIC;
+    key_sub.version = YMGUI_WIRE_VERSION;
+    key_sub.flags = YETTY_CLIENT_INPUT_SUB_KEY_FANOUT;
+    struct yetty_ycore_void_result key_sub_res = yetty_yface_emit_to_fd(
+        g_state.out_fd, YETTY_OSC_CS_CLIENT_INPUT_SUB, 0, nullptr, 0, &key_sub, sizeof(key_sub));
+    if (YETTY_IS_ERR(key_sub_res)) {
+        yetty_ycore_error_destroy(key_sub_res.error);
+    }
     return true;
 #endif
 }
@@ -1203,6 +1218,20 @@ void yetty_ymgui_ImGui_ImplYetty_PlatformShutdown(void)
             (void)w;
         }
         yetty_ycore_buffer_destroy(&unsub);
+
+        /* Drop the figure-key fan-out opt-in (flags = 0) — mirror of the setup
+         * subscription so the host stops routing keys to a gone figure. */
+        struct yetty_client_input_sub key_unsub = {};
+        key_unsub.magic = YETTY_CLIENT_INPUT_SUB_MAGIC;
+        key_unsub.version = YMGUI_WIRE_VERSION;
+        key_unsub.flags = 0u;
+        struct yetty_ycore_void_result key_unsub_res =
+            yetty_yface_emit_to_fd(g_state.out_fd, YETTY_OSC_CS_CLIENT_INPUT_SUB, 0, nullptr, 0,
+                                   &key_unsub, sizeof(key_unsub));
+        if (YETTY_IS_ERR(key_unsub_res)) {
+            yetty_ycore_error_destroy(key_unsub_res.error);
+        }
+
         platform_restore_termios(g_state.in_fd, &g_state.saved_termios);
         g_state.raw_mode_active = 0;
     }

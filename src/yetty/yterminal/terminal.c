@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <yetty/yplatform/platform-input-pipe.h>
-#include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/pty-io.h>
 #include <yetty/yplatform/pty-pipe-source.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/yclipboard/clipboard.h>
@@ -191,6 +191,18 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
     /* Same trick for the content-rect wire handler. */
     struct yetty_yterminal_terminal *content_rect_handler_self;
 
+    /* Same trick for the exit-window input-hold wire handler. */
+    struct yetty_yterminal_terminal *input_hold_handler_self;
+
+    /* Host-side timer that ACTIVELY enforces the input barrier's deadline: armed
+     * alongside the barrier (INPUT_HOLD), it fires if the client wedges without
+     * further pane output or user input and force-releases the held bytes — so
+     * expiry does not depend on a later keystroke happening to observe it.
+     * Created lazily on first arm; destroyed at teardown. */
+    yetty_yevent_timer_id input_barrier_timer;
+    struct yetty_yevent_event_listener input_barrier_listener;
+    int input_barrier_timer_ready;
+
     /* Same trick for the pane-wide subscription wire handler. */
     struct yetty_yterminal_terminal *client_sub_handler_self;
 
@@ -232,6 +244,12 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
     int mouse_click_subscribed;
     int mouse_move_subscribed;
     int key_subscribed;
+    /* CLIENT_INPUT_SUB_KEY_FANOUT (review: ygreeter key theft): the app
+     * OPTED INTO the structured figure-key fan-out via the pane-wide
+     * subscription envelope. Without it a click-focused figure must NOT
+     * consume keystrokes — apps that read raw keys from their PTY
+     * (ygreeter) went deaf after any click. */
+    int figure_key_optin;
     /* Geometry-only subscription: the client wants pane size + content_scale
      * on the resize envelope, with no input forwarding. Latched from the
      * pane-wide subscription envelope. */
@@ -369,6 +387,20 @@ static void terminal_pty_pipe_alloc(void *ctx, size_t suggested_size, char **buf
     *buflen = YETTY_YTERMINAL_PTY_READ_BUF_SIZE;
 }
 
+static struct yetty_ycore_size_result terminal_pty_write_raw(
+    struct yetty_yterminal_terminal *terminal, const char *data, size_t len);
+
+/* Reliably write an entire buffer to the pane PTY (retries EAGAIN). Used to
+ * flush released input-barrier bytes to the resumed shell. Returns the delivery
+ * result; the teardown/expiry call sites choose to absorb it (best-effort). */
+static struct yetty_ycore_void_result terminal_pty_write_all(
+    struct yetty_yterminal_terminal *terminal, const uint8_t *data, size_t size);
+
+/* Stop the barrier-expiry timer. Returns the stop result. Forward-declared
+ * because terminal_pty_pipe_read (above its definition) stops it on release. */
+static struct yetty_ycore_void_result terminal_input_barrier_stop_timer(
+    struct yetty_yterminal_terminal *terminal);
+
 /* libuv-shaped pipe-read callback. Errors from feed/process have no
  * Result to propagate to — absorb them at this boundary by logging the
  * full chain and destroying it. */
@@ -407,6 +439,31 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
             struct yetty_yevent_event_loop *loop = terminal->context.yetty_context.event_loop;
             loop->ops->post_fatal_error(loop, wrap.error);
             return;
+        }
+        /* This feed may have processed the in-pane client's final channel
+         * CLOSE (channel_host arms/holds the input barrier). If the client is
+         * now fully gone, RELEASE the keystrokes the host held during its
+         * teardown into the pane PTY — the resumed shell reads them exactly
+         * once. Host-owned bytes only; nothing from pane output. */
+        if (terminal->channel_host) {
+            struct yetty_ycore_buffer released = {0};
+            int released_len =
+                yetty_ywire_connection_input_barrier_release(terminal->channel_host, &released);
+            if (released_len > 0) {
+                /* Best-effort at the read callback: a failed flush means a dead
+                 * child (nothing left to deliver to) — absorb and keep serving. */
+                struct yetty_ycore_void_result flush_res =
+                    terminal_pty_write_all(terminal, released.data, released.size);
+                if (YETTY_IS_ERR(flush_res)) {
+                    yetty_ycore_error_destroy(flush_res.error);
+                }
+                struct yetty_ycore_void_result stop_res =
+                    terminal_input_barrier_stop_timer(terminal); /* barrier disarmed */
+                if (YETTY_IS_ERR(stop_res)) {
+                    yetty_ycore_error_destroy(stop_res.error);
+                }
+            }
+            yetty_ycore_buffer_destroy(&released);
         }
         {
             /* Ask the content grid whether anything went dirty this feed. Its
@@ -515,6 +572,27 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
         ydebug("terminal_pty_pipe_read: PTY EOF (nread=%ld), posting CLOSE for view %llu", nread,
                (unsigned long long)terminal->view.id);
         terminal->shutting_down = 1;
+        /* Ungraceful teardown (PTY EOF with an armed barrier): recover any held
+         * input-barrier bytes exactly once so nothing is stranded in memory. The
+         * forced release disarms; the write is best-effort (a closed PTY no-ops
+         * it). */
+        if (terminal->channel_host) {
+            struct yetty_ycore_buffer released = {0};
+            int released_len = yetty_ywire_connection_input_barrier_release_forced(
+                terminal->channel_host, &released);
+            if (released_len > 0) {
+                struct yetty_ycore_void_result flush_res =
+                    terminal_pty_write_all(terminal, released.data, released.size);
+                if (YETTY_IS_ERR(flush_res)) {
+                    yetty_ycore_error_destroy(flush_res.error);
+                }
+            }
+            yetty_ycore_buffer_destroy(&released);
+            struct yetty_ycore_void_result stop_res = terminal_input_barrier_stop_timer(terminal);
+            if (YETTY_IS_ERR(stop_res)) {
+                yetty_ycore_error_destroy(stop_res.error);
+            }
+        }
         struct yetty_ycore_xthread_event_pipe *pipe =
             terminal->context.yetty_context.runtime->platform_input_pipe;
         if (pipe && pipe->ops && pipe->ops->write) {
@@ -540,6 +618,19 @@ static struct yetty_ycore_size_result terminal_pty_write_raw(
     return terminal->context.pty->ops->write(terminal->context.pty, data, len);
 }
 
+static struct yetty_ycore_void_result terminal_pty_write_all(
+    struct yetty_yterminal_terminal *terminal, const uint8_t *data, size_t size)
+{
+    /* Reliable full-buffer delivery: retries EAGAIN (a zero-byte return on the
+     * non-blocking master) so a busy PTY or a large released paste never drops
+     * its tail. Surfaces a genuine write error (a dead child) to the caller,
+     * which decides whether to absorb it. */
+    struct yetty_ycore_void_result wr =
+        yetty_yplatform_pty_write_all(terminal->context.pty, data, size);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "terminal_pty_write_all");
+    return YETTY_OK_VOID();
+}
+
 /* yetty_yterminal_pty_write_fn impl — adapts the Result-returning PTY op
  * (size_result) to the typedef (void_result). */
 YETTY_ANNOTATE("override@ytermsink:sink:pty_write")
@@ -549,6 +640,41 @@ static struct yetty_ycore_void_result terminal_sink_pty_write(struct yetty_yclas
     struct yetty_yterminal_terminal_ptr_result terminal_res = yetty_yterminal_terminal_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, terminal_res, "terminal sink pty_write: from_obj");
     struct yetty_yterminal_terminal *terminal = terminal_res.value;
+    /* Host-owned input barrier: while an in-pane client is tearing down, HOLD
+     * these keystrokes host-side instead of forwarding them into the stream the
+     * client's close drain would consume (and lose). They release to the pane
+     * once the client is gone (terminal_pty_pipe_read). Held bytes are our OWN
+     * user input, never pane output — so this cannot inject. */
+    if (terminal->channel_host) {
+        if (yetty_ywire_connection_input_barrier_hold(terminal->channel_host, data, len)) {
+            return YETTY_OK_VOID();
+        }
+        /* Not held: either unarmed, or the barrier passed its host-side deadline
+         * (a wedged/dead client). On expiry, flush the held backlog to the pane
+         * NOW so retention stays bounded, then forward this keystroke below.
+         * Bail on the first error (explicit blocks so the released buffer is
+         * freed before returning). */
+        struct yetty_ycore_buffer expired = {0};
+        int flushed =
+            yetty_ywire_connection_input_barrier_release(terminal->channel_host, &expired);
+        if (flushed > 0) {
+            struct yetty_ycore_void_result flush_res =
+                terminal_pty_write_all(terminal, expired.data, expired.size);
+            if (YETTY_IS_ERR(flush_res)) {
+                yetty_ycore_buffer_destroy(&expired);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "terminal sink pty_write: flush expired barrier backlog",
+                                 flush_res);
+            }
+            struct yetty_ycore_void_result stop_res = terminal_input_barrier_stop_timer(terminal);
+            if (YETTY_IS_ERR(stop_res)) {
+                yetty_ycore_buffer_destroy(&expired);
+                return YETTY_ERR(yetty_ycore_void, "terminal sink pty_write: stop barrier timer",
+                                 stop_res);
+            }
+        }
+        yetty_ycore_buffer_destroy(&expired);
+    }
     struct yetty_ycore_size_result r = terminal_pty_write_raw(terminal, data, len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal sink pty_write: pty_write_raw failed");
     ydebug("terminal sink pty_write: wrote %zu bytes to PTY", len);
@@ -848,6 +974,8 @@ static struct yetty_yfigure_hit_result terminal_resolve_figure_hit(
     hit = plain_res.value;
     hit.local_x *= hit_scale;
     hit.local_y *= hit_scale;
+    ydebug("terminal resolve_figure_hit: (%.1f,%.1f) -> figure_id=%u local=(%.1f,%.1f)", lx, ly,
+           hit.figure_id, hit.local_x, hit.local_y);
     return YETTY_OK(yetty_yfigure_hit, hit);
 }
 
@@ -1182,6 +1310,188 @@ static struct yetty_ycore_void_result terminal_reinject_process_input(
 }
 
 /*-------------------------------------------------------------------------
+ * Exit-window input HOLD — YETTY_OSC_CS_CLIENT_INPUT_HOLD (no payload).
+ *
+ * A client sends this at the start of its teardown to ARM the host's input
+ * barrier: the host holds the user's keystrokes host-side instead of
+ * forwarding them into the stream the client's close drain would consume,
+ * releasing them to the pane once the client is gone. The envelope carries
+ * no bytes — it can only DEFER the host's own user input, never synthesize
+ * any (the safe replacement for the removed 610014 handback). We just drain
+ * the empty body and arm the barrier on channel_host.
+ *-----------------------------------------------------------------------*/
+/* Emit the no-payload HOLD-ACK back to the client — its arrival PROVES the
+ * barrier is armed, so the client can safely detach its sinks. Written straight
+ * to the PTY master (the host→client inline path, same as
+ * terminal_dcs_emit_response), never the keystroke sink, so the barrier does
+ * not hold it. */
+static struct yetty_ycore_void_result terminal_emit_input_hold_ack(
+    struct yetty_yterminal_terminal *terminal)
+{
+    struct yetty_ycore_buffer ack_env = {0};
+    struct yetty_ycore_void_result emit_res =
+        yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CLIENT_INPUT_HOLD_ACK,
+                         /*has_args=*/1, /*compressed=*/0, NULL, 0, NULL, 0, &ack_env);
+    if (YETTY_IS_ERR(emit_res)) {
+        yetty_ycore_buffer_destroy(&ack_env);
+        return YETTY_ERR(yetty_ycore_void, "terminal_emit_input_hold_ack: emit", emit_res);
+    }
+    /* Ship through the RELIABLE response-write path: it loops over short writes
+     * and RETRIES zero-byte writes (a busy PTY master) instead of dropping the
+     * tail — the client blocks on this ACK, so a partial write must not silently
+     * succeed. */
+    struct yetty_ycore_void_result write_res =
+        terminal_dcs_emit_response(ack_env.data, ack_env.size, terminal);
+    yetty_ycore_buffer_destroy(&ack_env);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, write_res,
+                        "terminal_emit_input_hold_ack: response write");
+    return YETTY_OK_VOID();
+}
+
+/* Stop the barrier-expiry timer (kept registered for reuse; deregistered +
+ * destroyed at terminal teardown). Safe when no timer exists / already stopped. */
+static struct yetty_ycore_void_result terminal_input_barrier_stop_timer(
+    struct yetty_yterminal_terminal *terminal)
+{
+    if (!terminal->input_barrier_timer_ready) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_yevent_event_loop *loop = terminal->context.yetty_context.event_loop;
+    if (!loop) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result stop_res =
+        loop->ops->stop_timer(loop, terminal->input_barrier_timer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, stop_res, "terminal_input_barrier_stop_timer");
+    return YETTY_OK_VOID();
+}
+
+/* Timer wakeup: the barrier's host-side deadline elapsed while the client was
+ * still (apparently) present — a wedged/dead client. Force-release the held
+ * bytes to the pane so retention is bounded and the input is recovered, then
+ * stop the timer (one-shot per arm). */
+YETTY_EXTERNAL_CALLBACK
+static struct yetty_ycore_int_result terminal_input_barrier_on_expiry(
+    struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *event)
+{
+    (void)event;
+    struct yetty_yterminal_terminal *terminal =
+        container_of(listener, struct yetty_yterminal_terminal, input_barrier_listener);
+    if (terminal->channel_host) {
+        struct yetty_ycore_buffer released = {0};
+        int released_len =
+            yetty_ywire_connection_input_barrier_release_forced(terminal->channel_host, &released);
+        if (released_len > 0) {
+            struct yetty_ycore_void_result flush_res =
+                terminal_pty_write_all(terminal, released.data, released.size);
+            if (YETTY_IS_ERR(flush_res)) {
+                yetty_ycore_error_destroy(flush_res.error);
+            }
+        }
+        yetty_ycore_buffer_destroy(&released);
+    }
+    /* External-callback boundary (timer wakeup): absorb the stop result. */
+    struct yetty_ycore_void_result stop_res = terminal_input_barrier_stop_timer(terminal);
+    if (YETTY_IS_ERR(stop_res)) {
+        yetty_ycore_error_destroy(stop_res.error);
+    }
+    return YETTY_OK(yetty_ycore_int, 0);
+}
+
+/* (Lazily create + register, then) (re)start the barrier-expiry timer for
+ * `deadline_ms`. Surfaces any timer error to the caller, which chooses to
+ * degrade to the passive deadline (checked in _hold/_release) rather than fail
+ * teardown. On a register failure the just-created timer is destroyed first. */
+static struct yetty_ycore_void_result terminal_input_barrier_start_timer(
+    struct yetty_yterminal_terminal *terminal, int deadline_ms)
+{
+    struct yetty_yevent_event_loop *loop = terminal->context.yetty_context.event_loop;
+    if (!loop) {
+        return YETTY_ERR(yetty_ycore_void, "terminal_input_barrier_start_timer: no event loop");
+    }
+    if (!terminal->input_barrier_timer_ready) {
+        struct yetty_yevent_timer_id_result id_res = loop->ops->create_timer(loop);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res,
+                            "terminal_input_barrier_start_timer: create_timer");
+        terminal->input_barrier_timer = id_res.value;
+        terminal->input_barrier_listener.handler = terminal_input_barrier_on_expiry;
+        struct yetty_ycore_void_result reg_res = loop->ops->register_timer_listener(
+            loop, terminal->input_barrier_timer, &terminal->input_barrier_listener);
+        if (YETTY_IS_ERR(reg_res)) {
+            struct yetty_ycore_void_result destroy_res =
+                loop->ops->destroy_timer(loop, terminal->input_barrier_timer);
+            if (YETTY_IS_ERR(destroy_res)) {
+                yetty_ycore_error_destroy(destroy_res.error);
+            }
+            return YETTY_ERR(yetty_ycore_void,
+                             "terminal_input_barrier_start_timer: register_timer_listener",
+                             reg_res);
+        }
+        terminal->input_barrier_timer_ready = 1;
+    }
+    /* Restart cleanly so a re-arm resets the countdown. */
+    struct yetty_ycore_void_result stop_res = terminal_input_barrier_stop_timer(terminal);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, stop_res, "terminal_input_barrier_start_timer: stop");
+    struct yetty_ycore_void_result cfg_res =
+        loop->ops->config_timer(loop, terminal->input_barrier_timer, deadline_ms);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cfg_res, "terminal_input_barrier_start_timer: config");
+    struct yetty_ycore_void_result start_res =
+        loop->ops->start_timer(loop, terminal->input_barrier_timer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, start_res, "terminal_input_barrier_start_timer: start");
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result terminal_input_hold_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_yterminal_terminal *terminal = *(struct yetty_yterminal_terminal **)userdata;
+    for (;;) {
+        /* Drain the (empty) envelope body to stay frame-aligned. */
+        for (;;) {
+            uint8_t scratch[64];
+            struct yetty_ycore_size_result read_res =
+                yetty_ywire_wire_statemachine_read(sm, scratch, sizeof(scratch));
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, read_res, "terminal_input_hold: sm read");
+            if (read_res.value == 0) {
+                if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                    break;
+                }
+                yetty_yplatform_coro_yield();
+                continue;
+            }
+        }
+        if (terminal->channel_host) {
+            /* Bounded host-side retention: past this deadline the barrier stops
+             * holding and releases, so a client that arms then crashes/wedges
+             * cannot make the host swallow the keyboard forever. Comfortably
+             * covers a healthy teardown (client ACK-wait + close drain are each
+             * bounded well under a second); the healthy path releases far
+             * earlier, on the client-gone signal. */
+            enum { INPUT_BARRIER_DEADLINE_MS = 3000 };
+            /* Arm FIRST, then ACK: once armed every keystroke is held, so the
+             * ACK the client waits on can only ever be followed by held input,
+             * never forwarded input. */
+            yetty_ywire_connection_input_barrier_arm(terminal->channel_host,
+                                                     INPUT_BARRIER_DEADLINE_MS);
+            /* Confirm the arm to the client (it blocks on this before detaching
+             * its sinks). Bail on failure — a failed ACK write means the PTY is
+             * gone, and the caller surfaces it. */
+            struct yetty_ycore_void_result ack_res = terminal_emit_input_hold_ack(terminal);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, ack_res, "terminal_input_hold: emit HOLD-ACK");
+            /* ACTIVELY enforce the same deadline with a host-loop timer, so a
+             * wedged client that sends no further output and receives no further
+             * input still has its held bytes released on time (the passive check
+             * only fires when a later event happens to observe expiry). */
+            struct yetty_ycore_void_result timer_res =
+                terminal_input_barrier_start_timer(terminal, INPUT_BARRIER_DEADLINE_MS);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, timer_res,
+                                "terminal_input_hold: arm barrier expiry timer");
+        }
+        yetty_yplatform_coro_yield();
+    }
+}
+
+/*-------------------------------------------------------------------------
  * Content reservation — YETTY_OSC_CS_CONTENT_RECT / _INSET.
  *
  * A client places the terminal content surface on part of the pane (a
@@ -1301,12 +1611,16 @@ static struct yetty_ycore_void_result terminal_content_inset_process_input(
 /*-----------------------------------------------------------------------
  * Pane-wide input subscription — YETTY_OSC_CS_CLIENT_INPUT_SUB.
  *
- * Today only the geometry bit is honoured here: a client that lays out in
- * logical pixels asks to be told the pane size AND the display's HiDPI
- * factor, without opting into mouse or key forwarding (which would steal
- * the wheel from scrollback and reroute its keystrokes). The mouse/key
- * bits stay driven by the DEC private modes, which is where every existing
- * subscriber sets them.
+ * Two bits are honoured here. RESIZE: a client that lays out in logical
+ * pixels asks to be told the pane size AND the display's HiDPI factor,
+ * without opting into mouse or key forwarding. KEY_FANOUT: the client asks
+ * that keystrokes be consumed and fanned out as structured
+ * CLIENT_INPUT_FIGURE_KEY envelopes once one of its figures is
+ * click-focused (without the opt-in, keys stay on the raw PTY channel).
+ * Each envelope declares the full desired subscription state. The classic
+ * mouse/?1502 bits stay driven by the DEC private modes, which is where
+ * every existing subscriber sets them — this envelope is the path that
+ * needs no terminal-emulation involvement at all.
  *----------------------------------------------------------------------*/
 
 /* Read one subscription envelope off the SM and latch the geometry bit.
@@ -1353,7 +1667,9 @@ static struct yetty_ycore_void_result terminal_client_sub_consume_envelope(
     int want_resize = (msg.flags & YETTY_CLIENT_INPUT_SUB_RESIZE) != 0;
     int was_subscribed = terminal->resize_subscribed;
     terminal->resize_subscribed = want_resize;
-    ydebug("terminal: client sub flags=0x%x resize=%d", msg.flags, want_resize);
+    terminal->figure_key_optin = (msg.flags & YETTY_CLIENT_INPUT_SUB_KEY_FANOUT) != 0;
+    ydebug("terminal: client sub flags=0x%x resize=%d figure_key=%d", msg.flags, want_resize,
+           terminal->figure_key_optin);
     if (want_resize && !was_subscribed && terminal->applied_w > 0.0f &&
         terminal->applied_h > 0.0f) {
         struct yetty_ycore_void_result rr = terminal_emit_card_resize(
@@ -2751,6 +3067,18 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     ydebug("terminal_create: client-input reinject registered for DCS %d",
            YETTY_OSC_CS_CLIENT_INPUT_REINJECT);
 
+    /* Exit-window input HOLD — a client arms the host input barrier at the
+     * start of its teardown (no payload; safe replacement for the removed
+     * handback). Distinct userdata for its own handler coroutine. */
+    terminal->input_hold_handler_self = terminal;
+    rr = yetty_ywire_wire_statemachine_register(
+        terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CLIENT_INPUT_HOLD, /*has_args=*/1,
+        terminal_input_hold_process_input, &terminal->input_hold_handler_self);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
+                        "terminal_create: register client-input hold");
+    ydebug("terminal_create: client-input hold registered for DCS %d",
+           YETTY_OSC_CS_CLIENT_INPUT_HOLD);
+
     /* Content inset — a client reserves a band of the pane for its own
      * overlay; we shrink the libvterm surface to the inset content rect.
      * Same DCS transport as every client→server yface emit (has_args=1).
@@ -2993,6 +3321,47 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
     if (terminal->compositor_font) {
         terminal->compositor_font->ops->destroy(terminal->compositor_font);
         terminal->compositor_font = NULL;
+    }
+
+    /* Tear the barrier-expiry timer down BEFORE the connection and PTY it
+     * releases into — its callback touches channel_host and the pane PTY, so it
+     * must be stopped + deregistered + destroyed while both still exist.
+     * Best-effort: run every step, stash the first error. */
+    if (terminal->input_barrier_timer_ready) {
+        struct yetty_yevent_event_loop *loop = terminal->context.yetty_context.event_loop;
+        if (loop) {
+            struct yetty_ycore_void_result stop_res =
+                loop->ops->stop_timer(loop, terminal->input_barrier_timer);
+            if (YETTY_IS_ERR(stop_res)) {
+                if (!have_err) {
+                    first_err = stop_res;
+                    have_err = true;
+                } else {
+                    yetty_ycore_error_destroy(stop_res.error);
+                }
+            }
+            struct yetty_ycore_void_result dereg_res = loop->ops->deregister_timer_listener(
+                loop, terminal->input_barrier_timer, &terminal->input_barrier_listener);
+            if (YETTY_IS_ERR(dereg_res)) {
+                if (!have_err) {
+                    first_err = dereg_res;
+                    have_err = true;
+                } else {
+                    yetty_ycore_error_destroy(dereg_res.error);
+                }
+            }
+            struct yetty_ycore_void_result destroy_res =
+                loop->ops->destroy_timer(loop, terminal->input_barrier_timer);
+            if (YETTY_IS_ERR(destroy_res)) {
+                if (!have_err) {
+                    first_err = destroy_res;
+                    have_err = true;
+                } else {
+                    yetty_ycore_error_destroy(destroy_res.error);
+                }
+            }
+        }
+        terminal->input_barrier_timer_ready = 0;
     }
 
     /* Destroy wire state machine BEFORE the PTY — the SM holds a
@@ -3511,7 +3880,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * keyboard via DEC ?1502 — such an app consumes keystrokes from its
          * own PTY (libvterm on_key below), the same channel a full-screen
          * program reads, so forwarding a structured copy here would double it. */
-        if (!terminal->key_subscribed) {
+        if (!terminal->key_subscribed && terminal->figure_key_optin) {
             struct yetty_ycore_int_result ckr = terminal_emit_figure_key(
                 terminal, YETTY_YMGUI_INPUT_KEY_DOWN, event->key.key, event->key.mods, 0);
             if (YETTY_IS_ERR(ckr)) {
@@ -3532,14 +3901,19 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
 
     case YETTY_YCORE_KEY_UP: {
         ydebug("terminal: KEY_UP key=%d mods=%d", event->key.key, event->key.mods);
-        struct yetty_ycore_int_result ckr = terminal_emit_figure_key(
-            terminal, YETTY_YMGUI_INPUT_KEY_UP, event->key.key, event->key.mods, 0);
-        if (YETTY_IS_ERR(ckr)) {
-            return YETTY_ERR(yetty_ycore_int,
-                             "terminal_view_on_event: emit_card_key(KEY_UP) failed", ckr);
-        }
-        if (ckr.value) {
-            return YETTY_OK(yetty_ycore_int, 1);
+        /* Same opt-in gate as KEY_DOWN/CHAR: without it, apps that never asked
+         * for structured keys would still receive stray KEY_UP envelopes (and
+         * ?1502 subscribers would see inconsistent phases). */
+        if (!terminal->key_subscribed && terminal->figure_key_optin) {
+            struct yetty_ycore_int_result ckr = terminal_emit_figure_key(
+                terminal, YETTY_YMGUI_INPUT_KEY_UP, event->key.key, event->key.mods, 0);
+            if (YETTY_IS_ERR(ckr)) {
+                return YETTY_ERR(yetty_ycore_int,
+                                 "terminal_view_on_event: emit_card_key(KEY_UP) failed", ckr);
+            }
+            if (ckr.value) {
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
         }
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -3556,7 +3930,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * key-subscribed app reads every keystroke from its own PTY (on_char
          * below), so routing a structured copy to the focused figure here would
          * steal printable keys from the app the moment a figure gained focus. */
-        if (!terminal->key_subscribed) {
+        if (!terminal->key_subscribed && terminal->figure_key_optin) {
             struct yetty_ycore_int_result ckr = terminal_emit_figure_key(
                 terminal, YETTY_YMGUI_INPUT_KEY_CHAR, -1, event->chr.mods, event->chr.codepoint);
             if (YETTY_IS_ERR(ckr)) {

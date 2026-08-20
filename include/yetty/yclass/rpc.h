@@ -179,6 +179,42 @@ struct yetty_ywire_connection;
 struct yetty_ycore_void_result yetty_yclass_rpc_serve_connection(
     struct yetty_ywire_connection *connection);
 
+/* PROXY the RPC of a MULTIPLEXED ywire connection instead of serving it
+ * locally. Same channel acceptance as rpc_serve_connection, but each accepted
+ * channel's raw request bytes are handed to `forward` (with the channel, so the
+ * caller can key the pairing and write responses back with
+ * yetty_ywire_channel_write) rather than dispatched via dispatch_one. This is
+ * how a GPU-free intermediary (ymuxd) tunnels a pane app's yclass RPC to the
+ * real server (yetty) that owns the skels + impls + renderer: the frames pass
+ * through untouched, so handles/slots/root all resolve against the upstream.
+ * `close_cb` (may be NULL) fires when a proxied channel is CLOSED — BEFORE the
+ * per-channel state is freed — so the caller can drop its pairing and propagate
+ * the close upstream. `channel` identifies which pairing ended.
+ *
+ * `connection` is borrowed; `userdata` is passed back verbatim. On success
+ * `*out_state` (may be NULL) receives an opaque per-connection state pointer the
+ * caller must dispose of via yetty_yclass_rpc_forward_connection_destroy() once
+ * the connection is torn down (it is the accept callback's userdata and outlives
+ * the call). Do NOT free() it directly — the state owns per-channel forward
+ * allocations that connection destruction does not release. */
+struct yetty_ywire_channel;
+typedef void (*yetty_yclass_rpc_forward_cb)(void *userdata, struct yetty_ywire_channel *channel,
+                                            const uint8_t *bytes, size_t n);
+typedef void (*yetty_yclass_rpc_forward_close_cb)(void *userdata,
+                                                  struct yetty_ywire_channel *channel);
+struct yetty_ycore_void_result yetty_yclass_rpc_forward_connection(
+    struct yetty_ywire_connection *connection, yetty_yclass_rpc_forward_cb forward,
+    yetty_yclass_rpc_forward_close_cb close_cb, void *userdata, void **out_state);
+
+/* Dispose of the per-connection forward state returned by
+ * yetty_yclass_rpc_forward_connection(). Frees every still-open per-channel
+ * forward allocation (connection destruction fires no channel CLOSE events, so
+ * those states would otherwise leak) and then the connection-level config.
+ * `close_cb` is NOT invoked for the walked channels — the caller is tearing the
+ * whole connection down and already knows the pairings are gone. `state` may be
+ * NULL. Call this AFTER destroying the connection. */
+void yetty_yclass_rpc_forward_connection_destroy(void *state);
+
 /* ---- Client side -------------------------------------------------- */
 
 /* The session takes ownership of `transport` and destroys it on
@@ -253,6 +289,15 @@ struct uint32_result yetty_yclass_rpc_session_ensure_remote_id(struct yetty_ycla
  * the legacy combined stubs. */
 struct uint32_result yetty_yclass_rpc_session_ensure_remote_id_by_name(
     struct yetty_yclass_rpc_session *s, const char *qualified_name);
+
+/* Seed the per-session name→rid cache without a wire round-trip. For links
+ * whose serving peer PUBLISHES its slot ids out of band (the peer resolves its
+ * own id locally via dispatch_one(RESOLVE_SLOT) and hands it over in its
+ * hello), so the producer's first typed call marshals immediately — no
+ * RESOLVE_SLOT, legal on an async transport whose sync recv is forbidden.
+ * Overwrites an existing entry for the name. */
+struct yetty_ycore_void_result yetty_yclass_rpc_session_seed_remote_id_by_name(
+    struct yetty_yclass_rpc_session *s, const char *qualified_name, uint32_t remote_id);
 
 /* Client: fetch the server's root object handle (RPC_OP_GET_ROOT). 0 if the
  * server set no root. Pair with yetty_yclass_object_proxy_create to wrap it. */
@@ -343,6 +388,21 @@ void yetty_yclass_rpc_session_set_error_sink(struct yetty_yclass_rpc_session *s,
 /* Drain every completed response frame that is already buffered —
  * non-blocking, never touches the wire. No-op on sync sessions. */
 struct yetty_ycore_void_result yetty_yclass_rpc_session_pump(struct yetty_yclass_rpc_session *s);
+
+/* Pipelined completions still awaiting their response frame. 0 on a sync
+ * session (nothing ever pipelines) and for NULL. Lets an owner gate
+ * "everything I sent has been applied by the peer" logic (e.g. deferring a
+ * delivery ACK until the pipeline is empty) without touching session
+ * internals. */
+size_t yetty_yclass_rpc_session_pending(const struct yetty_yclass_rpc_session *s);
+
+/* Monotonic count of pipelined calls whose response frame has drained.
+ * Responses arrive in request order, so snapshotting
+ * (completed_total + pending) when queueing a call yields the completion
+ * count at which THAT call is applied — per-call "applied" tracking that
+ * does not require the whole pipeline to drain (a sustained feed keeps
+ * the pipeline permanently non-empty). 0 on a sync session and for NULL. */
+uint64_t yetty_yclass_rpc_session_completed_total(const struct yetty_yclass_rpc_session *s);
 
 /* The multiplexed connection a zero-arg connect built under this session,
  * or NULL when the caller supplied the transport/connection itself. The

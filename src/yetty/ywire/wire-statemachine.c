@@ -1815,6 +1815,20 @@ int yetty_ywire_wire_statemachine_code(const struct yetty_ywire_wire_statemachin
     return sm ? sm->current_code : 0;
 }
 
+int yetty_ywire_wire_statemachine_idle(const struct yetty_ywire_wire_statemachine *sm)
+{
+    if (!sm) {
+        return 1;
+    }
+    /* GROUND on both layers: the scanner outside any envelope (no partial
+     * escape pending) AND the tmux-unwrap passthrough not inside a wrapper.
+     * This is the framed boundary a teardown drain may stop reading at —
+     * the message handler fires BEFORE the envelope's ST terminator bytes
+     * are consumed, so "completion reached" alone still leaves frame tail
+     * bytes queued ahead of any raw user input. */
+    return sm->state == SCAN_RAW && sm->uw_state == UNWRAP_NORMAL;
+}
+
 enum yetty_ywire_envelope_kind yetty_ywire_wire_statemachine_kind(
     const struct yetty_ywire_wire_statemachine *sm)
 {

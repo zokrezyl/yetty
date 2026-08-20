@@ -22,6 +22,7 @@ classes:
       - slot: run
         slot_domain: yapp
         impl: standalone_worker
+    internal: false
     doc: "/*
  * yclass app wrapper. The standalone window host is a yapp:app subclass; the
  * heavy per-run state stays in `struct app` (shared with client mode), which the

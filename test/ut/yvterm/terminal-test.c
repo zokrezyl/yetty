@@ -12,6 +12,7 @@
  * they live in the vterm figure / UI layer, not this pure grid model.
  */
 
+#include <yetty/yplatform/pty-io.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/api/yvterm/grid.h>
 #include <yetty/ywire/wire-statemachine.h>
@@ -418,9 +419,61 @@ static void test_dcs_osc_routing(struct ytest *test)
     yetty_yvterm_grid_dispose(grid);
 }
 
+/* Scripted mock PTY for the reliable-write contract (P0#2). Each write() call
+ * accepts at most script[cursor] bytes (0 = a simulated EAGAIN / full kernel
+ * buffer) and records the accepted bytes. Proves yetty_yplatform_pty_write_all
+ * delivers a whole buffer across short + zero-byte returns exactly once, in
+ * order — the non-blocking fork PTY returns 0 on EAGAIN, and a naive one-shot
+ * write would drop the unwritten tail. */
+struct mock_pty {
+    struct yetty_platform_pty base; /* first member — cast self back to this */
+    const size_t *script;
+    size_t script_len;
+    size_t cursor;
+    char captured[64];
+    size_t captured_len;
+};
+
+static struct yetty_ycore_size_result mock_pty_write(struct yetty_platform_pty *self,
+                                                     const char *data, size_t len)
+{
+    struct mock_pty *pty = (struct mock_pty *)self;
+    size_t allow = pty->cursor < pty->script_len ? pty->script[pty->cursor] : len;
+    if (pty->cursor < pty->script_len) {
+        pty->cursor++;
+    }
+    size_t written = allow < len ? allow : len;
+    if (written > 0 && pty->captured_len + written <= sizeof(pty->captured)) {
+        memcpy(pty->captured + pty->captured_len, data, written);
+        pty->captured_len += written;
+    }
+    return YETTY_OK(yetty_ycore_size, written);
+}
+
+static void test_pty_write_all_reliable(struct ytest *test)
+{
+    static const struct yetty_platform_pty_ops mock_ops = {.write = mock_pty_write};
+    /* accept 3, EAGAIN, accept 2, EAGAIN, then the rest — short writes with
+     * zero-byte returns interleaved, then recovery. */
+    const size_t script[] = {3, 0, 2, 0, 100};
+    struct mock_pty pty = {0};
+    pty.base.ops = &mock_ops;
+    pty.script = script;
+    pty.script_len = sizeof(script) / sizeof(script[0]);
+
+    const char *msg = "ABCDEFGH";
+    struct yetty_ycore_void_result r =
+        yetty_yplatform_pty_write_all(&pty.base, (const uint8_t *)msg, 8);
+    YTEST_REQUIRE_OK(test, r);
+    /* The COMPLETE sequence is delivered exactly once, in order. */
+    YTEST_CHECK_EQ_SIZE(test, pty.captured_len, 8);
+    YTEST_CHECK(test, memcmp(pty.captured, msg, 8) == 0);
+}
+
 int main(void)
 {
     struct ytest test = ytest_begin("yvterm_terminal");
+    YTEST_RUN(&test, test_pty_write_all_reliable);
     YTEST_RUN(&test, test_byte_ingestion);
     YTEST_RUN(&test, test_memory_pty_transport);
     YTEST_RUN(&test, test_ansi_attrs_and_color);

@@ -542,6 +542,13 @@ struct yetty_yclass_rpc_session {
     struct pending_call *pending_head;
     struct pending_call *pending_tail;
     size_t pending_count;
+    /* Monotonic count of pipelined calls whose response frame has drained.
+     * Responses arrive in request order, so an embedder that snapshots
+     * (completed_total + pending_count) when it queues a call knows that
+     * call is applied once completed_total reaches the snapshot — without
+     * waiting for the WHOLE pipeline to empty (which a sustained feed never
+     * lets happen). */
+    uint64_t completed_total;
     /* Response-frame reassembly (u32 len | payload, back to back). */
     uint8_t *inbound_buf;
     size_t inbound_len;
@@ -973,6 +980,40 @@ struct uint32_result yetty_yclass_rpc_session_ensure_remote_id_by_name(
     return YETTY_OK(uint32, remote);
 }
 
+struct yetty_ycore_void_result yetty_yclass_rpc_session_seed_remote_id_by_name(
+    struct yetty_yclass_rpc_session *s, const char *qualified_name, uint32_t remote_id)
+{
+    if (!s) {
+        return YETTY_ERR(yetty_ycore_void, "seed_remote_id_by_name: NULL session");
+    }
+    if (!qualified_name || !qualified_name[0]) {
+        return YETTY_ERR(yetty_ycore_void, "seed_remote_id_by_name: NULL/empty name");
+    }
+    if (remote_id > YETTY_YCLASS_RPC_ID_MASK) {
+        return YETTY_ERR(yetty_ycore_void, "seed_remote_id_by_name: rid > id-mask");
+    }
+    struct remote_name_entry *entry = NULL;
+    HASH_FIND_STR(s->remote_names, qualified_name, entry);
+    if (entry) {
+        entry->remote_id = remote_id;
+        return YETTY_OK_VOID();
+    }
+    entry = calloc(1, sizeof(*entry));
+    if (!entry) {
+        return YETTY_ERR(yetty_ycore_void, "seed_remote_id_by_name: calloc failed");
+    }
+    entry->qualified_name = strdup(qualified_name);
+    if (!entry->qualified_name) {
+        free(entry);
+        return YETTY_ERR(yetty_ycore_void, "seed_remote_id_by_name: strdup failed");
+    }
+    entry->remote_id = remote_id;
+    HASH_ADD_KEYPTR(hh, s->remote_names, entry->qualified_name, strlen(entry->qualified_name),
+                    entry);
+    ydebug("seeded name '%s' remote=%u", qualified_name, remote_id);
+    return YETTY_OK_VOID();
+}
+
 struct yetty_yclass_object_ptr_result yetty_yclass_rpc_connect_transport(
     struct yetty_yclass_transport *transport)
 {
@@ -1176,6 +1217,7 @@ static void complete_pending_call(struct yetty_yclass_rpc_session *s, const uint
         s->pending_tail = NULL;
     }
     s->pending_count--;
+    s->completed_total++;
 
     if (payload_len < 1) {
         ywarn("rpc pump: short response for '%s'", done->qualified_name);
@@ -1196,6 +1238,16 @@ static void complete_pending_call(struct yetty_yclass_rpc_session *s, const uint
         }
     }
     free(done);
+}
+
+size_t yetty_yclass_rpc_session_pending(const struct yetty_yclass_rpc_session *s)
+{
+    return s ? s->pending_count : 0;
+}
+
+uint64_t yetty_yclass_rpc_session_completed_total(const struct yetty_yclass_rpc_session *s)
+{
+    return s ? s->completed_total : 0;
 }
 
 struct yetty_ycore_void_result yetty_yclass_rpc_session_pump(struct yetty_yclass_rpc_session *s)

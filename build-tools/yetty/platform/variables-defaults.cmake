@@ -177,6 +177,7 @@ option(YETTY_ENABLE_TOOL_YSCENE_DEMO     "yscene-demo tool (retained-scene card 
 # are position-independent. The bindings under bindings/<lang>/ dlopen it.
 option(YETTY_BUILD_FFI_SHARED            "Build libyetty_ffi.so for language bindings (PIC)" OFF)
 option(YETTY_ENABLE_TOOL_YECHO           "yecho tool"                        ON)
+option(YETTY_ENABLE_TOOL_YMUX            "ymuxd terminal session daemon"     ON)
 option(YETTY_ENABLE_TOOL_GEN_ERROR       "gen-error tool (malformed OSC test) " ON)
 option(YETTY_ENABLE_TOOL_YRDAWN_DEMO       "yrdawn-demo tool (bridge smoke test)" ON)
 option(YETTY_ENABLE_TOOL_YPLOT           "yplot tool"                        ON)
@@ -219,7 +220,6 @@ option(YETTY_ENABLE_TOOL_YMAZE           "ymaze tool (animated maze → OSC)"  O
 option(YETTY_ENABLE_TOOL_YZOO            "yzoo tool (control-point zoo → OSC)" ON)
 option(YETTY_ENABLE_TOOL_YJUNGLE         "yjungle tool (scene-canvas test → OSC)" ON)
 option(YETTY_ENABLE_TOOL_YDRAW_MAZE      "ydraw-maze tool"                   OFF)
-option(YETTY_ENABLE_TOOL_YMUX            "ymux tool"                         OFF)
 option(YETTY_ENABLE_TOOL_YFLAME          "yflame tool"                       ON)
 option(YETTY_ENABLE_TOOL_PDF2YDRAW       "pdf2ydraw tool"                    OFF)
 option(YETTY_ENABLE_TOOL_HTML2YDRAW      "html2ydraw tool"                   OFF)

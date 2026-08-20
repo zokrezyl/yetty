@@ -19,6 +19,7 @@
 
 add_library(yetty_api_yscene STATIC
     ${YETTY_ROOT}/src/yetty/gen/api/yscene/scene.c
+    # vtermgrid is an `internal` yclass: no public object-API TU is generated.
 )
 
 target_include_directories(yetty_api_yscene PUBLIC
@@ -33,6 +34,8 @@ target_link_libraries(yetty_api_yscene PUBLIC
 add_library(yetty_yscene STATIC
     scene.c
     dom.c
+    vtermgrid.c
+    vtermgrid-store.c
 )
 
 target_include_directories(yetty_yscene PUBLIC
@@ -52,6 +55,7 @@ target_link_libraries(yetty_yscene PUBLIC
     yetty_yrender
     yetty_yfont_core      # font cache: materialise wire-shipped fonts
     yetty_yplatform_core  # cache dir + mkdir/file_exists for the font cache
+    vterm                 # class@yscene:vtermgrid: independent client libvterm
     webgpu
 )
 
@@ -62,6 +66,8 @@ if(NOT MSVC)
         C_STANDARD 23
         C_STANDARD_REQUIRED ON
     )
+    # Same warning GATE as yetty_ymux (#699 review cycle 19).
+    target_compile_options(yetty_yscene PRIVATE -Werror=return-type -Werror=comment)
 endif()
 
 # Register with the yclass codegen graph — the module list IS these

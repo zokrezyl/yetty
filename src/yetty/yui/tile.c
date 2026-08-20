@@ -280,7 +280,6 @@ static struct yetty_ycore_void_result pane_destroy(struct yetty_yui_tile *self)
             }
         }
     }
-
     free(pane->views);
     free(pane);
 

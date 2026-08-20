@@ -15,6 +15,30 @@ yetty_add_c_test(
 target_compile_definitions(yfont_shaping-test PRIVATE
     YFONT_TEST_FONT_DIR=\"${CMAKE_BINARY_DIR}/embed-data/fonts\")
 
+# ms-raster fallback-chain contract (#89): the yscene grid's fallback face must
+# resolve CJK through the FreeType chain and composite clusters. Headless;
+# self-skips when the staged fonts/shader are absent.
+if(APPLE)
+    set(YFONT_FALLBACK_PATHS_SOURCE ${YETTY_ROOT}/src/yetty/yplatform/paths/macos.c)
+else()
+    set(YFONT_FALLBACK_PATHS_SOURCE ${YETTY_ROOT}/src/yetty/yplatform/paths/linux.c)
+endif()
+yetty_add_c_test(
+    NAME    yfont_fallback
+    SOURCES fallback-test.c
+            ${YETTY_ROOT}/src/yetty/yconfig/config.c
+            ${YETTY_ROOT}/src/yetty/yplatform/paths/create.c
+            ${YFONT_FALLBACK_PATHS_SOURCE}
+            ${YETTY_ROOT}/src/yetty/yplatform/fs/default.c
+            ${YETTY_ROOT}/src/yetty/yplatform/getopt.c
+    LIBS    yetty_yfont_core yaml yetty_ycore yetty_yrender yetty_yplatform_core
+    SHIMS   trace
+    LABELS  unit
+    TIMEOUT 30)
+target_compile_definitions(yfont_fallback-test PRIVATE
+    YFONT_TEST_FONT_DIR=\"${CMAKE_BINARY_DIR}/embed-data/fonts\"
+    YFONT_TEST_SHADER_DIR=\"${CMAKE_BINARY_DIR}/embed-data/shaders\")
+
 # End-to-end shaped-glyph rasterization: shape -> gid atlas -> composite pixels.
 # Set YFONT_SHAPING_DUMP=<path.ppm> at runtime to emit the canvas for eyeballing.
 yetty_add_c_test(

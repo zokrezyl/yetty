@@ -1,24 +1,10 @@
 /*
- * ygreeter — first-contact tool. Dual-mode.
+ * ygreeter — first-contact tool. IN-TERMINAL ONLY.
  *
- *   TERM_PROGRAM=yetty  → CLIENT mode. The hosting yetty terminal
- *                         consumes our OSC envelopes; we ship them
- *                         over stdout. stdin delivers real keystrokes.
- *   otherwise           → STANDALONE mode. We open our own window via
- *                         the yplatform bootstrap + yframework_create, spin up a
- *                         local yfigure_container that's fed by an
- *                         in-process wire_statemachine reading from
- *                         the consumer end of a memory pty pair (the
- *                         producer end is ygui's output pty). yetty
- *                         framework's KEY events get serialised to
- *                         the same CSI escape sequences a terminal
- *                         would emit and pushed into ygui via
- *                         yetty_ygui_framework_feed_input.
- *
- * From ygui's perspective the two modes are identical: it has an
- * output_pty to write OSC envelopes to, and someone calls
- * framework_feed_input with byte-stream keystrokes. The framework has
- * no knowledge of which mode it's in.
+ * Runs exclusively inside a hosting yetty (TERM_PROGRAM=yetty): the hosting
+ * terminal consumes our OSC envelopes shipped over stdout; stdin delivers
+ * real keystrokes. No standalone window mode, no WebGPU — outside yetty the
+ * tool prints an error and exits.
  */
 
 #include <fcntl.h>
@@ -28,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #ifndef _WIN32
+#include <poll.h>
 #include <unistd.h>
 #endif
 
@@ -55,8 +42,6 @@
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yplot/yplot.h>
 
-#include "embedded-assets.h"
-
 #ifdef YETTY_YGREETER_HAS_CHROME
 /* ychrome headers are GPU-free — the wire/client chrome path emits figure
  * records the hosting yetty renders, so these compile on every target
@@ -66,32 +51,9 @@
 #include <yetty/ychrome/host.h>
 #endif
 
-#ifdef YETTY_YGREETER_HAS_STANDALONE
-/* Headers below pull <yetty/yetty/yetty.h> (or <webgpu/webgpu.h> directly)
- * via their public API surface. Standalone mode needs them; client mode
- * doesn't, and on platforms without WebGPU (riscv64 cross) including
- * them breaks the build. Keep gated. */
-#include <yetty/ydraw-factory/composite-factory.h>
-#include <yetty/yfigure/registry.h>
-#include <yetty/yframework/yframework.h>
-#include <yetty/api/yscene/scene.h>
-#include <yetty/api/yshadertoy/figure.h>
-#include <yetty/yplatform/gpu-context.h>
-#include <yetty/yplatform/yplatform/platform.h>
-#include "yetty/gen/impl/yapp/app.h"
-#include <yetty/yclass/class.h>
-#include <yetty/yrender/render-target.h>
-#endif
-
 /* Android standalone entry. ygreeter runs as a NativeActivity through the
  * shared NDK glue (src/yetty/yplatform/ymain/android-glue.c), which resolves the
  * yetty_android_program_init / _term pair defined at the foot of this file. */
-#if defined(__ANDROID__) && defined(YETTY_YGREETER_HAS_STANDALONE)
-#include <pthread.h>
-#include <webgpu/webgpu.h>
-#include <yetty/yplatform/android-glue.h>
-#include <yetty/yplatform/platform-input-pipe.h>
-#endif
 
 #ifdef YETTY_YGUI_HAS_UV
 #include <uv.h>
@@ -261,37 +223,6 @@ struct app {
     /* Shutdown hook — same function the key handler's stop_cb uses,
      * stored on the app so the titlebar close button can quit too. */
     void (*stop_cb)(struct app *app);
-
-#ifdef YETTY_YGREETER_HAS_STANDALONE
-    /* Standalone-mode resources, NULL in client mode. The headers that
-     * define the by-value member types (figure_args, event_listener) pull in
-     * webgpu transitively, so the whole block is gated. */
-    struct yetty_yframework *yframework;
-    /* The yetty_context handed to the root container (set_context stores
-     * the pointer, not a copy) and to the chrome host. It MUST outlive the
-     * worker: on webasm standalone_worker returns immediately after the
-     * emscripten main loop is registered, and the container mints its
-     * scene figures lazily on the first render tick — long after the
-     * worker's stack frame is gone. A stack-local context would dangle and
-     * the lazy yscene_create would read freed memory (OOB). Living on the
-     * heap-allocated, program-lifetime `app` keeps it valid. */
-    struct yetty_context ctx;
-    struct yetty_yclass_object *root_container;
-    struct yetty_yfigure_registry *figure_registry;
-    struct yetty_ydraw_composite_factory *composite_factory;
-    struct yetty_yfont_font *font;
-    struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
-    /* Two factory-args bundles for the yscene figure factory: the ygui
-     * chrome / producer kinds carry absolute (logical-pane) coordinates;
-     * the retained "yscene" kind carries document-space content. */
-    struct yetty_yscene_factory_args figure_args;
-    struct yetty_yscene_factory_args retained_figure_args;
-    struct yetty_yevent_event_listener listener;
-    /* ~30 fps animation pump for self-animating widgets (ymaze, …). */
-    struct yetty_yevent_event_listener frame_listener;
-    yetty_yevent_timer_id frame_timer;
-    struct yetty_ydraw_target *render_target;
-#endif
 };
 
 /*=============================================================================
@@ -3091,6 +3022,7 @@ static int on_key(struct yetty_yclass_object *engine, uint32_t key, int mods, vo
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywire/channel.h>
 #include <yetty/ywire/connection.h>
+#include <yetty/ywire/wire-statemachine.h>
 
 struct client_state {
     uv_loop_t loop;
@@ -3309,6 +3241,8 @@ static void client_input_sink(void *userdata, int wire_code, const uint8_t *args
         float scale = client_content_scale(cs);
         float mx = msg->x / scale;
         float my = msg->y / scale;
+        ydebug("ygreeter client: mouse envelope kind=%u fig=%u dev=(%.1f,%.1f) logical=(%.1f,%.1f)",
+               (unsigned)msg->kind, msg->figure_id, msg->x, msg->y, mx, my);
         /* ygreeter's UI (tabs/buttons) gets first refusal; only events it
          * does not consume fall through to the window chrome — mirrors the
          * standalone client-first / chrome-fallback ordering, so the chrome
@@ -3322,6 +3256,7 @@ static void client_input_sink(void *userdata, int wire_code, const uint8_t *args
             if (YETTY_IS_ERR(feed_result)) {
                 yetty_ycore_error_destroy(feed_result.error);
             }
+            ydebug("ygreeter client: feed_mouse_button consumed=%d", ygui_consumed);
             break;
         }
         case YETTY_YMGUI_INPUT_MOUSE_POS: {
@@ -3810,6 +3745,66 @@ static int run_client_mode(void)
     uv_close((uv_handle_t *)&cs.prep, client_close_cb);
     uv_run(&cs.loop, UV_RUN_NOWAIT);
 
+    /* FIRST — before closing any channel — arm the host's input barrier
+     * (no-payload INPUT_HOLD): the host holds the user's keystrokes host-side
+     * for the rest of teardown and releases them to the pane once we are gone,
+     * so exit-window keys reach the resumed shell instead of being consumed by
+     * our close drain. Carries no bytes → cannot inject. */
+    {
+        struct yetty_ywire_channel *hold_lane =
+            yetty_ywire_connection_channel(cs.conn, YETTY_YWIRE_CHANNEL_RAW);
+        struct yetty_ycore_buffer hold_env = {0};
+        struct yetty_ycore_void_result hold_emit =
+            yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CLIENT_INPUT_HOLD,
+                             /*has_args=*/1, /*compressed=*/0, NULL, 0, NULL, 0, &hold_env);
+        if (YETTY_IS_OK(hold_emit) && hold_lane) {
+            struct yetty_ycore_size_result hw =
+                yetty_ywire_channel_write(hold_lane, hold_env.data, hold_env.size);
+            if (YETTY_IS_ERR(hw)) {
+                yetty_ycore_error_destroy(hw.error);
+            } else {
+                struct yetty_ycore_void_result hf = yetty_ywire_channel_flush(hold_lane);
+                if (YETTY_IS_ERR(hf)) {
+                    yetty_ycore_error_destroy(hf.error);
+                }
+                hf = yetty_yclass_transport_pty_flush_blocking(cs.transport);
+                if (YETTY_IS_ERR(hf)) {
+                    yetty_ycore_error_destroy(hf.error);
+                }
+            }
+        } else if (YETTY_IS_ERR(hold_emit)) {
+            yetty_ycore_error_destroy(hold_emit.error);
+        }
+        yetty_ycore_buffer_destroy(&hold_env);
+    }
+
+    /* WAIT for the host's HOLD-ACK before detaching sinks — its arrival proves
+     * the barrier is armed. Parser + sinks stay alive across this wait: a key
+     * the host forwarded before it armed comes back as an echo the still-live
+     * client consumes here, not the close drain; every key after the ACK is
+     * held host-side. Wall-clock bounded (500 ms) so a dead host cannot hang
+     * exit. The result GATES the close drain below (see there). */
+    int hold_ack_confirmed = yetty_ywire_connection_drain_until_hold_ack(cs.conn, 500);
+
+    /* SINKS first: the raw/input sinks dispatch into the framework being
+     * destroyed next — anything the close drain below still parses must never
+     * reach a freed engine (frame-wrapped input lands in the channel inbuf
+     * instead). */
+    {
+        struct yetty_ywire_channel *raw_lane =
+            yetty_ywire_connection_channel(cs.conn, YETTY_YWIRE_CHANNEL_RAW);
+        struct yetty_ywire_channel *input_lane =
+            yetty_ywire_connection_channel(cs.conn, YETTY_YWIRE_CHANNEL_INPUT);
+        struct yetty_ycore_void_result sink_res =
+            yetty_ywire_channel_set_raw_sink(raw_lane, NULL, NULL);
+        if (YETTY_IS_ERR(sink_res)) {
+            yetty_ycore_error_destroy(sink_res.error);
+        }
+        sink_res = yetty_ywire_channel_set_envelope_sink(input_lane, NULL, NULL);
+        if (YETTY_IS_ERR(sink_res)) {
+            yetty_ycore_error_destroy(sink_res.error);
+        }
+    }
     teardown_result =
         yetty_ycore_void_chain(teardown_result, yetty_ygui_framework_destroy(app.engine));
 #ifdef YETTY_YGREETER_HAS_CHROME
@@ -3834,6 +3829,28 @@ static int run_client_mode(void)
      * force the tail onto the wire before the transport goes away. */
     teardown_result = yetty_ycore_void_chain(
         teardown_result, yetty_yclass_transport_pty_flush_blocking(cs.transport));
+    /* COMPLETION-AWARE close drain, parser ALIVE, BYTE-WISE (exit hygiene
+     * without input loss): the flush above put the chrome clears / figure
+     * deletes / channel CLOSE frames on the wire; the host answers each
+     * CLOSE with a framed CLOSE echo. drain_closes feeds the parser one
+     * byte at a time until the last echo is parsed (a WALL-CLOCK 500 ms
+     * bound covers a dead or babbling host) and stops reading EXACTLY at
+     * that framed boundary — a user key queued right after the echo, even
+     * in the same kernel-readable window, is never consumed and stays
+     * queued for the resumed shell. The sinks were detached above, so
+     * nothing the drain parses can touch the destroyed framework.
+     *
+     * ONLY when the HOLD was ACKed AND the lease is still fresh: a confirmed arm
+     * means every post-arm keystroke is held host-side, so the inbound stream
+     * carries only CLOSE echoes — safe to drain. WITHOUT the ACK the barrier may
+     * be unarmed; and the ACK is only a LEASE — the host's barrier expires on
+     * its own 3 s deadline and resumes forwarding, so if teardown to this point
+     * took longer than the lease the host may already have un-armed. In either
+     * case a forwarded key could interleave with the echoes, so we SKIP the
+     * drain (matching origin/main, which drains nothing). Lease 2000 < host 3000. */
+    if (hold_ack_confirmed && yetty_ywire_connection_hold_ack_lease_valid(cs.conn, 2000)) {
+        (void)yetty_ywire_connection_drain_closes(cs.conn, 500);
+    }
     /* Connection before transport: the connection borrows the transport's
      * reactor view. Destroying the transport restores the terminal raw mode. */
     teardown_result =
@@ -3856,983 +3873,10 @@ static int run_client_mode(void)
 
 #endif /* YETTY_YGUI_HAS_UV */
 
-#ifdef YETTY_YGREETER_HAS_STANDALONE
 /*=============================================================================
- * STANDALONE MODE — yplatform bootstrap + yframework + local container +
- * direct in-process dispatch + KEY→bytes encoder.
- *
- * The ygui framework is created with no output pty; set_container_obj wires its
- * typed yfigure_* stubs straight at the local root figure container. Each frame
- * framework_emit applies the pending figure-tree mutations inline, and render
- * paints that tree onto yframework's render_target.
+ * Entry — IN-TERMINAL ONLY: inside a hosting yetty run the client mode;
+ * anywhere else refuse. There is no standalone window mode.
  *===========================================================================*/
-
-/* Map yetty's KEY_DOWN keycodes to the CSI escape sequences a terminal
- * would emit. Used by the standalone event handler to push input into
- * ygui's framework_feed_input. */
-static const char *standalone_encode_key(uint32_t key, char *scratch, size_t scratch_n,
-                                         size_t *out_len)
-{
-    /* GLFW-style keycodes. The handful we care about: */
-    if (key >= 32 && key < 127) {
-        scratch[0] = (char)key;
-        *out_len = 1;
-        return scratch;
-    }
-    switch (key) {
-    case 256: /* ESC */
-        scratch[0] = 0x1B;
-        *out_len = 1;
-        return scratch;
-    case 257: /* Enter */
-        scratch[0] = '\r';
-        *out_len = 1;
-        return scratch;
-    case 259: /* Backspace */
-        scratch[0] = 0x7F;
-        *out_len = 1;
-        return scratch;
-    case 263: /* Left */
-        *out_len = snprintf(scratch, scratch_n, "\x1b[D");
-        return scratch;
-    case 262: /* Right */
-        *out_len = snprintf(scratch, scratch_n, "\x1b[C");
-        return scratch;
-    case 265: /* Up */
-        *out_len = snprintf(scratch, scratch_n, "\x1b[A");
-        return scratch;
-    case 264: /* Down */
-        *out_len = snprintf(scratch, scratch_n, "\x1b[B");
-        return scratch;
-    default:
-        *out_len = 0;
-        return NULL;
-    }
-}
-
-/* Animation pump — force a full re-emit each tick so self-animating
- * widgets (the ymaze tab) re-run their emit_body and advance. */
-static struct yetty_ycore_int_result standalone_frame_tick(
-    struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *ev)
-{
-    (void)ev;
-    struct app *app = container_of(listener, struct app, frame_listener);
-    if (app->engine) {
-        yetty_ygui_framework_mark_dirty(app->engine);
-    }
-    if (app->yframework && app->yframework->event_loop &&
-        app->yframework->event_loop->ops->request_render) {
-        app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
-    }
-    return YETTY_OK(yetty_ycore_int, 1);
-}
-
-/* HiDPI scale (framebuffer px / logical px) of the local display, 1.0 if
- * unset. The ygui chrome is authored in logical pixels and the scene
- * receiver scales it back up, so the standalone platform path divides
- * framebuffer-pixel viewport/pointer values by this on the way into ygui. */
-static float app_content_scale(const struct app *app)
-{
-    float s = app->yframework->gpu.app_gpu_context.content_scale;
-    return s > 0.0f ? s : 1.0f;
-}
-
-/* Client-first / chrome-fallback: hand a pointer event the greeter UI didn't
- * consume to the window chrome (drag / edge-resize / maximize / window
- * controls). chrome works in raw framebuffer px, so the unscaled event is
- * passed straight through. */
-static void ygreeter_chrome_fallback(struct app *app, const struct yetty_yui_event *ev)
-{
-    if (!app->chrome) {
-        return;
-    }
-    struct yetty_ycore_int_result cr = yetty_ychrome_host_handle_event(app->chrome, ev);
-    if (YETTY_IS_ERR(cr)) {
-        yetty_ycore_error_destroy(cr.error);
-    }
-}
-
-static struct yetty_ycore_int_result standalone_event_handler(
-    struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *ev)
-{
-    struct app *app = container_of(listener, struct app, listener);
-    const float scale = app_content_scale(app);
-
-    if (ev->type == YETTY_YCORE_WINDOW_REFRESH) {
-        if (app->render_target && app->render_target->ops->refresh_full) {
-            app->render_target->ops->refresh_full(app->render_target);
-        }
-        struct yetty_yui_event re = {.type = YETTY_YCORE_RENDER};
-        return standalone_event_handler(listener, &re);
-    }
-
-    if (ev->type == YETTY_YCORE_RENDER) {
-        if (!app->render_target) {
-            return YETTY_OK(yetty_ycore_int, 0);
-        }
-        if (app->render_target->ops->is_busy &&
-            app->render_target->ops->is_busy(app->render_target)) {
-            return YETTY_OK(yetty_ycore_int, 1);
-        }
-        /* Apply pending figure-tree mutations directly into root_container via
-         * the framework's typed yfigure_* stubs (set_container_obj). No
-         * memory-pty serialize/parse round; the mutations land inline. */
-        if (yetty_ygui_framework_is_dirty(app->engine)) {
-            struct yetty_ycore_void_result er = yetty_ygui_framework_emit(app->engine);
-            if (YETTY_IS_ERR(er)) {
-                yetty_ycore_error_destroy(er.error);
-            }
-        }
-        /* Clear + paint container + present. */
-        struct yetty_ycore_void_result cl = app->render_target->ops->clear(app->render_target);
-        if (YETTY_IS_ERR(cl)) {
-            yetty_ycore_error_destroy(cl.error);
-        }
-        if (app->root_container) {
-            struct yetty_ycore_void_result rr =
-                yetty_yfigure_render(app->root_container, app->render_target);
-            if (YETTY_IS_ERR(rr)) {
-                yetty_ycore_error_destroy(rr.error);
-            }
-            yetty_yfigure_figure_dirty_set(app->root_container, 0);
-        }
-        struct yetty_ycore_void_result pp = app->render_target->ops->present(app->render_target);
-        if (YETTY_IS_ERR(pp)) {
-            yetty_ycore_error_destroy(pp.error);
-        }
-        return YETTY_OK(yetty_ycore_int, 1);
-    }
-
-    switch (ev->type) {
-    case YETTY_YCORE_SHUTDOWN:
-    case YETTY_YCORE_WINDOW_CLOSE:
-        if (app->yframework && app->yframework->event_loop &&
-            app->yframework->event_loop->ops->stop) {
-            app->yframework->event_loop->ops->stop(app->yframework->event_loop);
-        }
-        return YETTY_OK(yetty_ycore_int, 1);
-    case YETTY_YCORE_RESIZE:
-        yetty_yframework_reconfigure_surface(app->yframework, (uint32_t)ev->resize.width,
-                                             (uint32_t)ev->resize.height);
-        if (app->render_target && app->render_target->ops->resize) {
-            struct yetty_yrender_viewport vp = {0, 0, ev->resize.width, ev->resize.height};
-            app->render_target->ops->resize(app->render_target, vp);
-        }
-        {
-            /* Logical viewport; container rect below stays framebuffer px. */
-            struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-                app->engine, (float)ev->resize.width / scale, (float)ev->resize.height / scale);
-            if (YETTY_IS_ERR(vr)) {
-                yetty_ycore_error_destroy(vr.error);
-            }
-        }
-        /* Size the compositor's root container directly. (The legacy route
-         * travelled this through the memory-pty pair so it reached the receiver
-         * like a real PTY's TIOCSWINSZ; with direct in-process dispatch the
-         * container is local, so we set its rect here.) */
-        if (app->root_container) {
-            struct yetty_ycore_rectangle rr = {
-                .min = {0, 0}, .max = {(float)ev->resize.width, (float)ev->resize.height}};
-            yetty_yfigure_figure_rect_set(app->root_container, rr);
-            yetty_yfigure_figure_dirty_set(app->root_container, 1);
-        }
-        if (app->chrome) {
-            struct yetty_ycore_void_result chrome_rz = yetty_ychrome_host_resized(
-                app->chrome, (float)ev->resize.width, (float)ev->resize.height);
-            if (YETTY_IS_ERR(chrome_rz)) {
-                yetty_ycore_error_destroy(chrome_rz.error);
-            }
-        }
-        if (app->yframework->event_loop->ops->request_render) {
-            app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
-        }
-        return YETTY_OK(yetty_ycore_int, 1);
-    case YETTY_YCORE_KEY_DOWN: {
-        char scratch[8];
-        size_t n = 0;
-        const char *bytes = standalone_encode_key(ev->key.key, scratch, sizeof(scratch), &n);
-        if (bytes && n > 0) {
-            struct yetty_ycore_void_result r =
-                yetty_ygui_framework_feed_input(app->engine, bytes, n);
-            if (YETTY_IS_ERR(r)) {
-                yetty_ycore_error_destroy(r.error);
-            }
-            if (app->yframework->event_loop->ops->request_render) {
-                app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
-            }
-        }
-        return YETTY_OK(yetty_ycore_int, 1);
-    }
-    case YETTY_YCORE_MOUSE_DOWN:
-    case YETTY_YCORE_MOUSE_UP: {
-        struct yetty_ycore_int_result r = yetty_ygui_framework_feed_mouse_button(
-            app->engine, ev->mouse.x / scale, ev->mouse.y / scale, ev->mouse.button,
-            ev->type == YETTY_YCORE_MOUSE_DOWN ? 1 : 0, ev->mouse.mods);
-        int consumed = YETTY_IS_OK(r) && r.value;
-        if (YETTY_IS_ERR(r)) {
-            yetty_ycore_error_destroy(r.error);
-        }
-        /* Client-first: only if the greeter UI (tabs/buttons) didn't take it
-         * does the window chrome get a shot (empty title-bar drag, edges). */
-        if (!consumed) {
-            ygreeter_chrome_fallback(app, ev);
-        }
-        if (app->yframework->event_loop->ops->request_render) {
-            app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
-        }
-        return YETTY_OK(yetty_ycore_int, 1);
-    }
-    case YETTY_YCORE_MOUSE_DOUBLE_CLICK:
-        /* ygui has no double-click concept here; it's the chrome's
-         * title-bar maximize gesture. */
-        ygreeter_chrome_fallback(app, ev);
-        if (app->yframework->event_loop->ops->request_render) {
-            app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
-        }
-        return YETTY_OK(yetty_ycore_int, 1);
-    case YETTY_YCORE_MOUSE_SCROLL: {
-        /* Positions are scaled like the others; the wheel deltas are not. */
-        struct yetty_ycore_int_result r = yetty_ygui_framework_feed_mouse_scroll(
-            app->engine, ev->mouse_scroll.x / scale, ev->mouse_scroll.y / scale,
-            ev->mouse_scroll.dx, ev->mouse_scroll.dy);
-        if (YETTY_IS_ERR(r)) {
-            yetty_ycore_error_destroy(r.error);
-        }
-        if (app->yframework->event_loop->ops->request_render) {
-            app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
-        }
-        return YETTY_OK(yetty_ycore_int, 1);
-    }
-    case YETTY_YCORE_MOUSE_MOVE:
-    case YETTY_YCORE_MOUSE_DRAG: {
-        struct yetty_ycore_int_result r = yetty_ygui_framework_feed_mouse_motion(
-            app->engine, ev->mouse.x / scale, ev->mouse.y / scale);
-        int consumed = YETTY_IS_OK(r) && r.value;
-        if (YETTY_IS_ERR(r)) {
-            yetty_ycore_error_destroy(r.error);
-        }
-        /* Client-first fallback: chrome gets the move (resize-edge cursor /
-         * in-progress drag) only if no widget claimed it. */
-        if (!consumed) {
-            ygreeter_chrome_fallback(app, ev);
-        }
-        /* Hover state may have flipped — request a render so the new
-         * hovered widget repaints before the next event. */
-        if (app->yframework->event_loop->ops->request_render) {
-            app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
-        }
-        return YETTY_OK(yetty_ycore_int, 1);
-    }
-    default:
-        break;
-    }
-    if (app->yframework->event_loop->ops->request_render) {
-        app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
-    }
-    return YETTY_OK(yetty_ycore_int, 0);
-}
-
-static void standalone_stop(struct app *app)
-{
-    if (app->yframework && app->yframework->event_loop && app->yframework->event_loop->ops->stop) {
-        app->yframework->event_loop->ops->stop(app->yframework->event_loop);
-    }
-}
-
-/*
- * yclass app wrapper. The standalone window host is a yapp:app subclass; the
- * heavy per-run state stays in `struct app` (shared with client mode), which the
- * data block embeds. codegen sees this class because the Makefile passes
- * YETTY_YGREETER_HAS_STANDALONE via YCLASS_DEFINES; main.gen.c is #included at
- * the foot, inside the same guard, so reduced builds never compile it.
- */
-struct YETTY_ANNOTATE("class@ygreeter:app") YETTY_ANNOTATE("parent@yapp:app") yetty_ygreeter_app {
-    struct app app;
-};
-
-YETTY_YRESULT_DECLARE(yetty_ygreeter_app_ptr, struct yetty_ygreeter_app *);
-struct yetty_yclass_ptr_result yetty_ygreeter_app_class_get(void);
-struct yetty_ygreeter_app_ptr_result yetty_ygreeter_app_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_ygreeter_app_create(struct yetty_yclass_ctx *ctx);
-
-/* Platform bring-up sequence symbols. ygreeter has its own dual-mode main(), so
- * it drives this sequence directly rather than via the shared ymain/glfw.c. */
-struct yetty_ycore_void_result yetty_yplatform_register(void);
-struct yetty_ycore_void_result yetty_yapp_register(void);
-struct yetty_yclass_object_ptr_result yetty_yplatform_default_platform_create(
-    struct yetty_yclass_ctx *ctx);
-struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
-                                                            struct yetty_yclass_object *app,
-                                                            int argc, char **argv);
-
-YETTY_ANNOTATE("override@yapp:app:init")
-static struct yetty_ycore_void_result ygreeter_app_init(struct yetty_yclass_object *obj,
-                                                        struct yetty_yclass_object *platform)
-{
-    (void)obj;
-    (void)platform;
-    return YETTY_OK_VOID();
-}
-
-YETTY_ANNOTATE("override@yapp:app:run")
-static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_object *obj,
-                                                        struct yetty_yclass_object *platform)
-{
-    struct yetty_ygreeter_app_ptr_result app_res = yetty_ygreeter_app_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "ygreeter:app:run: app_from");
-    struct app *app = &app_res.value->app;
-
-    struct yetty_yplatform_gpu_context_const_ptr_result gpu_res =
-        yetty_yplatform_platform_gpu_context(platform);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, gpu_res, "ygreeter:app:run: gpu_context");
-    const struct yetty_yplatform_gpu_context *gpu = gpu_res.value;
-
-    struct yetty_ycore_xthread_event_pipe_ptr_result input_pipe_res =
-        yetty_yplatform_platform_input_pipe(platform);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, input_pipe_res, "ygreeter:app:run: input_pipe");
-    struct yetty_ycore_xthread_event_pipe *input_pipe = input_pipe_res.value;
-    if (!gpu || !input_pipe) {
-        return YETTY_ERR(yetty_ycore_void, "ygreeter:app:run: platform state not populated");
-    }
-
-    struct yetty_yframework_ptr_result frr = yetty_yframework_create(platform);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, frr, "standalone: yframework_create");
-    app->yframework = frr.value;
-    app->render_target = app->yframework->render_target;
-
-    /* MSDF font for the receiver-side scene figures (glyph expansion). */
-    {
-        const char *fonts_dir =
-            app->yframework->config->ops->get_string(app->yframework->config, "paths/fonts", "");
-        const char *shaders_dir =
-            app->yframework->config->ops->get_string(app->yframework->config, "paths/shaders", "");
-        char cdb_path[768];
-        char shader_path[768];
-        snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir,
-                 "DejaVuSansMNerdFontMono");
-        snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", shaders_dir);
-        struct yetty_font_font_result fr =
-            yetty_yfont_msdf_font_create(cdb_path, shader_path, "ygreeter_default");
-        if (YETTY_IS_ERR(fr)) {
-            /* The MSDF glyph cdb + shader are NOT embedded in ygreeter — they
-             * come from the main yetty install's asset extraction into the
-             * shared data dir. Name the exact paths on stderr (the Result msg
-             * can only carry a static literal, and the trace log is off by
-             * default) so the failure is actionable, then propagate. */
-            fprintf(stderr,
-                    "ygreeter: cannot load MSDF font — required runtime assets are missing.\n"
-                    "  glyph cdb: %s\n"
-                    "  shader:    %s\n"
-                    "  (provided by the main yetty install; run yetty once to extract fonts)\n",
-                    cdb_path, shader_path);
-            return YETTY_ERR(yetty_ycore_void, "standalone: msdf_font_create", fr);
-        }
-        app->font = fr.value;
-        struct yetty_ycore_void_result load = app->font->ops->load_basic_latin(app->font);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, load, "standalone: load_basic_latin");
-    }
-
-    /* Raw figure factory — needed for the yplot / yimage producer
-     * kinds. Same wiring yui.c uses (yui_create lines 506-571). */
-    {
-        struct yetty_ydraw_composite_factory_ptr_result ffr = yetty_ydraw_composite_factory_create(
-            app->yframework->gpu.device, app->yframework->gpu.queue,
-            app->yframework->gpu.surface_format, app->yframework->gpu.allocator,
-            app->yframework->event_loop);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "standalone: raw_composite_factory_create");
-        app->composite_factory = ffr.value;
-        struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
-        if (yplot_f) {
-            yplot_f->destroy = yetty_yplot_factory_destroy;
-            struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(app->composite_factory, yplot_f);
-            if (YETTY_IS_ERR(rr)) {
-                yetty_ycore_error_destroy(rr.error);
-                yetty_yplot_factory_destroy(yplot_f);
-            }
-        }
-        struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
-        if (yimage_f) {
-            yimage_f->destroy = yetty_yimage_factory_destroy;
-            struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(app->composite_factory, yimage_f);
-            if (YETTY_IS_ERR(rr)) {
-                yetty_ycore_error_destroy(rr.error);
-                yetty_yimage_factory_destroy(yimage_f);
-            }
-        }
-    }
-
-    /* Figure registry — every figure kind the ygui chrome mints renders
-     * through the retained yscene engine. The legacy "ygrid" kind token
-     * (the shared chrome surface) and the producer kinds (yimage, yplot,
-     * yvideo) stay on the wire; only the factory behind them changed. */
-    {
-        struct yetty_yfigure_registry_ptr_result reg = yetty_yfigure_registry_create();
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, reg, "standalone: registry_create");
-        app->figure_registry = reg.value;
-        app->figure_args.default_font = app->font;
-        app->figure_args.composite_factory = app->composite_factory;
-        /* ygui chrome: chrome + producer figures are laid out in logical
-         * pixels and must be scaled to framebuffer by content_scale
-         * (HiDPI). Their widgets emit at the absolute widget rect to match. */
-        app->figure_args.absolute_coords = 1;
-        /* "ygrid" is the shared chrome surface; "yscroll" is the content
-         * kind ygui producer widgets mint. Both absolute. */
-        static const char *const chrome_kind_names[] = {"ygrid", "yscroll"};
-        for (size_t i = 0; i < sizeof(chrome_kind_names) / sizeof(chrome_kind_names[0]); ++i) {
-            struct yetty_ycore_void_result kr = yetty_yscene_register_factory_for_kind(
-                app->figure_registry, yetty_yfigure_kind_token(chrome_kind_names[i]),
-                &app->figure_args);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, kr,
-                                "standalone: yscene_register_factory_for_kind");
-        }
-        /* The retained "yscene" kind (scrollarea scene mode — the browser
-         * page): document-space content, GPU scroll. Local coordinates. */
-        app->retained_figure_args.default_font = app->font;
-        app->retained_figure_args.composite_factory = app->composite_factory;
-        struct yetty_ycore_void_result rf =
-            yetty_yscene_register_factory(app->figure_registry, &app->retained_figure_args);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "standalone: yscene_register_factory");
-        /* yshadertoy has its own factory + renderer (not the yscene path). */
-        struct yetty_ycore_void_result sfr =
-            yetty_yshadertoy_register_factory(app->figure_registry);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, sfr, "standalone: yshadertoy_register_factory");
-    }
-
-    /* Local container. The context lives on `app` (program-lifetime) so it
-     * outlives this worker — the container stores the pointer and mints its
-     * scene figures lazily, after the worker has returned on webasm. */
-    app->ctx = (struct yetty_context){.runtime = app->yframework,
-                                      .event_loop = app->yframework->event_loop};
-    {
-        struct yetty_ycore_rectangle root_rect = {
-            .min = {0, 0}, .max = {(float)gpu->surface_width, (float)gpu->surface_height}};
-        struct yetty_yclass_ctx yclass_ctx = {0};
-        struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "standalone: container_create");
-        app->root_container = obj_res.value;
-        yetty_yfigure_container_set_context(app->root_container, &app->ctx);
-        yetty_yfigure_container_set_registry(app->root_container, app->figure_registry);
-        yetty_yfigure_container_set_rect(app->root_container, root_rect);
-    }
-
-    /* ygui framework, driven into the local root container by DIRECT
-     * in-process yclass dispatch — on every platform, webasm and desktop alike.
-     *
-     * Producer (the ygui framework) and receiver (the root figure container)
-     * live in this one process on a single thread, so there is no out-of-process
-     * transport: framework_create(NULL) leaves the output pty unset, and
-     * set_container_obj wires the framework's typed yfigure_* stubs straight at
-     * the local container object. framework_emit then applies every figure-tree
-     * mutation inline via those stubs — the in-process equivalent of the
-     * RPC-server path a terminal runs for an out-of-process subprocess producer.
-     *
-     * The deleted legacy route shipped a one-way figure-tree record stream over
-     * an in-process memory-pty into a wire statemachine that decoded it with
-     * yetty_yfigure_container_process_input. Direct dispatch removes the
-     * serialize/parse round and the memory-pty + wire-statemachine entirely.
-     * It is also what webasm always required: the webasm wire-statemachine ran
-     * on a degenerate setjmp/longjmp coroutine that abandoned its stack on every
-     * yield, corrupting memory on ygreeter's large figure envelopes. */
-    {
-        struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "standalone: framework_create");
-        app->engine = fr.value;
-        struct yetty_ycore_void_result scr =
-            yetty_ygui_framework_set_container_obj(app->engine, app->root_container);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "standalone: set_container_obj");
-        /* Logical viewport: chrome is authored in logical px, the scene
-         * receiver scales back to framebuffer px (see app_content_scale). */
-        float cs = app_content_scale(app);
-        struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-            app->engine, (float)gpu->surface_width / cs, (float)gpu->surface_height / cs);
-        if (YETTY_IS_ERR(vr)) {
-            yetty_ycore_error_destroy(vr.error);
-        }
-    }
-
-    struct key_ctx kc = {.app = app, .stop_cb = standalone_stop};
-    app->stop_cb = standalone_stop;
-    yetty_ygui_framework_set_key_cb(app->engine, on_key, &kc);
-
-    struct yetty_ycore_void_result br = build_ui(app);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "standalone: build_ui");
-
-    /* Window chrome: draggable/resizable titlebar + min/max/close (SDF, no
-     * font), composited as a pinned figure over the greeter UI. */
-    {
-        struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
-            app->root_container, app->font, &app->ctx, app->yframework->window_chrome,
-            (float)gpu->surface_width, (float)gpu->surface_height, app_content_scale(app), 36.0f,
-            8.0f, YETTY_YCHROME_FLAG_ALL);
-        if (YETTY_IS_OK(chrome_r)) {
-            app->chrome = chrome_r.value;
-        } else {
-            ywarn("ygreeter standalone: chrome host create failed: %s", chrome_r.error.msg);
-            yetty_ycore_error_destroy(chrome_r.error);
-        }
-    }
-
-    app->listener.handler = standalone_event_handler;
-    struct yetty_ycore_void_result rel =
-        yetty_yevent_register_default_listeners(app->yframework->event_loop, &app->listener);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rel, "standalone: register_default_listeners");
-
-    /* ~30 fps animation pump for self-animating widgets (ymaze tab). */
-    {
-        struct yetty_yevent_event_loop *loop = app->yframework->event_loop;
-        struct yetty_yevent_timer_id_result tr = loop->ops->create_timer(loop);
-        if (YETTY_IS_OK(tr)) {
-            app->frame_timer = tr.value;
-            app->frame_listener.handler = standalone_frame_tick;
-            struct yetty_ycore_void_result cr = loop->ops->config_timer(loop, app->frame_timer, 33);
-            if (YETTY_IS_ERR(cr)) {
-                yetty_ycore_error_destroy(cr.error);
-            }
-            struct yetty_ycore_void_result lr =
-                loop->ops->register_timer_listener(loop, app->frame_timer, &app->frame_listener);
-            if (YETTY_IS_ERR(lr)) {
-                yetty_ycore_error_destroy(lr.error);
-            }
-            struct yetty_ycore_void_result st = loop->ops->start_timer(loop, app->frame_timer);
-            if (YETTY_IS_ERR(st)) {
-                yetty_ycore_error_destroy(st.error);
-            }
-        } else {
-            yetty_ycore_error_destroy(tr.error);
-        }
-    }
-
-    /* Kick first frame. */
-    yetty_yevent_post_async(input_pipe, &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
-
-    struct yetty_ycore_void_result run_res =
-        app->yframework->event_loop->ops->start(app->yframework->event_loop);
-    if (YETTY_IS_ERR(run_res)) {
-        yetty_ycore_error_destroy(run_res.error);
-    }
-
-#ifdef __EMSCRIPTEN__
-    /* CRITICAL webasm difference: event_loop->start() registers the
-     * emscripten main loop (emscripten_set_main_loop_arg) and returns
-     * IMMEDIATELY — it does not block like the desktop/libuv loop. The
-     * teardown below is desktop shutdown code; running it now would
-     * destroy the ygui engine, render target and GPU device microseconds
-     * after creation, so the browser-driven frames render nothing. The
-     * app must stay alive for program lifetime (the browser owns the
-     * loop after we return), so bail out before teardown — same as
-     * yetty's own webasm worker, which intentionally leaks. */
-    yinfo("ygreeter: standalone running on webasm — leaving app alive, "
-          "browser drives frames (engine=%p render_target=%p)",
-          (void *)app->engine, (void *)app->render_target);
-    return YETTY_OK_VOID();
-#endif
-
-    if (app->chrome) {
-        struct yetty_ycore_void_result dc = yetty_ychrome_host_destroy(app->chrome);
-        if (YETTY_IS_ERR(dc)) {
-            yetty_ycore_error_destroy(dc.error);
-        }
-        app->chrome = NULL;
-    }
-    if (app->engine) {
-        struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(app->engine);
-        if (YETTY_IS_ERR(dr)) {
-            yetty_ycore_error_destroy(dr.error);
-        }
-        app->engine = NULL;
-    }
-    if (app->root_container) {
-        struct yetty_ycore_void_result dr = yetty_yfigure_destroy(app->root_container);
-        if (YETTY_IS_ERR(dr)) {
-            yetty_ycore_error_destroy(dr.error);
-        }
-        app->root_container = NULL;
-    }
-    if (app->figure_registry) {
-        yetty_yfigure_registry_destroy(app->figure_registry);
-        app->figure_registry = NULL;
-    }
-    if (app->composite_factory) {
-        yetty_ydraw_composite_factory_destroy(app->composite_factory);
-        app->composite_factory = NULL;
-    }
-    if (app->font) {
-        app->font->ops->destroy(app->font);
-        app->font = NULL;
-    }
-    if (app->yframework) {
-        yetty_yframework_destroy(app->yframework);
-        app->yframework = NULL;
-    }
-    /* Discovered-paths arrays — allocated by discover_logo_images /
-     * discover_video_files / discover_readme at build_ui time. */
-    if (app->image_paths) {
-        for (int i = 0; i < app->image_path_count; ++i) {
-            free(app->image_paths[i]);
-        }
-        free(app->image_paths);
-        app->image_paths = NULL;
-        app->image_path_count = 0;
-    }
-    if (app->video_paths) {
-        for (int i = 0; i < app->video_path_count; ++i) {
-            free(app->video_paths[i]);
-        }
-        free(app->video_paths);
-        app->video_paths = NULL;
-        app->video_path_count = 0;
-    }
-    free(app->readme_path);
-    app->readme_path = NULL;
-    free(app->pdf_path);
-    app->pdf_path = NULL;
-    return YETTY_OK_VOID();
-}
-
-/* Confirm the embedded assets the rich-content tabs depend on actually
- * landed on disk. Extraction can report "success" while leaving nothing
- * behind — a build without incbin (the no-op extractor stub), a stale
- * skip-marker sitting over a wiped data dir, or a partial brotli decode
- * all do it. Without this check the missing files are swallowed twice
- * over (discover_* returns silently, rebuild_top discards the load
- * error), so the tabs render blank instead of failing. Surface it as a
- * hard error so startup aborts with a clear message — the same way yetty
- * itself dies when its own asset extraction fails. */
-static struct yetty_ycore_void_result ygreeter_verify_assets(const char *data_dir)
-{
-    static const char *const required[] = {
-        "logo-1.jpeg",           "logo-2.jpeg",    "logo-3.jpeg", "logo-4.jpeg",
-        "yetty-unchained-2.mp4", "pdf-sample.pdf", "README.md",
-    };
-    int missing = 0;
-    char path_buf[1024];
-    for (size_t i = 0; i < sizeof(required) / sizeof(required[0]); ++i) {
-        snprintf(path_buf, sizeof(path_buf), "%s/%s", data_dir, required[i]);
-        if (yetty_yplatform_file_exists(path_buf)) {
-            continue;
-        }
-        yerror("ygreeter: required runtime asset missing: %s", path_buf);
-        missing++;
-    }
-    if (missing > 0) {
-#ifdef __EMSCRIPTEN__
-        /* On the web build the logos / intro video / pdf samples aren't
-         * bundled yet (ygreeter's incbin path is compiled out; only the
-         * shared font/shader assets are preloaded). Those drive the
-         * Images / Video / PDF tabs, which already degrade to blank
-         * rather than crash — so warn and continue instead of aborting
-         * the whole showcase. The rest of the tabs render normally. */
-        ywarn("ygreeter: %d showcase asset(s) missing on web — Images/Video/PDF "
-              "tabs will be blank; the rest of the showcase still renders",
-              missing);
-        return YETTY_OK_VOID();
-#else
-        return YETTY_ERR(yetty_ycore_void,
-                         "ygreeter: required runtime assets are missing from the data dir "
-                         "(embedded-asset extraction produced none) — see log for the list");
-#endif
-    }
-    return YETTY_OK_VOID();
-}
-
-/* ygreeter's own incbin extractor (logos + demo video), used by the Android
- * program-init below. Desktop/web place assets via the installer / bundle. */
-YETTY_MAYBE_UNUSED static struct yetty_ycore_void_result ygreeter_extract_assets_cb(void)
-{
-    char data_dir_buf[512];
-    ygreeter_data_dir(data_dir_buf, sizeof(data_dir_buf));
-    const char *data_dir = data_dir_buf;
-    if (!data_dir || !*data_dir) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "ygreeter: could not resolve a data dir for asset extraction");
-    }
-    if (ygreeter_embedded_assets_extract(data_dir) != 0) {
-        return YETTY_ERR(yetty_ycore_void, "ygreeter: embedded asset extraction failed");
-    }
-    return ygreeter_verify_assets(data_dir);
-}
-
-#if defined(__ANDROID__)
-/* Render-thread payload: the heap app object + the synthetic runtime that
- * standalone_worker reads during setup. Both must outlive program_init's
- * stack — standalone_worker runs the event loop to completion on this thread,
- * so the thread owns them and frees them when it returns. */
-struct ygreeter_android_thread_args {
-    struct yetty_yclass_object *app_obj;  /* ygreeter:app object (owns struct app) */
-    struct yetty_yclass_object *platform; /* bring-up-state carrier (NDK owns the loop) */
-};
-
-YETTY_EXTERNAL_CALLBACK
-static void *ygreeter_android_render_thread(void *arg)
-{
-    struct ygreeter_android_thread_args *targs = arg;
-    /* Blocks: builds the framework, the UI and the chrome, runs the event
-     * loop, then tears the whole lot down when the loop is stopped (the
-     * non-emscripten tail of standalone_worker). The Android standalone path
-     * uses the yplatform Android entry (content-scale + NDK glue now in
-     * src/yetty/yplatform/ymain/android-glue.c). The call below tracks the
-     * migrated yapp:app:run signature. */
-    struct yetty_ycore_void_result run_res = standalone_worker(targs->app_obj, targs->platform);
-    if (YETTY_IS_ERR(run_res)) {
-        LOGE("ygreeter standalone worker: %s",
-             run_res.error.msg ? run_res.error.msg : "(no message)");
-        yetty_ycore_error_destroy(run_res.error);
-    }
-    if (targs->platform) {
-        (void)yetty_yclass_object_free(targs->platform);
-    }
-    free(targs);
-    return NULL;
-}
-
-/* Android program entry — resolved at link time by android-glue.c. Builds the
- * standalone showcase from the live surface and runs it on a render thread,
- * mirroring the terminal's yetty_android_program_init in src/yetty/yplatform/ymain/android.c. */
-YETTY_EXTERNAL_CALLBACK
-void yetty_android_program_init(struct yetty_yplatform_app_state *state)
-{
-    if (state->initialized || !state->window) {
-        return;
-    }
-
-    LOGI("Initializing ygreeter...");
-
-    /* Extract ygreeter's embedded assets (shaders, MSDF cdb font, logos, intro
-     * video, sample pdf, README); the extractor creates its own target dirs.
-     * The showcase reads its font + shaders from config (paths/fonts,
-     * paths/shaders), which yconfig_create resolves via the platform paths
-     * abstraction — the tool never touches the path getters directly. */
-    {
-        struct yetty_ycore_void_result extract_res = ygreeter_extract_assets_cb();
-        if (YETTY_IS_ERR(extract_res)) {
-            LOGE("ygreeter: asset extraction failed: %s",
-                 extract_res.error.msg ? extract_res.error.msg : "(no message)");
-            yetty_ycore_error_destroy(extract_res.error);
-            return;
-        }
-    }
-
-    /* No --qemu: ygreeter standalone renders its own figure tree, no VM. */
-    {
-        char *fake_argv[] = {(char *)"ygreeter", NULL};
-        struct yetty_yconfig_result config_result = yetty_yconfig_create(1, fake_argv);
-        if (!YETTY_IS_OK(config_result)) {
-            LOGE("ygreeter: config create failed");
-            return;
-        }
-        state->config = config_result.value;
-    }
-
-    struct yetty_yplatform_input_pipe_result pipe_result = yetty_platform_input_pipe_create();
-    if (!YETTY_IS_OK(pipe_result)) {
-        LOGE("ygreeter: input pipe create failed");
-        return;
-    }
-    state->pipe = pipe_result.value;
-
-    WGPUInstanceFeatureName instance_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
-    WGPUInstanceDescriptor instance_desc = {0};
-    instance_desc.requiredFeatureCount = 1;
-    instance_desc.requiredFeatures = instance_features;
-    state->instance = wgpuCreateInstance(&instance_desc);
-    if (!state->instance) {
-        LOGE("ygreeter: WebGPU instance create failed");
-        return;
-    }
-
-    state->surface = yetty_yplatform_create_surface_from_window(state->instance, state->window);
-    if (!state->surface) {
-        LOGE("ygreeter: surface create failed");
-        return;
-    }
-
-    int32_t width = ANativeWindow_getWidth(state->window);
-    int32_t height = ANativeWindow_getHeight(state->window);
-
-    /* The yapp:app object owns the embedded struct app; create it through the
-     * class so run() can resolve it. (Registration is idempotent.) */
-    (void)yetty_yplatform_register();
-    (void)yetty_yapp_register();
-    struct yetty_yclass_object_ptr_result app_res = yetty_ygreeter_app_create(NULL);
-    struct ygreeter_android_thread_args *targs = calloc(1, sizeof(*targs));
-    if (YETTY_IS_ERR(app_res) || !targs) {
-        LOGE("ygreeter: out of memory / app create failed");
-        if (YETTY_IS_ERR(app_res)) {
-            yetty_ycore_error_destroy(app_res.error);
-        }
-        free(targs);
-        return;
-    }
-    struct yetty_ygreeter_app_ptr_result app_data = yetty_ygreeter_app_from(app_res.value);
-    if (YETTY_IS_ERR(app_data)) {
-        yetty_ycore_error_destroy(app_data.error);
-        free(targs);
-        return;
-    }
-    struct app *app = &app_data.value->app;
-    targs->app_obj = app_res.value;
-
-    /* Register the platform classes and create a platform object to carry the
-     * bring-up state by hand (Android doesn't go through the GLFW platform run).
-     * FIXME: the new yplatform Android entry must supply the content-scale path. */
-    struct yetty_ycore_void_result plat_reg = yetty_yplatform_register();
-    if (YETTY_IS_ERR(plat_reg)) {
-        LOGE("ygreeter: platform register failed: %s",
-             plat_reg.error.msg ? plat_reg.error.msg : "(no message)");
-        yetty_ycore_error_destroy(plat_reg.error);
-        free(targs);
-        return;
-    }
-    struct yetty_yclass_object_ptr_result plat_res = yetty_yplatform_platform_create(NULL);
-    if (!YETTY_IS_OK(plat_res)) {
-        LOGE("ygreeter: platform create failed: %s",
-             plat_res.error.msg ? plat_res.error.msg : "(no message)");
-        yetty_ycore_error_destroy(plat_res.error);
-        free(targs);
-        return;
-    }
-    targs->platform = plat_res.value;
-
-    struct yetty_yplatform_gpu_context gpu = {
-        .instance = state->instance,
-        .surface = state->surface,
-        .surface_width = (uint32_t)width,
-        .surface_height = (uint32_t)height,
-        .content_scale = yetty_yplatform_android_content_scale(state->app),
-    };
-    struct yetty_ycore_void_result populate =
-        yetty_yplatform_platform_set_gpu_context(targs->platform, &gpu);
-    if (YETTY_IS_OK(populate)) {
-        populate = yetty_yplatform_platform_set_services(targs->platform, state->config,
-                                                         state->pipe, NULL, NULL);
-    }
-    if (YETTY_IS_ERR(populate)) {
-        LOGE("ygreeter: platform populate failed: %s",
-             populate.error.msg ? populate.error.msg : "(no message)");
-        yetty_ycore_error_destroy(populate.error);
-        (void)yetty_yclass_object_free(targs->platform);
-        free(targs);
-        return;
-    }
-
-    state->program_state = app;
-    /* The showcase is pointer-driven; never auto-pop the soft IME. */
-    state->suppress_soft_keyboard = 1;
-    state->initialized = 1;
-    state->running = 1;
-    pthread_create(&state->render_thread, NULL, ygreeter_android_render_thread, targs);
-
-    /* Initial resize so the container + chrome get the real surface size. */
-    {
-        struct yetty_yui_event ev = {0};
-        ev.type = YETTY_YCORE_RESIZE;
-        ev.resize.width = (float)width;
-        ev.resize.height = (float)height;
-        state->pipe->ops->write(state->pipe, &ev, sizeof(ev));
-    }
-
-    LOGI("ygreeter initialized successfully");
-}
-
-struct yetty_ycore_void_result yetty_android_program_term(struct yetty_yplatform_app_state *state)
-{
-    if (!state->initialized) {
-        return YETTY_OK_VOID();
-    }
-
-    LOGI("Terminating ygreeter...");
-
-    /* Stop the event loop; standalone_worker then unwinds its own teardown
-     * (framework, engine, container, surface + instance) on the render thread
-     * before returning. */
-    struct app *app = state->program_state;
-    state->running = 0;
-    if (app) {
-        standalone_stop(app);
-    }
-    if (state->render_thread) {
-        pthread_join(state->render_thread, NULL);
-        state->render_thread = 0;
-    }
-    /* app + the thread args were freed by the render thread; the surface and
-     * instance were released by standalone_worker's yframework teardown. */
-    state->program_state = NULL;
-    state->surface = NULL;
-    state->instance = NULL;
-
-    if (state->pipe) {
-        state->pipe->ops->destroy(state->pipe);
-        state->pipe = NULL;
-    }
-    if (state->config) {
-        state->config->ops->destroy(state->config);
-        state->config = NULL;
-    }
-    state->initialized = 0;
-    return YETTY_OK_VOID();
-}
-#endif /* __ANDROID__ */
-
-#ifndef __ANDROID__
-static int run_standalone_mode(int argc, char **argv)
-{
-    /* The app object's data block (struct yetty_ygreeter_app embedding struct
-     * app) is heap-allocated by yetty_ygreeter_app_create and never freed before
-     * exit — which also covers the webasm case where standalone_worker returns
-     * immediately but the browser keeps driving frames through callbacks that
-     * dereference `app` (a stack app would be a use-after-free there). */
-    struct yetty_ycore_void_result platform_reg = yetty_yplatform_register();
-    if (YETTY_IS_ERR(platform_reg)) {
-        yetty_ycore_error_print(stderr, "ygreeter: platform register", platform_reg.error);
-        yetty_ycore_error_destroy(platform_reg.error);
-        return 1;
-    }
-    struct yetty_ycore_void_result yapp_reg = yetty_yapp_register();
-    if (YETTY_IS_ERR(yapp_reg)) {
-        yetty_ycore_error_print(stderr, "ygreeter: yapp register", yapp_reg.error);
-        yetty_ycore_error_destroy(yapp_reg.error);
-        return 1;
-    }
-
-    struct yetty_yclass_object_ptr_result app_res = yetty_ygreeter_app_create(NULL);
-    if (YETTY_IS_ERR(app_res)) {
-        yetty_ycore_error_print(stderr, "ygreeter: app create", app_res.error);
-        yetty_ycore_error_destroy(app_res.error);
-        return 1;
-    }
-
-    struct yetty_yclass_object_ptr_result platform_res =
-        yetty_yplatform_default_platform_create(NULL);
-    if (YETTY_IS_ERR(platform_res)) {
-        yetty_ycore_error_print(stderr, "ygreeter: platform create", platform_res.error);
-        yetty_ycore_error_destroy(platform_res.error);
-        return 1;
-    }
-
-    struct yetty_ycore_void_result run_result =
-        yetty_yplatform_platform_run(platform_res.value, app_res.value, argc, argv);
-    if (YETTY_IS_ERR(run_result)) {
-        yetty_ycore_error_print(stderr, "ygreeter: run", run_result.error);
-        yetty_ycore_error_destroy(run_result.error);
-        return 1;
-    }
-    return 0;
-}
-#endif /* !__ANDROID__ — run_standalone_mode (drives the yplatform sequence) */
-
-/* yclass glue for ygreeter:app — compiled in every standalone build (desktop,
- * web, Android), outside the __ANDROID__ split above. */
-#include "yetty/gen/impl/ygreeter/main.c"
-
-#endif /* YETTY_YGREETER_HAS_STANDALONE */
-
-/*=============================================================================
- * Dispatcher. Not used on Android — there the NDK glue (android-glue.c)
- * drives android_main and calls yetty_android_program_init directly.
- *===========================================================================*/
-#ifndef __ANDROID__
 static int in_yetty_terminal(void)
 {
     return yetty_running_under_yetty();
@@ -4840,6 +3884,8 @@ static int in_yetty_terminal(void)
 
 int main(int argc, char **argv)
 {
+    (void)argc;
+    (void)argv;
     ytrace_init();
     if (in_yetty_terminal()) {
 #ifdef YETTY_YGUI_HAS_UV
@@ -4849,14 +3895,7 @@ int main(int argc, char **argv)
         return 1;
 #endif
     }
-#ifdef YETTY_YGREETER_HAS_STANDALONE
-    return run_standalone_mode(argc, argv);
-#else
-    (void)argc;
-    (void)argv;
-    fprintf(stderr, "ygreeter: standalone mode unavailable — built without webgpu. "
-                    "Run inside a yetty terminal (set TERM_PROGRAM=yetty).\n");
+    fprintf(stderr, "ygreeter renders into a hosting yetty terminal — run it inside yetty "
+                    "(TERM_PROGRAM=yetty)\n");
     return 1;
-#endif
 }
-#endif /* !__ANDROID__ — desktop/web dispatcher */

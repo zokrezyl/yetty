@@ -66,6 +66,11 @@ if(TARGET yetty_ydraw_core AND TARGET yetty_ysdf)
     add_subdirectory(ut/ydraw-core)
 endif()
 
+# ymux — independent daemon-side terminal engine (#695), headless, no GPU.
+if(TARGET yetty_ymux)
+    add_subdirectory(ut/ymux)
+endif()
+
 # yvterm — terminal-core grid model (libvterm-backed), headless.
 if(TARGET yetty_yvterm)
     add_subdirectory(ut/yvterm)

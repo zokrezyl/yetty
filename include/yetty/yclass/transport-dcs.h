@@ -26,7 +26,8 @@
 #ifndef YCLASS_TRANSPORT_DCS_H
 #define YCLASS_TRANSPORT_DCS_H
 
-#include <yetty/yclass/transport.h> /* for yetty_yclass_transport_ptr_result */
+#include <yetty/yclass/transport.h>        /* for yetty_yclass_transport_ptr_result */
+#include <yetty/ywire/wire-statemachine.h> /* for yetty_ywire_raw_cb */
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,6 +47,15 @@ struct yetty_yclass_transport_ptr_result yetty_yclass_transport_dcs_create(int r
                                                                            int write_fd,
                                                                            int dcs_code,
                                                                            int compressed);
+
+/* Install a sink for raw bytes that arrive on read_fd OUTSIDE any DCS envelope
+ * (e.g. keystrokes on the shared pane stdin) while the transport is reading a
+ * response. Without a sink these bytes are discarded; with one, a synchronous
+ * RPC no longer drops input typed during its round-trip. `cb` fires from inside
+ * recv() for each contiguous raw run — do not re-enter the transport from it;
+ * buffer and process after the call returns. Pass cb=NULL to clear. */
+struct yetty_ycore_void_result yetty_yclass_transport_dcs_set_raw_sink(
+    struct yetty_yclass_transport *transport, yetty_ywire_raw_cb cb, void *userdata);
 
 #ifdef __cplusplus
 }

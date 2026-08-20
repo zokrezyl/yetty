@@ -11,6 +11,7 @@
 #include <stdlib.h> /* calloc/free for proxy + buffer marshalling */
 #include <string.h> /* memcpy/strcmp/strlen */
 
+struct yetty_yclass_object_ptr_result;
 struct yetty_ycore_char_ptr_result;
 struct yetty_ycore_rectangle;
 struct yetty_ycore_void_result;
@@ -38,8 +39,15 @@ struct yetty_ycore_void_result yetty_yfigure_set_child_rect(struct yetty_yclass_
                                                             struct yetty_ycore_rectangle rect);
 struct yetty_ycore_void_result yetty_yfigure_set_rect(struct yetty_yclass_object *obj,
                                                       struct yetty_ycore_rectangle rect);
+struct yetty_yclass_object_ptr_result yetty_yfigure_child_object(struct yetty_yclass_object *obj,
+                                                                 uint32_t child_id);
+struct yetty_ycore_void_result yetty_yfigure_seat_overlay(struct yetty_yclass_object *obj,
+                                                          uint32_t id,
+                                                          struct yetty_ycore_rectangle rect);
 struct yetty_ycore_void_result yetty_yfigure_set_child_z(struct yetty_yclass_object *obj,
                                                          uint32_t id, int32_t z);
+struct yetty_ycore_void_result yetty_yfigure_set_child_input_passthrough(
+    struct yetty_yclass_object *obj, uint32_t id, uint32_t passthrough);
 struct yetty_ycore_void_result yetty_yfigure_set_child_hidden(struct yetty_yclass_object *obj,
                                                               uint32_t id, uint32_t hidden);
 struct yetty_ycore_void_result yetty_yfigure_set_child_scroll(struct yetty_yclass_object *obj,
@@ -75,8 +83,14 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_rect_fn)(
     struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_rect_fn)(struct yetty_yclass_object *,
                                                                     struct yetty_ycore_rectangle);
+typedef struct yetty_yclass_object_ptr_result (*yetty_yfigure_child_object_fn)(
+    struct yetty_yclass_object *, uint32_t);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_seat_overlay_fn)(
+    struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_z_fn)(struct yetty_yclass_object *,
                                                                        uint32_t, int32_t);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_input_passthrough_fn)(
+    struct yetty_yclass_object *, uint32_t, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_hidden_fn)(
     struct yetty_yclass_object *, uint32_t, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_scroll_fn)(
@@ -122,8 +136,18 @@ YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_rect_fn yetty_yfigure_container_yetty_yfigure_set_rect_check =
     yetty_yfigure_container_set_rect_impl;
 YETTY_MAYBE_UNUSED
+static yetty_yfigure_child_object_fn yetty_yfigure_container_yetty_yfigure_child_object_check =
+    yetty_yfigure_container_child_object_impl;
+YETTY_MAYBE_UNUSED
+static yetty_yfigure_seat_overlay_fn yetty_yfigure_container_yetty_yfigure_seat_overlay_check =
+    yetty_yfigure_container_seat_overlay_impl;
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_child_z_fn yetty_yfigure_container_yetty_yfigure_set_child_z_check =
     yetty_yfigure_container_set_child_z_impl;
+YETTY_MAYBE_UNUSED
+static yetty_yfigure_set_child_input_passthrough_fn
+    yetty_yfigure_container_yetty_yfigure_set_child_input_passthrough_check =
+        yetty_yfigure_container_set_child_input_passthrough_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_child_hidden_fn
     yetty_yfigure_container_yetty_yfigure_set_child_hidden_check =
@@ -184,8 +208,15 @@ struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void)
          (yetty_yclass_impl_t)yetty_yfigure_container_set_child_rect_impl},
         {"yetty_yfigure", "set_rect", (yetty_yclass_method_id_t)yetty_yfigure_set_rect,
          (yetty_yclass_impl_t)yetty_yfigure_container_set_rect_impl},
+        {"yetty_yfigure", "child_object", (yetty_yclass_method_id_t)yetty_yfigure_child_object,
+         (yetty_yclass_impl_t)yetty_yfigure_container_child_object_impl},
+        {"yetty_yfigure", "seat_overlay", (yetty_yclass_method_id_t)yetty_yfigure_seat_overlay,
+         (yetty_yclass_impl_t)yetty_yfigure_container_seat_overlay_impl},
         {"yetty_yfigure", "set_child_z", (yetty_yclass_method_id_t)yetty_yfigure_set_child_z,
          (yetty_yclass_impl_t)yetty_yfigure_container_set_child_z_impl},
+        {"yetty_yfigure", "set_child_input_passthrough",
+         (yetty_yclass_method_id_t)yetty_yfigure_set_child_input_passthrough,
+         (yetty_yclass_impl_t)yetty_yfigure_container_set_child_input_passthrough_impl},
         {"yetty_yfigure", "set_child_hidden",
          (yetty_yclass_method_id_t)yetty_yfigure_set_child_hidden,
          (yetty_yclass_impl_t)yetty_yfigure_container_set_child_hidden_impl},
@@ -736,6 +767,144 @@ size_t yetty_yfigure_set_rect_skel(const void *body, size_t body_len, void *resp
  * status wire response at this boundary. External linkage so this module's
  * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
  * across translation units. */
+size_t yetty_yfigure_child_object_skel(const void *, size_t, void *, size_t);
+YETTY_EXTERNAL_CALLBACK
+size_t yetty_yfigure_child_object_skel(const void *body, size_t body_len, void *resp,
+                                       size_t resp_max)
+{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
+        uint64_t obj_handle;
+        uint32_t child_id;
+    } wire_args;
+#pragma pack(pop)
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (body_len != sizeof(wire_args)) {
+        return 0;
+    }
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_child_object: handle_resolve",
+                                obj_resolve_r.error);
+        if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
+            return 0;
+        }
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
+    }
+    struct yetty_yclass_object_ptr_result call_r = yetty_yfigure_child_object(
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.child_id);
+    if (resp_max < 1 + sizeof(uint64_t)) {
+        return 0;
+    }
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_child_object", call_r.error);
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
+    }
+    uint64_t object_handle = 0;
+    if (call_r.value) {
+        struct yetty_yclass_handle_result handle_r =
+            yetty_yclass_rpc_register_object_dedup(call_r.value);
+        if (YETTY_IS_ERR(handle_r)) {
+            yetty_ycore_error_print(stderr,
+                                    "[skel] yetty_yfigure_child_object: register returned object",
+                                    handle_r.error);
+            ((uint8_t *)resp)[0] = 1;
+            size_t err_bytes =
+                yetty_ycore_error_serialize(handle_r.error, (uint8_t *)resp + 1, resp_max - 1);
+            yetty_ycore_error_destroy(handle_r.error);
+            return 1 + err_bytes;
+        }
+        object_handle = handle_r.value;
+    }
+    ((uint8_t *)resp)[0] = 0;
+    memcpy((uint8_t *)resp + 1, &object_handle, sizeof(object_handle));
+    return 1 + sizeof(object_handle);
+}
+
+/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
+ * contract (the RPC engine calls it as a fn-pointer), so it cannot return
+ * a Result; handle_resolve / impl failures are absorbed into the 1-byte
+ * status wire response at this boundary. External linkage so this module's
+ * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
+ * across translation units. */
+size_t yetty_yfigure_seat_overlay_skel(const void *, size_t, void *, size_t);
+YETTY_EXTERNAL_CALLBACK
+size_t yetty_yfigure_seat_overlay_skel(const void *body, size_t body_len, void *resp,
+                                       size_t resp_max)
+{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
+        uint64_t obj_handle;
+        uint32_t id;
+        struct yetty_ycore_rectangle rect;
+    } wire_args;
+#pragma pack(pop)
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (body_len != sizeof(wire_args)) {
+        return 0;
+    }
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_seat_overlay: handle_resolve",
+                                obj_resolve_r.error);
+        if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
+            return 0;
+        }
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
+    }
+    struct yetty_ycore_void_result call_r = yetty_yfigure_seat_overlay(
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.id, wire_args.rect);
+    if (resp_max < 1) {
+        return 0;
+    }
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_seat_overlay", call_r.error);
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
+    }
+    ((uint8_t *)resp)[0] = 0;
+    return 1;
+}
+
+/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
+ * contract (the RPC engine calls it as a fn-pointer), so it cannot return
+ * a Result; handle_resolve / impl failures are absorbed into the 1-byte
+ * status wire response at this boundary. External linkage so this module's
+ * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
+ * across translation units. */
 size_t yetty_yfigure_set_child_z_skel(const void *, size_t, void *, size_t);
 YETTY_EXTERNAL_CALLBACK
 size_t yetty_yfigure_set_child_z_skel(const void *body, size_t body_len, void *resp,
@@ -781,6 +950,69 @@ size_t yetty_yfigure_set_child_z_skel(const void *body, size_t body_len, void *r
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_set_child_z", call_r.error);
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
+    }
+    ((uint8_t *)resp)[0] = 0;
+    return 1;
+}
+
+/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
+ * contract (the RPC engine calls it as a fn-pointer), so it cannot return
+ * a Result; handle_resolve / impl failures are absorbed into the 1-byte
+ * status wire response at this boundary. External linkage so this module's
+ * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
+ * across translation units. */
+size_t yetty_yfigure_set_child_input_passthrough_skel(const void *, size_t, void *, size_t);
+YETTY_EXTERNAL_CALLBACK
+size_t yetty_yfigure_set_child_input_passthrough_skel(const void *body, size_t body_len, void *resp,
+                                                      size_t resp_max)
+{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
+        uint64_t obj_handle;
+        uint32_t id;
+        uint32_t passthrough;
+    } wire_args;
+#pragma pack(pop)
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (body_len != sizeof(wire_args)) {
+        return 0;
+    }
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
+        yetty_ycore_error_print(stderr,
+                                "[skel] yetty_yfigure_set_child_input_passthrough: handle_resolve",
+                                obj_resolve_r.error);
+        if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
+            return 0;
+        }
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
+    }
+    struct yetty_ycore_void_result call_r = yetty_yfigure_set_child_input_passthrough(
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.id, wire_args.passthrough);
+    if (resp_max < 1) {
+        return 0;
+    }
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_yfigure_set_child_input_passthrough",
+                                call_r.error);
         ((uint8_t *)resp)[0] = 1;
         size_t err_bytes =
             yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
@@ -1152,7 +1384,10 @@ size_t yetty_yfigure_create_child_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_delete_child_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_set_child_rect_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_set_rect_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_child_object_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_seat_overlay_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_set_child_z_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_set_child_input_passthrough_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_set_child_hidden_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_set_child_scroll_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_set_child_content_size_skel(const void *, size_t, void *, size_t);
@@ -1186,7 +1421,10 @@ static const struct yetty_yfigure_container_skel_row yetty_yfigure_container_ske
     {"yetty_yfigure_delete_child", yetty_yfigure_delete_child_skel},
     {"yetty_yfigure_set_child_rect", yetty_yfigure_set_child_rect_skel},
     {"yetty_yfigure_set_rect", yetty_yfigure_set_rect_skel},
+    {"yetty_yfigure_child_object", yetty_yfigure_child_object_skel},
+    {"yetty_yfigure_seat_overlay", yetty_yfigure_seat_overlay_skel},
     {"yetty_yfigure_set_child_z", yetty_yfigure_set_child_z_skel},
+    {"yetty_yfigure_set_child_input_passthrough", yetty_yfigure_set_child_input_passthrough_skel},
     {"yetty_yfigure_set_child_hidden", yetty_yfigure_set_child_hidden_skel},
     {"yetty_yfigure_set_child_scroll", yetty_yfigure_set_child_scroll_skel},
     {"yetty_yfigure_set_child_content_size", yetty_yfigure_set_child_content_size_skel},

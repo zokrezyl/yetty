@@ -1,21 +1,14 @@
-# ygreeter — first-contact tool. Dual-mode:
-#   - TERM_PROGRAM=yetty  → CLIENT mode. Ships OSC envelopes over stdout
-#                           to the host yetty. libuv-driven, no GPU.
-#   - otherwise           → STANDALONE mode. Opens its own GPU window
-#                           via the yplatform bootstrap + yframework_create, renders
-#                           the figure tree locally through an in-process
-#                           wire SM → yfigure_container → render_target.
-#
-# Standalone mode requires WebGPU/Dawn and GLFW. When YETTY_ENABLE_LIB_WEBGPU
-# is OFF (e.g. the riscv64 cross-build — Dawn has no riscv64 prebuilt),
-# we still build ygreeter, but only the client path. main.c gates the
-# standalone block on YETTY_YGREETER_HAS_STANDALONE.
+# ygreeter — first-contact tool. IN-TERMINAL ONLY on desktop:
+# CLIENT mode ships OSC envelopes over stdout to the host yetty
+# (libuv-driven, no GPU, no window). Outside a hosting yetty the binary
+# prints an error and exits — the desktop build carries NO WebGPU/Dawn/GLFW.
+# main.c still contains the YETTY_YGREETER_HAS_STANDALONE-guarded standalone
+# host — it is compiled ONLY by the Android/web packagings, never here.
 
-# Builds on Linux (both modes), macOS (both modes — shares the POSIX
-# forkpty / termios / fontconfig path with Linux) and Windows (standalone
-# GPU mode only — client mode's termios/ioctl/SIGWINCH/uv-stdin-poll glue
-# isn't ported). Other systems (mobile) aren't wired up.
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT WIN32 AND NOT APPLE)
+# Builds on Linux and macOS (shared POSIX forkpty / termios path). Windows
+# only had the standalone GPU mode — client mode's termios/ioctl/SIGWINCH/
+# uv-stdin-poll glue isn't ported — so it is not built there.
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT APPLE)
     return()
 endif()
 
@@ -37,42 +30,14 @@ set(YGREETER_SOURCES
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
 )
-# Platform pipe backend: Win32 pipes on Windows, POSIX pipes elsewhere.
-# Standalone mode drives a memory pty (memory-pty.c, above) — it never
-# spawns a shell or VM, so the real pty backend differs by platform:
-#   - Linux links forkpty.c, which is self-contained (no external refs).
-#   - Windows would otherwise link conpty.c, but that file also carries the
-#     VM-dispatching factory (--temu/--qemu), pulling in qemu/tinyemu. Since
-#     nothing in ygreeter references that factory, we omit conpty.c entirely.
-if(WIN32)
-    list(APPEND YGREETER_SOURCES
-        ${YETTY_ROOT}/src/yetty/yplatform/pipe/windows.c
-    )
-else()
-    list(APPEND YGREETER_SOURCES
-        ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
-        ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    )
-endif()
+# POSIX pty + pipe backends (client mode runs the wire over stdin/stdout;
+# forkpty.c is self-contained, no external refs).
+list(APPEND YGREETER_SOURCES
+    ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
+    ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
+)
 # ygreeter ships its OWN incbin manifest (logos + the demo video) via
 # embedded-assets.c.
-
-# Standalone-only sources: anything GLFW- or WebGPU-backed (the OS
-# event loop, clipboard, window glue, surface, device). Drop when
-# webgpu is off — client mode doesn't open a window or run a GPU
-# event loop.
-if(YETTY_ENABLE_LIB_WEBGPU)
-    # ygreeter is a yapp:app subclass (class ygreeter:app in main.c); its
-    # dual-mode main() drives the glfw_platform bootstrap directly (no shared
-    # ymain entry).
-    list(APPEND YGREETER_SOURCES
-        ${YETTY_APP_BOOTSTRAP_SOURCES}
-        ${YETTY_ROOT}/src/yetty/yframework/yframework.c
-        ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
-    )
-endif()
 
 add_executable(ygreeter ${YGREETER_SOURCES})
 
@@ -87,43 +52,16 @@ target_include_directories(ygreeter BEFORE PRIVATE
 target_compile_definitions(ygreeter PRIVATE
     YETTY_WEB=0
     YETTY_ANDROID=0
+    YETTY_USE_FORKPTY=1
+    YETTY_YGUI_HAS_UV
 )
-if(WIN32)
-    # Standalone-only on Windows: ConPTY + DirectWrite, no libuv client glue
-    # (YETTY_YGUI_HAS_UV stays undefined → client mode compiles out).
-    target_compile_definitions(ygreeter PRIVATE
-        YETTY_USE_CONPTY=1
-        YETTY_USE_DIRECTWRITE=1
-        NOMINMAX
-        WIN32_LEAN_AND_MEAN
-    )
-else()
-    target_compile_definitions(ygreeter PRIVATE
-        YETTY_USE_FORKPTY=1
-        YETTY_YGUI_HAS_UV
-    )
-endif()
-# Window chrome (ychrome) works in BOTH standalone and client/in-terminal mode.
-# The CLIENT/wire path is GPU-free — it emits the backdrop + caption as figure
-# records the hosting yetty renders — so it is available on EVERY target,
-# including the headless no-WebGPU riscv guest that runs inside a hosting yetty
-# (--temu / --qemu). Without this, the guest greeter drew its widgets with no
-# opaque backdrop and the host's console text showed through underneath.
-# Only STANDALONE (ygreeter's own GPU window + locally-rendered chrome) needs
-# WebGPU.
+# Window chrome (ychrome) in the CLIENT/wire flavor — GPU-free: it emits the
+# backdrop + caption as figure records the hosting yetty renders. Without
+# this, the greeter drew its widgets with no opaque backdrop and the host's
+# console text showed through underneath.
 target_compile_definitions(ygreeter PRIVATE YETTY_YGREETER_HAS_CHROME)
-if(YETTY_ENABLE_LIB_WEBGPU)
-    target_compile_definitions(ygreeter PRIVATE YETTY_YGREETER_HAS_STANDALONE)
-endif()
 
 find_package(Threads REQUIRED)
-# fontconfig is the Linux standalone-mode font-discovery backend. Windows
-# resolves fonts through DirectWrite (in yetty_yfont_core), and riscv64
-# cross-builds (no standalone) don't ship fontconfig.pc — skip the probe.
-if(YETTY_ENABLE_LIB_WEBGPU AND NOT WIN32)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
-endif()
 
 # Client-mode link line — what's needed to build the OSC-emitting
 # binary that runs inside a hosting yetty. Pulls in ygui (which
@@ -138,12 +76,12 @@ target_link_libraries(ygreeter PRIVATE
     yetty_yplatform_core
     yetty_yco
     yetty_telnet
-    # Window chrome — the GPU-free wire path (backdrop + caption emitted as
-    # figure records). ychrome's own CMake drops its ygrid dependency on no-GPU
-    # targets, so this links on the riscv guest too. The window_chrome gesture
-    # symbols it references resolve via yetty_yplatform_core above (NULL object
-    # in client mode → the stubs early-return).
-    yetty_ychrome
+    # Window chrome — the WIRE-ONLY flavor (backdrop + caption emitted as
+    # figure records, no yscene/GPU local sink even on WebGPU-enabled trees).
+    # The window_chrome gesture symbols it references resolve via
+    # yetty_yplatform_core above (NULL object in client mode → the stubs
+    # early-return).
+    yetty_ychrome_wire
     # ycircuit — GPU-free schematic renderer (SDF prims + MSDF text → a ydraw
     # drawable list). The Circuit scene hosts it in a generic ydraw_embed
     # widget, so it links on every target (client guest included), same as
@@ -157,56 +95,18 @@ target_link_libraries(ygreeter PRIVATE
     Threads::Threads
 )
 # Platform-specific link bits:
-#   Windows  — ws2_32 (libuv's Windows socket layer), dwrite (font backend).
 #   macOS    — util for openpty/forkpty; rt symbols live in libc/libSystem
 #              so no -lrt (same pattern as tinyemu.cmake).
 #   Linux    — rt for clock/shm/timer (glibc splits those out), util for
 #              openpty/forkpty/login_tty.
-if(WIN32)
-    target_link_libraries(ygreeter PRIVATE ws2_32 dwrite)
-elseif(APPLE)
+if(APPLE)
     target_link_libraries(ygreeter PRIVATE util)
 else()
     target_link_libraries(ygreeter PRIVATE rt util)
 endif()
 
-# Standalone-mode link line — Dawn-bound libs (yscene/yimage/yplot
-# call wgpu functions), the GLFW window helper, the full YETTY_LIBS
-# (yetty_yrender / yetty_ywebgpu / yetty_yterm are only declared
-# when webgpu is on), fontconfig for font discovery, ydraw-factory
-# for the figure factory. Only linked when webgpu is on.
-if(YETTY_ENABLE_LIB_WEBGPU)
-    target_link_libraries(ygreeter PRIVATE
-        yetty_yfigure
-        yetty_yscene
-        yetty_yshadertoy
-        yetty_yfont_core
-        yetty_ydraw_factory
-        yetty_yimage
-        yetty_yplot
-        ${YETTY_LIBS}
-        yetty_yplatform_move_resize
-        yetty_yplatform_window_chrome
-        # yetty_ychrome is linked unconditionally in the client link line above.
-        ${FONTCONFIG_LIBRARIES}
-    )
-    target_include_directories(ygreeter PRIVATE ${FONTCONFIG_INCLUDE_DIRS})
-endif()
-
-# Dawn (libwebgpu_dawn) is C++ — needs C++ runtime even though our
-# sources are C. Only relevant when webgpu is in the link line; harmless
-# to keep otherwise (CXX linker driver still works for pure C).
-set_target_properties(ygreeter PROPERTIES LINKER_LANGUAGE CXX)
-
 if(NOT MSVC)
     target_compile_options(ygreeter PRIVATE -Wall -Wextra)
-endif()
-
-# Standalone mode opens a Dawn/D3D12 window — copy the DX shader-compiler
-# DLLs next to ygreeter.exe so it runs from its own build dir.
-if(WIN32 AND YETTY_ENABLE_LIB_WEBGPU)
-    include(${YETTY_ROOT}/build-tools/yetty/dawn-runtime-dlls.cmake)
-    yetty_copy_dawn_runtime_dlls(ygreeter)
 endif()
 
 # Self-contained ygreeter: embed the assets that drive the Images and
@@ -260,7 +160,3 @@ if(YETTY_ENABLE_LIB_INCBIN)
         incbin_add_directory(ygreeter "data" "${_YGREETER_EMBED_DIR}" "*" TRUE)
     endif()
 endif()
-
-# Register with the yclass codegen graph — the module list IS these
-# call sites (see build-tools/yetty/yclass-codegen.cmake).
-yetty_yclass_module(ygreeter DEFINES YETTY_YGREETER_HAS_STANDALONE YETTY_YGUI_HAS_UV)

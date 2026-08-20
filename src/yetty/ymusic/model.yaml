@@ -150,6 +150,7 @@ classes:
       - slot: destroy
         slot_domain: ymusic
         impl: music_obj_destroy
+    internal: false
     doc: null
 exposed:
   - source_file: src/yetty/ymusic/music.c
@@ -287,22 +288,22 @@ local_typedefs:
     source_file: src/yetty/ymusic/music.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_ymusic_configure_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ymusic/music.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymusic/music.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymusic_configure_fn)(struct yetty_yclass_object *, float, float, uint32_t);"
   yetty_ymusic_parse_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ymusic/music.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymusic/music.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymusic_parse_fn)(struct yetty_yclass_object *, const char *, size_t);"
   yetty_ymusic_render_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ymusic/music.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymusic/music.c
     text: "typedef struct yetty_ydraw_drawable_list_result (*yetty_ymusic_render_fn)(struct yetty_yclass_object *);"
   yetty_ymusic_hit_test_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ymusic/music.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymusic/music.c
     text: "typedef struct yetty_ycore_int_result (*yetty_ymusic_hit_test_fn)(struct yetty_yclass_object *, float, float);"
   yetty_ymusic_set_highlight_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ymusic/music.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymusic/music.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymusic_set_highlight_fn)(struct yetty_yclass_object *, int32_t);"
   yetty_ymusic_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ymusic/music.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymusic/music.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymusic_destroy_fn)(struct yetty_yclass_object *);"
 includes:
   src/yetty/ymusic/music.c:

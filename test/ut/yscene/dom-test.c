@@ -466,6 +466,32 @@ static void test_hash_and_placement_hardening(void)
     CHECK("destroy", YETTY_IS_OK(destroy_res));
 }
 
+/* Review #15: the allocation-free LEAF delete — the staged-rollback
+ * primitive. Deletes a leaf; REFUSES a parent (tree intact); atomic
+ * multi-delete still handles subtrees. */
+static void test_leaf_delete(void)
+{
+    struct yetty_yscene_dom *dom = make_dom();
+    CHECK_OK("declare leaf", yetty_yscene_dom_node_declare(dom, 21, 0));
+    CHECK_OK("declare parent", yetty_yscene_dom_node_declare(dom, 22, 0));
+    CHECK_OK("declare child under parent", yetty_yscene_dom_node_declare(dom, 23, 22));
+
+    CHECK_OK("leaf delete removes the leaf", yetty_yscene_dom_node_delete_leaf(dom, 21));
+    CHECK_ERR("leaf delete refuses a parent", yetty_yscene_dom_node_delete_leaf(dom, 22));
+    /* The refused delete left the pair fully intact. */
+    CHECK_OK("parent still declared (re-declare no-op)", yetty_yscene_dom_node_declare(dom, 22, 0));
+    CHECK_OK("child still declared (re-declare no-op)", yetty_yscene_dom_node_declare(dom, 23, 22));
+    CHECK_OK("child (a leaf) deletes", yetty_yscene_dom_node_delete_leaf(dom, 23));
+    CHECK_OK("then the parent (now a leaf) deletes", yetty_yscene_dom_node_delete_leaf(dom, 22));
+    /* Reuse after the churn: the index stays consistent (the un-reused
+     * tombstones are reclaimed at the next rehash, not immediately). */
+    CHECK_OK("re-declare into leaf tombstone", yetty_yscene_dom_node_declare(dom, 21, 0));
+    CHECK_OK("and it deletes again as a leaf", yetty_yscene_dom_node_delete_leaf(dom, 21));
+
+    struct yetty_ycore_void_result destroy_res = yetty_yscene_dom_destroy(dom);
+    CHECK("destroy", YETTY_IS_OK(destroy_res));
+}
+
 int main(void)
 {
     test_tree_shape();
@@ -475,6 +501,7 @@ int main(void)
     test_id_churn();
     test_typed_interleave_anchor();
     test_hash_and_placement_hardening();
+    test_leaf_delete();
     fprintf(stderr, "%d checks, %d failures\n", g_checks, g_failures);
     return g_failures ? 1 : 0;
 }

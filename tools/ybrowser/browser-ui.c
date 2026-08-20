@@ -44,6 +44,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/yimage/yimage.h>
+#include <yetty/ymgui/wire.h>
 #include <yetty/ysvg/ysvg.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/yclipboard/clipboard.h>
@@ -3082,13 +3083,27 @@ static void open_first_tab(struct app *a, const char *initial_url)
  * watches DEC private modes 1500 (button) and 1501 (move); flipping them on
  * makes it re-emit pointer events as YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE
  * (and, on the rising edge, one FIGURE_RESIZE carrying the pane pixel size).
- * This is the path ygreeter / ymgui use — CLIENT_INPUT_SUB does not drive
- * it. Keystrokes arrive on stdin normally and need no subscription. */
+ * The CLIENT_INPUT_SUB KEY_FANOUT envelope is the figure-KEY opt-in: with
+ * it, once the browser figure is click-focused the host consumes keystrokes
+ * and delivers them as CLIENT_INPUT_FIGURE_KEY envelopes (which
+ * client_envelope_cb decodes into key_cb — typing into a page search
+ * field). Without the opt-in the host keeps keys on the raw channel and
+ * page typing goes dead. */
 static void set_mouse_forwarding(int on)
 {
     const char *seq = on ? "\033[?1500h\033[?1501h" : "\033[?1500l\033[?1501l";
     fwrite(seq, 1, strlen(seq), stdout);
     fflush(stdout);
+    struct yetty_client_input_sub sub = {
+        .magic = YETTY_CLIENT_INPUT_SUB_MAGIC,
+        .version = YMGUI_WIRE_VERSION,
+        .flags = on ? YETTY_CLIENT_INPUT_SUB_KEY_FANOUT : 0u,
+    };
+    struct yetty_ycore_void_result sub_res = yetty_yface_emit_to_fd(
+        STDOUT_FILENO, YETTY_OSC_CS_CLIENT_INPUT_SUB, 0, NULL, 0, &sub, sizeof(sub));
+    if (YETTY_IS_ERR(sub_res)) {
+        yetty_ycore_error_destroy(sub_res.error);
+    }
 }
 
 /* Minimal event-loop adapter for the in-yetty client's select() loop. The

@@ -216,6 +216,16 @@ struct yetty_ywire_wire_statemachine_args yetty_ywire_wire_statemachine_args(
 int yetty_ywire_wire_statemachine_at_end(const struct yetty_ywire_wire_statemachine *sm);
 
 /*
+ * 1 when the framer is at GROUND on both layers — outside any envelope with
+ * no partial escape pending, and the tmux-unwrap passthrough outside any
+ * wrapper. The safe framed boundary for a byte-wise teardown drain to stop
+ * reading at: handlers fire before the envelope's ST terminator is consumed,
+ * so completion alone still leaves frame-tail bytes queued ahead of raw
+ * input. NULL is idle.
+ */
+int yetty_ywire_wire_statemachine_idle(const struct yetty_ywire_wire_statemachine *sm);
+
+/*
  * Return the code (e.g. 600001 for ydraw BIN) of the envelope currently
  * being dispatched. 0 outside any envelope dispatch.
  *

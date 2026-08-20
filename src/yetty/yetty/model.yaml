@@ -22,6 +22,7 @@ classes:
       - slot: run
         slot_domain: yapp
         impl: yetty_app_run
+    internal: false
     doc: null
 types:
   - name: yetty_yclass_object_ptr_result

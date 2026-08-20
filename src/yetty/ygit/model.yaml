@@ -42,6 +42,7 @@ classes:
       - slot: destructor
         slot_domain: ygit
         impl: repo_destructor
+    internal: false
     doc: null
 exposed:
   - source_file: src/yetty/ygit/repo.c
@@ -295,10 +296,10 @@ local_typedefs:
     source_file: src/yetty/ygit/repo.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_ygit_constructor_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygit/repo.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygit/repo.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ygit_constructor_fn)(struct yetty_yclass_object *);"
   yetty_ygit_destructor_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygit/repo.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygit/repo.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ygit_destructor_fn)(struct yetty_yclass_object *);"
 includes:
   src/yetty/ygit/repo.c:

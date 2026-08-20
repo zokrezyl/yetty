@@ -17,6 +17,7 @@
 #include "ytest.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 /* Count host-byte-order occurrences of `tag` anywhere in the stream. The tag
@@ -159,10 +160,48 @@ static void test_kitchen_sink_deterministic(struct ytest *test)
     yetty_ydraw_drawable_list_destroy(b);
 }
 
+/*---------------------------------------------------------------------------
+ * The serialized scene bounds carry the CONTENT extent. A receiver that
+ * cannot walk record AABBs (the ymux daemon reserving figure rows) reads the
+ * document height from the container header, so the bounds must cover the
+ * laid-out document — not restate the viewport. height_cells=0 is ycat's
+ * "unbounded document" shape, which used to serialize scene_max_y=0 and made
+ * the daemon reserve nothing (the document overlapped the next prompt).
+ *-------------------------------------------------------------------------*/
+static void test_scene_bounds_carry_content_height(struct ytest *test)
+{
+    char many[4096] = {0};
+    size_t used = 0;
+    for (int i = 0; i < 40 && used + 32 < sizeof(many); i++) {
+        used += (size_t)snprintf(many + used, sizeof(many) - used, "line %02d text\n\n", i);
+    }
+    struct yetty_ymarkdown_render_config unbounded = {
+        .cell_width = 8,
+        .cell_height = 16,
+        .width_cells = 80,
+        .height_cells = 0,
+    };
+    struct yetty_ymarkdown_render_result r =
+        yetty_ymarkdown_render(many, strlen(many), NULL, 0, &unbounded);
+    YTEST_REQUIRE_OK(test, r);
+    float max_y = yetty_ydraw_drawable_list_scene_max_y(r.value.buffer);
+    /* 40 paragraphs at 16 px per line: far taller than one 24-row screen. */
+    YTEST_CHECK(test, max_y > 40.0f * 16.0f);
+    yetty_ydraw_drawable_list_destroy(r.value.buffer);
+
+    /* A short document's bounds are its content, not the 24-row viewport. */
+    struct yetty_ydraw_drawable_list *small = render_buf(test, "one line\n");
+    float small_max_y = yetty_ydraw_drawable_list_scene_max_y(small);
+    YTEST_CHECK(test, small_max_y > 0.0f);
+    YTEST_CHECK(test, small_max_y < 12.0f * 16.0f);
+    yetty_ydraw_drawable_list_destroy(small);
+}
+
 int main(void)
 {
     struct ytest test = ytest_begin("ymarkdown_golden");
     YTEST_RUN(&test, test_primitive_families);
     YTEST_RUN(&test, test_kitchen_sink_deterministic);
+    YTEST_RUN(&test, test_scene_bounds_carry_content_height);
     return ytest_end(&test);
 }

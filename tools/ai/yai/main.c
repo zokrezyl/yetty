@@ -1197,9 +1197,12 @@ static struct yetty_ycore_void_result emit_mouse_sub(uint32_t flags)
 
 static struct yetty_ycore_void_result subscribe_mouse(struct yai_app *app)
 {
+    /* KEY_FANOUT: with a figure click-focused the host consumes keystrokes
+     * and delivers CLIENT_INPUT_FIGURE_KEY envelopes (the path our key
+     * handler decodes); without the opt-in keys stay raw. */
     struct yetty_ycore_void_result sub_res =
         emit_mouse_sub(YETTY_CLIENT_INPUT_SUB_MOUSE_CLICK | YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE |
-                       YETTY_CLIENT_INPUT_SUB_MOUSE_WHEEL);
+                       YETTY_CLIENT_INPUT_SUB_MOUSE_WHEEL | YETTY_CLIENT_INPUT_SUB_KEY_FANOUT);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_res, "subscribe_mouse: sub envelope");
     if (fputs("\x1b[?1500h\x1b[?1501h", stdout) == EOF) {
         return YETTY_ERR(yetty_ycore_void, "subscribe_mouse: fputs failed");

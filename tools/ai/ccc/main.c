@@ -364,9 +364,10 @@ static struct yetty_ycore_void_result emit_mouse_sub(uint32_t flags)
 
 static struct yetty_ycore_void_result subscribe_mouse(struct ccc_app *app)
 {
+    /* KEY_FANOUT: figure-key envelopes for the click-focused card UI. */
     struct yetty_ycore_void_result sub_res =
         emit_mouse_sub(YETTY_CLIENT_INPUT_SUB_MOUSE_CLICK | YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE |
-                       YETTY_CLIENT_INPUT_SUB_MOUSE_WHEEL);
+                       YETTY_CLIENT_INPUT_SUB_MOUSE_WHEEL | YETTY_CLIENT_INPUT_SUB_KEY_FANOUT);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_res, "subscribe_mouse: sub envelope");
     fputs("\x1b[?1500h\x1b[?1501h", stdout);
     fflush(stdout);

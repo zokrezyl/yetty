@@ -148,6 +148,44 @@ methods:
     local: false
     oneway: false
     return_payload_type: null
+  - slot: child_object
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: child_id
+        type: uint32_t
+    doc: "/* Navigate to a child figure's yclass OBJECT by id. Object-returning:
+ * over RPC a remote producer receives a proxy handle (the skel registers
+ * the object), in-process callers the real object — the step a producer
+ * needs between create_child and calling the child's own typed methods
+ * (e.g. a scene's terminal surface). */"
+    local: false
+    oneway: false
+    return_payload_type: "struct yetty_yclass_object *"
+  - slot: seat_overlay
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: rect
+        type: struct yetty_ycore_rectangle
+    doc: "/* Seat a producer child as a FIXED FULL-PANE OVERLAY: place its rect at the
+ * given container-local position with NO viewport offset added (so it aligns
+ * with the container's STRUCTURAL children — e.g. the terminal content grid at
+ * the pane origin — rather than the offset producer-card space), and clear
+ * scroll anchoring so it never slides with the underlying pane's scroll. The
+ * ymux full-pane terminal grid uses this after CREATE_CHILD so it covers the
+ * pane's top rows instead of floating a couple of rows below them. */"
+    local: false
+    oneway: false
+    return_payload_type: null
   - slot: set_child_z
     domain: yfigure
     owning_class: container
@@ -160,6 +198,24 @@ methods:
       - name: z
         type: int32_t
     doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: set_child_input_passthrough
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: passthrough
+        type: uint32_t
+    doc: "/* Mark a child INPUT-PASSTHROUGH (see child_entry::input_passthrough): the
+ * hit test skips it, so clicks fall through to the figure beneath. A void
+ * one-way method so a pipelined producer session (ychrome wire host) can
+ * fire-and-forget it right after create_child. */"
     local: false
     oneway: false
     return_payload_type: null
@@ -268,6 +324,27 @@ methods:
     local: true
     oneway: false
     return_payload_type: null
+  - slot: hit_opaque
+    domain: yfigure
+    owning_class: figure
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: local_x
+        type: float
+      - name: local_y
+        type: float
+    doc: "/* hit_opaque: does this figure CONSUME pointer input at the given
+ * figure-local point (#699.4 overlay-first routing)? The container's
+ * topmost-wins hit test skips figures that report transparent, letting the
+ * event fall through to the figure below — an empty overlay scene yields
+ * everywhere; one with chrome consumes exactly where the chrome covers. The
+ * base default is OPAQUE (1): every existing figure keeps its whole-rect
+ * hit behavior unless its kind overrides. */"
+    local: true
+    oneway: false
+    return_payload_type: int
   - slot: process_bytes
     domain: yfigure
     owning_class: figure
@@ -433,9 +510,18 @@ classes:
       - slot: set_rect
         slot_domain: yfigure
         impl: yetty_yfigure_container_set_rect_impl
+      - slot: child_object
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_child_object_impl
+      - slot: seat_overlay
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_seat_overlay_impl
       - slot: set_child_z
         slot_domain: yfigure
         impl: yetty_yfigure_container_set_child_z_impl
+      - slot: set_child_input_passthrough
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_set_child_input_passthrough_impl
       - slot: set_child_hidden
         slot_domain: yfigure
         impl: yetty_yfigure_container_set_child_hidden_impl
@@ -454,6 +540,7 @@ classes:
       - slot: dump_state
         slot_domain: yfigure
         impl: container_dump_state_slot
+    internal: false
     doc: null
   - name: figure
     domain: yfigure
@@ -494,6 +581,9 @@ classes:
       - slot: process_input
         slot_domain: yfigure
         impl: yetty_yfigure_figure_default_process_input
+      - slot: hit_opaque
+        slot_domain: yfigure
+        impl: yetty_yfigure_figure_default_hit_opaque
       - slot: process_bytes
         slot_domain: yfigure
         impl: yetty_yfigure_figure_default_process_bytes
@@ -512,6 +602,7 @@ classes:
       - slot: apply_scroll_anchor
         slot_domain: yfigure
         impl: yetty_yfigure_figure_default_apply_scroll_anchor
+    internal: false
     doc: "/* ---- figure base data slice (PRIVATE) -----------------------------------
  * The yclass data slice for the figure base class — the first slice in every
  * figure object (right after the yclass object header). The layout is not
@@ -547,8 +638,9 @@ exposed:
 };"
     doc: "/* Hit-test result: the child whose rect contains the cursor, plus the cursor
  * coordinates inside that child's own pixel space (origin = child rect's
- * top-left). figure_id == 0 means \"no hit\". Iteration is back-to-front, so
- * for overlapping children the BACK-most match wins. This is an `expose`d
+ * top-left). figure_id == 0 means \"no hit\". Iteration is back-to-front and
+ * the LAST match wins — for overlapping children the TOP of the z-stack takes
+ * the hit (overlay-first input, #699.4). This is an `expose`d
  * type: codegen reads this definition (it sees the whole TU during its parse
  * pass) and re-emits it into the generated container.h for consumers. The
  * definition lives HERE because this TU no longer includes container.h, so it
@@ -755,6 +847,18 @@ types:
         type: int
       - name: cause
         type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ycore_pixel_coord
     kind: struct
     fields:
@@ -841,77 +945,89 @@ local_typedefs:
     source_file: src/yetty/yfigure/container.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_yfigure_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/figure.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_destroy_fn)(struct yetty_yclass_object *);"
   yetty_yfigure_render_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/figure.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_render_fn)(struct yetty_yclass_object *, struct yetty_ydraw_target *);"
   yetty_yfigure_dump_state_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/figure.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_yfigure_dump_state_fn)(struct yetty_yclass_object *, int);"
   yetty_yfigure_process_input_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/figure.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_process_input_fn)(struct yetty_yclass_object *, struct yetty_ywire_wire_statemachine *);"
+  yetty_yfigure_hit_opaque_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/figure.h
+    text: "typedef struct yetty_ycore_int_result (*yetty_yfigure_hit_opaque_fn)(struct yetty_yclass_object *, float, float);"
   yetty_yfigure_process_bytes_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/figure.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_process_bytes_fn)(struct yetty_yclass_object *, const uint8_t *, size_t);"
   yetty_yfigure_reset_content_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/figure.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_reset_content_fn)(struct yetty_yclass_object *);"
   yetty_yfigure_set_scroll_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/figure.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_scroll_fn)(struct yetty_yclass_object *, float, float);"
   yetty_yfigure_set_content_size_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/figure.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_content_size_fn)(struct yetty_yclass_object *, float, float);"
   yetty_yfigure_apply_scroll_anchor_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/figure.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_apply_scroll_anchor_fn)(struct yetty_yclass_object *, int32_t, float);"
   yetty_ycomposite_factory_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/include/yetty/yfigure/registry.h
+    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yfigure/registry.h
     text: "typedef struct yetty_yfigure_figure_ptr_result (*yetty_ycomposite_factory_fn)(struct yetty_ycore_rectangle, const struct yetty_context *, void *);"
   container_visitor_fn:
     source_file: src/yetty/yfigure/container.c
     text: "typedef int (*container_visitor_fn)(uint32_t, struct yetty_yfigure_figure *, void *);"
   yetty_yfigure_constructor_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_constructor_fn)(struct yetty_yclass_object *);"
   yetty_yfigure_add_child_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_add_child_fn)(struct yetty_yclass_object *, struct yetty_yfigure_figure *, uint32_t);"
   yetty_yfigure_remove_child_by_id_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_remove_child_by_id_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_yfigure_raise_child_by_id_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_raise_child_by_id_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_yfigure_create_child_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_create_child_fn)(struct yetty_yclass_object *, uint32_t, uint32_t, struct yetty_ycore_rectangle, struct yetty_ycore_buffer);"
   yetty_yfigure_delete_child_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_delete_child_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_yfigure_set_child_rect_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_rect_fn)(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);"
   yetty_yfigure_set_rect_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_rect_fn)(struct yetty_yclass_object *, struct yetty_ycore_rectangle);"
+  yetty_yfigure_child_object_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
+    text: "typedef struct yetty_yclass_object_ptr_result (*yetty_yfigure_child_object_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_yfigure_seat_overlay_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_seat_overlay_fn)(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);"
   yetty_yfigure_set_child_z_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_z_fn)(struct yetty_yclass_object *, uint32_t, int32_t);"
+  yetty_yfigure_set_child_input_passthrough_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_input_passthrough_fn)(struct yetty_yclass_object *, uint32_t, uint32_t);"
   yetty_yfigure_set_child_hidden_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_hidden_fn)(struct yetty_yclass_object *, uint32_t, uint32_t);"
   yetty_yfigure_set_child_scroll_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_scroll_fn)(struct yetty_yclass_object *, uint32_t, float, float);"
   yetty_yfigure_set_child_content_size_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_content_size_fn)(struct yetty_yclass_object *, uint32_t, float, float);"
   yetty_yfigure_apply_child_body_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_apply_child_body_fn)(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_buffer);"
   yetty_yfigure_clear_all_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yfigure/container.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_clear_all_fn)(struct yetty_yclass_object *);"

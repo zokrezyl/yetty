@@ -186,6 +186,7 @@ classes:
       - slot: run
         slot_domain: yapp
         impl: yaudio_app_run
+    internal: false
     doc: null
 types:
   - name: yetty_context
@@ -234,5 +235,5 @@ local_types:
   yetty_yaudio_app_ptr_result: tools/yaudio/main.c
 local_typedefs:
   yetty_yaudio_progress_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/include/yetty/yaudio/progress.h
+    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yaudio/progress.h
     text: "typedef void (*yetty_yaudio_progress_fn)(void *, double);"

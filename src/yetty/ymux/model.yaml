@@ -1,0 +1,3690 @@
+methods:
+  - slot: feed
+    domain: ymux
+    owning_class: vtsink
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: generation
+        type: uint64_t
+      - name: bytes
+        type: struct yetty_ycore_buffer
+    doc: "/* The ordered terminal-byte push the daemon calls over the relay. Synchronous
+ * (request/response) so the reply is the application ACK the daemon's VT flow
+ * control waits on — a oneway call would swallow write errors and turn a frozen
+ * sink into an invisible stall. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+classes:
+  - name: attachment
+    domain: ymux
+    accessor: yetty_ymux_attachment_class_get
+    type: regular
+    source_file: src/yetty/ymux/attachment.c
+    parent: null
+    mixins: []
+    data: struct yetty_ymux_attachment
+    data_fields:
+      - name: pane
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: view_rows
+        type: uint32_t
+        get: false
+        set: false
+      - name: view_cols
+        type: uint32_t
+        get: false
+        set: false
+      - name: follow_live
+        type: int
+        get: false
+        set: false
+      - name: anchor_logical_id
+        type: uint64_t
+        get: false
+        set: false
+      - name: anchor_timeline_hint
+        type: uint64_t
+        get: false
+        set: false
+      - name: selection_anchor_logical_id
+        type: uint64_t
+        get: false
+        set: false
+      - name: selection_anchor_offset
+        type: uint32_t
+        get: false
+        set: false
+      - name: selection_head_logical_id
+        type: uint64_t
+        get: false
+        set: false
+      - name: selection_head_offset
+        type: uint32_t
+        get: false
+        set: false
+      - name: published_generation
+        type: uint64_t
+        get: false
+        set: false
+      - name: acked_generation
+        type: uint64_t
+        get: false
+        set: false
+    ops: []
+    internal: false
+    doc: "/* The attachment — the yclass data block. */"
+  - name: client
+    domain: ymux
+    accessor: yetty_ymux_client_class_get
+    type: regular
+    source_file: src/yetty/ymux/client.c
+    parent: null
+    mixins: []
+    data: struct yetty_ymux_client
+    data_fields:
+      - name: socket
+        type: yetty_ipc_socket_t
+        get: false
+        set: false
+      - name: attachment_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: pane_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: permissions
+        type: uint32_t
+        get: false
+        set: false
+      - name: capabilities
+        type: uint32_t
+        get: false
+        set: false
+      - name: view_rows
+        type: uint32_t
+        get: false
+        set: false
+      - name: view_cols
+        type: uint32_t
+        get: false
+        set: false
+      - name: attached
+        type: int
+        get: false
+        set: false
+      - name: pane_exited
+        type: int
+        get: false
+        set: false
+      - name: last_refuse
+        type: uint32_t
+        get: false
+        set: false
+      - name: rich_body
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: rich_body_words
+        type: size_t
+        get: false
+        set: false
+      - name: rich_generation
+        type: uint64_t
+        get: false
+        set: false
+      - name: vtsink_enabled
+        type: int
+        get: false
+        set: false
+      - name: vtsink_emit
+        type: "void (*)(uint64_t, const uint8_t *, size_t, void *)"
+        get: false
+        set: false
+      - name: vtsink_emit_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: vtsink
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: overlay_input_active
+        type: int
+        get: false
+        set: false
+      - name: term_name
+        type: "char[64]"
+        get: false
+        set: false
+      - name: term_features
+        type: "char[128]"
+        get: false
+        set: false
+      - name: overlay_input_handler
+        type: "void (*)(uint32_t, const uint8_t *, size_t, void *)"
+        get: false
+        set: false
+      - name: overlay_input_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: ordered_queue
+        type: "struct yetty_ymux_ordered_entry *"
+        get: false
+        set: false
+      - name: ordered_head
+        type: uint32_t
+        get: false
+        set: false
+      - name: ordered_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: ordered_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: overlay_paste_open
+        type: int
+        get: false
+        set: false
+      - name: overlay_input_acked_seq
+        type: uint32_t
+        get: false
+        set: false
+      - name: overlay_input_nacked_seq
+        type: uint32_t
+        get: false
+        set: false
+      - name: overlay_input_nack_reason
+        type: uint32_t
+        get: false
+        set: false
+      - name: chrome_release_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: overlay_classify_carry
+        type: "uint8_t[8]"
+        get: false
+        set: false
+      - name: overlay_classify_carry_len
+        type: uint32_t
+        get: false
+        set: false
+      - name: vtsink_reset_handler
+        type: "int (*)(void *)"
+        get: false
+        set: false
+      - name: vtsink_reset_retry_pending
+        type: int
+        get: false
+        set: false
+      - name: vtsink_reset_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: pane_modes
+        type: uint32_t
+        get: false
+        set: false
+      - name: overlay_consumed_pointer
+        type: uint64_t
+        get: false
+        set: false
+      - name: overlay_consumed_key
+        type: uint64_t
+        get: false
+        set: false
+      - name: overlay_consumed_paste
+        type: uint64_t
+        get: false
+        set: false
+      - name: vtsink_handle
+        type: uint64_t
+        get: false
+        set: false
+      - name: vtsink_feed_rid
+        type: uint32_t
+        get: false
+        set: false
+      - name: vtsink_acked
+        type: uint64_t
+        get: false
+        set: false
+      - name: vtsink_defer_ack
+        type: int
+        get: false
+        set: false
+      - name: vtsink_rx
+        type: "uint8_t *"
+        get: false
+        set: false
+      - name: vtsink_rx_len
+        type: size_t
+        get: false
+        set: false
+      - name: vtsink_rx_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: rpc_relay_sink
+        type: "void (*)(uint32_t, const uint8_t *, size_t, void *)"
+        get: false
+        set: false
+      - name: rpc_relay_sink_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: rpc_relay_close_sink
+        type: "void (*)(uint32_t, void *)"
+        get: false
+        set: false
+      - name: rpc_relay_close_sink_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: bell_count
+        type: uint64_t
+        get: false
+        set: false
+      - name: title
+        type: "char[256]"
+        get: false
+        set: false
+      - name: title_generation
+        type: uint64_t
+        get: false
+        set: false
+      - name: reply_status
+        type: uint32_t
+        get: false
+        set: false
+      - name: reply_text
+        type: "char[512]"
+        get: false
+        set: false
+      - name: reply_generation
+        type: uint64_t
+        get: false
+        set: false
+      - name: clipboard_text
+        type: "char *"
+        get: false
+        set: false
+      - name: clipboard_len
+        type: size_t
+        get: false
+        set: false
+      - name: clipboard_target
+        type: int
+        get: false
+        set: false
+      - name: clipboard_generation
+        type: uint64_t
+        get: false
+        set: false
+      - name: rx
+        type: "uint8_t *"
+        get: false
+        set: false
+      - name: rx_len
+        type: size_t
+        get: false
+        set: false
+      - name: tx
+        type: "uint8_t *"
+        get: false
+        set: false
+      - name: tx_len
+        type: size_t
+        get: false
+        set: false
+      - name: resource_cache
+        type: "struct client_resource[64]"
+        get: false
+        set: false
+      - name: resource_cache_count
+        type: uint32_t
+        get: false
+        set: false
+    ops: []
+    internal: false
+    doc: null
+  - name: daemon
+    domain: ymux
+    accessor: yetty_ymux_daemon_class_get
+    type: regular
+    source_file: src/yetty/ymux/daemon.c
+    parent: null
+    mixins: []
+    data: struct yetty_ymux_daemon
+    data_fields:
+      - name: listener
+        type: yetty_ipc_socket_t
+        get: false
+        set: false
+      - name: socket_path
+        type: "char[256]"
+        get: false
+        set: false
+      - name: sessions
+        type: "struct daemon_session_entry[16]"
+        get: false
+        set: false
+      - name: session_stamp
+        type: uint64_t
+        get: false
+        set: false
+      - name: next_auto_name
+        type: uint32_t
+        get: false
+        set: false
+      - name: host
+        type: struct yetty_ymux_daemon_host
+        get: false
+        set: false
+      - name: connections
+        type: "struct daemon_connection[32]"
+        get: false
+        set: false
+      - name: ptys
+        type: "struct daemon_pane_pty[64]"
+        get: false
+        set: false
+      - name: default_rows
+        type: uint32_t
+        get: false
+        set: false
+      - name: default_cols
+        type: uint32_t
+        get: false
+        set: false
+      - name: shutdown_requested
+        type: int
+        get: false
+        set: false
+      - name: paste_buffer
+        type: "char *"
+        get: false
+        set: false
+      - name: paste_buffer_len
+        type: uint32_t
+        get: false
+        set: false
+      - name: paste_buffer_cap
+        type: uint32_t
+        get: false
+        set: false
+      - name: paste_truncated
+        type: int
+        get: false
+        set: false
+    ops: []
+    internal: false
+    doc: null
+  - name: engine
+    domain: ymux
+    accessor: yetty_ymux_engine_class_get
+    type: regular
+    source_file: src/yetty/ymux/engine.c
+    parent: null
+    mixins: []
+    data: struct yetty_ymux_engine
+    data_fields:
+      - name: vterm
+        type: "VTerm *"
+        get: false
+        set: false
+      - name: state
+        type: "VTermState *"
+        get: false
+        set: false
+      - name: primary
+        type: struct engine_surface
+        get: false
+        set: false
+      - name: alternate
+        type: struct engine_surface
+        get: false
+        set: false
+      - name: alt_active
+        type: int
+        get: false
+        set: false
+      - name: next_logical_id
+        type: uint64_t
+        get: false
+        set: false
+      - name: alt_epoch
+        type: uint64_t
+        get: false
+        set: false
+      - name: cursor_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: cursor_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: cursor_visible
+        type: int
+        get: false
+        set: false
+      - name: cursor_blink
+        type: int
+        get: false
+        set: false
+      - name: cursor_shape
+        type: int
+        get: false
+        set: false
+      - name: cell_pixel_height
+        type: uint32_t
+        get: false
+        set: false
+      - name: pending_reserve_rows
+        type: uint32_t
+        get: false
+        set: false
+      - name: pen_fg
+        type: uint32_t
+        get: false
+        set: false
+      - name: pen_bg
+        type: uint32_t
+        get: false
+        set: false
+      - name: pen_attrs
+        type: uint16_t
+        get: false
+        set: false
+      - name: ops
+        type: "struct yetty_ymux_engine_op *"
+        get: false
+        set: false
+      - name: op_head
+        type: uint64_t
+        get: false
+        set: false
+      - name: default_fg
+        type: uint32_t
+        get: false
+        set: false
+      - name: default_bg
+        type: uint32_t
+        get: false
+        set: false
+      - name: configured_fg
+        type: uint32_t
+        get: false
+        set: false
+      - name: configured_bg
+        type: uint32_t
+        get: false
+        set: false
+      - name: mouse_mode
+        type: int
+        get: false
+        set: false
+      - name: reverse_video
+        type: int
+        get: false
+        set: false
+      - name: card_click
+        type: int
+        get: false
+        set: false
+      - name: card_move
+        type: int
+        get: false
+        set: false
+      - name: card_key
+        type: int
+        get: false
+        set: false
+      - name: title
+        type: "char[256]"
+        get: false
+        set: false
+      - name: title_len
+        type: size_t
+        get: false
+        set: false
+      - name: title_accum_len
+        type: size_t
+        get: false
+        set: false
+      - name: osc_color_buf
+        type: "char[64]"
+        get: false
+        set: false
+      - name: osc_color_len
+        type: size_t
+        get: false
+        set: false
+      - name: osc_color_overflow
+        type: int
+        get: false
+        set: false
+      - name: sel_buffer
+        type: "char[4096]"
+        get: false
+        set: false
+      - name: clip_accum
+        type: "char *"
+        get: false
+        set: false
+      - name: clip_accum_len
+        type: size_t
+        get: false
+        set: false
+      - name: clip_accum_cap
+        type: size_t
+        get: false
+        set: false
+      - name: clip_overflow
+        type: int
+        get: false
+        set: false
+      - name: clip_target
+        type: int
+        get: false
+        set: false
+      - name: pending_utf8
+        type: "uint8_t[4]"
+        get: false
+        set: false
+      - name: pending_scroll_command
+        type: int
+        get: false
+        set: false
+      - name: pending_scroll_cursor_col
+        type: int
+        get: false
+        set: false
+      - name: exotic_overline
+        type: int
+        get: false
+        set: false
+      - name: exotic_underline_colour
+        type: int
+        get: false
+        set: false
+      - name: exotic_link
+        type: int
+        get: false
+        set: false
+      - name: filter_dim
+        type: int
+        get: false
+        set: false
+      - name: filter_fg_rgb_intent
+        type: int
+        get: false
+        set: false
+      - name: filter_bg_rgb_intent
+        type: int
+        get: false
+        set: false
+      - name: filter_underline_style
+        type: uint8_t
+        get: false
+        set: false
+      - name: filter_underline_colour_ref
+        type: uint8_t
+        get: false
+        set: false
+      - name: exotic_colour_table
+        type: "char[256][40]"
+        get: false
+        set: false
+      - name: exotic_colour_count
+        type: uint8_t
+        get: false
+        set: false
+      - name: hyperlinks
+        type: "struct engine_hyperlink *"
+        get: false
+        set: false
+      - name: hyperlink_next_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: filter_link_ref
+        type: uint32_t
+        get: false
+        set: false
+      - name: escape_carry
+        type: "uint8_t[1024]"
+        get: false
+        set: false
+      - name: escape_carry_len
+        type: size_t
+        get: false
+        set: false
+      - name: filter_scratch
+        type: "uint8_t *"
+        get: false
+        set: false
+      - name: filter_scratch_cap
+        type: size_t
+        get: false
+        set: false
+      - name: pending_utf8_len
+        type: uint8_t
+        get: false
+        set: false
+      - name: dcs_accum
+        type: "char *"
+        get: false
+        set: false
+      - name: dcs_accum_len
+        type: size_t
+        get: false
+        set: false
+      - name: dcs_accum_cap
+        type: size_t
+        get: false
+        set: false
+      - name: dcs_code
+        type: uint32_t
+        get: false
+        set: false
+      - name: dcs_active
+        type: int
+        get: false
+        set: false
+      - name: dcs_overflow
+        type: int
+        get: false
+        set: false
+      - name: host
+        type: struct yetty_ymux_engine_host
+        get: false
+        set: false
+    ops: []
+    internal: false
+    doc: "/* The engine — the yclass data block. */"
+  - name: history
+    domain: ymux
+    accessor: yetty_ymux_history_class_get
+    type: regular
+    source_file: src/yetty/ymux/history.c
+    parent: null
+    mixins: []
+    data: struct yetty_ymux_history
+    data_fields:
+      - name: hot_rows
+        type: "struct history_hot_row *"
+        get: false
+        set: false
+      - name: hot_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: hot_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: hot_head
+        type: uint32_t
+        get: false
+        set: false
+      - name: pushed_rows
+        type: uint64_t
+        get: false
+        set: false
+      - name: archived_rows
+        type: uint64_t
+        get: false
+        set: false
+      - name: dropped_rows
+        type: uint64_t
+        get: false
+        set: false
+      - name: segments
+        type: "struct history_segment *"
+        get: false
+        set: false
+      - name: segment_head
+        type: uint32_t
+        get: false
+        set: false
+      - name: segment_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: segment_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: builder
+        type: struct history_builder
+        get: false
+        set: false
+      - name: warm_bytes_used
+        type: size_t
+        get: false
+        set: false
+      - name: warm_bytes_budget
+        type: size_t
+        get: false
+        set: false
+      - name: total_row_cap
+        type: uint64_t
+        get: false
+        set: false
+      - name: file_bytes_budget
+        type: uint64_t
+        get: false
+        set: false
+      - name: spill_file
+        type: "FILE *"
+        get: false
+        set: false
+      - name: spill_file_size
+        type: uint64_t
+        get: false
+        set: false
+      - name: spill_disabled
+        type: int
+        get: false
+        set: false
+      - name: cache
+        type: "struct history_cache_entry[4]"
+        get: false
+        set: false
+      - name: cache_tick
+        type: uint64_t
+        get: false
+        set: false
+    ops: []
+    internal: false
+    doc: "/* The tiered store — the yclass data block. */"
+  - name: pane
+    domain: ymux
+    accessor: yetty_ymux_pane_class_get
+    type: regular
+    source_file: src/yetty/ymux/pane.c
+    parent: null
+    mixins: []
+    data: struct yetty_ymux_pane
+    data_fields:
+      - name: engine
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: history
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: rich
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: host
+        type: struct yetty_ymux_engine_host
+        get: false
+        set: false
+    ops: []
+    internal: false
+    doc: "/* The pane — the yclass data block. */"
+  - name: projector
+    domain: ymux
+    accessor: yetty_ymux_projector_class_get
+    type: regular
+    source_file: src/yetty/ymux/projector.c
+    parent: null
+    mixins: []
+    data: struct yetty_ymux_projector
+    data_fields:
+      - name: pane
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: attachment
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: vt_shadow_cells
+        type: "struct yetty_ymux_cell *"
+        get: false
+        set: false
+      - name: vt_shadow_rows
+        type: uint32_t
+        get: false
+        set: false
+      - name: vt_shadow_cols
+        type: uint32_t
+        get: false
+        set: false
+      - name: vt_shadow_valid
+        type: int
+        get: false
+        set: false
+      - name: vt_shadow_view_top
+        type: uint64_t
+        get: false
+        set: false
+      - name: vt_shadow_following
+        type: int
+        get: false
+        set: false
+      - name: vt_op_consumed
+        type: uint64_t
+        get: false
+        set: false
+      - name: vt_pending_scrollbar_wrap
+        type: int
+        get: false
+        set: false
+      - name: vt_tty
+        type: struct yetty_ymux_tty
+        get: false
+        set: false
+      - name: vt_term
+        type: struct yetty_ymux_tty_term
+        get: false
+        set: false
+      - name: vt_default_fg
+        type: uint32_t
+        get: false
+        set: false
+      - name: vt_default_bg
+        type: uint32_t
+        get: false
+        set: false
+      - name: vt_palette
+        type: "uint32_t[256]"
+        get: false
+        set: false
+      - name: vt_capabilities
+        type: uint32_t
+        get: false
+        set: false
+      - name: vt_attach_preamble
+        type: int
+        get: false
+        set: false
+      - name: vt_attach_preamble_sent
+        type: int
+        get: false
+        set: false
+      - name: vt_deferred_wrap_el
+        type: int
+        get: false
+        set: false
+      - name: response_state
+        type: "enum (unnamed enum at src/yetty/ymux/projector.c:127:5)"
+        get: false
+        set: false
+      - name: response_seq
+        type: "uint8_t *"
+        get: false
+        set: false
+      - name: response_seq_len
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_seq_cap
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_da_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_da2_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_cpr_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_decrpm_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_dcs_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_osc_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_other_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_theme_scheme
+        type: int
+        get: false
+        set: false
+      - name: response_theme_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_last_cpr_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_last_cpr_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_last_da
+        type: "char[64]"
+        get: false
+        set: false
+      - name: response_last_da2
+        type: "char[64]"
+        get: false
+        set: false
+      - name: response_caps
+        type: "struct yetty_ymux_response_cap *"
+        get: false
+        set: false
+      - name: response_caps_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_caps_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: response_last_osc
+        type: "char[64]"
+        get: false
+        set: false
+      - name: vt_exotic_colours
+        type: "char[256][40]"
+        get: false
+        set: false
+      - name: vt_links
+        type: "struct vt_link_cache_entry *"
+        get: false
+        set: false
+      - name: vt_links_count
+        type: size_t
+        get: false
+        set: false
+      - name: vt_links_cap
+        type: size_t
+        get: false
+        set: false
+      - name: vt_frame_engine
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: shadow_rich_revision
+        type: uint64_t
+        get: false
+        set: false
+      - name: shadow_rich_view_top
+        type: uint64_t
+        get: false
+        set: false
+      - name: shadow_rich_visible_ids
+        type: "uint64_t[32]"
+        get: false
+        set: false
+      - name: shadow_rich_visible_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: rich_emitted
+        type: int
+        get: false
+        set: false
+      - name: rich_delivered_hashes
+        type: "uint64_t[64]"
+        get: false
+        set: false
+      - name: rich_delivered_count
+        type: uint32_t
+        get: false
+        set: false
+    ops: []
+    internal: false
+    doc: "/* The projector — the yclass data block. */"
+  - name: rich
+    domain: ymux
+    accessor: yetty_ymux_rich_class_get
+    type: regular
+    source_file: src/yetty/ymux/rich.c
+    parent: null
+    mixins: []
+    data: struct yetty_ymux_rich
+    data_fields:
+      - name: objects
+        type: "struct rich_object *"
+        get: false
+        set: false
+      - name: object_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: object_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: next_rich_id
+        type: uint64_t
+        get: false
+        set: false
+      - name: bindings
+        type: "struct rich_stream_binding *"
+        get: false
+        set: false
+      - name: binding_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: binding_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: revision
+        type: uint64_t
+        get: false
+        set: false
+      - name: resources
+        type: struct yetty_ymux_resource_store
+        get: false
+        set: false
+    ops: []
+    internal: false
+    doc: "/* The store — the yclass data block. */"
+  - name: session
+    domain: ymux
+    accessor: yetty_ymux_session_class_get
+    type: regular
+    source_file: src/yetty/ymux/session.c
+    parent: null
+    mixins: []
+    data: struct yetty_ymux_session
+    data_fields:
+      - name: panes
+        type: "struct session_pane_slot[64]"
+        get: false
+        set: false
+      - name: next_pane_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: attachments
+        type: "struct session_attachment_slot[32]"
+        get: false
+        set: false
+      - name: next_attachment_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: controller_attachment_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: controller_token
+        type: "char[64]"
+        get: false
+        set: false
+      - name: active_pane_id
+        type: uint32_t
+        get: false
+        set: false
+    ops: []
+    internal: false
+    doc: "/* The session — the yclass data block. */"
+  - name: vtsink
+    domain: ymux
+    accessor: yetty_ymux_vtsink_class_get
+    type: regular
+    source_file: src/yetty/ymux/vtsink.c
+    parent: null
+    mixins: []
+    data: struct yetty_ymux_vtsink
+    data_fields:
+      - name: emit
+        type: yetty_ymux_vtsink_emit_fn
+        get: false
+        set: false
+      - name: emit_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: applied_generation
+        type: uint64_t
+        get: false
+        set: false
+    ops:
+      - slot: feed
+        slot_domain: ymux
+        impl: vtsink_feed_impl
+    internal: false
+    doc: "/* The sink — the yclass data block. */"
+exposed:
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: pane
+        type: "struct yetty_yclass_object *"
+      - name: view_rows
+        type: uint32_t
+      - name: view_cols
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_set_view_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: view_rows
+        type: uint32_t
+      - name: view_cols
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_follow
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Enter follow-live (the default) — the viewport tracks the live bottom. */"
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_anchor
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: timeline_idx
+        type: uint64_t
+    doc: "/* Anchor the viewport top at a timeline row: the row's STABLE logical id is
+ * captured (with the timeline as a hint), so the anchor survives floor
+ * movement and later re-resolution. Anchoring past the live top clamps to
+ * follow-live. */"
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_view_top
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Resolve the viewport's TOP timeline index right now: follow-live tracks
+ * the live screen; an anchored view re-locates its logical id around the
+ * hint (identity wins over the hint), clamping to the floor when the
+ * anchored row was dropped. */"
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_is_following
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_set_selection
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: anchor_logical_id
+        type: uint64_t
+      - name: anchor_offset
+        type: uint32_t
+      - name: head_logical_id
+        type: uint64_t
+      - name: head_offset
+        type: uint32_t
+    doc: "/* Selection endpoints in stable coordinates (0 anchor id = inactive). */"
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_selection
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_anchor_logical_id
+        type: "uint64_t *"
+      - name: out_anchor_offset
+        type: "uint32_t *"
+      - name: out_head_logical_id
+        type: "uint64_t *"
+      - name: out_head_offset
+        type: "uint32_t *"
+    doc: null
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_next_generation
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Generation bookkeeping (the projector publishes; the wire acks). */"
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_ack
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: generation
+        type: uint64_t
+    doc: null
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_generations
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_published
+        type: "uint64_t *"
+      - name: out_acked
+        type: "uint64_t *"
+    doc: null
+  - source_file: src/yetty/ymux/attachment.c
+    name: yetty_ymux_attachment_view_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_rows
+        type: "uint32_t *"
+      - name: out_cols
+        type: "uint32_t *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: socket_path
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_set_terminal
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: term_name
+        type: "const char *"
+      - name: features
+        type: "const char *"
+    doc: "/* Declare the client terminal's TERM name + features string; the next
+ * attach carries them (the daemon then resolves the capability profile
+ * via the terminfo/features state model). */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_attach
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: session_name
+        type: "const char *"
+      - name: pane_id
+        type: uint32_t
+      - name: view_rows
+        type: uint32_t
+      - name: view_cols
+        type: uint32_t
+      - name: cell_pixel_height
+        type: uint32_t
+      - name: capabilities
+        type: uint32_t
+      - name: token
+        type: "const char *"
+    doc: "/* Attach to `session_name` (NULL/empty = most recent — tmux attach
+ * without -t). The session must exist; new-session creates them. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_session_new
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+    doc: "/* new-session: create a named session (empty name = auto-number) with
+ * its initial shell pane. Reply arrives as a session reply. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_session_list
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_session_has
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_session_kill
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_session_detach
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+    doc: "/* detach-client -s: detach every client of the session server-side. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_session_send_keys
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+      - name: pairs
+        type: "const uint32_t *"
+      - name: pair_count
+        type: uint32_t
+    doc: "/* send-keys: (kind, value) u32 pairs — kind 0 codepoint, kind 1 special
+ * key — fed to the session's active pane engine, no attachment needed. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_session_rename
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: old_name
+        type: "const char *"
+      - name: new_name
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_session_reply
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_text
+        type: "const char **"
+      - name: out_status
+        type: "uint32_t *"
+    doc: "/* The last session-verb reply (borrowed text; status via out param).
+ * The returned counter moves per arrival — poll it around a verb. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_detach
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_input_char
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: codepoint
+        type: uint32_t
+      - name: mods
+        type: int
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_input_key
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: key
+        type: int
+      - name: mods
+        type: int
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_input_mouse_move
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: mods
+        type: int
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_input_mouse_button
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: button
+        type: int
+      - name: pressed
+        type: int
+      - name: mods
+        type: int
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_input_paste
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+      - name: len
+        type: size_t
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_resize
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_scroll
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: delta
+        type: int
+    doc: "/* Scroll the viewport by `delta` rows (negative = into history; reaching
+ * the live top resumes follow-live). The daemon answers with a FULL for
+ * the new viewport. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_takeover
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_resync
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Ask the daemon to resync this attachment: the client's terminal-byte stream
+ * became unusable (a dropped or failed VT frame), so request a fresh COMPLETE
+ * redraw rather than continue a desynced incremental stream. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_send_tty_response
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const uint8_t *"
+      - name: byte_count
+        type: uint32_t
+    doc: "/* Forward RAW terminal-response bytes from THIS attachment's renderer to
+ * its daemon-side response parser (review #16). Opaque transport: the
+ * bytes are preserved exactly — no decoding, no keyboard re-encoding. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_send_overlay_input
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: sequence
+        type: uint32_t
+      - name: input_class
+        type: uint32_t
+      - name: bytes
+        type: "const uint8_t *"
+      - name: byte_count
+        type: uint32_t
+    doc: "/* Forward one CONSUMED overlay input event (drained from the overlay
+ * scene's queue) to the daemon's chrome seat, tagged with an acceptance
+ * SEQUENCE (review #17): the daemon ACKs it after taking ownership; the
+ * caller pops its source event only at that commit point. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_overlay_input_nacked
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The highest overlay-input sequence the daemon has ACCEPTED. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_chrome_release_count
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* CHROME_RELEASE frames observed (the daemon-side chrome exited). */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_request_recover
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Ops/debug: ask the daemon to force slow-client recovery (epoch reset) on
+ * every attached connection — the attach-level reset-ordering probe. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_request_paste
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Ask the daemon to paste its copy-mode buffer into the target pane
+ * (tmux paste-buffer). The SESSION_REPLY ack carries the outcome. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_shutdown_server
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_step
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* One non-blocking pump: recv frames, apply paints (acking each), flush
+ * pending tx. Returns the number of frames handled. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_ingest
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const char *"
+      - name: len
+        type: size_t
+    doc: "/* Feed externally-read bytes into the frame parser (an embedder whose
+ * event loop owns the socket reads — e.g. a uv pipe watcher — routes the
+ * bytes here instead of letting step() recv). Returns frames handled. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_fd
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The connection's file descriptor for event-loop registration (-1 when
+ * disconnected or on platforms without one). */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_attached
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_attachment_id
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_pane_id
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_permissions
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_last_refuse
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_pane_exited
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_rich_body
+    return_type: struct yetty_ycore_const_uint32_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_word_count
+        type: "uint32_t *"
+    doc: "/* Borrowed — the most recent rich body (rich-format words; NULL until one
+ * arrives). Valid until the next transaction or dispose. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_rich_generation
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Counts rich-body arrivals — the embedder polls it to detect fresh
+ * bodies without comparing content. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_bell_count
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Bell arrivals (exactly-once effects — never replayed on reconnect). */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_title
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out
+        type: "char *"
+      - name: out_cap
+        type: size_t
+    doc: "/* The latest pane title (copy-out) + its arrival counter. */"
+  - source_file: src/yetty/ymux/client.c
+    name: yetty_ymux_client_clipboard
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_text
+        type: "const char **"
+      - name: out_len
+        type: "size_t *"
+      - name: out_target
+        type: "int *"
+    doc: "/* The latest clipboard effect text (borrowed; NULL until one arrives).
+ * `out_target`: 1 clipboard, 0 primary selection. The returned counter
+ * moves per arrival — controller-only routing means non-controllers
+ * never see it move. */"
+  - source_file: src/yetty/ymux/daemon.c
+    type_text: "struct yetty_ymux_daemon_host {
+    yetty_ymux_daemon_spawn_fn spawn;
+    void * userdata;
+};"
+    doc: "/* The PTY seam: the daemon model never forks or opens devices itself. */"
+  - source_file: src/yetty/ymux/daemon.c
+    name: yetty_ymux_daemon_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: socket_path
+        type: "const char *"
+      - name: default_rows
+        type: uint32_t
+      - name: default_cols
+        type: uint32_t
+      - name: host
+        type: "const struct yetty_ymux_daemon_host *"
+    doc: null
+  - source_file: src/yetty/ymux/daemon.c
+    name: yetty_ymux_daemon_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/daemon.c
+    name: yetty_ymux_daemon_paste_buffer
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_bytes
+        type: "uint8_t *"
+      - name: out_capacity
+        type: uint32_t
+    doc: "/* The copy-mode paste buffer (copied out; returns the length). */"
+  - source_file: src/yetty/ymux/daemon.c
+    name: yetty_ymux_daemon_chrome_intake
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The chrome-intake seat: total CONSUMED overlay events received (across
+ * connections), plus the most recent event's class — the observable end of
+ * the overlay consumer route until interactive chrome lands. */"
+  - source_file: src/yetty/ymux/daemon.c
+    name: yetty_ymux_daemon_chrome_last_event
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_bytes
+        type: "uint8_t *"
+      - name: out_capacity
+        type: uint32_t
+    doc: "/* The last CONSUMED chrome event's payload — the seat's identity
+ * observation: copies up to capacity, returns (class << 32) | length. */"
+  - source_file: src/yetty/ymux/daemon.c
+    name: yetty_ymux_daemon_force_recover
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Tests only: force slow-client recovery (epoch reset) on every attached
+ * connection NOW — the high-water trigger needs megabytes of backlog that a
+ * unit rig cannot accumulate through the ack window. */"
+  - source_file: src/yetty/ymux/daemon.c
+    name: yetty_ymux_daemon_fail_next_vtsink_tx
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: count
+        type: uint32_t
+    doc: "/* Tests only: make the next `count` vtsink lane enqueues fail on every
+ * connection, forcing the feed-failure recovery path. */"
+  - source_file: src/yetty/ymux/daemon.c
+    name: yetty_ymux_daemon_step
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/daemon.c
+    name: yetty_ymux_daemon_socket_path
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out
+        type: "char *"
+      - name: out_cap
+        type: size_t
+    doc: null
+  - source_file: src/yetty/ymux/daemon.c
+    name: yetty_ymux_daemon_session
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+    doc: "/* Borrowed — tests inspect controller policy through it. NULL-name (or
+ * empty) resolves the most recent session, tmux-style. */"
+  - source_file: src/yetty/ymux/daemon.c
+    name: yetty_ymux_daemon_shutdown_requested
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    type_text: "enum yetty_ymux_cell_limits {
+    YETTY_YMUX_CELL_MAX_MARKS = 5,
+};"
+    doc: "/* Combining marks one cell carries beyond its base codepoint. Locked to
+ * libvterm's per-cell cluster capacity by the static assert below. */"
+  - source_file: src/yetty/ymux/engine.c
+    type_text: "enum yetty_ymux_cell_attr {
+    YETTY_YMUX_ATTR_BOLD = 1,
+    YETTY_YMUX_ATTR_UNDERLINE = 2,
+    YETTY_YMUX_ATTR_UNDERLINE2 = 4,
+    YETTY_YMUX_ATTR_ITALIC = 8,
+    YETTY_YMUX_ATTR_REVERSE = 16,
+    YETTY_YMUX_ATTR_BLINK = 32,
+    YETTY_YMUX_ATTR_STRIKE = 64,
+    YETTY_YMUX_ATTR_CONCEAL = 128,
+    YETTY_YMUX_ATTR_EXOTIC = 256,
+    YETTY_YMUX_ATTR_DIM = 512,
+    YETTY_YMUX_ATTR_FG_RGB_INTENT = 1024,
+    YETTY_YMUX_ATTR_BG_RGB_INTENT = 2048,
+    YETTY_YMUX_ATTR_OVERLINE = 4096,
+};"
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    type_text: "struct yetty_ymux_cell {
+    uint32_t codepoint;
+    uint32_t fg;
+    uint32_t bg;
+    uint16_t attrs;
+    uint8_t width;
+    uint8_t mark_count;
+    uint8_t underline_style;
+    uint32_t exotic_ref;
+    uint32_t marks[5];
+};"
+    doc: "/* One semantic terminal cell. Colors are packed 0xAABBGGRR (alpha forced
+ * opaque). width: 1 normal, 2 wide-glyph head, 0 wide-glyph spill. Never
+ * carries renderer-derived state (no glyph indices, no atlas locations). */"
+  - source_file: src/yetty/ymux/engine.c
+    type_text: "struct yetty_ymux_engine_host {
+    yetty_ymux_engine_output_fn output;
+    yetty_ymux_engine_clipboard_fn clipboard;
+    yetty_ymux_engine_bell_fn bell;
+    yetty_ymux_engine_title_fn title;
+    yetty_ymux_engine_scroll_out_fn scroll_out;
+    yetty_ymux_engine_rich_fn rich;
+    void * userdata;
+};"
+    doc: "/* Narrow host table — the engine's ONLY upward channel. NULL members are
+ * skipped. Copied by value at make. */"
+  - source_file: src/yetty/ymux/engine.c
+    type_text: "enum yetty_ymux_key {
+    YETTY_YMUX_KEY_ENTER = 1,
+    YETTY_YMUX_KEY_TAB = 2,
+    YETTY_YMUX_KEY_BACKSPACE = 3,
+    YETTY_YMUX_KEY_ESCAPE = 4,
+    YETTY_YMUX_KEY_UP = 5,
+    YETTY_YMUX_KEY_DOWN = 6,
+    YETTY_YMUX_KEY_LEFT = 7,
+    YETTY_YMUX_KEY_RIGHT = 8,
+    YETTY_YMUX_KEY_INSERT = 9,
+    YETTY_YMUX_KEY_DELETE = 10,
+    YETTY_YMUX_KEY_HOME = 11,
+    YETTY_YMUX_KEY_END = 12,
+    YETTY_YMUX_KEY_PAGE_UP = 13,
+    YETTY_YMUX_KEY_PAGE_DOWN = 14,
+    YETTY_YMUX_KEY_KP_0 = 15,
+    YETTY_YMUX_KEY_KP_1 = 16,
+    YETTY_YMUX_KEY_KP_2 = 17,
+    YETTY_YMUX_KEY_KP_3 = 18,
+    YETTY_YMUX_KEY_KP_4 = 19,
+    YETTY_YMUX_KEY_KP_5 = 20,
+    YETTY_YMUX_KEY_KP_6 = 21,
+    YETTY_YMUX_KEY_KP_7 = 22,
+    YETTY_YMUX_KEY_KP_8 = 23,
+    YETTY_YMUX_KEY_KP_9 = 24,
+    YETTY_YMUX_KEY_KP_MULT = 25,
+    YETTY_YMUX_KEY_KP_PLUS = 26,
+    YETTY_YMUX_KEY_KP_COMMA = 27,
+    YETTY_YMUX_KEY_KP_MINUS = 28,
+    YETTY_YMUX_KEY_KP_PERIOD = 29,
+    YETTY_YMUX_KEY_KP_DIVIDE = 30,
+    YETTY_YMUX_KEY_KP_ENTER = 31,
+    YETTY_YMUX_KEY_KP_EQUAL = 32,
+    YETTY_YMUX_KEY_F1 = 33,
+    YETTY_YMUX_KEY_F2 = 34,
+    YETTY_YMUX_KEY_F3 = 35,
+    YETTY_YMUX_KEY_F4 = 36,
+    YETTY_YMUX_KEY_F5 = 37,
+    YETTY_YMUX_KEY_F6 = 38,
+    YETTY_YMUX_KEY_F7 = 39,
+    YETTY_YMUX_KEY_F8 = 40,
+    YETTY_YMUX_KEY_F9 = 41,
+    YETTY_YMUX_KEY_F10 = 42,
+    YETTY_YMUX_KEY_F11 = 43,
+    YETTY_YMUX_KEY_F12 = 44,
+};"
+    doc: "/* Special keys for structured input; the engine's libvterm encodes them
+ * according to the canonical terminal modes. */"
+  - source_file: src/yetty/ymux/engine.c
+    type_text: "enum yetty_ymux_mod {
+    YETTY_YMUX_MOD_SHIFT = 1,
+    YETTY_YMUX_MOD_CTRL = 2,
+    YETTY_YMUX_MOD_ALT = 4,
+};"
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+      - name: host
+        type: "const struct yetty_ymux_engine_host *"
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_feed
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const char *"
+      - name: len
+        type: size_t
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_set_cell_height
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: cell_pixel_height
+        type: uint32_t
+    doc: "/* The client reports its cell pixel height so a captured rich figure reserves
+ * the right number of terminal rows (a figure's pixel height only maps to rows
+ * once the cell height is known — the same reason the local terminal computes
+ * this receiver-side, not in the producer). */"
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_reserve_rich_rows
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: figure_pixel_height
+        type: uint32_t
+    doc: "/* Reserve terminal rows for a rich figure of the given pixel height. The rows
+ * are fed as newlines on the next engine_feed drain (advancing the cursor past
+ * the figure, so the next prompt lands below it and the figure scrolls with the
+ * text). Returns the reserved row count = the figure's span_rows. */"
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_resize
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_input_char
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: codepoint
+        type: uint32_t
+      - name: mods
+        type: int
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_input_key
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: key
+        type: enum yetty_ymux_key
+      - name: mods
+        type: int
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_input_mouse_move
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: mods
+        type: int
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_input_mouse_button
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: button
+        type: int
+      - name: pressed
+        type: int
+      - name: mods
+        type: int
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_input_paste
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+      - name: len
+        type: size_t
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_set_palette_color
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: int
+      - name: rgb
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_default_colors
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_fg
+        type: "uint32_t *"
+      - name: out_bg
+        type: "uint32_t *"
+    doc: "/* The live default colors (0xAABBGGRR — OSC 10/11 can move them). */"
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_palette_color
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: int
+    doc: "/* One base-16 palette entry, packed 0xAABBGGRR. */"
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_set_default_colors
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fg_rgb
+        type: uint32_t
+      - name: bg_rgb
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_dims
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_rows
+        type: "uint32_t *"
+      - name: out_cols
+        type: "uint32_t *"
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_alt_active
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_cursor
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_row
+        type: "uint32_t *"
+      - name: out_col
+        type: "uint32_t *"
+      - name: out_visible
+        type: "int *"
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_cursor_style
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_shape
+        type: "int *"
+      - name: out_blink
+        type: "int *"
+    doc: "/* Cursor STYLE (shape + blink) for the VT projection's DECSCUSR emission —
+ * shape is a VTERM_PROP_CURSORSHAPE_* value (1 block, 2 underline, 3 bar). */"
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_exotic_colour
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: ref
+        type: uint32_t
+      - name: out_text
+        type: "char *"
+      - name: out_capacity
+        type: uint32_t
+    doc: "/* Exotic-value table accessors (review #17): the projector replays the
+ * VERBATIM interned values on enabled capability profiles. Returns the
+ * table count; copies the ref's token/URI when in range. */"
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_exotic_link
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: ref
+        type: uint32_t
+      - name: out_text
+        type: "char *"
+      - name: out_capacity
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_row_cells
+    return_type: struct yetty_ymux_cell_const_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_row_identity
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: out_logical_line_id
+        type: "uint64_t *"
+      - name: out_logical_cell_start
+        type: "uint32_t *"
+      - name: out_continuation
+        type: "int *"
+    doc: "/* Stable identity of one ACTIVE-screen row. */"
+  - source_file: src/yetty/ymux/engine.c
+    name: yetty_ymux_engine_snapshot
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out
+        type: "struct yetty_ycore_buffer *"
+    doc: null
+  - source_file: src/yetty/ymux/history.c
+    type_text: "struct yetty_ymux_history_row {
+    const struct yetty_ymux_cell * cells;
+    uint32_t cols;
+    uint64_t logical_line_id;
+    uint32_t logical_cell_start;
+    int continuation;
+};"
+    doc: "/* One retained row as the store keeps it (hot) or serves it (inflated). */"
+  - source_file: src/yetty/ymux/history.c
+    name: yetty_ymux_history_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: hot_rows
+        type: uint32_t
+      - name: total_row_cap
+        type: uint64_t
+    doc: null
+  - source_file: src/yetty/ymux/history.c
+    name: yetty_ymux_history_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/history.c
+    name: yetty_ymux_history_set_budgets
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: warm_bytes
+        type: uint64_t
+      - name: file_max_bytes
+        type: uint64_t
+    doc: null
+  - source_file: src/yetty/ymux/history.c
+    name: yetty_ymux_history_push
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: cells
+        type: "const struct yetty_ymux_cell *"
+      - name: cols
+        type: uint32_t
+      - name: logical_line_id
+        type: uint64_t
+      - name: logical_cell_start
+        type: uint32_t
+      - name: continuation
+        type: int
+    doc: "/* Push one row scrolling off a pane's screen top. Signature matches the
+ * engine's scroll_out host callback so a pane can wire it directly. */"
+  - source_file: src/yetty/ymux/history.c
+    name: yetty_ymux_history_pushed_rows
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/history.c
+    name: yetty_ymux_history_floor
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/history.c
+    name: yetty_ymux_history_resolve
+    return_type: struct yetty_ymux_history_row_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: timeline_idx
+        type: uint64_t
+    doc: "/* Resolve one retained row by timeline index. The returned pointers stay
+ * valid until the next resolve/push that recycles their backing (hot ring
+ * slot or cache entry) — callers copy what they keep. A dropped or
+ * out-of-range index yields an error. */"
+  - source_file: src/yetty/ymux/pane.c
+    name: yetty_ymux_pane_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+      - name: hot_rows
+        type: uint32_t
+      - name: total_row_cap
+        type: uint64_t
+      - name: host
+        type: "const struct yetty_ymux_engine_host *"
+    doc: null
+  - source_file: src/yetty/ymux/pane.c
+    name: yetty_ymux_pane_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/pane.c
+    name: yetty_ymux_pane_feed
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const char *"
+      - name: len
+        type: size_t
+    doc: null
+  - source_file: src/yetty/ymux/pane.c
+    name: yetty_ymux_pane_resize
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/pane.c
+    name: yetty_ymux_pane_engine
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The composed engine (input encoding, snapshot, cursor, dims — callers use
+ * the engine API directly on this object). Borrowed. */"
+  - source_file: src/yetty/ymux/pane.c
+    name: yetty_ymux_pane_history
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The composed history store. Borrowed. */"
+  - source_file: src/yetty/ymux/pane.c
+    name: yetty_ymux_pane_rich_store
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The pane's canonical rich store (#695). Borrowed. */"
+  - source_file: src/yetty/ymux/pane.c
+    name: yetty_ymux_pane_timeline
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_floor
+        type: "uint64_t *"
+      - name: out_live_top
+        type: "uint64_t *"
+    doc: "/* Timeline geometry: [floor, live_top) is history; [live_top,
+ * live_top + rows) is the live screen (live_top == pushed rows). */"
+  - source_file: src/yetty/ymux/pane.c
+    name: yetty_ymux_pane_resolve_row
+    return_type: struct yetty_ymux_history_row_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: timeline_idx
+        type: uint64_t
+    doc: "/* Resolve ANY timeline row (history or live). Pointers are borrowed and
+ * valid only until the next mutation — the projector copies. Alt-screen
+ * panes serve the alt surface for live rows; history rows always come from
+ * the primary timeline. */"
+  - source_file: src/yetty/ymux/projector.c
+    name: yetty_ymux_projector_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: pane
+        type: "struct yetty_yclass_object *"
+      - name: attachment
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/projector.c
+    name: yetty_ymux_projector_consume_tty_response
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const uint8_t *"
+      - name: byte_count
+        type: uint32_t
+    doc: "/* Consume RAW terminal-response bytes from this attachment's renderer
+ * (review #16/#17): a STREAMING state machine — arbitrary fragmentation,
+ * arbitrary length (growable body, bounded at 64 KB per sequence). Raw
+ * bytes are never re-encoded; this is the response CONSUMER. */"
+  - source_file: src/yetty/ymux/projector.c
+    name: yetty_ymux_projector_response_cap
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: cap_index
+        type: uint32_t
+      - name: out_text
+        type: "char *"
+      - name: out_capacity
+        type: uint32_t
+    doc: "/* The decoded XTGETTCAP capability table: entry `index` copied out as
+ * \"name=value\"; returns the entry count. */"
+  - source_file: src/yetty/ymux/projector.c
+    name: yetty_ymux_projector_response_state
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Response-state observers: (da_count << 40) | (cpr_count << 16) | row<<8 | col
+ * would be cramped — expose the counts and last CPR separately. */"
+  - source_file: src/yetty/ymux/projector.c
+    name: yetty_ymux_projector_set_capabilities
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: capabilities
+        type: uint32_t
+    doc: "/* Record the attachment's terminfo capability profile (YMUX_TERM_CAP_*); the
+ * VT colour path reads it to choose truecolor passthrough vs an RGB->256
+ * downgrade. Set once from the attach handshake. */"
+  - source_file: src/yetty/ymux/projector.c
+    name: yetty_ymux_projector_set_terminal
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: term_name
+        type: "const char *"
+      - name: features
+        type: "const char *"
+    doc: "/* tmux's terminfo/features STATE MODEL entry (review #17 item 8): resolve
+ * the client's TERM name + features string through the tty-features
+ * pipeline (family base -> TERM-implied defaults -> explicit additions)
+ * instead of a pre-chewed capability bitmask. The bitmask path above stays
+ * as the legacy/override input; this is what an attach carrying TERM
+ * strings uses. The ATTACH_PREAMBLE toggle stays with the mask path (a
+ * client-mode choice, not a terminfo property). */"
+  - source_file: src/yetty/ymux/projector.c
+    name: yetty_ymux_projector_capabilities
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The negotiated capability mask (post terminal-strings resolution when the
+ * attach named its terminal). */"
+  - source_file: src/yetty/ymux/projector.c
+    name: yetty_ymux_projector_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/projector.c
+    name: yetty_ymux_projector_invalidate
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Force the next projection to be a FULL (client resync request, transport
+ * loss, geometry change). The rich half resends too. */"
+  - source_file: src/yetty/ymux/projector.c
+    name: yetty_ymux_projector_project_rich
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out
+        type: "struct yetty_ycore_buffer *"
+    doc: null
+  - source_file: src/yetty/ymux/projector.c
+    name: yetty_ymux_projector_project_vt
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out
+        type: "struct yetty_ycore_buffer *"
+    doc: null
+  - source_file: src/yetty/ymux/rich.c
+    type_text: "enum yetty_ymux_rich_anchor_kind {
+    YETTY_YMUX_RICH_ANCHOR_PRIMARY = 0,
+    YETTY_YMUX_RICH_ANCHOR_ALT = 1,
+};"
+    doc: "/* Tagged anchor kinds. */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args: []
+    doc: null
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_mint
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: creation_words
+        type: "const uint32_t *"
+      - name: word_count
+        type: uint32_t
+      - name: anchor_kind
+        type: int
+      - name: anchor_a
+        type: uint64_t
+      - name: anchor_b
+        type: uint32_t
+      - name: span_rows
+        type: uint32_t
+    doc: "/* Mint a stable rich id for one creating wire record (copied, store-owned)
+ * anchored at the tagged coordinate. Returns the id (never 0, never
+ * reused). */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_anchor
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rich_id
+        type: uint64_t
+      - name: out_kind
+        type: "int *"
+      - name: out_anchor_a
+        type: "uint64_t *"
+      - name: out_anchor_b
+        type: "uint32_t *"
+      - name: out_span_rows
+        type: "uint32_t *"
+    doc: null
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_journal_append
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rich_id
+        type: uint64_t
+      - name: words
+        type: "const uint32_t *"
+      - name: word_count
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_journal_count
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rich_id
+        type: uint64_t
+    doc: null
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_creation
+    return_type: struct yetty_ycore_const_uint32_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rich_id
+        type: uint64_t
+      - name: out_word_count
+        type: "uint32_t *"
+    doc: "/* Creation record / journal entry accessors (borrowed spans; index 0 with
+ * NULL out_count semantics like the other bulk accessors). */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_creation_hash
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rich_id
+        type: uint64_t
+    doc: "/* The 64-bit content hash of an object's creation payload — the key the
+ * content-addressed wire uses to reference a heavy payload the client already
+ * has, instead of re-sending it. 0 if the id is unknown/compacted. */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_distinct_resource_count
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Distinct content-addressed creation payloads currently stored — equals the
+ * number of live objects only when every payload is unique; identical blobs
+ * collapse to one. Exposed for tests/introspection of the dedup. */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_journal_entry
+    return_type: struct yetty_ycore_const_uint32_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rich_id
+        type: uint64_t
+      - name: entry_index
+        type: uint32_t
+      - name: out_word_count
+        type: "uint32_t *"
+    doc: null
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_tombstone
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rich_id
+        type: uint64_t
+    doc: null
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_is_tombstoned
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rich_id
+        type: uint64_t
+    doc: null
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_count
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Enumeration for projection: total object count (tombstoned included —
+ * callers filter) and the id at a dense index. */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_id_at
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_revision
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Monotonic store revision — moves on every state change. */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_clear_all
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Terminal CLEAR / RIS: tombstone every active object and close the stream
+ * namespace — cleared figures never resurrect. */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_compact_tombstoned
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Phase 6 retention: free the creation + journal payloads of tombstoned objects.
+ * A tombstoned id is never re-emitted or replayed (project_rich skips it), so its
+ * payloads are dead weight — churned rich content would otherwise grow memory
+ * unbounded. The slot + id + tombstone flag are KEPT so is_tombstoned stays
+ * correct and the id is never reused. Returns the number of objects compacted;
+ * does NOT bump the revision (no visible-state change). */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_snapshot
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out
+        type: "struct yetty_ycore_buffer *"
+    doc: "/* Serialize the whole object set into `out` (caller owns/creates the buffer). */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_restore
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: words
+        type: "const uint32_t *"
+      - name: word_count
+        type: size_t
+    doc: "/* Restore a store from a snapshot: pre-validate (atomic — a malformed snapshot
+ * leaves the store UNCHANGED), then HARD-reset and rebuild every object
+ * (creation + journal + anchor + tombstone) plus next_rich_id and revision.
+ * After validation the only possible failure is OOM, which leaves the store
+ * empty (fail closed); the running object_count/journal_count always covers
+ * exactly the materialized entries so the cleanup free is exact. */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_map_bind
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: ordinal
+        type: uint32_t
+      - name: rich_id
+        type: uint64_t
+    doc: "/* Bind a producer stream ordinal to a rich id (ADD re-binds an existing
+ * ordinal to the fresh object). */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_map_resolve
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: ordinal
+        type: uint32_t
+    doc: "/* Resolve a producer ordinal to its bound rich id (0 = unbound). */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_map_delete
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: ordinal
+        type: uint32_t
+    doc: "/* DELETE: tombstone the bound object and unbind the ordinal. */"
+  - source_file: src/yetty/ymux/rich.c
+    name: yetty_ymux_rich_map_close
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Producer exit: the namespace closes — later ordinals resolve to nothing;
+ * objects stay (their content remains in history). */"
+  - source_file: src/yetty/ymux/session.c
+    type_text: "enum yetty_ymux_permission {
+    YETTY_YMUX_PERMISSION_INPUT = 1,
+    YETTY_YMUX_PERMISSION_RESIZE = 2,
+};"
+    doc: null
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args: []
+    doc: null
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_pane_create
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+      - name: hot_rows
+        type: uint32_t
+      - name: total_row_cap
+        type: uint64_t
+      - name: host
+        type: "const struct yetty_ymux_engine_host *"
+    doc: "/* Create a pane (its engine host is the caller's — the daemon wires PTY
+ * output there). Returns the pane id. */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_pane_close
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: pane_id
+        type: uint32_t
+    doc: "/* Close a pane: its attachments detach first (projectors die with them). */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_pane
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: pane_id
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_attach
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: pane_id
+        type: uint32_t
+      - name: view_rows
+        type: uint32_t
+      - name: view_cols
+        type: uint32_t
+      - name: token
+        type: "const char *"
+    doc: "/* Attach a client to a pane. First eligible attachment becomes controller
+ * (and only then does the canonical pane resize to ITS geometry — attach
+ * itself never resizes for non-controllers); reconnecting with the
+ * controller's token resumes control. Returns the attachment id. */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_detach
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+    doc: "/* Detach: the pane survives; controller role frees (token remembered for
+ * resume-on-reconnect). */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_takeover
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+    doc: "/* Explicit authorized takeover: the attachment becomes controller and its
+ * geometry becomes canonical. */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_resize
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+    doc: "/* Controller-driven resize; non-controllers are rejected (their VIEW size
+ * is attachment state — set_view_size — and crops/pads instead). */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_controller
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_active_pane
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The active (most recently relevant) pane id, 0 when the session has no
+ * panes — the default attach target (tmux `attach` semantics: reuse the
+ * running session; only a pane-less session spawns fresh). */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_permissions
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_set_permissions
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+      - name: permissions
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_input_char
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+      - name: codepoint
+        type: uint32_t
+      - name: mods
+        type: int
+    doc: "/* Input from an attachment: permission-gated; encoding happens in the
+ * pane's canonical engine. */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_input_key
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+      - name: key
+        type: int
+      - name: mods
+        type: int
+    doc: "/* Special-key input from an attachment: permission-gated exactly like
+ * session_input_char — a read-only (non-INPUT) attachment must not be able to
+ * inject Enter/arrows/delete/etc. into the application PTY. */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_input_mouse_move
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: mods
+        type: int
+    doc: "/* Mouse motion from an attachment (permission-gated); the engine encodes it per
+ * the application's active mouse mode (or drops it when no mode is enabled). */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_input_mouse_button
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+      - name: button
+        type: int
+      - name: pressed
+        type: int
+      - name: mods
+        type: int
+    doc: "/* Mouse button press/release from an attachment (permission-gated). */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_input_paste
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+      - name: text
+        type: "const char *"
+      - name: len
+        type: size_t
+    doc: "/* Bracketed-paste content from an attachment (permission-gated); the engine
+ * wraps it per the app's paste mode. */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_projector
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+    doc: "/* The attachment's projector (the daemon pumps it). Borrowed. */"
+  - source_file: src/yetty/ymux/session.c
+    name: yetty_ymux_session_attachment
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+    doc: null
+types:
+  - name: client_resource
+    kind: struct
+    fields:
+      - name: hash
+        type: uint64_t
+      - name: words
+        type: "uint32_t *"
+      - name: word_count
+        type: uint32_t
+  - name: daemon_connection
+    kind: struct
+    fields:
+      - name: socket
+        type: yetty_ipc_socket_t
+      - name: session
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+      - name: pane_id
+        type: uint32_t
+      - name: capabilities
+        type: uint32_t
+      - name: sent_generation
+        type: uint64_t
+      - name: acked_generation
+        type: uint64_t
+      - name: fail_next_vtsink_tx
+        type: uint32_t
+      - name: chrome_queue
+        kind: struct
+        fields:
+          - name: input_class
+            type: uint32_t
+          - name: byte_len
+            type: uint32_t
+          - name: bytes
+            type: "uint8_t *"
+      - name: chrome_queue_head
+        type: uint32_t
+      - name: chrome_queue_count
+        type: uint32_t
+      - name: chrome_intake_count
+        type: uint64_t
+      - name: chrome_intake_class
+        type: uint32_t
+      - name: overlay_applied_seq
+        type: uint32_t
+      - name: refuse_next_overlay
+        type: uint32_t
+      - name: copy_key_pending
+        type: "uint8_t[16]"
+      - name: copy_key_pending_len
+        type: uint32_t
+      - name: copy_cursor_row
+        type: int
+      - name: copy_cursor_col
+        type: int
+      - name: copy_anchor_row
+        type: int
+      - name: copy_anchor_col
+        type: int
+      - name: copy_selecting
+        type: int
+      - name: chrome_last_bytes
+        type: "uint8_t *"
+      - name: chrome_last_len
+        type: uint32_t
+      - name: chrome_last_class
+        type: uint32_t
+      - name: sent_pane_modes
+        type: uint32_t
+      - name: sent_pane_modes_valid
+        type: int
+      - name: vtsink_session
+        type: "struct yetty_yclass_rpc_session *"
+      - name: vtsink_lane
+        type: "struct yetty_yclass_transport *"
+      - name: vtsink_proxy
+        type: "struct yetty_yclass_object *"
+      - name: rx
+        type: "uint8_t *"
+      - name: rx_len
+        type: size_t
+      - name: tx
+        type: "uint8_t *"
+      - name: tx_len
+        type: size_t
+      - name: tx_sent
+        type: size_t
+      - name: tx_total_sent
+        type: uint64_t
+      - name: slow_last_total_sent
+        type: uint64_t
+      - name: slow_recover_count
+        type: uint32_t
+      - name: want_close
+        type: int
+  - name: daemon_pane_pty
+    kind: struct
+    fields:
+      - name: pty
+        type: "struct yetty_platform_pty *"
+      - name: daemon
+        type: "struct yetty_ymux_daemon *"
+      - name: session
+        type: "struct yetty_yclass_object *"
+      - name: pane_id
+        type: uint32_t
+      - name: pty_rows
+        type: uint32_t
+      - name: pty_cols
+        type: uint32_t
+      - name: out_queue
+        type: "uint8_t *"
+      - name: out_queue_len
+        type: size_t
+      - name: out_queue_cap
+        type: size_t
+      - name: rpc_sm
+        type: "struct yetty_ywire_wire_statemachine *"
+      - name: rpc_connection
+        type: "struct yetty_ywire_connection *"
+      - name: rpc_forward_state
+        type: "void *"
+      - name: rpc_controller
+        type: uint32_t
+      - name: rpc_channels
+        kind: struct
+        fields:
+          - name: channel_id
+            type: uint32_t
+          - name: channel
+            type: "struct yetty_ywire_channel *"
+      - name: rpc_channel_count
+        type: uint32_t
+  - name: daemon_session_entry
+    kind: struct
+    fields:
+      - name: session
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "char[64]"
+      - name: created_stamp
+        type: uint64_t
+  - name: engine_surface
+    kind: struct
+    fields:
+      - name: rows
+        type: "struct engine_row *"
+      - name: rows_count
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+  - name: history_builder
+    kind: struct
+    fields:
+      - name: bytes
+        type: "uint8_t *"
+      - name: byte_count
+        type: size_t
+      - name: byte_capacity
+        type: size_t
+      - name: row_offsets
+        type: "uint32_t *"
+      - name: row_count
+        type: uint32_t
+      - name: row_capacity
+        type: uint32_t
+      - name: first_row
+        type: uint64_t
+  - name: history_cache_entry
+    kind: struct
+    fields:
+      - name: valid
+        type: int
+      - name: first_row
+        type: uint64_t
+      - name: row_count
+        type: uint32_t
+      - name: row_cells
+        type: "struct yetty_ymux_cell **"
+      - name: row_cols
+        type: "uint32_t *"
+      - name: row_logical_ids
+        type: "uint64_t *"
+      - name: row_logical_starts
+        type: "uint32_t *"
+      - name: row_continuations
+        type: "uint8_t *"
+      - name: last_used_tick
+        type: uint64_t
+  - name: session_attachment_slot
+    kind: struct
+    fields:
+      - name: attachment
+        type: "struct yetty_yclass_object *"
+      - name: projector
+        type: "struct yetty_yclass_object *"
+      - name: attachment_id
+        type: uint32_t
+      - name: pane_id
+        type: uint32_t
+      - name: permissions
+        type: uint32_t
+      - name: token
+        type: "char[64]"
+  - name: session_pane_slot
+    kind: struct
+    fields:
+      - name: pane
+        type: "struct yetty_yclass_object *"
+      - name: pane_id
+        type: uint32_t
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_buffer
+    kind: struct
+    fields:
+      - name: data
+        type: "uint8_t *"
+      - name: capacity
+        type: size_t
+      - name: size
+        type: size_t
+  - name: yetty_ycore_const_uint32_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: "const uint32_t *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_uint32_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: uint32_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_uint64_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: uint64_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ymux_cell_const_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: "const struct yetty_ymux_cell *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ymux_daemon_host
+    kind: struct
+    fields:
+      - name: spawn
+        type: yetty_ymux_daemon_spawn_fn
+      - name: userdata
+        type: "void *"
+  - name: yetty_ymux_engine_host
+    kind: struct
+    fields:
+      - name: output
+        type: yetty_ymux_engine_output_fn
+      - name: clipboard
+        type: yetty_ymux_engine_clipboard_fn
+      - name: bell
+        type: yetty_ymux_engine_bell_fn
+      - name: title
+        type: yetty_ymux_engine_title_fn
+      - name: scroll_out
+        type: yetty_ymux_engine_scroll_out_fn
+      - name: rich
+        type: yetty_ymux_engine_rich_fn
+      - name: userdata
+        type: "void *"
+  - name: yetty_ymux_history_row
+    kind: struct
+    fields:
+      - name: cells
+        type: "const struct yetty_ymux_cell *"
+      - name: cols
+        type: uint32_t
+      - name: logical_line_id
+        type: uint64_t
+      - name: logical_cell_start
+        type: uint32_t
+      - name: continuation
+        type: int
+  - name: yetty_ymux_history_row_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: struct yetty_ymux_history_row
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ymux_key
+    kind: enum
+    values:
+      - name: YETTY_YMUX_KEY_ENTER
+        value: 1
+      - name: YETTY_YMUX_KEY_TAB
+        value: 2
+      - name: YETTY_YMUX_KEY_BACKSPACE
+        value: 3
+      - name: YETTY_YMUX_KEY_ESCAPE
+        value: 4
+      - name: YETTY_YMUX_KEY_UP
+        value: 5
+      - name: YETTY_YMUX_KEY_DOWN
+        value: 6
+      - name: YETTY_YMUX_KEY_LEFT
+        value: 7
+      - name: YETTY_YMUX_KEY_RIGHT
+        value: 8
+      - name: YETTY_YMUX_KEY_INSERT
+        value: 9
+      - name: YETTY_YMUX_KEY_DELETE
+        value: 10
+      - name: YETTY_YMUX_KEY_HOME
+        value: 11
+      - name: YETTY_YMUX_KEY_END
+        value: 12
+      - name: YETTY_YMUX_KEY_PAGE_UP
+        value: 13
+      - name: YETTY_YMUX_KEY_PAGE_DOWN
+        value: 14
+      - name: YETTY_YMUX_KEY_KP_0
+        value: 15
+      - name: YETTY_YMUX_KEY_KP_1
+        value: 16
+      - name: YETTY_YMUX_KEY_KP_2
+        value: 17
+      - name: YETTY_YMUX_KEY_KP_3
+        value: 18
+      - name: YETTY_YMUX_KEY_KP_4
+        value: 19
+      - name: YETTY_YMUX_KEY_KP_5
+        value: 20
+      - name: YETTY_YMUX_KEY_KP_6
+        value: 21
+      - name: YETTY_YMUX_KEY_KP_7
+        value: 22
+      - name: YETTY_YMUX_KEY_KP_8
+        value: 23
+      - name: YETTY_YMUX_KEY_KP_9
+        value: 24
+      - name: YETTY_YMUX_KEY_KP_MULT
+        value: 25
+      - name: YETTY_YMUX_KEY_KP_PLUS
+        value: 26
+      - name: YETTY_YMUX_KEY_KP_COMMA
+        value: 27
+      - name: YETTY_YMUX_KEY_KP_MINUS
+        value: 28
+      - name: YETTY_YMUX_KEY_KP_PERIOD
+        value: 29
+      - name: YETTY_YMUX_KEY_KP_DIVIDE
+        value: 30
+      - name: YETTY_YMUX_KEY_KP_ENTER
+        value: 31
+      - name: YETTY_YMUX_KEY_KP_EQUAL
+        value: 32
+      - name: YETTY_YMUX_KEY_F1
+        value: 33
+      - name: YETTY_YMUX_KEY_F2
+        value: 34
+      - name: YETTY_YMUX_KEY_F3
+        value: 35
+      - name: YETTY_YMUX_KEY_F4
+        value: 36
+      - name: YETTY_YMUX_KEY_F5
+        value: 37
+      - name: YETTY_YMUX_KEY_F6
+        value: 38
+      - name: YETTY_YMUX_KEY_F7
+        value: 39
+      - name: YETTY_YMUX_KEY_F8
+        value: 40
+      - name: YETTY_YMUX_KEY_F9
+        value: 41
+      - name: YETTY_YMUX_KEY_F10
+        value: 42
+      - name: YETTY_YMUX_KEY_F11
+        value: 43
+      - name: YETTY_YMUX_KEY_F12
+        value: 44
+  - name: yetty_ymux_resource_store
+    kind: struct
+    fields:
+      - name: entries
+        type: "struct yetty_ymux_resource_entry *"
+      - name: count
+        type: uint32_t
+      - name: capacity
+        type: uint32_t
+  - name: yetty_ymux_tty
+    kind: struct
+    fields:
+      - name: caps
+        type: struct yetty_ymux_tty_caps
+      - name: term
+        type: "const struct yetty_ymux_tty_term *"
+      - name: cx
+        type: uint32_t
+      - name: cy
+        type: uint32_t
+      - name: sx
+        type: uint32_t
+      - name: sy
+        type: uint32_t
+      - name: rupper
+        type: uint32_t
+      - name: rlower
+        type: uint32_t
+      - name: rleft
+        type: uint32_t
+      - name: rright
+        type: uint32_t
+      - name: cell_attr
+        type: uint16_t
+      - name: active_underline_colour
+        type: "char[40]"
+      - name: active_link
+        type: "char[1025]"
+      - name: active_link_id
+        type: uint32_t
+      - name: cell_fg
+        type: int
+      - name: cell_bg
+        type: int
+      - name: last_attr
+        type: uint16_t
+      - name: last_fg
+        type: int
+      - name: last_bg
+        type: int
+      - name: cursor_visible
+        type: int
+      - name: cursor_shape_param
+        type: int
+  - name: yetty_ymux_tty_caps
+    kind: struct
+    fields:
+      - name: colors_256
+        type: unsigned int
+      - name: colors_rgb
+        type: unsigned int
+      - name: ech
+        type: unsigned int
+      - name: insert_delete_line
+        type: unsigned int
+      - name: insert_line
+        type: unsigned int
+      - name: delete_line
+        type: unsigned int
+      - name: ich
+        type: unsigned int
+      - name: dch
+        type: unsigned int
+      - name: decstbm
+        type: unsigned int
+      - name: bce
+        type: unsigned int
+      - name: extended_underline
+        type: unsigned int
+      - name: underline_colour
+        type: unsigned int
+      - name: hyperlink
+        type: unsigned int
+      - name: acs
+        type: unsigned int
+      - name: mouse
+        type: unsigned int
+      - name: title
+        type: unsigned int
+      - name: clipboard
+        type: unsigned int
+      - name: focus
+        type: unsigned int
+      - name: cursor_style
+        type: unsigned int
+      - name: cursor_colour
+        type: unsigned int
+      - name: margins
+        type: unsigned int
+      - name: overline
+        type: unsigned int
+      - name: strikethrough
+        type: unsigned int
+      - name: osc7
+        type: unsigned int
+      - name: extkeys
+        type: unsigned int
+      - name: rectfill
+        type: unsigned int
+      - name: sixel
+        type: unsigned int
+      - name: sync
+        type: unsigned int
+      - name: noam
+        type: unsigned int
+      - name: xenl
+        type: unsigned int
+  - name: yetty_ymux_tty_term
+    kind: struct
+    fields:
+      - name: name
+        type: "char[64]"
+      - name: strings
+        type: "char *[46]"
+      - name: colors
+        type: int
+      - name: bools
+        type: "uint8_t[3]"
+      - name: loaded_from_db
+        type: unsigned int
+      - name: bools_loaded
+        type: unsigned int
+local_types:
+  yetty_ymux_attachment: src/yetty/ymux/attachment.c
+  yetty_ymux_attachment_ptr_result: src/yetty/ymux/attachment.c
+  client_resource: src/yetty/ymux/client.c
+  yetty_ymux_client: src/yetty/ymux/client.c
+  yetty_ymux_ordered_entry: src/yetty/ymux/client.c
+  yetty_ymux_client_ptr_result: src/yetty/ymux/client.c
+  yetty_ymux_daemon_host: src/yetty/ymux/daemon.c
+  daemon_session_entry: src/yetty/ymux/daemon.c
+  daemon_pane_pty: src/yetty/ymux/daemon.c
+  daemon_connection: src/yetty/ymux/daemon.c
+  yetty_ymux_daemon: src/yetty/ymux/daemon.c
+  yetty_ymux_daemon_ptr_result: src/yetty/ymux/daemon.c
+  yetty_ymux_cell_limits: src/yetty/ymux/engine.c
+  yetty_ymux_cell_attr: src/yetty/ymux/engine.c
+  engine_hyperlink: src/yetty/ymux/engine.c
+  yetty_ymux_cell: src/yetty/ymux/engine.c
+  yetty_ymux_engine_host: src/yetty/ymux/engine.c
+  yetty_ymux_key: src/yetty/ymux/engine.c
+  yetty_ymux_mod: src/yetty/ymux/engine.c
+  engine_row: src/yetty/ymux/engine.c
+  engine_surface: src/yetty/ymux/engine.c
+  yetty_ymux_engine: src/yetty/ymux/engine.c
+  yetty_ymux_cell_const_ptr_result: src/yetty/ymux/engine.c
+  yetty_ymux_engine_ptr_result: src/yetty/ymux/engine.c
+  yetty_ymux_history_row: src/yetty/ymux/history.c
+  history_hot_row: src/yetty/ymux/history.c
+  history_segment: src/yetty/ymux/history.c
+  history_builder: src/yetty/ymux/history.c
+  history_cache_entry: src/yetty/ymux/history.c
+  yetty_ymux_history: src/yetty/ymux/history.c
+  yetty_ymux_history_row_result: src/yetty/ymux/history.c
+  yetty_ymux_history_ptr_result: src/yetty/ymux/history.c
+  yetty_ymux_pane: src/yetty/ymux/pane.c
+  yetty_ymux_pane_ptr_result: src/yetty/ymux/pane.c
+  yetty_ymux_projector: src/yetty/ymux/projector.c
+  yetty_ymux_response_cap: src/yetty/ymux/projector.c
+  vt_link_cache_entry: src/yetty/ymux/projector.c
+  yetty_ymux_projector_ptr_result: src/yetty/ymux/projector.c
+  yetty_ymux_rich_anchor_kind: src/yetty/ymux/rich.c
+  rich_journal_entry: src/yetty/ymux/rich.c
+  rich_object: src/yetty/ymux/rich.c
+  rich_stream_binding: src/yetty/ymux/rich.c
+  yetty_ymux_rich: src/yetty/ymux/rich.c
+  yetty_ymux_rich_ptr_result: src/yetty/ymux/rich.c
+  yetty_ymux_permission: src/yetty/ymux/session.c
+  session_pane_slot: src/yetty/ymux/session.c
+  session_attachment_slot: src/yetty/ymux/session.c
+  yetty_ymux_session: src/yetty/ymux/session.c
+  yetty_ymux_session_ptr_result: src/yetty/ymux/session.c
+  yetty_ymux_vtsink: src/yetty/ymux/vtsink.c
+  yetty_ymux_vtsink_ptr_result: src/yetty/ymux/vtsink.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ymux/attachment.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ymux/attachment.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ymux/attachment.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ymux/attachment.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ymux/attachment.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ymux_engine_bell_fn:
+    source_file: /home/misi/work/my/yetty-ymux/include/yetty/api/ymux/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ymux_engine_bell_fn)(void *);"
+  yetty_ymux_engine_clipboard_fn:
+    source_file: /home/misi/work/my/yetty-ymux/include/yetty/api/ymux/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ymux_engine_clipboard_fn)(const char *, size_t, int, void *);"
+  yetty_ymux_engine_output_fn:
+    source_file: /home/misi/work/my/yetty-ymux/include/yetty/api/ymux/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ymux_engine_output_fn)(const char *, size_t, void *);"
+  yetty_ymux_engine_rich_fn:
+    source_file: /home/misi/work/my/yetty-ymux/include/yetty/api/ymux/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ymux_engine_rich_fn)(uint32_t, const char *, size_t, uint64_t, uint32_t, void *);"
+  yetty_ymux_engine_scroll_out_fn:
+    source_file: /home/misi/work/my/yetty-ymux/include/yetty/api/ymux/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ymux_engine_scroll_out_fn)(const struct yetty_ymux_cell *, uint32_t, uint64_t, uint32_t, int, void *);"
+  yetty_ymux_engine_title_fn:
+    source_file: /home/misi/work/my/yetty-ymux/include/yetty/api/ymux/engine.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ymux_engine_title_fn)(const char *, size_t, void *);"
+  yetty_ymux_rpc_lane_tx_fn:
+    source_file: src/yetty/ymux/rpc-lane.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ymux_rpc_lane_tx_fn)(const uint8_t *, size_t, void *);"
+  yetty_ymux_daemon_spawn_fn:
+    source_file: src/yetty/ymux/daemon.c
+    text: "typedef struct yetty_yplatform_pty_ptr_result (*yetty_ymux_daemon_spawn_fn)(uint32_t, uint32_t, void *);"
+  VTermEncoding:
+    source_file: src/yetty/ymux/../../libvterm-0.3.3/src/vterm_internal.h
+    text: typedef struct VTermEncoding VTermEncoding;
+  VTermEncodingInstance:
+    source_file: src/yetty/ymux/../../libvterm-0.3.3/src/vterm_internal.h
+    text: typedef struct VTermEncodingInstance VTermEncodingInstance;
+  VTermEncodingType:
+    source_file: src/yetty/ymux/../../libvterm-0.3.3/src/vterm_internal.h
+    text: typedef enum VTermEncodingType VTermEncodingType;
+  yetty_ymux_vtsink_emit_fn:
+    source_file: src/yetty/ymux/vtsink.c
+    text: "typedef void (*yetty_ymux_vtsink_emit_fn)(uint64_t, const uint8_t *, size_t, void *);"
+  yetty_ymux_feed_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymux/vtsink.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ymux_feed_fn)(struct yetty_yclass_object *, uint64_t, struct yetty_ycore_buffer);"

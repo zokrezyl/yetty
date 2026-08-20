@@ -87,6 +87,24 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_input
     return YETTY_ERR(yetty_ycore_void, "yfigure: process_input not implemented by this figure");
 }
 
+/* hit_opaque: does this figure CONSUME pointer input at the given
+ * figure-local point (#699.4 overlay-first routing)? The container's
+ * topmost-wins hit test skips figures that report transparent, letting the
+ * event fall through to the figure below — an empty overlay scene yields
+ * everywhere; one with chrome consumes exactly where the chrome covers. The
+ * base default is OPAQUE (1): every existing figure keeps its whole-rect
+ * hit behavior unless its kind overrides. */
+YETTY_ANNOTATE("virtual@yfigure:figure:hit_opaque")
+YETTY_ANNOTATE("local@yfigure:hit_opaque")
+static struct yetty_ycore_int_result yetty_yfigure_figure_default_hit_opaque(
+    struct yetty_yclass_object *obj, float local_x, float local_y)
+{
+    (void)obj;
+    (void)local_x;
+    (void)local_y;
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
 /* process_bytes: apply a buffered wire body. Base default rejects. */
 YETTY_ANNOTATE("virtual@yfigure:figure:process_bytes")
 YETTY_ANNOTATE("local@yfigure:process_bytes")

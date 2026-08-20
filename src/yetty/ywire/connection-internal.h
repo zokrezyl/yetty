@@ -21,6 +21,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <time.h> /* struct timespec — the input-barrier host-side deadline */
 
 #define YETTY_YWIRE_CHANNEL_MAX 16
 
@@ -132,6 +133,42 @@ struct yetty_ywire_connection {
 
     yetty_ywire_resize_cb on_resize;
     void *resize_user;
+
+    /* Host-owned input forwarding barrier (exit-hygiene without input loss).
+     * When the in-pane client arms it (the no-payload INPUT_HOLD envelope at
+     * the start of teardown), `input_barrier_armed` is set; the host then HOLDS
+     * the keystrokes it would forward to the pane in `input_held` — its OWN user
+     * input, never bytes from pane output — instead of writing them where the
+     * client's close drain would consume them. When the client is gone (no
+     * dynamic channels remain) the host releases the held bytes to the pane so
+     * the resumed shell reads them exactly once. While armed the hold ALWAYS
+     * takes the bytes (it grows): declining would send the overflow straight
+     * into the drainable stream and re-lose it, so there is no cap-bypass.
+     *
+     * Retention is bounded by an ENFORCED absolute host-side deadline
+     * (`input_barrier_deadline`, set at arm), NOT merely by an assumed
+     * sub-second teardown. Past the deadline the hold refuses (the caller
+     * forwards) and the held bytes are released to the pane — so a client that
+     * crashes, wedges, or arms and keeps a channel open cannot make the host
+     * accumulate keyboard input without limit. Release also fires on PTY EOF
+     * (`_release_forced`) so an ungraceful client death recovers the bytes. */
+    int input_barrier_armed;
+    struct timespec input_barrier_deadline;
+    struct yetty_ycore_buffer input_held;
+
+    /* Client side of the barrier handshake: set when this connection parses the
+     * host's INPUT_HOLD_ACK (proof the host armed its barrier). The teardown
+     * path waits on it before detaching sinks so no exit-window key is lost to
+     * the race between "client sent HOLD" and "host executed arm".
+     *
+     * The ACK is a bounded LEASE, not a permanent grant: the host's barrier has
+     * its own deadline and will expire + resume forwarding. `input_hold_ack_time`
+     * stamps when the ACK arrived; the teardown checks the lease is still fresh
+     * (hold_ack_lease_valid) before running the close drain, so a client that
+     * spends longer than the lease in framework/RPC teardown does NOT drain
+     * after the host may have un-armed — which would re-expose the key-loss. */
+    int input_hold_ack_seen;
+    struct timespec input_hold_ack_time;
 };
 
 /* Drive ONE blocking inbound step: poll the inbound fd, read what's there, and
