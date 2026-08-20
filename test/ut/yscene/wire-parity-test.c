@@ -423,15 +423,14 @@ static struct yetty_ydraw_complex_factory *make_stub_complex_factory(
     wrapper->base.destroy = stub_factory_destroy;
     wrapper->base.compile_pipeline = stub_compile_pipeline;
     wrapper->base.create_instance = stub_create_instance;
-    YTEST_REQUIRE_OK(test,
-                     yetty_ydraw_complex_factory_register(factory_res.value, &wrapper->base));
+    YTEST_REQUIRE_OK(test, yetty_ydraw_complex_factory_register(factory_res.value, &wrapper->base));
     *out_wrapper = wrapper;
     return factory_res.value;
 }
 
 /* Append a stub complex record: [type][payload_size=16][x][y][w][h]. */
 static void add_stub_complex(struct ytest *test, struct yetty_ydraw_drawable_list *list, float x,
-                               float y, float w, float h)
+                             float y, float w, float h)
 {
     uint32_t record[6];
     record[0] = STUB_COMPLEX_TYPE_ID;

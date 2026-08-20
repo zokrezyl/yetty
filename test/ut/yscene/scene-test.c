@@ -1087,14 +1087,14 @@ static void test_factory_destroy(struct yetty_ydraw_concrete_factory *self)
 /* A rich frame with one hit-testable BOX record + `complex_count`
  * complex records (rich ids base_id, base_id+1, ...). */
 static size_t dom_rich_with_complexes(uint32_t *words, size_t cap, uint64_t base_id,
-                                       struct yetty_ydraw_drawable_list *list,
-                                       uint32_t complex_count)
+                                      struct yetty_ydraw_drawable_list *list,
+                                      uint32_t complex_count)
 {
     size_t list_bytes = yetty_ydraw_drawable_list_size(list);
     size_t list_words = list_bytes / sizeof(uint32_t);
     size_t offset = 0;
     words[offset++] = TEST_RICH_MAGIC;
-    words[offset++] = 1;                   /* version */
+    words[offset++] = 1;                 /* version */
     words[offset++] = 1 + complex_count; /* records */
     /* Record 1: the drawable-list box (world-survival hit probe). */
     words[offset++] = (uint32_t)(base_id & 0xFFFFFFFFu);
@@ -1154,8 +1154,7 @@ static void test_complex_factory_fault_rig(void)
                  .compile_pipeline = test_factory_compile_pipeline,
                  .create_instance = test_factory_create_instance},
     };
-    CHECK_OK("concrete registered",
-             yetty_ydraw_complex_factory_register(factory, &concrete.base));
+    CHECK_OK("concrete registered", yetty_ydraw_complex_factory_register(factory, &concrete.base));
 
     struct yetty_ydraw_drawable_list *box = make_list();
     add_box(box, 0, 0, 30, 30);

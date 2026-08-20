@@ -141,7 +141,7 @@ static const uint32_t *view_window(struct ytest *test, struct yetty_yclass_objec
 }
 
 static uint32_t slot_complex_count(struct ytest *test, struct yetty_yclass_object *grid,
-                                     uint32_t slot)
+                                   uint32_t slot)
 {
     uint32_t count = 0;
     struct yetty_ydraw_complex_const_ptr_ptr_result r =

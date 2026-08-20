@@ -410,8 +410,8 @@ static struct yetty_ydraw_drawable_list_registry *make_full_registry(void)
     if (YETTY_IS_ERR(a)) {
         goto err;
     }
-    a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_COMPLEX_TYPE_BASE,
-                                               0xFFFFFFFFu, yetty_ydraw_complex_record_handler);
+    a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_COMPLEX_TYPE_BASE, 0xFFFFFFFFu,
+                                               yetty_ydraw_complex_record_handler);
     if (YETTY_IS_ERR(a)) {
         goto err;
     }
