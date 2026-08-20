@@ -39,7 +39,7 @@ struct yetty_ycore_int_result yetty_ygui_tabbar_count(const struct yetty_yclass_
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_yclass_object *tabbar,
                                                             int index);
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include "yetty/gen/impl/ygui/mixins/clickable.h"
 #include "yetty/gen/impl/ygui/primitive-widget.h"
 #include "yetty/gen/impl/ygui/widgets/hbox.h"

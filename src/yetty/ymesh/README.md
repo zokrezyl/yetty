@@ -1,6 +1,6 @@
 # ymesh — 3D mesh figure (glTF .glb / PLY / STL / OBJ)
 
-`ymesh` loads a mesh and renders it as a composite ydraw figure with a
+`ymesh` loads a mesh and renders it as a complex ydraw figure with a
 real 3D pipeline (vertex + index buffers, depth test, Lambert shading or
 wireframe). It is split like yvideo: a GPU-less client side that
 serialises the wire format, and a server side that owns the raw WebGPU
@@ -22,8 +22,8 @@ color attribute (follow-up in #596).
 
 | target | contents | deps |
 |--------|----------|------|
-| `yetty_ymesh_core` | `.glb` decode (cgltf), wire serialisation, DCS emit | `cgltf`, `ydraw-core`, `yface` — no GPU |
-| `yetty_ymesh` | concrete composite factory + WGSL shaders (incbin) | `ymesh_core`, `ydraw-factory`, `yrender`, Dawn (gated on `YETTY_ENABLE_LIB_WEBGPU`) |
+| `yetty_ymesh_core` | `.glb` decode (cgltf), wire serialisation, DCS emit | `cgltf`, `ydraw-list`, `yface` — no GPU |
+| `yetty_ymesh` | concrete complex factory + WGSL shaders (incbin) | `ymesh_core`, `ydraw-factory`, `yrender`, Dawn (gated on `YETTY_ENABLE_LIB_WEBGPU`) |
 
 ## Client side (`ymesh.c`, `ymesh-glb.c`)
 
@@ -44,7 +44,7 @@ bbox-centred Y-up orbit; distance = `bbox_radius * dist_factor`; `mode` is
 
 ## Server side (`ymesh-gen.c`)
 
-The concrete factory registered with the abstract composite factory. Each
+The concrete factory registered with the abstract complex factory. Each
 instance owns its vertex/index/uniform buffers, an offscreen RGBA8 +
 depth16 target (clamped to 1024², linearly scaled at blit), and renders in
 two passes: a 3D pass into the offscreen target (`ymesh.wgsl`), then a
@@ -93,8 +93,8 @@ ignored.
 
 ## Related
 
-- [../ydraw-factory/README.md](../ydraw-factory/README.md) — composite
+- [../ydraw-factory/README.md](../ydraw-factory/README.md) — complex
   factory model
 - [../yrender/README.md](../yrender/README.md) — render targets
-- [../ydraw/README.md](../ydraw/README.md) — composite storage/lifecycle in
+- [../ydraw/README.md](../ydraw/README.md) — complex storage/lifecycle in
   the scrolling canvas

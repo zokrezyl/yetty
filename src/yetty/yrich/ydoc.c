@@ -28,9 +28,9 @@
 #include "yetty/gen/impl/yrich/document.h"
 #include "yetty/gen/impl/yrich/element.h"
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yfont/font.h>    /* metrics-only glyph advances for proportional layout */
-#include <yetty/yimage/yimage.h> /* decode + composite inline images into the doc buffer */
+#include <yetty/yimage/yimage.h> /* decode + complex inline images into the doc buffer */
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 

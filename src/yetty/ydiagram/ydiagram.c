@@ -17,7 +17,7 @@
 #include <yetty/ydiagram/layout.h>
 #include <yetty/ydiagram/mermaid-parser.h>
 #include <yetty/ydiagram/renderer.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 struct yetty_ydiagram_buffer_result yetty_ydiagram_render_mermaid_full(
     const char *input, size_t len, const struct yetty_ydiagram_layout_params *layout_params,

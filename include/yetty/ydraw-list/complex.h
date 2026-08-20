@@ -1,6 +1,6 @@
 // YDraw Complex Primitive Types - Wire Format
 //
-// Pure data layout for composites traveling over the DCS wire:
+// Pure data layout for complexes traveling over the DCS wire:
 //   - struct figure (type + payload_size + FAM data)
 //   - type-id ranges (simple SDF / drawable-list entry / complex)
 //   - helpers that operate on raw bytes (is_complex_type, size, aabb, handler)
@@ -10,7 +10,7 @@
 //
 // The server-side runtime (struct concrete_factory, struct figure_instance,
 // the abstract-factory registry) lives in
-// include/yetty/ydraw-factory/composite-factory.h.
+// include/yetty/ydraw-factory/complex-factory.h.
 //
 // See docs/ydraw.md for full documentation.
 
@@ -27,49 +27,49 @@ extern "C" {
 #endif
 
 //=============================================================================
-// Composite type IDs (0x80000000+ to avoid collision with SDF 0-255)
+// Complex type IDs (0x80000000+ to avoid collision with SDF 0-255)
 //=============================================================================
 
 /* Tier ranges for ydraw primitive types:
  *   [0x00000000, 0x000000FF]   Simple SDF (fixed-size, generated)
  *   [0x40000000, 0x7FFFFFFF]   Drawable-list entry (variable-size, no GPU pipeline)
- *                                FONT       — yetty/ydraw-core/font-resource.h
- *                                TEXT_DRAWABLE_LIST  — yetty/ydraw-core/text-drawable-list.h
+ *                                FONT       — yetty/ydraw-list/font-resource.h
+ *                                TEXT_DRAWABLE_LIST  — yetty/ydraw-list/text-drawable-list.h
  *   [0x80000000, 0xFFFFFFFF]   Complex (factory + per-instance GPU resources)
  *                                each concrete factory owns its own type id
  *                                (e.g. YETTY_YPLOT_TYPE_ID in yplot-gen.h).
  */
-#define YETTY_YDRAW_COMPOSITE_TYPE_BASE 0x80000000u
+#define YETTY_YDRAW_COMPLEX_TYPE_BASE 0x80000000u
 
 //=============================================================================
-// Composite header (FAM wire format)
+// Complex header (FAM wire format)
 //=============================================================================
 //
-struct yetty_ydraw_composite_header {
+struct yetty_ydraw_complex_header {
     uint32_t type;
     uint32_t payload_size;
 };
 
-struct yetty_ydraw_composite_record {
-    struct yetty_ydraw_composite_header header;
+struct yetty_ydraw_complex_record {
+    struct yetty_ydraw_complex_header header;
     uint8_t data[];
 };
 
 // Check if type uses FAM format
-bool yetty_ydraw_is_composite(uint32_t type);
+bool yetty_ydraw_is_complex(uint32_t type);
 
 // Get AABB (reads bounds from standard offset 0-15 in payload)
-struct rectangle_result yetty_ydraw_composite_record_aabb(const void *data);
+struct rectangle_result yetty_ydraw_complex_record_aabb(const void *data);
 
 //=============================================================================
-// Base ops for composites (for drawable-list registry)
+// Base ops for complexes (for drawable-list registry)
 // Returns base ops pointer for buffer iteration
 //=============================================================================
 
-#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-list/drawable-list-registry.h>
 
 // Handler for complex prim types (>= 0x80000000)
-struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_composite_record_handler(
+struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_complex_record_handler(
     uint32_t drawable_type);
 
 #ifdef __cplusplus

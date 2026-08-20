@@ -27,7 +27,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <yetty/ycore/ffi-annotations.h>
-#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-list/drawable-list-registry.h>
 
 #ifdef __cplusplus
 extern "C" {

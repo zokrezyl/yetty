@@ -11,7 +11,7 @@ target_include_directories(yetty_ypdf PUBLIC
 
 target_link_libraries(yetty_ypdf PUBLIC
     yetty_ycore
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yfont_core
     yetty_ysdf
     pdfio_lib

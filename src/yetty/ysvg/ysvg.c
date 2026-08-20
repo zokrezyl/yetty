@@ -14,7 +14,7 @@
 
 #include "ysvg-internal.h"
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ycore/types.h>

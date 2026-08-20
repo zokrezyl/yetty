@@ -65,7 +65,7 @@
  * widget calls these from its paint; see ygui/widgets/button.c). Using them
  * here keeps chrome ygui-free: it draws its own titlebar like any framework
  * primitive would. */
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -105,7 +105,7 @@ enum {
 #define YCHROME_HOVER_CLOSE_BG 0xFF3B3BC8u /* #C83B3B red */
 
 struct YETTY_ANNOTATE("class@ychrome:chrome")
-    YETTY_ANNOTATE("include@yetty/ydraw-core/drawable-list.h") yetty_ychrome_chrome {
+    YETTY_ANNOTATE("include@yetty/ydraw-list/drawable-list.h") yetty_ychrome_chrome {
     /* Borrowed yplatform:window_chrome yclass object — set by configure(). */
     struct yetty_yclass_object *window_chrome;
 

@@ -24,7 +24,7 @@ struct yetty_ygui_panel_ptr_result yetty_ygui_panel_from(struct yetty_yclass_obj
 
 #include "yetty/gen/impl/ygui/primitive-widget.h"
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <string.h>
 

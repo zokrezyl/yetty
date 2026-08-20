@@ -17,7 +17,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(ychart-cli PRIVATE
     yetty_ychart
     yetty_yface
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ysdf
     yetty_yfont_core
     yetty_ycore

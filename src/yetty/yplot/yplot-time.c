@@ -21,7 +21,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h> /* container_of */
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yplot/yplot.h> /* YETTY_YPLOT_FLAG_USES_TIME */
@@ -46,7 +46,7 @@ struct yplot_time_factory_state {
      * tick out to every instance in `instances`. */
     struct yetty_yevent_event_listener listener;
     yetty_yevent_timer_id timer_id; /* -1 when no timer exists */
-    struct yetty_ydraw_composite **instances;
+    struct yetty_ydraw_complex **instances;
     size_t instance_count;
     size_t instance_capacity;
 };
@@ -83,11 +83,11 @@ static struct yetty_ycore_int_result on_tick(struct yetty_yevent_event_listener 
 
 /* Append `instance` to the factory's animated list, growing it as needed. */
 static struct yetty_ycore_void_result instances_append(struct yplot_time_factory_state *fs,
-                                                       struct yetty_ydraw_composite *instance)
+                                                       struct yetty_ydraw_complex *instance)
 {
     if (fs->instance_count == fs->instance_capacity) {
         size_t new_capacity = fs->instance_capacity ? fs->instance_capacity * 2 : 8;
-        struct yetty_ydraw_composite **grown =
+        struct yetty_ydraw_complex **grown =
             realloc(fs->instances, new_capacity * sizeof(*fs->instances));
         if (!grown) {
             return YETTY_ERR(yetty_ycore_void, "yplot-time: instance list grow failed");
@@ -102,7 +102,7 @@ static struct yetty_ycore_void_result instances_append(struct yplot_time_factory
 /* Remove `instance` from the list (swap-with-last: order is irrelevant,
  * every entry gets the same tick). */
 static void instances_remove(struct yplot_time_factory_state *fs,
-                             const struct yetty_ydraw_composite *instance)
+                             const struct yetty_ydraw_complex *instance)
 {
     for (size_t i = 0; i < fs->instance_count; i++) {
         if (fs->instances[i] == instance) {
@@ -114,7 +114,7 @@ static void instances_remove(struct yplot_time_factory_state *fs,
 }
 
 static struct yetty_ycore_void_result subscribe(struct yetty_ydraw_concrete_factory *factory,
-                                                struct yetty_ydraw_composite *instance)
+                                                struct yetty_ydraw_complex *instance)
 {
     if (!factory || !factory->event_loop) {
         return YETTY_ERR(yetty_ycore_void, "yplot-time: no event_loop on factory");
@@ -161,7 +161,7 @@ static struct yetty_ycore_void_result subscribe(struct yetty_ydraw_concrete_fact
 }
 
 static void unsubscribe(struct yetty_ydraw_concrete_factory *factory,
-                        struct yetty_ydraw_composite *instance)
+                        struct yetty_ydraw_complex *instance)
 {
     if (!factory) {
         return;
@@ -205,7 +205,7 @@ static struct yetty_ycore_int_result on_tick(struct yetty_yevent_event_listener 
 
     double now = yetty_yplatform_ytime_monotonic_sec();
     for (size_t i = 0; i < fs->instance_count; i++) {
-        struct yetty_ydraw_composite *instance = fs->instances[i];
+        struct yetty_ydraw_complex *instance = fs->instances[i];
         if (!instance || !instance->resource_set) {
             continue;
         }
@@ -236,7 +236,7 @@ static struct yetty_ycore_int_result on_tick(struct yetty_yevent_event_listener 
  * Public attach / detach — called from yplot's create / destroy.
  *-------------------------------------------------------------------------*/
 
-struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_composite *instance)
+struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_complex *instance)
 {
     if (!instance || !instance->buffer_data || !instance->factory) {
         return YETTY_OK_VOID();
@@ -273,7 +273,7 @@ struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_compos
     return YETTY_OK_VOID();
 }
 
-void yetty_yplot_time_detach(struct yetty_ydraw_composite *instance)
+void yetty_yplot_time_detach(struct yetty_ydraw_complex *instance)
 {
     if (!instance) {
         return;

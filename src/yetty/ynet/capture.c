@@ -28,7 +28,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
@@ -76,7 +76,7 @@ struct ynet_flow {
 };
 
 struct YETTY_ANNOTATE("class@ynet:capture")
-    YETTY_ANNOTATE("include@yetty/ydraw-core/drawable-list.h") yetty_ynet_capture {
+    YETTY_ANNOTATE("include@yetty/ydraw-list/drawable-list.h") yetty_ynet_capture {
     char *path;
     int link_type; /* libpcap DLT_* */
 

@@ -11,7 +11,7 @@
 #include <yetty/ycat/ycat.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/terminal-detect.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ygit/commit-graph.h>
 #include <yetty/ygit/git-backend.h>
 #include <yetty/ysdf/funcs.gen.h>

@@ -1,7 +1,7 @@
 # yfigure — figure base class, container, kind registry, producer session
 
 The figure/container model of the compositor: **figure** is the yclass base
-class of every rich-content unit, **container** is the composite figure that
+class of every rich-content unit, **container** is the complex figure that
 hosts children keyed by id, **registry** mints figures from kind names, and
 **producer** is the client-side helper that drives a remote container over
 yclass RPC. Every pane's root container renders after the text/ydraw layers
@@ -39,7 +39,7 @@ itself, [ygrid](../ygrid/README.md)'s grid, [ymgui](../ymgui/README.md),
 [yrdawn](../yrdawn/README.md), [yshadertoy](../yshadertoy/README.md) and
 [yvterm](../yvterm/README.md).
 
-## container — id-keyed composite (`class@yfigure:container`)
+## container — id-keyed complex (`class@yfigure:container`)
 
 Children are `id → entry` in a uthash that doubles as an insertion-ordered
 list: render walks back-to-front (z-order; `raise` = move-to-end), hit-testing

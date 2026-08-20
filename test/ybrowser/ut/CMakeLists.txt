@@ -17,7 +17,7 @@
 yetty_add_c_test(
     NAME    ybrowser_layout
     SOURCES ybrowser-layout-test.c
-    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_list yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
     LABELS  golden browser
     TIMEOUT 30)
@@ -28,7 +28,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    ybrowser_dom
     SOURCES ybrowser-dom-test.c
-    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_list yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
     LABELS  contract browser
     TIMEOUT 30)
@@ -40,7 +40,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    ybrowser_viewport
     SOURCES ybrowser-viewport-test.c
-    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_list yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
     LABELS  contract browser
     TIMEOUT 30)
@@ -53,7 +53,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    ybrowser_provenance
     SOURCES ybrowser-provenance-test.c
-    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_list yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
     LABELS  golden browser
     TIMEOUT 30)
@@ -64,7 +64,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    ybrowser_storage_isolation
     SOURCES ybrowser-storage-isolation-test.c
-    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_list yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
     LABELS  contract browser
     TIMEOUT 30)
@@ -76,7 +76,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    ybrowser_wikipedia
     SOURCES ybrowser-wikipedia-test.c
-    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_list yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
     LABELS  golden browser
     TIMEOUT 30)
@@ -88,7 +88,7 @@ target_compile_definitions(ybrowser_wikipedia-test PRIVATE
 yetty_add_c_test(
     NAME    ybrowser_inline
     SOURCES ybrowser-inline-test.c
-    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_list yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
     LABELS  golden browser
     TIMEOUT 30)
@@ -98,7 +98,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    ybrowser_paint
     SOURCES ybrowser-paint-test.c
-    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_list yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
     LABELS  golden browser
     TIMEOUT 30)
@@ -108,7 +108,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    ybrowser_loader
     SOURCES ybrowser-loader-test.c
-    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    LIBS    yetty_ybrowser yetty_ysdf yetty_ydraw_list yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
     LABELS  network browser
     TIMEOUT 60)
@@ -155,7 +155,7 @@ if(Python3_Interpreter_FOUND)
         TIMEOUT          120
         SKIP_RETURN_CODE 77)
 
-    # Paint-order (CSS stacking) test: pins the composite stacking-key painter
+    # Paint-order (CSS stacking) test: pins the complex stacking-key painter
     # against the cases a single scalar level cannot get right at once —
     # early-in-DOM overlay over later content, root canvas vs negative-z,
     # z-index-child ESCAPING an auto-z wrapper above a lower-z sibling, and

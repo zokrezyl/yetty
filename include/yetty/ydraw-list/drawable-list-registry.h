@@ -5,8 +5,8 @@
 //   Base ops (all primitives - SDF and complex): size, aabb
 //   Extended ops (SDF only): destroy, get_gpu_resource_set
 //
-// Composites use the factory pattern instead of extended ops.
-// See composite.h for complex prim handling.
+// Complexes use the factory pattern instead of extended ops.
+// See complex.h for complex prim handling.
 #pragma once
 
 #include <stdint.h>
@@ -37,7 +37,7 @@ struct yetty_ydraw_drawable_list_entry_ops {
 
 //=============================================================================
 // Extended ops - for SDF primitives only (inherits base)
-// Composites use factory pattern instead
+// Complexes use factory pattern instead
 //=============================================================================
 
 struct yetty_ydraw_primitive_ops {

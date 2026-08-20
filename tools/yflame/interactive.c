@@ -21,7 +21,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterminal/client-input.h>
 #include <yetty/yplatform/term.h> /* yetty_yplatform_term_get_size */

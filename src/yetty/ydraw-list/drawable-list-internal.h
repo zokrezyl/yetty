@@ -1,11 +1,11 @@
-/* buffer — module-internal declarations (ydraw-core only).
+/* buffer — module-internal declarations (ydraw-list only).
  *
  * These functions are not part of the inter-module public API. The public
- * surface lives in include/yetty/ydraw-core/drawable-list.h.
+ * surface lives in include/yetty/ydraw-list/drawable-list.h.
  *
  * Most of these are the base64 round-trip pair (used internally to fuse
  * compression+encoding without double-buffering) and the matched min-side
- * scene-bounds accessors that nothing outside ydraw-core currently needs.
+ * scene-bounds accessors that nothing outside ydraw-list currently needs.
  */
 #ifndef YETTY_YDRAW_CORE_BUFFER_INTERNAL_H
 #define YETTY_YDRAW_CORE_BUFFER_INTERNAL_H
@@ -13,7 +13,7 @@
 #include <stddef.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,7 +36,7 @@ const struct yetty_ycore_buffer *yetty_ydraw_drawable_list_primitives(
     const struct yetty_ydraw_drawable_list *buf);
 
 /* yetty_ydraw_drawable_list_data / _size are now part of the public surface
- * (see include/yetty/ydraw-core/drawable-list.h). They are intentionally not
+ * (see include/yetty/ydraw-list/drawable-list.h). They are intentionally not
  * re-declared here. */
 
 #ifdef __cplusplus

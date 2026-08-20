@@ -32,7 +32,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/api/yfigure/container.h>
 #include <yetty/api/yterminal/terminal.h>
 #include <yetty/yclass/rpc.h>
@@ -269,7 +269,7 @@ static struct yetty_ycore_void_result view_set_content(
 
 /* Append one TEXT_DRAWABLE_LIST record (a UTF-8 run the server lays out with
  * the figure's default font) at content-local (x, y). font_id = -1 → default
- * slot. Wire layout per include/yetty/ydraw-core/text-drawable-list.h. */
+ * slot. Wire layout per include/yetty/ydraw-list/text-drawable-list.h. */
 static struct yetty_ycore_void_result append_text_line(struct yetty_ydraw_drawable_list *buf,
                                                        const char *text, uint32_t text_len, float x,
                                                        float y, float font_size, uint32_t color)
@@ -370,8 +370,8 @@ static struct yetty_ycore_void_result view_set_text(struct yetty_yclass_object *
 /* set_plot: render a yplot expression (yexpr-plot syntax — "sin(x)", or
  * "f=sin(x); g=cos(x)") as the view's content: one yplot figure filling the
  * rect (a plot doesn't scroll). x_max<=x_min or y_max<=y_min selects yplot's
- * default ranges. The ygrid figure renders the yplot composite prim via the
- * terminal's composite factory. */
+ * default ranges. The ygrid figure renders the yplot complex prim via the
+ * terminal's complex factory. */
 YETTY_ANNOTATE("virtual@yview:view:set_plot")
 YETTY_ANNOTATE("local@yview:set_plot")
 static struct yetty_ycore_void_result view_set_plot(struct yetty_yclass_object *obj,

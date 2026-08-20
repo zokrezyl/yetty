@@ -21,7 +21,7 @@ target_include_directories(yetty_ynetsurf PUBLIC
 target_link_libraries(yetty_ynetsurf
     PUBLIC
         netsurf_core
-        yetty_ydraw_core
+        yetty_ydraw_list
         yetty_ysdf
 )
 

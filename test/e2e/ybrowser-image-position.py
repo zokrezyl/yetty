@@ -8,7 +8,7 @@ land where the layout put them — the red rose (top "PNG" strip) must render in
 the UPPER part of the page, not shifted down into the lower "JPEG" strip.
 
 This exists because a figure-anchor double-count regressed the interactive
-(ygrid) render path: the composite render op adds the wire origin, and the grid
+(ygrid) render path: the complex render op adds the wire origin, and the grid
 ALSO anchored at the figure's own bounds, so every image painted at ~2x its
 laid-out position. Negligible for a figure near the top-left, catastrophic for
 one in a lower row — Google News story photos flew off the pane. The whole

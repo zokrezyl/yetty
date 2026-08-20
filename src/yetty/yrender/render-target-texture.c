@@ -162,14 +162,14 @@ struct yetty_yrender_render_target_texture {
     int render_skipped_pending;
 
     /* Borrowed — used to schedule the catch-up render from the present
-     * coro's tail. NULL on layer/composite targets that never present;
+     * coro's tail. NULL on layer/complex targets that never present;
      * set on the surface-backed desktop target via
      * yetty_yrender_target_texture_set_event_loop, called from
      * yframework right after set_wgpu. */
     struct yetty_yevent_event_loop *event_loop;
 
     /* Per-target present watchdog. NULL when this rt has no surface
-     * (layer and composite targets never call wgpuSurfacePresent).
+     * (layer and complex targets never call wgpuSurfacePresent).
      * Heap-owned; leaked on process exit — see present_watchdog_start. */
     struct yetty_yrender_present_watchdog *watchdog;
 
@@ -1298,7 +1298,7 @@ struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
            viewport.w, viewport.h, viewport.x, viewport.y, format, (void *)surface);
 
     /* Spin up a present watchdog for surface-bearing texture targets.
-     * Non-surface targets (layer/composite) never call wgpuSurfacePresent
+     * Non-surface targets (layer/complex) never call wgpuSurfacePresent
      * so they don't need one. */
     if (surface) {
         rt->watchdog = present_watchdog_start();

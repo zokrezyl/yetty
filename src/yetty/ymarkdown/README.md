@@ -1,7 +1,7 @@
 # ymarkdown — Markdown → ydraw buffer
 
 `ymarkdown` renders Markdown text into a ydraw buffer of text spans and SDF
-primitives. Pure C, depending only on `ycore`, `ydraw-core`, and `ysdf`.
+primitives. Pure C, depending only on `ycore`, `ydraw-list`, and `ysdf`.
 Consumed by ycat's markdown handler, the ygui `ymarkdown` widget, and the
 `yai` tool.
 
@@ -79,7 +79,7 @@ outside the list above render as plain paragraph text.
 
 ## Related
 
-- [../ydraw-core/README.md](../ydraw-core/README.md) — drawable-list buffer
+- [../ydraw-list/README.md](../ydraw-list/README.md) — drawable-list buffer
 - [../ychart/README.md](../ychart/README.md) /
   [../ydiagram/README.md](../ydiagram/README.md) — sibling text-to-buffer
   renderers

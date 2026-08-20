@@ -9,17 +9,27 @@ typedef long WGPUTextureView;
 typedef long _Atomic(int64_t);
 typedef long __syscall_slong_t;
 typedef long __time_t;
+typedef long yetty_ipc_socket_t;
 typedef long yetty_ycore_event_handler;
 typedef long yetty_ycore_object_id;
+typedef long yetty_ymux_daemon_spawn_fn;
+typedef long yetty_ymux_engine_bell_fn;
+typedef long yetty_ymux_engine_clipboard_fn;
+typedef long yetty_ymux_engine_output_fn;
+typedef long yetty_ymux_engine_rich_fn;
+typedef long yetty_ymux_engine_scroll_out_fn;
+typedef long yetty_ymux_engine_title_fn;
 typedef long yetty_yrich_element_id;
+struct engine_row;
 struct yetty_platform_pty;
 struct yetty_yclass;
 struct yetty_yclass_object;
 struct yetty_yclass_rpc_session;
+struct yetty_yclass_transport;
 struct yetty_yconfig_config;
 struct yetty_ycore_xthread_event_pipe;
-struct yetty_ydraw_composite;
-struct yetty_ydraw_composite_factory;
+struct yetty_ydraw_complex;
+struct yetty_ydraw_complex_factory;
 struct yetty_ydraw_drawable_list;
 struct yetty_ydraw_drawable_list_registry;
 struct yetty_ydraw_target;
@@ -36,6 +46,9 @@ struct yetty_ygit_log;
 struct yetty_ygit_status;
 struct yetty_ygui_emit_ctx;
 struct yetty_ymgui_figure;
+struct yetty_ymux_cell;
+struct yetty_ymux_daemon;
+struct yetty_ymux_resource_entry;
 struct yetty_yplatform_pty_factory;
 struct yetty_yrdawn_figure;
 struct yetty_yrich_command;
@@ -43,13 +56,116 @@ struct yetty_yrich_keybinding;
 struct yetty_yrich_operation;
 struct yetty_yrich_slide;
 struct yetty_yscene_scene;
+struct yetty_yscene_vtermgrid_store_cell;
 struct yetty_yui_event;
 struct yetty_yui_view_ops;
 struct yetty_yvterm_primitive;
 struct yetty_yvterm_text_cell;
 struct yetty_yvterm_tier_segment;
+struct yetty_ywire_channel;
+struct yetty_ywire_connection;
 struct yetty_ywire_wire_statemachine;
 struct ymusic_measure;
+struct client_resource {
+  uint64_t hash;
+  uint32_t *words;
+  uint32_t word_count;
+};
+struct daemon_connection {
+  yetty_ipc_socket_t socket;
+  struct yetty_yclass_object *session;
+  uint32_t attachment_id;
+  uint32_t pane_id;
+  uint32_t capabilities;
+  uint64_t sent_generation;
+  uint64_t acked_generation;
+  uint32_t fail_next_vtsink_tx;
+  struct {
+    uint32_t input_class;
+    uint32_t byte_len;
+    uint8_t *bytes;
+  } chrome_queue;
+  uint32_t chrome_queue_head;
+  uint32_t chrome_queue_count;
+  uint64_t chrome_intake_count;
+  uint32_t chrome_intake_class;
+  uint32_t overlay_applied_seq;
+  uint32_t refuse_next_overlay;
+  uint8_t copy_key_pending[16];
+  uint32_t copy_key_pending_len;
+  int copy_cursor_row;
+  int copy_cursor_col;
+  int copy_anchor_row;
+  int copy_anchor_col;
+  int copy_selecting;
+  uint8_t *chrome_last_bytes;
+  uint32_t chrome_last_len;
+  uint32_t chrome_last_class;
+  uint32_t sent_pane_modes;
+  int sent_pane_modes_valid;
+  struct yetty_yclass_rpc_session *vtsink_session;
+  struct yetty_yclass_transport *vtsink_lane;
+  struct yetty_yclass_object *vtsink_proxy;
+  uint8_t *rx;
+  size_t rx_len;
+  uint8_t *tx;
+  size_t tx_len;
+  size_t tx_sent;
+  uint64_t tx_total_sent;
+  uint64_t slow_last_total_sent;
+  uint32_t slow_recover_count;
+  int want_close;
+};
+struct daemon_pane_pty {
+  struct yetty_platform_pty *pty;
+  struct yetty_ymux_daemon *daemon;
+  struct yetty_yclass_object *session;
+  uint32_t pane_id;
+  uint32_t pty_rows;
+  uint32_t pty_cols;
+  uint8_t *out_queue;
+  size_t out_queue_len;
+  size_t out_queue_cap;
+  struct yetty_ywire_wire_statemachine *rpc_sm;
+  struct yetty_ywire_connection *rpc_connection;
+  void *rpc_forward_state;
+  uint32_t rpc_controller;
+  struct {
+    uint32_t channel_id;
+    struct yetty_ywire_channel *channel;
+  } rpc_channels;
+  uint32_t rpc_channel_count;
+};
+struct daemon_session_entry {
+  struct yetty_yclass_object *session;
+  char name[64];
+  uint64_t created_stamp;
+};
+struct engine_surface {
+  struct engine_row *rows;
+  uint32_t rows_count;
+  uint32_t cols;
+};
+struct history_builder {
+  uint8_t *bytes;
+  size_t byte_count;
+  size_t byte_capacity;
+  uint32_t *row_offsets;
+  uint32_t row_count;
+  uint32_t row_capacity;
+  uint64_t first_row;
+};
+struct history_cache_entry {
+  int valid;
+  uint64_t first_row;
+  uint32_t row_count;
+  struct yetty_ymux_cell **row_cells;
+  uint32_t *row_cols;
+  uint64_t *row_logical_ids;
+  uint32_t *row_logical_starts;
+  uint8_t *row_continuations;
+  uint64_t last_used_tick;
+};
 struct yetty_ycore_error {
   const char *msg;
   const char *file;
@@ -67,6 +183,18 @@ struct pixel_size_result {
     struct yetty_ycore_pixel_size value;
     struct yetty_ycore_error error;
   };
+};
+struct session_attachment_slot {
+  struct yetty_yclass_object *attachment;
+  struct yetty_yclass_object *projector;
+  uint32_t attachment_id;
+  uint32_t pane_id;
+  uint32_t permissions;
+  char token[64];
+};
+struct session_pane_slot {
+  struct yetty_yclass_object *pane;
+  uint32_t pane_id;
 };
 struct timespec {
   __time_t tv_sec;
@@ -122,7 +250,7 @@ struct vterm_uniforms {
   uint32_t face_pad0;
   uint32_t face_pad1;
   uint32_t face_pad2;
-  float face_params[4][4];
+  float face_params[6][4];
 };
 struct yetty_context {
   struct yetty_yframework *runtime;
@@ -274,10 +402,10 @@ struct yetty_ycore_xthread_event_pipe_ptr_result {
     struct yetty_ycore_error error;
   };
 };
-struct yetty_ydraw_composite_const_ptr_ptr_result {
+struct yetty_ydraw_complex_const_ptr_ptr_result {
   int ok;
   union {
-    struct yetty_ydraw_composite *const *value;
+    struct yetty_ydraw_complex *const *value;
     struct yetty_ycore_error error;
   };
 };
@@ -289,7 +417,7 @@ struct yetty_ydraw_drawable_list_result {
   };
 };
 struct yetty_ydraw_stream_registry {
-  struct yetty_ydraw_composite *targets[16];
+  struct yetty_ydraw_complex *targets[16];
 };
 struct yetty_yevent_event_listener {
   yetty_ycore_event_handler handler;
@@ -408,6 +536,108 @@ struct yetty_ymgui_figure_ptr_result {
     struct yetty_ymgui_figure *value;
     struct yetty_ycore_error error;
   };
+};
+struct yetty_ymux_cell_const_ptr_result {
+  int ok;
+  union {
+    const struct yetty_ymux_cell *value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_ymux_daemon_host {
+  yetty_ymux_daemon_spawn_fn spawn;
+  void *userdata;
+};
+struct yetty_ymux_engine_host {
+  yetty_ymux_engine_output_fn output;
+  yetty_ymux_engine_clipboard_fn clipboard;
+  yetty_ymux_engine_bell_fn bell;
+  yetty_ymux_engine_title_fn title;
+  yetty_ymux_engine_scroll_out_fn scroll_out;
+  yetty_ymux_engine_rich_fn rich;
+  void *userdata;
+};
+struct yetty_ymux_history_row {
+  const struct yetty_ymux_cell *cells;
+  uint32_t cols;
+  uint64_t logical_line_id;
+  uint32_t logical_cell_start;
+  int continuation;
+};
+struct yetty_ymux_history_row_result {
+  int ok;
+  union {
+    struct yetty_ymux_history_row value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_ymux_resource_store {
+  struct yetty_ymux_resource_entry *entries;
+  uint32_t count;
+  uint32_t capacity;
+};
+struct yetty_ymux_tty_caps {
+  unsigned int colors_256;
+  unsigned int colors_rgb;
+  unsigned int ech;
+  unsigned int insert_delete_line;
+  unsigned int insert_line;
+  unsigned int delete_line;
+  unsigned int ich;
+  unsigned int dch;
+  unsigned int decstbm;
+  unsigned int bce;
+  unsigned int extended_underline;
+  unsigned int underline_colour;
+  unsigned int hyperlink;
+  unsigned int acs;
+  unsigned int mouse;
+  unsigned int title;
+  unsigned int clipboard;
+  unsigned int focus;
+  unsigned int cursor_style;
+  unsigned int cursor_colour;
+  unsigned int margins;
+  unsigned int overline;
+  unsigned int strikethrough;
+  unsigned int osc7;
+  unsigned int extkeys;
+  unsigned int rectfill;
+  unsigned int sixel;
+  unsigned int sync;
+  unsigned int noam;
+  unsigned int xenl;
+};
+struct yetty_ymux_tty {
+  struct yetty_ymux_tty_caps caps;
+  const struct yetty_ymux_tty_term *term;
+  uint32_t cx;
+  uint32_t cy;
+  uint32_t sx;
+  uint32_t sy;
+  uint32_t rupper;
+  uint32_t rlower;
+  uint32_t rleft;
+  uint32_t rright;
+  uint16_t cell_attr;
+  char active_underline_colour[40];
+  char active_link[1025];
+  uint32_t active_link_id;
+  int cell_fg;
+  int cell_bg;
+  uint16_t last_attr;
+  int last_fg;
+  int last_bg;
+  int cursor_visible;
+  int cursor_shape_param;
+};
+struct yetty_ymux_tty_term {
+  char name[64];
+  char *strings[46];
+  int colors;
+  uint8_t bools[3];
+  unsigned int loaded_from_db;
+  unsigned int bools_loaded;
 };
 struct yetty_yplatform_gpu_context {
   WGPUInstance instance;
@@ -598,7 +828,7 @@ struct yetty_yrich_text_style {
   int32_t font_id;
 };
 struct yetty_yscene_factory_args {
-  struct yetty_ydraw_composite_factory *composite_factory;
+  struct yetty_ydraw_complex_factory *complex_factory;
   struct yetty_yfont_font *default_font;
   struct yetty_yfont_font *bold_font;
   struct yetty_yfont_font *italic_font;
@@ -611,6 +841,21 @@ struct yetty_yscene_scene_ptr_result {
     struct yetty_yscene_scene *value;
     struct yetty_ycore_error error;
   };
+};
+struct yetty_yscene_vtermgrid_store {
+  struct yetty_yscene_vtermgrid_store_cell *cells;
+  uint32_t rows;
+  uint32_t cols;
+  uint32_t pen_fg;
+  uint32_t pen_bg;
+  uint16_t pen_attrs;
+  int pen_protected;
+  uint32_t default_fg;
+  uint32_t default_bg;
+  int global_reverse;
+  uint32_t cursor_row;
+  uint32_t cursor_col;
+  int cursor_visible;
 };
 struct yetty_yterminal_terminal_context {
   struct yetty_context yetty_context;
@@ -635,9 +880,9 @@ struct yetty_yvterm_line {
   uint32_t *arena;
   uint32_t arena_count;
   uint32_t arena_capacity;
-  struct yetty_ydraw_composite **composites;
-  uint32_t composite_count;
-  uint32_t composite_capacity;
+  struct yetty_ydraw_complex **complexes;
+  uint32_t complex_count;
+  uint32_t complex_capacity;
   uint32_t rich_span_rows;
   uint32_t envelope_count;
   uint32_t view_stamp;
@@ -773,6 +1018,52 @@ M.ymusic_clef = {
   YMUSIC_CLEF_BASS = 1,
   YMUSIC_CLEF_ALTO = 2,
   YMUSIC_CLEF_TENOR = 3,
+}
+M.yetty_ymux_key = {
+  YETTY_YMUX_KEY_ENTER = 1,
+  YETTY_YMUX_KEY_TAB = 2,
+  YETTY_YMUX_KEY_BACKSPACE = 3,
+  YETTY_YMUX_KEY_ESCAPE = 4,
+  YETTY_YMUX_KEY_UP = 5,
+  YETTY_YMUX_KEY_DOWN = 6,
+  YETTY_YMUX_KEY_LEFT = 7,
+  YETTY_YMUX_KEY_RIGHT = 8,
+  YETTY_YMUX_KEY_INSERT = 9,
+  YETTY_YMUX_KEY_DELETE = 10,
+  YETTY_YMUX_KEY_HOME = 11,
+  YETTY_YMUX_KEY_END = 12,
+  YETTY_YMUX_KEY_PAGE_UP = 13,
+  YETTY_YMUX_KEY_PAGE_DOWN = 14,
+  YETTY_YMUX_KEY_KP_0 = 15,
+  YETTY_YMUX_KEY_KP_1 = 16,
+  YETTY_YMUX_KEY_KP_2 = 17,
+  YETTY_YMUX_KEY_KP_3 = 18,
+  YETTY_YMUX_KEY_KP_4 = 19,
+  YETTY_YMUX_KEY_KP_5 = 20,
+  YETTY_YMUX_KEY_KP_6 = 21,
+  YETTY_YMUX_KEY_KP_7 = 22,
+  YETTY_YMUX_KEY_KP_8 = 23,
+  YETTY_YMUX_KEY_KP_9 = 24,
+  YETTY_YMUX_KEY_KP_MULT = 25,
+  YETTY_YMUX_KEY_KP_PLUS = 26,
+  YETTY_YMUX_KEY_KP_COMMA = 27,
+  YETTY_YMUX_KEY_KP_MINUS = 28,
+  YETTY_YMUX_KEY_KP_PERIOD = 29,
+  YETTY_YMUX_KEY_KP_DIVIDE = 30,
+  YETTY_YMUX_KEY_KP_ENTER = 31,
+  YETTY_YMUX_KEY_KP_EQUAL = 32,
+  YETTY_YMUX_KEY_F1 = 33,
+  YETTY_YMUX_KEY_F2 = 34,
+  YETTY_YMUX_KEY_F3 = 35,
+  YETTY_YMUX_KEY_F4 = 36,
+  YETTY_YMUX_KEY_F5 = 37,
+  YETTY_YMUX_KEY_F6 = 38,
+  YETTY_YMUX_KEY_F7 = 39,
+  YETTY_YMUX_KEY_F8 = 40,
+  YETTY_YMUX_KEY_F9 = 41,
+  YETTY_YMUX_KEY_F10 = 42,
+  YETTY_YMUX_KEY_F11 = 43,
+  YETTY_YMUX_KEY_F12 = 44,
 }
 M.yetty_yrich_app_kind = {
   YETTY_YRICH_APP_YDOC = 0,

@@ -20,7 +20,7 @@ target_link_libraries(yscene-demo PRIVATE
     yetty_api_yfigure
     yetty_api_yterminal
     yetty_yclass
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ysdf
     Threads::Threads
     yetty_yplatform_core

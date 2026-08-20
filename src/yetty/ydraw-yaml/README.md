@@ -1,11 +1,11 @@
 # ydraw-yaml — YAML → ydraw drawable-list parser
 
 Parses a YAML scene description into a
-`struct yetty_ydraw_drawable_list` ([ydraw-core](../ydraw-core/README.md))
+`struct yetty_ydraw_drawable_list` ([ydraw-list](../ydraw-list/README.md))
 using libyaml. It is a small dispatch shell: a registry maps primitive type
 names to factory callbacks (`yetty_ydraw_yaml_factory_fn`, declared in
-`../ydraw-core/yaml-factory.h`), and each factory consumes its own mapping
-events and appends records to the buffer. Links `yaml`, `yetty_ydraw_core`,
+`../ydraw-list/yaml-factory.h`), and each factory consumes its own mapping
+events and appends records to the buffer. Links `yaml`, `yetty_ydraw_list`,
 `yetty_ysdf`, `yetty_yplot_core` and `yetty_yfsvm_core`; fontconfig is an
 optional desktop-only extra.
 
@@ -78,7 +78,7 @@ YAML-authored scenes.
 
 ## See also
 
-- [ydraw-core](../ydraw-core/README.md) — the buffer the factories fill.
+- [ydraw-list](../ydraw-list/README.md) — the buffer the factories fill.
 - [ysdf](../ysdf/README.md) — generated per-shape YAML factories.
-- [ydraw-gen](../ydraw-gen/README.md) — can emit a composite's YAML factory
+- [ydraw-gen](../ydraw-gen/README.md) — can emit a complex's YAML factory
   from its schema (`yaml_factory:` modes).

@@ -22,7 +22,7 @@
 #include <yetty/yfont/font.h>
 #include "yetty/gen/impl/ychrome/chrome.h" /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/api/yscene/scene.h>
@@ -107,9 +107,9 @@ struct YETTY_ANNOTATE("class@yrich:app") YETTY_ANNOTATE("parent@yapp:app") yetty
     struct yetty_yfont_font *font_bold_italic;
     struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
     struct yetty_yscene_factory_args figure_args;
-    /* Composite figure factory (yimage/yplot) so ydoc inline images render as
+    /* Complex figure factory (yimage/yplot) so ydoc inline images render as
      * real decoded textures rather than placeholder boxes. Owned. */
-    struct yetty_ydraw_composite_factory *composite_factory;
+    struct yetty_ydraw_complex_factory *complex_factory;
     void *surface;
     uint32_t surface_w;
     uint32_t surface_h;
@@ -1006,21 +1006,21 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
     struct yetty_yfigure_registry_ptr_result reg_r = yetty_yfigure_registry_create();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reg_r, "yfigure_registry_create failed");
     app->registry = reg_r.value;
-    /* Composite factory so ydoc inline images (and plots) render as real
-     * decoded figures through the scene's composite pass. */
+    /* Complex factory so ydoc inline images (and plots) render as real
+     * decoded figures through the scene's complex pass. */
     {
-        struct yetty_ydraw_composite_factory_ptr_result factory_res =
-            yetty_ydraw_composite_factory_create(app->yrt->gpu.device, app->yrt->gpu.queue,
-                                                 app->yrt->gpu.surface_format,
-                                                 app->yrt->gpu.allocator, app->yrt->event_loop);
+        struct yetty_ydraw_complex_factory_ptr_result factory_res =
+            yetty_ydraw_complex_factory_create(app->yrt->gpu.device, app->yrt->gpu.queue,
+                                               app->yrt->gpu.surface_format,
+                                               app->yrt->gpu.allocator, app->yrt->event_loop);
         if (YETTY_IS_ERR(factory_res)) {
             yetty_ycore_error_destroy(factory_res.error);
         } else {
-            app->composite_factory = factory_res.value;
+            app->complex_factory = factory_res.value;
             struct yetty_ydraw_concrete_factory *yimage_factory = yetty_yimage_factory_create();
             if (yimage_factory) {
                 struct yetty_ycore_void_result reg =
-                    yetty_ydraw_composite_factory_register(app->composite_factory, yimage_factory);
+                    yetty_ydraw_complex_factory_register(app->complex_factory, yimage_factory);
                 if (YETTY_IS_ERR(reg)) {
                     yetty_ycore_error_destroy(reg.error);
                 }
@@ -1028,7 +1028,7 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
             struct yetty_ydraw_concrete_factory *yplot_factory = yetty_yplot_factory_create();
             if (yplot_factory) {
                 struct yetty_ycore_void_result reg =
-                    yetty_ydraw_composite_factory_register(app->composite_factory, yplot_factory);
+                    yetty_ydraw_complex_factory_register(app->complex_factory, yplot_factory);
                 if (YETTY_IS_ERR(reg)) {
                     yetty_ycore_error_destroy(reg.error);
                 }
@@ -1040,7 +1040,7 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
     app->figure_args.bold_font = app->font_bold;
     app->figure_args.italic_font = app->font_italic;
     app->figure_args.bold_italic_font = app->font_bold_italic;
-    app->figure_args.composite_factory = app->composite_factory;
+    app->figure_args.complex_factory = app->complex_factory;
     /* The legacy "ygrid" kind token renders through the retained yscene
      * engine. Absolute (logical-pane) coordinates — the same mode the
      * ygrid factory forced for this kind. */
@@ -1163,9 +1163,9 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
         destroy_safe(yetty_yfigure_registry_destroy(app->registry));
         app->registry = NULL;
     }
-    if (app->composite_factory) {
-        yetty_ydraw_composite_factory_destroy(app->composite_factory);
-        app->composite_factory = NULL;
+    if (app->complex_factory) {
+        yetty_ydraw_complex_factory_destroy(app->complex_factory);
+        app->complex_factory = NULL;
     }
     app->target->ops->destroy(app->target);
     app->target = NULL;

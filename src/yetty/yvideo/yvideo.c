@@ -13,7 +13,7 @@
 
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yterminal/dcs-codes.h>
 
 #include <stdint.h>

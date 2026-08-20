@@ -55,7 +55,7 @@ typedef long long ssize_t;
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymime/mime.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -430,7 +430,7 @@ static struct yetty_ycore_void_result mime_render_circuit(
 #endif
 
 #ifdef YETTY_HAS_YMESH
-/* glTF binary → one ymesh composite figure; the GPU-side factory for the
+/* glTF binary → one ymesh complex figure; the GPU-side factory for the
  * record type is already registered by terminal_create. */
 static struct yetty_ycore_void_result mime_render_mesh(struct yetty_yterminal_terminal *terminal,
                                                        const uint8_t *content, size_t content_len)

@@ -1,5 +1,5 @@
 /*
- * ymesh-gen.c — concrete factory for the ymesh composite.
+ * ymesh-gen.c — concrete factory for the ymesh complex.
  *
  * Unlike yimage / yplot, ymesh uses raw WebGPU directly (not the schema-
  * driven yetty_yrender_pipeline / gpu_resource_binder framework). The
@@ -25,8 +25,8 @@
 #include <yetty/ymesh/ymesh-gen.h>
 #include <yetty/ymesh/ymesh-math.h>
 
-#include <yetty/ydraw-core/composite.h>
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-list/complex.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -295,7 +295,7 @@ static struct yetty_ycore_void_result ymesh_compute_3d_uniforms(const float bbox
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result ymesh_instance_render(struct yetty_ydraw_composite *self,
+static struct yetty_ycore_void_result ymesh_instance_render(struct yetty_ydraw_complex *self,
                                                             struct yetty_ydraw_target *target,
                                                             float x, float y)
 {
@@ -591,7 +591,7 @@ static struct yetty_ycore_void_result ymesh_build_blit_pipeline(struct yetty_yme
         return YETTY_ERR(yetty_ycore_void, "ymesh: layout_blit failed");
     }
 
-    /* Composite over the layer target — premultiplied-alpha blend. */
+    /* Complex over the layer target — premultiplied-alpha blend. */
     WGPUBlendState blend = {0};
     blend.color.operation = WGPUBlendOperation_Add;
     blend.color.srcFactor = WGPUBlendFactor_One;
@@ -683,7 +683,7 @@ static struct yetty_ycore_void_result ymesh_compile_pipeline(
 
 /* Forward decl — vtable definition lives below; create_instance just
  * needs its address. */
-static const struct yetty_ydraw_composite_ops ymesh_figure_ops;
+static const struct yetty_ydraw_complex_ops ymesh_figure_ops;
 
 static WGPURenderPipeline ymesh_get_pipeline(struct yetty_ydraw_concrete_factory *self)
 {
@@ -741,17 +741,17 @@ static void ymesh_instance_data_destroy(struct ymesh_instance_data *d)
     free(d);
 }
 
-static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
+static struct yetty_ydraw_complex_ptr_result ymesh_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite_record)) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_complex_record)) {
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: invalid buffer data");
     }
 
     struct yetty_ymesh_factory *factory = ymesh_factory_from_base(self);
     if (!factory->initialized) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: factory not initialized");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: factory not initialized");
     }
 
     /* Parse wire layout. See include/yetty/ymesh/ymesh.h for the canonical
@@ -760,12 +760,12 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
     const uint32_t *payload = data + 2;
 
     /* The fixed mesh header spans payload[0..18] (bbox, camera, mode,
-     * vcount/icount/isize). `sizeof(composite_record)` only guarantees the
+     * vcount/icount/isize). `sizeof(complex_record)` only guarantees the
      * 8-byte type+payload_size header, so a record with payload_size < 76
      * would let the reads below run off the end before the variable-data
      * size check. Require the full fixed header first. */
     if (size < (size_t)(2u + 19u) * sizeof(uint32_t)) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: record too small for mesh header");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: record too small for mesh header");
     }
 
     float bx = *(const float *)&payload[0];
@@ -792,10 +792,10 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
     uint32_t icount = payload[17];
     uint32_t isize = payload[18];
     if (isize != 4 && isize != 2) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: bad index_size");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: bad index_size");
     }
     if (vcount == 0 || icount == 0) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: empty mesh");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: empty mesh");
     }
 
     /* vcount/icount/isize come straight off the wire. Before deriving the
@@ -805,14 +805,14 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
      * buffer_data. The dimension caps keep the `vcount * 3` pointer math
      * below within uint32 and the 64-bit size check free of overflow. */
     if (vcount > YMESH_MAX_VERTICES || icount > YMESH_MAX_INDICES) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: vertex/index count out of range");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: vertex/index count out of range");
     }
     {
         const size_t mesh_data_offset = (size_t)(2u + 19u) * sizeof(uint32_t);
         uint64_t need = (uint64_t)mesh_data_offset + (uint64_t)vcount * 3u * sizeof(float) +
                         (uint64_t)vcount * 3u * sizeof(float) + (uint64_t)icount * isize;
         if ((uint64_t)size < need) {
-            return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: record too small for mesh data");
+            return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: record too small for mesh data");
         }
     }
 
@@ -821,21 +821,21 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
     const void *indices = (const void *)(normals + vcount * 3);
 
     /* Allocate instance + per-instance data. */
-    struct yetty_ydraw_composite *inst = calloc(1, sizeof(struct yetty_ydraw_composite));
+    struct yetty_ydraw_complex *inst = calloc(1, sizeof(struct yetty_ydraw_complex));
     if (!inst) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: inst alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: inst alloc failed");
     }
     struct ymesh_instance_data *d = calloc(1, sizeof(struct ymesh_instance_data));
     if (!d) {
         free(inst);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: data alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: data alloc failed");
     }
 
     inst->buffer_data = malloc(size);
     if (!inst->buffer_data) {
         free(d);
         free(inst);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: wire copy failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: wire copy failed");
     }
     memcpy(inst->buffer_data, buffer_data, size);
     inst->buffer_size = size;
@@ -846,7 +846,7 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
     inst->ops = &ymesh_figure_ops;
     inst->instance_data = d;
 
-    struct rectangle_result aabb_res = yetty_ydraw_composite_record_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_complex_record_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
         inst->bounds = aabb_res.value;
     }
@@ -867,7 +867,7 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
         ymesh_instance_data_destroy(d);
         free(inst->buffer_data);
         free(inst);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: vertex/index buffer alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: vertex/index buffer alloc failed");
     }
 
     /* Build the line-list index buffer from the triangle indices.
@@ -882,7 +882,7 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
             ymesh_instance_data_destroy(d);
             free(inst->buffer_data);
             free(inst);
-            return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: line index alloc failed");
+            return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: line index alloc failed");
         }
         if (isize == 4) {
             const uint32_t *src = (const uint32_t *)indices;
@@ -916,7 +916,7 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
             ymesh_instance_data_destroy(d);
             free(inst->buffer_data);
             free(inst);
-            return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: line index buffer alloc failed");
+            return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: line index buffer alloc failed");
         }
     }
 
@@ -946,7 +946,7 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
         ymesh_instance_data_destroy(d);
         free(inst->buffer_data);
         free(inst);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: offscreen tex alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: offscreen tex alloc failed");
     }
     d->color_view = wgpuTextureCreateView(d->color_tex, NULL);
     d->depth_view = wgpuTextureCreateView(d->depth_tex, NULL);
@@ -975,7 +975,7 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
         ymesh_instance_data_destroy(d);
         free(inst->buffer_data);
         free(inst);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: uniform buffer alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: uniform buffer alloc failed");
     }
 
     /* Bind groups. */
@@ -1013,15 +1013,15 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
         ymesh_instance_data_destroy(d);
         free(inst->buffer_data);
         free(inst);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: bind group create failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "ymesh: bind group create failed");
     }
 
     yinfo("ymesh: instance created vcount=%u icount=%u off=%ux%u", vcount, icount, d->off_w,
           d->off_h);
-    return YETTY_OK(yetty_ydraw_composite_ptr, inst);
+    return YETTY_OK(yetty_ydraw_complex_ptr, inst);
 }
 
-static void ymesh_instance_destroy(struct yetty_ydraw_composite *instance)
+static void ymesh_instance_destroy(struct yetty_ydraw_complex *instance)
 {
     if (!instance) {
         return;
@@ -1033,14 +1033,14 @@ static void ymesh_instance_destroy(struct yetty_ydraw_composite *instance)
 
 /* ymesh's vtable — no update path; the wire never carries CMD_UPDATE
  * for mesh figures. */
-static const struct yetty_ydraw_composite_ops ymesh_figure_ops = {
+static const struct yetty_ydraw_complex_ops ymesh_figure_ops = {
     .destroy = ymesh_instance_destroy,
     .update = NULL,
 };
 
 /* Legacy factory adapter — see yplot / yvideo equivalents. */
 static void ymesh_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                   struct yetty_ydraw_composite *instance)
+                                   struct yetty_ydraw_complex *instance)
 {
     (void)self;
     ymesh_instance_destroy(instance);

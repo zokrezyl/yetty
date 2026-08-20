@@ -9,7 +9,7 @@
  * the frontend-unification step.
  */
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yplot/resolve.h>
 
 #include "ytest.h"

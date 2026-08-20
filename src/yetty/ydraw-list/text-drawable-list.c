@@ -2,7 +2,7 @@
  * text-drawable-list.c - drawable-list entry TEXT_DRAWABLE_LIST primitive (see text-drawable-list.h).
  */
 
-#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ydraw-list/text-drawable-list.h>
 #include "text-drawable-list-internal.h"
 
 #include <math.h>

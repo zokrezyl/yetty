@@ -31,7 +31,7 @@
 #include <yetty/ycore/types.h>
 
 #include <yetty/yface/yface.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/yterminal/dcs-codes.h>
@@ -95,7 +95,7 @@ struct yflame_frame {
  *===========================================================================*/
 
 struct YETTY_ANNOTATE("class@yflame:flame")
-    YETTY_ANNOTATE("include@yetty/ydraw-core/drawable-list.h") yetty_yflame_flame {
+    YETTY_ANNOTATE("include@yetty/ydraw-list/drawable-list.h") yetty_yflame_flame {
     /* Render configuration. */
     float width;
     float frame_height;

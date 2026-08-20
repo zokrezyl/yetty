@@ -25,7 +25,7 @@ target_include_directories(ydu PRIVATE
 
 find_package(Threads REQUIRED)
 
-# yetty_ygui pulls in ydraw-core, ysdf, ycore, yface, yfont, yfigure, yplot,
+# yetty_ygui pulls in ydraw-list, ysdf, ycore, yface, yfont, yfigure, yplot,
 # yplatform_core, etc. as transitive PUBLIC deps. ydu drives its own libuv
 # client loop, so libuv (uv_a) is listed explicitly.
 target_link_libraries(ydu PRIVATE yetty_ygui uv_a Threads::Threads)

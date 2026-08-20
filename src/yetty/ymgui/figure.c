@@ -31,7 +31,7 @@
 
 #include <webgpu/webgpu.h>
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yetty/yetty.h>
 #include "yetty/gen/impl/yfigure/figure.h"
 #include <yetty/yfigure/registry.h>

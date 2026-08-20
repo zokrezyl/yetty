@@ -12,7 +12,7 @@
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yface/yface.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yterminal/dcs-codes.h> /* YETTY_DCS_YDRAW_* */
 #include <yetty/ythorvg/ythorvg.h>
 

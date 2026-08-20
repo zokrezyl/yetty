@@ -38,7 +38,7 @@
 
 #include <yetty/ycore/util.h>
 #include <yetty/yplatform/yworkpool.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/merge.h>
@@ -1846,7 +1846,7 @@ static void emit_image_box_prims(struct yetty_ylexbor *r, struct yetty_ylexbor_b
  * There is no depth buffer — occlusion is painter's order (draw sequence). A
  * flat DOM-order paint cannot make an overlay (dialog/modal/dropdown/fixed
  * header) cover in-flow content that comes LATER in the DOM, nor honour
- * z-index. We compute a COMPOSITE stacking key per box and sort by it, so the
+ * z-index. We compute a COMPLEX stacking key per box and sort by it, so the
  * whole nesting of stacking contexts is respected — not just a single scalar
  * level (which cannot express nested contexts, e.g. a z-index:100 child of a
  * z-index:auto wrapper escaping to outrank a z-index:50 sibling, while a
@@ -1932,7 +1932,7 @@ static uint32_t stack_parent_of(const struct yetty_ylexbor *r, uint32_t idx)
     }
 }
 
-/* Build the composite stacking key for `idx`: `key` receives interleaved
+/* Build the complex stacking key for `idx`: `key` receives interleaved
  * (level, DOM-index) pairs top-down; *out_pairs is the pair count. */
 static void stack_build_key(const struct yetty_ylexbor *r, uint32_t idx,
                             int64_t key[STACK_KEY_MAX * 2], int *out_pairs)
@@ -1952,7 +1952,7 @@ static void stack_build_key(const struct yetty_ylexbor *r, uint32_t idx,
     *out_pairs = n;
 }
 
-/* Lexicographic compare of two composite keys; a proper prefix sorts first. */
+/* Lexicographic compare of two complex keys; a proper prefix sorts first. */
 static int stack_key_cmp(const int64_t *ka, int na, const int64_t *kb, int nb)
 {
     int shared = na < nb ? na : nb;
@@ -2154,7 +2154,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 
     ydebug("paint total boxes=%u", r->boxes.size);
 
-    /* Compute the stacking-order paint sequence: each box gets a composite
+    /* Compute the stacking-order paint sequence: each box gets a complex
 	 * stacking key, then a sort reproduces CSS painting order (canvas → negative
 	 * z → normal flow → positioned by z, nesting-aware). A NULL slots allocation
 	 * (OOM) falls back to plain DOM order — still renders, just without stacking
@@ -2225,7 +2225,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 			 * nothing. This is how JS carousels / tab-panels hide the
 			 * inactive slide in place; painting it produced the Google News
 			 * weather-widget overlap (the hidden warning panel drawn on top
-			 * of the visible forecast). We do not alpha-composite, so any
+			 * of the visible forecast). We do not alpha-complex, so any
 			 * partially-transparent box (>= 0.02) still paints fully. */
             continue;
         }

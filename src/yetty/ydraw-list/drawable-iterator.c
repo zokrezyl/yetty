@@ -19,8 +19,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-iterator.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-iterator.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ytrace/ytrace.h>

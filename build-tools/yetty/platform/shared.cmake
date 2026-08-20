@@ -153,7 +153,7 @@ if(YETTY_ENABLE_LIB_TINYEMU OR YETTY_ENABLE_LIB_QEMU)
 
         if(NOT EXISTS "${_YR_STAMP}")
             if(NOT EXISTS "${_YR_CACHED}")
-                # In CI the stage-rootfs-riscv composite action drops the
+                # In CI the stage-rootfs-riscv complex action drops the
                 # workflow-artifact tarball here before configure runs,
                 # so the download branch only fires on local builds /
                 # external consumers.
@@ -465,7 +465,7 @@ add_subdirectory(${YETTY_ROOT}/src/api/yplot ${CMAKE_BINARY_DIR}/src/api/yplot)
 # build. Keep this list in sync with src/yetty/yffi/CMakeLists.txt.
 if(YETTY_BUILD_FFI_SHARED)
     foreach(ffi_pic_target
-            yetty_api_yplot yetty_yplot_core yetty_ydraw_core yetty_yface
+            yetty_api_yplot yetty_yplot_core yetty_ydraw_list yetty_yface
             yetty_ysdf yetty_yfsvm_core yetty_yexpr yetty_yclass yetty_ywire
             yetty_ycore)
         if(TARGET ${ffi_pic_target})
@@ -594,7 +594,7 @@ if(YETTY_ENABLE_FEATURE_YECHO)
     list(APPEND YETTY_LIBS yetty_yecho)
 endif()
 if(YETTY_ENABLE_FEATURE_YDRAW)
-    # The SDF handler lib plus the composite figure factories terminal.c
+    # The SDF handler lib plus the complex figure factories terminal.c
     # registers at startup (yplot / yimage / yshadertoy prim / ymesh).
     # Nothing else on YETTY_LIBS links these, so the app names them
     # directly. The gates mirror where each target is created.

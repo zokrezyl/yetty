@@ -1,7 +1,7 @@
 // YDraw Drawable-list entry - primitive handler registry implementation (instance-based)
 
 #include <stdlib.h>
-#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-list/drawable-list-registry.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include "drawable-list-registry-internal.h"

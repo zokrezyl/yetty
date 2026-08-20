@@ -66,12 +66,12 @@ target_link_libraries(ycompositor-ygui PRIVATE
     yetty_yfigure
     yetty_ymgui
     yetty_yface
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yframework
     ${YETTY_LIBS}
     yetty_yclass
     yetty_ywire
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yplatform_core
     yetty_yplatform_move_resize
     yetty_yplatform_window_chrome

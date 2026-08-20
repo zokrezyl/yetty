@@ -83,9 +83,9 @@ Also done (second hardening round + complex leaves):
   swaps only on success.
 - Font lifecycle: cache handles tracked per slot; reset/navigation
   releases wire fonts and clears producer-id maps; slot-0 default font
-  arrives via the factory args bundle (terminal wires composite factory
+  arrives via the factory args bundle (terminal wires complex factory
   + compositor font).
-- Complex (composite/image) leaves: instances minted at ingest (keyed
+- Complex (complex/image) leaves: instances minted at ingest (keyed
   by their immutable span location, so same-body CMD_UPDATE targets
   them), refreshed at staging, swept when their span leaves the
   committed scene, drawn after the prim pass in paint-key order
@@ -153,7 +153,7 @@ Also done (ygrid retirement):
 - The ygrid receiver test suite was ported (test/ut/yscene/
   wire-parity-test.c): nested groups + hit routing, the multi-group
   delta pattern, dirty/reset lifecycle, malformed-body recovery + dump
-  stability, and the composite-instance lifecycle (mint under a node,
+  stability, and the complex-instance lifecycle (mint under a node,
   CMD_DELETE destroys, re-open replaces, CMD_UPDATE routes).
 - src/yetty/ygrid is deleted.
 

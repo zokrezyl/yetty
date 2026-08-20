@@ -9,8 +9,8 @@
  * output is deterministic and headless.
  */
 
-#include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
+#include <yetty/ydraw-list/text-drawable-list.h>
 #include <yetty/ymarkdown/ymarkdown.h>
 #include <yetty/ysdf/types.gen.h>
 

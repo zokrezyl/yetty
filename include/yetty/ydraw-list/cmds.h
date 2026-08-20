@@ -109,11 +109,11 @@ extern "C" {
  * CRITICAL — type-word namespace collision risk:                         *
  *                                                                        *
  * cmd values that set HAS_ID_FLAG (CMD_DELETE, CMD_GROUP, CMD_UPDATE)    *
- * land in the same 0x8XXXXXXX range as composite type_ids             *
- * (YETTY_YDRAW_COMPOSITE_TYPE_BASE = 0x80000000). The drawable iterator    *
+ * land in the same 0x8XXXXXXX range as complex type_ids             *
+ * (YETTY_YDRAW_COMPLEX_TYPE_BASE = 0x80000000). The drawable iterator    *
  * disambiguates by *exact-match* on each cmd constant before falling     *
  * through to the prim registry — so each cmd value MUST stay distinct    *
- * from every composite type_id ever assigned.                         *
+ * from every complex type_id ever assigned.                         *
  *                                                                        *
  * Existing complex prim type_ids cluster at 0x80000003 (yplot),          *
  * 0x80000004 (yimage), 0x80000005 (ymesh). To avoid future clashes new   *

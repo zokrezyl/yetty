@@ -1,9 +1,9 @@
-/* font-resource — module-internal declarations (ydraw-core only).
+/* font-resource — module-internal declarations (ydraw-list only).
  *
  * The packers are called from buffer.c when wrapping FONT primitive
  * insertions; they are not part of the inter-module public API. The public
  * surface (parse, view struct, type id, handler) lives in
- * include/yetty/ydraw-core/font-resource.h.
+ * include/yetty/ydraw-list/font-resource.h.
  */
 #ifndef YETTY_YDRAW_CORE_FONT_RESOURCE_INTERNAL_H
 #define YETTY_YDRAW_CORE_FONT_RESOURCE_INTERNAL_H

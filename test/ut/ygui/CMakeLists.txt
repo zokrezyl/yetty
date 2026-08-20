@@ -8,7 +8,7 @@
 yetty_add_c_test(
     NAME    ygui_object
     SOURCES object-test.c
-    LIBS    yetty_ygui yetty_ycore yetty_ydraw_core
+    LIBS    yetty_ygui yetty_ycore yetty_ydraw_list
     SHIMS   trace platform_thread platform_term
     LABELS  unit
     TIMEOUT 30)
@@ -17,8 +17,8 @@ yetty_add_c_test(
     NAME    ygui_layout
     SOURCES layout-test.c
     # yetty_ysdf provides the default drawable-list registry the paint test
-    # iterates with (drift-proof prim walk); it PUBLIC-links ydraw_core.
-    LIBS    yetty_ygui yetty_ycore yetty_ysdf yetty_ydraw_core
+    # iterates with (drift-proof prim walk); it PUBLIC-links ydraw_list.
+    LIBS    yetty_ygui yetty_ycore yetty_ysdf yetty_ydraw_list
     SHIMS   trace platform_thread platform_term
     LABELS  unit
     TIMEOUT 30)
@@ -36,7 +36,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    ygui_matrix
     SOURCES matrix-test.c
-    LIBS    yetty_ygui yetty_ycore yetty_ydraw_core
+    LIBS    yetty_ygui yetty_ycore yetty_ydraw_list
     SHIMS   trace platform_thread platform_term
     LABELS  unit
     TIMEOUT 30)
@@ -46,7 +46,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    ygui_behavior
     SOURCES behavior-test.c
-    LIBS    yetty_ygui yetty_ycore yetty_ydraw_core
+    LIBS    yetty_ygui yetty_ycore yetty_ydraw_list
     SHIMS   trace platform_thread platform_term
     LABELS  contract
     TIMEOUT 30)
@@ -57,7 +57,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    ygui_textinput
     SOURCES textinput-test.c
-    LIBS    yetty_ygui yetty_ycore yetty_ydraw_core
+    LIBS    yetty_ygui yetty_ycore yetty_ydraw_list
     SHIMS   trace platform_thread platform_term platform_time
     LABELS  contract
     TIMEOUT 30)

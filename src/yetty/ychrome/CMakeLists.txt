@@ -32,7 +32,7 @@ target_link_libraries(yetty_ychrome PUBLIC
     yetty_yclass
     # Framework-level draw primitives (the same layer ygui paints into) so
     # chrome can render its own titlebar without pulling in ygui.
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ysdf
     yetty_yface
     # host.c's WIRE sink emits figure-tree records over a producer (GPU-free);
@@ -75,7 +75,7 @@ target_link_libraries(yetty_ychrome_wire PUBLIC
     yetty_api_ychrome
     yetty_ycore
     yetty_yclass
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ysdf
     yetty_yface
     yetty_yfigure

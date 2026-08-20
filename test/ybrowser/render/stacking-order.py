@@ -2,7 +2,7 @@
 """Paint-order (CSS stacking) regression test — headless, no GPU.
 
 There is no depth buffer in the renderer: occlusion is painter's order (draw
-sequence). The paint pass computes a COMPOSITE stacking key per box and sorts by
+sequence). The paint pass computes a COMPLEX stacking key per box and sorts by
 it, reproducing CSS painting order (canvas -> negative-z -> normal flow ->
 positioned by z, nesting-aware). This asserts the emission order for the cases
 the WPT geometry harness cannot see (paint order is not geometry), including the

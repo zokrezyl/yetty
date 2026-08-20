@@ -1,7 +1,7 @@
 /*
  * yvideo — emit a yvideo DCS envelope stream for a raw H.264 Annex-B
  * file. Inside a yetty terminal the DCS envelopes ride the ydraw
- * (YDRAW_BIN) record path, which mints a yvideo composite and decodes it
+ * (YDRAW_BIN) record path, which mints a yvideo complex and decodes it
  * via openh264, rendering frames as they arrive. Outside a yetty terminal
  * the bytes are still printed
  * (mostly garbage on a vt100), so typical usage is:
@@ -30,8 +30,8 @@
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yterminal/dcs-codes.h>
 #include <yetty/yvideo/yvideo-gen.h>
 #include <yetty/yvideo/yvideo.h>
@@ -708,8 +708,8 @@ static struct yetty_ycore_void_result emit_init(const struct yvideo_opts *o, con
 
     /* Attach the yvideo prim at top level (no GROUP wrapper). The YDRAW_BIN
      * receiver (terminal_ydraw_consume_bin) iterates records and mints a
-     * composite for any record whose type is in the composite range
-     * (0x80000000+), via the terminal's composite factory — the same path
+     * complex for any record whose type is in the complex range
+     * (0x80000000+), via the terminal's complex factory — the same path
      * yplot / yimage / ymesh / yshadertoy take. It does not descend into
      * CMD_GROUP records, so the prim must sit at the top level to be seen. */
     struct yetty_ydraw_id_result ar = yetty_ydraw_drawable_list_add_prim(dl, prim_bytes, prim_size);

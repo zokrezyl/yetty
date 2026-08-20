@@ -3,7 +3,7 @@
 
 /*
  * yecho - text with embedded glyphs and styled blocks, rendered to a
- * ydraw-core buffer (client-side only — yecho never runs in yetty's
+ * ydraw-list buffer (client-side only — yecho never runs in yetty's
  * process).
  *
  * Grammar:
@@ -46,7 +46,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -112,7 +112,7 @@ size_t yetty_yecho_doc_error_count(const struct yetty_yecho_doc *doc);
 const char *yetty_yecho_doc_error(const struct yetty_yecho_doc *doc, size_t idx);
 
 /*=============================================================================
- * Rendering — produce a ydraw-core buffer
+ * Rendering — produce a ydraw-list buffer
  *===========================================================================*/
 
 struct yetty_yecho_render_config {
@@ -129,7 +129,7 @@ struct yetty_yecho_render_config {
     float line_spacing;
 };
 
-/* Render `doc` into a fresh ydraw-core buffer. Caller frees with
+/* Render `doc` into a fresh ydraw-list buffer. Caller frees with
  * yetty_ydraw_drawable_list_destroy. */
 struct yetty_ydraw_drawable_list_result yetty_yecho_render(
     const struct yetty_yecho_doc *doc, const struct yetty_yecho_render_config *config);

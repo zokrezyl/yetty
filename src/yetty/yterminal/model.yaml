@@ -101,6 +101,18 @@ classes:
         type: "struct yetty_yterminal_terminal *"
         get: false
         set: false
+      - name: input_barrier_timer
+        type: yetty_yevent_timer_id
+        get: false
+        set: false
+      - name: input_barrier_listener
+        type: struct yetty_yevent_event_listener
+        get: false
+        set: false
+      - name: input_barrier_timer_ready
+        type: int
+        get: false
+        set: false
       - name: client_sub_handler_self
         type: "struct yetty_yterminal_terminal *"
         get: false
@@ -185,8 +197,8 @@ classes:
         type: "struct yetty_yfont_font *"
         get: false
         set: false
-      - name: composite_factory
-        type: "struct yetty_ydraw_composite_factory *"
+      - name: complex_factory
+        type: "struct yetty_ydraw_complex_factory *"
         get: false
         set: false
       - name: ydraw_registry
@@ -312,7 +324,7 @@ types:
     kind: struct
     fields:
       - name: targets
-        type: "struct yetty_ydraw_composite *[16]"
+        type: "struct yetty_ydraw_complex *[16]"
   - name: yetty_yevent_event_listener
     kind: struct
     fields:
@@ -321,8 +333,8 @@ types:
   - name: yetty_yscene_factory_args
     kind: struct
     fields:
-      - name: composite_factory
-        type: "struct yetty_ydraw_composite_factory *"
+      - name: complex_factory
+        type: "struct yetty_ydraw_complex_factory *"
       - name: default_font
         type: "struct yetty_yfont_font *"
       - name: bold_font
@@ -382,38 +394,38 @@ local_typedefs:
     source_file: src/yetty/yterminal/terminal.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_yterminal_pty_write_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yterminal/terminal.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yterminal/terminal.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yterminal_pty_write_fn)(const char *, size_t, void *);"
   yetty_yterminal_request_render_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yterminal/terminal.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yterminal/terminal.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yterminal_request_render_fn)(void *);"
   yetty_yterminal_scroll_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yterminal/terminal.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yterminal/terminal.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yterminal_scroll_fn)(struct yetty_yrender_terminal_layer *, int, void *);"
   yetty_yterminal_cursor_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yterminal/terminal.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yterminal/terminal.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yterminal_cursor_fn)(struct yetty_yrender_terminal_layer *, struct yetty_ycore_grid_cursor_pos, void *);"
   yetty_yterminal_mouse_sub_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yterminal/terminal.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yterminal/terminal.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yterminal_mouse_sub_fn)(int, int, int, void *);"
   yetty_yterminal_clipboard_write_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yterminal/terminal.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yterminal/terminal.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yterminal_clipboard_write_fn)(const char *, size_t, int, void *);"
   yetty_yterminal_sixel_write_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yterminal/terminal.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yterminal/terminal.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yterminal_sixel_write_fn)(const char *, size_t, void *);"
   yetty_yterminal_term_input_sub_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yterminal/terminal.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yterminal/terminal.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yterminal_term_input_sub_fn)(uint32_t, void *);"
   yetty_yterminal_emit_osc_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yterminal/terminal.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yterminal/terminal.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yterminal_emit_osc_fn)(int, const void *, size_t, void *);"
   yetty_yterminal_alt_screen_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yterminal/terminal.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yterminal/terminal.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yterminal_alt_screen_fn)(int, void *);"
   yetty_yterminal_clear_screen_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yterminal/terminal.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yterminal/terminal.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yterminal_clear_screen_fn)(void *);"
   yetty_yterminal_figure_root_container_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yterminal/terminal.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yterminal/terminal.c
     text: "typedef struct yetty_yclass_object_ptr_result (*yetty_yterminal_figure_root_container_fn)(struct yetty_yclass_object *);"

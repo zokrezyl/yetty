@@ -28,7 +28,7 @@ struct yetty_ygui_tooltip_ptr_result yetty_ygui_tooltip_from(struct yetty_yclass
 
 #include "yetty/gen/impl/ygui/primitive-widget.h"
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <stdlib.h>
 #include <string.h>
 

@@ -24,7 +24,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {

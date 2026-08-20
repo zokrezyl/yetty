@@ -14,7 +14,7 @@
 #include <yetty/ychart/data-parser.h>
 #include <yetty/ychart/renderer.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 /* Pick a chart kind from the data shape when neither the document nor the
  * caller specified one. Specialised kinds (pie/donut/radar/treemap) are only

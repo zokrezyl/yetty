@@ -14,7 +14,7 @@
  * NOT instantiate ygrid; it sources primitives from yvterm's own grid.
  *
  * The model follows ygrid's bucket+stage+draw pipeline, simplified to yvterm's
- * needs: no entity tree, no id index, no composite handling (composites render
+ * needs: no entity tree, no id index, no complex handling (complexes render
  * through vterm's own rich pass). Staging is rebuilt every render from the
  * visible ring — render is dirty-gated, so for static content it happens once
  * and on each scroll.
@@ -30,9 +30,9 @@
 #include <yetty/yclass/class.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/util.h>
-#include <yetty/ydraw-core/composite.h>
-#include <yetty/ydraw-core/font-resource.h>
-#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ydraw-list/complex.h>
+#include <yetty/ydraw-list/font-resource.h>
+#include <yetty/ydraw-list/text-drawable-list.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/font-cache.h>
@@ -652,8 +652,8 @@ static struct yetty_ycore_void_result index_record(struct yetty_yvterm_sdf_layer
                                        .min = {.x = glyph_x, .y = glyph_y},
                                        .max = {.x = glyph_x + quad_w, .y = glyph_y + quad_h},
                                    }));
-    } else if (yetty_ydraw_is_composite(type)) {
-        /* Composites render through vterm's own rich pass — not here. */
+    } else if (yetty_ydraw_is_complex(type)) {
+        /* Complexes render through vterm's own rich pass — not here. */
         return YETTY_OK_VOID();
     } else {
         struct yetty_ydraw_drawable_list_entry_ops_ptr_result ops_r = yetty_ysdf_handler(type);

@@ -1,13 +1,13 @@
-# ydraw-gen — schema-driven code generator for composite figures
+# ydraw-gen — schema-driven code generator for complex figures
 
-`generate.py` reads a composite figure's YAML schema
+`generate.py` reads a complex figure's YAML schema
 (`src/yetty/<module>/<module>.yaml`) and emits all the boilerplate a
-composite needs: the public C header, the concrete-factory + instance
+complex needs: the public C header, the concrete-factory + instance
 implementation, the pure-CPU wire serializer, and the WGSL accessor
 functions. The figure author writes only the schema and the main `.wgsl`
 shader. Distinct from the yclass codegen
 ([yclass](../yclass/README.md)) — this generator covers only the
-ydraw composite tier.
+ydraw complex tier.
 
 ## Invocation and outputs
 
@@ -35,7 +35,7 @@ by hand; their `-gen.c` names are historical.)
 
 Top-level keys consumed by the generator:
 
-- `name`, `type_id` (composite tier, `0x80000000+`), `description`.
+- `name`, `type_id` (complex tier, `0x80000000+`), `description`.
 - `uniforms:` — fixed-size scalars (`f32`/`u32`/`i32`, optional `count`,
   `default`); serialized first on the wire, uploaded as the GPU uniform block.
 - `buffers:` — variable-size payload regions. `array: true` marks a
@@ -72,7 +72,7 @@ only the serializer and the shader know the semantics.
 
 ## See also
 
-- [ydraw](../ydraw/README.md) — the composite/code-generation design the
+- [ydraw](../ydraw/README.md) — the complex/code-generation design the
   generator implements.
 - [ydraw-factory](../ydraw-factory/README.md) — the runtime the generated
   factories plug into.

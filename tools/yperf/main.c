@@ -35,7 +35,7 @@
  */
 #define _DEFAULT_SOURCE 1
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yface/yface.h>
 #include "yetty/gen/impl/yflame/flame.h"
 #include <yetty/ygui/ygui.h>

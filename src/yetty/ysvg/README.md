@@ -5,7 +5,7 @@ shapes, MSDF text spans, and embedded [`yimage`](../yimage/README.md)
 records — vectors stay vectors end to end, no rasterization. Scope is the
 SVG Tiny 1.2 static-graphics subset: no scripting, no SMIL animation, no
 DOM/timing model. Dependencies: yxml (SAX XML), `ycore`,
-[`ydraw-core`](../ydraw-core/README.md), [`ysdf`](../ysdf/README.md), and
+[`ydraw-list`](../ydraw-list/README.md), [`ysdf`](../ysdf/README.md), and
 the GPU-less `yetty_yimage_core` for `<image>`.
 
 ## Pipeline
@@ -32,7 +32,7 @@ solid, capped at 4096 vertices), `text`/`tspan` → MSDF text entries,
 `g`/`a`/`svg`/`use`/`switch` → recurse (`<use>` depth-capped). Gradients are
 approximated by the mean stop colour (following `xlink:href` stop
 inheritance); `<image>` is served by an embedder-supplied resolver and
-serialized as a yimage composite record.
+serialized as a yimage complex record.
 
 CSS selector support: descendant/child/adjacent/general-sibling combinators,
 attribute selectors, structural pseudo-classes, `!important`. Ignored:

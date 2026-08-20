@@ -34,7 +34,7 @@ set_target_properties(yetty_ythorvg PROPERTIES
 )
 
 target_link_libraries(yetty_ythorvg PUBLIC
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ysdf
     thorvg_lib
 )

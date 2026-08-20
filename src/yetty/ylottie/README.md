@@ -5,7 +5,7 @@ shape primitives and MSDF text spans — the same output shape as ysvg /
 ymarkdown / ypdf, where the caller owns one buffer. It is fully
 self-contained: it parses the JSON itself and flattens all geometry
 without any external vector/animation library. Depends only on `ycore`,
-`ydraw-core`, and `ysdf`.
+`ydraw-list`, and `ysdf`.
 
 Lottie is an animation format; this engine flattens the document **at a
 chosen frame** into a static buffer. Single-frame callers (ycat) use the

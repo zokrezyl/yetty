@@ -11,9 +11,9 @@ extern "C" {
 
 /* Forward-declared so this header stays GPU-less and can be included by
  * client-side wire emitters that don't link Dawn. The full types live in
- * yetty/ydraw-factory/composite-factory.h (server side). */
+ * yetty/ydraw-factory/complex-factory.h (server side). */
 struct yetty_ydraw_concrete_factory;
-struct yetty_ydraw_composite;
+struct yetty_ydraw_complex;
 
 #define YETTY_YPLOT_TYPE_ID 0x80000003u
 
@@ -64,7 +64,7 @@ struct yetty_yplot_buffers {
 /* CMD_UPDATE entry point — implemented by hand in a companion TU (the
  * decode of target_field/body is yplot-specific). Installed as the
  * per-instance ops->update at create time. */
-struct yetty_ycore_void_result yetty_yplot_instance_update(struct yetty_ydraw_composite *instance,
+struct yetty_ycore_void_result yetty_yplot_instance_update(struct yetty_ydraw_complex *instance,
                                                            uint32_t target_field, const void *body,
                                                            size_t body_size);
 
@@ -72,8 +72,8 @@ struct yetty_ycore_void_result yetty_yplot_instance_update(struct yetty_ydraw_co
  * runs after a successful create (failure is non-fatal: the figure still
  * renders); `destroying` runs FIRST in instance destroy, before any
  * teardown. */
-struct yetty_ycore_void_result yetty_yplot_instance_created(struct yetty_ydraw_composite *instance);
-void yetty_yplot_instance_destroying(struct yetty_ydraw_composite *instance);
+struct yetty_ycore_void_result yetty_yplot_instance_created(struct yetty_ydraw_complex *instance);
+void yetty_yplot_instance_destroying(struct yetty_ydraw_complex *instance);
 
 //=============================================================================
 // Serialization API

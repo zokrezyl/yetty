@@ -21,7 +21,7 @@ struct yetty_ygui_ymaze_ptr_result yetty_ygui_ymaze_from(struct yetty_yclass_obj
 #include "yetty/gen/impl/ygui/primitive-widget.h"
 #include "yetty/gen/impl/ygui/widgets/ydraw_embed.h"
 #include <yetty/ymaze/ymaze.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yplatform/time.h>
 
 struct YETTY_ANNOTATE("class@ygui:ymaze") YETTY_ANNOTATE("parent@ygui:ydraw_embed")

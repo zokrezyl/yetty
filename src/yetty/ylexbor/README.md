@@ -293,7 +293,7 @@ Each call site is a registered trace point:
 | **libjpeg-turbo** (BSD) | optional; JPEG decode (`tjDecompress2`). Falls back to stb_image |
 | **stb_image** (MIT)     | always; GIF/BMP/HDR/PSD plus the libpng/libjpeg fallback path |
 
-`yetty_ydraw_core` and `yetty_ysdf` are local yetty libs (the GPU side).
+`yetty_ydraw_list` and `yetty_ysdf` are local yetty libs (the GPU side).
 
 ## What was added on top of lexbor
 
@@ -381,4 +381,4 @@ starting point.
 
 [lexbor]: https://github.com/lexbor/lexbor
 [QuickJS-NG]: https://github.com/quickjs-ng/quickjs
-[ydraw]: ../ydraw-core/
+[ydraw]: ../ydraw-list/

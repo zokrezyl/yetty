@@ -21,7 +21,7 @@ struct yetty_ygui_yzoo_ptr_result yetty_ygui_yzoo_from(struct yetty_yclass_objec
 #include "yetty/gen/impl/ygui/primitive-widget.h"
 #include "yetty/gen/impl/ygui/widgets/ydraw_embed.h"
 #include <yetty/yzoo/yzoo.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yplatform/time.h>
 
 struct YETTY_ANNOTATE("class@ygui:yzoo") YETTY_ANNOTATE("parent@ygui:ydraw_embed") yetty_ygui_yzoo {

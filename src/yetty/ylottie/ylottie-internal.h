@@ -24,7 +24,7 @@
 #include <stdint.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ylottie/ylottie.h>
 
 #ifdef __cplusplus

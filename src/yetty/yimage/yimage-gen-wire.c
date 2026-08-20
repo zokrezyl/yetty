@@ -1,6 +1,6 @@
 // Auto-generated from yimage.yaml - DO NOT EDIT
 //
-// Wire-format helpers for the yimage composite. Pure CPU code: packs
+// Wire-format helpers for the yimage complex. Pure CPU code: packs
 // caller-supplied uniforms + buffers into the on-the-wire byte layout. Lives
 // in yetty_yimage_core (no Dawn, no WebGPU, safe for riscv64 / wasm / any
 // cross-target without a GPU).

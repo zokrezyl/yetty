@@ -138,7 +138,7 @@ parameter.
 
 ## Build
 
-GPU-less; links `yetty_ycore`, `yetty_yclass`, `yetty_yface`, `yetty_ydraw_core`,
+GPU-less; links `yetty_ycore`, `yetty_yclass`, `yetty_yface`, `yetty_ydraw_list`,
 `yetty_ysdf`. C23 (for the `[[clang::annotate]]` attributes). Gated by
 `YETTY_ENABLE_FEATURE_YFLAME` (ON by default). Add `yflame` to `YCLASS_MODULES`
 in the root Makefile so `make codegen` regenerates it. No third-party

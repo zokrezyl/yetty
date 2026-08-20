@@ -1,7 +1,7 @@
 /*
  * yecho - echo text with embedded glyphs and styled blocks.
  *
- * The parsed input is rendered into a ydraw-core buffer and emitted as a
+ * The parsed input is rendered into a ydraw-list buffer and emitted as a
  * YETTY_DCS_YDRAW_BIN sequence (same wire format ycat uses). The DCS
  * envelope goes out the same way for every host terminal: a yetty renders
  * it, every other terminal discards it. yecho does not probe TERM_PROGRAM.
@@ -10,7 +10,7 @@
 #include <yetty/yecho/yecho.h>
 #include <yetty/yfont/shader-glyph.h>
 #include <yetty/yplatform/getopt.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ycore/result.h>
 
 #include <stdbool.h>

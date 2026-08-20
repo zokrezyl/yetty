@@ -12,7 +12,7 @@ include(${YETTY_ROOT}/build-tools/yetty/libs/yyjson.cmake)
 include(${YETTY_ROOT}/build-tools/yetty/libs/libyaml.cmake)
 
 # ytrace is compiled per-final-target (not a standalone library); the
-# rest comes transitively from yetty_ygui (ydraw-core, yface, yfont,
+# rest comes transitively from yetty_ygui (ydraw-list, yface, yfont,
 # yplatform_core, ...).
 # Split codegen: the object-API stubs live under src/yetty/gen/api/yai/ (the
 # per-class impl glue is foot-included by each annotated source); there is no
@@ -58,7 +58,7 @@ find_package(Threads REQUIRED)
 # yetty_yfont_shader_glyph is the name->codepoint table for the activity
 # status line's animated glyph (PUA-B, rendered by the host text layer).
 # yetty_ymarkdown renders assistant answers to a ydraw drawable list in-process;
-# yai frames it as a YDRAW_BIN envelope itself (yface + ydraw-core come
+# yai frames it as a YDRAW_BIN envelope itself (yface + ydraw-list come
 # transitively via yetty_ygui), so markdown no longer shells out to ycat.
 # yetty_yplot renders the /usage tokens-vs-time curve the same in-process way.
 target_link_libraries(yai PRIVATE yetty_ygui yetty_yclass yetty_yfont_shader_glyph

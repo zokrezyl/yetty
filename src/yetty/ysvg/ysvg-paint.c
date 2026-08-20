@@ -25,7 +25,7 @@
 #include "ysvg-internal.h"
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
@@ -992,7 +992,7 @@ static int node_user_bounds(const struct yetty_ysvg_node *n, float *out_x0, floa
  * resolver (browser: href resolved against the document base, fetched
  * through the loader, decoded there). The placement rect maps through
  * the CTM like <rect>; rotation/skew degrade to the axis-aligned frame
- * (composite records carry an axis-aligned bounds box). */
+ * (complex records carry an axis-aligned bounds box). */
 static struct yetty_ycore_void_result emit_image(struct ysvg_paint_state *ps,
                                                  const struct yetty_ysvg_node *n)
 {
@@ -1031,7 +1031,7 @@ static struct yetty_ycore_void_result emit_image(struct ysvg_paint_state *ps,
         return YETTY_OK_VOID();
     }
 
-    /* Map the placement rect corners through the CTM; the composite
+    /* Map the placement rect corners through the CTM; the complex
 	 * bounds are the axis-aligned frame of the result. */
     float corner_x0, corner_y0, corner_x1, corner_y1;
     yetty_ysvg_xform_point(&ps->ctm, x, y, &corner_x0, &corner_y0);

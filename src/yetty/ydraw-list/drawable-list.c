@@ -11,10 +11,10 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ydraw-core/font-resource.h>
-#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-list.h>
+#include <yetty/ydraw-list/font-resource.h>
+#include <yetty/ydraw-list/text-drawable-list.h>
 #include <yetty/ycore/util.h>
 #include <yetty/ytrace/ytrace.h>
 

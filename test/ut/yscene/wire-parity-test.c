@@ -3,7 +3,7 @@
  * suite onto the yscene figure: nested CMD_GROUP trees, the multi-group
  * delta pattern (the browser progressive-image shape), the figure
  * dirty / reset_content lifecycle, malformed-body recovery + dump
- * stability, and the composite-instance lifecycle (mint under a node,
+ * stability, and the complex-instance lifecycle (mint under a node,
  * CMD_DELETE destroys, re-open replaces without duplicating, CMD_UPDATE
  * routes to the live instance).
  *
@@ -23,9 +23,9 @@
 #include <yetty/api/yfigure/figure.h>
 #include <yetty/api/yscene/scene.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-list.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -318,14 +318,14 @@ static void test_dump_stable(struct ytest *test)
 }
 
 /*===========================================================================
- * Stub composite factory — a headless concrete factory whose instances
+ * Stub complex factory — a headless concrete factory whose instances
  * are plain calloc'd structs (no GPU, no pipeline). Counters live on the
  * factory wrapper, reached through the instance's factory back-pointer.
  *=========================================================================*/
 
-#define STUB_COMPOSITE_TYPE_ID 0x80000042u
+#define STUB_COMPLEX_TYPE_ID 0x80000042u
 
-struct stub_composite_factory {
+struct stub_complex_factory {
     struct yetty_ydraw_concrete_factory base; /* must stay first: cast target */
     int instances_destroyed;
     int updates_received;
@@ -333,19 +333,19 @@ struct stub_composite_factory {
     uint32_t last_update_body_len;
 };
 
-static void stub_instance_destroy(struct yetty_ydraw_composite *self)
+static void stub_instance_destroy(struct yetty_ydraw_complex *self)
 {
-    struct stub_composite_factory *wrapper = (struct stub_composite_factory *)self->factory;
+    struct stub_complex_factory *wrapper = (struct stub_complex_factory *)self->factory;
     wrapper->instances_destroyed++;
     free(self->buffer_data);
     free(self);
 }
 
-static struct yetty_ycore_void_result stub_instance_update(struct yetty_ydraw_composite *self,
+static struct yetty_ycore_void_result stub_instance_update(struct yetty_ydraw_complex *self,
                                                            uint32_t target_field, const void *body,
                                                            size_t body_size)
 {
-    struct stub_composite_factory *wrapper = (struct stub_composite_factory *)self->factory;
+    struct stub_complex_factory *wrapper = (struct stub_complex_factory *)self->factory;
     (void)body;
     wrapper->updates_received++;
     wrapper->last_update_field = target_field;
@@ -353,9 +353,9 @@ static struct yetty_ycore_void_result stub_instance_update(struct yetty_ydraw_co
     return YETTY_OK_VOID();
 }
 
-static const struct yetty_ydraw_composite_ops *stub_instance_ops(void)
+static const struct yetty_ydraw_complex_ops *stub_instance_ops(void)
 {
-    static const struct yetty_ydraw_composite_ops ops = {
+    static const struct yetty_ydraw_complex_ops ops = {
         .destroy = stub_instance_destroy,
         .update = stub_instance_update,
     };
@@ -374,22 +374,22 @@ static struct yetty_ycore_void_result stub_compile_pipeline(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ydraw_composite_ptr_result stub_create_instance(
+static struct yetty_ydraw_complex_ptr_result stub_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    struct yetty_ydraw_composite *instance = calloc(1, sizeof(struct yetty_ydraw_composite));
+    struct yetty_ydraw_complex *instance = calloc(1, sizeof(struct yetty_ydraw_complex));
     if (!instance) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "stub_create_instance: oom");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "stub_create_instance: oom");
     }
     instance->ops = stub_instance_ops();
-    instance->type = STUB_COMPOSITE_TYPE_ID;
+    instance->type = STUB_COMPLEX_TYPE_ID;
     instance->factory = self;
     instance->rolling_row = rolling_row;
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {
         free(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "stub_create_instance: buffer oom");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "stub_create_instance: buffer oom");
     }
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
@@ -400,7 +400,7 @@ static struct yetty_ydraw_composite_ptr_result stub_create_instance(
     instance->bounds.min.y = bounds[1];
     instance->bounds.max.x = bounds[0] + bounds[2];
     instance->bounds.max.y = bounds[1] + bounds[3];
-    return YETTY_OK(yetty_ydraw_composite_ptr, instance);
+    return YETTY_OK(yetty_ydraw_complex_ptr, instance);
 }
 
 static void stub_factory_destroy(struct yetty_ydraw_concrete_factory *self)
@@ -410,31 +410,30 @@ static void stub_factory_destroy(struct yetty_ydraw_concrete_factory *self)
 
 /* Abstract factory with the stub registered. The wrapper is owned by the
  * abstract factory (registration transfers ownership); read the counters
- * BEFORE yetty_ydraw_composite_factory_destroy. */
-static struct yetty_ydraw_composite_factory *make_stub_composite_factory(
-    struct ytest *test, struct stub_composite_factory **out_wrapper)
+ * BEFORE yetty_ydraw_complex_factory_destroy. */
+static struct yetty_ydraw_complex_factory *make_stub_complex_factory(
+    struct ytest *test, struct stub_complex_factory **out_wrapper)
 {
-    struct yetty_ydraw_composite_factory_ptr_result factory_res =
-        yetty_ydraw_composite_factory_create(NULL, NULL, (WGPUTextureFormat)0, NULL, NULL);
+    struct yetty_ydraw_complex_factory_ptr_result factory_res =
+        yetty_ydraw_complex_factory_create(NULL, NULL, (WGPUTextureFormat)0, NULL, NULL);
     YTEST_REQUIRE_OK(test, factory_res);
-    struct stub_composite_factory *wrapper = calloc(1, sizeof(struct stub_composite_factory));
+    struct stub_complex_factory *wrapper = calloc(1, sizeof(struct stub_complex_factory));
     YTEST_REQUIRE_NOT_NULL(test, wrapper);
-    wrapper->base.type_id = STUB_COMPOSITE_TYPE_ID;
+    wrapper->base.type_id = STUB_COMPLEX_TYPE_ID;
     wrapper->base.destroy = stub_factory_destroy;
     wrapper->base.compile_pipeline = stub_compile_pipeline;
     wrapper->base.create_instance = stub_create_instance;
-    YTEST_REQUIRE_OK(test,
-                     yetty_ydraw_composite_factory_register(factory_res.value, &wrapper->base));
+    YTEST_REQUIRE_OK(test, yetty_ydraw_complex_factory_register(factory_res.value, &wrapper->base));
     *out_wrapper = wrapper;
     return factory_res.value;
 }
 
-/* Append a stub composite record: [type][payload_size=16][x][y][w][h]. */
-static void add_stub_composite(struct ytest *test, struct yetty_ydraw_drawable_list *list, float x,
-                               float y, float w, float h)
+/* Append a stub complex record: [type][payload_size=16][x][y][w][h]. */
+static void add_stub_complex(struct ytest *test, struct yetty_ydraw_drawable_list *list, float x,
+                             float y, float w, float h)
 {
     uint32_t record[6];
-    record[0] = STUB_COMPOSITE_TYPE_ID;
+    record[0] = STUB_COMPLEX_TYPE_ID;
     record[1] = 16u;
     memcpy(&record[2], &x, sizeof(float));
     memcpy(&record[3], &y, sizeof(float));
@@ -446,21 +445,21 @@ static void add_stub_composite(struct ytest *test, struct yetty_ydraw_drawable_l
 }
 
 /*===========================================================================
- * Composite minted under a node dies with the node's CMD_DELETE — no
+ * Complex minted under a node dies with the node's CMD_DELETE — no
  * ghost, no leak (the staging sweep reaps instances whose span left the
  * committed scene).
  *=========================================================================*/
-static void test_composite_delete_destroys_instance(struct ytest *test)
+static void test_complex_delete_destroys_instance(struct ytest *test)
 {
-    struct stub_composite_factory *stub = NULL;
-    struct yetty_ydraw_composite_factory *factory = make_stub_composite_factory(test, &stub);
+    struct stub_complex_factory *stub = NULL;
+    struct yetty_ydraw_complex_factory *factory = make_stub_complex_factory(test, &stub);
     struct yetty_yclass_object *obj = make_scene(test);
-    YTEST_REQUIRE_OK(test, yetty_yscene_set_composite_factory(obj, factory));
+    YTEST_REQUIRE_OK(test, yetty_yscene_set_complex_factory(obj, factory));
 
     struct yetty_ydraw_drawable_list *list = make_list(test);
     struct yetty_ydraw_id_result group_res = yetty_ydraw_drawable_list_begin_group(list, 7u);
     YTEST_REQUIRE_OK(test, group_res);
-    add_stub_composite(test, list, 20, 30, 32, 16);
+    add_stub_complex(test, list, 20, 30, 32, 16);
     YTEST_REQUIRE_OK(test, yetty_ydraw_drawable_list_end_group(list, group_res.value));
     feed(test, obj, list);
     yetty_ydraw_drawable_list_destroy(list);
@@ -477,25 +476,25 @@ static void test_composite_delete_destroys_instance(struct ytest *test)
     YTEST_CHECK(test, stub->instances_destroyed == 1);
 
     destroy_scene(obj);
-    yetty_ydraw_composite_factory_destroy(factory);
+    yetty_ydraw_complex_factory_destroy(factory);
 }
 
 /*===========================================================================
- * Re-opening the CMD_GROUP of a node that owns a composite replaces the
+ * Re-opening the CMD_GROUP of a node that owns a complex replaces the
  * instance instead of stacking a duplicate.
  *=========================================================================*/
-static void test_composite_reopen_no_duplicate(struct ytest *test)
+static void test_complex_reopen_no_duplicate(struct ytest *test)
 {
-    struct stub_composite_factory *stub = NULL;
-    struct yetty_ydraw_composite_factory *factory = make_stub_composite_factory(test, &stub);
+    struct stub_complex_factory *stub = NULL;
+    struct yetty_ydraw_complex_factory *factory = make_stub_complex_factory(test, &stub);
     struct yetty_yclass_object *obj = make_scene(test);
-    YTEST_REQUIRE_OK(test, yetty_yscene_set_composite_factory(obj, factory));
+    YTEST_REQUIRE_OK(test, yetty_yscene_set_complex_factory(obj, factory));
 
     for (int round = 0; round < 2; round++) {
         struct yetty_ydraw_drawable_list *list = make_list(test);
         struct yetty_ydraw_id_result group_res = yetty_ydraw_drawable_list_begin_group(list, 5u);
         YTEST_REQUIRE_OK(test, group_res);
-        add_stub_composite(test, list, 0, 0, 10, 10);
+        add_stub_complex(test, list, 0, 0, 10, 10);
         YTEST_REQUIRE_OK(test, yetty_ydraw_drawable_list_end_group(list, group_res.value));
         feed(test, obj, list);
         yetty_ydraw_drawable_list_destroy(list);
@@ -508,22 +507,22 @@ static void test_composite_reopen_no_duplicate(struct ytest *test)
     YTEST_CHECK(test, leaf_count(test, obj) == 1);
 
     destroy_scene(obj);
-    yetty_ydraw_composite_factory_destroy(factory);
+    yetty_ydraw_complex_factory_destroy(factory);
 }
 
 /*===========================================================================
- * CMD_UPDATE in a later body routes to the live composite through its
+ * CMD_UPDATE in a later body routes to the live complex through its
  * per-body producer ordinal (1-based), carrying target_field + body.
  *=========================================================================*/
-static void test_composite_cmd_update_routes(struct ytest *test)
+static void test_complex_cmd_update_routes(struct ytest *test)
 {
-    struct stub_composite_factory *stub = NULL;
-    struct yetty_ydraw_composite_factory *factory = make_stub_composite_factory(test, &stub);
+    struct stub_complex_factory *stub = NULL;
+    struct yetty_ydraw_complex_factory *factory = make_stub_complex_factory(test, &stub);
     struct yetty_yclass_object *obj = make_scene(test);
-    YTEST_REQUIRE_OK(test, yetty_yscene_set_composite_factory(obj, factory));
+    YTEST_REQUIRE_OK(test, yetty_yscene_set_complex_factory(obj, factory));
 
     struct yetty_ydraw_drawable_list *list = make_list(test);
-    add_stub_composite(test, list, 0, 0, 10, 10); /* root scope, ordinal 1 */
+    add_stub_complex(test, list, 0, 0, 10, 10); /* root scope, ordinal 1 */
     feed(test, obj, list);
     yetty_ydraw_drawable_list_destroy(list);
 
@@ -539,7 +538,7 @@ static void test_composite_cmd_update_routes(struct ytest *test)
     YTEST_CHECK(test, stub->last_update_body_len == 8u);
 
     destroy_scene(obj);
-    yetty_ydraw_composite_factory_destroy(factory);
+    yetty_ydraw_complex_factory_destroy(factory);
 }
 
 int main(void)
@@ -550,8 +549,8 @@ int main(void)
     YTEST_RUN(&test, test_dirty_lifecycle);
     YTEST_RUN(&test, test_malformed_then_recover);
     YTEST_RUN(&test, test_dump_stable);
-    YTEST_RUN(&test, test_composite_delete_destroys_instance);
-    YTEST_RUN(&test, test_composite_reopen_no_duplicate);
-    YTEST_RUN(&test, test_composite_cmd_update_routes);
+    YTEST_RUN(&test, test_complex_delete_destroys_instance);
+    YTEST_RUN(&test, test_complex_reopen_no_duplicate);
+    YTEST_RUN(&test, test_complex_cmd_update_routes);
     return ytest_end(&test);
 }

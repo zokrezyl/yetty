@@ -16,7 +16,7 @@
 #include <yetty/ydiagram/mermaid-parser.h>
 #include <yetty/ydiagram/renderer.h>
 #include <yetty/ydiagram/ydiagram.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #include "ytest.h"
 

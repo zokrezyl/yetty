@@ -2,7 +2,7 @@
 #define YETTY_YVIDEO_YVIDEO_H
 
 /*
- * yvideo — high-level API for producing a yvideo composite from
+ * yvideo — high-level API for producing a yvideo complex from
  * a raw H.264 Annex-B byte stream.
  *
  * Pipeline:
@@ -26,7 +26,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yvideo/yvideo-gen.h>
 
 #ifdef __cplusplus

@@ -4,7 +4,7 @@
 Sugiyama layered layout, and renders SDF shapes plus MSDF text spans into a
 ydraw drawable list — the same way [`ychart`](../ychart/README.md) turns
 tabular data into one. Pure C; depends only on `ycore`,
-[`ydraw-core`](../ydraw-core/README.md), and [`ysdf`](../ysdf/README.md).
+[`ydraw-list`](../ydraw-list/README.md), and [`ysdf`](../ysdf/README.md).
 
 ## Diagram families
 

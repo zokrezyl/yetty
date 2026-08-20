@@ -26,8 +26,8 @@ YETTY_YRESULT_DECLARE(yetty_ygui_yimage_ptr, struct yetty_ygui_yimage *);
 struct yetty_yclass_ptr_result yetty_ygui_yimage_class_get(void);
 struct yetty_ygui_yimage_ptr_result yetty_ygui_yimage_from(struct yetty_yclass_object *obj);
 
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yfigure/kind.h>
 #include <yetty/yimage/yimage.h>
 #include <stdlib.h>
@@ -160,7 +160,7 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_objec
                              "yimage_emit_body: rendered drawable_list exceeds wire u32 length");
         }
         /* Receiver-side YIMAGE figure is a ygrid whose process_bytes
-         * APPENDS composite instances on every body — without a
+         * APPENDS complex instances on every body — without a
          * CMD_ZERO prefix every emit stacks a fresh 800x800 yimage
          * texture on top of the previous one, exhausting GPU memory
          * and leaving stale instances drawn underneath the current

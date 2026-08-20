@@ -24,7 +24,7 @@ target_include_directories(yperf PRIVATE
 
 find_package(Threads REQUIRED)
 
-# yetty_ygui pulls in ydraw-core, ysdf, ycore, yface, yfont, yfigure, yplot,
+# yetty_ygui pulls in ydraw-list, ysdf, ycore, yface, yfont, yfigure, yplot,
 # yplatform_core transitively; yetty_yflame provides the flame-graph class;
 # uv_a for the client loop.
 target_link_libraries(yperf PRIVATE yetty_ygui yetty_yflame uv_a Threads::Threads)

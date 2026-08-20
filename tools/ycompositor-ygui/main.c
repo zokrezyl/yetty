@@ -781,10 +781,10 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
     struct yetty_yfigure_registry_ptr_result reg_r = yetty_yfigure_registry_create();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reg_r, "yfigure_registry_create failed");
     app->registry = reg_r.value;
-    /* Bundle the font into the factory-args struct; no composite
+    /* Bundle the font into the factory-args struct; no complex
      * factory at this layer — tool is a minimal POC. */
     app->figure_args.default_font = app->font;
-    app->figure_args.composite_factory = NULL;
+    app->figure_args.complex_factory = NULL;
     /* The legacy "ygrid" kind token renders through yscene. Absolute
      * (logical-pane) coordinates — the mode the ygrid factory forced. */
     app->figure_args.absolute_coords = 1;

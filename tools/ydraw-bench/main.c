@@ -13,7 +13,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/yterminal/dcs-codes.h> /* YETTY_DCS_YDRAW_BIN */
 
-// Composite type for yplot
+// Complex type for yplot
 #define YETTY_YDRAW_TYPE_YPLOT 0x80000003u
 
 // yfsvm constants

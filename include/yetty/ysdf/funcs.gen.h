@@ -4,7 +4,7 @@
 #pragma once
 
 #include "types.gen.h"
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ycore/result.h>
 
 #ifdef __cplusplus

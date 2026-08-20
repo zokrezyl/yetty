@@ -5,7 +5,7 @@
 #                   registry, view state, pan/zoom verbs, render dispatch.
 #                   map.gen.c + map.h are codegen output;
 #                   model.yaml drives the FFI / host-language bindings.
-#   engine.c        raster path: parallel tile fetch → RGBA composite →
+#   engine.c        raster path: parallel tile fetch → RGBA complex →
 #                   one yimage prim. Plus the slippy projection helpers.
 #   vector-render.c vector path: shortbread MVT → SDF/MSDF drawables
 #                   (cased roads, fills, decluttered labels).

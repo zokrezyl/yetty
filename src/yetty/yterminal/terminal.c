@@ -34,12 +34,12 @@
 #include <yetty/ywire/connection.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplatform/ycoroutine.h>
-#include <yetty/ydraw-factory/composite-factory.h>
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/composite.h>
-#include <yetty/ydraw-core/drawable-iterator.h>
-#include <yetty/ydraw-core/drawable-list-registry.h>
-#include <yetty/ydraw-core/font-resource.h>
+#include <yetty/ydraw-factory/complex-factory.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/complex.h>
+#include <yetty/ydraw-list/drawable-iterator.h>
+#include <yetty/ydraw-list/drawable-list-registry.h>
+#include <yetty/ydraw-list/font-resource.h>
 #include <yetty/api/yscene/scene.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
@@ -51,7 +51,7 @@
 #include <yetty/yvideo/yvideo-gen.h>
 #endif
 #if defined(YETTY_HAS_YSIXEL) && YETTY_HAS_YSIXEL
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysixel/sixel.h>
 #endif
 #include <yetty/yterminal/terminal.h>
@@ -298,14 +298,14 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
      * One instance per terminal — every scene the root container mints
      * borrows the same pointer via the factory args (below) so they all
      * share the same per-type pipeline cache. */
-    struct yetty_ydraw_composite_factory *composite_factory;
+    struct yetty_ydraw_complex_factory *complex_factory;
 
     /* Drawable-list registry for parsing inbound YDRAW_BIN record streams into
      * the content grid's anchored rich model. Borrowed from the framework's
      * shared instance (runtime->drawable_registry) — never owned. */
     struct yetty_ydraw_drawable_list_registry *ydraw_registry;
 
-    /* CMD_UPDATE routing for scrollback figures: each envelope's composites
+    /* CMD_UPDATE routing for scrollback figures: each envelope's complexes
      * register here under their ordinal (1, 2, ...) so a producer's later
      * update envelopes (live plot samples, chunked video NALs) reach the
      * instance. Instances unregister themselves on destroy. */
@@ -699,23 +699,23 @@ static struct yetty_ycore_void_result terminal_clear_figures_callback(void *user
 }
 
 /* Figure re-materialization hook: replay a wire envelope retained on a grid
- * line through the composite factory — the same call that minted the figure
+ * line through the complex factory — the same call that minted the figure
  * when the envelope first arrived over the PTY. The grid invokes this when an
  * evicted history line (past the scrollback hot window) scrolls back into
  * view; the fresh instance's ownership transfers to the grid line. */
 static struct yetty_ycore_void_result terminal_materialize_figure_callback(
     const uint32_t *envelope_words, uint32_t envelope_word_count, void *userdata,
-    struct yetty_ydraw_composite **out_instance)
+    struct yetty_ydraw_complex **out_instance)
 {
     struct yetty_yterminal_terminal *terminal = userdata;
     *out_instance = NULL;
-    if (!terminal || !terminal->composite_factory || envelope_word_count == 0) {
+    if (!terminal || !terminal->complex_factory || envelope_word_count == 0) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ydraw_composite_ptr_result instance_res =
-        yetty_ydraw_composite_factory_create_instance(
-            terminal->composite_factory, envelope_words,
-            (size_t)envelope_word_count * sizeof(uint32_t), /*rolling_row=*/0u);
+    struct yetty_ydraw_complex_ptr_result instance_res =
+        yetty_ydraw_complex_factory_create_instance(terminal->complex_factory, envelope_words,
+                                                    (size_t)envelope_word_count * sizeof(uint32_t),
+                                                    /*rolling_row=*/0u);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, instance_res,
                         "terminal_materialize_figure: create_instance");
     *out_instance = instance_res.value;
@@ -1753,7 +1753,7 @@ static struct yetty_ycore_void_result terminal_content_rect_process_input(
 /* Shader-effect OSC codes (mirror the poc protocol):
  *   ESC ] 66666{7,8,9} ; INDEX:P0:P1:P2:P3:P4:P5 BEL
  * 666667 = pre-effect (glyph, not yet applied), 666668 = post-color effect,
- * 666669 = coordinate distortion (composite pass). INDEX 0 disables the class. */
+ * 666669 = coordinate distortion (complex pass). INDEX 0 disables the class. */
 enum {
     YETTY_OSC_CS_EFFECT_PRE = 666667,
     YETTY_OSC_CS_EFFECT_POST = 666668,
@@ -1842,18 +1842,18 @@ struct terminal_ydraw_ingest_state {
     /* Bottom extent of this envelope's drawn content (px, envelope-local,
      * from the insert row's top). After ingestion the cursor is advanced
      * past it so the next envelope's content (the next plot, the next PDF
-     * page, …) lands below instead of on top. Covers composites, SDF prims,
+     * page, …) lands below instead of on top. Covers complexes, SDF prims,
      * and text alike — ycat ships one envelope per PDF page with y=0
      * origin, so without this the pages would all stack at the same row. */
     float content_bottom_px;
     uint32_t ingested_records;
-    uint32_t ingested_composites;
+    uint32_t ingested_complexes;
 };
 
 /* Anchor rich content on the cursor's current visible line in yvterm's OWN
- * grid. The grid owns a primitive/composite list per line on its scroll
+ * grid. The grid owns a primitive/complex list per line on its scroll
  * ring, so whatever sits at that line scrolls with the text for free — no
- * separate figure, no rolling-row bookkeeping. Composites render via vterm's
+ * separate figure, no rolling-row bookkeeping. Complexes render via vterm's
  * rich pass; raw SDF / text records are stored on the line for the SDF pass. */
 static struct yetty_ycore_void_result terminal_ydraw_ingest_begin(
     struct yetty_yterminal_terminal *terminal, struct terminal_ydraw_ingest_state *state)
@@ -1869,7 +1869,7 @@ static struct yetty_ycore_void_result terminal_ydraw_ingest_begin(
     return YETTY_OK_VOID();
 }
 
-/* Place one ADD record (composite or raw SDF/text/font) on the anchor line.
+/* Place one ADD record (complex or raw SDF/text/font) on the anchor line.
  * Per-record failures are absorbed (skip the record, keep the envelope). */
 static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *terminal,
                                          struct terminal_ydraw_ingest_state *state,
@@ -1879,14 +1879,14 @@ static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *termin
     const uint32_t *data = entry->data;
     /* Track the content's bottom for the space-reservation pass in finish.
      * The FONT resource record ships glyph bytes, not drawn geometry, so it
-     * has no meaningful extent — skip it. Composites carry their bounds at a
+     * has no meaningful extent — skip it. Complexes carry their bounds at a
      * fixed payload offset; SDF / text records expose them via the entry
      * ops aabb. */
     if (data[0] != YETTY_YDRAW_RESOURCE_FONT) {
         struct rectangle_result aabb;
         int have_aabb = 0;
-        if (yetty_ydraw_is_composite(data[0])) {
-            aabb = yetty_ydraw_composite_record_aabb(data);
+        if (yetty_ydraw_is_complex(data[0])) {
+            aabb = yetty_ydraw_complex_record_aabb(data);
             have_aabb = 1;
         } else if (entry->ops->aabb) {
             aabb = entry->ops->aabb(data);
@@ -1902,10 +1902,10 @@ static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *termin
             }
         }
     }
-    if (yetty_ydraw_is_composite(data[0]) && terminal->composite_factory) {
+    if (yetty_ydraw_is_complex(data[0]) && terminal->complex_factory) {
         /* Retain the creating wire envelope on the line FIRST (verbatim, in
          * the same arena the SDF records use — the SDF pass skips
-         * composite-type records). When the line ages past the scrollback
+         * complex-type records). When the line ages past the scrollback
          * hot window the figure runtime is destroyed and this envelope is
          * what re-materializes it on scroll-back. Best-effort: a figure
          * without a retained envelope still displays, it just cannot be
@@ -1917,22 +1917,22 @@ static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *termin
         }
         /* Mint the figure instance and hand it to the line; the grid owns it
          * and vterm's rich pass draws it at the line's pixel origin. */
-        struct yetty_ydraw_composite_ptr_result ir = yetty_ydraw_composite_factory_create_instance(
-            terminal->composite_factory, data, size, /*rolling_row=*/0u);
+        struct yetty_ydraw_complex_ptr_result ir = yetty_ydraw_complex_factory_create_instance(
+            terminal->complex_factory, data, size, /*rolling_row=*/0u);
         if (YETTY_IS_OK(ir)) {
             struct yetty_ycore_uint32_result at =
-                yetty_yvterm_vterm_attach_composite(terminal->grid, state->cursor_row, ir.value);
+                yetty_yvterm_vterm_attach_complex(terminal->grid, state->cursor_row, ir.value);
             if (YETTY_IS_ERR(at)) {
-                ydebug("ydraw ingest: attach_composite type=0x%08x FAILED: %s", data[0],
+                ydebug("ydraw ingest: attach_complex type=0x%08x FAILED: %s", data[0],
                        at.error.msg);
-                yetty_ydraw_composite_destroy(ir.value);
+                yetty_ydraw_complex_destroy(ir.value);
                 yetty_ycore_error_destroy(at.error);
             } else {
-                state->ingested_composites++;
+                state->ingested_complexes++;
                 /* Make the figure addressable by later update envelopes:
                  * ordinal within its creating envelope = stream id. */
                 yetty_ydraw_stream_registry_register(&terminal->stream_targets,
-                                                     state->ingested_composites, ir.value);
+                                                     state->ingested_complexes, ir.value);
             }
         } else {
             ydebug("ydraw ingest: create_instance type=0x%08x FAILED: %s", data[0], ir.error.msg);
@@ -1962,7 +1962,7 @@ static void terminal_ydraw_route_update(struct yetty_yterminal_terminal *termina
     if (update->size < sizeof(uint32_t)) {
         return; /* no target_field word — nothing to dispatch */
     }
-    struct yetty_ydraw_composite *target =
+    struct yetty_ydraw_complex *target =
         yetty_ydraw_stream_registry_find(&terminal->stream_targets, update->id);
     if (!target || !target->ops || !target->ops->update) {
         ydebug("ydraw ingest: CMD_UPDATE id=%u has no live updatable target", update->id);
@@ -1981,8 +1981,8 @@ static void terminal_ydraw_route_update(struct yetty_yterminal_terminal *termina
 static void terminal_ydraw_ingest_finish(struct yetty_yterminal_terminal *terminal,
                                          struct terminal_ydraw_ingest_state *state, int ok)
 {
-    ydebug("ydraw ingest: %u records (%u composites) bottom=%.0fpx ok=%d", state->ingested_records,
-           state->ingested_composites, state->content_bottom_px, ok);
+    ydebug("ydraw ingest: %u records (%u complexes) bottom=%.0fpx ok=%d", state->ingested_records,
+           state->ingested_complexes, state->content_bottom_px, ok);
 
     /* Reserve vertical space for this envelope's content by advancing the
      * libvterm cursor that many rows (newlines drive normal scrollback +
@@ -2007,7 +2007,7 @@ static void terminal_ydraw_ingest_finish(struct yetty_yterminal_terminal *termin
         }
     }
 
-    /* Re-home the just-ingested rich block (composites + SDF records, attached on
+    /* Re-home the just-ingested rich block (complexes + SDF records, attached on
      * the top line during ingestion) onto its BOTTOM line, so the figure leaves
      * the scrollback only when its lowest overlapping line is evicted — not its
      * first. After the reserve newlines the cursor sits on the line just below
@@ -2025,7 +2025,7 @@ static void terminal_ydraw_ingest_finish(struct yetty_yterminal_terminal *termin
 /* Ingest one YDRAW_BIN envelope into yvterm's own grid. Records are
  * streamed via the drawable iterator and anchored per line on the grid's
  * scroll ring — SDF shapes, text-drawable-lists (with wire-shipped
- * fonts), and composite figures alike; whatever sits on a line scrolls
+ * fonts), and complex figures alike; whatever sits on a line scrolls
  * with the text for free. ycat/ypdf/markdown all flow through here. */
 static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
     struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
@@ -2847,18 +2847,18 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
      * concrete factory (yplot_factory_create etc.) builds its own
      * pipeline lazily on the first create_instance call. */
     {
-        struct yetty_ydraw_composite_factory_ptr_result ffr = yetty_ydraw_composite_factory_create(
+        struct yetty_ydraw_complex_factory_ptr_result ffr = yetty_ydraw_complex_factory_create(
             yetty_context->runtime->gpu.device, yetty_context->runtime->gpu.queue,
             yetty_context->runtime->gpu.surface_format, yetty_context->runtime->gpu.allocator,
             yetty_context->event_loop);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, ffr,
-                            "terminal_create: raw_composite_factory create");
-        terminal->composite_factory = ffr.value;
+                            "terminal_create: raw_complex_factory create");
+        terminal->complex_factory = ffr.value;
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             yplot_f->destroy = yetty_yplot_factory_destroy;
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(terminal->composite_factory, yplot_f);
+                yetty_ydraw_complex_factory_register(terminal->complex_factory, yplot_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
                 yetty_yplot_factory_destroy(yplot_f);
@@ -2868,7 +2868,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
         if (yimage_f) {
             yimage_f->destroy = yetty_yimage_factory_destroy;
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(terminal->composite_factory, yimage_f);
+                yetty_ydraw_complex_factory_register(terminal->complex_factory, yimage_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
                 yetty_yimage_factory_destroy(yimage_f);
@@ -2878,7 +2878,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
         if (yshadertoy_f) {
             yshadertoy_f->destroy = yetty_yshadertoy_prim_factory_destroy;
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(terminal->composite_factory, yshadertoy_f);
+                yetty_ydraw_complex_factory_register(terminal->complex_factory, yshadertoy_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
                 yetty_yshadertoy_prim_factory_destroy(yshadertoy_f);
@@ -2889,7 +2889,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
         if (ymesh_f) {
             ymesh_f->destroy = yetty_ymesh_factory_destroy;
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(terminal->composite_factory, ymesh_f);
+                yetty_ydraw_complex_factory_register(terminal->complex_factory, ymesh_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
                 yetty_ymesh_factory_destroy(ymesh_f);
@@ -2901,7 +2901,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
         if (yvideo_f) {
             yvideo_f->destroy = yetty_yvideo_factory_destroy;
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(terminal->composite_factory, yvideo_f);
+                yetty_ydraw_complex_factory_register(terminal->complex_factory, yvideo_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
                 yetty_yvideo_factory_destroy(yvideo_f);
@@ -2913,7 +2913,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     /* Drawable-list registry for ingesting inbound YDRAW_BIN record streams —
      * borrowed from the framework's shared instance (immutable after
      * framework create), so the iterator can step SDF primitives,
-     * cmd/font/text-list records, and composite records alike. */
+     * cmd/font/text-list records, and complex records alike. */
     terminal->ydraw_registry = terminal->context.yetty_context.runtime->drawable_registry;
     if (!terminal->ydraw_registry) {
         return YETTY_ERR(yetty_yterminal_terminal,
@@ -2921,7 +2921,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     }
 
     terminal->figure_args.default_font = terminal->compositor_font;
-    terminal->figure_args.composite_factory = terminal->composite_factory;
+    terminal->figure_args.complex_factory = terminal->complex_factory;
 
     struct yetty_yfigure_registry_ptr_result reg_res = yetty_yfigure_registry_create();
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_res,
@@ -2942,13 +2942,13 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
          * via set_child_scroll (content = set_content_size so records past
          * the viewport are NOT clipped). ychromium's web page and every
          * ygui producer widget (plot / image / video content, shipped as
-         * composite records in the child body) mint this kind. The default
+         * complex records in the child body) mint this kind. The default
          * "ygrid" kind is absolute (chrome/widgets) and cannot scroll
          * content taller than its rect.
          *
          * The old "yplot"/"yimage"/"yvideo"/"yzoo"/"yjungle" alias kinds
          * are RETIRED — nothing mints them. */
-        terminal->yscene_factory_args.composite_factory = terminal->composite_factory;
+        terminal->yscene_factory_args.complex_factory = terminal->complex_factory;
         terminal->yscene_factory_args.default_font = terminal->compositor_font;
         struct yetty_ycore_void_result kr = yetty_yscene_register_factory_for_kind(
             terminal->figure_registry, yetty_yfigure_kind_token("yscroll"),
@@ -3035,7 +3035,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     }
 
     /* Rich content (ycat/ypdf/markdown/plots) is owned by yvterm's own grid —
-     * composites + raw SDF/text records are anchored per line on its scroll ring
+     * complexes + raw SDF/text records are anchored per line on its scroll ring
      * and drawn by vterm's render. No separate figure surface. */
 
     /* On a full-screen erase / reset (CSI 2J/3J or RIS — e.g. `clear`, Ctrl-L,
@@ -3050,7 +3050,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     /* Figure re-materialization for the tiered scroll buffer: lines aging past
      * the scrollback hot window lose their figure runtimes but keep the
      * creating wire envelopes; this hook replays an envelope through the
-     * composite factory when such a line scrolls back into view. */
+     * complex factory when such a line scrolls back into view. */
     struct yetty_ycore_void_result materialize_res = yetty_yvterm_vterm_set_materialize(
         terminal->grid, terminal_materialize_figure_callback, terminal);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, materialize_res,
@@ -3309,12 +3309,12 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
         }
         terminal->figure_registry = NULL;
     }
-    /* The composite factory outlives the registry — every scene the
+    /* The complex factory outlives the registry — every scene the
      * registry minted borrowed our factory pointer, and they must be
      * gone (via root_container destroy above) before we tear it down. */
-    if (terminal->composite_factory) {
-        yetty_ydraw_composite_factory_destroy(terminal->composite_factory);
-        terminal->composite_factory = NULL;
+    if (terminal->complex_factory) {
+        yetty_ydraw_complex_factory_destroy(terminal->complex_factory);
+        terminal->complex_factory = NULL;
     }
     /* ydraw_registry is borrowed from the framework — not ours to destroy. */
     terminal->ydraw_registry = NULL;

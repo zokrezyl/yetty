@@ -34,7 +34,7 @@ target_include_directories(ytop PRIVATE
 
 find_package(Threads REQUIRED)
 
-# yetty_ygui pulls in ydraw-core, ysdf, ycore, yface, yfont, yfigure, yplot,
+# yetty_ygui pulls in ydraw-list, ysdf, ycore, yface, yfont, yfigure, yplot,
 # yplatform_core, etc. as transitive PUBLIC deps. The new yetty_ygui is a pure
 # widget framework (no libuv of its own) and ytop drives its own libuv client
 # loop, so libuv (uv_a) is listed explicitly.

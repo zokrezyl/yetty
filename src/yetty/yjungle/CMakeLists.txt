@@ -8,7 +8,7 @@ target_include_directories(yetty_yjungle PUBLIC
 )
 
 target_link_libraries(yetty_yjungle PUBLIC
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ysdf
 )
 

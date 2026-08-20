@@ -5,7 +5,7 @@
 yetty_add_c_test(
     NAME    ymsoffice_golden
     SOURCES ymsoffice-test.c
-    LIBS    yetty_ymsoffice yetty_ydraw_core yetty_ysdf yetty_ycore
+    LIBS    yetty_ymsoffice yetty_ydraw_list yetty_ysdf yetty_ycore
     SHIMS   trace platform_thread platform_term
     LABELS  golden
     TIMEOUT 30)

@@ -12,7 +12,7 @@ optional library.
 
 **Status:** functional MVP. Text, rectangles, discs, lines, arcs,
 polygons, and flattened paths render; the bitmap plotter is a placeholder
-filled box (a real implementation needs a yimage composite upload). One
+filled box (a real implementation needs a yimage complex upload). One
 instance per process: NetSurf's table registration is process-wide, so
 the module keeps a singleton (`yetty_ynetsurf_singleton`) — a documented
 exception forced by the NetSurf API.

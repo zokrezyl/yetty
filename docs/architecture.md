@@ -77,12 +77,12 @@ The full startup/ownership chain and context structs are in
 | `yrender` | GPU pipeline: resource-set binder, allocator, pipeline, render targets, blender ([yrender](../src/yetty/yrender/README.md), [GPU binding](gpu-resource-binding.md)) | ✓ |
 | `yrender-utils` | Screenshot, tile-diff helpers | ✓ |
 | `ydraw` | Canvas + rolling-row scrolling primitive model ([ydraw](../src/yetty/ydraw/README.md)) | ✓ |
-| `ydraw-core` | Serialized primitive buffer, draw list, drawable-list registry | ✓ |
-| `ydraw-factory` | Figure factory for composites | ✓ |
+| `ydraw-list` | Serialized primitive buffer, draw list, drawable-list registry | ✓ |
+| `ydraw-factory` | Figure factory for complexes | ✓ |
 | `ydraw-yaml` | YAML-driven figure construction | ✓ |
-| `ydraw-gen` | Schema-driven composite generator (`generate.py`; run manually) | ◐ |
+| `ydraw-gen` | Schema-driven complex generator (`generate.py`; run manually) | ◐ |
 | `yfigure` | Figure/container model — the compositor that hosts rich content | ✓ |
-| `yscene` | Figure: retained scene graph — SDF primitives, glyphs, composites | ✓ |
+| `yscene` | Figure: retained scene graph — SDF primitives, glyphs, complexes | ✓ |
 | `yshaders` | WGSL asset staging (effects-lib + collected module shaders; legacy reference content) | ◐ |
 | `ysdf` | SDF primitive handler (shape parse + construction) | ✓ |
 | `ywebgpu` | WebGPU request/limits/utils glue ([webgpu](webgpu.md)) | ✓ |
@@ -123,7 +123,7 @@ The full startup/ownership chain and context structs are in
 | `ylottie` | Lottie (Bodymovin subset) frame → ydraw buffer | ✓ |
 | `ymap` | Slippy-map renderer: `ymap:map` class + XYZ tile engine | ✓ |
 | `ymusic` | LilyPond-subset music engraving → ydraw (single staff) | ◐ |
-| `yshadertoy` | Shadertoy-style shader figure + composite primitive | ✓ |
+| `yshadertoy` | Shadertoy-style shader figure + complex primitive | ✓ |
 | `ymaze`, `yjungle`, `yzoo` | Animated test scenes (maze solver, SDF jungle, control-point zoo) | ◐ |
 
 ## Web rendering

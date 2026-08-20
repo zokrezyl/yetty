@@ -132,10 +132,10 @@ def grid_append_primitive(obj: Any, row: int, words: Any, word_count: int) -> _r
     res = _fn(_rt.handle(obj), row, _rt.handle(words), word_count)
     return _rt.result_from_c(res)
 
-def grid_attach_composite(obj: Any, row: int, composite: Any) -> _rt.Result[int]:
-    """Call `yetty_yvterm_grid_attach_composite`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_attach_composite", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_void_p])
-    res = _fn(_rt.handle(obj), row, _rt.handle(composite))
+def grid_attach_complex(obj: Any, row: int, complex: Any) -> _rt.Result[int]:
+    """Call `yetty_yvterm_grid_attach_complex`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_attach_complex", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_void_p])
+    res = _fn(_rt.handle(obj), row, _rt.handle(complex))
     return _rt.result_from_c(res)
 
 def grid_relocate_rich_to_bottom(obj: Any, span_rows: int) -> _rt.Result[None]:
@@ -210,15 +210,15 @@ def grid_line_dirty(obj: Any, row: int) -> _rt.Result[int]:
     res = _fn(_rt.handle(obj), row)
     return _rt.result_from_c(res)
 
-def grid_line_composites(obj: Any, row: int, out_count: Any) -> _rt.Result[Any]:
-    """Call `yetty_yvterm_grid_line_composites`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_line_composites", _t.yetty_ydraw_composite_const_ptr_ptr_result, [c_void_p, c_uint32, c_void_p])
+def grid_line_complexes(obj: Any, row: int, out_count: Any) -> _rt.Result[Any]:
+    """Call `yetty_yvterm_grid_line_complexes`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_line_complexes", _t.yetty_ydraw_complex_const_ptr_ptr_result, [c_void_p, c_uint32, c_void_p])
     res = _fn(_rt.handle(obj), row, _rt.handle(out_count))
     return _rt.result_from_c(res)
 
-def grid_slot_composites(obj: Any, slot: int, out_count: Any) -> _rt.Result[Any]:
-    """Call `yetty_yvterm_grid_slot_composites`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_slot_composites", _t.yetty_ydraw_composite_const_ptr_ptr_result, [c_void_p, c_uint32, c_void_p])
+def grid_slot_complexes(obj: Any, slot: int, out_count: Any) -> _rt.Result[Any]:
+    """Call `yetty_yvterm_grid_slot_complexes`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_slot_complexes", _t.yetty_ydraw_complex_const_ptr_ptr_result, [c_void_p, c_uint32, c_void_p])
     res = _fn(_rt.handle(obj), slot, _rt.handle(out_count))
     return _rt.result_from_c(res)
 
@@ -425,10 +425,10 @@ def vterm_append_primitive(obj: Any, row: int, words: Any, word_count: int) -> _
     res = _fn(_rt.handle(obj), row, _rt.handle(words), word_count)
     return _rt.result_from_c(res)
 
-def vterm_attach_composite(obj: Any, row: int, composite: Any) -> _rt.Result[int]:
-    """Call `yetty_yvterm_vterm_attach_composite`."""
-    _fn = _rt.cfn("yetty_yvterm_vterm_attach_composite", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_void_p])
-    res = _fn(_rt.handle(obj), row, _rt.handle(composite))
+def vterm_attach_complex(obj: Any, row: int, complex: Any) -> _rt.Result[int]:
+    """Call `yetty_yvterm_vterm_attach_complex`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_attach_complex", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_void_p])
+    res = _fn(_rt.handle(obj), row, _rt.handle(complex))
     return _rt.result_from_c(res)
 
 def vterm_relocate_rich_to_bottom(obj: Any, span_rows: int) -> _rt.Result[None]:

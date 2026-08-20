@@ -14,7 +14,7 @@
 #include <yetty/ycat/ycat.h>
 
 #include <yetty/yface/yface.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yterminal/dcs-codes.h> /* YETTY_DCS_YDRAW_BIN */
 

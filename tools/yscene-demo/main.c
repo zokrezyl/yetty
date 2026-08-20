@@ -48,7 +48,7 @@
 #include <yetty/api/yterminal/terminal.h>
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yfigure/kind.h>
 #include <yetty/yplatform/tty.h>
 #include <yetty/ysdf/funcs.gen.h>

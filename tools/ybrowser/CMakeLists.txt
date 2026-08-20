@@ -39,7 +39,7 @@ target_link_libraries(ybrowser PRIVATE
     yetty_ybrowser
     yetty_ysvg
     yetty_yimage_core
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ysdf
     yetty_yface
     yetty_ycore

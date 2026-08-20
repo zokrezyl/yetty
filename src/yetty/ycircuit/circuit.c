@@ -56,7 +56,7 @@
 #include <yetty/ycore/types.h>
 
 #include <yetty/yface/yface.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/yterminal/dcs-codes.h>
@@ -156,7 +156,7 @@ struct ycircuit_element {
  *===========================================================================*/
 
 struct YETTY_ANNOTATE("class@ycircuit:circuit")
-    YETTY_ANNOTATE("include@yetty/ydraw-core/drawable-list.h") yetty_ycircuit_circuit {
+    YETTY_ANNOTATE("include@yetty/ydraw-list/drawable-list.h") yetty_ycircuit_circuit {
     /* Render configuration. 0 = default. */
     float grid;     /* px per grid unit (configure() wins over the DSL hint) */
     uint32_t flags; /* reserved */

@@ -9,7 +9,7 @@
 #include <yetty/ychart/chart-ir.h>
 #include <yetty/ychart/data-parser.h>
 #include <yetty/ychart/renderer.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #include "ytest.h"
 

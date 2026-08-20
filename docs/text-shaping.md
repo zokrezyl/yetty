@@ -190,7 +190,7 @@ Phasing:
   raster. Verified: Latin/Greek/Cyrillic/Vietnamese (é à ô ü ñ ç, ế ọ, и́, ά)
   plus Hebrew points and Thai/Devanagari matras. Does **not** address Arabic
   joining or Indic reordering (those stay for Phase 1). Two documented limits:
-  the MSDF backend cannot composite (it has no live rasterizer, so its own
+  the MSDF backend cannot complex (it has no live rasterizer, so its own
   glyphs still drop marks — hence the raster re-resolve), and a mark that
   overhangs the base cell is clamped into the slot rather than spilling.
 - **Phase 1 — HarfBuzz for complex scripts via the ydraw free-position path.
@@ -227,7 +227,7 @@ Phasing:
     joining (a medial letter's gid differs from its isolated gid), Devanagari
     pre-base-matra reordering (glyph order is non-monotonic vs input), the gid
     atlas resolves+caches, and the classifier. `shaping-render-test.c` drives
-    the full shape→atlas→rasterize→composite pipeline and (with
+    the full shape→atlas→rasterize→complex pipeline and (with
     `YFONT_SHAPING_DUMP=<path.ppm>`) emits a canvas — "العربية" renders as a
     correctly joined cursive run and "हिन्दी" with the reordered i-matra + the
     न्द conjunct. That canvas is the Phase 1 acceptance spike. (#616)

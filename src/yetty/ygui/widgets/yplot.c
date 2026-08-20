@@ -31,8 +31,8 @@ struct YETTY_ANNOTATE("expose") yetty_ygui_yplot_config {
     uint32_t flags;
 };
 
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yfigure/kind.h>
 #include <yetty/yplot/yplot.h>
 
@@ -113,7 +113,7 @@ static struct yetty_ycore_void_result yplot_emit_container(struct yetty_yclass_o
     struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yplot_emit_container: id");
     /* Kind names the renderer config (host-policy-coords content ygrid), not
-     * the content type — the plot itself travels as a composite record in
+     * the content type — the plot itself travels as a complex record in
      * the child's body (#685 Phase 2). "yplot" stays registered only as a
      * deprecated alias for external producers. */
     return yetty_ygui_emit_ensure_child(ctx, id_res.value, yetty_yfigure_kind_token("yscroll"),
@@ -145,7 +145,7 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_object
     struct yetty_yplot_render_config cfg = {
         /* FIGURE-LOCAL bounds. emit_container mints this body's child as kind
          * "yscroll", which is a LOCAL-coordinate figure (#685 Phase 2): the
-         * receiving scene anchors the composite at the child's own rect origin
+         * receiving scene anchors the complex at the child's own rect origin
          * (yscene scene.c, anchor = (translate - scroll) * view_scale) and the
          * record's bounds are added on top of that anchor. Baking the absolute
          * widget rect in here adds the origin a SECOND time — the plot lands

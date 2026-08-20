@@ -3,7 +3,7 @@
 
 #include <yetty/ysdf/yaml.gen.h>
 #include <yetty/ysdf/types.gen.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
 #include <stdlib.h>

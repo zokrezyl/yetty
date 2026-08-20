@@ -959,7 +959,7 @@ static int raster_font_rasterize_glyph(struct yetty_yfont_raster_font *font, uin
             }
             FT_GlyphSlot mark_slot = mark_face->glyph;
             FT_Bitmap *mark_bitmap = &mark_slot->bitmap;
-            /* Only grayscale marks composite cleanly into the coverage atlas. */
+            /* Only grayscale marks complex cleanly into the coverage atlas. */
             if (mark_bitmap->pixel_mode != FT_PIXEL_MODE_GRAY || mark_bitmap->width == 0 ||
                 mark_bitmap->rows == 0) {
                 continue;

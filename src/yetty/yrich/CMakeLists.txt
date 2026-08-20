@@ -47,7 +47,7 @@ target_link_libraries(yetty_yrich PUBLIC
     yetty_api_yrich
     yetty_ycore
     yetty_yclass
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ysdf
     yetty_yfont_core
     # The lean document model only decodes/emits inline images via
@@ -156,7 +156,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND YETTY_ENABLE_LIB_WEBGPU)
         yetty_ydraw_factory
         yetty_yimage
         yetty_yplot
-        yetty_ydraw_core
+        yetty_ydraw_list
         glfw3webgpu
         glfw
         uv_a

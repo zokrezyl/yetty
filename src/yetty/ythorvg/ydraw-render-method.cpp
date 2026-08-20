@@ -4,7 +4,7 @@
 
 #include "ydraw-render-method.hpp"
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -304,7 +304,7 @@ bool YDrawRenderMethod::renderImage(tvg::RenderData data)
     }
 
     // Image rendering not yet implemented — new yetty image pipeline lives
-    // in ydraw composites; wiring is a separate task.
+    // in ydraw complexes; wiring is a separate task.
     ywarn("YDrawRenderMethod::renderImage: not yet implemented");
     return true;
 }

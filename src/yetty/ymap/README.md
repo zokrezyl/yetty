@@ -12,7 +12,7 @@ ymap-specific code. Gated on libcurl + yimage.
 
 - **Raster** (`engine.c`) — lat/lon/zoom → Web-Mercator global-pixel
   viewport → covering tile set → per-tile disk-cache hit or libcurl GET →
-  stb_image decode → blit into one RGBA8 composite → a drawable list
+  stb_image decode → blit into one RGBA8 complex → a drawable list
   holding **one yimage prim**.
 - **Vector** (`vector-render.c` + `vector-tile.c`) — shortbread-schema
   Mapbox Vector Tiles decoded by a minimal hand-rolled protobuf-subset
@@ -82,7 +82,7 @@ only to pick a default map center).
 |------|------|
 | `map.c` | annotated `ymap:map` class: providers, view state, verbs, dispatch |
 | `map.gen.c` / `rpc.gen.c` / `model.yaml` | codegen outputs (never hand-edited) |
-| `engine.c` | raster path: fetch → RGBA composite → one yimage prim; projection helpers |
+| `engine.c` | raster path: fetch → RGBA complex → one yimage prim; projection helpers |
 | `vector-render.c` | vector path: MVT → clipped, triangulated SDF/MSDF drawables |
 | `vector-tile.c` / `vector-tile.h` | bounds-checked minimal MVT (protobuf subset) decoder |
 | `tile-fetch.c` / `tile-fetch.h` | disk cache + curl-multi parallel download, plain GET helper |
@@ -90,7 +90,7 @@ only to pick a default map center).
 
 ## See also
 
-- `../yimage/README.md` — the raster composite's target prim
+- `../yimage/README.md` — the raster complex's target prim
 - `../ydraw/README.md` — drawable lists / `YDRAW_BIN` scrolling path
 - `../yview/README.md` — the figure transport the interactive client uses
 - `../../yclass/README.md` — the annotation/codegen framework behind `map.h`

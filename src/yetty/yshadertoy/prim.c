@@ -1,5 +1,5 @@
 /*
- * prim.c — yshadertoy composite-prim factory (server side, GPU).
+ * prim.c — yshadertoy complex-prim factory (server side, GPU).
  *
  * Receives the wire record built by prim-wire.c and renders the user's
  * Shadertoy-style WGSL inside the scrolling content layer, cursor-anchored
@@ -30,8 +30,8 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h> /* container_of */
-#include <yetty/ydraw-core/composite.h>
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-list/complex.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yrender/gpu-resource-binder.h>
@@ -423,8 +423,8 @@ static struct yetty_ycore_int_result yshadertoy_prim_on_tick(
     struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *event)
 {
     (void)event;
-    struct yetty_ydraw_composite *instance =
-        container_of(listener, struct yetty_ydraw_composite, listener);
+    struct yetty_ydraw_complex *instance =
+        container_of(listener, struct yetty_ydraw_complex, listener);
     if (!instance || !instance->factory || !instance->factory->event_loop) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -439,7 +439,7 @@ static struct yetty_ycore_int_result yshadertoy_prim_on_tick(
  *===========================================================================*/
 
 static struct yetty_ycore_void_result yshadertoy_prim_instance_render(
-    struct yetty_ydraw_composite *self, struct yetty_ydraw_target *target, float x, float y)
+    struct yetty_ydraw_complex *self, struct yetty_ydraw_target *target, float x, float y)
 {
     if (!self || !self->factory || !self->resource_set || !self->binder) {
         return YETTY_ERR(yetty_ycore_void, "yshadertoy prim render: invalid instance");
@@ -532,7 +532,7 @@ static struct yetty_ycore_void_result yshadertoy_prim_instance_render(
  * Instance destroy
  *===========================================================================*/
 
-static void yshadertoy_prim_instance_destroy(struct yetty_ydraw_composite *instance)
+static void yshadertoy_prim_instance_destroy(struct yetty_ydraw_complex *instance)
 {
     if (!instance) {
         return;
@@ -565,7 +565,7 @@ static void yshadertoy_prim_instance_destroy(struct yetty_ydraw_composite *insta
 
 /* Vtable installed on every yshadertoy prim instance. No incremental
  * updates — the canvas drops CMD_UPDATE records addressed to us. */
-static const struct yetty_ydraw_composite_ops yshadertoy_prim_instance_ops = {
+static const struct yetty_ydraw_complex_ops yshadertoy_prim_instance_ops = {
     .destroy = yshadertoy_prim_instance_destroy,
     .update = NULL,
 };
@@ -601,17 +601,17 @@ static struct yetty_yrender_gpu_resource_set *yshadertoy_prim_get_shared_rs(
     return NULL; /* no shared RS — every instance owns its own */
 }
 
-static struct yetty_ydraw_composite_ptr_result yshadertoy_prim_create_instance(
+static struct yetty_ydraw_complex_ptr_result yshadertoy_prim_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite_header) +
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_complex_header) +
                                    YSHADERTOY_PRIM_FIXED_WORDS * sizeof(uint32_t)) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: wire record truncated");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: wire record truncated");
     }
     struct yetty_yshadertoy_prim_factory *factory = yshadertoy_prim_factory_from_base(self);
     if (!factory->device) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr,
+        return YETTY_ERR(yetty_ydraw_complex_ptr,
                          "yshadertoy prim: factory pipeline handles not initialised");
     }
 
@@ -620,19 +620,19 @@ static struct yetty_ydraw_composite_ptr_result yshadertoy_prim_create_instance(
     uint32_t wgsl_len = words[7];
     if (payload_size < YSHADERTOY_PRIM_FIXED_WORDS * sizeof(uint32_t) ||
         wgsl_len > payload_size - YSHADERTOY_PRIM_FIXED_WORDS * sizeof(uint32_t) ||
-        sizeof(struct yetty_ydraw_composite_header) + payload_size > size) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: wire lengths inconsistent");
+        sizeof(struct yetty_ydraw_complex_header) + payload_size > size) {
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: wire lengths inconsistent");
     }
     const char *wgsl_source = (const char *)&words[2u + YSHADERTOY_PRIM_FIXED_WORDS];
 
-    struct yetty_ydraw_composite *instance = calloc(1, sizeof(struct yetty_ydraw_composite));
+    struct yetty_ydraw_complex *instance = calloc(1, sizeof(struct yetty_ydraw_complex));
     if (!instance) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: instance alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: instance alloc failed");
     }
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {
         free(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: wire copy alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: wire copy alloc failed");
     }
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
@@ -642,7 +642,7 @@ static struct yetty_ydraw_composite_ptr_result yshadertoy_prim_create_instance(
     instance->render = yshadertoy_prim_instance_render;
     instance->ops = &yshadertoy_prim_instance_ops;
 
-    struct rectangle_result aabb_res = yetty_ydraw_composite_record_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_complex_record_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
         instance->bounds = aabb_res.value;
     }
@@ -650,7 +650,7 @@ static struct yetty_ydraw_composite_ptr_result yshadertoy_prim_create_instance(
     struct yshadertoy_prim_instance_state *state = calloc(1, sizeof(*state));
     if (!state) {
         yshadertoy_prim_instance_destroy(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: state alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: state alloc failed");
     }
     instance->instance_data = state;
 
@@ -659,13 +659,13 @@ static struct yetty_ydraw_composite_ptr_result yshadertoy_prim_create_instance(
         yshadertoy_prim_assemble_shader(wgsl_source, wgsl_len, &shader_source_size);
     if (!state->shader_source) {
         yshadertoy_prim_instance_destroy(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: shader assemble failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: shader assemble failed");
     }
 
     instance->resource_set = malloc(sizeof(struct yetty_yrender_gpu_resource_set));
     if (!instance->resource_set) {
         yshadertoy_prim_instance_destroy(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: rs alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: rs alloc failed");
     }
     yshadertoy_prim_populate_rs(instance->resource_set, state->shader_source, shader_source_size);
 
@@ -685,7 +685,7 @@ static struct yetty_ydraw_composite_ptr_result yshadertoy_prim_create_instance(
             factory->device, factory->target_format, factory->allocator, instance->resource_set);
         if (YETTY_IS_ERR(pipeline_res)) {
             yshadertoy_prim_instance_destroy(instance);
-            return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: pipeline create",
+            return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: pipeline create",
                              pipeline_res);
         }
         state->pipeline = pipeline_res.value;
@@ -698,7 +698,7 @@ static struct yetty_ydraw_composite_ptr_result yshadertoy_prim_create_instance(
                                                                factory->allocator, state->pipeline);
     if (YETTY_IS_ERR(binder_res)) {
         yshadertoy_prim_instance_destroy(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: binder create", binder_res);
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: binder create", binder_res);
     }
     instance->binder = binder_res.value;
 
@@ -706,13 +706,12 @@ static struct yetty_ydraw_composite_ptr_result yshadertoy_prim_create_instance(
         instance->binder->ops->submit(instance->binder, instance->resource_set);
     if (YETTY_IS_ERR(submit_res)) {
         yshadertoy_prim_instance_destroy(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: binder submit", submit_res);
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: binder submit", submit_res);
     }
     struct yetty_ycore_void_result finalize_res = instance->binder->ops->finalize(instance->binder);
     if (YETTY_IS_ERR(finalize_res)) {
         yshadertoy_prim_instance_destroy(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: binder finalize",
-                         finalize_res);
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: binder finalize", finalize_res);
     }
 
     /* A shadertoy is presumed animated — subscribe unconditionally.
@@ -734,11 +733,11 @@ static struct yetty_ydraw_composite_ptr_result yshadertoy_prim_create_instance(
            instance->bounds.min.x, instance->bounds.min.y,
            instance->bounds.max.x - instance->bounds.min.x,
            instance->bounds.max.y - instance->bounds.min.y, wgsl_len);
-    return YETTY_OK(yetty_ydraw_composite_ptr, instance);
+    return YETTY_OK(yetty_ydraw_complex_ptr, instance);
 }
 
 static void yshadertoy_prim_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                             struct yetty_ydraw_composite *instance)
+                                             struct yetty_ydraw_complex *instance)
 {
     (void)self;
     yshadertoy_prim_instance_destroy(instance);

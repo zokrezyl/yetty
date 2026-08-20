@@ -780,7 +780,7 @@ static int parse_scalar_number(struct yetty_yexpr_parser *p, float *out)
     return 1;
 }
 
-/* Append a generic `@plot_name.attr_name = value` attribute. Composite
+/* Append a generic `@plot_name.attr_name = value` attribute. Complex
  * figure attrs (size, field) decompose into scalar attrs through here so the
  * consumer only ever sees single-valued attributes. */
 static int plot_push_attr(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_expr *plot,

@@ -5,7 +5,7 @@
  *
  * Everything here is line-serial: text cells as (repeat, cell) runs, the SDF
  * primitive arena verbatim (it already holds opaque u32 wire words, including
- * the retained composite envelopes), plus continuation flags and the original
+ * the retained complex envelopes), plus continuation flags and the original
  * width for a future view-time re-wrap. Segments are self-delimiting and
  * versioned (magic + version + checksum), so the same blob layout feeds the
  * warm tier, the cold file, and a future persistent session log.
@@ -28,9 +28,9 @@
 
 #include "scroll-tiers.h"
 
-/* Composite-envelope type test — hand-declared from ydraw-core (same
+/* Complex-envelope type test — hand-declared from ydraw-list (same
  * header-clash avoidance as grid.c). */
-bool yetty_ydraw_is_composite(uint32_t type);
+bool yetty_ydraw_is_complex(uint32_t type);
 
 /* Serialized line header, in u32 words. */
 enum {
@@ -636,7 +636,7 @@ static struct yetty_ycore_void_result tier_inflate_line(struct yetty_yvterm_tier
     for (uint32_t index = 0; index < primitive_count; ++index) {
         const struct yetty_yvterm_primitive *record = &line->primitives[index];
         if (record->word_count && record->arena_offset < line->arena_count &&
-            yetty_ydraw_is_composite(line->arena[record->arena_offset])) {
+            yetty_ydraw_is_complex(line->arena[record->arena_offset])) {
             line->envelope_count++;
         }
     }

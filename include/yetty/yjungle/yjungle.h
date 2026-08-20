@@ -10,7 +10,7 @@
  *   - a group: 2..N sub-segments chained inside the parent's span; each
  *     sub-segment is itself either a primitive or a (deeper) group.
  *
- * Groups on the wire use CMD_GROUP / CMD_DELETE (see ydraw-core/cmds.h).
+ * Groups on the wire use CMD_GROUP / CMD_DELETE (see ydraw-list/cmds.h).
  * Nested groups produce nested CMD_GROUP records — exercises scene-
  * canvas's process_group_body recursion.
  *
@@ -34,7 +34,7 @@
 #include <stdint.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {

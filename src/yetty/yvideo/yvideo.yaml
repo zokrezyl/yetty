@@ -1,4 +1,4 @@
-# YVideo composite schema
+# YVideo complex schema
 #
 # Video playback figure. Stateful — lives across CMD_UPDATE envelopes that
 # append more NAL bytes to the H.264 stream. Modelled on yplot's

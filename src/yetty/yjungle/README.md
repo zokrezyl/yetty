@@ -3,10 +3,10 @@
 `yjungle` maintains a connected chain of "segments" — each either a single
 SDF primitive or a nested group of 2..N sub-segments — and emits scene
 mutations as incremental ydraw wire commands (`CMD_GROUP` / `CMD_DELETE`,
-see `ydraw-core/cmds.h`). It exists to stress the receiving side's
+see `ydraw-list/cmds.h`). It exists to stress the receiving side's
 recursive group parser and strict-id handling (`process_group_body` and
 the entity tree in `../ygrid/README.md`, ported from the scene-canvas).
-Pure producer; depends only on `ydraw-core` and `ysdf`.
+Pure producer; depends only on `ydraw-list` and `ysdf`.
 
 ## Wire model
 

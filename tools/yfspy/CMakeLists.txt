@@ -1,4 +1,4 @@
-# yfspy tool — renders a Python-subset yfsvm shader as a yplot composite.
+# yfspy tool — renders a Python-subset yfsvm shader as a yplot complex.
 #
 # The shader is compiled to yfsvm bytecode IN-PROCESS: yetty_yfspy_compile
 # parses it with the embedded libpython-free CPython parser (yetty_cpython)

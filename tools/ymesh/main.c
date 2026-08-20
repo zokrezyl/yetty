@@ -1,5 +1,5 @@
 /*
- * ymesh — emit a ymesh composite DCS envelope for a glTF 2.0 (.glb) file.
+ * ymesh — emit a ymesh complex DCS envelope for a glTF 2.0 (.glb) file.
  *
  * Two operating modes (mirroring ynetsurf):
  *
@@ -32,7 +32,7 @@
 
 #include <yetty/ymesh/ymesh.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterminal/client-input.h>

@@ -14,11 +14,11 @@ yetty_add_c_test(
     TIMEOUT 30)
 
 # emit_into contract: input validation, append-into-existing-list, log-range
-# failure. GPU-less (yetty_yplot_core + ydraw-core).
+# failure. GPU-less (yetty_yplot_core + ydraw-list).
 yetty_add_c_test(
     NAME    yplot_emit
     SOURCES emit-test.c
-    LIBS    yetty_yplot_core yetty_ydraw_core yetty_yexpr yetty_ycore
+    LIBS    yetty_yplot_core yetty_ydraw_list yetty_yexpr yetty_ycore
     SHIMS   trace platform_thread platform_term
     LABELS  contract
     TIMEOUT 30)

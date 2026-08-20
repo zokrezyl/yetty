@@ -3,7 +3,7 @@
  *
  * Thin glue: forwards the raw encoded bytes to yetty_yimage_render, which
  * handles the stb_image decode and the wire-format serialization for the
- * yimage composite. Display bounds default to the source pixel
+ * yimage complex. Display bounds default to the source pixel
  * dimensions, but a non-zero `width_cells * cell_width` (or height) from
  * the caller's config pins them instead.
  */

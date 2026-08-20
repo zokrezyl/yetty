@@ -4,7 +4,7 @@
 #   dom    (dom.c)    GPU-free retained content tree — a PLAIN INTERNAL
 #                     struct + functions (internal.h), created and
 #                     exclusively owned by its scene; not a yclass class,
-#                     never RPC/FFI-exposed. Depends on ydraw-core + ysdf
+#                     never RPC/FFI-exposed. Depends on ydraw-list + ysdf
 #                     for wire-record stride/AABB dispatch only.
 #   scene  (scene.c)  the renderer figure kind and the single public
 #                     yclass object. Owns one dom, surfaces the content-
@@ -49,8 +49,8 @@ target_link_libraries(yetty_yscene PUBLIC
     yetty_ycore
     yetty_yclass
     yetty_yfigure
-    yetty_ydraw_core
-    yetty_ydraw_factory   # complex (composite) instances at paint cut points
+    yetty_ydraw_list
+    yetty_ydraw_factory   # complex (complex) instances at paint cut points
     yetty_ysdf
     yetty_yrender
     yetty_yfont_core      # font cache: materialise wire-shipped fonts

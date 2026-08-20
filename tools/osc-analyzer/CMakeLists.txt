@@ -29,10 +29,10 @@ target_include_directories(osc-analyzer PRIVATE
 target_link_libraries(osc-analyzer PRIVATE
     yetty_ywire
     yetty_yface
-    # ydraw-core for the drawable-list registry + drawable_command_parse +
+    # ydraw-list for the drawable-list registry + drawable_command_parse +
     # text_span / font drawable parsers; ysdf for compute_aabb + type
     # tables used to decode SDF prims into YAML.
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ysdf
     yetty_ycore
     yetty_yplatform_core

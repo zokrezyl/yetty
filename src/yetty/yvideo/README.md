@@ -1,12 +1,12 @@
 # yvideo — streaming H.264 video as a stateful ydraw figure
 
 yvideo plays an H.264 (Annex-B) video — optionally with Opus audio — inside a
-ydraw composite primitive (type id `0x80000006`). Unlike yimage, the figure is
+ydraw complex primitive (type id `0x80000006`). Unlike yimage, the figure is
 stateful on the receiving terminal: the INIT envelope creates a playing
 instance, and the sender keeps streaming bytes to it through `CMD_UPDATE`
 envelopes addressed via `CMD_GROUP(id)`. Decoding happens receiver-side with
 openh264 ([`yvcodec`](../yvcodec/README.md)) and libopus
-([`yacodec`](../yacodec/README.md)); the composite model is described in
+([`yacodec`](../yacodec/README.md)); the complex model is described in
 [`ydraw`](../ydraw/README.md).
 
 ## Two-tier build
@@ -76,7 +76,7 @@ reference driver.
 |------|------|
 | `yvideo.c` | hand-written: config → wire serialize → drawable list, DCS emit |
 | `yvideo-mp4.c` | hand-written: minimp4 demux, AVCC→Annex-B, SPS dimension parse (sender-side) |
-| `yvideo.yaml` | composite schema — uniforms/buffers/texture layout, `hooks: true` |
+| `yvideo.yaml` | complex schema — uniforms/buffers/texture layout, `hooks: true` |
 | `yvideo-gen-wire.c` | generated wire serializer (CPU-only) |
 | `yvideo-gen.c` | generated factory/instance skeleton; calls the hook surface |
 | `yvideo-hooks.c` | hand-written lifecycle: decoders, rings, pump, A/V clock |

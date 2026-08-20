@@ -10,7 +10,7 @@
  * itself, instead of shelling out to the ycat binary. The terminal anchors
  * the drawable-list's text records to the cursor's grid line, so the rich
  * block scrolls with the conversation text. */
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymarkdown/ymarkdown.h>
 #include <yetty/yplot/yplot.h>

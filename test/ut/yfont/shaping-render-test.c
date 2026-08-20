@@ -4,7 +4,7 @@
  * Drives the whole complex-script pipeline: HarfBuzz shapes a run, each shaped
  * glyph id is rasterized through the (glyph_id, face) atlas, and the resulting
  * pixels are composited at their shaped pen positions (advances + GPOS offsets).
- * The composite proves the shaped output is renderable, not just that the shaper
+ * The complex proves the shaped output is renderable, not just that the shaper
  * returns glyph ids. Runs in full (atlas) mode so real pixels exist.
  *
  * Set YFONT_SHAPING_DUMP=<path.ppm> to write the composited canvas for visual
@@ -56,7 +56,7 @@ static void canvas_write_ppm(const struct canvas *canvas, const char *path)
     fclose(out);
 }
 
-/* Composite one shaped run onto the canvas at the given baseline, returning the
+/* Complex one shaped run onto the canvas at the given baseline, returning the
  * count of ink (non-white) pixels drawn. */
 static long render_run(struct ytest *test, struct canvas *canvas, struct yetty_yfont_font *font,
                        const uint32_t *codepoints, size_t count, float pen_x, float baseline)

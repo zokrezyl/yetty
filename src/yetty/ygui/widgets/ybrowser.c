@@ -18,7 +18,7 @@ YETTY_YRESULT_DECLARE(yetty_ygui_ybrowser_ptr, struct yetty_ygui_ybrowser *);
 struct yetty_yclass_ptr_result yetty_ygui_ybrowser_class_get(void);
 struct yetty_ygui_ybrowser_ptr_result yetty_ygui_ybrowser_from(struct yetty_yclass_object *obj);
 #include "yetty/gen/impl/ygui/primitive-widget.h"
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include "yetty/gen/impl/ygui/widgets/ydraw_embed.h"
 #if YETTY_YGUI_HAVE_YBROWSER
 #include <yetty/ybrowser/ybrowser.h>

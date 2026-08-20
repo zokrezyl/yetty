@@ -2,7 +2,7 @@
  * font-resource.c - drawable-list entry FONT primitive (see font-resource.h).
  */
 
-#include <yetty/ydraw-core/font-resource.h>
+#include <yetty/ydraw-list/font-resource.h>
 #include "font-resource-internal.h"
 
 #include <string.h>

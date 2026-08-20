@@ -55,7 +55,7 @@ target_link_libraries(yetty_ynet PUBLIC
     yetty_ycore
     yetty_yclass
     yetty_yface       # YDRAW_BIN DCS envelope encoder (topology figure)
-    yetty_ydraw_core  # drawable-list builder
+    yetty_ydraw_list  # drawable-list builder
     yetty_ysdf        # SDF primitives (nodes/edges)
 )
 target_link_libraries(yetty_ynet PRIVATE ${PCAP_LIBRARIES} m)

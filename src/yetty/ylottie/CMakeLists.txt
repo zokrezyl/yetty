@@ -20,6 +20,6 @@ target_include_directories(yetty_ylottie PUBLIC
 target_link_libraries(yetty_ylottie
     PUBLIC
         yetty_ycore
-        yetty_ydraw_core
+        yetty_ydraw_list
         yetty_ysdf
 )

@@ -2,11 +2,11 @@
 
 `ymusic` is the yclass class `ymusic:music`: it parses a subset of LilyPond
 into an editable score model, lays the model out, and renders it to a
-[`ydraw-core`](../ydraw-core/README.md) drawable list. Like
+[`ydraw-list`](../ydraw-list/README.md) drawable list. Like
 [`yflame`](../yflame/README.md) it is a pure frontend — it produces the
 picture; [`yfigure`](../yfigure/README.md) displays it, and
 [`yview`](../yview/README.md) ships it to a server figure so it scrolls.
-GPU-less; depends on `ycore`, `yclass`, `yface`, `ydraw_core`, `ysdf`.
+GPU-less; depends on `ycore`, `yclass`, `yface`, `ydraw_list`, `ysdf`.
 
 ## Engraving model
 

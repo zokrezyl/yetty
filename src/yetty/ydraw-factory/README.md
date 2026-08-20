@@ -1,28 +1,28 @@
-# ydraw-factory — GPU-side factory runtime for composite figures
+# ydraw-factory — GPU-side factory runtime for complex figures
 
-The server-side half of the composite model: it turns composite wire bytes
-(format defined in [ydraw-core](../ydraw-core/README.md)'s `composite.h`) into
+The server-side half of the complex model: it turns complex wire bytes
+(format defined in [ydraw-list](../ydraw-list/README.md)'s `complex.h`) into
 renderable GPU instances. Consumed by the receiving canvases
 (`../ydraw/scrolling-canvas.c`, `scrolling-grid.c`,
 [ygrid](../ygrid/README.md)), by yterminal/yui at setup time, and by every
-concrete composite factory — generated (yplot, yimage, yvideo via
+concrete complex factory — generated (yplot, yimage, yvideo via
 [ydraw-gen](../ydraw-gen/README.md)) or hand-written (ymesh, yshadertoy).
 Built only when `YETTY_ENABLE_LIB_WEBGPU` is on; no-GPU builds use just
-ydraw-core.
+ydraw-list.
 
 ## Three-level architecture
 
-- **Abstract factory** (`struct yetty_ydraw_composite_factory`) — a registry
+- **Abstract factory** (`struct yetty_ydraw_complex_factory`) — a registry
   mapping `type_id` → concrete factory (up to 32). Created once the WebGPU
   device/queue exist; stashes the event loop and propagates it to concrete
   factories so instances can subscribe to timers/input.
 - **Concrete factory** (`struct yetty_ydraw_concrete_factory`) — one per
-  composite type. Owns the shared `yetty_yrender_pipeline`; `compile_pipeline`
+  complex type. Owns the shared `yetty_yrender_pipeline`; `compile_pipeline`
   is **deferred to the first `create_instance` of that type** (a plain text
   session never pays for figure shaders). Also carries optional
   `update_instance`, `set_visual_zoom` / `set_cell_zoom` (two independent
   zoom transforms) and a `hook_data` slot for per-type state.
-- **Instance** (`struct yetty_ydraw_composite`) — one per figure occurrence,
+- **Instance** (`struct yetty_ydraw_complex`) — one per figure occurrence,
   stored in the host grid. Holds a copy of its wire bytes, its `bounds` and
   `rolling_row`, a per-instance `resource_set` + `binder` (own uniform/storage
   buffers and bind group, referencing the factory's shared pipeline), a
@@ -30,16 +30,16 @@ ydraw-core.
   vtable (`destroy`, `update`) so runtime dispatch bypasses the factory.
 
 ```c
-struct yetty_ydraw_composite_factory_ptr_result fac_res =
-    yetty_ydraw_composite_factory_create(device, queue, target_format,
+struct yetty_ydraw_complex_factory_ptr_result fac_res =
+    yetty_ydraw_complex_factory_create(device, queue, target_format,
                                          allocator, event_loop);
-yetty_ydraw_composite_factory_register(fac_res.value, yplot_concrete);
+yetty_ydraw_complex_factory_register(fac_res.value, yplot_concrete);
 
-struct yetty_ydraw_composite_ptr_result inst_res =
-    yetty_ydraw_composite_factory_create_instance(fac_res.value,
+struct yetty_ydraw_complex_ptr_result inst_res =
+    yetty_ydraw_complex_factory_create_instance(fac_res.value,
                                                   wire_bytes, size, rolling_row);
-yetty_ydraw_composite_render(inst_res.value, target, x, y);
-yetty_ydraw_composite_destroy(inst_res.value);
+yetty_ydraw_complex_render(inst_res.value, target, x, y);
+yetty_ydraw_complex_destroy(inst_res.value);
 ```
 
 ## GPU residency — bounded LRU
@@ -55,7 +55,7 @@ on-screen figure is never evicted mid-frame.
 
 ## Incremental updates
 
-A wire `CMD_UPDATE` (see `../ydraw-core/cmds.h`) is resolved by the canvas to
+A wire `CMD_UPDATE` (see `../ydraw-list/cmds.h`) is resolved by the canvas to
 an instance and dispatched through `instance->ops->update(self, target_field,
 body, body_size)` — `target_field` is the schema-level slot id, the body's
 semantics belong to the figure type (yplot: chunked f32 sample writes).
@@ -65,10 +65,10 @@ Factories/instances without an update op silently drop the record.
 
 | file | role |
 |------|------|
-| `composite-factory.c` | abstract-factory registry, deferred pipeline compile, instance mint/destroy/render wrappers, residency LRU, zoom fan-out |
+| `complex-factory.c` | abstract-factory registry, deferred pipeline compile, instance mint/destroy/render wrappers, residency LRU, zoom fan-out |
 
-Public header: `include/yetty/ydraw-factory/composite-factory.h` (pulls in
-`<webgpu/webgpu.h>`; keep client-only code on the ydraw-core side).
+Public header: `include/yetty/ydraw-factory/complex-factory.h` (pulls in
+`<webgpu/webgpu.h>`; keep client-only code on the ydraw-list side).
 
 ## See also
 

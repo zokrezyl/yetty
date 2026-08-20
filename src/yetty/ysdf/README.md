@@ -6,7 +6,7 @@ id, geometry fields, WGSL distance function and C AABB code — and
 `gen-sdf-code.py` generates matching C and WGSL from it. Everything that
 emits or consumes SDF records (ychart, ydiagram, ycircuit, ygui widgets,
 ybrowser/ylexbor paint, yscene, the terminal SDF layer, …) builds on this
-module. Depends only on `ycore` and `ydraw-core` (plus libyaml for the YAML
+module. Depends only on `ycore` and `ydraw-list` (plus libyaml for the YAML
 parse path).
 
 ## Wire layout
@@ -74,7 +74,7 @@ struct yetty_ycore_int_result yetty_ydraw_drawable_list_merge_transformed(
 
 `merge.c` is the only hand-written translation unit: it walks a source
 stream record by record, transforms SDF geometry / text positions /
-composite bounds per the primitive's own semantics, drops `CMD_ZERO`, and
+complex bounds per the primitive's own semantics, drops `CMD_ZERO`, and
 appends to the destination. FONT resources pass through unchanged (font-id
 remapping is not implemented — see the coverage notes in `merge.h`).
 

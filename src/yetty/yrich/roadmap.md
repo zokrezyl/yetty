@@ -353,9 +353,9 @@ Landed increments (each meets the §8 Definition of Done unless noted):
 - **Inline images (real decoded pixels)** — Phase 2 (done, verified live). The
   `inline_image` element used to render a grey placeholder box; it now composites
   the actual decoded image. Enablers: (1) the yrich app creates a
-  `yetty_ydraw_composite_factory` (registering the yimage + yplot concrete
+  `yetty_ydraw_complex_factory` (registering the yimage + yplot concrete
   factories) and passes it in the ygrid factory args, so the ydoc render ygrid
-  runs a composite pass — previously the factory was NULL, which is why images
+  runs a complex pass — previously the factory was NULL, which is why images
   could never render; (2) yimage gained `yetty_yimage_emit_into(buf, bytes, len,
   config)` (a refactor sharing the decode+serialize core with `yetty_yimage_render`)
   that appends ONE yimage complex prim into an existing drawable_list at the

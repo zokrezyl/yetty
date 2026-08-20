@@ -30,7 +30,7 @@ target_link_libraries(yetty_ycircuit PUBLIC
     yetty_ycore
     yetty_yclass
     yetty_yface
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ysdf
 )
 

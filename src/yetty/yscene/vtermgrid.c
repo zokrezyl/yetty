@@ -2044,7 +2044,7 @@ struct yetty_ycore_void_result yetty_yscene_vtermgrid_set_selection(struct yetty
 
 /* Draw the current cell grid into `target`, positioned/clipped to `rect`
  * (logical pixels, pane-local). No-op when GPU state or font is absent
- * (headless). Composites with LoadOp_Load over whatever is already in the
+ * (headless). Complexes with LoadOp_Load over whatever is already in the
  * target. Local (expose): the scene calls this from its render pass. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yscene_vtermgrid_render(struct yetty_yclass_object *obj,

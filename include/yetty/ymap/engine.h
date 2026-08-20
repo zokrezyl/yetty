@@ -31,7 +31,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -71,7 +71,7 @@ struct yetty_ymap_config {
     /* Optional data overlay (GeoJSON markers/tracks loaded by the ymap
      * class). The raster path BAKES it into the composited image after
      * the tile blit — SDF prims appended to the drawable list would be
-     * painted over by the composite figure in the terminal's render
+     * painted over by the complex figure in the terminal's render
      * order. NULL = no overlay. */
     const struct yetty_ymap_overlay *overlay;
 };

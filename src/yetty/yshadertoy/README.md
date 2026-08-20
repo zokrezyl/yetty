@@ -6,7 +6,7 @@ the familiar Shadertoy inputs (`iResolution`, `iTime`, `iTimeDelta`,
 positioned **figure** on the compositor wire (a `yfigure:figure` subclass)
 and a cursor-anchored **prim** on the ordinary `YDRAW_BIN` drawable-list
 channel that scrolls with the terminal text. Depends on `yfigure`,
-`yrender`, `yframework`, `yevent` (figure tier) and `ydraw-core` /
+`yrender`, `yframework`, `yevent` (figure tier) and `ydraw-list` /
 `ydraw-factory` (prim tier).
 
 ## The shader contract

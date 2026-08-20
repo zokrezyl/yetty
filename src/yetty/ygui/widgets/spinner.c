@@ -16,7 +16,7 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_spinner_ptr, struct yetty_ygui_spinner *);
 struct yetty_yclass_ptr_result yetty_ygui_spinner_class_get(void);
 struct yetty_ygui_spinner_ptr_result yetty_ygui_spinner_from(struct yetty_yclass_object *obj);
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include "yetty/gen/impl/ygui/mixins/clickable.h"
 #include "yetty/gen/impl/ygui/primitive-widget.h"
 #include <yetty/ysdf/funcs.gen.h>

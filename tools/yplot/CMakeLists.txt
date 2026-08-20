@@ -1,4 +1,4 @@
-# yplot tool — emits a yplot composite OSC envelope from an expression.
+# yplot tool — emits a yplot complex OSC envelope from an expression.
 # Pure C frontend over the yetty_yplot library.
 
 add_executable(yplot

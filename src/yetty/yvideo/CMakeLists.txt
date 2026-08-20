@@ -17,7 +17,7 @@ target_include_directories(yetty_yvideo_core PUBLIC
 )
 
 target_link_libraries(yetty_yvideo_core PUBLIC
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yface
 )
 

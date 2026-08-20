@@ -43,10 +43,10 @@
 #include <yetty/yface/yface.h>
 #include <yetty/yplatform/tty.h>
 #include <yetty/ysdf/types.gen.h>
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/font-resource.h>
-#include <yetty/ydraw-core/text-drawable-list.h>
-#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/font-resource.h>
+#include <yetty/ydraw-list/text-drawable-list.h>
+#include <yetty/ydraw-list/complex.h>
 
 static FILE *g_out = NULL; /* set in main() — defaults to stderr */
 
@@ -119,7 +119,7 @@ static void print_sdf_prim(int idx, int indent, uint32_t t, const uint32_t *w, s
 static void print_text_span(int idx, int indent, const uint8_t *p, size_t psize)
 {
     const char *prefix = (indent == 0) ? "  " : "      ";
-    /* Minimal direct decode — the layout is in include/yetty/ydraw-core/text-drawable-list.h.
+    /* Minimal direct decode — the layout is in include/yetty/ydraw-list/text-drawable-list.h.
      * Header is 8 bytes (type + payload_size); payload starts with 32 bytes of fixed
      * fields then text_len + text bytes. */
     if (psize < 8u + 32u) {
@@ -347,7 +347,7 @@ static int walk_prims(const uint8_t *p, const uint8_t *end, int indent)
             print_font(idx, indent, p, psize);
         } else if (t == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
             print_text_span(idx, indent, p, psize);
-        } else if (yetty_ydraw_is_composite(t)) {
+        } else if (yetty_ydraw_is_complex(t)) {
             print_figure(idx, indent, t, psize);
         } else {
             out("%sprim #%d UNKNOWN type=0x%08x payload=%u B\n", prefix, idx, t, payload_size);

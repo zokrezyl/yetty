@@ -1,12 +1,12 @@
 # yimage — inline raster images as a ydraw figure
 
 yimage decodes a raster image (any format stb_image handles: PNG, JPEG, GIF,
-BMP, TGA, …) into RGBA8 pixels and packs them into one `yimage` composite
+BMP, TGA, …) into RGBA8 pixels and packs them into one `yimage` complex
 primitive (type id `0x80000004`) inside a ydraw drawable list. Sender side,
 the list ships as a DCS `YDRAW_BIN` envelope (via [`yface`](../yface/README.md));
 receiver side, a pre-compiled factory routes the pixels into the shared RGBA8
 atlas and the shader samples the atlas region with hardware bilinear
-filtering. The composite model (factory / instance / binder) is described in
+filtering. The complex model (factory / instance / binder) is described in
 [`ydraw`](../ydraw/README.md).
 
 ## Two-tier build
@@ -45,7 +45,7 @@ Receiver-side registration (done by the canvas/terminal hosts, not by apps):
 ```c
 struct yetty_ydraw_concrete_factory *factory = yetty_yimage_factory_create();
 factory->destroy = yetty_yimage_factory_destroy;
-yetty_ydraw_composite_factory_register(abstract_factory, factory);
+yetty_ydraw_complex_factory_register(abstract_factory, factory);
 ```
 
 The wire layout is `[type_id][payload_size][6 uniform words][pixels_len]
@@ -58,7 +58,7 @@ them with the post-scroll screen position at render time.
 | file | role |
 |------|------|
 | `yimage.c` | hand-written glue: decode → serialize → drawable list, DCS emit |
-| `yimage.yaml` | composite schema — source of truth for every `*-gen*` file |
+| `yimage.yaml` | complex schema — source of truth for every `*-gen*` file |
 | `yimage-gen-wire.c` | generated wire serializer (CPU-only) |
 | `yimage-gen.c` | generated factory: shared pipeline, per-instance resource set/binder |
 | `yimage.wgsl` | hand-written shader — maps pane-local pixels to the atlas UV region |

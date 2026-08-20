@@ -31,8 +31,8 @@ target_link_libraries(yetty_yvterm PUBLIC
     yetty_yclass
     yetty_yfigure
     yetty_ysdf           # grid-sdf-layer.c: yetty_ysdf_compute_aabb (record indexing)
-    yetty_ydraw_core
-    yetty_ydraw_factory  # yetty_ydraw_composite_destroy (anchored composite teardown)
+    yetty_ydraw_list
+    yetty_ydraw_factory  # yetty_ydraw_complex_destroy (anchored complex teardown)
     yetty_ywire          # wire statemachine: default raw-bytes sink → libvterm
     yetty_yfont_core     # MSDF font + font cache: text render AND SDF-layer wire fonts
     yetty_yfont_shader_glyph # PUA-B shader-glyph codepoint table (codepoint_exists)

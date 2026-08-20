@@ -27,7 +27,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
 

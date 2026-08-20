@@ -1,5 +1,5 @@
 /*
- * yplot-yaml.c — HAND-WRITTEN yaml factory for the yplot composite
+ * yplot-yaml.c — HAND-WRITTEN yaml factory for the yplot complex
  * (schema: `yaml_factory: manual`).
  *
  * This parser goes far beyond the generic generated shape: it feeds the
@@ -15,7 +15,7 @@
 #include <yetty/yplot/yplot.h>
 #include <yetty/yplot/resolve.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yexpr/yexpr.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/ytrace/ytrace.h>

@@ -47,7 +47,7 @@ if(NOT MSVC)
 endif()
 
 #=============================================================================
-# yshadertoy prim — the low-level composite-prim sibling of the figure.
+# yshadertoy prim — the low-level complex-prim sibling of the figure.
 # Rides the YDRAW_BIN drawable-list channel (cursor-anchored, scrolls with
 # text) instead of the figure-tree compositor wire. Two-tier build, same
 # split as yvideo:
@@ -70,7 +70,7 @@ target_include_directories(yetty_yshadertoy_core PUBLIC
 
 target_link_libraries(yetty_yshadertoy_core PUBLIC
     yetty_ycore
-    yetty_ydraw_core
+    yetty_ydraw_list
 )
 
 add_library(yetty_yshadertoy_prim STATIC

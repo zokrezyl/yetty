@@ -11,8 +11,8 @@ target_include_directories(yetty_ysixel_core PUBLIC
 )
 
 target_link_libraries(yetty_ysixel_core PUBLIC
-    # yetty_yimage_core brings yetty_ydraw_core + yetty_yface transitively; the
-    # ydraw_core dep is spelled out too since sixel.c uses drawable-list directly.
+    # yetty_yimage_core brings yetty_ydraw_list + yetty_yface transitively; the
+    # ydraw_list dep is spelled out too since sixel.c uses drawable-list directly.
     yetty_yimage_core
-    yetty_ydraw_core
+    yetty_ydraw_list
 )

@@ -33,8 +33,8 @@
 #include <yetty/yclass/class.h>
 #include <yetty/yconfig/config.h>
 
-#include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-list/drawable-list.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
@@ -90,7 +90,7 @@ yetty_yguiapp_app {
     /* Environment owned for the app's lifetime. */
     struct yetty_yframework *yframework;
     struct yetty_yfigure_registry *figure_registry;
-    struct yetty_ydraw_composite_factory *composite_factory;
+    struct yetty_ydraw_complex_factory *complex_factory;
     struct yetty_yfont_font *font;
     /* Two yscene factory-args bundles: the shared "ygrid"-token chrome
      * surface carries absolute (logical-pane) coordinates; the producer
@@ -638,16 +638,16 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
 
     /* Raw figure factory + producer kinds (yplot, yimage). */
     {
-        struct yetty_ydraw_composite_factory_ptr_result ffr = yetty_ydraw_composite_factory_create(
+        struct yetty_ydraw_complex_factory_ptr_result ffr = yetty_ydraw_complex_factory_create(
             app->yframework->gpu.device, app->yframework->gpu.queue,
             app->yframework->gpu.surface_format, app->yframework->gpu.allocator,
             app->yframework->event_loop);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "yguiapp:run: composite_factory_create");
-        app->composite_factory = ffr.value;
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "yguiapp:run: complex_factory_create");
+        app->complex_factory = ffr.value;
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(app->composite_factory, yplot_f);
+                yetty_ydraw_complex_factory_register(app->complex_factory, yplot_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             }
@@ -655,7 +655,7 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(app->composite_factory, yimage_f);
+                yetty_ydraw_complex_factory_register(app->complex_factory, yimage_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             }
@@ -672,7 +672,7 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
         /* The shared "ygrid"-token chrome surface: absolute (logical-pane)
          * coordinates, scaled to framebuffer by content_scale. */
         app->figure_args.default_font = app->font;
-        app->figure_args.composite_factory = app->composite_factory;
+        app->figure_args.complex_factory = app->complex_factory;
         app->figure_args.absolute_coords = 1;
         struct yetty_ycore_void_result rf = yetty_yscene_register_factory_for_kind(
             app->figure_registry, yetty_yfigure_kind_token("ygrid"), &app->figure_args);
@@ -686,7 +686,7 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
         /* The retained "yscene" kind (scrollarea scene mode): document-
          * space content, GPU scroll. Figure-local coordinates. */
         app->local_figure_args.default_font = app->font;
-        app->local_figure_args.composite_factory = app->composite_factory;
+        app->local_figure_args.complex_factory = app->complex_factory;
         struct yetty_ycore_void_result sceneres =
             yetty_yscene_register_factory(app->figure_registry, &app->local_figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sceneres, "yguiapp:run: yscene_register_factory");
@@ -854,9 +854,9 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
         yetty_yfigure_registry_destroy(app->figure_registry);
         app->figure_registry = NULL;
     }
-    if (app->composite_factory) {
-        yetty_ydraw_composite_factory_destroy(app->composite_factory);
-        app->composite_factory = NULL;
+    if (app->complex_factory) {
+        yetty_ydraw_complex_factory_destroy(app->complex_factory);
+        app->complex_factory = NULL;
     }
     if (app->font) {
         app->font->ops->destroy(app->font);
