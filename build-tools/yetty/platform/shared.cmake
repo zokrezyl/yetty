@@ -465,7 +465,7 @@ add_subdirectory(${YETTY_ROOT}/src/api/yplot ${CMAKE_BINARY_DIR}/src/api/yplot)
 # build. Keep this list in sync with src/yetty/yffi/CMakeLists.txt.
 if(YETTY_BUILD_FFI_SHARED)
     foreach(ffi_pic_target
-            yetty_api_yplot yetty_yplot_core yetty_ydraw_core yetty_yface
+            yetty_api_yplot yetty_yplot_core yetty_ydraw_list yetty_yface
             yetty_ysdf yetty_yfsvm_core yetty_yexpr yetty_yclass yetty_ywire
             yetty_ycore)
         if(TARGET ${ffi_pic_target})

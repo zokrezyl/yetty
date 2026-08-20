@@ -10,7 +10,7 @@ scrollable surface instead of writing into the scrollback (contrast the
 one-shot `YDRAW_BIN` path used by [`ycat`](../ycat/README.md)).
 
 Depends on [`yfigure`](../yfigure/README.md) (producer session + typed
-container stubs), [`ydraw-core`](../ydraw-core/README.md) (drawable lists),
+container stubs), [`ydraw-list`](../ydraw-list/README.md) (drawable lists),
 and `yplot_core` for `set_plot`. Built when both `YDRAW` and `YFACE`
 features are on.
 

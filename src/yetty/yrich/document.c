@@ -30,7 +30,7 @@
 
 #include "yetty/gen/impl/yrich/element.h"
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #include <stdlib.h>
 #include <string.h>

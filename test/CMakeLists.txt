@@ -61,9 +61,9 @@ if(TARGET yetty_ywire)
     add_subdirectory(ut/ywire)
 endif()
 
-# ydraw-core — serialized draw-command layer.
-if(TARGET yetty_ydraw_core AND TARGET yetty_ysdf)
-    add_subdirectory(ut/ydraw-core)
+# ydraw-list — serialized draw-command layer.
+if(TARGET yetty_ydraw_list AND TARGET yetty_ysdf)
+    add_subdirectory(ut/ydraw-list)
 endif()
 
 # ymux — independent daemon-side terminal engine (#695), headless, no GPU.

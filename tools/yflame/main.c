@@ -18,7 +18,7 @@
 #include <yetty/yclass/class.h>
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #ifdef _WIN32
 #include <io.h> /* _fileno */

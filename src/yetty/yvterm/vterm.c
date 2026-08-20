@@ -186,7 +186,7 @@ struct vterm_uniforms {
 };
 
 /* `struct yetty_ydraw_complex` is forward-declared in grid.c and kept opaque
- * here on purpose: it is defined in BOTH ydraw-core/figure.h and
+ * here on purpose: it is defined in BOTH ydraw-list/figure.h and
  * ydraw-factory/complex-factory.h (a pre-existing duplicate), so pulling
  * either defining header would clash in any consumer that includes the other.
  * The factory teardown is declared by hand so this TU only ever uses the type

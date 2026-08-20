@@ -29,8 +29,8 @@
 #include "yetty/gen/impl/ygui/widgets/menubar.h"
 #include "yetty/gen/impl/ygui/widgets/popup_menu.h"
 
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/api/yfigure/container.h>
 #include <yetty/api/yterminal/terminal.h>
 #include <yetty/yclass/rpc.h>
@@ -2158,7 +2158,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_yclass_obj
     /* Full-redraw model: prepend CMD_ZERO so the receiver wipes its
      * ygrid display list before applying this frame's prims. Without
      * this the prims accumulate on the receiver every frame —
-     * documented in include/yetty/ydraw-core/cmds.h:89. */
+     * documented in include/yetty/ydraw-list/cmds.h:89. */
     {
         struct yetty_ycore_void_result zr =
             yetty_ydraw_drawable_list_add_cmd_zero(framework->ygrid_drawable_list);

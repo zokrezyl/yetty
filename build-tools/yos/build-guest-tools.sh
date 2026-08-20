@@ -238,13 +238,13 @@ CORE_SOURCES=(
     src/yetty/yplatform/getopt.c
     src/yetty/yplatform/thread/default.c
     src/yetty/yplatform/term/default.c
-    src/yetty/ydraw-core/drawable-list.c
-    src/yetty/ydraw-core/cmds.c
-    src/yetty/ydraw-core/complex.c
-    src/yetty/ydraw-core/drawable-list-registry.c
-    src/yetty/ydraw-core/font-resource.c
-    src/yetty/ydraw-core/drawable-iterator.c
-    src/yetty/ydraw-core/text-drawable-list.c
+    src/yetty/ydraw-list/drawable-list.c
+    src/yetty/ydraw-list/cmds.c
+    src/yetty/ydraw-list/complex.c
+    src/yetty/ydraw-list/drawable-list-registry.c
+    src/yetty/ydraw-list/font-resource.c
+    src/yetty/ydraw-list/drawable-iterator.c
+    src/yetty/ydraw-list/text-drawable-list.c
     src/yetty/ysdf/funcs.gen.c
     src/yetty/ysdf/aabb.gen.c
     src/yetty/ysdf/yaml-factory.gen.c

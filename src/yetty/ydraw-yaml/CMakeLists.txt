@@ -9,7 +9,7 @@ target_include_directories(yetty_ydraw_yaml PUBLIC
 
 target_link_libraries(yetty_ydraw_yaml PUBLIC
     yaml
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ysdf
     yetty_yplot_core
     yetty_yfsvm_core

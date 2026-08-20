@@ -20,7 +20,7 @@
 #include <yetty/yplatform/time.h> /* yetty_yplatform_ytime_sleep_ms */
 #include <yetty/ycore/util.h>     /* yetty_ycore_read_file */
 #include <yetty/yface/yface.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yterminal/dcs-codes.h> /* YETTY_DCS_YDRAW_* */
 #include <yetty/ylottie/ylottie.h>
 

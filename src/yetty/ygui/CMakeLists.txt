@@ -112,7 +112,7 @@ target_link_libraries(yetty_ygui PUBLIC
     yetty_api_ygui
     yetty_ycore
     yetty_yclass
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yface
     yetty_yfigure
     yetty_api_yterminal

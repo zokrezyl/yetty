@@ -9,7 +9,7 @@
 yetty_add_c_test(
     NAME    yfigure_wire
     SOURCES yfigure-wire-test.c
-    LIBS    yetty_yfigure yetty_yclass yetty_ydraw_core yetty_ycore Threads::Threads
+    LIBS    yetty_yfigure yetty_yclass yetty_ydraw_list yetty_ycore Threads::Threads
     SHIMS   trace platform_thread platform_term
     LABELS  contract wire
     TIMEOUT 30)
@@ -18,7 +18,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    yfigure_container
     SOURCES container-test.c
-    LIBS    yetty_yfigure yetty_yclass yetty_ydraw_core yetty_ycore
+    LIBS    yetty_yfigure yetty_yclass yetty_ydraw_list yetty_ycore
     SHIMS   trace platform_thread platform_term
     LABELS  contract
     TIMEOUT 30)
@@ -29,7 +29,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    yfigure_model
     SOURCES model-test.c
-    LIBS    yetty_yfigure yetty_yclass yetty_ydraw_core yetty_ycore
+    LIBS    yetty_yfigure yetty_yclass yetty_ydraw_list yetty_ycore
     SHIMS   trace platform_thread platform_term
     LABELS  contract
     TIMEOUT 30)

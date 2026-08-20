@@ -22,10 +22,10 @@
 
 #include <yetty/ybrowser/ybrowser.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ydraw-core/drawable-list-registry.h>
-#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list-registry.h>
+#include <yetty/ydraw-list/text-drawable-list.h>
 #include <yetty/ysdf/default-registry.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/ysdf/types.gen.h>

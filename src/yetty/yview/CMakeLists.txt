@@ -6,7 +6,7 @@
 #                     GPU-free (yclass + ycore only).
 #   yetty_yview       compiles the hand-written view.c (which #includes the
 #                     generated impl glue src/yetty/gen/impl/yview/view.c).
-#                     Builds the figure-tree wire records from a ydraw-core
+#                     Builds the figure-tree wire records from a ydraw-list
 #                     drawable list and drives the host container over RPC.
 
 add_library(yetty_api_yview STATIC
@@ -38,7 +38,7 @@ target_link_libraries(yetty_yview PUBLIC
     yetty_yclass
     yetty_api_yfigure   # typed container stubs only (pure remote-driver client)
     yetty_api_yterminal # figure_root_container navigation from the session root
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yplot_core    # set_plot: render a yplot expression to a drawable list (GPU-less)
 )
 

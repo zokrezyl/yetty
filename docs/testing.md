@@ -29,7 +29,7 @@ this strategy fixes:
   tree; per-directory `enable_testing()`, shim sources, include dirs, and link
   rules are copy-pasted.
 - **Coverage is upside-down.** The most-reused, most-critical modules (`ycore`,
-  `yclass`, `yconfig`, `ydraw-core`, `ywire`/`yface`, `yvterm`) have little or
+  `yclass`, `yconfig`, `ydraw-list`, `ywire`/`yface`, `yvterm`) have little or
   no coverage, while some downstream figure modules do.
 
 The first goal is a reliable platform: one obvious command, one deterministic
@@ -79,7 +79,7 @@ Every test belongs to exactly one layer.
   Makefile `ctest` entrypoints, the CI test step, labels/timeouts. Not tests
   themselves; the foundation that makes the rest trustworthy.
 - **L1 — pure logic.** No GPU, display, network, or event loop. `ycore`
-  result/error helpers, `yclass` dispatch, `yconfig`, `ydraw-core` command
+  result/error helpers, `yclass` dispatch, `yconfig`, `ydraw-list` command
   builders/parsers, `ywire`/`yface` framing, `yvterm` parser pieces, `yrich`
   document/selection/YAML where pure.
 - **L2 — headless component.** Real modules through in-process seams:
@@ -191,7 +191,7 @@ function name.
 yetty_add_c_test(
     NAME    yscene_wire_parity
     SOURCES wire-parity-test.c
-    LIBS    yetty_yscene yetty_ydraw_factory yetty_ydraw_core yetty_ysdf yetty_yfigure
+    LIBS    yetty_yscene yetty_ydraw_factory yetty_ydraw_list yetty_ysdf yetty_yfigure
     SHIMS   trace platform_thread platform_term
     LABELS  contract wire
     TIMEOUT 30)
@@ -312,7 +312,7 @@ Expand in this order (highest structural risk first):
 2. **ywire / yface** — partial frames, multiple frames per buffer, malformed
    OSC/DCS envelopes, base64 and LZ4 payloads, reset/recovery after bad input,
    large-payload chunking.
-3. **ydraw-core** — command builder/parser roundtrips, groups, delete, clear,
+3. **ydraw-list** — command builder/parser roundtrips, groups, delete, clear,
    invalid lengths, truncated buffers, stable textual dumps for goldens.
 4. **yfigure / yscene** — child create/delete/clear, rect update, z-order, hit
    testing, dirty propagation, body forwarding, local-vs-RPC dispatch; yscene
@@ -353,5 +353,5 @@ Expand in this order (highest structural risk first):
 Fast-follow: migrate `test/ybrowser/ut` and `test/integration/ylexbor` to the
 helper/label conventions.
 
-**Then, coverage** in the §11 order: yclass → ywire/yface → ydraw-core →
+**Then, coverage** in the §11 order: yclass → ywire/yface → ydraw-list →
 yfigure/yscene → ygui → yvterm/yterminal → parser/render modules → render/E2E.

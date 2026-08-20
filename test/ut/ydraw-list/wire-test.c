@@ -1,7 +1,7 @@
 /*
- * ydraw-core command wire + golden contract test.
+ * ydraw-list command wire + golden contract test.
  *
- * Builds command streams with the ydraw-core builders, walks them back with
+ * Builds command streams with the ydraw-list builders, walks them back with
  * the real parser (yetty_ydraw_drawable_command_parse), and pins:
  *   - builder/parser roundtrips (CMD_ZERO, SDF box, CMD_DELETE)
  *   - group open/close with end_group payload_size back-patching
@@ -13,10 +13,10 @@
  * cmd + SDF strides the parser needs.
  */
 
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-iterator.h>
-#include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-iterator.h>
+#include <yetty/ydraw-list/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list-registry.h>
 #include <yetty/ysdf/default-registry.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
@@ -288,7 +288,7 @@ static void test_invalid_group_size(struct ytest *test)
 
 int main(void)
 {
-    struct ytest test = ytest_begin("ydraw_core_wire");
+    struct ytest test = ytest_begin("ydraw_list_wire");
     YTEST_RUN(&test, test_roundtrip);
     YTEST_RUN(&test, test_group_backpatch);
     YTEST_RUN(&test, test_clear_resets);

@@ -77,7 +77,7 @@ The full startup/ownership chain and context structs are in
 | `yrender` | GPU pipeline: resource-set binder, allocator, pipeline, render targets, blender ([yrender](../src/yetty/yrender/README.md), [GPU binding](gpu-resource-binding.md)) | ✓ |
 | `yrender-utils` | Screenshot, tile-diff helpers | ✓ |
 | `ydraw` | Canvas + rolling-row scrolling primitive model ([ydraw](../src/yetty/ydraw/README.md)) | ✓ |
-| `ydraw-core` | Serialized primitive buffer, draw list, drawable-list registry | ✓ |
+| `ydraw-list` | Serialized primitive buffer, draw list, drawable-list registry | ✓ |
 | `ydraw-factory` | Figure factory for complexes | ✓ |
 | `ydraw-yaml` | YAML-driven figure construction | ✓ |
 | `ydraw-gen` | Schema-driven complex generator (`generate.py`; run manually) | ◐ |

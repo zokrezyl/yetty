@@ -6,7 +6,7 @@
  */
 
 #include <yetty/api/ycircuit/circuit.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #include "ytest.h"
 

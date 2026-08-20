@@ -13,7 +13,7 @@
  *   ynet <file.pcap|file.pcapng>        # print the capture (default)
  *   ynet --dump <file>                  # explicit; same as above
  */
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include "yetty/gen/impl/ynet/capture.h"
 
 #include <stdio.h>

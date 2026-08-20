@@ -4,7 +4,7 @@
  * For each positional input (file path, or "-" for stdin):
  *   1. read the bytes
  *   2. detect the type via libmagic + extension
- *   3. dispatch to a handler that returns a ydraw-core buffer (markdown,
+ *   3. dispatch to a handler that returns a ydraw-list buffer (markdown,
  *      PDF for now — registry is open for more)
  *   4. emit a DCS YDRAW_BIN (600001) envelope to stdout carrying the
  *      base64-encoded ydraw primitive bytes (consumed by the ydraw
@@ -26,7 +26,7 @@
 
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #include <stdbool.h>
 #include <stdint.h>

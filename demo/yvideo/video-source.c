@@ -68,8 +68,8 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yterminal/dcs-codes.h>
 #include <yetty/yvideo/yvideo.h>
 #include <yetty/yvideo/yvideo-gen.h>

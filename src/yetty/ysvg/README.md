@@ -5,7 +5,7 @@ shapes, MSDF text spans, and embedded [`yimage`](../yimage/README.md)
 records — vectors stay vectors end to end, no rasterization. Scope is the
 SVG Tiny 1.2 static-graphics subset: no scripting, no SMIL animation, no
 DOM/timing model. Dependencies: yxml (SAX XML), `ycore`,
-[`ydraw-core`](../ydraw-core/README.md), [`ysdf`](../ysdf/README.md), and
+[`ydraw-list`](../ydraw-list/README.md), [`ysdf`](../ysdf/README.md), and
 the GPU-less `yetty_yimage_core` for `<image>`.
 
 ## Pipeline

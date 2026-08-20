@@ -1,5 +1,5 @@
 # ysixel decoder contract test — pure pixel math, headless, deterministic.
-# Links only the decoder core (which pulls yimage_core → ydraw_core → yface).
+# Links only the decoder core (which pulls yimage_core → ydraw_list → yface).
 
 yetty_add_c_test(
     NAME    ysixel_decode

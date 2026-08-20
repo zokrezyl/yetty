@@ -8,7 +8,7 @@
  * Pipeline:
  *   stb_image decode (path or in-memory PNG/JPG/...)  → RGBA8 pixels
  *   yetty_yimage_uniforms_serialize(uniforms, pixels) → wire bytes
- *   ydraw_core_buffer_add_prim(buffer)               → attach to ydraw
+ *   ydraw_list_buffer_add_prim(buffer)               → attach to ydraw
  *
  * The frontend tool (tools/yimage) wraps the path-based variant with a
  * CLI; yecho's `{image: ...}` block (planned) will use the bytes variant
@@ -25,7 +25,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yimage/yimage-gen.h>
 
 #ifdef __cplusplus
@@ -46,7 +46,7 @@ struct yetty_yimage_render_config {
  * before deciding the display bounds. */
 int yetty_yimage_probe_size(const uint8_t *image_bytes, size_t len, int *out_w, int *out_h);
 
-/* Decode `image_bytes` (PNG/JPG/...) and produce a fresh ydraw-core
+/* Decode `image_bytes` (PNG/JPG/...) and produce a fresh ydraw-list
  * buffer holding ONE yimage complex prim. Caller frees the buffer with
  * yetty_ydraw_drawable_list_destroy. */
 struct yetty_ydraw_drawable_list_result yetty_yimage_render(

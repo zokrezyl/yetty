@@ -96,7 +96,7 @@ Yetty's figure system currently covers:
 
 | Area | Modules and tools |
 |---|---|
-| Primitive drawing | `ydraw`, `ydraw-core`, `ydraw-factory`, `ygrid`, `ysdf` |
+| Primitive drawing | `ydraw`, `ydraw-list`, `ydraw-factory`, `ygrid`, `ysdf` |
 | Charts and plots | `yplot`, `ychart`, `yflame`, `tools/yplot`, `tools/ychart`, `tools/yflame` |
 | Documents and markup | `ycat`, `ymarkdown`, `ypdf`, `ysvg`, `yrich`, `tools/yless` |
 | Diagrams and notation | `ydiagram`, `ycircuit`, `ymusic` |

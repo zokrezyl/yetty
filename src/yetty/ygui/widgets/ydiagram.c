@@ -40,7 +40,7 @@ YETTY_YRESULT_DECLARE(yetty_ygui_ydiagram_ptr, struct yetty_ygui_ydiagram *);
 struct yetty_yclass_ptr_result yetty_ygui_ydiagram_class_get(void);
 struct yetty_ygui_ydiagram_ptr_result yetty_ygui_ydiagram_from(struct yetty_yclass_object *obj);
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include "yetty/gen/impl/ygui/widgets/ydraw_embed.h"
 
 #if YETTY_YGUI_HAVE_YDIAGRAM

@@ -293,7 +293,7 @@ def generate_sdf_drawable_header(prims: list[dict], out: Path) -> None:
 #pragma once
 
 #include "types.gen.h"
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ycore/result.h>
 
 #ifdef __cplusplus
@@ -615,7 +615,7 @@ def generate_sdf_yaml_factory_header(prims: list[dict], out: Path) -> None:
     prims_2d = [p for p in prims if p["category"] == "sdf2d"]
 
     lines = [HEADER_C, "#pragma once", ""]
-    lines.append('#include <yetty/ydraw-core/yaml-factory.h>')
+    lines.append('#include <yetty/ydraw-list/yaml-factory.h>')
     lines.append("")
     lines.append("#ifdef __cplusplus")
     lines.append('extern "C" {')
@@ -649,7 +649,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines = [HEADER_C, ""]
     lines.append('#include <yetty/ysdf/yaml-factory.gen.h>')
     lines.append('#include <yetty/ysdf/types.gen.h>')
-    lines.append('#include <yetty/ydraw-core/drawable-list.h>')
+    lines.append('#include <yetty/ydraw-list/drawable-list.h>')
     lines.append('#include <yetty/ydraw-yaml/ydraw-yaml.h>')
     lines.append('#include <yetty/ytrace/ytrace.h>')
     lines.append('#include <yaml.h>')

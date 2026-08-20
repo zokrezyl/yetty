@@ -1,12 +1,12 @@
-/* drawable-list entry — module-internal declarations (ydraw-core only).
+/* drawable-list entry — module-internal declarations (ydraw-list only).
  *
- * The public surface lives in include/yetty/ydraw-core/drawable-list-registry.h.
+ * The public surface lives in include/yetty/ydraw-list/drawable-list-registry.h.
  */
 #ifndef YETTY_YDRAW_CORE_DRAWABLE_LIST_REGISTRY_INTERNAL_H
 #define YETTY_YDRAW_CORE_DRAWABLE_LIST_REGISTRY_INTERNAL_H
 
 #include <stdint.h>
-#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-list/drawable-list-registry.h>
 
 #ifdef __cplusplus
 extern "C" {

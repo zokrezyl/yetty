@@ -13,7 +13,7 @@ target_include_directories(yetty_ymesh_core PUBLIC
 
 target_link_libraries(yetty_ymesh_core PUBLIC
     cgltf
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yface
 )
 

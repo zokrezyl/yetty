@@ -16,7 +16,7 @@ target_include_directories(demo-yvideo-source PRIVATE
 find_package(Threads REQUIRED)
 target_link_libraries(demo-yvideo-source PRIVATE
     yetty_yvideo_core
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yface
     yetty_ycore
     Threads::Threads

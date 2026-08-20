@@ -19,7 +19,7 @@
 
 #include <yetty/ypdf/ypdf.h>
 #include <yetty/ypdf/pdf-content-parser.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/raster-font.h>
 #include <yetty/ysdf/types.gen.h>

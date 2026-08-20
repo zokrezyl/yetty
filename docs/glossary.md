@@ -288,7 +288,7 @@ The document editor — part of [yrich](#yrich), not its own module.
 The 2D content model and wire format: serialized streams of
 [primitives](#primitive), [complexes](#complex), [resources](#resource),
 and commands that scroll with terminal content. Implemented by the `ydraw-*`
-module family — [ydraw-core](../src/yetty/ydraw-core/README.md) (drawable
+module family — [ydraw-list](../src/yetty/ydraw-list/README.md) (drawable
 list, type registry, streaming iterator, wire commands),
 [ydraw-factory](../src/yetty/ydraw-factory/README.md),
 [ydraw-yaml](../src/yetty/ydraw-yaml/README.md),
@@ -303,7 +303,7 @@ direct primitives, complexes, resources, commands, and text drawable lists.
 Related identifiers follow the same base: `drawable_list_entry`,
 `drawable_list_registry`, `drawable_list_entry_ops` — a bare "entry" type
 does not appear in public naming. See
-[ydraw-core](../src/yetty/ydraw-core/README.md).
+[ydraw-list](../src/yetty/ydraw-list/README.md).
 
 ## yetty
 

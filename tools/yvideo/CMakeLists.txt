@@ -20,7 +20,7 @@ include(${YETTY_ROOT}/build-tools/yetty/minimp4.cmake)
 find_package(Threads REQUIRED)
 target_link_libraries(yvideo PRIVATE
     yetty_yvideo_core
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yface
     yetty_ycore
     Threads::Threads

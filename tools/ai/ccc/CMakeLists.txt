@@ -7,7 +7,7 @@
 include(${YETTY_ROOT}/build-tools/yetty/libs/yyjson.cmake)
 
 # ytrace is compiled per-final-target (not a standalone library); the
-# rest comes transitively from yetty_ygui (ydraw-core, yface, yfont,
+# rest comes transitively from yetty_ygui (ydraw-list, yface, yfont,
 # yplatform_core, ...).
 add_executable(ccc
     main.c

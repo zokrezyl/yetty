@@ -30,9 +30,9 @@
 #include <yetty/yclass/class.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/util.h>
-#include <yetty/ydraw-core/complex.h>
-#include <yetty/ydraw-core/font-resource.h>
-#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ydraw-list/complex.h>
+#include <yetty/ydraw-list/font-resource.h>
+#include <yetty/ydraw-list/text-drawable-list.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/font-cache.h>

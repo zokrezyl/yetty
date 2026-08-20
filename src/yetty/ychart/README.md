@@ -5,7 +5,7 @@ buffer of SDF shape and MSDF text primitives, the same way
 [`ydiagram`](../ydiagram) turns Mermaid text into one. The buffer is handed
 to a yetty pane (over the DCS `YDRAW_BIN` envelope) or to a ygui widget.
 
-It is pure C and depends only on `ycore`, `ydraw-core`, and `ysdf` — no
+It is pure C and depends only on `ycore`, `ydraw-list`, and `ysdf` — no
 platform-specific code.
 
 ## Chart kinds

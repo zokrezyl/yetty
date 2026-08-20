@@ -30,14 +30,14 @@
 #include <yetty/ywire/wire-statemachine.h>
 
 /* `struct yetty_ydraw_complex` is kept opaque on purpose: it is defined in
- * BOTH ydraw-core/figure.h and ydraw-factory/complex-factory.h (a pre-existing
+ * BOTH ydraw-list/figure.h and ydraw-factory/complex-factory.h (a pre-existing
  * duplicate), so pulling either defining header clashes in any consumer that
  * includes the other. Used by pointer only; the teardown + render free functions
  * are hand-declared (defined in ydraw-factory). */
 struct yetty_ydraw_complex;
 void yetty_ydraw_complex_destroy(struct yetty_ydraw_complex *instance);
 /* Complex-envelope type test (type ids >= 0x80000000) — hand-declared from
- * ydraw-core for the same header-clash reason. The line arena stores complex
+ * ydraw-list for the same header-clash reason. The line arena stores complex
  * wire envelopes as opaque records next to the SDF/glyph ones; this picks them
  * out for figure re-materialization. */
 bool yetty_ydraw_is_complex(uint32_t type);

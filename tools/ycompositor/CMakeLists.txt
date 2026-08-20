@@ -73,11 +73,11 @@ endif()
 target_link_libraries(ycompositor PRIVATE
     yetty_yscene
     yetty_yfigure
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yframework
     ${YETTY_LIBS}
     yetty_ywire
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yplatform_core
     yetty_yplatform_move_resize
     yetty_yplatform_window_chrome
@@ -94,7 +94,7 @@ else()
     target_link_libraries(ycompositor PRIVATE rt util)
 endif()
 
-# drawable-iterator (in libyetty_ydraw_core.a) calls into libyetty_ywire.a.
+# drawable-iterator (in libyetty_ydraw_list.a) calls into libyetty_ywire.a.
 # GNU ld needs --start-group/--end-group to re-scan the static archives
 # until all cross-references resolve. MSVC's link.exe re-scans by default,
 # so the grouping is GNU-ld only.

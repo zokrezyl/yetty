@@ -28,7 +28,7 @@
 
 #include "scroll-tiers.h"
 
-/* Complex-envelope type test — hand-declared from ydraw-core (same
+/* Complex-envelope type test — hand-declared from ydraw-list (same
  * header-clash avoidance as grid.c). */
 bool yetty_ydraw_is_complex(uint32_t type);
 

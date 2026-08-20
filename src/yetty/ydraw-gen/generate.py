@@ -1215,7 +1215,7 @@ static struct yetty_ycore_void_result {name}_update_dispatch(
                               f'    yetty_{name}_instance_destroying(instance);\n') + hooks_destroy_call
 
     # webgpu.h is pulled in via the ydraw-factory header (server-only).
-    # Wire format / type-id ranges come from ydraw-core/complex.h.
+    # Wire format / type-id ranges come from ydraw-list/complex.h.
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
 //
@@ -1237,7 +1237,7 @@ static struct yetty_ycore_void_result {name}_update_dispatch(
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/pipeline.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/ydraw-core/complex.h>
+#include <yetty/ydraw-list/complex.h>
 #include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
@@ -1832,7 +1832,7 @@ def generate_yaml_parser(schema, uniforms, buffers):
 
 #include <yetty/{name}/{name}-gen.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yaml.h>

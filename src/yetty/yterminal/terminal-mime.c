@@ -55,7 +55,7 @@ typedef long long ssize_t;
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymime/mime.h>
 #include <yetty/yplatform/ycoroutine.h>

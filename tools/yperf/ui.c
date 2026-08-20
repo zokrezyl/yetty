@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/api/yflame/flame.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ysdf/funcs.gen.h> /* yetty_ydraw_drawable_list_add_cmd_add_box */

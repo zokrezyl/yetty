@@ -6,7 +6,7 @@
 #include <yetty/ycore/ffi-annotations.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-list/drawable-list-registry.h>
 
 #ifdef __cplusplus
 extern "C" {

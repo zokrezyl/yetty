@@ -15,7 +15,7 @@
  *   yexpr_parse_plot(source)   — multi-function plot syntax
  *   yfsvm_compile_multi(ast)   — bytecode for the GPU interpreter
  *   yplot_serialize(uniforms, bytecode + data buffers) — wire bytes
- *   ydraw_core_drawable_list_add_prim(buffer) — attach to a ydraw draw list
+ *   ydraw_list_drawable_list_add_prim(buffer) — attach to a ydraw draw list
  */
 
 #include <stdbool.h>
@@ -24,7 +24,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yplot/yplot-gen.h>
 
 #ifdef __cplusplus
@@ -140,7 +140,7 @@ YETTY_YRESULT_DECLARE(yetty_yplot_loaded_samples, struct yetty_yplot_loaded_samp
 struct yetty_yplot_loaded_samples_result yetty_yplot_load_samples(const char *spec);
 
 /* Render `source` (multi-plot-expression syntax — see yexpr_parse_plot)
- * into a fresh ydraw-core buffer holding ONE yplot complex prim.
+ * into a fresh ydraw-list buffer holding ONE yplot complex prim.
  *
  * Per-plot color overrides come from `@<name>.color = #RRGGBB` attrs in
  * the source; plots without explicit colors fall back to a built-in
@@ -166,7 +166,7 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
 
 /* Render a PRECOMPILED yfsvm program (the serialized word array produced by
  * yetty_yfsvm_program_serialize — e.g. emitted by an external frontend such
- * as the Python-subset compiler) into a fresh ydraw-core buffer holding one
+ * as the Python-subset compiler) into a fresh ydraw-list buffer holding one
  * yplot prim. No expression parsing or compilation happens here.
  *
  * `program` / `program_words` is the serialized program:

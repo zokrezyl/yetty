@@ -1,9 +1,9 @@
-/* text-drawable-list — module-internal declarations (ydraw-core only).
+/* text-drawable-list — module-internal declarations (ydraw-list only).
  *
- * These functions are called only from within the ydraw-core module
+ * These functions are called only from within the ydraw-list module
  * (text-drawable-list.c implementation, buffer.c packing wrappers). The public
  * surface (parse, view struct, type id, handler) lives in
- * include/yetty/ydraw-core/text-drawable-list.h.
+ * include/yetty/ydraw-list/text-drawable-list.h.
  */
 #ifndef YETTY_YDRAW_CORE_TEXT_DRAWABLE_LIST_INTERNAL_H
 #define YETTY_YDRAW_CORE_TEXT_DRAWABLE_LIST_INTERNAL_H

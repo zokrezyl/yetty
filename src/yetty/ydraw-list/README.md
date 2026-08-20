@@ -1,4 +1,4 @@
-# ydraw-core — serialized primitive buffer, wire commands, drawable-list registry
+# ydraw-list — serialized primitive buffer, wire commands, drawable-list registry
 
 The GPU-less core of the ydraw wire format: the drawable-list buffer that
 producers append primitives into, the type registry that maps wire type ids to
@@ -59,7 +59,7 @@ primitive stream. Entity-scoped editing uses `begin_group[_with_rect]` /
 a spatial grid). The fully wired registry for all tiers is built by
 `yetty_ydraw_drawable_list_registry_create_default()` in
 `../ysdf/default-registry.c` (ysdf, because the default handler is the SDF
-one and ydraw-core must not depend on ysdf).
+one and ydraw-list must not depend on ysdf).
 
 Two decode paths:
 
@@ -83,7 +83,7 @@ Two decode paths:
 | `font-resource.c` | FONT record parse/handler (TTF bytes, content-hash ref, or named ref) |
 | `text-drawable-list.c` | TEXT_DRAWABLE_LIST parse/handler (UTF-8 run + PDF Tc/Tw spacing) |
 
-Public headers live in `include/yetty/ydraw-core/`. Two of them are special:
+Public headers live in `include/yetty/ydraw-list/`. Two of them are special:
 `yaml-factory.h` only declares the factory-callback type used by
 [ydraw-yaml](../ydraw-yaml/README.md), and `figure.h` is a legacy complex
 base interface kept for [yvterm](../yvterm/README.md) — new complex code

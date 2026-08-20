@@ -12,7 +12,7 @@ target_include_directories(yetty_yimage_core PUBLIC
 
 target_link_libraries(yetty_yimage_core PUBLIC
     stb
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yface
 )
 

@@ -41,7 +41,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_yclas
                                                               yetty_ygui_menu_item_cb cb,
                                                               void *userdata);
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include "yetty/gen/impl/ygui/primitive-widget.h"
 #include <yetty/ysdf/funcs.gen.h>
 

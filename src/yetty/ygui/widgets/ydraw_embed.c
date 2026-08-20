@@ -22,10 +22,10 @@ struct yetty_yclass_ptr_result yetty_ygui_ydraw_embed_class_get(void);
 struct yetty_ygui_ydraw_embed_ptr_result yetty_ygui_ydraw_embed_from(
     struct yetty_yclass_object *obj);
 
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/complex.h>
-#include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/complex.h>
+#include <yetty/ydraw-list/drawable-list.h>
+#include <yetty/ydraw-list/text-drawable-list.h>
 #include "yetty/gen/impl/ygui/primitive-widget.h"
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/handler.h>

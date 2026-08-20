@@ -3,7 +3,7 @@
 
 add_executable(yetty-ylottie
     main.c
-    # ytrace stubs used by libraries we pull in (ydraw-core, ylottie).
+    # ytrace stubs used by libraries we pull in (ydraw-list, ylottie).
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
 )
 
@@ -14,7 +14,7 @@ target_include_directories(yetty-ylottie PRIVATE
 
 target_link_libraries(yetty-ylottie PRIVATE
     yetty_ylottie
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yface
     yetty_ycore
     yetty_yplatform_core

@@ -1,11 +1,11 @@
-// ydraw-core YAML factory callback type
+// ydraw-list YAML factory callback type
 
 #pragma once
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
-// Forward declare libyaml parser (avoids yaml.h dependency in ydraw-core)
+// Forward declare libyaml parser (avoids yaml.h dependency in ydraw-list)
 struct yaml_parser_s;
 
 #ifdef __cplusplus

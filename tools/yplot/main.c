@@ -17,7 +17,7 @@
 #include <yetty/yplot/yplot.h>
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #include <stdbool.h>
 #include <stdint.h>

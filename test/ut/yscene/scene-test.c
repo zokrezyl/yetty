@@ -29,9 +29,9 @@ struct yetty_ycore_uint64_result yetty_yscene_vtermgrid_replies_discarded(
 
 #include "../../../src/yetty/ymux/proto.h"
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/cmds.h>
+#include <yetty/ydraw-list/cmds.h>
 #include <yetty/ydraw-factory/complex-factory.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 

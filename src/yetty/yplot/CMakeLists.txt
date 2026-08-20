@@ -15,7 +15,7 @@ target_include_directories(yetty_yplot_core PUBLIC
 
 target_link_libraries(yetty_yplot_core PUBLIC
     yaml
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yfsvm_core
     yetty_yface
     yetty_ysdf

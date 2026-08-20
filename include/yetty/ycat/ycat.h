@@ -5,7 +5,7 @@
  * ycat - MIME-dispatched cat.
  *
  * Detects the type of a byte buffer (libmagic + extension fallback) and
- * dispatches to a handler that turns the bytes into a ydraw-core buffer.
+ * dispatches to a handler that turns the bytes into a ydraw-list buffer.
  * The caller then either:
  *   - base64-encodes the ydraw primitives and emits a DCS YDRAW_BIN envelope
  *     (yetty_ycat_dcs_bin_emit), so a running yetty terminal picks it up
@@ -20,7 +20,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -80,7 +80,7 @@ struct yetty_ycat_config {
 };
 
 /* Handler signature: bytes+len (and optionally a path for formats that need
- * one, e.g. PDF via pdfio) → fresh ydraw-core buffer. Returned buffer
+ * one, e.g. PDF via pdfio) → fresh ydraw-list buffer. Returned buffer
  * ownership is transferred to the caller.
  *
  * path_hint may be NULL (for stdin / URL). If the handler needs a real file

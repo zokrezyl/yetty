@@ -1,7 +1,7 @@
 // YSDF primitive handler for buffer iteration
 #pragma once
 
-#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-list/drawable-list-registry.h>
 #include <yetty/ysdf/types.gen.h>
 
 #ifdef __cplusplus

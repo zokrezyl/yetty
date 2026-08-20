@@ -30,7 +30,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h> /* container_of */
-#include <yetty/ydraw-core/complex.h>
+#include <yetty/ydraw-list/complex.h>
 #include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/time.h>

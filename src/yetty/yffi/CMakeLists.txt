@@ -37,7 +37,7 @@ target_link_libraries(yetty_ffi PRIVATE
     yetty_api_yplot   # public API facade — exports yetty_api_yplot_* for bindings
     -Wl,--no-whole-archive
     yetty_yplot_core  # yetty_yplot_render + dcs_bin_emit (GPU-less)
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yface
     yetty_ysdf
     yetty_yfsvm_core

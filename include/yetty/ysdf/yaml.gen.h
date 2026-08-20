@@ -5,7 +5,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ysdf/types.gen.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <stddef.h>
 
 #ifdef __cplusplus

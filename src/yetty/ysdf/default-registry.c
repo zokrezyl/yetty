@@ -1,6 +1,6 @@
 /* default-registry.c — configured drawable-list registry for ALL primitives.
  *
- * Type-id space (see ydraw-core/cmds.h for the canonical layout):
+ * Type-id space (see ydraw-list/cmds.h for the canonical layout):
  *   1. CMD tier handler                        types [0x00000000, 0x0000FFFF]
  *   2. SDF default handler                     types [0x10000000, 0x1FFFFFFF]
  *   3. FONT drawable-list entry handler        type   0x40000001
@@ -10,10 +10,10 @@
  * All return base ops (size, aabb) for buffer iteration.
  */
 
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/complex.h>
-#include <yetty/ydraw-core/font-resource.h>
-#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/complex.h>
+#include <yetty/ydraw-list/font-resource.h>
+#include <yetty/ydraw-list/text-drawable-list.h>
 #include <yetty/ysdf/default-registry.h>
 #include <yetty/ysdf/handler.h>
 

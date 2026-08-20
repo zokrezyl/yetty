@@ -16,7 +16,7 @@
  * Release/NDEBUG.
  */
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include "yetty/gen/impl/ygui/mixins/draggable.h"
 #include "yetty/gen/impl/ygui/widget.h"
 #include <yetty/ygui/ygui.h>

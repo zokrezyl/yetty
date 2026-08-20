@@ -80,6 +80,6 @@ ThorVG-fidelity alternative path.
 
 ## Related
 
-- [../ydraw-core/README.md](../ydraw-core/README.md) — the buffer being
+- [../ydraw-list/README.md](../ydraw-list/README.md) — the buffer being
   filled
 - [../ysdf/README.md](../ysdf/README.md) — SDF primitive types emitted

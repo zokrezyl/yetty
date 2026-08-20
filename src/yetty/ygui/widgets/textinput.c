@@ -20,7 +20,7 @@ YETTY_YRESULT_DECLARE(yetty_ygui_textinput_ptr, struct yetty_ygui_textinput *);
 struct yetty_yclass_ptr_result yetty_ygui_textinput_class_get(void);
 struct yetty_ygui_textinput_ptr_result yetty_ygui_textinput_from(struct yetty_yclass_object *obj);
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yfont/font.h>
 #include "yetty/gen/impl/ygui/primitive-widget.h"
 #include <yetty/yplatform/time.h>

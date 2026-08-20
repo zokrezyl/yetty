@@ -2,7 +2,7 @@
 # for bar / column / line / area / scatter / pie / donut / radar / treemap /
 # sankey charts.
 #
-# Pure C; depends on ycore (result/types), ydraw-core (buffer + text/font
+# Pure C; depends on ycore (result/types), ydraw-list (buffer + text/font
 # drawable-list entries), and ysdf (SDF shape emitters). No platform-specific
 # deps — mirrors ydiagram.
 
@@ -26,7 +26,7 @@ target_include_directories(yetty_ychart PUBLIC
 
 target_link_libraries(yetty_ychart PUBLIC
     yetty_ycore
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ysdf
 )
 

@@ -17,7 +17,7 @@
  * written to stdout — the PTY connected to the parent yetty.
  */
 #include <yetty/ycat/ycat.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yconfig/config.h>        /* read brand colours from the yetty config */
 #include "yetty/gen/impl/ymusic/music.h" /* yetty_ymusic_* — LilyPond score rendering */
 #include <yetty/yplatform/getopt.h>

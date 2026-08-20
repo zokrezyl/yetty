@@ -36,7 +36,7 @@
 #include <yetty/ycore/types.h>
 
 #include <yetty/yface/yface.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/yterminal/dcs-codes.h>
@@ -160,7 +160,7 @@ struct ymusic_staff {
  *===========================================================================*/
 
 struct YETTY_ANNOTATE("class@ymusic:music")
-    YETTY_ANNOTATE("include@yetty/ydraw-core/drawable-list.h") yetty_ymusic_music {
+    YETTY_ANNOTATE("include@yetty/ydraw-list/drawable-list.h") yetty_ymusic_music {
     /* Render configuration. */
     float width;
     float staff_space;

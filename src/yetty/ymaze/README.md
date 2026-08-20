@@ -5,7 +5,7 @@ SDF primitives. It is a pure producer — no IO, no GPU, no terminal
 interaction: each `render(time)` fills a caller-owned
 `yetty_ydraw_drawable_list`, and the frontend owns time and the buffer. A
 port of the yetty-poc `ydraw-maze` C++ renderer; depends only on
-`ydraw-core` and `ysdf`.
+`ydraw-list` and `ysdf`.
 
 ## How it works
 

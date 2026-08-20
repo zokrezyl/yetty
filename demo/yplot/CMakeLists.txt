@@ -16,7 +16,7 @@ target_include_directories(demo-yplot-audio-source PRIVATE
 find_package(Threads REQUIRED)
 target_link_libraries(demo-yplot-audio-source PRIVATE
     yetty_yplot_core
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yface
     yetty_yfsvm_core
     yetty_yexpr

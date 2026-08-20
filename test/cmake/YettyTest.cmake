@@ -12,7 +12,7 @@
 #   yetty_add_c_test(
 #       NAME    yscene_scene                     # ctest name (also the label seed)
 #       SOURCES scene-test.c                     # test sources (relative to caller)
-#       LIBS    yetty_yscene yetty_ydraw_core ...# libraries to link
+#       LIBS    yetty_yscene yetty_ydraw_list ...# libraries to link
 #       SHIMS   trace platform_thread platform_term
 #       LABELS  contract wire                    # one layer label + optional domain
 #       TIMEOUT 30)                              # seconds

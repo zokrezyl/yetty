@@ -29,7 +29,7 @@ endif()
 
 add_executable(ylexbor-wpt-runner
     wpt-runner.c
-    # ytrace symbols are referenced by yetty_ydraw_core's drawable-list entry
+    # ytrace symbols are referenced by yetty_ydraw_list's drawable-list entry
     # path; the regular yetty binary pulls them in transitively, but a
     # standalone ctest binary needs them explicitly.
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
@@ -45,7 +45,7 @@ add_executable(ylexbor-wpt-runner
 # final link fails with undefined yetty_yplatform_* references.
 target_link_libraries(ylexbor-wpt-runner PRIVATE
     yetty_ylexbor
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_ycore
     yetty_yplatform_core
     qjs

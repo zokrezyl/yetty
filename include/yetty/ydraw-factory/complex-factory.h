@@ -1,7 +1,7 @@
 // YDraw Complex Primitive Factory - Abstract Factory Pattern (GPU side)
 //
 // This header bundles the *server-side* runtime that turns wire-format
-// complex bytes (defined in yetty/ydraw-core/complex.h)
+// complex bytes (defined in yetty/ydraw-list/complex.h)
 // into renderable GPU objects.
 //
 // Architecture:
@@ -11,7 +11,7 @@
 //
 // Anything in this header pulls in <webgpu/webgpu.h> and the GPU resource
 // types — keep client-only code (DCS emit, YAML, wire serialize) on the
-// ydraw-core side.
+// ydraw-list side.
 //
 // See docs/ydraw.md for full documentation.
 
@@ -23,7 +23,7 @@
 #include <yetty/ycore/ffi-annotations.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/complex.h>
+#include <yetty/ydraw-list/complex.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yrender/gpu-resource-set.h>

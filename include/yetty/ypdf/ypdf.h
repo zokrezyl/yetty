@@ -19,7 +19,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 /* Uniform render (supersampling) scale. Every emitted span coordinate, font
  * size, spacing parameter, and the buffer's scene bounds are multiplied by

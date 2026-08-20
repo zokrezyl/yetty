@@ -7,7 +7,7 @@ render as line-segment-approximated quadratic beziers, straight
 segments, or one of 22 SDF shapes placed at the connection midpoint. A
 pure producer of ydraw primitives — no IO, no GPU, no terminal
 interaction; the frontend drives time and owns the buffer. Port of the
-yetty-poc `ydraw-zoo/zoo-renderer.cpp`; depends only on `ydraw-core` and
+yetty-poc `ydraw-zoo/zoo-renderer.cpp`; depends only on `ydraw-list` and
 `ysdf`.
 
 ## How it works

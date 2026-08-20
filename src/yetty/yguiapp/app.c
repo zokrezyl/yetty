@@ -33,7 +33,7 @@
 #include <yetty/yclass/class.h>
 #include <yetty/yconfig/config.h>
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>

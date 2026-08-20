@@ -480,50 +480,50 @@ local_typedefs:
     source_file: src/yetty/ymap/map.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_ymap_configure_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymap_configure_fn)(struct yetty_yclass_object *, double, double, uint32_t, uint32_t, uint32_t);"
   yetty_ymap_set_provider_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymap_set_provider_fn)(struct yetty_yclass_object *, const char *);"
   yetty_ymap_set_custom_provider_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymap_set_custom_provider_fn)(struct yetty_yclass_object *, const char *, int, const char *, uint32_t, const char *);"
   yetty_ymap_set_center_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymap_set_center_fn)(struct yetty_yclass_object *, double, double);"
   yetty_ymap_set_zoom_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymap_set_zoom_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_ymap_set_viewport_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymap_set_viewport_fn)(struct yetty_yclass_object *, uint32_t, uint32_t);"
   yetty_ymap_pan_by_pixels_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymap_pan_by_pixels_fn)(struct yetty_yclass_object *, double, double);"
   yetty_ymap_zoom_by_at_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_int_result (*yetty_ymap_zoom_by_at_fn)(struct yetty_yclass_object *, int32_t, double, double);"
   yetty_ymap_get_zoom_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_int_result (*yetty_ymap_get_zoom_fn)(struct yetty_yclass_object *);"
   yetty_ymap_geolocate_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymap_geolocate_fn)(struct yetty_yclass_object *);"
   yetty_ymap_attribution_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ymap_attribution_fn)(struct yetty_yclass_object *);"
   yetty_ymap_is_vector_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_int_result (*yetty_ymap_is_vector_fn)(struct yetty_yclass_object *);"
   yetty_ymap_overlay_geojson_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymap_overlay_geojson_fn)(struct yetty_yclass_object *, const char *);"
   yetty_ymap_render_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ydraw_drawable_list_result (*yetty_ymap_render_fn)(struct yetty_yclass_object *);"
   yetty_ymap_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymap/map.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymap/map.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymap_destroy_fn)(struct yetty_yclass_object *);"
 includes:
   src/yetty/ymap/map.c:
-    - yetty/ydraw-core/drawable-list.h
+    - yetty/ydraw-list/drawable-list.h

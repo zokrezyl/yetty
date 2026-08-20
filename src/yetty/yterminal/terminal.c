@@ -35,11 +35,11 @@
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ydraw-factory/complex-factory.h>
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/complex.h>
-#include <yetty/ydraw-core/drawable-iterator.h>
-#include <yetty/ydraw-core/drawable-list-registry.h>
-#include <yetty/ydraw-core/font-resource.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/complex.h>
+#include <yetty/ydraw-list/drawable-iterator.h>
+#include <yetty/ydraw-list/drawable-list-registry.h>
+#include <yetty/ydraw-list/font-resource.h>
 #include <yetty/api/yscene/scene.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
@@ -51,7 +51,7 @@
 #include <yetty/yvideo/yvideo-gen.h>
 #endif
 #if defined(YETTY_HAS_YSIXEL) && YETTY_HAS_YSIXEL
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysixel/sixel.h>
 #endif
 #include <yetty/yterminal/terminal.h>

@@ -38,7 +38,7 @@
 #include "content/fetch.h"
 
 /* yetty */
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 /* Singleton — NetSurf's table registration is process-wide and the
  * plotter callbacks reach this via redraw_context.priv. We keep one

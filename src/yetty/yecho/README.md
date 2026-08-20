@@ -57,7 +57,7 @@ yetty_ydraw_drawable_list_destroy(r.value);
 |------|------|
 | `yecho.c` | the whole parser + renderer (spans, attrs, glyph resolution, plot/video complex emission, DCS emit) |
 
-Public header: `include/yetty/yecho/yecho.h`. Deps: `ycore`, `ydraw-core`,
+Public header: `include/yetty/yecho/yecho.h`. Deps: `ycore`, `ydraw-list`,
 `ysdf`, `yfont_shader_glyph`, `yface`, `yplot_core` (pulls yfsvm + yexpr;
 no GPU), optionally `yvideo_core`. Gated by `YETTY_ENABLE_FEATURE_YECHO`.
 

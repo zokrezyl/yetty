@@ -4,9 +4,9 @@
  * u32 payload_size) followed by `payload_size` bytes. Cmds with no
  * payload (CMD_ZERO) are an 8-byte record. */
 
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list-registry.h>
 #include <yetty/ycore/types.h>
 
 /* size op — read payload_size from prim[1], add the 8-byte header. */

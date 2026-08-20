@@ -32,7 +32,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/api/yfigure/container.h>
 #include <yetty/api/yterminal/terminal.h>
 #include <yetty/yclass/rpc.h>
@@ -269,7 +269,7 @@ static struct yetty_ycore_void_result view_set_content(
 
 /* Append one TEXT_DRAWABLE_LIST record (a UTF-8 run the server lays out with
  * the figure's default font) at content-local (x, y). font_id = -1 → default
- * slot. Wire layout per include/yetty/ydraw-core/text-drawable-list.h. */
+ * slot. Wire layout per include/yetty/ydraw-list/text-drawable-list.h. */
 static struct yetty_ycore_void_result append_text_line(struct yetty_ydraw_drawable_list *buf,
                                                        const char *text, uint32_t text_len, float x,
                                                        float y, float font_size, uint32_t color)

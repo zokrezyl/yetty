@@ -9,7 +9,7 @@ and renders it on the GPU). Its sole consumer is
 feeds it PTY bytes, and seats it in the pane's figure container. Main
 dependencies: libvterm, [yclass](../yclass/README.md),
 [ywire](../ywire/README.md), [yfont](../yfont/README.md),
-[yrender](../yrender/README.md), ydraw-core/[ydraw-factory](../ydraw-factory/README.md), lz4.
+[yrender](../yrender/README.md), ydraw-list/[ydraw-factory](../ydraw-factory/README.md), lz4.
 
 ## Split of concerns
 

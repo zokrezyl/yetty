@@ -40,13 +40,13 @@
 #include <stdint.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Complex-prim type id — see the tier ranges in ydraw-core/complex.h.
+/* Complex-prim type id — see the tier ranges in ydraw-list/complex.h.
  * 0x80000003..6 are yplot / yimage / ymesh / yvideo. */
 #define YETTY_YSHADERTOY_PRIM_TYPE_ID 0x80000007u
 

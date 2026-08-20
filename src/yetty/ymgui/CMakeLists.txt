@@ -30,7 +30,7 @@ target_link_libraries(yetty_ymgui PUBLIC
     yetty_ycore
     yetty_yclass
     yetty_yfigure
-    yetty_ydraw_core
+    yetty_ydraw_list
     yetty_yrender
     yetty_ywire
     webgpu

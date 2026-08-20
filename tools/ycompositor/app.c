@@ -210,7 +210,7 @@ static struct yetty_ycore_void_result emit_capsule(struct yetty_yclass_object *f
  * bearings, and advances come from the actual font metrics — the
  * caller just hands over the UTF-8 string.
  *
- * Wire format documented in include/yetty/ydraw-core/text-drawable-list.h:
+ * Wire format documented in include/yetty/ydraw-list/text-drawable-list.h:
  *
  *   u32 type            (= YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST = 0x40000002)
  *   u32 payload_size    (bytes of payload, padded to 4)

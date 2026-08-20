@@ -87,7 +87,7 @@ Build-gated by `YETTY_ENABLE_FEATURE_YPDF`.
 
 ## Related
 
-- [../ydraw-core/README.md](../ydraw-core/README.md) — the drawable-list
+- [../ydraw-list/README.md](../ydraw-list/README.md) — the drawable-list
   buffer this module fills
 - [../yfont/README.md](../yfont/README.md) — raster-font metrics used for
   advance measurement

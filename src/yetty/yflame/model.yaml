@@ -451,50 +451,50 @@ local_typedefs:
     source_file: src/yetty/yflame/flame.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_yflame_configure_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yflame_configure_fn)(struct yetty_yclass_object *, float, float, float, uint32_t);"
   yetty_yflame_parse_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yflame_parse_fn)(struct yetty_yclass_object *, const char *, size_t);"
   yetty_yflame_render_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ydraw_drawable_list_result (*yetty_yflame_render_fn)(struct yetty_yclass_object *);"
   yetty_yflame_hit_test_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_int_result (*yetty_yflame_hit_test_fn)(struct yetty_yclass_object *, float, float);"
   yetty_yflame_focus_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yflame_focus_fn)(struct yetty_yclass_object *, int32_t);"
   yetty_yflame_focus_parent_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yflame_focus_parent_fn)(struct yetty_yclass_object *);"
   yetty_yflame_reset_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yflame_reset_fn)(struct yetty_yclass_object *);"
   yetty_yflame_set_highlight_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yflame_set_highlight_fn)(struct yetty_yclass_object *, int32_t);"
   yetty_yflame_highlight_name_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yflame_highlight_name_fn)(struct yetty_yclass_object *, const char *, size_t);"
   yetty_yflame_focus_name_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yflame_focus_name_fn)(struct yetty_yclass_object *, const char *, size_t);"
   yetty_yflame_set_baseline_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yflame_set_baseline_fn)(struct yetty_yclass_object *, const char *, size_t);"
   yetty_yflame_node_name_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_yflame_node_name_fn)(struct yetty_yclass_object *, int32_t);"
   yetty_yflame_node_value_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_uint64_result (*yetty_yflame_node_value_fn)(struct yetty_yclass_object *, int32_t);"
   yetty_yflame_root_value_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_uint64_result (*yetty_yflame_root_value_fn)(struct yetty_yclass_object *);"
   yetty_yflame_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yflame/flame.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yflame/flame.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yflame_destroy_fn)(struct yetty_yclass_object *);"
 includes:
   src/yetty/yflame/flame.c:
-    - yetty/ydraw-core/drawable-list.h
+    - yetty/ydraw-list/drawable-list.h

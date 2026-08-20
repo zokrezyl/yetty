@@ -44,5 +44,5 @@ v.destroy()                                 # clear
 ```
 
 `set_content(drawable_list)` is also available for callers that build a
-ydraw-core drawable list themselves; `set_text` is the convenience for plain
+ydraw-list drawable list themselves; `set_text` is the convenience for plain
 text (rendered with the terminal's font, server-side).

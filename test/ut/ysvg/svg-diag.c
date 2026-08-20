@@ -12,7 +12,7 @@
  * harmless no-op under ctest.
  */
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysvg/ysvg.h>
 
 #include <stdio.h>

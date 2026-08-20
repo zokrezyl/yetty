@@ -3,7 +3,7 @@
 // The GPU-side runtime (factory registry, instance lifecycle, zoom fan-out)
 // lives in src/yetty/ydraw-factory/complex-factory.c.
 
-#include <yetty/ydraw-core/complex.h>
+#include <yetty/ydraw-list/complex.h>
 #include <stdlib.h>
 #include <string.h>
 

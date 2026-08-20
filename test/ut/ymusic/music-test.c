@@ -6,7 +6,7 @@
  * pins render determinism. Headless (no GPU/display).
  */
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/api/ymusic/music.h>
 
 #include "ytest.h"

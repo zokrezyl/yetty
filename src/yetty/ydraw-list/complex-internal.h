@@ -1,12 +1,12 @@
-/* complex — module-internal declarations (ydraw-core only).
+/* complex — module-internal declarations (ydraw-list only).
  *
- * The public surface lives in include/yetty/ydraw-core/complex.h.
+ * The public surface lives in include/yetty/ydraw-list/complex.h.
  */
 #ifndef YETTY_YDRAW_CORE_COMPLEX_INTERNAL_H
 #define YETTY_YDRAW_CORE_COMPLEX_INTERNAL_H
 
 #include <stddef.h>
-#include <yetty/ydraw-core/complex.h>
+#include <yetty/ydraw-list/complex.h>
 
 #ifdef __cplusplus
 extern "C" {

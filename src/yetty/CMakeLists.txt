@@ -209,14 +209,14 @@ if(YETTY_ENABLE_FEATURE_YRICH)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YDRAW)
-    add_subdirectory(ydraw-core)
+    add_subdirectory(ydraw-list)
     add_subdirectory(ydraw-factory)
     add_subdirectory(ydraw-yaml)
     add_subdirectory(ysdf)
 endif()
 
 # yview — client emitter for server-side scrollable content surfaces.
-# Needs the ydraw-core record builder and the yface envelope encoder.
+# Needs the ydraw-list record builder and the yface envelope encoder.
 if(YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
     add_subdirectory(yview)
 endif()
@@ -308,14 +308,14 @@ if(YETTY_ENABLE_FEATURE_YGUI AND YETTY_ENABLE_LIB_WEBGPU)
     add_subdirectory(yguiapp)
 endif()
 
-# ymusic — LilyPond-subset music renderer. Needs the ydraw-core record builder,
+# ymusic — LilyPond-subset music renderer. Needs the ydraw-list record builder,
 # the SDF primitives and the yface envelope encoder (same set as yflame).
 if(YETTY_ENABLE_FEATURE_YMUSIC AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
     add_subdirectory(ymusic)
 endif()
 
 # ycircuit — electronic circuit schematic renderer. Same dependency set as
-# ymusic: the ydraw-core record builder, the SDF primitives and the yface
+# ymusic: the ydraw-list record builder, the SDF primitives and the yface
 # envelope encoder.
 if(YETTY_ENABLE_FEATURE_YCIRCUIT AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
     add_subdirectory(ycircuit)

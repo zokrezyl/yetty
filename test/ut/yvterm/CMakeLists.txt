@@ -34,7 +34,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    yvterm_scroll_tiers
     SOURCES scroll-tiers-test.c
-    LIBS    yetty_yvterm yetty_yclass yetty_ywire yetty_ydraw_factory yetty_ydraw_core yetty_ycore
+    LIBS    yetty_yvterm yetty_yclass yetty_ywire yetty_ydraw_factory yetty_ydraw_list yetty_ycore
     SHIMS   trace platform_thread platform_term
     LABELS  contract terminal scrollback
     TIMEOUT 30)

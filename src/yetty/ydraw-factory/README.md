@@ -1,14 +1,14 @@
 # ydraw-factory — GPU-side factory runtime for complex figures
 
 The server-side half of the complex model: it turns complex wire bytes
-(format defined in [ydraw-core](../ydraw-core/README.md)'s `complex.h`) into
+(format defined in [ydraw-list](../ydraw-list/README.md)'s `complex.h`) into
 renderable GPU instances. Consumed by the receiving canvases
 (`../ydraw/scrolling-canvas.c`, `scrolling-grid.c`,
 [ygrid](../ygrid/README.md)), by yterminal/yui at setup time, and by every
 concrete complex factory — generated (yplot, yimage, yvideo via
 [ydraw-gen](../ydraw-gen/README.md)) or hand-written (ymesh, yshadertoy).
 Built only when `YETTY_ENABLE_LIB_WEBGPU` is on; no-GPU builds use just
-ydraw-core.
+ydraw-list.
 
 ## Three-level architecture
 
@@ -55,7 +55,7 @@ on-screen figure is never evicted mid-frame.
 
 ## Incremental updates
 
-A wire `CMD_UPDATE` (see `../ydraw-core/cmds.h`) is resolved by the canvas to
+A wire `CMD_UPDATE` (see `../ydraw-list/cmds.h`) is resolved by the canvas to
 an instance and dispatched through `instance->ops->update(self, target_field,
 body, body_size)` — `target_field` is the schema-level slot id, the body's
 semantics belong to the figure type (yplot: chunked f32 sample writes).
@@ -68,7 +68,7 @@ Factories/instances without an update op silently drop the record.
 | `complex-factory.c` | abstract-factory registry, deferred pipeline compile, instance mint/destroy/render wrappers, residency LRU, zoom fan-out |
 
 Public header: `include/yetty/ydraw-factory/complex-factory.h` (pulls in
-`<webgpu/webgpu.h>`; keep client-only code on the ydraw-core side).
+`<webgpu/webgpu.h>`; keep client-only code on the ydraw-list side).
 
 ## See also
 

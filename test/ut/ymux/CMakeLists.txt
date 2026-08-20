@@ -188,7 +188,7 @@ yetty_add_c_test(
 yetty_add_c_test(
     NAME    ymux_ycat_real
     SOURCES ycat-real-test.c ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
-    LIBS    yetty_ymux yetty_api_ymux yetty_yscene yetty_yfigure yetty_ydraw_core yetty_ysdf
+    LIBS    yetty_ymux yetty_api_ymux yetty_yscene yetty_yfigure yetty_ydraw_list yetty_ysdf
             yetty_yclass yetty_ycore vterm lz4_static util
     SHIMS   trace platform_thread platform_term
     LABELS  contract ymux integration

@@ -15,7 +15,7 @@
 #include <yetty/yplot/yplot.h>
 #include <yetty/yplot/resolve.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yexpr/yexpr.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/ytrace/ytrace.h>

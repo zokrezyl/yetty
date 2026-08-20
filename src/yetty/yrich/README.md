@@ -4,7 +4,7 @@
 rich-text documents (**ydoc**), spreadsheets (**yspreadsheet**), and slide
 decks (**yslides**) that renders itself into a ydraw buffer. The three kinds
 are *not* separate modules — they all live here as yclass classes. Built on
-`yclass` (object model + codegen), `ydraw-core`/`ysdf` (rendering), and
+`yclass` (object model + codegen), `ydraw-list`/`ysdf` (rendering), and
 libyaml (persistence).
 
 ## Class hierarchy (yclass)
@@ -113,5 +113,5 @@ the process.
 
 - `../../yclass/README.md` — annotation-driven class/RPC/codegen model
 - [../ygui/README.md](../ygui/README.md) — widget chrome the shells compose
-- [../ydraw-core/README.md](../ydraw-core/README.md) — the buffer documents
+- [../ydraw-list/README.md](../ydraw-list/README.md) — the buffer documents
   render into

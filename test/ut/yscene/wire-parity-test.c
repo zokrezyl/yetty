@@ -23,8 +23,8 @@
 #include <yetty/api/yfigure/figure.h>
 #include <yetty/api/yscene/scene.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>

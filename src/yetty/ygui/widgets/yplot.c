@@ -31,8 +31,8 @@ struct YETTY_ANNOTATE("expose") yetty_ygui_yplot_config {
     uint32_t flags;
 };
 
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yfigure/kind.h>
 #include <yetty/yplot/yplot.h>
 

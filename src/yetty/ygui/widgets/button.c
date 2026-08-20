@@ -25,7 +25,7 @@ struct yetty_ygui_button_ptr_result yetty_ygui_button_from(struct yetty_yclass_o
 
 #include "yetty/gen/impl/ygui/primitive-widget.h"
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include "yetty/gen/impl/ygui/mixins/clickable.h"
 #include <yetty/ygui/theme.h>
 #include <yetty/ysdf/funcs.gen.h>

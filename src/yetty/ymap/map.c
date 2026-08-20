@@ -125,7 +125,7 @@ static const struct ymap_provider *ymap_provider_by_name(const char *name)
  * Class data
  *===========================================================================*/
 
-struct YETTY_ANNOTATE("class@ymap:map") YETTY_ANNOTATE("include@yetty/ydraw-core/drawable-list.h")
+struct YETTY_ANNOTATE("class@ymap:map") YETTY_ANNOTATE("include@yetty/ydraw-list/drawable-list.h")
     yetty_ymap_map {
     double latitude;
     double longitude;

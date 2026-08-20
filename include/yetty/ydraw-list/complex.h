@@ -33,8 +33,8 @@ extern "C" {
 /* Tier ranges for ydraw primitive types:
  *   [0x00000000, 0x000000FF]   Simple SDF (fixed-size, generated)
  *   [0x40000000, 0x7FFFFFFF]   Drawable-list entry (variable-size, no GPU pipeline)
- *                                FONT       — yetty/ydraw-core/font-resource.h
- *                                TEXT_DRAWABLE_LIST  — yetty/ydraw-core/text-drawable-list.h
+ *                                FONT       — yetty/ydraw-list/font-resource.h
+ *                                TEXT_DRAWABLE_LIST  — yetty/ydraw-list/text-drawable-list.h
  *   [0x80000000, 0xFFFFFFFF]   Complex (factory + per-instance GPU resources)
  *                                each concrete factory owns its own type id
  *                                (e.g. YETTY_YPLOT_TYPE_ID in yplot-gen.h).
@@ -66,7 +66,7 @@ struct rectangle_result yetty_ydraw_complex_record_aabb(const void *data);
 // Returns base ops pointer for buffer iteration
 //=============================================================================
 
-#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-list/drawable-list-registry.h>
 
 // Handler for complex prim types (>= 0x80000000)
 struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_complex_record_handler(

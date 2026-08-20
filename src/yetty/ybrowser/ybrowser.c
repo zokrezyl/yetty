@@ -20,7 +20,7 @@
 #include <lexbor/selectors/selectors.h>
 #include <lexbor/tag/const.h>
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* Defined below (near load_html); used by the destroy path above it. */

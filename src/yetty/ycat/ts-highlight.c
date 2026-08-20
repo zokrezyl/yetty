@@ -14,7 +14,7 @@
 #include <yetty/ycat/ycat.h>
 #include "ts-grammars.h"
 
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 

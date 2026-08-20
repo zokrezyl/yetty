@@ -20,7 +20,7 @@
  */
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yfspy/compile.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/yplatform/getopt.h>

@@ -70,7 +70,7 @@ target_include_directories(yetty_yshadertoy_core PUBLIC
 
 target_link_libraries(yetty_yshadertoy_core PUBLIC
     yetty_ycore
-    yetty_ydraw_core
+    yetty_ydraw_list
 )
 
 add_library(yetty_yshadertoy_prim STATIC

@@ -37,7 +37,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ymesh/ymesh-gen.h>
 
 #ifdef __cplusplus
@@ -61,7 +61,7 @@ struct yetty_ymesh_render_config {
     uint32_t mode;
 };
 
-/* Decode `glb_bytes` and produce a fresh ydraw-core buffer holding ONE
+/* Decode `glb_bytes` and produce a fresh ydraw-list buffer holding ONE
  * ymesh complex prim. Caller frees with yetty_ydraw_drawable_list_destroy. */
 struct yetty_ydraw_drawable_list_result yetty_ymesh_render(
     const uint8_t *glb_bytes, size_t len, const struct yetty_ymesh_render_config *config);

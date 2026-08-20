@@ -26,7 +26,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/yvideo/yvideo-gen.h>
 
 #ifdef __cplusplus

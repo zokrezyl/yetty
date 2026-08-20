@@ -6,7 +6,7 @@ id, geometry fields, WGSL distance function and C AABB code — and
 `gen-sdf-code.py` generates matching C and WGSL from it. Everything that
 emits or consumes SDF records (ychart, ydiagram, ycircuit, ygui widgets,
 ybrowser/ylexbor paint, yscene, the terminal SDF layer, …) builds on this
-module. Depends only on `ycore` and `ydraw-core` (plus libyaml for the YAML
+module. Depends only on `ycore` and `ydraw-list` (plus libyaml for the YAML
 parse path).
 
 ## Wire layout

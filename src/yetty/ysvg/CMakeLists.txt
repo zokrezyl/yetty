@@ -20,7 +20,7 @@ target_include_directories(yetty_ysvg PUBLIC
 target_link_libraries(yetty_ysvg
     PUBLIC
         yetty_ycore
-        yetty_ydraw_core
+        yetty_ydraw_list
         yetty_ysdf
     PRIVATE
         # <image> elements serialize yimage complex records into the

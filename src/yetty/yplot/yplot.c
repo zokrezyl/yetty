@@ -9,7 +9,7 @@
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/yplot/resolve.h>
 #include <yetty/yface/yface.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/yterminal/dcs-codes.h>

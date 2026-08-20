@@ -19,7 +19,7 @@
 
 #include <yetty/yfont/shader-glyph.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/yexpr/yexpr.h>
@@ -637,7 +637,7 @@ struct yetty_yecho_doc_ptr_result yetty_yecho_parse(const char *input, size_t le
 }
 
 /*=============================================================================
- * Renderer — ydraw-core buffer.
+ * Renderer — ydraw-list buffer.
  *
  * Layout: cursor walks left-to-right, x advances by approx width per
  * codepoint. '\n' inside a span resets x and bumps y. Glyphs occupy

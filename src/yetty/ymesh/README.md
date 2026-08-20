@@ -22,7 +22,7 @@ color attribute (follow-up in #596).
 
 | target | contents | deps |
 |--------|----------|------|
-| `yetty_ymesh_core` | `.glb` decode (cgltf), wire serialisation, DCS emit | `cgltf`, `ydraw-core`, `yface` — no GPU |
+| `yetty_ymesh_core` | `.glb` decode (cgltf), wire serialisation, DCS emit | `cgltf`, `ydraw-list`, `yface` — no GPU |
 | `yetty_ymesh` | concrete complex factory + WGSL shaders (incbin) | `ymesh_core`, `ydraw-factory`, `yrender`, Dawn (gated on `YETTY_ENABLE_LIB_WEBGPU`) |
 
 ## Client side (`ymesh.c`, `ymesh-glb.c`)

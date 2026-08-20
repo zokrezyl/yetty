@@ -9,11 +9,11 @@
 
 #include <yetty/ysdf/merge.h>
 
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/complex.h>
-#include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ydraw-core/font-resource.h>
-#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ydraw-list/complex.h>
+#include <yetty/ydraw-list/drawable-list.h>
+#include <yetty/ydraw-list/font-resource.h>
+#include <yetty/ydraw-list/text-drawable-list.h>
 #include <yetty/ysdf/types.gen.h>
 
 #include <stdint.h>

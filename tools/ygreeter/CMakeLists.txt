@@ -65,7 +65,7 @@ find_package(Threads REQUIRED)
 
 # Client-mode link line — what's needed to build the OSC-emitting
 # binary that runs inside a hosting yetty. Pulls in ygui (which
-# transitively brings yfigure, the *_core helpers, ydraw-core,
+# transitively brings yfigure, the *_core helpers, ydraw-list,
 # ysdf, etc.), the wire SM, libuv glue, coroutines, telnet, and
 # the system libs. None of these reach for wgpu functions, so they
 # all link on the riscv64 cross (with the headers-only webgpu stub

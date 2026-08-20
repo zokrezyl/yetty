@@ -405,7 +405,7 @@ PKG_CFG_AARCH64 := PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/s
 PKG_CFG_RISCV := PKG_CONFIG_LIBDIR=/usr/lib/riscv64-linux-gnu/pkgconfig:/usr/share/pkgconfig
 
 # riscv64 target list (no `yetty` — Dawn unavailable for riscv64).
-# Tools/demos that link yrender, ywebgpu, or ydraw-core (which all
+# Tools/demos that link yrender, ywebgpu, or ydraw-list (which all
 # include <webgpu/webgpu.h> directly) are excluded — that rules out
 # ycat, yecho, yplot, ymesh, ymaze, ydoc, ysheet, yslide, yetty-ythorvg,
 # yetty-ymsdf-gen-gpu, msdf-render-atlas, and every demo-ygui-*. What
