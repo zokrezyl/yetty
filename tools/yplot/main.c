@@ -1,5 +1,5 @@
 /*
- * yplot — emit a yplot composite DCS envelope for a function expression.
+ * yplot — emit a yplot complex DCS envelope for a function expression.
  *
  * Inside a yetty terminal the DCS is routed to the ydraw scrolling layer,
  * which renders the plot via the yplot pipeline. Outside a yetty terminal

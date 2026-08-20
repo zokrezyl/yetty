@@ -19,7 +19,7 @@ inputs:
     default: ""
 
 runs:
-  using: composite
+  using: complex
   steps:
     - name: Download merged rootfs artifact
       if: inputs.artifact-name != ''

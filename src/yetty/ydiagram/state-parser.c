@@ -18,7 +18,7 @@
  *   [*] --> A        /  A --> [*]
  *   state "long description" as A           (alias: node A, label = desc)
  *   StateName                               (bare declaration)
- *   composite `state X { ... }` braces are flattened (inner states become
+ *   complex `state X { ... }` braces are flattened (inner states become
  *   siblings); `note ...`, `%%` comments are ignored.
  */
 
@@ -220,7 +220,7 @@ struct yetty_ycore_void_result yetty_ydiagram_state_parse(const char *input, siz
         }
 
         if (strncmp(line, "state", 5) == 0 && (line[5] == ' ' || line[5] == '\t')) {
-            /* `state "desc" as ID` alias, or `state X {` composite header. */
+            /* `state "desc" as ID` alias, or `state X {` complex header. */
             char *rest = trim(line + 5);
             if (strchr(rest, '"')) {
                 result = parse_alias(out_graph, rest);

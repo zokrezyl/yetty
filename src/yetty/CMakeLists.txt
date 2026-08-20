@@ -155,7 +155,7 @@ add_subdirectory(yshadertoy)
 
 # yscene — retained scene graph (#691): `dom` (GPU-free content tree,
 # scene-internal) + `scene` (renderer figure kind). Renders every wire
-# figure kind (SDF prims, glyphs/text, composites), replacing ygrid.
+# figure kind (SDF prims, glyphs/text, complexes), replacing ygrid.
 add_subdirectory(yscene)
 
 # ygit — read-only Git history/inspection component (yclass `repo` class over

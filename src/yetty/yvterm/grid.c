@@ -2,7 +2,7 @@
  * grid.c — the unified terminal model as a yclass class: class@yvterm:grid.
  *
  * This class owns the ONE CPU-side terminal truth: text cells, per-cell rich
- * refs, and anchored primitive/composite storage on two scrolling line rings —
+ * refs, and anchored primitive/complex storage on two scrolling line rings —
  * the primary screen (with scrollback) and the alternate screen — plus
  * the libvterm State machine that drives it and the keyboard/PTY I/O. The
  * renderer (class@yvterm:vterm, a yfigure) composes a grid instance and reads it
@@ -29,18 +29,18 @@
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywire/wire-statemachine.h>
 
-/* `struct yetty_ydraw_composite` is kept opaque on purpose: it is defined in
- * BOTH ydraw-core/figure.h and ydraw-factory/composite-factory.h (a pre-existing
+/* `struct yetty_ydraw_complex` is kept opaque on purpose: it is defined in
+ * BOTH ydraw-core/figure.h and ydraw-factory/complex-factory.h (a pre-existing
  * duplicate), so pulling either defining header clashes in any consumer that
  * includes the other. Used by pointer only; the teardown + render free functions
  * are hand-declared (defined in ydraw-factory). */
-struct yetty_ydraw_composite;
-void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance);
-/* Composite-envelope type test (type ids >= 0x80000000) — hand-declared from
- * ydraw-core for the same header-clash reason. The line arena stores composite
+struct yetty_ydraw_complex;
+void yetty_ydraw_complex_destroy(struct yetty_ydraw_complex *instance);
+/* Complex-envelope type test (type ids >= 0x80000000) — hand-declared from
+ * ydraw-core for the same header-clash reason. The line arena stores complex
  * wire envelopes as opaque records next to the SDF/glyph ones; this picks them
  * out for figure re-materialization. */
-bool yetty_ydraw_is_composite(uint32_t type);
+bool yetty_ydraw_is_complex(uint32_t type);
 
 /* PTY write callback — keyboard output + libvterm query responses go back to the
  * child through this. Own typedef (rather than yterminal's) so the model has no
@@ -126,7 +126,7 @@ struct YETTY_ANNOTATE("expose") yetty_yvterm_text_cell {
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *userdata);
 
 /* Hook that re-creates one anchored figure from its retained wire envelope.
- * Registered by the integration layer (terminal), which owns the composite
+ * Registered by the integration layer (terminal), which owns the complex
  * factory; the grid model itself never depends on ydraw-factory. The envelope
  * is the verbatim u32 wire record that created the figure, stored in the
  * owning line's arena. On success *out_instance carries the fresh instance
@@ -134,7 +134,7 @@ typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *
  * result means "cannot materialize right now" and is skipped quietly. */
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(
     const uint32_t *envelope_words, uint32_t envelope_word_count, void *userdata,
-    struct yetty_ydraw_composite **out_instance);
+    struct yetty_ydraw_complex **out_instance);
 
 /* Hook fired when the child toggles pixel-precise input forwarding via DEC modes
  * ?1500 (click) / ?1501 (move) — libvterm surfaces these as VTERM_PROP_CARDCLICK
@@ -249,7 +249,7 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
     struct yetty_yclass_object *sink;
 
     /* Re-creates one figure from its retained envelope (registered by the
-     * terminal, which owns the composite factory). NULL → evicted figures
+     * terminal, which owns the complex factory). NULL → evicted figures
      * simply stay blank when scrolled back into view. */
     yetty_yvterm_grid_materialize_fn materialize_fn;
     void *materialize_userdata;
@@ -307,7 +307,7 @@ YETTY_YRESULT_DECLARE(yetty_yvterm_grid_ptr, struct yetty_yvterm_grid *);
  * the exposed accessors that return them are emitted. Each returned pointer
  * borrows the grid's own backing — read it, do not free it. */
 YETTY_YRESULT_DECLARE(yetty_yvterm_text_cell_const_ptr, const struct yetty_yvterm_text_cell *);
-YETTY_YRESULT_DECLARE(yetty_ydraw_composite_const_ptr_ptr, struct yetty_ydraw_composite *const *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_complex_const_ptr_ptr, struct yetty_ydraw_complex *const *);
 
 /* Defined in the appended grid.gen.c. */
 struct yetty_yclass_ptr_result yetty_yvterm_grid_class_get(void);
@@ -381,10 +381,10 @@ static inline struct yetty_yvterm_text_cell *cell_at(struct yetty_yvterm_grid *g
     return &line_at(grid, row)->text_cells[col];
 }
 
-static void destroy_composite(struct yetty_ydraw_composite *composite)
+static void destroy_complex(struct yetty_ydraw_complex *complex)
 {
-    if (composite) {
-        yetty_ydraw_composite_destroy(composite);
+    if (complex) {
+        yetty_ydraw_complex_destroy(complex);
     }
 }
 
@@ -428,44 +428,44 @@ static struct yetty_ycore_void_result ensure_primitives(struct yetty_yvterm_line
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result ensure_composites(struct yetty_yvterm_line *line,
+static struct yetty_ycore_void_result ensure_complexes(struct yetty_yvterm_line *line,
                                                         uint32_t need)
 {
-    if (need <= line->composite_capacity) {
+    if (need <= line->complex_capacity) {
         return YETTY_OK_VOID();
     }
-    uint32_t new_cap = line->composite_capacity ? line->composite_capacity : 4u;
+    uint32_t new_cap = line->complex_capacity ? line->complex_capacity : 4u;
     while (new_cap < need) {
         new_cap *= 2u;
     }
-    struct yetty_ydraw_composite **grown =
-        realloc(line->composites, (size_t)new_cap * sizeof(struct yetty_ydraw_composite *));
+    struct yetty_ydraw_complex **grown =
+        realloc(line->complexes, (size_t)new_cap * sizeof(struct yetty_ydraw_complex *));
     if (!grown) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm: composites grow failed");
+        return YETTY_ERR(yetty_ycore_void, "yvterm: complexes grow failed");
     }
-    line->composites = grown;
-    line->composite_capacity = new_cap;
+    line->complexes = grown;
+    line->complex_capacity = new_cap;
     return YETTY_OK_VOID();
 }
 
 /* Full line clear: release the line's owned rich content (arena/primitives
- * reset, composites destroyed). */
+ * reset, complexes destroyed). */
 static void clear_line_rich(struct yetty_yvterm_line *line, uint32_t cols)
 {
     (void)cols;
     line->primitive_count = 0;
     line->arena_count = 0;
-    for (uint32_t i = 0; i < line->composite_count; ++i) {
-        destroy_composite(line->composites[i]);
-        line->composites[i] = NULL;
+    for (uint32_t i = 0; i < line->complex_count; ++i) {
+        destroy_complex(line->complexes[i]);
+        line->complexes[i] = NULL;
     }
-    line->composite_count = 0;
+    line->complex_count = 0;
     line->rich_span_rows = 0;
     line->envelope_count = 0;
     line->view_stamp = 0;
 }
 
-/* Evict a line's figure RUNTIMES only: destroy the composite instances but
+/* Evict a line's figure RUNTIMES only: destroy the complex instances but
  * keep everything serial — the arena (which holds the creating envelopes),
  * the primitive descriptors, and rich_span_rows (the renderer still needs the
  * block height to place re-materialized figures). This is the hot-tier
@@ -473,11 +473,11 @@ static void clear_line_rich(struct yetty_yvterm_line *line, uint32_t cols)
  * decoder + coroutine + timer subscription) goes away, the wire truth stays. */
 static void evict_line_figures(struct yetty_yvterm_line *line)
 {
-    for (uint32_t i = 0; i < line->composite_count; ++i) {
-        destroy_composite(line->composites[i]);
-        line->composites[i] = NULL;
+    for (uint32_t i = 0; i < line->complex_count; ++i) {
+        destroy_complex(line->complexes[i]);
+        line->complexes[i] = NULL;
     }
-    line->composite_count = 0;
+    line->complex_count = 0;
     line->view_stamp = 0;
 }
 
@@ -557,7 +557,7 @@ static struct yetty_yvterm_line *grid_resolve_view_row(struct yetty_yvterm_grid 
 static void grid_archive_recycled_line(struct yetty_yvterm_grid *grid,
                                        struct yetty_yvterm_line *line)
 {
-    if (line->composite_count) {
+    if (line->complex_count) {
         evict_line_figures(line);
     }
     uint32_t used_cols = line_used_cols(line, grid->cols);
@@ -599,13 +599,13 @@ static int grid_archive_enabled(const struct yetty_yvterm_grid *grid)
  * backing is going away or is about to be replaced by pointer-move. */
 static void release_line_rich(struct yetty_yvterm_line *line)
 {
-    for (uint32_t i = 0; i < line->composite_count; ++i) {
-        destroy_composite(line->composites[i]);
+    for (uint32_t i = 0; i < line->complex_count; ++i) {
+        destroy_complex(line->complexes[i]);
     }
-    free(line->composites);
-    line->composites = NULL;
-    line->composite_count = 0;
-    line->composite_capacity = 0;
+    free(line->complexes);
+    line->complexes = NULL;
+    line->complex_count = 0;
+    line->complex_capacity = 0;
     free(line->primitives);
     line->primitives = NULL;
     line->primitive_count = 0;
@@ -694,7 +694,7 @@ static void grid_sync_continuation(struct yetty_yvterm_grid *grid)
  * are re-laid-out in LOGICAL order — oldest history at slot 0, visible rows
  * after it, base = history — so the fresh tail slots sit logically after the
  * newest line and the ring stays unwrapped until it is full again. Line
- * structs move by value; their owned buffers (cells/arena/composites) travel
+ * structs move by value; their owned buffers (cells/arena/complexes) travel
  * with them. Best-effort: on allocation failure the ring is left untouched
  * and the caller recycles the oldest history line exactly as before. */
 static void screen_grow_ring(struct yetty_yvterm_grid *grid, struct yetty_yvterm_screen *screen,
@@ -816,7 +816,7 @@ static void roll_up(struct yetty_yvterm_grid *grid, uint32_t count)
     grid->has_dirty = 1;
 }
 
-/* Move one cell's text state. Line-owned primitive/composite storage is not
+/* Move one cell's text state. Line-owned primitive/complex storage is not
  * touched: it lives on its anchor line and scrolls with that line, so a
  * within-grid cell move (libvterm region scroll / DECSTBM) only relocates text. */
 static void move_cell(struct yetty_yvterm_grid *grid, uint32_t dst_row, uint32_t dst_col,
@@ -875,12 +875,12 @@ static int cb_putglyph(VTermGlyphInfo *info, VTermPos pos, void *user)
         next->mark_count = 0;
     }
 
-    /* If this row anchors owned primitives/composites, writing text over it
+    /* If this row anchors owned primitives/complexes, writing text over it
      * invalidates that rich content: release the owned storage so the figure
-     * stops drawing. primitive_count/composite_count drop to 0, so later glyphs
+     * stops drawing. primitive_count/complex_count drop to 0, so later glyphs
      * on the same line skip this cheaply. */
     struct yetty_yvterm_line *line = line_at(grid, (uint32_t)pos.row);
-    if (line->primitive_count || line->composite_count) {
+    if (line->primitive_count || line->complex_count) {
         clear_line_rich(line, grid->cols);
     }
 
@@ -977,7 +977,7 @@ static int cb_erase(VTermRect rect, int selective, void *user)
          * that content too — release it, mirroring cb_putglyph's anchor-line
          * invalidation. */
         struct yetty_yvterm_line *line = line_at(grid, (uint32_t)row);
-        if (line->primitive_count || line->composite_count) {
+        if (line->primitive_count || line->complex_count) {
             clear_line_rich(line, grid->cols);
         }
         mark_dirty_row(grid, (uint32_t)row);
@@ -1076,7 +1076,7 @@ static int cb_settermprop(VTermProp prop, VTermValue *val, void *user)
          * starts fresh (libvterm erases the whole screen right after this
          * callback returns, and that erase lands on the now-active alternate
          * ring); on exit the alternate ring's rich content is dropped
-         * eagerly so composites don't sit on a dormant surface. Only
+         * eagerly so complexes don't sit on a dormant surface. Only
          * transitions act, in case the prop is re-asserted without a state
          * change (?47/?1047/?1049 overlap). The cursor is saved/restored by
          * libvterm itself for mode 1049. */
@@ -1781,7 +1781,7 @@ static void grid_model_teardown(struct yetty_yvterm_grid *grid)
  * through the reflow by its absolute offset within its logical line.
  *
  * Scope note: only text cells reflow. Anchored rich content (primitives /
- * composites) is released on resize, as it was before reflow existed — its
+ * complexes) is released on resize, as it was before reflow existed — its
  * placement is row-relative and re-wrapping invalidates it. Preserving rich
  * content across reflow is a separate follow-up.
  *=========================================================================*/
@@ -1842,13 +1842,13 @@ static int reflow_gidx_to_slot(uint32_t gidx, uint32_t visible_top, uint32_t new
 }
 
 /* Steal a source line's whole rich backing (arena + primitive descriptors +
- * composite array) onto an empty destination line — pointers move, the source
+ * complex array) onto an empty destination line — pointers move, the source
  * is left empty so the old-ring teardown frees nothing for it. */
 static void take_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_line *src)
 {
-    dst->composites = src->composites;
-    dst->composite_count = src->composite_count;
-    dst->composite_capacity = src->composite_capacity;
+    dst->complexes = src->complexes;
+    dst->complex_count = src->complex_count;
+    dst->complex_capacity = src->complex_capacity;
     dst->primitives = src->primitives;
     dst->primitive_count = src->primitive_count;
     dst->primitive_capacity = src->primitive_capacity;
@@ -1859,9 +1859,9 @@ static void take_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_li
     dst->envelope_count = src->envelope_count;
     dst->view_stamp = src->view_stamp;
 
-    src->composites = NULL;
-    src->composite_count = 0;
-    src->composite_capacity = 0;
+    src->complexes = NULL;
+    src->complex_count = 0;
+    src->complex_capacity = 0;
     src->primitives = NULL;
     src->primitive_count = 0;
     src->primitive_capacity = 0;
@@ -1874,21 +1874,21 @@ static void take_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_li
 }
 
 /* Move a source line's anchored rich content (SDF primitive arena + descriptors
- * and owned composites) onto a destination line in the new ring, so figures and
+ * and owned complexes) onto a destination line in the new ring, so figures and
  * SDF drawables survive a resize instead of being dropped. The fast path steals
  * the whole backing when the destination is still empty; when two source rows
  * fold onto the same new row (e.g. widening packs a wrapped logical line), the
  * source's content is APPENDED so nothing is lost — the primitive arena is
- * concatenated (descriptor offsets rebased), the descriptor and composite arrays
+ * concatenated (descriptor offsets rebased), the descriptor and complex arrays
  * grown. Each category transfers all-or-nothing: anything that can't grow is left
  * on the source for the old-ring teardown, never leaked or double-owned. */
 static struct yetty_ycore_void_result merge_line_rich(struct yetty_yvterm_line *dst,
                                                       struct yetty_yvterm_line *src)
 {
-    if (!src->composite_count && !src->primitive_count && !src->arena_count) {
+    if (!src->complex_count && !src->primitive_count && !src->arena_count) {
         return YETTY_OK_VOID();
     }
-    if (!dst->composites && !dst->primitives && !dst->arena) {
+    if (!dst->complexes && !dst->primitives && !dst->arena) {
         take_line_rich(dst, src);
         dst->dirty = 1;
         return YETTY_OK_VOID();
@@ -1927,17 +1927,17 @@ static struct yetty_ycore_void_result merge_line_rich(struct yetty_yvterm_line *
         src->envelope_count = 0;
     }
 
-    if (src->composite_count) {
+    if (src->complex_count) {
         struct yetty_ycore_void_result comp_res =
-            ensure_composites(dst, dst->composite_count + src->composite_count);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, comp_res, "yvterm merge_line_rich: grow composites");
-        for (uint32_t i = 0; i < src->composite_count; ++i) {
-            dst->composites[dst->composite_count++] = src->composites[i];
+            ensure_complexes(dst, dst->complex_count + src->complex_count);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, comp_res, "yvterm merge_line_rich: grow complexes");
+        for (uint32_t i = 0; i < src->complex_count; ++i) {
+            dst->complexes[dst->complex_count++] = src->complexes[i];
         }
-        free(src->composites);
-        src->composites = NULL;
-        src->composite_count = 0;
-        src->composite_capacity = 0;
+        free(src->complexes);
+        src->complexes = NULL;
+        src->complex_count = 0;
+        src->complex_capacity = 0;
     }
 
     /* Two blocks folded onto one row: keep the taller span so the merged
@@ -2149,7 +2149,7 @@ static struct yetty_ycore_void_result screen_resize_reflow(struct yetty_yvterm_g
          * stays anchored where the reflowed text put it. */
         for (uint32_t seg = 0; seg < entry->seg_count; ++seg) {
             struct yetty_yvterm_line *src_line = src[first + seg].line;
-            if (!src_line->composite_count && !src_line->primitive_count) {
+            if (!src_line->complex_count && !src_line->primitive_count) {
                 continue;
             }
             uint32_t seg_offset = seg * old_cols;
@@ -2397,7 +2397,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_clear_hook(struct yetty_ycl
 }
 
 /* Register the figure re-materialization hook. The integration layer (which
- * owns the composite factory) supplies it; the grid replays retained wire
+ * owns the complex factory) supplies it; the grid replays retained wire
  * envelopes through it when an evicted history line scrolls back into view. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_grid_set_materialize(
@@ -2541,11 +2541,11 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_append_primitive(struct yetty
     line->primitives[index].arena_offset = arena_offset;
     line->primitives[index].word_count = word_count;
     line->primitive_count++;
-    /* A composite-type record is a retained figure envelope, not a drawable:
+    /* A complex-type record is a retained figure envelope, not a drawable:
      * the SDF pass skips it, and the figure re-materialization path replays it
-     * through the composite factory when an evicted line scrolls back into
+     * through the complex factory when an evicted line scrolls back into
      * view. Count them so the render path can spot evicted lines cheaply. */
-    if (word_count && yetty_ydraw_is_composite(words[0])) {
+    if (word_count && yetty_ydraw_is_complex(words[0])) {
         line->envelope_count++;
     }
     mark_dirty_row(grid, row);
@@ -2553,40 +2553,40 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_append_primitive(struct yetty
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_uint32_result yetty_yvterm_grid_attach_composite(
-    struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite)
+struct yetty_ycore_uint32_result yetty_yvterm_grid_attach_complex(
+    struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_complex *complex)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, grid_res, "yvterm attach_composite: from_obj");
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, grid_res, "yvterm attach_complex: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     if (row >= grid->visible_rows) {
-        return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_composite: row out of range");
+        return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_complex: row out of range");
     }
-    if (!composite) {
-        return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_composite: NULL composite");
+    if (!complex) {
+        return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_complex: NULL complex");
     }
     struct yetty_yvterm_line *line = line_at(grid, row);
-    if (line->composite_count >= UINT16_MAX) {
-        return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_composite: too many composites");
+    if (line->complex_count >= UINT16_MAX) {
+        return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_complex: too many complexes");
     }
-    struct yetty_ycore_void_result gr = ensure_composites(line, line->composite_count + 1u);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, gr, "yvterm attach_composite: grow");
-    uint32_t index = line->composite_count;
-    line->composites[index] = composite;
-    line->composite_count++;
+    struct yetty_ycore_void_result gr = ensure_complexes(line, line->complex_count + 1u);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, gr, "yvterm attach_complex: grow");
+    uint32_t index = line->complex_count;
+    line->complexes[index] = complex;
+    line->complex_count++;
     mark_dirty_row(grid, row);
     return YETTY_OK(yetty_ycore_uint32, index);
 }
 
 /* Re-home a freshly-ingested rich block from its TOP line onto its BOTTOM line
- * and stamp the block's row span there, so a figure (composite or SDF block)
+ * and stamp the block's row span there, so a figure (complex or SDF block)
  * leaves the scrollback only when its LAST overlapping line is evicted, not its
  * first. Called once after the reserve newlines that allocated the block's rows:
  * the cursor then sits on the line just BELOW the block, so the bottom line is
  * cursor_row − 1 and the top is cursor_row − span_rows. span_rows is the row
  * height the block reserved. A span of 1 is a single-row block (top == bottom):
  * only the span is recorded, nothing moves. The content was attached on the top
- * line via attach_composite / append_primitive during ingestion; those rows are
+ * line via attach_complex / append_primitive during ingestion; those rows are
  * never recycled during their own reserve (the scroll blanks the rows below the
  * block), so the top line still holds the content here. */
 YETTY_ANNOTATE("expose")
@@ -3015,27 +3015,27 @@ struct yetty_ycore_int_result yetty_yvterm_grid_line_dirty(struct yetty_yclass_o
     return YETTY_OK(yetty_ycore_int, line_at(grid, row)->dirty);
 }
 
-/* Composite array anchored on visible row `row`. Sets *out_count; value may be
+/* Complex array anchored on visible row `row`. Sets *out_count; value may be
  * NULL. */
 YETTY_ANNOTATE("expose")
-struct yetty_ydraw_composite_const_ptr_ptr_result yetty_yvterm_grid_line_composites(
+struct yetty_ydraw_complex_const_ptr_ptr_result yetty_yvterm_grid_line_complexes(
     struct yetty_yclass_object *obj, uint32_t row, uint32_t *out_count)
 {
     if (out_count) {
         *out_count = 0;
     }
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_composite_const_ptr_ptr, grid_res,
-                        "yvterm grid_line_composites: from_obj");
+    YETTY_RETURN_IF_ERR(yetty_ydraw_complex_const_ptr_ptr, grid_res,
+                        "yvterm grid_line_complexes: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     if (row >= grid->visible_rows) {
-        return YETTY_OK(yetty_ydraw_composite_const_ptr_ptr, NULL);
+        return YETTY_OK(yetty_ydraw_complex_const_ptr_ptr, NULL);
     }
     struct yetty_yvterm_line *line = line_at(grid, row);
     if (out_count) {
-        *out_count = line->composite_count;
+        *out_count = line->complex_count;
     }
-    return YETTY_OK(yetty_ydraw_composite_const_ptr_ptr, line->composites);
+    return YETTY_OK(yetty_ydraw_complex_const_ptr_ptr, line->complexes);
 }
 
 /* Line behind a slot id handed to the renderer: a real ring slot, or an
@@ -3055,34 +3055,34 @@ static struct yetty_yvterm_line *grid_slot_line(struct yetty_yvterm_grid *grid, 
     return NULL;
 }
 
-/* Composite array on RAW ring slot `slot` (0..slot_count) or an extended
+/* Complex array on RAW ring slot `slot` (0..slot_count) or an extended
  * view-window id. Distinct from the visible-row accessor above: the text
  * upload + shader address the ring by raw slot via the resolved window, so
- * the composite pass must read by the SAME slot to scroll in lockstep (live
+ * the complex pass must read by the SAME slot to scroll in lockstep (live
  * AND scrolled-back). Sets *out_count; may be NULL. */
 YETTY_ANNOTATE("expose")
-struct yetty_ydraw_composite_const_ptr_ptr_result yetty_yvterm_grid_slot_composites(
+struct yetty_ydraw_complex_const_ptr_ptr_result yetty_yvterm_grid_slot_complexes(
     struct yetty_yclass_object *obj, uint32_t slot, uint32_t *out_count)
 {
     if (out_count) {
         *out_count = 0;
     }
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_composite_const_ptr_ptr, grid_res,
-                        "yvterm grid_slot_composites: from_obj");
+    YETTY_RETURN_IF_ERR(yetty_ydraw_complex_const_ptr_ptr, grid_res,
+                        "yvterm grid_slot_complexes: from_obj");
     struct yetty_yvterm_line *line = grid_slot_line(grid_res.value, slot);
     if (!line) {
-        return YETTY_OK(yetty_ydraw_composite_const_ptr_ptr, NULL);
+        return YETTY_OK(yetty_ydraw_complex_const_ptr_ptr, NULL);
     }
     if (out_count) {
-        *out_count = line->composite_count;
+        *out_count = line->complex_count;
     }
-    return YETTY_OK(yetty_ydraw_composite_const_ptr_ptr, line->composites);
+    return YETTY_OK(yetty_ydraw_complex_const_ptr_ptr, line->complexes);
 }
 
 /* Number of raw drawable records (SDF / glyph / TEXT_DRAWABLE_LIST / FONT) stored
  * on RAW ring slot `slot`. The SDF render pass walks these by slot — same raw-slot
- * addressing the composite + text passes use — so figures and text scroll together. */
+ * addressing the complex + text passes use — so figures and text scroll together. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_primitive_count(
     struct yetty_yclass_object *obj, uint32_t slot)
@@ -3141,7 +3141,7 @@ struct yetty_ycore_const_uint32_ptr_result yetty_yvterm_grid_slot_primitive_word
  * it into the current window generation. */
 static void line_materialize_figures(struct yetty_yvterm_grid *grid, struct yetty_yvterm_line *line)
 {
-    if (line->composite_count) {
+    if (line->complex_count) {
         /* Already materialized from an earlier window — refresh the stamp so
          * the sweep keeps it alive while it stays on view. */
         line->view_stamp = grid->window_stamp;
@@ -3154,10 +3154,10 @@ static void line_materialize_figures(struct yetty_yvterm_grid *grid, struct yett
     for (uint32_t index = 0; index < line->primitive_count; ++index) {
         const struct yetty_yvterm_primitive *record = &line->primitives[index];
         if (record->word_count == 0 ||
-            !yetty_ydraw_is_composite(line->arena[record->arena_offset])) {
+            !yetty_ydraw_is_complex(line->arena[record->arena_offset])) {
             continue;
         }
-        struct yetty_ydraw_composite *instance = NULL;
+        struct yetty_ydraw_complex *instance = NULL;
         struct yetty_ycore_void_result mat_res =
             grid->materialize_fn(line->arena + record->arena_offset, record->word_count,
                                  grid->materialize_userdata, &instance);
@@ -3171,20 +3171,20 @@ static void line_materialize_figures(struct yetty_yvterm_grid *grid, struct yett
             continue;
         }
         struct yetty_ycore_void_result grow_res =
-            ensure_composites(line, line->composite_count + 1u);
+            ensure_complexes(line, line->complex_count + 1u);
         if (YETTY_IS_ERR(grow_res)) {
             yetty_ycore_error_destroy(grow_res.error);
-            destroy_composite(instance);
+            destroy_complex(instance);
             break;
         }
-        line->composites[line->composite_count++] = instance;
+        line->complexes[line->complex_count++] = instance;
     }
-    if (line->composite_count) {
+    if (line->complex_count) {
         line->view_stamp = grid->window_stamp;
         grid->window_sweep_armed = 1;
         ydebug("scroll tiers: re-materialized %u figure(s) from retained envelopes for the "
                "scrolled-back view",
-               line->composite_count);
+               line->complex_count);
     }
 }
 
@@ -3201,7 +3201,7 @@ static void grid_view_sweep_visit(struct yetty_yvterm_line *line, uint64_t timel
 {
     (void)timeline_idx;
     struct grid_view_sweep_state *state = userdata;
-    if (!line->view_stamp || !line->composite_count) {
+    if (!line->view_stamp || !line->complex_count) {
         return;
     }
     if (line->view_stamp == state->current_stamp) {
@@ -3374,7 +3374,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_inject_ring_alloc_failure(
 /* Resolve the renderer's window for this frame: `row_count` rows starting at
  * the view top (live top when no view is active). Returns a grid-owned array
  * of one slot id per window row — real ring slots for hot rows (the text,
- * composite and SDF passes read them exactly as before), or extended ids
+ * complex and SDF passes read them exactly as before), or extended ids
  * (>= slot_count) that the slot accessors transparently serve from the
  * archive materialization cache. Also sweeps archive figure runtimes whose
  * lines left the window, and prefetches the adjacent segment in the scroll

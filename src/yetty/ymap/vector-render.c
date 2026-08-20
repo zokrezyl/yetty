@@ -1,7 +1,7 @@
 /*
  * vector-render.c — vector tiles → native SDF/MSDF drawables.
  *
- * The vector counterpart of openstreet.c's raster composite: fetches the
+ * The vector counterpart of openstreet.c's raster complex: fetches the
  * Mapbox-Vector-Tile (shortbread schema) tiles covering the viewport,
  * decodes them (vector-tile.c) and emits the map as first-class ydraw
  * drawables instead of pixels:

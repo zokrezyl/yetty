@@ -1,5 +1,5 @@
 /*
- * engine.c — raster tile download + composite → yimage prim.
+ * engine.c — raster tile download + complex → yimage prim.
  *
  * See include/yetty/ymap/engine.h for the contract. The module
  * is deliberately GPU-less: everything ends in the existing yimage wire
@@ -9,7 +9,7 @@
  * Pipeline:
  *   lat/lon/zoom → global pixel viewport (Web-Mercator slippy projection)
  *   → covering tile set → per-tile: disk cache hit, else libcurl GET
- *   → stb_image PNG decode → blit into one RGBA8 composite
+ *   → stb_image PNG decode → blit into one RGBA8 complex
  *   → yetty_yimage_uniforms_serialize → drawable list with one prim.
  *
  * Tile fetch is best-effort BY DESIGN: a tile that fails to download or
@@ -83,15 +83,15 @@ void yetty_ymap_global_pixel_to_lonlat(double pixel_x, double pixel_y, uint32_t 
  * Data-overlay bake
  *===========================================================================*/
 
-/* Alpha-blend one RGBA8 pixel of the composite. */
-static void overlay_blend_pixel(uint32_t *composite, uint32_t viewport_w, uint32_t viewport_h,
+/* Alpha-blend one RGBA8 pixel of the complex. */
+static void overlay_blend_pixel(uint32_t *complex, uint32_t viewport_w, uint32_t viewport_h,
                                 int64_t x, int64_t y, uint8_t red, uint8_t green, uint8_t blue,
                                 uint8_t alpha)
 {
     if (x < 0 || y < 0 || x >= (int64_t)viewport_w || y >= (int64_t)viewport_h || alpha == 0) {
         return;
     }
-    uint8_t *pixel = (uint8_t *)&composite[(size_t)y * viewport_w + (size_t)x];
+    uint8_t *pixel = (uint8_t *)&complex[(size_t)y * viewport_w + (size_t)x];
     uint32_t inverse = 255u - alpha;
     pixel[0] = (uint8_t)((red * alpha + pixel[0] * inverse) / 255u);
     pixel[1] = (uint8_t)((green * alpha + pixel[1] * inverse) / 255u);
@@ -100,7 +100,7 @@ static void overlay_blend_pixel(uint32_t *composite, uint32_t viewport_w, uint32
 
 /* Filled anti-aliased-ish disc with a dark rim so markers read on any
  * basemap. */
-static void overlay_draw_marker(uint32_t *composite, uint32_t viewport_w, uint32_t viewport_h,
+static void overlay_draw_marker(uint32_t *complex, uint32_t viewport_w, uint32_t viewport_h,
                                 double center_x, double center_y,
                                 const struct yetty_ymap_overlay_point *point)
 {
@@ -116,11 +116,11 @@ static void overlay_draw_marker(uint32_t *composite, uint32_t viewport_w, uint32
                 /* Soft edge over the last pixel of the fill. */
                 double coverage = point->radius_px - distance;
                 double edge = coverage < 1.0 ? coverage : 1.0;
-                overlay_blend_pixel(composite, viewport_w, viewport_h, x, y, point->red,
+                overlay_blend_pixel(complex, viewport_w, viewport_h, x, y, point->red,
                                     point->green, point->blue,
                                     (uint8_t)((double)point->alpha * edge));
             } else if (distance <= rim_radius) {
-                overlay_blend_pixel(composite, viewport_w, viewport_h, x, y, 0x0B, 0x10, 0x14,
+                overlay_blend_pixel(complex, viewport_w, viewport_h, x, y, 0x0B, 0x10, 0x14,
                                     (uint8_t)(point->alpha / 2));
             }
         }
@@ -128,7 +128,7 @@ static void overlay_draw_marker(uint32_t *composite, uint32_t viewport_w, uint32
 }
 
 /* 2px-wide line segment (crude DDA — fine at overlay densities). */
-static void overlay_draw_segment(uint32_t *composite, uint32_t viewport_w, uint32_t viewport_h,
+static void overlay_draw_segment(uint32_t *complex, uint32_t viewport_w, uint32_t viewport_h,
                                  double start_x, double start_y, double end_x, double end_y,
                                  const struct yetty_ymap_overlay_path *path)
 {
@@ -145,7 +145,7 @@ static void overlay_draw_segment(uint32_t *composite, uint32_t viewport_w, uint3
         double y = start_y + delta_y * position;
         for (int64_t offset_y = 0; offset_y <= 1; offset_y++) {
             for (int64_t offset_x = 0; offset_x <= 1; offset_x++) {
-                overlay_blend_pixel(composite, viewport_w, viewport_h, (int64_t)floor(x) + offset_x,
+                overlay_blend_pixel(complex, viewport_w, viewport_h, (int64_t)floor(x) + offset_x,
                                     (int64_t)floor(y) + offset_y, path->red, path->green,
                                     path->blue, path->alpha);
             }
@@ -157,7 +157,7 @@ static void overlay_draw_segment(uint32_t *composite, uint32_t viewport_w, uint3
  * composited basemap. Whole-feature clipping happens per pixel inside the
  * blend, so features straddling the edges just clip cleanly. */
 static void ymap_overlay_bake(const struct yetty_ymap_config *config, int64_t origin_x,
-                              int64_t origin_y, uint32_t *composite)
+                              int64_t origin_y, uint32_t *complex)
 {
     const struct yetty_ymap_overlay *overlay = config->overlay;
     for (size_t i = 0; i < overlay->path_count; i++) {
@@ -170,7 +170,7 @@ static void ymap_overlay_bake(const struct yetty_ymap_config *config, int64_t or
             yetty_ymap_lonlat_to_global_pixel(path->coordinates[segment * 2 + 2],
                                               path->coordinates[segment * 2 + 3], config->zoom,
                                               &end_x, &end_y);
-            overlay_draw_segment(composite, config->width_px, config->height_px,
+            overlay_draw_segment(complex, config->width_px, config->height_px,
                                  start_x - (double)origin_x, start_y - (double)origin_y,
                                  end_x - (double)origin_x, end_y - (double)origin_y, path);
         }
@@ -180,19 +180,19 @@ static void ymap_overlay_bake(const struct yetty_ymap_config *config, int64_t or
         double pixel_x, pixel_y;
         yetty_ymap_lonlat_to_global_pixel(point->longitude, point->latitude, config->zoom, &pixel_x,
                                           &pixel_y);
-        overlay_draw_marker(composite, config->width_px, config->height_px,
+        overlay_draw_marker(complex, config->width_px, config->height_px,
                             pixel_x - (double)origin_x, pixel_y - (double)origin_y, point);
     }
     ydebug("ymap overlay: baked %zu points, %zu paths", overlay->point_count, overlay->path_count);
 }
 
 /*=============================================================================
- * Composite render
+ * Complex render
  *===========================================================================*/
 
-/* Blit a decoded tile into the composite at its viewport position,
+/* Blit a decoded tile into the complex at its viewport position,
  * clipping against the viewport edges. */
-static void blit_tile(uint32_t *composite, uint32_t viewport_w, uint32_t viewport_h,
+static void blit_tile(uint32_t *complex, uint32_t viewport_w, uint32_t viewport_h,
                       const uint32_t *tile_pixels, int tile_w, int tile_h, int64_t dest_x,
                       int64_t dest_y)
 {
@@ -208,7 +208,7 @@ static void blit_tile(uint32_t *composite, uint32_t viewport_w, uint32_t viewpor
     size_t row_words = (size_t)(copy_x1 - copy_x0);
     for (int64_t row = 0; row < copy_y1 - copy_y0; row++) {
         const uint32_t *src_row = tile_pixels + (src_y0 + row) * tile_w + src_x0;
-        uint32_t *dst_row = composite + (copy_y0 + row) * viewport_w + copy_x0;
+        uint32_t *dst_row = complex + (copy_y0 + row) * viewport_w + copy_x0;
         memcpy(dst_row, src_row, row_words * sizeof(uint32_t));
     }
 }
@@ -281,12 +281,12 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
     }
 
     size_t pixel_count = (size_t)config->width_px * (size_t)config->height_px;
-    uint32_t *composite = malloc(pixel_count * sizeof(uint32_t));
-    if (!composite) {
-        return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: composite alloc failed");
+    uint32_t *complex = malloc(pixel_count * sizeof(uint32_t));
+    if (!complex) {
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: complex alloc failed");
     }
     for (size_t i = 0; i < pixel_count; i++) {
-        composite[i] = OSM_BACKGROUND_PIXEL;
+        complex[i] = OSM_BACKGROUND_PIXEL;
     }
 
     /* Collect the covering tile set (wrapped duplicates deduped), fetch
@@ -302,7 +302,7 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
     if (!slots || !requests) {
         free(slots);
         free(requests);
-        free(composite);
+        free(complex);
         return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: tile set alloc failed");
     }
     uint32_t slot_count = 0;
@@ -337,7 +337,7 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
     if (YETTY_IS_ERR(fetch_res)) {
         free(slots);
         free(requests);
-        free(composite);
+        free(complex);
         return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: batch fetch", fetch_res);
     }
 
@@ -358,7 +358,7 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
                   (long long)slot->tile_y, stbi_failure_reason());
             continue;
         }
-        blit_tile(composite, config->width_px, config->height_px, (const uint32_t *)tile_pixels,
+        blit_tile(complex, config->width_px, config->height_px, (const uint32_t *)tile_pixels,
                   tile_w, tile_h, slot->tile_x * (int64_t)OSM_TILE_SIZE - origin_x,
                   slot->tile_y * (int64_t)OSM_TILE_SIZE - origin_y);
         stbi_image_free(tile_pixels);
@@ -371,7 +371,7 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
     free(slots);
 
     if (tiles_blitted == 0) {
-        free(composite);
+        free(complex);
         return YETTY_ERR(yetty_ydraw_drawable_list,
                          "ymap: no tile could be fetched — offline and cold cache?");
     }
@@ -379,7 +379,7 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
            (long long)tiles_total, config->width_px, config->height_px, config->zoom);
 
     if (config->overlay) {
-        ymap_overlay_bake(config, origin_x, origin_y, composite);
+        ymap_overlay_bake(config, origin_x, origin_y, complex);
     }
 
     /* Pack as ONE yimage prim — identical path to yetty_yimage_render,
@@ -392,19 +392,19 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
     uniforms.image_w = config->width_px;
     uniforms.image_h = config->height_px;
     struct yetty_yimage_buffers buffers = {
-        .pixels = composite,
+        .pixels = complex,
         .pixels_len = pixel_count,
     };
 
     size_t required = yetty_yimage_uniforms_serialized_size(&uniforms, &buffers);
     uint8_t *prim_buf = malloc(required);
     if (!prim_buf) {
-        free(composite);
+        free(complex);
         return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: prim alloc failed");
     }
     struct yetty_ycore_size_result serialize_res =
         yetty_yimage_uniforms_serialize(&uniforms, &buffers, prim_buf, required);
-    free(composite);
+    free(complex);
     if (YETTY_IS_ERR(serialize_res)) {
         free(prim_buf);
         return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: serialize failed", serialize_res);

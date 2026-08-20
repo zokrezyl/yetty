@@ -30,7 +30,7 @@ yetty_add_c_test(
 
 # Tiered scrollback (#466): hot-window figure-runtime eviction, wire-envelope
 # retention in the line arena, view-driven re-materialization + sweep.
-# Composites are fabricated with a test-local ops table — no factory, no GPU.
+# Complexes are fabricated with a test-local ops table — no factory, no GPU.
 yetty_add_c_test(
     NAME    yvterm_scroll_tiers
     SOURCES scroll-tiers-test.c

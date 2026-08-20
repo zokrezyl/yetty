@@ -2776,7 +2776,7 @@ static int build_ui(struct app *a)
 
     /* Raster-image content uses a dedicated yimage widget (its own figure)
 	 * — a yimage prim can't be painted by the ydraw_embed, and nesting the
-	 * figure inside the scrollarea doesn't composite. So it's a sibling of
+	 * figure inside the scrollarea doesn't complex. So it's a sibling of
 	 * the scrollarea; exactly one of {scrollarea, image} is visible. */
     struct yetty_yclass_object_ptr_result ir =
         yetty_ygui_widget_add(a->root, yetty_ygui_yimage_class_get().value);
@@ -3489,7 +3489,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #ifdef YETTY_YBROWSER_HAS_STANDALONE
 
 #include <yetty/yconfig/config.h>
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
 #include <yetty/api/yfigure/figure.h>
@@ -3523,7 +3523,7 @@ struct YETTY_ANNOTATE("class@ybrowser:app") YETTY_ANNOTATE("parent@yapp:app") ye
     struct yetty_yframework *yframework;
     struct yetty_yclass_object *root_container;
     struct yetty_yfigure_registry *figure_registry;
-    struct yetty_ydraw_composite_factory *composite_factory;
+    struct yetty_ydraw_complex_factory *complex_factory;
     struct yetty_yfont_font *font;
     struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
     struct yetty_yscene_factory_args figure_args;
@@ -4054,20 +4054,20 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
 
     /* Raw figure factory + producer kinds. */
     {
-        struct yetty_ydraw_composite_factory_ptr_result ffr = yetty_ydraw_composite_factory_create(
+        struct yetty_ydraw_complex_factory_ptr_result ffr = yetty_ydraw_complex_factory_create(
             s->yframework->gpu.device, s->yframework->gpu.queue, s->yframework->gpu.surface_format,
             s->yframework->gpu.allocator, s->yframework->event_loop);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "ybrowser standalone: raw_composite_factory");
-        s->composite_factory = ffr.value;
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "ybrowser standalone: raw_complex_factory");
+        s->complex_factory = ffr.value;
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             yplot_f->destroy = yetty_yplot_factory_destroy;
-            err_ok(yetty_ydraw_composite_factory_register(s->composite_factory, yplot_f));
+            err_ok(yetty_ydraw_complex_factory_register(s->complex_factory, yplot_f));
         }
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
             yimage_f->destroy = yetty_yimage_factory_destroy;
-            err_ok(yetty_ydraw_composite_factory_register(s->composite_factory, yimage_f));
+            err_ok(yetty_ydraw_complex_factory_register(s->complex_factory, yimage_f));
         }
     }
 
@@ -4077,7 +4077,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, reg, "ybrowser standalone: registry_create");
         s->figure_registry = reg.value;
         s->figure_args.default_font = s->font;
-        s->figure_args.composite_factory = s->composite_factory;
+        s->figure_args.complex_factory = s->complex_factory;
         /* ygui chrome: producer figures laid out in logical px, scaled to
          * framebuffer by content_scale; widgets emit at absolute widget rect. */
         s->figure_args.absolute_coords = 1;
@@ -4094,7 +4094,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         }
         /* "yscene" — the retained scene the page scrollarea renders into
          * (in-yetty the terminal registers it; standalone must too). */
-        s->yscene_args.composite_factory = s->composite_factory;
+        s->yscene_args.complex_factory = s->complex_factory;
         s->yscene_args.default_font = s->font;
         struct yetty_ycore_void_result yscene_res =
             yetty_yscene_register_factory(s->figure_registry, &s->yscene_args);
@@ -4290,9 +4290,9 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         yetty_yfigure_registry_destroy(s->figure_registry);
         s->figure_registry = NULL;
     }
-    if (s->composite_factory) {
-        yetty_ydraw_composite_factory_destroy(s->composite_factory);
-        s->composite_factory = NULL;
+    if (s->complex_factory) {
+        yetty_ydraw_complex_factory_destroy(s->complex_factory);
+        s->complex_factory = NULL;
     }
     if (s->font) {
         s->font->ops->destroy(s->font);

@@ -2,7 +2,7 @@
  *
  * Builds a ydraw-core registry with every wire tier registered: control
  * cmds, the ysdf SDF default handler, the FONT / TEXT_DRAWABLE_LIST
- * entry handlers, and the composite record handler. Declared here (not
+ * entry handlers, and the complex record handler. Declared here (not
  * in ydraw-core) because ydraw-core must stay free of the ysdf handler
  * dependency; ysdf is the lowest module that sees both.
  */

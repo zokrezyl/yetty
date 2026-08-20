@@ -80,5 +80,5 @@ YAML-authored scenes.
 
 - [ydraw-core](../ydraw-core/README.md) — the buffer the factories fill.
 - [ysdf](../ysdf/README.md) — generated per-shape YAML factories.
-- [ydraw-gen](../ydraw-gen/README.md) — can emit a composite's YAML factory
+- [ydraw-gen](../ydraw-gen/README.md) — can emit a complex's YAML factory
   from its schema (`yaml_factory:` modes).

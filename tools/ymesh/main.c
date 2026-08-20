@@ -1,5 +1,5 @@
 /*
- * ymesh — emit a ymesh composite DCS envelope for a glTF 2.0 (.glb) file.
+ * ymesh — emit a ymesh complex DCS envelope for a glTF 2.0 (.glb) file.
  *
  * Two operating modes (mirroring ynetsurf):
  *

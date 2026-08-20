@@ -376,7 +376,7 @@ Mechanics:
   retained wire payload — the instance render re-parses the wire each
   frame, so a bare RS write would be clobbered.
 - Scrollback figures accept CMD_UPDATE via the terminal's stream
-  registry: each envelope's composites register under their ordinal
+  registry: each envelope's complexes register under their ordinal
   (1, 2, ...); later envelopes' updates route by that id
   (most-recent-wins per id; a later figure-creating envelope re-claims
   low ids, so producers should finish streaming before other figures are

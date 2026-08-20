@@ -370,8 +370,8 @@ static struct yetty_ycore_void_result view_set_text(struct yetty_yclass_object *
 /* set_plot: render a yplot expression (yexpr-plot syntax — "sin(x)", or
  * "f=sin(x); g=cos(x)") as the view's content: one yplot figure filling the
  * rect (a plot doesn't scroll). x_max<=x_min or y_max<=y_min selects yplot's
- * default ranges. The ygrid figure renders the yplot composite prim via the
- * terminal's composite factory. */
+ * default ranges. The ygrid figure renders the yplot complex prim via the
+ * terminal's complex factory. */
 YETTY_ANNOTATE("virtual@yview:view:set_plot")
 YETTY_ANNOTATE("local@yview:set_plot")
 static struct yetty_ycore_void_result view_set_plot(struct yetty_yclass_object *obj,

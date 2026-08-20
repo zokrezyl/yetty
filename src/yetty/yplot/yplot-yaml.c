@@ -1,5 +1,5 @@
 /*
- * yplot-yaml.c — HAND-WRITTEN yaml factory for the yplot composite
+ * yplot-yaml.c — HAND-WRITTEN yaml factory for the yplot complex
  * (schema: `yaml_factory: manual`).
  *
  * This parser goes far beyond the generic generated shape: it feeds the

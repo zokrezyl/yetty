@@ -30,7 +30,7 @@ struct yetty_ycore_uint64_result yetty_yscene_vtermgrid_replies_discarded(
 #include "../../../src/yetty/ymux/proto.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
@@ -1006,13 +1006,13 @@ static void test_dom_reposition_moves_active_generation(void)
  * previous world intact (or, for retirement, the DEFINED empty wipe), leak
  * no partial node, keep the complex registry consistent, and admit a
  * follow-up full frame. */
-/* Review #14: the REAL composite-factory fault rig. A minimal concrete
- * factory mints REAL (heap, ops-wired) composite instances and can be armed
+/* Review #14: the REAL complex-factory fault rig. A minimal concrete
+ * factory mints REAL (heap, ops-wired) complex instances and can be armed
  * to fail the Nth mint; the transactional assertions are that a retirement
  * fault destroys every instance minted for the incoming world (registry
  * snapshot rollback), the outgoing world's instances survive, and scene
  * destroy releases every remaining instance (leak accounting = zero). */
-enum { SCENE_TEST_COMPOSITE_TYPE = 0x80754321 };
+enum { SCENE_TEST_COMPLEX_TYPE = 0x80754321 };
 
 struct test_concrete_factory {
     struct yetty_ydraw_concrete_factory base;
@@ -1022,28 +1022,28 @@ struct test_concrete_factory {
     int destroy_count;
 };
 
-struct test_composite_instance {
-    struct yetty_ydraw_composite base;
+struct test_complex_instance {
+    struct yetty_ydraw_complex base;
     struct test_concrete_factory *owner;
 };
 
-static void test_composite_instance_destroy(struct yetty_ydraw_composite *self)
+static void test_complex_instance_destroy(struct yetty_ydraw_complex *self)
 {
-    struct test_composite_instance *instance = (struct test_composite_instance *)self;
+    struct test_complex_instance *instance = (struct test_complex_instance *)self;
     ++instance->owner->destroy_count;
     --instance->owner->live_instances;
     free(instance);
 }
 
-static const struct yetty_ydraw_composite_ops *test_composite_instance_ops(void)
+static const struct yetty_ydraw_complex_ops *test_complex_instance_ops(void)
 {
-    static const struct yetty_ydraw_composite_ops ops = {
-        .destroy = test_composite_instance_destroy,
+    static const struct yetty_ydraw_complex_ops ops = {
+        .destroy = test_complex_instance_destroy,
     };
     return &ops;
 }
 
-static struct yetty_ydraw_composite_ptr_result test_factory_create_instance(
+static struct yetty_ydraw_complex_ptr_result test_factory_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
@@ -1053,18 +1053,18 @@ static struct yetty_ydraw_composite_ptr_result test_factory_create_instance(
     struct test_concrete_factory *factory = (struct test_concrete_factory *)self;
     ++factory->mint_count;
     if (factory->fail_at_mint && factory->mint_count == factory->fail_at_mint) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "test factory: armed mint failure");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "test factory: armed mint failure");
     }
-    struct test_composite_instance *instance = calloc(1, sizeof(struct test_composite_instance));
+    struct test_complex_instance *instance = calloc(1, sizeof(struct test_complex_instance));
     if (!instance) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "test factory: alloc");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "test factory: alloc");
     }
-    instance->base.ops = test_composite_instance_ops();
-    instance->base.type = SCENE_TEST_COMPOSITE_TYPE;
+    instance->base.ops = test_complex_instance_ops();
+    instance->base.type = SCENE_TEST_COMPLEX_TYPE;
     instance->base.factory = self;
     instance->owner = factory;
     ++factory->live_instances;
-    return YETTY_OK(yetty_ydraw_composite_ptr, &instance->base);
+    return YETTY_OK(yetty_ydraw_complex_ptr, &instance->base);
 }
 
 static struct yetty_ycore_void_result test_factory_compile_pipeline(
@@ -1084,18 +1084,18 @@ static void test_factory_destroy(struct yetty_ydraw_concrete_factory *self)
     (void)self; /* embedded in the test frame — nothing to free */
 }
 
-/* A rich frame with one hit-testable BOX record + `composite_count`
- * composite records (rich ids base_id, base_id+1, ...). */
-static size_t dom_rich_with_composites(uint32_t *words, size_t cap, uint64_t base_id,
+/* A rich frame with one hit-testable BOX record + `complex_count`
+ * complex records (rich ids base_id, base_id+1, ...). */
+static size_t dom_rich_with_complexes(uint32_t *words, size_t cap, uint64_t base_id,
                                        struct yetty_ydraw_drawable_list *list,
-                                       uint32_t composite_count)
+                                       uint32_t complex_count)
 {
     size_t list_bytes = yetty_ydraw_drawable_list_size(list);
     size_t list_words = list_bytes / sizeof(uint32_t);
     size_t offset = 0;
     words[offset++] = TEST_RICH_MAGIC;
     words[offset++] = 1;                   /* version */
-    words[offset++] = 1 + composite_count; /* records */
+    words[offset++] = 1 + complex_count; /* records */
     /* Record 1: the drawable-list box (world-survival hit probe). */
     words[offset++] = (uint32_t)(base_id & 0xFFFFFFFFu);
     words[offset++] = (uint32_t)(base_id >> 32);
@@ -1110,12 +1110,12 @@ static size_t dom_rich_with_composites(uint32_t *words, size_t cap, uint64_t bas
     words[offset++] = 0;
     words[offset++] = 0;
     words[offset++] = (uint32_t)list_bytes;
-    if (offset + list_words + (size_t)composite_count * 13 > cap) {
+    if (offset + list_words + (size_t)complex_count * 13 > cap) {
         return 0;
     }
     memcpy(&words[offset], yetty_ydraw_drawable_list_data(list), list_bytes);
     offset += list_words;
-    for (uint32_t index = 0; index < composite_count; ++index) {
+    for (uint32_t index = 0; index < complex_count; ++index) {
         uint64_t rich_id = base_id + 1 + index;
         words[offset++] = (uint32_t)(rich_id & 0xFFFFFFFFu);
         words[offset++] = (uint32_t)(rich_id >> 32);
@@ -1123,14 +1123,14 @@ static size_t dom_rich_with_composites(uint32_t *words, size_t cap, uint64_t bas
         words[offset++] = 0;     /* row */
         words[offset++] = 0;     /* col */
         words[offset++] = 0;     /* flags */
-        words[offset++] = 6 + 6; /* payload: YPB1 hdr + composite record */
+        words[offset++] = 6 + 6; /* payload: YPB1 hdr + complex record */
         words[offset++] = 0x31425059u;
         words[offset++] = 0;
         words[offset++] = 0;
         words[offset++] = 0;
         words[offset++] = 0;
         words[offset++] = 6 * sizeof(uint32_t); /* record bytes */
-        words[offset++] = SCENE_TEST_COMPOSITE_TYPE;
+        words[offset++] = SCENE_TEST_COMPLEX_TYPE;
         words[offset++] = 4 * sizeof(uint32_t); /* payload: the bounds */
         float bounds[4] = {0.0f, 0.0f, 24.0f, 24.0f};
         memcpy(&words[offset], bounds, sizeof(bounds));
@@ -1139,48 +1139,48 @@ static size_t dom_rich_with_composites(uint32_t *words, size_t cap, uint64_t bas
     return offset;
 }
 
-static void test_composite_factory_fault_rig(void)
+static void test_complex_factory_fault_rig(void)
 {
-    struct yetty_ydraw_composite_factory_ptr_result factory_res =
-        yetty_ydraw_composite_factory_create(NULL, NULL, 0, NULL, NULL);
-    CHECK("composite factory created", YETTY_IS_OK(factory_res));
+    struct yetty_ydraw_complex_factory_ptr_result factory_res =
+        yetty_ydraw_complex_factory_create(NULL, NULL, 0, NULL, NULL);
+    CHECK("complex factory created", YETTY_IS_OK(factory_res));
     if (YETTY_IS_ERR(factory_res)) {
         return;
     }
-    struct yetty_ydraw_composite_factory *factory = factory_res.value;
+    struct yetty_ydraw_complex_factory *factory = factory_res.value;
     struct test_concrete_factory concrete = {
-        .base = {.type_id = SCENE_TEST_COMPOSITE_TYPE,
+        .base = {.type_id = SCENE_TEST_COMPLEX_TYPE,
                  .destroy = test_factory_destroy,
                  .compile_pipeline = test_factory_compile_pipeline,
                  .create_instance = test_factory_create_instance},
     };
     CHECK_OK("concrete registered",
-             yetty_ydraw_composite_factory_register(factory, &concrete.base));
+             yetty_ydraw_complex_factory_register(factory, &concrete.base));
 
     struct yetty_ydraw_drawable_list *box = make_list();
     add_box(box, 0, 0, 30, 30);
     struct yetty_yclass_object *obj = make_scene();
-    CHECK_OK("factory wired", yetty_yscene_set_composite_factory(obj, factory));
+    CHECK_OK("factory wired", yetty_yscene_set_complex_factory(obj, factory));
 
-    /* World A: box + TWO composite subtrees — real instances minted. */
+    /* World A: box + TWO complex subtrees — real instances minted. */
     uint32_t frame_a[512];
-    size_t count_a = dom_rich_with_composites(frame_a, 512, 500, box, 2);
+    size_t count_a = dom_rich_with_complexes(frame_a, 512, 500, box, 2);
     CHECK("A built", count_a > 0);
     CHECK_OK("world A applies",
              yetty_yscene_scene_apply_content_transaction(obj, frame_a, count_a));
     CHECK("A hits", hit(obj, 5, 5) != 0);
-    /* Composites mint AT APPLY (the stage-4 batch scan). */
+    /* Complexes mint AT APPLY (the stage-4 batch scan). */
     CHECK("A minted two real instances", concrete.live_instances == 2);
 
     /* Retirement fault with MULTIPLE old subtrees: world B mints its own
      * instances during staging; the armed stage-5 failure must destroy
      * EXACTLY those (registry snapshot rollback) and preserve world A —
-     * dom subtrees AND live composite instances. */
+     * dom subtrees AND live complex instances. */
     /* The seam countdown is PER CALL: 3 records x 4 stage seams + 1 puts
-     * the fault on the RETIRE seam — after B's composites have minted. */
+     * the fault on the RETIRE seam — after B's complexes have minted. */
     CHECK_OK("arm retire fault", yetty_yscene_scene_rich_fault_arm(obj, 13));
     uint32_t frame_b[512];
-    size_t count_b = dom_rich_with_composites(frame_b, 512, 600, box, 2);
+    size_t count_b = dom_rich_with_complexes(frame_b, 512, 600, box, 2);
     struct yetty_ycore_void_result fail_res =
         yetty_yscene_scene_apply_content_transaction(obj, frame_b, count_b);
     CHECK("retire fault rejects B", YETTY_IS_ERR(fail_res));
@@ -1199,7 +1199,7 @@ static void test_composite_factory_fault_rig(void)
      * record drops, the frame lands, the OTHER records mint). */
     concrete.fail_at_mint = concrete.mint_count + 1;
     uint32_t frame_c[512];
-    size_t count_c = dom_rich_with_composites(frame_c, 512, 700, box, 2);
+    size_t count_c = dom_rich_with_complexes(frame_c, 512, 700, box, 2);
     CHECK_OK("world C applies despite factory mint failure",
              yetty_yscene_scene_apply_content_transaction(obj, frame_c, count_c));
     CHECK("C hits", hit(obj, 5, 5) != 0);
@@ -1220,7 +1220,7 @@ static void test_composite_factory_fault_rig(void)
     destroy_scene(obj);
     CHECK("every instance released at scene destroy", concrete.live_instances == 0);
     yetty_ydraw_drawable_list_destroy(box);
-    yetty_ydraw_composite_factory_destroy(factory);
+    yetty_ydraw_complex_factory_destroy(factory);
 }
 
 static void test_dom_rollback_fault_matrix(void)
@@ -1971,7 +1971,7 @@ int main(void)
     test_dom_reposition_moves_active_generation();
     test_production_chrome_frame();
     test_dom_rollback_fault_matrix();
-    test_composite_factory_fault_rig();
+    test_complex_factory_fault_rig();
     test_terminal_grid_recreate_resets_parser_and_modes();
     test_vtermgrid_projector_parity();
     test_vtermgrid_scroll_burst_parity();

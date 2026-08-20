@@ -55,8 +55,8 @@ struct yetty_ycore_void_result yetty_yview_set_text(struct yetty_yclass_object *
 /* set_plot: render a yplot expression (yexpr-plot syntax — "sin(x)", or
  * "f=sin(x); g=cos(x)") as the view's content: one yplot figure filling the
  * rect (a plot doesn't scroll). x_max<=x_min or y_max<=y_min selects yplot's
- * default ranges. The ygrid figure renders the yplot composite prim via the
- * terminal's composite factory. */
+ * default ranges. The ygrid figure renders the yplot complex prim via the
+ * terminal's complex factory. */
 struct yetty_ycore_void_result yetty_yview_set_plot(struct yetty_yclass_object *obj,
                                                     const char *expr, float x_min, float x_max,
                                                     float y_min, float y_max);

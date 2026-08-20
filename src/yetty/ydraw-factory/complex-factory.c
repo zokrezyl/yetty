@@ -1,6 +1,6 @@
 // YDraw Complex Primitive Factory - Abstract Factory Implementation
 
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
@@ -22,14 +22,14 @@
 
 //=============================================================================
 // GPU residency — bounded LRU of GPU-resident figures (see the residency block
-// in struct yetty_ydraw_composite). Owned by the abstract factory; every
+// in struct yetty_ydraw_complex). Owned by the abstract factory; every
 // instance it mints back-points here. Not thread-safe: all mutation happens on
 // the render/ingest thread that owns the factory.
 //=============================================================================
 
 struct yetty_ydraw_gpu_residency {
-    struct yetty_ydraw_composite *mru; /* most recently used — list head */
-    struct yetty_ydraw_composite *lru; /* least recently used — list tail */
+    struct yetty_ydraw_complex *mru; /* most recently used — list head */
+    struct yetty_ydraw_complex *lru; /* least recently used — list tail */
     uint32_t count;
     uint32_t budget;
 };
@@ -42,47 +42,47 @@ static void residency_init(struct yetty_ydraw_gpu_residency *residency, uint32_t
     residency->budget = budget ? budget : YETTY_YDRAW_GPU_RESIDENCY_BUDGET;
 }
 
-/* Detach `composite` from the LRU list. Leaves its GPU resources untouched —
+/* Detach `complex` from the LRU list. Leaves its GPU resources untouched —
  * callers that also want the slots freed call residency_release_one(). */
 static void residency_list_remove(struct yetty_ydraw_gpu_residency *residency,
-                                  struct yetty_ydraw_composite *composite)
+                                  struct yetty_ydraw_complex *complex)
 {
-    if (!composite->resident) {
+    if (!complex->resident) {
         return;
     }
-    if (composite->res_prev) {
-        composite->res_prev->res_next = composite->res_next;
+    if (complex->res_prev) {
+        complex->res_prev->res_next = complex->res_next;
     } else {
-        residency->mru = composite->res_next;
+        residency->mru = complex->res_next;
     }
-    if (composite->res_next) {
-        composite->res_next->res_prev = composite->res_prev;
+    if (complex->res_next) {
+        complex->res_next->res_prev = complex->res_prev;
     } else {
-        residency->lru = composite->res_prev;
+        residency->lru = complex->res_prev;
     }
-    composite->res_prev = NULL;
-    composite->res_next = NULL;
-    composite->resident = 0;
+    complex->res_prev = NULL;
+    complex->res_next = NULL;
+    complex->resident = 0;
     if (residency->count > 0) {
         residency->count--;
     }
 }
 
-/* Push `composite` at the MRU (front). Caller guarantees it is not currently
+/* Push `complex` at the MRU (front). Caller guarantees it is not currently
  * linked. */
 static void residency_list_push_front(struct yetty_ydraw_gpu_residency *residency,
-                                      struct yetty_ydraw_composite *composite)
+                                      struct yetty_ydraw_complex *complex)
 {
-    composite->res_prev = NULL;
-    composite->res_next = residency->mru;
+    complex->res_prev = NULL;
+    complex->res_next = residency->mru;
     if (residency->mru) {
-        residency->mru->res_prev = composite;
+        residency->mru->res_prev = complex;
     }
-    residency->mru = composite;
+    residency->mru = complex;
     if (!residency->lru) {
-        residency->lru = composite;
+        residency->lru = complex;
     }
-    composite->resident = 1;
+    complex->resident = 1;
     residency->count++;
 }
 
@@ -90,15 +90,15 @@ static void residency_list_push_front(struct yetty_ydraw_gpu_residency *residenc
  * LRU. The figure itself lives on (its wire record is retained); a later
  * render reacquires the slots via binder->finalize(). */
 static void residency_release_one(struct yetty_ydraw_gpu_residency *residency,
-                                  struct yetty_ydraw_composite *composite)
+                                  struct yetty_ydraw_complex *complex)
 {
-    if (composite->binder && composite->binder->ops->release_gpu) {
-        struct yetty_ycore_void_result rr = composite->binder->ops->release_gpu(composite->binder);
+    if (complex->binder && complex->binder->ops->release_gpu) {
+        struct yetty_ycore_void_result rr = complex->binder->ops->release_gpu(complex->binder);
         if (YETTY_IS_ERR(rr)) {
             yetty_ycore_error_destroy(rr.error); /* best-effort — slot may already be gone */
         }
     }
-    residency_list_remove(residency, composite);
+    residency_list_remove(residency, complex);
 }
 
 /* Evict from the LRU tail until the resident set fits the budget. The tail is
@@ -111,26 +111,26 @@ static void residency_evict_to_budget(struct yetty_ydraw_gpu_residency *residenc
     }
 }
 
-/* Make `composite` the most-recently-used resident figure, ensuring its GPU
+/* Make `complex` the most-recently-used resident figure, ensuring its GPU
  * resources are live. Called on every render and on create (eager binders).
  * Returns an error only if reacquiring the GPU resources failed. */
 static struct yetty_ycore_void_result residency_touch(struct yetty_ydraw_gpu_residency *residency,
-                                                      struct yetty_ydraw_composite *composite)
+                                                      struct yetty_ydraw_complex *complex)
 {
-    composite->residency = residency;
+    complex->residency = residency;
 
     /* Rebuild the binder's GPU resources if they were previously released
      * (off-screen). finalize() is a no-op when already finalized, so this is
      * cheap on the hot path where the figure stayed resident. */
-    if (composite->binder && composite->binder->ops->finalize) {
-        struct yetty_ycore_void_result fr = composite->binder->ops->finalize(composite->binder);
+    if (complex->binder && complex->binder->ops->finalize) {
+        struct yetty_ycore_void_result fr = complex->binder->ops->finalize(complex->binder);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "residency_touch: reacquire GPU resources");
     }
 
-    if (composite->resident) {
-        residency_list_remove(residency, composite);
+    if (complex->resident) {
+        residency_list_remove(residency, complex);
     }
-    residency_list_push_front(residency, composite);
+    residency_list_push_front(residency, complex);
     residency_evict_to_budget(residency);
     return YETTY_OK_VOID();
 }
@@ -139,7 +139,7 @@ static struct yetty_ycore_void_result residency_touch(struct yetty_ydraw_gpu_res
 // Abstract factory internal structure
 //=============================================================================
 
-struct yetty_ydraw_composite_factory {
+struct yetty_ydraw_complex_factory {
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat target_format;
@@ -165,14 +165,14 @@ struct yetty_ydraw_composite_factory {
 // Abstract factory lifecycle
 //=============================================================================
 
-struct yetty_ydraw_composite_factory_ptr_result yetty_ydraw_composite_factory_create(
+struct yetty_ydraw_complex_factory_ptr_result yetty_ydraw_complex_factory_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat target_format,
     struct yetty_ydraw_gpu_allocator *allocator, struct yetty_yevent_event_loop *event_loop)
 {
-    struct yetty_ydraw_composite_factory *factory =
-        calloc(1, sizeof(struct yetty_ydraw_composite_factory));
+    struct yetty_ydraw_complex_factory *factory =
+        calloc(1, sizeof(struct yetty_ydraw_complex_factory));
     if (!factory) {
-        return YETTY_ERR(yetty_ydraw_composite_factory_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ydraw_complex_factory_ptr, "allocation failed");
     }
 
     factory->device = device;
@@ -182,10 +182,10 @@ struct yetty_ydraw_composite_factory_ptr_result yetty_ydraw_composite_factory_cr
     factory->event_loop = event_loop;
     residency_init(&factory->residency, YETTY_YDRAW_GPU_RESIDENCY_BUDGET);
 
-    return YETTY_OK(yetty_ydraw_composite_factory_ptr, factory);
+    return YETTY_OK(yetty_ydraw_complex_factory_ptr, factory);
 }
 
-void yetty_ydraw_composite_factory_destroy(struct yetty_ydraw_composite_factory *factory)
+void yetty_ydraw_complex_factory_destroy(struct yetty_ydraw_complex_factory *factory)
 {
     if (!factory) {
         return;
@@ -207,8 +207,8 @@ void yetty_ydraw_composite_factory_destroy(struct yetty_ydraw_composite_factory 
 // Abstract factory registration
 //=============================================================================
 
-struct yetty_ycore_void_result yetty_ydraw_composite_factory_register(
-    struct yetty_ydraw_composite_factory *factory, struct yetty_ydraw_concrete_factory *concrete)
+struct yetty_ycore_void_result yetty_ydraw_complex_factory_register(
+    struct yetty_ydraw_complex_factory *factory, struct yetty_ydraw_concrete_factory *concrete)
 {
     if (!factory) {
         return YETTY_ERR(yetty_ycore_void, "factory is NULL");
@@ -232,11 +232,11 @@ struct yetty_ycore_void_result yetty_ydraw_composite_factory_register(
     concrete->event_loop = factory->event_loop;
 
     /* Pipeline compilation is deferred to the first create_instance of this
-     * type (see composite_factory_ensure_pipeline). Compiling here would make
+     * type (see complex_factory_ensure_pipeline). Compiling here would make
      * every startup pay for every figure shader, used or not. */
     factory->pipeline_ready[factory->count] = concrete->compile_pipeline ? 0 : 1;
     factory->factories[factory->count++] = concrete;
-    ydebug("composite_factory: registered type 0x%08x", concrete->type_id);
+    ydebug("complex_factory: registered type 0x%08x", concrete->type_id);
     return YETTY_OK_VOID();
 }
 
@@ -247,7 +247,7 @@ struct yetty_ycore_void_result yetty_ydraw_composite_factory_register(
 /* Returns the factories[] slot for `type_id`, or -1 if not registered. The
  * slot (not the pointer) is what lookups hand out so callers can reach the
  * parallel pipeline_ready[] flag. */
-static int composite_factory_get_slot(struct yetty_ydraw_composite_factory *factory,
+static int complex_factory_get_slot(struct yetty_ydraw_complex_factory *factory,
                                       uint32_t type_id)
 {
     if (!factory) {
@@ -265,8 +265,8 @@ static int composite_factory_get_slot(struct yetty_ydraw_composite_factory *fact
 /* Run the deferred compile_pipeline for the factory in `slot` if it hasn't run
  * yet. Idempotent; called on every create_instance, a boolean test after the
  * first time. */
-static struct yetty_ycore_void_result composite_factory_ensure_pipeline(
-    struct yetty_ydraw_composite_factory *factory, uint32_t slot)
+static struct yetty_ycore_void_result complex_factory_ensure_pipeline(
+    struct yetty_ydraw_complex_factory *factory, uint32_t slot)
 {
     struct yetty_ydraw_concrete_factory *concrete = factory->factories[slot];
     if (factory->pipeline_ready[slot]) {
@@ -275,7 +275,7 @@ static struct yetty_ycore_void_result composite_factory_ensure_pipeline(
     struct yetty_ycore_void_result compile_res = concrete->compile_pipeline(
         concrete, factory->device, factory->queue, factory->target_format, factory->allocator);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, compile_res,
-                        "composite_factory: deferred compile_pipeline failed");
+                        "complex_factory: deferred compile_pipeline failed");
     factory->pipeline_ready[slot] = 1;
     return YETTY_OK_VOID();
 }
@@ -284,36 +284,36 @@ static struct yetty_ycore_void_result composite_factory_ensure_pipeline(
 // Abstract factory instance creation
 //=============================================================================
 
-struct yetty_ydraw_composite_ptr_result yetty_ydraw_composite_factory_create_instance(
-    struct yetty_ydraw_composite_factory *factory, const void *buffer_data, size_t size,
+struct yetty_ydraw_complex_ptr_result yetty_ydraw_complex_factory_create_instance(
+    struct yetty_ydraw_complex_factory *factory, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
     if (!factory) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "factory is NULL");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "factory is NULL");
     }
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite_record)) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_complex_record)) {
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "invalid buffer data");
     }
 
     // Read type from buffer
-    const struct yetty_ydraw_composite_record *prim = buffer_data;
+    const struct yetty_ydraw_complex_record *prim = buffer_data;
     uint32_t type_id = prim->header.type;
 
     // Get concrete factory
-    int slot = composite_factory_get_slot(factory, type_id);
+    int slot = complex_factory_get_slot(factory, type_id);
     if (slot < 0) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "type not registered");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "type not registered");
     }
     struct yetty_ydraw_concrete_factory *concrete = factory->factories[slot];
 
     /* First instance of this type: run the deferred pipeline compile. */
     struct yetty_ycore_void_result ensure_res =
-        composite_factory_ensure_pipeline(factory, (uint32_t)slot);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_composite_ptr, ensure_res,
-                        "composite_factory: pipeline compile on first use failed");
+        complex_factory_ensure_pipeline(factory, (uint32_t)slot);
+    YETTY_RETURN_IF_ERR(yetty_ydraw_complex_ptr, ensure_res,
+                        "complex_factory: pipeline compile on first use failed");
 
     // Delegate to concrete factory
-    struct yetty_ydraw_composite_ptr_result inst_res =
+    struct yetty_ydraw_complex_ptr_result inst_res =
         concrete->create_instance(concrete, buffer_data, size, rolling_row);
     if (YETTY_IS_ERR(inst_res)) {
         return inst_res;
@@ -342,7 +342,7 @@ struct yetty_ydraw_composite_ptr_result yetty_ydraw_composite_factory_create_ins
 // so its fragment shader can transform the incoming pixel at fs_main entry.
 //=============================================================================
 
-void yetty_ydraw_composite_factory_set_visual_zoom(struct yetty_ydraw_composite_factory *factory,
+void yetty_ydraw_complex_factory_set_visual_zoom(struct yetty_ydraw_complex_factory *factory,
                                                    float scale, float offset_x, float offset_y)
 {
     if (!factory) {
@@ -356,14 +356,14 @@ void yetty_ydraw_composite_factory_set_visual_zoom(struct yetty_ydraw_composite_
     }
 }
 
-void yetty_ydraw_composite_factory_set_cell_zoom(struct yetty_ydraw_composite_factory *factory,
+void yetty_ydraw_complex_factory_set_cell_zoom(struct yetty_ydraw_complex_factory *factory,
                                                  float scale, float offset_x, float offset_y)
 {
     if (!factory) {
-        ydebug("composite_factory_set_cell_zoom: factory is NULL");
+        ydebug("complex_factory_set_cell_zoom: factory is NULL");
         return;
     }
-    ydebug("composite_factory_set_cell_zoom: scale=%.3f off=(%.1f,%.1f) factories=%u", scale,
+    ydebug("complex_factory_set_cell_zoom: scale=%.3f off=(%.1f,%.1f) factories=%u", scale,
            offset_x, offset_y, factory->count);
     for (uint32_t i = 0; i < factory->count; i++) {
         struct yetty_ydraw_concrete_factory *cf = factory->factories[i];
@@ -384,7 +384,7 @@ void yetty_ydraw_composite_factory_set_cell_zoom(struct yetty_ydraw_composite_fa
 
 void yetty_ydraw_stream_registry_register(struct yetty_ydraw_stream_registry *registry,
                                           uint32_t stream_id,
-                                          struct yetty_ydraw_composite *instance)
+                                          struct yetty_ydraw_complex *instance)
 {
     if (!registry || !instance || stream_id == 0 || stream_id > YETTY_YDRAW_STREAM_TARGETS_MAX) {
         return;
@@ -394,7 +394,7 @@ void yetty_ydraw_stream_registry_register(struct yetty_ydraw_stream_registry *re
     registry->targets[stream_id - 1u] = instance;
 }
 
-struct yetty_ydraw_composite *yetty_ydraw_stream_registry_find(
+struct yetty_ydraw_complex *yetty_ydraw_stream_registry_find(
     struct yetty_ydraw_stream_registry *registry, uint32_t stream_id)
 {
     if (!registry || stream_id == 0 || stream_id > YETTY_YDRAW_STREAM_TARGETS_MAX) {
@@ -406,7 +406,7 @@ struct yetty_ydraw_composite *yetty_ydraw_stream_registry_find(
 /* Clear every slot still pointing at `instance`. A replaced instance keeps
  * a stale back-pointer, so only self-matching slots may be cleared. */
 static void stream_registry_remove(struct yetty_ydraw_stream_registry *registry,
-                                   struct yetty_ydraw_composite *instance)
+                                   struct yetty_ydraw_complex *instance)
 {
     for (uint32_t i = 0; i < YETTY_YDRAW_STREAM_TARGETS_MAX; i++) {
         if (registry->targets[i] == instance) {
@@ -419,7 +419,7 @@ static void stream_registry_remove(struct yetty_ydraw_stream_registry *registry,
 // Instance destruction (uses back-pointer)
 //=============================================================================
 
-void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance)
+void yetty_ydraw_complex_destroy(struct yetty_ydraw_complex *instance)
 {
     if (!instance) {
         return;
@@ -459,16 +459,16 @@ void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance)
     free(instance);
 }
 
-/* Render one composite instance into `target` at (x, y). Thin public wrapper
+/* Render one complex instance into `target` at (x, y). Thin public wrapper
  * over the per-instance `render` op (the host grid supplies the position for
  * its scrolling/anchored placement). A figure type with no render op simply
  * doesn't paint — not an error. */
-struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_composite *instance,
+struct yetty_ycore_void_result yetty_ydraw_complex_render(struct yetty_ydraw_complex *instance,
                                                             struct yetty_ydraw_target *target,
                                                             float x, float y)
 {
     if (!instance) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ydraw_composite_render: NULL instance");
+        return YETTY_ERR(yetty_ycore_void, "yetty_ydraw_complex_render: NULL instance");
     }
     if (!instance->render) {
         return YETTY_OK_VOID();
@@ -482,13 +482,13 @@ struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_c
      * (none today, but keep the wrapper self-contained). */
     if (instance->residency) {
         struct yetty_ycore_void_result tr = residency_touch(instance->residency, instance);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "composite_render: residency acquire");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "complex_render: residency acquire");
     }
 
     return instance->render(instance, target, x, y);
 }
 
-float yetty_ydraw_composite_pixel_height(const struct yetty_ydraw_composite *instance)
+float yetty_ydraw_complex_pixel_height(const struct yetty_ydraw_complex *instance)
 {
     if (!instance) {
         return 0.0f;
@@ -501,7 +501,7 @@ float yetty_ydraw_composite_pixel_height(const struct yetty_ydraw_composite *ins
  * must use THIS, not the height: a multi-figure envelope's record can sit
  * deep inside its block (origin at bounds.min), so the visible extent
  * below the block anchor is max.y, not max.y - min.y. */
-float yetty_ydraw_composite_pixel_bottom(const struct yetty_ydraw_composite *instance)
+float yetty_ydraw_complex_pixel_bottom(const struct yetty_ydraw_complex *instance)
 {
     if (!instance) {
         return 0.0f;
@@ -509,7 +509,7 @@ float yetty_ydraw_composite_pixel_bottom(const struct yetty_ydraw_composite *ins
     return instance->bounds.max.y > 0.0f ? instance->bounds.max.y : 0.0f;
 }
 
-void yetty_ydraw_composite_set_content_scale(struct yetty_ydraw_composite *instance, float scale)
+void yetty_ydraw_complex_set_content_scale(struct yetty_ydraw_complex *instance, float scale)
 {
     if (!instance) {
         return;

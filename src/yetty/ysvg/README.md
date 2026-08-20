@@ -32,7 +32,7 @@ solid, capped at 4096 vertices), `text`/`tspan` → MSDF text entries,
 `g`/`a`/`svg`/`use`/`switch` → recurse (`<use>` depth-capped). Gradients are
 approximated by the mean stop colour (following `xlink:href` stop
 inheritance); `<image>` is served by an embedder-supplied resolver and
-serialized as a yimage composite record.
+serialized as a yimage complex record.
 
 CSS selector support: descendant/child/adjacent/general-sibling combinators,
 attribute selectors, structural pseudo-classes, `!important`. Ignored:

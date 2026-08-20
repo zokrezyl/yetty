@@ -15,6 +15,7 @@ from . import yjupyter as yjupyter
 from . import ymap as ymap
 from . import ymgui as ymgui
 from . import ymusic as ymusic
+from . import ymux as ymux
 from . import ynet as ynet
 from . import ynotebook as ynotebook
 from . import yplatform as yplatform

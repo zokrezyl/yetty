@@ -50,6 +50,52 @@ class ymusic_clef(IntEnum):
     YMUSIC_CLEF_ALTO = 2
     YMUSIC_CLEF_TENOR = 3
 
+class yetty_ymux_key(IntEnum):
+    YETTY_YMUX_KEY_ENTER = 1
+    YETTY_YMUX_KEY_TAB = 2
+    YETTY_YMUX_KEY_BACKSPACE = 3
+    YETTY_YMUX_KEY_ESCAPE = 4
+    YETTY_YMUX_KEY_UP = 5
+    YETTY_YMUX_KEY_DOWN = 6
+    YETTY_YMUX_KEY_LEFT = 7
+    YETTY_YMUX_KEY_RIGHT = 8
+    YETTY_YMUX_KEY_INSERT = 9
+    YETTY_YMUX_KEY_DELETE = 10
+    YETTY_YMUX_KEY_HOME = 11
+    YETTY_YMUX_KEY_END = 12
+    YETTY_YMUX_KEY_PAGE_UP = 13
+    YETTY_YMUX_KEY_PAGE_DOWN = 14
+    YETTY_YMUX_KEY_KP_0 = 15
+    YETTY_YMUX_KEY_KP_1 = 16
+    YETTY_YMUX_KEY_KP_2 = 17
+    YETTY_YMUX_KEY_KP_3 = 18
+    YETTY_YMUX_KEY_KP_4 = 19
+    YETTY_YMUX_KEY_KP_5 = 20
+    YETTY_YMUX_KEY_KP_6 = 21
+    YETTY_YMUX_KEY_KP_7 = 22
+    YETTY_YMUX_KEY_KP_8 = 23
+    YETTY_YMUX_KEY_KP_9 = 24
+    YETTY_YMUX_KEY_KP_MULT = 25
+    YETTY_YMUX_KEY_KP_PLUS = 26
+    YETTY_YMUX_KEY_KP_COMMA = 27
+    YETTY_YMUX_KEY_KP_MINUS = 28
+    YETTY_YMUX_KEY_KP_PERIOD = 29
+    YETTY_YMUX_KEY_KP_DIVIDE = 30
+    YETTY_YMUX_KEY_KP_ENTER = 31
+    YETTY_YMUX_KEY_KP_EQUAL = 32
+    YETTY_YMUX_KEY_F1 = 33
+    YETTY_YMUX_KEY_F2 = 34
+    YETTY_YMUX_KEY_F3 = 35
+    YETTY_YMUX_KEY_F4 = 36
+    YETTY_YMUX_KEY_F5 = 37
+    YETTY_YMUX_KEY_F6 = 38
+    YETTY_YMUX_KEY_F7 = 39
+    YETTY_YMUX_KEY_F8 = 40
+    YETTY_YMUX_KEY_F9 = 41
+    YETTY_YMUX_KEY_F10 = 42
+    YETTY_YMUX_KEY_F11 = 43
+    YETTY_YMUX_KEY_F12 = 44
+
 class yetty_yrich_app_kind(IntEnum):
     YETTY_YRICH_APP_YDOC = 0
     YETTY_YRICH_APP_YSHEET = 1
@@ -75,6 +121,32 @@ class yvterm_font_method(IntEnum):
     YVTERM_FONT_METHOD_RASTER = 1
     YVTERM_FONT_METHOD_RASTER_COLOR = 2
 
+class client_resource(Structure):
+    pass
+client_resource._fields_ = [("hash", c_uint64), ("words", c_void_p), ("word_count", c_uint32)]
+
+class daemon_connection_u1(Structure):
+    pass
+daemon_connection_u1._fields_ = [("input_class", c_uint32), ("byte_len", c_uint32), ("bytes", c_void_p)]
+class daemon_connection(Structure):
+    pass
+daemon_connection._fields_ = [("socket", c_void_p), ("session", c_void_p), ("attachment_id", c_uint32), ("pane_id", c_uint32), ("capabilities", c_uint32), ("sent_generation", c_uint64), ("acked_generation", c_uint64), ("fail_next_vtsink_tx", c_uint32), ("chrome_queue", daemon_connection_u1), ("chrome_queue_head", c_uint32), ("chrome_queue_count", c_uint32), ("chrome_intake_count", c_uint64), ("chrome_intake_class", c_uint32), ("overlay_applied_seq", c_uint32), ("refuse_next_overlay", c_uint32), ("copy_key_pending", (c_uint8 * 16)), ("copy_key_pending_len", c_uint32), ("copy_cursor_row", c_int), ("copy_cursor_col", c_int), ("copy_anchor_row", c_int), ("copy_anchor_col", c_int), ("copy_selecting", c_int), ("chrome_last_bytes", c_void_p), ("chrome_last_len", c_uint32), ("chrome_last_class", c_uint32), ("sent_pane_modes", c_uint32), ("sent_pane_modes_valid", c_int), ("vtsink_session", c_void_p), ("vtsink_lane", c_void_p), ("vtsink_proxy", c_void_p), ("rx", c_void_p), ("rx_len", c_size_t), ("tx", c_void_p), ("tx_len", c_size_t), ("tx_sent", c_size_t), ("tx_total_sent", c_uint64), ("slow_last_total_sent", c_uint64), ("slow_recover_count", c_uint32), ("want_close", c_int)]
+
+class daemon_pane_pty_u1(Structure):
+    pass
+daemon_pane_pty_u1._fields_ = [("channel_id", c_uint32), ("channel", c_void_p)]
+class daemon_pane_pty(Structure):
+    pass
+daemon_pane_pty._fields_ = [("pty", c_void_p), ("daemon", c_void_p), ("session", c_void_p), ("pane_id", c_uint32), ("pty_rows", c_uint32), ("pty_cols", c_uint32), ("out_queue", c_void_p), ("out_queue_len", c_size_t), ("out_queue_cap", c_size_t), ("rpc_sm", c_void_p), ("rpc_connection", c_void_p), ("rpc_forward_state", c_void_p), ("rpc_controller", c_uint32), ("rpc_channels", daemon_pane_pty_u1), ("rpc_channel_count", c_uint32)]
+
+class daemon_session_entry(Structure):
+    pass
+daemon_session_entry._fields_ = [("session", c_void_p), ("name", (c_char * 64)), ("created_stamp", c_uint64)]
+
+class engine_surface(Structure):
+    pass
+engine_surface._fields_ = [("rows", c_void_p), ("rows_count", c_uint32), ("cols", c_uint32)]
+
 class yetty_ycore_error(Structure):
     pass
 yetty_ycore_error._fields_ = [("msg", c_char_p), ("file", c_char_p), ("func", c_char_p), ("line", c_int), ("cause", c_void_p)]
@@ -86,6 +158,14 @@ class float_result(Structure):
     pass
 float_result._anonymous_ = ('_anon1',)
 float_result._fields_ = [("ok", c_int), ("_anon1", float_result_u1)]
+
+class history_builder(Structure):
+    pass
+history_builder._fields_ = [("bytes", c_void_p), ("byte_count", c_size_t), ("byte_capacity", c_size_t), ("row_offsets", c_void_p), ("row_count", c_uint32), ("row_capacity", c_uint32), ("first_row", c_uint64)]
+
+class history_cache_entry(Structure):
+    pass
+history_cache_entry._fields_ = [("valid", c_int), ("first_row", c_uint64), ("row_count", c_uint32), ("row_cells", c_void_p), ("row_cols", c_void_p), ("row_logical_ids", c_void_p), ("row_logical_starts", c_void_p), ("row_continuations", c_void_p), ("last_used_tick", c_uint64)]
 
 class yetty_ycore_pixel_size(Structure):
     pass
@@ -115,6 +195,14 @@ class rectangle_result(Structure):
 rectangle_result._anonymous_ = ('_anon1',)
 rectangle_result._fields_ = [("ok", c_int), ("_anon1", rectangle_result_u1)]
 
+class session_attachment_slot(Structure):
+    pass
+session_attachment_slot._fields_ = [("attachment", c_void_p), ("projector", c_void_p), ("attachment_id", c_uint32), ("pane_id", c_uint32), ("permissions", c_uint32), ("token", (c_char * 64))]
+
+class session_pane_slot(Structure):
+    pass
+session_pane_slot._fields_ = [("pane", c_void_p), ("pane_id", c_uint32)]
+
 class timespec(Structure):
     pass
 timespec._fields_ = [("tv_sec", c_void_p), ("tv_nsec", c_void_p)]
@@ -129,7 +217,7 @@ uint32_result._fields_ = [("ok", c_int), ("_anon1", uint32_result_u1)]
 
 class vterm_uniforms(Structure):
     pass
-vterm_uniforms._fields_ = [("grid_size", (c_float * 2)), ("cell_size", (c_float * 2)), ("scale", c_float), ("baseline_y", c_float), ("glyph_left", c_float), ("pixel_range", c_float), ("root_row", c_uint32), ("cursor_col", c_uint32), ("cursor_row", c_uint32), ("cursor_visible", c_uint32), ("sel_active", c_uint32), ("sel_start_row", c_uint32), ("sel_start_col", c_uint32), ("sel_end_row", c_uint32), ("sel_end_col", c_uint32), ("ring_rows", c_uint32), ("visual_zoom_scale", c_float), ("visual_zoom_offset_x", c_float), ("visual_zoom_offset_y", c_float), ("time", c_float), ("mouse_x", c_float), ("mouse_y", c_float), ("post_fx_index", c_uint32), ("post_fx_p0", c_float), ("post_fx_p1", c_float), ("post_fx_p2", c_float), ("post_fx_p3", c_float), ("post_fx_p4", c_float), ("post_fx_p5", c_float), ("coord_fx_index", c_uint32), ("coord_fx_p0", c_float), ("coord_fx_p1", c_float), ("coord_fx_p2", c_float), ("coord_fx_p3", c_float), ("coord_fx_p4", c_float), ("coord_fx_p5", c_float), ("pad_a", c_uint32), ("pad_b", c_uint32), ("face_methods", c_uint32), ("face_pad0", c_uint32), ("face_pad1", c_uint32), ("face_pad2", c_uint32), ("face_params", ((c_float * 4) * 4))]
+vterm_uniforms._fields_ = [("grid_size", (c_float * 2)), ("cell_size", (c_float * 2)), ("scale", c_float), ("baseline_y", c_float), ("glyph_left", c_float), ("pixel_range", c_float), ("root_row", c_uint32), ("cursor_col", c_uint32), ("cursor_row", c_uint32), ("cursor_visible", c_uint32), ("sel_active", c_uint32), ("sel_start_row", c_uint32), ("sel_start_col", c_uint32), ("sel_end_row", c_uint32), ("sel_end_col", c_uint32), ("ring_rows", c_uint32), ("visual_zoom_scale", c_float), ("visual_zoom_offset_x", c_float), ("visual_zoom_offset_y", c_float), ("time", c_float), ("mouse_x", c_float), ("mouse_y", c_float), ("post_fx_index", c_uint32), ("post_fx_p0", c_float), ("post_fx_p1", c_float), ("post_fx_p2", c_float), ("post_fx_p3", c_float), ("post_fx_p4", c_float), ("post_fx_p5", c_float), ("coord_fx_index", c_uint32), ("coord_fx_p0", c_float), ("coord_fx_p1", c_float), ("coord_fx_p2", c_float), ("coord_fx_p3", c_float), ("coord_fx_p4", c_float), ("coord_fx_p5", c_float), ("pad_a", c_uint32), ("pad_b", c_uint32), ("face_methods", c_uint32), ("face_pad0", c_uint32), ("face_pad1", c_uint32), ("face_pad2", c_uint32), ("face_params", ((c_float * 6) * 4))]
 
 class yetty_context(Structure):
     pass
@@ -283,13 +371,13 @@ class yetty_ycore_xthread_event_pipe_ptr_result(Structure):
 yetty_ycore_xthread_event_pipe_ptr_result._anonymous_ = ('_anon1',)
 yetty_ycore_xthread_event_pipe_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ycore_xthread_event_pipe_ptr_result_u1)]
 
-class yetty_ydraw_composite_const_ptr_ptr_result_u1(Union):
+class yetty_ydraw_complex_const_ptr_ptr_result_u1(Union):
     pass
-yetty_ydraw_composite_const_ptr_ptr_result_u1._fields_ = [("value", c_void_p), ("error", yetty_ycore_error)]
-class yetty_ydraw_composite_const_ptr_ptr_result(Structure):
+yetty_ydraw_complex_const_ptr_ptr_result_u1._fields_ = [("value", c_void_p), ("error", yetty_ycore_error)]
+class yetty_ydraw_complex_const_ptr_ptr_result(Structure):
     pass
-yetty_ydraw_composite_const_ptr_ptr_result._anonymous_ = ('_anon1',)
-yetty_ydraw_composite_const_ptr_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ydraw_composite_const_ptr_ptr_result_u1)]
+yetty_ydraw_complex_const_ptr_ptr_result._anonymous_ = ('_anon1',)
+yetty_ydraw_complex_const_ptr_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ydraw_complex_const_ptr_ptr_result_u1)]
 
 class yetty_ydraw_drawable_list_result_u1(Union):
     pass
@@ -402,6 +490,50 @@ class yetty_ymgui_figure_ptr_result(Structure):
     pass
 yetty_ymgui_figure_ptr_result._anonymous_ = ('_anon1',)
 yetty_ymgui_figure_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ymgui_figure_ptr_result_u1)]
+
+class yetty_ymux_cell_const_ptr_result_u1(Union):
+    pass
+yetty_ymux_cell_const_ptr_result_u1._fields_ = [("value", c_void_p), ("error", yetty_ycore_error)]
+class yetty_ymux_cell_const_ptr_result(Structure):
+    pass
+yetty_ymux_cell_const_ptr_result._anonymous_ = ('_anon1',)
+yetty_ymux_cell_const_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ymux_cell_const_ptr_result_u1)]
+
+class yetty_ymux_daemon_host(Structure):
+    pass
+yetty_ymux_daemon_host._fields_ = [("spawn", c_void_p), ("userdata", c_void_p)]
+
+class yetty_ymux_engine_host(Structure):
+    pass
+yetty_ymux_engine_host._fields_ = [("output", c_void_p), ("clipboard", c_void_p), ("bell", c_void_p), ("title", c_void_p), ("scroll_out", c_void_p), ("rich", c_void_p), ("userdata", c_void_p)]
+
+class yetty_ymux_history_row(Structure):
+    pass
+yetty_ymux_history_row._fields_ = [("cells", c_void_p), ("cols", c_uint32), ("logical_line_id", c_uint64), ("logical_cell_start", c_uint32), ("continuation", c_int)]
+
+class yetty_ymux_history_row_result_u1(Union):
+    pass
+yetty_ymux_history_row_result_u1._fields_ = [("value", yetty_ymux_history_row), ("error", yetty_ycore_error)]
+class yetty_ymux_history_row_result(Structure):
+    pass
+yetty_ymux_history_row_result._anonymous_ = ('_anon1',)
+yetty_ymux_history_row_result._fields_ = [("ok", c_int), ("_anon1", yetty_ymux_history_row_result_u1)]
+
+class yetty_ymux_resource_store(Structure):
+    pass
+yetty_ymux_resource_store._fields_ = [("entries", c_void_p), ("count", c_uint32), ("capacity", c_uint32)]
+
+class yetty_ymux_tty_caps(Structure):
+    pass
+yetty_ymux_tty_caps._fields_ = [("colors_256", c_uint), ("colors_rgb", c_uint), ("ech", c_uint), ("insert_delete_line", c_uint), ("insert_line", c_uint), ("delete_line", c_uint), ("ich", c_uint), ("dch", c_uint), ("decstbm", c_uint), ("bce", c_uint), ("extended_underline", c_uint), ("underline_colour", c_uint), ("hyperlink", c_uint), ("acs", c_uint), ("mouse", c_uint), ("title", c_uint), ("clipboard", c_uint), ("focus", c_uint), ("cursor_style", c_uint), ("cursor_colour", c_uint), ("margins", c_uint), ("overline", c_uint), ("strikethrough", c_uint), ("osc7", c_uint), ("extkeys", c_uint), ("rectfill", c_uint), ("sixel", c_uint), ("sync", c_uint), ("noam", c_uint), ("xenl", c_uint)]
+
+class yetty_ymux_tty(Structure):
+    pass
+yetty_ymux_tty._fields_ = [("caps", yetty_ymux_tty_caps), ("term", c_void_p), ("cx", c_uint32), ("cy", c_uint32), ("sx", c_uint32), ("sy", c_uint32), ("rupper", c_uint32), ("rlower", c_uint32), ("rleft", c_uint32), ("rright", c_uint32), ("cell_attr", c_uint16), ("active_underline_colour", (c_char * 40)), ("active_link", (c_char * 1025)), ("active_link_id", c_uint32), ("cell_fg", c_int), ("cell_bg", c_int), ("last_attr", c_uint16), ("last_fg", c_int), ("last_bg", c_int), ("cursor_visible", c_int), ("cursor_shape_param", c_int)]
+
+class yetty_ymux_tty_term(Structure):
+    pass
+yetty_ymux_tty_term._fields_ = [("name", (c_char * 64)), ("strings", (c_char_p * 46)), ("colors", c_int), ("bools", (c_uint8 * 3)), ("loaded_from_db", c_uint), ("bools_loaded", c_uint)]
 
 class yetty_yplatform_gpu_context(Structure):
     pass
@@ -548,7 +680,7 @@ yetty_yrich_text_style._fields_ = [("font_size", c_float), ("color", c_uint32), 
 
 class yetty_yscene_factory_args(Structure):
     pass
-yetty_yscene_factory_args._fields_ = [("composite_factory", c_void_p), ("default_font", c_void_p), ("bold_font", c_void_p), ("italic_font", c_void_p), ("bold_italic_font", c_void_p), ("absolute_coords", c_int)]
+yetty_yscene_factory_args._fields_ = [("complex_factory", c_void_p), ("default_font", c_void_p), ("bold_font", c_void_p), ("italic_font", c_void_p), ("bold_italic_font", c_void_p), ("absolute_coords", c_int)]
 
 class yetty_yscene_scene_ptr_result_u1(Union):
     pass
@@ -557,6 +689,10 @@ class yetty_yscene_scene_ptr_result(Structure):
     pass
 yetty_yscene_scene_ptr_result._anonymous_ = ('_anon1',)
 yetty_yscene_scene_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_yscene_scene_ptr_result_u1)]
+
+class yetty_yscene_vtermgrid_store(Structure):
+    pass
+yetty_yscene_vtermgrid_store._fields_ = [("cells", c_void_p), ("rows", c_uint32), ("cols", c_uint32), ("pen_fg", c_uint32), ("pen_bg", c_uint32), ("pen_attrs", c_uint16), ("pen_protected", c_int), ("default_fg", c_uint32), ("default_bg", c_uint32), ("global_reverse", c_int), ("cursor_row", c_uint32), ("cursor_col", c_uint32), ("cursor_visible", c_int)]
 
 class yetty_yterminal_terminal_context(Structure):
     pass
@@ -572,7 +708,7 @@ yetty_yui_view._fields_ = [("ops", c_void_p), ("id", c_void_p), ("bounds", yetty
 
 class yetty_yvterm_line(Structure):
     pass
-yetty_yvterm_line._fields_ = [("text_cells", c_void_p), ("primitives", c_void_p), ("primitive_count", c_uint32), ("primitive_capacity", c_uint32), ("arena", c_void_p), ("arena_count", c_uint32), ("arena_capacity", c_uint32), ("composites", c_void_p), ("composite_count", c_uint32), ("composite_capacity", c_uint32), ("rich_span_rows", c_uint32), ("envelope_count", c_uint32), ("view_stamp", c_uint32), ("dirty", c_int), ("continuation", c_int)]
+yetty_yvterm_line._fields_ = [("text_cells", c_void_p), ("primitives", c_void_p), ("primitive_count", c_uint32), ("primitive_capacity", c_uint32), ("arena", c_void_p), ("arena_count", c_uint32), ("arena_capacity", c_uint32), ("complexes", c_void_p), ("complex_count", c_uint32), ("complex_capacity", c_uint32), ("rich_span_rows", c_uint32), ("envelope_count", c_uint32), ("view_stamp", c_uint32), ("dirty", c_int), ("continuation", c_int)]
 
 class yetty_yvterm_screen(Structure):
     pass

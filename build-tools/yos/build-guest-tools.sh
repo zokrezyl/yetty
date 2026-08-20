@@ -240,7 +240,7 @@ CORE_SOURCES=(
     src/yetty/yplatform/term/default.c
     src/yetty/ydraw-core/drawable-list.c
     src/yetty/ydraw-core/cmds.c
-    src/yetty/ydraw-core/composite.c
+    src/yetty/ydraw-core/complex.c
     src/yetty/ydraw-core/drawable-list-registry.c
     src/yetty/ydraw-core/font-resource.c
     src/yetty/ydraw-core/drawable-iterator.c

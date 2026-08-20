@@ -11,7 +11,7 @@
  */
 
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-core/complex.h>
 #include <yetty/ydraw-core/font-resource.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/ysdf/default-registry.h>
@@ -60,14 +60,14 @@ yetty_ydraw_drawable_list_registry_create_default(void)
     }
 
     /* Complex prim handler (types >= 0x80000000). */
-    struct yetty_ycore_void_result composite_res =
-        yetty_ydraw_drawable_list_registry_add(registry, YETTY_YDRAW_COMPOSITE_TYPE_BASE,
-                                               0xFFFFFFFF, yetty_ydraw_composite_record_handler);
-    if (YETTY_IS_ERR(composite_res)) {
+    struct yetty_ycore_void_result complex_res =
+        yetty_ydraw_drawable_list_registry_add(registry, YETTY_YDRAW_COMPLEX_TYPE_BASE,
+                                               0xFFFFFFFF, yetty_ydraw_complex_record_handler);
+    if (YETTY_IS_ERR(complex_res)) {
         yetty_ydraw_drawable_list_registry_destroy(registry);
         return YETTY_ERR(yetty_ydraw_drawable_list_registry_ptr,
                          "drawable_list_registry_create_default: register complex handler",
-                         composite_res);
+                         complex_res);
     }
 
     return registry_res;

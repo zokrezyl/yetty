@@ -4,7 +4,7 @@
  * `map` is a client-side object: it holds a view (center lat/lon, zoom,
  * viewport pixels) over a named TILE PROVIDER and renders the visible map
  * to a ydraw drawable list via the ymap engine — raster providers
- * composite PNG/JPEG tiles into one yimage prim, vector providers
+ * complex PNG/JPEG tiles into one yimage prim, vector providers
  * (shortbread MVT) emit native SDF/MSDF drawables. It does not display
  * itself: one-shot callers ship the list into the scrolling layer
  * (YDRAW_BIN, ycat-style), interactive frontends ship it to a server
@@ -714,8 +714,8 @@ static struct yetty_ydraw_drawable_list_result map_render(struct yetty_yclass_ob
     char cache_dir[1024];
     snprintf(cache_dir, sizeof(cache_dir), "%s/ymap/%s", map->cache_base, provider_name);
 
-    /* The overlay bakes into the raster composite (SDF prims appended to
-     * the list would be painted over by the composite figure). Vector
+    /* The overlay bakes into the raster complex (SDF prims appended to
+     * the list would be painted over by the complex figure). Vector
      * providers don't carry the overlay yet. */
     struct yetty_ymap_overlay overlay = {
         .points = map->overlay_points,

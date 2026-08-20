@@ -15,7 +15,10 @@ struct yetty_ycore_void_result yetty_yfigure_create_child(struct yetty_yclass_ob
 struct yetty_ycore_void_result yetty_yfigure_delete_child(struct yetty_yclass_object *, uint32_t);
 struct yetty_ycore_void_result yetty_yfigure_set_child_rect(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);
 struct yetty_ycore_void_result yetty_yfigure_set_rect(struct yetty_yclass_object *, struct yetty_ycore_rectangle);
+struct yetty_yclass_object_ptr_result yetty_yfigure_child_object(struct yetty_yclass_object *, uint32_t);
+struct yetty_ycore_void_result yetty_yfigure_seat_overlay(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);
 struct yetty_ycore_void_result yetty_yfigure_set_child_z(struct yetty_yclass_object *, uint32_t, int32_t);
+struct yetty_ycore_void_result yetty_yfigure_set_child_input_passthrough(struct yetty_yclass_object *, uint32_t, uint32_t);
 struct yetty_ycore_void_result yetty_yfigure_set_child_hidden(struct yetty_yclass_object *, uint32_t, uint32_t);
 struct yetty_ycore_void_result yetty_yfigure_set_child_scroll(struct yetty_yclass_object *, uint32_t, float, float);
 struct yetty_ycore_void_result yetty_yfigure_set_child_content_size(struct yetty_yclass_object *, uint32_t, float, float);
@@ -23,6 +26,7 @@ struct yetty_ycore_void_result yetty_yfigure_apply_child_body(struct yetty_yclas
 struct yetty_ycore_void_result yetty_yfigure_clear_all(struct yetty_yclass_object *);
 struct yetty_ycore_char_ptr_result yetty_yfigure_dump_state(struct yetty_yclass_object *, int);
 struct yetty_ycore_void_result yetty_yfigure_process_input(struct yetty_yclass_object *, struct yetty_ywire_wire_statemachine *);
+struct yetty_ycore_int_result yetty_yfigure_hit_opaque(struct yetty_yclass_object *, float, float);
 struct yetty_ycore_void_result yetty_yfigure_process_bytes(struct yetty_yclass_object *, const uint8_t *, size_t);
 struct yetty_ycore_void_result yetty_yfigure_reset_content(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_yfigure_set_scroll(struct yetty_yclass_object *, float, float);
@@ -77,8 +81,21 @@ function Container:set_rect()
   local res = rt.C().yetty_yfigure_set_rect(nil, self.handle)
   rt.check(res)
 end
+function Container:child_object()
+  local res = rt.C().yetty_yfigure_child_object(nil, self.handle)
+  rt.check(res)
+  return res.value
+end
+function Container:seat_overlay(rect)
+  local res = rt.C().yetty_yfigure_seat_overlay(nil, self.handle, rect)
+  rt.check(res)
+end
 function Container:set_child_z(z)
   local res = rt.C().yetty_yfigure_set_child_z(nil, self.handle, z)
+  rt.check(res)
+end
+function Container:set_child_input_passthrough(passthrough)
+  local res = rt.C().yetty_yfigure_set_child_input_passthrough(nil, self.handle, passthrough)
   rt.check(res)
 end
 function Container:set_child_hidden(hidden)
@@ -125,6 +142,11 @@ end
 function Figure:process_input()
   local res = rt.C().yetty_yfigure_process_input(nil, self.handle)
   rt.check(res)
+end
+function Figure:hit_opaque(local_y)
+  local res = rt.C().yetty_yfigure_hit_opaque(nil, self.handle, local_y)
+  rt.check(res)
+  return res.value
 end
 function Figure:process_bytes(bytes_len)
   local res = rt.C().yetty_yfigure_process_bytes(nil, self.handle, bytes_len)

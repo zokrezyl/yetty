@@ -23,7 +23,7 @@ target_link_libraries(yetty_ysvg
         yetty_ydraw_core
         yetty_ysdf
     PRIVATE
-        # <image> elements serialize yimage composite records into the
+        # <image> elements serialize yimage complex records into the
         # scene (wire-only core lib — no Dawn/GPU dependency).
         yetty_yimage_core
         yxml

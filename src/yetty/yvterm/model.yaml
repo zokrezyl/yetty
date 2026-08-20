@@ -564,7 +564,7 @@ exposed:
       - name: userdata
         type: "void *"
     doc: "/* Register the figure re-materialization hook. The integration layer (which
- * owns the composite factory) supplies it; the grid replays retained wire
+ * owns the complex factory) supplies it; the grid replays retained wire
  * envelopes through it when an evicted history line scrolls back into view. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_feed
@@ -645,15 +645,15 @@ exposed:
         type: uint32_t
     doc: null
   - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_attach_composite
+    name: yetty_yvterm_grid_attach_complex
     return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: row
         type: uint32_t
-      - name: composite
-        type: "struct yetty_ydraw_composite *"
+      - name: complex
+        type: "struct yetty_ydraw_complex *"
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_relocate_rich_to_bottom
@@ -664,14 +664,14 @@ exposed:
       - name: span_rows
         type: uint32_t
     doc: "/* Re-home a freshly-ingested rich block from its TOP line onto its BOTTOM line
- * and stamp the block's row span there, so a figure (composite or SDF block)
+ * and stamp the block's row span there, so a figure (complex or SDF block)
  * leaves the scrollback only when its LAST overlapping line is evicted, not its
  * first. Called once after the reserve newlines that allocated the block's rows:
  * the cursor then sits on the line just BELOW the block, so the bottom line is
  * cursor_row − 1 and the top is cursor_row − span_rows. span_rows is the row
  * height the block reserved. A span of 1 is a single-row block (top == bottom):
  * only the span is recorded, nothing moves. The content was attached on the top
- * line via attach_composite / append_primitive during ingestion; those rows are
+ * line via attach_complex / append_primitive during ingestion; those rows are
  * never recycled during their own reserve (the scroll blanks the rows below the
  * block), so the top line still holds the content here. */"
   - source_file: src/yetty/yvterm/grid.c
@@ -797,8 +797,8 @@ exposed:
         type: uint32_t
     doc: null
   - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_line_composites
-    return_type: struct yetty_ydraw_composite_const_ptr_ptr_result
+    name: yetty_yvterm_grid_line_complexes
+    return_type: struct yetty_ydraw_complex_const_ptr_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -806,11 +806,11 @@ exposed:
         type: uint32_t
       - name: out_count
         type: "uint32_t *"
-    doc: "/* Composite array anchored on visible row `row`. Sets *out_count; value may be
+    doc: "/* Complex array anchored on visible row `row`. Sets *out_count; value may be
  * NULL. */"
   - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_slot_composites
-    return_type: struct yetty_ydraw_composite_const_ptr_ptr_result
+    name: yetty_yvterm_grid_slot_complexes
+    return_type: struct yetty_ydraw_complex_const_ptr_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -818,10 +818,10 @@ exposed:
         type: uint32_t
       - name: out_count
         type: "uint32_t *"
-    doc: "/* Composite array on RAW ring slot `slot` (0..slot_count) or an extended
+    doc: "/* Complex array on RAW ring slot `slot` (0..slot_count) or an extended
  * view-window id. Distinct from the visible-row accessor above: the text
  * upload + shader address the ring by raw slot via the resolved window, so
- * the composite pass must read by the SAME slot to scroll in lockstep (live
+ * the complex pass must read by the SAME slot to scroll in lockstep (live
  * AND scrolled-back). Sets *out_count; may be NULL. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_primitive_count
@@ -833,7 +833,7 @@ exposed:
         type: uint32_t
     doc: "/* Number of raw drawable records (SDF / glyph / TEXT_DRAWABLE_LIST / FONT) stored
  * on RAW ring slot `slot`. The SDF render pass walks these by slot — same raw-slot
- * addressing the composite + text passes use — so figures and text scroll together. */"
+ * addressing the complex + text passes use — so figures and text scroll together. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_span
     return_type: struct yetty_ycore_uint32_result
@@ -948,7 +948,7 @@ exposed:
     doc: "/* Resolve the renderer's window for this frame: `row_count` rows starting at
  * the view top (live top when no view is active). Returns a grid-owned array
  * of one slot id per window row — real ring slots for hot rows (the text,
- * composite and SDF passes read them exactly as before), or extended ids
+ * complex and SDF passes read them exactly as before), or extended ids
  * (>= slot_count) that the slot accessors transparently serve from the
  * archive materialization cache. Also sweeps archive figure runtimes whose
  * lines left the window, and prefetches the adjacent segment in the scroll
@@ -1180,7 +1180,7 @@ exposed:
       - name: userdata
         type: "void *"
     doc: "/* Register the figure re-materialization hook on the composed grid model: the
- * terminal (which owns the composite factory) supplies a function that replays
+ * terminal (which owns the complex factory) supplies a function that replays
  * a retained wire envelope into a fresh figure instance when an evicted
  * history line scrolls back into view. */"
   - source_file: src/yetty/yvterm/vterm.c
@@ -1232,15 +1232,15 @@ exposed:
         type: uint32_t
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
-    name: yetty_yvterm_vterm_attach_composite
+    name: yetty_yvterm_vterm_attach_complex
     return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: row
         type: uint32_t
-      - name: composite
-        type: "struct yetty_ydraw_composite *"
+      - name: complex
+        type: "struct yetty_ydraw_complex *"
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_relocate_rich_to_bottom
@@ -1658,7 +1658,7 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
-  - name: yetty_ydraw_composite_const_ptr_ptr_result
+  - name: yetty_ydraw_complex_const_ptr_ptr_result
     kind: result
     fields:
       - name: ok
@@ -1667,7 +1667,7 @@ types:
         kind: union
         fields:
           - name: value
-            type: "struct yetty_ydraw_composite *const *"
+            type: "struct yetty_ydraw_complex *const *"
           - name: error
             type: struct yetty_ycore_error
   - name: yetty_yfigure_figure_ptr_result
@@ -1699,11 +1699,11 @@ types:
         type: uint32_t
       - name: arena_capacity
         type: uint32_t
-      - name: composites
-        type: "struct yetty_ydraw_composite **"
-      - name: composite_count
+      - name: complexes
+        type: "struct yetty_ydraw_complex **"
+      - name: complex_count
         type: uint32_t
-      - name: composite_capacity
+      - name: complex_capacity
         type: uint32_t
       - name: rich_span_rows
         type: uint32_t
@@ -1863,7 +1863,7 @@ local_types:
   yetty_yvterm_grid: src/yetty/yvterm/grid.c
   yetty_yvterm_grid_ptr_result: src/yetty/yvterm/grid.c
   yetty_yvterm_text_cell_const_ptr_result: src/yetty/yvterm/grid.c
-  yetty_ydraw_composite_const_ptr_ptr_result: src/yetty/yvterm/grid.c
+  yetty_ydraw_complex_const_ptr_ptr_result: src/yetty/yvterm/grid.c
   yetty_yvterm_reflow_source: src/yetty/yvterm/grid.c
   yetty_yvterm_reflow_logical: src/yetty/yvterm/grid.c
   grid_view_sweep_state: src/yetty/yvterm/grid.c
@@ -1906,7 +1906,7 @@ local_typedefs:
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);"
   yetty_yvterm_grid_materialize_fn:
     source_file: src/yetty/yvterm/grid.c
-    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);"
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(const uint32_t *, uint32_t, void *, struct yetty_ydraw_complex **);"
   yetty_yvterm_grid_card_sub_fn:
     source_file: src/yetty/yvterm/grid.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, int, void *);"
@@ -1915,4 +1915,4 @@ local_typedefs:
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *);"
   yetty_yvterm_materialize_fn:
     source_file: src/yetty/yvterm/vterm.c
-    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_materialize_fn)(const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);"
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_materialize_fn)(const uint32_t *, uint32_t, void *, struct yetty_ydraw_complex **);"

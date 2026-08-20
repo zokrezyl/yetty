@@ -11,9 +11,9 @@ extern "C" {
 
 /* Forward-declared so this header stays GPU-less and can be included by
  * client-side wire emitters that don't link Dawn. The full types live in
- * yetty/ydraw-factory/composite-factory.h (server side). */
+ * yetty/ydraw-factory/complex-factory.h (server side). */
 struct yetty_ydraw_concrete_factory;
-struct yetty_ydraw_composite;
+struct yetty_ydraw_complex;
 
 #define YETTY_YVIDEO_TYPE_ID 0x80000006u
 

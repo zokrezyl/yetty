@@ -11,7 +11,7 @@
 
 #include <yetty/yplot/yplot-gen.h>
 
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -22,15 +22,15 @@
 /* yplot-time.c — hooks the instance into the shared animation timer when
  * the compiled bytecode references LOAD_T. Forward-declared here instead
  * of a header: the pair is private to the yplot module. */
-struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_composite *instance);
-void yetty_yplot_time_detach(struct yetty_ydraw_composite *instance);
+struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_complex *instance);
+void yetty_yplot_time_detach(struct yetty_ydraw_complex *instance);
 
 /* Push a fresh slice of samples into one of the instance's data buffers.
  * Writes both into the in-memory wire (so the next re-finalize / cold
  * re-upload picks up the same bytes) and directly to GPU via the binder's
  * write_buffer_chunk op (so no whole-buffer re-upload occurs). */
 static struct yetty_ycore_void_result yplot_update_data_chunk(
-    struct yetty_ydraw_composite *instance, uint32_t buffer_index, uint32_t sample_offset,
+    struct yetty_ydraw_complex *instance, uint32_t buffer_index, uint32_t sample_offset,
     const float *data, size_t count)
 {
     if (!instance || !instance->buffer_data || !instance->binder) {
@@ -93,7 +93,7 @@ static struct yetty_ycore_void_result yplot_update_data_chunk(
  * the wire into the RS on every frame (uniform i ← payload word i), so a
  * bare RS write would be clobbered by the next render. Same
  * keep-the-wire-consistent contract as yplot_update_data_chunk above. */
-static struct yetty_ycore_void_result yplot_update_ring_head(struct yetty_ydraw_composite *instance,
+static struct yetty_ycore_void_result yplot_update_ring_head(struct yetty_ydraw_complex *instance,
                                                              uint32_t buffer_index,
                                                              uint32_t head_index)
 {
@@ -132,7 +132,7 @@ static struct yetty_ycore_void_result yplot_update_ring_head(struct yetty_ydraw_
  * peeled off as `target_field` (= buffer_index here); the rest arrives as
  * `body` / `body_size`, so body[0..3] = sample_offset, body[4..7] = count,
  * body[8..] = samples. */
-struct yetty_ycore_void_result yetty_yplot_instance_update(struct yetty_ydraw_composite *instance,
+struct yetty_ycore_void_result yetty_yplot_instance_update(struct yetty_ydraw_complex *instance,
                                                            uint32_t target_field, const void *body,
                                                            size_t body_size)
 {
@@ -159,12 +159,12 @@ struct yetty_ycore_void_result yetty_yplot_instance_update(struct yetty_ydraw_co
 
 /* Lifecycle callouts — see the decls in yplot-gen.h. The timer attach is
  * a no-op on static plots (yplot-time.c checks the wire flags itself). */
-struct yetty_ycore_void_result yetty_yplot_instance_created(struct yetty_ydraw_composite *instance)
+struct yetty_ycore_void_result yetty_yplot_instance_created(struct yetty_ydraw_complex *instance)
 {
     return yetty_yplot_time_attach(instance);
 }
 
-void yetty_yplot_instance_destroying(struct yetty_ydraw_composite *instance)
+void yetty_yplot_instance_destroying(struct yetty_ydraw_complex *instance)
 {
     yetty_yplot_time_detach(instance);
 }

@@ -30,7 +30,7 @@ endif()
 if(YETTY_ENABLE_LIB_WEBGPU)
     # yplot-time.c hooks the figure into the shared animation timer
     # when the compiled bytecode references `t`/`time`. Lives next to
-    # yplot-gen.c because both need Dawn + the composite_factory headers.
+    # yplot-gen.c because both need Dawn + the complex_factory headers.
     add_library(yetty_yplot STATIC
         yplot-gen.c
         yplot-time.c

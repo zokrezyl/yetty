@@ -5,7 +5,7 @@
  * a separate class@yvterm:grid object (the terminal model + libvterm + keyboard
  * I/O, in grid.c). Concerns are split: grid.c owns the truth; this figure reads
  * it through grid's bulk accessors (yetty_yvterm_grid_*) and draws the MSDF text
- * plane plus anchored composites. The public yetty_yvterm_vterm_* model entry
+ * plane plus anchored complexes. The public yetty_yvterm_vterm_* model entry
  * points here are thin delegators to the grid object, so the terminal keeps one
  * API surface.
  *
@@ -123,7 +123,7 @@ struct yvterm_font_range {
  * the screen; the look-ahead is additionally capped by the live scroll distance
  * (no figure exists below the live bottom). Past this a figure is fully off the
  * bottom. The per-figure extent test culls anything that doesn't reach. */
-enum { YVTERM_COMPOSITE_ANCHOR_LOOKAHEAD_ROWS = 256 };
+enum { YVTERM_COMPLEX_ANCHOR_LOOKAHEAD_ROWS = 256 };
 
 /* Must match the Uniforms struct in the text shader (text_wgsl below). */
 struct vterm_uniforms {
@@ -185,29 +185,29 @@ struct vterm_uniforms {
     float face_params[YVTERM_MAX_FONT_FACES][4];
 };
 
-/* `struct yetty_ydraw_composite` is forward-declared in grid.c and kept opaque
+/* `struct yetty_ydraw_complex` is forward-declared in grid.c and kept opaque
  * here on purpose: it is defined in BOTH ydraw-core/figure.h and
- * ydraw-factory/composite-factory.h (a pre-existing duplicate), so pulling
+ * ydraw-factory/complex-factory.h (a pre-existing duplicate), so pulling
  * either defining header would clash in any consumer that includes the other.
  * The factory teardown is declared by hand so this TU only ever uses the type
  * by pointer — which also lets codegen forward-declare it in the generated
  * header rather than including a (conflicting) defining header. */
-struct yetty_ydraw_composite;
-void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance);
-/* Render an anchored composite at a pixel origin — hand-declared free function
- * (defined in ydraw-factory) so this TU can draw composites without including
+struct yetty_ydraw_complex;
+void yetty_ydraw_complex_destroy(struct yetty_ydraw_complex *instance);
+/* Render an anchored complex at a pixel origin — hand-declared free function
+ * (defined in ydraw-factory) so this TU can draw complexes without including
  * the conflicting defining header. */
-struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_composite *instance,
+struct yetty_ycore_void_result yetty_ydraw_complex_render(struct yetty_ydraw_complex *instance,
                                                             struct yetty_ydraw_target *target,
                                                             float x, float y);
 /* Laid-out pixel height of a figure — hand-declared for the same reason. Lets
  * the rich pass keep a figure drawn while any of its rows is still on screen,
  * instead of dropping it the moment its anchor (top) line scrolls off. */
-float yetty_ydraw_composite_pixel_height(const struct yetty_ydraw_composite *instance);
-float yetty_ydraw_composite_pixel_bottom(const struct yetty_ydraw_composite *instance);
+float yetty_ydraw_complex_pixel_height(const struct yetty_ydraw_complex *instance);
+float yetty_ydraw_complex_pixel_bottom(const struct yetty_ydraw_complex *instance);
 /* Set a figure's content scale so it magnifies with the zoomed text — same
  * reason for the hand declaration. */
-void yetty_ydraw_composite_set_content_scale(struct yetty_ydraw_composite *instance, float scale);
+void yetty_ydraw_complex_set_content_scale(struct yetty_ydraw_complex *instance, float scale);
 
 /* The render slot takes the render target only by pointer and never derefs it
  * here, so a forward decl suffices — avoids pulling the webgpu-heavy
@@ -326,7 +326,7 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("parent@yfigure:figur
 
     /* yvterm's own SDF/glyph/text renderer for the raw ydraw records stored on
      * the grid ring (ycat PDF/SVG/markdown). Best-effort: NULL if its shaders
-     * couldn't load — text + composites still render. */
+     * couldn't load — text + complexes still render. */
     struct yetty_yvterm_sdf_layer *sdf_layer;
 
     /* Animated procedural "shader glyphs": PUA-B cells (U+100000..U+100FFF)
@@ -1323,7 +1323,7 @@ static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *
 
     /* SDF/glyph/text renderer for raw ydraw records (ycat). Best-effort: a
      * failure here leaves sdf_layer NULL and the rich SDF pass is skipped, but
-     * text + composites still render. */
+     * text + complexes still render. */
     struct yetty_yvterm_sdf_layer_ptr_result sdf_res = yetty_yvterm_sdf_layer_create(context);
     if (YETTY_IS_OK(sdf_res)) {
         vterm->sdf_layer = sdf_res.value;
@@ -1479,9 +1479,9 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
             back = distance > UINT32_MAX ? UINT32_MAX : (uint32_t)distance;
         }
     }
-    int comp_lookahead = (int)(back < (uint32_t)YVTERM_COMPOSITE_ANCHOR_LOOKAHEAD_ROWS
+    int comp_lookahead = (int)(back < (uint32_t)YVTERM_COMPLEX_ANCHOR_LOOKAHEAD_ROWS
                                    ? back
-                                   : (uint32_t)YVTERM_COMPOSITE_ANCHOR_LOOKAHEAD_ROWS);
+                                   : (uint32_t)YVTERM_COMPLEX_ANCHOR_LOOKAHEAD_ROWS);
     uint32_t window_rows = 0;
     struct yetty_ycore_const_uint32_ptr_result window_res =
         yetty_yvterm_grid_view_window(grid, rows + (uint32_t)comp_lookahead, &window_rows);
@@ -1550,7 +1550,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     vterm->uniforms.sel_start_col = sa_col;
     vterm->uniforms.sel_end_row = sh_row;
     vterm->uniforms.sel_end_col = sh_col;
-    /* Same visual-zoom transform the composite pass uses, so the text plane and
+    /* Same visual-zoom transform the complex pass uses, so the text plane and
      * anchored figures magnify and pan together (keeps a figure locked to its
      * row under Ctrl+wheel zoom). */
     vterm->uniforms.visual_zoom_scale =
@@ -1649,17 +1649,17 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     wgpuCommandBufferRelease(cmd);
     wgpuCommandEncoderRelease(enc);
 
-    /* Rich-content pass: anchored composites (yplot/yimage/… wrapped as
-     * ydraw composites) scroll with the text. Whatever line currently sits at
-     * visible row R draws its owned composites at that row's pixel origin, on
-     * top of the text (each composite runs its own LoadOp_Load pass). The
+    /* Rich-content pass: anchored complexes (yplot/yimage/… wrapped as
+     * ydraw complexes) scroll with the text. Whatever line currently sits at
+     * visible row R draws its owned complexes at that row's pixel origin, on
+     * top of the text (each complex runs its own LoadOp_Load pass). The
      * vertical scroll offset + visual zoom match the text mapping. This is
      * consumed in the SAME render that clears the dirty flags below, so rich
      * updates are never dropped.
      *
      * NOTE: raw SDF *primitives* stored in the per-line arena are not drawn
      * here yet — that needs the ydraw SDF grid/binder pipeline (the deleted
-     * ydraw-scrolling-layer). Composites cover the common anchored-figure case. */
+     * ydraw-scrolling-layer). Complexes cover the common anchored-figure case. */
     float zoom = vterm->visual_zoom_scale > 0.0f ? vterm->visual_zoom_scale : 1.0f;
     float pane_height = rect.max.y - rect.min.y;
     /* Canonical visual-zoom transform, identical to the text shader's, so a
@@ -1680,9 +1680,9 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     /* Rich SDF pass: the raw ydraw records (ycat PDF/SVG/markdown — SDF shapes,
      * glyphs, text runs) stored per line. Anchored by the same resolved window
      * as the text, so they scroll in lockstep across all tiers. Drawn after
-     * the text and BEFORE the anchored composites: producers layer their
+     * the text and BEFORE the anchored complexes: producers layer their
      * figures over the SDF chrome (a browser page's images sit on its
-     * background rectangles; the old composites-first order painted every
+     * background rectangles; the old complexes-first order painted every
      * page background OVER its images, blanking them). Best-effort — never
      * fail the frame on it. */
     if (vterm->sdf_layer) {
@@ -1696,7 +1696,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
         }
     }
 
-    /* Anchored-composite pass — after the SDF records, so figures render
+    /* Anchored-complex pass — after the SDF records, so figures render
      * on top of any page chrome sharing their lines (see the SDF pass
      * comment above; a z-aware unified ordering across both record kinds
      * is the eventual replacement for this two-pass split).
@@ -1709,15 +1709,15 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
      * exactly the visible rows. */
     for (int row = 0; row < (int)window_rows; ++row) {
         uint32_t comp_count = 0;
-        /* Read composites by the SAME window slot the text pass drew at this
+        /* Read complexes by the SAME window slot the text pass drew at this
          * row, so figures scroll in lockstep with the text in both live and
          * scrolled-back views (including archive rows served from the
          * materialization cache). */
         uint32_t comp_slot = window_slots[row];
-        struct yetty_ydraw_composite_const_ptr_ptr_result comps_res =
-            yetty_yvterm_grid_slot_composites(grid, comp_slot, &comp_count);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, comps_res, "vterm_render: slot composites");
-        struct yetty_ydraw_composite *const *comps = comps_res.value;
+        struct yetty_ydraw_complex_const_ptr_ptr_result comps_res =
+            yetty_yvterm_grid_slot_complexes(grid, comp_slot, &comp_count);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, comps_res, "vterm_render: slot complexes");
+        struct yetty_ydraw_complex *const *comps = comps_res.value;
         if (!comps || comp_count == 0) {
             continue;
         }
@@ -1745,7 +1745,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
 			 * a small figure far down must survive the block top scrolling
 			 * off. A figure with no reported extent draws whenever its
 			 * block top is on screen. */
-            float fig_bottom = yetty_ydraw_composite_pixel_bottom(comps[ci]) * figure_scale;
+            float fig_bottom = yetty_ydraw_complex_pixel_bottom(comps[ci]) * figure_scale;
             if (fig_bottom > 0.0f && comp_y_local + fig_bottom <= 0.0f) {
                 continue;
             }
@@ -1756,11 +1756,11 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
              * visual-zoom factor times the cell-size (intrusive-zoom) ratio.
              * Position (comp_x/comp_y) already carries the visual zoom, and the
              * row pitch already carries the larger cell. */
-            yetty_ydraw_composite_set_content_scale(comps[ci], figure_scale);
+            yetty_ydraw_complex_set_content_scale(comps[ci], figure_scale);
             struct yetty_ycore_void_result cr =
-                yetty_ydraw_composite_render(comps[ci], target, comp_x, comp_y);
+                yetty_ydraw_complex_render(comps[ci], target, comp_x, comp_y);
             if (YETTY_IS_ERR(cr)) {
-                ydebug("vterm composite: render FAILED: %s", cr.error.msg);
+                ydebug("vterm complex: render FAILED: %s", cr.error.msg);
                 yetty_ycore_error_destroy(cr.error);
             }
         }
@@ -1780,7 +1780,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     }
 
     /* Uploaded — clear model dirty now that the renderer has consumed the text
-     * plane, the anchored composites, and the SDF/glyph records. */
+     * plane, the anchored complexes, and the SDF/glyph records. */
     struct yetty_ycore_void_result clear_dirty_res = yetty_yvterm_grid_clear_dirty(grid);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, clear_dirty_res, "vterm_render: clear dirty");
     vterm->view_dirty = 0;
@@ -1858,7 +1858,7 @@ typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *userd
  * same reason as the clear hook above (codegen reproduces it into vterm.h). */
 typedef struct yetty_ycore_void_result (*yetty_yvterm_materialize_fn)(
     const uint32_t *envelope_words, uint32_t envelope_word_count, void *userdata,
-    struct yetty_ydraw_composite **out_instance);
+    struct yetty_ydraw_complex **out_instance);
 
 /* Resolve one config colour key to the web-style 0xRRGGBB the grid setters
  * take. Missing / malformed keys fall back to default_hex so a partial
@@ -2243,7 +2243,7 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_clear_hook(struct yetty_yc
 }
 
 /* Register the figure re-materialization hook on the composed grid model: the
- * terminal (which owns the composite factory) supplies a function that replays
+ * terminal (which owns the complex factory) supplies a function that replays
  * a retained wire envelope into a fresh figure instance when an evicted
  * history line scrolls back into view. */
 YETTY_ANNOTATE("expose")
@@ -2301,12 +2301,12 @@ struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive(
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_composite(
-    struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite)
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_complex(
+    struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_complex *complex)
 {
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm attach_composite: from_obj");
-    return yetty_yvterm_grid_attach_composite(vterm_res.value->grid_obj, row, composite);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm attach_complex: from_obj");
+    return yetty_yvterm_grid_attach_complex(vterm_res.value->grid_obj, row, complex);
 }
 
 YETTY_ANNOTATE("expose")

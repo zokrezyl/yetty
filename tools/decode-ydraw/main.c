@@ -46,7 +46,7 @@
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/font-resource.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
-#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-core/complex.h>
 
 static FILE *g_out = NULL; /* set in main() — defaults to stderr */
 
@@ -347,7 +347,7 @@ static int walk_prims(const uint8_t *p, const uint8_t *end, int indent)
             print_font(idx, indent, p, psize);
         } else if (t == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
             print_text_span(idx, indent, p, psize);
-        } else if (yetty_ydraw_is_composite(t)) {
+        } else if (yetty_ydraw_is_complex(t)) {
             print_figure(idx, indent, t, psize);
         } else {
             out("%sprim #%d UNKNOWN type=0x%08x payload=%u B\n", prefix, idx, t, payload_size);

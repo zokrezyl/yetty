@@ -2,7 +2,7 @@
 #define YETTY_YMESH_YMESH_H
 
 /*
- * ymesh — high-level API for producing a ymesh composite from a
+ * ymesh — high-level API for producing a ymesh complex from a
  * glTF 2.0 (.glb) byte buffer or path.
  *
  * Pipeline:

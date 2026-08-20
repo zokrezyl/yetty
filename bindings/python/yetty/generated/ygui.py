@@ -1795,6 +1795,18 @@ def widget_figure_reset_request(obj: Any) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
+def widget_figure_retained_set(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_figure_retained_set`."""
+    _fn = _rt.cfn("yetty_ygui_widget_figure_retained_set", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def widget_figure_retained_get(obj: Any) -> _rt.Result[int]:
+    """Call `yetty_ygui_widget_figure_retained_get`."""
+    _fn = _rt.cfn("yetty_ygui_widget_figure_retained_get", _t.yetty_ycore_int_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
 def widget_figure_reset_consume(obj: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_widget_figure_reset_consume`."""
     _fn = _rt.cfn("yetty_ygui_widget_figure_reset_consume", _t.yetty_ycore_int_result, [c_void_p])

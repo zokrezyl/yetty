@@ -114,7 +114,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
 
 struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui);
 
-/* Composite the yui into the render target. Called from yetty's
+/* Complex the yui into the render target. Called from yetty's
  * RENDER handler after every terminal layer has rendered. */
 struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
                                                 struct yetty_ydraw_target *target);

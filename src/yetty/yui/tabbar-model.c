@@ -304,7 +304,7 @@ struct yetty_ycore_void_result yetty_yui_tabbar_model_resize(struct yetty_yui_ta
          * yetty.c calls tabbar_on_event(RESIZE) after us, but that only
          * forwards to the ACTIVE workspace — inactive tabs would keep
          * their initial small layer-target size and, when later
-         * activated, composite that small framebuffer up into the now-
+         * activated, complex that small framebuffer up into the now-
          * larger workspace, making everything (notably the font) look
          * ~2× bigger. Fan the synthetic RESIZE here so every tab's
          * terminal stays in sync. */

@@ -18,7 +18,7 @@ extern "C" {
 
 struct yetty_context;
 struct yetty_ycore_rectangle;
-struct yetty_ydraw_composite_factory;
+struct yetty_ydraw_complex_factory;
 struct yetty_ydraw_drawable_list_registry;
 struct yetty_yfigure_figure;
 struct yetty_yfigure_registry;
@@ -31,7 +31,7 @@ struct yetty_yscene_scene;
  * host (terminal), outliving every scene minted through the registry —
  * the same contract as ygrid's factory args bundle. */
 struct yetty_yscene_factory_args {
-    struct yetty_ydraw_composite_factory *composite_factory;
+    struct yetty_ydraw_complex_factory *complex_factory;
     struct yetty_yfont_font *default_font;
     struct yetty_yfont_font *bold_font;
     struct yetty_yfont_font *italic_font;
@@ -320,7 +320,7 @@ struct yetty_ycore_void_result yetty_yscene_scene_set_default_font(struct yetty_
 /* Register the "yscene" figure kind so containers can mint scenes from
  * wire CREATE_CHILD records. `args` is BORROWED for the registry's
  * lifetime (host-owned bundle); NULL registers a bare scene (no
- * composites, no default font). Call at terminal/host create time. */
+ * complexes, no default font). Call at terminal/host create time. */
 struct yetty_ycore_void_result yetty_yscene_register_factory(
     struct yetty_yfigure_registry *registry, const struct yetty_yscene_factory_args *args);
 /* Register the scene factory under an arbitrary kind code — the ygrid
@@ -335,8 +335,8 @@ struct yetty_ycore_void_result yetty_yscene_register_factory_for_kind(
 struct yetty_ycore_void_result yetty_yscene_set_default_font(struct yetty_yclass_object *obj,
                                                              struct yetty_yfont_font *font);
 /* Host-side complex renderer for a hand-created scene. Borrowed. */
-struct yetty_ycore_void_result yetty_yscene_set_composite_factory(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_composite_factory *factory);
+struct yetty_ycore_void_result yetty_yscene_set_complex_factory(
+    struct yetty_yclass_object *obj, struct yetty_ydraw_complex_factory *factory);
 /* The figure base of this scene (the container's handle on it). */
 struct yetty_yfigure_figure *yetty_yscene_as_figure(struct yetty_yscene_scene *scene);
 /* Rebuild the derived world state from the latest committed generation

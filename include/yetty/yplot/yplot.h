@@ -2,7 +2,7 @@
 #define YETTY_YPLOT_YPLOT_H
 
 /*
- * yplot — high-level API for producing yplot composites. Two
+ * yplot — high-level API for producing yplot complexes. Two
  * curve kinds coexist in one instance:
  *
  *   expressions: multi-function plot syntax compiled to yfsvm bytecode and

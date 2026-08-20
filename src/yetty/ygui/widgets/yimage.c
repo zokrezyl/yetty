@@ -160,7 +160,7 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_objec
                              "yimage_emit_body: rendered drawable_list exceeds wire u32 length");
         }
         /* Receiver-side YIMAGE figure is a ygrid whose process_bytes
-         * APPENDS composite instances on every body — without a
+         * APPENDS complex instances on every body — without a
          * CMD_ZERO prefix every emit stacks a fresh 800x800 yimage
          * texture on top of the previous one, exhausting GPU memory
          * and leaving stale instances drawn underneath the current

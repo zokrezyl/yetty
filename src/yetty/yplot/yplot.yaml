@@ -1,4 +1,4 @@
-# YPlot composite schema
+# YPlot complex schema
 # Generator produces: C serializer, WGSL accessors, GPU resource set logic
 
 name: yplot

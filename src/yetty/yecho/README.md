@@ -21,7 +21,7 @@ Styled-block attributes (semicolon-separated `key=value`): `color=#RRGGBB`,
 (recorded on the span but not yet rendered — no font-style mapping on the
 wire), `font-size=N`. Plot blocks take `w`/`h`, `xrange=lo..hi`,
 `yrange=lo..hi`, `nogrid|noaxes|nolabels`; their content is yexpr plot
-syntax compiled to yfsvm bytecode and serialised as a yplot composite prim.
+syntax compiled to yfsvm bytecode and serialised as a yplot complex prim.
 Blocks are not recursive — content is plain text.
 
 Glyph names resolve through `yetty_yfont_shader_glyph_codepoint()` (PUA
@@ -55,7 +55,7 @@ yetty_ydraw_drawable_list_destroy(r.value);
 
 | file | role |
 |------|------|
-| `yecho.c` | the whole parser + renderer (spans, attrs, glyph resolution, plot/video composite emission, DCS emit) |
+| `yecho.c` | the whole parser + renderer (spans, attrs, glyph resolution, plot/video complex emission, DCS emit) |
 
 Public header: `include/yetty/yecho/yecho.h`. Deps: `ycore`, `ydraw-core`,
 `ysdf`, `yfont_shader_glyph`, `yface`, `yplot_core` (pulls yfsvm + yexpr;
@@ -72,5 +72,5 @@ no GPU), optionally `yvideo_core`. Gated by `YETTY_ENABLE_FEATURE_YECHO`.
 - [../ycat/README.md](../ycat/README.md) — sibling emitter with the same
   wire format
 - [../yfont/README.md](../yfont/README.md) — shader-glyph registry
-- [../yplot/README.md](../yplot/README.md) — the plot composite embedded by
+- [../yplot/README.md](../yplot/README.md) — the plot complex embedded by
   `{plot: …}` blocks

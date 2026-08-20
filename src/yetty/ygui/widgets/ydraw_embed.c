@@ -23,7 +23,7 @@ struct yetty_ygui_ydraw_embed_ptr_result yetty_ygui_ydraw_embed_from(
     struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-core/complex.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
 #include "yetty/gen/impl/ygui/primitive-widget.h"
@@ -259,11 +259,11 @@ static uint64_t embed_chunk_hash(const uint8_t *bytes, size_t len, float dx, flo
 
 /* Vertical viewport cull for the emit walk. When an embed lives inside a
  * scrollarea (or any nested figure), the emit context narrows fig_clip to the
- * visible rect; every primitive outside it is scissored away at composite time
+ * visible rect; every primitive outside it is scissored away at complex time
  * anyway. Emitting the whole tall page every frame — re-translated by the
  * scroll offset — is what makes a long document scroll at a few fps. So we drop
  * primitives that fall entirely outside the visible band up front: the ygrid
- * only ever holds the on-screen slice, so both the emit and the composite go
+ * only ever holds the on-screen slice, so both the emit and the complex go
  * from O(page) to O(viewport). */
 struct embed_cull {
     int active;
@@ -273,7 +273,7 @@ struct embed_cull {
 
 /* Vertical extent [*y_lo, *y_hi] of a TRANSLATED leaf primitive, or 0 if this
  * primitive's bounds can't be read exactly — in which case it is never culled.
- * Cullable: text runs, composites (yimage/yplot/…, the dominant byte cost of a
+ * Cullable: text runs, complexes (yimage/yplot/…, the dominant byte cost of a
  * web page), and bare SDF shapes. Kept unconditionally: id-carrying prims,
  * fonts, and unknown types, whose exact bounds we don't read here. Being
  * conservative is the safety property: an over-large extent only keeps an
@@ -301,16 +301,16 @@ static int embed_prim_extent(const uint32_t *prim, size_t bytes, float *y_lo, fl
         *y_hi = baseline + font_size * 0.6f; /* descent + slack */
         return 1;
     }
-    /* Composite (yimage / yplot / ymesh …). On a web page this is the
+    /* Complex (yimage / yplot / ymesh …). On a web page this is the
      * dominant BYTE cost — every decoded image bitmap rides inline in its
      * record, so a tall page is tens of MB of off-screen image pixels that
-     * we re-emit and re-composite every frame while scrolling. The AABB is
+     * we re-emit and re-complex every frame while scrolling. The AABB is
      * the first 16 payload bytes (x,y,w,h); translate_prim already shifted
-     * x,y. A composite carries the top type bit but is NOT id-carrying —
+     * x,y. A complex carries the top type bit but is NOT id-carrying —
      * distinguish it from an id'd SDF (top bit + SDF base) by its base
      * having no SDF size. Culling these is the whole point of the exercise. */
-    if (yetty_ydraw_is_composite(type) && yetty_ysdf_primitive_size(RICH_TYPE_BASE(type)) == 0u) {
-        struct rectangle_result aabb = yetty_ydraw_composite_record_aabb(prim);
+    if (yetty_ydraw_is_complex(type) && yetty_ysdf_primitive_size(RICH_TYPE_BASE(type)) == 0u) {
+        struct rectangle_result aabb = yetty_ydraw_complex_record_aabb(prim);
         if (YETTY_IS_ERR(aabb)) {
             yetty_ycore_error_destroy(aabb.error);
             return 0;
@@ -344,7 +344,7 @@ static int embed_prim_extent(const uint32_t *prim, size_t bytes, float *y_lo, fl
  * cmd records (DELETE, UPDATE, GROUP_REF) carry no translatable coordinates
  * and are copied through verbatim.
  *
- * These cmd type words share the 0x8XXXXXXX range with composite prim
+ * These cmd type words share the 0x8XXXXXXX range with complex prim
  * type_ids (yimage = 0x80000004, …), so — exactly like the drawable iterator
  * — each cmd is matched by its exact constant BEFORE the generic prim_size /
  * translate path, which would otherwise misread the id word as a payload
@@ -447,7 +447,7 @@ static struct yetty_ycore_void_result embed_emit_range(struct yetty_ydraw_drawab
             continue;
         }
 
-        /* Leaf primitive (SDF / TEXT / FONT / composite). Copy into scratch,
+        /* Leaf primitive (SDF / TEXT / FONT / complex). Copy into scratch,
          * translate by the widget offset, append. */
         size_t s = prim_size((const uint32_t *)p, remaining);
         if (s == 0 || s > remaining) {

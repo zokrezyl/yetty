@@ -1,6 +1,6 @@
 // Auto-generated from yvideo.yaml - DO NOT EDIT
 //
-// Two-tier composite model:
+// Two-tier complex model:
 //   - factory owns ONE shared yetty_yrender_pipeline (compiled once at
 //     compile_pipeline time from a template resource_set; the pipeline
 //     carries the WGPUShaderModule + bind_group_layout + WGPURenderPipeline
@@ -18,8 +18,8 @@
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/pipeline.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/ydraw-core/composite.h>
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-core/complex.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,14 +27,14 @@
 /* Hook surface — see hooks_enabled() in ydraw-gen/generate.py. Implemented
  * in yvideo-hooks.c (hand-written). Missing symbols are a link error. */
 extern struct yetty_ycore_void_result yvideo_hook_instance_create(
-    struct yetty_ydraw_composite *instance, const void *buffer_data, size_t size);
-extern void yvideo_hook_instance_destroy(struct yetty_ydraw_composite *instance);
+    struct yetty_ydraw_complex *instance, const void *buffer_data, size_t size);
+extern void yvideo_hook_instance_destroy(struct yetty_ydraw_complex *instance);
 extern struct yetty_ycore_void_result yvideo_hook_instance_update(
-    struct yetty_ydraw_composite *instance, const void *payload, size_t size);
+    struct yetty_ydraw_complex *instance, const void *payload, size_t size);
 extern struct yetty_ycore_void_result yvideo_hook_instance_render_pre(
-    struct yetty_ydraw_composite *instance, struct yetty_ydraw_target *target, float x, float y);
+    struct yetty_ydraw_complex *instance, struct yetty_ydraw_target *target, float x, float y);
 
-static struct yetty_ycore_void_result yvideo_instance_update(struct yetty_ydraw_composite *instance,
+static struct yetty_ycore_void_result yvideo_instance_update(struct yetty_ydraw_complex *instance,
                                                              uint32_t target_field,
                                                              const void *body, size_t body_size)
 {
@@ -80,7 +80,7 @@ static struct yetty_ycore_void_result yvideo_instance_update(struct yetty_ydraw_
  * fi->ops->update directly, so this is dead in the runtime path but
  * gets removed when the factory loses the slot. */
 static struct yetty_ycore_void_result yvideo_update_dispatch(
-    struct yetty_ydraw_concrete_factory *self, struct yetty_ydraw_composite *instance,
+    struct yetty_ydraw_concrete_factory *self, struct yetty_ydraw_complex *instance,
     const void *payload, size_t size)
 {
     (void)self;
@@ -292,7 +292,7 @@ static void yvideo_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
 // supplies only the shared pipeline + zoom state.
 //=============================================================================
 
-static struct yetty_ycore_void_result yvideo_instance_render(struct yetty_ydraw_composite *self,
+static struct yetty_ycore_void_result yvideo_instance_render(struct yetty_ydraw_complex *self,
                                                              struct yetty_ydraw_target *target,
                                                              float x, float y)
 {
@@ -526,41 +526,41 @@ static WGPURenderPipeline yvideo_get_pipeline(struct yetty_ydraw_concrete_factor
 
 /* Forward decl — vtable definition lives below; create_instance just
  * needs its address. */
-static const struct yetty_ydraw_composite_ops yvideo_figure_ops;
+static const struct yetty_ydraw_complex_ops yvideo_figure_ops;
 
-static struct yetty_ydraw_composite_ptr_result yvideo_create_instance(
+static struct yetty_ydraw_complex_ptr_result yvideo_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite_record)) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_complex_record)) {
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "invalid buffer data");
     }
 
     /* Bounds-check the wire record against its declared payload_size. */
     {
         if (size < 2u * sizeof(uint32_t)) {
-            return YETTY_ERR(yetty_ydraw_composite_ptr, "yvideo: record too small for header");
+            return YETTY_ERR(yetty_ydraw_complex_ptr, "yvideo: record too small for header");
         }
         uint64_t declared_payload = (uint64_t)((const uint32_t *)buffer_data)[1];
         if (2u * sizeof(uint32_t) + declared_payload > (uint64_t)size) {
-            return YETTY_ERR(yetty_ydraw_composite_ptr, "yvideo: payload exceeds wire record");
+            return YETTY_ERR(yetty_ydraw_complex_ptr, "yvideo: payload exceeds wire record");
         }
     }
 
     struct yetty_yvideo_factory *factory = yetty_yvideo_factory_from_base(self);
     if (!factory->pipeline) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "yvideo factory pipeline not compiled");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "yvideo factory pipeline not compiled");
     }
 
-    struct yetty_ydraw_composite *instance = calloc(1, sizeof(struct yetty_ydraw_composite));
+    struct yetty_ydraw_complex *instance = calloc(1, sizeof(struct yetty_ydraw_complex));
     if (!instance) {
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "allocation failed");
     }
 
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {
         free(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "buffer alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "buffer alloc failed");
     }
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
@@ -570,7 +570,7 @@ static struct yetty_ydraw_composite_ptr_result yvideo_create_instance(
     instance->render = yvideo_instance_render;
     instance->ops = &yvideo_figure_ops;
 
-    struct rectangle_result aabb_res = yetty_ydraw_composite_record_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_complex_record_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
         instance->bounds = aabb_res.value;
     }
@@ -582,7 +582,7 @@ static struct yetty_ydraw_composite_ptr_result yvideo_create_instance(
     if (!instance->resource_set) {
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "rs alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "rs alloc failed");
     }
     memcpy(instance->resource_set, &factory->template_rs,
            sizeof(struct yetty_yrender_gpu_resource_set));
@@ -617,7 +617,7 @@ static struct yetty_ydraw_composite_ptr_result yvideo_create_instance(
             free(instance->resource_set);
             free(instance->buffer_data);
             free(instance);
-            return YETTY_ERR(yetty_ydraw_composite_ptr, "yvideo: hook_instance_create failed", hcr);
+            return YETTY_ERR(yetty_ydraw_complex_ptr, "yvideo: hook_instance_create failed", hcr);
         }
     }
 
@@ -632,7 +632,7 @@ static struct yetty_ydraw_composite_ptr_result yvideo_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "instance binder create failed", br);
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "instance binder create failed", br);
     }
     instance->binder = br.value;
 
@@ -644,7 +644,7 @@ static struct yetty_ydraw_composite_ptr_result yvideo_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "binder submit failed", sr);
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "binder submit failed", sr);
     }
 
     struct yetty_ycore_void_result fr = instance->binder->ops->finalize(instance->binder);
@@ -654,15 +654,15 @@ static struct yetty_ydraw_composite_ptr_result yvideo_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "binder finalize failed", fr);
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "binder finalize failed", fr);
     }
 
     ydebug("yvideo_create_instance: OK bounds=(%.0f,%.0f,%.0f,%.0f)", instance->bounds.min.x,
            instance->bounds.min.y, instance->bounds.max.x, instance->bounds.max.y);
-    return YETTY_OK(yetty_ydraw_composite_ptr, instance);
+    return YETTY_OK(yetty_ydraw_complex_ptr, instance);
 }
 
-static void yvideo_instance_destroy(struct yetty_ydraw_composite *instance)
+static void yvideo_instance_destroy(struct yetty_ydraw_complex *instance)
 {
     if (!instance) {
         return;
@@ -677,7 +677,7 @@ static void yvideo_instance_destroy(struct yetty_ydraw_composite *instance)
 }
 
 /* Per-instance vtable installed on every yvideo figure_instance. */
-static const struct yetty_ydraw_composite_ops yvideo_figure_ops = {
+static const struct yetty_ydraw_complex_ops yvideo_figure_ops = {
     .destroy = yvideo_instance_destroy,
     .update = yvideo_instance_update,
 };
@@ -685,7 +685,7 @@ static const struct yetty_ydraw_composite_ops yvideo_figure_ops = {
 /* Legacy factory adapter — kept for the factory->destroy_instance
  * fallback path. */
 static void yvideo_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                    struct yetty_ydraw_composite *instance)
+                                    struct yetty_ydraw_complex *instance)
 {
     (void)self;
     yvideo_instance_destroy(instance);

@@ -93,4 +93,4 @@ That is why `yframework.h` includes `yetty/yetty.h` rather than the reverse.
 - [`../yui/README.md`](../yui/README.md) — tabbar model, workspaces, tiles, chrome
 - [`../yui-core/README.md`](../yui-core/README.md) — the view abstraction panes host
 - [`../yrender/README.md`](../yrender/README.md) — render targets and present
-- [`../../../docs/layered-rendering.md`](../../../docs/layered-rendering.md) — how layers and figures composite
+- [`../../../docs/layered-rendering.md`](../../../docs/layered-rendering.md) — how layers and figures complex

@@ -304,7 +304,7 @@ bool YDrawRenderMethod::renderImage(tvg::RenderData data)
     }
 
     // Image rendering not yet implemented — new yetty image pipeline lives
-    // in ydraw composites; wiring is a separate task.
+    // in ydraw complexes; wiring is a separate task.
     ywarn("YDrawRenderMethod::renderImage: not yet implemented");
     return true;
 }

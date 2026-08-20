@@ -10,7 +10,7 @@
 #include <yetty/ysdf/merge.h>
 
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-core/complex.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/font-resource.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
@@ -75,10 +75,10 @@ static void merge_transform_record(uint32_t *prim, size_t words, float offset_x,
         prim[7] += z_order_offset;
         return;
     }
-    if (yetty_ydraw_is_composite(type) && words >= 2 + 4) {
-        /* Composite figure record: [type][payload_size][bounds_x][bounds_y]
-		 * [bounds_w][bounds_h][...]. Every composite serializer starts its
-		 * payload with the four bounds floats (composite_record_aabb reads
+    if (yetty_ydraw_is_complex(type) && words >= 2 + 4) {
+        /* Complex figure record: [type][payload_size][bounds_x][bounds_y]
+		 * [bounds_w][bounds_h][...]. Every complex serializer starts its
+		 * payload with the four bounds floats (complex_record_aabb reads
 		 * the same fixed offsets), so the embed transform maps them like
 		 * any other geometry — this is what places an SVG <image> raster
 		 * correctly when the scene is merged under a box transform. */

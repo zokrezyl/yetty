@@ -46,7 +46,7 @@ yetty_add_c_test(
 
 # Receiver coverage ported from the retired ygrid suite: nested groups,
 # the multi-group delta pattern, dirty/reset lifecycle, malformed-body
-# recovery + dump stability, and the composite-instance lifecycle.
+# recovery + dump stability, and the complex-instance lifecycle.
 yetty_add_c_test(
     NAME    yscene_wire_parity
     SOURCES wire-parity-test.c

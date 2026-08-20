@@ -59,6 +59,15 @@ class Figure(_rt.YClass):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
+    def hit_opaque(self, local_x: float, local_y: float) -> int:
+        """Call `yetty_yfigure_hit_opaque`; raises _rt.YettyError on failure."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_yfigure_hit_opaque", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float])
+        res = _rt.result_from_c(_fn(self._handle, local_x, local_y))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
     def process_bytes(self, bytes: Any, bytes_len: int) -> None:
         """Call `yetty_yfigure_process_bytes`; raises _rt.YettyError on failure."""
         if self._handle is None:
@@ -306,12 +315,39 @@ class Container(Figure):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
+    def child_object(self, child_id: int) -> Any:
+        """Call `yetty_yfigure_child_object`; raises _rt.YettyError on failure."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_yfigure_child_object", _t.yetty_yclass_object_ptr_result, [c_void_p, c_uint32])
+        res = _rt.result_from_c(_fn(self._handle, child_id))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def seat_overlay(self, id: int, rect: _t.yetty_ycore_rectangle) -> None:
+        """Call `yetty_yfigure_seat_overlay`; raises _rt.YettyError on failure."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_yfigure_seat_overlay", _t.yetty_ycore_void_result, [c_void_p, c_uint32, _t.yetty_ycore_rectangle])
+        res = _rt.result_from_c(_fn(self._handle, id, rect))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
     def set_child_z(self, id: int, z: int) -> None:
         """Call `yetty_yfigure_set_child_z`; raises _rt.YettyError on failure."""
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yfigure_set_child_z", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_int32])
         res = _rt.result_from_c(_fn(self._handle, id, z))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def set_child_input_passthrough(self, id: int, passthrough: int) -> None:
+        """Call `yetty_yfigure_set_child_input_passthrough`; raises _rt.YettyError on failure."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_yfigure_set_child_input_passthrough", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_uint32])
+        res = _rt.result_from_c(_fn(self._handle, id, passthrough))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value

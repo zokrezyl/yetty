@@ -15,7 +15,7 @@
 
 #define MAX_OBJECTS 256
 /* Max wire body for one RPC frame. Figure bodies are whole drawable-list /
- * composite payloads shipped one-way (a yplot/yimage figure is multi-MB:
+ * complex payloads shipped one-way (a yplot/yimage figure is multi-MB:
  * 800x800 RGBA alone is ~2.5 MB), so this must comfortably exceed 64 KB or
  * rpc_write_request rejects them. The two static scratch buffers in
  * rpc_server_run are sized from this — they are BSS (demand-paged), and the

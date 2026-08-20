@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Composite code generator.
+Complex code generator.
 
 Reads YAML schema, generates ALL boilerplate:
 - C header: struct definition, serialization API, factory API
@@ -211,15 +211,15 @@ def hooks_enabled(schema):
     When enabled the generator emits, at the top of <name>-gen.c:
 
       extern struct yetty_ycore_void_result <name>_hook_instance_create(
-          struct yetty_ydraw_composite *instance,
+          struct yetty_ydraw_complex *instance,
           const void *buffer_data, size_t size);
       extern void <name>_hook_instance_destroy(
-          struct yetty_ydraw_composite *instance);
+          struct yetty_ydraw_complex *instance);
       extern struct yetty_ycore_void_result <name>_hook_instance_update(
-          struct yetty_ydraw_composite *instance,
+          struct yetty_ydraw_complex *instance,
           const void *payload, size_t size);
       extern struct yetty_ycore_void_result <name>_hook_instance_render_pre(
-          struct yetty_ydraw_composite *instance,
+          struct yetty_ydraw_complex *instance,
           struct yetty_ydraw_target *target, float x, float y);
 
     Insertion points:
@@ -299,7 +299,7 @@ struct yetty_{name}_{b["name"]}_buffer {{
  * decode of target_field/body is {name}-specific). Installed as the
  * per-instance ops->update at create time. */
 struct yetty_ycore_void_result yetty_{name}_instance_update(
-    struct yetty_ydraw_composite *instance, uint32_t target_field,
+    struct yetty_ydraw_complex *instance, uint32_t target_field,
     const void *body, size_t body_size);
 '''
     if schema.get('lifecycle_extern'):
@@ -309,8 +309,8 @@ struct yetty_ycore_void_result yetty_{name}_instance_update(
  * renders); `destroying` runs FIRST in instance destroy, before any
  * teardown. */
 struct yetty_ycore_void_result yetty_{name}_instance_created(
-    struct yetty_ydraw_composite *instance);
-void yetty_{name}_instance_destroying(struct yetty_ydraw_composite *instance);
+    struct yetty_ydraw_complex *instance);
+void yetty_{name}_instance_destroying(struct yetty_ydraw_complex *instance);
 '''
 
     yaml_section = '' if yaml_mode == 'none' else f'''
@@ -336,9 +336,9 @@ extern "C" {{
 
 /* Forward-declared so this header stays GPU-less and can be included by
  * client-side wire emitters that don't link Dawn. The full types live in
- * yetty/ydraw-factory/composite-factory.h (server side). */
+ * yetty/ydraw-factory/complex-factory.h (server side). */
 struct yetty_ydraw_concrete_factory;
-struct yetty_ydraw_composite;
+struct yetty_ydraw_complex;
 
 #define YETTY_{NAME}_TYPE_ID 0x{type_id:08x}u
 
@@ -409,7 +409,7 @@ def generate_c_wire_source(schema, uniforms, buffers):
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
 //
-// Wire-format helpers for the {name} composite. Pure CPU code: packs
+// Wire-format helpers for the {name} complex. Pure CPU code: packs
 // caller-supplied uniforms + buffers into the on-the-wire byte layout. Lives
 // in yetty_{name}_core (no Dawn, no WebGPU, safe for riscv64 / wasm / any
 // cross-target without a GPU).
@@ -487,7 +487,7 @@ def generate_c_wire_source_merged(schema, uniforms, buffers):
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
 //
-// Wire-format helpers for the {name} composite. Pure CPU code: packs
+// Wire-format helpers for the {name} complex. Pure CPU code: packs
 // caller-supplied uniforms + buffers into the on-the-wire byte layout. Lives
 // in yetty_{name}_core (no Dawn, no WebGPU, safe for riscv64 / wasm / any
 // cross-target without a GPU).
@@ -993,22 +993,22 @@ def generate_c_source(schema, uniforms, buffers, textures):
             return ''
         # Bound the record against its own declared payload_size rather than a
         # sum of per-buffer length words at fixed offsets. The fixed-offset sum
-        # is wrong for composites whose buffers are NOT contiguous: yplot
+        # is wrong for complexes whose buffers are NOT contiguous: yplot
         # interleaves a variable-length bytecode payload between its
         # buffer-length words, so word[uniforms+1] is a bytecode instruction,
         # not a length — the old check read garbage and falsely rejected every
         # valid yplot record ("buffers exceed record"). payload_size (header
         # word[1]) is the authoritative byte count following the 8-byte header
-        # and is written by every composite serializer, so this is correct for
+        # and is written by every complex serializer, so this is correct for
         # all layouts (fixed or variable).
         return f'''    /* Bounds-check the wire record against its declared payload_size. */
     {{
         if (size < 2u * sizeof(uint32_t))
-            return YETTY_ERR(yetty_ydraw_composite_ptr,
+            return YETTY_ERR(yetty_ydraw_complex_ptr,
                              "{name}: record too small for header");
         uint64_t declared_payload = (uint64_t)((const uint32_t *)buffer_data)[1];
         if (2u * sizeof(uint32_t) + declared_payload > (uint64_t)size)
-            return YETTY_ERR(yetty_ydraw_composite_ptr,
+            return YETTY_ERR(yetty_ydraw_complex_ptr,
                              "{name}: payload exceeds wire record");
     }}'''
 
@@ -1022,19 +1022,19 @@ def generate_c_source(schema, uniforms, buffers, textures):
     {{
         const uint32_t *payload = (const uint32_t *)buffer_data + 2;
         if (size < (size_t){min_header_words}u * sizeof(uint32_t))
-            return YETTY_ERR(yetty_ydraw_composite_ptr,
+            return YETTY_ERR(yetty_ydraw_complex_ptr,
                              "{name}: record too small for texture header");
         uint32_t tex_w = payload[{t["width_wire_offset"]}];
         uint32_t tex_h = payload[{t["height_wire_offset"]}];
         if (tex_w > {TEXTURE_MAX_DIM}u || tex_h > {TEXTURE_MAX_DIM}u)
-            return YETTY_ERR(yetty_ydraw_composite_ptr,
+            return YETTY_ERR(yetty_ydraw_complex_ptr,
                              "{name}: texture dimensions out of range");
         uint64_t pixels_word_off = (uint64_t){buffer_data_offset}u{sum_expr};
         uint64_t pixels_byte_off = (2ull + pixels_word_off) * sizeof(uint32_t);
         uint64_t tex_need = (uint64_t)tex_w * (uint64_t)tex_h * {t["format_bpp"]}u;
         if (pixels_byte_off > (uint64_t)size ||
             tex_need > (uint64_t)size - pixels_byte_off)
-            return YETTY_ERR(yetty_ydraw_composite_ptr,
+            return YETTY_ERR(yetty_ydraw_complex_ptr,
                              "{name}: texture pixels exceed record");
     }}'''
 
@@ -1059,18 +1059,18 @@ def generate_c_source(schema, uniforms, buffers, textures):
 /* Hook surface — see hooks_enabled() in ydraw-gen/generate.py. Implemented
  * in {name}-hooks.c (hand-written). Missing symbols are a link error. */
 extern struct yetty_ycore_void_result {name}_hook_instance_create(
-    struct yetty_ydraw_composite *instance,
+    struct yetty_ydraw_complex *instance,
     const void *buffer_data, size_t size);
 extern void {name}_hook_instance_destroy(
-    struct yetty_ydraw_composite *instance);
+    struct yetty_ydraw_complex *instance);
 extern struct yetty_ycore_void_result {name}_hook_instance_update(
-    struct yetty_ydraw_composite *instance,
+    struct yetty_ydraw_complex *instance,
     const void *payload, size_t size);
 extern struct yetty_ycore_void_result {name}_hook_instance_render_pre(
-    struct yetty_ydraw_composite *instance,
+    struct yetty_ydraw_complex *instance,
     struct yetty_ydraw_target *target, float x, float y);
 
-static struct yetty_ycore_void_result {name}_instance_update(struct yetty_ydraw_composite *instance,
+static struct yetty_ycore_void_result {name}_instance_update(struct yetty_ydraw_complex *instance,
                                                              uint32_t target_field,
                                                              const void *body, size_t body_size)
 {{
@@ -1117,7 +1117,7 @@ static struct yetty_ycore_void_result {name}_instance_update(struct yetty_ydraw_
  * gets removed when the factory loses the slot. */
 static struct yetty_ycore_void_result {name}_update_dispatch(
     struct yetty_ydraw_concrete_factory *self,
-    struct yetty_ydraw_composite *instance,
+    struct yetty_ydraw_complex *instance,
     const void *payload, size_t size)
 {{
     (void)self;
@@ -1140,7 +1140,7 @@ static struct yetty_ycore_void_result {name}_update_dispatch(
             free(instance->resource_set);
             free(instance->buffer_data);
             free(instance);
-            return YETTY_ERR(yetty_ydraw_composite_ptr,
+            return YETTY_ERR(yetty_ydraw_complex_ptr,
                              "{name}: hook_instance_create failed", hcr);
         }}
     }}
@@ -1173,7 +1173,7 @@ static struct yetty_ycore_void_result {name}_update_dispatch(
  * itself is hand-written in a companion TU (see the generated header). */
 static struct yetty_ycore_void_result {name}_update_dispatch(
     struct yetty_ydraw_concrete_factory *self,
-    struct yetty_ydraw_composite *instance,
+    struct yetty_ydraw_complex *instance,
     const void *payload, size_t size)
 {{
     (void)self;
@@ -1215,11 +1215,11 @@ static struct yetty_ycore_void_result {name}_update_dispatch(
                               f'    yetty_{name}_instance_destroying(instance);\n') + hooks_destroy_call
 
     # webgpu.h is pulled in via the ydraw-factory header (server-only).
-    # Wire format / type-id ranges come from ydraw-core/composite.h.
+    # Wire format / type-id ranges come from ydraw-core/complex.h.
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
 //
-// Two-tier composite model:
+// Two-tier complex model:
 //   - factory owns ONE shared yetty_yrender_pipeline (compiled once at
 //     compile_pipeline time from a template resource_set; the pipeline
 //     carries the WGPUShaderModule + bind_group_layout + WGPURenderPipeline
@@ -1237,8 +1237,8 @@ static struct yetty_ycore_void_result {name}_update_dispatch(
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/pipeline.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/ydraw-core/composite.h>
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-core/complex.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1326,7 +1326,7 @@ static void {name}_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
 //=============================================================================
 
 static struct yetty_ycore_void_result
-{name}_instance_render(struct yetty_ydraw_composite *self,
+{name}_instance_render(struct yetty_ydraw_complex *self,
                        struct yetty_ydraw_target *target, float x, float y)
 {{
     if (!self || !self->buffer_data || !self->factory)
@@ -1522,29 +1522,29 @@ static WGPURenderPipeline {name}_get_pipeline(struct yetty_ydraw_concrete_factor
 
 /* Forward decl — vtable definition lives below; create_instance just
  * needs its address. */
-static const struct yetty_ydraw_composite_ops {name}_figure_ops;
+static const struct yetty_ydraw_complex_ops {name}_figure_ops;
 
-static struct yetty_ydraw_composite_ptr_result
+static struct yetty_ydraw_complex_ptr_result
 {name}_create_instance(struct yetty_ydraw_concrete_factory *self,
                        const void *buffer_data, size_t size, uint32_t rolling_row)
 {{
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite_record))
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_complex_record))
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "invalid buffer data");
 {record_validation}
     struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
     if (!factory->pipeline)
-        return YETTY_ERR(yetty_ydraw_composite_ptr,
+        return YETTY_ERR(yetty_ydraw_complex_ptr,
                          "{name} factory pipeline not compiled");
 
-    struct yetty_ydraw_composite *instance =
-        calloc(1, sizeof(struct yetty_ydraw_composite));
+    struct yetty_ydraw_complex *instance =
+        calloc(1, sizeof(struct yetty_ydraw_complex));
     if (!instance)
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "allocation failed");
 
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {{
         free(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "buffer alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "buffer alloc failed");
     }}
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
@@ -1554,7 +1554,7 @@ static struct yetty_ydraw_composite_ptr_result
     instance->render = {name}_instance_render;
     instance->ops = &{name}_figure_ops;
 
-    struct rectangle_result aabb_res = yetty_ydraw_composite_record_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_complex_record_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res))
         instance->bounds = aabb_res.value;
 
@@ -1565,7 +1565,7 @@ static struct yetty_ydraw_composite_ptr_result
     if (!instance->resource_set) {{
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr, "rs alloc failed");
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "rs alloc failed");
     }}
     memcpy(instance->resource_set, &factory->template_rs,
            sizeof(struct yetty_yrender_gpu_resource_set));
@@ -1582,7 +1582,7 @@ static struct yetty_ydraw_composite_ptr_result
 {hooks_create_rollback}free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr,
+        return YETTY_ERR(yetty_ydraw_complex_ptr,
                          "instance binder create failed", br);
     }}
     instance->binder = br.value;
@@ -1594,7 +1594,7 @@ static struct yetty_ydraw_composite_ptr_result
 {hooks_create_rollback}free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr,
+        return YETTY_ERR(yetty_ydraw_complex_ptr,
                          "binder submit failed", sr);
     }}
 
@@ -1604,16 +1604,16 @@ static struct yetty_ydraw_composite_ptr_result
 {hooks_create_rollback}free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_composite_ptr,
+        return YETTY_ERR(yetty_ydraw_complex_ptr,
                          "binder finalize failed", fr);
     }}
 
 {lifecycle_create_call}    ydebug("{name}_create_instance: OK bounds=(%.0f,%.0f,%.0f,%.0f)", instance->bounds.min.x,
            instance->bounds.min.y, instance->bounds.max.x, instance->bounds.max.y);
-    return YETTY_OK(yetty_ydraw_composite_ptr, instance);
+    return YETTY_OK(yetty_ydraw_complex_ptr, instance);
 }}
 
-static void {name}_instance_destroy(struct yetty_ydraw_composite *instance)
+static void {name}_instance_destroy(struct yetty_ydraw_complex *instance)
 {{
     if (!instance)
         return;
@@ -1625,7 +1625,7 @@ static void {name}_instance_destroy(struct yetty_ydraw_composite *instance)
 }}
 
 /* Per-instance vtable installed on every {name} figure_instance. */
-static const struct yetty_ydraw_composite_ops {name}_figure_ops = {{
+static const struct yetty_ydraw_complex_ops {name}_figure_ops = {{
     .destroy = {name}_instance_destroy,
     .update = {ops_update_member},
 }};
@@ -1633,7 +1633,7 @@ static const struct yetty_ydraw_composite_ops {name}_figure_ops = {{
 /* Legacy factory adapter — kept for the factory->destroy_instance
  * fallback path. */
 static void {name}_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                    struct yetty_ydraw_composite *instance)
+                                    struct yetty_ydraw_complex *instance)
 {{
     (void)self;
     {name}_instance_destroy(instance);
@@ -1828,7 +1828,7 @@ def generate_yaml_parser(schema, uniforms, buffers):
     flags_code = '\n                else '.join(flag_checks) if flag_checks else '/* no yaml_flags */'
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
-// YAML parser factory for {name} composite
+// YAML parser factory for {name} complex
 
 #include <yetty/{name}/{name}-gen.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>

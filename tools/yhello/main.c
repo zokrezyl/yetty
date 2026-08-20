@@ -50,7 +50,7 @@
 #ifdef YETTY_YHELLO_HAS_STANDALONE
 /* Headers below pull <yetty/yetty/yetty.h> (or <webgpu/webgpu.h> directly)
  * via their public API surface. */
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/api/yscene/scene.h>
@@ -251,7 +251,7 @@ struct app {
     struct yetty_context ctx;
     struct yetty_yclass_object *root_container;
     struct yetty_yfigure_registry *figure_registry;
-    struct yetty_ydraw_composite_factory *composite_factory;
+    struct yetty_ydraw_complex_factory *complex_factory;
     struct yetty_yfont_font *font;
     struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
     /* Two factory-args bundles for the yscene figure factory: the ygui
@@ -3528,17 +3528,17 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
     /* Raw figure factory — needed for the yplot / yimage producer
      * kinds. Same wiring yui.c uses (yui_create lines 506-571). */
     {
-        struct yetty_ydraw_composite_factory_ptr_result ffr = yetty_ydraw_composite_factory_create(
+        struct yetty_ydraw_complex_factory_ptr_result ffr = yetty_ydraw_complex_factory_create(
             app->yframework->gpu.device, app->yframework->gpu.queue,
             app->yframework->gpu.surface_format, app->yframework->gpu.allocator,
             app->yframework->event_loop);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "standalone: raw_composite_factory_create");
-        app->composite_factory = ffr.value;
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ffr, "standalone: raw_complex_factory_create");
+        app->complex_factory = ffr.value;
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             yplot_f->destroy = yetty_yplot_factory_destroy;
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(app->composite_factory, yplot_f);
+                yetty_ydraw_complex_factory_register(app->complex_factory, yplot_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
                 yetty_yplot_factory_destroy(yplot_f);
@@ -3548,7 +3548,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
         if (yimage_f) {
             yimage_f->destroy = yetty_yimage_factory_destroy;
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(app->composite_factory, yimage_f);
+                yetty_ydraw_complex_factory_register(app->complex_factory, yimage_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
                 yetty_yimage_factory_destroy(yimage_f);
@@ -3563,7 +3563,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
         YETTY_RETURN_IF_ERR(yetty_ycore_void, reg, "standalone: registry_create");
         app->figure_registry = reg.value;
         app->figure_args.default_font = app->font;
-        app->figure_args.composite_factory = app->composite_factory;
+        app->figure_args.complex_factory = app->complex_factory;
         /* ygui chrome: chrome + producer figures (yplot/yimage/yvideo) are
          * laid out in logical pixels and must be scaled to framebuffer by
          * content_scale (HiDPI). Widgets emit at the absolute rect to match. */
@@ -3583,7 +3583,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
         /* The retained "yscene" kind (scrollarea scene mode): document-space
          * content, GPU scroll. Local coordinates. */
         app->retained_figure_args.default_font = app->font;
-        app->retained_figure_args.composite_factory = app->composite_factory;
+        app->retained_figure_args.complex_factory = app->complex_factory;
         struct yetty_ycore_void_result rf =
             yetty_yscene_register_factory(app->figure_registry, &app->retained_figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "standalone: yscene_register_factory");
@@ -3729,9 +3729,9 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
         yetty_yfigure_registry_destroy(app->figure_registry);
         app->figure_registry = NULL;
     }
-    if (app->composite_factory) {
-        yetty_ydraw_composite_factory_destroy(app->composite_factory);
-        app->composite_factory = NULL;
+    if (app->complex_factory) {
+        yetty_ydraw_complex_factory_destroy(app->complex_factory);
+        app->complex_factory = NULL;
     }
     if (app->font) {
         app->font->ops->destroy(app->font);

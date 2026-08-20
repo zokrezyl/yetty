@@ -20,12 +20,12 @@ struct yetty_context;
 struct yetty_ycore_buffer;
 struct yetty_ycore_grid_size;
 struct yetty_ycore_pixel_size;
-struct yetty_ydraw_composite;
+struct yetty_ydraw_complex;
 struct yetty_ywire_wire_statemachine;
 
 typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_materialize_fn)(
-    const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);
+    const uint32_t *, uint32_t, void *, struct yetty_ydraw_complex **);
 
 struct yetty_yclass_ptr_result yetty_yvterm_vterm_class_get(void);
 
@@ -87,7 +87,7 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_clear_hook(struct yetty_yc
                                                                  yetty_yvterm_clear_hook_fn fn,
                                                                  void *userdata);
 /* Register the figure re-materialization hook on the composed grid model: the
- * terminal (which owns the composite factory) supplies a function that replays
+ * terminal (which owns the complex factory) supplies a function that replays
  * a retained wire envelope into a fresh figure instance when an evicted
  * history line scrolls back into view. */
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_materialize(struct yetty_yclass_object *obj,
@@ -103,8 +103,8 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_word_bounds(struct yetty_yclas
 struct yetty_ycore_uint64_result yetty_yvterm_vterm_scroll_origin(struct yetty_yclass_object *obj);
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive(
     struct yetty_yclass_object *obj, uint32_t row, const uint32_t *words, uint32_t word_count);
-struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_composite(
-    struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite);
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_complex(
+    struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_complex *complex);
 struct yetty_ycore_void_result yetty_yvterm_vterm_relocate_rich_to_bottom(
     struct yetty_yclass_object *obj, uint32_t span_rows);
 struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_line(struct yetty_yclass_object *obj,

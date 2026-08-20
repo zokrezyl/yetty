@@ -155,7 +155,7 @@ if(Python3_Interpreter_FOUND)
         TIMEOUT          120
         SKIP_RETURN_CODE 77)
 
-    # Paint-order (CSS stacking) test: pins the composite stacking-key painter
+    # Paint-order (CSS stacking) test: pins the complex stacking-key painter
     # against the cases a single scalar level cannot get right at once —
     # early-in-DOM overlay over later content, root canvas vs negative-z,
     # z-index-child ESCAPING an auto-z wrapper above a lower-z sibling, and

@@ -13,7 +13,7 @@
  *                concatenate into closed runs and fan-triangulate fills
  *                the same way as polygon.
  *   - bitmap   : MVP — placeholder filled box at the bitmap's slot.
- *                A real impl needs a yimage composite atlas upload.
+ *                A real impl needs a yimage complex atlas upload.
  *   - text     : TEXT_DRAWABLE_LIST drawable-list entry prim (font_id = -1 = canvas default).
  */
 

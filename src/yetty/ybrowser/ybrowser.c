@@ -774,7 +774,7 @@ static char *dup_attr(const lxb_char_t *value, size_t len)
 
 /* Post-layout pass: for every laid-out <iframe> box, fetch its src (or read its
  * srcdoc), render that document in a child engine sized to the iframe's content
- * box, and hang the child off the box so paint can composite it. Runs after
+ * box, and hang the child off the box so paint can complex it. Runs after
  * layout so the iframe box dimensions (hence the child viewport) are known. */
 static struct yetty_ycore_void_result resolve_iframes(struct yetty_ylexbor *r)
 {

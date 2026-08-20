@@ -1,7 +1,7 @@
 add_library(yetty_ydraw_core STATIC
     drawable-list.c
     cmds.c
-    composite.c
+    complex.c
     drawable-list-registry.c
     font-resource.c
     drawable-iterator.c

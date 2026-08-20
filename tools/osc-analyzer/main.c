@@ -58,7 +58,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-iterator.h>
-#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-core/complex.h>
 #include <yetty/ydraw-core/drawable-list-registry.h>
 #include <yetty/ydraw-core/font-resource.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
@@ -410,8 +410,8 @@ static struct yetty_ydraw_drawable_list_registry *make_full_registry(void)
     if (YETTY_IS_ERR(a)) {
         goto err;
     }
-    a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_COMPOSITE_TYPE_BASE,
-                                               0xFFFFFFFFu, yetty_ydraw_composite_record_handler);
+    a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_COMPLEX_TYPE_BASE,
+                                               0xFFFFFFFFu, yetty_ydraw_complex_record_handler);
     if (YETTY_IS_ERR(a)) {
         goto err;
     }
@@ -599,7 +599,7 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
      * type >= 0x80000003 and FAM-shaped (word 1 = payload_size). Show
      * type + size only, NEVER the payload bytes (yimage carries
      * megabytes of pixel data; dumping it floods the analyzer log). */
-    if (type >= YETTY_YDRAW_COMPOSITE_TYPE_BASE && rec_len >= 8) {
+    if (type >= YETTY_YDRAW_COMPLEX_TYPE_BASE && rec_len >= 8) {
         uint32_t payload_size;
         memcpy(&payload_size, bytes + 4, 4);
         ind(depth);

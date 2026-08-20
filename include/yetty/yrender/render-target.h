@@ -64,7 +64,7 @@ struct yetty_yrender_target_ops {
     /* Apply a non-intrusive visual zoom to the next blend() into this target.
 	 * scale = 1.0 disables zoom; scale > 1.0 zooms in.
 	 * offset_{x,y} are in source pixels within the target. Optional op — may
-	 * be NULL for targets that don't composite layers. */
+	 * be NULL for targets that don't complex layers. */
     struct yetty_ycore_void_result (*set_visual_zoom)(struct yetty_ydraw_target *self, float scale,
                                                       float offset_x, float offset_y);
 

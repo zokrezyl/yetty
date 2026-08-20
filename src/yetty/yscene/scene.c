@@ -53,12 +53,12 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/util.h>
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-core/complex.h>
 #include <yetty/ydraw-core/drawable-iterator.h>
 #include <yetty/ydraw-core/drawable-list-registry.h>
 #include <yetty/ydraw-core/font-resource.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/font-cache.h>
 #include <yetty/yfont/ms-font.h>
@@ -133,7 +133,7 @@
 enum yscene_leaf_kind {
     YSCENE_LEAF_PRIMITIVE = 0, /* SDF — unified-shader batchable */
     YSCENE_LEAF_TEXT,          /* TEXT_DRAWABLE_LIST — expands to glyphs at staging */
-    YSCENE_LEAF_COMPLEX,       /* composite — own pipeline, z-run cut point */
+    YSCENE_LEAF_COMPLEX,       /* complex — own pipeline, z-run cut point */
 };
 
 struct yscene_leaf {
@@ -207,14 +207,14 @@ struct YETTY_ANNOTATE("class@yscene:scene") YETTY_ANNOTATE("parent@yfigure:figur
      * reset_content) rebuilds from scratch. */
     bool pending_poisoned;
 
-    /* Complex (composite) leaves — own-pipeline draws at their paint
+    /* Complex (complex) leaves — own-pipeline draws at their paint
      * position. Instances are minted when their record enters the dom
      * (so same-envelope CMD_UPDATE can target them, ygrid semantics),
      * keyed by their immutable span location, swept when staging no
      * longer references that span. */
-    struct yetty_ydraw_composite_factory *composite_factory; /* borrowed */
+    struct yetty_ydraw_complex_factory *complex_factory; /* borrowed */
     struct yscene_complex_instance {
-        struct yetty_ydraw_composite *instance;
+        struct yetty_ydraw_complex *instance;
         /* Identity = (batch_stamp, record_offset). The stamp is the
          * batch's immutable ALLOCATION id — slots recycle after zero/
          * navigation, and a slot-keyed instance would collide with the
@@ -355,7 +355,7 @@ struct YETTY_ANNOTATE("class@yscene:scene") YETTY_ANNOTATE("parent@yfigure:figur
     uint64_t rich_staged_revision;
     /* ymux drawable-list rich (ycat SVG/PDF/plot/…): each rich_id is routed
      * through the DOM as one node so the full pipeline renders it (text, fonts,
-     * composites, primitives). We track the declared node ids to delete the
+     * complexes, primitives). We track the declared node ids to delete the
      * stale ones when the rich world changes. */
     uint64_t *rich_dom_ids;
     uint32_t rich_dom_count;
@@ -696,7 +696,7 @@ static struct yetty_ycore_void_result scene_derive_node_content(
                 .world_clip = clip,
                 .world_opacity = opacity,
             };
-            if (yetty_ydraw_is_composite(record_type)) {
+            if (yetty_ydraw_is_complex(record_type)) {
                 leaf.kind = YSCENE_LEAF_COMPLEX;
             } else if (record_type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
                 leaf.kind = YSCENE_LEAF_TEXT;
@@ -1011,7 +1011,7 @@ static struct yetty_ycore_void_result scene_validate_body_chain(struct yscene_bo
     return YETTY_OK_VOID();
 }
 
-/* Find (or mint) the complex instance for the composite record at
+/* Find (or mint) the complex instance for the complex record at
  * (batch_slot, record_offset). Minting happens at INGEST so a
  * CMD_UPDATE later in the same body can already target it — ygrid's
  * semantics. Returns NULL quietly when no factory is wired (headless). */
@@ -1020,7 +1020,7 @@ static struct yetty_ycore_void_result scene_complex_mint(struct yetty_yscene_sce
                                                          uint32_t record_offset,
                                                          const uint32_t *record, size_t record_len)
 {
-    if (!scene->composite_factory) {
+    if (!scene->complex_factory) {
         return YETTY_OK_VOID();
     }
     uint64_t batch_stamp = scene->dom->batches[batch_slot].batch_stamp;
@@ -1040,8 +1040,8 @@ static struct yetty_ycore_void_result scene_complex_mint(struct yetty_yscene_sce
         scene->complexes = grown;
         scene->complex_capacity = new_capacity;
     }
-    struct yetty_ydraw_composite_ptr_result instance_res =
-        yetty_ydraw_composite_factory_create_instance(scene->composite_factory, record, record_len,
+    struct yetty_ydraw_complex_ptr_result instance_res =
+        yetty_ydraw_complex_factory_create_instance(scene->complex_factory, record, record_len,
                                                       /*rolling_row=*/0);
     if (YETTY_IS_ERR(instance_res)) {
         /* Per-record best-effort, like ygrid: an unknown/failed complex
@@ -1061,7 +1061,7 @@ static struct yetty_ycore_void_result scene_complex_mint(struct yetty_yscene_sce
     return YETTY_OK_VOID();
 }
 
-/* Mint complex instances for every composite record in `batch_slot`.
+/* Mint complex instances for every complex record in `batch_slot`.
  * Called right after a span enters the dom (append/replace/set). */
 static struct yetty_ycore_void_result scene_complex_scan_batch(struct yetty_yscene_scene *scene,
                                                                uint32_t batch_slot)
@@ -1071,7 +1071,7 @@ static struct yetty_ycore_void_result scene_complex_scan_batch(struct yetty_ysce
         uint32_t record_offset = batch->record_offsets[i];
         uint32_t record_type;
         memcpy(&record_type, batch->bytes + record_offset, sizeof(record_type));
-        if (!yetty_ydraw_is_composite(record_type)) {
+        if (!yetty_ydraw_is_complex(record_type)) {
             continue;
         }
         size_t record_len = (i + 1 < batch->record_count ? batch->record_offsets[i + 1]
@@ -1131,7 +1131,7 @@ static void scene_reset_complexes(struct yetty_yscene_scene *scene)
     }
     for (uint32_t i = 0; i < scene->complex_count; i++) {
         if (scene->complexes[i].instance) {
-            yetty_ydraw_composite_destroy(scene->complexes[i].instance);
+            yetty_ydraw_complex_destroy(scene->complexes[i].instance);
         }
     }
     scene->complex_count = 0;
@@ -1145,7 +1145,7 @@ static void scene_complex_sweep(struct yetty_yscene_scene *scene)
     for (uint32_t i = 0; i < scene->complex_count; i++) {
         if (!scene->complexes[i].seen) {
             if (scene->complexes[i].instance) {
-                yetty_ydraw_composite_destroy(scene->complexes[i].instance);
+                yetty_ydraw_complex_destroy(scene->complexes[i].instance);
             }
             continue;
         }
@@ -1172,7 +1172,7 @@ static struct yetty_ycore_void_result scene_flush_run(struct yscene_body_walk *w
         apply_res = yetty_yscene_dom_node_append_batch(walk->dom, target_id, run_start, run_len);
     }
     YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "yscene adapter: content run");
-    /* Mint complex instances for any composite record in the span that
+    /* Mint complex instances for any complex record in the span that
      * just landed, so same-body CMD_UPDATEs can target them. */
     {
         struct yetty_ycore_uint32_result slot_res = yetty_yscene_dom_lookup(walk->dom, target_id);
@@ -2216,23 +2216,23 @@ static void scene_rich_world_free(struct yetty_yscene_scene *scene)
 
 /* Stage the rich world: each entry's ysdf records, translated from
  * anchor-relative pixel coords to world space at the anchor cell. */
-/* Rich-side namespace bit for complex-instance keys: keeps ymux rich composites
+/* Rich-side namespace bit for complex-instance keys: keeps ymux rich complexes
  * from colliding with DOM-batch-keyed instances (batch stamps are small ids). */
 enum { SCENE_RICH_STAMP_BIT = 0x8000000000000000ULL };
 enum { SCENE_RICH_GENERATION_BIT = 0x4000000000000000ULL };
 
-/* Mint (or reuse) an own-pipeline COMPLEX instance for a composite record from a
+/* Mint (or reuse) an own-pipeline COMPLEX instance for a complex record from a
  * rich entry (ycat SVG/PDF/image/plot), positioned at the cell anchor. Keyed on
  * (rich_id, record position) so a static figure reuses its instance across
  * frames; the revision guards content updates (destroy + re-create). Marked
  * `seen` so scene_complex_sweep keeps it. Best-effort: a failed create drops the
  * one figure, never the frame. */
-static struct yetty_ycore_void_result scene_rich_stage_composite(
+static struct yetty_ycore_void_result scene_rich_stage_complex(
     struct yetty_yscene_scene *scene, uint64_t rich_id, uint32_t revision, uint32_t record_key,
     const uint32_t *record, uint32_t record_words, float anchor_x, float anchor_y)
 {
-    if (!scene->composite_factory) {
-        ydebug("yscene rich composite: no composite_factory (headless?) — dropped");
+    if (!scene->complex_factory) {
+        ydebug("yscene rich complex: no complex_factory (headless?) — dropped");
         return YETTY_OK_VOID();
     }
     uint64_t stamp = rich_id | SCENE_RICH_STAMP_BIT;
@@ -2245,16 +2245,16 @@ static struct yetty_ycore_void_result scene_rich_stage_composite(
         }
     }
     if (slot && slot->record_index != revision && slot->instance) {
-        yetty_ydraw_composite_destroy(slot->instance); /* content changed — re-mint */
+        yetty_ydraw_complex_destroy(slot->instance); /* content changed — re-mint */
         slot->instance = NULL;
     }
     if (!slot || !slot->instance) {
-        struct yetty_ydraw_composite_ptr_result instance_res =
-            yetty_ydraw_composite_factory_create_instance(scene->composite_factory, record,
+        struct yetty_ydraw_complex_ptr_result instance_res =
+            yetty_ydraw_complex_factory_create_instance(scene->complex_factory, record,
                                                           (size_t)record_words * sizeof(uint32_t),
                                                           /*rolling_row=*/0);
         if (YETTY_IS_ERR(instance_res)) {
-            ydebug("yscene rich composite: create_instance failed for type=0x%08x: %s", record[0],
+            ydebug("yscene rich complex: create_instance failed for type=0x%08x: %s", record[0],
                    instance_res.error.msg);
             yetty_ycore_error_destroy(instance_res.error);
             return YETTY_OK_VOID();
@@ -2266,8 +2266,8 @@ static struct yetty_ycore_void_result scene_rich_stage_composite(
                     realloc(scene->complexes,
                             (size_t)new_capacity * sizeof(struct yscene_complex_instance));
                 if (!grown) {
-                    yetty_ydraw_composite_destroy(instance_res.value);
-                    return YETTY_ERR(yetty_ycore_void, "yscene rich composite: instance array");
+                    yetty_ydraw_complex_destroy(instance_res.value);
+                    return YETTY_ERR(yetty_ycore_void, "yscene rich complex: instance array");
                 }
                 scene->complexes = grown;
                 scene->complex_capacity = new_capacity;
@@ -2307,27 +2307,27 @@ static struct yetty_ycore_void_result scene_stage_rich(struct yetty_yscene_scene
         uint32_t offset = 0;
         while (offset < entry->word_count) {
             uint32_t record_type = entry->words[offset];
-            /* Composite figure (ycat SVG/PDF/image/plot): own-pipeline draw via
-             * the composite factory, anchored at the cell. */
-            if (yetty_ydraw_is_composite(record_type)) {
+            /* Complex figure (ycat SVG/PDF/image/plot): own-pipeline draw via
+             * the complex factory, anchored at the cell. */
+            if (yetty_ydraw_is_complex(record_type)) {
                 struct yetty_ydraw_command command;
                 struct yetty_ycore_size_result parse_res = yetty_ydraw_drawable_command_parse(
                     registry, (const uint8_t *)&entry->words[offset],
                     (uint32_t)((entry->word_count - offset) * sizeof(uint32_t)), &command);
                 if (YETTY_IS_ERR(parse_res)) {
                     yetty_ycore_error_destroy(parse_res.error);
-                    return YETTY_ERR(yetty_ycore_void, "yscene rich: corrupt composite record");
+                    return YETTY_ERR(yetty_ycore_void, "yscene rich: corrupt complex record");
                 }
-                uint32_t composite_words = (uint32_t)(parse_res.value / sizeof(uint32_t));
-                if (composite_words == 0 || offset + composite_words > entry->word_count) {
-                    return YETTY_ERR(yetty_ycore_void, "yscene rich: composite record overrun");
+                uint32_t complex_words = (uint32_t)(parse_res.value / sizeof(uint32_t));
+                if (complex_words == 0 || offset + complex_words > entry->word_count) {
+                    return YETTY_ERR(yetty_ycore_void, "yscene rich: complex record overrun");
                 }
-                struct yetty_ycore_void_result composite_res = scene_rich_stage_composite(
+                struct yetty_ycore_void_result complex_res = scene_rich_stage_complex(
                     scene, entry->rich_id, entry->revision, offset, &entry->words[offset],
-                    composite_words, anchor_x, anchor_y);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, composite_res,
-                                    "yscene rich: composite stage");
-                offset += composite_words;
+                    complex_words, anchor_x, anchor_y);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, complex_res,
+                                    "yscene rich: complex stage");
+                offset += complex_words;
                 continue;
             }
             uint32_t record_words = yetty_ysdf_word_count((enum yetty_ysdf_type)record_type);
@@ -2441,7 +2441,7 @@ static struct yetty_ycore_void_result scene_rebuild_staging(struct yetty_yscene_
     }
 
     /* Rich world: row-anchored ydraw records stage after the terminal
-     * cells (annotations composite above the text they annotate). */
+     * cells (annotations complex above the text they annotate). */
     if (scene->rich_entry_count) {
         struct yetty_ycore_void_result rich_res = scene_stage_rich(scene);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rich_res, "yscene staging: rich");
@@ -3135,7 +3135,7 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
     /* Complex pass — own-pipeline draws in paint-key order, AFTER the
      * whole prim pass (ygrid-parity interim; the z-run interleave that
      * lets prims cover a complex is the follow-up). Anchor math: the
-     * composite render op adds the record's node-LOCAL bounds scaled by
+     * complex render op adds the record's node-LOCAL bounds scaled by
      * content_scale, so the anchor carries rect origin + (node world
      * translate − scroll) in screen units and content_scale carries the
      * view scale. Publish the figure scissor as target->clip so the
@@ -3162,7 +3162,7 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
                              scene->scroll_anchor_y;
             entry->instance->content_scale = view_scale;
             struct yetty_ycore_void_result render_res =
-                yetty_ydraw_composite_render(entry->instance, target, anchor_x, anchor_y);
+                yetty_ydraw_complex_render(entry->instance, target, anchor_x, anchor_y);
             if (YETTY_IS_ERR(render_res)) {
                 ydebug("yscene render: complex instance failed: %s", render_res.error.msg);
                 yetty_ycore_error_destroy(render_res.error);
@@ -3226,7 +3226,7 @@ static struct yetty_ycore_void_result scene_destroy_slot(struct yetty_yclass_obj
         free(scene->combined_shader);
         for (uint32_t i = 0; i < scene->complex_count; i++) {
             if (scene->complexes[i].instance) {
-                yetty_ydraw_composite_destroy(scene->complexes[i].instance);
+                yetty_ydraw_complex_destroy(scene->complexes[i].instance);
             }
         }
         free(scene->complexes);
@@ -3652,15 +3652,15 @@ static struct yetty_ycore_void_result scene_rich_parse(
             goto malformed;
         }
         /* Validate the payload: a whole number of records. ysdf primitives are
-         * sized by the ysdf table; ydraw COMPOSITE records (ycat SVG/PDF/image/
-         * plot — type via yetty_ydraw_is_composite) are sized by the generic
-         * drawable parser, so a composite figure survives instead of being
+         * sized by the ysdf table; ydraw COMPLEX records (ycat SVG/PDF/image/
+         * plot — type via yetty_ydraw_is_complex) are sized by the generic
+         * drawable parser, so a complex figure survives instead of being
          * rejected as "not a ysdf record". */
         uint32_t payload_offset = 0;
         while (payload_offset < payload_words) {
             uint32_t record_type = words[offset + payload_offset];
             uint32_t record_words;
-            if (yetty_ydraw_is_composite(record_type)) {
+            if (yetty_ydraw_is_complex(record_type)) {
                 struct yetty_ydraw_command command;
                 struct yetty_ycore_size_result parse_res = yetty_ydraw_drawable_command_parse(
                     registry, (const uint8_t *)&words[offset + payload_offset],
@@ -3730,11 +3730,11 @@ static struct yetty_ycore_void_result scene_rich_grow_dom_ids(struct yetty_yscen
 }
 
 /* Route ymux drawable-list rich content (ycat SVG/PDF/plot; #695) through the
- * scene DOM so the FULL render pipeline (text, fonts, composites, primitives)
+ * scene DOM so the FULL render pipeline (text, fonts, complexes, primitives)
  * draws it — the flat rich-entry path only knows ysdf primitives. One DOM node
  * per rich_id, anchored at its cell; the world is replaced each apply (stale
  * nodes deleted). Payloads are unwrapped from the YPB1 container to the raw
- * record span, appended as a batch, and composites in the batch are minted
+ * record span, appended as a batch, and complexes in the batch are minted
  * (the direct DOM-append API skips the scan the wire applier does). */
 /* Tests only: arm the rich-DOM fault countdown — the Nth fallible stage
  * (declare/transform/append/mint/retire, in call order) fails. */
@@ -3965,7 +3965,7 @@ static struct yetty_ycore_void_result scene_rich_apply_dom(struct yetty_yclass_o
         }
         for (uint32_t index = complex_snapshot; index < scene->complex_count; ++index) {
             if (scene->complexes[index].instance) {
-                yetty_ydraw_composite_destroy(scene->complexes[index].instance);
+                yetty_ydraw_complex_destroy(scene->complexes[index].instance);
             }
         }
         scene->complex_count = complex_snapshot;
@@ -3999,7 +3999,7 @@ static struct yetty_ycore_void_result scene_rich_apply_dom(struct yetty_yclass_o
         }
         for (uint32_t index = complex_snapshot; index < scene->complex_count; ++index) {
             if (scene->complexes[index].instance) {
-                yetty_ydraw_composite_destroy(scene->complexes[index].instance);
+                yetty_ydraw_complex_destroy(scene->complexes[index].instance);
             }
         }
         scene->complex_count = complex_snapshot;
@@ -4043,7 +4043,7 @@ struct yetty_ycore_void_result yetty_yscene_scene_apply_content_transaction(
     struct yetty_yscene_scene *scene = scene_res.value;
 
     /* A drawable-list (YPB1) rich body — ycat SVG/PDF/plot and every real
-     * figure — routes through the DOM (full pipeline: text/fonts/composites);
+     * figure — routes through the DOM (full pipeline: text/fonts/complexes);
      * the flat rich-entry path handles only bare ysdf primitives. Detect by the
      * first record's payload magic. */
     int have_rich = rich_words != NULL;
@@ -4485,9 +4485,9 @@ struct yetty_ycore_void_result yetty_yscene_scene_set_default_font(struct yetty_
  * host (terminal), outliving every scene minted through the registry —
  * the same contract as ygrid's factory args bundle. */
 struct YETTY_ANNOTATE("expose") yetty_yscene_factory_args {
-    /* Complex renderer (yplot / yimage / yvideo / …). NULL → composite
+    /* Complex renderer (yplot / yimage / yvideo / …). NULL → complex
      * records drop with trace. */
-    struct yetty_ydraw_composite_factory *composite_factory;
+    struct yetty_ydraw_complex_factory *complex_factory;
     /* Slot-0 font for TEXT spans with the default/negative font id.
      * NULL → such spans drop until a wire font arrives. */
     struct yetty_yfont_font *default_font;
@@ -4522,7 +4522,7 @@ static struct yetty_yfigure_figure_ptr_result scene_wire_factory(
     YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, object_res, "yscene factory: object");
     struct yetty_yclass_object *obj = object_res.value;
     if (args) {
-        scene->composite_factory = args->composite_factory;
+        scene->complex_factory = args->complex_factory;
         /* Slot 0 = default face; slots 1/2/3 = bold / italic /
          * bold-italic, the same layout the ygrid factory installed so
          * producer font_ids resolve identically. */
@@ -4556,7 +4556,7 @@ static struct yetty_yfigure_figure_ptr_result scene_wire_factory(
 /* Register the "yscene" figure kind so containers can mint scenes from
  * wire CREATE_CHILD records. `args` is BORROWED for the registry's
  * lifetime (host-owned bundle); NULL registers a bare scene (no
- * composites, no default font). Call at terminal/host create time. */
+ * complexes, no default font). Call at terminal/host create time. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yscene_register_factory(
     struct yetty_yfigure_registry *registry, const struct yetty_yscene_factory_args *args)
@@ -4590,12 +4590,12 @@ struct yetty_ycore_void_result yetty_yscene_set_default_font(struct yetty_yclass
 
 /* Host-side complex renderer for a hand-created scene. Borrowed. */
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_yscene_set_composite_factory(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_composite_factory *factory)
+struct yetty_ycore_void_result yetty_yscene_set_complex_factory(
+    struct yetty_yclass_object *obj, struct yetty_ydraw_complex_factory *factory)
 {
     struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene set_composite_factory: object");
-    scene_res.value->composite_factory = factory;
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene set_complex_factory: object");
+    scene_res.value->complex_factory = factory;
     return YETTY_OK_VOID();
 }
 

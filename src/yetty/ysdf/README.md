@@ -74,7 +74,7 @@ struct yetty_ycore_int_result yetty_ydraw_drawable_list_merge_transformed(
 
 `merge.c` is the only hand-written translation unit: it walks a source
 stream record by record, transforms SDF geometry / text positions /
-composite bounds per the primitive's own semantics, drops `CMD_ZERO`, and
+complex bounds per the primitive's own semantics, drops `CMD_ZERO`, and
 appends to the destination. FONT resources pass through unchanged (font-id
 remapping is not implemented — see the coverage notes in `merge.h`).
 

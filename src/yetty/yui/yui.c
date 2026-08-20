@@ -20,7 +20,7 @@
 #include <yetty/api/yfigure/figure.h>
 #include <yetty/api/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/api/yscene/scene.h>
@@ -84,7 +84,7 @@ struct yetty_yui {
 
     struct yetty_yfont_font *font;
 
-    struct yetty_ydraw_composite_factory *composite_factory;
+    struct yetty_ydraw_complex_factory *complex_factory;
     /* Two yscene factory-args bundles: the "ygrid"-token chrome kind
      * carries absolute (logical-pane) coordinates; the producer kinds and
      * the retained "yscene" kind carry figure-local content. */
@@ -803,21 +803,21 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     /* Build registry + register the yscene factories, then the root container
      * that consumes ygui's records. */
     {
-        struct yetty_ydraw_composite_factory_ptr_result ffr = yetty_ydraw_composite_factory_create(
+        struct yetty_ydraw_complex_factory_ptr_result ffr = yetty_ydraw_complex_factory_create(
             context->runtime->gpu.device, context->runtime->gpu.queue,
             context->runtime->gpu.surface_format, context->runtime->gpu.allocator,
             context->event_loop);
         if (!YETTY_IS_OK(ffr)) {
             yui->font->ops->destroy(yui->font);
             free(yui);
-            return YETTY_ERR(yetty_yui_ptr, "yui_create: raw_composite_factory create", ffr);
+            return YETTY_ERR(yetty_yui_ptr, "yui_create: raw_complex_factory create", ffr);
         }
-        yui->composite_factory = ffr.value;
+        yui->complex_factory = ffr.value;
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
             yplot_f->destroy = yetty_yplot_factory_destroy;
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(yui->composite_factory, yplot_f);
+                yetty_ydraw_complex_factory_register(yui->complex_factory, yplot_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
                 yetty_yplot_factory_destroy(yplot_f);
@@ -827,18 +827,18 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         if (yimage_f) {
             yimage_f->destroy = yetty_yimage_factory_destroy;
             struct yetty_ycore_void_result rr =
-                yetty_ydraw_composite_factory_register(yui->composite_factory, yimage_f);
+                yetty_ydraw_complex_factory_register(yui->complex_factory, yimage_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
                 yetty_yimage_factory_destroy(yimage_f);
             }
         }
         yui->figure_args.default_font = yui->font;
-        yui->figure_args.composite_factory = yui->composite_factory;
+        yui->figure_args.complex_factory = yui->complex_factory;
 
         struct yetty_yfigure_registry_ptr_result reg_res = yetty_yfigure_registry_create();
         if (!YETTY_IS_OK(reg_res)) {
-            yetty_ydraw_composite_factory_destroy(yui->composite_factory);
+            yetty_ydraw_complex_factory_destroy(yui->complex_factory);
             yui->font->ops->destroy(yui->font);
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: registry", reg_res);
@@ -851,7 +851,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             yui->figure_registry, yetty_yfigure_kind_token("ygrid"), &yui->figure_args);
         if (!YETTY_IS_OK(rf)) {
             (void)yetty_yfigure_registry_destroy(yui->figure_registry);
-            yetty_ydraw_composite_factory_destroy(yui->composite_factory);
+            yetty_ydraw_complex_factory_destroy(yui->complex_factory);
             yui->font->ops->destroy(yui->font);
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: yscene chrome-kind register", rf);
@@ -860,12 +860,12 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
          * Figure-local coordinates. The same bundle serves the retained
          * "yscene" kind below. The old alias kinds are RETIRED. */
         yui->local_figure_args.default_font = yui->font;
-        yui->local_figure_args.composite_factory = yui->composite_factory;
+        yui->local_figure_args.complex_factory = yui->complex_factory;
         struct yetty_ycore_void_result kr = yetty_yscene_register_factory_for_kind(
             yui->figure_registry, yetty_yfigure_kind_token("yscroll"), &yui->local_figure_args);
         if (!YETTY_IS_OK(kr)) {
             (void)yetty_yfigure_registry_destroy(yui->figure_registry);
-            yetty_ydraw_composite_factory_destroy(yui->composite_factory);
+            yetty_ydraw_complex_factory_destroy(yui->complex_factory);
             yui->font->ops->destroy(yui->font);
             free(yui);
             return YETTY_ERR(yetty_yui_ptr, "yui_create: yscene yscroll register", kr);
@@ -876,7 +876,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
                 yetty_yscene_register_factory(yui->figure_registry, &yui->local_figure_args);
             if (!YETTY_IS_OK(sr)) {
                 (void)yetty_yfigure_registry_destroy(yui->figure_registry);
-                yetty_ydraw_composite_factory_destroy(yui->composite_factory);
+                yetty_ydraw_complex_factory_destroy(yui->complex_factory);
                 yui->font->ops->destroy(yui->font);
                 free(yui);
                 return YETTY_ERR(yetty_yui_ptr, "yui_create: yscene register_factory", sr);
@@ -887,7 +887,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
                 context->runtime, yui->figure_registry, context);
             if (!YETTY_IS_OK(fr)) {
                 (void)yetty_yfigure_registry_destroy(yui->figure_registry);
-                yetty_ydraw_composite_factory_destroy(yui->composite_factory);
+                yetty_ydraw_complex_factory_destroy(yui->complex_factory);
                 yui->font->ops->destroy(yui->font);
                 free(yui);
                 return YETTY_ERR(yetty_yui_ptr, "yui_create: framework register_figure_factories",
@@ -1158,9 +1158,9 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
         yetty_ycore_error_destroy_safe(yetty_yfigure_registry_destroy(yui->figure_registry));
         yui->figure_registry = NULL;
     }
-    if (yui->composite_factory) {
-        yetty_ydraw_composite_factory_destroy(yui->composite_factory);
-        yui->composite_factory = NULL;
+    if (yui->complex_factory) {
+        yetty_ydraw_complex_factory_destroy(yui->complex_factory);
+        yui->complex_factory = NULL;
     }
     if (yui->font) {
         yui->font->ops->destroy(yui->font);

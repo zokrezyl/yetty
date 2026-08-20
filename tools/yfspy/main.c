@@ -1,5 +1,5 @@
 /*
- * yfspy — render a Python-subset yfsvm shader as a yplot composite.
+ * yfspy — render a Python-subset yfsvm shader as a yplot complex.
  *
  * tools/yplot's sibling, but the source language is the restricted Python
  * subset. The shader is compiled to yfsvm bytecode IN-PROCESS via the embedded

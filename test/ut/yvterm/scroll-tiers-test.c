@@ -15,11 +15,11 @@
  *   - lazy reflow: resize drains ring history into the archive, so archived
  *     text stays readable afterwards at its stored layout.
  *
- * Composites are fabricated with a test-local ops table (destroy counts into
+ * Complexes are fabricated with a test-local ops table (destroy counts into
  * the fixture); no factory, pipeline, or GPU device is involved.
  */
 
-#include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/api/yvterm/grid.h>
 
 #include "ytest.h"
@@ -30,8 +30,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* A composite-tier type id (>= 0x80000000) that no real factory owns. */
-#define FAKE_COMPOSITE_TYPE 0x80abcdefu
+/* A complex-tier type id (>= 0x80000000) that no real factory owns. */
+#define FAKE_COMPLEX_TYPE 0x80abcdefu
 
 struct tier_fixture {
     int destroy_count;
@@ -42,37 +42,37 @@ struct tier_fixture {
     uint32_t seen_word_count;
 };
 
-static void fake_composite_destroy(struct yetty_ydraw_composite *self)
+static void fake_complex_destroy(struct yetty_ydraw_complex *self)
 {
     int *destroy_count = self->instance_data;
     (*destroy_count)++;
     free(self);
 }
 
-static const struct yetty_ydraw_composite_ops *fake_composite_ops(void)
+static const struct yetty_ydraw_complex_ops *fake_complex_ops(void)
 {
-    static const struct yetty_ydraw_composite_ops ops = {
-        .destroy = fake_composite_destroy,
+    static const struct yetty_ydraw_complex_ops ops = {
+        .destroy = fake_complex_destroy,
         .update = NULL,
     };
     return &ops;
 }
 
-static struct yetty_ydraw_composite *fake_composite_create(int *destroy_count)
+static struct yetty_ydraw_complex *fake_complex_create(int *destroy_count)
 {
-    struct yetty_ydraw_composite *instance = calloc(1, sizeof(*instance));
+    struct yetty_ydraw_complex *instance = calloc(1, sizeof(*instance));
     if (!instance) {
         return NULL;
     }
-    instance->ops = fake_composite_ops();
-    instance->type = FAKE_COMPOSITE_TYPE;
+    instance->ops = fake_complex_ops();
+    instance->type = FAKE_COMPLEX_TYPE;
     instance->instance_data = destroy_count;
     return instance;
 }
 
 static struct yetty_ycore_void_result fake_materialize(const uint32_t *envelope_words,
                                                        uint32_t envelope_word_count, void *userdata,
-                                                       struct yetty_ydraw_composite **out_instance)
+                                                       struct yetty_ydraw_complex **out_instance)
 {
     struct tier_fixture *fixture = userdata;
     fixture->materialize_calls++;
@@ -81,9 +81,9 @@ static struct yetty_ycore_void_result fake_materialize(const uint32_t *envelope_
     if (fixture->materialize_fail) {
         return YETTY_ERR(yetty_ycore_void, "fake materialize failure");
     }
-    *out_instance = fake_composite_create(&fixture->destroy_count);
+    *out_instance = fake_complex_create(&fixture->destroy_count);
     if (!*out_instance) {
-        return YETTY_ERR(yetty_ycore_void, "fake composite alloc failed");
+        return YETTY_ERR(yetty_ycore_void, "fake complex alloc failed");
     }
     return YETTY_OK_VOID();
 }
@@ -140,12 +140,12 @@ static const uint32_t *view_window(struct ytest *test, struct yetty_yclass_objec
     return window_res.value;
 }
 
-static uint32_t slot_composite_count(struct ytest *test, struct yetty_yclass_object *grid,
+static uint32_t slot_complex_count(struct ytest *test, struct yetty_yclass_object *grid,
                                      uint32_t slot)
 {
     uint32_t count = 0;
-    struct yetty_ydraw_composite_const_ptr_ptr_result r =
-        yetty_yvterm_grid_slot_composites(grid, slot, &count);
+    struct yetty_ydraw_complex_const_ptr_ptr_result r =
+        yetty_yvterm_grid_slot_complexes(grid, slot, &count);
     YTEST_REQUIRE_OK(test, r);
     return count;
 }
@@ -187,15 +187,15 @@ static uint64_t anchor_figure(struct ytest *test, struct yetty_yclass_object *gr
     struct yetty_ycore_void_result cur = yetty_yvterm_grid_cursor(grid, &row, &col, &visible);
     YTEST_REQUIRE_OK(test, cur);
 
-    uint32_t envelope[4] = {FAKE_COMPOSITE_TYPE, 8u, 0x11111111u, 0x22222222u};
+    uint32_t envelope[4] = {FAKE_COMPLEX_TYPE, 8u, 0x11111111u, 0x22222222u};
     struct yetty_ycore_uint32_result env_res =
         yetty_yvterm_grid_append_primitive(grid, row, envelope, 4u);
     YTEST_REQUIRE_OK(test, env_res);
 
-    struct yetty_ydraw_composite *instance = fake_composite_create(&fixture->destroy_count);
+    struct yetty_ydraw_complex *instance = fake_complex_create(&fixture->destroy_count);
     YTEST_REQUIRE_NOT_NULL(test, instance);
     struct yetty_ycore_uint32_result attach_res =
-        yetty_yvterm_grid_attach_composite(grid, row, instance);
+        yetty_yvterm_grid_attach_complex(grid, row, instance);
     YTEST_REQUIRE_OK(test, attach_res);
 
     return live_anchor(test, grid) + row;
@@ -281,9 +281,9 @@ static void test_view_resolves_archived_lines(struct ytest *test)
     YTEST_CHECK_EQ_INT(test, slot_codepoint(test, grid, window[0], 5), '!');
     /* The envelope replayed through the hook, verbatim. */
     YTEST_CHECK_EQ_INT(test, fixture.materialize_calls, 1);
-    YTEST_CHECK_EQ_INT(test, (int)fixture.seen_type, (int)FAKE_COMPOSITE_TYPE);
+    YTEST_CHECK_EQ_INT(test, (int)fixture.seen_type, (int)FAKE_COMPLEX_TYPE);
     YTEST_CHECK_EQ_INT(test, fixture.seen_word_count, 4);
-    YTEST_CHECK_EQ_INT(test, slot_composite_count(test, grid, window[0]), 1);
+    YTEST_CHECK_EQ_INT(test, slot_complex_count(test, grid, window[0]), 1);
     YTEST_CHECK_EQ_INT(test, slot_primitive_count(test, grid, window[0]), 1);
 
     /* Same window again: cached — the hook must not re-fire. */
@@ -297,7 +297,7 @@ static void test_view_resolves_archived_lines(struct ytest *test)
     /* Second visit re-materializes from the (still cached) segment. */
     window = view_window(test, grid, 1, figure_line, 4);
     YTEST_CHECK_EQ_INT(test, fixture.materialize_calls, 2);
-    YTEST_CHECK_EQ_INT(test, slot_composite_count(test, grid, window[0]), 1);
+    YTEST_CHECK_EQ_INT(test, slot_complex_count(test, grid, window[0]), 1);
 
     yetty_yvterm_grid_dispose(grid);
 }
@@ -319,7 +319,7 @@ static void test_materialize_failure_is_absorbed(struct ytest *test)
 
     const uint32_t *window = view_window(test, grid, 1, figure_line, 4);
     YTEST_CHECK_EQ_INT(test, fixture.materialize_calls, 1);
-    YTEST_CHECK_EQ_INT(test, slot_composite_count(test, grid, window[0]), 0);
+    YTEST_CHECK_EQ_INT(test, slot_complex_count(test, grid, window[0]), 0);
     /* The envelope stays for a later retry. */
     YTEST_CHECK_EQ_INT(test, slot_primitive_count(test, grid, window[0]), 1);
 
@@ -396,7 +396,7 @@ static void test_text_overwrite_drops_envelope(struct ytest *test)
     feed(test, grid, "overwritten");
     YTEST_CHECK_EQ_INT(test, fixture.destroy_count, 1);
     const uint32_t *window = view_window(test, grid, 0, 0, 4);
-    YTEST_CHECK_EQ_INT(test, slot_composite_count(test, grid, window[0]), 0);
+    YTEST_CHECK_EQ_INT(test, slot_complex_count(test, grid, window[0]), 0);
     YTEST_CHECK_EQ_INT(test, slot_primitive_count(test, grid, window[0]), 0);
 
     yetty_yvterm_grid_dispose(grid);

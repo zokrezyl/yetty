@@ -6,7 +6,7 @@ Entries that are just an alternate spelling point at the canonical term.
 
 For the full module index see [Architecture & Module Map](architecture.md).
 One standing rule cuts across many entries: keep wire/data/model vocabulary
-(drawable list, primitive, resource, composite, figure) separate from
+(drawable list, primitive, resource, complex, figure) separate from
 GPU/render vocabulary (renderer, render instance, GPU resource set, binder,
 pipeline). A model object may store state for content, but rendering is an
 orthogonal concern handled by renderer/registry code.
@@ -47,14 +47,14 @@ edit the annotated source and re-run codegen. It parses with the build's own
 flags from `compile_commands.json`, so it requires a configured build. See
 [yclass](../src/yetty/yclass/README.md).
 
-## composite
+## complex
 
 A heavyweight non-primitive [ydraw](#ydraw) entry: plot, image, video,
-mesh, shader-backed content. Composites occupy the top wire type-id tier and
+mesh, shader-backed content. Complexes occupy the top wire type-id tier and
 are not lowered into [yscene](#yscene) primitives by the basic primitive path —
 they carry their own payload and, eventually, a runtime scene object. The old
 `raw_figure` / `complex_drawable` wire record names mean this. Do not call a
-composite a "figure" (see [figure](#figure)).
+complex a "figure" (see [figure](#figure)).
 
 ## compositor
 
@@ -120,7 +120,7 @@ object deriving from `yfigure:figure`, with rect, z, hidden/dirty state, and
 input routing. Concrete figure [kinds](#kind) are renderer implementations
 (yscene, ymgui, yrdawn, vterm). Never "card". Avoid "figure" for entries
 inside a ydraw stream — those are [primitives](#primitive),
-[composites](#composite), or [resources](#resource). See
+[complexes](#complex), or [resources](#resource). See
 [yfigure](../src/yetty/yfigure/README.md).
 
 ## figure container
@@ -141,7 +141,7 @@ The registered name of a figure renderer implementation — not a content
 type. A kind is identified by `yetty_yfigure_kind_token("<name>")` (a
 header-inline hash; no central enum) and maps to a factory in the yfigure
 registry. Content types live in the [ydraw](#ydraw) stream as wire type
-words; producer content ships as [composite](#composite) records inside a
+words; producer content ships as [complex](#complex) records inside a
 [yscene](#yscene) stream. New kinds are reserved for genuinely different
 renderers. See [yfigure](../src/yetty/yfigure/README.md).
 
@@ -175,7 +175,7 @@ the form the render staging path can place and render, needing no
 materialization into a separate scene object. Fonts are
 [resources](#resource), text runs are a
 [text drawable list](#text-drawable-list), and heavyweight content is a
-[composite](#composite) — none of those are primitives.
+[complex](#complex) — none of those are primitives.
 
 ## producer
 
@@ -241,7 +241,7 @@ works in both cases. Counterpart of the [skeleton](#skeleton).
 The text-specific drawable-list entry (`TEXT_DRAWABLE_LIST` wire id):
 compact text and layout data that resolves into an ordered list of glyph
 [primitives](#primitive) after font/[resource](#resource) resolution. It is
-neither a primitive, nor a resource, nor a composite. In identifiers:
+neither a primitive, nor a resource, nor a complex. In identifiers:
 `text_drawable_list`.
 
 ## TinyEMU
@@ -286,7 +286,7 @@ The document editor — part of [yrich](#yrich), not its own module.
 ## ydraw
 
 The 2D content model and wire format: serialized streams of
-[primitives](#primitive), [composites](#composite), [resources](#resource),
+[primitives](#primitive), [complexes](#complex), [resources](#resource),
 and commands that scroll with terminal content. Implemented by the `ydraw-*`
 module family — [ydraw-core](../src/yetty/ydraw-core/README.md) (drawable
 list, type registry, streaming iterator, wire commands),
@@ -299,7 +299,7 @@ list, type registry, streaming iterator, wire commands),
 The ordered container/stream of [ydraw](#ydraw) entries — in code
 `struct yetty_ydraw_drawable_list` (spoken: [drawable list](#drawable-list)).
 It is the producer-side object used to emit ydraw content and may contain
-direct primitives, composites, resources, commands, and text drawable lists.
+direct primitives, complexes, resources, commands, and text drawable lists.
 Related identifiers follow the same base: `drawable_list_entry`,
 `drawable_list_registry`, `drawable_list_entry_ops` — a bare "entry" type
 does not appear in public naming. See
@@ -387,7 +387,7 @@ typed call site drive a local object or a remote one over the multiplexed
 The general-purpose figure [kind](#kind) for [ydraw](#ydraw) content: the
 retained scene graph — a dom of nodes (groups) holding verbatim wire
 spans, derived into one paint-ordered leaf list, rendered as SDF
-[primitives](#primitive), expanded glyphs, and [composites](#composite),
+[primitives](#primitive), expanded glyphs, and [complexes](#complex),
 with update/delete/grouping addressable by node id. Also answers to the
 legacy wire kind token "ygrid". See
 [yscene](../src/yetty/yscene/README.md).

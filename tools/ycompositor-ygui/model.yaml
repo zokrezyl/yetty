@@ -173,8 +173,8 @@ types:
   - name: yetty_yscene_factory_args
     kind: struct
     fields:
-      - name: composite_factory
-        type: "struct yetty_ydraw_composite_factory *"
+      - name: complex_factory
+        type: "struct yetty_ydraw_complex_factory *"
       - name: default_font
         type: "struct yetty_yfont_font *"
       - name: bold_font

@@ -18,13 +18,13 @@ extern "C" {
 
 struct yetty_ycore_buffer;
 struct yetty_ycore_memtag_registry;
-struct yetty_ydraw_composite;
+struct yetty_ydraw_complex;
 struct yetty_yvterm_grid;
 struct yetty_ywire_wire_statemachine;
 
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(
-    const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);
+    const uint32_t *, uint32_t, void *, struct yetty_ydraw_complex **);
 
 #ifndef YETTY_YCLASSGEN_TYPE_YETTY_YVTERM_TEXT_ATTR
 #define YETTY_YCLASSGEN_TYPE_YETTY_YVTERM_TEXT_ATTR
@@ -70,12 +70,12 @@ struct yetty_yvterm_text_cell {
     uint32_t marks[5];
 };
 #endif
-#ifndef YETTY_YCLASSGEN_TYPE_YETTY_YDRAW_COMPOSITE_CONST_PTR_PTR_RESULT
-#define YETTY_YCLASSGEN_TYPE_YETTY_YDRAW_COMPOSITE_CONST_PTR_PTR_RESULT
-struct yetty_ydraw_composite_const_ptr_ptr_result {
+#ifndef YETTY_YCLASSGEN_TYPE_YETTY_YDRAW_COMPLEX_CONST_PTR_PTR_RESULT
+#define YETTY_YCLASSGEN_TYPE_YETTY_YDRAW_COMPLEX_CONST_PTR_PTR_RESULT
+struct yetty_ydraw_complex_const_ptr_ptr_result {
     int ok;
     union {
-        struct yetty_ydraw_composite *const *value;
+        struct yetty_ydraw_complex *const *value;
         struct yetty_ycore_error error;
     };
 };
@@ -128,7 +128,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_clear_hook(struct yetty_ycl
                                                                 yetty_yvterm_grid_clear_hook_fn fn,
                                                                 void *userdata);
 /* Register the figure re-materialization hook. The integration layer (which
- * owns the composite factory) supplies it; the grid replays retained wire
+ * owns the complex factory) supplies it; the grid replays retained wire
  * envelopes through it when an evicted history line scrolls back into view. */
 struct yetty_ycore_void_result yetty_yvterm_grid_set_materialize(
     struct yetty_yclass_object *obj, yetty_yvterm_grid_materialize_fn fn, void *userdata);
@@ -155,17 +155,17 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_append_primitive(struct yetty
                                                                     uint32_t row,
                                                                     const uint32_t *words,
                                                                     uint32_t word_count);
-struct yetty_ycore_uint32_result yetty_yvterm_grid_attach_composite(
-    struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite);
+struct yetty_ycore_uint32_result yetty_yvterm_grid_attach_complex(
+    struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_complex *complex);
 /* Re-home a freshly-ingested rich block from its TOP line onto its BOTTOM line
- * and stamp the block's row span there, so a figure (composite or SDF block)
+ * and stamp the block's row span there, so a figure (complex or SDF block)
  * leaves the scrollback only when its LAST overlapping line is evicted, not its
  * first. Called once after the reserve newlines that allocated the block's rows:
  * the cursor then sits on the line just BELOW the block, so the bottom line is
  * cursor_row − 1 and the top is cursor_row − span_rows. span_rows is the row
  * height the block reserved. A span of 1 is a single-row block (top == bottom):
  * only the span is recorded, nothing moves. The content was attached on the top
- * line via attach_composite / append_primitive during ingestion; those rows are
+ * line via attach_complex / append_primitive during ingestion; those rows are
  * never recycled during their own reserve (the scroll blanks the rows below the
  * block), so the top line still holds the content here. */
 struct yetty_ycore_void_result yetty_yvterm_grid_relocate_rich_to_bottom(
@@ -202,20 +202,20 @@ struct yetty_yvterm_text_cell_const_ptr_result yetty_yvterm_grid_line_cells(
     struct yetty_yclass_object *obj, uint32_t row);
 struct yetty_ycore_int_result yetty_yvterm_grid_line_dirty(struct yetty_yclass_object *obj,
                                                            uint32_t row);
-/* Composite array anchored on visible row `row`. Sets *out_count; value may be
+/* Complex array anchored on visible row `row`. Sets *out_count; value may be
  * NULL. */
-struct yetty_ydraw_composite_const_ptr_ptr_result yetty_yvterm_grid_line_composites(
+struct yetty_ydraw_complex_const_ptr_ptr_result yetty_yvterm_grid_line_complexes(
     struct yetty_yclass_object *obj, uint32_t row, uint32_t *out_count);
-/* Composite array on RAW ring slot `slot` (0..slot_count) or an extended
+/* Complex array on RAW ring slot `slot` (0..slot_count) or an extended
  * view-window id. Distinct from the visible-row accessor above: the text
  * upload + shader address the ring by raw slot via the resolved window, so
- * the composite pass must read by the SAME slot to scroll in lockstep (live
+ * the complex pass must read by the SAME slot to scroll in lockstep (live
  * AND scrolled-back). Sets *out_count; may be NULL. */
-struct yetty_ydraw_composite_const_ptr_ptr_result yetty_yvterm_grid_slot_composites(
+struct yetty_ydraw_complex_const_ptr_ptr_result yetty_yvterm_grid_slot_complexes(
     struct yetty_yclass_object *obj, uint32_t slot, uint32_t *out_count);
 /* Number of raw drawable records (SDF / glyph / TEXT_DRAWABLE_LIST / FONT) stored
  * on RAW ring slot `slot`. The SDF render pass walks these by slot — same raw-slot
- * addressing the composite + text passes use — so figures and text scroll together. */
+ * addressing the complex + text passes use — so figures and text scroll together. */
 struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_primitive_count(
     struct yetty_yclass_object *obj, uint32_t slot);
 /* Row-span of the rich-content block whose BOTTOM line is RAW ring slot `slot`.
@@ -262,7 +262,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_inject_ring_alloc_failure(
 /* Resolve the renderer's window for this frame: `row_count` rows starting at
  * the view top (live top when no view is active). Returns a grid-owned array
  * of one slot id per window row — real ring slots for hot rows (the text,
- * composite and SDF passes read them exactly as before), or extended ids
+ * complex and SDF passes read them exactly as before), or extended ids
  * (>= slot_count) that the slot accessors transparently serve from the
  * archive materialization cache. Also sweeps archive figure runtimes whose
  * lines left the window, and prefetches the adjacent segment in the scroll

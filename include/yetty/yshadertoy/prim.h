@@ -2,7 +2,7 @@
 #define YETTY_YSHADERTOY_PRIM_H
 
 /*
- * yshadertoy prim — Shadertoy-style shader as a ydraw composite prim.
+ * yshadertoy prim — Shadertoy-style shader as a ydraw complex prim.
  *
  * The low-level sibling of the yshadertoy *figure* (figure.h): instead of
  * the positioned-figure compositor wire, the shader rides the ordinary
@@ -12,7 +12,7 @@
  * canvas registers the receiving factory.
  *
  * Wire payload layout (after the u32 type_id | u32 payload_size header):
- *   f32 bounds_x, bounds_y, bounds_w, bounds_h   (standard composite AABB)
+ *   f32 bounds_x, bounds_y, bounds_w, bounds_h   (standard complex AABB)
  *   u32 flags                                    (reserved, 0)
  *   u32 wgsl_len                                 (byte length, unpadded)
  *   u8  wgsl[wgsl_len]                           (padded to a u32 boundary)
@@ -46,7 +46,7 @@
 extern "C" {
 #endif
 
-/* Complex-prim type id — see the tier ranges in ydraw-core/composite.h.
+/* Complex-prim type id — see the tier ranges in ydraw-core/complex.h.
  * 0x80000003..6 are yplot / yimage / ymesh / yvideo. */
 #define YETTY_YSHADERTOY_PRIM_TYPE_ID 0x80000007u
 
@@ -81,7 +81,7 @@ struct yetty_ydraw_drawable_list_result yetty_yshadertoy_prim_render(
 
 struct yetty_ydraw_concrete_factory;
 
-/* Mint the factory for registration with a composite factory. Unlike the
+/* Mint the factory for registration with a complex factory. Unlike the
  * sibling prim types there is no shared pipeline — each instance compiles
  * its own from the wire's WGSL text. */
 struct yetty_ydraw_concrete_factory *yetty_yshadertoy_prim_factory_create(void);

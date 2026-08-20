@@ -28,7 +28,7 @@ extern "C" {
 #endif
 
 struct yetty_yvterm_text_cell;
-struct yetty_ydraw_composite;
+struct yetty_ydraw_complex;
 struct yetty_yvterm_line;
 struct yetty_ycore_memtag;
 
@@ -42,7 +42,7 @@ struct yetty_yvterm_primitive {
 };
 
 /* One slot in the scrolling line ring. The line owns its text cells, its
- * primitive arena/descriptors, and its anchored composites. Rich content is
+ * primitive arena/descriptors, and its anchored complexes. Rich content is
  * anchored per LINE (figures/SDF records hang off the line that scrolls them);
  * there is no per-cell coverage metadata. The same struct backs the archive
  * materialization cache, so tier-resolved history lines flow through the very
@@ -58,25 +58,25 @@ struct yetty_yvterm_line {
     uint32_t arena_count;
     uint32_t arena_capacity;
 
-    struct yetty_ydraw_composite **composites;
-    uint32_t composite_count;
-    uint32_t composite_capacity;
+    struct yetty_ydraw_complex **complexes;
+    uint32_t complex_count;
+    uint32_t complex_capacity;
 
     /* Row-span of the rich-content block whose BOTTOM line this is. A figure
-     * (composite or SDF block) is anchored on its bottom line so it leaves the
+     * (complex or SDF block) is anchored on its bottom line so it leaves the
      * scrollback only when its last overlapping line is evicted. The renderer
      * recovers the block's top row as (this line's row − (rich_span_rows − 1)),
      * so the figure still draws top-down from where its text sits. 0 means "not
      * a relocated block" — treated as a single-row anchor (top == bottom). */
     uint32_t rich_span_rows;
 
-    /* Count of composite wire envelopes among this line's arena records. Each
+    /* Count of complex wire envelopes among this line's arena records. Each
      * anchored figure's creating record is retained verbatim in the arena
-     * (the SDF pass skips composite-type records), so an archived line whose
+     * (the SDF pass skips complex-type records), so an archived line whose
      * figure runtimes are gone still knows how to rebuild them on demand. */
     uint32_t envelope_count;
 
-    /* Nonzero when this cache line's composites were re-created from
+    /* Nonzero when this cache line's complexes were re-created from
      * envelopes for a scrolled-back view; holds the resolver stamp of the
      * last window that used them, so the sweep can destroy runtimes whose
      * lines left the view. Always 0 on ring (hot) lines. */
@@ -213,7 +213,7 @@ struct yetty_yvterm_tiers {
     uint32_t live_pin_stamp;
 };
 
-/* Line helpers owned by grid.c (they know how to destroy composites). */
+/* Line helpers owned by grid.c (they know how to destroy complexes). */
 void yetty_yvterm_line_release_rich(struct yetty_yvterm_line *line);
 void yetty_yvterm_line_evict_figures(struct yetty_yvterm_line *line);
 
@@ -224,7 +224,7 @@ void yetty_yvterm_tiers_destroy(struct yetty_yvterm_tiers *tiers);
  * the open segment when full and enforces the warm/file/total budgets
  * (`retained_top` is the timeline index of the live screen top — the
  * reference the total-line cap counts back from). Does NOT touch the line's
- * composites — the caller destroys runtimes first. */
+ * complexes — the caller destroys runtimes first. */
 struct yetty_ycore_void_result yetty_yvterm_tiers_push_line(struct yetty_yvterm_tiers *tiers,
                                                             const struct yetty_yvterm_line *line,
                                                             uint32_t used_cols,

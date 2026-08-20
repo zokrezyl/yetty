@@ -102,7 +102,7 @@ if(YETTY_ENABLE_FEATURE_YMGUI)
     target_link_libraries(yetty_yterminal yetty_ymgui)
 endif()
 
-# ymesh composite factory — terminal.c registers it with composite_factory so
+# ymesh complex factory — terminal.c registers it with complex_factory so
 # inbound YDRAW_BIN ymesh records (type 0x80000005) decode + render. The GPU
 # factory symbol (yetty_ymesh_factory_create) only exists when both the ymesh
 # feature and WebGPU are enabled; gate the macro + link on exactly that.
@@ -111,7 +111,7 @@ if(YETTY_ENABLE_FEATURE_YMESH AND YETTY_ENABLE_LIB_WEBGPU)
     target_link_libraries(yetty_yterminal yetty_ymesh)
 endif()
 
-# yvideo composite factory — terminal.c registers it so inbound YDRAW_BIN
+# yvideo complex factory — terminal.c registers it so inbound YDRAW_BIN
 # yvideo records (type 0x80000006) decode + render. The factory symbol
 # (yetty_yvideo_factory_create) exists only when the yvideo feature, OpenH264,
 # and WebGPU are all enabled; gate the macro + link on exactly that. (The
