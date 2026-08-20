@@ -429,7 +429,7 @@ static struct yetty_ycore_void_result ensure_primitives(struct yetty_yvterm_line
 }
 
 static struct yetty_ycore_void_result ensure_complexes(struct yetty_yvterm_line *line,
-                                                        uint32_t need)
+                                                       uint32_t need)
 {
     if (need <= line->complex_capacity) {
         return YETTY_OK_VOID();
@@ -3153,8 +3153,7 @@ static void line_materialize_figures(struct yetty_yvterm_grid *grid, struct yett
     }
     for (uint32_t index = 0; index < line->primitive_count; ++index) {
         const struct yetty_yvterm_primitive *record = &line->primitives[index];
-        if (record->word_count == 0 ||
-            !yetty_ydraw_is_complex(line->arena[record->arena_offset])) {
+        if (record->word_count == 0 || !yetty_ydraw_is_complex(line->arena[record->arena_offset])) {
             continue;
         }
         struct yetty_ydraw_complex *instance = NULL;
@@ -3170,8 +3169,7 @@ static void line_materialize_figures(struct yetty_yvterm_grid *grid, struct yett
         if (!instance) {
             continue;
         }
-        struct yetty_ycore_void_result grow_res =
-            ensure_complexes(line, line->complex_count + 1u);
+        struct yetty_ycore_void_result grow_res = ensure_complexes(line, line->complex_count + 1u);
         if (YETTY_IS_ERR(grow_res)) {
             yetty_ycore_error_destroy(grow_res.error);
             destroy_complex(instance);

@@ -247,8 +247,7 @@ struct yetty_ycore_void_result yetty_ydraw_complex_factory_register(
 /* Returns the factories[] slot for `type_id`, or -1 if not registered. The
  * slot (not the pointer) is what lookups hand out so callers can reach the
  * parallel pipeline_ready[] flag. */
-static int complex_factory_get_slot(struct yetty_ydraw_complex_factory *factory,
-                                      uint32_t type_id)
+static int complex_factory_get_slot(struct yetty_ydraw_complex_factory *factory, uint32_t type_id)
 {
     if (!factory) {
         return -1;
@@ -343,7 +342,7 @@ struct yetty_ydraw_complex_ptr_result yetty_ydraw_complex_factory_create_instanc
 //=============================================================================
 
 void yetty_ydraw_complex_factory_set_visual_zoom(struct yetty_ydraw_complex_factory *factory,
-                                                   float scale, float offset_x, float offset_y)
+                                                 float scale, float offset_x, float offset_y)
 {
     if (!factory) {
         return;
@@ -357,7 +356,7 @@ void yetty_ydraw_complex_factory_set_visual_zoom(struct yetty_ydraw_complex_fact
 }
 
 void yetty_ydraw_complex_factory_set_cell_zoom(struct yetty_ydraw_complex_factory *factory,
-                                                 float scale, float offset_x, float offset_y)
+                                               float scale, float offset_x, float offset_y)
 {
     if (!factory) {
         ydebug("complex_factory_set_cell_zoom: factory is NULL");
@@ -383,8 +382,7 @@ void yetty_ydraw_complex_factory_set_cell_zoom(struct yetty_ydraw_complex_factor
 //=============================================================================
 
 void yetty_ydraw_stream_registry_register(struct yetty_ydraw_stream_registry *registry,
-                                          uint32_t stream_id,
-                                          struct yetty_ydraw_complex *instance)
+                                          uint32_t stream_id, struct yetty_ydraw_complex *instance)
 {
     if (!registry || !instance || stream_id == 0 || stream_id > YETTY_YDRAW_STREAM_TARGETS_MAX) {
         return;
@@ -464,8 +462,8 @@ void yetty_ydraw_complex_destroy(struct yetty_ydraw_complex *instance)
  * its scrolling/anchored placement). A figure type with no render op simply
  * doesn't paint — not an error. */
 struct yetty_ycore_void_result yetty_ydraw_complex_render(struct yetty_ydraw_complex *instance,
-                                                            struct yetty_ydraw_target *target,
-                                                            float x, float y)
+                                                          struct yetty_ydraw_target *target,
+                                                          float x, float y)
 {
     if (!instance) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ydraw_complex_render: NULL instance");

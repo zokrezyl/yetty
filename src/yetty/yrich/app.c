@@ -1011,8 +1011,8 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
     {
         struct yetty_ydraw_complex_factory_ptr_result factory_res =
             yetty_ydraw_complex_factory_create(app->yrt->gpu.device, app->yrt->gpu.queue,
-                                                 app->yrt->gpu.surface_format,
-                                                 app->yrt->gpu.allocator, app->yrt->event_loop);
+                                               app->yrt->gpu.surface_format,
+                                               app->yrt->gpu.allocator, app->yrt->event_loop);
         if (YETTY_IS_ERR(factory_res)) {
             yetty_ycore_error_destroy(factory_res.error);
         } else {

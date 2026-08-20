@@ -711,8 +711,7 @@ static struct yetty_ydraw_complex_ptr_result yshadertoy_prim_create_instance(
     struct yetty_ycore_void_result finalize_res = instance->binder->ops->finalize(instance->binder);
     if (YETTY_IS_ERR(finalize_res)) {
         yshadertoy_prim_instance_destroy(instance);
-        return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: binder finalize",
-                         finalize_res);
+        return YETTY_ERR(yetty_ydraw_complex_ptr, "yshadertoy prim: binder finalize", finalize_res);
     }
 
     /* A shadertoy is presumed animated — subscribe unconditionally.

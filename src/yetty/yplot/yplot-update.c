@@ -29,9 +29,10 @@ void yetty_yplot_time_detach(struct yetty_ydraw_complex *instance);
  * Writes both into the in-memory wire (so the next re-finalize / cold
  * re-upload picks up the same bytes) and directly to GPU via the binder's
  * write_buffer_chunk op (so no whole-buffer re-upload occurs). */
-static struct yetty_ycore_void_result yplot_update_data_chunk(
-    struct yetty_ydraw_complex *instance, uint32_t buffer_index, uint32_t sample_offset,
-    const float *data, size_t count)
+static struct yetty_ycore_void_result yplot_update_data_chunk(struct yetty_ydraw_complex *instance,
+                                                              uint32_t buffer_index,
+                                                              uint32_t sample_offset,
+                                                              const float *data, size_t count)
 {
     if (!instance || !instance->buffer_data || !instance->binder) {
         return YETTY_ERR(yetty_ycore_void, "update_data_chunk: invalid instance");

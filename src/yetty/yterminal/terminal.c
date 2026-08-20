@@ -713,9 +713,9 @@ static struct yetty_ycore_void_result terminal_materialize_figure_callback(
         return YETTY_OK_VOID();
     }
     struct yetty_ydraw_complex_ptr_result instance_res =
-        yetty_ydraw_complex_factory_create_instance(
-            terminal->complex_factory, envelope_words,
-            (size_t)envelope_word_count * sizeof(uint32_t), /*rolling_row=*/0u);
+        yetty_ydraw_complex_factory_create_instance(terminal->complex_factory, envelope_words,
+                                                    (size_t)envelope_word_count * sizeof(uint32_t),
+                                                    /*rolling_row=*/0u);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, instance_res,
                         "terminal_materialize_figure: create_instance");
     *out_instance = instance_res.value;

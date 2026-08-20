@@ -116,9 +116,8 @@ static void overlay_draw_marker(uint32_t *complex, uint32_t viewport_w, uint32_t
                 /* Soft edge over the last pixel of the fill. */
                 double coverage = point->radius_px - distance;
                 double edge = coverage < 1.0 ? coverage : 1.0;
-                overlay_blend_pixel(complex, viewport_w, viewport_h, x, y, point->red,
-                                    point->green, point->blue,
-                                    (uint8_t)((double)point->alpha * edge));
+                overlay_blend_pixel(complex, viewport_w, viewport_h, x, y, point->red, point->green,
+                                    point->blue, (uint8_t)((double)point->alpha * edge));
             } else if (distance <= rim_radius) {
                 overlay_blend_pixel(complex, viewport_w, viewport_h, x, y, 0x0B, 0x10, 0x14,
                                     (uint8_t)(point->alpha / 2));

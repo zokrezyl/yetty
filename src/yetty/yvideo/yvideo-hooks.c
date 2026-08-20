@@ -1144,8 +1144,9 @@ struct yetty_ycore_void_result yvideo_hook_instance_update(struct yetty_ydraw_co
     }
 }
 
-struct yetty_ycore_void_result yvideo_hook_instance_render_pre(
-    struct yetty_ydraw_complex *instance, struct yetty_ydraw_target *target, float x, float y)
+struct yetty_ycore_void_result yvideo_hook_instance_render_pre(struct yetty_ydraw_complex *instance,
+                                                               struct yetty_ydraw_target *target,
+                                                               float x, float y)
 {
     (void)instance;
     (void)target;

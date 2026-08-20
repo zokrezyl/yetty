@@ -1042,7 +1042,7 @@ static struct yetty_ycore_void_result scene_complex_mint(struct yetty_yscene_sce
     }
     struct yetty_ydraw_complex_ptr_result instance_res =
         yetty_ydraw_complex_factory_create_instance(scene->complex_factory, record, record_len,
-                                                      /*rolling_row=*/0);
+                                                    /*rolling_row=*/0);
     if (YETTY_IS_ERR(instance_res)) {
         /* Per-record best-effort, like ygrid: an unknown/failed complex
          * drops that record, not the frame. */
@@ -2251,8 +2251,8 @@ static struct yetty_ycore_void_result scene_rich_stage_complex(
     if (!slot || !slot->instance) {
         struct yetty_ydraw_complex_ptr_result instance_res =
             yetty_ydraw_complex_factory_create_instance(scene->complex_factory, record,
-                                                          (size_t)record_words * sizeof(uint32_t),
-                                                          /*rolling_row=*/0);
+                                                        (size_t)record_words * sizeof(uint32_t),
+                                                        /*rolling_row=*/0);
         if (YETTY_IS_ERR(instance_res)) {
             ydebug("yscene rich complex: create_instance failed for type=0x%08x: %s", record[0],
                    instance_res.error.msg);
@@ -2325,8 +2325,7 @@ static struct yetty_ycore_void_result scene_stage_rich(struct yetty_yscene_scene
                 struct yetty_ycore_void_result complex_res = scene_rich_stage_complex(
                     scene, entry->rich_id, entry->revision, offset, &entry->words[offset],
                     complex_words, anchor_x, anchor_y);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, complex_res,
-                                    "yscene rich: complex stage");
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, complex_res, "yscene rich: complex stage");
                 offset += complex_words;
                 continue;
             }

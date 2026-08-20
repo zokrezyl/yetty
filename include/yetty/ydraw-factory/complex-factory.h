@@ -192,8 +192,7 @@ struct yetty_ydraw_stream_registry {
 /* Register `instance` under `stream_id` (1-based; ids outside
  * 1..YETTY_YDRAW_STREAM_TARGETS_MAX are ignored). */
 void yetty_ydraw_stream_registry_register(struct yetty_ydraw_stream_registry *registry,
-                                          uint32_t stream_id,
-                                          struct yetty_ydraw_complex *instance);
+                                          uint32_t stream_id, struct yetty_ydraw_complex *instance);
 
 /* The live instance registered under `stream_id`, or NULL. */
 struct yetty_ydraw_complex *yetty_ydraw_stream_registry_find(
@@ -319,8 +318,8 @@ void yetty_ydraw_complex_destroy(struct yetty_ydraw_complex *instance YETTY_ANNO
 // position for its scrolling/anchored placement. Thin wrapper over the
 // per-instance render op; a figure type with no render op doesn't paint.
 struct yetty_ycore_void_result yetty_ydraw_complex_render(struct yetty_ydraw_complex *instance,
-                                                            struct yetty_ydraw_target *target,
-                                                            float x, float y);
+                                                          struct yetty_ydraw_target *target,
+                                                          float x, float y);
 
 // Laid-out pixel height of the figure (bounds.max.y - bounds.min.y), in the
 // host's layout space. The hosting grid uses it to keep a multi-row figure
@@ -343,12 +342,12 @@ void yetty_ydraw_complex_set_content_scale(struct yetty_ydraw_complex *instance,
 // yimage, ...). Safe to call with no registrations. Concrete factories that
 // don't implement set_visual_zoom are silently skipped.
 void yetty_ydraw_complex_factory_set_visual_zoom(struct yetty_ydraw_complex_factory *factory,
-                                                   float scale, float offset_x, float offset_y);
+                                                 float scale, float offset_x, float offset_y);
 
 // Fan out "intrusive" cell-zoom state the same way (separate uniforms,
 // separate semantics — see set_cell_zoom in the concrete factory ops).
 void yetty_ydraw_complex_factory_set_cell_zoom(struct yetty_ydraw_complex_factory *factory,
-                                                 float scale, float offset_x, float offset_y);
+                                               float scale, float offset_x, float offset_y);
 
 #ifdef __cplusplus
 }

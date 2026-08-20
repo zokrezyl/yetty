@@ -198,8 +198,8 @@ void yetty_ydraw_complex_destroy(struct yetty_ydraw_complex *instance);
  * (defined in ydraw-factory) so this TU can draw complexes without including
  * the conflicting defining header. */
 struct yetty_ycore_void_result yetty_ydraw_complex_render(struct yetty_ydraw_complex *instance,
-                                                            struct yetty_ydraw_target *target,
-                                                            float x, float y);
+                                                          struct yetty_ydraw_target *target,
+                                                          float x, float y);
 /* Laid-out pixel height of a figure — hand-declared for the same reason. Lets
  * the rich pass keep a figure drawn while any of its rows is still on screen,
  * instead of dropping it the moment its anchor (top) line scrolls off. */
