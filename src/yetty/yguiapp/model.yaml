@@ -109,6 +109,7 @@ classes:
       - slot: quit
         slot_domain: yapp
         impl: yguiapp_quit
+    internal: false
     doc: "/*===========================================================================
  * Class data slice. The host owns the whole environment; the per-instance
  * pointers below are created in run() and torn down at the end of run().
@@ -200,6 +201,9 @@ local_typedefs:
   __builtin_va_list:
     source_file: src/yetty/yguiapp/app.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_yguiapp_terminal_build_fn:
+    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yguiapp/run.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_yguiapp_terminal_build_fn)(struct yetty_yclass_object *, void *);"
   yetty_yguiapp_build_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yguiapp/app.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yguiapp/app.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yguiapp_build_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *);"

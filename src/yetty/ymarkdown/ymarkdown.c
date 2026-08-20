@@ -1368,7 +1368,8 @@ static struct yetty_ycore_void_result ymd_emit_one_line(struct yetty_ydraw_drawa
 static struct yetty_ycore_void_result ymd_emit(struct yetty_ydraw_drawable_list *buf,
                                                const struct yetty_ymarkdown_ymd_doc *doc,
                                                float content_w,
-                                               const struct yetty_ymarkdown_ymd_params *p)
+                                               const struct yetty_ymarkdown_ymd_params *p,
+                                               float *out_content_height)
 {
     float cursor_y = YMD_MARGIN;
 
@@ -1380,6 +1381,9 @@ static struct yetty_ycore_void_result ymd_emit(struct yetty_ydraw_drawable_list 
         cursor_y += ymd_block_height(line, p);
     }
 
+    if (out_content_height) {
+        *out_content_height = cursor_y;
+    }
     return YETTY_OK_VOID();
 }
 
@@ -1430,7 +1434,8 @@ struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
         return YETTY_ERR(yetty_ymarkdown_render, "parse failed");
     }
 
-    struct yetty_ycore_void_result er = ymd_emit(buf, &doc, content_w, &params);
+    float content_height = 0.0f;
+    struct yetty_ycore_void_result er = ymd_emit(buf, &doc, content_w, &params, &content_height);
     if (YETTY_IS_ERR(er)) {
         ymd_doc_destroy(&doc);
         yetty_ydraw_drawable_list_destroy(buf);
@@ -1438,6 +1443,17 @@ struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
     }
 
     ymd_doc_destroy(&doc);
+
+    /* The serialized scene bounds carry the CONTENT extent, not the viewport
+     * (the ecosystem convention — yplot/ysvg/ypdf/yecho all ship content
+     * bounds): a receiver that cannot walk the record AABBs (the ymux daemon
+     * reserving figure rows) reads the height straight from the container.
+     * The config's height_cells is a layout hint only — under ycat it is 0
+     * ("unbounded document"), which used to serialize scene_max_y=0 and made
+     * the daemon reserve nothing, overlapping the document onto whatever the
+     * shell printed next. */
+    yetty_ydraw_drawable_list_set_scene_bounds(buf, 0.0f, 0.0f, scene_w,
+                                               content_height + YMD_MARGIN);
 
     struct yetty_ymarkdown_render_output out = {
         .buffer = buf,

@@ -1307,6 +1307,13 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                     if not b["source_file"]:
                         b["domain"] = primary_dom
                         b["type"] = kind2
+                        # `internal` marker (a plain annotation, no `@`): the
+                        # class is MODULE-PRIVATE. It keeps its full impl glue
+                        # (accessor/from/to/register + the impl-root header)
+                        # so same-module code drives it, but codegen emits NO
+                        # public API header under include/yetty/api/ and NO
+                        # object-API stub TU — it never becomes public surface.
+                        b["internal"] = "internal" in anns
                         b["source_file"] = str(path)
                         b["doc"] = doc_for(decl, decl_file)
                         suffix = "_mixin_get" if kind2 == "mixin" else "_class_get"
@@ -2370,6 +2377,15 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
     for cls in model.get("classes", []):
         groups.setdefault(cls["source_file"], []).append(cls)
     for src_file, classes in groups.items():
+        # `internal` classes have NO public API header (include/yetty/api/):
+        # they are module-private. They DO still get the impl-root header
+        # (this same emitter, split=False) so same-module code can drive
+        # them. A source whose classes are all internal produces no public
+        # header at all.
+        if split:
+            classes = [c for c in classes if not c.get("internal")]
+            if not classes:
+                continue
         src_path = Path(src_file).resolve()
         stem = src_path.stem
         rel_subdir = source_rel_subdir(src_file, module_src)
@@ -2591,11 +2607,19 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
 
         # Forward declarations for struct tags named only in pointer position
         # (completeness is only required at the call site and the definition).
-        # Skip result/yclass-core types and anything this header fully defines.
+        # Skip result/yclass-core types and anything this header fully defines
+        # — EXCEPT tags referenced by the reproduced typedefs: those precede
+        # the full definitions in the emitted layout, and a struct tag first
+        # seen inside a function-prototype typedef has prototype scope (a
+        # DISTINCT type from the later definition), so each such tag needs a
+        # file-scope forward declaration even when defined below.
         proto_struct_types |= stub_struct_names
         proto_struct_types -= exposed_type_names
+        typedef_struct_tags = set()
+        for typedef_text in typedef_defs:
+            typedef_struct_tags |= set(re.findall(r"\bstruct\s+(\w+)", typedef_text))
         fwd_decls = "".join(
-            f"struct {n};\n" for n in sorted(proto_struct_types)
+            f"struct {n};\n" for n in sorted(proto_struct_types | typedef_struct_tags)
             if not n.endswith("_result") and not n.startswith("yetty_yclass"))
 
         # Header-destined #include directives (`include@<path>`) for by-value
@@ -2906,14 +2930,19 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path, split: bool = F
                 '#include <stdlib.h>  /* malloc/free for buffer marshalling */\n'
                 '#include <string.h>  /* memcpy/strlen */\n'
             )
-            api_header_rel = (Path("yetty/api") / api_name
-                              / source_rel_subdir(src_path, module_dir)
-                              / f"{src_path_p.stem}.h")
-            api_body = (HEADER
-                        + f'#include <{api_header_rel.as_posix()}>\n\n'
-                        + api_runtime_includes + "\n" + slot_block
-                        + api_stub_block)
-            _write_atomic(api_dir / f"{src_path_p.stem}.c", api_body)
+            # `internal` classes have no object-API header and no consumers,
+            # so they emit no object-API stub TU either — the impl TU below
+            # (accessor/skels/register) is their whole generated surface.
+            stem_all_internal = bool(classes) and all(c.get("internal") for c in classes)
+            if not stem_all_internal:
+                api_header_rel = (Path("yetty/api") / api_name
+                                  / source_rel_subdir(src_path, module_dir)
+                                  / f"{src_path_p.stem}.h")
+                api_body = (HEADER
+                            + f'#include <{api_header_rel.as_posix()}>\n\n'
+                            + api_runtime_includes + "\n" + slot_block
+                            + api_stub_block)
+                _write_atomic(api_dir / f"{src_path_p.stem}.c", api_body)
 
             # This source's registration hook (name→accessor + slot→skel
             # lookups) folds into the impl TU — the per-class generated

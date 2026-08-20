@@ -81,6 +81,7 @@ classes:
       - slot: process_bytes
         slot_domain: yfigure
         impl: figure_process_bytes_slot
+    internal: false
     doc: null
 exposed:
   - source_file: src/yetty/yshadertoy/figure.c

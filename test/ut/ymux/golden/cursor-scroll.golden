@@ -1,0 +1,15 @@
+engine rows=6 cols=40 alt=0 epoch=0
+cursor row=5 col=6 visible=1 blink=1 shape=1
+pen fg=FFE4E5E0 bg=FF14100B attrs=0000
+colors default_fg=FFE4E5E0 default_bg=FF14100B configured_fg=FFE4E5E0 configured_bg=FF14100B
+palette FF000000 FF0000E0 FF00E000 FF00E0E0 FFE00000 FFE000E0 FFE0E000 FFE0E0E0 FF808080 FF4040FF FF40FF40 FF40FFFF FFFF4040 FFFF40FF FFFFFF40 FFFFFFFF
+modes mouse=0 reverse=0 card_click=0 card_move=0 card_key=0
+title len=0 text=
+screen primary
+row 0 id=1 start=0 cont=0: [4C w1 fFFE4E5E0 bFF14100B a0000]x1 [31 w1 fFFE4E5E0 bFF14100B a0000]x1 blank_x38
+row 1 id=3 start=0 cont=0: [52 w1 fFFE4E5E0 bFF14100B a0000]x1 [32 w1 fFFE4E5E0 bFF14100B a0000]x1 blank_x38
+row 2 id=4 start=0 cont=0: [52 w1 fFFE4E5E0 bFF14100B a0000]x1 [33 w1 fFFE4E5E0 bFF14100B a0000]x1 blank_x38
+row 3 id=13 start=0 cont=0: [52 w1 fFFE4E5E0 bFF14100B a0000]x1 [34 w1 fFFE4E5E0 bFF14100B a0000]x1 blank_x38
+row 4 id=5 start=0 cont=0: [4C w1 fFFE4E5E0 bFF14100B a0000]x1 [35 w1 fFFE4E5E0 bFF14100B a0000]x1 blank_x38
+row 5 id=6 start=0 cont=0: [62 w1 fFFE4E5E0 bFF14100B a0000]x1 [6F w1 fFFE4E5E0 bFF14100B a0000]x1 [74 w1 fFFE4E5E0 bFF14100B a0000]x2 [6F w1 fFFE4E5E0 bFF14100B a0000]x1 [6D w1 fFFE4E5E0 bFF14100B a0000]x1 blank_x34
+callbacks

@@ -203,15 +203,45 @@ static int mkdir_p(const char *path)
     return mkdir_one(tmp); /* leaf: must end up as a dir */
 }
 
+/* FNV-1a content hash over every embedded asset (name + bytes). The extraction
+ * marker keys on this, NOT on YETTY_BUILD_VERSION alone: the build version is a
+ * git short-SHA + "-dirty", which does NOT change when uncommitted asset content
+ * changes on a dirty dev tree. Two different dirty builds then share the version
+ * string, the marker matches, and stale extracted assets (e.g. an old grid-text
+ * shader with more bindings than the current C layout) persist and crash the GPU
+ * pipeline at startup. Hashing the embedded bytes makes the marker change exactly
+ * when the assets change, for every build. */
+static uint64_t assets_content_hash(const struct yetty_incbin_assets *assets)
+{
+    uint64_t hash = 1469598103934665603ULL; /* FNV-1a 64 offset basis */
+    for (size_t index = 0; assets && index < assets->count; ++index) {
+        const struct asset_entry *entry = &assets->entries[index];
+        for (const char *name = entry->name; name && *name; ++name) {
+            hash = (hash ^ (uint8_t)*name) * 1099511628211ULL;
+        }
+        for (size_t byte = 0; byte < entry->size; ++byte) {
+            hash = (hash ^ entry->data[byte]) * 1099511628211ULL;
+        }
+    }
+    return hash;
+}
+
+/* The extraction marker value: build version + embedded-asset content hash. */
+static void assets_marker_value(const struct yetty_incbin_assets *assets, char *out,
+                                size_t out_size)
+{
+    snprintf(out, out_size, "%s-%016llx", YETTY_BUILD_VERSION,
+             (unsigned long long)assets_content_hash(assets));
+}
+
 /* Check if extraction is needed */
 int yetty_incbin_assets_needs_extraction(struct yetty_incbin_assets *assets, const char *cache_dir,
                                          const char *kind)
 {
     char marker_path[MAX_PATH_LEN];
-    char version[64];
+    char marker[128];
+    char expected[128];
     FILE *f;
-
-    (void)assets;
 
     get_marker_path(cache_dir, kind, marker_path, sizeof(marker_path));
     ydebug("needsExtraction: marker path = %s", marker_path);
@@ -222,20 +252,20 @@ int yetty_incbin_assets_needs_extraction(struct yetty_incbin_assets *assets, con
         return 1;
     }
 
-    if (!fgets(version, sizeof(version), f)) {
+    if (!fgets(marker, sizeof(marker), f)) {
         fclose(f);
         return 1;
     }
     fclose(f);
 
     /* Strip newline */
-    version[strcspn(version, "\n")] = 0;
+    marker[strcspn(marker, "\n")] = 0;
 
-    ydebug("needsExtraction: marker version = '%s', build version = '%s'", version,
-           YETTY_BUILD_VERSION);
+    assets_marker_value(assets, expected, sizeof(expected));
+    ydebug("needsExtraction: stored marker = '%s', expected = '%s'", marker, expected);
 
-    if (strcmp(version, YETTY_BUILD_VERSION) != 0) {
-        ydebug("needsExtraction: returning 1 (version mismatch)");
+    if (strcmp(marker, expected) != 0) {
+        ydebug("needsExtraction: returning 1 (marker mismatch — version or content changed)");
         return 1;
     }
 
@@ -417,7 +447,8 @@ static int extract_with_prefix(struct yetty_incbin_assets *assets, const char *p
 }
 
 /* Write version marker to directory */
-static void write_marker(const char *dir, const char *kind)
+static void write_marker(const struct yetty_incbin_assets *assets, const char *dir,
+                         const char *kind)
 {
     char marker_path[MAX_PATH_LEN];
     char marker_dir[MAX_PATH_LEN];
@@ -434,7 +465,9 @@ static void write_marker(const char *dir, const char *kind)
 
     f = fopen(marker_path, "w");
     if (f) {
-        fprintf(f, "%s", YETTY_BUILD_VERSION);
+        char value[128];
+        assets_marker_value(assets, value, sizeof(value));
+        fprintf(f, "%s", value);
         fclose(f);
     }
 }
@@ -448,7 +481,7 @@ int yetty_incbin_assets_extract_data_to(struct yetty_incbin_assets *assets, cons
         return 0;
     }
 
-    write_marker(data_dir, "data");
+    write_marker(assets, data_dir, "data");
     ydebug("Data asset extraction complete");
     return 1;
 }
@@ -467,7 +500,7 @@ int yetty_incbin_assets_extract_config_to(struct yetty_incbin_assets *assets,
         return 0;
     }
 
-    write_marker(config_dir, "config");
+    write_marker(assets, config_dir, "config");
     ydebug("Config asset extraction complete");
     return 1;
 }
@@ -489,7 +522,7 @@ int yetty_incbin_assets_extract_yemu_to(struct yetty_incbin_assets *assets, cons
         return 0;
     }
 
-    write_marker(data_dir, "yemu");
+    write_marker(assets, data_dir, "yemu");
     ydebug("yemu asset extraction complete");
     return 1;
 }
@@ -531,7 +564,7 @@ int yetty_incbin_assets_extract_qemu_to(struct yetty_incbin_assets *assets, cons
         ydebug("Failed to make QEMU executable: %s", strerror(errno));
     }
 
-    write_marker(data_dir, "qemu");
+    write_marker(assets, data_dir, "qemu");
     ydebug("QEMU asset extraction complete");
     return 1;
 }

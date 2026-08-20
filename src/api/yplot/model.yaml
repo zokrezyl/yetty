@@ -228,6 +228,7 @@ classes:
       - slot: destroy
         slot_domain: api_yplot
         impl: plot_destroy
+    internal: false
     doc: null
   - name: function
     domain: api_yplot
@@ -260,6 +261,7 @@ classes:
       - slot: set_color
         slot_domain: api_yplot
         impl: function_set_color
+    internal: false
     doc: null
 types:
   - name: yetty_yclass_object_ptr_result

@@ -30,6 +30,8 @@
 #ifndef _WIN32
 #include <poll.h>
 #include <sys/ioctl.h>
+#include <time.h>
+#include <unistd.h>
 #endif
 
 #define YWIRE_PUMP_TIMEOUT_MS 5000
@@ -120,6 +122,29 @@ static struct yetty_ycore_void_result on_input_envelope(void *userdata,
     if (channel->env_sink) {
         channel->env_sink(channel->sink_user, code, args, args_len, payload, payload_len);
     }
+    return YETTY_OK_VOID();
+}
+
+/* DCS YETTY_OSC_CS_CLIENT_INPUT_HOLD_ACK (no payload) → the host confirms it has
+ * armed its input barrier. Client-only: the host never receives this, it emits
+ * it. Sets the flag the teardown drain waits on before detaching sinks. */
+static struct yetty_ycore_void_result on_input_hold_ack(void *userdata,
+                                                        enum yetty_ywire_envelope_kind kind,
+                                                        int code, const uint8_t *args,
+                                                        size_t args_len, const uint8_t *payload,
+                                                        size_t payload_len)
+{
+    (void)kind;
+    (void)code;
+    (void)args;
+    (void)args_len;
+    (void)payload;
+    (void)payload_len;
+    struct yetty_ywire_connection *connection = userdata;
+    connection->input_hold_ack_seen = 1;
+#ifndef _WIN32
+    clock_gettime(CLOCK_MONOTONIC, &connection->input_hold_ack_time);
+#endif
     return YETTY_OK_VOID();
 }
 
@@ -595,6 +620,17 @@ struct yetty_ywire_connection_ptr_result yetty_ywire_connection_create(
         }
     }
 
+    /* HOLD-ACK lane: the host's confirmation that it armed the input barrier.
+     * Client-only in practice (the host emits, never receives), but registering
+     * it here is harmless on the host — it only sets a flag. has_args=1 to
+     * match the host's emit. */
+    struct yetty_ycore_void_result hold_ack_reg = yetty_ywire_wire_statemachine_register_buffered(
+        connection->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CLIENT_INPUT_HOLD_ACK,
+        /*has_args=*/1, on_input_hold_ack, connection);
+    if (YETTY_IS_ERR(hold_ack_reg)) {
+        YWIRE_CONNECTION_FAIL("ywire_connection_create: register hold-ack", hold_ack_reg);
+    }
+
     /* raw lane: the default sink. */
     struct yetty_ycore_void_result raw_reg = yetty_ywire_wire_statemachine_set_default_buffered(
         connection->sm, on_raw_bytes, connection);
@@ -636,6 +672,7 @@ struct yetty_ycore_void_result yetty_ywire_connection_destroy(
         }
     }
     yetty_ycore_buffer_destroy(&connection->emit_buf);
+    yetty_ycore_buffer_destroy(&connection->input_held);
     for (size_t i = 0; i < YETTY_YWIRE_CHANNEL_MAX; i++) {
         yetty_ycore_buffer_destroy(&connection->channels[i].inbuf);
         yetty_ycore_buffer_destroy(&connection->channels[i].outbuf);
@@ -848,6 +885,368 @@ struct yetty_ycore_size_result yetty_ywire_connection_pump_writable(
         return YETTY_OK(yetty_ycore_size, 0); /* attach mode ships through the writer */
     }
     return connection->reactor.ops->pump_writable(connection->reactor.userdata);
+}
+
+static int connection_open_dynamic_count(const struct yetty_ywire_connection *connection)
+{
+    int open = 0;
+    for (size_t index = 0; index < YETTY_YWIRE_CHANNEL_MAX; ++index) {
+        const struct yetty_ywire_channel *channel = &connection->channels[index];
+        if (channel->in_use && channel->kind == YETTY_YWIRE_CHANNEL_KIND_DYNAMIC) {
+            ++open;
+        }
+    }
+    return open;
+}
+
+/* Has the armed barrier's absolute host-side deadline passed? On Windows (not a
+ * terminal-client target) there is no CLOCK_MONOTONIC deadline — never expires. */
+static int barrier_deadline_passed(const struct yetty_ywire_connection *connection)
+{
+#ifdef _WIN32
+    (void)connection;
+    return 0;
+#else
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+        return 0;
+    }
+    long long now_ms = (long long)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    long long deadline_ms = (long long)connection->input_barrier_deadline.tv_sec * 1000 +
+                            connection->input_barrier_deadline.tv_nsec / 1000000;
+    return now_ms >= deadline_ms;
+#endif
+}
+
+/* Disarm and hand the held bytes back exactly once (moves them into `out`).
+ * Returns the byte count; 0 when nothing was held. The caller has already
+ * decided release is warranted. */
+static int barrier_take(struct yetty_ywire_connection *connection, struct yetty_ycore_buffer *out)
+{
+    connection->input_barrier_armed = 0;
+    size_t held = connection->input_held.size;
+    if (held == 0) {
+        return 0;
+    }
+    if (out) {
+        struct yetty_ycore_void_result move_res =
+            yetty_ycore_buffer_write(out, connection->input_held.data, held);
+        if (YETTY_IS_ERR(move_res)) {
+            yetty_ycore_error_destroy(move_res.error);
+            held = 0;
+        }
+    }
+    yetty_ycore_buffer_clear(&connection->input_held);
+    return (int)held;
+}
+
+void yetty_ywire_connection_input_barrier_arm(struct yetty_ywire_connection *connection,
+                                              int deadline_ms)
+{
+    /* Arm the barrier BEFORE the client closes its channels and drains — so a
+     * keystroke the user types anywhere in the teardown window is held, even
+     * one the host writes before it processes the client's first CLOSE. Stamp an
+     * ABSOLUTE host-side deadline: past it the barrier stops holding and
+     * releases, so a client that never completes teardown cannot make the host
+     * retain input forever. Re-arming (a fresh client's HOLD) resets it. */
+    if (!connection) {
+        return;
+    }
+    connection->input_barrier_armed = 1;
+#ifndef _WIN32
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) == 0) {
+        now.tv_sec += deadline_ms / 1000;
+        now.tv_nsec += (long)(deadline_ms % 1000) * 1000000L;
+        if (now.tv_nsec >= 1000000000L) {
+            now.tv_sec += 1;
+            now.tv_nsec -= 1000000000L;
+        }
+        connection->input_barrier_deadline = now;
+    }
+#else
+    (void)deadline_ms;
+#endif
+}
+
+int yetty_ywire_connection_input_barrier_hold(struct yetty_ywire_connection *connection,
+                                              const void *bytes, size_t len)
+{
+    /* HOLD host→pane input only while the client is tearing down. The bytes are
+     * the host's OWN user keystrokes (the terminal's keystroke sink), never
+     * anything from pane output — so this can never let child output synthesize
+     * input; it only DEFERS the host's real user input. While armed AND within
+     * the deadline the hold ALWAYS takes the bytes (the buffer grows): there is
+     * no size-cap bypass, because declining would make the caller write the
+     * overflow straight into the stream the client's close drain consumes —
+     * re-losing a large paste. PAST the deadline the hold refuses (the caller
+     * forwards, and releases the backlog) so retention stays bounded. Only a
+     * genuine allocation failure, an unarmed barrier, or an expired deadline
+     * declines. */
+    if (!connection || !connection->input_barrier_armed) {
+        return 0;
+    }
+    if (barrier_deadline_passed(connection)) {
+        return 0;
+    }
+    struct yetty_ycore_void_result append_res =
+        yetty_ycore_buffer_write(&connection->input_held, bytes, len);
+    if (YETTY_IS_ERR(append_res)) {
+        yetty_ycore_error_destroy(append_res.error);
+        return 0;
+    }
+    return 1;
+}
+
+int yetty_ywire_connection_input_barrier_release(struct yetty_ywire_connection *connection,
+                                                 struct yetty_ycore_buffer *out)
+{
+    /* Release the held keystrokes once the client is GONE (no dynamic channels
+     * remain) OR the barrier's host-side deadline has passed (a wedged client) —
+     * the pane reads them exactly once. Nothing releases while the client still
+     * has a channel open AND the deadline holds, so a still-running client never
+     * gets its own input replayed early. */
+    if (!connection || !connection->input_barrier_armed) {
+        return 0;
+    }
+    int client_gone = connection_open_dynamic_count(connection) == 0;
+    int expired = barrier_deadline_passed(connection);
+    if (!client_gone && !expired) {
+        return 0;
+    }
+    return barrier_take(connection, out);
+}
+
+int yetty_ywire_connection_input_barrier_release_forced(struct yetty_ywire_connection *connection,
+                                                        struct yetty_ycore_buffer *out)
+{
+    /* Unconditional release for owner death / PTY EOF: the pane fd is gone, so
+     * an ungraceful client death (no CLOSE, deadline not yet passed) must still
+     * recover the held bytes rather than strand them. Exactly once — barrier_take
+     * disarms. */
+    if (!connection || !connection->input_barrier_armed) {
+        return 0;
+    }
+    return barrier_take(connection, out);
+}
+
+int yetty_ywire_connection_pending_close_count(struct yetty_ywire_connection *connection)
+{
+    if (!connection) {
+        return 0;
+    }
+    int pending = 0;
+    for (size_t index = 0; index < YETTY_YWIRE_CHANNEL_MAX; ++index) {
+        const struct yetty_ywire_channel *channel = &connection->channels[index];
+        if (!channel->in_use || channel->kind != YETTY_YWIRE_CHANNEL_KIND_DYNAMIC) {
+            continue;
+        }
+        /* Awaiting close COMPLETION: the local close was requested (whether
+         * or not the scheduler has put it on the wire yet) and the peer's
+         * answering CLOSE has not arrived. A released slot (both sides
+         * closed, inbuf drained) was memset back to free. */
+        if (channel->close_requested && !channel->close_rcvd) {
+            ++pending;
+        }
+    }
+    return pending;
+}
+
+static struct yetty_ycore_void_result feed_chunk(struct yetty_ywire_connection *connection,
+                                                 const uint8_t *bytes, size_t n);
+
+#ifndef _WIN32
+/* Milliseconds of CLOCK_MONOTONIC left until `deadline`; 0 when passed. */
+static int drain_remaining_ms(const struct timespec *deadline)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+        return 0;
+    }
+    long long remaining = (long long)(deadline->tv_sec - now.tv_sec) * 1000 +
+                          (deadline->tv_nsec - now.tv_nsec) / 1000000;
+    if (remaining <= 0) {
+        return 0;
+    }
+    return remaining > 1000000 ? 1000000 : (int)remaining;
+}
+#endif
+
+int yetty_ywire_connection_drain_closes(struct yetty_ywire_connection *connection, int deadline_ms)
+{
+    if (!connection) {
+        return 0;
+    }
+    int pending = yetty_ywire_connection_pending_close_count(connection);
+    if (pending == 0) {
+        return 0; /* nothing expected — read NOTHING */
+    }
+    int fd = yetty_ywire_connection_fd(connection);
+    if (fd < 0) {
+        return pending;
+    }
+#ifdef _WIN32
+    /* The byte-wise teardown drain is POSIX-only (poll/read on a terminal
+     * fd); the terminal clients that need it are not built on Windows. */
+    (void)deadline_ms;
+    return pending;
+#else
+    /* ABSOLUTE wall-clock deadline (CLOCK_MONOTONIC): recomputed after EVERY
+     * iteration — reads, EINTR, everything — so a peer that keeps the fd
+     * readable without ever sending the expected CLOSE (key-repeat flood, a
+     * babbling host) cannot hold teardown open past the bound. */
+    struct timespec deadline;
+    if (clock_gettime(CLOCK_MONOTONIC, &deadline) != 0) {
+        return pending;
+    }
+    deadline.tv_sec += deadline_ms / 1000;
+    deadline.tv_nsec += (long)(deadline_ms % 1000) * 1000000L;
+    if (deadline.tv_nsec >= 1000000000L) {
+        deadline.tv_sec += 1;
+        deadline.tv_nsec -= 1000000000L;
+    }
+    /* One byte per read: the drain must stop EXACTLY at the final
+     * framed-completion boundary. A raw user key queued right after the
+     * final CLOSE echo — even in the SAME kernel-readable window — is then
+     * never consumed; a bulk read would slurp frame and key together. The
+     * traffic here is a handful of close echoes, so byte-wise cost is nil.
+     * The loop runs until completion + parser GROUND: the CLOSE handler
+     * fires BEFORE the envelope's ST terminator bytes are consumed, so the
+     * tail must be read for the stop to land ON the framed boundary. */
+    for (;;) {
+        int done = pending == 0 && yetty_ywire_wire_statemachine_idle(connection->sm);
+        if (done) {
+            break;
+        }
+        int remaining_ms = drain_remaining_ms(&deadline);
+        if (remaining_ms == 0) {
+            break; /* wall-clock bound — teardown never hangs */
+        }
+        struct pollfd drain_poll = {.fd = fd, .events = POLLIN};
+        int slice_ms = remaining_ms < 50 ? remaining_ms : 50;
+        int ready = poll(&drain_poll, 1, slice_ms);
+        if (ready <= 0) {
+            continue; /* timeout/EINTR — the absolute deadline still governs */
+        }
+        uint8_t byte = 0;
+        ssize_t got = read(fd, &byte, 1);
+        if (got == 0) {
+            break; /* peer hung up — no more completions can arrive */
+        }
+        if (got < 0) {
+            if (errno == EAGAIN || errno == EINTR) {
+                continue;
+            }
+            break;
+        }
+        struct yetty_ycore_void_result feed_res = feed_chunk(connection, &byte, 1);
+        if (YETTY_IS_ERR(feed_res)) {
+            yetty_ycore_error_destroy(feed_res.error);
+            break;
+        }
+        pending = yetty_ywire_connection_pending_close_count(connection);
+    }
+    return pending;
+#endif
+}
+
+int yetty_ywire_connection_drain_until_hold_ack(struct yetty_ywire_connection *connection,
+                                                int deadline_ms)
+{
+    if (!connection) {
+        return 0;
+    }
+    if (connection->input_hold_ack_seen) {
+        return 1; /* host already confirmed the arm */
+    }
+    int fd = yetty_ywire_connection_fd(connection);
+    if (fd < 0) {
+        return 0;
+    }
+#ifdef _WIN32
+    /* POSIX-only, like the close drain — the terminal clients that need it are
+     * not built on Windows. */
+    (void)deadline_ms;
+    return 0;
+#else
+    /* ABSOLUTE wall-clock deadline (CLOCK_MONOTONIC), recomputed every
+     * iteration: a host that never answers the HOLD must not hang teardown. */
+    struct timespec deadline;
+    if (clock_gettime(CLOCK_MONOTONIC, &deadline) != 0) {
+        return 0;
+    }
+    deadline.tv_sec += deadline_ms / 1000;
+    deadline.tv_nsec += (long)(deadline_ms % 1000) * 1000000L;
+    if (deadline.tv_nsec >= 1000000000L) {
+        deadline.tv_sec += 1;
+        deadline.tv_nsec -= 1000000000L;
+    }
+    /* Read inbound byte-wise and feed the parser until the host's HOLD-ACK
+     * envelope is dispatched (on_input_hold_ack sets the flag). The client's
+     * sinks are still attached here BY DESIGN: an echo of a pre-arm key the
+     * host forwarded before it armed is handled by the still-live client on
+     * this path rather than dropped. Post-arm keys never reach this wire — the
+     * host holds them — so there is nothing here to preserve for the shell, and
+     * stopping the instant the flag flips is safe (any trailing ST bytes are
+     * consumed by the close drain that follows). */
+    for (;;) {
+        if (connection->input_hold_ack_seen) {
+            break;
+        }
+        int remaining_ms = drain_remaining_ms(&deadline);
+        if (remaining_ms == 0) {
+            break; /* wall-clock bound — teardown never hangs */
+        }
+        struct pollfd ack_poll = {.fd = fd, .events = POLLIN};
+        int slice_ms = remaining_ms < 50 ? remaining_ms : 50;
+        int ready = poll(&ack_poll, 1, slice_ms);
+        if (ready <= 0) {
+            continue; /* timeout/EINTR — the absolute deadline still governs */
+        }
+        uint8_t byte = 0;
+        ssize_t got = read(fd, &byte, 1);
+        if (got == 0) {
+            break; /* peer hung up — no ACK can arrive */
+        }
+        if (got < 0) {
+            if (errno == EAGAIN || errno == EINTR) {
+                continue;
+            }
+            break;
+        }
+        struct yetty_ycore_void_result feed_res = feed_chunk(connection, &byte, 1);
+        if (YETTY_IS_ERR(feed_res)) {
+            yetty_ycore_error_destroy(feed_res.error);
+            break;
+        }
+    }
+    return connection->input_hold_ack_seen ? 1 : 0;
+#endif
+}
+
+int yetty_ywire_connection_hold_ack_lease_valid(struct yetty_ywire_connection *connection,
+                                                int lease_ms)
+{
+    /* The ACK is only a lease: valid while the host is still guaranteed armed.
+     * Pick lease_ms comfortably BELOW the host's barrier deadline so that, even
+     * with one-way ACK latency, the client stops draining before the host could
+     * expire and resume forwarding. */
+    if (!connection || !connection->input_hold_ack_seen) {
+        return 0;
+    }
+#ifdef _WIN32
+    (void)lease_ms;
+    return 1; /* no monotonic clock / no host deadline on Windows */
+#else
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+        return 0;
+    }
+    long long now_ms = (long long)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    long long ack_ms = (long long)connection->input_hold_ack_time.tv_sec * 1000 +
+                       connection->input_hold_ack_time.tv_nsec / 1000000;
+    return (now_ms - ack_ms) <= lease_ms ? 1 : 0;
+#endif
 }
 
 /* Feed one chunk into the state machine and run it. */

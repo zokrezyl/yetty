@@ -10,6 +10,7 @@ yetty_add_c_test(
     NAME    yvterm_terminal
     SOURCES terminal-test.c
             ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
+            ${YETTY_ROOT}/src/yetty/yplatform/time/default.c
     LIBS    yetty_yvterm yetty_yclass yetty_ywire yetty_ycore
     SHIMS   trace platform_thread platform_term
     LABELS  contract terminal wire

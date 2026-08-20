@@ -97,6 +97,15 @@ struct yetty_ycore_char_ptr_result yetty_yfigure_dump_state(struct yetty_yclass_
  * detected via yetty_yfigure_figure_implements). */
 struct yetty_ycore_void_result yetty_yfigure_process_input(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *statemachine);
+/* hit_opaque: does this figure CONSUME pointer input at the given
+ * figure-local point (#699.4 overlay-first routing)? The container's
+ * topmost-wins hit test skips figures that report transparent, letting the
+ * event fall through to the figure below — an empty overlay scene yields
+ * everywhere; one with chrome consumes exactly where the chrome covers. The
+ * base default is OPAQUE (1): every existing figure keeps its whole-rect
+ * hit behavior unless its kind overrides. */
+struct yetty_ycore_int_result yetty_yfigure_hit_opaque(struct yetty_yclass_object *obj,
+                                                       float local_x, float local_y);
 /* process_bytes: apply a buffered wire body. Base default rejects. */
 struct yetty_ycore_void_result yetty_yfigure_process_bytes(struct yetty_yclass_object *obj,
                                                            const uint8_t *bytes, size_t bytes_len);

@@ -263,6 +263,7 @@ classes:
       - slot: destructor
         slot_domain: ygui
         impl: framework_destructor
+    internal: false
     doc: null
   - name: clickable
     domain: ygui
@@ -300,6 +301,7 @@ classes:
       - slot: widget_on_release
         slot_domain: ygui
         impl: clickable_on_release
+    internal: false
     doc: null
   - name: draggable
     domain: ygui
@@ -348,6 +350,7 @@ classes:
       - slot: widget_on_release
         slot_domain: ygui
         impl: draggable_on_release
+    internal: false
     doc: null
   - name: primitive_widget
     domain: ygui
@@ -368,6 +371,7 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: primitive_emit_body
+    internal: false
     doc: "/* Marker data struct — primitive_widget adds no per-instance fields
  * (it's a chrome-widget base), but yclass codegen needs a `class@`
  * annotation to sit on something. The struct's size contributes 1
@@ -493,6 +497,7 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: widget_default_emit_body
+    internal: false
     doc: null
   - name: breadcrumbs
     domain: ygui
@@ -527,6 +532,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: button
     domain: ygui
@@ -559,6 +565,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: button_paint
+    internal: false
     doc: null
   - name: checkbox
     domain: ygui
@@ -591,6 +598,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: checkbox_paint
+    internal: false
     doc: null
   - name: chip
     domain: ygui
@@ -623,6 +631,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: choicebox
     domain: ygui
@@ -660,6 +669,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: collapsing_header
     domain: ygui
@@ -697,6 +707,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: colorpicker
     domain: ygui
@@ -720,6 +731,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: combobox
     domain: ygui
@@ -752,6 +764,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: datepicker
     domain: ygui
@@ -794,6 +807,7 @@ classes:
       - slot: widget_on_press
         slot_domain: ygui
         impl: on_press
+    internal: false
     doc: null
   - name: dialog
     domain: ygui
@@ -828,6 +842,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: dialog_paint
+    internal: false
     doc: null
   - name: dropdown
     domain: ygui
@@ -872,6 +887,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: dropdown_paint
+    internal: false
     doc: null
   - name: filepicker
     domain: ygui
@@ -931,6 +947,7 @@ classes:
       - slot: widget_on_press
         slot_domain: ygui
         impl: on_press
+    internal: false
     doc: null
   - name: hbox
     domain: ygui
@@ -951,6 +968,7 @@ classes:
       - slot: constructor
         slot_domain: ygui
         impl: hbox_constructor
+    internal: false
     doc: null
   - name: label
     domain: ygui
@@ -985,6 +1003,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: label_paint
+    internal: false
     doc: null
   - name: list
     domain: ygui
@@ -1026,6 +1045,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: menubar
     domain: ygui
@@ -1046,6 +1066,7 @@ classes:
       - slot: constructor
         slot_domain: ygui
         impl: menubar_constructor
+    internal: false
     doc: null
   - name: panel
     domain: ygui
@@ -1077,6 +1098,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: panel_paint
+    internal: false
     doc: null
   - name: popup_menu
     domain: ygui
@@ -1137,6 +1159,7 @@ classes:
       - slot: widget_on_motion
         slot_domain: ygui
         impl: popup_menu_on_motion
+    internal: false
     doc: null
   - name: progress
     domain: ygui
@@ -1164,6 +1187,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: progress_paint
+    internal: false
     doc: null
   - name: radio
     domain: ygui
@@ -1196,6 +1220,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: rich
     domain: ygui
@@ -1230,6 +1255,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: rich_paint
+    internal: false
     doc: null
   - name: scrollarea
     domain: ygui
@@ -1270,6 +1296,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: selectable
     domain: ygui
@@ -1302,6 +1329,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: separator
     domain: ygui
@@ -1322,6 +1350,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: separator_paint
+    internal: false
     doc: null
   - name: slider
     domain: ygui
@@ -1359,6 +1388,7 @@ classes:
       - slot: widget_on_motion
         slot_domain: ygui
         impl: slider_on_motion
+    internal: false
     doc: null
   - name: spinner
     domain: ygui
@@ -1397,6 +1427,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: spinner_paint
+    internal: false
     doc: null
   - name: splitter
     domain: ygui
@@ -1435,6 +1466,7 @@ classes:
       - slot: widget_on_motion
         slot_domain: ygui
         impl: on_motion
+    internal: false
     doc: null
   - name: statusbar
     domain: ygui
@@ -1465,6 +1497,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: statusbar_paint
+    internal: false
     doc: null
   - name: stepper
     domain: ygui
@@ -1503,6 +1536,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: tabbar
     domain: ygui
@@ -1552,6 +1586,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: tabbar_paint
+    internal: false
     doc: null
   - name: table
     domain: ygui
@@ -1594,6 +1629,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: textarea
     domain: ygui
@@ -1620,6 +1656,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: textinput
     domain: ygui
@@ -1707,6 +1744,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: textinput_paint
+    internal: false
     doc: null
   - name: toggle
     domain: ygui
@@ -1739,6 +1777,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: toggle_paint
+    internal: false
     doc: null
   - name: tooltip
     domain: ygui
@@ -1765,6 +1804,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: tooltip_paint
+    internal: false
     doc: null
   - name: tree_node
     domain: ygui
@@ -1806,6 +1846,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: vbox
     domain: ygui
@@ -1826,6 +1867,7 @@ classes:
       - slot: constructor
         slot_domain: ygui
         impl: vbox_constructor
+    internal: false
     doc: null
   - name: window
     domain: ygui
@@ -1897,6 +1939,7 @@ classes:
       - slot: widget_on_release
         slot_domain: ygui
         impl: on_release
+    internal: false
     doc: null
   - name: ybrowser
     domain: ygui
@@ -1935,6 +1978,7 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: ybr_emit_body
+    internal: false
     doc: null
   - name: ydiagram
     domain: ygui
@@ -1962,6 +2006,7 @@ classes:
       - slot: destructor
         slot_domain: ygui
         impl: ydiagram_destructor
+    internal: false
     doc: null
   - name: ydraw_embed
     domain: ygui
@@ -2012,6 +2057,7 @@ classes:
       - slot: widget_paint
         slot_domain: ygui
         impl: paint
+    internal: false
     doc: null
   - name: yimage
     domain: ygui
@@ -2057,6 +2103,7 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: yimage_emit_body
+    internal: false
     doc: null
   - name: yjungle
     domain: ygui
@@ -2095,6 +2142,7 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: yjungle_emit_body
+    internal: false
     doc: null
   - name: ymarkdown
     domain: ygui
@@ -2133,6 +2181,7 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: ymd_emit_body
+    internal: false
     doc: null
   - name: ymaze
     domain: ygui
@@ -2171,6 +2220,7 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: ymz_emit_body
+    internal: false
     doc: null
   - name: ynode
     domain: ygui
@@ -2266,6 +2316,7 @@ classes:
       - slot: widget_on_release
         slot_domain: ygui
         impl: ynode_on_release
+    internal: false
     doc: null
   - name: ynodes
     domain: ygui
@@ -2396,6 +2447,7 @@ classes:
       - slot: widget_on_scroll
         slot_domain: ygui
         impl: ynodes_on_scroll
+    internal: false
     doc: null
   - name: ypdf
     domain: ygui
@@ -2413,6 +2465,7 @@ classes:
         get: false
         set: false
     ops: []
+    internal: false
     doc: "/* ypdf adds no ops or state on top of ydraw_embed; the class exists only
  * so callers can name it in yetty_ygui_add. The 1-byte slice is unused. */"
   - name: yplot
@@ -2463,6 +2516,7 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: yplot_emit_body
+    internal: false
     doc: null
   - name: yrich_view
     domain: ygui
@@ -2514,6 +2568,7 @@ classes:
       - slot: widget_on_motion
         slot_domain: ygui
         impl: yrich_view_on_motion
+    internal: false
     doc: null
   - name: yshadertoy
     domain: ygui
@@ -2551,6 +2606,7 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: emit_body
+    internal: false
     doc: null
   - name: yvideo
     domain: ygui
@@ -2596,6 +2652,7 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: emit_body
+    internal: false
     doc: null
   - name: yzoo
     domain: ygui
@@ -2634,6 +2691,7 @@ classes:
       - slot: widget_emit_body
         slot_domain: ygui
         impl: yzoo_emit_body
+    internal: false
     doc: null
 exposed:
   - source_file: src/yetty/ygui/framework.c
@@ -5527,46 +5585,46 @@ local_typedefs:
     source_file: src/yetty/ygui/framework.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_ygui_key_cb:
-    source_file: /home/misi/work/my/yetty-ygreeter/include/yetty/ygui/framework-defs.h
+    source_file: /home/misi/work/my/yetty-ymux/include/yetty/ygui/framework-defs.h
     text: "typedef int (*yetty_ygui_key_cb)(struct yetty_yclass_object *, uint32_t, int, void *);"
   yetty_ygui_event_cb:
-    source_file: /home/misi/work/my/yetty-ygreeter/include/yetty/ygui/event.h
+    source_file: /home/misi/work/my/yetty-ymux/include/yetty/ygui/event.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_event_cb)(struct yetty_yclass_object *, const struct yetty_ygui_event *, void *);"
   yetty_ygui_click_cb:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/mixins/clickable.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/mixins/clickable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_object *, void *);"
   yetty_ygui_drag_cb:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/mixins/draggable.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/mixins/draggable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *, float, float, void *);"
   yetty_ygui_constructor_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_object *);"
   yetty_ygui_destructor_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_object *);"
   yetty_ygui_widget_on_press_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct yetty_yclass_object *, float, float, int);"
   yetty_ygui_widget_on_release_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_release_fn)(struct yetty_yclass_object *, float, float, int);"
   yetty_ygui_widget_on_motion_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(struct yetty_yclass_object *, float, float);"
   yetty_ygui_widget_emit_body_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
   yetty_ygui_widget_on_scroll_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_scroll_fn)(struct yetty_yclass_object *, float, float, float, float);"
   yetty_ygui_widget_paint_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
   yetty_ygui_widget_emit_container_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_container_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
   yetty_ygui_menu_item_cb:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/widgets/popup_menu.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widgets/popup_menu.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *, int, void *);"
   fn_t:
     source_file: src/yetty/ygui/widget.c
@@ -5581,7 +5639,7 @@ local_typedefs:
     source_file: src/yetty/ygui/widgets/tabbar.c
     text: "typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *, void *);"
   yetty_ygui_ynodes_link_cb:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/ygui/widgets/ynodes.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widgets/ynodes.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, struct yetty_yclass_object *, int, void *);"
 includes:
   src/yetty/ygui/framework.c:

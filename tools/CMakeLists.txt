@@ -156,7 +156,10 @@ if(YETTY_ENABLE_TOOL_YDRAW_MAZE)
     add_subdirectory(ydraw-maze)
 endif()
 
-if(YETTY_ENABLE_TOOL_YMUX)
+# ymux is POSIX-only (see YETTY_YMUX_SUPPORTED in the root CMakeLists): its
+# library is built on desktop Linux only, so the tool follows the same gate —
+# otherwise it would try to link the absent yetty_ymux on Windows/WebASM.
+if(YETTY_ENABLE_TOOL_YMUX AND YETTY_YMUX_SUPPORTED)
     add_subdirectory(ymux)
 endif()
 

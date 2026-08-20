@@ -11,6 +11,7 @@
 #include <string.h> /* memcpy/strcmp/strlen */
 
 struct yetty_ycore_char_ptr_result;
+struct yetty_ycore_int_result;
 struct yetty_ycore_void_result;
 struct yetty_ydraw_target;
 struct yetty_ywire_wire_statemachine;
@@ -19,6 +20,8 @@ struct yetty_ycore_void_result yetty_yfigure_render(struct yetty_yclass_object *
 struct yetty_ycore_void_result yetty_yfigure_destroy(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yfigure_process_input(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *statemachine);
+struct yetty_ycore_int_result yetty_yfigure_hit_opaque(struct yetty_yclass_object *obj,
+                                                       float local_x, float local_y);
 struct yetty_ycore_void_result yetty_yfigure_process_bytes(struct yetty_yclass_object *obj,
                                                            const uint8_t *bytes, size_t bytes_len);
 struct yetty_ycore_void_result yetty_yfigure_reset_content(struct yetty_yclass_object *obj);
@@ -36,6 +39,8 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_render_fn)(struct yetty_y
 typedef struct yetty_ycore_void_result (*yetty_yfigure_destroy_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_process_input_fn)(
     struct yetty_yclass_object *, struct yetty_ywire_wire_statemachine *);
+typedef struct yetty_ycore_int_result (*yetty_yfigure_hit_opaque_fn)(struct yetty_yclass_object *,
+                                                                     float, float);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_process_bytes_fn)(
     struct yetty_yclass_object *, const uint8_t *, size_t);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_reset_content_fn)(
@@ -58,6 +63,9 @@ static yetty_yfigure_destroy_fn yetty_yfigure_figure_yetty_yfigure_destroy_check
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_process_input_fn yetty_yfigure_figure_yetty_yfigure_process_input_check =
     yetty_yfigure_figure_default_process_input;
+YETTY_MAYBE_UNUSED
+static yetty_yfigure_hit_opaque_fn yetty_yfigure_figure_yetty_yfigure_hit_opaque_check =
+    yetty_yfigure_figure_default_hit_opaque;
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_process_bytes_fn yetty_yfigure_figure_yetty_yfigure_process_bytes_check =
     yetty_yfigure_figure_default_process_bytes;
@@ -99,6 +107,8 @@ struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)
          (yetty_yclass_impl_t)yetty_yfigure_figure_default_destroy},
         {"yetty_yfigure", "process_input", (yetty_yclass_method_id_t)yetty_yfigure_process_input,
          (yetty_yclass_impl_t)yetty_yfigure_figure_default_process_input},
+        {"yetty_yfigure", "hit_opaque", (yetty_yclass_method_id_t)yetty_yfigure_hit_opaque,
+         (yetty_yclass_impl_t)yetty_yfigure_figure_default_hit_opaque},
         {"yetty_yfigure", "process_bytes", (yetty_yclass_method_id_t)yetty_yfigure_process_bytes,
          (yetty_yclass_impl_t)yetty_yfigure_figure_default_process_bytes},
         {"yetty_yfigure", "reset_content", (yetty_yclass_method_id_t)yetty_yfigure_reset_content,

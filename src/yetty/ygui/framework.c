@@ -273,6 +273,38 @@ static struct yetty_ycore_void_result framework_destructor(struct yetty_yclass_o
         }
         framework->root = NULL;
     }
+    /* Final wire hygiene: the per-frame flush is what normally ships queued
+     * DELETE_CHILDs, but the widget-tree destroy above queues them after the
+     * last flush ever ran. Ship every receiver-side child now, while the
+     * session is still up — otherwise the host pane keeps painting the app's
+     * final frame over the resumed shell after exit. Best-effort void calls;
+     * the local (session-NULL) path dispatches in-process and is harmless. */
+    if (framework->container_obj) {
+        for (size_t i = 0; i < framework->pending_delete_count; ++i) {
+            struct yetty_ycore_void_result del_res =
+                yetty_yfigure_delete_child(framework->container_obj, framework->pending_deletes[i]);
+            if (YETTY_IS_ERR(del_res)) {
+                yetty_ycore_error_destroy(del_res.error);
+            }
+        }
+        framework->pending_delete_count = 0;
+        for (size_t i = 0; i < framework->minted_figure_count; ++i) {
+            struct yetty_ycore_void_result del_res =
+                yetty_yfigure_delete_child(framework->container_obj, framework->minted_figures[i]);
+            if (YETTY_IS_ERR(del_res)) {
+                yetty_ycore_error_destroy(del_res.error);
+            }
+        }
+        framework->minted_figure_count = 0;
+        if (framework->ygrid_created) {
+            struct yetty_ycore_void_result del_res =
+                yetty_yfigure_delete_child(framework->container_obj, framework->ygrid_id);
+            if (YETTY_IS_ERR(del_res)) {
+                yetty_ycore_error_destroy(del_res.error);
+            }
+            framework->ygrid_created = 0;
+        }
+    }
     /* Tear down the attached session (channel + connection + pty, plus the
      * root proxy). container_obj / yclass_ctx.session pointed into it, so
      * clear them first. Best-effort — stash and surface any error after the

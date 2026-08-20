@@ -821,7 +821,11 @@ static void set_dec_mode(VTermState *state, int num, int val)
 
   case 69: // DECVSSM - vertical split screen mode
            // DECLRMM - left/right margin mode
-    state->mode.leftrightmargin = val;
+    // A state with ignore_leftrightmargin set (only the ymux engine sets it,
+    // #699) does NOT honour an application's left/right margins — a scroll/insert
+    // inside DECSLRM margins acts full-width, matching tmux's pane. Every other
+    // consumer (yvterm) keeps the standard behaviour of honouring them.
+    state->mode.leftrightmargin = state->ignore_leftrightmargin ? 0 : val;
     if(val) {
       // Setting DECVSSM must clear doublewidth/doubleheight state of every line
       for(int row = 0; row < state->rows; row++)
@@ -2488,6 +2492,11 @@ void vterm_state_reset(VTermState *state, int hard)
 void vterm_state_get_cursorpos(const VTermState *state, VTermPos *cursorpos)
 {
   *cursorpos = state->pos;
+}
+
+void vterm_state_set_ignore_leftright_margin(VTermState *state, int ignore)
+{
+  state->ignore_leftrightmargin = ignore ? 1 : 0;
 }
 
 void vterm_state_set_callbacks(VTermState *state, const VTermStateCallbacks *callbacks, void *user)

@@ -1015,6 +1015,133 @@ struct yetty_ycore_void_result yetty_yscene_dom_node_delete(struct yetty_yscene_
     return YETTY_OK_VOID();
 }
 
+/* Allocation-FREE delete of a LEAF node (review #15): the rollback path
+ * for staged rich nodes — they carry batches, never child nodes — must be
+ * infallible under the exact allocator pressure that triggered the
+ * rollback. No scratch, no BFS: resolve, verify leafness, run the
+ * destructive phase for the single node. */
+struct yetty_ycore_void_result yetty_yscene_dom_node_delete_leaf(struct yetty_yscene_dom *dom,
+                                                                 uint64_t external_id)
+{
+    if (external_id == 0) {
+        return YETTY_ERR(yetty_ycore_void, "yscene dom node_delete_leaf: cannot delete the root");
+    }
+    struct yetty_ycore_uint32_result slot_res = dom_resolve(dom, external_id);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_res, "yscene dom node_delete_leaf: node");
+    uint32_t doomed_slot = slot_res.value;
+    struct yetty_yscene_dom_node *node = &dom->nodes[doomed_slot];
+    if (node->child_count != 0) {
+        return YETTY_ERR(yetty_ycore_void, "yscene dom node_delete_leaf: node has children");
+    }
+    dom_bubble_subtree_dirty(dom, node->parent_slot);
+    dom_child_detach(dom, doomed_slot);
+    for (uint32_t batch_index = 0; batch_index < node->batch_count; ++batch_index) {
+        dom_batch_retire(dom, node->batch_slots[batch_index]);
+    }
+    node->batch_count = 0;
+    dom_id_index_remove(dom, node->external_id);
+    dom_node_release(dom, doomed_slot);
+    dom->has_pending = true;
+    return YETTY_OK_VOID();
+}
+
+/* Delete SEVERAL subtrees ATOMICALLY (review #14): every subtree is
+ * collected (the only fallible phase) before ANY destructive step, so an
+ * allocation failure leaves the whole set untouched — the caller's old
+ * world survives every fallible pre-commit step. */
+struct yetty_ycore_void_result yetty_yscene_dom_nodes_delete_atomic(struct yetty_yscene_dom *dom,
+                                                                    const uint64_t *external_ids,
+                                                                    uint32_t id_count)
+{
+    if (id_count == 0) {
+        return YETTY_OK_VOID();
+    }
+    /* Phase 1 — resolve + collect every subtree into one arena. */
+    uint32_t *doomed_slots = malloc((size_t)id_count * sizeof(uint32_t));
+    if (!doomed_slots) {
+        return YETTY_ERR(yetty_ycore_void, "yscene dom delete_atomic: slot arena");
+    }
+    uint32_t collected_capacity = 64;
+    uint32_t *collected = malloc((size_t)collected_capacity * sizeof(uint32_t));
+    if (!collected) {
+        free(doomed_slots);
+        return YETTY_ERR(yetty_ycore_void, "yscene dom delete_atomic: scratch");
+    }
+    uint32_t *subtree_starts = malloc(((size_t)id_count + 1) * sizeof(uint32_t));
+    if (!subtree_starts) {
+        free(collected);
+        free(doomed_slots);
+        return YETTY_ERR(yetty_ycore_void, "yscene dom delete_atomic: starts");
+    }
+    uint32_t collected_count = 0;
+    for (uint32_t id_index = 0; id_index < id_count; ++id_index) {
+        struct yetty_ycore_uint32_result slot_res = dom_resolve(dom, external_ids[id_index]);
+        if (YETTY_IS_ERR(slot_res)) {
+            free(subtree_starts);
+            free(collected);
+            free(doomed_slots);
+            return YETTY_ERR(yetty_ycore_void, "yscene dom delete_atomic: resolve", slot_res);
+        }
+        doomed_slots[id_index] = slot_res.value;
+        subtree_starts[id_index] = collected_count;
+        uint32_t scanned = collected_count;
+        if (collected_count == collected_capacity) {
+            uint32_t new_capacity = collected_capacity * 2;
+            uint32_t *grown = realloc(collected, (size_t)new_capacity * sizeof(uint32_t));
+            if (!grown) {
+                free(subtree_starts);
+                free(collected);
+                free(doomed_slots);
+                return YETTY_ERR(yetty_ycore_void, "yscene dom delete_atomic: scratch grow");
+            }
+            collected = grown;
+            collected_capacity = new_capacity;
+        }
+        collected[collected_count++] = slot_res.value;
+        while (scanned < collected_count) {
+            const struct yetty_yscene_dom_node *node = &dom->nodes[collected[scanned++]];
+            for (uint32_t child = 0; child < node->child_count; ++child) {
+                if (collected_count == collected_capacity) {
+                    uint32_t new_capacity = collected_capacity * 2;
+                    uint32_t *grown = realloc(collected, (size_t)new_capacity * sizeof(uint32_t));
+                    if (!grown) {
+                        free(subtree_starts);
+                        free(collected);
+                        free(doomed_slots);
+                        return YETTY_ERR(yetty_ycore_void,
+                                         "yscene dom delete_atomic: scratch grow");
+                    }
+                    collected = grown;
+                    collected_capacity = new_capacity;
+                }
+                collected[collected_count++] = node->children[child];
+            }
+        }
+    }
+    subtree_starts[id_count] = collected_count;
+    /* Phase 2 — destructive, allocation-free, for every subtree. */
+    for (uint32_t id_index = 0; id_index < id_count; ++id_index) {
+        uint32_t doomed_slot = doomed_slots[id_index];
+        dom_bubble_subtree_dirty(dom, dom->nodes[doomed_slot].parent_slot);
+        dom_child_detach(dom, doomed_slot);
+        for (uint32_t i = subtree_starts[id_index]; i < subtree_starts[id_index + 1]; ++i) {
+            struct yetty_yscene_dom_node *node = &dom->nodes[collected[i]];
+            for (uint32_t batch_index = 0; batch_index < node->batch_count; ++batch_index) {
+                dom_batch_retire(dom, node->batch_slots[batch_index]);
+            }
+            node->batch_count = 0;
+            node->child_count = 0;
+            dom_id_index_remove(dom, node->external_id);
+            dom_node_release(dom, collected[i]);
+        }
+    }
+    free(subtree_starts);
+    free(collected);
+    free(doomed_slots);
+    dom->has_pending = true;
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_yscene_dom_zero(struct yetty_yscene_dom *dom)
 {
     for (uint32_t slot = 0; slot < dom->node_high_water; slot++) {

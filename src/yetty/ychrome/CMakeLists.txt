@@ -59,9 +59,36 @@ if(YETTY_ENABLE_LIB_WEBGPU)
     target_compile_definitions(yetty_ychrome PUBLIC YETTY_YCHROME_HAS_LOCAL)
 endif()
 
+# WIRE-ONLY flavor: the same chrome.c + host.c compiled WITHOUT the local
+# (yscene/GPU) sink, even on WebGPU-enabled trees. Terminal-only clients
+# (ygreeter) link THIS flavor so their closure stays GPU-free. Never link
+# both flavors into one binary — they carry the same symbols.
+add_library(yetty_ychrome_wire STATIC
+    chrome.c
+    host.c
+)
+target_include_directories(yetty_ychrome_wire PUBLIC
+    ${YETTY_ROOT}/include
+)
+target_include_directories(yetty_ychrome_wire PRIVATE ${YETTY_ROOT}/src)
+target_link_libraries(yetty_ychrome_wire PUBLIC
+    yetty_api_ychrome
+    yetty_ycore
+    yetty_yclass
+    yetty_ydraw_core
+    yetty_ysdf
+    yetty_yface
+    yetty_yfigure
+    yetty_yplatform_core
+)
+
 # chrome.c carries C23 `[[clang::annotate(...)]]` attributes.
 if(NOT MSVC)
     set_target_properties(yetty_ychrome PROPERTIES
+        C_STANDARD 23
+        C_STANDARD_REQUIRED ON
+    )
+    set_target_properties(yetty_ychrome_wire PROPERTIES
         C_STANDARD 23
         C_STANDARD_REQUIRED ON
     )

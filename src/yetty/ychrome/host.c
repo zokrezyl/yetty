@@ -216,6 +216,16 @@ static struct yetty_ycore_void_result host_wire_emit(struct yetty_ychrome_host *
     YETTY_RETURN_IF_ERR(yetty_ycore_void, create_result, "chrome host wire: create_child");
     struct yetty_ycore_void_result z_result = yetty_yfigure_set_child_z(host->container, id, z);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, z_result, "chrome host wire: set_child_z");
+    /* Chrome figures are INPUT-PASSTHROUGH: their interactivity (caption
+     * drag / window buttons) arrives via the chrome engine's raw event
+     * feed — taking container hits would steal clicks from the app figure
+     * beneath (the topmost-wins hit test put the caption strip exactly
+     * over ygreeter's tabs). Void one-way call, safe on a pipelined
+     * producer session. */
+    struct yetty_ycore_void_result passthrough_result =
+        yetty_yfigure_set_child_input_passthrough(host->container, id, 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, passthrough_result,
+                        "chrome host wire: set_child_input_passthrough");
     return YETTY_OK_VOID();
 }
 

@@ -61,7 +61,12 @@
 #include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/font-cache.h>
+#include <yetty/yfont/ms-font.h>
+#include <yetty/yfont/ms-msdf-font.h>
+#include <yetty/yfont/ms-raster-font.h>
+#include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/ymsdf/generator.h>
 #include <yetty/yplatform/fs.h>
 #include <yetty/yplatform/paths.h>
@@ -75,6 +80,15 @@
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfigure/registry.h>
 #include "yetty/gen/impl/yfigure/figure.h"
+
+/* vtermgrid is an `internal` yclass — module-private, no public API header.
+ * The scene owns it and drives it through its impl-root header. */
+#include "yetty/gen/impl/yscene/vtermgrid.h"
+
+/* Module-private ymux wire contracts (the paint + rich halves of one
+ * content transaction) — formats, not APIs. */
+#include "yetty/ymux/rich-format.h"
+#include <yetty/ysdf/types.gen.h>
 
 #include "internal.h"
 
@@ -223,6 +237,12 @@ struct YETTY_ANNOTATE("class@yscene:scene") YETTY_ANNOTATE("parent@yfigure:figur
 
     /*--- GPU state (absent in headless mode: binder == NULL) ---------*/
     struct yetty_yframework *runtime; /* borrowed — frame clock */
+    /* Borrowed host loop — lets a mutation (terminal grid write, rich apply)
+     * ask the host to schedule a frame. Without this, a scene change reached
+     * over RPC marks only this figure dirty; the terminal's post-feed check
+     * looks at the CONTAINER's own dirty bit, so the frame stays stale until
+     * some unrelated event triggers a render. NULL in headless mode. */
+    struct yetty_yevent_event_loop *event_loop;
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat target_format;
@@ -296,6 +316,104 @@ struct YETTY_ANNOTATE("class@yscene:scene") YETTY_ANNOTATE("parent@yfigure:figur
         uint32_t count;
         uint32_t capacity;
     } cells[YSCENE_GRID_COLS * YSCENE_GRID_ROWS];
+
+    /*--- Terminal cell metrics (#699) --------------------------------
+     * Pixel cell size shared by the grid figure and rich staging (anchor
+     * placement); set at terminal_grid_create. */
+    float terminal_cell_width;
+    float terminal_cell_height;
+
+    /*--- Independent client terminal grid (#699) ---------------------
+     * A class@yscene:vtermgrid: an independent libvterm consuming ordinary
+     * terminal bytes (tmux-style redraw), rendered by a dedicated packed
+     * MSDF cell-grid GPU pass BELOW the rich DOM. Not a dom node, not the
+     * old cells-as-records surface. Its own monospace MSDF font (built from
+     * config, separate from the general slot-0 font). */
+    struct yetty_yclass_object *terminal_grid;          /* owned; NULL = absent */
+    struct yetty_yfont_ms_font *terminal_font;          /* owned; the grid's MSDF font */
+    struct yetty_yfont_ms_font *terminal_fallback_font; /* owned; raster CJK/etc. chain */
+    bool terminal_grid_gpu_attached;
+
+    /*--- Rich world (#695 content transactions) ----------------------
+     * Row-anchored ydraw records published atomically with the terminal
+     * paint half of one apply_content_transaction: the rich body parses
+     * into a STAGED set first (side-effect free), the paint half applies
+     * (rejects before mutation), and only then does the staged set
+     * replace the world — both halves land under one generation or
+     * neither does. Payload words are ysdf prim records in pixel coords
+     * relative to the anchor cell; staging translates by the anchor. */
+    struct yscene_rich_entry {
+        uint64_t rich_id;
+        uint32_t revision;
+        uint32_t anchor_row;
+        uint32_t anchor_col;
+        uint32_t word_count;
+        uint32_t *words; /* owned */
+    } *rich_entries;
+    uint32_t rich_entry_count;
+    uint64_t rich_world_revision;
+    uint64_t rich_staged_revision;
+    /* ymux drawable-list rich (ycat SVG/PDF/plot/…): each rich_id is routed
+     * through the DOM as one node so the full pipeline renders it (text, fonts,
+     * composites, primitives). We track the declared node ids to delete the
+     * stale ones when the rich world changes. */
+    uint64_t *rich_dom_ids;
+    uint32_t rich_dom_count;
+    /* Alternates each full-frame apply: node ids carry the generation bit, so
+     * the incoming world builds beside the outgoing one and the swap commits
+     * atomically (review #11: all-or-nothing rich-DOM transaction). */
+    uint32_t rich_dom_generation;
+    /* Fault injection (tests only): counts down at every fallible rich-DOM
+     * apply stage; reaching zero forces that stage to fail, so the rollback
+     * matrix is exercisable per stage. 0 = disabled. */
+    int rich_fault_countdown;
+    /* Recorded overlay pointer event (dispatch_pointer): the chrome intake. */
+    uint64_t pointer_event_node;
+    float pointer_event_x;
+    float pointer_event_y;
+    uint32_t pointer_event_kind;
+    uint32_t pointer_event_button;
+    uint32_t pointer_event_mods;
+    uint64_t pointer_event_serial;
+    /* Recorded overlay key/paste event (dispatch_key): the chrome intake. */
+    uint32_t key_event_class;
+    size_t key_event_len;
+    uint8_t key_event_head[32];
+    uint64_t key_event_serial;
+    /* Overlay input QUEUE (review #15): ordered ring of OWNED, full-length
+     * payloads the chrome consumer drains — consumed input is LOSSLESS. An
+     * event is queued (and reported consumed) only while the chrome holds
+     * key focus; without focus — or when the queue is full or the payload
+     * copy fails — dispatch returns UNCONSUMED and the bridge falls the
+     * bytes through to the daemon. Nothing is ever silently truncated or
+     * dropped. */
+    struct {
+        uint32_t input_class;
+        uint32_t byte_len;
+        uint8_t *bytes; /* owned; freed on take/destroy */
+    } input_queue[16];
+    uint32_t input_queue_head;
+    uint32_t input_queue_count;
+    /* Key-focus owner: set by a consumed pointer PRESS on opaque chrome,
+     * cleared by a press that falls through to the grid. */
+    int overlay_key_focus;
+    /* Receiver grid GENERATION (review #17): bumped on every grid
+     * (re)create — the attach bridge value-polls it after a reset to
+     * OBSERVE that the remote receiver actually replaced its parser
+     * before republishing the vtsink. */
+    uint32_t terminal_grid_generation;
+    /* Layout BARRIER (#699 review 19 resize transaction): while depth > 0
+     * render kicks defer; the barrier end issues ONE kick for everything
+     * it covered. */
+    uint32_t layout_barrier_depth;
+    int layout_barrier_render_pending;
+    uint32_t rich_dom_cap;
+    /* Sticky once a drawable-list (YPB1) rich frame routes through the DOM: from
+     * then on EVERY rich frame for this scene — reposition (scroll) frames that
+     * carry no payload, and empty frames that clear a scrolled-off figure — must
+     * also go to the DOM, not the flat bare-ysdf path. Without this, a payloadless
+     * frame fails the YPB1 sniff and misroutes, freezing the figure on scroll. */
+    int rich_dom_active;
 };
 
 YETTY_YRESULT_DECLARE(yetty_yscene_scene_ptr, struct yetty_yscene_scene *);
@@ -601,10 +719,17 @@ static struct yetty_ycore_void_result scene_derive_node_content(
                 if (YETTY_IS_OK(aabb_res)) {
                     leaf.world_aabb = transform_map_rect(world, aabb_res.value);
                 } else {
+                    ydebug("yscene derive: leaf type=0x%x aabb FAILED: %s", record_type,
+                           aabb_res.error.msg);
                     yetty_ycore_error_destroy(aabb_res.error);
                 }
             } else if (YETTY_IS_ERR(parse_res)) {
+                ydebug("yscene derive: record type=0x%x parse FAILED: %s", record_type,
+                       parse_res.error.msg);
                 yetty_ycore_error_destroy(parse_res.error);
+            } else if (YETTY_IS_OK(parse_res)) {
+                ydebug("yscene derive: record type=0x%x kind=%d no aabb op", record_type,
+                       (int)command.kind);
             }
 
             struct yetty_ycore_void_result append_res = scene_leaf_append(scene, &leaf);
@@ -2079,6 +2204,164 @@ static struct yetty_ycore_void_result scene_stage_text_leaf(struct yetty_yscene_
  * TEXT expansion makes the record count unknown up front. Buffer order
  * IS paint order. COMPLEX leaves are skipped until the complex
  * increment. */
+static void scene_rich_world_free(struct yetty_yscene_scene *scene)
+{
+    for (uint32_t index = 0; index < scene->rich_entry_count; ++index) {
+        free(scene->rich_entries[index].words);
+    }
+    free(scene->rich_entries);
+    scene->rich_entries = NULL;
+    scene->rich_entry_count = 0;
+}
+
+/* Stage the rich world: each entry's ysdf records, translated from
+ * anchor-relative pixel coords to world space at the anchor cell. */
+/* Rich-side namespace bit for complex-instance keys: keeps ymux rich composites
+ * from colliding with DOM-batch-keyed instances (batch stamps are small ids). */
+enum { SCENE_RICH_STAMP_BIT = 0x8000000000000000ULL };
+enum { SCENE_RICH_GENERATION_BIT = 0x4000000000000000ULL };
+
+/* Mint (or reuse) an own-pipeline COMPLEX instance for a composite record from a
+ * rich entry (ycat SVG/PDF/image/plot), positioned at the cell anchor. Keyed on
+ * (rich_id, record position) so a static figure reuses its instance across
+ * frames; the revision guards content updates (destroy + re-create). Marked
+ * `seen` so scene_complex_sweep keeps it. Best-effort: a failed create drops the
+ * one figure, never the frame. */
+static struct yetty_ycore_void_result scene_rich_stage_composite(
+    struct yetty_yscene_scene *scene, uint64_t rich_id, uint32_t revision, uint32_t record_key,
+    const uint32_t *record, uint32_t record_words, float anchor_x, float anchor_y)
+{
+    if (!scene->composite_factory) {
+        ydebug("yscene rich composite: no composite_factory (headless?) — dropped");
+        return YETTY_OK_VOID();
+    }
+    uint64_t stamp = rich_id | SCENE_RICH_STAMP_BIT;
+    struct yscene_complex_instance *slot = NULL;
+    for (uint32_t index = 0; index < scene->complex_count; ++index) {
+        if (scene->complexes[index].batch_stamp == stamp &&
+            scene->complexes[index].record_offset == record_key) {
+            slot = &scene->complexes[index];
+            break;
+        }
+    }
+    if (slot && slot->record_index != revision && slot->instance) {
+        yetty_ydraw_composite_destroy(slot->instance); /* content changed — re-mint */
+        slot->instance = NULL;
+    }
+    if (!slot || !slot->instance) {
+        struct yetty_ydraw_composite_ptr_result instance_res =
+            yetty_ydraw_composite_factory_create_instance(scene->composite_factory, record,
+                                                          (size_t)record_words * sizeof(uint32_t),
+                                                          /*rolling_row=*/0);
+        if (YETTY_IS_ERR(instance_res)) {
+            ydebug("yscene rich composite: create_instance failed for type=0x%08x: %s", record[0],
+                   instance_res.error.msg);
+            yetty_ycore_error_destroy(instance_res.error);
+            return YETTY_OK_VOID();
+        }
+        if (!slot) {
+            if (scene->complex_count == scene->complex_capacity) {
+                uint32_t new_capacity = scene->complex_capacity ? scene->complex_capacity * 2 : 8;
+                struct yscene_complex_instance *grown =
+                    realloc(scene->complexes,
+                            (size_t)new_capacity * sizeof(struct yscene_complex_instance));
+                if (!grown) {
+                    yetty_ydraw_composite_destroy(instance_res.value);
+                    return YETTY_ERR(yetty_ycore_void, "yscene rich composite: instance array");
+                }
+                scene->complexes = grown;
+                scene->complex_capacity = new_capacity;
+            }
+            slot = &scene->complexes[scene->complex_count++];
+            memset(slot, 0, sizeof(*slot));
+            slot->batch_stamp = stamp;
+            slot->batch_slot = 0xFFFFFFFFu; /* sentinel: rich, not a DOM batch slot */
+            slot->record_offset = record_key;
+            slot->stream_ordinal = ++scene->stream_next_ordinal;
+        }
+        slot->instance = instance_res.value;
+        slot->record_index = revision;
+    }
+    slot->translate_x = anchor_x;
+    slot->translate_y = anchor_y;
+    slot->paint_z = 0;
+    slot->paint_seq = record_key;
+    slot->seen = true;
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result scene_stage_rich(struct yetty_yscene_scene *scene)
+{
+    float cell_w = scene->terminal_cell_width > 0.0f ? scene->terminal_cell_width : 9.0f;
+    float cell_h = scene->terminal_cell_height > 0.0f ? scene->terminal_cell_height : 18.0f;
+    struct yetty_ydraw_drawable_list_registry_ptr_result registry_res = scene_registry(scene);
+    const struct yetty_ydraw_drawable_list_registry *registry =
+        YETTY_IS_OK(registry_res) ? registry_res.value : NULL;
+    if (YETTY_IS_ERR(registry_res)) {
+        yetty_ycore_error_destroy(registry_res.error);
+    }
+    for (uint32_t index = 0; index < scene->rich_entry_count; ++index) {
+        const struct yscene_rich_entry *entry = &scene->rich_entries[index];
+        float anchor_x = (float)entry->anchor_col * cell_w;
+        float anchor_y = (float)entry->anchor_row * cell_h;
+        uint32_t offset = 0;
+        while (offset < entry->word_count) {
+            uint32_t record_type = entry->words[offset];
+            /* Composite figure (ycat SVG/PDF/image/plot): own-pipeline draw via
+             * the composite factory, anchored at the cell. */
+            if (yetty_ydraw_is_composite(record_type)) {
+                struct yetty_ydraw_command command;
+                struct yetty_ycore_size_result parse_res = yetty_ydraw_drawable_command_parse(
+                    registry, (const uint8_t *)&entry->words[offset],
+                    (uint32_t)((entry->word_count - offset) * sizeof(uint32_t)), &command);
+                if (YETTY_IS_ERR(parse_res)) {
+                    yetty_ycore_error_destroy(parse_res.error);
+                    return YETTY_ERR(yetty_ycore_void, "yscene rich: corrupt composite record");
+                }
+                uint32_t composite_words = (uint32_t)(parse_res.value / sizeof(uint32_t));
+                if (composite_words == 0 || offset + composite_words > entry->word_count) {
+                    return YETTY_ERR(yetty_ycore_void, "yscene rich: composite record overrun");
+                }
+                struct yetty_ycore_void_result composite_res = scene_rich_stage_composite(
+                    scene, entry->rich_id, entry->revision, offset, &entry->words[offset],
+                    composite_words, anchor_x, anchor_y);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, composite_res,
+                                    "yscene rich: composite stage");
+                offset += composite_words;
+                continue;
+            }
+            uint32_t record_words = yetty_ysdf_word_count((enum yetty_ysdf_type)record_type);
+            if (record_words == 0 || offset + record_words > entry->word_count) {
+                /* Parse validated this; a mismatch here is corruption. */
+                return YETTY_ERR(yetty_ycore_void, "yscene rich: corrupt staged record");
+            }
+            uint32_t staged_record[16];
+            memcpy(staged_record, &entry->words[offset], record_words * sizeof(uint32_t));
+            if (record_words > 5) {
+                yetty_ysdf_geometry_transform(record_type, (float *)&staged_record[5], anchor_x,
+                                              anchor_y, 1.0f, 1.0f);
+            }
+            struct rectangle_result aabb_res =
+                yetty_ysdf_compute_aabb((const float *)staged_record, record_words);
+            struct yetty_ycore_rectangle aabb;
+            if (YETTY_IS_OK(aabb_res)) {
+                aabb = aabb_res.value;
+            } else {
+                yetty_ycore_error_destroy(aabb_res.error);
+                aabb.min.x = anchor_x;
+                aabb.min.y = anchor_y;
+                aabb.max.x = anchor_x + cell_w;
+                aabb.max.y = anchor_y + cell_h;
+            }
+            struct yetty_ycore_void_result stage_res =
+                scene_stage_record(scene, staged_record, record_words, aabb);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, stage_res, "yscene rich: stage");
+            offset += record_words;
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result scene_rebuild_staging(struct yetty_yscene_scene *scene,
                                                             float content_w, float content_h)
 {
@@ -2156,6 +2439,14 @@ static struct yetty_ycore_void_result scene_rebuild_staging(struct yetty_yscene_
             }
         }
     }
+
+    /* Rich world: row-anchored ydraw records stage after the terminal
+     * cells (annotations composite above the text they annotate). */
+    if (scene->rich_entry_count) {
+        struct yetty_ycore_void_result rich_res = scene_stage_rich(scene);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rich_res, "yscene staging: rich");
+    }
+    scene->rich_staged_revision = scene->rich_world_revision;
 
     /* Pass 2 — assemble prim staging: [offset table][scratch records]. */
     uint32_t staged_count = scene->staged_record_count;
@@ -2260,6 +2551,364 @@ static int scene_complex_compare(const void *first_ptr, const void *second_ptr)
  * Figure overrides
  *=========================================================================*/
 
+/*===========================================================================
+ * Independent client terminal grid (#699) — embed + render.
+ *=========================================================================*/
+
+/* Lazily build the grid's monospace MSDF font from config (same recipe as the
+ * terminal text-layer's base face). Returns NULL until the assets resolve. */
+static struct yetty_yfont_ms_font *scene_terminal_ensure_font(struct yetty_yscene_scene *scene)
+{
+    if (scene->terminal_font) {
+        return scene->terminal_font;
+    }
+    if (!scene->runtime || !scene->runtime->config || !scene->msdf_generator) {
+        return NULL;
+    }
+    struct yetty_yconfig_config *config = scene->runtime->config;
+    const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
+    float content_scale = scene->view_scale > 0.0f ? scene->view_scale : 1.0f;
+    int cfg_size = config->ops->get_int(config, "terminal/text-layer/font/size", 14);
+    float font_size = (float)cfg_size * content_scale;
+    const char *font_family = config->ops->font_family(config);
+    if (!font_family || !font_family[0] || strcmp(font_family, "default") == 0) {
+        font_family = "DejaVuSansMNerdFontMono";
+    }
+    char cdb_path[768];
+    struct yetty_ycore_void_result cdb_res =
+        yetty_yfont_msdf_resolve_cdb(scene->msdf_generator, fonts_dir, scene->cache_dir,
+                                     font_family, "-Regular", cdb_path, sizeof(cdb_path));
+    if (YETTY_IS_ERR(cdb_res)) {
+        yetty_ycore_error_destroy(cdb_res.error);
+        return NULL;
+    }
+    char shader_path[768];
+    snprintf(shader_path, sizeof(shader_path), "%s/ms-msdf-font.wgsl", scene->shaders_dir);
+    struct yetty_yfont_ms_padding padding = {0};
+    struct yetty_font_ms_font_result font_res =
+        yetty_yfont_ms_msdf_font_create(cdb_path, shader_path, font_size, padding);
+    if (YETTY_IS_ERR(font_res)) {
+        yetty_ycore_error_destroy(font_res.error);
+        return NULL;
+    }
+    scene->terminal_font = font_res.value;
+    struct yetty_ycore_void_result latin =
+        scene->terminal_font->ops->load_basic_latin(scene->terminal_font);
+    if (YETTY_IS_ERR(latin)) {
+        yetty_ycore_error_destroy(latin.error);
+    }
+    /* FALLBACK face (#89): a raster font at the SAME cell size; its
+     * FreeType chain (every non-color face in the fonts dir, incl. Noto
+     * CJK) covers what the MSDF base misses. Best-effort — the grid
+     * renders tofu for uncovered codepoints without it. */
+    struct pixel_size_result grid_cell_res =
+        scene->terminal_font->ops->get_cell_size(scene->terminal_font);
+    if (YETTY_IS_OK(grid_cell_res)) {
+        /* Glob name: the chain loads EVERY NotoSans<Script>-Regular face in
+         * the fonts dir (CJK included) — plain family names load only the
+         * four style faces with no chain. */
+        struct yetty_font_ms_font_result fallback_res = yetty_yfont_ms_raster_font_create_named(
+            config, "NotoSans*", (float)grid_cell_res.value.width,
+            (float)grid_cell_res.value.height);
+        if (YETTY_IS_OK(fallback_res)) {
+            scene->terminal_fallback_font = fallback_res.value;
+        } else {
+            yetty_ycore_error_destroy(fallback_res.error);
+        }
+    }
+    return scene->terminal_font;
+}
+
+/* Draw the embedded terminal grid into the target (BELOW the rich DOM),
+ * attaching its GPU pipeline + font on first paint. Best-effort: skips a frame
+ * if the font assets aren't ready yet. */
+static struct yetty_ycore_void_result scene_render_terminal_grid(struct yetty_yscene_scene *scene,
+                                                                 struct yetty_ydraw_target *target,
+                                                                 struct yetty_ycore_rectangle rect)
+{
+    if (!scene->terminal_grid || !scene->device) {
+        return YETTY_OK_VOID();
+    }
+    if (!scene->terminal_grid_gpu_attached) {
+        struct yetty_yfont_ms_font *font = scene_terminal_ensure_font(scene);
+        if (!font) {
+            return YETTY_OK_VOID(); /* assets not ready — try next frame */
+        }
+        struct yetty_ycore_void_result yetty_yscene_vtermgrid_gpu_set_fallback_font(
+            struct yetty_yclass_object * grid_object, struct yetty_yfont_ms_font * fallback_font);
+        struct yetty_ycore_void_result setup_res =
+            yetty_yscene_vtermgrid_gpu_setup(scene->terminal_grid, scene->runtime, font);
+        if (YETTY_IS_OK(setup_res) && scene->terminal_fallback_font) {
+            struct yetty_ycore_void_result fallback_attach_res =
+                yetty_yscene_vtermgrid_gpu_set_fallback_font(scene->terminal_grid,
+                                                             scene->terminal_fallback_font);
+            if (YETTY_IS_ERR(fallback_attach_res)) {
+                yetty_ycore_error_destroy(fallback_attach_res.error);
+            }
+        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, setup_res, "yscene terminal grid: gpu setup");
+        scene->terminal_grid_gpu_attached = true;
+    }
+    return yetty_yscene_vtermgrid_render(scene->terminal_grid, target, rect);
+}
+
+/* Ask the host to schedule a frame after a mutation reached over RPC. The
+ * terminal's post-feed dirty check only inspects the CONTAINER's own dirty bit,
+ * which a method invoked directly on this child figure (the grid/rich calls
+ * below) never sets — so without an explicit request the change marks only this
+ * figure dirty and does not paint until some unrelated event triggers a render.
+ * No-op in headless mode (tests) where there is no loop to poke. */
+static void scene_request_render(struct yetty_yscene_scene *scene)
+{
+    ydebug("yscene request_render: event_loop=%p", (void *)scene->event_loop);
+    if (scene->layout_barrier_depth > 0) {
+        /* Inside a layout BARRIER (#699 review 19): defer — the barrier
+         * end issues ONE render for everything it covered. */
+        scene->layout_barrier_render_pending = 1;
+        return;
+    }
+    if (scene->event_loop && scene->event_loop->ops && scene->event_loop->ops->request_render) {
+        scene->event_loop->ops->request_render(scene->event_loop);
+    }
+}
+
+/* Layout BARRIER (#699 review 19): a multi-call layout change (figure
+ * reseat, grid resize, chrome restage) applies as ONE deliberate frame —
+ * render kicks between begin and end coalesce into a single kick at end.
+ * Nesting-safe (depth counter); pipelined over yRPC the pair brackets the
+ * ordered layout calls exactly. */
+YETTY_ANNOTATE("virtual@yscene:scene:layout_barrier_begin")
+static struct yetty_ycore_void_result scene_layout_barrier_begin_impl(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene layout_barrier_begin");
+    ++scene_res.value->layout_barrier_depth;
+    return YETTY_OK_VOID();
+}
+
+YETTY_ANNOTATE("virtual@yscene:scene:layout_barrier_end")
+static struct yetty_ycore_void_result scene_layout_barrier_end_impl(struct yetty_yclass_object *obj)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene layout_barrier_end");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (scene->layout_barrier_depth > 0 && --scene->layout_barrier_depth == 0 &&
+        scene->layout_barrier_render_pending) {
+        scene->layout_barrier_render_pending = 0;
+        scene_request_render(scene);
+        struct yetty_ycore_void_result dirty_res = yetty_yfigure_figure_dirty_set(obj, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dirty_res, "yscene layout_barrier_end: dirty");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Hand-written vtermgrid seam (outside the generated header). */
+void yetty_yscene_vtermgrid_set_render_kick(struct yetty_yclass_object *obj,
+                                            void (*kick)(void *userdata), void *userdata);
+
+/* Blink/animation render kick for the embedded grid: a timer tick has no
+ * figure context of its own — route it through the scene so the compositor's
+ * dirty gate actually repaints the frame the re-pack lands in. */
+static void scene_terminal_grid_render_kick(void *userdata)
+{
+    struct yetty_yscene_scene *scene = userdata;
+    scene_request_render(scene);
+    struct yetty_yclass_object_ptr_result obj_res = yetty_yscene_scene_to(scene);
+    if (YETTY_IS_ERR(obj_res)) {
+        yetty_ycore_error_destroy(obj_res.error);
+        return;
+    }
+    struct yetty_ycore_void_result dirty_res = yetty_yfigure_figure_dirty_set(obj_res.value, 1);
+    if (YETTY_IS_ERR(dirty_res)) {
+        yetty_ycore_error_destroy(dirty_res.error);
+    }
+}
+
+/* Create/replace the embedded terminal grid at the given geometry. The cell
+ * metrics are the pixel pitch the grid renders at; rich content anchored to
+ * (row, col) is positioned against them, so they must match the grid. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yscene_scene_terminal_grid_create(
+    struct yetty_yclass_object *obj, uint32_t rows, uint32_t cols, float cell_width,
+    float cell_height)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene terminal_grid_create: from_obj");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (rows == 0 || cols == 0) {
+        return YETTY_ERR(yetty_ycore_void, "yscene terminal_grid_create: invalid size");
+    }
+    if (cell_width > 0.0f) {
+        scene->terminal_cell_width = cell_width;
+    }
+    if (cell_height > 0.0f) {
+        scene->terminal_cell_height = cell_height;
+    }
+    if (scene->terminal_grid) {
+        struct yetty_ycore_void_result dispose =
+            yetty_yscene_vtermgrid_dispose(scene->terminal_grid);
+        if (YETTY_IS_ERR(dispose)) {
+            yetty_ycore_error_destroy(dispose.error);
+        }
+        scene->terminal_grid = NULL;
+        scene->terminal_grid_gpu_attached = false;
+    }
+    struct yetty_yclass_object_ptr_result grid_res = yetty_yscene_vtermgrid_make(rows, cols);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yscene terminal_grid_create: make");
+    scene->terminal_grid = grid_res.value;
+    ++scene->terminal_grid_generation;
+    yetty_yscene_vtermgrid_set_render_kick(scene->terminal_grid, scene_terminal_grid_render_kick,
+                                           scene);
+    scene_request_render(scene);
+    return yetty_yfigure_figure_dirty_set(obj, 1);
+}
+
+/* The receiver grid generation — remote-observable over yRPC (value call):
+ * the reset barrier polls it to CONFIRM the fresh parser exists before the
+ * vtsink republishes (review #17). */
+YETTY_ANNOTATE("virtual@yscene:scene:terminal_grid_generation")
+static struct yetty_ycore_uint32_result scene_terminal_grid_generation_impl(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, scene_res, "yscene terminal_grid_generation");
+    return YETTY_OK(yetty_ycore_uint32, scene_res.value->terminal_grid_generation);
+}
+
+/* Feed ordinary terminal bytes to the embedded grid. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yscene_scene_terminal_grid_write(
+    struct yetty_yclass_object *obj, const uint8_t *bytes, size_t len)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene terminal_grid_write: from_obj");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (!scene->terminal_grid) {
+        return YETTY_ERR(yetty_ycore_void, "yscene terminal_grid_write: no grid");
+    }
+    struct yetty_ycore_void_result write_res =
+        yetty_yscene_vtermgrid_write(scene->terminal_grid, bytes, len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, write_res, "yscene terminal_grid_write: feed");
+    scene_request_render(scene);
+    return yetty_yfigure_figure_dirty_set(obj, 1);
+}
+
+/* Defined later in this file. */
+struct yetty_ycore_void_result yetty_yscene_scene_apply_content_transaction(
+    struct yetty_yclass_object *obj, const uint32_t *rich_words, size_t rich_word_count);
+
+/* Atomic content publish (#699/#4): feed the terminal VT bytes to the grid AND
+ * apply the rich body together, with a SINGLE render at the end — so a frame is
+ * never rendered with the terminal update but not its paired rich update (or
+ * vice versa). Either half may be empty. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yscene_scene_terminal_write_content(
+    struct yetty_yclass_object *obj, const uint8_t *vt_bytes, size_t vt_len,
+    const uint32_t *rich_words, size_t rich_word_count)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene terminal_write_content: from_obj");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    /* ATOMICITY ORDER (#699.6 "both halves or neither"): the RICH half carries
+     * every fallible operation (parse/validate/stage inside the transaction),
+     * so it runs FIRST — a malformed rich body rejects the whole call with the
+     * terminal state untouched. The grid feed that follows is structurally
+     * infallible for well-formed state (libvterm consumes arbitrary bytes; the
+     * only failure modes are a missing grid/object, checked up front). */
+    if (vt_len && !scene->terminal_grid) {
+        return YETTY_ERR(yetty_ycore_void, "yscene terminal_write_content: no grid");
+    }
+    if (rich_word_count) {
+        struct yetty_ycore_void_result rich_res =
+            yetty_yscene_scene_apply_content_transaction(obj, rich_words, rich_word_count);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rich_res, "yscene terminal_write_content: rich");
+    }
+    if (vt_len) {
+        struct yetty_ycore_void_result write_res =
+            yetty_yscene_vtermgrid_write(scene->terminal_grid, vt_bytes, vt_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, write_res, "yscene terminal_write_content: grid");
+    }
+    /* One render for both halves (requests coalesce into the same frame). */
+    scene_request_render(scene);
+    return yetty_yfigure_figure_dirty_set(obj, 1);
+}
+
+/* Resize the embedded grid. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yscene_scene_terminal_grid_resize(
+    struct yetty_yclass_object *obj, uint32_t rows, uint32_t cols)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene terminal_grid_resize: from_obj");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (!scene->terminal_grid) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result resize_res =
+        yetty_yscene_vtermgrid_resize(scene->terminal_grid, rows, cols);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_res, "yscene terminal_grid_resize: resize");
+    scene_request_render(scene);
+    return yetty_yfigure_figure_dirty_set(obj, 1);
+}
+
+/* The embedded terminal grid object (borrowed), or an error when absent —
+ * lets tests/tools inspect the client grid's cells directly. */
+YETTY_ANNOTATE("expose")
+struct yetty_yclass_object_ptr_result yetty_yscene_scene_terminal_grid(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, scene_res, "yscene terminal_grid: from_obj");
+    if (!scene_res.value->terminal_grid) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "yscene terminal_grid: absent");
+    }
+    return YETTY_OK(yetty_yclass_object_ptr, scene_res.value->terminal_grid);
+}
+
+/* Remote-facing terminal-grid slots (#699): the ymux attach bridge drives the
+ * pane through these over the yclass RPC. */
+YETTY_ANNOTATE("virtual@yscene:scene:terminal_grid_create")
+static struct yetty_ycore_void_result scene_terminal_grid_create_impl(
+    struct yetty_yclass_object *obj, uint32_t rows, uint32_t cols, float cell_width,
+    float cell_height)
+{
+    return yetty_yscene_scene_terminal_grid_create(obj, rows, cols, cell_width, cell_height);
+}
+
+/* Synchronous (request/response): the ymux attach bridge streams VT redraws
+ * here over the pane's DCS wire. A synchronous call surfaces write errors to
+ * the bridge (a oneway call would swallow them — a silently-failing grid write
+ * looks exactly like a frozen pane). Keystrokes that arrive on the shared
+ * stdin while the bridge blocks on the reply are captured by the transport's
+ * raw sink (yetty_yclass_transport_dcs_set_raw_sink) instead of being dropped,
+ * so the round-trip no longer costs input. */
+YETTY_ANNOTATE("virtual@yscene:scene:terminal_grid_write")
+static struct yetty_ycore_void_result scene_terminal_grid_write_impl(
+    struct yetty_yclass_object *obj, struct yetty_ycore_buffer bytes)
+{
+    return yetty_yscene_scene_terminal_grid_write(
+        obj, bytes.size ? (const uint8_t *)bytes.data : NULL, bytes.size);
+}
+
+/* Atomic terminal+rich publish over RPC (#699/#4): the ymux bridge sends both
+ * halves of one content update in a single call so they render together. */
+YETTY_ANNOTATE("virtual@yscene:scene:terminal_write_content")
+static struct yetty_ycore_void_result scene_terminal_write_content_impl(
+    struct yetty_yclass_object *obj, struct yetty_ycore_buffer vt, struct yetty_ycore_buffer rich)
+{
+    return yetty_yscene_scene_terminal_write_content(
+        obj, vt.size ? (const uint8_t *)vt.data : NULL, vt.size,
+        rich.size ? (const uint32_t *)rich.data : NULL, rich.size / sizeof(uint32_t));
+}
+
+YETTY_ANNOTATE("virtual@yscene:scene:terminal_grid_resize")
+static struct yetty_ycore_void_result scene_terminal_grid_resize_impl(
+    struct yetty_yclass_object *obj, uint32_t rows, uint32_t cols)
+{
+    return yetty_yscene_scene_terminal_grid_resize(obj, rows, cols);
+}
+
 YETTY_ANNOTATE("override@yfigure:figure:render")
 static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_object *obj,
                                                         struct yetty_ydraw_target *target)
@@ -2283,6 +2932,11 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
     if (rect_w <= 0.0f || rect_h <= 0.0f) {
         return yetty_yfigure_figure_dirty_set(obj, 0);
     }
+
+    /* Content-scene order (#699): the terminal grid draws FIRST, then the
+     * prim/rich-DOM pass composites above it. Both use LoadOp_Load. */
+    struct yetty_ycore_void_result terminal_res = scene_render_terminal_grid(scene, target, rect);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, terminal_res, "yscene render: terminal grid");
     /* Absolute-coords figures (ygui chrome / yrich documents — the
      * migrated ygrid contract): content is in logical PANE coordinates,
      * the figure rect only scissors + hit-tests. Document space is the
@@ -2321,7 +2975,8 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
      * prims from the wrong cells. */
     bool staging_rebuilt = false;
     if (!scene->staging_valid || scene->staging_generation != scene->derived_generation ||
-        scene->staged_content_w != content_w || scene->staged_content_h != content_h) {
+        scene->staged_content_w != content_w || scene->staged_content_h != content_h ||
+        scene->rich_staged_revision != scene->rich_world_revision) {
         struct yetty_ycore_void_result staging_res =
             scene_rebuild_staging(scene, content_w, content_h);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, staging_res, "yscene render: staging");
@@ -2414,20 +3069,34 @@ static struct yetty_ycore_void_result scene_render_slot(struct yetty_yclass_obje
         wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
                                          target->viewport.w, target->viewport.h, 0.0f, 1.0f);
     } else {
-        wgpuRenderPassEncoderSetViewport(pass, rect.min.x * view_scale, rect.min.y * view_scale,
+        /* The figure rect is PANE-local: offset by the target viewport
+         * (the pane's origin within a shared window target) exactly as
+         * the grid renderer does — without it the pass draws at the
+         * window origin and the pane scissor clips everything (review
+         * #17: the staged overlay chrome was hittable yet invisible). */
+        wgpuRenderPassEncoderSetViewport(pass, target->viewport.x + rect.min.x * view_scale,
+                                         target->viewport.y + rect.min.y * view_scale,
                                          rect_w * view_scale, rect_h * view_scale, 0.0f, 1.0f);
     }
     /* The figure rect arrives in LOGICAL px in both modes; viewport and
-     * scissor are framebuffer px. */
+     * scissor are framebuffer px. The pane offset applies ONLY to LOCAL
+     * figures (seated overlays carry pane-local rects): ABSOLUTE figures'
+     * rects are already window coordinates — CREATE_CHILD added the
+     * viewport offset at creation — so adding it again here shifted their
+     * scissor down by the chrome height and ate the figure's top band
+     * (ygreeter's tab strip went invisible while its content stayed
+     * put). */
     float rect_scale = view_scale;
+    float rect_offset_x = absolute ? 0.0f : target->viewport.x;
+    float rect_offset_y = absolute ? 0.0f : target->viewport.y;
     float target_min_x = target->viewport.x;
     float target_min_y = target->viewport.y;
     float target_max_x = target->viewport.x + target->viewport.w;
     float target_max_y = target->viewport.y + target->viewport.h;
-    float rect_fb_min_x = rect.min.x * rect_scale;
-    float rect_fb_min_y = rect.min.y * rect_scale;
-    float rect_fb_max_x = rect.max.x * rect_scale;
-    float rect_fb_max_y = rect.max.y * rect_scale;
+    float rect_fb_min_x = rect_offset_x + rect.min.x * rect_scale;
+    float rect_fb_min_y = rect_offset_y + rect.min.y * rect_scale;
+    float rect_fb_max_x = rect_offset_x + rect.max.x * rect_scale;
+    float rect_fb_max_y = rect_offset_y + rect.max.y * rect_scale;
     float scissor_min_x = rect_fb_min_x > target_min_x ? rect_fb_min_x : target_min_x;
     float scissor_min_y = rect_fb_min_y > target_min_y ? rect_fb_min_y : target_min_y;
     float scissor_max_x = rect_fb_max_x < target_max_x ? rect_fb_max_x : target_max_x;
@@ -2518,6 +3187,35 @@ static struct yetty_ycore_void_result scene_destroy_slot(struct yetty_yclass_obj
         YETTY_IS_ERR(scene_res) ? YETTY_ERR(yetty_ycore_void, "yscene destroy: object", scene_res)
                                 : YETTY_OK_VOID();
     if (scene) {
+        if (scene->terminal_grid) {
+            struct yetty_ycore_void_result grid_res =
+                yetty_yscene_vtermgrid_dispose(scene->terminal_grid);
+            if (YETTY_IS_ERR(grid_res)) {
+                yetty_ycore_error_destroy(grid_res.error);
+            }
+            scene->terminal_grid = NULL;
+            scene->terminal_grid_gpu_attached = false;
+        }
+        if (scene->terminal_fallback_font) {
+            scene->terminal_fallback_font->ops->destroy(scene->terminal_fallback_font);
+            scene->terminal_fallback_font = NULL;
+        }
+        if (scene->terminal_font) {
+            scene->terminal_font->ops->destroy(scene->terminal_font);
+            scene->terminal_font = NULL;
+        }
+        scene_rich_world_free(scene);
+        free(scene->rich_dom_ids);
+        scene->rich_dom_ids = NULL;
+        scene->rich_dom_count = 0;
+        scene->rich_dom_cap = 0;
+        /* Undrained overlay input payloads (owned). */
+        for (uint32_t queue_index = 0; queue_index < scene->input_queue_count; ++queue_index) {
+            uint32_t queue_slot = (scene->input_queue_head + queue_index) % 16;
+            free(scene->input_queue[queue_slot].bytes);
+            scene->input_queue[queue_slot].bytes = NULL;
+        }
+        scene->input_queue_count = 0;
         if (scene->binder) {
             scene->binder->ops->destroy(scene->binder);
             scene->binder = NULL;
@@ -2853,6 +3551,7 @@ struct yetty_yscene_scene_ptr_result yetty_yscene_create(struct yetty_ycore_rect
     bool headless = (context == NULL) || (context->runtime == NULL);
     if (!headless) {
         scene->runtime = context->runtime;
+        scene->event_loop = context->event_loop;
         scene->device = context->runtime->gpu.device;
         scene->queue = context->runtime->gpu.queue;
         scene->target_format = context->runtime->gpu.surface_format;
@@ -2909,6 +3608,877 @@ struct yetty_yscene_scene_ptr_result yetty_yscene_create(struct yetty_ycore_rect
         }
     }
     return YETTY_OK(yetty_yscene_scene_ptr, scene);
+}
+
+/* Parse a rich body into a staged entry set — side-effect free: fully
+ * validated (magic/version/bounds/every ysdf record type + size) and
+ * allocated off to the side, so a malformed body rejects with the world
+ * untouched. Tombstoned records are dropped here (replace-the-world
+ * reconciliation). */
+static struct yetty_ycore_void_result scene_rich_parse(
+    const struct yetty_ydraw_drawable_list_registry *registry, const uint32_t *words,
+    size_t word_count, struct yscene_rich_entry **out_entries, uint32_t *out_count)
+{
+    *out_entries = NULL;
+    *out_count = 0;
+    if (word_count < YMUX_RICH_HEADER_WORDS) {
+        return YETTY_ERR(yetty_ycore_void, "yscene rich: short body");
+    }
+    if (words[0] != YMUX_RICH_MAGIC || words[1] != YMUX_RICH_VERSION) {
+        return YETTY_ERR(yetty_ycore_void, "yscene rich: bad magic/version");
+    }
+    uint32_t record_count = words[2];
+    struct yscene_rich_entry *entries = NULL;
+    if (record_count) {
+        entries = calloc(record_count, sizeof(struct yscene_rich_entry));
+        if (!entries) {
+            return YETTY_ERR(yetty_ycore_void, "yscene rich: alloc");
+        }
+    }
+    uint32_t staged_count = 0;
+    size_t offset = YMUX_RICH_HEADER_WORDS;
+    for (uint32_t index = 0; index < record_count; ++index) {
+        if (offset + YMUX_RICH_RECORD_HEADER_WORDS > word_count) {
+            goto malformed;
+        }
+        uint64_t rich_id = (uint64_t)words[offset] | ((uint64_t)words[offset + 1] << 32);
+        uint32_t revision = words[offset + 2];
+        uint32_t anchor_row = words[offset + 3];
+        uint32_t anchor_col = words[offset + 4];
+        uint32_t flags = words[offset + 5];
+        uint32_t payload_words = words[offset + 6];
+        offset += YMUX_RICH_RECORD_HEADER_WORDS;
+        if (offset + payload_words > word_count) {
+            goto malformed;
+        }
+        /* Validate the payload: a whole number of records. ysdf primitives are
+         * sized by the ysdf table; ydraw COMPOSITE records (ycat SVG/PDF/image/
+         * plot — type via yetty_ydraw_is_composite) are sized by the generic
+         * drawable parser, so a composite figure survives instead of being
+         * rejected as "not a ysdf record". */
+        uint32_t payload_offset = 0;
+        while (payload_offset < payload_words) {
+            uint32_t record_type = words[offset + payload_offset];
+            uint32_t record_words;
+            if (yetty_ydraw_is_composite(record_type)) {
+                struct yetty_ydraw_command command;
+                struct yetty_ycore_size_result parse_res = yetty_ydraw_drawable_command_parse(
+                    registry, (const uint8_t *)&words[offset + payload_offset],
+                    (uint32_t)((payload_words - payload_offset) * sizeof(uint32_t)), &command);
+                if (YETTY_IS_ERR(parse_res)) {
+                    yetty_ycore_error_destroy(parse_res.error);
+                    goto malformed;
+                }
+                record_words = (uint32_t)(parse_res.value / sizeof(uint32_t));
+            } else {
+                record_words = yetty_ysdf_word_count((enum yetty_ysdf_type)record_type);
+            }
+            if (record_words == 0 || payload_offset + record_words > payload_words) {
+                goto malformed;
+            }
+            payload_offset += record_words;
+        }
+        if (!(flags & YMUX_RICH_FLAG_TOMBSTONE) && payload_words) {
+            struct yscene_rich_entry *entry = &entries[staged_count];
+            entry->words = malloc(payload_words * sizeof(uint32_t));
+            if (!entry->words) {
+                goto malformed;
+            }
+            memcpy(entry->words, &words[offset], payload_words * sizeof(uint32_t));
+            entry->rich_id = rich_id;
+            entry->revision = revision;
+            entry->anchor_row = anchor_row;
+            entry->anchor_col = anchor_col;
+            entry->word_count = payload_words;
+            ++staged_count;
+        }
+        offset += payload_words;
+    }
+    if (offset != word_count) {
+        goto malformed;
+    }
+    *out_entries = entries;
+    *out_count = staged_count;
+    return YETTY_OK_VOID();
+
+malformed:
+    for (uint32_t index = 0; index < staged_count; ++index) {
+        free(entries[index].words);
+    }
+    free(entries);
+    return YETTY_ERR(yetty_ycore_void, "yscene rich: malformed body");
+}
+
+/* YPB1 = the ydraw serialized drawable-list container magic (drawable-list.c):
+ * a 24-byte header (magic + 4 float bounds + byte_count) then the raw record
+ * stream. ycat/mcp-draw figures arrive wrapped in it inside the rich payload. */
+enum { SCENE_YDRAW_SERIAL_MAGIC = 0x31425059u, SCENE_YPB1_HEADER_WORDS = 6 };
+
+static struct yetty_ycore_void_result scene_rich_grow_dom_ids(struct yetty_yscene_scene *scene)
+{
+    if (scene->rich_dom_count < scene->rich_dom_cap) {
+        return YETTY_OK_VOID();
+    }
+    uint32_t new_cap = scene->rich_dom_cap ? scene->rich_dom_cap * 2 : 8;
+    uint64_t *grown = realloc(scene->rich_dom_ids, (size_t)new_cap * sizeof(uint64_t));
+    if (!grown) {
+        return YETTY_ERR(yetty_ycore_void, "yscene rich dom: id array alloc");
+    }
+    scene->rich_dom_ids = grown;
+    scene->rich_dom_cap = new_cap;
+    return YETTY_OK_VOID();
+}
+
+/* Route ymux drawable-list rich content (ycat SVG/PDF/plot; #695) through the
+ * scene DOM so the FULL render pipeline (text, fonts, composites, primitives)
+ * draws it — the flat rich-entry path only knows ysdf primitives. One DOM node
+ * per rich_id, anchored at its cell; the world is replaced each apply (stale
+ * nodes deleted). Payloads are unwrapped from the YPB1 container to the raw
+ * record span, appended as a batch, and composites in the batch are minted
+ * (the direct DOM-append API skips the scan the wire applier does). */
+/* Tests only: arm the rich-DOM fault countdown — the Nth fallible stage
+ * (declare/transform/append/mint/retire, in call order) fails. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yscene_scene_rich_fault_arm(struct yetty_yclass_object *obj,
+                                                                 int countdown)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene rich_fault_arm");
+    scene_res.value->rich_fault_countdown = countdown;
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result scene_rich_fault(struct yetty_yscene_scene *scene,
+                                                       const char *stage)
+{
+    if (scene->rich_fault_countdown > 0 && --scene->rich_fault_countdown == 0) {
+        (void)stage;
+        return YETTY_ERR(yetty_ycore_void, "yscene rich fault injected");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Validate a rich frame's structure WITHOUT mutating anything: magic/version +
+ * every record's header and payload fits within word_count. Lets the caller
+ * reject a malformed/truncated frame BEFORE it deletes the published world (or
+ * before the transaction applies its paint half), so the apply is atomic. */
+static struct yetty_ycore_void_result scene_rich_dom_validate(const uint32_t *words,
+                                                              size_t word_count)
+{
+    if (word_count < YMUX_RICH_HEADER_WORDS || words[0] != YMUX_RICH_MAGIC ||
+        words[1] != YMUX_RICH_VERSION) {
+        return YETTY_ERR(yetty_ycore_void, "yscene rich dom: bad magic");
+    }
+    uint32_t record_count = words[2];
+    size_t offset = YMUX_RICH_HEADER_WORDS;
+    for (uint32_t index = 0; index < record_count; ++index) {
+        if (offset + YMUX_RICH_RECORD_HEADER_WORDS > word_count) {
+            return YETTY_ERR(yetty_ycore_void, "yscene rich dom: truncated record header");
+        }
+        uint32_t payload_words = words[offset + 6];
+        offset += YMUX_RICH_RECORD_HEADER_WORDS;
+        if (offset + payload_words > word_count) {
+            return YETTY_ERR(yetty_ycore_void, "yscene rich dom: truncated record payload");
+        }
+        offset += payload_words;
+    }
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result scene_rich_apply_dom(struct yetty_yclass_object *obj,
+                                                           struct yetty_yscene_scene *scene,
+                                                           const uint32_t *words, size_t word_count)
+{
+    float cell_w = scene->terminal_cell_width > 0.0f ? scene->terminal_cell_width : 9.0f;
+    float cell_h = scene->terminal_cell_height > 0.0f ? scene->terminal_cell_height : 18.0f;
+    /* Reject a malformed/truncated frame up front — the delete-then-rebuild
+     * below is not atomic, so this must not begin on bad input. */
+    struct yetty_ycore_void_result validate_res = scene_rich_dom_validate(words, word_count);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, validate_res, "yscene rich dom: validate");
+    uint32_t record_count = words[2];
+    size_t offset = YMUX_RICH_HEADER_WORDS;
+
+    /* A pure SCROLL arrives as a REPOSITION frame (all records carry the
+     * REPOSITION flag and no payload): move the existing figure nodes to their
+     * new anchor rows WITHOUT rebuilding the world — the payload was NOT
+     * re-sent (yvterm's rolling-row / apply_scroll_anchor scroll). The producer
+     * emits all-full or all-reposition, so the first record's flag classifies
+     * the whole frame. */
+    if (record_count > 0 && offset + YMUX_RICH_RECORD_HEADER_WORDS <= word_count &&
+        (words[offset + 5] & YMUX_RICH_FLAG_REPOSITION)) {
+        ydebug("yscene rich reposition: %u records row0=%d", record_count,
+               (int32_t)words[offset + 3]);
+        for (uint32_t index = 0; index < record_count; ++index) {
+            if (offset + YMUX_RICH_RECORD_HEADER_WORDS > word_count) {
+                break;
+            }
+            uint64_t rich_id = (uint64_t)words[offset] | ((uint64_t)words[offset + 1] << 32);
+            int32_t anchor_row = (int32_t)words[offset + 3];
+            uint32_t anchor_col = words[offset + 4];
+            uint32_t payload_words = words[offset + 6];
+            offset += YMUX_RICH_RECORD_HEADER_WORDS + payload_words;
+            /* The live nodes carry the ACTIVE generation's tag (review #12:
+             * the untagged lookup silently failed every transform after the
+             * first full apply, freezing anchored content during scroll). */
+            uint64_t generation_tag = scene->rich_dom_generation ? SCENE_RICH_GENERATION_BIT : 0;
+            uint64_t node_id = rich_id | SCENE_RICH_STAMP_BIT | generation_tag;
+            struct yetty_ycore_void_result transform_res =
+                scene_node_set_transform(obj, node_id, 1.0f, 0.0f, 0.0f, 1.0f,
+                                         (float)anchor_col * cell_w, (float)anchor_row * cell_h);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, transform_res,
+                                "yscene rich reposition: transform");
+        }
+        struct yetty_ycore_uint64_result commit_res = yetty_yscene_dom_commit(scene->dom);
+        if (YETTY_IS_ERR(commit_res)) {
+            return YETTY_ERR(yetty_ycore_void, "yscene rich dom: reposition commit", commit_res);
+        }
+        return YETTY_OK_VOID();
+    }
+
+    /* Full frame — replace the rich world ALL-OR-NOTHING (review #11). The
+     * incoming nodes build FIRST, under ids tagged with the flipped
+     * generation bit so they cannot collide with the outgoing world; any
+     * failure bails immediately, deletes the partially-staged new nodes
+     * (restoring the exact pre-call staged state — dom_commit publishes only
+     * committed generations, so nothing partial ever renders), and leaves
+     * the old world untouched. Rollback uses the allocation-FREE leaf
+     * delete (staged rich nodes are leaves by construction), so it cannot
+     * fail under the allocator pressure that triggered it (review #15). Only after every record succeeded are the old
+     * nodes deleted and the single commit issued; the bookkeeping swaps at
+     * the end. */
+    uint32_t new_generation = scene->rich_dom_generation ^ 1u;
+    uint64_t generation_tag = new_generation ? SCENE_RICH_GENERATION_BIT : 0;
+    /* Resource-transaction snapshot (review #13): complex instances minted
+     * during a failed apply are destroyed IMMEDIATELY on rollback and the
+     * registry counters restored — not left to the eventual span sweep. */
+    uint32_t complex_snapshot = scene->complex_count;
+    uint32_t ordinal_snapshot = scene->stream_next_ordinal;
+    uint64_t *new_ids = NULL;
+    uint32_t new_count = 0;
+    uint32_t new_cap = 0;
+    struct yetty_ycore_void_result stage_res = YETTY_OK_VOID();
+    for (uint32_t index = 0; index < record_count && YETTY_IS_OK(stage_res); ++index) {
+        if (offset + YMUX_RICH_RECORD_HEADER_WORDS > word_count) {
+            break; /* pre-validated: only a trailing tombstone pad can end here */
+        }
+        uint64_t rich_id = (uint64_t)words[offset] | ((uint64_t)words[offset + 1] << 32);
+        int32_t anchor_row = (int32_t)words[offset + 3]; /* signed: <0 = above viewport */
+        uint32_t anchor_col = words[offset + 4];
+        uint32_t flags = words[offset + 5];
+        uint32_t payload_words = words[offset + 6];
+        offset += YMUX_RICH_RECORD_HEADER_WORDS;
+        if (offset + payload_words > word_count) {
+            break;
+        }
+        if ((flags & YMUX_RICH_FLAG_TOMBSTONE) || payload_words == 0) {
+            offset += payload_words;
+            continue;
+        }
+        const uint32_t *records = &words[offset];
+        uint32_t record_words = payload_words;
+        if (payload_words >= SCENE_YPB1_HEADER_WORDS && words[offset] == SCENE_YDRAW_SERIAL_MAGIC) {
+            uint32_t byte_count = words[offset + 5];
+            uint32_t inner = byte_count / (uint32_t)sizeof(uint32_t);
+            if (SCENE_YPB1_HEADER_WORDS + inner <= payload_words) {
+                records = &words[offset + SCENE_YPB1_HEADER_WORDS];
+                record_words = inner;
+            }
+        }
+        uint64_t node_id = rich_id | SCENE_RICH_STAMP_BIT | generation_tag;
+        /* Grow the rollback list BEFORE the node exists and record the id
+         * IMMEDIATELY after a successful declare (review #12): a failure in
+         * ANY later stage then rolls the current partial node back too. */
+        if (new_count == new_cap) {
+            uint32_t grown_cap = new_cap ? new_cap * 2 : 16;
+            uint64_t *grown = realloc(new_ids, (size_t)grown_cap * sizeof(uint64_t));
+            if (!grown) {
+                stage_res = YETTY_ERR(yetty_ycore_void, "yscene rich dom: id list alloc");
+                break;
+            }
+            new_ids = grown;
+            new_cap = grown_cap;
+        }
+        stage_res = scene_rich_fault(scene, "declare");
+        if (YETTY_IS_OK(stage_res)) {
+            stage_res = yetty_yscene_dom_node_declare(scene->dom, node_id, 0);
+        }
+        if (YETTY_IS_ERR(stage_res)) {
+            stage_res = (struct yetty_ycore_void_result)YETTY_ERR(
+                yetty_ycore_void, "yscene rich dom: declare", stage_res);
+            break;
+        }
+        new_ids[new_count++] = node_id;
+        stage_res = scene_rich_fault(scene, "transform");
+        if (YETTY_IS_OK(stage_res)) {
+            stage_res =
+                scene_node_set_transform(obj, node_id, 1.0f, 0.0f, 0.0f, 1.0f,
+                                         (float)anchor_col * cell_w, (float)anchor_row * cell_h);
+        }
+        if (YETTY_IS_ERR(stage_res)) {
+            stage_res = (struct yetty_ycore_void_result)YETTY_ERR(
+                yetty_ycore_void, "yscene rich dom: transform", stage_res);
+            break;
+        }
+        stage_res = scene_rich_fault(scene, "append");
+        if (YETTY_IS_OK(stage_res)) {
+            stage_res =
+                yetty_yscene_dom_node_append_batch(scene->dom, node_id, (const uint8_t *)records,
+                                                   (size_t)record_words * sizeof(uint32_t));
+        }
+        if (YETTY_IS_ERR(stage_res)) {
+            stage_res = (struct yetty_ycore_void_result)YETTY_ERR(
+                yetty_ycore_void, "yscene rich dom: append", stage_res);
+            break;
+        }
+        struct yetty_ycore_uint32_result slot_res = yetty_yscene_dom_lookup(scene->dom, node_id);
+        if (YETTY_IS_ERR(slot_res)) {
+            stage_res = (struct yetty_ycore_void_result)YETTY_ERR(
+                yetty_ycore_void, "yscene rich dom: lookup", slot_res);
+            break;
+        }
+        const struct yetty_yscene_dom_node *node = &scene->dom->nodes[slot_res.value];
+        if (node->batch_count > 0) {
+            uint32_t batch_slot = node->batch_slots[node->batch_count - 1];
+            stage_res = scene_rich_fault(scene, "mint");
+            if (YETTY_IS_OK(stage_res)) {
+                stage_res = scene_complex_scan_batch(scene, batch_slot);
+            }
+            if (YETTY_IS_ERR(stage_res)) {
+                stage_res = (struct yetty_ycore_void_result)YETTY_ERR(
+                    yetty_ycore_void, "yscene rich dom: complex mint", stage_res);
+                break;
+            }
+        }
+        offset += payload_words;
+    }
+    if (YETTY_IS_ERR(stage_res)) {
+        /* Rollback: the new nodes are the ONLY staged DOM mutations —
+         * deleting them restores the pre-call staged state; the complex
+         * registry rolls back to its snapshot (instances minted for the
+         * failed frame destroyed NOW, ordinal restored). */
+        for (uint32_t index = 0; index < new_count; ++index) {
+            struct yetty_ycore_void_result rollback_res =
+                yetty_yscene_dom_node_delete_leaf(scene->dom, new_ids[index]);
+            if (YETTY_IS_ERR(rollback_res)) {
+                yetty_ycore_error_destroy(rollback_res.error);
+            }
+        }
+        for (uint32_t index = complex_snapshot; index < scene->complex_count; ++index) {
+            if (scene->complexes[index].instance) {
+                yetty_ydraw_composite_destroy(scene->complexes[index].instance);
+            }
+        }
+        scene->complex_count = complex_snapshot;
+        scene->stream_next_ordinal = ordinal_snapshot;
+        free(new_ids);
+        return stage_res;
+    }
+    /* Every incoming node staged — retire the outgoing world. Already-staged
+     * old deletions CANNOT be un-deleted, so a mid-retirement failure has no
+     * balanced rollback; the DEFINED recovery is a full rich-world wipe (new
+     * nodes deleted, remaining old nodes deleted best-effort, bookkeeping
+     * cleared, the wipe committed): empty-but-consistent, and the error
+     * propagates so the producer resends a full frame. */
+    /* Retirement (review #14): ONE transaction-wide atomic delete — every
+     * subtree is collected (the only fallible phase) before any destructive
+     * step, so ANY failure here leaves the OLD world completely intact and
+     * rolls back the incoming nodes. The empty-wipe last resort is gone:
+     * there is no post-collection fallible step. */
+    struct yetty_ycore_void_result retire_res = scene_rich_fault(scene, "retire");
+    if (YETTY_IS_OK(retire_res)) {
+        retire_res = yetty_yscene_dom_nodes_delete_atomic(scene->dom, scene->rich_dom_ids,
+                                                          scene->rich_dom_count);
+    }
+    if (YETTY_IS_ERR(retire_res)) {
+        for (uint32_t index = 0; index < new_count; ++index) {
+            struct yetty_ycore_void_result rollback_res =
+                yetty_yscene_dom_node_delete_leaf(scene->dom, new_ids[index]);
+            if (YETTY_IS_ERR(rollback_res)) {
+                yetty_ycore_error_destroy(rollback_res.error);
+            }
+        }
+        for (uint32_t index = complex_snapshot; index < scene->complex_count; ++index) {
+            if (scene->complexes[index].instance) {
+                yetty_ydraw_composite_destroy(scene->complexes[index].instance);
+            }
+        }
+        scene->complex_count = complex_snapshot;
+        scene->stream_next_ordinal = ordinal_snapshot;
+        free(new_ids);
+        return (struct yetty_ycore_void_result)YETTY_ERR(yetty_ycore_void,
+                                                         "yscene rich dom: retire", retire_res);
+    }
+    struct yetty_ycore_uint64_result commit_res = yetty_yscene_dom_commit(scene->dom);
+    if (YETTY_IS_ERR(commit_res)) {
+        for (uint32_t index = 0; index < new_count; ++index) {
+            struct yetty_ycore_void_result rollback_res =
+                yetty_yscene_dom_node_delete_leaf(scene->dom, new_ids[index]);
+            if (YETTY_IS_ERR(rollback_res)) {
+                yetty_ycore_error_destroy(rollback_res.error);
+            }
+        }
+        free(new_ids);
+        return YETTY_ERR(yetty_ycore_void, "yscene rich dom: commit", commit_res);
+    }
+    free(scene->rich_dom_ids);
+    scene->rich_dom_ids = new_ids;
+    scene->rich_dom_count = new_count;
+    scene->rich_dom_generation = new_generation;
+    ydebug("yscene rich dom: applied %u nodes (generation %u)", scene->rich_dom_count,
+           scene->rich_dom_generation);
+    return YETTY_OK_VOID();
+}
+
+/* One atomic rich content transaction (#699.3: rich-only — the retired
+ * semantic paint half no longer exists in the schema): the body is fully
+ * staged/validated before publication, so a malformed rich body publishes
+ * NOTHING. A present-but-empty body (record_count 0) clears the rich
+ * world. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yscene_scene_apply_content_transaction(
+    struct yetty_yclass_object *obj, const uint32_t *rich_words, size_t rich_word_count)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene transaction: from_obj");
+    struct yetty_yscene_scene *scene = scene_res.value;
+
+    /* A drawable-list (YPB1) rich body — ycat SVG/PDF/plot and every real
+     * figure — routes through the DOM (full pipeline: text/fonts/composites);
+     * the flat rich-entry path handles only bare ysdf primitives. Detect by the
+     * first record's payload magic. */
+    int have_rich = rich_words != NULL;
+    int rich_is_dom_full =
+        have_rich && rich_word_count > YMUX_RICH_HEADER_WORDS + YMUX_RICH_RECORD_HEADER_WORDS &&
+        rich_words[YMUX_RICH_HEADER_WORDS + YMUX_RICH_RECORD_HEADER_WORDS] ==
+            SCENE_YDRAW_SERIAL_MAGIC;
+    /* Once the scene is driving figures through the DOM, keep ALL its rich
+     * frames on the DOM path — reposition (scroll) and empty (scrolled-off)
+     * frames carry no YPB1 payload to sniff, so a content check alone would
+     * misroute them to the flat path and freeze the figure. Routing state
+     * (rich_dom_active) is committed only after a SUCCESSFUL apply (review
+     * #11): a malformed first DOM frame must not flip later flat frames onto
+     * the DOM path. */
+    int rich_via_dom = have_rich && (rich_is_dom_full || scene->rich_dom_active);
+
+    /* Stage the flat rich half first: side-effect free, fallible. */
+    struct yscene_rich_entry *staged_entries = NULL;
+    uint32_t staged_count = 0;
+    if (have_rich && !rich_via_dom) {
+        struct yetty_ydraw_drawable_list_registry_ptr_result registry_res = scene_registry(scene);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, registry_res, "yscene transaction: registry");
+        struct yetty_ycore_void_result parse_res = scene_rich_parse(
+            registry_res.value, rich_words, rich_word_count, &staged_entries, &staged_count);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, parse_res, "yscene transaction: rich body");
+    }
+
+    /* Apply the paint half — the surface rejects before mutation, so a
+     * failure here publishes NOTHING (staged rich frees untouched). */
+    /* Validate the DOM rich frame BEFORE applying paint: the DOM apply mutates
+     * the published world (unlike the flat path, which is staged above), so a
+     * malformed rich body must reject the WHOLE transaction — paint included —
+     * rather than leave paint applied and the rich world half-rebuilt. */
+    if (rich_via_dom) {
+        struct yetty_ycore_void_result rich_validate =
+            scene_rich_dom_validate(rich_words, rich_word_count);
+        if (YETTY_IS_ERR(rich_validate)) {
+            for (uint32_t index = 0; index < staged_count; ++index) {
+                free(staged_entries[index].words);
+            }
+            free(staged_entries);
+            return YETTY_ERR(yetty_ycore_void, "yscene transaction: rich validate", rich_validate);
+        }
+    }
+
+    /* Publish the rich world (everything fallible is behind us). */
+    if (rich_via_dom) {
+        struct yetty_ycore_void_result dom_res =
+            scene_rich_apply_dom(obj, scene, rich_words, rich_word_count);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dom_res, "yscene transaction: rich dom");
+        /* Routing state commits WITH the successful apply, never before. */
+        scene->rich_dom_active = 1;
+        scene->rich_world_revision++;
+    } else if (have_rich) {
+        scene_rich_world_free(scene);
+        scene->rich_entries = staged_entries;
+        scene->rich_entry_count = staged_count;
+        scene->rich_world_revision++;
+        ydebug("yscene apply_transaction: published %u rich entries (rev %llu)", staged_count,
+               (unsigned long long)scene->rich_world_revision);
+    }
+    if (have_rich) {
+        scene_request_render(scene);
+        /* The FIGURE dirty flag is what makes the compositor repaint this
+         * figure's rect — without it the published content is committed
+         * (and hittable) but never drawn until some other dirt repaints
+         * the pane (review #17: the staged overlay chrome was hittable
+         * yet invisible). Mirrors terminal_write_content. */
+        return yetty_yfigure_figure_dirty_set(obj, 1);
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_uint64_result yetty_yscene_hit_test(struct yetty_yclass_object *obj,
+                                                       float screen_x, float screen_y);
+
+/* Resolve the dom leaf whose world AABB covers the screen-space point, or
+ * NULL. Shared by hit_test (which reports the leaf's external id for the
+ * overlay dispatch protocol) and hit_opaque (which only cares about
+ * geometric coverage — an app figure's leaves carry external id 0, yet its
+ * content still consumes the click). */
+static const struct yscene_leaf *scene_leaf_at(struct yetty_yscene_scene *scene, float screen_x,
+                                               float screen_y)
+{
+    float scale = scene->view_scale > 0.0f ? scene->view_scale : 1.0f;
+    float document_x = screen_x / scale + scene->scroll_x;
+    float document_y = screen_y / scale + scene->scroll_y + scene->scroll_anchor_y / scale;
+
+    for (uint32_t i = scene->leaf_count; i-- > 0;) {
+        const struct yscene_leaf *leaf = &scene->leaves[i];
+        if (leaf->has_world_clip && !rect_contains(leaf->world_clip, document_x, document_y)) {
+            continue;
+        }
+        if (rect_contains(leaf->world_aabb, document_x, document_y)) {
+            return leaf;
+        }
+    }
+    return NULL;
+}
+
+/* Overlay-first input consumption (#699.4): a scene consumes pointer input
+ * where its content covers the point. A scene hosting the terminal grid is
+ * opaque everywhere (the terminal consumes its whole pane); any other scene
+ * consumes where a dom leaf covers the point — an EMPTY overlay is
+ * transparent everywhere, so unconsumed events fall through to the content
+ * below via the container's hit test. Coverage is geometric: leaves with no
+ * external id (an app's ygui drawables) still consume. */
+YETTY_ANNOTATE("override@yfigure:figure:hit_opaque")
+static struct yetty_ycore_int_result scene_hit_opaque_impl(struct yetty_yclass_object *obj,
+                                                           float local_x, float local_y)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, scene_res, "yscene hit_opaque: from_obj");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (scene->terminal_grid) {
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+    struct yetty_ycore_void_result derive_res = scene_derive(scene);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, derive_res, "yscene hit_opaque: derive");
+    return YETTY_OK(yetty_ycore_int, scene_leaf_at(scene, local_x, local_y) != NULL ? 1 : 0);
+}
+
+/* Synchronous (NOT oneway): the DCS transport flushes its send buffer on
+ * the next recv, so a request/response round-trip is what actually pushes
+ * the envelope to the host — a oneway call would buffer forever and never
+ * reach yetty. Round-trip on the local pty is microseconds. */
+/* Defined later in this file. */
+struct yetty_ycore_uint64_result yetty_yscene_scene_dispatch_pointer(
+    struct yetty_yclass_object *obj, uint32_t local_x, uint32_t local_y, uint32_t kind,
+    uint32_t button, uint32_t mods, uint32_t pressed);
+
+/* Overlay KEY/PASTE dispatch (#699.4, review #13): the bridge routes
+ * consumed keystroke/paste byte runs here while the overlay holds input
+ * focus; the scene records them (class, length, leading bytes, serial) as
+ * the chrome's key intake. */
+/* Codegen bootstrap: the grid's new scalar-word reply accessors are declared
+ * in its generated header only after this TU parses — forward-declare. */
+struct yetty_ycore_uint64_result yetty_yscene_vtermgrid_reply_word(struct yetty_yclass_object *obj,
+                                                                   uint32_t word_index);
+struct yetty_ycore_void_result yetty_yscene_vtermgrid_reply_consume(struct yetty_yclass_object *obj,
+                                                                    uint32_t byte_count);
+
+/* Terminal-reply drain over yRPC (#699 reply route, review #15). Buffer
+ * RETURNS are not wire-marshallable, so the drain is scalar-word shaped:
+ * pending() -> byte count, reply_word(index) -> 8 payload bytes packed LE
+ * into a u64, reply_consume(count) -> drop the drained prefix. The bridge
+ * polls after write batches and forwards the bytes through the attachment
+ * input path to the daemon — the single controlling attachment owns the
+ * answer, so N clients never reply N times. */
+YETTY_ANNOTATE("virtual@yscene:scene:terminal_reply_pending")
+static struct yetty_ycore_uint32_result scene_terminal_reply_pending_impl(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, scene_res, "yscene reply_pending");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (!scene->terminal_grid) {
+        return YETTY_OK(yetty_ycore_uint32, 0);
+    }
+    return yetty_yscene_vtermgrid_reply_pending(scene->terminal_grid);
+}
+
+YETTY_ANNOTATE("virtual@yscene:scene:terminal_reply_word")
+static struct yetty_ycore_uint64_result scene_terminal_reply_word_impl(
+    struct yetty_yclass_object *obj, uint32_t word_index)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, scene_res, "yscene reply_word");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (!scene->terminal_grid) {
+        return YETTY_OK(yetty_ycore_uint64, 0);
+    }
+    return yetty_yscene_vtermgrid_reply_word(scene->terminal_grid, word_index);
+}
+
+YETTY_ANNOTATE("virtual@yscene:scene:terminal_reply_consume")
+static struct yetty_ycore_void_result scene_terminal_reply_consume_impl(
+    struct yetty_yclass_object *obj, uint32_t byte_count)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene reply_consume");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (!scene->terminal_grid) {
+        return YETTY_OK_VOID();
+    }
+    return yetty_yscene_vtermgrid_reply_consume(scene->terminal_grid, byte_count);
+}
+
+/* Overlay-input drain over yRPC (review #15): same scalar-word shape as the
+ * reply drain. The head event is addressed as class+length (packed) and
+ * word reads; consume pops it. The bridge forwards each drained event to
+ * the daemon (OVERLAY_INPUT) — the daemon owns the chrome, tmux-style, so
+ * chrome interaction logic runs where the chrome content originates. */
+YETTY_ANNOTATE("virtual@yscene:scene:input_event_head")
+static struct yetty_ycore_uint64_result scene_input_event_head_impl(struct yetty_yclass_object *obj)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, scene_res, "yscene input_event_head");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (scene->input_queue_count == 0) {
+        return YETTY_OK(yetty_ycore_uint64, 0); /* class 0 = none (classes start at 1) */
+    }
+    uint32_t slot = scene->input_queue_head;
+    uint64_t packed =
+        ((uint64_t)scene->input_queue[slot].input_class << 32) | scene->input_queue[slot].byte_len;
+    return YETTY_OK(yetty_ycore_uint64, packed);
+}
+
+YETTY_ANNOTATE("virtual@yscene:scene:input_event_word")
+static struct yetty_ycore_uint64_result scene_input_event_word_impl(struct yetty_yclass_object *obj,
+                                                                    uint32_t word_index)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, scene_res, "yscene input_event_word");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (scene->input_queue_count == 0) {
+        return YETTY_OK(yetty_ycore_uint64, 0);
+    }
+    uint32_t slot = scene->input_queue_head;
+    uint64_t packed = 0;
+    for (uint32_t byte_index = 0; byte_index < 8; ++byte_index) {
+        uint64_t offset = (uint64_t)word_index * 8 + byte_index;
+        if (offset >= scene->input_queue[slot].byte_len) {
+            break;
+        }
+        packed |= (uint64_t)scene->input_queue[slot].bytes[offset] << (byte_index * 8);
+    }
+    return YETTY_OK(yetty_ycore_uint64, packed);
+}
+
+YETTY_ANNOTATE("virtual@yscene:scene:input_event_pop")
+static struct yetty_ycore_void_result scene_input_event_pop_impl(struct yetty_yclass_object *obj)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene input_event_pop");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (scene->input_queue_count == 0) {
+        return YETTY_OK_VOID();
+    }
+    uint32_t slot = scene->input_queue_head;
+    free(scene->input_queue[slot].bytes);
+    scene->input_queue[slot].bytes = NULL;
+    scene->input_queue_head = (slot + 1) % 16;
+    --scene->input_queue_count;
+    return YETTY_OK_VOID();
+}
+
+YETTY_ANNOTATE("virtual@yscene:scene:dispatch_key")
+static struct yetty_ycore_uint32_result scene_dispatch_key_impl(struct yetty_yclass_object *obj,
+                                                                uint32_t input_class,
+                                                                struct yetty_ycore_buffer bytes)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, scene_res, "yscene dispatch_key");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    scene->key_event_class = input_class;
+    scene->key_event_len = bytes.size;
+    size_t copy_len =
+        bytes.size < sizeof(scene->key_event_head) ? bytes.size : sizeof(scene->key_event_head);
+    if (copy_len > 0 && bytes.data) {
+        memcpy(scene->key_event_head, bytes.data, copy_len);
+    }
+    ++scene->key_event_serial;
+    /* Consumed only while the chrome holds key focus AND the event can be
+     * queued LOSSLESSLY. A full queue or a failed payload copy reports
+     * UNCONSUMED (backpressure) — the caller falls the bytes through to
+     * the daemon; consumed input is never truncated or dropped. */
+    if (!scene->overlay_key_focus) {
+        return YETTY_OK(yetty_ycore_uint32, 0);
+    }
+    enum { RING = 16 };
+    if (scene->input_queue_count == RING) {
+        return YETTY_OK(yetty_ycore_uint32, 0);
+    }
+    uint8_t *payload = NULL;
+    if (bytes.size > 0) {
+        if (!bytes.data) {
+            return YETTY_OK(yetty_ycore_uint32, 0);
+        }
+        payload = malloc(bytes.size);
+        if (!payload) {
+            return YETTY_OK(yetty_ycore_uint32, 0);
+        }
+        memcpy(payload, bytes.data, bytes.size);
+    }
+    uint32_t slot = (scene->input_queue_head + scene->input_queue_count) % RING;
+    scene->input_queue[slot].input_class = input_class;
+    scene->input_queue[slot].byte_len = (uint32_t)bytes.size;
+    scene->input_queue[slot].bytes = payload;
+    ++scene->input_queue_count;
+    return YETTY_OK(yetty_ycore_uint32, 1);
+}
+
+/* Chrome key-intake NOTE (review #17): the same recording dispatch_key
+ * makes, WITHOUT the consumption verdict or the queue — a void call, so
+ * the bridge can pipeline it from the hot key path (a value round-trip
+ * there needs an idle RPC window a live feed rarely offers; the bridge
+ * already knows the focus verdict client-side and forwards the bytes to
+ * the daemon seat directly). */
+YETTY_ANNOTATE("virtual@yscene:scene:note_key_intake")
+static struct yetty_ycore_void_result scene_note_key_intake_impl(struct yetty_yclass_object *obj,
+                                                                 uint32_t input_class,
+                                                                 struct yetty_ycore_buffer bytes)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene note_key_intake");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    scene->key_event_class = input_class;
+    scene->key_event_len = bytes.size;
+    size_t copy_len =
+        bytes.size < sizeof(scene->key_event_head) ? bytes.size : sizeof(scene->key_event_head);
+    if (copy_len > 0 && bytes.data) {
+        memcpy(scene->key_event_head, bytes.data, copy_len);
+    }
+    ++scene->key_event_serial;
+    return YETTY_OK_VOID();
+}
+
+/* The recorded key-event serial (monotonic; 0 = none yet). */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_uint64_result yetty_yscene_scene_key_event_serial(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, scene_res, "yscene key_event_serial");
+    return YETTY_OK(yetty_ycore_uint64, scene_res.value->key_event_serial);
+}
+
+/* Chrome consumer drain (review #15): pop the OLDEST queued input event —
+ * LOSSLESSLY. Returns the stored byte length (-1 when the queue is empty);
+ * the class lands in out_class. The event is dequeued ONLY when the whole
+ * payload fits in out_capacity; a short buffer copies nothing, keeps the
+ * event queued, and the (positive) return tells the caller the required
+ * size for the retry. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_yscene_scene_take_input_event(struct yetty_yclass_object *obj,
+                                                                  uint32_t *out_class,
+                                                                  uint8_t *out_bytes,
+                                                                  uint32_t out_capacity)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, scene_res, "yscene take_input_event");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (scene->input_queue_count == 0) {
+        return YETTY_OK(yetty_ycore_int, -1);
+    }
+    enum { RING = 16 };
+    uint32_t slot = scene->input_queue_head;
+    if (out_class) {
+        *out_class = scene->input_queue[slot].input_class;
+    }
+    uint32_t stored = scene->input_queue[slot].byte_len;
+    if (stored > out_capacity) {
+        return YETTY_OK(yetty_ycore_int, (int)stored); /* still queued */
+    }
+    if (stored > 0 && out_bytes) {
+        memcpy(out_bytes, scene->input_queue[slot].bytes, stored);
+    }
+    free(scene->input_queue[slot].bytes);
+    scene->input_queue[slot].bytes = NULL;
+    scene->input_queue_head = (slot + 1) % RING;
+    --scene->input_queue_count;
+    return YETTY_OK(yetty_ycore_int, (int)stored);
+}
+
+/* Whether the chrome currently owns key focus (set by a consumed pointer
+ * press on opaque chrome; cleared by a press that fell through). */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_int_result yetty_yscene_scene_key_focus(struct yetty_yclass_object *obj)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, scene_res, "yscene key_focus");
+    return YETTY_OK(yetty_ycore_int, scene_res.value->overlay_key_focus);
+}
+
+/* Terminal-grid selection over RPC (#699.5, review #12): the bridge's
+ * copy-mode/drag path drives the grid's inverted span through the scene —
+ * the grid object itself never crosses the wire. */
+YETTY_ANNOTATE("virtual@yscene:scene:set_terminal_selection")
+static struct yetty_ycore_void_result scene_set_terminal_selection_impl(
+    struct yetty_yclass_object *obj, uint32_t start_row, uint32_t start_col, uint32_t end_row,
+    uint32_t end_col, uint32_t active)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene set_terminal_selection");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    if (!scene->terminal_grid) {
+        return YETTY_ERR(yetty_ycore_void, "yscene set_terminal_selection: no grid");
+    }
+    return yetty_yscene_vtermgrid_set_selection(scene->terminal_grid, start_row, start_col, end_row,
+                                                end_col, active ? 1 : 0);
+}
+
+YETTY_ANNOTATE("virtual@yscene:scene:dispatch_pointer")
+static struct yetty_ycore_uint64_result scene_dispatch_pointer_impl(struct yetty_yclass_object *obj,
+                                                                    uint32_t local_x,
+                                                                    uint32_t local_y, uint32_t kind,
+                                                                    uint32_t button, uint32_t mods,
+                                                                    uint32_t pressed)
+{
+    return yetty_yscene_scene_dispatch_pointer(obj, local_x, local_y, kind, button, mods, pressed);
+}
+
+YETTY_ANNOTATE("virtual@yscene:scene:apply_content_transaction")
+static struct yetty_ycore_void_result scene_apply_content_transaction_impl(
+    struct yetty_yclass_object *obj, struct yetty_ycore_buffer rich)
+{
+    return yetty_yscene_scene_apply_content_transaction(
+        obj, rich.size ? (const uint32_t *)rich.data : NULL, rich.size / sizeof(uint32_t));
+}
+
+/* The published rich world size — tests assert atomicity through it. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_uint32_result yetty_yscene_scene_rich_entry_count(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, scene_res, "yscene rich_entry_count: from_obj");
+    return YETTY_OK(yetty_ycore_uint32, scene_res.value->rich_entry_count);
+}
+
+/* Install the slot-0 default font on a directly-created scene. The wire
+ * factory installs from its args bundle; embedders that create scenes
+ * programmatically (the ymux viewer) install here. Borrowed — the
+ * caller owns the font and must outlive the scene. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yscene_scene_set_default_font(struct yetty_yclass_object *obj,
+                                                                   struct yetty_yfont_font *font)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "yscene set_default_font: from_obj");
+    if (!font) {
+        return YETTY_ERR(yetty_ycore_void, "yscene set_default_font: NULL font");
+    }
+    return scene_set_font(scene_res.value, 0, font);
 }
 
 /* Host inputs every wire-minted scene borrows. Lifetime: owned by the
@@ -3074,20 +4644,52 @@ struct yetty_ycore_uint64_result yetty_yscene_hit_test(struct yetty_yclass_objec
     struct yetty_ycore_void_result derive_res = scene_derive(scene);
     YETTY_RETURN_IF_ERR(yetty_ycore_uint64, derive_res, "yscene hit_test: derive");
 
-    float scale = scene->view_scale > 0.0f ? scene->view_scale : 1.0f;
-    float document_x = screen_x / scale + scene->scroll_x;
-    float document_y = screen_y / scale + scene->scroll_y + scene->scroll_anchor_y / scale;
+    const struct yscene_leaf *leaf = scene_leaf_at(scene, screen_x, screen_y);
+    return YETTY_OK(yetty_ycore_uint64, leaf ? leaf->node_external_id : 0);
+}
 
-    for (uint32_t i = scene->leaf_count; i-- > 0;) {
-        const struct yscene_leaf *leaf = &scene->leaves[i];
-        if (leaf->has_world_clip && !rect_contains(leaf->world_clip, document_x, document_y)) {
-            continue;
-        }
-        if (rect_contains(leaf->world_aabb, document_x, document_y)) {
-            return YETTY_OK(yetty_ycore_uint64, leaf->node_external_id);
-        }
+/* Production overlay POINTER dispatch (#699.4, review #12): resolve the dom
+ * leaf under the point and RECORD the event on the scene (node id, position,
+ * kind/button/mods, a monotonic serial) — the overlay chrome's event intake.
+ * Returns the hit node's external id (0 = nothing consumed the point). The
+ * bridge calls this for pointer events the overlay consumed; chrome widgets
+ * poll/react via the recorded state until a richer widget protocol exists. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_uint64_result yetty_yscene_scene_dispatch_pointer(
+    struct yetty_yclass_object *obj, uint32_t local_x, uint32_t local_y, uint32_t kind,
+    uint32_t button, uint32_t mods, uint32_t pressed)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, scene_res, "yscene dispatch_pointer");
+    struct yetty_yscene_scene *scene = scene_res.value;
+    struct yetty_ycore_uint64_result hit_res =
+        yetty_yscene_hit_test(obj, (float)local_x, (float)local_y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, hit_res, "yscene dispatch_pointer: hit");
+    /* Key-focus ownership (review #14): a button PRESS decides — consumed
+     * by opaque chrome (a hit) claims key focus for the chrome; a press
+     * that fell through (no hit) releases it back to the terminal. */
+    if (kind == 1 && pressed) {
+        scene->overlay_key_focus = hit_res.value != 0 ? 1 : 0;
     }
-    return YETTY_OK(yetty_ycore_uint64, 0);
+    scene->pointer_event_node = hit_res.value;
+    scene->pointer_event_x = (float)local_x;
+    scene->pointer_event_y = (float)local_y;
+    scene->pointer_event_kind = kind;
+    scene->pointer_event_button = button;
+    scene->pointer_event_mods = mods;
+    ++scene->pointer_event_serial;
+    return YETTY_OK(yetty_ycore_uint64, hit_res.value);
+}
+
+/* The recorded pointer-event serial (monotonic; 0 = none yet) — chrome and
+ * tests observe dispatch through it. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_uint64_result yetty_yscene_scene_pointer_event_serial(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yscene_scene_ptr_result scene_res = scene_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, scene_res, "yscene pointer_event_serial");
+    return YETTY_OK(yetty_ycore_uint64, scene_res.value->pointer_event_serial);
 }
 
 /* Render-plan snapshot for headless tests: derive, build staging

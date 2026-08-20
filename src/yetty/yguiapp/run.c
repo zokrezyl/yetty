@@ -1,25 +1,22 @@
 /*
- * yguiapp/run.c — dual-mode launcher + in-terminal host for yguiapp:app.
+ * yguiapp/run.c — the in-terminal (in-host-yetty) ygui host. GPU-FREE.
  *
- * Plain C (not a yclass file). Hosts a yguiapp:app subclass instance in one of
- * two modes, deciding by yetty_running_under_yetty():
+ * Plain C (not a yclass file). A libuv loop over a single transport-pty +
+ * ywire_connection (the #380 single-reader path). The framework's figure
+ * output rides the rpc channel; forwarded mouse arrives on the input channel;
+ * raw keystrokes on the raw channel. Terminal raw mode is restored on every
+ * exit/error path.
  *
- *   STANDALONE  — register the platform + yapp classes, create the glfw_platform
- *                 and drive the app's run() override (the full window/GPU bring-up
- *                 in app.c).
- *   TERMINAL    — inside a host yetty: a libuv loop over a single transport-pty +
- *                 ywire_connection (the #380 single-reader path). The framework's
- *                 figure output rides the rpc channel; forwarded mouse arrives on
- *                 the input channel; raw keystrokes on the raw channel. Terminal
- *                 raw mode is restored on every exit/error path.
+ * The app populates the widget tree through a plain BUILD CALLBACK
+ * (yetty_yguiapp_terminal_build_fn) — no app object, no platform, no window,
+ * no WebGPU. This file is compiled into yetty_yguiapp_terminal, whose link
+ * closure must stay GPU-free: terminal-only tools (yzoo, ymaze, yjungle, …)
+ * link it directly. The dual-mode launcher for yclass yguiapp:app subclasses
+ * (demos) lives in run-app.c on top of this.
  *
- * From the framework's perspective the two modes are identical: there is an
- * output transport to write to and a caller pushing input bytes via
- * framework_feed_input. The framework has no knowledge of which mode it's in.
- *
- * The shared two-level root/body construction (yetty_yguiapp_build_root_body) is
- * here so both the standalone run() (app.c) and the terminal host build the same
- * styled canvas; the build virtual is dispatched the same way in both modes.
+ * The shared two-level root/body construction (yetty_yguiapp_build_root_body)
+ * is here so both the standalone run() (app.c) and this terminal host build
+ * the same styled canvas.
  */
 
 #include "yetty/yguiapp/run.h"
@@ -41,19 +38,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-
-/* Generated build-virtual stub (dispatches to the subclass override). */
-struct yetty_ycore_void_result yetty_yguiapp_build(struct yetty_yclass_object *app,
-                                                   struct yetty_yclass_object *root);
-
-/* Platform bring-up symbols (provided by the executable's bootstrap sources). */
-struct yetty_ycore_void_result yetty_yplatform_register(void);
-struct yetty_ycore_void_result yetty_yapp_register(void);
-struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_platform_create(
-    struct yetty_yclass_ctx *ctx);
-struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
-                                                            struct yetty_yclass_object *app,
-                                                            int argc, char **argv);
 
 /* Caption inset must match app.c's YGUIAPP_CHROME_CAPTION_H; the terminal host
  * has no chrome, so it always passes 0. */
@@ -135,6 +119,7 @@ struct yetty_ycore_void_result yetty_yguiapp_build_root_body(struct yetty_yclass
 #include <yetty/ywire/connection.h>
 #include <yetty/ywire/wire-statemachine.h>
 
+#include <poll.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -603,7 +588,8 @@ static struct yetty_yfont_font *yguiapp_client_measure_font_create(void)
     return font;
 }
 
-struct yetty_ycore_void_result yetty_yguiapp_run_terminal(struct yetty_yclass_object *app)
+struct yetty_ycore_void_result yetty_yguiapp_run_terminal_build(
+    yetty_yguiapp_terminal_build_fn build_fn, void *build_userdata)
 {
     /* Cleanup state up front so every error path can `goto fail` and the single
      * teardown restores whatever was set up — crucially raw mode, which once
@@ -693,9 +679,9 @@ struct yetty_ycore_void_result yetty_yguiapp_run_terminal(struct yetty_yclass_ob
         }
     }
 
-    /* Hand the styled body to the app subclass to populate (virtual dispatch). */
+    /* Hand the styled body to the app to populate. */
     {
-        struct yetty_ycore_void_result rb = yetty_yguiapp_build(app, body);
+        struct yetty_ycore_void_result rb = build_fn(body, build_userdata);
         if (YETTY_IS_ERR(rb)) {
             YGUIAPP_TERMINAL_FAIL("yguiapp client: build", rb);
         }
@@ -854,9 +840,77 @@ fail:
         uv_run(&cs.loop, UV_RUN_DEFAULT);
     }
 
-    /* Tear down in order: framework first (detaches the producer session, which
-     * destroys the rpc channel transport adapter), then the connection (state
-     * machine + channels), then the transport (restores raw mode). */
+    /* FIRST — before we close any channel — arm the host's input barrier
+     * (no-payload INPUT_HOLD): the host holds the user's keystrokes host-side
+     * for the rest of teardown instead of forwarding them into the stream our
+     * close drain would consume, and releases them to the pane when we are
+     * gone. Emitted on the raw channel + blocking-flushed so the host sees it
+     * before the teardown-window keys. Carries no bytes → cannot inject. */
+    if (cs.conn) {
+        struct yetty_ywire_channel *hold_lane =
+            yetty_ywire_connection_channel(cs.conn, YETTY_YWIRE_CHANNEL_RAW);
+        struct yetty_ycore_buffer hold_env = {0};
+        struct yetty_ycore_void_result hold_emit =
+            yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CLIENT_INPUT_HOLD,
+                             /*has_args=*/1, /*compressed=*/0, NULL, 0, NULL, 0, &hold_env);
+        if (YETTY_IS_OK(hold_emit) && hold_lane) {
+            struct yetty_ycore_size_result hw =
+                yetty_ywire_channel_write(hold_lane, hold_env.data, hold_env.size);
+            if (YETTY_IS_ERR(hw)) {
+                yetty_ycore_error_destroy(hw.error);
+            } else {
+                struct yetty_ycore_void_result hf = yetty_ywire_channel_flush(hold_lane);
+                if (YETTY_IS_ERR(hf)) {
+                    yetty_ycore_error_destroy(hf.error);
+                }
+                if (cs.transport) {
+                    hf = yetty_yclass_transport_pty_flush_blocking(cs.transport);
+                    if (YETTY_IS_ERR(hf)) {
+                        yetty_ycore_error_destroy(hf.error);
+                    }
+                }
+            }
+        } else if (YETTY_IS_ERR(hold_emit)) {
+            yetty_ycore_error_destroy(hold_emit.error);
+        }
+        yetty_ycore_buffer_destroy(&hold_env);
+    }
+
+    /* WAIT for the host's HOLD-ACK before we detach anything — its arrival
+     * proves the host armed its barrier. Parser + sinks stay ALIVE across this
+     * wait BY DESIGN: a key the host forwarded before it armed comes back as an
+     * echo the still-live client consumes here, not the close drain; every key
+     * after the ACK is held host-side and can never reach the drain. Wall-clock
+     * bounded (500 ms) so a dead/wedged host cannot hang exit. The result GATES
+     * the close drain below: without a confirmed arm the barrier may be unarmed,
+     * so running the new inbound close drain could consume a forwarded key with
+     * the sinks detached — the original regression. */
+    int hold_ack_confirmed = 0;
+    if (cs.conn) {
+        hold_ack_confirmed = yetty_ywire_connection_drain_until_hold_ack(cs.conn, 500);
+    }
+
+    /* Tear down in order: SINKS first — the raw/input sinks dispatch into
+     * cs.engine, which dies next; anything the close drain below still parses
+     * must never reach a destroyed framework (frame-wrapped input lands in
+     * the channel inbuf instead of a freed object). Then the framework
+     * (detaches the producer session, which closes the rpc channel), then
+     * the connection, then the transport (restores raw mode). */
+    if (cs.conn) {
+        struct yetty_ywire_channel *raw_lane =
+            yetty_ywire_connection_channel(cs.conn, YETTY_YWIRE_CHANNEL_RAW);
+        struct yetty_ywire_channel *input_lane =
+            yetty_ywire_connection_channel(cs.conn, YETTY_YWIRE_CHANNEL_INPUT);
+        struct yetty_ycore_void_result sink_res =
+            yetty_ywire_channel_set_raw_sink(raw_lane, NULL, NULL);
+        if (YETTY_IS_ERR(sink_res)) {
+            yetty_ycore_error_destroy(sink_res.error);
+        }
+        sink_res = yetty_ywire_channel_set_envelope_sink(input_lane, NULL, NULL);
+        if (YETTY_IS_ERR(sink_res)) {
+            yetty_ycore_error_destroy(sink_res.error);
+        }
+    }
     if (cs.engine) {
         struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(cs.engine);
         if (YETTY_IS_ERR(dr)) {
@@ -876,6 +930,30 @@ fail:
         if (YETTY_IS_ERR(fl)) {
             yetty_ycore_error_destroy(fl.error);
         }
+    }
+    /* COMPLETION-AWARE close drain, parser ALIVE, BYTE-WISE (exit hygiene
+     * without input loss): the flush above put the figure deletes + channel
+     * CLOSE frames on the wire; the host answers each CLOSE with a framed
+     * CLOSE echo. drain_closes feeds the parser one byte at a time until the
+     * last echo is parsed (a WALL-CLOCK 500 ms bound covers a dead or
+     * babbling host) and stops reading EXACTLY at that framed boundary — a
+     * user key queued right after the echo, even in the same kernel-readable
+     * window, is never consumed and stays queued for the resumed shell. The
+     * sinks were detached above, so nothing the drain parses can touch the
+     * destroyed framework.
+     *
+     * ONLY when the HOLD was ACKed AND the lease is still fresh: a confirmed arm
+     * means every post-arm keystroke is held host-side, so the inbound stream
+     * carries only CLOSE echoes — safe to drain. WITHOUT the ACK the barrier may
+     * be unarmed; and the ACK is only a LEASE — the host's barrier expires on
+     * its own 3 s deadline and resumes forwarding, so if teardown to this point
+     * took longer than the lease the host may already have un-armed. In either
+     * case a forwarded key could interleave with the echoes, so we SKIP the
+     * drain (matching origin/main, which drains nothing) rather than consume a
+     * user key with the sinks already detached. Lease 2000 ms < host 3000 ms. */
+    if (cs.conn && hold_ack_confirmed &&
+        yetty_ywire_connection_hold_ack_lease_valid(cs.conn, 2000)) {
+        (void)yetty_ywire_connection_drain_closes(cs.conn, 500);
     }
     if (cs.conn) {
         struct yetty_ycore_void_result cd = yetty_ywire_connection_destroy(cs.conn);
@@ -906,84 +984,37 @@ fail:
 
 #else /* !YETTY_YGUI_HAS_UV */
 
-struct yetty_ycore_void_result yetty_yguiapp_run_terminal(struct yetty_yclass_object *app)
+struct yetty_ycore_void_result yetty_yguiapp_run_terminal_build(
+    yetty_yguiapp_terminal_build_fn build_fn, void *build_userdata)
 {
-    (void)app;
+    (void)build_fn;
+    (void)build_userdata;
     return YETTY_ERR(yetty_ycore_void, "yguiapp: terminal host requires libuv (YETTY_YGUI_HAS_UV)");
 }
 
 #endif /* YETTY_YGUI_HAS_UV */
 
-/*===========================================================================
- * Standalone host — drive the platform bring-up sequence directly.
- *=========================================================================*/
-static int yguiapp_run_standalone(int argc, char **argv, const struct yetty_yclass *app_class)
+int yetty_yguiapp_terminal_main(int argc, char **argv, yetty_yguiapp_terminal_build_fn build_fn,
+                                void *build_userdata)
 {
-    struct yetty_ycore_void_result platform_reg = yetty_yplatform_register();
-    if (YETTY_IS_ERR(platform_reg)) {
-        yetty_ycore_error_print(stderr, "yguiapp: platform register", platform_reg.error);
-        yetty_ycore_error_destroy(platform_reg.error);
+    (void)argc;
+    (void)argv;
+    ytrace_init();
+    if (!build_fn) {
+        fprintf(stderr, "yguiapp: terminal_main: NULL build callback\n");
         return 1;
     }
-    struct yetty_ycore_void_result yapp_reg = yetty_yapp_register();
-    if (YETTY_IS_ERR(yapp_reg)) {
-        yetty_ycore_error_print(stderr, "yguiapp: yapp register", yapp_reg.error);
-        yetty_ycore_error_destroy(yapp_reg.error);
+    if (!yetty_running_under_yetty()) {
+        fprintf(stderr, "this program renders into a hosting yetty terminal — run it inside "
+                        "yetty (TERM_PROGRAM=yetty)\n");
         return 1;
     }
-
-    struct yetty_yclass_object_ptr_result app_res = yetty_yclass_object_alloc(app_class);
-    if (YETTY_IS_ERR(app_res)) {
-        yetty_ycore_error_print(stderr, "yguiapp: app alloc", app_res.error);
-        yetty_ycore_error_destroy(app_res.error);
-        return 1;
-    }
-
-    struct yetty_yclass_object_ptr_result platform_res = yetty_yplatform_glfw_platform_create(NULL);
-    if (YETTY_IS_ERR(platform_res)) {
-        yetty_ycore_error_print(stderr, "yguiapp: platform create", platform_res.error);
-        yetty_ycore_error_destroy(platform_res.error);
-        return 1;
-    }
-
-    /* Single step — run() calls init(app, argc, argv) internally. */
-    struct yetty_ycore_void_result run_result =
-        yetty_yplatform_platform_run(platform_res.value, app_res.value, argc, argv);
-    if (YETTY_IS_ERR(run_result)) {
-        yetty_ycore_error_print(stderr, "yguiapp: run", run_result.error);
-        yetty_ycore_error_destroy(run_result.error);
+    struct yetty_ycore_void_result run_res =
+        yetty_yguiapp_run_terminal_build(build_fn, build_userdata);
+    if (YETTY_IS_ERR(run_res)) {
+        yetty_ycore_error_print(stderr, "yguiapp: run_terminal", run_res.error);
+        yetty_ycore_error_destroy(run_res.error);
         return 1;
     }
     return 0;
-}
-
-int yetty_yguiapp_run_main(int argc, char **argv, const struct yetty_yclass *app_class)
-{
-    ytrace_init();
-    if (!app_class) {
-        fprintf(stderr, "yguiapp: run_main: NULL app class\n");
-        return 1;
-    }
-
-#ifdef YETTY_YGUI_HAS_UV
-    if (yetty_running_under_yetty()) {
-        /* Terminal mode runs inside a host yetty pane — no borderless OS window
-         * to drag, so chrome is irrelevant here. */
-        struct yetty_yclass_object_ptr_result app_res = yetty_yclass_object_alloc(app_class);
-        if (YETTY_IS_ERR(app_res)) {
-            yetty_ycore_error_print(stderr, "yguiapp: app alloc (terminal)", app_res.error);
-            yetty_ycore_error_destroy(app_res.error);
-            return 1;
-        }
-        struct yetty_ycore_void_result rt = yetty_yguiapp_run_terminal(app_res.value);
-        if (YETTY_IS_ERR(rt)) {
-            yetty_ycore_error_print(stderr, "yguiapp: run_terminal", rt.error);
-            yetty_ycore_error_destroy(rt.error);
-            return 1;
-        }
-        return 0;
-    }
-#endif
-
-    return yguiapp_run_standalone(argc, argv, app_class);
 }

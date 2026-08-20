@@ -1,97 +1,31 @@
-# tools/ymaze — standalone animated-maze app.
+# tools/ymaze — animated maze, IN-TERMINAL ONLY (no WebGPU, no window).
 #
-# Drives a single full-window yscene figure straight from C (no terminal,
-# no yui, no ygui widget tree), rendering the yetty_ymaze each frame.
-# The independent-app counterpart to the ygui ymaze widget. Modeled on
-# tools/ycompositor.
+# A plain-C app.c forwarding to the GPU-free yguiapp terminal host
+# (yetty_yguiapp_terminal): inside a hosting yetty the ymaze ygui widget
+# renders into the pane over ywire; outside yetty the tool refuses to run.
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     return()
 endif()
 
-if(NOT YETTY_ENABLE_LIB_WEBGPU)
-    return()
-endif()
-
-# ymaze is a yapp:app subclass (class ymaze:app in app.c). The shared yplatform
-# entry (${YETTY_APP_ENTRY_GLFW}) owns main() and drives the glfw_platform
-# bootstrap (${YETTY_APP_BOOTSTRAP_SOURCES}); app.c #includes its own app.gen.c.
-set(YMAZE_PLATFORM_SOURCES
-    ${YETTY_APP_ENTRY_GLFW}
-    ${YETTY_APP_BOOTSTRAP_SOURCES}
-    ${YETTY_ROOT}/src/yetty/yframework/yframework.c
-    ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
-    ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
-    ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
-    ${YETTY_ROOT}/src/yetty/yconfig/config.c
-    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
-)
-
 add_executable(ymaze
     app.c
-    ${YMAZE_PLATFORM_SOURCES}
+    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
 )
 
-target_include_directories(ymaze BEFORE PRIVATE
-    ${YETTY_ROOT}/src
+target_include_directories(ymaze PRIVATE
     ${YETTY_ROOT}/include
-)
-
-target_compile_definitions(ymaze PRIVATE
-    YETTY_WEB=0
-    YETTY_ANDROID=0
-    YETTY_USE_FORKPTY=1
+    ${YETTY_ROOT}/src
 )
 
 find_package(Threads REQUIRED)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
-
 target_link_libraries(ymaze PRIVATE
-    yetty_ymaze
-    yetty_ysdf
-    yetty_yscene
-    yetty_yfigure
-    yetty_ydraw_core
-    yetty_yframework
-    ${YETTY_LIBS}
-    yetty_ywire
-    yetty_ydraw_core
-    yetty_yplatform_core
-    yetty_yplatform_move_resize
-    yetty_yplatform_window_chrome
-    yetty_ychrome
-    yetty_yco
-    yetty_telnet
-    ${BROTLIDEC_LIBRARIES}
+    yetty_yguiapp_terminal
     Threads::Threads
-    ${FONTCONFIG_LIBRARIES}
     rt
     util
 )
 
-target_link_options(ymaze PRIVATE
-    "-Wl,--start-group"
-)
-target_link_libraries(ymaze PRIVATE
-    "-Wl,--end-group"
-)
-target_include_directories(ymaze PRIVATE ${FONTCONFIG_INCLUDE_DIRS})
-
-set_target_properties(ymaze PROPERTIES LINKER_LANGUAGE CXX)
-
 if(NOT MSVC)
     target_compile_options(ymaze PRIVATE -Wall -Wextra)
 endif()
-
-# Register with the yclass codegen graph — the module list IS these
-# call sites (see build-tools/yetty/yclass-codegen.cmake).
-yetty_yclass_module(ymaze)

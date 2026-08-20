@@ -113,6 +113,7 @@ typedef enum {
     VTERM_ATTR_BACKGROUND, // color:  40-49 100-107
     VTERM_ATTR_SMALL,      // bool:   73, 74, 75
     VTERM_ATTR_BASELINE,   // number: 73, 74, 75
+    VTERM_ATTR_FAINT,      // bool:   2, 22 (yetty: SGR faint/dim carriage)
 
     VTERM_N_ATTRS
 } VTermAttr;
@@ -360,6 +361,10 @@ void vterm_state_set_default_colors(VTermState *state, const VTermColor *default
                                     const VTermColor *default_bg);
 void vterm_state_set_palette_color(VTermState *state, int index, const VTermColor *col);
 void vterm_state_set_bold_highbright(VTermState *state, int bold_is_highbright);
+/* yetty (#699): make this state ignore an application's DECSLRM left/right
+ * margins (scroll/insert acts full-width), matching tmux's pane. Off by default;
+ * the ymux engine turns it on, yvterm leaves it off. */
+void vterm_state_set_ignore_leftright_margin(VTermState *state, int ignore);
 int vterm_state_get_penattr(const VTermState *state, VTermAttr attr, VTermValue *val);
 int vterm_state_set_termprop(VTermState *state, VTermProp prop, VTermValue *val);
 void vterm_state_focus_in(VTermState *state);

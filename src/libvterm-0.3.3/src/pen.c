@@ -173,6 +173,7 @@ INTERNAL void vterm_state_newpen(VTermState *state)
 INTERNAL void vterm_state_resetpen(VTermState *state)
 {
   state->pen.bold = 0;      setpenattr_bool(state, VTERM_ATTR_BOLD, 0);
+  state->pen.faint = 0;     setpenattr_bool(state, VTERM_ATTR_FAINT, 0);
   state->pen.underline = 0; setpenattr_int (state, VTERM_ATTR_UNDERLINE, 0);
   state->pen.italic = 0;    setpenattr_bool(state, VTERM_ATTR_ITALIC, 0);
   state->pen.blink = 0;     setpenattr_bool(state, VTERM_ATTR_BLINK, 0);
@@ -196,6 +197,7 @@ INTERNAL void vterm_state_savepen(VTermState *state, int save)
     state->pen = state->saved.pen;
 
     setpenattr_bool(state, VTERM_ATTR_BOLD,      state->pen.bold);
+    setpenattr_bool(state, VTERM_ATTR_FAINT,     state->pen.faint);
     setpenattr_int (state, VTERM_ATTR_UNDERLINE, state->pen.underline);
     setpenattr_bool(state, VTERM_ATTR_ITALIC,    state->pen.italic);
     setpenattr_bool(state, VTERM_ATTR_BLINK,     state->pen.blink);
@@ -275,6 +277,11 @@ INTERNAL void vterm_state_setpen(VTermState *state, const long args[], int argco
       /* yetty: removed bold_is_highbright - not compatible with RGB-only colors */
       break;
 
+    case 2: // Faint on (yetty: SGR dim carriage)
+      state->pen.faint = 1;
+      setpenattr_bool(state, VTERM_ATTR_FAINT, 1);
+      break;
+
     case 3: // Italic on
       state->pen.italic = 1;
       setpenattr_bool(state, VTERM_ATTR_ITALIC, 1);
@@ -333,9 +340,11 @@ INTERNAL void vterm_state_setpen(VTermState *state, const long args[], int argco
       setpenattr_int(state, VTERM_ATTR_UNDERLINE, state->pen.underline);
       break;
 
-    case 22: // Bold off
+    case 22: // Normal intensity: bold AND faint off
       state->pen.bold = 0;
       setpenattr_bool(state, VTERM_ATTR_BOLD, 0);
+      state->pen.faint = 0;
+      setpenattr_bool(state, VTERM_ATTR_FAINT, 0);
       break;
 
     case 23: // Italic and Gothic (currently unsupported) off
@@ -505,6 +514,10 @@ int vterm_state_get_penattr(const VTermState *state, VTermAttr attr, VTermValue 
   switch(attr) {
   case VTERM_ATTR_BOLD:
     val->boolean = state->pen.bold;
+    return 1;
+
+  case VTERM_ATTR_FAINT:
+    val->boolean = state->pen.faint;
     return 1;
 
   case VTERM_ATTR_UNDERLINE:

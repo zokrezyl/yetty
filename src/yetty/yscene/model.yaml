@@ -227,6 +227,291 @@ methods:
     local: false
     oneway: false
     return_payload_type: uint64_t
+  - slot: layout_barrier_begin
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Layout BARRIER (#699 review 19): a multi-call layout change (figure
+ * reseat, grid resize, chrome restage) applies as ONE deliberate frame —
+ * render kicks between begin and end coalesce into a single kick at end.
+ * Nesting-safe (depth counter); pipelined over yRPC the pair brackets the
+ * ordered layout calls exactly. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: layout_barrier_end
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: terminal_grid_generation
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The receiver grid generation — remote-observable over yRPC (value call):
+ * the reset barrier polls it to CONFIRM the fresh parser exists before the
+ * vtsink republishes (review #17). */"
+    local: false
+    oneway: false
+    return_payload_type: uint32_t
+  - slot: terminal_grid_create
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+      - name: cell_width
+        type: float
+      - name: cell_height
+        type: float
+    doc: "/* Remote-facing terminal-grid slots (#699): the ymux attach bridge drives the
+ * pane through these over the yclass RPC. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: terminal_grid_write
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: struct yetty_ycore_buffer
+    doc: "/* Synchronous (request/response): the ymux attach bridge streams VT redraws
+ * here over the pane's DCS wire. A synchronous call surfaces write errors to
+ * the bridge (a oneway call would swallow them — a silently-failing grid write
+ * looks exactly like a frozen pane). Keystrokes that arrive on the shared
+ * stdin while the bridge blocks on the reply are captured by the transport's
+ * raw sink (yetty_yclass_transport_dcs_set_raw_sink) instead of being dropped,
+ * so the round-trip no longer costs input. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: terminal_write_content
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: vt
+        type: struct yetty_ycore_buffer
+      - name: rich
+        type: struct yetty_ycore_buffer
+    doc: "/* Atomic terminal+rich publish over RPC (#699/#4): the ymux bridge sends both
+ * halves of one content update in a single call so they render together. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: terminal_grid_resize
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: terminal_reply_pending
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Terminal-reply drain over yRPC (#699 reply route, review #15). Buffer
+ * RETURNS are not wire-marshallable, so the drain is scalar-word shaped:
+ * pending() -> byte count, reply_word(index) -> 8 payload bytes packed LE
+ * into a u64, reply_consume(count) -> drop the drained prefix. The bridge
+ * polls after write batches and forwards the bytes through the attachment
+ * input path to the daemon — the single controlling attachment owns the
+ * answer, so N clients never reply N times. */"
+    local: false
+    oneway: false
+    return_payload_type: uint32_t
+  - slot: terminal_reply_word
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: word_index
+        type: uint32_t
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: uint64_t
+  - slot: terminal_reply_consume
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: byte_count
+        type: uint32_t
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: input_event_head
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Overlay-input drain over yRPC (review #15): same scalar-word shape as the
+ * reply drain. The head event is addressed as class+length (packed) and
+ * word reads; consume pops it. The bridge forwards each drained event to
+ * the daemon (OVERLAY_INPUT) — the daemon owns the chrome, tmux-style, so
+ * chrome interaction logic runs where the chrome content originates. */"
+    local: false
+    oneway: false
+    return_payload_type: uint64_t
+  - slot: input_event_word
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: word_index
+        type: uint32_t
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: uint64_t
+  - slot: input_event_pop
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: dispatch_key
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: input_class
+        type: uint32_t
+      - name: bytes
+        type: struct yetty_ycore_buffer
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: uint32_t
+  - slot: note_key_intake
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: input_class
+        type: uint32_t
+      - name: bytes
+        type: struct yetty_ycore_buffer
+    doc: "/* Chrome key-intake NOTE (review #17): the same recording dispatch_key
+ * makes, WITHOUT the consumption verdict or the queue — a void call, so
+ * the bridge can pipeline it from the hot key path (a value round-trip
+ * there needs an idle RPC window a live feed rarely offers; the bridge
+ * already knows the focus verdict client-side and forwards the bytes to
+ * the daemon seat directly). */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: set_terminal_selection
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: start_row
+        type: uint32_t
+      - name: start_col
+        type: uint32_t
+      - name: end_row
+        type: uint32_t
+      - name: end_col
+        type: uint32_t
+      - name: active
+        type: uint32_t
+    doc: "/* Terminal-grid selection over RPC (#699.5, review #12): the bridge's
+ * copy-mode/drag path drives the grid's inverted span through the scene —
+ * the grid object itself never crosses the wire. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: dispatch_pointer
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: local_x
+        type: uint32_t
+      - name: local_y
+        type: uint32_t
+      - name: kind
+        type: uint32_t
+      - name: button
+        type: uint32_t
+      - name: mods
+        type: uint32_t
+      - name: pressed
+        type: uint32_t
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: uint64_t
+  - slot: apply_content_transaction
+    domain: yscene
+    owning_class: scene
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rich
+        type: struct yetty_ycore_buffer
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
 classes:
   - name: scene
     domain: yscene
@@ -333,6 +618,10 @@ classes:
         set: false
       - name: runtime
         type: "struct yetty_yframework *"
+        get: false
+        set: false
+      - name: event_loop
+        type: "struct yetty_yevent_event_loop *"
         get: false
         set: false
       - name: device
@@ -511,6 +800,142 @@ classes:
         type: "struct yscene_cell[256]"
         get: false
         set: false
+      - name: terminal_cell_width
+        type: float
+        get: false
+        set: false
+      - name: terminal_cell_height
+        type: float
+        get: false
+        set: false
+      - name: terminal_grid
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: terminal_font
+        type: "struct yetty_yfont_ms_font *"
+        get: false
+        set: false
+      - name: terminal_fallback_font
+        type: "struct yetty_yfont_ms_font *"
+        get: false
+        set: false
+      - name: terminal_grid_gpu_attached
+        type: bool
+        get: false
+        set: false
+      - name: rich_entries
+        type: "struct yscene_rich_entry *"
+        get: false
+        set: false
+      - name: rich_entry_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: rich_world_revision
+        type: uint64_t
+        get: false
+        set: false
+      - name: rich_staged_revision
+        type: uint64_t
+        get: false
+        set: false
+      - name: rich_dom_ids
+        type: "uint64_t *"
+        get: false
+        set: false
+      - name: rich_dom_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: rich_dom_generation
+        type: uint32_t
+        get: false
+        set: false
+      - name: rich_fault_countdown
+        type: int
+        get: false
+        set: false
+      - name: pointer_event_node
+        type: uint64_t
+        get: false
+        set: false
+      - name: pointer_event_x
+        type: float
+        get: false
+        set: false
+      - name: pointer_event_y
+        type: float
+        get: false
+        set: false
+      - name: pointer_event_kind
+        type: uint32_t
+        get: false
+        set: false
+      - name: pointer_event_button
+        type: uint32_t
+        get: false
+        set: false
+      - name: pointer_event_mods
+        type: uint32_t
+        get: false
+        set: false
+      - name: pointer_event_serial
+        type: uint64_t
+        get: false
+        set: false
+      - name: key_event_class
+        type: uint32_t
+        get: false
+        set: false
+      - name: key_event_len
+        type: size_t
+        get: false
+        set: false
+      - name: key_event_head
+        type: "uint8_t[32]"
+        get: false
+        set: false
+      - name: key_event_serial
+        type: uint64_t
+        get: false
+        set: false
+      - name: input_queue
+        type: "struct (unnamed struct at src/yetty/yscene/scene.c:390:5)[16]"
+        get: false
+        set: false
+      - name: input_queue_head
+        type: uint32_t
+        get: false
+        set: false
+      - name: input_queue_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: overlay_key_focus
+        type: int
+        get: false
+        set: false
+      - name: terminal_grid_generation
+        type: uint32_t
+        get: false
+        set: false
+      - name: layout_barrier_depth
+        type: uint32_t
+        get: false
+        set: false
+      - name: layout_barrier_render_pending
+        type: int
+        get: false
+        set: false
+      - name: rich_dom_cap
+        type: uint32_t
+        get: false
+        set: false
+      - name: rich_dom_active
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: yscene
@@ -557,6 +982,27 @@ classes:
       - slot: commit
         slot_domain: yscene
         impl: scene_commit
+      - slot: layout_barrier_begin
+        slot_domain: yscene
+        impl: scene_layout_barrier_begin_impl
+      - slot: layout_barrier_end
+        slot_domain: yscene
+        impl: scene_layout_barrier_end_impl
+      - slot: terminal_grid_generation
+        slot_domain: yscene
+        impl: scene_terminal_grid_generation_impl
+      - slot: terminal_grid_create
+        slot_domain: yscene
+        impl: scene_terminal_grid_create_impl
+      - slot: terminal_grid_write
+        slot_domain: yscene
+        impl: scene_terminal_grid_write_impl
+      - slot: terminal_write_content
+        slot_domain: yscene
+        impl: scene_terminal_write_content_impl
+      - slot: terminal_grid_resize
+        slot_domain: yscene
+        impl: scene_terminal_grid_resize_impl
       - slot: render
         slot_domain: yfigure
         impl: scene_render_slot
@@ -581,8 +1027,422 @@ classes:
       - slot: dump_state
         slot_domain: yfigure
         impl: scene_dump_state_slot
+      - slot: hit_opaque
+        slot_domain: yfigure
+        impl: scene_hit_opaque_impl
+      - slot: terminal_reply_pending
+        slot_domain: yscene
+        impl: scene_terminal_reply_pending_impl
+      - slot: terminal_reply_word
+        slot_domain: yscene
+        impl: scene_terminal_reply_word_impl
+      - slot: terminal_reply_consume
+        slot_domain: yscene
+        impl: scene_terminal_reply_consume_impl
+      - slot: input_event_head
+        slot_domain: yscene
+        impl: scene_input_event_head_impl
+      - slot: input_event_word
+        slot_domain: yscene
+        impl: scene_input_event_word_impl
+      - slot: input_event_pop
+        slot_domain: yscene
+        impl: scene_input_event_pop_impl
+      - slot: dispatch_key
+        slot_domain: yscene
+        impl: scene_dispatch_key_impl
+      - slot: note_key_intake
+        slot_domain: yscene
+        impl: scene_note_key_intake_impl
+      - slot: set_terminal_selection
+        slot_domain: yscene
+        impl: scene_set_terminal_selection_impl
+      - slot: dispatch_pointer
+        slot_domain: yscene
+        impl: scene_dispatch_pointer_impl
+      - slot: apply_content_transaction
+        slot_domain: yscene
+        impl: scene_apply_content_transaction_impl
+    internal: false
+    doc: null
+  - name: vtermgrid
+    domain: yscene
+    accessor: yetty_yscene_vtermgrid_class_get
+    type: regular
+    source_file: src/yetty/yscene/vtermgrid.c
+    parent: null
+    mixins: []
+    data: struct yetty_yscene_vtermgrid
+    data_fields:
+      - name: vterm
+        type: "VTerm *"
+        get: false
+        set: false
+      - name: sel_start_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: sel_start_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: sel_end_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: sel_end_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: sel_active
+        type: int
+        get: false
+        set: false
+      - name: store
+        type: struct yetty_yscene_vtermgrid_store
+        get: false
+        set: false
+      - name: alt_store
+        type: struct yetty_yscene_vtermgrid_store
+        get: false
+        set: false
+      - name: on_alt_screen
+        type: int
+        get: false
+        set: false
+      - name: state
+        type: "VTermState *"
+        get: false
+        set: false
+      - name: rows
+        type: uint32_t
+        get: false
+        set: false
+      - name: cols
+        type: uint32_t
+        get: false
+        set: false
+      - name: cursor_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: cursor_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: cursor_visible
+        type: int
+        get: false
+        set: false
+      - name: cursor_shape
+        type: int
+        get: false
+        set: false
+      - name: cursor_blink
+        type: int
+        get: false
+        set: false
+      - name: reverse_video
+        type: int
+        get: false
+        set: false
+      - name: default_fg
+        type: uint32_t
+        get: false
+        set: false
+      - name: default_bg
+        type: uint32_t
+        get: false
+        set: false
+      - name: generation
+        type: uint32_t
+        get: false
+        set: false
+      - name: event_loop
+        type: "struct yetty_yevent_event_loop *"
+        get: false
+        set: false
+      - name: render_kick
+        type: "void (*)(void *)"
+        get: false
+        set: false
+      - name: render_kick_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: blink_listener
+        type: struct yetty_yevent_event_listener
+        get: false
+        set: false
+      - name: blink_timer
+        type: yetty_yevent_timer_id
+        get: false
+        set: false
+      - name: blink_timer_running
+        type: int
+        get: false
+        set: false
+      - name: blink_phase
+        type: int
+        get: false
+        set: false
+      - name: has_blink_cells
+        type: int
+        get: false
+        set: false
+      - name: bell_count
+        type: uint64_t
+        get: false
+        set: false
+      - name: bell_hook
+        type: "void (*)(void *)"
+        get: false
+        set: false
+      - name: bell_hook_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: reply_discarded_bytes
+        type: uint64_t
+        get: false
+        set: false
+      - name: reply_buffer
+        type: "uint8_t *"
+        get: false
+        set: false
+      - name: reply_buffer_len
+        type: size_t
+        get: false
+        set: false
+      - name: reply_buffer_cap
+        type: size_t
+        get: false
+        set: false
+      - name: pending_utf8
+        type: "uint8_t[4]"
+        get: false
+        set: false
+      - name: pending_utf8_len
+        type: uint8_t
+        get: false
+        set: false
+      - name: device
+        type: WGPUDevice
+        get: false
+        set: false
+      - name: queue
+        type: WGPUQueue
+        get: false
+        set: false
+      - name: target_format
+        type: WGPUTextureFormat
+        get: false
+        set: false
+      - name: font
+        type: "struct yetty_yfont_ms_font *"
+        get: false
+        set: false
+      - name: shader_module
+        type: WGPUShaderModule
+        get: false
+        set: false
+      - name: bind_group_layout
+        type: WGPUBindGroupLayout
+        get: false
+        set: false
+      - name: pipeline
+        type: WGPURenderPipeline
+        get: false
+        set: false
+      - name: sampler
+        type: WGPUSampler
+        get: false
+        set: false
+      - name: cell_buffer
+        type: WGPUBuffer
+        get: false
+        set: false
+      - name: cell_buffer_cells
+        type: size_t
+        get: false
+        set: false
+      - name: uniform_buffer
+        type: WGPUBuffer
+        get: false
+        set: false
+      - name: meta_buffer
+        type: WGPUBuffer
+        get: false
+        set: false
+      - name: meta_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: atlas_texture
+        type: WGPUTexture
+        get: false
+        set: false
+      - name: atlas_view
+        type: WGPUTextureView
+        get: false
+        set: false
+      - name: atlas_width
+        type: uint32_t
+        get: false
+        set: false
+      - name: atlas_height
+        type: uint32_t
+        get: false
+        set: false
+      - name: atlas_format
+        type: uint32_t
+        get: false
+        set: false
+      - name: atlas_bytes_per_pixel
+        type: uint32_t
+        get: false
+        set: false
+      - name: fallback_font
+        type: "struct yetty_yfont_ms_font *"
+        get: false
+        set: false
+      - name: fallback_meta_buffer
+        type: WGPUBuffer
+        get: false
+        set: false
+      - name: fallback_meta_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: fallback_atlas_texture
+        type: WGPUTexture
+        get: false
+        set: false
+      - name: fallback_atlas_view
+        type: WGPUTextureView
+        get: false
+        set: false
+      - name: fallback_atlas_width
+        type: uint32_t
+        get: false
+        set: false
+      - name: fallback_atlas_height
+        type: uint32_t
+        get: false
+        set: false
+      - name: fallback_atlas_format
+        type: uint32_t
+        get: false
+        set: false
+      - name: fallback_atlas_bytes_per_pixel
+        type: uint32_t
+        get: false
+        set: false
+      - name: bind_group
+        type: WGPUBindGroup
+        get: false
+        set: false
+      - name: bind_group_valid
+        type: int
+        get: false
+        set: false
+      - name: pack_scratch
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: pack_scratch_cells
+        type: size_t
+        get: false
+        set: false
+      - name: uni_pixel_range
+        type: float
+        get: false
+        set: false
+      - name: uni_scale
+        type: float
+        get: false
+        set: false
+      - name: uni_baseline_y
+        type: float
+        get: false
+        set: false
+      - name: uni_glyph_left
+        type: float
+        get: false
+        set: false
+      - name: cell_size
+        type: struct yetty_ycore_pixel_size
+        get: false
+        set: false
+    ops: []
+    internal: true
     doc: null
 exposed:
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_terminal_grid_create
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+      - name: cell_width
+        type: float
+      - name: cell_height
+        type: float
+    doc: "/* Create/replace the embedded terminal grid at the given geometry. The cell
+ * metrics are the pixel pitch the grid renders at; rich content anchored to
+ * (row, col) is positioned against them, so they must match the grid. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_terminal_grid_write
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const uint8_t *"
+      - name: len
+        type: size_t
+    doc: "/* Feed ordinary terminal bytes to the embedded grid. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_terminal_write_content
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: vt_bytes
+        type: "const uint8_t *"
+      - name: vt_len
+        type: size_t
+      - name: rich_words
+        type: "const uint32_t *"
+      - name: rich_word_count
+        type: size_t
+    doc: "/* Atomic content publish (#699/#4): feed the terminal VT bytes to the grid AND
+ * apply the rich body together, with a SINGLE render at the end — so a frame is
+ * never rendered with the terminal update but not its paired rich update (or
+ * vice versa). Either half may be empty. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_terminal_grid_resize
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+    doc: "/* Resize the embedded grid. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_terminal_grid
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The embedded terminal grid object (borrowed), or an error when absent —
+ * lets tests/tools inspect the client grid's cells directly. */"
   - source_file: src/yetty/yscene/scene.c
     name: yetty_yscene_create
     return_type: struct yetty_yscene_scene_ptr_result
@@ -597,6 +1457,83 @@ exposed:
  * nothing. With a real context the scene binds the framework's shared
  * drawable registry and builds its GPU pipeline (shared ydraw-layer
  * machinery: binder + yscene.wgsl + ysdf/effects libs). */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_rich_fault_arm
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: countdown
+        type: int
+    doc: "/* Tests only: arm the rich-DOM fault countdown — the Nth fallible stage
+ * (declare/transform/append/mint/retire, in call order) fails. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_apply_content_transaction
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rich_words
+        type: "const uint32_t *"
+      - name: rich_word_count
+        type: size_t
+    doc: "/* One atomic rich content transaction (#699.3: rich-only — the retired
+ * semantic paint half no longer exists in the schema): the body is fully
+ * staged/validated before publication, so a malformed rich body publishes
+ * NOTHING. A present-but-empty body (record_count 0) clears the rich
+ * world. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_key_event_serial
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The recorded key-event serial (monotonic; 0 = none yet). */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_take_input_event
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_class
+        type: "uint32_t *"
+      - name: out_bytes
+        type: "uint8_t *"
+      - name: out_capacity
+        type: uint32_t
+    doc: "/* Chrome consumer drain (review #15): pop the OLDEST queued input event —
+ * LOSSLESSLY. Returns the stored byte length (-1 when the queue is empty);
+ * the class lands in out_class. The event is dequeued ONLY when the whole
+ * payload fits in out_capacity; a short buffer copies nothing, keeps the
+ * event queued, and the (positive) return tells the caller the required
+ * size for the retry. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_key_focus
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Whether the chrome currently owns key focus (set by a consumed pointer
+ * press on opaque chrome; cleared by a press that fell through). */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_rich_entry_count
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The published rich world size — tests assert atomicity through it. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_set_default_font
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: font
+        type: "struct yetty_yfont_font *"
+    doc: "/* Install the slot-0 default font on a directly-created scene. The wire
+ * factory installs from its args bundle; embedders that create scenes
+ * programmatically (the ymux viewer) install here. Borrowed — the
+ * caller owns the font and must outlive the scene. */"
   - source_file: src/yetty/yscene/scene.c
     type_text: "struct yetty_yscene_factory_args {
     struct yetty_ydraw_composite_factory * composite_factory;
@@ -691,6 +1628,38 @@ exposed:
  * order over world AABBs + effective clips. Returns the owning node's
  * external id; 0 = no leaf hit (the document root / background). */"
   - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_dispatch_pointer
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: local_x
+        type: uint32_t
+      - name: local_y
+        type: uint32_t
+      - name: kind
+        type: uint32_t
+      - name: button
+        type: uint32_t
+      - name: mods
+        type: uint32_t
+      - name: pressed
+        type: uint32_t
+    doc: "/* Production overlay POINTER dispatch (#699.4, review #12): resolve the dom
+ * leaf under the point and RECORD the event on the scene (node id, position,
+ * kind/button/mods, a monotonic serial) — the overlay chrome's event intake.
+ * Returns the hit node's external id (0 = nothing consumed the point). The
+ * bridge calls this for pointer events the overlay consumed; chrome widgets
+ * poll/react via the recorded state until a richer widget protocol exists. */"
+  - source_file: src/yetty/yscene/scene.c
+    name: yetty_yscene_scene_pointer_event_serial
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* The recorded pointer-event serial (monotonic; 0 = none yet) — chrome and
+ * tests observe dispatch through it. */"
+  - source_file: src/yetty/yscene/scene.c
     name: yetty_yscene_render_plan
     return_type: struct yetty_ycore_char_ptr_result
     args:
@@ -711,6 +1680,250 @@ exposed:
         type: float
     doc: "/* View scale (HiDPI / zoom) — derive/view state, never baked into wire
  * coordinates. */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    type_text: "enum yetty_yscene_vtermgrid_cell_attr {
+    YETTY_YSCENE_VTERMGRID_ATTR_BOLD = 1,
+    YETTY_YSCENE_VTERMGRID_ATTR_UNDERLINE = 2,
+    YETTY_YSCENE_VTERMGRID_ATTR_UNDERLINE2 = 4,
+    YETTY_YSCENE_VTERMGRID_ATTR_ITALIC = 8,
+    YETTY_YSCENE_VTERMGRID_ATTR_REVERSE = 16,
+    YETTY_YSCENE_VTERMGRID_ATTR_BLINK = 32,
+    YETTY_YSCENE_VTERMGRID_ATTR_STRIKE = 64,
+    YETTY_YSCENE_VTERMGRID_ATTR_CONCEAL = 128,
+    YETTY_YSCENE_VTERMGRID_ATTR_FAINT = 256,
+    YETTY_YSCENE_VTERMGRID_ATTR_UNDERLINE_CURLY = 512,
+};"
+    doc: "/* Per-cell attribute bits exposed to the GPU packer / consumers. Kept as a
+ * compact bitset (not the libvterm bitfield) so the packed GPU cell can carry
+ * it in one 16-bit field. */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    type_text: "struct yetty_yscene_vtermgrid_cell {
+    uint32_t glyph;
+    uint32_t fg;
+    uint32_t bg;
+    uint16_t attrs;
+    uint8_t width;
+    uint8_t pad;
+};"
+    doc: "/* One resolved terminal cell. `glyph` is the Unicode codepoint (the grid runs
+ * libvterm with a NULL glyph resolver, so the cell's glyph index IS the
+ * codepoint); the GPU packer maps it to an atlas slot. `fg`/`bg` are packed
+ * 0xFFBBGGRR. `width` is 1 (normal), 2 (wide head) or 0 (wide continuation /
+ * empty). */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_write
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const uint8_t *"
+      - name: len
+        type: size_t
+    doc: "/* Feed ordinary terminal bytes to libvterm, holding back a trailing partial
+ * UTF-8 sequence so a chunk split mid-codepoint never corrupts decoding. Local
+ * (expose) — the scene's virtual@ terminal_grid_write is the RPC surface and
+ * forwards here. */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_reset
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+    doc: "/* Discard all client terminal state and rebuild a fresh grid at the given
+ * geometry — the reconnect / new-stream-epoch path. No parser checkpoint or
+ * private state is carried across. */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_resize
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+    doc: "/* Resize the grid in place; the screen layer reallocs its own buffers and
+ * lineinfo (no manual fix needed, unlike the state-layer engine). */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_dims
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: "uint32_t *"
+      - name: cols
+        type: "uint32_t *"
+    doc: null
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_generation
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_cursor
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: "uint32_t *"
+      - name: col
+        type: "uint32_t *"
+      - name: visible
+        type: "int *"
+    doc: null
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_cell
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: out
+        type: "struct yetty_yscene_vtermgrid_cell *"
+    doc: "/* Read one cell of the current screen. Out-of-range positions yield a blank
+ * cell. */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_gpu_setup
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: runtime
+        type: "struct yetty_yframework *"
+      - name: font
+        type: "struct yetty_yfont_ms_font *"
+    doc: "/* Bind the GPU context (from the framework runtime) + the MSDF font this grid
+ * renders with, and build the pipeline. Local (expose): WebGPU handles come
+ * from `runtime->gpu`, so no raw WebGPU type ever crosses the generated API. */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_gpu_set_fallback_font
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fallback_font
+        type: "struct yetty_yfont_ms_font *"
+    doc: "/* Attach the optional FALLBACK face (#89): a raster ms-font whose FreeType
+ * fallback chain covers codepoints the MSDF base face lacks (CJK etc.).
+ * Borrowed — the scene owns both fonts. Local (expose). */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_mode_flags
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Packed mode/prop flags for state-equality tests (review #14): bit0 =
+ * cursor blink, bit1 = reverse video (DECSCNM); bits 8..15 = cursor shape
+ * (VTERM_PROP_CURSORSHAPE_*). Rendering state only — parser/pen internals
+ * are pinned behaviorally by fragmentation + continuation vectors. */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_reply_pending
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Pending (untaken) terminal-reply byte count — peek, does not drain. */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_reply_word
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: word_index
+        type: uint32_t
+    doc: "/* Scalar-word access into the pending reply bytes (review #15): 8 bytes at
+ * word_index*8, packed LE into a u64 — RPC-marshallable, unlike a buffer
+ * return. Consume drops the drained prefix. */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_reply_consume
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: byte_count
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_take_replies
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out
+        type: "uint8_t *"
+      - name: out_capacity
+        type: uint32_t
+    doc: "/* Take (and clear) the accumulated terminal reply bytes — the scalar-word
+ * drain (reply_word/reply_consume) is the production route; this whole-copy
+ * form serves local embedders and tests. */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_on_alt_screen
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_set_selection
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: start_row
+        type: uint32_t
+      - name: start_col
+        type: uint32_t
+      - name: end_row
+        type: uint32_t
+      - name: end_col
+        type: uint32_t
+      - name: active
+        type: int
+    doc: "/* Selection span (review #11): a linear [start..end] cell range rendered
+ * INVERTED (fg/bg swap, like tmux/xterm selections). active == 0 clears.
+ * Local (expose): copy-mode chrome drives this from the bridge. */"
+  - source_file: src/yetty/yscene/vtermgrid.c
+    name: yetty_yscene_vtermgrid_render
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: target
+        type: "struct yetty_ydraw_target *"
+      - name: rect
+        type: struct yetty_ycore_rectangle
+    doc: "/* Draw the current cell grid into `target`, positioned/clipped to `rect`
+ * (logical pixels, pane-local). No-op when GPU state or font is absent
+ * (headless). Composites with LoadOp_Load over whatever is already in the
+ * target. Local (expose): the scene calls this from its render pass. */"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result
@@ -758,6 +1971,18 @@ types:
         type: int
       - name: cause
         type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ycore_pixel_coord
     kind: struct
     fields:
@@ -815,6 +2040,11 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_yevent_event_listener
+    kind: struct
+    fields:
+      - name: handler
+        type: yetty_ycore_event_handler
   - name: yetty_yrender_buffer
     kind: struct
     fields:
@@ -946,6 +2176,35 @@ types:
             type: "struct yetty_yscene_scene *"
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_yscene_vtermgrid_store
+    kind: struct
+    fields:
+      - name: cells
+        type: "struct yetty_yscene_vtermgrid_store_cell *"
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+      - name: pen_fg
+        type: uint32_t
+      - name: pen_bg
+        type: uint32_t
+      - name: pen_attrs
+        type: uint16_t
+      - name: pen_protected
+        type: int
+      - name: default_fg
+        type: uint32_t
+      - name: default_bg
+        type: uint32_t
+      - name: global_reverse
+        type: int
+      - name: cursor_row
+        type: uint32_t
+      - name: cursor_col
+        type: uint32_t
+      - name: cursor_visible
+        type: int
   - name: yscene_cell
     kind: struct
     fields:
@@ -962,6 +2221,7 @@ local_types:
   yscene_complex_instance: src/yetty/yscene/scene.c
   yscene_staged_record: src/yetty/yscene/scene.c
   yscene_cell: src/yetty/yscene/scene.c
+  yscene_rich_entry: src/yetty/yscene/scene.c
   yetty_yscene_scene_ptr_result: src/yetty/yscene/scene.c
   yscene_transform: src/yetty/yscene/scene.c
   yscene_derive_frame: src/yetty/yscene/scene.c
@@ -969,6 +2229,11 @@ local_types:
   scene_transform_argument: src/yetty/yscene/scene.c
   scene_dump_buffer: src/yetty/yscene/scene.c
   yetty_yscene_factory_args: src/yetty/yscene/scene.c
+  yetty_yscene_vtermgrid_cell_attr: src/yetty/yscene/vtermgrid.c
+  yetty_yscene_vtermgrid_cell: src/yetty/yscene/vtermgrid.c
+  yetty_yscene_vtermgrid: src/yetty/yscene/vtermgrid.c
+  yetty_yscene_vtermgrid_ptr_result: src/yetty/yscene/vtermgrid.c
+  vtermgrid_uniforms: src/yetty/yscene/vtermgrid.c
 local_typedefs:
   __int128_t:
     source_file: src/yetty/yscene/scene.c
@@ -986,47 +2251,101 @@ local_typedefs:
     source_file: src/yetty/yscene/scene.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_yscene_constructor_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_constructor_fn)(struct yetty_yclass_object *);"
   yetty_yscene_set_registry_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_set_registry_fn)(struct yetty_yclass_object *, struct yetty_ydraw_drawable_list_registry *);"
   yetty_yscene_node_declare_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_declare_fn)(struct yetty_yclass_object *, uint64_t, uint64_t);"
   yetty_yscene_node_set_transform_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_set_transform_fn)(struct yetty_yclass_object *, uint64_t, float, float, float, float, float, float);"
   yetty_yscene_node_set_clip_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_set_clip_fn)(struct yetty_yclass_object *, uint64_t, float, float, float, float);"
   yetty_yscene_node_clear_clip_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_clear_clip_fn)(struct yetty_yclass_object *, uint64_t);"
   yetty_yscene_node_set_opacity_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_set_opacity_fn)(struct yetty_yclass_object *, uint64_t, float);"
   yetty_yscene_node_set_z_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_set_z_fn)(struct yetty_yclass_object *, uint64_t, int32_t);"
   yetty_yscene_node_set_content_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_set_content_fn)(struct yetty_yclass_object *, uint64_t, struct yetty_ycore_buffer);"
   yetty_yscene_node_append_batch_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_append_batch_fn)(struct yetty_yclass_object *, uint64_t, struct yetty_ycore_buffer);"
   yetty_yscene_node_replace_batch_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_replace_batch_fn)(struct yetty_yclass_object *, uint64_t, uint32_t, struct yetty_ycore_buffer);"
   yetty_yscene_node_remove_batch_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_remove_batch_fn)(struct yetty_yclass_object *, uint64_t, uint32_t);"
   yetty_yscene_node_delete_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_node_delete_fn)(struct yetty_yclass_object *, uint64_t);"
   yetty_yscene_zero_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yscene_zero_fn)(struct yetty_yclass_object *);"
   yetty_yscene_commit_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yscene/scene.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
     text: "typedef struct yetty_ycore_uint64_result (*yetty_yscene_commit_fn)(struct yetty_yclass_object *);"
+  yetty_yscene_layout_barrier_begin_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_layout_barrier_begin_fn)(struct yetty_yclass_object *);"
+  yetty_yscene_layout_barrier_end_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_layout_barrier_end_fn)(struct yetty_yclass_object *);"
+  yetty_yscene_terminal_grid_generation_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_uint32_result (*yetty_yscene_terminal_grid_generation_fn)(struct yetty_yclass_object *);"
+  yetty_yscene_terminal_grid_create_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_terminal_grid_create_fn)(struct yetty_yclass_object *, uint32_t, uint32_t, float, float);"
+  yetty_yscene_terminal_grid_write_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_terminal_grid_write_fn)(struct yetty_yclass_object *, struct yetty_ycore_buffer);"
+  yetty_yscene_terminal_write_content_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_terminal_write_content_fn)(struct yetty_yclass_object *, struct yetty_ycore_buffer, struct yetty_ycore_buffer);"
+  yetty_yscene_terminal_grid_resize_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_terminal_grid_resize_fn)(struct yetty_yclass_object *, uint32_t, uint32_t);"
+  yetty_yscene_terminal_reply_pending_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_uint32_result (*yetty_yscene_terminal_reply_pending_fn)(struct yetty_yclass_object *);"
+  yetty_yscene_terminal_reply_word_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_uint64_result (*yetty_yscene_terminal_reply_word_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_yscene_terminal_reply_consume_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_terminal_reply_consume_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_yscene_input_event_head_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_uint64_result (*yetty_yscene_input_event_head_fn)(struct yetty_yclass_object *);"
+  yetty_yscene_input_event_word_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_uint64_result (*yetty_yscene_input_event_word_fn)(struct yetty_yclass_object *, uint32_t);"
+  yetty_yscene_input_event_pop_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_input_event_pop_fn)(struct yetty_yclass_object *);"
+  yetty_yscene_dispatch_key_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_uint32_result (*yetty_yscene_dispatch_key_fn)(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_buffer);"
+  yetty_yscene_note_key_intake_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_note_key_intake_fn)(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_buffer);"
+  yetty_yscene_set_terminal_selection_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_set_terminal_selection_fn)(struct yetty_yclass_object *, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);"
+  yetty_yscene_dispatch_pointer_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_uint64_result (*yetty_yscene_dispatch_pointer_fn)(struct yetty_yclass_object *, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);"
+  yetty_yscene_apply_content_transaction_fn:
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yscene/scene.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yscene_apply_content_transaction_fn)(struct yetty_yclass_object *, struct yetty_ycore_buffer);"

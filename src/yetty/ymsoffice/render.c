@@ -1151,6 +1151,14 @@ struct yetty_ymsoffice_render_result yetty_ymsoffice_render(
         return YETTY_ERR(yetty_ymsoffice_render, "ymsoffice render: emission failed", emit_res);
     }
 
+    /* Serialized scene bounds carry the CONTENT extent (ecosystem convention;
+     * same fix as ymarkdown): a receiver that cannot walk record AABBs — the
+     * ymux daemon reserving figure rows — reads the document height from the
+     * container. height_cells=0 (ycat's unbounded-document shape) used to
+     * serialize scene_max_y=0 and reserve nothing. */
+    yetty_ydraw_drawable_list_set_scene_bounds(ctx.buffer, 0.0f, 0.0f, scene_w,
+                                               ctx.cursor_y + MSO_MARGIN);
+
     struct yetty_ymsoffice_render_output output = {
         .buffer = ctx.buffer,
         .scene_width = scene_w,

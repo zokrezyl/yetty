@@ -90,6 +90,17 @@ set(YETTY_YCORE_SOURCES "")
 # Wire-format state machine (OSC framer + decode stack)
 add_subdirectory(ywire)
 
+# ymux — tmux-like terminal session server (#695): independent daemon-side
+# terminal engine + history + projector. No yvterm, no GPU. POSIX-only
+# (unix-domain sockets, poll, forkpty) — built on desktop Linux only; the
+# Windows/WebASM/mobile builds skip it (YETTY_YMUX_SUPPORTED, set in the root
+# CMakeLists). yscene consumes only the self-contained wire header
+# ymux/rich-format.h via its own `src` include path, so it does NOT need the
+# ymux library and keeps building everywhere.
+if(YETTY_YMUX_SUPPORTED)
+    add_subdirectory(ymux)
+endif()
+
 # ytermsink — abstract terminal-host sink interface (GPU-free). Both yvterm
 # (content figure, calls up) and yterminal (host, implements) link it, so it
 # must be defined before either.

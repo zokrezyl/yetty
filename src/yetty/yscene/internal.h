@@ -305,6 +305,17 @@ struct yetty_ycore_void_result yetty_yscene_dom_node_delete(struct yetty_yscene_
  * retired, the root's placement reset (and marked placement-dirty). */
 struct yetty_ycore_void_result yetty_yscene_dom_zero(struct yetty_yscene_dom *dom);
 
+/* Allocation-free LEAF delete: the rollback primitive for staged rich
+ * nodes (leaves by construction) — infallible under allocator pressure. */
+struct yetty_ycore_void_result yetty_yscene_dom_node_delete_leaf(struct yetty_yscene_dom *dom,
+                                                                 uint64_t external_id);
+
+/* Delete several subtrees atomically: ALL collection (the fallible phase)
+ * precedes ANY destructive step, so failure leaves everything untouched. */
+struct yetty_ycore_void_result yetty_yscene_dom_nodes_delete_atomic(struct yetty_yscene_dom *dom,
+                                                                    const uint64_t *external_ids,
+                                                                    uint32_t id_count);
+
 /*===========================================================================
  * Versioning
  *=========================================================================*/

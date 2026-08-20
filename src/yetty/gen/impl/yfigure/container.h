@@ -25,8 +25,9 @@ struct yetty_yfigure_registry;
 #define YETTY_YCLASSGEN_TYPE_YETTY_YFIGURE_HIT
 /* Hit-test result: the child whose rect contains the cursor, plus the cursor
  * coordinates inside that child's own pixel space (origin = child rect's
- * top-left). figure_id == 0 means "no hit". Iteration is back-to-front, so
- * for overlapping children the BACK-most match wins. This is an `expose`d
+ * top-left). figure_id == 0 means "no hit". Iteration is back-to-front and
+ * the LAST match wins — for overlapping children the TOP of the z-stack takes
+ * the hit (overlay-first input, #699.4). This is an `expose`d
  * type: codegen reads this definition (it sees the whole TU during its parse
  * pass) and re-emits it into the generated container.h for consumers. The
  * definition lives HERE because this TU no longer includes container.h, so it
@@ -118,8 +119,31 @@ struct yetty_ycore_void_result yetty_yfigure_set_child_rect(struct yetty_yclass_
                                                             struct yetty_ycore_rectangle rect);
 struct yetty_ycore_void_result yetty_yfigure_set_rect(struct yetty_yclass_object *obj,
                                                       struct yetty_ycore_rectangle rect);
+/* Navigate to a child figure's yclass OBJECT by id. Object-returning:
+ * over RPC a remote producer receives a proxy handle (the skel registers
+ * the object), in-process callers the real object — the step a producer
+ * needs between create_child and calling the child's own typed methods
+ * (e.g. a scene's terminal surface). */
+struct yetty_yclass_object_ptr_result yetty_yfigure_child_object(struct yetty_yclass_object *obj,
+                                                                 uint32_t child_id);
+/* Seat a producer child as a FIXED FULL-PANE OVERLAY: place its rect at the
+ * given container-local position with NO viewport offset added (so it aligns
+ * with the container's STRUCTURAL children — e.g. the terminal content grid at
+ * the pane origin — rather than the offset producer-card space), and clear
+ * scroll anchoring so it never slides with the underlying pane's scroll. The
+ * ymux full-pane terminal grid uses this after CREATE_CHILD so it covers the
+ * pane's top rows instead of floating a couple of rows below them. */
+struct yetty_ycore_void_result yetty_yfigure_seat_overlay(struct yetty_yclass_object *obj,
+                                                          uint32_t id,
+                                                          struct yetty_ycore_rectangle rect);
 struct yetty_ycore_void_result yetty_yfigure_set_child_z(struct yetty_yclass_object *obj,
                                                          uint32_t id, int32_t z);
+/* Mark a child INPUT-PASSTHROUGH (see child_entry::input_passthrough): the
+ * hit test skips it, so clicks fall through to the figure beneath. A void
+ * one-way method so a pipelined producer session (ychrome wire host) can
+ * fire-and-forget it right after create_child. */
+struct yetty_ycore_void_result yetty_yfigure_set_child_input_passthrough(
+    struct yetty_yclass_object *obj, uint32_t id, uint32_t passthrough);
 struct yetty_ycore_void_result yetty_yfigure_set_child_hidden(struct yetty_yclass_object *obj,
                                                               uint32_t id, uint32_t hidden);
 struct yetty_ycore_void_result yetty_yfigure_set_child_scroll(struct yetty_yclass_object *obj,
@@ -151,8 +175,14 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_rect_fn)(
     struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_rect_fn)(struct yetty_yclass_object *,
                                                                     struct yetty_ycore_rectangle);
+typedef struct yetty_yclass_object_ptr_result (*yetty_yfigure_child_object_fn)(
+    struct yetty_yclass_object *, uint32_t);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_seat_overlay_fn)(
+    struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_z_fn)(struct yetty_yclass_object *,
                                                                        uint32_t, int32_t);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_input_passthrough_fn)(
+    struct yetty_yclass_object *, uint32_t, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_hidden_fn)(
     struct yetty_yclass_object *, uint32_t, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_scroll_fn)(

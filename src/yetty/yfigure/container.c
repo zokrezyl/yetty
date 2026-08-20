@@ -44,8 +44,9 @@
 
 /* Hit-test result: the child whose rect contains the cursor, plus the cursor
  * coordinates inside that child's own pixel space (origin = child rect's
- * top-left). figure_id == 0 means "no hit". Iteration is back-to-front, so
- * for overlapping children the BACK-most match wins. This is an `expose`d
+ * top-left). figure_id == 0 means "no hit". Iteration is back-to-front and
+ * the LAST match wins — for overlapping children the TOP of the z-stack takes
+ * the hit (overlay-first input, #699.4). This is an `expose`d
  * type: codegen reads this definition (it sees the whole TU during its parse
  * pass) and re-emits it into the generated container.h for consumers. The
  * definition lives HERE because this TU no longer includes container.h, so it
@@ -126,6 +127,20 @@ struct child_entry {
      * container re-anchors it each render. Host-structural figures (content
      * grid, chrome) are seated via add_child and stay unanchored. */
     int scroll_anchored;
+    /* SEATED figures (seat_overlay): their rect is PANE-local — the seat
+     * bypassed the viewport-offset add that CREATE_CHILD applies, so the
+     * hit test must subtract the container's viewport offset before
+     * re-origining the cursor (render already adds the target viewport).
+     * Without this a seated figure's hit space is displaced by exactly
+     * the window chrome height (review #17 click-miss). */
+    int seated;
+    /* INPUT-PASSTHROUGH children are skipped by the hit test entirely.
+     * Chrome producers (ychrome backdrop/caption) mark their figures so —
+     * their interactivity (caption drag / window buttons) arrives via the
+     * chrome engine's raw event feed, and taking container hits would
+     * steal clicks from the app figure beneath (the topmost-wins walk put
+     * the caption strip exactly over ygreeter's tabs). */
+    int input_passthrough;
     /* Absolute content-row index the figure's top was created at (the
      * container's content_root_row at mint time). Valid when scroll_anchored. */
     uint64_t creation_row;
@@ -1269,13 +1284,31 @@ static int hit_visit(uint32_t id, struct yetty_yfigure_figure *child, void *user
     if (yetty_yfigure_figure_hidden_get((struct yetty_yclass_object *)(child)-1).value) {
         return 0;
     }
-    if (st->x <
+    /* SEATED children (seat_overlay) carry PANE-local rects — the seat
+     * bypassed the viewport-offset add CREATE_CHILD applies — so the
+     * window-coord cursor drops the container's viewport offset before
+     * containment and re-origin (render adds the target viewport the
+     * same way; review #17 click-miss). */
+    float cursor_x = st->x;
+    float cursor_y = st->y;
+    if (st->container) {
+        struct child_entry *seat_entry = NULL;
+        HASH_FIND_INT(st->container->children, &id, seat_entry);
+        if (seat_entry && seat_entry->input_passthrough) {
+            return 0;
+        }
+        if (seat_entry && seat_entry->seated) {
+            cursor_x -= st->viewport_offset_x;
+            cursor_y -= st->viewport_offset_y;
+        }
+    }
+    if (cursor_x <
             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(child)-1).value.min.x ||
-        st->x >=
+        cursor_x >=
             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(child)-1).value.max.x ||
-        st->y <
+        cursor_y <
             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(child)-1).value.min.y ||
-        st->y >=
+        cursor_y >=
             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(child)-1).value.max.y) {
         return 0;
     }
@@ -1285,6 +1318,7 @@ static int hit_visit(uint32_t id, struct yetty_yfigure_figure *child, void *user
      * would make decoration figures (e.container. shader-glyph at 0xFFFFFFFE,
      * inserted at terminal create) steal hits from interactive figures
      * (ygreeter / ygui chrome) inserted later. */
+    struct yetty_yfigure_hit previous_hit = st->hit;
     st->hit.figure_id = id;
     if (yetty_yfigure_figure_absolute_coords_get((struct yetty_yclass_object *)(child)-1).value) {
         /* Absolute-coords figure (ygui chrome / scrolling sub-figures): its
@@ -1311,11 +1345,28 @@ static int hit_visit(uint32_t id, struct yetty_yfigure_figure *child, void *user
         }
     } else {
         /* Local-coords producer figure (yplot/yimage/…): content drawn from
-         * the figure's own origin; re-origin the cursor to its rect. */
+         * the figure's own origin; re-origin the (seat-adjusted) cursor to
+         * its rect. */
         struct yetty_ycore_rectangle rect =
             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(child)-1).value;
-        st->hit.local_x = st->x - rect.min.x;
-        st->hit.local_y = st->y - rect.min.y;
+        st->hit.local_x = cursor_x - rect.min.x;
+        st->hit.local_y = cursor_y - rect.min.y;
+    }
+    /* Overlay-first consumption (#699.4): a figure that reports itself
+     * input-TRANSPARENT at this local point does not take the hit — the
+     * previously-recorded (lower) figure keeps it, so unconsumed events fall
+     * through an empty overlay to the content beneath. Default figures are
+     * opaque; a dispatch failure conservatively counts as opaque. */
+    struct yetty_ycore_int_result opaque_res = yetty_yfigure_hit_opaque(
+        (struct yetty_yclass_object *)(child)-1, st->hit.local_x, st->hit.local_y);
+    ydebug("hit_visit: id=%u local=(%.1f,%.1f) opaque=%d", id, st->hit.local_x, st->hit.local_y,
+           YETTY_IS_OK(opaque_res) ? opaque_res.value : -1);
+    if (YETTY_IS_OK(opaque_res) && !opaque_res.value) {
+        st->hit = previous_hit;
+        return 0;
+    }
+    if (YETTY_IS_ERR(opaque_res)) {
+        yetty_ycore_error_destroy(opaque_res.error);
     }
     return 0;
 }
@@ -1439,11 +1490,78 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_rect_impl(
     return container_do_set_container_rect(obj, rect);
 }
 
+/* Navigate to a child figure's yclass OBJECT by id. Object-returning:
+ * over RPC a remote producer receives a proxy handle (the skel registers
+ * the object), in-process callers the real object — the step a producer
+ * needs between create_child and calling the child's own typed methods
+ * (e.g. a scene's terminal surface). */
+YETTY_ANNOTATE("virtual@yfigure:container:child_object")
+static struct yetty_yclass_object_ptr_result yetty_yfigure_container_child_object_impl(
+    struct yetty_yclass_object *obj, uint32_t child_id)
+{
+    struct yetty_yfigure_figure_ptr_result child_res =
+        yetty_yfigure_container_find_child_by_id(obj, child_id);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, child_res, "yfigure child_object: find_child");
+    if (!child_res.value) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "yfigure child_object: no such child");
+    }
+    return yetty_yfigure_figure_to(child_res.value);
+}
+
+/* Seat a producer child as a FIXED FULL-PANE OVERLAY: place its rect at the
+ * given container-local position with NO viewport offset added (so it aligns
+ * with the container's STRUCTURAL children — e.g. the terminal content grid at
+ * the pane origin — rather than the offset producer-card space), and clear
+ * scroll anchoring so it never slides with the underlying pane's scroll. The
+ * ymux full-pane terminal grid uses this after CREATE_CHILD so it covers the
+ * pane's top rows instead of floating a couple of rows below them. */
+YETTY_ANNOTATE("virtual@yfigure:container:seat_overlay")
+static struct yetty_ycore_void_result yetty_yfigure_container_seat_overlay_impl(
+    struct yetty_yclass_object *obj, uint32_t id, struct yetty_ycore_rectangle rect)
+{
+    struct yetty_yfigure_container_ptr_result container_r = yetty_yfigure_container_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, container_r, "yfigure seat_overlay: from_obj");
+    struct yetty_yfigure_container *container = container_r.value;
+    struct child_entry *entry = NULL;
+    HASH_FIND_INT(container->children, &id, entry);
+    if (!entry) {
+        return YETTY_ERR(yetty_ycore_void, "yfigure seat_overlay: no such child");
+    }
+    entry->scroll_anchored = 0;
+    entry->seated = 1;
+    struct yetty_ycore_void_result rect_r =
+        yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(entry->figure) - 1, rect);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_r, "yfigure seat_overlay: rect_set");
+    return yetty_yfigure_figure_dirty_set(obj, 1);
+}
+
 YETTY_ANNOTATE("virtual@yfigure:container:set_child_z")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_child_z_impl(
     struct yetty_yclass_object *obj, uint32_t id, int32_t z)
 {
     return container_do_set_child_z(obj, id, z);
+}
+
+/* Mark a child INPUT-PASSTHROUGH (see child_entry::input_passthrough): the
+ * hit test skips it, so clicks fall through to the figure beneath. A void
+ * one-way method so a pipelined producer session (ychrome wire host) can
+ * fire-and-forget it right after create_child. */
+YETTY_ANNOTATE("virtual@yfigure:container:set_child_input_passthrough")
+static struct yetty_ycore_void_result yetty_yfigure_container_set_child_input_passthrough_impl(
+    struct yetty_yclass_object *obj, uint32_t id, uint32_t passthrough)
+{
+    struct yetty_yfigure_container_ptr_result container_r = yetty_yfigure_container_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, container_r,
+                        "container set_child_input_passthrough: from_obj");
+    struct yetty_yfigure_container *container = container_r.value;
+    struct child_entry *entry = NULL;
+    HASH_FIND_INT(container->children, &id, entry);
+    if (!entry) {
+        ydebug("container set_child_input_passthrough: id=%u not bound", id);
+        return YETTY_OK_VOID();
+    }
+    entry->input_passthrough = passthrough ? 1 : 0;
+    return YETTY_OK_VOID();
 }
 
 YETTY_ANNOTATE("virtual@yfigure:container:set_child_hidden")

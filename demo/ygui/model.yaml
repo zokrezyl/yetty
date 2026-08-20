@@ -19,6 +19,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 01_button_test
     domain: demoygui
@@ -39,6 +40,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 02_coord_debug
     domain: demoygui
@@ -59,6 +61,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 03_all_widgets
     domain: demoygui
@@ -79,6 +82,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 04_edge_test
     domain: demoygui
@@ -99,6 +103,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 05_debug_events
     domain: demoygui
@@ -119,6 +124,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 06_hello_button
     domain: demoygui
@@ -139,6 +145,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 07_label_and_button
     domain: demoygui
@@ -159,6 +166,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 08_slider
     domain: demoygui
@@ -179,6 +187,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 09_checkbox
     domain: demoygui
@@ -199,6 +208,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 10_panel_layout
     domain: demoygui
@@ -219,6 +229,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 11_progress_bar
     domain: demoygui
@@ -239,6 +250,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 12_calculator
     domain: demoygui
@@ -259,6 +271,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 13_color_mixer
     domain: demoygui
@@ -279,6 +292,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 14_todo_list
     domain: demoygui
@@ -299,6 +313,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 15_dashboard
     domain: demoygui
@@ -319,6 +334,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 16_new_widgets
     domain: demoygui
@@ -339,6 +355,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 17_flex_row
     domain: demoygui
@@ -359,6 +376,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 18_flex_column
     domain: demoygui
@@ -379,6 +397,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 19_flex_dashboard
     domain: demoygui
@@ -399,6 +418,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 20_tree_view
     domain: demoygui
@@ -419,6 +439,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 21_tree_with_panes
     domain: demoygui
@@ -439,6 +460,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 22_tree_complex
     domain: demoygui
@@ -459,6 +481,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 23_rich_tabbar
     domain: demoygui
@@ -479,6 +502,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 24_ymarkdown
     domain: demoygui
@@ -499,6 +523,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 25_ypdf
     domain: demoygui
@@ -519,6 +544,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 26_ybrowser
     domain: demoygui
@@ -539,6 +565,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 27_yjungle
     domain: demoygui
@@ -559,6 +586,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 28_yzoo
     domain: demoygui
@@ -579,6 +607,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 29_yimage
     domain: demoygui
@@ -599,6 +628,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 30_radio
     domain: demoygui
@@ -619,6 +649,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 31_spinner
     domain: demoygui
@@ -639,6 +670,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 32_splitter
     domain: demoygui
@@ -659,6 +691,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 33_dialog
     domain: demoygui
@@ -679,6 +712,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 34_textarea
     domain: demoygui
@@ -699,6 +733,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 35_collapsing_header_open
     domain: demoygui
@@ -719,6 +754,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 36_ydiagram
     domain: demoygui
@@ -739,6 +775,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 37_scrollarea
     domain: demoygui
@@ -759,6 +796,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 38_ynodes
     domain: demoygui
@@ -779,6 +817,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 40_ymaze
     domain: demoygui
@@ -799,6 +838,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 41_yshadertoy
     domain: demoygui
@@ -819,6 +859,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 42_window_chrome
     domain: demoygui
@@ -839,6 +880,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 43_tree_showcase
     domain: demoygui
@@ -859,6 +901,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
   - name: 44_textinput
     domain: demoygui
@@ -895,6 +938,7 @@ classes:
       - slot: build
         slot_domain: yguiapp
         impl: build
+    internal: false
     doc: "/* Demo app class: holds the edit box, the live labels, and a copy buffer. */"
 types:
   - name: yetty_yclass_object_ptr_result

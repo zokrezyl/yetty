@@ -70,6 +70,28 @@ extern "C" {
  * Payload: yetty_content_rect. */
 #define YETTY_OSC_CS_CONTENT_RECT 610013 /* yetty_content_rect, comp=0 */
 
+/* Client → server: exit-window input HOLD. A NO-PAYLOAD control envelope the
+ * client sends at the very START of its teardown (before it closes channels or
+ * drains inbound). It ARMS the host's input-forwarding barrier: the host stops
+ * writing the user's keystrokes into the stream the client's close drain would
+ * consume, and instead HOLDS them host-side, releasing them to the pane once
+ * the client's connection is gone — so exit-window keys reach the resumed
+ * shell exactly once. It carries NO bytes: it can only DEFER the host's own
+ * user input, never inject anything (unlike the removed 610014 handback, which
+ * let child output write arbitrary bytes to PTY input). */
+#define YETTY_OSC_CS_CLIENT_INPUT_HOLD 610014 /* no payload */
+
+/* Server → client: HOLD acknowledgement. A NO-PAYLOAD envelope the host emits
+ * IMMEDIATELY after it has parsed the client's INPUT_HOLD and executed the arm
+ * — so its arrival PROVES the barrier is armed host-side. The client must keep
+ * its parser and input sinks alive after sending HOLD and only tear down
+ * (detach sinks, destroy the framework, close channels, run the close drain)
+ * once this ACK is seen. That closes the arm/teardown race: a keystroke the
+ * host processes before the ACK is forwarded to the still-live client (barrier
+ * not yet armed); every keystroke after the ACK is held (barrier armed) and can
+ * never land in the stream the close drain consumes. Carries no bytes. */
+#define YETTY_OSC_CS_CLIENT_INPUT_HOLD_ACK 610015 /* no payload */
+
 /* Server → client, figure-tagged variants. figure_id != 0; (x, y) are
  * card-local pixels. */
 #define YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE 700000  /* yetty_client_input_mouse,  comp=0 */
@@ -114,6 +136,11 @@ extern "C" {
  * a HiDPI display. Subscribing to mouse forwarding purely to learn the
  * number would steal the wheel from the terminal's scrollback. */
 #define YETTY_CLIENT_INPUT_SUB_RESIZE (1u << 4)
+/* Figure-KEY fan-out opt-in: once one of the client's figures is
+ * click-focused, the host consumes keystrokes and delivers them as
+ * structured CLIENT_INPUT_FIGURE_KEY envelopes instead of raw PTY bytes.
+ * Purely envelope-driven — no DEC mode, no terminal-emulation state. */
+#define YETTY_CLIENT_INPUT_SUB_KEY_FANOUT (1u << 5)
 
 struct yetty_client_input_sub {
     uint32_t magic;   /* YETTY_CLIENT_INPUT_SUB_MAGIC */

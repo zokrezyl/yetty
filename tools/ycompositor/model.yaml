@@ -62,6 +62,7 @@ classes:
       - slot: run
         slot_domain: yapp
         impl: ycompositor_app_run
+    internal: false
     doc: null
 types:
   - name: yetty_context

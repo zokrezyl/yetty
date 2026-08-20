@@ -270,3 +270,161 @@ struct yetty_ycore_void_result yetty_yclass_rpc_serve_connection(
      * in the host — the host just "serves RPC on this connection". */
     return yetty_ywire_connection_set_accept_cb(connection, rpc_connection_accept, NULL);
 }
+
+/*===========================================================================
+ * Forward (proxy) path — accept channels like the server, but relay each
+ * channel's raw request bytes to a callback instead of dispatching locally.
+ * A GPU-free intermediary (the ymux daemon role) uses this to tunnel a pane app's yclass RPC
+ * to the real upstream server (yetty), which owns the skels + impls + renderer.
+ * The frames pass through byte-for-byte, so handles/slots/root resolve against
+ * the upstream, not here.
+ *=========================================================================*/
+
+/* Connection-lifetime config: which callback receives each channel's bytes.
+ * One per proxied connection (i.e. per pane); lives as long as the connection
+ * (it is the accept callback's userdata). It owns the intrusive list of live
+ * per-channel forward states so connection teardown can free any that never saw
+ * a CLOSE event (connection destruction fires none). */
+struct rpc_forward_config {
+    yetty_yclass_rpc_forward_cb forward;
+    yetty_yclass_rpc_forward_close_cb close_cb;
+    void *userdata;
+    struct rpc_channel_forward *channels; /* intrusive singly-linked list head */
+};
+
+/* Per-accepted-channel forward state. Freed when the channel closes, or by
+ * yetty_yclass_rpc_forward_connection_destroy() for channels still open at
+ * teardown. */
+struct rpc_channel_forward {
+    struct yetty_ywire_channel *channel; /* borrowed — identifies the pairing */
+    struct rpc_forward_config *config;   /* borrowed (connection-lifetime) */
+    struct rpc_channel_forward *next;    /* next live forward on this connection */
+};
+
+/* Channel raw sink — hand a run of the pane app's request bytes to the caller's
+ * forward callback verbatim. Signature dictated by yetty_ywire_channel_raw_sink. */
+YETTY_EXTERNAL_CALLBACK
+static void rpc_forward_raw_sink(void *user, const uint8_t *bytes, size_t n)
+{
+    struct rpc_channel_forward *forward_state = user;
+    if (!forward_state || !bytes || n == 0 || !forward_state->config->forward) {
+        return;
+    }
+    forward_state->config->forward(forward_state->config->userdata, forward_state->channel, bytes,
+                                   n);
+}
+
+/* Notify the caller then free the per-channel forward state on CLOSE. The caller
+ * (the ymux daemon role) uses close_cb to drop its pairing + propagate the close to the client.
+ * Signature dictated by yetty_ywire_channel_event_cb. */
+YETTY_EXTERNAL_CALLBACK
+static void rpc_forward_event(void *user, struct yetty_ywire_channel *channel,
+                              enum yetty_ywire_channel_event event)
+{
+    struct rpc_channel_forward *forward_state = user;
+    if (event == YETTY_YWIRE_CHANNEL_EVENT_CLOSED && forward_state) {
+        struct rpc_forward_config *config = forward_state->config;
+        /* Unlink from the connection's live list before freeing, so a later
+         * teardown walk does not touch this freed node. */
+        struct rpc_channel_forward **link = &config->channels;
+        while (*link && *link != forward_state) {
+            link = &(*link)->next;
+        }
+        if (*link == forward_state) {
+            *link = forward_state->next;
+        }
+        if (config->close_cb) {
+            config->close_cb(config->userdata, channel);
+        }
+        free(forward_state);
+    }
+}
+
+/* Accept callback — a pane app opened a channel. Stand up per-channel forward
+ * state that relays its bytes upstream. Signature dictated by
+ * yetty_ywire_accept_cb. */
+YETTY_EXTERNAL_CALLBACK
+static int rpc_forward_accept(void *user, struct yetty_ywire_channel *channel)
+{
+    struct rpc_forward_config *config = user;
+    if (!channel || !config) {
+        return 0;
+    }
+    struct rpc_channel_forward *forward_state = calloc(1, sizeof(*forward_state));
+    if (!forward_state) {
+        ywarn("rpc-fwd: accept alloc failed — refusing channel");
+        return 0;
+    }
+    forward_state->channel = channel;
+    forward_state->config = config;
+    forward_state->next = config->channels;
+    config->channels = forward_state;
+    struct yetty_ycore_void_result sink_res =
+        yetty_ywire_channel_set_raw_sink(channel, rpc_forward_raw_sink, forward_state);
+    if (YETTY_IS_ERR(sink_res)) {
+        yetty_ycore_error_print(stderr, "rpc-fwd: set_raw_sink", sink_res.error);
+        yetty_ycore_error_destroy(sink_res.error);
+        config->channels = forward_state->next; /* it was just prepended */
+        free(forward_state);
+        return 0;
+    }
+    struct yetty_ycore_void_result event_res =
+        yetty_ywire_channel_set_event_cb(channel, rpc_forward_event, forward_state);
+    if (YETTY_IS_ERR(event_res)) {
+        yetty_ycore_error_print(stderr, "rpc-fwd: set_event_cb (state will leak on close)",
+                                event_res.error);
+        yetty_ycore_error_destroy(event_res.error);
+    }
+    ydebug("rpc-fwd: forwarding channel id=%u", yetty_ywire_channel_id(channel));
+    return 1;
+}
+
+struct yetty_ycore_void_result yetty_yclass_rpc_forward_connection(
+    struct yetty_ywire_connection *connection, yetty_yclass_rpc_forward_cb forward,
+    yetty_yclass_rpc_forward_close_cb close_cb, void *userdata, void **out_state)
+{
+    if (out_state) {
+        *out_state = NULL;
+    }
+    if (!connection || !forward) {
+        return YETTY_ERR(yetty_ycore_void, "rpc_forward_connection: NULL connection/forward");
+    }
+    struct rpc_forward_config *config = calloc(1, sizeof(*config));
+    if (!config) {
+        return YETTY_ERR(yetty_ycore_void, "rpc_forward_connection: config alloc failed");
+    }
+    config->forward = forward;
+    config->close_cb = close_cb;
+    config->userdata = userdata;
+    /* config is the accept userdata; it lives for the connection's lifetime. The
+     * caller owns it (via out_state) and frees it after tearing the connection
+     * down — the connection layer does not free its accept userdata. */
+    struct yetty_ycore_void_result accept_res =
+        yetty_ywire_connection_set_accept_cb(connection, rpc_forward_accept, config);
+    if (YETTY_IS_ERR(accept_res)) {
+        free(config);
+        return accept_res;
+    }
+    if (out_state) {
+        *out_state = config;
+    }
+    return YETTY_OK_VOID();
+}
+
+void yetty_yclass_rpc_forward_connection_destroy(void *state)
+{
+    struct rpc_forward_config *config = state;
+    if (!config) {
+        return;
+    }
+    /* Connection destruction frees channel objects but fires no CLOSE events, so
+     * any channel still open here left its forward state dangling. Walk and free
+     * them; close_cb is intentionally not called (the whole connection is gone). */
+    struct rpc_channel_forward *forward_state = config->channels;
+    while (forward_state) {
+        struct rpc_channel_forward *next = forward_state->next;
+        free(forward_state);
+        forward_state = next;
+    }
+    free(config);
+}

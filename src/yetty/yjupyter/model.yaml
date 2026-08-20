@@ -402,6 +402,7 @@ classes:
       - slot: client_destroy
         slot_domain: yjupyter
         impl: client_destroy
+    internal: false
     doc: null
   - name: message
     domain: yjupyter
@@ -457,6 +458,7 @@ classes:
       - slot: message_destroy
         slot_domain: yjupyter
         impl: message_destroy
+    internal: false
     doc: null
   - name: session
     domain: yjupyter
@@ -513,6 +515,7 @@ classes:
       - slot: session_destroy
         slot_domain: yjupyter
         impl: session_destroy
+    internal: false
     doc: null
 types:
   - name: yetty_yclass_object_ptr_result
@@ -614,80 +617,80 @@ local_typedefs:
     source_file: src/yetty/yjupyter/client.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_yjupyter_message_build_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yjupyter_message_build_fn)(struct yetty_yclass_object *, const char *, const char *, const char *, const char *, const char *, const char *);"
   yetty_yjupyter_message_from_wire_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yjupyter_message_from_wire_fn)(struct yetty_yclass_object *, const char *);"
   yetty_yjupyter_message_to_wire_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_yjupyter_message_to_wire_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_message_msg_type_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_yjupyter_message_msg_type_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_message_msg_id_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_yjupyter_message_msg_id_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_message_parent_msg_id_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_yjupyter_message_parent_msg_id_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_message_channel_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_yjupyter_message_channel_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_message_session_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_yjupyter_message_session_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_message_content_json_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_yjupyter_message_content_json_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_message_content_string_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_yjupyter_message_content_string_fn)(struct yetty_yclass_object *, const char *);"
   yetty_yjupyter_message_content_int_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_int_result (*yetty_yjupyter_message_content_int_fn)(struct yetty_yclass_object *, const char *);"
   yetty_yjupyter_message_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yjupyter_message_destroy_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_session_init_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yjupyter_session_init_fn)(struct yetty_yclass_object *, const char *);"
   yetty_yjupyter_session_id_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_yjupyter_session_id_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_session_kernel_state_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_yjupyter_session_kernel_state_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_session_new_request_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_yclass_object_ptr_result (*yetty_yjupyter_session_new_request_fn)(struct yetty_yclass_object *, const char *, const char *, const char *, const char *);"
   yetty_yjupyter_session_handle_wire_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_yclass_object_ptr_result (*yetty_yjupyter_session_handle_wire_fn)(struct yetty_yclass_object *, const char *);"
   yetty_yjupyter_session_tag_for_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_yjupyter_session_tag_for_fn)(struct yetty_yclass_object *, const char *);"
   yetty_yjupyter_session_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/protocol.h
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/protocol.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yjupyter_session_destroy_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_client_open_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/client.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/client.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yjupyter_client_open_fn)(struct yetty_yclass_object *, const char *, const char *);"
   yetty_yjupyter_client_execute_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/client.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/client.c
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_yjupyter_client_execute_fn)(struct yetty_yclass_object *, const char *, const char *);"
   yetty_yjupyter_client_poll_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/client.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/client.c
     text: "typedef struct yetty_yclass_object_ptr_result (*yetty_yjupyter_client_poll_fn)(struct yetty_yclass_object *, int);"
   yetty_yjupyter_client_kernel_state_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/client.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/client.c
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_yjupyter_client_kernel_state_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_client_tag_for_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/client.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/client.c
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_yjupyter_client_tag_for_fn)(struct yetty_yclass_object *, const char *);"
   yetty_yjupyter_client_close_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/client.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/client.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yjupyter_client_close_fn)(struct yetty_yclass_object *);"
   yetty_yjupyter_client_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ygreeter/src/yetty/gen/impl/yjupyter/client.c
+    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yjupyter/client.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yjupyter_client_destroy_fn)(struct yetty_yclass_object *);"

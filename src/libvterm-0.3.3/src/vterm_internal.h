@@ -41,6 +41,7 @@ struct VTermPen
   VTermColor fg;
   VTermColor bg;
   unsigned int bold:1;
+  unsigned int faint:1; /* yetty: SGR 2 dim carriage */
   unsigned int underline:2;
   unsigned int italic:1;
   unsigned int blink:1;
@@ -64,6 +65,12 @@ struct VTermState
 
   int rows;
   int cols;
+
+  /* yetty (#699): when set, this state IGNORES an application's DECSLRM
+   * left/right margins, so a scroll/insert inside them acts full-width — this
+   * matches tmux's pane, which does not honour app left/right margins. Only the
+   * ymux engine sets it; yvterm leaves it 0 and keeps honouring margins. */
+  unsigned int ignore_leftrightmargin:1;
 
   /* Current cursor position */
   VTermPos pos;
