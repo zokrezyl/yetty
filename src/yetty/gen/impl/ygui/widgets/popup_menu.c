@@ -32,20 +32,23 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(
     struct yetty_yclass_object *, float, float);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_popup_menu_yetty_ygui_constructor_check =
-    popup_menu_constructor;
+static yetty_ygui_constructor_fn
+    yetty_ygui_popup_menu_yetty_ygui_constructor_popup_menu_constructor_check =
+        popup_menu_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_popup_menu_yetty_ygui_destructor_check =
-    popup_menu_destructor;
+static yetty_ygui_destructor_fn
+    yetty_ygui_popup_menu_yetty_ygui_destructor_popup_menu_destructor_check = popup_menu_destructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_popup_menu_yetty_ygui_widget_paint_check =
-    popup_menu_paint;
+static yetty_ygui_widget_paint_fn
+    yetty_ygui_popup_menu_yetty_ygui_widget_paint_popup_menu_paint_check = popup_menu_paint;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_press_fn yetty_ygui_popup_menu_yetty_ygui_widget_on_press_check =
-    popup_menu_on_press;
+static yetty_ygui_widget_on_press_fn
+    yetty_ygui_popup_menu_yetty_ygui_widget_on_press_popup_menu_on_press_check =
+        popup_menu_on_press;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_motion_fn yetty_ygui_popup_menu_yetty_ygui_widget_on_motion_check =
-    popup_menu_on_motion;
+static yetty_ygui_widget_on_motion_fn
+    yetty_ygui_popup_menu_yetty_ygui_widget_on_motion_popup_menu_on_motion_check =
+        popup_menu_on_motion;
 
 struct yetty_yclass_ptr_result yetty_ygui_popup_menu_class_get(void)
 {

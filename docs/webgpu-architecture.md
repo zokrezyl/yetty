@@ -97,7 +97,8 @@ terminal composites a stack of layers plus a figure container. They all share:
 - the one device + queue + allocator from yframework,
 - the MSDF font generator (large atlas materialized on demand),
 - the figure factories registered by
-  `yetty_yframework_register_figure_factories` — complex figures (yplot, yimage,
+  `yetty_yframework_register_figure_factories` — figure kinds backed by
+  complex drawables (yplot, yimage,
   ymgui, yrdawn, …) of the same kind share one compiled pipeline, and each
   instance binds only its own per-instance data.
 

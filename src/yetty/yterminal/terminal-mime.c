@@ -430,7 +430,7 @@ static struct yetty_ycore_void_result mime_render_circuit(
 #endif
 
 #ifdef YETTY_HAS_YMESH
-/* glTF binary → one ymesh complex figure; the GPU-side factory for the
+/* glTF binary → one ymesh complex drawable; the GPU-side factory for the
  * record type is already registered by terminal_create. */
 static struct yetty_ycore_void_result mime_render_mesh(struct yetty_yterminal_terminal *terminal,
                                                        const uint8_t *content, size_t content_len)

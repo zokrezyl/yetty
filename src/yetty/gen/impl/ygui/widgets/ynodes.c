@@ -40,24 +40,26 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_scroll_fn)(
     struct yetty_yclass_object *, float, float, float, float);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_ynodes_yetty_ygui_constructor_check =
+static yetty_ygui_constructor_fn yetty_ygui_ynodes_yetty_ygui_constructor_ynodes_constructor_check =
     ynodes_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_ynodes_yetty_ygui_destructor_check = ynodes_destructor;
+static yetty_ygui_destructor_fn yetty_ygui_ynodes_yetty_ygui_destructor_ynodes_destructor_check =
+    ynodes_destructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_ynodes_yetty_ygui_widget_paint_check = ynodes_paint;
+static yetty_ygui_widget_paint_fn yetty_ygui_ynodes_yetty_ygui_widget_paint_ynodes_paint_check =
+    ynodes_paint;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_press_fn yetty_ygui_ynodes_yetty_ygui_widget_on_press_check =
-    ynodes_on_press;
+static yetty_ygui_widget_on_press_fn
+    yetty_ygui_ynodes_yetty_ygui_widget_on_press_ynodes_on_press_check = ynodes_on_press;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_motion_fn yetty_ygui_ynodes_yetty_ygui_widget_on_motion_check =
-    ynodes_on_motion;
+static yetty_ygui_widget_on_motion_fn
+    yetty_ygui_ynodes_yetty_ygui_widget_on_motion_ynodes_on_motion_check = ynodes_on_motion;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_release_fn yetty_ygui_ynodes_yetty_ygui_widget_on_release_check =
-    ynodes_on_release;
+static yetty_ygui_widget_on_release_fn
+    yetty_ygui_ynodes_yetty_ygui_widget_on_release_ynodes_on_release_check = ynodes_on_release;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_scroll_fn yetty_ygui_ynodes_yetty_ygui_widget_on_scroll_check =
-    ynodes_on_scroll;
+static yetty_ygui_widget_on_scroll_fn
+    yetty_ygui_ynodes_yetty_ygui_widget_on_scroll_ynodes_on_scroll_check = ynodes_on_scroll;
 
 struct yetty_yclass_ptr_result yetty_ygui_ynodes_class_get(void)
 {

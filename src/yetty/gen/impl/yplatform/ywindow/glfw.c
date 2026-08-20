@@ -48,31 +48,35 @@ typedef struct yetty_yclass_void_ptr_result (*yetty_yplatform_window_create_surf
 
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_open_fn
-    yetty_yplatform_glfw_window_yetty_yplatform_window_open_check = glfw_window_open;
+    yetty_yplatform_glfw_window_yetty_yplatform_window_open_glfw_window_open_check =
+        glfw_window_open;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_destroy_fn
-    yetty_yplatform_glfw_window_yetty_yplatform_window_destroy_check = glfw_window_destroy;
+    yetty_yplatform_glfw_window_yetty_yplatform_window_destroy_glfw_window_destroy_check =
+        glfw_window_destroy;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_size_fn
-    yetty_yplatform_glfw_window_yetty_yplatform_window_get_size_check = glfw_window_get_size;
+    yetty_yplatform_glfw_window_yetty_yplatform_window_get_size_glfw_window_get_size_check =
+        glfw_window_get_size;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_framebuffer_size_fn
-    yetty_yplatform_glfw_window_yetty_yplatform_window_get_framebuffer_size_check =
+    yetty_yplatform_glfw_window_yetty_yplatform_window_get_framebuffer_size_glfw_window_get_framebuffer_size_check =
         glfw_window_get_framebuffer_size;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_content_scale_fn
-    yetty_yplatform_glfw_window_yetty_yplatform_window_get_content_scale_check =
+    yetty_yplatform_glfw_window_yetty_yplatform_window_get_content_scale_glfw_window_get_content_scale_check =
         glfw_window_get_content_scale;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_should_close_fn
-    yetty_yplatform_glfw_window_yetty_yplatform_window_should_close_check =
+    yetty_yplatform_glfw_window_yetty_yplatform_window_should_close_glfw_window_should_close_check =
         glfw_window_should_close;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_set_title_fn
-    yetty_yplatform_glfw_window_yetty_yplatform_window_set_title_check = glfw_window_set_title;
+    yetty_yplatform_glfw_window_yetty_yplatform_window_set_title_glfw_window_set_title_check =
+        glfw_window_set_title;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_create_surface_fn
-    yetty_yplatform_glfw_window_yetty_yplatform_window_create_surface_check =
+    yetty_yplatform_glfw_window_yetty_yplatform_window_create_surface_glfw_window_create_surface_check =
         glfw_window_create_surface;
 
 struct yetty_yclass_ptr_result yetty_yplatform_glfw_window_class_get(void)

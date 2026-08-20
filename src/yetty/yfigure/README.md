@@ -1,7 +1,7 @@
 # yfigure — figure base class, container, kind registry, producer session
 
 The figure/container model of the compositor: **figure** is the yclass base
-class of every rich-content unit, **container** is the complex figure that
+class of every rich-content unit, **container** is the figure that
 hosts children keyed by id, **registry** mints figures from kind names, and
 **producer** is the client-side helper that drives a remote container over
 yclass RPC. Every pane's root container renders after the text/ydraw layers

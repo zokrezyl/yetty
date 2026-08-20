@@ -66,6 +66,11 @@ if(TARGET yetty_ydraw_list AND TARGET yetty_ysdf)
     add_subdirectory(ut/ydraw-list)
 endif()
 
+# ydrawlist2/ysdf2 — v2 yclass client interface byte-identity pin.
+if(TARGET yetty_ydrawlist2 AND TARGET yetty_ysdf2)
+    add_subdirectory(ut/ydrawlist2)
+endif()
+
 # ymux — independent daemon-side terminal engine (#695), headless, no GPU.
 if(TARGET yetty_ymux)
     add_subdirectory(ut/ymux)

@@ -207,33 +207,43 @@ classes:
     ops:
       - slot: resolve_permission
         slot_domain: yai
+        slot_class: claude
         impl: claude_resolve_permission
       - slot: handle_event
         slot_domain: yai
+        slot_class: claude
         impl: claude_handle_event
       - slot: send_user_message
         slot_domain: yai
+        slot_class: claude
         impl: claude_send_user_message
       - slot: interrupt
         slot_domain: yai
+        slot_class: claude
         impl: claude_interrupt
       - slot: start
         slot_domain: yai
+        slot_class: claude
         impl: claude_start
       - slot: describe_config
         slot_domain: yai
+        slot_class: claude
         impl: claude_describe_config
       - slot: config_knob
         slot_domain: yai
+        slot_class: claude
         impl: claude_config_knob
       - slot: apply_config
         slot_domain: yai
+        slot_class: claude
         impl: claude_apply_config
       - slot: on_child_exit
         slot_domain: yai
+        slot_class: claude
         impl: claude_on_child_exit
       - slot: on_child_eof
         slot_domain: yai
+        slot_class: claude
         impl: claude_on_child_eof
     internal: false
     doc: "/* Engine-private state: the tool_use_id -> tool name ring (to label
@@ -256,18 +266,23 @@ classes:
     ops:
       - slot: start
         slot_domain: yai
+        slot_class: codex
         impl: codex_start
       - slot: send_user_message
         slot_domain: yai
+        slot_class: codex
         impl: codex_send_user_message
       - slot: describe_config
         slot_domain: yai
+        slot_class: codex
         impl: codex_describe_config
       - slot: config_knob
         slot_domain: yai
+        slot_class: codex
         impl: codex_config_knob
       - slot: handle_event
         slot_domain: yai
+        slot_class: codex
         impl: codex_handle_event
     internal: false
     doc: null
@@ -289,6 +304,7 @@ classes:
     ops:
       - slot: feed_byte
         slot_domain: yai
+        slot_class: emacs
         impl: emacs_feed_byte
     internal: false
     doc: null
@@ -330,6 +346,7 @@ classes:
     ops:
       - slot: feed_byte
         slot_domain: yai
+        slot_class: vi
         impl: vi_feed_byte
     internal: false
     doc: null
@@ -349,6 +366,7 @@ classes:
     ops:
       - slot: feed_byte
         slot_domain: yai
+        slot_class: editor
         impl: editor_feed_byte
     internal: false
     doc: "/* The class@ annotation needs a struct to sit on; the base carries no
@@ -370,33 +388,43 @@ classes:
     ops:
       - slot: start
         slot_domain: yai
+        slot_class: engine
         impl: engine_start
       - slot: send_user_message
         slot_domain: yai
+        slot_class: engine
         impl: engine_send_user_message
       - slot: handle_event
         slot_domain: yai
+        slot_class: engine
         impl: engine_handle_event
       - slot: interrupt
         slot_domain: yai
+        slot_class: engine
         impl: engine_interrupt
       - slot: on_child_exit
         slot_domain: yai
+        slot_class: engine
         impl: engine_on_child_exit
       - slot: on_child_eof
         slot_domain: yai
+        slot_class: engine
         impl: engine_on_child_eof
       - slot: describe_config
         slot_domain: yai
+        slot_class: engine
         impl: engine_describe_config
       - slot: config_knob
         slot_domain: yai
+        slot_class: engine
         impl: engine_config_knob
       - slot: apply_config
         slot_domain: yai
+        slot_class: engine
         impl: engine_apply_config
       - slot: resolve_permission
         slot_domain: yai
+        slot_class: engine
         impl: engine_resolve_permission
     internal: false
     doc: "/* The class@ annotation needs a struct to sit on; the engine carries
@@ -421,18 +449,23 @@ classes:
     ops:
       - slot: start
         slot_domain: yai
+        slot_class: gemini
         impl: gemini_start
       - slot: send_user_message
         slot_domain: yai
+        slot_class: gemini
         impl: gemini_send_user_message
       - slot: describe_config
         slot_domain: yai
+        slot_class: gemini
         impl: gemini_describe_config
       - slot: config_knob
         slot_domain: yai
+        slot_class: gemini
         impl: gemini_config_knob
       - slot: handle_event
         slot_domain: yai
+        slot_class: gemini
         impl: gemini_handle_event
     internal: false
     doc: null
@@ -454,12 +487,15 @@ classes:
     ops:
       - slot: on_child_exit
         slot_domain: yai
+        slot_class: turn_engine
         impl: turn_engine_on_child_exit
       - slot: on_child_eof
         slot_domain: yai
+        slot_class: turn_engine
         impl: turn_engine_on_child_eof
       - slot: interrupt
         slot_domain: yai
+        slot_class: turn_engine
         impl: turn_engine_interrupt
     internal: false
     doc: null
@@ -541,35 +577,35 @@ local_types:
   yetty_yai_turn_engine_ptr_result: tools/ai/yai/turn-engine.c
 local_typedefs:
   yetty_yai_resolve_permission_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yai/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yai/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yai_resolve_permission_fn)(struct yetty_yclass_object *, struct yai_app *, int);"
   yetty_yai_handle_event_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yai/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yai/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yai_handle_event_fn)(struct yetty_yclass_object *, struct yai_app *, struct yyjson_val *);"
   yetty_yai_send_user_message_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yai/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yai/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yai_send_user_message_fn)(struct yetty_yclass_object *, struct yai_app *, const char *);"
   yetty_yai_interrupt_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yai/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yai/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yai_interrupt_fn)(struct yetty_yclass_object *, struct yai_app *);"
   yetty_yai_start_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yai/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yai/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yai_start_fn)(struct yetty_yclass_object *, struct yai_app *);"
   yetty_yai_describe_config_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yai/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yai/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yai_describe_config_fn)(struct yetty_yclass_object *, struct yai_app *, char *, size_t);"
   yetty_yai_config_knob_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yai/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yai/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yai_config_knob_fn)(struct yetty_yclass_object *, struct yai_app *, char *, size_t);"
   yetty_yai_apply_config_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yai/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yai/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yai_apply_config_fn)(struct yetty_yclass_object *, struct yai_app *, const char *, const char *);"
   yetty_yai_on_child_exit_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yai/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yai/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yai_on_child_exit_fn)(struct yetty_yclass_object *, struct yai_app *, int64_t);"
   yetty_yai_on_child_eof_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yai/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yai/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yai_on_child_eof_fn)(struct yetty_yclass_object *, struct yai_app *);"
   yetty_yai_feed_byte_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yai/editor.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yai/editor.h
     text: "typedef struct yetty_ycore_int_result (*yetty_yai_feed_byte_fn)(struct yetty_yclass_object *, struct yai_app *, int);"

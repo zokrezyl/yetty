@@ -15,23 +15,19 @@ class Client(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yjupyter_client_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yjupyter_client_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yjupyter_client_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Client':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Client.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
     def client_open(self, base_url: str | bytes | None, token: str | bytes | None) -> None:
         """Call `yetty_yjupyter_client_open`; raises _rt.YettyError on failure."""
         if self._handle is None:
@@ -104,23 +100,19 @@ class Message(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yjupyter_message_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yjupyter_message_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yjupyter_message_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Message':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Message.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
     def message_build(self, msg_type: str | bytes | None, channel: str | bytes | None, session_id: str | bytes | None, msg_id: str | bytes | None, parent_msg_id: str | bytes | None, content_json: str | bytes | None) -> None:
         """Call `yetty_yjupyter_message_build`; raises _rt.YettyError on failure."""
         if self._handle is None:
@@ -238,23 +230,19 @@ class Session(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yjupyter_session_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yjupyter_session_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yjupyter_session_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Session':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Session.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
     def session_init(self, session_id: str | bytes | None) -> None:
         """Call `yetty_yjupyter_session_init`; raises _rt.YettyError on failure."""
         if self._handle is None:

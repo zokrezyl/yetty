@@ -64,31 +64,36 @@ typedef struct yetty_ycore_void_result (*yetty_yai_on_child_eof_fn)(struct yetty
                                                                     struct yai_app *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yai_resolve_permission_fn yetty_yai_claude_yetty_yai_resolve_permission_check =
-    claude_resolve_permission;
+static yetty_yai_resolve_permission_fn
+    yetty_yai_claude_yetty_yai_resolve_permission_claude_resolve_permission_check =
+        claude_resolve_permission;
 YETTY_MAYBE_UNUSED
-static yetty_yai_handle_event_fn yetty_yai_claude_yetty_yai_handle_event_check =
+static yetty_yai_handle_event_fn yetty_yai_claude_yetty_yai_handle_event_claude_handle_event_check =
     claude_handle_event;
 YETTY_MAYBE_UNUSED
-static yetty_yai_send_user_message_fn yetty_yai_claude_yetty_yai_send_user_message_check =
-    claude_send_user_message;
+static yetty_yai_send_user_message_fn
+    yetty_yai_claude_yetty_yai_send_user_message_claude_send_user_message_check =
+        claude_send_user_message;
 YETTY_MAYBE_UNUSED
-static yetty_yai_interrupt_fn yetty_yai_claude_yetty_yai_interrupt_check = claude_interrupt;
+static yetty_yai_interrupt_fn yetty_yai_claude_yetty_yai_interrupt_claude_interrupt_check =
+    claude_interrupt;
 YETTY_MAYBE_UNUSED
-static yetty_yai_start_fn yetty_yai_claude_yetty_yai_start_check = claude_start;
+static yetty_yai_start_fn yetty_yai_claude_yetty_yai_start_claude_start_check = claude_start;
 YETTY_MAYBE_UNUSED
-static yetty_yai_describe_config_fn yetty_yai_claude_yetty_yai_describe_config_check =
-    claude_describe_config;
+static yetty_yai_describe_config_fn
+    yetty_yai_claude_yetty_yai_describe_config_claude_describe_config_check =
+        claude_describe_config;
 YETTY_MAYBE_UNUSED
-static yetty_yai_config_knob_fn yetty_yai_claude_yetty_yai_config_knob_check = claude_config_knob;
+static yetty_yai_config_knob_fn yetty_yai_claude_yetty_yai_config_knob_claude_config_knob_check =
+    claude_config_knob;
 YETTY_MAYBE_UNUSED
-static yetty_yai_apply_config_fn yetty_yai_claude_yetty_yai_apply_config_check =
+static yetty_yai_apply_config_fn yetty_yai_claude_yetty_yai_apply_config_claude_apply_config_check =
     claude_apply_config;
 YETTY_MAYBE_UNUSED
-static yetty_yai_on_child_exit_fn yetty_yai_claude_yetty_yai_on_child_exit_check =
-    claude_on_child_exit;
+static yetty_yai_on_child_exit_fn
+    yetty_yai_claude_yetty_yai_on_child_exit_claude_on_child_exit_check = claude_on_child_exit;
 YETTY_MAYBE_UNUSED
-static yetty_yai_on_child_eof_fn yetty_yai_claude_yetty_yai_on_child_eof_check =
+static yetty_yai_on_child_eof_fn yetty_yai_claude_yetty_yai_on_child_eof_claude_on_child_eof_check =
     claude_on_child_eof;
 
 struct yetty_yclass_ptr_result yetty_yai_claude_class_get(void)

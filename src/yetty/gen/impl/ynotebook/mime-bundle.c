@@ -49,30 +49,36 @@ typedef struct yetty_ycore_void_result (*yetty_ynotebook_mime_bundle_destroy_fn)
 
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_mime_bundle_from_json_text_fn
-    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_from_json_text_check =
+    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_from_json_text_mime_bundle_from_json_text_check =
         mime_bundle_from_json_text;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_mime_bundle_to_json_text_fn
-    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_to_json_text_check =
+    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_to_json_text_mime_bundle_to_json_text_check =
         mime_bundle_to_json_text;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_mime_bundle_count_fn
-    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_count_check = mime_bundle_count;
+    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_count_mime_bundle_count_check =
+        mime_bundle_count;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_mime_bundle_mime_at_fn
-    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_mime_at_check = mime_bundle_mime_at;
+    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_mime_at_mime_bundle_mime_at_check =
+        mime_bundle_mime_at;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_mime_bundle_kind_at_fn
-    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_kind_at_check = mime_bundle_kind_at;
+    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_kind_at_mime_bundle_kind_at_check =
+        mime_bundle_kind_at;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_mime_bundle_bytes_at_fn
-    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_bytes_at_check = mime_bundle_bytes_at;
+    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_bytes_at_mime_bundle_bytes_at_check =
+        mime_bundle_bytes_at;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_mime_bundle_json_at_fn
-    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_json_at_check = mime_bundle_json_at;
+    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_json_at_mime_bundle_json_at_check =
+        mime_bundle_json_at;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_mime_bundle_destroy_fn
-    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_destroy_check = mime_bundle_destroy;
+    yetty_ynotebook_mime_bundle_yetty_ynotebook_mime_bundle_destroy_mime_bundle_destroy_check =
+        mime_bundle_destroy;
 
 struct yetty_yclass_ptr_result yetty_ynotebook_mime_bundle_class_get(void)
 {

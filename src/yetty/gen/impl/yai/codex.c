@@ -42,17 +42,20 @@ typedef struct yetty_ycore_void_result (*yetty_yai_handle_event_fn)(struct yetty
                                                                     struct yyjson_val *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yai_start_fn yetty_yai_codex_yetty_yai_start_check = codex_start;
+static yetty_yai_start_fn yetty_yai_codex_yetty_yai_start_codex_start_check = codex_start;
 YETTY_MAYBE_UNUSED
-static yetty_yai_send_user_message_fn yetty_yai_codex_yetty_yai_send_user_message_check =
-    codex_send_user_message;
+static yetty_yai_send_user_message_fn
+    yetty_yai_codex_yetty_yai_send_user_message_codex_send_user_message_check =
+        codex_send_user_message;
 YETTY_MAYBE_UNUSED
-static yetty_yai_describe_config_fn yetty_yai_codex_yetty_yai_describe_config_check =
-    codex_describe_config;
+static yetty_yai_describe_config_fn
+    yetty_yai_codex_yetty_yai_describe_config_codex_describe_config_check = codex_describe_config;
 YETTY_MAYBE_UNUSED
-static yetty_yai_config_knob_fn yetty_yai_codex_yetty_yai_config_knob_check = codex_config_knob;
+static yetty_yai_config_knob_fn yetty_yai_codex_yetty_yai_config_knob_codex_config_knob_check =
+    codex_config_knob;
 YETTY_MAYBE_UNUSED
-static yetty_yai_handle_event_fn yetty_yai_codex_yetty_yai_handle_event_check = codex_handle_event;
+static yetty_yai_handle_event_fn yetty_yai_codex_yetty_yai_handle_event_codex_handle_event_check =
+    codex_handle_event;
 
 struct yetty_yclass_ptr_result yetty_yai_codex_class_get(void)
 {

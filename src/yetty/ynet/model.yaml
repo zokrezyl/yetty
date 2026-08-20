@@ -250,45 +250,59 @@ classes:
     ops:
       - slot: load_file
         slot_domain: ynet
+        slot_class: capture
         impl: capture_load_file
       - slot: packet_count
         slot_domain: ynet
+        slot_class: capture
         impl: capture_packet_count
       - slot: packet_time
         slot_domain: ynet
+        slot_class: capture
         impl: capture_packet_time
       - slot: packet_length
         slot_domain: ynet
+        slot_class: capture
         impl: capture_packet_length
       - slot: packet_protocol
         slot_domain: ynet
+        slot_class: capture
         impl: capture_packet_protocol
       - slot: packet_source
         slot_domain: ynet
+        slot_class: capture
         impl: capture_packet_source
       - slot: packet_destination
         slot_domain: ynet
+        slot_class: capture
         impl: capture_packet_destination
       - slot: packet_info
         slot_domain: ynet
+        slot_class: capture
         impl: capture_packet_info
       - slot: packet_bytes
         slot_domain: ynet
+        slot_class: capture
         impl: capture_packet_bytes
       - slot: packet_caplen
         slot_domain: ynet
+        slot_class: capture
         impl: capture_packet_caplen
       - slot: flow_count
         slot_domain: ynet
+        slot_class: capture
         impl: capture_flow_count
       - slot: flow_summary
         slot_domain: ynet
+        slot_class: capture
         impl: capture_flow_summary
       - slot: render
         slot_domain: ynet
+        slot_class: capture
         impl: capture_render
       - slot: destroy
         slot_domain: ynet
+        slot_class: capture
         impl: capture_destroy
     internal: false
     doc: null

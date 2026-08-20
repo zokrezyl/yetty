@@ -68,49 +68,60 @@ typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_text_input_fn)(
     struct yetty_yclass_object *, struct yetty_ycore_buffer);
 
 YETTY_MAYBE_UNUSED
-static yetty_yrich_constructor_fn yetty_yrich_document_yetty_yrich_constructor_check =
-    document_constructor;
+static yetty_yrich_constructor_fn
+    yetty_yrich_document_yetty_yrich_constructor_document_constructor_check = document_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_document_destroy_fn yetty_yrich_document_yetty_yrich_document_destroy_check =
-    document_default_destroy;
+static yetty_yrich_document_destroy_fn
+    yetty_yrich_document_yetty_yrich_document_destroy_document_default_destroy_check =
+        document_default_destroy;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_content_width_fn
-    yetty_yrich_document_yetty_yrich_document_content_width_check = document_default_content_width;
+    yetty_yrich_document_yetty_yrich_document_content_width_document_default_content_width_check =
+        document_default_content_width;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_content_height_fn
-    yetty_yrich_document_yetty_yrich_document_content_height_check =
+    yetty_yrich_document_yetty_yrich_document_content_height_document_default_content_height_check =
         document_default_content_height;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_document_render_fn yetty_yrich_document_yetty_yrich_document_render_check =
-    document_default_render;
+static yetty_yrich_document_render_fn
+    yetty_yrich_document_yetty_yrich_document_render_document_default_render_check =
+        document_default_render;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_document_apply_op_fn yetty_yrich_document_yetty_yrich_document_apply_op_check =
-    document_default_apply_op;
+static yetty_yrich_document_apply_op_fn
+    yetty_yrich_document_yetty_yrich_document_apply_op_document_default_apply_op_check =
+        document_default_apply_op;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_document_undo_fn yetty_yrich_document_yetty_yrich_document_undo_check =
-    document_default_undo;
+static yetty_yrich_document_undo_fn
+    yetty_yrich_document_yetty_yrich_document_undo_document_default_undo_check =
+        document_default_undo;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_document_redo_fn yetty_yrich_document_yetty_yrich_document_redo_check =
-    document_default_redo;
+static yetty_yrich_document_redo_fn
+    yetty_yrich_document_yetty_yrich_document_redo_document_default_redo_check =
+        document_default_redo;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_mouse_down_fn
-    yetty_yrich_document_yetty_yrich_document_on_mouse_down_check = document_default_on_mouse_down;
+    yetty_yrich_document_yetty_yrich_document_on_mouse_down_document_default_on_mouse_down_check =
+        document_default_on_mouse_down;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_mouse_up_fn
-    yetty_yrich_document_yetty_yrich_document_on_mouse_up_check = document_default_on_mouse_up;
+    yetty_yrich_document_yetty_yrich_document_on_mouse_up_document_default_on_mouse_up_check =
+        document_default_on_mouse_up;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_mouse_drag_fn
-    yetty_yrich_document_yetty_yrich_document_on_mouse_drag_check = document_default_on_mouse_drag;
+    yetty_yrich_document_yetty_yrich_document_on_mouse_drag_document_default_on_mouse_drag_check =
+        document_default_on_mouse_drag;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_mouse_double_click_fn
-    yetty_yrich_document_yetty_yrich_document_on_mouse_double_click_check =
+    yetty_yrich_document_yetty_yrich_document_on_mouse_double_click_document_default_on_mouse_double_click_check =
         document_default_on_mouse_double_click;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_key_down_fn
-    yetty_yrich_document_yetty_yrich_document_on_key_down_check = document_default_on_key_down;
+    yetty_yrich_document_yetty_yrich_document_on_key_down_document_default_on_key_down_check =
+        document_default_on_key_down;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_text_input_fn
-    yetty_yrich_document_yetty_yrich_document_on_text_input_check = document_default_on_text_input;
+    yetty_yrich_document_yetty_yrich_document_on_text_input_document_default_on_text_input_check =
+        document_default_on_text_input;
 
 struct yetty_yclass_ptr_result yetty_yrich_document_class_get(void)
 {

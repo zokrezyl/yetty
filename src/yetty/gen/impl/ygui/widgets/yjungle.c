@@ -23,12 +23,14 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
     struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_yjungle_yetty_ygui_constructor_check = yjungle_ctor;
+static yetty_ygui_constructor_fn yetty_ygui_yjungle_yetty_ygui_constructor_yjungle_ctor_check =
+    yjungle_ctor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_yjungle_yetty_ygui_destructor_check = yjungle_dtor;
+static yetty_ygui_destructor_fn yetty_ygui_yjungle_yetty_ygui_destructor_yjungle_dtor_check =
+    yjungle_dtor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_emit_body_fn yetty_ygui_yjungle_yetty_ygui_widget_emit_body_check =
-    yjungle_emit_body;
+static yetty_ygui_widget_emit_body_fn
+    yetty_ygui_yjungle_yetty_ygui_widget_emit_body_yjungle_emit_body_check = yjungle_emit_body;
 
 struct yetty_yclass_ptr_result yetty_ygui_yjungle_class_get(void)
 {

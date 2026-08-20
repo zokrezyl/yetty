@@ -29,17 +29,20 @@ typedef struct yetty_ycore_void_result (*yetty_ydummy_set_time_fn)(struct yetty_
 typedef struct yetty_ycore_void_result (*yetty_ydummy_destroy_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ydummy_constructor_fn yetty_ydummy_canvas_yetty_ydummy_constructor_check =
-    canvas_constructor;
+static yetty_ydummy_constructor_fn
+    yetty_ydummy_canvas_yetty_ydummy_constructor_canvas_constructor_check = canvas_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ydummy_set_shader_fn yetty_ydummy_canvas_yetty_ydummy_set_shader_check =
-    canvas_set_shader;
+static yetty_ydummy_set_shader_fn
+    yetty_ydummy_canvas_yetty_ydummy_set_shader_canvas_set_shader_check = canvas_set_shader;
 YETTY_MAYBE_UNUSED
-static yetty_ydummy_set_rect_fn yetty_ydummy_canvas_yetty_ydummy_set_rect_check = canvas_set_rect;
+static yetty_ydummy_set_rect_fn yetty_ydummy_canvas_yetty_ydummy_set_rect_canvas_set_rect_check =
+    canvas_set_rect;
 YETTY_MAYBE_UNUSED
-static yetty_ydummy_set_time_fn yetty_ydummy_canvas_yetty_ydummy_set_time_check = canvas_set_time;
+static yetty_ydummy_set_time_fn yetty_ydummy_canvas_yetty_ydummy_set_time_canvas_set_time_check =
+    canvas_set_time;
 YETTY_MAYBE_UNUSED
-static yetty_ydummy_destroy_fn yetty_ydummy_canvas_yetty_ydummy_destroy_check = canvas_destroy;
+static yetty_ydummy_destroy_fn yetty_ydummy_canvas_yetty_ydummy_destroy_canvas_destroy_check =
+    canvas_destroy;
 
 struct yetty_yclass_ptr_result yetty_ydummy_canvas_class_get(void)
 {

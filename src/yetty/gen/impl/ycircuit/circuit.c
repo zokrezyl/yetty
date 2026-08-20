@@ -66,37 +66,44 @@ typedef struct yetty_ycore_void_result (*yetty_ycircuit_set_highlight_fn)(
 typedef struct yetty_ycore_void_result (*yetty_ycircuit_destroy_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ycircuit_configure_fn yetty_ycircuit_circuit_yetty_ycircuit_configure_check =
-    circuit_configure;
+static yetty_ycircuit_configure_fn
+    yetty_ycircuit_circuit_yetty_ycircuit_configure_circuit_configure_check = circuit_configure;
 YETTY_MAYBE_UNUSED
-static yetty_ycircuit_parse_fn yetty_ycircuit_circuit_yetty_ycircuit_parse_check = circuit_parse;
+static yetty_ycircuit_parse_fn yetty_ycircuit_circuit_yetty_ycircuit_parse_circuit_parse_check =
+    circuit_parse;
 YETTY_MAYBE_UNUSED
-static yetty_ycircuit_clear_fn yetty_ycircuit_circuit_yetty_ycircuit_clear_check = circuit_clear;
+static yetty_ycircuit_clear_fn yetty_ycircuit_circuit_yetty_ycircuit_clear_circuit_clear_check =
+    circuit_clear;
 YETTY_MAYBE_UNUSED
-static yetty_ycircuit_add_component_fn yetty_ycircuit_circuit_yetty_ycircuit_add_component_check =
-    circuit_add_component;
+static yetty_ycircuit_add_component_fn
+    yetty_ycircuit_circuit_yetty_ycircuit_add_component_circuit_add_component_check =
+        circuit_add_component;
 YETTY_MAYBE_UNUSED
-static yetty_ycircuit_add_ic_fn yetty_ycircuit_circuit_yetty_ycircuit_add_ic_check = circuit_add_ic;
+static yetty_ycircuit_add_ic_fn yetty_ycircuit_circuit_yetty_ycircuit_add_ic_circuit_add_ic_check =
+    circuit_add_ic;
 YETTY_MAYBE_UNUSED
-static yetty_ycircuit_add_wire_fn yetty_ycircuit_circuit_yetty_ycircuit_add_wire_check =
-    circuit_add_wire;
+static yetty_ycircuit_add_wire_fn
+    yetty_ycircuit_circuit_yetty_ycircuit_add_wire_circuit_add_wire_check = circuit_add_wire;
 YETTY_MAYBE_UNUSED
-static yetty_ycircuit_add_junction_fn yetty_ycircuit_circuit_yetty_ycircuit_add_junction_check =
-    circuit_add_junction;
+static yetty_ycircuit_add_junction_fn
+    yetty_ycircuit_circuit_yetty_ycircuit_add_junction_circuit_add_junction_check =
+        circuit_add_junction;
 YETTY_MAYBE_UNUSED
-static yetty_ycircuit_add_label_fn yetty_ycircuit_circuit_yetty_ycircuit_add_label_check =
-    circuit_add_label;
+static yetty_ycircuit_add_label_fn
+    yetty_ycircuit_circuit_yetty_ycircuit_add_label_circuit_add_label_check = circuit_add_label;
 YETTY_MAYBE_UNUSED
-static yetty_ycircuit_render_fn yetty_ycircuit_circuit_yetty_ycircuit_render_check = circuit_render;
+static yetty_ycircuit_render_fn yetty_ycircuit_circuit_yetty_ycircuit_render_circuit_render_check =
+    circuit_render;
 YETTY_MAYBE_UNUSED
-static yetty_ycircuit_hit_test_fn yetty_ycircuit_circuit_yetty_ycircuit_hit_test_check =
-    circuit_hit_test;
+static yetty_ycircuit_hit_test_fn
+    yetty_ycircuit_circuit_yetty_ycircuit_hit_test_circuit_hit_test_check = circuit_hit_test;
 YETTY_MAYBE_UNUSED
-static yetty_ycircuit_set_highlight_fn yetty_ycircuit_circuit_yetty_ycircuit_set_highlight_check =
-    circuit_set_highlight;
+static yetty_ycircuit_set_highlight_fn
+    yetty_ycircuit_circuit_yetty_ycircuit_set_highlight_circuit_set_highlight_check =
+        circuit_set_highlight;
 YETTY_MAYBE_UNUSED
-static yetty_ycircuit_destroy_fn yetty_ycircuit_circuit_yetty_ycircuit_destroy_check =
-    circuit_obj_destroy;
+static yetty_ycircuit_destroy_fn
+    yetty_ycircuit_circuit_yetty_ycircuit_destroy_circuit_obj_destroy_check = circuit_obj_destroy;
 
 struct yetty_yclass_ptr_result yetty_ycircuit_circuit_class_get(void)
 {

@@ -22,6 +22,8 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+#include <yetty/ydraw-list/drawable-list.h>
+#include <yetty/yplot/resolve.h>
 #include <yetty/yplot/yplot.h>
 
 #include <stdarg.h>
@@ -32,38 +34,78 @@
 #define API_YPLOT_NAME_MAX 64
 #define API_YPLOT_BODY_MAX 256
 #define API_YPLOT_COLOR_MAX 16
+#define API_YPLOT_BUFFER_VALUES_MAX 1024
 
-struct YETTY_ANNOTATE("class@api_yplot:plot") yetty_api_yplot_plot {
-    char *source; /* accumulating plot-DSL string (owned), NUL-terminated */
-    size_t length;
-    size_t capacity;
-};
+static struct yetty_ycore_void_result store_field(char *dest, size_t cap, const char *value,
+                                                  const char *what)
+{
+    if (!value) {
+        dest[0] = '\0';
+        return YETTY_OK_VOID();
+    }
+    if (strlen(value) >= cap) {
+        return YETTY_ERR(yetty_ycore_void, what);
+    }
+    snprintf(dest, cap, "%s", value);
+    return YETTY_OK_VOID();
+}
 
-struct YETTY_ANNOTATE("class@api_yplot:function") yetty_api_yplot_function {
+/* Curve — the shared name/color base of everything a plot draws: a
+ * `function` (symbolic body) or a `buffer` (sampled values) IS a curve.
+ * The name doubles as the legend label AND the identifier expressions
+ * sample a buffer by (`name(x)`). */
+struct YETTY_ANNOTATE("class@api_yplot:curve") yetty_api_yplot_curve {
     char name[API_YPLOT_NAME_MAX];   /* legend name; empty = auto-named */
-    char body[API_YPLOT_BODY_MAX];   /* the expression, e.g. "sin(x)" */
     char color[API_YPLOT_COLOR_MAX]; /* "#RRGGBB"; empty = palette default */
 };
 
-/* Result wrappers declared here (the TU does not include its own generated
- * header); plot.gen.c defines the *_from() accessors returning them. */
-YETTY_YRESULT_DECLARE(yetty_api_yplot_plot_ptr, struct yetty_api_yplot_plot *);
-YETTY_YRESULT_DECLARE(yetty_api_yplot_function_ptr, struct yetty_api_yplot_function *);
+YETTY_YRESULT_DECLARE(yetty_api_yplot_curve_ptr, struct yetty_api_yplot_curve *);
+#define YETTY_YCLASSGEN_TYPE_YETTY_API_YPLOT_CURVE_PTR_RESULT
 
-struct yetty_yclass_ptr_result yetty_api_yplot_plot_class_get(void);
-struct yetty_api_yplot_plot_ptr_result yetty_api_yplot_plot_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_ptr_result yetty_api_yplot_function_class_get(void);
-struct yetty_api_yplot_function_ptr_result yetty_api_yplot_function_from(
-    struct yetty_yclass_object *obj);
+struct yetty_yclass_ptr_result yetty_api_yplot_curve_class_get(void);
 
-static struct yetty_yclass_void_ptr_result plot_from_obj(struct yetty_yclass_object *obj)
+static struct yetty_yclass_void_ptr_result curve_from_obj(struct yetty_yclass_object *obj)
 {
-    struct yetty_yclass_ptr_result class_r = yetty_api_yplot_plot_class_get();
-    YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, class_r, "plot_from_obj: class_get");
+    struct yetty_yclass_ptr_result class_r = yetty_api_yplot_curve_class_get();
+    YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, class_r, "curve_from_obj: class_get");
     struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
-    YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, slice_r, "plot_from_obj: object_data");
+    YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, slice_r, "curve_from_obj: object_data");
     return slice_r;
 }
+
+YETTY_ANNOTATE("virtual@api_yplot:curve:set_name")
+YETTY_ANNOTATE("local@api_yplot:set_name")
+static struct yetty_ycore_void_result curve_set_name(struct yetty_yclass_object *obj,
+                                                     const char *name)
+{
+    struct yetty_yclass_void_ptr_result curve_r = curve_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, curve_r, "api_yplot curve set_name: object");
+    struct yetty_api_yplot_curve *curve = (struct yetty_api_yplot_curve *)curve_r.value;
+    return store_field(curve->name, sizeof(curve->name), name, "api_yplot curve: name too long");
+}
+
+YETTY_ANNOTATE("virtual@api_yplot:curve:set_color")
+YETTY_ANNOTATE("local@api_yplot:set_color")
+static struct yetty_ycore_void_result curve_set_color(struct yetty_yclass_object *obj,
+                                                      const char *color)
+{
+    struct yetty_yclass_void_ptr_result curve_r = curve_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, curve_r, "api_yplot curve set_color: object");
+    struct yetty_api_yplot_curve *curve = (struct yetty_api_yplot_curve *)curve_r.value;
+    return store_field(curve->color, sizeof(curve->color), color,
+                       "api_yplot curve: color too long");
+}
+
+/* Function — a symbolic curve: the yexpr body, e.g. "sin(x)". */
+struct YETTY_ANNOTATE("class@api_yplot:function") YETTY_ANNOTATE("parent@api_yplot:curve")
+    yetty_api_yplot_function {
+    char body[API_YPLOT_BODY_MAX]; /* the expression, e.g. "sin(x)" */
+};
+
+YETTY_YRESULT_DECLARE(yetty_api_yplot_function_ptr, struct yetty_api_yplot_function *);
+#define YETTY_YCLASSGEN_TYPE_YETTY_API_YPLOT_FUNCTION_PTR_RESULT
+
+struct yetty_yclass_ptr_result yetty_api_yplot_function_class_get(void);
 
 static struct yetty_yclass_void_ptr_result function_from_obj(struct yetty_yclass_object *obj)
 {
@@ -71,6 +113,107 @@ static struct yetty_yclass_void_ptr_result function_from_obj(struct yetty_yclass
     YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, class_r, "function_from_obj: class_get");
     struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, slice_r, "function_from_obj: object_data");
+    return slice_r;
+}
+
+/* set_body: the function body — the class's primary content. The slot is
+ * named distinctly from plot:set_expression because yclass slot names are
+ * module-global. */
+YETTY_ANNOTATE("virtual@api_yplot:function:set_body")
+YETTY_ANNOTATE("primary@api_yplot:set_body")
+YETTY_ANNOTATE("local@api_yplot:set_body")
+static struct yetty_ycore_void_result function_set_body(struct yetty_yclass_object *obj,
+                                                        const char *body)
+{
+    struct yetty_yclass_void_ptr_result function_r = function_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, function_r, "api_yplot function set_body: object");
+    struct yetty_api_yplot_function *fn = (struct yetty_api_yplot_function *)function_r.value;
+    return store_field(fn->body, sizeof(fn->body), body, "api_yplot function: body too long");
+}
+
+/* Buffer — a sampled curve: a named, buffer-backed plot input. `name(x)`
+ * inside a Function body samples it; a colored buffer is also drawn as a
+ * reference curve. add_buffer lowers it into the DSL. */
+struct YETTY_ANNOTATE("class@api_yplot:buffer") YETTY_ANNOTATE("parent@api_yplot:curve")
+    yetty_api_yplot_buffer {
+    YETTY_ANNOTATE("property") uint32_t size; /* capacity; 0 = value count */
+    uint32_t value_count;
+    float values[API_YPLOT_BUFFER_VALUES_MAX];
+};
+
+YETTY_YRESULT_DECLARE(yetty_api_yplot_buffer_ptr, struct yetty_api_yplot_buffer *);
+#define YETTY_YCLASSGEN_TYPE_YETTY_API_YPLOT_BUFFER_PTR_RESULT
+
+struct yetty_yclass_ptr_result yetty_api_yplot_buffer_class_get(void);
+
+static struct yetty_yclass_void_ptr_result buffer_from_obj(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_ptr_result class_r = yetty_api_yplot_buffer_class_get();
+    YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, class_r, "buffer_from_obj: class_get");
+    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
+    YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, slice_r, "buffer_from_obj: object_data");
+    return slice_r;
+}
+
+/* set_values: the sample data as an f32 byte buffer. The buffer's PRIMARY
+ * content is its NAME (Buffer("env", …)) — the primary@ below marks the
+ * inherited set_name slot; this function only anchors the annotation. */
+YETTY_ANNOTATE("virtual@api_yplot:buffer:set_values")
+YETTY_ANNOTATE("primary@api_yplot:set_name")
+YETTY_ANNOTATE("local@api_yplot:set_values")
+static struct yetty_ycore_void_result buffer_set_values(struct yetty_yclass_object *obj,
+                                                        struct yetty_ycore_buffer samples)
+{
+    struct yetty_yclass_void_ptr_result buffer_r = buffer_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, buffer_r, "api_yplot buffer set_values: object");
+    struct yetty_api_yplot_buffer *buffer = (struct yetty_api_yplot_buffer *)buffer_r.value;
+    if (!samples.data || samples.size == 0) {
+        buffer->value_count = 0;
+        return YETTY_OK_VOID();
+    }
+    if (samples.size % sizeof(float) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "api_yplot buffer set_values: not an f32 array");
+    }
+    size_t count = samples.size / sizeof(float);
+    if (count > API_YPLOT_BUFFER_VALUES_MAX) {
+        return YETTY_ERR(yetty_ycore_void, "api_yplot buffer set_values: too many samples");
+    }
+    memcpy(buffer->values, samples.data, samples.size);
+    buffer->value_count = (uint32_t)count;
+    return YETTY_OK_VOID();
+}
+
+/* A plot is also a DRAWABLE (v2 client interface): pack() renders the
+ * accumulated DSL into a caller-supplied drawable list as one complex
+ * record positioned at the (x, y) origin properties — dlist.add(plot).
+ * Everything else (size, ranges, view, flags, title) rides the DSL. */
+struct YETTY_ANNOTATE("class@api_yplot:plot") YETTY_ANNOTATE("parent@ydrawlist2:drawable")
+    yetty_api_yplot_plot {
+    YETTY_ANNOTATE("property") float x;
+    YETTY_ANNOTATE("property") float y;
+    /* Drawable bounds for pack(); 0 = the 400x200 default. show()'s bounds
+     * come from the DSL (@plot.size) as before. */
+    YETTY_ANNOTATE("property") float width;
+    YETTY_ANNOTATE("property") float height;
+    char *source; /* accumulating plot-DSL string (owned), NUL-terminated */
+    size_t length;
+    size_t capacity;
+};
+
+/* Result wrappers declared here (the TU does not include its own generated
+ * header); plot.gen.c defines the *_from() accessors returning them. */
+YETTY_YRESULT_DECLARE(yetty_api_yplot_plot_ptr, struct yetty_api_yplot_plot *);
+#define YETTY_YCLASSGEN_TYPE_YETTY_API_YPLOT_PLOT_PTR_RESULT
+
+struct yetty_yclass_ptr_result yetty_api_yplot_plot_class_get(void);
+struct yetty_api_yplot_plot_ptr_result yetty_api_yplot_plot_from(struct yetty_yclass_object *obj);
+
+static struct yetty_yclass_void_ptr_result plot_from_obj(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_ptr_result class_r = yetty_api_yplot_plot_class_get();
+    YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, class_r, "plot_from_obj: class_get");
+    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
+    YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, slice_r, "plot_from_obj: object_data");
     return slice_r;
 }
 
@@ -118,20 +261,6 @@ static struct yetty_ycore_void_result plot_appendf(struct yetty_api_yplot_plot *
     return plot_append(plot, buffer);
 }
 
-static struct yetty_ycore_void_result store_field(char *dest, size_t cap, const char *value,
-                                                  const char *what)
-{
-    if (!value) {
-        dest[0] = '\0';
-        return YETTY_OK_VOID();
-    }
-    if (strlen(value) >= cap) {
-        return YETTY_ERR(yetty_ycore_void, what);
-    }
-    snprintf(dest, cap, "%s", value);
-    return YETTY_OK_VOID();
-}
-
 /*=============================================================================
  * plot slots
  *===========================================================================*/
@@ -139,6 +268,7 @@ static struct yetty_ycore_void_result store_field(char *dest, size_t cap, const 
 /* set_expression: append a raw plot-DSL fragment (curves, per-curve colors, and
  * any figure/axis attributes such as @plot.title / @x.scale). */
 YETTY_ANNOTATE("virtual@api_yplot:plot:set_expression")
+YETTY_ANNOTATE("primary@api_yplot:set_expression")
 YETTY_ANNOTATE("local@api_yplot:set_expression")
 static struct yetty_ycore_void_result plot_set_expression(struct yetty_yclass_object *obj,
                                                           const char *source)
@@ -167,16 +297,19 @@ static struct yetty_ycore_void_result plot_add_function(struct yetty_yclass_obje
     struct yetty_yclass_void_ptr_result function_r = function_from_obj(function);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, function_r, "api_yplot add_function: function object");
     struct yetty_api_yplot_function *fn = (struct yetty_api_yplot_function *)function_r.value;
+    struct yetty_yclass_void_ptr_result curve_r = curve_from_obj(function);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, curve_r, "api_yplot add_function: curve slice");
+    struct yetty_api_yplot_curve *curve = (struct yetty_api_yplot_curve *)curve_r.value;
     if (!fn->body[0]) {
         return YETTY_ERR(yetty_ycore_void, "api_yplot add_function: function has no body");
     }
 
     struct yetty_ycore_void_result append_res;
-    if (fn->name[0]) {
-        append_res = plot_appendf(plot, "%s=%s", fn->name, fn->body);
+    if (curve->name[0]) {
+        append_res = plot_appendf(plot, "%s=%s", curve->name, fn->body);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, append_res, "api_yplot add_function: def");
-        if (fn->color[0]) {
-            append_res = plot_appendf(plot, "@%s.color=%s", fn->name, fn->color);
+        if (curve->color[0]) {
+            append_res = plot_appendf(plot, "@%s.color=%s", curve->name, curve->color);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, append_res, "api_yplot add_function: color");
         }
     } else {
@@ -254,6 +387,133 @@ static struct yetty_ycore_void_result plot_set_y_range(struct yetty_yclass_objec
                         (double)max);
 }
 
+/* add_buffer: lower a Buffer curve into the DSL — name declaration,
+ * capacity, inline values (CSV built here, once, in C — no binding
+ * re-implements the formatting) and the optional reference-curve color. */
+YETTY_ANNOTATE("virtual@api_yplot:plot:add_buffer")
+YETTY_ANNOTATE("local@api_yplot:add_buffer")
+static struct yetty_ycore_void_result plot_add_buffer(struct yetty_yclass_object *obj,
+                                                      struct yetty_yclass_object *buffer)
+{
+    struct yetty_yclass_void_ptr_result plot_r = plot_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, plot_r, "api_yplot add_buffer: plot object");
+    struct yetty_api_yplot_plot *plot = (struct yetty_api_yplot_plot *)plot_r.value;
+    if (!buffer) {
+        return YETTY_ERR(yetty_ycore_void, "api_yplot add_buffer: NULL buffer");
+    }
+    struct yetty_yclass_void_ptr_result buffer_r = buffer_from_obj(buffer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, buffer_r, "api_yplot add_buffer: buffer object");
+    struct yetty_api_yplot_buffer *data = (struct yetty_api_yplot_buffer *)buffer_r.value;
+    struct yetty_yclass_void_ptr_result curve_r = curve_from_obj(buffer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, curve_r, "api_yplot add_buffer: curve slice");
+    struct yetty_api_yplot_curve *curve = (struct yetty_api_yplot_curve *)curve_r.value;
+    if (!curve->name[0]) {
+        return YETTY_ERR(yetty_ycore_void, "api_yplot add_buffer: buffer has no name");
+    }
+    struct yetty_ycore_void_result append_res =
+        plot_appendf(plot, "%s=buffer", curve->name);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, append_res, "api_yplot add_buffer: decl");
+    uint32_t capacity = data->size ? data->size : data->value_count;
+    if (capacity) {
+        append_res = plot_appendf(plot, "@%s.size=%u", curve->name, capacity);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, append_res, "api_yplot add_buffer: size");
+    }
+    if (data->value_count) {
+        /* "@name.values=v1,v2,…" — worst case ~14 chars per float. */
+        size_t csv_cap = strlen(curve->name) + 16 + (size_t)data->value_count * 14;
+        char *csv = malloc(csv_cap);
+        if (!csv) {
+            return YETTY_ERR(yetty_ycore_void, "api_yplot add_buffer: alloc");
+        }
+        int written = snprintf(csv, csv_cap, "@%s.values=", curve->name);
+        for (uint32_t i = 0; i < data->value_count; i++) {
+            written += snprintf(csv + written, csv_cap - (size_t)written, "%s%g",
+                                i ? "," : "", (double)data->values[i]);
+        }
+        append_res = plot_append(plot, csv);
+        free(csv);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, append_res, "api_yplot add_buffer: values");
+    }
+    if (curve->color[0]) {
+        append_res = plot_appendf(plot, "@%s.color=%s", curve->name, curve->color);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, append_res, "api_yplot add_buffer: color");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* set_view: reframe without changing the domain — the DSL's @view=. */
+YETTY_ANNOTATE("virtual@api_yplot:plot:set_view")
+YETTY_ANNOTATE("local@api_yplot:set_view")
+static struct yetty_ycore_void_result plot_set_view(struct yetty_yclass_object *obj, float x_min,
+                                                    float x_max, float y_min, float y_max)
+{
+    struct yetty_yclass_void_ptr_result plot_r = plot_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, plot_r, "api_yplot set_view: object");
+    return plot_appendf((struct yetty_api_yplot_plot *)plot_r.value, "@view=%g..%g,%g..%g",
+                        (double)x_min, (double)x_max, (double)y_min, (double)y_max);
+}
+
+/* Chrome flags — nonzero disables the element (@plot.grid=0 …); zero
+ * re-enables it. Last directive wins, as everywhere in the DSL. */
+YETTY_ANNOTATE("virtual@api_yplot:plot:set_nogrid")
+YETTY_ANNOTATE("local@api_yplot:set_nogrid")
+static struct yetty_ycore_void_result plot_set_nogrid(struct yetty_yclass_object *obj,
+                                                      uint32_t disabled)
+{
+    struct yetty_yclass_void_ptr_result plot_r = plot_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, plot_r, "api_yplot set_nogrid: object");
+    return plot_appendf((struct yetty_api_yplot_plot *)plot_r.value, "@plot.grid=%u",
+                        disabled ? 0u : 1u);
+}
+
+YETTY_ANNOTATE("virtual@api_yplot:plot:set_noaxes")
+YETTY_ANNOTATE("local@api_yplot:set_noaxes")
+static struct yetty_ycore_void_result plot_set_noaxes(struct yetty_yclass_object *obj,
+                                                      uint32_t disabled)
+{
+    struct yetty_yclass_void_ptr_result plot_r = plot_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, plot_r, "api_yplot set_noaxes: object");
+    return plot_appendf((struct yetty_api_yplot_plot *)plot_r.value, "@plot.axes=%u",
+                        disabled ? 0u : 1u);
+}
+
+YETTY_ANNOTATE("virtual@api_yplot:plot:set_nolabels")
+YETTY_ANNOTATE("local@api_yplot:set_nolabels")
+static struct yetty_ycore_void_result plot_set_nolabels(struct yetty_yclass_object *obj,
+                                                        uint32_t disabled)
+{
+    struct yetty_yclass_void_ptr_result plot_r = plot_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, plot_r, "api_yplot set_nolabels: object");
+    return plot_appendf((struct yetty_api_yplot_plot *)plot_r.value, "@plot.labels=%u",
+                        disabled ? 0u : 1u);
+}
+
+/* pack: render the accumulated DSL INTO the caller's drawable list at the
+ * (x, y) origin — the v2 drawable contract. Defaults mirror yecho's plot
+ * block; every DSL directive ("expression attributes win") overrides them. */
+YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
+static struct yetty_ycore_void_result plot_pack(struct yetty_yclass_object *obj,
+                                                struct yetty_ydraw_drawable_list *list)
+{
+    struct yetty_yclass_void_ptr_result plot_r = plot_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, plot_r, "api_yplot pack: object");
+    struct yetty_api_yplot_plot *plot = (struct yetty_api_yplot_plot *)plot_r.value;
+    const char *source = plot->source ? plot->source : "";
+    struct yetty_yplot_render_config config = {
+        .bounds_w = plot->width > 0.0f ? plot->width : 400.0f,
+        .bounds_h = plot->height > 0.0f ? plot->height : 200.0f,
+        .x_min = -3.14159f,
+        .x_max = 3.14159f,
+        .y_min = -1.5f,
+        .y_max = 1.5f,
+        .flags = YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS,
+    };
+    struct yetty_ycore_void_result emit_r = yetty_yplot_emit_expression(
+        source, strlen(source), NULL, 0, &config, list, plot->x, plot->y, NULL, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_r, "api_yplot pack: emit_expression");
+    return YETTY_OK_VOID();
+}
+
 /* show: render the accumulated DSL and emit it as a DCS envelope on stdout. */
 YETTY_ANNOTATE("virtual@api_yplot:plot:show")
 YETTY_ANNOTATE("local@api_yplot:show")
@@ -292,50 +552,5 @@ static struct yetty_ycore_void_result plot_destroy(struct yetty_yclass_object *o
     YETTY_RETURN_IF_ERR(yetty_ycore_void, free_r, "api_yplot destroy: object_free");
     return YETTY_OK_VOID();
 }
-
-/*=============================================================================
- * function slots
- *===========================================================================*/
-
-/* set_body: the function body, e.g. "sin(x)". (The generated create() maps its
- * positional argument to this, so Function.create("sin(x)") works.) The slot is
- * named distinctly from plot:set_expression because yclass slot names are
- * module-global. */
-YETTY_ANNOTATE("virtual@api_yplot:function:set_body")
-YETTY_ANNOTATE("local@api_yplot:set_body")
-static struct yetty_ycore_void_result function_set_body(struct yetty_yclass_object *obj,
-                                                        const char *body)
-{
-    struct yetty_yclass_void_ptr_result function_r = function_from_obj(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, function_r, "api_yplot function set_body: object");
-    struct yetty_api_yplot_function *fn = (struct yetty_api_yplot_function *)function_r.value;
-    return store_field(fn->body, sizeof(fn->body), body, "api_yplot function: body too long");
-}
-
-YETTY_ANNOTATE("virtual@api_yplot:function:set_name")
-YETTY_ANNOTATE("local@api_yplot:set_name")
-static struct yetty_ycore_void_result function_set_name(struct yetty_yclass_object *obj,
-                                                        const char *name)
-{
-    struct yetty_yclass_void_ptr_result function_r = function_from_obj(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, function_r, "api_yplot function set_name: object");
-    struct yetty_api_yplot_function *fn = (struct yetty_api_yplot_function *)function_r.value;
-    return store_field(fn->name, sizeof(fn->name), name, "api_yplot function: name too long");
-}
-
-YETTY_ANNOTATE("virtual@api_yplot:function:set_color")
-YETTY_ANNOTATE("local@api_yplot:set_color")
-static struct yetty_ycore_void_result function_set_color(struct yetty_yclass_object *obj,
-                                                         const char *color)
-{
-    struct yetty_yclass_void_ptr_result function_r = function_from_obj(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, function_r, "api_yplot function set_color: object");
-    struct yetty_api_yplot_function *fn = (struct yetty_api_yplot_function *)function_r.value;
-    return store_field(fn->color, sizeof(fn->color), color, "api_yplot function: color too long");
-}
-
-/* A function has no owned heap (name/body/color are inline), so it needs no
- * class-specific destructor — the binding's generic destroy (yclass object
- * free) reclaims it. */
 
 #include "yetty/gen/impl/api_yplot/plot.c"

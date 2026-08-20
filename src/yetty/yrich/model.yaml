@@ -672,9 +672,11 @@ classes:
     ops:
       - slot: init
         slot_domain: yapp
+        slot_class: app
         impl: yrich_app_init
       - slot: run
         slot_domain: yapp
+        slot_class: app
         impl: yrich_app_run
     internal: false
     doc: null
@@ -750,45 +752,59 @@ classes:
     ops:
       - slot: constructor
         slot_domain: yrich
+        slot_class: document
         impl: document_constructor
       - slot: document_destroy
         slot_domain: yrich
+        slot_class: document
         impl: document_default_destroy
       - slot: document_content_width
         slot_domain: yrich
+        slot_class: document
         impl: document_default_content_width
       - slot: document_content_height
         slot_domain: yrich
+        slot_class: document
         impl: document_default_content_height
       - slot: document_render
         slot_domain: yrich
+        slot_class: document
         impl: document_default_render
       - slot: document_apply_op
         slot_domain: yrich
+        slot_class: document
         impl: document_default_apply_op
       - slot: document_undo
         slot_domain: yrich
+        slot_class: document
         impl: document_default_undo
       - slot: document_redo
         slot_domain: yrich
+        slot_class: document
         impl: document_default_redo
       - slot: document_on_mouse_down
         slot_domain: yrich
+        slot_class: document
         impl: document_default_on_mouse_down
       - slot: document_on_mouse_up
         slot_domain: yrich
+        slot_class: document
         impl: document_default_on_mouse_up
       - slot: document_on_mouse_drag
         slot_domain: yrich
+        slot_class: document
         impl: document_default_on_mouse_drag
       - slot: document_on_mouse_double_click
         slot_domain: yrich
+        slot_class: document
         impl: document_default_on_mouse_double_click
       - slot: document_on_key_down
         slot_domain: yrich
+        slot_class: document
         impl: document_default_on_key_down
       - slot: document_on_text_input
         slot_domain: yrich
+        slot_class: document
         impl: document_default_on_text_input
     internal: false
     doc: null
@@ -808,36 +824,47 @@ classes:
     ops:
       - slot: constructor
         slot_domain: yrich
+        slot_class: element
         impl: element_constructor
       - slot: element_destroy
         slot_domain: yrich
+        slot_class: element
         impl: element_default_destroy
       - slot: element_bounds
         slot_domain: yrich
+        slot_class: element
         impl: element_default_bounds
       - slot: element_hit_test
         slot_domain: yrich
+        slot_class: element
         impl: element_default_hit_test
       - slot: element_render
         slot_domain: yrich
+        slot_class: element
         impl: element_default_render
       - slot: element_is_editable
         slot_domain: yrich
+        slot_class: element
         impl: element_default_is_editable
       - slot: element_begin_edit
         slot_domain: yrich
+        slot_class: element
         impl: element_default_begin_edit
       - slot: element_end_edit
         slot_domain: yrich
+        slot_class: element
         impl: element_default_end_edit
       - slot: element_is_editing
         slot_domain: yrich
+        slot_class: element
         impl: element_default_is_editing
       - slot: element_insert_text
         slot_domain: yrich
+        slot_class: element
         impl: element_default_insert_text
       - slot: element_delete_sel
         slot_domain: yrich
+        slot_class: element
         impl: element_default_delete_sel
     internal: false
     doc: null
@@ -927,33 +954,43 @@ classes:
     ops:
       - slot: constructor
         slot_domain: yrich
+        slot_class: shape
         impl: shape_constructor
       - slot: element_destroy
         slot_domain: yrich
+        slot_class: shape
         impl: shape_destroy
       - slot: element_bounds
         slot_domain: yrich
+        slot_class: shape
         impl: shape_bounds
       - slot: element_is_editable
         slot_domain: yrich
+        slot_class: shape
         impl: shape_is_editable
       - slot: element_begin_edit
         slot_domain: yrich
+        slot_class: shape
         impl: shape_begin_edit
       - slot: element_end_edit
         slot_domain: yrich
+        slot_class: shape
         impl: shape_end_edit
       - slot: element_is_editing
         slot_domain: yrich
+        slot_class: shape
         impl: shape_is_editing
       - slot: element_render
         slot_domain: yrich
+        slot_class: shape
         impl: shape_render
       - slot: element_insert_text
         slot_domain: yrich
+        slot_class: shape
         impl: shape_insert_text
       - slot: element_delete_sel
         slot_domain: yrich
+        slot_class: shape
         impl: shape_delete_sel
     internal: false
     doc: null
@@ -995,27 +1032,35 @@ classes:
     ops:
       - slot: constructor
         slot_domain: yrich
+        slot_class: slides
         impl: slides_constructor
       - slot: document_destroy
         slot_domain: yrich
+        slot_class: slides
         impl: slides_destroy
       - slot: document_content_width
         slot_domain: yrich
+        slot_class: slides
         impl: slides_content_width
       - slot: document_content_height
         slot_domain: yrich
+        slot_class: slides
         impl: slides_content_height
       - slot: document_render
         slot_domain: yrich
+        slot_class: slides
         impl: slides_render
       - slot: slides_set_current
         slot_domain: yrich
+        slot_class: slides
         impl: slides_set_current
       - slot: slides_next
         slot_domain: yrich
+        slot_class: slides
         impl: slides_next
       - slot: slides_prev
         slot_domain: yrich
+        slot_class: slides
         impl: slides_prev
     internal: false
     doc: null
@@ -1089,33 +1134,43 @@ classes:
     ops:
       - slot: constructor
         slot_domain: yrich
+        slot_class: cell
         impl: cell_constructor
       - slot: element_destroy
         slot_domain: yrich
+        slot_class: cell
         impl: cell_destroy
       - slot: element_bounds
         slot_domain: yrich
+        slot_class: cell
         impl: cell_bounds
       - slot: element_is_editable
         slot_domain: yrich
+        slot_class: cell
         impl: cell_is_editable
       - slot: element_begin_edit
         slot_domain: yrich
+        slot_class: cell
         impl: cell_begin_edit
       - slot: element_end_edit
         slot_domain: yrich
+        slot_class: cell
         impl: cell_end_edit
       - slot: element_is_editing
         slot_domain: yrich
+        slot_class: cell
         impl: cell_is_editing
       - slot: element_render
         slot_domain: yrich
+        slot_class: cell
         impl: cell_render
       - slot: element_insert_text
         slot_domain: yrich
+        slot_class: cell
         impl: cell_insert_text
       - slot: element_delete_sel
         slot_domain: yrich
+        slot_class: cell
         impl: cell_delete_sel
     internal: false
     doc: null
@@ -1205,27 +1260,35 @@ classes:
     ops:
       - slot: constructor
         slot_domain: yrich
+        slot_class: spreadsheet
         impl: spreadsheet_constructor
       - slot: document_destroy
         slot_domain: yrich
+        slot_class: spreadsheet
         impl: spreadsheet_destroy
       - slot: document_content_width
         slot_domain: yrich
+        slot_class: spreadsheet
         impl: spreadsheet_content_width
       - slot: document_content_height
         slot_domain: yrich
+        slot_class: spreadsheet
         impl: spreadsheet_content_height
       - slot: spreadsheet_set_grid_size
         slot_domain: yrich
+        slot_class: spreadsheet
         impl: spreadsheet_set_grid_size
       - slot: spreadsheet_set_row_height
         slot_domain: yrich
+        slot_class: spreadsheet
         impl: spreadsheet_set_row_height
       - slot: spreadsheet_set_col_width
         slot_domain: yrich
+        slot_class: spreadsheet
         impl: spreadsheet_set_col_width
       - slot: spreadsheet_set_cell_value
         slot_domain: yrich
+        slot_class: spreadsheet
         impl: spreadsheet_set_cell_value
     internal: false
     doc: null
@@ -1371,33 +1434,43 @@ classes:
     ops:
       - slot: constructor
         slot_domain: yrich
+        slot_class: paragraph
         impl: paragraph_constructor
       - slot: element_destroy
         slot_domain: yrich
+        slot_class: paragraph
         impl: paragraph_destroy
       - slot: element_bounds
         slot_domain: yrich
+        slot_class: paragraph
         impl: paragraph_bounds
       - slot: element_is_editable
         slot_domain: yrich
+        slot_class: paragraph
         impl: paragraph_is_editable
       - slot: element_begin_edit
         slot_domain: yrich
+        slot_class: paragraph
         impl: paragraph_begin_edit
       - slot: element_end_edit
         slot_domain: yrich
+        slot_class: paragraph
         impl: paragraph_end_edit
       - slot: element_is_editing
         slot_domain: yrich
+        slot_class: paragraph
         impl: paragraph_is_editing
       - slot: element_render
         slot_domain: yrich
+        slot_class: paragraph
         impl: paragraph_render
       - slot: element_insert_text
         slot_domain: yrich
+        slot_class: paragraph
         impl: paragraph_insert_text
       - slot: element_delete_sel
         slot_domain: yrich
+        slot_class: paragraph
         impl: paragraph_delete_sel
     internal: false
     doc: null
@@ -1435,15 +1508,19 @@ classes:
     ops:
       - slot: constructor
         slot_domain: yrich
+        slot_class: inline_image
         impl: inline_image_constructor
       - slot: element_destroy
         slot_domain: yrich
+        slot_class: inline_image
         impl: inline_image_destroy
       - slot: element_bounds
         slot_domain: yrich
+        slot_class: inline_image
         impl: inline_image_bounds
       - slot: element_render
         slot_domain: yrich
+        slot_class: inline_image
         impl: inline_image_render
     internal: false
     doc: null
@@ -1573,66 +1650,87 @@ classes:
     ops:
       - slot: constructor
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_constructor
       - slot: document_destroy
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_destroy
       - slot: document_content_width
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_content_width
       - slot: document_content_height
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_content_height
       - slot: document_on_mouse_down
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_on_mouse_down
       - slot: document_on_mouse_drag
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_on_mouse_drag
       - slot: document_on_key_down
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_on_key_down
       - slot: document_on_text_input
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_on_text_input
       - slot: document_on_mouse_double_click
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_on_mouse_double_click
       - slot: document_apply_op
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_apply_op
       - slot: document_render
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_render
       - slot: ydoc_toggle_format
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_toggle_format_impl
       - slot: ydoc_set_text_color
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_set_text_color_impl
       - slot: ydoc_set_alignment
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_set_alignment_impl
       - slot: ydoc_set_line_spacing
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_set_line_spacing_impl
       - slot: ydoc_adjust_indent
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_adjust_indent_impl
       - slot: ydoc_set_highlight
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_set_highlight_impl
       - slot: ydoc_clear_format
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_clear_format_impl
       - slot: ydoc_set_heading
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_set_heading_impl
       - slot: ydoc_change_font_size
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_change_font_size_impl
       - slot: ydoc_set_font_size
         slot_domain: yrich
+        slot_class: ydoc
         impl: ydoc_set_font_size_impl
     internal: false
     doc: null

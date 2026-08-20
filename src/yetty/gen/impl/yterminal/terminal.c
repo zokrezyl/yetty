@@ -18,23 +18,28 @@ typedef struct yetty_yclass_object_ptr_result (*yetty_yterminal_figure_root_cont
     struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ytermsink_pty_write_fn yetty_yterminal_terminal_yetty_ytermsink_pty_write_check =
-    terminal_sink_pty_write;
+static yetty_ytermsink_pty_write_fn
+    yetty_yterminal_terminal_yetty_ytermsink_pty_write_terminal_sink_pty_write_check =
+        terminal_sink_pty_write;
 YETTY_MAYBE_UNUSED
-static yetty_ytermsink_mouse_sub_fn yetty_yterminal_terminal_yetty_ytermsink_mouse_sub_check =
-    terminal_sink_mouse_sub;
+static yetty_ytermsink_mouse_sub_fn
+    yetty_yterminal_terminal_yetty_ytermsink_mouse_sub_terminal_sink_mouse_sub_check =
+        terminal_sink_mouse_sub;
 YETTY_MAYBE_UNUSED
 static yetty_ytermsink_clipboard_write_fn
-    yetty_yterminal_terminal_yetty_ytermsink_clipboard_write_check = terminal_sink_clipboard_write;
+    yetty_yterminal_terminal_yetty_ytermsink_clipboard_write_terminal_sink_clipboard_write_check =
+        terminal_sink_clipboard_write;
 YETTY_MAYBE_UNUSED
-static yetty_ytermsink_sixel_write_fn yetty_yterminal_terminal_yetty_ytermsink_sixel_write_check =
-    terminal_sink_sixel_write;
+static yetty_ytermsink_sixel_write_fn
+    yetty_yterminal_terminal_yetty_ytermsink_sixel_write_terminal_sink_sixel_write_check =
+        terminal_sink_sixel_write;
 YETTY_MAYBE_UNUSED
 static yetty_ytermsink_request_render_fn
-    yetty_yterminal_terminal_yetty_ytermsink_request_render_check = terminal_sink_request_render;
+    yetty_yterminal_terminal_yetty_ytermsink_request_render_terminal_sink_request_render_check =
+        terminal_sink_request_render;
 YETTY_MAYBE_UNUSED
 static yetty_yterminal_figure_root_container_fn
-    yetty_yterminal_terminal_yetty_yterminal_figure_root_container_check =
+    yetty_yterminal_terminal_yetty_yterminal_figure_root_container_terminal_figure_root_container_check =
         terminal_figure_root_container;
 
 struct yetty_yclass_ptr_result yetty_yterminal_terminal_class_get(void)

@@ -211,30 +211,39 @@ classes:
     ops:
       - slot: configure
         slot_domain: yview
+        slot_class: view
         impl: view_configure
       - slot: set_content
         slot_domain: yview
+        slot_class: view
         impl: view_set_content
       - slot: set_text
         slot_domain: yview
+        slot_class: view
         impl: view_set_text
       - slot: set_plot
         slot_domain: yview
+        slot_class: view
         impl: view_set_plot
       - slot: set_content_size
         slot_domain: yview
+        slot_class: view
         impl: view_set_content_size
       - slot: scroll_to
         slot_domain: yview
+        slot_class: view
         impl: view_scroll_to
       - slot: scroll_by
         slot_domain: yview
+        slot_class: view
         impl: view_scroll_by
       - slot: set_rect
         slot_domain: yview
+        slot_class: view
         impl: view_set_rect
       - slot: destroy
         slot_domain: yview
+        slot_class: view
         impl: view_destroy
     internal: false
     doc: null

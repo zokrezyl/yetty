@@ -2025,7 +2025,7 @@ static void terminal_ydraw_ingest_finish(struct yetty_yterminal_terminal *termin
 /* Ingest one YDRAW_BIN envelope into yvterm's own grid. Records are
  * streamed via the drawable iterator and anchored per line on the grid's
  * scroll ring — SDF shapes, text-drawable-lists (with wire-shipped
- * fonts), and complex figures alike; whatever sits on a line scrolls
+ * fonts), and complexes alike; whatever sits on a line scrolls
  * with the text for free. ycat/ypdf/markdown all flow through here. */
 static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
     struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)

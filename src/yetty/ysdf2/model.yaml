@@ -1,0 +1,1157 @@
+methods: []
+classes:
+  - name: circle
+    domain: ysdf2
+    accessor: yetty_ysdf2_circle_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_circle
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_circle_pack
+    internal: false
+    doc: null
+  - name: box
+    domain: ysdf2
+    accessor: yetty_ysdf2_box_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_box
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: half_width
+        type: float
+        get: true
+        set: true
+      - name: half_height
+        type: float
+        get: true
+        set: true
+      - name: corner_radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_box_pack
+    internal: false
+    doc: null
+  - name: segment
+    domain: ysdf2
+    accessor: yetty_ysdf2_segment_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_segment
+    data_fields:
+      - name: start_x
+        type: float
+        get: true
+        set: true
+      - name: start_y
+        type: float
+        get: true
+        set: true
+      - name: end_x
+        type: float
+        get: true
+        set: true
+      - name: end_y
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_segment_pack
+    internal: false
+    doc: null
+  - name: triangle
+    domain: ysdf2
+    accessor: yetty_ysdf2_triangle_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_triangle
+    data_fields:
+      - name: vertex_a_x
+        type: float
+        get: true
+        set: true
+      - name: vertex_a_y
+        type: float
+        get: true
+        set: true
+      - name: vertex_b_x
+        type: float
+        get: true
+        set: true
+      - name: vertex_b_y
+        type: float
+        get: true
+        set: true
+      - name: vertex_c_x
+        type: float
+        get: true
+        set: true
+      - name: vertex_c_y
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_triangle_pack
+    internal: false
+    doc: null
+  - name: ellipse
+    domain: ysdf2
+    accessor: yetty_ysdf2_ellipse_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_ellipse
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: radius_x
+        type: float
+        get: true
+        set: true
+      - name: radius_y
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_ellipse_pack
+    internal: false
+    doc: null
+  - name: arc
+    domain: ysdf2
+    accessor: yetty_ysdf2_arc_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_arc
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: aperture_x
+        type: float
+        get: true
+        set: true
+      - name: aperture_y
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+      - name: thickness
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_arc_pack
+    internal: false
+    doc: null
+  - name: rounded_box
+    domain: ysdf2
+    accessor: yetty_ysdf2_rounded_box_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_rounded_box
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: half_width
+        type: float
+        get: true
+        set: true
+      - name: half_height
+        type: float
+        get: true
+        set: true
+      - name: radius_top_right
+        type: float
+        get: true
+        set: true
+      - name: radius_bottom_right
+        type: float
+        get: true
+        set: true
+      - name: radius_top_left
+        type: float
+        get: true
+        set: true
+      - name: radius_bottom_left
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_rounded_box_pack
+    internal: false
+    doc: null
+  - name: rhombus
+    domain: ysdf2
+    accessor: yetty_ysdf2_rhombus_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_rhombus
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: half_width
+        type: float
+        get: true
+        set: true
+      - name: half_height
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_rhombus_pack
+    internal: false
+    doc: null
+  - name: pentagon
+    domain: ysdf2
+    accessor: yetty_ysdf2_pentagon_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_pentagon
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_pentagon_pack
+    internal: false
+    doc: null
+  - name: hexagon
+    domain: ysdf2
+    accessor: yetty_ysdf2_hexagon_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_hexagon
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_hexagon_pack
+    internal: false
+    doc: null
+  - name: star
+    domain: ysdf2
+    accessor: yetty_ysdf2_star_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_star
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+      - name: num_points
+        type: float
+        get: true
+        set: true
+      - name: inner_ratio
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_star_pack
+    internal: false
+    doc: null
+  - name: pie
+    domain: ysdf2
+    accessor: yetty_ysdf2_pie_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_pie
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: aperture_x
+        type: float
+        get: true
+        set: true
+      - name: aperture_y
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_pie_pack
+    internal: false
+    doc: null
+  - name: ring
+    domain: ysdf2
+    accessor: yetty_ysdf2_ring_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_ring
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: normal_x
+        type: float
+        get: true
+        set: true
+      - name: normal_y
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+      - name: thickness
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_ring_pack
+    internal: false
+    doc: null
+  - name: heart
+    domain: ysdf2
+    accessor: yetty_ysdf2_heart_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_heart
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: scale
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_heart_pack
+    internal: false
+    doc: null
+  - name: cross
+    domain: ysdf2
+    accessor: yetty_ysdf2_cross_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_cross
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: half_width
+        type: float
+        get: true
+        set: true
+      - name: half_height
+        type: float
+        get: true
+        set: true
+      - name: corner_radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_cross_pack
+    internal: false
+    doc: null
+  - name: rounded_x
+    domain: ysdf2
+    accessor: yetty_ysdf2_rounded_x_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_rounded_x
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: width
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_rounded_x_pack
+    internal: false
+    doc: null
+  - name: capsule
+    domain: ysdf2
+    accessor: yetty_ysdf2_capsule_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_capsule
+    data_fields:
+      - name: start_x
+        type: float
+        get: true
+        set: true
+      - name: start_y
+        type: float
+        get: true
+        set: true
+      - name: end_x
+        type: float
+        get: true
+        set: true
+      - name: end_y
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_capsule_pack
+    internal: false
+    doc: null
+  - name: moon
+    domain: ysdf2
+    accessor: yetty_ysdf2_moon_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_moon
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: offset
+        type: float
+        get: true
+        set: true
+      - name: radius_outer
+        type: float
+        get: true
+        set: true
+      - name: radius_inner
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_moon_pack
+    internal: false
+    doc: null
+  - name: egg
+    domain: ysdf2
+    accessor: yetty_ysdf2_egg_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_egg
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: radius_outer
+        type: float
+        get: true
+        set: true
+      - name: radius_inner
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_egg_pack
+    internal: false
+    doc: null
+  - name: octogon
+    domain: ysdf2
+    accessor: yetty_ysdf2_octogon_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_octogon
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_octogon_pack
+    internal: false
+    doc: null
+  - name: hexagram
+    domain: ysdf2
+    accessor: yetty_ysdf2_hexagram_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_hexagram
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_hexagram_pack
+    internal: false
+    doc: null
+  - name: pentagram
+    domain: ysdf2
+    accessor: yetty_ysdf2_pentagram_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_pentagram
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_pentagram_pack
+    internal: false
+    doc: null
+  - name: linear_gradient_box
+    domain: ysdf2
+    accessor: yetty_ysdf2_linear_gradient_box_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_linear_gradient_box
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: half_width
+        type: float
+        get: true
+        set: true
+      - name: half_height
+        type: float
+        get: true
+        set: true
+      - name: corner_radius
+        type: float
+        get: true
+        set: true
+      - name: grad_x0
+        type: float
+        get: true
+        set: true
+      - name: grad_y0
+        type: float
+        get: true
+        set: true
+      - name: grad_x1
+        type: float
+        get: true
+        set: true
+      - name: grad_y1
+        type: float
+        get: true
+        set: true
+      - name: color0
+        type: uint32_t
+        get: true
+        set: true
+      - name: color1
+        type: uint32_t
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_linear_gradient_box_pack
+    internal: false
+    doc: null
+  - name: radial_gradient_box
+    domain: ysdf2
+    accessor: yetty_ysdf2_radial_gradient_box_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_radial_gradient_box
+    data_fields:
+      - name: center_x
+        type: float
+        get: true
+        set: true
+      - name: center_y
+        type: float
+        get: true
+        set: true
+      - name: half_width
+        type: float
+        get: true
+        set: true
+      - name: half_height
+        type: float
+        get: true
+        set: true
+      - name: corner_radius
+        type: float
+        get: true
+        set: true
+      - name: grad_cx
+        type: float
+        get: true
+        set: true
+      - name: grad_cy
+        type: float
+        get: true
+        set: true
+      - name: grad_radius
+        type: float
+        get: true
+        set: true
+      - name: color_inner
+        type: uint32_t
+        get: true
+        set: true
+      - name: color_outer
+        type: uint32_t
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_radial_gradient_box_pack
+    internal: false
+    doc: null
+  - name: sphere_3d
+    domain: ysdf2
+    accessor: yetty_ysdf2_sphere_3d_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_sphere_3d
+    data_fields:
+      - name: position_x
+        type: float
+        get: true
+        set: true
+      - name: position_y
+        type: float
+        get: true
+        set: true
+      - name: position_z
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_sphere_3d_pack
+    internal: false
+    doc: null
+  - name: box_3d
+    domain: ysdf2
+    accessor: yetty_ysdf2_box_3d_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_box_3d
+    data_fields:
+      - name: position_x
+        type: float
+        get: true
+        set: true
+      - name: position_y
+        type: float
+        get: true
+        set: true
+      - name: position_z
+        type: float
+        get: true
+        set: true
+      - name: half_size_x
+        type: float
+        get: true
+        set: true
+      - name: half_size_y
+        type: float
+        get: true
+        set: true
+      - name: half_size_z
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_box_3d_pack
+    internal: false
+    doc: null
+  - name: torus_3d
+    domain: ysdf2
+    accessor: yetty_ysdf2_torus_3d_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_torus_3d
+    data_fields:
+      - name: position_x
+        type: float
+        get: true
+        set: true
+      - name: position_y
+        type: float
+        get: true
+        set: true
+      - name: position_z
+        type: float
+        get: true
+        set: true
+      - name: major_radius
+        type: float
+        get: true
+        set: true
+      - name: minor_radius
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_torus_3d_pack
+    internal: false
+    doc: null
+  - name: cylinder_3d
+    domain: ysdf2
+    accessor: yetty_ysdf2_cylinder_3d_class_get
+    type: regular
+    source_file: src/yetty/ysdf2/shapes.c
+    parent:
+      domain: ydrawlist2
+      name: shape
+    mixins: []
+    data: struct yetty_ysdf2_cylinder_3d
+    data_fields:
+      - name: position_x
+        type: float
+        get: true
+        set: true
+      - name: position_y
+        type: float
+        get: true
+        set: true
+      - name: position_z
+        type: float
+        get: true
+        set: true
+      - name: radius
+        type: float
+        get: true
+        set: true
+      - name: half_height
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: ysdf2_cylinder_3d_pack
+    internal: false
+    doc: null
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+local_types:
+  yetty_ysdf2_circle: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_circle_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_box: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_box_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_segment: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_segment_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_triangle: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_triangle_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_ellipse: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_ellipse_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_arc: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_arc_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_rounded_box: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_rounded_box_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_rhombus: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_rhombus_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_pentagon: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_pentagon_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_hexagon: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_hexagon_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_star: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_star_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_pie: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_pie_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_ring: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_ring_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_heart: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_heart_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_cross: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_cross_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_rounded_x: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_rounded_x_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_capsule: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_capsule_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_moon: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_moon_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_egg: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_egg_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_octogon: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_octogon_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_hexagram: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_hexagram_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_pentagram: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_pentagram_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_linear_gradient_box: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_linear_gradient_box_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_radial_gradient_box: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_radial_gradient_box_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_sphere_3d: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_sphere_3d_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_box_3d: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_box_3d_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_torus_3d: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_torus_3d_ptr_result: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_cylinder_3d: src/yetty/ysdf2/shapes.c
+  yetty_ysdf2_cylinder_3d_ptr_result: src/yetty/ysdf2/shapes.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ysdf2/shapes.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ysdf2/shapes.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ysdf2/shapes.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ysdf2/shapes.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ysdf2/shapes.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

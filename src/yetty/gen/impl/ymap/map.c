@@ -69,38 +69,47 @@ typedef struct yetty_ydraw_drawable_list_result (*yetty_ymap_render_fn)(
 typedef struct yetty_ycore_void_result (*yetty_ymap_destroy_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ymap_configure_fn yetty_ymap_map_yetty_ymap_configure_check = map_configure;
+static yetty_ymap_configure_fn yetty_ymap_map_yetty_ymap_configure_map_configure_check =
+    map_configure;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_set_provider_fn yetty_ymap_map_yetty_ymap_set_provider_check = map_set_provider;
+static yetty_ymap_set_provider_fn yetty_ymap_map_yetty_ymap_set_provider_map_set_provider_check =
+    map_set_provider;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_set_custom_provider_fn yetty_ymap_map_yetty_ymap_set_custom_provider_check =
-    map_set_custom_provider;
+static yetty_ymap_set_custom_provider_fn
+    yetty_ymap_map_yetty_ymap_set_custom_provider_map_set_custom_provider_check =
+        map_set_custom_provider;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_set_center_fn yetty_ymap_map_yetty_ymap_set_center_check = map_set_center;
+static yetty_ymap_set_center_fn yetty_ymap_map_yetty_ymap_set_center_map_set_center_check =
+    map_set_center;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_set_zoom_fn yetty_ymap_map_yetty_ymap_set_zoom_check = map_set_zoom;
+static yetty_ymap_set_zoom_fn yetty_ymap_map_yetty_ymap_set_zoom_map_set_zoom_check = map_set_zoom;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_set_viewport_fn yetty_ymap_map_yetty_ymap_set_viewport_check = map_set_viewport;
+static yetty_ymap_set_viewport_fn yetty_ymap_map_yetty_ymap_set_viewport_map_set_viewport_check =
+    map_set_viewport;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_pan_by_pixels_fn yetty_ymap_map_yetty_ymap_pan_by_pixels_check =
+static yetty_ymap_pan_by_pixels_fn yetty_ymap_map_yetty_ymap_pan_by_pixels_map_pan_by_pixels_check =
     map_pan_by_pixels;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_zoom_by_at_fn yetty_ymap_map_yetty_ymap_zoom_by_at_check = map_zoom_by_at;
+static yetty_ymap_zoom_by_at_fn yetty_ymap_map_yetty_ymap_zoom_by_at_map_zoom_by_at_check =
+    map_zoom_by_at;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_get_zoom_fn yetty_ymap_map_yetty_ymap_get_zoom_check = map_get_zoom;
+static yetty_ymap_get_zoom_fn yetty_ymap_map_yetty_ymap_get_zoom_map_get_zoom_check = map_get_zoom;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_geolocate_fn yetty_ymap_map_yetty_ymap_geolocate_check = map_geolocate;
+static yetty_ymap_geolocate_fn yetty_ymap_map_yetty_ymap_geolocate_map_geolocate_check =
+    map_geolocate;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_attribution_fn yetty_ymap_map_yetty_ymap_attribution_check = map_attribution;
+static yetty_ymap_attribution_fn yetty_ymap_map_yetty_ymap_attribution_map_attribution_check =
+    map_attribution;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_is_vector_fn yetty_ymap_map_yetty_ymap_is_vector_check = map_is_vector;
+static yetty_ymap_is_vector_fn yetty_ymap_map_yetty_ymap_is_vector_map_is_vector_check =
+    map_is_vector;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_overlay_geojson_fn yetty_ymap_map_yetty_ymap_overlay_geojson_check =
-    map_overlay_geojson;
+static yetty_ymap_overlay_geojson_fn
+    yetty_ymap_map_yetty_ymap_overlay_geojson_map_overlay_geojson_check = map_overlay_geojson;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_render_fn yetty_ymap_map_yetty_ymap_render_check = map_render;
+static yetty_ymap_render_fn yetty_ymap_map_yetty_ymap_render_map_render_check = map_render;
 YETTY_MAYBE_UNUSED
-static yetty_ymap_destroy_fn yetty_ymap_map_yetty_ymap_destroy_check = map_destroy;
+static yetty_ymap_destroy_fn yetty_ymap_map_yetty_ymap_destroy_map_destroy_check = map_destroy;
 
 struct yetty_yclass_ptr_result yetty_ymap_map_class_get(void)
 {

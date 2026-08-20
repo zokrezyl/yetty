@@ -12,9 +12,10 @@
 #include <string.h> /* memcpy/strcmp/strlen */
 
 YETTY_MAYBE_UNUSED
-static yetty_yapp_init_fn yetty_ybrowser_app_yetty_yapp_init_check = ybrowser_app_init;
+static yetty_yapp_init_fn yetty_ybrowser_app_yetty_yapp_init_ybrowser_app_init_check =
+    ybrowser_app_init;
 YETTY_MAYBE_UNUSED
-static yetty_yapp_run_fn yetty_ybrowser_app_yetty_yapp_run_check = sa_worker;
+static yetty_yapp_run_fn yetty_ybrowser_app_yetty_yapp_run_sa_worker_check = sa_worker;
 
 struct yetty_yclass_ptr_result yetty_ybrowser_app_class_get(void)
 {

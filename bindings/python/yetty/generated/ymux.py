@@ -15,23 +15,19 @@ class Attachment(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_ymux_attachment_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_ymux_attachment_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_ymux_attachment_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Attachment':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Attachment.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class Client(_rt.YClass):
     """yclass ymux:client"""
@@ -41,23 +37,19 @@ class Client(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_ymux_client_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_ymux_client_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_ymux_client_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Client':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Client.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class Daemon(_rt.YClass):
     """yclass ymux:daemon"""
@@ -67,23 +59,19 @@ class Daemon(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_ymux_daemon_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_ymux_daemon_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_ymux_daemon_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Daemon':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Daemon.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class Engine(_rt.YClass):
     """yclass ymux:engine"""
@@ -93,23 +81,19 @@ class Engine(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_ymux_engine_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_ymux_engine_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_ymux_engine_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Engine':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Engine.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class History(_rt.YClass):
     """yclass ymux:history"""
@@ -119,23 +103,19 @@ class History(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_ymux_history_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_ymux_history_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_ymux_history_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'History':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"History.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class Pane(_rt.YClass):
     """yclass ymux:pane"""
@@ -145,23 +125,19 @@ class Pane(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_ymux_pane_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_ymux_pane_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_ymux_pane_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Pane':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Pane.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class Projector(_rt.YClass):
     """yclass ymux:projector"""
@@ -171,23 +147,19 @@ class Projector(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_ymux_projector_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_ymux_projector_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_ymux_projector_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Projector':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Projector.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class Rich(_rt.YClass):
     """yclass ymux:rich"""
@@ -197,23 +169,19 @@ class Rich(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_ymux_rich_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_ymux_rich_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_ymux_rich_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Rich':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Rich.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class Session(_rt.YClass):
     """yclass ymux:session"""
@@ -223,23 +191,19 @@ class Session(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_ymux_session_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_ymux_session_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_ymux_session_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Session':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Session.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class Vtsink(_rt.YClass):
     """yclass ymux:vtsink"""
@@ -249,29 +213,25 @@ class Vtsink(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_ymux_vtsink_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_ymux_vtsink_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_ymux_vtsink_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Vtsink':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Vtsink.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
     def feed(self, generation: int, bytes: _t.yetty_ycore_buffer) -> None:
         """Call `yetty_ymux_feed`; raises _rt.YettyError on failure."""
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ymux_feed", _t.yetty_ycore_void_result, [c_void_p, c_uint64, _t.yetty_ycore_buffer])
-        res = _rt.result_from_c(_fn(self._handle, generation, bytes))
+        res = _rt.result_from_c(_fn(self._handle, generation, _rt.as_buffer(bytes)))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value

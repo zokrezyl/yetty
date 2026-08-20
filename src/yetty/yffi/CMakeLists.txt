@@ -34,9 +34,18 @@ target_include_directories(yetty_ffi PRIVATE
 # requirements.
 target_link_libraries(yetty_ffi PRIVATE
     -Wl,--whole-archive
-    yetty_api_yplot   # public API facade — exports yetty_api_yplot_* for bindings
+    yetty_api_yplot      # public API facade — exports yetty_api_yplot_* for bindings
+    yetty_ydrawlist2     # v2 ydraw client interface: drawable/shape/font/text/list
+    yetty_api_ydrawlist2 # its generated stubs + class accessors
+    yetty_ysdf2          # v2 generated shape classes
+    yetty_api_ysdf2      # their generated stubs + class accessors
+    yetty_ycomplex2      # v2 complex-kind drawables (image/mesh/shadertoy/video)
+    yetty_api_ycomplex2
     -Wl,--no-whole-archive
     yetty_yplot_core  # yetty_yplot_render + dcs_bin_emit (GPU-less)
+    yetty_yimage_core
+    yetty_ymesh_core
+    yetty_yshadertoy_core
     yetty_ydraw_list
     yetty_yface
     yetty_ysdf
@@ -48,6 +57,9 @@ target_link_libraries(yetty_ffi PRIVATE
     Threads::Threads
     m
 )
+if(YETTY_ENABLE_FEATURE_YVIDEO)
+    target_link_libraries(yetty_ffi PRIVATE yetty_yvideo_core)
+endif()
 
 # Fail the link on any unresolved symbol so a missing transitive dependency
 # shows up here at build time, not as a dlopen error in the bindings.

@@ -191,6 +191,13 @@ def result_payload_type(return_type: str, types_by_name: dict):
 #                                                                       the class this
 #                                                                       annotation sits on,
 #                                                                       resolved from context.
+#   primary@<DOMAIN>:<SLOT>                           on a setter fn  — mark the slot as the
+#                                                                       class's PRIMARY content;
+#                                                                       binding generators emit
+#                                                                       it as the positional
+#                                                                       constructor argument.
+#                                                                       Class = nearest preceding
+#                                                                       class@ in the source.
 #   local@<DOMAIN>:<SLOT>                             on any fn       — mark the named slot
 #                                                                       as local-only; the
 #                                                                       public stub is built
@@ -927,6 +934,8 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     methods: dict = {}
     classes: dict = {}
     local_slots: set = set()
+    # class name -> primary-content slot (`primary@` annotation).
+    primary_by_class: dict = {}
     # Slots flagged `oneway@<DOMAIN>:<SLOT>` — their public stub marshals over
     # RPC fire-and-forget (no response read; server writes none). Void slots
     # only. See the post-parse application + emit_dispatch_body.
@@ -972,6 +981,12 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     # virtual method being overridden (`override@yapp:app:run`) and the
     # implementing class is the source file's class.
     impl_class_by_file: dict = {}
+    # The MOST RECENTLY seen own-module class@ per file, updated as the
+    # decl walk proceeds in source order. Attribution target for override@
+    # impls in multi-class files (e.g. ysdf2's generated shapes.c): the
+    # overriding class is "the class the annotation sits under", i.e. the
+    # nearest preceding class@ in the same source.
+    last_class_in_file: dict = {}
 
     def bucket(name: str) -> dict:
         if name not in classes:
@@ -1149,6 +1164,26 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                             continue
                         local_slots.add(slot_name)
                         continue
+                    if role == "primary":
+                        # `primary@<DOMAIN>:<SLOT>` — mark the named setter
+                        # slot as the class's PRIMARY content: language
+                        # generators emit it as the positional constructor
+                        # argument (Plot("f=sin(x)"), Image("rose.png")).
+                        # Attribution: the nearest preceding class@ in this
+                        # source, like override@.
+                        require_segments(role, args, 2, "primary@<DOMAIN>:<SLOT>")
+                        slot_dom, slot_name = args[0], args[1]
+                        if slot_dom != module:
+                            continue
+                        primary_cls = (last_class_in_file.get(str(path)) or
+                                       impl_class_by_file.get(str(path)))
+                        if not primary_cls:
+                            sys.stderr.write(
+                                f"error: 'primary@{slot_dom}:{slot_name}' with no local "
+                                f"class@ seen yet in {path}.\n")
+                            sys.exit(1)
+                        primary_by_class[primary_cls] = slot_name
+                        continue
                     if role == "oneway":
                         # `oneway@<DOMAIN>:<SLOT>` — the public stub marshals
                         # fire-and-forget (RPC_OP_CALL_ONEWAY): no response is
@@ -1197,6 +1232,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                         b["ops"].append({
                             "slot": slot,
                             "slot_domain": slot_dom,
+                            "slot_class": cls,
                             "impl": decl["name"],
                         })
                         # Authoritative owner. Overwrite any provisional entry an
@@ -1223,10 +1259,18 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                         # form (restating the overriding class) is rejected below.
                         if len(args) == 3:
                             ann_dom, ann_cls, slot = args
+                            # The overriding class is the nearest preceding
+                            # class@ in this source (multi-class files:
+                            # ysdf2's shapes.c, ydrawlist2's drawable.c);
+                            # fall back to the file's primary class.
+                            override_cls = (last_class_in_file.get(str(path)) or
+                                            impl_class_by_file.get(str(path)))
                             if ann_dom == module:
-                                impl_dom, cls, slot_dom = ann_dom, ann_cls, ann_dom
+                                if not override_cls:
+                                    override_cls = ann_cls
+                                impl_dom, cls, slot_dom = ann_dom, override_cls, ann_dom
                             else:
-                                cls = impl_class_by_file.get(str(path))
+                                cls = override_cls
                                 if not cls:
                                     sys.stderr.write(
                                         f"error: 'override@{':'.join(args)}' names a foreign "
@@ -1252,6 +1296,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                         b["ops"].append({
                             "slot": slot,
                             "slot_domain": slot_dom,
+                            "slot_class": ann_cls,
                             "impl": decl["name"],
                         })
                         # Only emit a public stub for slots OWNED by this
@@ -1295,6 +1340,8 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                     if primary_dom != module:
                         continue
                     impl_class_by_file.setdefault(str(path), primary)
+                    if decl_file == str(path):
+                        last_class_in_file[str(path)] = primary
                     b = bucket(primary)
                     # Set descriptive fields ONLY on first sighting.
                     # The same annotation reaches every TU that pulls
@@ -1408,6 +1455,11 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             f"default impl) in its base class using virtual@; override@ may only "
             f"supply an impl for an already-declared virtual slot.\n")
         sys.exit(1)
+    # Stamp each class's primary-content slot (`primary@`) into the model so
+    # every language generator emits it as the positional constructor arg.
+    for class_name, primary_slot in primary_by_class.items():
+        if class_name in classes:
+            classes[class_name]["primary_slot"] = primary_slot
     model = {
         "methods": list(methods.values()),
         "classes": [c for c in classes.values() if c["accessor"]],
@@ -2055,11 +2107,14 @@ def emit_class_accessor(cls: dict) -> str:
     #
     # The check variable name MUST include slot_domain — a class that
     # overrides the same local slot name from two different domains would
-    # otherwise collide on the static variable name.
+    # otherwise collide on the static variable name. It must ALSO include
+    # the impl name: when several same-module classes override one slot,
+    # every impl is wired in the slot owner's glue, and a name keyed on the
+    # owner class alone would collide across those impls.
     qcls = qualified_class(cls)
     typecheck_lines = [
         f"YETTY_MAYBE_UNUSED\n"
-        f"static {op_c_name(op)}_fn {qcls}_{op_c_name(op)}_check = {op['impl']};"
+        f"static {op_c_name(op)}_fn {qcls}_{op_c_name(op)}_{op['impl']}_check = {op['impl']};"
         for op in cls["ops"]
     ]
     typecheck_block = "\n".join(typecheck_lines)
@@ -2778,6 +2833,18 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path, split: bool = F
             for mx in c.get("mixins", []):
                 needed.add(_class_header_lookup(model, mx, fallback_dom=mx['domain'],
                                                 module_src=module_dir, split=split))
+            # A FOREIGN override also references the slot owner's stub +
+            # `_fn` typedef, which live in that class's impl header — the
+            # parent chain alone doesn't guarantee it (the parent may be a
+            # different class of the foreign module). Same-module overrides
+            # need nothing: their typedefs are emitted locally below.
+            for op in c.get("ops", []):
+                slot_dom = op.get("slot_domain")
+                slot_cls = op.get("slot_class")
+                if slot_dom and slot_cls and slot_dom != c.get("domain"):
+                    needed.add(_class_header_lookup(
+                        model, {"domain": slot_dom, "name": slot_cls},
+                        fallback_dom=slot_dom, module_src=module_dir, split=split))
         include_block = "".join(f'#include "{h}"\n' for h in sorted(needed))
         # The accessor body emits ydebug() and YETTY_OK / YETTY_ERR
         # which expand to ycore + ytrace primitives. Pull those in

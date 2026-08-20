@@ -15,23 +15,19 @@ class Clipboard(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_clipboard_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Clipboard':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Clipboard.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
     def clipboard_set_text(self, text: str | bytes | None, len: int) -> None:
         """Call `yetty_yplatform_clipboard_set_text`; raises _rt.YettyError on failure."""
         if self._handle is None:
@@ -68,23 +64,19 @@ class AndroidClipboard(Clipboard):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_android_clipboard_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_android_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_android_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'AndroidClipboard':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"AndroidClipboard.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class GlfwClipboard(Clipboard):
     """yclass yplatform:glfw_clipboard"""
@@ -94,23 +86,19 @@ class GlfwClipboard(Clipboard):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_glfw_clipboard_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_glfw_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_glfw_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'GlfwClipboard':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"GlfwClipboard.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class IosClipboard(Clipboard):
     """yclass yplatform:ios_clipboard"""
@@ -120,23 +108,19 @@ class IosClipboard(Clipboard):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_ios_clipboard_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_ios_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_ios_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'IosClipboard':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"IosClipboard.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class WebasmClipboard(Clipboard):
     """yclass yplatform:webasm_clipboard"""
@@ -146,23 +130,19 @@ class WebasmClipboard(Clipboard):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_webasm_clipboard_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_webasm_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_webasm_clipboard_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'WebasmClipboard':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"WebasmClipboard.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class Platform(_rt.YClass):
     """yclass yplatform:platform"""
@@ -172,23 +152,19 @@ class Platform(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_platform_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Platform':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Platform.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
     def platform_init(self, app: Any, argc: int, argv: Any) -> None:
         """Call `yetty_yplatform_platform_init`; raises _rt.YettyError on failure."""
         if self._handle is None:
@@ -216,23 +192,19 @@ class AndroidPlatform(Platform):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_android_platform_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_android_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_android_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'AndroidPlatform':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"AndroidPlatform.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class GlfwPlatform(Platform):
     """yclass yplatform:glfw_platform"""
@@ -242,23 +214,19 @@ class GlfwPlatform(Platform):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_glfw_platform_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_glfw_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_glfw_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'GlfwPlatform':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"GlfwPlatform.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class IosPlatform(Platform):
     """yclass yplatform:ios_platform"""
@@ -268,23 +236,19 @@ class IosPlatform(Platform):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_ios_platform_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_ios_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_ios_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'IosPlatform':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"IosPlatform.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class WebasmPlatform(Platform):
     """yclass yplatform:webasm_platform"""
@@ -294,23 +258,19 @@ class WebasmPlatform(Platform):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_webasm_platform_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_webasm_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_webasm_platform_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'WebasmPlatform':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"WebasmPlatform.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class WindowChrome(_rt.YClass):
     """yclass yplatform:window_chrome"""
@@ -320,23 +280,19 @@ class WindowChrome(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_window_chrome_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_window_chrome_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_window_chrome_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'WindowChrome':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"WindowChrome.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
     def window_chrome_configure(self, output_pipe: Any) -> None:
         """Call `yetty_yplatform_window_chrome_configure`; raises _rt.YettyError on failure."""
         if self._handle is None:
@@ -445,23 +401,19 @@ class GlfwWindowChrome(WindowChrome):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_glfw_window_chrome_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_glfw_window_chrome_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_glfw_window_chrome_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'GlfwWindowChrome':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"GlfwWindowChrome.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class Window(_rt.YClass):
     """yclass yplatform:window"""
@@ -471,23 +423,19 @@ class Window(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_window_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Window':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Window.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
     def window_open(self, width: int, height: int, title: str | bytes | None) -> None:
         """Call `yetty_yplatform_window_open`; raises _rt.YettyError on failure."""
         if self._handle is None:
@@ -569,23 +517,19 @@ class AndroidWindow(Window):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_android_window_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_android_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_android_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'AndroidWindow':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"AndroidWindow.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class GlfwWindow(Window):
     """yclass yplatform:glfw_window"""
@@ -595,23 +539,19 @@ class GlfwWindow(Window):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_glfw_window_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_glfw_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_glfw_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'GlfwWindow':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"GlfwWindow.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class IosWindow(Window):
     """yclass yplatform:ios_window"""
@@ -621,23 +561,19 @@ class IosWindow(Window):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_ios_window_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_ios_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_ios_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'IosWindow':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"IosWindow.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 class WebasmWindow(Window):
     """yclass yplatform:webasm_window"""
@@ -647,23 +583,19 @@ class WebasmWindow(Window):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yplatform_webasm_window_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yplatform_webasm_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yplatform_webasm_window_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'WebasmWindow':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"WebasmWindow.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 def android_clipboard_configure(obj: Any, response_pipe: Any) -> _rt.Result[None]:
     """Call `yetty_yplatform_android_clipboard_configure`."""

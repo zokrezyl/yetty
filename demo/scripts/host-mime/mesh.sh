@@ -1,6 +1,6 @@
 #!/bin/bash
 # host-mime — glTF binary meshes decoded by the TERMINAL (ymesh), not the
-# client. Each file becomes one ymesh complex figure.
+# client. Each file becomes one ymesh complex drawable.
 #
 # Usage (from inside yetty):
 #   ./build-desktop-ytrace-release/yetty -e demo/scripts/host-mime/mesh.sh

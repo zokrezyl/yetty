@@ -36,23 +36,25 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yett
                                                                      struct yetty_ygui_emit_ctx *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_press_fn yetty_ygui_textinput_yetty_ygui_widget_on_press_check =
-    textinput_on_press;
+static yetty_ygui_widget_on_press_fn
+    yetty_ygui_textinput_yetty_ygui_widget_on_press_textinput_on_press_check = textinput_on_press;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_motion_fn yetty_ygui_textinput_yetty_ygui_widget_on_motion_check =
-    textinput_on_motion;
+static yetty_ygui_widget_on_motion_fn
+    yetty_ygui_textinput_yetty_ygui_widget_on_motion_textinput_on_motion_check =
+        textinput_on_motion;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_release_fn yetty_ygui_textinput_yetty_ygui_widget_on_release_check =
-    textinput_on_release;
+static yetty_ygui_widget_on_release_fn
+    yetty_ygui_textinput_yetty_ygui_widget_on_release_textinput_on_release_check =
+        textinput_on_release;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_textinput_yetty_ygui_constructor_check =
-    textinput_constructor;
+static yetty_ygui_constructor_fn
+    yetty_ygui_textinput_yetty_ygui_constructor_textinput_constructor_check = textinput_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_textinput_yetty_ygui_destructor_check =
-    textinput_destructor;
+static yetty_ygui_destructor_fn
+    yetty_ygui_textinput_yetty_ygui_destructor_textinput_destructor_check = textinput_destructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_textinput_yetty_ygui_widget_paint_check =
-    textinput_paint;
+static yetty_ygui_widget_paint_fn
+    yetty_ygui_textinput_yetty_ygui_widget_paint_textinput_paint_check = textinput_paint;
 
 struct yetty_yclass_ptr_result yetty_ygui_textinput_class_get(void)
 {

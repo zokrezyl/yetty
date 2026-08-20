@@ -34,21 +34,25 @@ typedef struct yetty_ycore_void_result (*yetty_ytermsink_sixel_write_fn)(
     struct yetty_yclass_object *, const char *, size_t);
 
 YETTY_MAYBE_UNUSED
-static yetty_ytermsink_pty_write_fn yetty_ytermsink_sink_yetty_ytermsink_pty_write_check =
-    yetty_ytermsink_sink_default_pty_write;
+static yetty_ytermsink_pty_write_fn
+    yetty_ytermsink_sink_yetty_ytermsink_pty_write_yetty_ytermsink_sink_default_pty_write_check =
+        yetty_ytermsink_sink_default_pty_write;
 YETTY_MAYBE_UNUSED
-static yetty_ytermsink_request_render_fn yetty_ytermsink_sink_yetty_ytermsink_request_render_check =
-    yetty_ytermsink_sink_default_request_render;
+static yetty_ytermsink_request_render_fn
+    yetty_ytermsink_sink_yetty_ytermsink_request_render_yetty_ytermsink_sink_default_request_render_check =
+        yetty_ytermsink_sink_default_request_render;
 YETTY_MAYBE_UNUSED
-static yetty_ytermsink_mouse_sub_fn yetty_ytermsink_sink_yetty_ytermsink_mouse_sub_check =
-    yetty_ytermsink_sink_default_mouse_sub;
+static yetty_ytermsink_mouse_sub_fn
+    yetty_ytermsink_sink_yetty_ytermsink_mouse_sub_yetty_ytermsink_sink_default_mouse_sub_check =
+        yetty_ytermsink_sink_default_mouse_sub;
 YETTY_MAYBE_UNUSED
 static yetty_ytermsink_clipboard_write_fn
-    yetty_ytermsink_sink_yetty_ytermsink_clipboard_write_check =
+    yetty_ytermsink_sink_yetty_ytermsink_clipboard_write_yetty_ytermsink_sink_default_clipboard_write_check =
         yetty_ytermsink_sink_default_clipboard_write;
 YETTY_MAYBE_UNUSED
-static yetty_ytermsink_sixel_write_fn yetty_ytermsink_sink_yetty_ytermsink_sixel_write_check =
-    yetty_ytermsink_sink_default_sixel_write;
+static yetty_ytermsink_sixel_write_fn
+    yetty_ytermsink_sink_yetty_ytermsink_sixel_write_yetty_ytermsink_sink_default_sixel_write_check =
+        yetty_ytermsink_sink_default_sixel_write;
 
 struct yetty_yclass_ptr_result yetty_ytermsink_sink_class_get(void)
 {

@@ -36,22 +36,27 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(
     struct yetty_yclass_object *, float, float);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_yrich_view_yetty_ygui_constructor_check =
-    yrich_view_ctor;
+static yetty_ygui_constructor_fn
+    yetty_ygui_yrich_view_yetty_ygui_constructor_yrich_view_ctor_check = yrich_view_ctor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_yrich_view_yetty_ygui_destructor_check = yrich_view_dtor;
+static yetty_ygui_destructor_fn yetty_ygui_yrich_view_yetty_ygui_destructor_yrich_view_dtor_check =
+    yrich_view_dtor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_emit_body_fn yetty_ygui_yrich_view_yetty_ygui_widget_emit_body_check =
-    yrich_view_emit_body;
+static yetty_ygui_widget_emit_body_fn
+    yetty_ygui_yrich_view_yetty_ygui_widget_emit_body_yrich_view_emit_body_check =
+        yrich_view_emit_body;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_press_fn yetty_ygui_yrich_view_yetty_ygui_widget_on_press_check =
-    yrich_view_on_press;
+static yetty_ygui_widget_on_press_fn
+    yetty_ygui_yrich_view_yetty_ygui_widget_on_press_yrich_view_on_press_check =
+        yrich_view_on_press;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_release_fn yetty_ygui_yrich_view_yetty_ygui_widget_on_release_check =
-    yrich_view_on_release;
+static yetty_ygui_widget_on_release_fn
+    yetty_ygui_yrich_view_yetty_ygui_widget_on_release_yrich_view_on_release_check =
+        yrich_view_on_release;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_motion_fn yetty_ygui_yrich_view_yetty_ygui_widget_on_motion_check =
-    yrich_view_on_motion;
+static yetty_ygui_widget_on_motion_fn
+    yetty_ygui_yrich_view_yetty_ygui_widget_on_motion_yrich_view_on_motion_check =
+        yrich_view_on_motion;
 
 struct yetty_yclass_ptr_result yetty_ygui_yrich_view_class_get(void)
 {

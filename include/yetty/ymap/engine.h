@@ -71,7 +71,7 @@ struct yetty_ymap_config {
     /* Optional data overlay (GeoJSON markers/tracks loaded by the ymap
      * class). The raster path BAKES it into the composited image after
      * the tile blit — SDF prims appended to the drawable list would be
-     * painted over by the complex figure in the terminal's render
+     * painted over by the complex instance in the terminal's render
      * order. NULL = no overlay. */
     const struct yetty_ymap_overlay *overlay;
 };

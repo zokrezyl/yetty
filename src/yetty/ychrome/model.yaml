@@ -195,21 +195,27 @@ classes:
     ops:
       - slot: configure
         slot_domain: ychrome
+        slot_class: chrome
         impl: chrome_configure
       - slot: set_size
         slot_domain: ychrome
+        slot_class: chrome
         impl: chrome_set_size
       - slot: destroy
         slot_domain: ychrome
+        slot_class: chrome
         impl: chrome_destroy
       - slot: edge_cursor_at
         slot_domain: ychrome
+        slot_class: chrome
         impl: chrome_edge_cursor_at
       - slot: render
         slot_domain: ychrome
+        slot_class: chrome
         impl: chrome_render
       - slot: handle_event
         slot_domain: ychrome
+        slot_class: chrome
         impl: chrome_handle_event
     internal: false
     doc: null

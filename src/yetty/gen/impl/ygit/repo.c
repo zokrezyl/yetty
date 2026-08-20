@@ -17,9 +17,11 @@ typedef struct yetty_ycore_void_result (*yetty_ygit_constructor_fn)(struct yetty
 typedef struct yetty_ycore_void_result (*yetty_ygit_destructor_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygit_constructor_fn yetty_ygit_repo_yetty_ygit_constructor_check = repo_constructor;
+static yetty_ygit_constructor_fn yetty_ygit_repo_yetty_ygit_constructor_repo_constructor_check =
+    repo_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygit_destructor_fn yetty_ygit_repo_yetty_ygit_destructor_check = repo_destructor;
+static yetty_ygit_destructor_fn yetty_ygit_repo_yetty_ygit_destructor_repo_destructor_check =
+    repo_destructor;
 
 struct yetty_yclass_ptr_result yetty_ygit_repo_class_get(void)
 {

@@ -36,20 +36,20 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct ye
                                                                        float, float, int);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_filepicker_yetty_ygui_constructor_check = ctor;
+static yetty_ygui_constructor_fn yetty_ygui_filepicker_yetty_ygui_constructor_ctor_check = ctor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_filepicker_yetty_ygui_destructor_check = dtor;
+static yetty_ygui_destructor_fn yetty_ygui_filepicker_yetty_ygui_destructor_dtor_check = dtor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_filepicker_yetty_ygui_widget_paint_check = paint;
+static yetty_ygui_widget_paint_fn yetty_ygui_filepicker_yetty_ygui_widget_paint_paint_check = paint;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_motion_fn yetty_ygui_filepicker_yetty_ygui_widget_on_motion_check =
-    fp_on_motion;
+static yetty_ygui_widget_on_motion_fn
+    yetty_ygui_filepicker_yetty_ygui_widget_on_motion_fp_on_motion_check = fp_on_motion;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_scroll_fn yetty_ygui_filepicker_yetty_ygui_widget_on_scroll_check =
-    fp_on_scroll;
+static yetty_ygui_widget_on_scroll_fn
+    yetty_ygui_filepicker_yetty_ygui_widget_on_scroll_fp_on_scroll_check = fp_on_scroll;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_press_fn yetty_ygui_filepicker_yetty_ygui_widget_on_press_check =
-    on_press;
+static yetty_ygui_widget_on_press_fn
+    yetty_ygui_filepicker_yetty_ygui_widget_on_press_on_press_check = on_press;
 
 struct yetty_yclass_ptr_result yetty_ygui_filepicker_class_get(void)
 {

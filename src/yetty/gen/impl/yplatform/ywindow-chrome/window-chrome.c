@@ -60,47 +60,47 @@ typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_handle_ev
 
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_configure_fn
-    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_configure_check =
+    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_configure_window_chrome_configure_check =
         window_chrome_configure;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_destroy_fn
-    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_destroy_check =
+    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_destroy_window_chrome_destroy_check =
         window_chrome_destroy;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_iconify_fn
-    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_iconify_check =
+    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_iconify_window_chrome_iconify_check =
         window_chrome_iconify;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_toggle_maximize_fn
-    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_toggle_maximize_check =
+    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_toggle_maximize_window_chrome_toggle_maximize_check =
         window_chrome_toggle_maximize;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_request_close_fn
-    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_request_close_check =
+    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_request_close_window_chrome_request_close_check =
         window_chrome_request_close;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_drag_by_fn
-    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_drag_by_check =
+    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_drag_by_window_chrome_drag_by_check =
         window_chrome_drag_by;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_resize_by_fn
-    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_resize_by_check =
+    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_resize_by_window_chrome_resize_by_check =
         window_chrome_resize_by;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_begin_interactive_move_fn
-    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_begin_interactive_move_check =
+    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_begin_interactive_move_window_chrome_begin_interactive_move_check =
         window_chrome_begin_interactive_move;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_begin_interactive_resize_fn
-    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_begin_interactive_resize_check =
+    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_begin_interactive_resize_window_chrome_begin_interactive_resize_check =
         window_chrome_begin_interactive_resize;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_set_cursor_fn
-    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_set_cursor_check =
+    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_set_cursor_window_chrome_set_cursor_check =
         window_chrome_set_cursor;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_handle_event_fn
-    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_handle_event_check =
+    yetty_yplatform_window_chrome_yetty_yplatform_window_chrome_handle_event_window_chrome_handle_event_check =
         window_chrome_handle_event;
 
 struct yetty_yclass_ptr_result yetty_yplatform_window_chrome_class_get(void)

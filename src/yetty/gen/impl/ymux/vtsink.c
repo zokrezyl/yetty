@@ -17,7 +17,8 @@ typedef struct yetty_ycore_void_result (*yetty_ymux_feed_fn)(struct yetty_yclass
                                                              struct yetty_ycore_buffer);
 
 YETTY_MAYBE_UNUSED
-static yetty_ymux_feed_fn yetty_ymux_vtsink_yetty_ymux_feed_check = vtsink_feed_impl;
+static yetty_ymux_feed_fn yetty_ymux_vtsink_yetty_ymux_feed_vtsink_feed_impl_check =
+    vtsink_feed_impl;
 
 struct yetty_yclass_ptr_result yetty_ymux_vtsink_class_get(void)
 {

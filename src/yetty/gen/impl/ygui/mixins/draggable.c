@@ -25,14 +25,16 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_release_fn)(
     struct yetty_yclass_object *, float, float, int);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_press_fn yetty_ygui_draggable_yetty_ygui_widget_on_press_check =
-    draggable_on_press;
+static yetty_ygui_widget_on_press_fn
+    yetty_ygui_draggable_yetty_ygui_widget_on_press_draggable_on_press_check = draggable_on_press;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_motion_fn yetty_ygui_draggable_yetty_ygui_widget_on_motion_check =
-    draggable_on_motion;
+static yetty_ygui_widget_on_motion_fn
+    yetty_ygui_draggable_yetty_ygui_widget_on_motion_draggable_on_motion_check =
+        draggable_on_motion;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_release_fn yetty_ygui_draggable_yetty_ygui_widget_on_release_check =
-    draggable_on_release;
+static yetty_ygui_widget_on_release_fn
+    yetty_ygui_draggable_yetty_ygui_widget_on_release_draggable_on_release_check =
+        draggable_on_release;
 
 struct yetty_yclass_ptr_result yetty_ygui_draggable_mixin_get(void)
 {

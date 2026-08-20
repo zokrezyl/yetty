@@ -23,11 +23,13 @@ typedef struct yetty_ycore_void_result (*yetty_yapp_run_fn)(struct yetty_yclass_
 typedef struct yetty_ycore_void_result (*yetty_yapp_quit_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yapp_init_fn yetty_yapp_app_yetty_yapp_init_check = yapp_default_init;
+static yetty_yapp_init_fn yetty_yapp_app_yetty_yapp_init_yapp_default_init_check =
+    yapp_default_init;
 YETTY_MAYBE_UNUSED
-static yetty_yapp_run_fn yetty_yapp_app_yetty_yapp_run_check = yapp_default_run;
+static yetty_yapp_run_fn yetty_yapp_app_yetty_yapp_run_yapp_default_run_check = yapp_default_run;
 YETTY_MAYBE_UNUSED
-static yetty_yapp_quit_fn yetty_yapp_app_yetty_yapp_quit_check = yapp_default_quit;
+static yetty_yapp_quit_fn yetty_yapp_app_yetty_yapp_quit_yapp_default_quit_check =
+    yapp_default_quit;
 
 struct yetty_yclass_ptr_result yetty_yapp_app_class_get(void)
 {

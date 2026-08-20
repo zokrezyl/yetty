@@ -73,35 +73,35 @@ typedef struct yetty_ycore_void_result (*yetty_yrich_slides_next_fn)(struct yett
 typedef struct yetty_ycore_void_result (*yetty_yrich_slides_prev_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yrich_constructor_fn yetty_yrich_shape_yetty_yrich_constructor_check =
-    shape_constructor;
+static yetty_yrich_constructor_fn
+    yetty_yrich_shape_yetty_yrich_constructor_shape_constructor_check = shape_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_destroy_fn yetty_yrich_shape_yetty_yrich_element_destroy_check =
-    shape_destroy;
+static yetty_yrich_element_destroy_fn
+    yetty_yrich_shape_yetty_yrich_element_destroy_shape_destroy_check = shape_destroy;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_bounds_fn yetty_yrich_shape_yetty_yrich_element_bounds_check =
-    shape_bounds;
+static yetty_yrich_element_bounds_fn
+    yetty_yrich_shape_yetty_yrich_element_bounds_shape_bounds_check = shape_bounds;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_is_editable_fn yetty_yrich_shape_yetty_yrich_element_is_editable_check =
-    shape_is_editable;
+static yetty_yrich_element_is_editable_fn
+    yetty_yrich_shape_yetty_yrich_element_is_editable_shape_is_editable_check = shape_is_editable;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_begin_edit_fn yetty_yrich_shape_yetty_yrich_element_begin_edit_check =
-    shape_begin_edit;
+static yetty_yrich_element_begin_edit_fn
+    yetty_yrich_shape_yetty_yrich_element_begin_edit_shape_begin_edit_check = shape_begin_edit;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_end_edit_fn yetty_yrich_shape_yetty_yrich_element_end_edit_check =
-    shape_end_edit;
+static yetty_yrich_element_end_edit_fn
+    yetty_yrich_shape_yetty_yrich_element_end_edit_shape_end_edit_check = shape_end_edit;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_is_editing_fn yetty_yrich_shape_yetty_yrich_element_is_editing_check =
-    shape_is_editing;
+static yetty_yrich_element_is_editing_fn
+    yetty_yrich_shape_yetty_yrich_element_is_editing_shape_is_editing_check = shape_is_editing;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_render_fn yetty_yrich_shape_yetty_yrich_element_render_check =
-    shape_render;
+static yetty_yrich_element_render_fn
+    yetty_yrich_shape_yetty_yrich_element_render_shape_render_check = shape_render;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_insert_text_fn yetty_yrich_shape_yetty_yrich_element_insert_text_check =
-    shape_insert_text;
+static yetty_yrich_element_insert_text_fn
+    yetty_yrich_shape_yetty_yrich_element_insert_text_shape_insert_text_check = shape_insert_text;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_delete_sel_fn yetty_yrich_shape_yetty_yrich_element_delete_sel_check =
-    shape_delete_sel;
+static yetty_yrich_element_delete_sel_fn
+    yetty_yrich_shape_yetty_yrich_element_delete_sel_shape_delete_sel_check = shape_delete_sel;
 
 struct yetty_yclass_ptr_result yetty_yrich_shape_class_get(void)
 {
@@ -330,27 +330,31 @@ struct yetty_ycore_void_result yetty_yrich_shape_text_valign_set(struct yetty_yc
 }
 
 YETTY_MAYBE_UNUSED
-static yetty_yrich_constructor_fn yetty_yrich_slides_yetty_yrich_constructor_check =
-    slides_constructor;
+static yetty_yrich_constructor_fn
+    yetty_yrich_slides_yetty_yrich_constructor_slides_constructor_check = slides_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_document_destroy_fn yetty_yrich_slides_yetty_yrich_document_destroy_check =
-    slides_destroy;
+static yetty_yrich_document_destroy_fn
+    yetty_yrich_slides_yetty_yrich_document_destroy_slides_destroy_check = slides_destroy;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_content_width_fn
-    yetty_yrich_slides_yetty_yrich_document_content_width_check = slides_content_width;
+    yetty_yrich_slides_yetty_yrich_document_content_width_slides_content_width_check =
+        slides_content_width;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_content_height_fn
-    yetty_yrich_slides_yetty_yrich_document_content_height_check = slides_content_height;
+    yetty_yrich_slides_yetty_yrich_document_content_height_slides_content_height_check =
+        slides_content_height;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_document_render_fn yetty_yrich_slides_yetty_yrich_document_render_check =
-    slides_render;
+static yetty_yrich_document_render_fn
+    yetty_yrich_slides_yetty_yrich_document_render_slides_render_check = slides_render;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_slides_set_current_fn yetty_yrich_slides_yetty_yrich_slides_set_current_check =
-    slides_set_current;
+static yetty_yrich_slides_set_current_fn
+    yetty_yrich_slides_yetty_yrich_slides_set_current_slides_set_current_check = slides_set_current;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_slides_next_fn yetty_yrich_slides_yetty_yrich_slides_next_check = slides_next;
+static yetty_yrich_slides_next_fn yetty_yrich_slides_yetty_yrich_slides_next_slides_next_check =
+    slides_next;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_slides_prev_fn yetty_yrich_slides_yetty_yrich_slides_prev_check = slides_prev;
+static yetty_yrich_slides_prev_fn yetty_yrich_slides_yetty_yrich_slides_prev_slides_prev_check =
+    slides_prev;
 
 struct yetty_yclass_ptr_result yetty_yrich_slides_class_get(void)
 {

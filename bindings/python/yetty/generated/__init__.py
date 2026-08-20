@@ -4,6 +4,8 @@ from . import api_yplot as api_yplot
 from . import yapp as yapp
 from . import ychrome as ychrome
 from . import ycircuit as ycircuit
+from . import ycomplex2 as ycomplex2
+from . import ydrawlist2 as ydrawlist2
 from . import ydummy as ydummy
 from . import yetty as yetty
 from . import yfigure as yfigure
@@ -22,6 +24,7 @@ from . import yplatform as yplatform
 from . import yrdawn as yrdawn
 from . import yrich as yrich
 from . import yscene as yscene
+from . import ysdf2 as ysdf2
 from . import yshadertoy as yshadertoy
 from . import yterminal as yterminal
 from . import ytermsink as ytermsink

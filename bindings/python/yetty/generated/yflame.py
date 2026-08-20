@@ -15,23 +15,19 @@ class Flame(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yflame_flame_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yflame_flame_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yflame_flame_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Flame':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Flame.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
     def configure(self, width: float, frame_height: float, min_width: float, flags: int) -> None:
         """Call `yetty_yflame_configure`; raises _rt.YettyError on failure."""
         if self._handle is None:

@@ -213,6 +213,10 @@ if(YETTY_ENABLE_FEATURE_YDRAW)
     add_subdirectory(ydraw-factory)
     add_subdirectory(ydraw-yaml)
     add_subdirectory(ysdf)
+    # v2 yclass client interface (transitional `2` suffix — epic #712).
+    add_subdirectory(ydrawlist2)
+    add_subdirectory(ysdf2)
+    add_subdirectory(ycomplex2)
 endif()
 
 # yview — client emitter for server-side scrollable content surfaces.

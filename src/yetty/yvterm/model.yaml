@@ -466,9 +466,11 @@ classes:
     ops:
       - slot: render
         slot_domain: yfigure
+        slot_class: figure
         impl: vterm_render_slot
       - slot: destroy
         slot_domain: yfigure
+        slot_class: figure
         impl: vterm_destroy_slot
     internal: false
     doc: null

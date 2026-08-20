@@ -26,13 +26,14 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yett
                                                                      struct yetty_ygui_emit_ctx *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_spinner_yetty_ygui_constructor_check =
-    spinner_constructor;
+static yetty_ygui_constructor_fn
+    yetty_ygui_spinner_yetty_ygui_constructor_spinner_constructor_check = spinner_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_press_fn yetty_ygui_spinner_yetty_ygui_widget_on_press_check =
-    spinner_on_press;
+static yetty_ygui_widget_on_press_fn
+    yetty_ygui_spinner_yetty_ygui_widget_on_press_spinner_on_press_check = spinner_on_press;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_spinner_yetty_ygui_widget_paint_check = spinner_paint;
+static yetty_ygui_widget_paint_fn yetty_ygui_spinner_yetty_ygui_widget_paint_spinner_paint_check =
+    spinner_paint;
 
 struct yetty_yclass_ptr_result yetty_ygui_spinner_class_get(void)
 {

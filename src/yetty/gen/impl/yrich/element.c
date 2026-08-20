@@ -53,38 +53,48 @@ typedef struct yetty_ycore_void_result (*yetty_yrich_element_delete_sel_fn)(
     struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yrich_constructor_fn yetty_yrich_element_yetty_yrich_constructor_check =
-    element_constructor;
+static yetty_yrich_constructor_fn
+    yetty_yrich_element_yetty_yrich_constructor_element_constructor_check = element_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_destroy_fn yetty_yrich_element_yetty_yrich_element_destroy_check =
-    element_default_destroy;
+static yetty_yrich_element_destroy_fn
+    yetty_yrich_element_yetty_yrich_element_destroy_element_default_destroy_check =
+        element_default_destroy;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_bounds_fn yetty_yrich_element_yetty_yrich_element_bounds_check =
-    element_default_bounds;
+static yetty_yrich_element_bounds_fn
+    yetty_yrich_element_yetty_yrich_element_bounds_element_default_bounds_check =
+        element_default_bounds;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_hit_test_fn yetty_yrich_element_yetty_yrich_element_hit_test_check =
-    element_default_hit_test;
+static yetty_yrich_element_hit_test_fn
+    yetty_yrich_element_yetty_yrich_element_hit_test_element_default_hit_test_check =
+        element_default_hit_test;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_render_fn yetty_yrich_element_yetty_yrich_element_render_check =
-    element_default_render;
+static yetty_yrich_element_render_fn
+    yetty_yrich_element_yetty_yrich_element_render_element_default_render_check =
+        element_default_render;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_element_is_editable_fn
-    yetty_yrich_element_yetty_yrich_element_is_editable_check = element_default_is_editable;
+    yetty_yrich_element_yetty_yrich_element_is_editable_element_default_is_editable_check =
+        element_default_is_editable;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_begin_edit_fn yetty_yrich_element_yetty_yrich_element_begin_edit_check =
-    element_default_begin_edit;
+static yetty_yrich_element_begin_edit_fn
+    yetty_yrich_element_yetty_yrich_element_begin_edit_element_default_begin_edit_check =
+        element_default_begin_edit;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_end_edit_fn yetty_yrich_element_yetty_yrich_element_end_edit_check =
-    element_default_end_edit;
+static yetty_yrich_element_end_edit_fn
+    yetty_yrich_element_yetty_yrich_element_end_edit_element_default_end_edit_check =
+        element_default_end_edit;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_is_editing_fn yetty_yrich_element_yetty_yrich_element_is_editing_check =
-    element_default_is_editing;
+static yetty_yrich_element_is_editing_fn
+    yetty_yrich_element_yetty_yrich_element_is_editing_element_default_is_editing_check =
+        element_default_is_editing;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_element_insert_text_fn
-    yetty_yrich_element_yetty_yrich_element_insert_text_check = element_default_insert_text;
+    yetty_yrich_element_yetty_yrich_element_insert_text_element_default_insert_text_check =
+        element_default_insert_text;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_delete_sel_fn yetty_yrich_element_yetty_yrich_element_delete_sel_check =
-    element_default_delete_sel;
+static yetty_yrich_element_delete_sel_fn
+    yetty_yrich_element_yetty_yrich_element_delete_sel_element_default_delete_sel_check =
+        element_default_delete_sel;
 
 struct yetty_yclass_ptr_result yetty_yrich_element_class_get(void)
 {

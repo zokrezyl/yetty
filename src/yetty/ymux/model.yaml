@@ -1170,6 +1170,7 @@ classes:
     ops:
       - slot: feed
         slot_domain: ymux
+        slot_class: vtsink
         impl: vtsink_feed_impl
     internal: false
     doc: "/* The sink — the yclass data block. */"
@@ -3650,22 +3651,22 @@ local_typedefs:
     source_file: src/yetty/ymux/attachment.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_ymux_engine_bell_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/api/ymux/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/api/ymux/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ymux_engine_bell_fn)(void *);"
   yetty_ymux_engine_clipboard_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/api/ymux/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/api/ymux/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ymux_engine_clipboard_fn)(const char *, size_t, int, void *);"
   yetty_ymux_engine_output_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/api/ymux/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/api/ymux/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ymux_engine_output_fn)(const char *, size_t, void *);"
   yetty_ymux_engine_rich_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/api/ymux/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/api/ymux/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ymux_engine_rich_fn)(uint32_t, const char *, size_t, uint64_t, uint32_t, void *);"
   yetty_ymux_engine_scroll_out_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/api/ymux/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/api/ymux/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ymux_engine_scroll_out_fn)(const struct yetty_ymux_cell *, uint32_t, uint64_t, uint32_t, int, void *);"
   yetty_ymux_engine_title_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/api/ymux/engine.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/api/ymux/engine.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ymux_engine_title_fn)(const char *, size_t, void *);"
   yetty_ymux_rpc_lane_tx_fn:
     source_file: src/yetty/ymux/rpc-lane.h
@@ -3686,5 +3687,5 @@ local_typedefs:
     source_file: src/yetty/ymux/vtsink.c
     text: "typedef void (*yetty_ymux_vtsink_emit_fn)(uint64_t, const uint8_t *, size_t, void *);"
   yetty_ymux_feed_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ymux/vtsink.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ymux/vtsink.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ymux_feed_fn)(struct yetty_yclass_object *, uint64_t, struct yetty_ycore_buffer);"

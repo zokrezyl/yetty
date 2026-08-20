@@ -12,17 +12,21 @@
 #include <string.h> /* memcpy/strcmp/strlen */
 
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_render_fn yetty_yrdawn_figure_yetty_yfigure_render_check =
-    yrdawn_figure_render_slot;
+static yetty_yfigure_render_fn
+    yetty_yrdawn_figure_yetty_yfigure_render_yrdawn_figure_render_slot_check =
+        yrdawn_figure_render_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_destroy_fn yetty_yrdawn_figure_yetty_yfigure_destroy_check =
-    yrdawn_figure_destroy_slot;
+static yetty_yfigure_destroy_fn
+    yetty_yrdawn_figure_yetty_yfigure_destroy_yrdawn_figure_destroy_slot_check =
+        yrdawn_figure_destroy_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_process_input_fn yetty_yrdawn_figure_yetty_yfigure_process_input_check =
-    yrdawn_figure_process_input_slot;
+static yetty_yfigure_process_input_fn
+    yetty_yrdawn_figure_yetty_yfigure_process_input_yrdawn_figure_process_input_slot_check =
+        yrdawn_figure_process_input_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_process_bytes_fn yetty_yrdawn_figure_yetty_yfigure_process_bytes_check =
-    yrdawn_figure_process_bytes_slot;
+static yetty_yfigure_process_bytes_fn
+    yetty_yrdawn_figure_yetty_yfigure_process_bytes_yrdawn_figure_process_bytes_slot_check =
+        yrdawn_figure_process_bytes_slot;
 
 struct yetty_yclass_ptr_result yetty_yrdawn_figure_class_get(void)
 {

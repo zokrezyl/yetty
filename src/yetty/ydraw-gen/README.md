@@ -1,13 +1,15 @@
-# ydraw-gen — schema-driven code generator for complex figures
+# ydraw-gen — schema-driven code generator for complex drawables
 
-`generate.py` reads a complex figure's YAML schema
+`generate.py` reads a complex drawable's YAML schema
 (`src/yetty/<module>/<module>.yaml`) and emits all the boilerplate a
 complex needs: the public C header, the concrete-factory + instance
 implementation, the pure-CPU wire serializer, and the WGSL accessor
-functions. The figure author writes only the schema and the main `.wgsl`
+functions. The module author writes only the schema and the main `.wgsl`
 shader. Distinct from the yclass codegen
 ([yclass](../yclass/README.md)) — this generator covers only the
-ydraw complex tier.
+ydraw complex tier. (A complex is a RECORD in a ydraw stream — not a
+[figure](../../../docs/glossary.md#figure); the same modules also ship
+figure kinds, which is where the terms used to blur.)
 
 ## Invocation and outputs
 
@@ -49,7 +51,7 @@ Top-level keys consumed by the generator:
   hostile record cannot drive an out-of-bounds GPU upload.
 - `libraries:` — WGSL libraries (e.g. `yfsvm`) concatenated before the main
   shader.
-- Escape hatches so stateful figures need no fork of the generated code:
+- Escape hatches so stateful complexes need no fork of the generated code:
   `update: extern` (ops->update points at a hand-written
   `yetty_<name>_instance_update`), `lifecycle_extern` (create/destroy
   callouts, e.g. yplot's animation timer), `external_uniforms` (server-side

@@ -25,10 +25,12 @@ typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_run_fn)(
 
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_platform_init_fn
-    yetty_yplatform_glfw_platform_yetty_yplatform_platform_init_check = glfw_platform_init;
+    yetty_yplatform_glfw_platform_yetty_yplatform_platform_init_glfw_platform_init_check =
+        glfw_platform_init;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_platform_run_fn
-    yetty_yplatform_glfw_platform_yetty_yplatform_platform_run_check = glfw_platform_run;
+    yetty_yplatform_glfw_platform_yetty_yplatform_platform_run_glfw_platform_run_check =
+        glfw_platform_run;
 
 struct yetty_yclass_ptr_result yetty_yplatform_glfw_platform_class_get(void)
 {

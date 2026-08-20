@@ -23,12 +23,14 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yett
                                                                      struct yetty_ygui_emit_ctx *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_dialog_yetty_ygui_constructor_check =
+static yetty_ygui_constructor_fn yetty_ygui_dialog_yetty_ygui_constructor_dialog_constructor_check =
     dialog_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_dialog_yetty_ygui_destructor_check = dialog_destructor;
+static yetty_ygui_destructor_fn yetty_ygui_dialog_yetty_ygui_destructor_dialog_destructor_check =
+    dialog_destructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_dialog_yetty_ygui_widget_paint_check = dialog_paint;
+static yetty_ygui_widget_paint_fn yetty_ygui_dialog_yetty_ygui_widget_paint_dialog_paint_check =
+    dialog_paint;
 
 struct yetty_yclass_ptr_result yetty_ygui_dialog_class_get(void)
 {

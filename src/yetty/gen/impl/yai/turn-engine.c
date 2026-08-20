@@ -27,14 +27,16 @@ typedef struct yetty_ycore_void_result (*yetty_yai_interrupt_fn)(struct yetty_yc
                                                                  struct yai_app *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yai_on_child_exit_fn yetty_yai_turn_engine_yetty_yai_on_child_exit_check =
-    turn_engine_on_child_exit;
+static yetty_yai_on_child_exit_fn
+    yetty_yai_turn_engine_yetty_yai_on_child_exit_turn_engine_on_child_exit_check =
+        turn_engine_on_child_exit;
 YETTY_MAYBE_UNUSED
-static yetty_yai_on_child_eof_fn yetty_yai_turn_engine_yetty_yai_on_child_eof_check =
-    turn_engine_on_child_eof;
+static yetty_yai_on_child_eof_fn
+    yetty_yai_turn_engine_yetty_yai_on_child_eof_turn_engine_on_child_eof_check =
+        turn_engine_on_child_eof;
 YETTY_MAYBE_UNUSED
-static yetty_yai_interrupt_fn yetty_yai_turn_engine_yetty_yai_interrupt_check =
-    turn_engine_interrupt;
+static yetty_yai_interrupt_fn
+    yetty_yai_turn_engine_yetty_yai_interrupt_turn_engine_interrupt_check = turn_engine_interrupt;
 
 struct yetty_yclass_ptr_result yetty_yai_turn_engine_class_get(void)
 {

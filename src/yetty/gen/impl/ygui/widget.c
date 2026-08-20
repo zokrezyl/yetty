@@ -47,32 +47,40 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
     struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_widget_yetty_ygui_constructor_check =
-    widget_default_constructor;
+static yetty_ygui_constructor_fn
+    yetty_ygui_widget_yetty_ygui_constructor_widget_default_constructor_check =
+        widget_default_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_widget_yetty_ygui_destructor_check =
-    widget_default_destructor;
+static yetty_ygui_destructor_fn
+    yetty_ygui_widget_yetty_ygui_destructor_widget_default_destructor_check =
+        widget_default_destructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_press_fn yetty_ygui_widget_yetty_ygui_widget_on_press_check =
-    widget_default_on_press;
+static yetty_ygui_widget_on_press_fn
+    yetty_ygui_widget_yetty_ygui_widget_on_press_widget_default_on_press_check =
+        widget_default_on_press;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_release_fn yetty_ygui_widget_yetty_ygui_widget_on_release_check =
-    widget_default_on_release;
+static yetty_ygui_widget_on_release_fn
+    yetty_ygui_widget_yetty_ygui_widget_on_release_widget_default_on_release_check =
+        widget_default_on_release;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_motion_fn yetty_ygui_widget_yetty_ygui_widget_on_motion_check =
-    widget_default_on_motion;
+static yetty_ygui_widget_on_motion_fn
+    yetty_ygui_widget_yetty_ygui_widget_on_motion_widget_default_on_motion_check =
+        widget_default_on_motion;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_scroll_fn yetty_ygui_widget_yetty_ygui_widget_on_scroll_check =
-    widget_default_on_scroll;
+static yetty_ygui_widget_on_scroll_fn
+    yetty_ygui_widget_yetty_ygui_widget_on_scroll_widget_default_on_scroll_check =
+        widget_default_on_scroll;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_widget_yetty_ygui_widget_paint_check =
-    widget_default_paint;
+static yetty_ygui_widget_paint_fn
+    yetty_ygui_widget_yetty_ygui_widget_paint_widget_default_paint_check = widget_default_paint;
 YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_emit_container_fn
-    yetty_ygui_widget_yetty_ygui_widget_emit_container_check = widget_default_emit_container;
+    yetty_ygui_widget_yetty_ygui_widget_emit_container_widget_default_emit_container_check =
+        widget_default_emit_container;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_emit_body_fn yetty_ygui_widget_yetty_ygui_widget_emit_body_check =
-    widget_default_emit_body;
+static yetty_ygui_widget_emit_body_fn
+    yetty_ygui_widget_yetty_ygui_widget_emit_body_widget_default_emit_body_check =
+        widget_default_emit_body;
 
 struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void)
 {

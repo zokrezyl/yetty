@@ -23,11 +23,11 @@ typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_request_paste
 
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_clipboard_set_text_fn
-    yetty_yplatform_android_clipboard_yetty_yplatform_clipboard_set_text_check =
+    yetty_yplatform_android_clipboard_yetty_yplatform_clipboard_set_text_android_clipboard_set_text_check =
         android_clipboard_set_text;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_clipboard_request_paste_fn
-    yetty_yplatform_android_clipboard_yetty_yplatform_clipboard_request_paste_check =
+    yetty_yplatform_android_clipboard_yetty_yplatform_clipboard_request_paste_android_clipboard_request_paste_check =
         android_clipboard_request_paste;
 
 struct yetty_yclass_ptr_result yetty_yplatform_android_clipboard_class_get(void)

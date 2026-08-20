@@ -308,48 +308,63 @@ classes:
     ops:
       - slot: configure
         slot_domain: ymap
+        slot_class: map
         impl: map_configure
       - slot: set_provider
         slot_domain: ymap
+        slot_class: map
         impl: map_set_provider
       - slot: set_custom_provider
         slot_domain: ymap
+        slot_class: map
         impl: map_set_custom_provider
       - slot: set_center
         slot_domain: ymap
+        slot_class: map
         impl: map_set_center
       - slot: set_zoom
         slot_domain: ymap
+        slot_class: map
         impl: map_set_zoom
       - slot: set_viewport
         slot_domain: ymap
+        slot_class: map
         impl: map_set_viewport
       - slot: pan_by_pixels
         slot_domain: ymap
+        slot_class: map
         impl: map_pan_by_pixels
       - slot: zoom_by_at
         slot_domain: ymap
+        slot_class: map
         impl: map_zoom_by_at
       - slot: get_zoom
         slot_domain: ymap
+        slot_class: map
         impl: map_get_zoom
       - slot: geolocate
         slot_domain: ymap
+        slot_class: map
         impl: map_geolocate
       - slot: attribution
         slot_domain: ymap
+        slot_class: map
         impl: map_attribution
       - slot: is_vector
         slot_domain: ymap
+        slot_class: map
         impl: map_is_vector
       - slot: overlay_geojson
         slot_domain: ymap
+        slot_class: map
         impl: map_overlay_geojson
       - slot: render
         slot_domain: ymap
+        slot_class: map
         impl: map_render
       - slot: destroy
         slot_domain: ymap
+        slot_class: map
         impl: map_destroy
     internal: false
     doc: null

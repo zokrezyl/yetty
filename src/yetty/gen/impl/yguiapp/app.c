@@ -18,13 +18,14 @@ typedef struct yetty_ycore_void_result (*yetty_yguiapp_build_fn)(struct yetty_yc
                                                                  struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yguiapp_build_fn yetty_yguiapp_app_yetty_yguiapp_build_check = yguiapp_default_build;
+static yetty_yguiapp_build_fn yetty_yguiapp_app_yetty_yguiapp_build_yguiapp_default_build_check =
+    yguiapp_default_build;
 YETTY_MAYBE_UNUSED
-static yetty_yapp_init_fn yetty_yguiapp_app_yetty_yapp_init_check = yguiapp_init;
+static yetty_yapp_init_fn yetty_yguiapp_app_yetty_yapp_init_yguiapp_init_check = yguiapp_init;
 YETTY_MAYBE_UNUSED
-static yetty_yapp_run_fn yetty_yguiapp_app_yetty_yapp_run_check = yguiapp_run;
+static yetty_yapp_run_fn yetty_yguiapp_app_yetty_yapp_run_yguiapp_run_check = yguiapp_run;
 YETTY_MAYBE_UNUSED
-static yetty_yapp_quit_fn yetty_yguiapp_app_yetty_yapp_quit_check = yguiapp_quit;
+static yetty_yapp_quit_fn yetty_yguiapp_app_yetty_yapp_quit_yguiapp_quit_check = yguiapp_quit;
 
 struct yetty_yclass_ptr_result yetty_yguiapp_app_class_get(void)
 {

@@ -1,10 +1,10 @@
-# ydraw-factory — GPU-side factory runtime for complex figures
+# ydraw-factory — GPU-side factory runtime for complex drawables
 
 The server-side half of the complex model: it turns complex wire bytes
 (format defined in [ydraw-list](../ydraw-list/README.md)'s `complex.h`) into
 renderable GPU instances. Consumed by the receiving canvases
-(`../ydraw/scrolling-canvas.c`, `scrolling-grid.c`,
-[ygrid](../ygrid/README.md)), by yterminal/yui at setup time, and by every
+([yvterm](../yvterm/README.md)'s grid, [yscene](../yscene/README.md)),
+by yterminal/yui at setup time, and by every
 concrete complex factory — generated (yplot, yimage, yvideo via
 [ydraw-gen](../ydraw-gen/README.md)) or hand-written (ymesh, yshadertoy).
 Built only when `YETTY_ENABLE_LIB_WEBGPU` is on; no-GPU builds use just
@@ -19,10 +19,10 @@ ydraw-list.
 - **Concrete factory** (`struct yetty_ydraw_concrete_factory`) — one per
   complex type. Owns the shared `yetty_yrender_pipeline`; `compile_pipeline`
   is **deferred to the first `create_instance` of that type** (a plain text
-  session never pays for figure shaders). Also carries optional
+  session never pays for complex shaders). Also carries optional
   `update_instance`, `set_visual_zoom` / `set_cell_zoom` (two independent
   zoom transforms) and a `hook_data` slot for per-type state.
-- **Instance** (`struct yetty_ydraw_complex`) — one per figure occurrence,
+- **Instance** (`struct yetty_ydraw_complex`) — one per complex occurrence,
   stored in the host grid. Holds a copy of its wire bytes, its `bounds` and
   `rolling_row`, a per-instance `resource_set` + `binder` (own uniform/storage
   buffers and bind group, referencing the factory's shared pipeline), a
@@ -44,21 +44,22 @@ yetty_ydraw_complex_destroy(inst_res.value);
 
 ## GPU residency — bounded LRU
 
-A figure's binder holds real allocator slots, and 10k lines of scrollback can
-anchor far more figures than the allocator budget. The abstract factory owns a
+An instance's binder holds real allocator slots, and 10k lines of scrollback
+can anchor far more complexes than the allocator budget. The abstract factory
+owns a
 `yetty_ydraw_gpu_residency` manager: an intrusive LRU threaded through each
 instance's `res_prev`/`res_next`. Only the `YETTY_YDRAW_GPU_RESIDENCY_BUDGET`
-(128) most recently rendered figures stay resident; falling off the tail runs
+(128) most recently rendered instances stay resident; falling off the tail runs
 `binder->release_gpu()`, and the next `render()` reacquires slots via
 `binder->finalize()`. Every render touches the instance to the MRU head, so an
-on-screen figure is never evicted mid-frame.
+on-screen instance is never evicted mid-frame.
 
 ## Incremental updates
 
 A wire `CMD_UPDATE` (see `../ydraw-list/cmds.h`) is resolved by the canvas to
 an instance and dispatched through `instance->ops->update(self, target_field,
 body, body_size)` — `target_field` is the schema-level slot id, the body's
-semantics belong to the figure type (yplot: chunked f32 sample writes).
+semantics belong to the complex type (yplot: chunked f32 sample writes).
 Factories/instances without an update op silently drop the record.
 
 ## Files

@@ -259,39 +259,51 @@ classes:
     ops:
       - slot: configure
         slot_domain: ycircuit
+        slot_class: circuit
         impl: circuit_configure
       - slot: parse
         slot_domain: ycircuit
+        slot_class: circuit
         impl: circuit_parse
       - slot: clear
         slot_domain: ycircuit
+        slot_class: circuit
         impl: circuit_clear
       - slot: add_component
         slot_domain: ycircuit
+        slot_class: circuit
         impl: circuit_add_component
       - slot: add_ic
         slot_domain: ycircuit
+        slot_class: circuit
         impl: circuit_add_ic
       - slot: add_wire
         slot_domain: ycircuit
+        slot_class: circuit
         impl: circuit_add_wire
       - slot: add_junction
         slot_domain: ycircuit
+        slot_class: circuit
         impl: circuit_add_junction
       - slot: add_label
         slot_domain: ycircuit
+        slot_class: circuit
         impl: circuit_add_label
       - slot: render
         slot_domain: ycircuit
+        slot_class: circuit
         impl: circuit_render
       - slot: hit_test
         slot_domain: ycircuit
+        slot_class: circuit
         impl: circuit_hit_test
       - slot: set_highlight
         slot_domain: ycircuit
+        slot_class: circuit
         impl: circuit_set_highlight
       - slot: destroy
         slot_domain: ycircuit
+        slot_class: circuit
         impl: circuit_obj_destroy
     internal: false
     doc: null

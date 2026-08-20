@@ -99,15 +99,19 @@ classes:
     ops:
       - slot: build
         slot_domain: yguiapp
+        slot_class: app
         impl: yguiapp_default_build
       - slot: init
         slot_domain: yapp
+        slot_class: app
         impl: yguiapp_init
       - slot: run
         slot_domain: yapp
+        slot_class: app
         impl: yguiapp_run
       - slot: quit
         slot_domain: yapp
+        slot_class: app
         impl: yguiapp_quit
     internal: false
     doc: "/*===========================================================================

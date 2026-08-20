@@ -27,12 +27,12 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yett
                                                                      struct yetty_ygui_emit_ctx *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_scroll_fn yetty_ygui_scrollarea_yetty_ygui_widget_on_scroll_check =
-    on_scroll;
+static yetty_ygui_widget_on_scroll_fn
+    yetty_ygui_scrollarea_yetty_ygui_widget_on_scroll_on_scroll_check = on_scroll;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_scrollarea_yetty_ygui_constructor_check = ctor;
+static yetty_ygui_constructor_fn yetty_ygui_scrollarea_yetty_ygui_constructor_ctor_check = ctor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_scrollarea_yetty_ygui_widget_paint_check = paint;
+static yetty_ygui_widget_paint_fn yetty_ygui_scrollarea_yetty_ygui_widget_paint_paint_check = paint;
 
 struct yetty_yclass_ptr_result yetty_ygui_scrollarea_class_get(void)
 {

@@ -1,0 +1,406 @@
+methods:
+  - slot: pack
+    domain: ydrawlist2
+    owning_class: drawable
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: list
+        type: "struct yetty_ydraw_drawable_list *"
+    doc: "/* pack: append this drawable's record to `list`. The base impl is abstract —
+ * every concrete drawable (font, text, the ysdf2 shapes) overrides it. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_name
+    domain: ydrawlist2
+    owning_class: font
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+    doc: "/* set_name: the installed face name (e.g. \"Emmentaler\"). */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_body
+    domain: ydrawlist2
+    owning_class: text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: body
+        type: "const char *"
+    doc: "/* set_body: the UTF-8 text of the run. Named `body` so the binding
+ * generators treat it as the class's primary content (positional in the
+ * generated constructors, like api_yplot's Function). */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_color
+    domain: ydrawlist2
+    owning_class: text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: color
+        type: "const char *"
+    doc: "/* set_color: text color as \"#RRGGBB\" / \"#RRGGBBAA\" (the u32 `color`
+ * property remains for numeric callers). */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: add
+    domain: ydrawlist2
+    owning_class: drawable_list
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: drawable
+        type: "struct yetty_yclass_object *"
+    doc: "/* add: pack `drawable`'s record into this list, immediately, in call order. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: dcs_emit
+    domain: ydrawlist2
+    owning_class: drawable_list
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* dcs_emit: serialize the list, wrap it in the YETTY_DCS_YDRAW_BIN envelope
+ * and write it to stdout — the enclosing yetty renders it, anything else
+ * discards it. Flushes so the envelope reaches the terminal immediately. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: destroy
+    domain: ydrawlist2
+    owning_class: drawable_list
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* destroy: release the wrapped list and the object. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_fill
+    domain: ydrawlist2
+    owning_class: shape
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: color
+        type: "const char *"
+    doc: "/* set_fill: fill color as \"#RRGGBB\" / \"#RRGGBBAA\". */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_stroke
+    domain: ydrawlist2
+    owning_class: shape
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: color
+        type: "const char *"
+    doc: "/* set_stroke: stroke color as \"#RRGGBB\" / \"#RRGGBBAA\". */"
+    local: true
+    oneway: false
+    return_payload_type: null
+classes:
+  - name: drawable
+    domain: ydrawlist2
+    accessor: yetty_ydrawlist2_drawable_class_get
+    type: regular
+    source_file: src/yetty/ydrawlist2/drawable.c
+    parent: null
+    mixins: []
+    data: struct yetty_ydrawlist2_drawable
+    data_fields:
+      - name: base_reserved
+        type: uint32_t
+        get: false
+        set: false
+    ops:
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: drawable_pack
+    internal: false
+    doc: "/* The abstract drawable base. It has no state of its own — the member below
+ * only keeps the struct non-empty for strict C; it is not a property and
+ * never reaches the wire. */"
+  - name: font
+    domain: ydrawlist2
+    accessor: yetty_ydrawlist2_font_class_get
+    type: regular
+    source_file: src/yetty/ydrawlist2/drawable.c
+    parent:
+      domain: ydrawlist2
+      name: drawable
+    mixins: []
+    data: struct yetty_ydrawlist2_font
+    data_fields:
+      - name: font_id
+        type: int32_t
+        get: true
+        set: true
+      - name: name
+        type: "char[128]"
+        get: false
+        set: false
+    ops:
+      - slot: set_name
+        slot_domain: ydrawlist2
+        slot_class: font
+        impl: font_set_name
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: font_pack
+    internal: false
+    doc: "/* A FONT resource record. The wire record carries an EXPLICIT i32 font_id
+ * field — a plain property of this object, chosen by the user; Text records
+ * reference it by the same int. v2 scope: installed-face references only
+ * (no embedded TTF bytes yet). */"
+  - name: text
+    domain: ydrawlist2
+    accessor: yetty_ydrawlist2_text_class_get
+    type: regular
+    source_file: src/yetty/ydrawlist2/drawable.c
+    parent:
+      domain: ydrawlist2
+      name: drawable
+    mixins: []
+    data: struct yetty_ydrawlist2_text
+    data_fields:
+      - name: x
+        type: float
+        get: true
+        set: true
+      - name: y
+        type: float
+        get: true
+        set: true
+      - name: font_size
+        type: float
+        get: true
+        set: true
+      - name: color
+        type: uint32_t
+        get: true
+        set: true
+      - name: layer
+        type: uint32_t
+        get: true
+        set: true
+      - name: font_id
+        type: int32_t
+        get: true
+        set: true
+      - name: rotation
+        type: float
+        get: true
+        set: true
+      - name: body_len
+        type: uint32_t
+        get: false
+        set: false
+      - name: body
+        type: "char[2048]"
+        get: false
+        set: false
+    ops:
+      - slot: set_body
+        slot_domain: ydrawlist2
+        slot_class: text
+        impl: text_set_body
+      - slot: set_color
+        slot_domain: ydrawlist2
+        slot_class: text
+        impl: text_set_color
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: text_pack
+    internal: false
+    doc: "/* A TEXT run record: a UTF-8 span at (x, y) referencing a font by id
+ * (-1 = the terminal's default face). Shaping and glyph resolution stay
+ * server-side; @name shader glyphs are ordinary PUA codepoints in the body.
+ * The body is inline — the cap bounds one RECORD, not the drawing. */"
+    primary_slot: set_body
+  - name: drawable_list
+    domain: ydrawlist2
+    accessor: yetty_ydrawlist2_drawable_list_class_get
+    type: regular
+    source_file: src/yetty/ydrawlist2/list.c
+    parent: null
+    mixins: []
+    data: struct yetty_ydrawlist2_drawable_list
+    data_fields:
+      - name: list
+        type: "struct yetty_ydraw_drawable_list *"
+        get: false
+        set: false
+    ops:
+      - slot: add
+        slot_domain: ydrawlist2
+        slot_class: drawable_list
+        impl: list_add
+      - slot: dcs_emit
+        slot_domain: ydrawlist2
+        slot_class: drawable_list
+        impl: list_dcs_emit
+      - slot: destroy
+        slot_domain: ydrawlist2
+        slot_class: drawable_list
+        impl: list_destroy
+    internal: false
+    doc: null
+  - name: shape
+    domain: ydrawlist2
+    accessor: yetty_ydrawlist2_shape_class_get
+    type: regular
+    source_file: src/yetty/ydrawlist2/shape.c
+    parent:
+      domain: ydrawlist2
+      name: drawable
+    mixins: []
+    data: struct yetty_ydrawlist2_shape
+    data_fields:
+      - name: id
+        type: uint32_t
+        get: true
+        set: true
+      - name: z
+        type: uint32_t
+        get: true
+        set: true
+      - name: fill
+        type: uint32_t
+        get: true
+        set: true
+      - name: stroke
+        type: uint32_t
+        get: true
+        set: true
+      - name: stroke_width
+        type: float
+        get: true
+        set: true
+    ops:
+      - slot: set_fill
+        slot_domain: ydrawlist2
+        slot_class: shape
+        impl: shape_set_fill
+      - slot: set_stroke
+        slot_domain: ydrawlist2
+        slot_class: shape
+        impl: shape_set_stroke
+    internal: false
+    doc: "/* `id` follows the wire rule: 0 = anonymous record, nonzero = addressable
+ * (the type word gains the HAS_ID flag and the id word follows it). Colors
+ * are 0xAARRGGBB words. */"
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+local_types:
+  yetty_ydrawlist2_drawable: src/yetty/ydrawlist2/drawable.c
+  yetty_ydrawlist2_drawable_ptr_result: src/yetty/ydrawlist2/drawable.c
+  yetty_ydrawlist2_font: src/yetty/ydrawlist2/drawable.c
+  yetty_ydrawlist2_font_ptr_result: src/yetty/ydrawlist2/drawable.c
+  yetty_ydrawlist2_text: src/yetty/ydrawlist2/drawable.c
+  yetty_ydrawlist2_text_ptr_result: src/yetty/ydrawlist2/drawable.c
+  yetty_ydrawlist2_drawable_list: src/yetty/ydrawlist2/list.c
+  yetty_ydrawlist2_drawable_list_ptr_result: src/yetty/ydrawlist2/list.c
+  yetty_ydrawlist2_shape: src/yetty/ydrawlist2/shape.c
+  yetty_ydrawlist2_shape_ptr_result: src/yetty/ydrawlist2/shape.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ydrawlist2/drawable.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ydrawlist2/drawable.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ydrawlist2/drawable.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ydrawlist2/drawable.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ydrawlist2/drawable.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ydrawlist2_pack_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/drawable.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_pack_fn)(struct yetty_yclass_object *, struct yetty_ydraw_drawable_list *);"
+  yetty_ydrawlist2_set_name_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/drawable.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_set_name_fn)(struct yetty_yclass_object *, const char *);"
+  yetty_ydrawlist2_set_body_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/drawable.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_set_body_fn)(struct yetty_yclass_object *, const char *);"
+  yetty_ydrawlist2_set_color_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/drawable.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_set_color_fn)(struct yetty_yclass_object *, const char *);"
+  yetty_ydrawlist2_add_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/list.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_add_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *);"
+  yetty_ydrawlist2_dcs_emit_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/list.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_dcs_emit_fn)(struct yetty_yclass_object *);"
+  yetty_ydrawlist2_destroy_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/list.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_destroy_fn)(struct yetty_yclass_object *);"
+  yetty_ydrawlist2_set_fill_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/shape.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_set_fill_fn)(struct yetty_yclass_object *, const char *);"
+  yetty_ydrawlist2_set_stroke_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/shape.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_set_stroke_fn)(struct yetty_yclass_object *, const char *);"

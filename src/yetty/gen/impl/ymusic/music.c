@@ -36,18 +36,22 @@ typedef struct yetty_ycore_void_result (*yetty_ymusic_set_highlight_fn)(
 typedef struct yetty_ycore_void_result (*yetty_ymusic_destroy_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ymusic_configure_fn yetty_ymusic_music_yetty_ymusic_configure_check = music_configure;
+static yetty_ymusic_configure_fn yetty_ymusic_music_yetty_ymusic_configure_music_configure_check =
+    music_configure;
 YETTY_MAYBE_UNUSED
-static yetty_ymusic_parse_fn yetty_ymusic_music_yetty_ymusic_parse_check = music_parse;
+static yetty_ymusic_parse_fn yetty_ymusic_music_yetty_ymusic_parse_music_parse_check = music_parse;
 YETTY_MAYBE_UNUSED
-static yetty_ymusic_render_fn yetty_ymusic_music_yetty_ymusic_render_check = music_render;
+static yetty_ymusic_render_fn yetty_ymusic_music_yetty_ymusic_render_music_render_check =
+    music_render;
 YETTY_MAYBE_UNUSED
-static yetty_ymusic_hit_test_fn yetty_ymusic_music_yetty_ymusic_hit_test_check = music_hit_test;
+static yetty_ymusic_hit_test_fn yetty_ymusic_music_yetty_ymusic_hit_test_music_hit_test_check =
+    music_hit_test;
 YETTY_MAYBE_UNUSED
-static yetty_ymusic_set_highlight_fn yetty_ymusic_music_yetty_ymusic_set_highlight_check =
-    music_set_highlight;
+static yetty_ymusic_set_highlight_fn
+    yetty_ymusic_music_yetty_ymusic_set_highlight_music_set_highlight_check = music_set_highlight;
 YETTY_MAYBE_UNUSED
-static yetty_ymusic_destroy_fn yetty_ymusic_music_yetty_ymusic_destroy_check = music_obj_destroy;
+static yetty_ymusic_destroy_fn yetty_ymusic_music_yetty_ymusic_destroy_music_obj_destroy_check =
+    music_obj_destroy;
 
 struct yetty_yclass_ptr_result yetty_ymusic_music_class_get(void)
 {

@@ -24,11 +24,11 @@ typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_handle_ev
 
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_destroy_fn
-    yetty_yplatform_glfw_window_chrome_yetty_yplatform_window_chrome_destroy_check =
+    yetty_yplatform_glfw_window_chrome_yetty_yplatform_window_chrome_destroy_glfw_window_chrome_destroy_check =
         glfw_window_chrome_destroy;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_chrome_handle_event_fn
-    yetty_yplatform_glfw_window_chrome_yetty_yplatform_window_chrome_handle_event_check =
+    yetty_yplatform_glfw_window_chrome_yetty_yplatform_window_chrome_handle_event_glfw_window_chrome_handle_event_check =
         glfw_window_chrome_handle_event;
 
 struct yetty_yclass_ptr_result yetty_yplatform_glfw_window_chrome_class_get(void)

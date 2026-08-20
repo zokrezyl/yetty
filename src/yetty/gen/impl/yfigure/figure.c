@@ -55,35 +55,44 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_apply_scroll_anchor_fn)(
     struct yetty_yclass_object *, int32_t, float);
 
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_render_fn yetty_yfigure_figure_yetty_yfigure_render_check =
-    yetty_yfigure_figure_default_render;
+static yetty_yfigure_render_fn
+    yetty_yfigure_figure_yetty_yfigure_render_yetty_yfigure_figure_default_render_check =
+        yetty_yfigure_figure_default_render;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_destroy_fn yetty_yfigure_figure_yetty_yfigure_destroy_check =
-    yetty_yfigure_figure_default_destroy;
+static yetty_yfigure_destroy_fn
+    yetty_yfigure_figure_yetty_yfigure_destroy_yetty_yfigure_figure_default_destroy_check =
+        yetty_yfigure_figure_default_destroy;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_process_input_fn yetty_yfigure_figure_yetty_yfigure_process_input_check =
-    yetty_yfigure_figure_default_process_input;
+static yetty_yfigure_process_input_fn
+    yetty_yfigure_figure_yetty_yfigure_process_input_yetty_yfigure_figure_default_process_input_check =
+        yetty_yfigure_figure_default_process_input;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_hit_opaque_fn yetty_yfigure_figure_yetty_yfigure_hit_opaque_check =
-    yetty_yfigure_figure_default_hit_opaque;
+static yetty_yfigure_hit_opaque_fn
+    yetty_yfigure_figure_yetty_yfigure_hit_opaque_yetty_yfigure_figure_default_hit_opaque_check =
+        yetty_yfigure_figure_default_hit_opaque;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_process_bytes_fn yetty_yfigure_figure_yetty_yfigure_process_bytes_check =
-    yetty_yfigure_figure_default_process_bytes;
+static yetty_yfigure_process_bytes_fn
+    yetty_yfigure_figure_yetty_yfigure_process_bytes_yetty_yfigure_figure_default_process_bytes_check =
+        yetty_yfigure_figure_default_process_bytes;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_reset_content_fn yetty_yfigure_figure_yetty_yfigure_reset_content_check =
-    yetty_yfigure_figure_default_reset_content;
+static yetty_yfigure_reset_content_fn
+    yetty_yfigure_figure_yetty_yfigure_reset_content_yetty_yfigure_figure_default_reset_content_check =
+        yetty_yfigure_figure_default_reset_content;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_dump_state_fn yetty_yfigure_figure_yetty_yfigure_dump_state_check =
-    yetty_yfigure_figure_default_dump_state;
+static yetty_yfigure_dump_state_fn
+    yetty_yfigure_figure_yetty_yfigure_dump_state_yetty_yfigure_figure_default_dump_state_check =
+        yetty_yfigure_figure_default_dump_state;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_set_scroll_fn yetty_yfigure_figure_yetty_yfigure_set_scroll_check =
-    yetty_yfigure_figure_default_set_scroll;
+static yetty_yfigure_set_scroll_fn
+    yetty_yfigure_figure_yetty_yfigure_set_scroll_yetty_yfigure_figure_default_set_scroll_check =
+        yetty_yfigure_figure_default_set_scroll;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_set_content_size_fn yetty_yfigure_figure_yetty_yfigure_set_content_size_check =
-    yetty_yfigure_figure_default_set_content_size;
+static yetty_yfigure_set_content_size_fn
+    yetty_yfigure_figure_yetty_yfigure_set_content_size_yetty_yfigure_figure_default_set_content_size_check =
+        yetty_yfigure_figure_default_set_content_size;
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_apply_scroll_anchor_fn
-    yetty_yfigure_figure_yetty_yfigure_apply_scroll_anchor_check =
+    yetty_yfigure_figure_yetty_yfigure_apply_scroll_anchor_yetty_yfigure_figure_default_apply_scroll_anchor_check =
         yetty_yfigure_figure_default_apply_scroll_anchor;
 
 struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)

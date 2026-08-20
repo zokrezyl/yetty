@@ -1,4 +1,60 @@
 methods:
+  - slot: set_name
+    domain: api_yplot
+    owning_class: curve
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_color
+    domain: api_yplot
+    owning_class: curve
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: color
+        type: "const char *"
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_body
+    domain: api_yplot
+    owning_class: function
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: body
+        type: "const char *"
+    doc: "/* set_body: the function body — the class's primary content. The slot is
+ * named distinctly from plot:set_expression because yclass slot names are
+ * module-global. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_values
+    domain: api_yplot
+    owning_class: buffer
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: samples
+        type: struct yetty_ycore_buffer
+    doc: "/* set_values: the sample data as an f32 byte buffer. The buffer's PRIMARY
+ * content is its NAME (Buffer(\"env\", …)) — the primary@ below marks the
+ * inherited set_name slot; this function only anchors the annotation. */"
+    local: true
+    oneway: false
+    return_payload_type: null
   - slot: set_expression
     domain: api_yplot
     owning_class: plot
@@ -111,6 +167,80 @@ methods:
     local: true
     oneway: false
     return_payload_type: null
+  - slot: add_buffer
+    domain: api_yplot
+    owning_class: plot
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: buffer
+        type: "struct yetty_yclass_object *"
+    doc: "/* add_buffer: lower a Buffer curve into the DSL — name declaration,
+ * capacity, inline values (CSV built here, once, in C — no binding
+ * re-implements the formatting) and the optional reference-curve color. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_view
+    domain: api_yplot
+    owning_class: plot
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x_min
+        type: float
+      - name: x_max
+        type: float
+      - name: y_min
+        type: float
+      - name: y_max
+        type: float
+    doc: "/* set_view: reframe without changing the domain — the DSL's @view=. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_nogrid
+    domain: api_yplot
+    owning_class: plot
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: disabled
+        type: uint32_t
+    doc: "/* Chrome flags — nonzero disables the element (@plot.grid=0 …); zero
+ * re-enables it. Last directive wins, as everywhere in the DSL. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_noaxes
+    domain: api_yplot
+    owning_class: plot
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: disabled
+        type: uint32_t
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_nolabels
+    domain: api_yplot
+    owning_class: plot
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: disabled
+        type: uint32_t
+    doc: null
+    local: true
+    oneway: false
+    return_payload_type: null
   - slot: show
     domain: api_yplot
     owning_class: plot
@@ -133,58 +263,121 @@ methods:
     local: true
     oneway: false
     return_payload_type: null
-  - slot: set_body
-    domain: api_yplot
-    owning_class: function
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: body
-        type: "const char *"
-    doc: "/* set_body: the function body, e.g. \"sin(x)\". (The generated create() maps its
- * positional argument to this, so Function.create(\"sin(x)\") works.) The slot is
- * named distinctly from plot:set_expression because yclass slot names are
- * module-global. */"
-    local: true
-    oneway: false
-    return_payload_type: null
-  - slot: set_name
-    domain: api_yplot
-    owning_class: function
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: name
-        type: "const char *"
-    doc: null
-    local: true
-    oneway: false
-    return_payload_type: null
-  - slot: set_color
-    domain: api_yplot
-    owning_class: function
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: color
-        type: "const char *"
-    doc: null
-    local: true
-    oneway: false
-    return_payload_type: null
 classes:
+  - name: curve
+    domain: api_yplot
+    accessor: yetty_api_yplot_curve_class_get
+    type: regular
+    source_file: src/api/yplot/plot.c
+    parent: null
+    mixins: []
+    data: struct yetty_api_yplot_curve
+    data_fields:
+      - name: name
+        type: "char[64]"
+        get: false
+        set: false
+      - name: color
+        type: "char[16]"
+        get: false
+        set: false
+    ops:
+      - slot: set_name
+        slot_domain: api_yplot
+        slot_class: curve
+        impl: curve_set_name
+      - slot: set_color
+        slot_domain: api_yplot
+        slot_class: curve
+        impl: curve_set_color
+    internal: false
+    doc: "/* Curve — the shared name/color base of everything a plot draws: a
+ * `function` (symbolic body) or a `buffer` (sampled values) IS a curve.
+ * The name doubles as the legend label AND the identifier expressions
+ * sample a buffer by (`name(x)`). */"
+  - name: function
+    domain: api_yplot
+    accessor: yetty_api_yplot_function_class_get
+    type: regular
+    source_file: src/api/yplot/plot.c
+    parent:
+      domain: api_yplot
+      name: curve
+    mixins: []
+    data: struct yetty_api_yplot_function
+    data_fields:
+      - name: body
+        type: "char[256]"
+        get: false
+        set: false
+    ops:
+      - slot: set_body
+        slot_domain: api_yplot
+        slot_class: function
+        impl: function_set_body
+    internal: false
+    doc: "/* Function — a symbolic curve: the yexpr body, e.g. \"sin(x)\". */"
+    primary_slot: set_body
+  - name: buffer
+    domain: api_yplot
+    accessor: yetty_api_yplot_buffer_class_get
+    type: regular
+    source_file: src/api/yplot/plot.c
+    parent:
+      domain: api_yplot
+      name: curve
+    mixins: []
+    data: struct yetty_api_yplot_buffer
+    data_fields:
+      - name: size
+        type: uint32_t
+        get: true
+        set: true
+      - name: value_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: values
+        type: "float[1024]"
+        get: false
+        set: false
+    ops:
+      - slot: set_values
+        slot_domain: api_yplot
+        slot_class: buffer
+        impl: buffer_set_values
+    internal: false
+    doc: "/* Buffer — a sampled curve: a named, buffer-backed plot input. `name(x)`
+ * inside a Function body samples it; a colored buffer is also drawn as a
+ * reference curve. add_buffer lowers it into the DSL. */"
+    primary_slot: set_name
   - name: plot
     domain: api_yplot
     accessor: yetty_api_yplot_plot_class_get
     type: regular
     source_file: src/api/yplot/plot.c
-    parent: null
+    parent:
+      domain: ydrawlist2
+      name: drawable
     mixins: []
     data: struct yetty_api_yplot_plot
     data_fields:
+      - name: x
+        type: float
+        get: true
+        set: true
+      - name: y
+        type: float
+        get: true
+        set: true
+      - name: width
+        type: float
+        get: true
+        set: true
+      - name: height
+        type: float
+        get: true
+        set: true
       - name: source
         type: "char *"
         get: false
@@ -200,69 +393,74 @@ classes:
     ops:
       - slot: set_expression
         slot_domain: api_yplot
+        slot_class: plot
         impl: plot_set_expression
       - slot: add_function
         slot_domain: api_yplot
+        slot_class: plot
         impl: plot_add_function
       - slot: set_title
         slot_domain: api_yplot
+        slot_class: plot
         impl: plot_set_title
       - slot: set_x_label
         slot_domain: api_yplot
+        slot_class: plot
         impl: plot_set_x_label
       - slot: set_y_label
         slot_domain: api_yplot
+        slot_class: plot
         impl: plot_set_y_label
       - slot: set_size
         slot_domain: api_yplot
+        slot_class: plot
         impl: plot_set_size
       - slot: set_x_range
         slot_domain: api_yplot
+        slot_class: plot
         impl: plot_set_x_range
       - slot: set_y_range
         slot_domain: api_yplot
+        slot_class: plot
         impl: plot_set_y_range
+      - slot: add_buffer
+        slot_domain: api_yplot
+        slot_class: plot
+        impl: plot_add_buffer
+      - slot: set_view
+        slot_domain: api_yplot
+        slot_class: plot
+        impl: plot_set_view
+      - slot: set_nogrid
+        slot_domain: api_yplot
+        slot_class: plot
+        impl: plot_set_nogrid
+      - slot: set_noaxes
+        slot_domain: api_yplot
+        slot_class: plot
+        impl: plot_set_noaxes
+      - slot: set_nolabels
+        slot_domain: api_yplot
+        slot_class: plot
+        impl: plot_set_nolabels
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: plot_pack
       - slot: show
         slot_domain: api_yplot
+        slot_class: plot
         impl: plot_show
       - slot: destroy
         slot_domain: api_yplot
+        slot_class: plot
         impl: plot_destroy
     internal: false
-    doc: null
-  - name: function
-    domain: api_yplot
-    accessor: yetty_api_yplot_function_class_get
-    type: regular
-    source_file: src/api/yplot/plot.c
-    parent: null
-    mixins: []
-    data: struct yetty_api_yplot_function
-    data_fields:
-      - name: name
-        type: "char[64]"
-        get: false
-        set: false
-      - name: body
-        type: "char[256]"
-        get: false
-        set: false
-      - name: color
-        type: "char[16]"
-        get: false
-        set: false
-    ops:
-      - slot: set_body
-        slot_domain: api_yplot
-        impl: function_set_body
-      - slot: set_name
-        slot_domain: api_yplot
-        impl: function_set_name
-      - slot: set_color
-        slot_domain: api_yplot
-        impl: function_set_color
-    internal: false
-    doc: null
+    doc: "/* A plot is also a DRAWABLE (v2 client interface): pack() renders the
+ * accumulated DSL into a caller-supplied drawable list as one complex
+ * record positioned at the (x, y) origin properties — dlist.add(plot).
+ * Everything else (size, ranges, view, flags, title) rides the DSL. */"
+    primary_slot: set_expression
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result
@@ -276,6 +474,15 @@ types:
             type: "struct yetty_yclass_object *"
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_ycore_buffer
+    kind: struct
+    fields:
+      - name: data
+        type: "uint8_t *"
+      - name: capacity
+        type: size_t
+      - name: size
+        type: size_t
   - name: yetty_ycore_error
     kind: struct
     fields:
@@ -302,7 +509,11 @@ types:
           - name: error
             type: struct yetty_ycore_error
 local_types:
-  yetty_api_yplot_plot: src/api/yplot/plot.c
+  yetty_api_yplot_curve: src/api/yplot/plot.c
+  yetty_api_yplot_curve_ptr_result: src/api/yplot/plot.c
   yetty_api_yplot_function: src/api/yplot/plot.c
-  yetty_api_yplot_plot_ptr_result: src/api/yplot/plot.c
   yetty_api_yplot_function_ptr_result: src/api/yplot/plot.c
+  yetty_api_yplot_buffer: src/api/yplot/plot.c
+  yetty_api_yplot_buffer_ptr_result: src/api/yplot/plot.c
+  yetty_api_yplot_plot: src/api/yplot/plot.c
+  yetty_api_yplot_plot_ptr_result: src/api/yplot/plot.c

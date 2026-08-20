@@ -15,23 +15,19 @@ class Figure(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yfigure_figure_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yfigure_figure_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yfigure_figure_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Figure':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Figure.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
     def render(self, target: Any) -> None:
         """Call `yetty_yfigure_render`; raises _rt.YettyError on failure."""
         if self._handle is None:
@@ -226,23 +222,19 @@ class Container(Figure):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yfigure_container_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yfigure_container_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yfigure_container_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Container':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Container.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
     def constructor(self) -> None:
         """Call `yetty_yfigure_constructor`; raises _rt.YettyError on failure."""
         if self._handle is None:
@@ -284,7 +276,7 @@ class Container(Figure):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yfigure_create_child", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_uint32, _t.yetty_ycore_rectangle, _t.yetty_ycore_buffer])
-        res = _rt.result_from_c(_fn(self._handle, kind_token, id, rect, init))
+        res = _rt.result_from_c(_fn(self._handle, kind_token, id, rect, _rt.as_buffer(init)))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -383,7 +375,7 @@ class Container(Figure):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yfigure_apply_child_body", _t.yetty_ycore_void_result, [c_void_p, c_uint32, _t.yetty_ycore_buffer])
-        res = _rt.result_from_c(_fn(self._handle, id, body))
+        res = _rt.result_from_c(_fn(self._handle, id, _rt.as_buffer(body)))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value

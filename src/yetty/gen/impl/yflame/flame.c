@@ -70,42 +70,48 @@ typedef struct yetty_ycore_uint64_result (*yetty_yflame_root_value_fn)(
 typedef struct yetty_ycore_void_result (*yetty_yflame_destroy_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yflame_configure_fn yetty_yflame_flame_yetty_yflame_configure_check = flame_configure;
+static yetty_yflame_configure_fn yetty_yflame_flame_yetty_yflame_configure_flame_configure_check =
+    flame_configure;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_parse_fn yetty_yflame_flame_yetty_yflame_parse_check = flame_parse;
+static yetty_yflame_parse_fn yetty_yflame_flame_yetty_yflame_parse_flame_parse_check = flame_parse;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_render_fn yetty_yflame_flame_yetty_yflame_render_check = flame_render;
+static yetty_yflame_render_fn yetty_yflame_flame_yetty_yflame_render_flame_render_check =
+    flame_render;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_hit_test_fn yetty_yflame_flame_yetty_yflame_hit_test_check = flame_hit_test;
+static yetty_yflame_hit_test_fn yetty_yflame_flame_yetty_yflame_hit_test_flame_hit_test_check =
+    flame_hit_test;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_focus_fn yetty_yflame_flame_yetty_yflame_focus_check = flame_focus;
+static yetty_yflame_focus_fn yetty_yflame_flame_yetty_yflame_focus_flame_focus_check = flame_focus;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_focus_parent_fn yetty_yflame_flame_yetty_yflame_focus_parent_check =
-    flame_focus_parent;
+static yetty_yflame_focus_parent_fn
+    yetty_yflame_flame_yetty_yflame_focus_parent_flame_focus_parent_check = flame_focus_parent;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_reset_fn yetty_yflame_flame_yetty_yflame_reset_check = flame_reset;
+static yetty_yflame_reset_fn yetty_yflame_flame_yetty_yflame_reset_flame_reset_check = flame_reset;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_set_highlight_fn yetty_yflame_flame_yetty_yflame_set_highlight_check =
-    flame_set_highlight;
+static yetty_yflame_set_highlight_fn
+    yetty_yflame_flame_yetty_yflame_set_highlight_flame_set_highlight_check = flame_set_highlight;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_highlight_name_fn yetty_yflame_flame_yetty_yflame_highlight_name_check =
-    flame_highlight_name;
+static yetty_yflame_highlight_name_fn
+    yetty_yflame_flame_yetty_yflame_highlight_name_flame_highlight_name_check =
+        flame_highlight_name;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_focus_name_fn yetty_yflame_flame_yetty_yflame_focus_name_check =
-    flame_focus_name;
+static yetty_yflame_focus_name_fn
+    yetty_yflame_flame_yetty_yflame_focus_name_flame_focus_name_check = flame_focus_name;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_set_baseline_fn yetty_yflame_flame_yetty_yflame_set_baseline_check =
-    flame_set_baseline;
+static yetty_yflame_set_baseline_fn
+    yetty_yflame_flame_yetty_yflame_set_baseline_flame_set_baseline_check = flame_set_baseline;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_node_name_fn yetty_yflame_flame_yetty_yflame_node_name_check = flame_node_name;
+static yetty_yflame_node_name_fn yetty_yflame_flame_yetty_yflame_node_name_flame_node_name_check =
+    flame_node_name;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_node_value_fn yetty_yflame_flame_yetty_yflame_node_value_check =
-    flame_node_value;
+static yetty_yflame_node_value_fn
+    yetty_yflame_flame_yetty_yflame_node_value_flame_node_value_check = flame_node_value;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_root_value_fn yetty_yflame_flame_yetty_yflame_root_value_check =
-    flame_root_value;
+static yetty_yflame_root_value_fn
+    yetty_yflame_flame_yetty_yflame_root_value_flame_root_value_check = flame_root_value;
 YETTY_MAYBE_UNUSED
-static yetty_yflame_destroy_fn yetty_yflame_flame_yetty_yflame_destroy_check = flame_obj_destroy;
+static yetty_yflame_destroy_fn yetty_yflame_flame_yetty_yflame_destroy_flame_obj_destroy_check =
+    flame_obj_destroy;
 
 struct yetty_yclass_ptr_result yetty_yflame_flame_class_get(void)
 {

@@ -27,16 +27,18 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
     struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_yimage_yetty_ygui_constructor_check =
+static yetty_ygui_constructor_fn yetty_ygui_yimage_yetty_ygui_constructor_yimage_constructor_check =
     yimage_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_yimage_yetty_ygui_destructor_check = yimage_destructor;
+static yetty_ygui_destructor_fn yetty_ygui_yimage_yetty_ygui_destructor_yimage_destructor_check =
+    yimage_destructor;
 YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_emit_container_fn
-    yetty_ygui_yimage_yetty_ygui_widget_emit_container_check = yimage_emit_container;
+    yetty_ygui_yimage_yetty_ygui_widget_emit_container_yimage_emit_container_check =
+        yimage_emit_container;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_emit_body_fn yetty_ygui_yimage_yetty_ygui_widget_emit_body_check =
-    yimage_emit_body;
+static yetty_ygui_widget_emit_body_fn
+    yetty_ygui_yimage_yetty_ygui_widget_emit_body_yimage_emit_body_check = yimage_emit_body;
 
 struct yetty_yclass_ptr_result yetty_ygui_yimage_class_get(void)
 {

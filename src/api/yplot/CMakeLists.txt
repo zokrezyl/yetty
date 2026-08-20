@@ -20,8 +20,10 @@ target_include_directories(yetty_api_yplot PRIVATE ${YETTY_ROOT}/src)
 target_link_libraries(yetty_api_yplot PUBLIC
     yetty_ycore
     yetty_yclass
-    yetty_yplot_core   # yetty_yplot_render + dcs_bin_emit (GPU-less)
-    yetty_ydraw_list   # drawable_list_destroy
+    yetty_yplot_core     # yetty_yplot_render + dcs_bin_emit (GPU-less)
+    yetty_ydraw_list     # drawable_list_destroy
+    yetty_ydrawlist2     # drawable parent: pack() makes a plot a v2 drawable
+    yetty_api_ydrawlist2 # the pack slot's stub + typedef
 )
 
 # plot.c carries `[[clang::annotate(...)]]` (C23 attribute syntax).

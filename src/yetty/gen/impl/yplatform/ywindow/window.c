@@ -46,32 +46,37 @@ typedef struct yetty_ycore_void_result (*yetty_yplatform_window_set_title_fn)(
     struct yetty_yclass_object *, const char *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yplatform_window_open_fn yetty_yplatform_window_yetty_yplatform_window_open_check =
-    window_default_open;
+static yetty_yplatform_window_open_fn
+    yetty_yplatform_window_yetty_yplatform_window_open_window_default_open_check =
+        window_default_open;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_destroy_fn
-    yetty_yplatform_window_yetty_yplatform_window_destroy_check = window_default_destroy;
+    yetty_yplatform_window_yetty_yplatform_window_destroy_window_default_destroy_check =
+        window_default_destroy;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_create_surface_fn
-    yetty_yplatform_window_yetty_yplatform_window_create_surface_check =
+    yetty_yplatform_window_yetty_yplatform_window_create_surface_window_default_create_surface_check =
         window_default_create_surface;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_size_fn
-    yetty_yplatform_window_yetty_yplatform_window_get_size_check = window_default_get_size;
+    yetty_yplatform_window_yetty_yplatform_window_get_size_window_default_get_size_check =
+        window_default_get_size;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_framebuffer_size_fn
-    yetty_yplatform_window_yetty_yplatform_window_get_framebuffer_size_check =
+    yetty_yplatform_window_yetty_yplatform_window_get_framebuffer_size_window_default_get_framebuffer_size_check =
         window_default_get_framebuffer_size;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_content_scale_fn
-    yetty_yplatform_window_yetty_yplatform_window_get_content_scale_check =
+    yetty_yplatform_window_yetty_yplatform_window_get_content_scale_window_default_get_content_scale_check =
         window_default_get_content_scale;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_should_close_fn
-    yetty_yplatform_window_yetty_yplatform_window_should_close_check = window_default_should_close;
+    yetty_yplatform_window_yetty_yplatform_window_should_close_window_default_should_close_check =
+        window_default_should_close;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_set_title_fn
-    yetty_yplatform_window_yetty_yplatform_window_set_title_check = window_default_set_title;
+    yetty_yplatform_window_yetty_yplatform_window_set_title_window_default_set_title_check =
+        window_default_set_title;
 
 struct yetty_yclass_ptr_result yetty_yplatform_window_class_get(void)
 {

@@ -26,12 +26,12 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct ye
                                                                        float, float, int);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_datepicker_yetty_ygui_constructor_check = ctor;
+static yetty_ygui_constructor_fn yetty_ygui_datepicker_yetty_ygui_constructor_ctor_check = ctor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_datepicker_yetty_ygui_widget_paint_check = paint;
+static yetty_ygui_widget_paint_fn yetty_ygui_datepicker_yetty_ygui_widget_paint_paint_check = paint;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_press_fn yetty_ygui_datepicker_yetty_ygui_widget_on_press_check =
-    on_press;
+static yetty_ygui_widget_on_press_fn
+    yetty_ygui_datepicker_yetty_ygui_widget_on_press_on_press_check = on_press;
 
 struct yetty_yclass_ptr_result yetty_ygui_datepicker_class_get(void)
 {

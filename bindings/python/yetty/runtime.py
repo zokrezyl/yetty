@@ -54,6 +54,30 @@ class YettyError(Exception):
     """Compatibility exception for low-level handwritten wrappers only."""
 
 
+def as_buffer(value):
+    """Coerce a python value into a by-value `yetty_ycore_buffer` argument:
+    bytes/bytearray as-is; a list/tuple of numbers as a packed f32 array (the
+    wire's sample format); an already-built buffer struct passes through."""
+    import struct as _struct
+
+    from .generated import _types
+    if isinstance(value, _types.yetty_ycore_buffer):
+        return value
+    if isinstance(value, (list, tuple)):
+        value = _struct.pack(f"<{len(value)}f", *[float(v) for v in value])
+    if isinstance(value, (bytes, bytearray)):
+        raw = bytes(value)
+        backing = ctypes.create_string_buffer(raw, len(raw))
+        buffer = _types.yetty_ycore_buffer()
+        buffer.data = ctypes.cast(backing, ctypes.c_void_p)
+        buffer.size = len(raw)
+        buffer.capacity = len(raw)
+        # keep the backing storage alive for the duration of the call
+        buffer._backing = backing
+        return buffer
+    raise TypeError(f"cannot coerce {type(value).__name__} to a ycore buffer")
+
+
 class YClass:
     """Base class for generated yclass object wrappers."""
 
@@ -77,6 +101,36 @@ class YClass:
 
     def _invalid_result(self):
         return Result(error=self._error or Error("uninitialized yclass handle"))
+
+    def _apply_kwargs(self, kwargs) -> None:
+        """Apply constructor keywords, generically (no per-class logic):
+
+        - `set_<key>` method when the class has one. TUPLE values unpack
+          into its arguments (size=(640, 320) -> set_size(640, 320));
+          lists pass through whole (data arrays, e.g. values=[...]).
+        - else a generated @property member (inherited ones included).
+        - else, for a list/tuple of yclass objects, an `add_<key-singular>`
+          method applied per element (functions=[...] -> add_function each).
+        """
+        for key, value in kwargs.items():
+            setter = getattr(self, "set_" + key, None)
+            if setter is not None:
+                if isinstance(value, tuple):
+                    setter(*value)
+                else:
+                    setter(value)
+                continue
+            descriptor = getattr(type(self), key, None)
+            if isinstance(descriptor, property):
+                setattr(self, key, value)
+                continue
+            if isinstance(value, (list, tuple)) and key.endswith("s"):
+                adder = getattr(self, "add_" + key[:-1], None)
+                if adder is not None and all(isinstance(e, YClass) for e in value):
+                    for element in value:
+                        adder(element)
+                    continue
+            raise TypeError(f"{type(self).__name__}: unknown property {key!r}")
 
     def destroy(self) -> None:
         """Reclaim the underlying yclass object.
@@ -203,10 +257,12 @@ def cfn(name: str, restype, argtypes: list):
 
 
 def cstr(value):
-    """Coerce a Python str to UTF-8 bytes for a `const char *` argument
-    (bytes and None pass through)."""
+    """Coerce a Python str (or os.PathLike) to UTF-8 bytes for a
+    `const char *` argument (bytes and None pass through)."""
     if value is None or isinstance(value, bytes):
         return value
+    if isinstance(value, os.PathLike):
+        value = os.fspath(value)
     return value.encode("utf-8")
 
 

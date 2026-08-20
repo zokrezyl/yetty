@@ -23,12 +23,14 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
     struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_ybrowser_yetty_ygui_constructor_check = ybr_constructor;
+static yetty_ygui_constructor_fn yetty_ygui_ybrowser_yetty_ygui_constructor_ybr_constructor_check =
+    ybr_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_ybrowser_yetty_ygui_destructor_check = ybr_destructor;
+static yetty_ygui_destructor_fn yetty_ygui_ybrowser_yetty_ygui_destructor_ybr_destructor_check =
+    ybr_destructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_emit_body_fn yetty_ygui_ybrowser_yetty_ygui_widget_emit_body_check =
-    ybr_emit_body;
+static yetty_ygui_widget_emit_body_fn
+    yetty_ygui_ybrowser_yetty_ygui_widget_emit_body_ybr_emit_body_check = ybr_emit_body;
 
 struct yetty_yclass_ptr_result yetty_ygui_ybrowser_class_get(void)
 {
