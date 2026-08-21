@@ -25,13 +25,13 @@ show(new Plot({ width: 520, height: 160, xRange: [0, 2 * Math.PI], yRange: [-1.2
 // (3) view= overrides the framing without changing the domain — zoom into
 // a region without resampling the expression.
 console.log("(3) view zoom-in");
-show(new Plot({ width: 520, height: 160, xRange: [-10, 10], view: [-Math.PI, Math.PI, -0.5, 1.5], functions: [
+show(new Plot({ width: 520, height: 160, xRange: [-10, 10], view: [[-Math.PI, Math.PI], [-0.5, 1.5]], functions: [
       new Function("sin(x)/x", { name: "signal", color: "#74C5A5" }),
     ] }));
 
 // (4) Wide domain, deliberately tighter viewport: evaluated across the
 // full domain, only the viewport is rendered.
 console.log("(4) wide eval, narrow view");
-show(new Plot({ width: 520, height: 160, xRange: [-10, 10], view: [-2, 2, -1, 1], functions: [
+show(new Plot({ width: 520, height: 160, xRange: [-10, 10], view: [[-2, 2], [-1, 1]], functions: [
       new Function("sin(x)*exp(-abs(x)/3)", { name: "damped", color: "#AA96DA" }),
     ] }));

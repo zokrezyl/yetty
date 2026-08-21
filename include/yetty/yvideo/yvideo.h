@@ -98,6 +98,13 @@ struct yetty_yvideo_render_config {
  * helper below is intentionally low-level and does NOT wrap — callers
  * (or the demo driver) compose the GROUP themselves.
  */
+/* Extract width/height from the first SPS NAL of a raw Annex-B H.264
+ * stream. Returns 1 on success, 0 if no SPS was found or parsing failed.
+ * The ONE SPS parser shared by every producer. */
+int yetty_yvideo_h264_dimensions(const uint8_t *buf YETTY_ANNOT_ARRAY(size), size_t size,
+                                 uint32_t *out_w YETTY_ANNOT_OUT,
+                                 uint32_t *out_h YETTY_ANNOT_OUT);
+
 struct yetty_ydraw_drawable_list_result yetty_yvideo_render(
     const uint8_t *nal_bytes, size_t nal_len, const uint8_t *audio_bytes, size_t audio_len,
     const struct yetty_yvideo_render_config *config);

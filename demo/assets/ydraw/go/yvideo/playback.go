@@ -15,14 +15,14 @@ const assets = "demo/assets/yvideo/"
 func main() {
 	fmt.Println("smpte bars")
 	dlist := ydraw.NewDrawableList()
-	dlist.Add(ydraw.Video{Path: assets + "smpte.h264", VideoW: 320, VideoH: 240})
+	dlist.Add(ydraw.Video{Path: assets + "smpte.h264", ID: 1})
 	dlist.DcsEmit()
 	dlist.Destroy()
 
 	fmt.Println("testsrc at 480x270, 25fps")
 	dlist = ydraw.NewDrawableList()
-	dlist.Add(ydraw.Video{Path: assets + "testsrc.h264", VideoW: 320, VideoH: 240,
-		Width: 480, Height: 360, FPS: 25})
+	dlist.Add(ydraw.Video{Path: assets + "testsrc.h264", ID: 2,
+		Width: 480, Height: 270, FPS: 25})
 	dlist.DcsEmit()
 	dlist.Destroy()
 }

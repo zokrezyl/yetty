@@ -173,6 +173,26 @@ struct yetty_ycore_void_result yetty_ycomplex2_video_height_set(struct yetty_ycl
     return YETTY_OK_VOID();
 }
 
+struct uint32_result yetty_ycomplex2_video_id_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_ycomplex2_video_ptr_result data = yetty_ycomplex2_video_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(uint32, "yetty_ycomplex2_video_id_get: data block", data);
+    }
+    return YETTY_OK(uint32, data.value->id);
+}
+
+struct yetty_ycore_void_result yetty_ycomplex2_video_id_set(struct yetty_yclass_object *obj,
+                                                            uint32_t value)
+{
+    struct yetty_ycomplex2_video_ptr_result data = yetty_ycomplex2_video_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ycomplex2_video_id_set: data block", data);
+    }
+    data.value->id = value;
+    return YETTY_OK_VOID();
+}
+
 struct uint32_result yetty_ycomplex2_video_video_w_get(struct yetty_yclass_object *obj)
 {
     struct yetty_ycomplex2_video_ptr_result data = yetty_ycomplex2_video_from(obj);

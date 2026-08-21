@@ -9,7 +9,7 @@ struct yetty_yclass_object_ptr_result yetty_ycomplex2_shadertoy_create(struct ye
 struct yetty_yclass_object_ptr_result yetty_ycomplex2_video_create(struct yetty_yclass_ctx *);
 struct yetty_ycore_void_result yetty_ycomplex2_set_path(struct yetty_yclass_object *, const char *);
 struct yetty_ycore_void_result yetty_ycomplex2_set_glb(struct yetty_yclass_object *, const char *);
-struct yetty_ycore_void_result yetty_ycomplex2_set_wgsl(struct yetty_yclass_object *, const char *);
+struct yetty_ycore_void_result yetty_ycomplex2_set_source(struct yetty_yclass_object *, const char *);
 struct yetty_ycore_void_result yetty_ycomplex2_set_wgsl_path(struct yetty_yclass_object *, const char *);
 struct yetty_ycore_void_result yetty_ycomplex2_set_h264(struct yetty_yclass_object *, const char *);
 ]]
@@ -45,8 +45,8 @@ function Shadertoy.new()
   rt.check(res)
   return setmetatable({ handle = res.value }, Shadertoy)
 end
-function Shadertoy:set_wgsl()
-  local res = rt.C().yetty_ycomplex2_set_wgsl(nil, self.handle)
+function Shadertoy:set_source()
+  local res = rt.C().yetty_ycomplex2_set_source(nil, self.handle)
   rt.check(res)
 end
 function Shadertoy:set_wgsl_path()

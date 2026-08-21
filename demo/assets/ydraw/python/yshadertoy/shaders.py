@@ -37,5 +37,5 @@ show(Shadertoy(ASSETS / "swirl.wgsl", width=560, height=320))
 
 # Source can come from anywhere — a string works as well as a file.
 print('palette, inline source')
-show(Shadertoy(wgsl=(ASSETS / "palette.wgsl").read_text(),
+show(Shadertoy(source=(ASSETS / "palette.wgsl").read_text(),
                width=560, height=160))

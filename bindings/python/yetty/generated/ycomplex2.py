@@ -325,11 +325,11 @@ class Shadertoy(_ydrawlist2.Drawable):
     @classmethod
     def create(cls, wgsl_path: Any = None, **kwargs: Any) -> 'Shadertoy':
         return cls(wgsl_path, **kwargs)
-    def set_wgsl(self, wgsl: str | bytes | None) -> None:
-        """Call `yetty_ycomplex2_set_wgsl`; raises _rt.YettyError on failure."""
+    def set_source(self, wgsl: str | bytes | None) -> None:
+        """Call `yetty_ycomplex2_set_source`; raises _rt.YettyError on failure."""
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
-        _fn = _rt.cfn("yetty_ycomplex2_set_wgsl", _t.yetty_ycore_void_result, [c_void_p, c_char_p])
+        _fn = _rt.cfn("yetty_ycomplex2_set_source", _t.yetty_ycore_void_result, [c_void_p, c_char_p])
         res = _rt.result_from_c(_fn(self._handle, _rt.cstr(wgsl)))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
@@ -525,6 +525,25 @@ class Video(_ydrawlist2.Drawable):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycomplex2_video_height_set", _t.yetty_ycore_void_result, [c_void_p, c_float])
+        res = _rt.result_from_c(_fn(self._handle, value))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    @property
+    def id(self) -> int:
+        """Property `id` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_video_id_get", _t.uint32_result, [c_void_p])
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    @id.setter
+    def id(self, value: int) -> None:
+        """Property `id` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_video_id_set", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
         res = _rt.result_from_c(_fn(self._handle, value))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)

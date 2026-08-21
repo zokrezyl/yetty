@@ -12,19 +12,19 @@
 #include <string.h> /* memcpy/strcmp/strlen */
 
 struct yetty_ycore_void_result;
-struct yetty_ycore_void_result yetty_ycomplex2_set_wgsl(struct yetty_yclass_object *obj,
-                                                        const char *wgsl);
+struct yetty_ycore_void_result yetty_ycomplex2_set_source(struct yetty_yclass_object *obj,
+                                                          const char *wgsl);
 struct yetty_ycore_void_result yetty_ycomplex2_set_wgsl_path(struct yetty_yclass_object *obj,
                                                              const char *path);
-typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_wgsl_fn)(struct yetty_yclass_object *,
-                                                                      const char *);
+typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_source_fn)(
+    struct yetty_yclass_object *, const char *);
 typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_wgsl_path_fn)(
     struct yetty_yclass_object *, const char *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ycomplex2_set_wgsl_fn
-    yetty_ycomplex2_shadertoy_yetty_ycomplex2_set_wgsl_shadertoy_set_wgsl_check =
-        shadertoy_set_wgsl;
+static yetty_ycomplex2_set_source_fn
+    yetty_ycomplex2_shadertoy_yetty_ycomplex2_set_source_shadertoy_set_source_check =
+        shadertoy_set_source;
 YETTY_MAYBE_UNUSED
 static yetty_ycomplex2_set_wgsl_path_fn
     yetty_ycomplex2_shadertoy_yetty_ycomplex2_set_wgsl_path_shadertoy_set_wgsl_path_check =
@@ -48,8 +48,8 @@ struct yetty_yclass_ptr_result yetty_ycomplex2_shadertoy_class_get(void)
         .data_align = _Alignof(struct yetty_ycomplex2_shadertoy),
     };
     static const struct yetty_yclass_op ops[] = {
-        {"yetty_ycomplex2", "set_wgsl", (yetty_yclass_method_id_t)yetty_ycomplex2_set_wgsl,
-         (yetty_yclass_impl_t)shadertoy_set_wgsl},
+        {"yetty_ycomplex2", "set_source", (yetty_yclass_method_id_t)yetty_ycomplex2_set_source,
+         (yetty_yclass_impl_t)shadertoy_set_source},
         {"yetty_ycomplex2", "set_wgsl_path",
          (yetty_yclass_method_id_t)yetty_ycomplex2_set_wgsl_path,
          (yetty_yclass_impl_t)shadertoy_set_wgsl_path},

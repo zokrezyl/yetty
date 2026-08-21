@@ -3,7 +3,7 @@
 
 Domain vs viewport: x_range/y_range set where the expression is
 EVALUATED; view reframes what is RENDERED without resampling.
-(The DSL's inline `x=-pi..pi` / `y=..` become kwargs, `@view=` the flat view=(x0,x1,y0,y1); symbolic
+(The DSL's inline `x=-pi..pi` / `y=..` / `@view=` become kwargs; symbolic
 constants become Python math constants.)
 """
 import math
@@ -37,7 +37,7 @@ show(Plot(width=520, height=160, x_range=(0, math.tau),
 # a region without resampling the expression.
 print('(3) view zoom-in')
 show(Plot(width=520, height=160, x_range=(-10, 10),
-          view=(-math.pi, math.pi, -0.5, 1.5),
+          view=((-math.pi, math.pi), (-0.5, 1.5)),
           functions=[Function("sin(x)/x", name="signal",
                               color="#74C5A5")]))
 
@@ -45,6 +45,6 @@ show(Plot(width=520, height=160, x_range=(-10, 10),
 # full domain, only the viewport is rendered.
 print('(4) wide eval, narrow view')
 show(Plot(width=520, height=160, x_range=(-10, 10),
-          view=(-2, 2, -1, 1),
+          view=((-2, 2), (-1, 1)),
           functions=[Function("sin(x)*exp(-abs(x)/3)", name="damped",
                               color="#AA96DA")]))

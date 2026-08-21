@@ -25,13 +25,13 @@ show(ydraw.Plot{width = 520, height = 160, x_range = {0, 2 * math.pi}, y_range =
 -- (3) view= overrides the framing without changing the domain — zoom into
 -- a region without resampling the expression.
 print("(3) view zoom-in")
-show(ydraw.Plot{width = 520, height = 160, x_range = {-10, 10}, view = {-math.pi, math.pi, -0.5, 1.5}, functions = {
+show(ydraw.Plot{width = 520, height = 160, x_range = {-10, 10}, view = {{-math.pi, math.pi}, {-0.5, 1.5}}, functions = {
         ydraw.Function{"sin(x)/x", name = "signal", color = "#74C5A5"},
     }})
 
 -- (4) Wide domain, deliberately tighter viewport: evaluated across the
 -- full domain, only the viewport is rendered.
 print("(4) wide eval, narrow view")
-show(ydraw.Plot{width = 520, height = 160, x_range = {-10, 10}, view = {-2, 2, -1, 1}, functions = {
+show(ydraw.Plot{width = 520, height = 160, x_range = {-10, 10}, view = {{-2, 2}, {-1, 1}}, functions = {
         ydraw.Function{"sin(x)*exp(-abs(x)/3)", name = "damped", color = "#AA96DA"},
     }})

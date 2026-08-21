@@ -24,5 +24,5 @@ show(new Shadertoy(ASSETS + "swirl.wgsl", { width: 560, height: 320 }));
 
 // Source can come from anywhere — a string works as well as a file.
 console.log("palette, inline source");
-show(new Shadertoy({ wgsl: readFileSync(ASSETS + "palette.wgsl", "utf8"),
+show(new Shadertoy({ source: readFileSync(ASSETS + "palette.wgsl", "utf8"),
                      width: 560, height: 160 }));

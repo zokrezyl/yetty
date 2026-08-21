@@ -25,7 +25,7 @@ methods:
     local: true
     oneway: false
     return_payload_type: null
-  - slot: set_wgsl
+  - slot: set_source
     domain: ycomplex2
     owning_class: shadertoy
     return_type: struct yetty_ycore_void_result
@@ -34,8 +34,8 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: wgsl
         type: "const char *"
-    doc: "/* set_wgsl: the shader source. Empty/NULL selects the receiver's built-in
- * default shader (animated gradient). */"
+    doc: "/* set_source: the WGSL shader source, inline. Empty/NULL selects the
+ * receiver's built-in default shader (animated gradient). */"
     local: true
     oneway: false
     return_payload_type: null
@@ -205,10 +205,10 @@ classes:
         get: false
         set: false
     ops:
-      - slot: set_wgsl
+      - slot: set_source
         slot_domain: ycomplex2
         slot_class: shadertoy
-        impl: shadertoy_set_wgsl
+        impl: shadertoy_set_source
       - slot: set_wgsl_path
         slot_domain: ycomplex2
         slot_class: shadertoy
@@ -245,6 +245,10 @@ classes:
         set: true
       - name: height
         type: float
+        get: true
+        set: true
+      - name: id
+        type: uint32_t
         get: true
         set: true
       - name: video_w
@@ -344,9 +348,9 @@ local_typedefs:
   yetty_ycomplex2_set_glb_fn:
     source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ycomplex2/mesh.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_glb_fn)(struct yetty_yclass_object *, const char *);"
-  yetty_ycomplex2_set_wgsl_fn:
+  yetty_ycomplex2_set_source_fn:
     source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ycomplex2/shadertoy.c
-    text: "typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_wgsl_fn)(struct yetty_yclass_object *, const char *);"
+    text: "typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_source_fn)(struct yetty_yclass_object *, const char *);"
   yetty_ycomplex2_set_wgsl_path_fn:
     source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ycomplex2/shadertoy.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_wgsl_path_fn)(struct yetty_yclass_object *, const char *);"

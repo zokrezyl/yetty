@@ -2,8 +2,9 @@
  * shadertoy.c — yclass class `ycomplex2:shadertoy`: one yshadertoy complex
  * record as a v2 drawable. The payload IS the WGSL shader text (mainImage
  * contract, see yshadertoy/prim.h); the receiving factory compiles a
- * per-instance pipeline around it. Source arrives via set_wgsl (the python
- * wrapper reads files into it) — inline, no owned heap, no destructor.
+ * per-instance pipeline around it. Source arrives via set_wgsl_path (a
+ * file, the primary content) or set_source (inline text) — inline storage,
+ * no owned heap, no destructor.
  */
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/ffi-annotations.h>
@@ -50,12 +51,12 @@ static struct yetty_yclass_void_ptr_result shadertoy_from_obj(struct yetty_yclas
  * Method slots
  *===========================================================================*/
 
-/* set_wgsl: the shader source. Empty/NULL selects the receiver's built-in
- * default shader (animated gradient). */
-YETTY_ANNOTATE("virtual@ycomplex2:shadertoy:set_wgsl")
-YETTY_ANNOTATE("local@ycomplex2:set_wgsl")
-static struct yetty_ycore_void_result shadertoy_set_wgsl(struct yetty_yclass_object *obj,
-                                                         const char *wgsl YETTY_ANNOT_CSTRING)
+/* set_source: the WGSL shader source, inline. Empty/NULL selects the
+ * receiver's built-in default shader (animated gradient). */
+YETTY_ANNOTATE("virtual@ycomplex2:shadertoy:set_source")
+YETTY_ANNOTATE("local@ycomplex2:set_source")
+static struct yetty_ycore_void_result shadertoy_set_source(struct yetty_yclass_object *obj,
+                                                           const char *wgsl YETTY_ANNOT_CSTRING)
 {
     struct yetty_yclass_void_ptr_result shader_r = shadertoy_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, shader_r, "ycomplex2 set_wgsl: object");

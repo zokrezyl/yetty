@@ -13,41 +13,41 @@
 #include <string.h> /* memcpy/strlen */
 
 struct yetty_ycore_void_result;
-struct yetty_ycore_void_result yetty_ycomplex2_set_wgsl(struct yetty_yclass_object *obj,
-                                                        const char *wgsl);
+struct yetty_ycore_void_result yetty_ycomplex2_set_source(struct yetty_yclass_object *obj,
+                                                          const char *wgsl);
 struct yetty_ycore_void_result yetty_ycomplex2_set_wgsl_path(struct yetty_yclass_object *obj,
                                                              const char *path);
-typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_wgsl_fn)(struct yetty_yclass_object *,
-                                                                      const char *);
+typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_source_fn)(
+    struct yetty_yclass_object *, const char *);
 typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_wgsl_path_fn)(
     struct yetty_yclass_object *, const char *);
 
-struct yetty_ycore_void_result yetty_ycomplex2_set_wgsl(struct yetty_yclass_object *obj,
-                                                        const char *wgsl)
+struct yetty_ycore_void_result yetty_ycomplex2_set_source(struct yetty_yclass_object *obj,
+                                                          const char *wgsl)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
         struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
-            "yetty_ycomplex2", (yetty_yclass_method_id_t)yetty_ycomplex2_set_wgsl);
+            "yetty_ycomplex2", (yetty_yclass_method_id_t)yetty_ycomplex2_set_source);
         if (YETTY_IS_ERR(method_slot_r)) {
-            return YETTY_ERR(yetty_ycore_void, "yetty_ycomplex2_set_wgsl: method_slot_get failed",
+            return YETTY_ERR(yetty_ycore_void, "yetty_ycomplex2_set_source: method_slot_get failed",
                              method_slot_r);
         }
         method_slot = method_slot_r.value;
     }
 
     if (!obj) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ycomplex2_set_wgsl: NULL object");
+        return YETTY_ERR(yetty_ycore_void, "yetty_ycomplex2_set_source: NULL object");
     }
 
     struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
-                        "yetty_ycomplex2_set_wgsl: object_class failed");
+                        "yetty_ycomplex2_set_source: object_class failed");
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
-                        "yetty_ycomplex2_set_wgsl: dispatch_lookup failed");
-    return ((yetty_ycomplex2_set_wgsl_fn)dispatch_impl_r.value)(obj, wgsl);
+                        "yetty_ycomplex2_set_source: dispatch_lookup failed");
+    return ((yetty_ycomplex2_set_source_fn)dispatch_impl_r.value)(obj, wgsl);
 }
 
 struct yetty_ycore_void_result yetty_ycomplex2_set_wgsl_path(struct yetty_yclass_object *obj,

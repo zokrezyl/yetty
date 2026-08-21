@@ -1,11 +1,11 @@
 /* GENERATED — do not edit. */
-/* Public interface for regular class(es) `shadertoy` (module: ycomplex2).
- * Fully generated from the source .c — do not edit. This single
- * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), exposed
- * functions, and the public types the signatures use. */
-#ifndef YETTY_YCLASSGEN_YCOMPLEX2_SHADERTOY_H
-#define YETTY_YCLASSGEN_YCOMPLEX2_SHADERTOY_H
+/* Object API for regular class(es) `shadertoy` (implementation module: ycomplex2).
+ * Fully generated from the source .c — do not edit. The API does
+ * not encode whether an implementation dispatches in-process or
+ * over RPC; it declares the typed methods, create(), properties,
+ * exposed functions, and the types those signatures use. */
+#ifndef YETTY_YCLASSGEN_API_YCOMPLEX2_SHADERTOY_H
+#define YETTY_YCLASSGEN_API_YCOMPLEX2_SHADERTOY_H
 
 #include <yetty/yclass/class.h>
 #include <yetty/yclass/rpc.h>
@@ -59,15 +59,8 @@ struct yetty_ycore_void_result yetty_ycomplex2_set_source(struct yetty_yclass_ob
 struct yetty_ycore_void_result yetty_ycomplex2_set_wgsl_path(struct yetty_yclass_object *obj,
                                                              const char *path);
 
-typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_source_fn)(
-    struct yetty_yclass_object *, const char *);
-typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_wgsl_path_fn)(
-    struct yetty_yclass_object *, const char *);
-
 struct yetty_yclass_object_ptr_result yetty_ycomplex2_shadertoy_create(
     struct yetty_yclass_ctx *ctx);
-
-struct yetty_ycore_void_result yetty_ycomplex2_register(void);
 
 #ifdef __cplusplus
 }

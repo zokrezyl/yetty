@@ -106,7 +106,9 @@ class YClass:
         """Apply constructor keywords, generically (no per-class logic):
 
         - `set_<key>` method when the class has one. TUPLE values unpack
-          into its arguments (size=(640, 320) -> set_size(640, 320));
+          into its arguments, one nesting level flattened
+          (size=(640, 320) -> set_size(640, 320);
+          view=((a, b), (c, d)) -> set_view(a, b, c, d));
           lists pass through whole (data arrays, e.g. values=[...]).
         - else a generated @property member (inherited ones included).
         - else, for a list/tuple of yclass objects, an `add_<key-singular>`
@@ -116,7 +118,13 @@ class YClass:
             setter = getattr(self, "set_" + key, None)
             if setter is not None:
                 if isinstance(value, tuple):
-                    setter(*value)
+                    flat = []
+                    for element in value:
+                        if isinstance(element, tuple):
+                            flat.extend(element)
+                        else:
+                            flat.append(element)
+                    setter(*flat)
                 else:
                     setter(value)
                 continue

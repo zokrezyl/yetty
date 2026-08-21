@@ -8,13 +8,13 @@ const ASSETS = "demo/assets/yvideo/";
 
 console.log("smpte bars");
 let dlist = new DrawableList();
-dlist.add(new Video(ASSETS + "smpte.h264", { videoW: 320, videoH: 240 }));
+dlist.add(new Video(ASSETS + "smpte.h264", { id: 1 }));
 dlist.dcsEmit();
 dlist.destroy();
 
 console.log("testsrc at 480x270, 25fps");
 dlist = new DrawableList();
-dlist.add(new Video(ASSETS + "testsrc.h264", { videoW: 320, videoH: 240,
-                                               width: 480, height: 360, fps: 25 }));
+dlist.add(new Video(ASSETS + "testsrc.h264", { id: 2, width: 480,
+                                               height: 270, fps: 25 }));
 dlist.dcsEmit();
 dlist.destroy();

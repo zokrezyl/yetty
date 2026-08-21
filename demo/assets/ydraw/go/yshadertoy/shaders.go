@@ -31,5 +31,5 @@ func main() {
 	// Source can come from anywhere — a string works as well as a file.
 	fmt.Println("palette, inline source")
 	source, _ := os.ReadFile(assets + "palette.wgsl")
-	show(ydraw.Shadertoy{WGSL: string(source), Width: 560, Height: 160})
+	show(ydraw.Shadertoy{Source: string(source), Width: 560, Height: 160})
 }
