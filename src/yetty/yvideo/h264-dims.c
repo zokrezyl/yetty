@@ -86,8 +86,7 @@ static size_t h264_rbsp_strip_emulation(const uint8_t *in, size_t in_len, uint8_
  * `width`/`height` from it. Returns 1 on success, 0 if no SPS found
  * or parsing failed. */
 
-int yetty_yvideo_h264_dimensions(const uint8_t *buf, size_t size, uint32_t *out_w,
-                                 uint32_t *out_h)
+int yetty_yvideo_h264_dimensions(const uint8_t *buf, size_t size, uint32_t *out_w, uint32_t *out_h)
 {
     /* Find the SPS NAL: a start code followed by a header byte whose
      * low 5 bits == 7. */

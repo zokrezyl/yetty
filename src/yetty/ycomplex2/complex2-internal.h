@@ -66,8 +66,8 @@ static inline struct yetty_ycore_void_result ycomplex2_append_rendered(
     if (byte_count == 0 || byte_count > raw_size - YETTY_YDRAW_SERIAL_HEADER_BYTES) {
         return YETTY_ERR(yetty_ycore_void, "ycomplex2: bad rendered prim byte count");
     }
-    struct yetty_ydraw_id_result add_r = yetty_ydraw_drawable_list_add_prim(
-        dest, raw + YETTY_YDRAW_SERIAL_HEADER_BYTES, byte_count);
+    struct yetty_ydraw_id_result add_r =
+        yetty_ydraw_drawable_list_add_prim(dest, raw + YETTY_YDRAW_SERIAL_HEADER_BYTES, byte_count);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, add_r, "ycomplex2: append rendered prim");
     return YETTY_OK_VOID();
 }

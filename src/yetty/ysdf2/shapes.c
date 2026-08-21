@@ -29,8 +29,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_circle_ptr, struct yetty_ysdf2_circle *);
 struct yetty_yclass_ptr_result yetty_ysdf2_circle_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_circle_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_circle_pack(struct yetty_yclass_object *obj,
+                                                        struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 circle pack: id");
@@ -40,16 +40,13 @@ static struct yetty_ycore_void_result ysdf2_circle_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 circle pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 circle pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 circle pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_circle_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 circle pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 circle pack: slice");
-    const struct yetty_ysdf2_circle *geometry =
-        (const struct yetty_ysdf2_circle *)self_r.value;
+    const struct yetty_ysdf2_circle *geometry = (const struct yetty_ysdf2_circle *)self_r.value;
 
     uint32_t data[9];
     uint32_t off = 0;
@@ -75,8 +72,7 @@ static struct yetty_ycore_void_result ysdf2_circle_pack(
     return YETTY_OK_VOID();
 }
 
-struct YETTY_ANNOTATE("class@ysdf2:box") YETTY_ANNOTATE("parent@ydrawlist2:shape")
-    yetty_ysdf2_box {
+struct YETTY_ANNOTATE("class@ysdf2:box") YETTY_ANNOTATE("parent@ydrawlist2:shape") yetty_ysdf2_box {
     YETTY_ANNOTATE("property") float center_x;
     YETTY_ANNOTATE("property") float center_y;
     YETTY_ANNOTATE("property") float half_width;
@@ -91,8 +87,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_box_ptr, struct yetty_ysdf2_box *);
 struct yetty_yclass_ptr_result yetty_ysdf2_box_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_box_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_box_pack(struct yetty_yclass_object *obj,
+                                                     struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 box pack: id");
@@ -102,16 +98,13 @@ static struct yetty_ycore_void_result ysdf2_box_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 box pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 box pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 box pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_box_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 box pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 box pack: slice");
-    const struct yetty_ysdf2_box *geometry =
-        (const struct yetty_ysdf2_box *)self_r.value;
+    const struct yetty_ysdf2_box *geometry = (const struct yetty_ysdf2_box *)self_r.value;
 
     uint32_t data[11];
     uint32_t off = 0;
@@ -154,8 +147,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_segment_ptr, struct yetty_ysdf2_segment *);
 struct yetty_yclass_ptr_result yetty_ysdf2_segment_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_segment_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_segment_pack(struct yetty_yclass_object *obj,
+                                                         struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 segment pack: id");
@@ -165,16 +158,13 @@ static struct yetty_ycore_void_result ysdf2_segment_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 segment pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 segment pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 segment pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_segment_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 segment pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 segment pack: slice");
-    const struct yetty_ysdf2_segment *geometry =
-        (const struct yetty_ysdf2_segment *)self_r.value;
+    const struct yetty_ysdf2_segment *geometry = (const struct yetty_ysdf2_segment *)self_r.value;
 
     uint32_t data[10];
     uint32_t off = 0;
@@ -218,8 +208,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_triangle_ptr, struct yetty_ysdf2_triangle *);
 struct yetty_yclass_ptr_result yetty_ysdf2_triangle_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_triangle_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_triangle_pack(struct yetty_yclass_object *obj,
+                                                          struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 triangle pack: id");
@@ -229,16 +219,13 @@ static struct yetty_ycore_void_result ysdf2_triangle_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 triangle pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 triangle pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 triangle pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_triangle_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 triangle pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 triangle pack: slice");
-    const struct yetty_ysdf2_triangle *geometry =
-        (const struct yetty_ysdf2_triangle *)self_r.value;
+    const struct yetty_ysdf2_triangle *geometry = (const struct yetty_ysdf2_triangle *)self_r.value;
 
     uint32_t data[12];
     uint32_t off = 0;
@@ -282,8 +269,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_ellipse_ptr, struct yetty_ysdf2_ellipse *);
 struct yetty_yclass_ptr_result yetty_ysdf2_ellipse_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_ellipse_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_ellipse_pack(struct yetty_yclass_object *obj,
+                                                         struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 ellipse pack: id");
@@ -293,16 +280,13 @@ static struct yetty_ycore_void_result ysdf2_ellipse_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 ellipse pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 ellipse pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 ellipse pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_ellipse_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 ellipse pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 ellipse pack: slice");
-    const struct yetty_ysdf2_ellipse *geometry =
-        (const struct yetty_ysdf2_ellipse *)self_r.value;
+    const struct yetty_ysdf2_ellipse *geometry = (const struct yetty_ysdf2_ellipse *)self_r.value;
 
     uint32_t data[10];
     uint32_t off = 0;
@@ -329,8 +313,7 @@ static struct yetty_ycore_void_result ysdf2_ellipse_pack(
     return YETTY_OK_VOID();
 }
 
-struct YETTY_ANNOTATE("class@ysdf2:arc") YETTY_ANNOTATE("parent@ydrawlist2:shape")
-    yetty_ysdf2_arc {
+struct YETTY_ANNOTATE("class@ysdf2:arc") YETTY_ANNOTATE("parent@ydrawlist2:shape") yetty_ysdf2_arc {
     YETTY_ANNOTATE("property") float center_x;
     YETTY_ANNOTATE("property") float center_y;
     YETTY_ANNOTATE("property") float aperture_x;
@@ -346,8 +329,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_arc_ptr, struct yetty_ysdf2_arc *);
 struct yetty_yclass_ptr_result yetty_ysdf2_arc_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_arc_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_arc_pack(struct yetty_yclass_object *obj,
+                                                     struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 arc pack: id");
@@ -357,16 +340,13 @@ static struct yetty_ycore_void_result ysdf2_arc_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 arc pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 arc pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 arc pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_arc_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 arc pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 arc pack: slice");
-    const struct yetty_ysdf2_arc *geometry =
-        (const struct yetty_ysdf2_arc *)self_r.value;
+    const struct yetty_ysdf2_arc *geometry = (const struct yetty_ysdf2_arc *)self_r.value;
 
     uint32_t data[12];
     uint32_t off = 0;
@@ -414,8 +394,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_rounded_box_ptr, struct yetty_ysdf2_rounded_bo
 struct yetty_yclass_ptr_result yetty_ysdf2_rounded_box_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_rounded_box_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_rounded_box_pack(struct yetty_yclass_object *obj,
+                                                             struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 rounded_box pack: id");
@@ -425,13 +405,11 @@ static struct yetty_ycore_void_result ysdf2_rounded_box_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 rounded_box pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 rounded_box pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 rounded_box pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_rounded_box_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 rounded_box pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 rounded_box pack: slice");
     const struct yetty_ysdf2_rounded_box *geometry =
         (const struct yetty_ysdf2_rounded_box *)self_r.value;
@@ -480,8 +458,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_rhombus_ptr, struct yetty_ysdf2_rhombus *);
 struct yetty_yclass_ptr_result yetty_ysdf2_rhombus_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_rhombus_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_rhombus_pack(struct yetty_yclass_object *obj,
+                                                         struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 rhombus pack: id");
@@ -491,16 +469,13 @@ static struct yetty_ycore_void_result ysdf2_rhombus_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 rhombus pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 rhombus pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 rhombus pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_rhombus_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 rhombus pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 rhombus pack: slice");
-    const struct yetty_ysdf2_rhombus *geometry =
-        (const struct yetty_ysdf2_rhombus *)self_r.value;
+    const struct yetty_ysdf2_rhombus *geometry = (const struct yetty_ysdf2_rhombus *)self_r.value;
 
     uint32_t data[10];
     uint32_t off = 0;
@@ -541,8 +516,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_pentagon_ptr, struct yetty_ysdf2_pentagon *);
 struct yetty_yclass_ptr_result yetty_ysdf2_pentagon_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_pentagon_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_pentagon_pack(struct yetty_yclass_object *obj,
+                                                          struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 pentagon pack: id");
@@ -552,16 +527,13 @@ static struct yetty_ycore_void_result ysdf2_pentagon_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 pentagon pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 pentagon pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 pentagon pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_pentagon_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 pentagon pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 pentagon pack: slice");
-    const struct yetty_ysdf2_pentagon *geometry =
-        (const struct yetty_ysdf2_pentagon *)self_r.value;
+    const struct yetty_ysdf2_pentagon *geometry = (const struct yetty_ysdf2_pentagon *)self_r.value;
 
     uint32_t data[9];
     uint32_t off = 0;
@@ -601,8 +573,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_hexagon_ptr, struct yetty_ysdf2_hexagon *);
 struct yetty_yclass_ptr_result yetty_ysdf2_hexagon_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_hexagon_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_hexagon_pack(struct yetty_yclass_object *obj,
+                                                         struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 hexagon pack: id");
@@ -612,16 +584,13 @@ static struct yetty_ycore_void_result ysdf2_hexagon_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 hexagon pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 hexagon pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 hexagon pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_hexagon_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 hexagon pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 hexagon pack: slice");
-    const struct yetty_ysdf2_hexagon *geometry =
-        (const struct yetty_ysdf2_hexagon *)self_r.value;
+    const struct yetty_ysdf2_hexagon *geometry = (const struct yetty_ysdf2_hexagon *)self_r.value;
 
     uint32_t data[9];
     uint32_t off = 0;
@@ -663,8 +632,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_star_ptr, struct yetty_ysdf2_star *);
 struct yetty_yclass_ptr_result yetty_ysdf2_star_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_star_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_star_pack(struct yetty_yclass_object *obj,
+                                                      struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 star pack: id");
@@ -674,16 +643,13 @@ static struct yetty_ycore_void_result ysdf2_star_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 star pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 star pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 star pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_star_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 star pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 star pack: slice");
-    const struct yetty_ysdf2_star *geometry =
-        (const struct yetty_ysdf2_star *)self_r.value;
+    const struct yetty_ysdf2_star *geometry = (const struct yetty_ysdf2_star *)self_r.value;
 
     uint32_t data[11];
     uint32_t off = 0;
@@ -711,8 +677,7 @@ static struct yetty_ycore_void_result ysdf2_star_pack(
     return YETTY_OK_VOID();
 }
 
-struct YETTY_ANNOTATE("class@ysdf2:pie") YETTY_ANNOTATE("parent@ydrawlist2:shape")
-    yetty_ysdf2_pie {
+struct YETTY_ANNOTATE("class@ysdf2:pie") YETTY_ANNOTATE("parent@ydrawlist2:shape") yetty_ysdf2_pie {
     YETTY_ANNOTATE("property") float center_x;
     YETTY_ANNOTATE("property") float center_y;
     YETTY_ANNOTATE("property") float aperture_x;
@@ -727,8 +692,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_pie_ptr, struct yetty_ysdf2_pie *);
 struct yetty_yclass_ptr_result yetty_ysdf2_pie_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_pie_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_pie_pack(struct yetty_yclass_object *obj,
+                                                     struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 pie pack: id");
@@ -738,16 +703,13 @@ static struct yetty_ycore_void_result ysdf2_pie_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 pie pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 pie pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 pie pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_pie_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 pie pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 pie pack: slice");
-    const struct yetty_ysdf2_pie *geometry =
-        (const struct yetty_ysdf2_pie *)self_r.value;
+    const struct yetty_ysdf2_pie *geometry = (const struct yetty_ysdf2_pie *)self_r.value;
 
     uint32_t data[11];
     uint32_t off = 0;
@@ -792,8 +754,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_ring_ptr, struct yetty_ysdf2_ring *);
 struct yetty_yclass_ptr_result yetty_ysdf2_ring_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_ring_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_ring_pack(struct yetty_yclass_object *obj,
+                                                      struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 ring pack: id");
@@ -803,16 +765,13 @@ static struct yetty_ycore_void_result ysdf2_ring_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 ring pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 ring pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 ring pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_ring_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 ring pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 ring pack: slice");
-    const struct yetty_ysdf2_ring *geometry =
-        (const struct yetty_ysdf2_ring *)self_r.value;
+    const struct yetty_ysdf2_ring *geometry = (const struct yetty_ysdf2_ring *)self_r.value;
 
     uint32_t data[12];
     uint32_t off = 0;
@@ -855,8 +814,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_heart_ptr, struct yetty_ysdf2_heart *);
 struct yetty_yclass_ptr_result yetty_ysdf2_heart_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_heart_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_heart_pack(struct yetty_yclass_object *obj,
+                                                       struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 heart pack: id");
@@ -866,16 +825,13 @@ static struct yetty_ycore_void_result ysdf2_heart_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 heart pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 heart pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 heart pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_heart_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 heart pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 heart pack: slice");
-    const struct yetty_ysdf2_heart *geometry =
-        (const struct yetty_ysdf2_heart *)self_r.value;
+    const struct yetty_ysdf2_heart *geometry = (const struct yetty_ysdf2_heart *)self_r.value;
 
     uint32_t data[9];
     uint32_t off = 0;
@@ -917,8 +873,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_cross_ptr, struct yetty_ysdf2_cross *);
 struct yetty_yclass_ptr_result yetty_ysdf2_cross_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_cross_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_cross_pack(struct yetty_yclass_object *obj,
+                                                       struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 cross pack: id");
@@ -928,16 +884,13 @@ static struct yetty_ycore_void_result ysdf2_cross_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 cross pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 cross pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 cross pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_cross_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 cross pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 cross pack: slice");
-    const struct yetty_ysdf2_cross *geometry =
-        (const struct yetty_ysdf2_cross *)self_r.value;
+    const struct yetty_ysdf2_cross *geometry = (const struct yetty_ysdf2_cross *)self_r.value;
 
     uint32_t data[11];
     uint32_t off = 0;
@@ -980,8 +933,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_rounded_x_ptr, struct yetty_ysdf2_rounded_x *)
 struct yetty_yclass_ptr_result yetty_ysdf2_rounded_x_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_rounded_x_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_rounded_x_pack(struct yetty_yclass_object *obj,
+                                                           struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 rounded_x pack: id");
@@ -991,13 +944,11 @@ static struct yetty_ycore_void_result ysdf2_rounded_x_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 rounded_x pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 rounded_x pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 rounded_x pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_rounded_x_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 rounded_x pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 rounded_x pack: slice");
     const struct yetty_ysdf2_rounded_x *geometry =
         (const struct yetty_ysdf2_rounded_x *)self_r.value;
@@ -1043,8 +994,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_capsule_ptr, struct yetty_ysdf2_capsule *);
 struct yetty_yclass_ptr_result yetty_ysdf2_capsule_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_capsule_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_capsule_pack(struct yetty_yclass_object *obj,
+                                                         struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 capsule pack: id");
@@ -1054,16 +1005,13 @@ static struct yetty_ycore_void_result ysdf2_capsule_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 capsule pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 capsule pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 capsule pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_capsule_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 capsule pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 capsule pack: slice");
-    const struct yetty_ysdf2_capsule *geometry =
-        (const struct yetty_ysdf2_capsule *)self_r.value;
+    const struct yetty_ysdf2_capsule *geometry = (const struct yetty_ysdf2_capsule *)self_r.value;
 
     uint32_t data[11];
     uint32_t off = 0;
@@ -1107,8 +1055,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_moon_ptr, struct yetty_ysdf2_moon *);
 struct yetty_yclass_ptr_result yetty_ysdf2_moon_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_moon_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_moon_pack(struct yetty_yclass_object *obj,
+                                                      struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 moon pack: id");
@@ -1118,16 +1066,13 @@ static struct yetty_ycore_void_result ysdf2_moon_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 moon pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 moon pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 moon pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_moon_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 moon pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 moon pack: slice");
-    const struct yetty_ysdf2_moon *geometry =
-        (const struct yetty_ysdf2_moon *)self_r.value;
+    const struct yetty_ysdf2_moon *geometry = (const struct yetty_ysdf2_moon *)self_r.value;
 
     uint32_t data[11];
     uint32_t off = 0;
@@ -1155,8 +1100,7 @@ static struct yetty_ycore_void_result ysdf2_moon_pack(
     return YETTY_OK_VOID();
 }
 
-struct YETTY_ANNOTATE("class@ysdf2:egg") YETTY_ANNOTATE("parent@ydrawlist2:shape")
-    yetty_ysdf2_egg {
+struct YETTY_ANNOTATE("class@ysdf2:egg") YETTY_ANNOTATE("parent@ydrawlist2:shape") yetty_ysdf2_egg {
     YETTY_ANNOTATE("property") float center_x;
     YETTY_ANNOTATE("property") float center_y;
     YETTY_ANNOTATE("property") float radius_outer;
@@ -1170,8 +1114,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_egg_ptr, struct yetty_ysdf2_egg *);
 struct yetty_yclass_ptr_result yetty_ysdf2_egg_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_egg_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_egg_pack(struct yetty_yclass_object *obj,
+                                                     struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 egg pack: id");
@@ -1181,16 +1125,13 @@ static struct yetty_ycore_void_result ysdf2_egg_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 egg pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 egg pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 egg pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_egg_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 egg pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 egg pack: slice");
-    const struct yetty_ysdf2_egg *geometry =
-        (const struct yetty_ysdf2_egg *)self_r.value;
+    const struct yetty_ysdf2_egg *geometry = (const struct yetty_ysdf2_egg *)self_r.value;
 
     uint32_t data[10];
     uint32_t off = 0;
@@ -1231,8 +1172,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_octogon_ptr, struct yetty_ysdf2_octogon *);
 struct yetty_yclass_ptr_result yetty_ysdf2_octogon_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_octogon_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_octogon_pack(struct yetty_yclass_object *obj,
+                                                         struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 octogon pack: id");
@@ -1242,16 +1183,13 @@ static struct yetty_ycore_void_result ysdf2_octogon_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 octogon pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 octogon pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 octogon pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_octogon_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 octogon pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 octogon pack: slice");
-    const struct yetty_ysdf2_octogon *geometry =
-        (const struct yetty_ysdf2_octogon *)self_r.value;
+    const struct yetty_ysdf2_octogon *geometry = (const struct yetty_ysdf2_octogon *)self_r.value;
 
     uint32_t data[9];
     uint32_t off = 0;
@@ -1291,8 +1229,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_hexagram_ptr, struct yetty_ysdf2_hexagram *);
 struct yetty_yclass_ptr_result yetty_ysdf2_hexagram_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_hexagram_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_hexagram_pack(struct yetty_yclass_object *obj,
+                                                          struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 hexagram pack: id");
@@ -1302,16 +1240,13 @@ static struct yetty_ycore_void_result ysdf2_hexagram_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 hexagram pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 hexagram pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 hexagram pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_hexagram_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 hexagram pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 hexagram pack: slice");
-    const struct yetty_ysdf2_hexagram *geometry =
-        (const struct yetty_ysdf2_hexagram *)self_r.value;
+    const struct yetty_ysdf2_hexagram *geometry = (const struct yetty_ysdf2_hexagram *)self_r.value;
 
     uint32_t data[9];
     uint32_t off = 0;
@@ -1351,8 +1286,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_pentagram_ptr, struct yetty_ysdf2_pentagram *)
 struct yetty_yclass_ptr_result yetty_ysdf2_pentagram_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_pentagram_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_pentagram_pack(struct yetty_yclass_object *obj,
+                                                           struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 pentagram pack: id");
@@ -1362,13 +1297,11 @@ static struct yetty_ycore_void_result ysdf2_pentagram_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 pentagram pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 pentagram pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 pentagram pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_pentagram_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 pentagram pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 pentagram pack: slice");
     const struct yetty_ysdf2_pentagram *geometry =
         (const struct yetty_ysdf2_pentagram *)self_r.value;
@@ -1412,7 +1345,8 @@ struct YETTY_ANNOTATE("class@ysdf2:linear_gradient_box") YETTY_ANNOTATE("parent@
     YETTY_ANNOTATE("property") uint32_t color1;
 };
 
-YETTY_YRESULT_DECLARE(yetty_ysdf2_linear_gradient_box_ptr, struct yetty_ysdf2_linear_gradient_box *);
+YETTY_YRESULT_DECLARE(yetty_ysdf2_linear_gradient_box_ptr,
+                      struct yetty_ysdf2_linear_gradient_box *);
 /* Keep the impl glue's guarded re-emission out of this TU (C23 tag-compat). */
 #define YETTY_YCLASSGEN_TYPE_YETTY_YSDF2_LINEAR_GRADIENT_BOX_PTR_RESULT
 
@@ -1430,13 +1364,12 @@ static struct yetty_ycore_void_result ysdf2_linear_gradient_box_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 linear_gradient_box pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 linear_gradient_box pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 linear_gradient_box pack: stroke_width");
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r,
+                        "ysdf2 linear_gradient_box pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_linear_gradient_box_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 linear_gradient_box pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 linear_gradient_box pack: slice");
     const struct yetty_ysdf2_linear_gradient_box *geometry =
         (const struct yetty_ysdf2_linear_gradient_box *)self_r.value;
@@ -1487,7 +1420,8 @@ struct YETTY_ANNOTATE("class@ysdf2:radial_gradient_box") YETTY_ANNOTATE("parent@
     YETTY_ANNOTATE("property") uint32_t color_outer;
 };
 
-YETTY_YRESULT_DECLARE(yetty_ysdf2_radial_gradient_box_ptr, struct yetty_ysdf2_radial_gradient_box *);
+YETTY_YRESULT_DECLARE(yetty_ysdf2_radial_gradient_box_ptr,
+                      struct yetty_ysdf2_radial_gradient_box *);
 /* Keep the impl glue's guarded re-emission out of this TU (C23 tag-compat). */
 #define YETTY_YCLASSGEN_TYPE_YETTY_YSDF2_RADIAL_GRADIENT_BOX_PTR_RESULT
 
@@ -1505,13 +1439,12 @@ static struct yetty_ycore_void_result ysdf2_radial_gradient_box_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 radial_gradient_box pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 radial_gradient_box pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 radial_gradient_box pack: stroke_width");
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r,
+                        "ysdf2 radial_gradient_box pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_radial_gradient_box_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 radial_gradient_box pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 radial_gradient_box pack: slice");
     const struct yetty_ysdf2_radial_gradient_box *geometry =
         (const struct yetty_ysdf2_radial_gradient_box *)self_r.value;
@@ -1562,8 +1495,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_sphere_3d_ptr, struct yetty_ysdf2_sphere_3d *)
 struct yetty_yclass_ptr_result yetty_ysdf2_sphere_3d_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_sphere_3d_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_sphere_3d_pack(struct yetty_yclass_object *obj,
+                                                           struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 sphere_3d pack: id");
@@ -1573,13 +1506,11 @@ static struct yetty_ycore_void_result ysdf2_sphere_3d_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 sphere_3d pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 sphere_3d pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 sphere_3d pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_sphere_3d_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 sphere_3d pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 sphere_3d pack: slice");
     const struct yetty_ysdf2_sphere_3d *geometry =
         (const struct yetty_ysdf2_sphere_3d *)self_r.value;
@@ -1626,8 +1557,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_box_3d_ptr, struct yetty_ysdf2_box_3d *);
 struct yetty_yclass_ptr_result yetty_ysdf2_box_3d_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_box_3d_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_box_3d_pack(struct yetty_yclass_object *obj,
+                                                        struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 box_3d pack: id");
@@ -1637,16 +1568,13 @@ static struct yetty_ycore_void_result ysdf2_box_3d_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 box_3d pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 box_3d pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 box_3d pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_box_3d_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 box_3d pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 box_3d pack: slice");
-    const struct yetty_ysdf2_box_3d *geometry =
-        (const struct yetty_ysdf2_box_3d *)self_r.value;
+    const struct yetty_ysdf2_box_3d *geometry = (const struct yetty_ysdf2_box_3d *)self_r.value;
 
     uint32_t data[12];
     uint32_t off = 0;
@@ -1691,8 +1619,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_torus_3d_ptr, struct yetty_ysdf2_torus_3d *);
 struct yetty_yclass_ptr_result yetty_ysdf2_torus_3d_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_torus_3d_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_torus_3d_pack(struct yetty_yclass_object *obj,
+                                                          struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 torus_3d pack: id");
@@ -1702,16 +1630,13 @@ static struct yetty_ycore_void_result ysdf2_torus_3d_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 torus_3d pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 torus_3d pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 torus_3d pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_torus_3d_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 torus_3d pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 torus_3d pack: slice");
-    const struct yetty_ysdf2_torus_3d *geometry =
-        (const struct yetty_ysdf2_torus_3d *)self_r.value;
+    const struct yetty_ysdf2_torus_3d *geometry = (const struct yetty_ysdf2_torus_3d *)self_r.value;
 
     uint32_t data[11];
     uint32_t off = 0;
@@ -1755,8 +1680,8 @@ YETTY_YRESULT_DECLARE(yetty_ysdf2_cylinder_3d_ptr, struct yetty_ysdf2_cylinder_3
 struct yetty_yclass_ptr_result yetty_ysdf2_cylinder_3d_class_get(void);
 
 YETTY_ANNOTATE("override@ydrawlist2:drawable:pack")
-static struct yetty_ycore_void_result ysdf2_cylinder_3d_pack(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *list)
+static struct yetty_ycore_void_result ysdf2_cylinder_3d_pack(struct yetty_yclass_object *obj,
+                                                             struct yetty_ydraw_drawable_list *list)
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 cylinder_3d pack: id");
@@ -1766,13 +1691,11 @@ static struct yetty_ycore_void_result ysdf2_cylinder_3d_pack(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 cylinder_3d pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_r, "ysdf2 cylinder_3d pack: stroke");
-    struct float_result stroke_width_r =
-        yetty_ydrawlist2_shape_stroke_width_get(obj);
+    struct float_result stroke_width_r = yetty_ydrawlist2_shape_stroke_width_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stroke_width_r, "ysdf2 cylinder_3d pack: stroke_width");
     struct yetty_yclass_ptr_result class_r = yetty_ysdf2_cylinder_3d_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_r, "ysdf2 cylinder_3d pack: class");
-    struct yetty_yclass_void_ptr_result self_r =
-        yetty_yclass_object_data(obj, class_r.value);
+    struct yetty_yclass_void_ptr_result self_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self_r, "ysdf2 cylinder_3d pack: slice");
     const struct yetty_ysdf2_cylinder_3d *geometry =
         (const struct yetty_ysdf2_cylinder_3d *)self_r.value;

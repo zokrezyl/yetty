@@ -27,8 +27,7 @@ struct YETTY_ANNOTATE("class@ydrawlist2:drawable_list") yetty_ydrawlist2_drawabl
     struct yetty_ydraw_drawable_list *list; /* owned; lazy-created on first use */
 };
 
-YETTY_YRESULT_DECLARE(yetty_ydrawlist2_drawable_list_ptr,
-                      struct yetty_ydrawlist2_drawable_list *);
+YETTY_YRESULT_DECLARE(yetty_ydrawlist2_drawable_list_ptr, struct yetty_ydrawlist2_drawable_list *);
 /* Keep the impl glue's guarded re-emission out of this TU (C23 tag-compat
  * vs the annotate-attributed class tag). */
 #define YETTY_YCLASSGEN_TYPE_YETTY_YDRAWLIST2_DRAWABLE_LIST_PTR_RESULT
@@ -58,8 +57,7 @@ static struct yetty_ydraw_drawable_list_result list_ensure(
     if (!wrapper->list) {
         struct yetty_ydraw_drawable_list_result create_r =
             yetty_ydraw_drawable_list_config_buffer_create(NULL);
-        YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, create_r,
-                            "ydrawlist2: wrapped list create");
+        YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, create_r, "ydrawlist2: wrapped list create");
         wrapper->list = create_r.value;
     }
     return YETTY_OK(yetty_ydraw_drawable_list, wrapper->list);

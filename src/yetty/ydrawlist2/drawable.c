@@ -55,7 +55,6 @@ struct YETTY_ANNOTATE("class@ydrawlist2:drawable") yetty_ydrawlist2_drawable {
 YETTY_YRESULT_DECLARE(yetty_ydrawlist2_drawable_ptr, struct yetty_ydrawlist2_drawable *);
 #define YETTY_YCLASSGEN_TYPE_YETTY_YDRAWLIST2_DRAWABLE_PTR_RESULT
 
-
 /*=============================================================================
  * drawable slots
  *===========================================================================*/
@@ -226,9 +225,9 @@ static struct yetty_ycore_void_result text_pack(struct yetty_yclass_object *obj,
         .size = text->body_len,
         .capacity = text->body_len,
     };
-    struct yetty_ycore_void_result pack_r = yetty_ydraw_drawable_list_add_text(
-        list, text->x, text->y, &body, text->font_size, text->color, text->layer, text->font_id,
-        text->rotation);
+    struct yetty_ycore_void_result pack_r =
+        yetty_ydraw_drawable_list_add_text(list, text->x, text->y, &body, text->font_size,
+                                           text->color, text->layer, text->font_id, text->rotation);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pack_r, "ydrawlist2 text pack: add_text");
     return YETTY_OK_VOID();
 }

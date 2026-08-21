@@ -252,9 +252,8 @@ struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font_named(
  * semantics); ttf_len > 0 embeds the TTF bytes (add_font semantics). Text
  * spans reference the record by the same id. */
 struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_font_with_id(
-    struct yetty_ydraw_drawable_list *buf, int32_t font_id,
-    const char *name YETTY_ANNOT_CSTRING, const uint8_t *ttf_data YETTY_ANNOT_ARRAY(ttf_len),
-    size_t ttf_len);
+    struct yetty_ydraw_drawable_list *buf, int32_t font_id, const char *name YETTY_ANNOT_CSTRING,
+    const uint8_t *ttf_data YETTY_ANNOT_ARRAY(ttf_len), size_t ttf_len);
 
 /* Pack a TEXT_DRAWABLE_LIST primitive (text-drawable-list.h). font_id must match a
  * previously-added FONT prim's id, or be -1 to use the canvas default. */

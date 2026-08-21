@@ -875,8 +875,7 @@ struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_font_with_id(
         return YETTY_ERR(yetty_ycore_void, "alloc failed");
     }
 
-    yetty_ydraw_font_resource_write(staging, font_id, name, name_len, ttf_data,
-                                    (uint32_t)ttf_len);
+    yetty_ydraw_font_resource_write(staging, font_id, name, name_len, ttf_data, (uint32_t)ttf_len);
 
     struct yetty_ydraw_id_result r =
         yetty_ydraw_drawable_list_add_prim(buf, staging, drawable_size);
