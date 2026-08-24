@@ -217,8 +217,8 @@ struct yetty_ydraw_drawable_list_result yetty_yvideo_render_from_mp4_bytes(
                          "yvideo_mp4: demux failed (no video track or unreadable container)");
     }
     uint32_t video_w = 0, video_h = 0;
-    if (!yetty_yvideo_h264_dimensions(annexb, annexb_len, &video_w, &video_h) ||
-        video_w == 0 || video_h == 0) {
+    if (!yetty_yvideo_h264_dimensions(annexb, annexb_len, &video_w, &video_h) || video_w == 0 ||
+        video_h == 0) {
         free(annexb);
         return YETTY_ERR(yetty_ydraw_drawable_list, "yvideo_mp4: SPS dimensions extraction failed");
     }

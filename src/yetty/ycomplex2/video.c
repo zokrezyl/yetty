@@ -96,10 +96,12 @@ static struct yetty_ycore_void_result video_pack(struct yetty_yclass_object *obj
                              "ycomplex2 video pack: no SPS in stream — set video_w/video_h");
         }
         /* A partial override survives: only unset dims come from the SPS. */
-        if (video_w == 0)
+        if (video_w == 0) {
             video_w = sps_w;
-        if (video_h == 0)
+        }
+        if (video_h == 0) {
             video_h = sps_h;
+        }
     }
     struct yetty_yvideo_render_config config = {
         .bounds_x = video->x,
