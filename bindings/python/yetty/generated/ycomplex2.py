@@ -25,6 +25,7 @@ class Image(_ydrawlist2.Drawable):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         if path is not None:
             self.set_path(path)
         self._apply_kwargs(kwargs)
@@ -134,6 +135,7 @@ class Mesh(_ydrawlist2.Drawable):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         if glb is not None:
             self.set_glb(glb)
         self._apply_kwargs(kwargs)
@@ -319,6 +321,7 @@ class Shadertoy(_ydrawlist2.Drawable):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         if wgsl_path is not None:
             self.set_wgsl_path(wgsl_path)
         self._apply_kwargs(kwargs)
@@ -437,6 +440,7 @@ class Video(_ydrawlist2.Drawable):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         if h264 is not None:
             self.set_h264(h264)
         self._apply_kwargs(kwargs)
@@ -604,4 +608,3 @@ class Video(_ydrawlist2.Drawable):
         res = _rt.result_from_c(_fn(self._handle, value))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
-

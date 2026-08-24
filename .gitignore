@@ -35,6 +35,12 @@ src/tinyemu/Untitled
 node_modules/
 package-lock.json
 package.json
+# The typescript FFI binding + its demo tree are real npm packages: their
+# manifests and lockfiles are source, not stray tool droppings.
+!/bindings/typescript/package.json
+!/bindings/typescript/package-lock.json
+!/demo/ffi/ydraw/typescript/package.json
+!/demo/ffi/ydraw/typescript/package-lock.json
 
 # Re-include the alpine-extended-disk fs/ overlay tree. The `*.d` rule
 # above is meant to catch Make/Ninja dependency files (foo.c.d), but

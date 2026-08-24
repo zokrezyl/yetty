@@ -611,4 +611,3 @@ def vtermgrid_render(obj: Any, target: Any, rect: _t.yetty_ycore_rectangle) -> _
     _fn = _rt.cfn("yetty_yscene_vtermgrid_render", _t.yetty_ycore_void_result, [c_void_p, c_void_p, _t.yetty_ycore_rectangle])
     res = _fn(_rt.handle(obj), _rt.handle(target), rect)
     return _rt.result_from_c(res)
-

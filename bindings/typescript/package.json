@@ -1,0 +1,17 @@
+{
+  "name": "@yetty/ydraw",
+  "version": "0.1.0",
+  "description": "yetty ydraw client interface (draw-list FFI bindings)",
+  "type": "module",
+  "main": "ydraw.mjs",
+  "types": "ydraw.d.ts",
+  "exports": {
+    ".": {
+      "types": "./ydraw.d.ts",
+      "default": "./ydraw.mjs"
+    }
+  },
+  "dependencies": {
+    "koffi": "^2.9.0"
+  }
+}

@@ -418,4 +418,3 @@ class Notebook(_rt.YClass):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
-

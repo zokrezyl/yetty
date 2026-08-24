@@ -61,4 +61,3 @@ def create_app(ctx: Any) -> _rt.Result[Any]:
     _fn = _rt.cfn("yetty_yapp_create_app", _t.yetty_yclass_object_ptr_result, [c_void_p])
     res = _fn(_rt.handle(ctx))
     return _rt.result_from_c(res)
-

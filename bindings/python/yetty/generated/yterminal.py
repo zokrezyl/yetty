@@ -38,4 +38,3 @@ class Terminal(_ytermsink.Sink):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
-

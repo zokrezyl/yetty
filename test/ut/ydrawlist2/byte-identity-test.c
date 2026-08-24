@@ -13,11 +13,9 @@
  *   - drawable_list add()/destroy() drive the same pack path
  */
 
-#include <yetty/api/ydrawlist2/drawable.h>
-#include <yetty/api/ydrawlist2/font.h>
+#include <yetty/api/ydrawlist2/drawable.h> /* drawable + font + text classes */
 #include <yetty/api/ydrawlist2/list.h>
 #include <yetty/api/ydrawlist2/shape.h>
-#include <yetty/api/ydrawlist2/text.h>
 #include <yetty/api/ysdf2/shapes.h>
 #include <yetty/ydraw-list/drawable-list.h>
 #include <yetty/ydraw-list/font-resource.h>

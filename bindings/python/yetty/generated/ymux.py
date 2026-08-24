@@ -1201,4 +1201,3 @@ def session_attachment(obj: Any, attachment_id: int) -> _rt.Result[Any]:
     _fn = _rt.cfn("yetty_ymux_session_attachment", _t.yetty_yclass_object_ptr_result, [c_void_p, c_uint32])
     res = _fn(_rt.handle(obj), attachment_id)
     return _rt.result_from_c(res)
-

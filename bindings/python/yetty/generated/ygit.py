@@ -112,4 +112,3 @@ def repo_destroy(obj: Any) -> _rt.Result[None]:
     _fn = _rt.cfn("yetty_ygit_repo_destroy", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
-

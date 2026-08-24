@@ -53,4 +53,3 @@ def register_factory(registry: Any) -> _rt.Result[None]:
     _fn = _rt.cfn("yetty_yshadertoy_register_factory", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(registry))
     return _rt.result_from_c(res)
-

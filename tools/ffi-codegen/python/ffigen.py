@@ -37,6 +37,16 @@ REPO = pathlib.Path(__file__).resolve().parents[3]
 # are keyed by DOMAIN, not directory name — the domain is the symbol prefix.
 SRC_ROOTS = [REPO / "src" / "yetty", REPO / "src" / "api"]
 
+# The ydraw client-interface domains whose classes are VALUE-LIKE: created,
+# packed by a copying add()/adder, never handed to an ownership-taking C
+# API. Only these get automatic GC finalization (_owned); everywhere else a
+# wrapper may be the last reference to an object some C-side container has
+# taken ownership of (e.g. yrich document_add_element), where a finalizer
+# would free it behind the container's back. The model does not yet carry
+# per-argument ownership annotations — until it does, finalization stays
+# scoped to this list and other modules use explicit destroy().
+FINALIZED_DOMAINS = {"ydrawlist2", "ysdf2", "api_yplot", "ycomplex2"}
+
 
 # ---------------------------------------------------------------------------
 # Model loading
@@ -332,7 +342,7 @@ def py_emit_types(types: list[dict], out_path: pathlib.Path):
     for s in structs:
         parts.append(py_emit_struct(s, type_names))
         parts.append("")
-    out_path.write_text("\n".join(parts) + "\n")
+    out_path.write_text("\n".join(parts).rstrip("\n") + "\n")
 
 
 def py_method_pyname(slot: str) -> str:
@@ -557,6 +567,8 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
         parts.append("        if res.error is not None:")
         parts.append("            raise _rt.YettyError(res.error.message)")
         parts.append("        _rt.YClass.__init__(self, res.value)")
+        if cls["domain"] in FINALIZED_DOMAINS:
+            parts.append("        self._owned = True")
         if primary_setter is not None:
             parts.append(f"        if {primary_setter} is not None:")
             parts.append(f"            self.set_{primary_setter}({primary_setter})")
@@ -586,10 +598,19 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
             ret_ann = py_result_value_annot(m["return_type"])
             sig = f"self, {params}" if params else "self"
             sym = f"yetty_{m['domain']}_{slot}"
+            destructive = slot == "destroy"
             parts.append(f"    def {py_method_pyname(slot)}({sig}) -> {ret_ann}:")
-            parts.append(f'        """Call `{sym}`; raises _rt.YettyError on failure."""')
-            parts.append("        if self._handle is None:")
-            parts.append('            raise _rt.YettyError("uninitialized yclass handle")')
+            if destructive:
+                # The destroy slot consumes the handle: invalidate the wrapper
+                # before surfacing any error, and make repeat calls no-ops
+                # (matching the runtime fallback destroy).
+                parts.append(f'        """Call `{sym}`; idempotent; raises _rt.YettyError on failure."""')
+                parts.append("        if self._handle is None:")
+                parts.append("            return None")
+            else:
+                parts.append(f'        """Call `{sym}`; raises _rt.YettyError on failure."""')
+                parts.append("        if self._handle is None:")
+                parts.append('            raise _rt.YettyError("uninitialized yclass handle")')
             parts.append(
                 f'        _fn = _rt.cfn("{sym}", _t.{classify(m["return_type"])[1]}, {argtypes_expr(args)})')
 
@@ -614,6 +635,8 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
             unwrap = f"_rt.result_from_c(_fn({', '.join(passed)})"
             unwrap += f", {converter})" if converter else ")"
             parts.append(f"        res = {unwrap}")
+            if destructive:
+                parts.append("        self._handle = None")
             parts.append("        if res.error is not None:")
             parts.append("            raise _rt.YettyError(res.error.message)")
             parts.append("        return res.value")
@@ -721,7 +744,7 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
             parts.append(f"    return {call}")
         parts.append("")
 
-    out_path.write_text("\n".join(parts) + "\n")
+    out_path.write_text("\n".join(parts).rstrip("\n") + "\n")
 
 # ---------------------------------------------------------------------------
 # Connection facade (#439). The reactor-seam contract every binding rides —

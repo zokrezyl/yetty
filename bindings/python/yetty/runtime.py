@@ -81,11 +81,15 @@ def as_buffer(value):
 class YClass:
     """Base class for generated yclass object wrappers."""
 
-    __slots__ = ("_handle", "_error")
+    __slots__ = ("_handle", "_error", "_owned")
 
     def __init__(self, _handle, _error: Error | None = None):
         self._handle = _handle
         self._error = _error
+        # Created-by-us wrappers set _owned (in the generated create path);
+        # borrowed handles (from_handle, RPC proxies) stay unowned and are
+        # never finalized here.
+        self._owned = False
 
     @property
     def handle(self):
@@ -156,6 +160,21 @@ class YClass:
         self._handle = None
         if res.error is not None:
             raise YettyError(res.error.message)
+
+    def __del__(self):
+        # Reclaim owned native objects when the wrapper is collected, so
+        # temporaries like dlist.add(Circle(...)) do not accumulate in
+        # long-running hosts. destroy() is idempotent (class-specific
+        # destroys invalidate the handle too), and interpreter-shutdown
+        # teardown races are absorbed.
+        if not getattr(self, "_owned", False):
+            return
+        if getattr(self, "_handle", None) is None:
+            return
+        try:
+            self.destroy()
+        except Exception:
+            pass
 
     @classmethod
     def from_handle(cls, handle):
@@ -262,6 +281,16 @@ def cfn(name: str, restype, argtypes: list):
     fn.restype = restype
     fn.argtypes = argtypes
     return fn
+
+
+def has_symbol(name: str) -> bool:
+    """Whether the loaded FFI library exports `name`. Used to gate
+    feature-dependent classes (e.g. Video) on the actual build."""
+    try:
+        getattr(_require(), name)
+        return True
+    except (AttributeError, OSError, RuntimeError):
+        return False
 
 
 def cstr(value):

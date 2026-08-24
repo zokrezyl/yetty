@@ -29,4 +29,3 @@ class App(_yapp.App):
     @classmethod
     def create(cls, **kwargs: Any) -> 'App':
         return cls(**kwargs)
-

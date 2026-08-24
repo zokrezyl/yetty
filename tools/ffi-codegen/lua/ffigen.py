@@ -26,29 +26,59 @@ Usage:
 from __future__ import annotations
 
 import pathlib
+import re
 import sys
 
 import yaml
 
 REPO = pathlib.Path(__file__).resolve().parents[3]
-SRC = REPO / "src" / "yetty"
+# model.yaml lives under the implementation tree (src/yetty/<module>/) and the
+# public-API facade tree (src/api/<group>/); models are keyed by DOMAIN (the
+# yetty_<domain>_* symbol prefix), mirroring the python generator.
+SRC_ROOTS = [REPO / "src" / "yetty", REPO / "src" / "api"]
+
+# The ydraw client-interface domains whose classes are VALUE-LIKE: created,
+# packed by a copying add()/adder, never handed to an ownership-taking C
+# API. Only these get the automatic GC finalizer (rt.own); everywhere else
+# a wrapper may be the last reference to an object some C-side container
+# has taken ownership of, where a finalizer would free it behind the
+# container's back. Other modules use explicit destroy().
+FINALIZED_DOMAINS = {"ydrawlist2", "ysdf2", "api_yplot", "ycomplex2"}
 
 
 # ---------------------------------------------------------------------------
 # Model loading
 # ---------------------------------------------------------------------------
 
+def model_domain(model: dict) -> str | None:
+    for entry in model.get("classes", []) or []:
+        if entry.get("domain"):
+            return entry["domain"]
+    for entry in model.get("methods", []) or []:
+        if entry.get("domain"):
+            return entry["domain"]
+    return None
+
+
 def discover_models(selected: list[str]) -> dict[str, dict]:
-    """Load model.yaml for the requested modules (default: every module that
-    has one)."""
+    """Load every model.yaml under both source roots, keyed by domain
+    (default: all; `selected` restricts)."""
+    found: dict[str, dict] = {}
+    for root in SRC_ROOTS:
+        if not root.is_dir():
+            continue
+        for path in root.glob("*/model.yaml"):
+            model = yaml.safe_load(path.read_text()) or {}
+            domain = model_domain(model)
+            if domain:
+                found[domain] = model
+    names = selected or sorted(found)
     models: dict[str, dict] = {}
-    names = selected or sorted(p.parent.name for p in SRC.glob("*/model.yaml"))
     for name in names:
-        path = SRC / name / "model.yaml"
-        if not path.exists():
-            sys.stderr.write(f"ffigen: no model.yaml for module '{name}'\n")
+        if name not in found:
+            sys.stderr.write(f"ffigen: no model.yaml for domain '{name}'\n")
             sys.exit(1)
-        models[name] = yaml.safe_load(path.read_text()) or {}
+        models[name] = found[name]
     return models
 
 
@@ -144,8 +174,95 @@ def topo_types(types: list[dict]) -> list[dict]:
 # so types/prototypes are reproduced straight from the model's C strings.
 # ===========================================================================
 
+def prop_result_id(field_type: str) -> str:
+    """The YRESULT_DECLARE id for a property's value type (mirrors codegen)."""
+    r = (field_type or "").strip()
+    if r in ("int", "int32_t"):
+        return "yetty_ycore_int"
+    if r == "size_t":
+        return "yetty_ycore_size"
+    if r == "uint32_t":
+        return "uint32"
+    m = re.match(r"^struct\s+(\w+)\s*\*\s*$", r)
+    if m:
+        return f"{m.group(1)}_ptr"
+    m = re.match(r"^struct\s+(\w+)\s*$", r)
+    if m:
+        overrides = {
+            "yetty_ycore_rectangle": "rectangle",
+            "yetty_ycore_pixel_size": "pixel_size",
+            "yetty_ycore_pixel_coord": "pixel_coord",
+        }
+        return overrides.get(m.group(1), m.group(1))
+    return r
+
+
+def prop_result_name(field_type: str) -> str:
+    return f"{prop_result_id(field_type)}_result"
+
+
+def add_property_result_types(models: dict[str, dict], types: list[dict]) -> None:
+    """Synthesize result-type entries for property getters the models don't
+    already carry (same layout as YETTY_YRESULT_DECLARE)."""
+    present = {t["name"] for t in types}
+    for model in models.values():
+        for cls in model.get("classes", []) or []:
+            for field in cls.get("data_fields", []) or []:
+                if not field.get("get"):
+                    continue
+                name = prop_result_name(field.get("type", ""))
+                if name in present:
+                    continue
+                types.append({
+                    "name": name,
+                    "kind": "result",
+                    "fields": [
+                        {"name": "ok", "type": "int"},
+                        {"kind": "union", "fields": [
+                            {"name": "value", "type": field.get("type", "")},
+                            {"name": "error", "type": "struct yetty_ycore_error"},
+                        ]},
+                    ],
+                })
+                present.add(name)
+
+
+def class_registry(models: dict[str, dict]) -> dict[tuple[str, str], dict]:
+    """(domain, class) -> {cls, methods} across every loaded model, for
+    cross-module ancestry walks."""
+    registry: dict[tuple[str, str], dict] = {}
+    for model in models.values():
+        methods = {m["slot"]: m for m in model.get("methods", [])}
+        for cls in model.get("classes", []) or []:
+            registry[(cls.get("domain"), cls["name"])] = {
+                "cls": cls, "methods": methods}
+    return registry
+
+
+def ancestry(registry: dict, domain: str, name: str) -> list[dict]:
+    """The class and its parents, child-first."""
+    chain: list[dict] = []
+    key = (domain, name)
+    seen: set[tuple[str, str]] = set()
+    while key in registry and key not in seen:
+        seen.add(key)
+        chain.append(registry[key])
+        parent = registry[key]["cls"].get("parent")
+        if not parent:
+            break
+        key = (parent.get("domain"), parent["name"])
+    return chain
+
+
 def lua_class_name(name: str) -> str:
     return "".join(w.capitalize() for w in name.split("_"))
+
+
+def lua_strip_atomic(type_str: str) -> str:
+    """LuaJIT's cdef has no _Atomic support; `_Atomic(T)` / `_Atomic T` have
+    T's layout for our read-only purposes — unwrap them."""
+    stripped = re.sub(r"_Atomic\s*\(\s*([^)]+?)\s*\)", r"\1", type_str or "")
+    return re.sub(r"_Atomic\s+", "", stripped)
 
 
 def lua_c_field(field: dict, indent: str = "  ") -> str:
@@ -155,7 +272,7 @@ def lua_c_field(field: dict, indent: str = "  ") -> str:
         member = field.get("name") or ""
         tail = f" {member}" if member else ""
         return f"{indent}{kind} {{\n{inner}\n{indent}}}{tail};"
-    base, arr = split_array(field["type"])
+    base, arr = split_array(lua_strip_atomic(field["type"]))
     # Enums aren't cdef'd (their constants live in the Lua table); a field of
     # `enum X` would have unknown size, so emit it as int (enum's storage type).
     if classify(base)[0] == "enum":
@@ -219,7 +336,7 @@ def lua_unknown_scalars(types: list) -> list:
             elif "type" in f and classify(f["type"])[0] == "scalar":
                 elem, _ = split_array(f["type"])
                 base = re.sub(r"^(const|volatile)\s+", "", elem).strip()
-                if base and base not in LUA_KNOWN_SCALARS:
+                if base and base not in LUA_KNOWN_SCALARS and base != "FILE":
                     found.add(base)
 
     for t in types:
@@ -229,7 +346,8 @@ def lua_unknown_scalars(types: list) -> list:
 
 
 def lua_emit_types(models: dict, types: list, out_path: pathlib.Path):
-    cdef = [f"typedef long {name};" for name in lua_unknown_scalars(types)]
+    cdef = ["typedef struct _IO_FILE FILE;"]
+    cdef += [f"typedef long {name};" for name in lua_unknown_scalars(types)]
     cdef += lua_opaque_forward_decls(models, types)
     for entry in topo_types([t for t in types if t["kind"] in ("struct", "result")]):
         cdef.append(f"struct {entry['name']} {{")
@@ -255,7 +373,7 @@ def lua_emit_types(models: dict, types: list, out_path: pathlib.Path):
 
 def lua_cdef_param(type_str: str) -> str:
     """A function-parameter type for cdef: enum → int (enums aren't cdef'd)."""
-    base, arr = split_array(type_str)
+    base, arr = split_array(lua_strip_atomic(type_str))
     if classify(base)[0] == "enum":
         base = "int"
     return f"{base}{arr}"
@@ -267,22 +385,76 @@ def lua_proto(return_type: str, name: str, args: list) -> str:
     return f"{return_type}{sep}{name}({params});"
 
 
-def lua_emit_module(module: str, model: dict, out_path: pathlib.Path):
+LUA_RESERVED = {
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function",
+    "goto", "if", "in", "local", "nil", "not", "or", "repeat", "return",
+    "then", "true", "until", "while",
+}
+
+
+def lua_param_name(name: str) -> str:
+    """C argument names that collide with lua keywords get an `_arg` suffix
+    (e.g. add_function's `function` parameter)."""
+    return f"{name}_arg" if name in LUA_RESERVED else name
+
+
+def lua_arg_expr(arg: dict) -> str:
+    """Argument conversion for a method wrapper: yclass object args accept
+    wrapped objects or raw handles; by-value ycore buffers coerce from lua
+    tables (f32 arrays) / strings; everything else passes through (LuaJIT
+    converts lua strings to const char* itself)."""
+    name = lua_param_name(arg["name"])
+    category, tag = classify(arg.get("type", ""))
+    if category == "ptr" and "yclass_object" in (arg.get("type") or ""):
+        return f"rt.unwrap({name})"
+    if (category, tag) == ("struct", "yetty_ycore_buffer"):
+        return f"rt.as_buffer({name})"
+    return name
+
+
+def lua_emit_module(domain: str, model: dict, registry: dict,
+                    out_path: pathlib.Path):
     methods = {m["slot"]: m for m in model.get("methods", [])}
+    classes = [c for c in model.get("classes", []) if c.get("type") == "regular"]
+
     protos: list[str] = []
-    for cls in model.get("classes", []):
-        if cls.get("type") == "regular":
-            protos.append(lua_proto("struct yetty_yclass_object_ptr_result",
-                                    f"yetty_{cls['domain']}_{cls['name']}_create",
-                                    [{"type": "struct yetty_yclass_ctx *"}]))
+    for cls in classes:
+        protos.append(lua_proto("struct yetty_yclass_object_ptr_result",
+                                f"yetty_{cls['domain']}_{cls['name']}_create",
+                                [{"type": "struct yetty_yclass_ctx *"}]))
+        for field in cls.get("data_fields", []) or []:
+            base_sym = f"yetty_{cls['domain']}_{cls['name']}_{field['name']}"
+            if field.get("get"):
+                protos.append(lua_proto(f"struct {prop_result_name(field['type'])}",
+                                        f"{base_sym}_get",
+                                        [{"type": "struct yetty_yclass_object *"}]))
+            if field.get("set"):
+                protos.append(lua_proto("struct yetty_ycore_void_result",
+                                        f"{base_sym}_set",
+                                        [{"type": "struct yetty_yclass_object *"},
+                                         {"type": field["type"]}]))
     for m in model.get("methods", []):
         protos.append(lua_proto(m["return_type"], f"yetty_{m['domain']}_{m['slot']}", m["args"]))
 
+    # Foreign ancestor domains: require their modules so the parent slots'
+    # cdefs are in place before any inherited call.
+    foreign: list[str] = []
+    for cls in classes:
+        for link in ancestry(registry, cls["domain"], cls["name"])[1:]:
+            dom = link["cls"].get("domain")
+            if dom and dom != domain and dom not in foreign:
+                foreign.append(dom)
+
     parts = [
-        f"-- yetty.{module} bindings — GENERATED from model.yaml, do not edit.",
+        f"-- yetty.{domain} bindings — GENERATED from model.yaml, do not edit.",
         'local ffi = require("ffi")',
         'local rt = require("yetty.runtime")',
         'require("yetty.generated._types")',
+    ]
+    for dom in foreign:
+        parts.append(f'require("yetty.generated.{dom}")')
+    parts += [
+        "local unpack = unpack or table.unpack",
         "ffi.cdef[[",
         "\n".join(protos),
         "]]",
@@ -293,33 +465,149 @@ def lua_emit_module(module: str, model: dict, out_path: pathlib.Path):
         _, tag = classify(return_type)
         return not (tag or "").endswith("void_result")
 
-    for cls in model.get("classes", []):
-        if cls.get("type") != "regular":
-            continue
+    for cls in classes:
         cname = lua_class_name(cls["name"])
         create_sym = f"yetty_{cls['domain']}_{cls['name']}_create"
+        chain = ancestry(registry, cls["domain"], cls["name"])
         parts.append(f"local {cname} = {{}}")
-        parts.append(f"{cname}.__index = {cname}")
+        parts.append(f"{cname}.__prop_get = {{}}")
+        parts.append(f"{cname}.__prop_set = {{}}")
+        parts.append(f"local {cname}_instance_mt = {{")
+        parts.append("  __index = function(obj, key)")
+        parts.append(f"    local member = {cname}[key]")
+        parts.append("    if member ~= nil then return member end")
+        parts.append(f"    local getter = {cname}.__prop_get[key]")
+        parts.append("    if getter then return getter(obj) end")
+        parts.append("    return nil")
+        parts.append("  end,")
+        parts.append("  __newindex = function(obj, key, value)")
+        parts.append(f"    local setter = {cname}.__prop_set[key]")
+        parts.append("    if setter then setter(obj, value) else rawset(obj, key, value) end")
+        parts.append("  end,")
+        parts.append("}")
         parts.append(f"function {cname}.new()")
         parts.append("  local res = rt.C()." + create_sym + "(nil)")
         parts.append("  rt.check(res)")
-        parts.append(f"  return setmetatable({{ handle = res.value }}, {cname})")
+        parts.append(f"  local obj = setmetatable({{ handle = res.value }}, {cname}_instance_mt)")
+        if cls["domain"] in FINALIZED_DOMAINS:
+            parts.append(f"  rt.own(obj, {cname})")
+        parts.append("  return obj")
         parts.append("end")
-        for op in cls.get("ops", []):
-            m = methods.get(op["slot"])
-            if not m:
-                continue
-            params = [a["name"] for a in m["args"][2:]]
-            # `:` already binds self implicitly — do NOT list it in params.
-            sig = ", ".join(params)
-            sym = f"yetty_{m['domain']}_{op['slot']}"
-            call_args = ", ".join(["nil", "self.handle"] + params)
-            parts.append(f"function {cname}:{op['slot']}({sig})")
-            parts.append(f"  local res = rt.C().{sym}({call_args})")
-            parts.append("  rt.check(res)")
-            if returns_value(m["return_type"]):
-                parts.append("  return res.value")
+
+        emitted_slots: set[str] = set()
+        setter_meta: dict[str, dict] = {}
+        adder_meta: dict[str, str] = {}
+        has_destroy = False
+        for link in chain:
+            link_dom = link["cls"].get("domain")
+            for op in link["cls"].get("ops", []):
+                slot = op["slot"]
+                if slot in emitted_slots:
+                    continue
+                m = link["methods"].get(slot)
+                if not m:
+                    continue
+                emitted_slots.add(slot)
+                if slot == "destroy":
+                    has_destroy = True
+                arg_defs = m["args"][1:]
+                params = ", ".join(lua_param_name(a["name"]) for a in arg_defs)
+                sym = f"yetty_{m['domain']}_{slot}"
+                call_args = ", ".join(["self.handle"] +
+                                      [lua_arg_expr(a) for a in arg_defs])
+                parts.append(f"function {cname}:{slot}({params})")
+                if slot == "destroy":
+                    # The destroy slot consumes the handle: invalidate the
+                    # wrapper before surfacing any error; repeat calls no-op.
+                    parts.append("  if self.handle == nil then return end")
+                    parts.append("  rt.disown(self)")
+                    parts.append(f"  local res = rt.C().{sym}(self.handle)")
+                    parts.append('  rawset(self, "handle", nil)')
+                    parts.append("  rt.check(res)")
+                else:
+                    parts.append(f'  rt.live(self, "{cname}:{slot}")')
+                    parts.append(f"  local res = rt.C().{sym}({call_args})")
+                    parts.append("  rt.check(res)")
+                    if returns_value(m["return_type"]):
+                        parts.append("  return res.value")
+                parts.append("end")
+                if slot.startswith("set_"):
+                    setter_meta[slot[4:]] = {"fn": slot, "n": len(arg_defs)}
+                if slot.startswith("add_"):
+                    adder_meta[slot[4:] + "s"] = slot
+
+        # Properties (own + inherited), exposed as plain fields.
+        prop_names: list[str] = []
+        for link in chain:
+            link_cls = link["cls"]
+            for field in link_cls.get("data_fields", []) or []:
+                fname = field["name"]
+                if fname in prop_names:
+                    continue
+                prop_names.append(fname)
+                base_sym = (f"yetty_{link_cls['domain']}_{link_cls['name']}_"
+                            f"{fname}")
+                if field.get("get"):
+                    parts.append(f"{cname}.__prop_get.{fname} = function(obj)")
+                    parts.append(f'  rt.live(obj, "{cname}.{fname}")')
+                    parts.append(f"  local res = rt.C().{base_sym}_get(obj.handle)")
+                    parts.append("  rt.check(res)")
+                    parts.append("  return res.value")
+                    parts.append("end")
+                if field.get("set"):
+                    parts.append(f"{cname}.__prop_set.{fname} = function(obj, value)")
+                    parts.append(f'  rt.live(obj, "{cname}.{fname}")')
+                    parts.append(f"  local res = rt.C().{base_sym}_set(obj.handle, value)")
+                    parts.append("  rt.check(res)")
+                    parts.append("end")
+
+        if has_destroy:
+            # The GC finalizer (rt.own) frees through the class destroy slot.
+            destroy_sym = None
+            for link in chain:
+                m = link["methods"].get("destroy")
+                if m:
+                    destroy_sym = f"yetty_{m['domain']}_destroy"
+                    break
+            parts.append(f'{cname}.__destroy_sym = "{destroy_sym}"')
+        else:
+            parts.append(f"function {cname}:destroy()")
+            parts.append("  rt.object_free(self)")
             parts.append("end")
+
+        # Constructor spec (table-call): primary from the model, setters with
+        # arity, settable properties, add_* pluralized adders.
+        primary = cls.get("primary_slot")
+        if not primary:
+            for probe in ("set_expression", "set_body"):
+                if probe in emitted_slots:
+                    primary = probe
+                    break
+        settable = [f["name"] for link in chain
+                    for f in link["cls"].get("data_fields", []) or []
+                    if f.get("set")]
+        parts.append(f"{cname}.__spec = {{")
+        if primary:
+            parts.append(f'  primary = "{primary}",')
+        parts.append("  setters = {")
+        for key in sorted(setter_meta):
+            meta = setter_meta[key]
+            parts.append(f'    {key} = {{ fn = "{meta["fn"]}", n = {meta["n"]} }},')
+        parts.append("  },")
+        parts.append("  props = {")
+        for fname in sorted(set(settable)):
+            parts.append(f"    {fname} = true,")
+        parts.append("  },")
+        parts.append("  adders = {")
+        for key in sorted(adder_meta):
+            parts.append(f'    {key} = "{adder_meta[key]}",')
+        parts.append("  },")
+        parts.append("}")
+        parts.append(f"setmetatable({cname}, {{ __call = function(cls, spec)")
+        parts.append("  local obj = cls.new()")
+        parts.append("  if spec ~= nil then rt.apply_spec(obj, spec, cls.__spec) end")
+        parts.append("  return obj")
+        parts.append("end })")
         parts.append(f"M.{cname} = {cname}")
     parts.append("return M")
     out_path.write_text("\n".join(parts) + "\n")
@@ -713,13 +1001,15 @@ def emit_lua(models: dict[str, dict]):
     gen = REPO / "bindings" / "lua" / "yetty" / "generated"
     gen.mkdir(parents=True, exist_ok=True)
     types = global_types(models)
+    add_property_result_types(models, types)
+    registry = class_registry(models)
     lua_emit_types(models, types, gen / "_types.lua")
     lua_emit_connection(gen / "connection.lua")
     count = 0
-    for module, model in models.items():
+    for domain, model in models.items():
         if not model.get("classes"):
             continue
-        lua_emit_module(module, model, gen / f"{module}.lua")
+        lua_emit_module(domain, model, registry, gen / f"{domain}.lua")
         count += 1
     print(f"ffigen: lua → {count} modules + connection facade, {len(types)} types "
           f"under bindings/lua/yetty/generated/")

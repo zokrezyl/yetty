@@ -24,6 +24,7 @@ class Drawable(_rt.YClass):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Drawable':
@@ -55,6 +56,7 @@ class Font(Drawable):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Font':
@@ -105,6 +107,7 @@ class Text(Drawable):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         if body is not None:
             self.set_body(body)
         self._apply_kwargs(kwargs)
@@ -280,6 +283,7 @@ class DrawableList(_rt.YClass):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'DrawableList':
@@ -303,11 +307,12 @@ class DrawableList(_rt.YClass):
             raise _rt.YettyError(res.error.message)
         return res.value
     def destroy(self) -> None:
-        """Call `yetty_ydrawlist2_destroy`; raises _rt.YettyError on failure."""
+        """Call `yetty_ydrawlist2_destroy`; idempotent; raises _rt.YettyError on failure."""
         if self._handle is None:
-            raise _rt.YettyError("uninitialized yclass handle")
+            return None
         _fn = _rt.cfn("yetty_ydrawlist2_destroy", _t.yetty_ycore_void_result, [c_void_p])
         res = _rt.result_from_c(_fn(self._handle))
+        self._handle = None
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -329,6 +334,7 @@ class Shape(Drawable):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Shape':
@@ -446,4 +452,3 @@ class Shape(Drawable):
         res = _rt.result_from_c(_fn(self._handle, value))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
-

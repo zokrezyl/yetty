@@ -37,5 +37,5 @@ both surfaces produce identical record bytes throughout the migration.
 
 ## Demos / target surface
 
-`demo/assets/ydraw/` — per-language sketches (python is the source of
+`demo/ffi/ydraw/` — per-language sketches (python is the source of
 truth) that this module plus `ysdf2` make runnable.

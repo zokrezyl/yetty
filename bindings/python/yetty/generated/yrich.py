@@ -1514,4 +1514,3 @@ def paragraph_add_run(obj: Any, start: int, end: int, format: int, color: int, b
     _fn = _rt.cfn("yetty_yrich_paragraph_add_run", _t.yetty_ycore_void_result, [c_void_p, c_int32, c_int32, c_uint32, c_uint32, c_uint32, c_float])
     res = _fn(_rt.handle(obj), start, end, format, color, bg_color, font_size)
     return _rt.result_from_c(res)
-

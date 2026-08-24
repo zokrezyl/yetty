@@ -25,6 +25,7 @@ class Circle(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Circle':
@@ -104,6 +105,7 @@ class Box(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Box':
@@ -221,6 +223,7 @@ class Segment(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Segment':
@@ -319,6 +322,7 @@ class Triangle(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Triangle':
@@ -455,6 +459,7 @@ class Ellipse(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Ellipse':
@@ -553,6 +558,7 @@ class Arc(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Arc':
@@ -689,6 +695,7 @@ class RoundedBox(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'RoundedBox':
@@ -863,6 +870,7 @@ class Rhombus(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Rhombus':
@@ -961,6 +969,7 @@ class Pentagon(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Pentagon':
@@ -1040,6 +1049,7 @@ class Hexagon(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Hexagon':
@@ -1119,6 +1129,7 @@ class Star(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Star':
@@ -1236,6 +1247,7 @@ class Pie(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Pie':
@@ -1353,6 +1365,7 @@ class Ring(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Ring':
@@ -1489,6 +1502,7 @@ class Heart(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Heart':
@@ -1568,6 +1582,7 @@ class Cross(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Cross':
@@ -1685,6 +1700,7 @@ class RoundedX(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'RoundedX':
@@ -1783,6 +1799,7 @@ class Capsule(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Capsule':
@@ -1900,6 +1917,7 @@ class Moon(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Moon':
@@ -2017,6 +2035,7 @@ class Egg(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Egg':
@@ -2115,6 +2134,7 @@ class Octogon(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Octogon':
@@ -2194,6 +2214,7 @@ class Hexagram(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Hexagram':
@@ -2273,6 +2294,7 @@ class Pentagram(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Pentagram':
@@ -2352,6 +2374,7 @@ class LinearGradientBox(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'LinearGradientBox':
@@ -2583,6 +2606,7 @@ class RadialGradientBox(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'RadialGradientBox':
@@ -2795,6 +2819,7 @@ class Sphere3d(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Sphere3d':
@@ -2893,6 +2918,7 @@ class Box3d(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Box3d':
@@ -3029,6 +3055,7 @@ class Torus3d(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Torus3d':
@@ -3146,6 +3173,7 @@ class Cylinder3d(_ydrawlist2.Shape):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
+        self._owned = True
         self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Cylinder3d':
@@ -3245,4 +3273,3 @@ class Cylinder3d(_ydrawlist2.Shape):
         res = _rt.result_from_c(_fn(self._handle, value))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
-

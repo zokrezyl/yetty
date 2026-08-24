@@ -65,11 +65,12 @@ class Canvas(_rt.YClass):
             raise _rt.YettyError(res.error.message)
         return res.value
     def destroy(self) -> None:
-        """Call `yetty_ydummy_destroy`; raises _rt.YettyError on failure."""
+        """Call `yetty_ydummy_destroy`; idempotent; raises _rt.YettyError on failure."""
         if self._handle is None:
-            raise _rt.YettyError("uninitialized yclass handle")
+            return None
         _fn = _rt.cfn("yetty_ydummy_destroy", _t.yetty_ycore_void_result, [c_void_p])
         res = _rt.result_from_c(_fn(self._handle))
+        self._handle = None
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -103,4 +104,3 @@ def canvas_time(obj: Any) -> _rt.Result[float]:
     _fn = _rt.cfn("yetty_ydummy_canvas_time", _t.yetty_ycore_float_result, [c_void_p])
     res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
-

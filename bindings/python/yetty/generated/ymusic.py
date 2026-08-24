@@ -74,11 +74,12 @@ class Music(_rt.YClass):
             raise _rt.YettyError(res.error.message)
         return res.value
     def destroy(self) -> None:
-        """Call `yetty_ymusic_destroy`; raises _rt.YettyError on failure."""
+        """Call `yetty_ymusic_destroy`; idempotent; raises _rt.YettyError on failure."""
         if self._handle is None:
-            raise _rt.YettyError("uninitialized yclass handle")
+            return None
         _fn = _rt.cfn("yetty_ymusic_destroy", _t.yetty_ycore_void_result, [c_void_p])
         res = _rt.result_from_c(_fn(self._handle))
+        self._handle = None
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -88,4 +89,3 @@ def emit_osc(list: Any, fd: int) -> _rt.Result[None]:
     _fn = _rt.cfn("yetty_ymusic_emit_osc", _t.yetty_ycore_void_result, [c_void_p, c_int])
     res = _fn(_rt.handle(list), fd)
     return _rt.result_from_c(res)
-

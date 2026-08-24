@@ -179,6 +179,8 @@ codegen: ## Regenerate yclass outputs (incremental — only changed modules re-r
 ffi: ## Generate FFI language bindings from the per-module model.yaml (run after codegen)
 	uv run tools/ffi-codegen/python/ffigen.py
 	uv run tools/ffi-codegen/lua/ffigen.py
+	uv run tools/ffi-codegen/go/ffigen.py
+	uv run tools/ffi-codegen/typescript/ffigen.py
 
 .PHONY: format-code
 format-code: ## clang-format all C/H sources under include/ src/ tools/ (parallel, in place)

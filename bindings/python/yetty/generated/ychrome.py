@@ -47,11 +47,12 @@ class Chrome(_rt.YClass):
             raise _rt.YettyError(res.error.message)
         return res.value
     def destroy(self) -> None:
-        """Call `yetty_ychrome_destroy`; raises _rt.YettyError on failure."""
+        """Call `yetty_ychrome_destroy`; idempotent; raises _rt.YettyError on failure."""
         if self._handle is None:
-            raise _rt.YettyError("uninitialized yclass handle")
+            return None
         _fn = _rt.cfn("yetty_ychrome_destroy", _t.yetty_ycore_void_result, [c_void_p])
         res = _rt.result_from_c(_fn(self._handle))
+        self._handle = None
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -94,4 +95,3 @@ def in_gesture(obj: Any) -> _rt.Result[int]:
     _fn = _rt.cfn("yetty_ychrome_in_gesture", _t.yetty_ycore_int_result, [c_void_p])
     res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
-

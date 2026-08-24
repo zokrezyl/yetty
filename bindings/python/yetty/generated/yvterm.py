@@ -518,4 +518,3 @@ def vterm_set_mouse(obj: Any, x: float, y: float) -> _rt.Result[None]:
     _fn = _rt.cfn("yetty_yvterm_vterm_set_mouse", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float])
     res = _fn(_rt.handle(obj), x, y)
     return _rt.result_from_c(res)
-

@@ -680,4 +680,3 @@ def ios_window_set_metrics(obj: Any, framebuffer_width: int, framebuffer_height:
     _fn = _rt.cfn("yetty_yplatform_ios_window_set_metrics", _t.yetty_ycore_void_result, [c_void_p, c_int, c_int, c_float])
     res = _fn(_rt.handle(obj), framebuffer_width, framebuffer_height, content_scale)
     return _rt.result_from_c(res)
-

@@ -2787,4 +2787,3 @@ def yvideo_set_bytes(obj: Any, bytes: Any, len: int) -> _rt.Result[None]:
     _fn = _rt.cfn("yetty_ygui_yvideo_set_bytes", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_size_t])
     res = _fn(_rt.handle(obj), _rt.handle(bytes), len)
     return _rt.result_from_c(res)
-

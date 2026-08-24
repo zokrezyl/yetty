@@ -38,11 +38,12 @@ class Figure(_rt.YClass):
             raise _rt.YettyError(res.error.message)
         return res.value
     def destroy(self) -> None:
-        """Call `yetty_yfigure_destroy`; raises _rt.YettyError on failure."""
+        """Call `yetty_yfigure_destroy`; idempotent; raises _rt.YettyError on failure."""
         if self._handle is None:
-            raise _rt.YettyError("uninitialized yclass handle")
+            return None
         _fn = _rt.cfn("yetty_yfigure_destroy", _t.yetty_ycore_void_result, [c_void_p])
         res = _rt.result_from_c(_fn(self._handle))
+        self._handle = None
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -472,4 +473,3 @@ def container_hit_test(obj: Any, x: float, y: float) -> _rt.Result[Any]:
     _fn = _rt.cfn("yetty_yfigure_container_hit_test", _t.yetty_yfigure_hit_result, [c_void_p, c_float, c_float])
     res = _fn(_rt.handle(obj), x, y)
     return _rt.result_from_c(res)
-

@@ -65,4 +65,3 @@ def factory_args_release(args: Any) -> _rt.Result[None]:
     _fn = _rt.cfn("yetty_ymgui_factory_args_release", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(args))
     return _rt.result_from_c(res)
-

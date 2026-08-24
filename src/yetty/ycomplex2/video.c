@@ -88,11 +88,18 @@ static struct yetty_ycore_void_result video_pack(struct yetty_yclass_object *obj
     uint32_t video_w = video->video_w;
     uint32_t video_h = video->video_h;
     if (video_w == 0 || video_h == 0) {
-        if (!yetty_yvideo_h264_dimensions(nal_bytes, read_r.value, &video_w, &video_h)) {
+        uint32_t sps_w = 0;
+        uint32_t sps_h = 0;
+        if (!yetty_yvideo_h264_dimensions(nal_bytes, read_r.value, &sps_w, &sps_h)) {
             free(nal_bytes);
             return YETTY_ERR(yetty_ycore_void,
                              "ycomplex2 video pack: no SPS in stream — set video_w/video_h");
         }
+        /* A partial override survives: only unset dims come from the SPS. */
+        if (video_w == 0)
+            video_w = sps_w;
+        if (video_h == 0)
+            video_h = sps_h;
     }
     struct yetty_yvideo_render_config config = {
         .bounds_x = video->x,

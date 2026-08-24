@@ -14,47 +14,57 @@ struct bit_reader {
     const uint8_t *buf;
     size_t size;
     size_t byte_pos;
-    int bit_pos; /* 0..7, MSB-first */
+    int bit_pos;  /* 0..7, MSB-first */
+    bool overrun; /* a read walked past the end, or a field was malformed;
+                   * once set every later read returns 0 and the whole
+                   * parse must be rejected */
 };
 
-static uint32_t br_read_bits(struct bit_reader *br, int n)
+static uint32_t br_read_bits(struct bit_reader *reader, int count)
 {
-    uint32_t v = 0;
-    for (int i = 0; i < n; i++) {
-        if (br->byte_pos >= br->size) {
+    uint32_t value = 0;
+    for (int i = 0; i < count; i++) {
+        if (reader->byte_pos >= reader->size) {
+            reader->overrun = true;
             return 0;
         }
-        uint32_t b = (br->buf[br->byte_pos] >> (7 - br->bit_pos)) & 1u;
-        v = (v << 1) | b;
-        br->bit_pos++;
-        if (br->bit_pos == 8) {
-            br->bit_pos = 0;
-            br->byte_pos++;
+        uint32_t bit = (reader->buf[reader->byte_pos] >> (7 - reader->bit_pos)) & 1u;
+        value = (value << 1) | bit;
+        reader->bit_pos++;
+        if (reader->bit_pos == 8) {
+            reader->bit_pos = 0;
+            reader->byte_pos++;
         }
     }
-    return v;
+    return value;
 }
 
-static uint32_t br_read_ue(struct bit_reader *br)
+static uint32_t br_read_ue(struct bit_reader *reader)
 {
     int zero_bits = 0;
-    while (zero_bits < 32 && br->byte_pos < br->size && br_read_bits(br, 1) == 0) {
+    while (!reader->overrun && br_read_bits(reader, 1) == 0) {
         zero_bits++;
+        if (zero_bits > 31) {
+            /* No valid Exp-Golomb code carries 32+ leading zeros; this is
+             * garbage (an all-zero buffer lands here), not a real SPS. */
+            reader->overrun = true;
+            return 0;
+        }
     }
-    if (zero_bits == 0) {
+    if (reader->overrun || zero_bits == 0) {
         return 0;
     }
-    uint32_t tail = br_read_bits(br, zero_bits);
+    uint32_t tail = br_read_bits(reader, zero_bits);
     return (1u << zero_bits) - 1u + tail;
 }
 
-static int32_t br_read_se(struct bit_reader *br)
+static int32_t br_read_se(struct bit_reader *reader)
 {
-    uint32_t v = br_read_ue(br);
-    if (v & 1u) {
-        return (int32_t)((v + 1u) >> 1);
+    uint32_t coded = br_read_ue(reader);
+    if (coded & 1u) {
+        return (int32_t)((coded + 1u) >> 1);
     }
-    return -(int32_t)(v >> 1);
+    return -(int32_t)(coded >> 1);
 }
 
 /* Strip H.264 emulation prevention bytes (0x000003 → 0x0000) from a NAL
@@ -128,26 +138,34 @@ int yetty_yvideo_h264_dimensions(const uint8_t *buf, size_t size, uint32_t *out_
             return 0;
         }
 
-        struct bit_reader br = {.buf = rbsp, .size = rbsp_len, .byte_pos = 0, .bit_pos = 0};
+        struct bit_reader br = {
+            .buf = rbsp, .size = rbsp_len, .byte_pos = 0, .bit_pos = 0, .overrun = false};
         uint8_t profile_idc = rbsp[0];
         br.byte_pos = 3; /* skip profile_idc, constraints+reserved, level_idc */
 
         (void)br_read_ue(&br); /* seq_parameter_set_id */
 
+        /* Defaults for profiles that carry no chroma_format_idc: 4:2:0. */
+        uint32_t chroma_format_idc = 1;
+        uint32_t separate_colour_plane = 0;
+
         if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 || profile_idc == 244 ||
             profile_idc == 44 || profile_idc == 83 || profile_idc == 86 || profile_idc == 118 ||
             profile_idc == 128 || profile_idc == 138 || profile_idc == 139 || profile_idc == 134 ||
             profile_idc == 135) {
-            uint32_t chroma = br_read_ue(&br);
-            if (chroma == 3) {
-                br_read_bits(&br, 1); /* separate_colour_plane_flag */
+            chroma_format_idc = br_read_ue(&br);
+            if (chroma_format_idc > 3) {
+                return 0;
+            }
+            if (chroma_format_idc == 3) {
+                separate_colour_plane = br_read_bits(&br, 1);
             }
             (void)br_read_ue(&br); /* bit_depth_luma_minus8 */
             (void)br_read_ue(&br); /* bit_depth_chroma_minus8 */
             br_read_bits(&br, 1);  /* qpprime_y_zero_transform_bypass_flag */
             uint32_t seq_scaling_list_present = br_read_bits(&br, 1);
             if (seq_scaling_list_present) {
-                int n = (chroma != 3) ? 8 : 12;
+                int n = (chroma_format_idc != 3) ? 8 : 12;
                 for (int s = 0; s < n; s++) {
                     if (br_read_bits(&br, 1)) {
                         int last_scale = 8, next_scale = 8;
@@ -172,8 +190,15 @@ int yetty_yvideo_h264_dimensions(const uint8_t *buf, size_t size, uint32_t *out_
             br_read_bits(&br, 1);  /* delta_pic_order_always_zero_flag */
             (void)br_read_se(&br); /* offset_for_non_ref_pic */
             (void)br_read_se(&br); /* offset_for_top_to_bottom_field */
-            uint32_t n = br_read_ue(&br);
-            for (uint32_t k = 0; k < n; k++) {
+            /* num_ref_frames_in_pic_order_cnt_cycle: the spec bounds it to
+             * [0, 255]. A hostile Exp-Golomb value can otherwise encode
+             * ~2^32 and pin this loop for billions of iterations — reject
+             * oversized counts and stop on reader error immediately. */
+            uint32_t cycle_count = br_read_ue(&br);
+            if (br.overrun || cycle_count > 255u) {
+                return 0;
+            }
+            for (uint32_t k = 0; k < cycle_count && !br.overrun; k++) {
                 (void)br_read_se(&br);
             }
         }
@@ -188,8 +213,24 @@ int yetty_yvideo_h264_dimensions(const uint8_t *buf, size_t size, uint32_t *out_
         }
         br_read_bits(&br, 1); /* direct_8x8_inference_flag */
 
-        uint32_t width = (pic_width_in_mbs_minus1 + 1u) * 16u;
-        uint32_t height = (2u - frame_mbs_only_flag) * (pic_height_in_map_units_minus1 + 1u) * 16u;
+        /* All dimension arithmetic is 64-bit: the counts are hostile-
+         * controlled 32-bit Exp-Golomb values, and 32-bit products would
+         * wrap into small "valid" numbers that defeat the range checks
+         * below (the worst case here is ~2^37, comfortably inside u64). */
+        uint64_t width_in_mbs = (uint64_t)pic_width_in_mbs_minus1 + 1u;
+        uint64_t frame_height_in_mbs =
+            (2u - (uint64_t)frame_mbs_only_flag) * ((uint64_t)pic_height_in_map_units_minus1 + 1u);
+        /* Annex A bounds, taken at the largest defined level (6.2,
+         * MaxFS = 139264 macroblocks): each dimension is limited to
+         * floor(sqrt(8 * MaxFS)) = 1055 macroblocks (16880 samples), and
+         * the frame area to MaxFS. Values beyond these are not valid in
+         * ANY H.264 stream. */
+        if (width_in_mbs > 1055u || frame_height_in_mbs > 1055u ||
+            width_in_mbs * frame_height_in_mbs > 139264u) {
+            return 0;
+        }
+        uint64_t width = width_in_mbs * 16u;
+        uint64_t height = frame_height_in_mbs * 16u;
 
         uint32_t frame_cropping_flag = br_read_bits(&br, 1);
         if (frame_cropping_flag) {
@@ -197,19 +238,43 @@ int yetty_yvideo_h264_dimensions(const uint8_t *buf, size_t size, uint32_t *out_
             uint32_t right = br_read_ue(&br);
             uint32_t top = br_read_ue(&br);
             uint32_t bottom = br_read_ue(&br);
-            /* SubWidthC/SubHeightC = 2 for the common YUV420 case. */
-            uint32_t sx = 2u, sy = 2u;
-            uint32_t cx = sx * (left + right);
-            uint32_t cy = sy * (top + bottom) * (2u - frame_mbs_only_flag);
-            if (cx < width) {
-                width -= cx;
+            /* Crop units per 7.4.2.1.1: ChromaArrayType 0 (monochrome or
+             * separate planes) crops in luma samples; otherwise in chroma
+             * units — SubWidthC/SubHeightC depend on the sampling
+             * (4:2:0 -> 2x2, 4:2:2 -> 2x1, 4:4:4 -> 1x1). */
+            uint32_t chroma_array_type = separate_colour_plane ? 0u : chroma_format_idc;
+            uint64_t crop_unit_x;
+            uint64_t crop_unit_y;
+            if (chroma_array_type == 0) {
+                crop_unit_x = 1u;
+                crop_unit_y = 2u - frame_mbs_only_flag;
+            } else {
+                uint64_t sub_width_c = (chroma_array_type == 3) ? 1u : 2u;
+                uint64_t sub_height_c = (chroma_array_type == 1) ? 2u : 1u;
+                crop_unit_x = sub_width_c;
+                crop_unit_y = sub_height_c * (2u - frame_mbs_only_flag);
             }
-            if (cy < height) {
-                height -= cy;
+            /* 64-bit throughout: offsets are hostile-controlled 32-bit
+             * values, so their sums/products must not wrap before the
+             * comparison below. */
+            uint64_t cx = crop_unit_x * ((uint64_t)left + right);
+            uint64_t cy = crop_unit_y * ((uint64_t)top + bottom);
+            /* A crop consuming the whole coded frame is malformed. */
+            if (cx >= width || cy >= height) {
+                return 0;
             }
+            width -= cx;
+            height -= cy;
         }
-        *out_w = width;
-        *out_h = height;
+        /* A parse that ran past the RBSP (or hit a malformed field) read
+         * fabricated zeros — its numbers are meaningless. Re-check the
+         * cropped result against the Level 6.2 per-dimension maximum
+         * (1055 macroblocks = 16880 samples). */
+        if (br.overrun || width == 0 || height == 0 || width > 16880u || height > 16880u) {
+            return 0;
+        }
+        *out_w = (uint32_t)width;
+        *out_h = (uint32_t)height;
         return 1;
     }
     return 0;

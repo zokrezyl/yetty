@@ -256,6 +256,11 @@ function(incbin_add_directory TARGET PREFIX DIR)
     # Find all matching files recursively
     file(GLOB_RECURSE FILES "${DIR}/${PATTERN}")
 
+    # npm install trees inside demo/binding directories are local tooling
+    # state, never embeddable payload — and their symlinked package dirs
+    # (node_modules/@scope/pkg -> ../..) break .incbin outright.
+    list(FILTER FILES EXCLUDE REGEX "/node_modules/")
+
     if(NOT FILES)
         message(WARNING "incbin_add_directory: No files found matching ${DIR}/${PATTERN}")
         return()
