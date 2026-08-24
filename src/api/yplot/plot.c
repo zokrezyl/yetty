@@ -410,8 +410,7 @@ static struct yetty_ycore_void_result plot_add_buffer(struct yetty_yclass_object
     if (!curve->name[0]) {
         return YETTY_ERR(yetty_ycore_void, "api_yplot add_buffer: buffer has no name");
     }
-    struct yetty_ycore_void_result append_res =
-        plot_appendf(plot, "%s=buffer", curve->name);
+    struct yetty_ycore_void_result append_res = plot_appendf(plot, "%s=buffer", curve->name);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, append_res, "api_yplot add_buffer: decl");
     uint32_t capacity = data->size ? data->size : data->value_count;
     if (capacity) {
@@ -427,8 +426,8 @@ static struct yetty_ycore_void_result plot_add_buffer(struct yetty_yclass_object
         }
         int written = snprintf(csv, csv_cap, "@%s.values=", curve->name);
         for (uint32_t i = 0; i < data->value_count; i++) {
-            written += snprintf(csv + written, csv_cap - (size_t)written, "%s%g",
-                                i ? "," : "", (double)data->values[i]);
+            written += snprintf(csv + written, csv_cap - (size_t)written, "%s%g", i ? "," : "",
+                                (double)data->values[i]);
         }
         append_res = plot_append(plot, csv);
         free(csv);

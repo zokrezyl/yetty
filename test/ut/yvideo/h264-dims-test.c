@@ -63,8 +63,8 @@ static void sps_put_ue(struct sps_writer *writer, uint32_t value)
 }
 
 /* Assemble [start code][0x67][profile, constraints, level][rbsp + stop bit]. */
-static size_t sps_payload(const struct sps_writer *writer, uint8_t profile_idc,
-                          uint8_t level_idc, uint8_t *out, size_t out_max)
+static size_t sps_payload(const struct sps_writer *writer, uint8_t profile_idc, uint8_t level_idc,
+                          uint8_t *out, size_t out_max)
 {
     struct sps_writer stopped = *writer;
     sps_put_bit(&stopped, 1u); /* rbsp_stop_one_bit */
@@ -89,10 +89,10 @@ static size_t sps_payload(const struct sps_writer *writer, uint8_t profile_idc,
 static void sps_put_tail(struct sps_writer *writer, uint32_t width_in_mbs_minus1,
                          uint32_t height_in_map_units_minus1, uint32_t crop_bottom)
 {
-    sps_put_ue(writer, 0);  /* log2_max_frame_num_minus4 */
-    sps_put_ue(writer, 0);  /* pic_order_cnt_type */
-    sps_put_ue(writer, 0);  /* log2_max_pic_order_cnt_lsb_minus4 */
-    sps_put_ue(writer, 0);  /* max_num_ref_frames */
+    sps_put_ue(writer, 0);   /* log2_max_frame_num_minus4 */
+    sps_put_ue(writer, 0);   /* pic_order_cnt_type */
+    sps_put_ue(writer, 0);   /* log2_max_pic_order_cnt_lsb_minus4 */
+    sps_put_ue(writer, 0);   /* max_num_ref_frames */
     sps_put_flag(writer, 0); /* gaps_in_frame_num_value_allowed_flag */
     sps_put_ue(writer, width_in_mbs_minus1);
     sps_put_ue(writer, height_in_map_units_minus1);
@@ -115,8 +115,8 @@ static void sps_put_high_profile_prefix(struct sps_writer *writer, uint32_t chro
 {
     sps_put_ue(writer, 0); /* seq_parameter_set_id */
     sps_put_ue(writer, chroma_format_idc);
-    sps_put_ue(writer, 0);  /* bit_depth_luma_minus8 */
-    sps_put_ue(writer, 0);  /* bit_depth_chroma_minus8 */
+    sps_put_ue(writer, 0);   /* bit_depth_luma_minus8 */
+    sps_put_ue(writer, 0);   /* bit_depth_chroma_minus8 */
     sps_put_flag(writer, 0); /* qpprime_y_zero_transform_bypass_flag */
     sps_put_flag(writer, 0); /* seq_scaling_matrix_present_flag */
 }
@@ -124,7 +124,7 @@ static void sps_put_high_profile_prefix(struct sps_writer *writer, uint32_t chro
 static void test_baseline_accepts(struct ytest *test)
 {
     struct sps_writer writer = {0};
-    sps_put_ue(&writer, 0); /* seq_parameter_set_id */
+    sps_put_ue(&writer, 0);         /* seq_parameter_set_id */
     sps_put_tail(&writer, 0, 0, 0); /* 1x1 macroblocks -> 16x16 */
     uint8_t payload[280];
     size_t size = sps_payload(&writer, 66, 30, payload, sizeof payload);
@@ -172,12 +172,12 @@ static void test_hostile_cycle_count_rejected(struct ytest *test)
      * ~2^32: formerly pinned the parser for billions of iterations. The
      * ctest TIMEOUT doubles as the promptness assertion. */
     struct sps_writer writer = {0};
-    sps_put_ue(&writer, 0);  /* seq_parameter_set_id */
-    sps_put_ue(&writer, 0);  /* log2_max_frame_num_minus4 */
-    sps_put_ue(&writer, 1);  /* pic_order_cnt_type = 1 */
-    sps_put_flag(&writer, 0); /* delta_pic_order_always_zero_flag */
-    sps_put_ue(&writer, 0);  /* offset_for_non_ref_pic (se 0) */
-    sps_put_ue(&writer, 0);  /* offset_for_top_to_bottom_field (se 0) */
+    sps_put_ue(&writer, 0);           /* seq_parameter_set_id */
+    sps_put_ue(&writer, 0);           /* log2_max_frame_num_minus4 */
+    sps_put_ue(&writer, 1);           /* pic_order_cnt_type = 1 */
+    sps_put_flag(&writer, 0);         /* delta_pic_order_always_zero_flag */
+    sps_put_ue(&writer, 0);           /* offset_for_non_ref_pic (se 0) */
+    sps_put_ue(&writer, 0);           /* offset_for_top_to_bottom_field (se 0) */
     sps_put_ue(&writer, 0xfffffffeu); /* the hostile cycle count */
     uint8_t payload[280];
     size_t size = sps_payload(&writer, 66, 30, payload, sizeof payload);

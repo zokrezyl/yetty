@@ -130,8 +130,8 @@ static void test_star_identity(struct ytest *test)
                                    .radius = 56.0f,
                                    .num_points = 5.0f,
                                    .inner_ratio = 0.45f};
-    YTEST_REQUIRE_OK(test, yetty_ydraw_drawable_list_add_cmd_add_star(via_builder, 0u, 0u,
-                                                                      0xFF74C5A5u, 0u, 0.0f, &geom));
+    YTEST_REQUIRE_OK(test, yetty_ydraw_drawable_list_add_cmd_add_star(
+                               via_builder, 0u, 0u, 0xFF74C5A5u, 0u, 0.0f, &geom));
 
     require_identical(test, via_class, via_builder);
     yetty_ydraw_drawable_list_destroy(via_class);
@@ -171,8 +171,8 @@ static void test_font_identity_and_explicit_id(struct ytest *test)
     size_t raw_size = yetty_ydraw_drawable_list_serialize(via_class, &raw);
     YTEST_REQUIRE(test, raw_size > size_before);
     struct yetty_ydraw_font_resource_view view;
-    YTEST_REQUIRE(test,
-                  yetty_ydraw_font_resource_parse((const uint32_t *)(raw + size_before), &view) == 0);
+    YTEST_REQUIRE(
+        test, yetty_ydraw_font_resource_parse((const uint32_t *)(raw + size_before), &view) == 0);
     YTEST_REQUIRE(test, view.font_id == 7);
     YTEST_REQUIRE(test, view.ttf_len == 0);
     YTEST_REQUIRE(test, view.name_len == strlen("Emmentaler"));
@@ -201,9 +201,8 @@ static void test_text_identity(struct ytest *test)
     YTEST_REQUIRE_OK(test, yetty_yclass_object_free(text));
 
     const char *body = "hello ydraw";
-    struct yetty_ycore_buffer body_buf = {.data = (uint8_t *)(uintptr_t)body,
-                                          .size = strlen(body),
-                                          .capacity = strlen(body)};
+    struct yetty_ycore_buffer body_buf = {
+        .data = (uint8_t *)(uintptr_t)body, .size = strlen(body), .capacity = strlen(body)};
     YTEST_REQUIRE_OK(test, yetty_ydraw_drawable_list_add_text(via_builder, 40.0f, 240.0f, &body_buf,
                                                               24.0f, 0xFFE0E5E4u, 0u, -1, 0.0f));
 
