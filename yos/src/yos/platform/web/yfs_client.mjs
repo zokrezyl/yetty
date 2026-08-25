@@ -14,6 +14,11 @@
 //   dirs           { "": [entry...], "bin": [entry...], ... }
 //   fetchBody(dirPath, entry) -> Promise<Uint8Array>
 //   readBodySync(dirPath, entry) -> Uint8Array | null   (node only)
+//   readBodySyncFallback(dirPath, entry) -> Uint8Array | null
+//     last-resort SYNCHRONOUS body read for contexts that cannot
+//     asyncify-suspend (a lua_* forwarder on the stack — liblua is not
+//     asyncify-instrumented). Browser: sync XHR (blocks the thread — use
+//     only when suspension would corrupt the guest); node: readBodySync.
 //   entryAt(path) -> { dirPath, entry } | null
 //   fetchBodyAtPath(path) -> Promise<Uint8Array>
 
@@ -54,19 +59,41 @@ export async function openYfs(rootUrl, options = {}) {
   const dirs = manifest.dirs;
   const entryAt = makeEntryLookup(dirs);
 
-  const fetchBody = async (dirPath, entry) => {
+  const bodyUrl = (dirPath, entry) => {
     const location = bodyLocation(dirPath, entry);
-    const url = location.blob !== undefined
+    return location.blob !== undefined
       ? `${rootUrl}/blob/${location.blob}`
       : `${rootUrl}/${version}/guest/${encodePath(location.mirrored)}`;
+  };
+
+  const fetchBody = async (dirPath, entry) => {
+    const url = bodyUrl(dirPath, entry);
     const response = await fetch(url);
     if (!response.ok) throw new Error(`yfs: ${url} -> ${response.status}`);
     return new Uint8Array(await response.arrayBuffer());
   };
 
+  // Synchronous XHR body read. Sync XHR forbids responseType in window
+  // context, so the bytes come back through the charset=x-user-defined
+  // text path (one char per byte, low 8 bits significant).
+  const readBodySyncFallback = typeof XMLHttpRequest !== "function" ? null :
+    (dirPath, entry) => {
+      const url = bodyUrl(dirPath, entry);
+      const request = new XMLHttpRequest();
+      request.open("GET", url, false);
+      request.overrideMimeType("text/plain; charset=x-user-defined");
+      request.send(null);
+      if (request.status !== 200) throw new Error(`yfs: ${url} -> ${request.status}`);
+      const text = request.responseText;
+      const bytes = new Uint8Array(text.length);
+      for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i) & 0xff;
+      return bytes;
+    };
+
   return {
     version, dirs, entryAt, fetchBody,
     readBodySync: null,
+    readBodySyncFallback,
     fetchBodyAtPath: async (path) => {
       const hit = entryAt(path);
       if (!hit) throw new Error(`yfs: no such entry: ${path}`);
@@ -106,6 +133,7 @@ export function openYfsDir(rootDir, options = {}) {
 
   return {
     version, dirs, entryAt, readBodySync,
+    readBodySyncFallback: readBodySync,
     fetchBody: async (dirPath, entry) => readBodySync(dirPath, entry),
     fetchBodyAtPath: async (path) => {
       const hit = entryAt(path);

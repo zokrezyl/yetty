@@ -28,6 +28,18 @@ const LUA_TABLE_RESERVE = 1024; // >= liblua's element count (~170)
 
 let libluaModule = null; // compiled WebAssembly.Module (loaded once)
 
+// lua_* forwarder frames currently on the JS/wasm call stack. liblua is NOT
+// asyncify-instrumented, so while this is non-zero the engine must not
+// asyncify-suspend: the unwind would skip liblua's frames and the later
+// rewind diverges into an `unreachable` trap (nvim's Lua-driven runtime
+// opens died exactly that way when yfs bodies arrived asynchronously).
+// Single-threaded engine, one guest turn at a time — one counter suffices.
+let luaForwarderDepth = 0;
+
+export function luaCallDepth() {
+	return luaForwarderDepth;
+}
+
 // Load + compile liblua.wasm. Works in node (fs) and browser (fetch).
 export async function loadLiblua() {
 	if (libluaModule) return libluaModule;
@@ -88,7 +100,16 @@ export function installLuaForwarders(env, getGuest, luaEnv, growTo, reserve) {
 		if (luaInst.exports.__wasm_call_ctors) luaInst.exports.__wasm_call_ctors();
 		return luaInst;
 	};
+	// try/finally so the depth stays right even when a wasm exception
+	// (Lua error/pcall) unwinds through the forwarder frame.
 	for (const name of luaExportNames()) {
-		env[name] = (...args) => ensure().exports[name](...args);
+		env[name] = (...args) => {
+			luaForwarderDepth++;
+			try {
+				return ensure().exports[name](...args);
+			} finally {
+				luaForwarderDepth--;
+			}
+		};
 	}
 }

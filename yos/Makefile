@@ -257,10 +257,13 @@ browser-liblua:
 
 # nvim in the browser (Lua via shared-memory liblua.wasm). Needs `make all`.
 # Batch (--version) + full interactive editor (TUI client + embedded server,
-# runtime files mounted from result/share, insert round-trip, :q! teardown).
+# runtime files mounted from result/share, insert round-trip, :q! teardown)
+# + the deployed-site configuration (async yfs bodies; Lua-driven cold opens
+# must take the sync fallback instead of asyncify-suspending, issue #724).
 test-browser-nvim: browser-liblua
 	@node $(WEB)/lua/nvim_test.mjs
 	@node $(WEB)/lua/nvim_interactive_test.mjs
+	@node $(WEB)/lua/nvim_yfs_async_test.mjs
 
 # Interactive top in the browser — guards the asyncify instrumentation of the
 # freebsd-tools binaries (a tool that blocks in select() must suspend, not trap).

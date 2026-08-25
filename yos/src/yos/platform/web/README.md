@@ -131,7 +131,13 @@ What made it work, layer by layer:
 - **Runtime files**: `$VIMRUNTIME` (vim/_defaults.lua, syntax, ftplugin, …)
   mounts into the VFS from `result/share` — one `/fs/pack.bin` blob in the
   browser (serve.sh packs it, `fs_mount.mjs` parses it, file data are
-  zero-copy views), lazy per-file reads in node.
+  zero-copy views), lazy per-file reads in node. The deployed site mounts
+  the same tree through yfs with ASYNC bodies instead (docs/yfs.md in the
+  yetty tree) — and a cold open from inside a `lua_*` call must NOT
+  asyncify-suspend (liblua is not instrumented; the rewind traps
+  `unreachable` — nvim dying silently on yetty.dev, issue #724). The
+  engine reads such bodies synchronously through the yfs client's sync
+  fallback (browser: sync XHR); pinned by `lua/nvim_yfs_async_test.mjs`.
 - **Engine**: pipe2 O_CLOEXEC honored across exec (libuv's uv_spawn status
   pipe must EOF); fcntl(F_GETFL) reports real access modes (libuv derives
   stream writability from it); kevent grew EVFILT_PROC (how libuv on kqueue
