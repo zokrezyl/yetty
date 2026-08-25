@@ -157,6 +157,22 @@ classes:
         type: int
         get: false
         set: false
+      - name: title
+        type: "char[256]"
+        get: false
+        set: false
+      - name: title_accum_len
+        type: size_t
+        get: false
+        set: false
+      - name: title_stack
+        type: "char[8][256]"
+        get: false
+        set: false
+      - name: title_stack_depth
+        type: uint32_t
+        get: false
+        set: false
       - name: clear_hook_fn
         type: yetty_yvterm_grid_clear_hook_fn
         get: false

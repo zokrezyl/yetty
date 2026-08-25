@@ -240,12 +240,25 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
     int card_move;
     int card_key;
 
+    /* Terminal title (OSC 0/2), accumulated across VTermStringFragment
+     * pieces; published to the sink (set_title) on the final fragment.
+     * Overlong titles are truncated. */
+    char title[256];
+    size_t title_accum_len;
+    /* XTWINOPS title stack (CSI 22/23 t): full-screen apps (nvim with
+     * 'title', for one) save the title on entry and restore it on exit.
+     * The depth counter keeps counting past the fixed capacity so pushes
+     * and pops stay balanced; entries beyond it are dropped. */
+    char title_stack[8][256];
+    uint32_t title_stack_depth;
+
     yetty_yvterm_grid_clear_hook_fn clear_hook_fn;
     void *clear_hook_userdata;
 
     /* Terminal-host sink (ytermsink:sink): the grid dispatches pty_write /
-     * mouse_sub / clipboard_write / sixel_write on it. Borrowed — the host
-     * (terminal) owns it and outlives the grid. NULL in headless/test. */
+     * mouse_sub / clipboard_write / sixel_write / set_title on it. Borrowed —
+     * the host (terminal) owns it and outlives the grid. NULL in
+     * headless/test. */
     struct yetty_yclass_object *sink;
 
     /* Re-creates one figure from its retained envelope (registered by the
@@ -1097,6 +1110,30 @@ static int cb_settermprop(VTermProp prop, VTermValue *val, void *user)
     case VTERM_PROP_MOUSE:
         grid->mouse_mode = (int)val->number;
         break;
+    case VTERM_PROP_TITLE: {
+        /* OSC 0/2 delivers the title as string fragments; accumulate and
+         * publish the assembled title to the host on the final piece. A
+         * libvterm callback can't propagate a Result — absorb here. */
+        VTermStringFragment fragment = val->string;
+        if (fragment.initial) {
+            grid->title_accum_len = 0;
+        }
+        size_t space = sizeof(grid->title) - 1 - grid->title_accum_len;
+        size_t take = fragment.len < space ? fragment.len : space;
+        memcpy(grid->title + grid->title_accum_len, fragment.str, take);
+        grid->title_accum_len += take;
+        if (fragment.final) {
+            grid->title[grid->title_accum_len] = 0;
+            if (grid->sink) {
+                struct yetty_ycore_void_result title_res =
+                    yetty_ytermsink_set_title(grid->sink, grid->title, grid->title_accum_len);
+                if (YETTY_IS_ERR(title_res)) {
+                    yetty_ycore_error_destroy(title_res.error);
+                }
+            }
+        }
+        break;
+    }
     case VTERM_PROP_CARDCLICK:
     case VTERM_PROP_CARDMOVE:
     case VTERM_PROP_CARDKEY:
@@ -1571,9 +1608,59 @@ static int cb_dcs(const char *command, size_t commandlen, VTermStringFragment fr
     return 1;
 }
 
+/* XTWINOPS title stack: CSI 22;0|2 t saves the window title, CSI 23;0|2 t
+ * restores it. Full-screen apps bracket themselves with these so the
+ * pre-launch title comes back on exit (nvim pushes on entry and pops on
+ * quit). Icon-only ops (second arg 1) have no equivalent here — the
+ * terminal keeps a single title — and fall through unhandled. libvterm has
+ * no handler for CSI t, so this arrives via the unrecognised fallback. */
+YETTY_EXTERNAL_CALLBACK
+static int cb_csi(const char *leader, const long args[], int argcount, const char *intermed,
+                  char command, void *user)
+{
+    struct yetty_yvterm_grid *grid = user;
+    if (command != 't' || (leader && leader[0]) || (intermed && intermed[0]) || argcount < 1) {
+        return 0;
+    }
+    uint32_t capacity = sizeof(grid->title_stack) / sizeof(grid->title_stack[0]);
+    long op = CSI_ARG(args[0]);
+    long what = argcount > 1 ? (long)CSI_ARG(args[1]) : 0;
+    if (what == (long)CSI_ARG_MISSING) {
+        what = 0;
+    }
+    if (op == 22 && (what == 0 || what == 2)) {
+        if (grid->title_stack_depth < capacity) {
+            memcpy(grid->title_stack[grid->title_stack_depth], grid->title, sizeof(grid->title));
+        }
+        grid->title_stack_depth++;
+        return 1;
+    }
+    if (op == 23 && (what == 0 || what == 2)) {
+        if (grid->title_stack_depth > 0) {
+            grid->title_stack_depth--;
+            if (grid->title_stack_depth < capacity) {
+                memcpy(grid->title, grid->title_stack[grid->title_stack_depth],
+                       sizeof(grid->title));
+                grid->title_accum_len = strlen(grid->title);
+                if (grid->sink) {
+                    /* A libvterm callback can't propagate a Result — absorb. */
+                    struct yetty_ycore_void_result title_res =
+                        yetty_ytermsink_set_title(grid->sink, grid->title, grid->title_accum_len);
+                    if (YETTY_IS_ERR(title_res)) {
+                        yetty_ycore_error_destroy(title_res.error);
+                    }
+                }
+            }
+        }
+        return 1;
+    }
+    return 0;
+}
+
 static const VTermStateFallbacks *grid_fallbacks(void)
 {
     static const VTermStateFallbacks fallbacks = {
+        .csi = cb_csi,
         .osc = cb_osc,
         .dcs = cb_dcs,
     };

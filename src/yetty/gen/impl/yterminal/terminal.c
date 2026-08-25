@@ -38,6 +38,10 @@ static yetty_ytermsink_request_render_fn
     yetty_yterminal_terminal_yetty_ytermsink_request_render_terminal_sink_request_render_check =
         terminal_sink_request_render;
 YETTY_MAYBE_UNUSED
+static yetty_ytermsink_set_title_fn
+    yetty_yterminal_terminal_yetty_ytermsink_set_title_terminal_sink_set_title_check =
+        terminal_sink_set_title;
+YETTY_MAYBE_UNUSED
 static yetty_yterminal_figure_root_container_fn
     yetty_yterminal_terminal_yetty_yterminal_figure_root_container_terminal_figure_root_container_check =
         terminal_figure_root_container;
@@ -69,6 +73,8 @@ struct yetty_yclass_ptr_result yetty_yterminal_terminal_class_get(void)
         {"yetty_ytermsink", "request_render",
          (yetty_yclass_method_id_t)yetty_ytermsink_request_render,
          (yetty_yclass_impl_t)terminal_sink_request_render},
+        {"yetty_ytermsink", "set_title", (yetty_yclass_method_id_t)yetty_ytermsink_set_title,
+         (yetty_yclass_impl_t)terminal_sink_set_title},
         {"yetty_yterminal", "figure_root_container",
          (yetty_yclass_method_id_t)yetty_yterminal_figure_root_container,
          (yetty_yclass_impl_t)terminal_figure_root_container},

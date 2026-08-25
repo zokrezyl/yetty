@@ -3429,142 +3429,142 @@ local_typedefs:
     source_file: src/yetty/yrich/app.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_yrich_element_id:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yrich/yrich-types.h
+    source_file: include/yetty/yrich/yrich-types.h
     text: typedef uint64_t yetty_yrich_element_id;
   yetty_yrich_sync_cb:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yrich/yrich-types.h
+    source_file: include/yetty/yrich/yrich-types.h
     text: "typedef void (*yetty_yrich_sync_cb)(struct yetty_yclass_object *, struct yetty_yrich_operation *const *, size_t, void *);"
   yetty_yrich_dirty_cb:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yrich/yrich-types.h
+    source_file: include/yetty/yrich/yrich-types.h
     text: "typedef void (*yetty_yrich_dirty_cb)(struct yetty_yclass_object *, void *);"
   yetty_yrich_session_id:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yrich/yrich-operation.h
+    source_file: include/yetty/yrich/yrich-operation.h
     text: typedef uint64_t yetty_yrich_session_id;
   yetty_yrich_constructor_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_constructor_fn)(struct yetty_yclass_object *);"
   yetty_yrich_document_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_document_destroy_fn)(struct yetty_yclass_object *);"
   yetty_yrich_document_content_width_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_float_result (*yetty_yrich_document_content_width_fn)(struct yetty_yclass_object *);"
   yetty_yrich_document_content_height_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_float_result (*yetty_yrich_document_content_height_fn)(struct yetty_yclass_object *);"
   yetty_yrich_document_render_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_document_render_fn)(struct yetty_yclass_object *);"
   yetty_yrich_document_apply_op_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_document_apply_op_fn)(struct yetty_yclass_object *, struct yetty_yrich_operation *, int);"
   yetty_yrich_document_undo_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_document_undo_fn)(struct yetty_yclass_object *);"
   yetty_yrich_document_redo_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_document_redo_fn)(struct yetty_yclass_object *);"
   yetty_yrich_document_on_mouse_down_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_mouse_down_fn)(struct yetty_yclass_object *, float, float, uint32_t, uint32_t);"
   yetty_yrich_document_on_mouse_up_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_mouse_up_fn)(struct yetty_yclass_object *, float, float, uint32_t, uint32_t);"
   yetty_yrich_document_on_mouse_drag_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_mouse_drag_fn)(struct yetty_yclass_object *, float, float, uint32_t, uint32_t);"
   yetty_yrich_document_on_mouse_double_click_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_mouse_double_click_fn)(struct yetty_yclass_object *, float, float, uint32_t, uint32_t);"
   yetty_yrich_document_on_key_down_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_key_down_fn)(struct yetty_yclass_object *, uint32_t, uint32_t);"
   yetty_yrich_document_on_text_input_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/document.h
+    source_file: src/yetty/gen/impl/yrich/document.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_text_input_fn)(struct yetty_yclass_object *, struct yetty_ycore_buffer);"
   yetty_yrich_ydoc_toggle_format_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/ydoc.h
+    source_file: src/yetty/gen/impl/yrich/ydoc.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_toggle_format_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_yrich_ydoc_set_text_color_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/ydoc.h
+    source_file: src/yetty/gen/impl/yrich/ydoc.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_text_color_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_yrich_ydoc_set_alignment_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/ydoc.h
+    source_file: src/yetty/gen/impl/yrich/ydoc.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_alignment_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_yrich_ydoc_set_line_spacing_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/ydoc.h
+    source_file: src/yetty/gen/impl/yrich/ydoc.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_line_spacing_fn)(struct yetty_yclass_object *, float);"
   yetty_yrich_ydoc_adjust_indent_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/ydoc.h
+    source_file: src/yetty/gen/impl/yrich/ydoc.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_adjust_indent_fn)(struct yetty_yclass_object *, int32_t);"
   yetty_yrich_ydoc_set_highlight_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/ydoc.h
+    source_file: src/yetty/gen/impl/yrich/ydoc.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_highlight_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_yrich_ydoc_clear_format_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/ydoc.h
+    source_file: src/yetty/gen/impl/yrich/ydoc.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_clear_format_fn)(struct yetty_yclass_object *);"
   yetty_yrich_ydoc_set_heading_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/ydoc.h
+    source_file: src/yetty/gen/impl/yrich/ydoc.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_heading_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_yrich_ydoc_change_font_size_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/ydoc.h
+    source_file: src/yetty/gen/impl/yrich/ydoc.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_change_font_size_fn)(struct yetty_yclass_object *, float);"
   yetty_yrich_ydoc_set_font_size_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/ydoc.h
+    source_file: src/yetty/gen/impl/yrich/ydoc.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_font_size_fn)(struct yetty_yclass_object *, float);"
   yetty_yrich_element_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/element.h
+    source_file: src/yetty/gen/impl/yrich/element.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_element_destroy_fn)(struct yetty_yclass_object *);"
   yetty_yrich_element_bounds_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/element.h
+    source_file: src/yetty/gen/impl/yrich/element.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_element_bounds_fn)(struct yetty_yclass_object *, struct yetty_yrich_rect *);"
   yetty_yrich_element_hit_test_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/element.h
+    source_file: src/yetty/gen/impl/yrich/element.h
     text: "typedef struct yetty_ycore_int_result (*yetty_yrich_element_hit_test_fn)(struct yetty_yclass_object *, float, float);"
   yetty_yrich_element_render_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/element.h
+    source_file: src/yetty/gen/impl/yrich/element.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_element_render_fn)(struct yetty_yclass_object *, struct yetty_ydraw_drawable_list *, uint32_t, int);"
   yetty_yrich_element_is_editable_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/element.h
+    source_file: src/yetty/gen/impl/yrich/element.h
     text: "typedef struct yetty_ycore_int_result (*yetty_yrich_element_is_editable_fn)(struct yetty_yclass_object *);"
   yetty_yrich_element_begin_edit_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/element.h
+    source_file: src/yetty/gen/impl/yrich/element.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_element_begin_edit_fn)(struct yetty_yclass_object *);"
   yetty_yrich_element_end_edit_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/element.h
+    source_file: src/yetty/gen/impl/yrich/element.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_element_end_edit_fn)(struct yetty_yclass_object *);"
   yetty_yrich_element_is_editing_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/element.h
+    source_file: src/yetty/gen/impl/yrich/element.h
     text: "typedef struct yetty_ycore_int_result (*yetty_yrich_element_is_editing_fn)(struct yetty_yclass_object *);"
   yetty_yrich_element_insert_text_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/element.h
+    source_file: src/yetty/gen/impl/yrich/element.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_element_insert_text_fn)(struct yetty_yclass_object *, struct yetty_ycore_buffer);"
   yetty_yrich_element_delete_sel_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/element.h
+    source_file: src/yetty/gen/impl/yrich/element.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_element_delete_sel_fn)(struct yetty_yclass_object *);"
   fn_t:
     source_file: src/yetty/yrich/document.c
     text: "typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_object *);"
   yetty_yrich_slides_set_current_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/slides.c
+    source_file: src/yetty/gen/impl/yrich/slides.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_slides_set_current_fn)(struct yetty_yclass_object *, int32_t);"
   yetty_yrich_slides_next_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/slides.c
+    source_file: src/yetty/gen/impl/yrich/slides.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_slides_next_fn)(struct yetty_yclass_object *);"
   yetty_yrich_slides_prev_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/slides.c
+    source_file: src/yetty/gen/impl/yrich/slides.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_slides_prev_fn)(struct yetty_yclass_object *);"
   yetty_yrich_spreadsheet_set_grid_size_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/spreadsheet.c
+    source_file: src/yetty/gen/impl/yrich/spreadsheet.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_grid_size_fn)(struct yetty_yclass_object *, int32_t, int32_t);"
   yetty_yrich_spreadsheet_set_row_height_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/spreadsheet.c
+    source_file: src/yetty/gen/impl/yrich/spreadsheet.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_row_height_fn)(struct yetty_yclass_object *, int32_t, float);"
   yetty_yrich_spreadsheet_set_col_width_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/spreadsheet.c
+    source_file: src/yetty/gen/impl/yrich/spreadsheet.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_col_width_fn)(struct yetty_yclass_object *, int32_t, float);"
   yetty_yrich_spreadsheet_set_cell_value_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yrich/spreadsheet.c
+    source_file: src/yetty/gen/impl/yrich/spreadsheet.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_cell_value_fn)(struct yetty_yclass_object *, int32_t, int32_t, struct yetty_ycore_buffer);"
   paragraph_line_visitor:
     source_file: src/yetty/yrich/ydoc.c

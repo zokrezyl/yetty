@@ -62,6 +62,12 @@ struct yetty_ycore_void_result yetty_ytermsink_clipboard_write(struct yetty_ycla
  * anchored image figure. Default no-op. */
 struct yetty_ycore_void_result yetty_ytermsink_sixel_write(struct yetty_yclass_object *obj,
                                                            const char *data, size_t len);
+/* set_title: report the terminal title set by the running program (OSC 0/2)
+ * so the host can surface it — tab label, window title. `title` is the
+ * complete NUL-terminated title (fragments already assembled by the content
+ * side); `len` excludes the NUL. Default no-op. */
+struct yetty_ycore_void_result yetty_ytermsink_set_title(struct yetty_yclass_object *obj,
+                                                         const char *title, size_t len);
 
 typedef struct yetty_ycore_void_result (*yetty_ytermsink_pty_write_fn)(struct yetty_yclass_object *,
                                                                        const char *, size_t);
@@ -73,6 +79,8 @@ typedef struct yetty_ycore_void_result (*yetty_ytermsink_clipboard_write_fn)(
     struct yetty_yclass_object *, const char *, size_t, int);
 typedef struct yetty_ycore_void_result (*yetty_ytermsink_sixel_write_fn)(
     struct yetty_yclass_object *, const char *, size_t);
+typedef struct yetty_ycore_void_result (*yetty_ytermsink_set_title_fn)(struct yetty_yclass_object *,
+                                                                       const char *, size_t);
 
 struct yetty_yclass_object_ptr_result yetty_ytermsink_sink_create(struct yetty_yclass_ctx *ctx);
 

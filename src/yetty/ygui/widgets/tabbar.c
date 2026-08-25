@@ -58,7 +58,19 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_yclass_
 #define TABBAR_PILL_GAP 4.0f
 #define TABBAR_PILL_RADIUS 6.0f
 #define TABBAR_ACCENT_BAR_H 3.0f
+/* Initial pill width before a label lands; tabbar_reflow_pills re-derives
+ * the real basis from the label text right after. */
 #define TABBAR_PILL_PREF_W 160.0f
+/* Content-sized pills: each pill's flex basis follows its label length
+ * (same 0.62-em mono advance the paint-side elide uses, so a pill sized
+ * here fits its label exactly at paint time), clamped to [MIN_W, MAX_W].
+ * When the strip overflows, shrink is weighted by flex_shrink × basis:
+ * inactive pills carry full weight, the active pill only ACTIVE_SHRINK —
+ * so the active tab keeps the better share of its width. */
+#define TABBAR_PILL_MIN_W 64.0f
+#define TABBAR_PILL_MAX_W 320.0f
+#define TABBAR_LABEL_ADVANCE_EM 0.62f
+#define TABBAR_ACTIVE_SHRINK 0.15f
 /* 2px so the SDF box renders as a solid line — a 1px-wide box is nearly
  * erased by the shader's edge anti-aliasing, which is why the old hairline
  * was effectively invisible. */
@@ -284,6 +296,89 @@ static struct yetty_ycore_void_result header_set_label(struct yetty_yclass_objec
         return YETTY_ERR(yetty_ycore_void, "header_set_label: malloc failed");
     }
     memcpy(hd->label, label, n + 1);
+    return YETTY_OK_VOID();
+}
+
+/*-----------------------------------------------------------------------------
+ * Content-sized pill layout.
+ *---------------------------------------------------------------------------*/
+
+static size_t label_codepoint_count(const char *label)
+{
+    size_t count = 0;
+    for (const unsigned char *byte = (const unsigned char *)label; *byte; byte++) {
+        if ((*byte & 0xC0) != 0x80) {
+            count++;
+        }
+    }
+    return count;
+}
+
+static struct yetty_ycore_void_result tabbar_apply_pill_layout(struct yetty_yclass_object *header,
+                                                               const struct header_data *hd,
+                                                               int close_band, int is_active,
+                                                               float font_size)
+{
+    float reserved_right = close_band ? TABBAR_CLOSE_W : TABBAR_PILL_PAD_X;
+    size_t glyphs = hd->label ? label_codepoint_count(hd->label) : 0;
+    /* +1px headroom: the paint-side elide floors label_avail / advance, so
+     * a pill sized to fit its label EXACTLY loses the last glyph to float
+     * truncation without it. */
+    float desired = TABBAR_PILL_PAD_X + (float)glyphs * font_size * TABBAR_LABEL_ADVANCE_EM +
+                    reserved_right + 1.0f;
+    if (desired < TABBAR_PILL_MIN_W) {
+        desired = TABBAR_PILL_MIN_W;
+    }
+    if (desired > TABBAR_PILL_MAX_W) {
+        desired = TABBAR_PILL_MAX_W;
+    }
+
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(header);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "tabbar_apply_pill_layout: layout_get");
+    struct yetty_ygui_layout layout = *layout_res.value;
+    layout.width = desired;
+    layout.min_width = TABBAR_PILL_MIN_W;
+    layout.flex_shrink = is_active ? TABBAR_ACTIVE_SHRINK : 1.0f;
+    /* layout_set is a no-op on byte-identical layouts, so re-pushing an
+     * unchanged pill layout every reflow does not dirty the widget. */
+    return yetty_ygui_widget_layout_set(header, &layout);
+}
+
+/* Re-derive every pill's flex basis + shrink weight. Called whenever an
+ * input of the computation changes: a label, the active index, or the
+ * close-band presence. */
+static struct yetty_ycore_void_result tabbar_reflow_pills(struct yetty_yclass_object *tabbar)
+{
+    struct yetty_ygui_tabbar_ptr_result td_dr = yetty_ygui_tabbar_from(tabbar);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "tabbar_reflow_pills: data_get");
+    struct yetty_ygui_tabbar *td = td_dr.value;
+
+    float font_size = 14.0f;
+    struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_widget_framework(tabbar);
+    if (YETTY_IS_OK(framework_res)) {
+        const struct yetty_ygui_theme *theme = yetty_ygui_framework_theme(framework_res.value);
+        if (theme && theme->font_size > 0.0f) {
+            font_size = theme->font_size;
+        }
+    } else {
+        yetty_ycore_error_destroy(framework_res.error);
+    }
+
+    int idx = 0;
+    struct yetty_yclass_object_ptr_result child_res = yetty_ygui_widget_first_child(tabbar);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res, "tabbar_reflow_pills: first_child");
+    for (struct yetty_yclass_object *c = child_res.value; c;) {
+        struct yetty_yclass_void_ptr_result hd_dr =
+            yetty_yclass_object_data(c, header_class_get().value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, hd_dr, "tabbar_reflow_pills: header data");
+        struct yetty_ycore_void_result apply_res = tabbar_apply_pill_layout(
+            c, hd_dr.value, td->close_cb != NULL, idx == td->active_index, font_size);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "tabbar_reflow_pills: apply");
+        idx++;
+        struct yetty_yclass_object_ptr_result next_res = yetty_ygui_widget_next_sibling(c);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, next_res, "tabbar_reflow_pills: next_sibling");
+        c = next_res.value;
+    }
     return YETTY_OK_VOID();
 }
 
@@ -711,6 +806,8 @@ struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_ycl
             yetty_ycore_error_destroy(dr.error);
         }
     }
+    struct yetty_ycore_void_result reflow_res = tabbar_reflow_pills(tabbar);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, reflow_res, "yetty_ygui_tabbar_add_tab: reflow");
     return YETTY_OK(yetty_yclass_object_ptr, header);
 }
 
@@ -743,6 +840,11 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_yclass_
             if (td->active_index >= n) {
                 td->active_index = n - 1;
             }
+            /* The active index may have shifted onto a different pill —
+             * re-derive shrink weights. */
+            struct yetty_ycore_void_result reflow_res = tabbar_reflow_pills(tabbar);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, reflow_res,
+                                "yetty_ygui_tabbar_remove_tab: reflow");
             return yetty_ygui_widget_set_dirty(tabbar);
         }
         c = next;
@@ -766,6 +868,9 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_label(struct yetty_yclass_o
             struct yetty_ycore_void_result lr =
                 header_set_label((struct yetty_yclass_object *)c, label);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "yetty_ygui_tabbar_set_label: set");
+            struct yetty_ycore_void_result reflow_res = tabbar_reflow_pills(tabbar);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, reflow_res,
+                                "yetty_ygui_tabbar_set_label: reflow");
             return yetty_ygui_widget_set_dirty(tabbar);
         }
         i++;
@@ -775,6 +880,40 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_label(struct yetty_yclass_o
         c = next_res.value;
     }
     return YETTY_OK_VOID();
+}
+
+/* Current label of the tab at `index`, NULL when the index is out of range
+ * (or the header has no label). Borrowed pointer — valid until the next
+ * set_label/remove_tab on this tabbar. Lets callers compare before calling
+ * set_label so an unchanged label doesn't dirty the widget every frame. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_const_char_ptr_result yetty_ygui_tabbar_label(
+    const struct yetty_yclass_object *tabbar, int index)
+{
+    if (!tabbar || index < 0) {
+        return YETTY_OK(yetty_ycore_const_char_ptr, NULL);
+    }
+    int i = 0;
+    struct yetty_yclass_object_ptr_result child_res =
+        yetty_ygui_widget_first_child((struct yetty_yclass_object *)tabbar);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, child_res,
+                        "yetty_ygui_tabbar_label: first_child");
+    for (struct yetty_yclass_object *c = child_res.value; c;) {
+        if (i == index) {
+            struct yetty_yclass_void_ptr_result hd_dr =
+                yetty_yclass_object_data(c, header_class_get().value);
+            YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, hd_dr,
+                                "yetty_ygui_tabbar_label: data_get");
+            struct header_data *hd = hd_dr.value;
+            return YETTY_OK(yetty_ycore_const_char_ptr, hd->label);
+        }
+        i++;
+        struct yetty_yclass_object_ptr_result next_res = yetty_ygui_widget_next_sibling(c);
+        YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, next_res,
+                            "yetty_ygui_tabbar_label: next_sibling");
+        c = next_res.value;
+    }
+    return YETTY_OK(yetty_ycore_const_char_ptr, NULL);
 }
 
 YETTY_ANNOTATE("expose")
@@ -835,6 +974,8 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_yclass_
         return YETTY_OK_VOID();
     }
     td->active_index = index;
+    struct yetty_ycore_void_result reflow_res = tabbar_reflow_pills(tabbar);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, reflow_res, "yetty_ygui_tabbar_set_active: reflow");
     struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(tabbar);
     if (YETTY_IS_ERR(dr)) {
         return dr;
@@ -859,6 +1000,9 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_yclas
     struct yetty_ygui_tabbar *td = td_dr.value;
     td->close_cb = cb;
     td->close_userdata = userdata;
+    /* The close band widens every pill's reserved right edge. */
+    struct yetty_ycore_void_result reflow_res = tabbar_reflow_pills(tabbar);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, reflow_res, "yetty_ygui_tabbar_set_on_close: reflow");
     return yetty_ygui_widget_set_dirty(tabbar);
 }
 

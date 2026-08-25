@@ -975,89 +975,89 @@ local_typedefs:
     source_file: src/yetty/yfigure/container.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_yfigure_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/figure.h
+    source_file: src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_destroy_fn)(struct yetty_yclass_object *);"
   yetty_yfigure_render_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/figure.h
+    source_file: src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_render_fn)(struct yetty_yclass_object *, struct yetty_ydraw_target *);"
   yetty_yfigure_dump_state_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/figure.h
+    source_file: src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_yfigure_dump_state_fn)(struct yetty_yclass_object *, int);"
   yetty_yfigure_process_input_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/figure.h
+    source_file: src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_process_input_fn)(struct yetty_yclass_object *, struct yetty_ywire_wire_statemachine *);"
   yetty_yfigure_hit_opaque_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/figure.h
+    source_file: src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_int_result (*yetty_yfigure_hit_opaque_fn)(struct yetty_yclass_object *, float, float);"
   yetty_yfigure_process_bytes_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/figure.h
+    source_file: src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_process_bytes_fn)(struct yetty_yclass_object *, const uint8_t *, size_t);"
   yetty_yfigure_reset_content_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/figure.h
+    source_file: src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_reset_content_fn)(struct yetty_yclass_object *);"
   yetty_yfigure_set_scroll_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/figure.h
+    source_file: src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_scroll_fn)(struct yetty_yclass_object *, float, float);"
   yetty_yfigure_set_content_size_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/figure.h
+    source_file: src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_content_size_fn)(struct yetty_yclass_object *, float, float);"
   yetty_yfigure_apply_scroll_anchor_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/figure.h
+    source_file: src/yetty/gen/impl/yfigure/figure.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_apply_scroll_anchor_fn)(struct yetty_yclass_object *, int32_t, float);"
   yetty_ycomplex_factory_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yfigure/registry.h
+    source_file: include/yetty/yfigure/registry.h
     text: "typedef struct yetty_yfigure_figure_ptr_result (*yetty_ycomplex_factory_fn)(struct yetty_ycore_rectangle, const struct yetty_context *, void *);"
   container_visitor_fn:
     source_file: src/yetty/yfigure/container.c
     text: "typedef int (*container_visitor_fn)(uint32_t, struct yetty_yfigure_figure *, void *);"
   yetty_yfigure_constructor_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_constructor_fn)(struct yetty_yclass_object *);"
   yetty_yfigure_add_child_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_add_child_fn)(struct yetty_yclass_object *, struct yetty_yfigure_figure *, uint32_t);"
   yetty_yfigure_remove_child_by_id_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_remove_child_by_id_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_yfigure_raise_child_by_id_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_raise_child_by_id_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_yfigure_create_child_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_create_child_fn)(struct yetty_yclass_object *, uint32_t, uint32_t, struct yetty_ycore_rectangle, struct yetty_ycore_buffer);"
   yetty_yfigure_delete_child_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_delete_child_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_yfigure_set_child_rect_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_rect_fn)(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);"
   yetty_yfigure_set_rect_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_rect_fn)(struct yetty_yclass_object *, struct yetty_ycore_rectangle);"
   yetty_yfigure_child_object_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_yclass_object_ptr_result (*yetty_yfigure_child_object_fn)(struct yetty_yclass_object *, uint32_t);"
   yetty_yfigure_seat_overlay_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_seat_overlay_fn)(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);"
   yetty_yfigure_set_child_z_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_z_fn)(struct yetty_yclass_object *, uint32_t, int32_t);"
   yetty_yfigure_set_child_input_passthrough_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_input_passthrough_fn)(struct yetty_yclass_object *, uint32_t, uint32_t);"
   yetty_yfigure_set_child_hidden_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_hidden_fn)(struct yetty_yclass_object *, uint32_t, uint32_t);"
   yetty_yfigure_set_child_scroll_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_scroll_fn)(struct yetty_yclass_object *, uint32_t, float, float);"
   yetty_yfigure_set_child_content_size_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_set_child_content_size_fn)(struct yetty_yclass_object *, uint32_t, float, float);"
   yetty_yfigure_apply_child_body_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_apply_child_body_fn)(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_buffer);"
   yetty_yfigure_clear_all_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yfigure/container.c
+    source_file: src/yetty/gen/impl/yfigure/container.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yfigure_clear_all_fn)(struct yetty_yclass_object *);"

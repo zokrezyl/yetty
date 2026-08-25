@@ -10,6 +10,8 @@
  *   clipboard_write  hand an OSC 52 payload up so the host sets the OS
  *                    clipboard
  *   sixel_write      hand a decoded sixel image up so the host presents it
+ *   set_title        report the terminal title (OSC 0/2) so the host can
+ *                    surface it (tab label, window title)
  *
  * Direction is always content -> host. Each is a `virtual@` slot with a no-op
  * default; the host (the terminal) derives from this base (parent@ytermsink:
@@ -91,6 +93,21 @@ static struct yetty_ycore_void_result yetty_ytermsink_sink_default_sixel_write(
 {
     (void)obj;
     (void)data;
+    (void)len;
+    return YETTY_OK_VOID();
+}
+
+/* set_title: report the terminal title set by the running program (OSC 0/2)
+ * so the host can surface it — tab label, window title. `title` is the
+ * complete NUL-terminated title (fragments already assembled by the content
+ * side); `len` excludes the NUL. Default no-op. */
+YETTY_ANNOTATE("virtual@ytermsink:sink:set_title")
+YETTY_ANNOTATE("local@ytermsink:set_title")
+static struct yetty_ycore_void_result yetty_ytermsink_sink_default_set_title(
+    struct yetty_yclass_object *obj, const char *title, size_t len)
+{
+    (void)obj;
+    (void)title;
     (void)len;
     return YETTY_OK_VOID();
 }

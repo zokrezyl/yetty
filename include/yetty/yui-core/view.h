@@ -49,6 +49,11 @@ struct yetty_yui_view_ops {
                                                  struct yetty_yui_rect bounds);
     struct yetty_ycore_int_result (*on_event)(struct yetty_yui_view *self,
                                               const struct yetty_yui_event *event);
+    /* Optional. Human-readable title of the hosted content (for a terminal:
+     * what the running program set via OSC 0/2). NULL = no title known; the
+     * caller falls back to its own default label. The returned pointer is
+     * borrowed and only valid until the next view mutation. */
+    const char *(*title)(const struct yetty_yui_view *self);
 };
 
 /* View base - embed as first member in subclasses */
@@ -77,6 +82,10 @@ yetty_ycore_object_id yetty_yui_view_next_id(void);
 /* Accessors */
 yetty_ycore_object_id yetty_yui_view_id(const struct yetty_yui_view *view);
 struct yetty_yui_rect yetty_yui_view_bounds(const struct yetty_yui_view *view);
+
+/* Title of the hosted content, or NULL when the view has none (op not
+ * implemented or nothing set yet). Borrowed pointer — copy to keep. */
+const char *yetty_yui_view_title(const struct yetty_yui_view *view);
 
 #ifdef __cplusplus
 }

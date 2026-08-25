@@ -205,6 +205,25 @@ float yetty_yui_workspace_height(const struct yetty_yui_workspace *ws)
     return ws ? ws->height : 0;
 }
 
+const char *yetty_yui_workspace_focused_view_title(const struct yetty_yui_workspace *ws)
+{
+    if (!ws || !ws->root) {
+        return NULL;
+    }
+    /* The focused pane decides the workspace title. An inactive workspace
+     * keeps the pane focus it had when it was last active; a fresh tree
+     * with no focus yet falls back to its first pane so the tab still
+     * shows something meaningful. */
+    struct yetty_yui_tile *pane = yetty_yui_tile_find_focused_pane(ws->root);
+    if (!pane) {
+        pane = yetty_yui_tile_find_first_pane(ws->root);
+    }
+    if (!pane) {
+        return NULL;
+    }
+    return yetty_yui_view_title(yetty_yui_tile_pane_active_view(pane));
+}
+
 /*=============================================================================
  * Tree operations
  *===========================================================================*/
