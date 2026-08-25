@@ -46,5 +46,5 @@ the joining/reordering/marks/ligatures appear as drawn.
 
 The headless tests pin the same behaviour: `yfont_shaping` (Arabic joining,
 Devanagari reordering, glyph-id atlas), `yfont_shaping_render` (full
-shape→atlas→rasterize→complex; `YFONT_SHAPING_DUMP=tmp/shaped.ppm` dumps a
+shape→atlas→rasterize→composite; `YFONT_SHAPING_DUMP=tmp/shaped.ppm` dumps a
 canvas), and `yfont_ligature` (the ligature table).

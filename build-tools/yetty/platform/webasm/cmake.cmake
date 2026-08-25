@@ -453,7 +453,7 @@ set(_YW_STAMP  "${_YW_DEST}/.fetched-${_YW_VER}")
 
 if(NOT EXISTS "${_YW_STAMP}")
     if(NOT EXISTS "${_YW_CACHED}")
-        # In CI the stage-yos-web complex action drops the workflow
+        # In CI the stage-yos-web composite action drops the workflow
         # artifact here before configure runs, so this download only
         # fires on local builds / external consumers.
         message(STATUS "yos-web: downloading ${_YW_FILE}")
