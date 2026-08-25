@@ -3902,8 +3902,7 @@ static struct yetty_ycore_void_result scene_rich_apply_dom(struct yetty_yclass_o
             stage_res = yetty_yscene_dom_node_declare(scene->dom, node_id, 0);
         }
         if (YETTY_IS_ERR(stage_res)) {
-            stage_res = (struct yetty_ycore_void_result)YETTY_ERR(
-                yetty_ycore_void, "yscene rich dom: declare", stage_res);
+            stage_res = YETTY_ERR(yetty_ycore_void, "yscene rich dom: declare", stage_res);
             break;
         }
         new_ids[new_count++] = node_id;
@@ -3914,8 +3913,7 @@ static struct yetty_ycore_void_result scene_rich_apply_dom(struct yetty_yclass_o
                                          (float)anchor_col * cell_w, (float)anchor_row * cell_h);
         }
         if (YETTY_IS_ERR(stage_res)) {
-            stage_res = (struct yetty_ycore_void_result)YETTY_ERR(
-                yetty_ycore_void, "yscene rich dom: transform", stage_res);
+            stage_res = YETTY_ERR(yetty_ycore_void, "yscene rich dom: transform", stage_res);
             break;
         }
         stage_res = scene_rich_fault(scene, "append");
@@ -3925,14 +3923,12 @@ static struct yetty_ycore_void_result scene_rich_apply_dom(struct yetty_yclass_o
                                                    (size_t)record_words * sizeof(uint32_t));
         }
         if (YETTY_IS_ERR(stage_res)) {
-            stage_res = (struct yetty_ycore_void_result)YETTY_ERR(
-                yetty_ycore_void, "yscene rich dom: append", stage_res);
+            stage_res = YETTY_ERR(yetty_ycore_void, "yscene rich dom: append", stage_res);
             break;
         }
         struct yetty_ycore_uint32_result slot_res = yetty_yscene_dom_lookup(scene->dom, node_id);
         if (YETTY_IS_ERR(slot_res)) {
-            stage_res = (struct yetty_ycore_void_result)YETTY_ERR(
-                yetty_ycore_void, "yscene rich dom: lookup", slot_res);
+            stage_res = YETTY_ERR(yetty_ycore_void, "yscene rich dom: lookup", slot_res);
             break;
         }
         const struct yetty_yscene_dom_node *node = &scene->dom->nodes[slot_res.value];
@@ -3943,8 +3939,7 @@ static struct yetty_ycore_void_result scene_rich_apply_dom(struct yetty_yclass_o
                 stage_res = scene_complex_scan_batch(scene, batch_slot);
             }
             if (YETTY_IS_ERR(stage_res)) {
-                stage_res = (struct yetty_ycore_void_result)YETTY_ERR(
-                    yetty_ycore_void, "yscene rich dom: complex mint", stage_res);
+                stage_res = YETTY_ERR(yetty_ycore_void, "yscene rich dom: complex mint", stage_res);
                 break;
             }
         }
@@ -4004,8 +3999,7 @@ static struct yetty_ycore_void_result scene_rich_apply_dom(struct yetty_yclass_o
         scene->complex_count = complex_snapshot;
         scene->stream_next_ordinal = ordinal_snapshot;
         free(new_ids);
-        return (struct yetty_ycore_void_result)YETTY_ERR(yetty_ycore_void,
-                                                         "yscene rich dom: retire", retire_res);
+        return YETTY_ERR(yetty_ycore_void, "yscene rich dom: retire", retire_res);
     }
     struct yetty_ycore_uint64_result commit_res = yetty_yscene_dom_commit(scene->dom);
     if (YETTY_IS_ERR(commit_res)) {
