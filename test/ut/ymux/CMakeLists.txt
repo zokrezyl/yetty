@@ -212,12 +212,16 @@ yetty_add_c_test(
 # #699 closure gate: FAIL if the ymux implementation includes or links yvterm.
 # The independent libvterm+yscene endpoint is the only terminal engine ymux may
 # use (review cycle 21) — this pins the architectural boundary in CI.
-add_test(NAME ymux_no_yvterm_gate
-    COMMAND ${YETTY_ROOT}/test/ut/ymux/no-yvterm-gate.sh)
-set_tests_properties(ymux_no_yvterm_gate PROPERTIES
-    ENVIRONMENT "YMUX_BINARY=$<TARGET_FILE:ymux>;YETTY_ROOT=${YETTY_ROOT}"
-    LABELS "contract;ymux;headless"
-    TIMEOUT 30)
+# Needs the ymux TOOL binary, which has its own gate (YETTY_ENABLE_TOOL_YMUX);
+# the library tests above only need TARGET yetty_ymux, so guard separately.
+if(TARGET ymux)
+    add_test(NAME ymux_no_yvterm_gate
+        COMMAND ${YETTY_ROOT}/test/ut/ymux/no-yvterm-gate.sh)
+    set_tests_properties(ymux_no_yvterm_gate PROPERTIES
+        ENVIRONMENT "YMUX_BINARY=$<TARGET_FILE:ymux>;YETTY_ROOT=${YETTY_ROOT}"
+        LABELS "contract;ymux;headless"
+        TIMEOUT 30)
+endif()
 
 # #699 MANDATORY byte-differential gate (review cycle 23): the FULL 77-case
 # incremental matrix — the projector's real VT stream vs pinned tmux (d5afb67),
