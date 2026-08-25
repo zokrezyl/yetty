@@ -74,12 +74,15 @@ classes:
     ops:
       - slot: render
         slot_domain: yfigure
+        slot_class: figure
         impl: figure_render_slot
       - slot: destroy
         slot_domain: yfigure
+        slot_class: figure
         impl: figure_destroy_slot
       - slot: process_bytes
         slot_domain: yfigure
+        slot_class: figure
         impl: figure_process_bytes_slot
     internal: false
     doc: null

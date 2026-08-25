@@ -26,15 +26,16 @@ typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_drain_fn)(
 
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_clipboard_set_text_fn
-    yetty_yplatform_glfw_clipboard_yetty_yplatform_clipboard_set_text_check =
+    yetty_yplatform_glfw_clipboard_yetty_yplatform_clipboard_set_text_glfw_clipboard_set_text_check =
         glfw_clipboard_set_text;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_clipboard_request_paste_fn
-    yetty_yplatform_glfw_clipboard_yetty_yplatform_clipboard_request_paste_check =
+    yetty_yplatform_glfw_clipboard_yetty_yplatform_clipboard_request_paste_glfw_clipboard_request_paste_check =
         glfw_clipboard_request_paste;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_clipboard_drain_fn
-    yetty_yplatform_glfw_clipboard_yetty_yplatform_clipboard_drain_check = glfw_clipboard_drain;
+    yetty_yplatform_glfw_clipboard_yetty_yplatform_clipboard_drain_glfw_clipboard_drain_check =
+        glfw_clipboard_drain;
 
 struct yetty_yclass_ptr_result yetty_yplatform_glfw_clipboard_class_get(void)
 {

@@ -23,12 +23,14 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yett
                                                                      struct yetty_ygui_emit_ctx *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_tooltip_yetty_ygui_constructor_check =
-    tooltip_constructor;
+static yetty_ygui_constructor_fn
+    yetty_ygui_tooltip_yetty_ygui_constructor_tooltip_constructor_check = tooltip_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_tooltip_yetty_ygui_destructor_check = tooltip_destructor;
+static yetty_ygui_destructor_fn yetty_ygui_tooltip_yetty_ygui_destructor_tooltip_destructor_check =
+    tooltip_destructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_tooltip_yetty_ygui_widget_paint_check = tooltip_paint;
+static yetty_ygui_widget_paint_fn yetty_ygui_tooltip_yetty_ygui_widget_paint_tooltip_paint_check =
+    tooltip_paint;
 
 struct yetty_yclass_ptr_result yetty_ygui_tooltip_class_get(void)
 {

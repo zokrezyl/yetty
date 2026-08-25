@@ -3653,7 +3653,7 @@ static struct yetty_ycore_void_result scene_rich_parse(
         /* Validate the payload: a whole number of records. ysdf primitives are
          * sized by the ysdf table; ydraw COMPLEX records (ycat SVG/PDF/image/
          * plot — type via yetty_ydraw_is_complex) are sized by the generic
-         * drawable parser, so a complex figure survives instead of being
+         * drawable parser, so a complex record survives instead of being
          * rejected as "not a ysdf record". */
         uint32_t payload_offset = 0;
         while (payload_offset < payload_words) {

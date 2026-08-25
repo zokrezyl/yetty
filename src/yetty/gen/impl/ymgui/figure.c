@@ -12,17 +12,21 @@
 #include <string.h> /* memcpy/strcmp/strlen */
 
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_render_fn yetty_ymgui_figure_yetty_yfigure_render_check =
-    ymgui_figure_render_slot;
+static yetty_yfigure_render_fn
+    yetty_ymgui_figure_yetty_yfigure_render_ymgui_figure_render_slot_check =
+        ymgui_figure_render_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_destroy_fn yetty_ymgui_figure_yetty_yfigure_destroy_check =
-    ymgui_figure_destroy_slot;
+static yetty_yfigure_destroy_fn
+    yetty_ymgui_figure_yetty_yfigure_destroy_ymgui_figure_destroy_slot_check =
+        ymgui_figure_destroy_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_process_input_fn yetty_ymgui_figure_yetty_yfigure_process_input_check =
-    ymgui_figure_process_input_slot;
+static yetty_yfigure_process_input_fn
+    yetty_ymgui_figure_yetty_yfigure_process_input_ymgui_figure_process_input_slot_check =
+        ymgui_figure_process_input_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_process_bytes_fn yetty_ymgui_figure_yetty_yfigure_process_bytes_check =
-    ymgui_figure_process_bytes_slot;
+static yetty_yfigure_process_bytes_fn
+    yetty_ymgui_figure_yetty_yfigure_process_bytes_ymgui_figure_process_bytes_slot_check =
+        ymgui_figure_process_bytes_slot;
 
 struct yetty_yclass_ptr_result yetty_ymgui_figure_class_get(void)
 {

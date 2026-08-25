@@ -93,41 +93,47 @@ typedef struct yetty_ycore_void_result (*yetty_yjupyter_session_destroy_fn)(
     struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yjupyter_message_build_fn yetty_yjupyter_message_yetty_yjupyter_message_build_check =
-    message_build;
+static yetty_yjupyter_message_build_fn
+    yetty_yjupyter_message_yetty_yjupyter_message_build_message_build_check = message_build;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_message_from_wire_fn
-    yetty_yjupyter_message_yetty_yjupyter_message_from_wire_check = message_from_wire;
+    yetty_yjupyter_message_yetty_yjupyter_message_from_wire_message_from_wire_check =
+        message_from_wire;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_message_to_wire_fn
-    yetty_yjupyter_message_yetty_yjupyter_message_to_wire_check = message_to_wire;
+    yetty_yjupyter_message_yetty_yjupyter_message_to_wire_message_to_wire_check = message_to_wire;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_message_msg_type_fn
-    yetty_yjupyter_message_yetty_yjupyter_message_msg_type_check = message_msg_type;
+    yetty_yjupyter_message_yetty_yjupyter_message_msg_type_message_msg_type_check =
+        message_msg_type;
 YETTY_MAYBE_UNUSED
-static yetty_yjupyter_message_msg_id_fn yetty_yjupyter_message_yetty_yjupyter_message_msg_id_check =
-    message_msg_id;
+static yetty_yjupyter_message_msg_id_fn
+    yetty_yjupyter_message_yetty_yjupyter_message_msg_id_message_msg_id_check = message_msg_id;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_message_parent_msg_id_fn
-    yetty_yjupyter_message_yetty_yjupyter_message_parent_msg_id_check = message_parent_msg_id;
+    yetty_yjupyter_message_yetty_yjupyter_message_parent_msg_id_message_parent_msg_id_check =
+        message_parent_msg_id;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_message_channel_fn
-    yetty_yjupyter_message_yetty_yjupyter_message_channel_check = message_channel;
+    yetty_yjupyter_message_yetty_yjupyter_message_channel_message_channel_check = message_channel;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_message_session_fn
-    yetty_yjupyter_message_yetty_yjupyter_message_session_check = message_session;
+    yetty_yjupyter_message_yetty_yjupyter_message_session_message_session_check = message_session;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_message_content_json_fn
-    yetty_yjupyter_message_yetty_yjupyter_message_content_json_check = message_content_json;
+    yetty_yjupyter_message_yetty_yjupyter_message_content_json_message_content_json_check =
+        message_content_json;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_message_content_string_fn
-    yetty_yjupyter_message_yetty_yjupyter_message_content_string_check = message_content_string;
+    yetty_yjupyter_message_yetty_yjupyter_message_content_string_message_content_string_check =
+        message_content_string;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_message_content_int_fn
-    yetty_yjupyter_message_yetty_yjupyter_message_content_int_check = message_content_int;
+    yetty_yjupyter_message_yetty_yjupyter_message_content_int_message_content_int_check =
+        message_content_int;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_message_destroy_fn
-    yetty_yjupyter_message_yetty_yjupyter_message_destroy_check = message_destroy;
+    yetty_yjupyter_message_yetty_yjupyter_message_destroy_message_destroy_check = message_destroy;
 
 struct yetty_yclass_ptr_result yetty_yjupyter_message_class_get(void)
 {
@@ -226,26 +232,29 @@ struct yetty_yclass_object_ptr_result yetty_yjupyter_message_to(struct yetty_yju
 }
 
 YETTY_MAYBE_UNUSED
-static yetty_yjupyter_session_init_fn yetty_yjupyter_session_yetty_yjupyter_session_init_check =
-    session_init;
+static yetty_yjupyter_session_init_fn
+    yetty_yjupyter_session_yetty_yjupyter_session_init_session_init_check = session_init;
 YETTY_MAYBE_UNUSED
-static yetty_yjupyter_session_id_fn yetty_yjupyter_session_yetty_yjupyter_session_id_check =
-    session_id;
+static yetty_yjupyter_session_id_fn
+    yetty_yjupyter_session_yetty_yjupyter_session_id_session_id_check = session_id;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_session_kernel_state_fn
-    yetty_yjupyter_session_yetty_yjupyter_session_kernel_state_check = session_kernel_state;
+    yetty_yjupyter_session_yetty_yjupyter_session_kernel_state_session_kernel_state_check =
+        session_kernel_state;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_session_new_request_fn
-    yetty_yjupyter_session_yetty_yjupyter_session_new_request_check = session_new_request;
+    yetty_yjupyter_session_yetty_yjupyter_session_new_request_session_new_request_check =
+        session_new_request;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_session_handle_wire_fn
-    yetty_yjupyter_session_yetty_yjupyter_session_handle_wire_check = session_handle_wire;
+    yetty_yjupyter_session_yetty_yjupyter_session_handle_wire_session_handle_wire_check =
+        session_handle_wire;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_session_tag_for_fn
-    yetty_yjupyter_session_yetty_yjupyter_session_tag_for_check = session_tag_for;
+    yetty_yjupyter_session_yetty_yjupyter_session_tag_for_session_tag_for_check = session_tag_for;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_session_destroy_fn
-    yetty_yjupyter_session_yetty_yjupyter_session_destroy_check = session_destroy;
+    yetty_yjupyter_session_yetty_yjupyter_session_destroy_session_destroy_check = session_destroy;
 
 struct yetty_yclass_ptr_result yetty_yjupyter_session_class_get(void)
 {

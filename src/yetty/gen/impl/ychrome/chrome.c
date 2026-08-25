@@ -40,21 +40,24 @@ typedef struct yetty_ycore_int_result (*yetty_ychrome_handle_event_fn)(
     struct yetty_yclass_object *, const struct yetty_yui_event *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ychrome_configure_fn yetty_ychrome_chrome_yetty_ychrome_configure_check =
-    chrome_configure;
+static yetty_ychrome_configure_fn
+    yetty_ychrome_chrome_yetty_ychrome_configure_chrome_configure_check = chrome_configure;
 YETTY_MAYBE_UNUSED
-static yetty_ychrome_set_size_fn yetty_ychrome_chrome_yetty_ychrome_set_size_check =
+static yetty_ychrome_set_size_fn yetty_ychrome_chrome_yetty_ychrome_set_size_chrome_set_size_check =
     chrome_set_size;
 YETTY_MAYBE_UNUSED
-static yetty_ychrome_destroy_fn yetty_ychrome_chrome_yetty_ychrome_destroy_check = chrome_destroy;
+static yetty_ychrome_destroy_fn yetty_ychrome_chrome_yetty_ychrome_destroy_chrome_destroy_check =
+    chrome_destroy;
 YETTY_MAYBE_UNUSED
-static yetty_ychrome_edge_cursor_at_fn yetty_ychrome_chrome_yetty_ychrome_edge_cursor_at_check =
-    chrome_edge_cursor_at;
+static yetty_ychrome_edge_cursor_at_fn
+    yetty_ychrome_chrome_yetty_ychrome_edge_cursor_at_chrome_edge_cursor_at_check =
+        chrome_edge_cursor_at;
 YETTY_MAYBE_UNUSED
-static yetty_ychrome_render_fn yetty_ychrome_chrome_yetty_ychrome_render_check = chrome_render;
+static yetty_ychrome_render_fn yetty_ychrome_chrome_yetty_ychrome_render_chrome_render_check =
+    chrome_render;
 YETTY_MAYBE_UNUSED
-static yetty_ychrome_handle_event_fn yetty_ychrome_chrome_yetty_ychrome_handle_event_check =
-    chrome_handle_event;
+static yetty_ychrome_handle_event_fn
+    yetty_ychrome_chrome_yetty_ychrome_handle_event_chrome_handle_event_check = chrome_handle_event;
 
 struct yetty_yclass_ptr_result yetty_ychrome_chrome_class_get(void)
 {

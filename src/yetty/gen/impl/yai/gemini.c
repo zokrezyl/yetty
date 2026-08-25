@@ -42,17 +42,20 @@ typedef struct yetty_ycore_void_result (*yetty_yai_handle_event_fn)(struct yetty
                                                                     struct yyjson_val *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yai_start_fn yetty_yai_gemini_yetty_yai_start_check = gemini_start;
+static yetty_yai_start_fn yetty_yai_gemini_yetty_yai_start_gemini_start_check = gemini_start;
 YETTY_MAYBE_UNUSED
-static yetty_yai_send_user_message_fn yetty_yai_gemini_yetty_yai_send_user_message_check =
-    gemini_send_user_message;
+static yetty_yai_send_user_message_fn
+    yetty_yai_gemini_yetty_yai_send_user_message_gemini_send_user_message_check =
+        gemini_send_user_message;
 YETTY_MAYBE_UNUSED
-static yetty_yai_describe_config_fn yetty_yai_gemini_yetty_yai_describe_config_check =
-    gemini_describe_config;
+static yetty_yai_describe_config_fn
+    yetty_yai_gemini_yetty_yai_describe_config_gemini_describe_config_check =
+        gemini_describe_config;
 YETTY_MAYBE_UNUSED
-static yetty_yai_config_knob_fn yetty_yai_gemini_yetty_yai_config_knob_check = gemini_config_knob;
+static yetty_yai_config_knob_fn yetty_yai_gemini_yetty_yai_config_knob_gemini_config_knob_check =
+    gemini_config_knob;
 YETTY_MAYBE_UNUSED
-static yetty_yai_handle_event_fn yetty_yai_gemini_yetty_yai_handle_event_check =
+static yetty_yai_handle_event_fn yetty_yai_gemini_yetty_yai_handle_event_gemini_handle_event_check =
     gemini_handle_event;
 
 struct yetty_yclass_ptr_result yetty_yai_gemini_class_get(void)

@@ -16,8 +16,8 @@ struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object
 typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_menubar_yetty_ygui_constructor_check =
-    menubar_constructor;
+static yetty_ygui_constructor_fn
+    yetty_ygui_menubar_yetty_ygui_constructor_menubar_constructor_check = menubar_constructor;
 
 struct yetty_yclass_ptr_result yetty_ygui_menubar_class_get(void)
 {

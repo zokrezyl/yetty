@@ -24,13 +24,13 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yett
                                                                      struct yetty_ygui_emit_ctx *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_checkbox_yetty_ygui_constructor_check =
-    checkbox_constructor;
+static yetty_ygui_constructor_fn
+    yetty_ygui_checkbox_yetty_ygui_constructor_checkbox_constructor_check = checkbox_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_checkbox_yetty_ygui_destructor_check =
-    checkbox_destructor;
+static yetty_ygui_destructor_fn
+    yetty_ygui_checkbox_yetty_ygui_destructor_checkbox_destructor_check = checkbox_destructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_checkbox_yetty_ygui_widget_paint_check =
+static yetty_ygui_widget_paint_fn yetty_ygui_checkbox_yetty_ygui_widget_paint_checkbox_paint_check =
     checkbox_paint;
 
 struct yetty_yclass_ptr_result yetty_ygui_checkbox_class_get(void)

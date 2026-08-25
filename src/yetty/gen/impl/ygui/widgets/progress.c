@@ -21,10 +21,10 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yett
                                                                      struct yetty_ygui_emit_ctx *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_progress_yetty_ygui_constructor_check =
-    progress_constructor;
+static yetty_ygui_constructor_fn
+    yetty_ygui_progress_yetty_ygui_constructor_progress_constructor_check = progress_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_progress_yetty_ygui_widget_paint_check =
+static yetty_ygui_widget_paint_fn yetty_ygui_progress_yetty_ygui_widget_paint_progress_paint_check =
     progress_paint;
 
 struct yetty_yclass_ptr_result yetty_ygui_progress_class_get(void)

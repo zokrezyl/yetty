@@ -16,23 +16,19 @@ class Scene(_yfigure.Figure):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yscene_scene_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yscene_scene_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yscene_scene_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Scene':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Scene.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
     def constructor(self) -> None:
         """Call `yetty_yscene_constructor`; raises _rt.YettyError on failure."""
         if self._handle is None:
@@ -110,7 +106,7 @@ class Scene(_yfigure.Figure):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yscene_node_set_content", _t.yetty_ycore_void_result, [c_void_p, c_uint64, _t.yetty_ycore_buffer])
-        res = _rt.result_from_c(_fn(self._handle, external_id, content))
+        res = _rt.result_from_c(_fn(self._handle, external_id, _rt.as_buffer(content)))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -119,7 +115,7 @@ class Scene(_yfigure.Figure):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yscene_node_append_batch", _t.yetty_ycore_void_result, [c_void_p, c_uint64, _t.yetty_ycore_buffer])
-        res = _rt.result_from_c(_fn(self._handle, external_id, content))
+        res = _rt.result_from_c(_fn(self._handle, external_id, _rt.as_buffer(content)))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -128,7 +124,7 @@ class Scene(_yfigure.Figure):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yscene_node_replace_batch", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_uint32, _t.yetty_ycore_buffer])
-        res = _rt.result_from_c(_fn(self._handle, external_id, batch_index, content))
+        res = _rt.result_from_c(_fn(self._handle, external_id, batch_index, _rt.as_buffer(content)))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -209,7 +205,7 @@ class Scene(_yfigure.Figure):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yscene_terminal_grid_write", _t.yetty_ycore_void_result, [c_void_p, _t.yetty_ycore_buffer])
-        res = _rt.result_from_c(_fn(self._handle, bytes))
+        res = _rt.result_from_c(_fn(self._handle, _rt.as_buffer(bytes)))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -218,7 +214,7 @@ class Scene(_yfigure.Figure):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yscene_terminal_write_content", _t.yetty_ycore_void_result, [c_void_p, _t.yetty_ycore_buffer, _t.yetty_ycore_buffer])
-        res = _rt.result_from_c(_fn(self._handle, vt, rich))
+        res = _rt.result_from_c(_fn(self._handle, _rt.as_buffer(vt), _rt.as_buffer(rich)))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -290,7 +286,7 @@ class Scene(_yfigure.Figure):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yscene_dispatch_key", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, _t.yetty_ycore_buffer])
-        res = _rt.result_from_c(_fn(self._handle, input_class, bytes))
+        res = _rt.result_from_c(_fn(self._handle, input_class, _rt.as_buffer(bytes)))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -299,7 +295,7 @@ class Scene(_yfigure.Figure):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yscene_note_key_intake", _t.yetty_ycore_void_result, [c_void_p, c_uint32, _t.yetty_ycore_buffer])
-        res = _rt.result_from_c(_fn(self._handle, input_class, bytes))
+        res = _rt.result_from_c(_fn(self._handle, input_class, _rt.as_buffer(bytes)))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -326,7 +322,7 @@ class Scene(_yfigure.Figure):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yscene_apply_content_transaction", _t.yetty_ycore_void_result, [c_void_p, _t.yetty_ycore_buffer])
-        res = _rt.result_from_c(_fn(self._handle, rich))
+        res = _rt.result_from_c(_fn(self._handle, _rt.as_buffer(rich)))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -339,23 +335,19 @@ class Vtermgrid(_rt.YClass):
     def yclass(cls) -> _rt.Result[Any]:
         _fn = _rt.cfn("yetty_yscene_vtermgrid_class_get", _t.yetty_yclass_ptr_result, [])
         return _rt.result_from_c(_fn())
-    def __init__(self, _handle: Any = None) -> None:
-        if _handle is None:
-            _fn = _rt.cfn("yetty_yscene_vtermgrid_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _rt.result_from_c(_fn(None))
-            if res.error is not None:
-                raise _rt.YettyError(res.error.message)
-            _handle = res.value
-        super().__init__(_handle)
+    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:
+        if _handle is not None:
+            _rt.YClass.__init__(self, _handle)
+            return
+        _fn = _rt.cfn("yetty_yscene_vtermgrid_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+        res = _rt.result_from_c(_fn(None))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        _rt.YClass.__init__(self, res.value)
+        self._apply_kwargs(kwargs)
     @classmethod
     def create(cls, **kwargs: Any) -> 'Vtermgrid':
-        obj = cls()
-        for _key, _value in kwargs.items():
-            _setter = getattr(obj, "set_" + _key, None)
-            if _setter is None:
-                raise TypeError(f"Vtermgrid.create: unknown property {_key!r}")
-            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)
-        return obj
+        return cls(**kwargs)
 
 def scene_terminal_grid_create(obj: Any, rows: int, cols: int, cell_width: float, cell_height: float) -> _rt.Result[None]:
     """Call `yetty_yscene_scene_terminal_grid_create`."""
@@ -619,4 +611,3 @@ def vtermgrid_render(obj: Any, target: Any, rect: _t.yetty_ycore_rectangle) -> _
     _fn = _rt.cfn("yetty_yscene_vtermgrid_render", _t.yetty_ycore_void_result, [c_void_p, c_void_p, _t.yetty_ycore_rectangle])
     res = _fn(_rt.handle(obj), _rt.handle(target), rect)
     return _rt.result_from_c(res)
-

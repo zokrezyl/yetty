@@ -939,129 +939,171 @@ classes:
     ops:
       - slot: constructor
         slot_domain: yscene
+        slot_class: scene
         impl: scene_constructor
       - slot: set_registry
         slot_domain: yscene
+        slot_class: scene
         impl: scene_set_registry
       - slot: node_declare
         slot_domain: yscene
+        slot_class: scene
         impl: scene_node_declare
       - slot: node_set_transform
         slot_domain: yscene
+        slot_class: scene
         impl: scene_node_set_transform
       - slot: node_set_clip
         slot_domain: yscene
+        slot_class: scene
         impl: scene_node_set_clip
       - slot: node_clear_clip
         slot_domain: yscene
+        slot_class: scene
         impl: scene_node_clear_clip
       - slot: node_set_opacity
         slot_domain: yscene
+        slot_class: scene
         impl: scene_node_set_opacity
       - slot: node_set_z
         slot_domain: yscene
+        slot_class: scene
         impl: scene_node_set_z
       - slot: node_set_content
         slot_domain: yscene
+        slot_class: scene
         impl: scene_node_set_content
       - slot: node_append_batch
         slot_domain: yscene
+        slot_class: scene
         impl: scene_node_append_batch
       - slot: node_replace_batch
         slot_domain: yscene
+        slot_class: scene
         impl: scene_node_replace_batch
       - slot: node_remove_batch
         slot_domain: yscene
+        slot_class: scene
         impl: scene_node_remove_batch
       - slot: node_delete
         slot_domain: yscene
+        slot_class: scene
         impl: scene_node_delete
       - slot: zero
         slot_domain: yscene
+        slot_class: scene
         impl: scene_zero
       - slot: commit
         slot_domain: yscene
+        slot_class: scene
         impl: scene_commit
       - slot: layout_barrier_begin
         slot_domain: yscene
+        slot_class: scene
         impl: scene_layout_barrier_begin_impl
       - slot: layout_barrier_end
         slot_domain: yscene
+        slot_class: scene
         impl: scene_layout_barrier_end_impl
       - slot: terminal_grid_generation
         slot_domain: yscene
+        slot_class: scene
         impl: scene_terminal_grid_generation_impl
       - slot: terminal_grid_create
         slot_domain: yscene
+        slot_class: scene
         impl: scene_terminal_grid_create_impl
       - slot: terminal_grid_write
         slot_domain: yscene
+        slot_class: scene
         impl: scene_terminal_grid_write_impl
       - slot: terminal_write_content
         slot_domain: yscene
+        slot_class: scene
         impl: scene_terminal_write_content_impl
       - slot: terminal_grid_resize
         slot_domain: yscene
+        slot_class: scene
         impl: scene_terminal_grid_resize_impl
       - slot: render
         slot_domain: yfigure
+        slot_class: figure
         impl: scene_render_slot
       - slot: destroy
         slot_domain: yfigure
+        slot_class: figure
         impl: scene_destroy_slot
       - slot: process_bytes
         slot_domain: yfigure
+        slot_class: figure
         impl: scene_process_bytes_slot
       - slot: reset_content
         slot_domain: yfigure
+        slot_class: figure
         impl: scene_reset_content_slot
       - slot: set_scroll
         slot_domain: yfigure
+        slot_class: figure
         impl: scene_set_scroll_slot
       - slot: set_content_size
         slot_domain: yfigure
+        slot_class: figure
         impl: scene_set_content_size_slot
       - slot: apply_scroll_anchor
         slot_domain: yfigure
+        slot_class: figure
         impl: scene_apply_scroll_anchor_slot
       - slot: dump_state
         slot_domain: yfigure
+        slot_class: figure
         impl: scene_dump_state_slot
       - slot: hit_opaque
         slot_domain: yfigure
+        slot_class: figure
         impl: scene_hit_opaque_impl
       - slot: terminal_reply_pending
         slot_domain: yscene
+        slot_class: scene
         impl: scene_terminal_reply_pending_impl
       - slot: terminal_reply_word
         slot_domain: yscene
+        slot_class: scene
         impl: scene_terminal_reply_word_impl
       - slot: terminal_reply_consume
         slot_domain: yscene
+        slot_class: scene
         impl: scene_terminal_reply_consume_impl
       - slot: input_event_head
         slot_domain: yscene
+        slot_class: scene
         impl: scene_input_event_head_impl
       - slot: input_event_word
         slot_domain: yscene
+        slot_class: scene
         impl: scene_input_event_word_impl
       - slot: input_event_pop
         slot_domain: yscene
+        slot_class: scene
         impl: scene_input_event_pop_impl
       - slot: dispatch_key
         slot_domain: yscene
+        slot_class: scene
         impl: scene_dispatch_key_impl
       - slot: note_key_intake
         slot_domain: yscene
+        slot_class: scene
         impl: scene_note_key_intake_impl
       - slot: set_terminal_selection
         slot_domain: yscene
+        slot_class: scene
         impl: scene_set_terminal_selection_impl
       - slot: dispatch_pointer
         slot_domain: yscene
+        slot_class: scene
         impl: scene_dispatch_pointer_impl
       - slot: apply_content_transaction
         slot_domain: yscene
+        slot_class: scene
         impl: scene_apply_content_transaction_impl
     internal: false
     doc: null

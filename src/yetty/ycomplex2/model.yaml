@@ -1,0 +1,359 @@
+methods:
+  - slot: set_path
+    domain: ycomplex2
+    owning_class: image
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: path
+        type: "const char *"
+    doc: "/* set_path: the image file (PNG/JPG/… — whatever stb decodes). */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_glb
+    domain: ycomplex2
+    owning_class: mesh
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: path
+        type: "const char *"
+    doc: "/* set_glb: the glTF 2.0 binary file. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_source
+    domain: ycomplex2
+    owning_class: shadertoy
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: wgsl
+        type: "const char *"
+    doc: "/* set_source: the WGSL shader source, inline. Empty/NULL selects the
+ * receiver's built-in default shader (animated gradient). */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_wgsl_path
+    domain: ycomplex2
+    owning_class: shadertoy
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: path
+        type: "const char *"
+    doc: "/* set_wgsl_path: read the shader source from a file — the class's primary
+ * content (Shadertoy(\"plasma.wgsl\", …)); set_wgsl takes inline source. */"
+    local: true
+    oneway: false
+    return_payload_type: null
+  - slot: set_h264
+    domain: ycomplex2
+    owning_class: video
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: path
+        type: "const char *"
+    doc: "/* set_h264: the raw Annex-B H.264 byte stream file (.h264/.264). */"
+    local: true
+    oneway: false
+    return_payload_type: null
+classes:
+  - name: image
+    domain: ycomplex2
+    accessor: yetty_ycomplex2_image_class_get
+    type: regular
+    source_file: src/yetty/ycomplex2/image.c
+    parent:
+      domain: ydrawlist2
+      name: drawable
+    mixins: []
+    data: struct yetty_ycomplex2_image
+    data_fields:
+      - name: x
+        type: float
+        get: true
+        set: true
+      - name: y
+        type: float
+        get: true
+        set: true
+      - name: width
+        type: float
+        get: true
+        set: true
+      - name: height
+        type: float
+        get: true
+        set: true
+      - name: path
+        type: "char[512]"
+        get: false
+        set: false
+    ops:
+      - slot: set_path
+        slot_domain: ycomplex2
+        slot_class: image
+        impl: image_set_path
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: image_pack
+    internal: false
+    doc: null
+    primary_slot: set_path
+  - name: mesh
+    domain: ycomplex2
+    accessor: yetty_ycomplex2_mesh_class_get
+    type: regular
+    source_file: src/yetty/ycomplex2/mesh.c
+    parent:
+      domain: ydrawlist2
+      name: drawable
+    mixins: []
+    data: struct yetty_ycomplex2_mesh
+    data_fields:
+      - name: x
+        type: float
+        get: true
+        set: true
+      - name: y
+        type: float
+        get: true
+        set: true
+      - name: width
+        type: float
+        get: true
+        set: true
+      - name: height
+        type: float
+        get: true
+        set: true
+      - name: azimuth
+        type: float
+        get: true
+        set: true
+      - name: elevation
+        type: float
+        get: true
+        set: true
+      - name: zoom
+        type: float
+        get: true
+        set: true
+      - name: wireframe
+        type: uint32_t
+        get: true
+        set: true
+      - name: path
+        type: "char[512]"
+        get: false
+        set: false
+    ops:
+      - slot: set_glb
+        slot_domain: ycomplex2
+        slot_class: mesh
+        impl: mesh_set_glb
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: mesh_pack
+    internal: false
+    doc: null
+    primary_slot: set_glb
+  - name: shadertoy
+    domain: ycomplex2
+    accessor: yetty_ycomplex2_shadertoy_class_get
+    type: regular
+    source_file: src/yetty/ycomplex2/shadertoy.c
+    parent:
+      domain: ydrawlist2
+      name: drawable
+    mixins: []
+    data: struct yetty_ycomplex2_shadertoy
+    data_fields:
+      - name: x
+        type: float
+        get: true
+        set: true
+      - name: y
+        type: float
+        get: true
+        set: true
+      - name: width
+        type: float
+        get: true
+        set: true
+      - name: height
+        type: float
+        get: true
+        set: true
+      - name: wgsl_len
+        type: uint32_t
+        get: false
+        set: false
+      - name: wgsl
+        type: "char[16384]"
+        get: false
+        set: false
+    ops:
+      - slot: set_source
+        slot_domain: ycomplex2
+        slot_class: shadertoy
+        impl: shadertoy_set_source
+      - slot: set_wgsl_path
+        slot_domain: ycomplex2
+        slot_class: shadertoy
+        impl: shadertoy_set_wgsl_path
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: shadertoy_pack
+    internal: false
+    doc: null
+    primary_slot: set_wgsl_path
+  - name: video
+    domain: ycomplex2
+    accessor: yetty_ycomplex2_video_class_get
+    type: regular
+    source_file: src/yetty/ycomplex2/video.c
+    parent:
+      domain: ydrawlist2
+      name: drawable
+    mixins: []
+    data: struct yetty_ycomplex2_video
+    data_fields:
+      - name: x
+        type: float
+        get: true
+        set: true
+      - name: y
+        type: float
+        get: true
+        set: true
+      - name: width
+        type: float
+        get: true
+        set: true
+      - name: height
+        type: float
+        get: true
+        set: true
+      - name: id
+        type: uint32_t
+        get: true
+        set: true
+      - name: video_w
+        type: uint32_t
+        get: true
+        set: true
+      - name: video_h
+        type: uint32_t
+        get: true
+        set: true
+      - name: fps
+        type: float
+        get: true
+        set: true
+      - name: path
+        type: "char[512]"
+        get: false
+        set: false
+    ops:
+      - slot: set_h264
+        slot_domain: ycomplex2
+        slot_class: video
+        impl: video_set_h264
+      - slot: pack
+        slot_domain: ydrawlist2
+        slot_class: drawable
+        impl: video_pack
+    internal: false
+    doc: null
+    primary_slot: set_h264
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+local_types:
+  yetty_ycomplex2_image: src/yetty/ycomplex2/image.c
+  yetty_ycomplex2_image_ptr_result: src/yetty/ycomplex2/image.c
+  yetty_ycomplex2_mesh: src/yetty/ycomplex2/mesh.c
+  yetty_ycomplex2_mesh_ptr_result: src/yetty/ycomplex2/mesh.c
+  yetty_ycomplex2_shadertoy: src/yetty/ycomplex2/shadertoy.c
+  yetty_ycomplex2_shadertoy_ptr_result: src/yetty/ycomplex2/shadertoy.c
+  yetty_ycomplex2_video: src/yetty/ycomplex2/video.c
+  yetty_ycomplex2_video_ptr_result: src/yetty/ycomplex2/video.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ycomplex2/image.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ycomplex2/image.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ycomplex2/image.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ycomplex2/image.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ycomplex2/image.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ycomplex2_set_path_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ycomplex2/image.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_path_fn)(struct yetty_yclass_object *, const char *);"
+  yetty_ycomplex2_set_glb_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ycomplex2/mesh.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_glb_fn)(struct yetty_yclass_object *, const char *);"
+  yetty_ycomplex2_set_source_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ycomplex2/shadertoy.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_source_fn)(struct yetty_yclass_object *, const char *);"
+  yetty_ycomplex2_set_wgsl_path_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ycomplex2/shadertoy.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_wgsl_path_fn)(struct yetty_yclass_object *, const char *);"
+  yetty_ycomplex2_set_h264_fn:
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ycomplex2/video.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ycomplex2_set_h264_fn)(struct yetty_yclass_object *, const char *);"

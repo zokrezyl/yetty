@@ -104,72 +104,83 @@ typedef struct yetty_ycore_char_ptr_result (*yetty_yfigure_dump_state_fn)(
     struct yetty_yclass_object *, int);
 
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_destroy_fn yetty_yfigure_container_yetty_yfigure_destroy_check =
-    container_destroy;
+static yetty_yfigure_destroy_fn
+    yetty_yfigure_container_yetty_yfigure_destroy_container_destroy_check = container_destroy;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_render_fn yetty_yfigure_container_yetty_yfigure_render_check =
+static yetty_yfigure_render_fn yetty_yfigure_container_yetty_yfigure_render_container_render_check =
     container_render;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_constructor_fn yetty_yfigure_container_yetty_yfigure_constructor_check =
-    yetty_yfigure_container_constructor_impl;
+static yetty_yfigure_constructor_fn
+    yetty_yfigure_container_yetty_yfigure_constructor_yetty_yfigure_container_constructor_impl_check =
+        yetty_yfigure_container_constructor_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_add_child_fn yetty_yfigure_container_yetty_yfigure_add_child_check =
-    yetty_yfigure_container_add_child_impl;
+static yetty_yfigure_add_child_fn
+    yetty_yfigure_container_yetty_yfigure_add_child_yetty_yfigure_container_add_child_impl_check =
+        yetty_yfigure_container_add_child_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_remove_child_by_id_fn
-    yetty_yfigure_container_yetty_yfigure_remove_child_by_id_check =
+    yetty_yfigure_container_yetty_yfigure_remove_child_by_id_yetty_yfigure_container_remove_child_by_id_impl_check =
         yetty_yfigure_container_remove_child_by_id_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_raise_child_by_id_fn
-    yetty_yfigure_container_yetty_yfigure_raise_child_by_id_check =
+    yetty_yfigure_container_yetty_yfigure_raise_child_by_id_yetty_yfigure_container_raise_child_by_id_impl_check =
         yetty_yfigure_container_raise_child_by_id_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_create_child_fn yetty_yfigure_container_yetty_yfigure_create_child_check =
-    yetty_yfigure_container_create_child_impl;
+static yetty_yfigure_create_child_fn
+    yetty_yfigure_container_yetty_yfigure_create_child_yetty_yfigure_container_create_child_impl_check =
+        yetty_yfigure_container_create_child_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_delete_child_fn yetty_yfigure_container_yetty_yfigure_delete_child_check =
-    yetty_yfigure_container_delete_child_impl;
+static yetty_yfigure_delete_child_fn
+    yetty_yfigure_container_yetty_yfigure_delete_child_yetty_yfigure_container_delete_child_impl_check =
+        yetty_yfigure_container_delete_child_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_set_child_rect_fn yetty_yfigure_container_yetty_yfigure_set_child_rect_check =
-    yetty_yfigure_container_set_child_rect_impl;
+static yetty_yfigure_set_child_rect_fn
+    yetty_yfigure_container_yetty_yfigure_set_child_rect_yetty_yfigure_container_set_child_rect_impl_check =
+        yetty_yfigure_container_set_child_rect_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_set_rect_fn yetty_yfigure_container_yetty_yfigure_set_rect_check =
-    yetty_yfigure_container_set_rect_impl;
+static yetty_yfigure_set_rect_fn
+    yetty_yfigure_container_yetty_yfigure_set_rect_yetty_yfigure_container_set_rect_impl_check =
+        yetty_yfigure_container_set_rect_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_child_object_fn yetty_yfigure_container_yetty_yfigure_child_object_check =
-    yetty_yfigure_container_child_object_impl;
+static yetty_yfigure_child_object_fn
+    yetty_yfigure_container_yetty_yfigure_child_object_yetty_yfigure_container_child_object_impl_check =
+        yetty_yfigure_container_child_object_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_seat_overlay_fn yetty_yfigure_container_yetty_yfigure_seat_overlay_check =
-    yetty_yfigure_container_seat_overlay_impl;
+static yetty_yfigure_seat_overlay_fn
+    yetty_yfigure_container_yetty_yfigure_seat_overlay_yetty_yfigure_container_seat_overlay_impl_check =
+        yetty_yfigure_container_seat_overlay_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_set_child_z_fn yetty_yfigure_container_yetty_yfigure_set_child_z_check =
-    yetty_yfigure_container_set_child_z_impl;
+static yetty_yfigure_set_child_z_fn
+    yetty_yfigure_container_yetty_yfigure_set_child_z_yetty_yfigure_container_set_child_z_impl_check =
+        yetty_yfigure_container_set_child_z_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_child_input_passthrough_fn
-    yetty_yfigure_container_yetty_yfigure_set_child_input_passthrough_check =
+    yetty_yfigure_container_yetty_yfigure_set_child_input_passthrough_yetty_yfigure_container_set_child_input_passthrough_impl_check =
         yetty_yfigure_container_set_child_input_passthrough_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_child_hidden_fn
-    yetty_yfigure_container_yetty_yfigure_set_child_hidden_check =
+    yetty_yfigure_container_yetty_yfigure_set_child_hidden_yetty_yfigure_container_set_child_hidden_impl_check =
         yetty_yfigure_container_set_child_hidden_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_child_scroll_fn
-    yetty_yfigure_container_yetty_yfigure_set_child_scroll_check =
+    yetty_yfigure_container_yetty_yfigure_set_child_scroll_yetty_yfigure_container_set_child_scroll_impl_check =
         yetty_yfigure_container_set_child_scroll_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_child_content_size_fn
-    yetty_yfigure_container_yetty_yfigure_set_child_content_size_check =
+    yetty_yfigure_container_yetty_yfigure_set_child_content_size_yetty_yfigure_container_set_child_content_size_impl_check =
         yetty_yfigure_container_set_child_content_size_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_apply_child_body_fn
-    yetty_yfigure_container_yetty_yfigure_apply_child_body_check =
+    yetty_yfigure_container_yetty_yfigure_apply_child_body_yetty_yfigure_container_apply_child_body_impl_check =
         yetty_yfigure_container_apply_child_body_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_clear_all_fn yetty_yfigure_container_yetty_yfigure_clear_all_check =
-    yetty_yfigure_container_clear_all_slot;
+static yetty_yfigure_clear_all_fn
+    yetty_yfigure_container_yetty_yfigure_clear_all_yetty_yfigure_container_clear_all_slot_check =
+        yetty_yfigure_container_clear_all_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_dump_state_fn yetty_yfigure_container_yetty_yfigure_dump_state_check =
-    container_dump_state_slot;
+static yetty_yfigure_dump_state_fn
+    yetty_yfigure_container_yetty_yfigure_dump_state_container_dump_state_slot_check =
+        container_dump_state_slot;
 
 struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void)
 {

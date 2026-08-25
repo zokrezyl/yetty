@@ -1,6 +1,7 @@
 -- Foundational + shared ABI types — GENERATED, do not edit.
 local ffi = require("ffi")
 ffi.cdef[[
+typedef struct _IO_FILE FILE;
 typedef long WGPUBuffer;
 typedef long WGPUInstance;
 typedef long WGPUSurface;
@@ -146,6 +147,20 @@ struct engine_surface {
   uint32_t rows_count;
   uint32_t cols;
 };
+struct yetty_ycore_error {
+  const char *msg;
+  const char *file;
+  const char *func;
+  int line;
+  struct yetty_ycore_error *cause;
+};
+struct float_result {
+  int ok;
+  union {
+    float value;
+    struct yetty_ycore_error error;
+  };
+};
 struct history_builder {
   uint8_t *bytes;
   size_t byte_count;
@@ -166,13 +181,6 @@ struct history_cache_entry {
   uint8_t *row_continuations;
   uint64_t last_used_tick;
 };
-struct yetty_ycore_error {
-  const char *msg;
-  const char *file;
-  const char *func;
-  int line;
-  struct yetty_ycore_error *cause;
-};
 struct yetty_ycore_pixel_size {
   float width;
   float height;
@@ -181,6 +189,21 @@ struct pixel_size_result {
   int ok;
   union {
     struct yetty_ycore_pixel_size value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_ycore_pixel_coord {
+  float x;
+  float y;
+};
+struct yetty_ycore_rectangle {
+  struct yetty_ycore_pixel_coord min;
+  struct yetty_ycore_pixel_coord max;
+};
+struct rectangle_result {
+  int ok;
+  union {
+    struct yetty_ycore_rectangle value;
     struct yetty_ycore_error error;
   };
 };
@@ -341,18 +364,10 @@ struct yetty_ycore_int_result {
 };
 struct yetty_ycore_memtag {
   const char *name;
-  _Atomic(int64_t) live_bytes;
-  _Atomic(int64_t) peak_bytes;
-  _Atomic(int64_t) total_allocs;
-  _Atomic(int64_t) fail_after;
-};
-struct yetty_ycore_pixel_coord {
-  float x;
-  float y;
-};
-struct yetty_ycore_rectangle {
-  struct yetty_ycore_pixel_coord min;
-  struct yetty_ycore_pixel_coord max;
+  int64_t live_bytes;
+  int64_t peak_bytes;
+  int64_t total_allocs;
+  int64_t fail_after;
 };
 struct yetty_ycore_rectangle_result {
   int ok;

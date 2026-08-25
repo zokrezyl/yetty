@@ -102,15 +102,19 @@ classes:
     ops:
       - slot: render
         slot_domain: yfigure
+        slot_class: figure
         impl: ymgui_figure_render_slot
       - slot: destroy
         slot_domain: yfigure
+        slot_class: figure
         impl: ymgui_figure_destroy_slot
       - slot: process_input
         slot_domain: yfigure
+        slot_class: figure
         impl: ymgui_figure_process_input_slot
       - slot: process_bytes
         slot_domain: yfigure
+        slot_class: figure
         impl: ymgui_figure_process_bytes_slot
     internal: false
     doc: null

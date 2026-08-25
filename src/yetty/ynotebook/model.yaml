@@ -473,27 +473,35 @@ classes:
     ops:
       - slot: mime_bundle_from_json_text
         slot_domain: ynotebook
+        slot_class: mime_bundle
         impl: mime_bundle_from_json_text
       - slot: mime_bundle_to_json_text
         slot_domain: ynotebook
+        slot_class: mime_bundle
         impl: mime_bundle_to_json_text
       - slot: mime_bundle_count
         slot_domain: ynotebook
+        slot_class: mime_bundle
         impl: mime_bundle_count
       - slot: mime_bundle_mime_at
         slot_domain: ynotebook
+        slot_class: mime_bundle
         impl: mime_bundle_mime_at
       - slot: mime_bundle_kind_at
         slot_domain: ynotebook
+        slot_class: mime_bundle
         impl: mime_bundle_kind_at
       - slot: mime_bundle_bytes_at
         slot_domain: ynotebook
+        slot_class: mime_bundle
         impl: mime_bundle_bytes_at
       - slot: mime_bundle_json_at
         slot_domain: ynotebook
+        slot_class: mime_bundle
         impl: mime_bundle_json_at
       - slot: mime_bundle_destroy
         slot_domain: ynotebook
+        slot_class: mime_bundle
         impl: mime_bundle_destroy
     internal: false
     doc: null
@@ -521,27 +529,35 @@ classes:
     ops:
       - slot: output_type
         slot_domain: ynotebook
+        slot_class: output
         impl: output_type
       - slot: output_stream_name
         slot_domain: ynotebook
+        slot_class: output
         impl: output_stream_name
       - slot: output_text
         slot_domain: ynotebook
+        slot_class: output
         impl: output_text
       - slot: output_execution_count
         slot_domain: ynotebook
+        slot_class: output
         impl: output_execution_count
       - slot: output_error_name
         slot_domain: ynotebook
+        slot_class: output
         impl: output_error_name
       - slot: output_error_value
         slot_domain: ynotebook
+        slot_class: output
         impl: output_error_value
       - slot: output_bundle
         slot_domain: ynotebook
+        slot_class: output
         impl: output_bundle
       - slot: output_destroy
         slot_domain: ynotebook
+        slot_class: output
         impl: output_destroy
     internal: false
     doc: null
@@ -577,33 +593,43 @@ classes:
     ops:
       - slot: cell_type
         slot_domain: ynotebook
+        slot_class: cell
         impl: cell_type
       - slot: cell_id
         slot_domain: ynotebook
+        slot_class: cell
         impl: cell_id
       - slot: cell_source
         slot_domain: ynotebook
+        slot_class: cell
         impl: cell_source
       - slot: cell_set_source
         slot_domain: ynotebook
+        slot_class: cell
         impl: cell_set_source
       - slot: cell_execution_count
         slot_domain: ynotebook
+        slot_class: cell
         impl: cell_execution_count
       - slot: cell_output_count
         slot_domain: ynotebook
+        slot_class: cell
         impl: cell_output_count
       - slot: cell_output_at
         slot_domain: ynotebook
+        slot_class: cell
         impl: cell_output_at
       - slot: cell_metadata_json
         slot_domain: ynotebook
+        slot_class: cell
         impl: cell_metadata_json
       - slot: cell_apply_message
         slot_domain: ynotebook
+        slot_class: cell
         impl: cell_apply_message
       - slot: cell_destroy
         slot_domain: ynotebook
+        slot_class: cell
         impl: cell_destroy
     internal: false
     doc: null
@@ -635,33 +661,43 @@ classes:
     ops:
       - slot: notebook_load_text
         slot_domain: ynotebook
+        slot_class: notebook
         impl: notebook_load_text
       - slot: notebook_load_file
         slot_domain: ynotebook
+        slot_class: notebook
         impl: notebook_load_file
       - slot: notebook_to_text
         slot_domain: ynotebook
+        slot_class: notebook
         impl: notebook_to_text
       - slot: notebook_save_file
         slot_domain: ynotebook
+        slot_class: notebook
         impl: notebook_save_file
       - slot: notebook_nbformat
         slot_domain: ynotebook
+        slot_class: notebook
         impl: notebook_nbformat
       - slot: notebook_nbformat_minor
         slot_domain: ynotebook
+        slot_class: notebook
         impl: notebook_nbformat_minor
       - slot: notebook_cell_count
         slot_domain: ynotebook
+        slot_class: notebook
         impl: notebook_cell_count
       - slot: notebook_cell_at
         slot_domain: ynotebook
+        slot_class: notebook
         impl: notebook_cell_at
       - slot: notebook_metadata_json
         slot_domain: ynotebook
+        slot_class: notebook
         impl: notebook_metadata_json
       - slot: notebook_destroy
         slot_domain: ynotebook
+        slot_class: notebook
         impl: notebook_destroy
     internal: false
     doc: null
@@ -779,110 +815,110 @@ local_typedefs:
     source_file: src/yetty/ynotebook/mime-bundle.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_ynotebook_mime_bundle_from_json_text_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/mime-bundle.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/mime-bundle.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ynotebook_mime_bundle_from_json_text_fn)(struct yetty_yclass_object *, const char *, const char *);"
   yetty_ynotebook_mime_bundle_to_json_text_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/mime-bundle.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/mime-bundle.c
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_ynotebook_mime_bundle_to_json_text_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_mime_bundle_count_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/mime-bundle.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/mime-bundle.c
     text: "typedef struct yetty_ycore_size_result (*yetty_ynotebook_mime_bundle_count_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_mime_bundle_mime_at_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/mime-bundle.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/mime-bundle.c
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynotebook_mime_bundle_mime_at_fn)(struct yetty_yclass_object *, size_t);"
   yetty_ynotebook_mime_bundle_kind_at_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/mime-bundle.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/mime-bundle.c
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynotebook_mime_bundle_kind_at_fn)(struct yetty_yclass_object *, size_t);"
   yetty_ynotebook_mime_bundle_bytes_at_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/mime-bundle.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/mime-bundle.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ynotebook_mime_bundle_bytes_at_fn)(struct yetty_yclass_object *, size_t, const uint8_t **, size_t *);"
   yetty_ynotebook_mime_bundle_json_at_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/mime-bundle.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/mime-bundle.c
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_ynotebook_mime_bundle_json_at_fn)(struct yetty_yclass_object *, size_t);"
   yetty_ynotebook_mime_bundle_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/mime-bundle.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/mime-bundle.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ynotebook_mime_bundle_destroy_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_output_type_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynotebook_output_type_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_output_stream_name_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynotebook_output_stream_name_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_output_text_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_ynotebook_output_text_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_output_execution_count_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_int_result (*yetty_ynotebook_output_execution_count_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_output_error_name_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynotebook_output_error_name_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_output_error_value_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynotebook_output_error_value_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_output_bundle_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_yclass_object_ptr_result (*yetty_ynotebook_output_bundle_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_output_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ynotebook_output_destroy_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_cell_type_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynotebook_cell_type_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_cell_id_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_const_char_ptr_result (*yetty_ynotebook_cell_id_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_cell_source_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_ynotebook_cell_source_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_cell_set_source_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ynotebook_cell_set_source_fn)(struct yetty_yclass_object *, const char *);"
   yetty_ynotebook_cell_execution_count_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_int_result (*yetty_ynotebook_cell_execution_count_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_cell_output_count_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_size_result (*yetty_ynotebook_cell_output_count_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_cell_output_at_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_yclass_object_ptr_result (*yetty_ynotebook_cell_output_at_fn)(struct yetty_yclass_object *, size_t);"
   yetty_ynotebook_cell_metadata_json_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_ynotebook_cell_metadata_json_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_cell_apply_message_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ynotebook_cell_apply_message_fn)(struct yetty_yclass_object *, const char *, const char *);"
   yetty_ynotebook_cell_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ynotebook_cell_destroy_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_notebook_load_text_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ynotebook_notebook_load_text_fn)(struct yetty_yclass_object *, const char *);"
   yetty_ynotebook_notebook_load_file_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ynotebook_notebook_load_file_fn)(struct yetty_yclass_object *, const char *);"
   yetty_ynotebook_notebook_to_text_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_ynotebook_notebook_to_text_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_notebook_save_file_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ynotebook_notebook_save_file_fn)(struct yetty_yclass_object *, const char *);"
   yetty_ynotebook_notebook_nbformat_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_int_result (*yetty_ynotebook_notebook_nbformat_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_notebook_nbformat_minor_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_int_result (*yetty_ynotebook_notebook_nbformat_minor_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_notebook_cell_count_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_size_result (*yetty_ynotebook_notebook_cell_count_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_notebook_cell_at_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_yclass_object_ptr_result (*yetty_ynotebook_notebook_cell_at_fn)(struct yetty_yclass_object *, size_t);"
   yetty_ynotebook_notebook_metadata_json_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_char_ptr_result (*yetty_ynotebook_notebook_metadata_json_fn)(struct yetty_yclass_object *);"
   yetty_ynotebook_notebook_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ynotebook/notebook.c
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ynotebook/notebook.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ynotebook_notebook_destroy_fn)(struct yetty_yclass_object *);"

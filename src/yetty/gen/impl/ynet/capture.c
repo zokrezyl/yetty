@@ -69,43 +69,49 @@ typedef struct yetty_ydraw_drawable_list_result (*yetty_ynet_render_fn)(
 typedef struct yetty_ycore_void_result (*yetty_ynet_destroy_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ynet_load_file_fn yetty_ynet_capture_yetty_ynet_load_file_check = capture_load_file;
+static yetty_ynet_load_file_fn yetty_ynet_capture_yetty_ynet_load_file_capture_load_file_check =
+    capture_load_file;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_packet_count_fn yetty_ynet_capture_yetty_ynet_packet_count_check =
-    capture_packet_count;
+static yetty_ynet_packet_count_fn
+    yetty_ynet_capture_yetty_ynet_packet_count_capture_packet_count_check = capture_packet_count;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_packet_time_fn yetty_ynet_capture_yetty_ynet_packet_time_check =
-    capture_packet_time;
+static yetty_ynet_packet_time_fn
+    yetty_ynet_capture_yetty_ynet_packet_time_capture_packet_time_check = capture_packet_time;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_packet_length_fn yetty_ynet_capture_yetty_ynet_packet_length_check =
-    capture_packet_length;
+static yetty_ynet_packet_length_fn
+    yetty_ynet_capture_yetty_ynet_packet_length_capture_packet_length_check = capture_packet_length;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_packet_protocol_fn yetty_ynet_capture_yetty_ynet_packet_protocol_check =
-    capture_packet_protocol;
+static yetty_ynet_packet_protocol_fn
+    yetty_ynet_capture_yetty_ynet_packet_protocol_capture_packet_protocol_check =
+        capture_packet_protocol;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_packet_source_fn yetty_ynet_capture_yetty_ynet_packet_source_check =
-    capture_packet_source;
+static yetty_ynet_packet_source_fn
+    yetty_ynet_capture_yetty_ynet_packet_source_capture_packet_source_check = capture_packet_source;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_packet_destination_fn yetty_ynet_capture_yetty_ynet_packet_destination_check =
-    capture_packet_destination;
+static yetty_ynet_packet_destination_fn
+    yetty_ynet_capture_yetty_ynet_packet_destination_capture_packet_destination_check =
+        capture_packet_destination;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_packet_info_fn yetty_ynet_capture_yetty_ynet_packet_info_check =
-    capture_packet_info;
+static yetty_ynet_packet_info_fn
+    yetty_ynet_capture_yetty_ynet_packet_info_capture_packet_info_check = capture_packet_info;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_packet_bytes_fn yetty_ynet_capture_yetty_ynet_packet_bytes_check =
-    capture_packet_bytes;
+static yetty_ynet_packet_bytes_fn
+    yetty_ynet_capture_yetty_ynet_packet_bytes_capture_packet_bytes_check = capture_packet_bytes;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_packet_caplen_fn yetty_ynet_capture_yetty_ynet_packet_caplen_check =
-    capture_packet_caplen;
+static yetty_ynet_packet_caplen_fn
+    yetty_ynet_capture_yetty_ynet_packet_caplen_capture_packet_caplen_check = capture_packet_caplen;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_flow_count_fn yetty_ynet_capture_yetty_ynet_flow_count_check = capture_flow_count;
+static yetty_ynet_flow_count_fn yetty_ynet_capture_yetty_ynet_flow_count_capture_flow_count_check =
+    capture_flow_count;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_flow_summary_fn yetty_ynet_capture_yetty_ynet_flow_summary_check =
-    capture_flow_summary;
+static yetty_ynet_flow_summary_fn
+    yetty_ynet_capture_yetty_ynet_flow_summary_capture_flow_summary_check = capture_flow_summary;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_render_fn yetty_ynet_capture_yetty_ynet_render_check = capture_render;
+static yetty_ynet_render_fn yetty_ynet_capture_yetty_ynet_render_capture_render_check =
+    capture_render;
 YETTY_MAYBE_UNUSED
-static yetty_ynet_destroy_fn yetty_ynet_capture_yetty_ynet_destroy_check = capture_destroy;
+static yetty_ynet_destroy_fn yetty_ynet_capture_yetty_ynet_destroy_capture_destroy_check =
+    capture_destroy;
 
 struct yetty_yclass_ptr_result yetty_ynet_capture_class_get(void)
 {

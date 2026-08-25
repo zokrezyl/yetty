@@ -78,34 +78,35 @@ typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_cell_value_
     struct yetty_yclass_object *, int32_t, int32_t, struct yetty_ycore_buffer);
 
 YETTY_MAYBE_UNUSED
-static yetty_yrich_constructor_fn yetty_yrich_cell_yetty_yrich_constructor_check = cell_constructor;
+static yetty_yrich_constructor_fn yetty_yrich_cell_yetty_yrich_constructor_cell_constructor_check =
+    cell_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_destroy_fn yetty_yrich_cell_yetty_yrich_element_destroy_check =
-    cell_destroy;
+static yetty_yrich_element_destroy_fn
+    yetty_yrich_cell_yetty_yrich_element_destroy_cell_destroy_check = cell_destroy;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_bounds_fn yetty_yrich_cell_yetty_yrich_element_bounds_check =
+static yetty_yrich_element_bounds_fn yetty_yrich_cell_yetty_yrich_element_bounds_cell_bounds_check =
     cell_bounds;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_is_editable_fn yetty_yrich_cell_yetty_yrich_element_is_editable_check =
-    cell_is_editable;
+static yetty_yrich_element_is_editable_fn
+    yetty_yrich_cell_yetty_yrich_element_is_editable_cell_is_editable_check = cell_is_editable;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_begin_edit_fn yetty_yrich_cell_yetty_yrich_element_begin_edit_check =
-    cell_begin_edit;
+static yetty_yrich_element_begin_edit_fn
+    yetty_yrich_cell_yetty_yrich_element_begin_edit_cell_begin_edit_check = cell_begin_edit;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_end_edit_fn yetty_yrich_cell_yetty_yrich_element_end_edit_check =
-    cell_end_edit;
+static yetty_yrich_element_end_edit_fn
+    yetty_yrich_cell_yetty_yrich_element_end_edit_cell_end_edit_check = cell_end_edit;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_is_editing_fn yetty_yrich_cell_yetty_yrich_element_is_editing_check =
-    cell_is_editing;
+static yetty_yrich_element_is_editing_fn
+    yetty_yrich_cell_yetty_yrich_element_is_editing_cell_is_editing_check = cell_is_editing;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_render_fn yetty_yrich_cell_yetty_yrich_element_render_check =
+static yetty_yrich_element_render_fn yetty_yrich_cell_yetty_yrich_element_render_cell_render_check =
     cell_render;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_insert_text_fn yetty_yrich_cell_yetty_yrich_element_insert_text_check =
-    cell_insert_text;
+static yetty_yrich_element_insert_text_fn
+    yetty_yrich_cell_yetty_yrich_element_insert_text_cell_insert_text_check = cell_insert_text;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_delete_sel_fn yetty_yrich_cell_yetty_yrich_element_delete_sel_check =
-    cell_delete_sel;
+static yetty_yrich_element_delete_sel_fn
+    yetty_yrich_cell_yetty_yrich_element_delete_sel_cell_delete_sel_check = cell_delete_sel;
 
 struct yetty_yclass_ptr_result yetty_yrich_cell_class_get(void)
 {
@@ -193,30 +194,36 @@ struct yetty_yclass_object_ptr_result yetty_yrich_cell_to(struct yetty_yrich_cel
 }
 
 YETTY_MAYBE_UNUSED
-static yetty_yrich_constructor_fn yetty_yrich_spreadsheet_yetty_yrich_constructor_check =
-    spreadsheet_constructor;
+static yetty_yrich_constructor_fn
+    yetty_yrich_spreadsheet_yetty_yrich_constructor_spreadsheet_constructor_check =
+        spreadsheet_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_document_destroy_fn yetty_yrich_spreadsheet_yetty_yrich_document_destroy_check =
-    spreadsheet_destroy;
+static yetty_yrich_document_destroy_fn
+    yetty_yrich_spreadsheet_yetty_yrich_document_destroy_spreadsheet_destroy_check =
+        spreadsheet_destroy;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_content_width_fn
-    yetty_yrich_spreadsheet_yetty_yrich_document_content_width_check = spreadsheet_content_width;
+    yetty_yrich_spreadsheet_yetty_yrich_document_content_width_spreadsheet_content_width_check =
+        spreadsheet_content_width;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_content_height_fn
-    yetty_yrich_spreadsheet_yetty_yrich_document_content_height_check = spreadsheet_content_height;
+    yetty_yrich_spreadsheet_yetty_yrich_document_content_height_spreadsheet_content_height_check =
+        spreadsheet_content_height;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_spreadsheet_set_grid_size_fn
-    yetty_yrich_spreadsheet_yetty_yrich_spreadsheet_set_grid_size_check = spreadsheet_set_grid_size;
+    yetty_yrich_spreadsheet_yetty_yrich_spreadsheet_set_grid_size_spreadsheet_set_grid_size_check =
+        spreadsheet_set_grid_size;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_spreadsheet_set_row_height_fn
-    yetty_yrich_spreadsheet_yetty_yrich_spreadsheet_set_row_height_check =
+    yetty_yrich_spreadsheet_yetty_yrich_spreadsheet_set_row_height_spreadsheet_set_row_height_check =
         spreadsheet_set_row_height;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_spreadsheet_set_col_width_fn
-    yetty_yrich_spreadsheet_yetty_yrich_spreadsheet_set_col_width_check = spreadsheet_set_col_width;
+    yetty_yrich_spreadsheet_yetty_yrich_spreadsheet_set_col_width_spreadsheet_set_col_width_check =
+        spreadsheet_set_col_width;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_spreadsheet_set_cell_value_fn
-    yetty_yrich_spreadsheet_yetty_yrich_spreadsheet_set_cell_value_check =
+    yetty_yrich_spreadsheet_yetty_yrich_spreadsheet_set_cell_value_spreadsheet_set_cell_value_check =
         spreadsheet_set_cell_value;
 
 struct yetty_yclass_ptr_result yetty_yrich_spreadsheet_class_get(void)

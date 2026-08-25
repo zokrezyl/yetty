@@ -42,26 +42,27 @@ typedef struct yetty_ycore_void_result (*yetty_yjupyter_client_destroy_fn)(
     struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yjupyter_client_open_fn yetty_yjupyter_client_yetty_yjupyter_client_open_check =
-    client_open;
+static yetty_yjupyter_client_open_fn
+    yetty_yjupyter_client_yetty_yjupyter_client_open_client_open_check = client_open;
 YETTY_MAYBE_UNUSED
-static yetty_yjupyter_client_execute_fn yetty_yjupyter_client_yetty_yjupyter_client_execute_check =
-    client_execute;
+static yetty_yjupyter_client_execute_fn
+    yetty_yjupyter_client_yetty_yjupyter_client_execute_client_execute_check = client_execute;
 YETTY_MAYBE_UNUSED
-static yetty_yjupyter_client_poll_fn yetty_yjupyter_client_yetty_yjupyter_client_poll_check =
-    client_poll;
+static yetty_yjupyter_client_poll_fn
+    yetty_yjupyter_client_yetty_yjupyter_client_poll_client_poll_check = client_poll;
 YETTY_MAYBE_UNUSED
 static yetty_yjupyter_client_kernel_state_fn
-    yetty_yjupyter_client_yetty_yjupyter_client_kernel_state_check = client_kernel_state;
+    yetty_yjupyter_client_yetty_yjupyter_client_kernel_state_client_kernel_state_check =
+        client_kernel_state;
 YETTY_MAYBE_UNUSED
-static yetty_yjupyter_client_tag_for_fn yetty_yjupyter_client_yetty_yjupyter_client_tag_for_check =
-    client_tag_for;
+static yetty_yjupyter_client_tag_for_fn
+    yetty_yjupyter_client_yetty_yjupyter_client_tag_for_client_tag_for_check = client_tag_for;
 YETTY_MAYBE_UNUSED
-static yetty_yjupyter_client_close_fn yetty_yjupyter_client_yetty_yjupyter_client_close_check =
-    client_close;
+static yetty_yjupyter_client_close_fn
+    yetty_yjupyter_client_yetty_yjupyter_client_close_client_close_check = client_close;
 YETTY_MAYBE_UNUSED
-static yetty_yjupyter_client_destroy_fn yetty_yjupyter_client_yetty_yjupyter_client_destroy_check =
-    client_destroy;
+static yetty_yjupyter_client_destroy_fn
+    yetty_yjupyter_client_yetty_yjupyter_client_destroy_client_destroy_check = client_destroy;
 
 struct yetty_yclass_ptr_result yetty_yjupyter_client_class_get(void)
 {

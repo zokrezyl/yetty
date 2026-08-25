@@ -482,63 +482,83 @@ classes:
     ops:
       - slot: destroy
         slot_domain: yfigure
+        slot_class: container
         impl: container_destroy
       - slot: render
         slot_domain: yfigure
+        slot_class: container
         impl: container_render
       - slot: constructor
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_constructor_impl
       - slot: add_child
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_add_child_impl
       - slot: remove_child_by_id
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_remove_child_by_id_impl
       - slot: raise_child_by_id
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_raise_child_by_id_impl
       - slot: create_child
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_create_child_impl
       - slot: delete_child
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_delete_child_impl
       - slot: set_child_rect
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_set_child_rect_impl
       - slot: set_rect
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_set_rect_impl
       - slot: child_object
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_child_object_impl
       - slot: seat_overlay
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_seat_overlay_impl
       - slot: set_child_z
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_set_child_z_impl
       - slot: set_child_input_passthrough
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_set_child_input_passthrough_impl
       - slot: set_child_hidden
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_set_child_hidden_impl
       - slot: set_child_scroll
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_set_child_scroll_impl
       - slot: set_child_content_size
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_set_child_content_size_impl
       - slot: apply_child_body
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_apply_child_body_impl
       - slot: clear_all
         slot_domain: yfigure
+        slot_class: container
         impl: yetty_yfigure_container_clear_all_slot
       - slot: dump_state
         slot_domain: yfigure
+        slot_class: container
         impl: container_dump_state_slot
     internal: false
     doc: null
@@ -574,33 +594,43 @@ classes:
     ops:
       - slot: render
         slot_domain: yfigure
+        slot_class: figure
         impl: yetty_yfigure_figure_default_render
       - slot: destroy
         slot_domain: yfigure
+        slot_class: figure
         impl: yetty_yfigure_figure_default_destroy
       - slot: process_input
         slot_domain: yfigure
+        slot_class: figure
         impl: yetty_yfigure_figure_default_process_input
       - slot: hit_opaque
         slot_domain: yfigure
+        slot_class: figure
         impl: yetty_yfigure_figure_default_hit_opaque
       - slot: process_bytes
         slot_domain: yfigure
+        slot_class: figure
         impl: yetty_yfigure_figure_default_process_bytes
       - slot: reset_content
         slot_domain: yfigure
+        slot_class: figure
         impl: yetty_yfigure_figure_default_reset_content
       - slot: dump_state
         slot_domain: yfigure
+        slot_class: figure
         impl: yetty_yfigure_figure_default_dump_state
       - slot: set_scroll
         slot_domain: yfigure
+        slot_class: figure
         impl: yetty_yfigure_figure_default_set_scroll
       - slot: set_content_size
         slot_domain: yfigure
+        slot_class: figure
         impl: yetty_yfigure_figure_default_set_content_size
       - slot: apply_scroll_anchor
         slot_domain: yfigure
+        slot_class: figure
         impl: yetty_yfigure_figure_default_apply_scroll_anchor
     internal: false
     doc: "/* ---- figure base data slice (PRIVATE) -----------------------------------

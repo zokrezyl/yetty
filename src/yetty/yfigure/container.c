@@ -1,5 +1,5 @@
 /*
- * yfigure_container — complex figure that holds child figures keyed
+ * yfigure_container — the figure that holds child figures keyed
  * by parent-scoped id.
  *
  * Storage: each child is wrapped in a `struct child_entry` carrying its

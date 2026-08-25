@@ -749,4 +749,3 @@ yvterm_font_face._fields_ = [("font", c_void_p), ("method", c_int), ("name", (c_
 class yvterm_font_range(Structure):
     pass
 yvterm_font_range._fields_ = [("from", c_uint32), ("to", c_uint32), ("face", c_uint32)]
-

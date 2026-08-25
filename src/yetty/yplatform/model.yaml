@@ -343,9 +343,11 @@ classes:
     ops:
       - slot: clipboard_set_text
         slot_domain: yplatform
+        slot_class: android_clipboard
         impl: android_clipboard_set_text
       - slot: clipboard_request_paste
         slot_domain: yplatform
+        slot_class: android_clipboard
         impl: android_clipboard_request_paste
     internal: false
     doc: "/* Private subclass state: the pipe paste results are posted to (borrowed). */"
@@ -366,12 +368,15 @@ classes:
     ops:
       - slot: clipboard_set_text
         slot_domain: yplatform
+        slot_class: clipboard
         impl: clipboard_default_set_text
       - slot: clipboard_request_paste
         slot_domain: yplatform
+        slot_class: clipboard
         impl: clipboard_default_request_paste
       - slot: clipboard_drain
         slot_domain: yplatform
+        slot_class: clipboard
         impl: clipboard_default_drain
     internal: false
     doc: "/* Base clipboard data slice. Abstract — holds no shared state; each subclass
@@ -398,12 +403,15 @@ classes:
     ops:
       - slot: clipboard_set_text
         slot_domain: yplatform
+        slot_class: glfw_clipboard
         impl: glfw_clipboard_set_text
       - slot: clipboard_request_paste
         slot_domain: yplatform
+        slot_class: glfw_clipboard
         impl: glfw_clipboard_request_paste
       - slot: clipboard_drain
         slot_domain: yplatform
+        slot_class: glfw_clipboard
         impl: glfw_clipboard_drain
     internal: false
     doc: "/* Private subclass state: the cross-thread pipes, borrowed (owned by caller). */"
@@ -426,9 +434,11 @@ classes:
     ops:
       - slot: clipboard_set_text
         slot_domain: yplatform
+        slot_class: ios_clipboard
         impl: ios_clipboard_set_text
       - slot: clipboard_request_paste
         slot_domain: yplatform
+        slot_class: ios_clipboard
         impl: ios_clipboard_request_paste
     internal: false
     doc: "/* Private subclass state: the pipe paste results are posted to (borrowed). */"
@@ -451,9 +461,11 @@ classes:
     ops:
       - slot: clipboard_set_text
         slot_domain: yplatform
+        slot_class: webasm_clipboard
         impl: webasm_clipboard_set_text
       - slot: clipboard_request_paste
         slot_domain: yplatform
+        slot_class: webasm_clipboard
         impl: webasm_clipboard_request_paste
     internal: false
     doc: "/* Private subclass state: the pipe paste results are posted to (borrowed). */"
@@ -492,9 +504,11 @@ classes:
     ops:
       - slot: platform_init
         slot_domain: yplatform
+        slot_class: android_platform
         impl: android_platform_init
       - slot: platform_run
         slot_domain: yplatform
+        slot_class: android_platform
         impl: android_platform_run
     internal: false
     doc: null
@@ -517,9 +531,11 @@ classes:
     ops:
       - slot: platform_init
         slot_domain: yplatform
+        slot_class: glfw_platform
         impl: glfw_platform_init
       - slot: platform_run
         slot_domain: yplatform
+        slot_class: glfw_platform
         impl: glfw_platform_run
     internal: false
     doc: "/* No per-instance state: the bootstrap below owns the window / surface / pipes /
@@ -559,9 +575,11 @@ classes:
     ops:
       - slot: platform_init
         slot_domain: yplatform
+        slot_class: ios_platform
         impl: ios_platform_init
       - slot: platform_run
         slot_domain: yplatform
+        slot_class: ios_platform
         impl: ios_platform_run
     internal: false
     doc: null
@@ -598,9 +616,11 @@ classes:
     ops:
       - slot: platform_init
         slot_domain: yplatform
+        slot_class: platform
         impl: platform_default_init
       - slot: platform_run
         slot_domain: yplatform
+        slot_class: platform
         impl: platform_default_run
     internal: false
     doc: "/* The platform's bring-up results live on the base so every subclass shares one
@@ -649,9 +669,11 @@ classes:
     ops:
       - slot: platform_init
         slot_domain: yplatform
+        slot_class: webasm_platform
         impl: webasm_platform_init
       - slot: platform_run
         slot_domain: yplatform
+        slot_class: webasm_platform
         impl: webasm_platform_run
     internal: false
     doc: null
@@ -706,9 +728,11 @@ classes:
     ops:
       - slot: window_chrome_destroy
         slot_domain: yplatform
+        slot_class: glfw_window_chrome
         impl: glfw_window_chrome_destroy
       - slot: window_chrome_handle_event
         slot_domain: yplatform
+        slot_class: glfw_window_chrome
         impl: glfw_window_chrome_handle_event
     internal: false
     doc: "/* Private subclass state. */"
@@ -729,36 +753,47 @@ classes:
     ops:
       - slot: window_chrome_configure
         slot_domain: yplatform
+        slot_class: window_chrome
         impl: window_chrome_configure
       - slot: window_chrome_destroy
         slot_domain: yplatform
+        slot_class: window_chrome
         impl: window_chrome_destroy
       - slot: window_chrome_iconify
         slot_domain: yplatform
+        slot_class: window_chrome
         impl: window_chrome_iconify
       - slot: window_chrome_toggle_maximize
         slot_domain: yplatform
+        slot_class: window_chrome
         impl: window_chrome_toggle_maximize
       - slot: window_chrome_request_close
         slot_domain: yplatform
+        slot_class: window_chrome
         impl: window_chrome_request_close
       - slot: window_chrome_drag_by
         slot_domain: yplatform
+        slot_class: window_chrome
         impl: window_chrome_drag_by
       - slot: window_chrome_resize_by
         slot_domain: yplatform
+        slot_class: window_chrome
         impl: window_chrome_resize_by
       - slot: window_chrome_begin_interactive_move
         slot_domain: yplatform
+        slot_class: window_chrome
         impl: window_chrome_begin_interactive_move
       - slot: window_chrome_begin_interactive_resize
         slot_domain: yplatform
+        slot_class: window_chrome
         impl: window_chrome_begin_interactive_resize
       - slot: window_chrome_set_cursor
         slot_domain: yplatform
+        slot_class: window_chrome
         impl: window_chrome_set_cursor
       - slot: window_chrome_handle_event
         slot_domain: yplatform
+        slot_class: window_chrome
         impl: window_chrome_handle_event
     internal: false
     doc: null
@@ -788,21 +823,27 @@ classes:
     ops:
       - slot: window_open
         slot_domain: yplatform
+        slot_class: android_window
         impl: android_window_open
       - slot: window_get_size
         slot_domain: yplatform
+        slot_class: android_window
         impl: android_window_get_size
       - slot: window_get_framebuffer_size
         slot_domain: yplatform
+        slot_class: android_window
         impl: android_window_get_framebuffer_size
       - slot: window_get_content_scale
         slot_domain: yplatform
+        slot_class: android_window
         impl: android_window_get_content_scale
       - slot: window_should_close
         slot_domain: yplatform
+        slot_class: android_window
         impl: android_window_should_close
       - slot: window_set_title
         slot_domain: yplatform
+        slot_class: android_window
         impl: android_window_set_title
     internal: false
     doc: "/* Cached framebuffer metrics pushed from the NDK glue. */"
@@ -825,27 +866,35 @@ classes:
     ops:
       - slot: window_open
         slot_domain: yplatform
+        slot_class: glfw_window
         impl: glfw_window_open
       - slot: window_destroy
         slot_domain: yplatform
+        slot_class: glfw_window
         impl: glfw_window_destroy
       - slot: window_get_size
         slot_domain: yplatform
+        slot_class: glfw_window
         impl: glfw_window_get_size
       - slot: window_get_framebuffer_size
         slot_domain: yplatform
+        slot_class: glfw_window
         impl: glfw_window_get_framebuffer_size
       - slot: window_get_content_scale
         slot_domain: yplatform
+        slot_class: glfw_window
         impl: glfw_window_get_content_scale
       - slot: window_should_close
         slot_domain: yplatform
+        slot_class: glfw_window
         impl: glfw_window_should_close
       - slot: window_set_title
         slot_domain: yplatform
+        slot_class: glfw_window
         impl: glfw_window_set_title
       - slot: window_create_surface
         slot_domain: yplatform
+        slot_class: glfw_window
         impl: glfw_window_create_surface
     internal: false
     doc: "/* Private subclass state: the native GLFW window, owned here. */"
@@ -876,21 +925,27 @@ classes:
     ops:
       - slot: window_open
         slot_domain: yplatform
+        slot_class: ios_window
         impl: ios_window_open
       - slot: window_get_size
         slot_domain: yplatform
+        slot_class: ios_window
         impl: ios_window_get_size
       - slot: window_get_framebuffer_size
         slot_domain: yplatform
+        slot_class: ios_window
         impl: ios_window_get_framebuffer_size
       - slot: window_get_content_scale
         slot_domain: yplatform
+        slot_class: ios_window
         impl: ios_window_get_content_scale
       - slot: window_should_close
         slot_domain: yplatform
+        slot_class: ios_window
         impl: ios_window_should_close
       - slot: window_set_title
         slot_domain: yplatform
+        slot_class: ios_window
         impl: ios_window_set_title
     internal: false
     doc: "/* Cached metrics pushed from the UIKit bootstrap. framebuffer_* is in physical
@@ -915,24 +970,31 @@ classes:
     ops:
       - slot: window_open
         slot_domain: yplatform
+        slot_class: webasm_window
         impl: webasm_window_open
       - slot: window_destroy
         slot_domain: yplatform
+        slot_class: webasm_window
         impl: webasm_window_destroy
       - slot: window_get_size
         slot_domain: yplatform
+        slot_class: webasm_window
         impl: webasm_window_get_size
       - slot: window_get_framebuffer_size
         slot_domain: yplatform
+        slot_class: webasm_window
         impl: webasm_window_get_framebuffer_size
       - slot: window_get_content_scale
         slot_domain: yplatform
+        slot_class: webasm_window
         impl: webasm_window_get_content_scale
       - slot: window_should_close
         slot_domain: yplatform
+        slot_class: webasm_window
         impl: webasm_window_should_close
       - slot: window_set_title
         slot_domain: yplatform
+        slot_class: webasm_window
         impl: webasm_window_set_title
     internal: false
     doc: "/* No webasm-specific state — the canvas is global to the emscripten runtime. */"
@@ -953,27 +1015,35 @@ classes:
     ops:
       - slot: window_open
         slot_domain: yplatform
+        slot_class: window
         impl: window_default_open
       - slot: window_destroy
         slot_domain: yplatform
+        slot_class: window
         impl: window_default_destroy
       - slot: window_create_surface
         slot_domain: yplatform
+        slot_class: window
         impl: window_default_create_surface
       - slot: window_get_size
         slot_domain: yplatform
+        slot_class: window
         impl: window_default_get_size
       - slot: window_get_framebuffer_size
         slot_domain: yplatform
+        slot_class: window
         impl: window_default_get_framebuffer_size
       - slot: window_get_content_scale
         slot_domain: yplatform
+        slot_class: window
         impl: window_default_get_content_scale
       - slot: window_should_close
         slot_domain: yplatform
+        slot_class: window
         impl: window_default_should_close
       - slot: window_set_title
         slot_domain: yplatform
+        slot_class: window
         impl: window_default_set_title
     internal: false
     doc: "/* Base window data slice. The base is abstract — it owns no state (the native
@@ -1287,77 +1357,77 @@ local_typedefs:
     source_file: src/yetty/yplatform/yclipboard/android.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_yplatform_clipboard_set_text_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yplatform/yclipboard/clipboard.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yplatform/yclipboard/clipboard.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_set_text_fn)(struct yetty_yclass_object *, const char *, size_t);"
   yetty_yplatform_clipboard_request_paste_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yplatform/yclipboard/clipboard.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yplatform/yclipboard/clipboard.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_request_paste_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_clipboard_drain_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yplatform/yclipboard/clipboard.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yplatform/yclipboard/clipboard.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_drain_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_platform_init_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yplatform/yplatform/platform.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yplatform/yplatform/platform.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_init_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);"
   yetty_yplatform_platform_run_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/yplatform/yplatform/platform.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yplatform/yplatform/platform.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_run_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);"
   ythread_func_t:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/thread.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/thread.h
     text: "typedef int (*ythread_func_t)(void *);"
   yetty_yplatform_window_open_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow/window.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_open_fn)(struct yetty_yclass_object *, int, int, const char *);"
   yetty_yplatform_window_get_size_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow/window.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_get_size_fn)(struct yetty_yclass_object *, int *, int *);"
   yetty_yplatform_window_get_framebuffer_size_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow/window.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_get_framebuffer_size_fn)(struct yetty_yclass_object *, int *, int *);"
   yetty_yplatform_window_get_content_scale_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow/window.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_get_content_scale_fn)(struct yetty_yclass_object *, float *, float *);"
   yetty_yplatform_window_should_close_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow/window.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_int_result (*yetty_yplatform_window_should_close_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_set_title_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow/window.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_set_title_fn)(struct yetty_yclass_object *, const char *);"
   yetty_yplatform_window_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow/window.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_destroy_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_create_surface_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow/window.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_yclass_void_ptr_result (*yetty_yplatform_window_create_surface_fn)(struct yetty_yclass_object *, void *);"
   yetty_yplatform_window_chrome_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_destroy_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_chrome_handle_event_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_handle_event_fn)(struct yetty_yclass_object *, const struct yetty_yui_event *);"
   yetty_yplatform_window_chrome_configure_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_configure_fn)(struct yetty_yclass_object *, struct yetty_ycore_xthread_event_pipe *);"
   yetty_yplatform_window_chrome_iconify_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_iconify_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_chrome_toggle_maximize_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_toggle_maximize_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_chrome_request_close_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_request_close_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_chrome_drag_by_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_drag_by_fn)(struct yetty_yclass_object *, int, int);"
   yetty_yplatform_window_chrome_resize_by_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_resize_by_fn)(struct yetty_yclass_object *, int, int, int);"
   yetty_yplatform_window_chrome_begin_interactive_move_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_begin_interactive_move_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_chrome_begin_interactive_resize_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_begin_interactive_resize_fn)(struct yetty_yclass_object *, int);"
   yetty_yplatform_window_chrome_set_cursor_fn:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_set_cursor_fn)(struct yetty_yclass_object *, int);"

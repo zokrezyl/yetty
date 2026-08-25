@@ -18,11 +18,11 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty
 typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_ydiagram_yetty_ygui_constructor_check =
-    ydiagram_constructor;
+static yetty_ygui_constructor_fn
+    yetty_ygui_ydiagram_yetty_ygui_constructor_ydiagram_constructor_check = ydiagram_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_ydiagram_yetty_ygui_destructor_check =
-    ydiagram_destructor;
+static yetty_ygui_destructor_fn
+    yetty_ygui_ydiagram_yetty_ygui_destructor_ydiagram_destructor_check = ydiagram_destructor;
 
 struct yetty_yclass_ptr_result yetty_ygui_ydiagram_class_get(void)
 {

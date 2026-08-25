@@ -12,7 +12,8 @@
 #include <string.h> /* memcpy/strcmp/strlen */
 
 YETTY_MAYBE_UNUSED
-static yetty_yguiapp_build_fn yetty_demoygui_22_tree_complex_yetty_yguiapp_build_check = build;
+static yetty_yguiapp_build_fn yetty_demoygui_22_tree_complex_yetty_yguiapp_build_build_check =
+    build;
 
 struct yetty_yclass_ptr_result yetty_demoygui_22_tree_complex_class_get(void)
 {

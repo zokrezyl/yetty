@@ -169,6 +169,12 @@ size_t yetty_ydraw_drawable_list_size(const struct yetty_ydraw_drawable_list *bu
 struct yetty_ycore_void_result yetty_ydraw_drawable_list_truncate(
     struct yetty_ydraw_drawable_list *buf, size_t size);
 
+/* Size of the magic header that prefixes a serialized stream: magic (4) +
+ * scene bounds (16) + primitive byte count (4). The prim records begin at
+ * this offset — producers that lift a rendered list's records into another
+ * list (ycomplex2 pack) rely on it. */
+#define YETTY_YDRAW_SERIAL_HEADER_BYTES (4 + 16 + 4)
+
 /* Serialize the whole buffer (scene_bounds + primitives + text_spans) into
  * a single binary blob, tagged with a magic header. The receiver passes the
  * raw bytes into create_from_bytes() and recognises the magic to restore all
@@ -238,6 +244,16 @@ struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font_ref(
  * font_id, same numbering as yetty_ydraw_drawable_list_add_font. */
 struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font_named(
     struct yetty_ydraw_drawable_list *buf, const char *name YETTY_ANNOT_CSTRING);
+
+/* Pack a FONT primitive carrying an EXPLICIT producer-chosen font_id — the
+ * id is a field of the wire record; the auto-numbering of add_font /
+ * add_font_named is a convenience convention, not a wire rule. ttf_len == 0
+ * makes this a reference to an installed font by name (add_font_named
+ * semantics); ttf_len > 0 embeds the TTF bytes (add_font semantics). Text
+ * spans reference the record by the same id. */
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_font_with_id(
+    struct yetty_ydraw_drawable_list *buf, int32_t font_id, const char *name YETTY_ANNOT_CSTRING,
+    const uint8_t *ttf_data YETTY_ANNOT_ARRAY(ttf_len), size_t ttf_len);
 
 /* Pack a TEXT_DRAWABLE_LIST primitive (text-drawable-list.h). font_id must match a
  * previously-added FONT prim's id, or be -1 to use the canvas default. */

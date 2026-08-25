@@ -43,28 +43,32 @@ typedef struct yetty_ycore_void_result (*yetty_yplatform_window_set_title_fn)(
 
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_open_fn
-    yetty_yplatform_webasm_window_yetty_yplatform_window_open_check = webasm_window_open;
+    yetty_yplatform_webasm_window_yetty_yplatform_window_open_webasm_window_open_check =
+        webasm_window_open;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_destroy_fn
-    yetty_yplatform_webasm_window_yetty_yplatform_window_destroy_check = webasm_window_destroy;
+    yetty_yplatform_webasm_window_yetty_yplatform_window_destroy_webasm_window_destroy_check =
+        webasm_window_destroy;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_size_fn
-    yetty_yplatform_webasm_window_yetty_yplatform_window_get_size_check = webasm_window_get_size;
+    yetty_yplatform_webasm_window_yetty_yplatform_window_get_size_webasm_window_get_size_check =
+        webasm_window_get_size;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_framebuffer_size_fn
-    yetty_yplatform_webasm_window_yetty_yplatform_window_get_framebuffer_size_check =
+    yetty_yplatform_webasm_window_yetty_yplatform_window_get_framebuffer_size_webasm_window_get_framebuffer_size_check =
         webasm_window_get_framebuffer_size;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_content_scale_fn
-    yetty_yplatform_webasm_window_yetty_yplatform_window_get_content_scale_check =
+    yetty_yplatform_webasm_window_yetty_yplatform_window_get_content_scale_webasm_window_get_content_scale_check =
         webasm_window_get_content_scale;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_should_close_fn
-    yetty_yplatform_webasm_window_yetty_yplatform_window_should_close_check =
+    yetty_yplatform_webasm_window_yetty_yplatform_window_should_close_webasm_window_should_close_check =
         webasm_window_should_close;
 YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_set_title_fn
-    yetty_yplatform_webasm_window_yetty_yplatform_window_set_title_check = webasm_window_set_title;
+    yetty_yplatform_webasm_window_yetty_yplatform_window_set_title_webasm_window_set_title_check =
+        webasm_window_set_title;
 
 struct yetty_yclass_ptr_result yetty_yplatform_webasm_window_class_get(void)
 {

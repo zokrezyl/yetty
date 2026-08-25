@@ -12,14 +12,15 @@
 #include <string.h> /* memcpy/strcmp/strlen */
 
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_render_fn yetty_yshadertoy_figure_yetty_yfigure_render_check =
-    figure_render_slot;
+static yetty_yfigure_render_fn
+    yetty_yshadertoy_figure_yetty_yfigure_render_figure_render_slot_check = figure_render_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_destroy_fn yetty_yshadertoy_figure_yetty_yfigure_destroy_check =
-    figure_destroy_slot;
+static yetty_yfigure_destroy_fn
+    yetty_yshadertoy_figure_yetty_yfigure_destroy_figure_destroy_slot_check = figure_destroy_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_process_bytes_fn yetty_yshadertoy_figure_yetty_yfigure_process_bytes_check =
-    figure_process_bytes_slot;
+static yetty_yfigure_process_bytes_fn
+    yetty_yshadertoy_figure_yetty_yfigure_process_bytes_figure_process_bytes_slot_check =
+        figure_process_bytes_slot;
 
 struct yetty_yclass_ptr_result yetty_yshadertoy_figure_class_get(void)
 {

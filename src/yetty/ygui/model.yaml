@@ -259,9 +259,11 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: framework
         impl: framework_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: framework
         impl: framework_destructor
     internal: false
     doc: null
@@ -297,9 +299,11 @@ classes:
     ops:
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: clickable
         impl: clickable_on_press
       - slot: widget_on_release
         slot_domain: ygui
+        slot_class: clickable
         impl: clickable_on_release
     internal: false
     doc: null
@@ -343,12 +347,15 @@ classes:
     ops:
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: draggable
         impl: draggable_on_press
       - slot: widget_on_motion
         slot_domain: ygui
+        slot_class: draggable
         impl: draggable_on_motion
       - slot: widget_on_release
         slot_domain: ygui
+        slot_class: draggable
         impl: draggable_on_release
     internal: false
     doc: null
@@ -370,6 +377,7 @@ classes:
     ops:
       - slot: widget_emit_body
         slot_domain: ygui
+        slot_class: primitive_widget
         impl: primitive_emit_body
     internal: false
     doc: "/* Marker data struct — primitive_widget adds no per-instance fields
@@ -472,30 +480,39 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: widget
         impl: widget_default_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: widget
         impl: widget_default_destructor
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: widget
         impl: widget_default_on_press
       - slot: widget_on_release
         slot_domain: ygui
+        slot_class: widget
         impl: widget_default_on_release
       - slot: widget_on_motion
         slot_domain: ygui
+        slot_class: widget
         impl: widget_default_on_motion
       - slot: widget_on_scroll
         slot_domain: ygui
+        slot_class: widget
         impl: widget_default_on_scroll
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: widget
         impl: widget_default_paint
       - slot: widget_emit_container
         slot_domain: ygui
+        slot_class: widget
         impl: widget_default_emit_container
       - slot: widget_emit_body
         slot_domain: ygui
+        slot_class: widget
         impl: widget_default_emit_body
     internal: false
     doc: null
@@ -525,12 +542,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: breadcrumbs
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: breadcrumbs
         impl: dtor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: breadcrumbs
         impl: paint
     internal: false
     doc: null
@@ -558,12 +578,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: button
         impl: button_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: button
         impl: button_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: button
         impl: button_paint
     internal: false
     doc: null
@@ -591,12 +614,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: checkbox
         impl: checkbox_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: checkbox
         impl: checkbox_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: checkbox
         impl: checkbox_paint
     internal: false
     doc: null
@@ -624,12 +650,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: chip
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: chip
         impl: dtor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: chip
         impl: paint
     internal: false
     doc: null
@@ -659,15 +688,19 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: choicebox
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: choicebox
         impl: dtor
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: choicebox
         impl: on_press
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: choicebox
         impl: paint
     internal: false
     doc: null
@@ -697,15 +730,19 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: collapsing_header
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: collapsing_header
         impl: dtor
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: collapsing_header
         impl: on_press
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: collapsing_header
         impl: paint
     internal: false
     doc: null
@@ -727,9 +764,11 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: colorpicker
         impl: ctor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: colorpicker
         impl: paint
     internal: false
     doc: null
@@ -757,12 +796,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: combobox
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: combobox
         impl: dtor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: combobox
         impl: paint
     internal: false
     doc: null
@@ -800,12 +842,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: datepicker
         impl: ctor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: datepicker
         impl: paint
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: datepicker
         impl: on_press
     internal: false
     doc: null
@@ -835,12 +880,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: dialog
         impl: dialog_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: dialog
         impl: dialog_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: dialog
         impl: dialog_paint
     internal: false
     doc: null
@@ -880,12 +928,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: dropdown
         impl: dropdown_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: dropdown
         impl: dropdown_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: dropdown
         impl: dropdown_paint
     internal: false
     doc: null
@@ -931,21 +982,27 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: filepicker
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: filepicker
         impl: dtor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: filepicker
         impl: paint
       - slot: widget_on_motion
         slot_domain: ygui
+        slot_class: filepicker
         impl: fp_on_motion
       - slot: widget_on_scroll
         slot_domain: ygui
+        slot_class: filepicker
         impl: fp_on_scroll
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: filepicker
         impl: on_press
     internal: false
     doc: null
@@ -967,6 +1024,7 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: hbox
         impl: hbox_constructor
     internal: false
     doc: null
@@ -996,12 +1054,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: label
         impl: label_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: label
         impl: label_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: label
         impl: label_paint
     internal: false
     doc: null
@@ -1035,15 +1096,19 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: list
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: list
         impl: dtor
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: list
         impl: on_press
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: list
         impl: paint
     internal: false
     doc: null
@@ -1065,6 +1130,7 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: menubar
         impl: menubar_constructor
     internal: false
     doc: null
@@ -1094,9 +1160,11 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: panel
         impl: panel_constructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: panel
         impl: panel_paint
     internal: false
     doc: null
@@ -1146,18 +1214,23 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: popup_menu
         impl: popup_menu_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: popup_menu
         impl: popup_menu_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: popup_menu
         impl: popup_menu_paint
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: popup_menu
         impl: popup_menu_on_press
       - slot: widget_on_motion
         slot_domain: ygui
+        slot_class: popup_menu
         impl: popup_menu_on_motion
     internal: false
     doc: null
@@ -1183,9 +1256,11 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: progress
         impl: progress_constructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: progress
         impl: progress_paint
     internal: false
     doc: null
@@ -1213,12 +1288,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: radio
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: radio
         impl: dtor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: radio
         impl: paint
     internal: false
     doc: null
@@ -1248,12 +1326,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: rich
         impl: rich_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: rich
         impl: rich_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: rich
         impl: rich_paint
     internal: false
     doc: null
@@ -1289,12 +1370,15 @@ classes:
     ops:
       - slot: widget_on_scroll
         slot_domain: ygui
+        slot_class: scrollarea
         impl: on_scroll
       - slot: constructor
         slot_domain: ygui
+        slot_class: scrollarea
         impl: ctor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: scrollarea
         impl: paint
     internal: false
     doc: null
@@ -1322,12 +1406,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: selectable
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: selectable
         impl: dtor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: selectable
         impl: paint
     internal: false
     doc: null
@@ -1349,6 +1436,7 @@ classes:
     ops:
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: separator
         impl: separator_paint
     internal: false
     doc: null
@@ -1378,15 +1466,19 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: slider
         impl: slider_constructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: slider
         impl: slider_paint
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: slider
         impl: slider_on_press
       - slot: widget_on_motion
         slot_domain: ygui
+        slot_class: slider
         impl: slider_on_motion
     internal: false
     doc: null
@@ -1420,12 +1512,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: spinner
         impl: spinner_constructor
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: spinner
         impl: spinner_on_press
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: spinner
         impl: spinner_paint
     internal: false
     doc: null
@@ -1459,12 +1554,15 @@ classes:
     ops:
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: splitter
         impl: paint
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: splitter
         impl: on_press
       - slot: widget_on_motion
         slot_domain: ygui
+        slot_class: splitter
         impl: on_motion
     internal: false
     doc: null
@@ -1490,12 +1588,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: statusbar
         impl: statusbar_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: statusbar
         impl: statusbar_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: statusbar
         impl: statusbar_paint
     internal: false
     doc: null
@@ -1529,12 +1630,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: stepper
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: stepper
         impl: dtor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: stepper
         impl: paint
     internal: false
     doc: null
@@ -1576,15 +1680,19 @@ classes:
     ops:
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: tabbar
         impl: tabbar_on_press
       - slot: widget_on_release
         slot_domain: ygui
+        slot_class: tabbar
         impl: tabbar_on_release
       - slot: constructor
         slot_domain: ygui
+        slot_class: tabbar
         impl: tabbar_constructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: tabbar
         impl: tabbar_paint
     internal: false
     doc: null
@@ -1622,12 +1730,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: table
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: table
         impl: dtor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: table
         impl: paint
     internal: false
     doc: null
@@ -1649,12 +1760,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: textarea
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: textarea
         impl: dtor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: textarea
         impl: paint
     internal: false
     doc: null
@@ -1728,21 +1842,27 @@ classes:
     ops:
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: textinput
         impl: textinput_on_press
       - slot: widget_on_motion
         slot_domain: ygui
+        slot_class: textinput
         impl: textinput_on_motion
       - slot: widget_on_release
         slot_domain: ygui
+        slot_class: textinput
         impl: textinput_on_release
       - slot: constructor
         slot_domain: ygui
+        slot_class: textinput
         impl: textinput_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: textinput
         impl: textinput_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: textinput
         impl: textinput_paint
     internal: false
     doc: null
@@ -1770,12 +1890,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: toggle
         impl: toggle_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: toggle
         impl: toggle_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: toggle
         impl: toggle_paint
     internal: false
     doc: null
@@ -1797,12 +1920,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: tooltip
         impl: tooltip_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: tooltip
         impl: tooltip_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: tooltip
         impl: tooltip_paint
     internal: false
     doc: null
@@ -1836,15 +1962,19 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: tree_node
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: tree_node
         impl: dtor
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: tree_node
         impl: on_press
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: tree_node
         impl: paint
     internal: false
     doc: null
@@ -1866,6 +1996,7 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: vbox
         impl: vbox_constructor
     internal: false
     doc: null
@@ -1923,21 +2054,27 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: window
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: window
         impl: dtor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: window
         impl: paint
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: window
         impl: on_press
       - slot: widget_on_motion
         slot_domain: ygui
+        slot_class: window
         impl: on_motion
       - slot: widget_on_release
         slot_domain: ygui
+        slot_class: window
         impl: on_release
     internal: false
     doc: null
@@ -1971,12 +2108,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: ybrowser
         impl: ybr_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: ybrowser
         impl: ybr_destructor
       - slot: widget_emit_body
         slot_domain: ygui
+        slot_class: ybrowser
         impl: ybr_emit_body
     internal: false
     doc: null
@@ -2002,9 +2142,11 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: ydiagram
         impl: ydiagram_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: ydiagram
         impl: ydiagram_destructor
     internal: false
     doc: null
@@ -2050,12 +2192,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: ydraw_embed
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: ydraw_embed
         impl: dtor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: ydraw_embed
         impl: paint
     internal: false
     doc: null
@@ -2093,15 +2238,19 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: yimage
         impl: yimage_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: yimage
         impl: yimage_destructor
       - slot: widget_emit_container
         slot_domain: ygui
+        slot_class: yimage
         impl: yimage_emit_container
       - slot: widget_emit_body
         slot_domain: ygui
+        slot_class: yimage
         impl: yimage_emit_body
     internal: false
     doc: null
@@ -2135,12 +2284,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: yjungle
         impl: yjungle_ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: yjungle
         impl: yjungle_dtor
       - slot: widget_emit_body
         slot_domain: ygui
+        slot_class: yjungle
         impl: yjungle_emit_body
     internal: false
     doc: null
@@ -2174,12 +2326,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: ymarkdown
         impl: ymd_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: ymarkdown
         impl: ymd_destructor
       - slot: widget_emit_body
         slot_domain: ygui
+        slot_class: ymarkdown
         impl: ymd_emit_body
     internal: false
     doc: null
@@ -2213,12 +2368,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: ymaze
         impl: ymz_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: ymaze
         impl: ymz_destructor
       - slot: widget_emit_body
         slot_domain: ygui
+        slot_class: ymaze
         impl: ymz_emit_body
     internal: false
     doc: null
@@ -2300,21 +2458,27 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: ynode
         impl: ynode_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: ynode
         impl: ynode_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: ynode
         impl: ynode_paint
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: ynode
         impl: ynode_on_press
       - slot: widget_on_motion
         slot_domain: ygui
+        slot_class: ynode
         impl: ynode_on_motion
       - slot: widget_on_release
         slot_domain: ygui
+        slot_class: ynode
         impl: ynode_on_release
     internal: false
     doc: null
@@ -2428,24 +2592,31 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: ynodes
         impl: ynodes_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: ynodes
         impl: ynodes_destructor
       - slot: widget_paint
         slot_domain: ygui
+        slot_class: ynodes
         impl: ynodes_paint
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: ynodes
         impl: ynodes_on_press
       - slot: widget_on_motion
         slot_domain: ygui
+        slot_class: ynodes
         impl: ynodes_on_motion
       - slot: widget_on_release
         slot_domain: ygui
+        slot_class: ynodes
         impl: ynodes_on_release
       - slot: widget_on_scroll
         slot_domain: ygui
+        slot_class: ynodes
         impl: ynodes_on_scroll
     internal: false
     doc: null
@@ -2506,15 +2677,19 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: yplot
         impl: yplot_constructor
       - slot: destructor
         slot_domain: ygui
+        slot_class: yplot
         impl: yplot_destructor
       - slot: widget_emit_container
         slot_domain: ygui
+        slot_class: yplot
         impl: yplot_emit_container
       - slot: widget_emit_body
         slot_domain: ygui
+        slot_class: yplot
         impl: yplot_emit_body
     internal: false
     doc: null
@@ -2552,21 +2727,27 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: yrich_view
         impl: yrich_view_ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: yrich_view
         impl: yrich_view_dtor
       - slot: widget_emit_body
         slot_domain: ygui
+        slot_class: yrich_view
         impl: yrich_view_emit_body
       - slot: widget_on_press
         slot_domain: ygui
+        slot_class: yrich_view
         impl: yrich_view_on_press
       - slot: widget_on_release
         slot_domain: ygui
+        slot_class: yrich_view
         impl: yrich_view_on_release
       - slot: widget_on_motion
         slot_domain: ygui
+        slot_class: yrich_view
         impl: yrich_view_on_motion
     internal: false
     doc: null
@@ -2596,15 +2777,19 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: yshadertoy
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: yshadertoy
         impl: dtor
       - slot: widget_emit_container
         slot_domain: ygui
+        slot_class: yshadertoy
         impl: emit_container
       - slot: widget_emit_body
         slot_domain: ygui
+        slot_class: yshadertoy
         impl: emit_body
     internal: false
     doc: null
@@ -2642,15 +2827,19 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: yvideo
         impl: ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: yvideo
         impl: dtor
       - slot: widget_emit_container
         slot_domain: ygui
+        slot_class: yvideo
         impl: emit_container
       - slot: widget_emit_body
         slot_domain: ygui
+        slot_class: yvideo
         impl: emit_body
     internal: false
     doc: null
@@ -2684,12 +2873,15 @@ classes:
     ops:
       - slot: constructor
         slot_domain: ygui
+        slot_class: yzoo
         impl: yzoo_ctor
       - slot: destructor
         slot_domain: ygui
+        slot_class: yzoo
         impl: yzoo_dtor
       - slot: widget_emit_body
         slot_domain: ygui
+        slot_class: yzoo
         impl: yzoo_emit_body
     internal: false
     doc: null
@@ -5585,46 +5777,46 @@ local_typedefs:
     source_file: src/yetty/ygui/framework.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_ygui_key_cb:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/ygui/framework-defs.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/ygui/framework-defs.h
     text: "typedef int (*yetty_ygui_key_cb)(struct yetty_yclass_object *, uint32_t, int, void *);"
   yetty_ygui_event_cb:
-    source_file: /home/misi/work/my/yetty-ymux/include/yetty/ygui/event.h
+    source_file: /home/misi/work/my/yetty-ffi/include/yetty/ygui/event.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_event_cb)(struct yetty_yclass_object *, const struct yetty_ygui_event *, void *);"
   yetty_ygui_click_cb:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/mixins/clickable.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/mixins/clickable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_object *, void *);"
   yetty_ygui_drag_cb:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/mixins/draggable.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/mixins/draggable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *, float, float, void *);"
   yetty_ygui_constructor_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_object *);"
   yetty_ygui_destructor_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_object *);"
   yetty_ygui_widget_on_press_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct yetty_yclass_object *, float, float, int);"
   yetty_ygui_widget_on_release_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_release_fn)(struct yetty_yclass_object *, float, float, int);"
   yetty_ygui_widget_on_motion_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(struct yetty_yclass_object *, float, float);"
   yetty_ygui_widget_emit_body_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
   yetty_ygui_widget_on_scroll_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_scroll_fn)(struct yetty_yclass_object *, float, float, float, float);"
   yetty_ygui_widget_paint_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
   yetty_ygui_widget_emit_container_fn:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widget.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/widget.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_container_fn)(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);"
   yetty_ygui_menu_item_cb:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widgets/popup_menu.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/widgets/popup_menu.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *, int, void *);"
   fn_t:
     source_file: src/yetty/ygui/widget.c
@@ -5639,7 +5831,7 @@ local_typedefs:
     source_file: src/yetty/ygui/widgets/tabbar.c
     text: "typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *, void *);"
   yetty_ygui_ynodes_link_cb:
-    source_file: /home/misi/work/my/yetty-ymux/src/yetty/gen/impl/ygui/widgets/ynodes.h
+    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ygui/widgets/ynodes.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, struct yetty_yclass_object *, int, void *);"
 includes:
   src/yetty/ygui/framework.c:

@@ -132,35 +132,42 @@ typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_font_size_fn)(
     struct yetty_yclass_object *, float);
 
 YETTY_MAYBE_UNUSED
-static yetty_yrich_constructor_fn yetty_yrich_paragraph_yetty_yrich_constructor_check =
-    paragraph_constructor;
+static yetty_yrich_constructor_fn
+    yetty_yrich_paragraph_yetty_yrich_constructor_paragraph_constructor_check =
+        paragraph_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_destroy_fn yetty_yrich_paragraph_yetty_yrich_element_destroy_check =
-    paragraph_destroy;
+static yetty_yrich_element_destroy_fn
+    yetty_yrich_paragraph_yetty_yrich_element_destroy_paragraph_destroy_check = paragraph_destroy;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_bounds_fn yetty_yrich_paragraph_yetty_yrich_element_bounds_check =
-    paragraph_bounds;
+static yetty_yrich_element_bounds_fn
+    yetty_yrich_paragraph_yetty_yrich_element_bounds_paragraph_bounds_check = paragraph_bounds;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_element_is_editable_fn
-    yetty_yrich_paragraph_yetty_yrich_element_is_editable_check = paragraph_is_editable;
+    yetty_yrich_paragraph_yetty_yrich_element_is_editable_paragraph_is_editable_check =
+        paragraph_is_editable;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_element_begin_edit_fn
-    yetty_yrich_paragraph_yetty_yrich_element_begin_edit_check = paragraph_begin_edit;
+    yetty_yrich_paragraph_yetty_yrich_element_begin_edit_paragraph_begin_edit_check =
+        paragraph_begin_edit;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_end_edit_fn yetty_yrich_paragraph_yetty_yrich_element_end_edit_check =
-    paragraph_end_edit;
+static yetty_yrich_element_end_edit_fn
+    yetty_yrich_paragraph_yetty_yrich_element_end_edit_paragraph_end_edit_check =
+        paragraph_end_edit;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_element_is_editing_fn
-    yetty_yrich_paragraph_yetty_yrich_element_is_editing_check = paragraph_is_editing;
+    yetty_yrich_paragraph_yetty_yrich_element_is_editing_paragraph_is_editing_check =
+        paragraph_is_editing;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_render_fn yetty_yrich_paragraph_yetty_yrich_element_render_check =
-    paragraph_render;
+static yetty_yrich_element_render_fn
+    yetty_yrich_paragraph_yetty_yrich_element_render_paragraph_render_check = paragraph_render;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_element_insert_text_fn
-    yetty_yrich_paragraph_yetty_yrich_element_insert_text_check = paragraph_insert_text;
+    yetty_yrich_paragraph_yetty_yrich_element_insert_text_paragraph_insert_text_check =
+        paragraph_insert_text;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_element_delete_sel_fn
-    yetty_yrich_paragraph_yetty_yrich_element_delete_sel_check = paragraph_delete_sel;
+    yetty_yrich_paragraph_yetty_yrich_element_delete_sel_paragraph_delete_sel_check =
+        paragraph_delete_sel;
 
 struct yetty_yclass_ptr_result yetty_yrich_paragraph_class_get(void)
 {
@@ -253,17 +260,21 @@ struct yetty_yclass_object_ptr_result yetty_yrich_paragraph_to(struct yetty_yric
 }
 
 YETTY_MAYBE_UNUSED
-static yetty_yrich_constructor_fn yetty_yrich_inline_image_yetty_yrich_constructor_check =
-    inline_image_constructor;
+static yetty_yrich_constructor_fn
+    yetty_yrich_inline_image_yetty_yrich_constructor_inline_image_constructor_check =
+        inline_image_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_destroy_fn yetty_yrich_inline_image_yetty_yrich_element_destroy_check =
-    inline_image_destroy;
+static yetty_yrich_element_destroy_fn
+    yetty_yrich_inline_image_yetty_yrich_element_destroy_inline_image_destroy_check =
+        inline_image_destroy;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_bounds_fn yetty_yrich_inline_image_yetty_yrich_element_bounds_check =
-    inline_image_bounds;
+static yetty_yrich_element_bounds_fn
+    yetty_yrich_inline_image_yetty_yrich_element_bounds_inline_image_bounds_check =
+        inline_image_bounds;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_element_render_fn yetty_yrich_inline_image_yetty_yrich_element_render_check =
-    inline_image_render;
+static yetty_yrich_element_render_fn
+    yetty_yrich_inline_image_yetty_yrich_element_render_inline_image_render_check =
+        inline_image_render;
 
 struct yetty_yclass_ptr_result yetty_yrich_inline_image_class_get(void)
 {
@@ -344,67 +355,84 @@ struct yetty_yclass_object_ptr_result yetty_yrich_inline_image_to(
 }
 
 YETTY_MAYBE_UNUSED
-static yetty_yrich_constructor_fn yetty_yrich_ydoc_yetty_yrich_constructor_check = ydoc_constructor;
+static yetty_yrich_constructor_fn yetty_yrich_ydoc_yetty_yrich_constructor_ydoc_constructor_check =
+    ydoc_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_document_destroy_fn yetty_yrich_ydoc_yetty_yrich_document_destroy_check =
-    ydoc_destroy;
+static yetty_yrich_document_destroy_fn
+    yetty_yrich_ydoc_yetty_yrich_document_destroy_ydoc_destroy_check = ydoc_destroy;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_content_width_fn
-    yetty_yrich_ydoc_yetty_yrich_document_content_width_check = ydoc_content_width;
+    yetty_yrich_ydoc_yetty_yrich_document_content_width_ydoc_content_width_check =
+        ydoc_content_width;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_content_height_fn
-    yetty_yrich_ydoc_yetty_yrich_document_content_height_check = ydoc_content_height;
+    yetty_yrich_ydoc_yetty_yrich_document_content_height_ydoc_content_height_check =
+        ydoc_content_height;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_mouse_down_fn
-    yetty_yrich_ydoc_yetty_yrich_document_on_mouse_down_check = ydoc_on_mouse_down;
+    yetty_yrich_ydoc_yetty_yrich_document_on_mouse_down_ydoc_on_mouse_down_check =
+        ydoc_on_mouse_down;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_mouse_drag_fn
-    yetty_yrich_ydoc_yetty_yrich_document_on_mouse_drag_check = ydoc_on_mouse_drag;
+    yetty_yrich_ydoc_yetty_yrich_document_on_mouse_drag_ydoc_on_mouse_drag_check =
+        ydoc_on_mouse_drag;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_document_on_key_down_fn yetty_yrich_ydoc_yetty_yrich_document_on_key_down_check =
-    ydoc_on_key_down;
+static yetty_yrich_document_on_key_down_fn
+    yetty_yrich_ydoc_yetty_yrich_document_on_key_down_ydoc_on_key_down_check = ydoc_on_key_down;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_text_input_fn
-    yetty_yrich_ydoc_yetty_yrich_document_on_text_input_check = ydoc_on_text_input;
+    yetty_yrich_ydoc_yetty_yrich_document_on_text_input_ydoc_on_text_input_check =
+        ydoc_on_text_input;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_mouse_double_click_fn
-    yetty_yrich_ydoc_yetty_yrich_document_on_mouse_double_click_check = ydoc_on_mouse_double_click;
+    yetty_yrich_ydoc_yetty_yrich_document_on_mouse_double_click_ydoc_on_mouse_double_click_check =
+        ydoc_on_mouse_double_click;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_document_apply_op_fn yetty_yrich_ydoc_yetty_yrich_document_apply_op_check =
-    ydoc_apply_op;
+static yetty_yrich_document_apply_op_fn
+    yetty_yrich_ydoc_yetty_yrich_document_apply_op_ydoc_apply_op_check = ydoc_apply_op;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_document_render_fn yetty_yrich_ydoc_yetty_yrich_document_render_check =
-    ydoc_render;
+static yetty_yrich_document_render_fn
+    yetty_yrich_ydoc_yetty_yrich_document_render_ydoc_render_check = ydoc_render;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_ydoc_toggle_format_fn yetty_yrich_ydoc_yetty_yrich_ydoc_toggle_format_check =
-    ydoc_toggle_format_impl;
+static yetty_yrich_ydoc_toggle_format_fn
+    yetty_yrich_ydoc_yetty_yrich_ydoc_toggle_format_ydoc_toggle_format_impl_check =
+        ydoc_toggle_format_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_ydoc_set_text_color_fn yetty_yrich_ydoc_yetty_yrich_ydoc_set_text_color_check =
-    ydoc_set_text_color_impl;
+static yetty_yrich_ydoc_set_text_color_fn
+    yetty_yrich_ydoc_yetty_yrich_ydoc_set_text_color_ydoc_set_text_color_impl_check =
+        ydoc_set_text_color_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_ydoc_set_alignment_fn yetty_yrich_ydoc_yetty_yrich_ydoc_set_alignment_check =
-    ydoc_set_alignment_impl;
+static yetty_yrich_ydoc_set_alignment_fn
+    yetty_yrich_ydoc_yetty_yrich_ydoc_set_alignment_ydoc_set_alignment_impl_check =
+        ydoc_set_alignment_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_ydoc_set_line_spacing_fn
-    yetty_yrich_ydoc_yetty_yrich_ydoc_set_line_spacing_check = ydoc_set_line_spacing_impl;
+    yetty_yrich_ydoc_yetty_yrich_ydoc_set_line_spacing_ydoc_set_line_spacing_impl_check =
+        ydoc_set_line_spacing_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_ydoc_adjust_indent_fn yetty_yrich_ydoc_yetty_yrich_ydoc_adjust_indent_check =
-    ydoc_adjust_indent_impl;
+static yetty_yrich_ydoc_adjust_indent_fn
+    yetty_yrich_ydoc_yetty_yrich_ydoc_adjust_indent_ydoc_adjust_indent_impl_check =
+        ydoc_adjust_indent_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_ydoc_set_highlight_fn yetty_yrich_ydoc_yetty_yrich_ydoc_set_highlight_check =
-    ydoc_set_highlight_impl;
+static yetty_yrich_ydoc_set_highlight_fn
+    yetty_yrich_ydoc_yetty_yrich_ydoc_set_highlight_ydoc_set_highlight_impl_check =
+        ydoc_set_highlight_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_ydoc_clear_format_fn yetty_yrich_ydoc_yetty_yrich_ydoc_clear_format_check =
-    ydoc_clear_format_impl;
+static yetty_yrich_ydoc_clear_format_fn
+    yetty_yrich_ydoc_yetty_yrich_ydoc_clear_format_ydoc_clear_format_impl_check =
+        ydoc_clear_format_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_ydoc_set_heading_fn yetty_yrich_ydoc_yetty_yrich_ydoc_set_heading_check =
-    ydoc_set_heading_impl;
+static yetty_yrich_ydoc_set_heading_fn
+    yetty_yrich_ydoc_yetty_yrich_ydoc_set_heading_ydoc_set_heading_impl_check =
+        ydoc_set_heading_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yrich_ydoc_change_font_size_fn
-    yetty_yrich_ydoc_yetty_yrich_ydoc_change_font_size_check = ydoc_change_font_size_impl;
+    yetty_yrich_ydoc_yetty_yrich_ydoc_change_font_size_ydoc_change_font_size_impl_check =
+        ydoc_change_font_size_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yrich_ydoc_set_font_size_fn yetty_yrich_ydoc_yetty_yrich_ydoc_set_font_size_check =
-    ydoc_set_font_size_impl;
+static yetty_yrich_ydoc_set_font_size_fn
+    yetty_yrich_ydoc_yetty_yrich_ydoc_set_font_size_ydoc_set_font_size_impl_check =
+        ydoc_set_font_size_impl;
 
 struct yetty_yclass_ptr_result yetty_yrich_ydoc_class_get(void)
 {

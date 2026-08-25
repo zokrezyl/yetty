@@ -467,7 +467,10 @@ if(YETTY_BUILD_FFI_SHARED)
     foreach(ffi_pic_target
             yetty_api_yplot yetty_yplot_core yetty_ydraw_list yetty_yface
             yetty_ysdf yetty_yfsvm_core yetty_yexpr yetty_yclass yetty_ywire
-            yetty_ycore)
+            yetty_ycore yetty_ydrawlist2 yetty_api_ydrawlist2 yetty_ysdf2
+            yetty_api_ysdf2 yetty_ycomplex2 yetty_api_ycomplex2
+            yetty_yimage_core yetty_ymesh_core yetty_yshadertoy_core
+            yetty_yvideo_core)
         if(TARGET ${ffi_pic_target})
             set_target_properties(${ffi_pic_target} PROPERTIES
                 POSITION_INDEPENDENT_CODE ON)
@@ -594,7 +597,7 @@ if(YETTY_ENABLE_FEATURE_YECHO)
     list(APPEND YETTY_LIBS yetty_yecho)
 endif()
 if(YETTY_ENABLE_FEATURE_YDRAW)
-    # The SDF handler lib plus the complex figure factories terminal.c
+    # The SDF handler lib plus the complex-drawable factories terminal.c
     # registers at startup (yplot / yimage / yshadertoy prim / ymesh).
     # Nothing else on YETTY_LIBS links these, so the app names them
     # directly. The gates mirror where each target is created.

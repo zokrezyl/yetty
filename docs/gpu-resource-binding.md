@@ -99,7 +99,7 @@ yetty_yrender_gpu_resource_binder_create(device, queue, surface_format, allocato
 
 /* Binder uses an externally-owned, shared pipeline; it owns only the
  * per-instance side (uniform buffer, storage buffer, bind group). Used by
- * complex figures (yplot, yimage, ...) so all instances of one kind share
+ * complex drawables (yplot, yimage, ...) so all instances of one kind share
  * one compiled shader. The pipeline must outlive the binder. */
 yetty_yrender_gpu_resource_binder_create_with_pipeline(device, queue, allocator, pipeline);
 ```

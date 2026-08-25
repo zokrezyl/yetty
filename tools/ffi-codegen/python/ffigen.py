@@ -37,6 +37,16 @@ REPO = pathlib.Path(__file__).resolve().parents[3]
 # are keyed by DOMAIN, not directory name — the domain is the symbol prefix.
 SRC_ROOTS = [REPO / "src" / "yetty", REPO / "src" / "api"]
 
+# The ydraw client-interface domains whose classes are VALUE-LIKE: created,
+# packed by a copying add()/adder, never handed to an ownership-taking C
+# API. Only these get automatic GC finalization (_owned); everywhere else a
+# wrapper may be the last reference to an object some C-side container has
+# taken ownership of (e.g. yrich document_add_element), where a finalizer
+# would free it behind the container's back. The model does not yet carry
+# per-argument ownership annotations — until it does, finalization stays
+# scoped to this list and other modules use explicit destroy().
+FINALIZED_DOMAINS = {"ydrawlist2", "ysdf2", "api_yplot", "ycomplex2"}
+
 
 # ---------------------------------------------------------------------------
 # Model loading
@@ -332,7 +342,7 @@ def py_emit_types(types: list[dict], out_path: pathlib.Path):
     for s in structs:
         parts.append(py_emit_struct(s, type_names))
         parts.append("")
-    out_path.write_text("\n".join(parts) + "\n")
+    out_path.write_text("\n".join(parts).rstrip("\n") + "\n")
 
 
 def py_method_pyname(slot: str) -> str:
@@ -525,41 +535,52 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
             parts.append("    def yclass(cls) -> _rt.Result[Any]:")
             parts.append(f'        _fn = _rt.cfn("{accessor_sym}", _t.yetty_yclass_ptr_result, [])')
             parts.append("        return _rt.result_from_c(_fn())")
-        # constructor -> generated <module>_<class>_create
+        # constructor -> generated <module>_<class>_create. The plain Python
+        # constructor IS the API: keywords map to set_<name> methods (tuple/
+        # list values unpack, so size=(640, 320) -> set_size(640, 320)) with a
+        # fallback to generated @property members; a class whose primary
+        # content has a dedicated setter (set_expression, else set_body) also
+        # takes that content as the first positional argument, so
+        # Plot("f=sin(x)") / Text("hello", x=4) work. `_handle` wraps an
+        # existing object (from_handle) and skips construction entirely.
         create_sym = f"yetty_{cls['domain']}_{cls['name']}_create"
-        parts.append("    def __init__(self, _handle: Any = None) -> None:")
-        parts.append("        if _handle is None:")
-        parts.append(
-            f'            _fn = _rt.cfn("{create_sym}", _t.yetty_yclass_object_ptr_result, [c_void_p])')
-        parts.append("            res = _rt.result_from_c(_fn(None))")
-        parts.append("            if res.error is not None:")
-        parts.append("                raise _rt.YettyError(res.error.message)")
-        parts.append("            _handle = res.value")
-        parts.append("        super().__init__(_handle)")
-        # create(**kwargs): each keyword maps to a set_<name> method (tuple/list
-        # values unpack, so size=(640, 320) -> set_size(640, 320)). A class whose
-        # primary content has a dedicated setter (set_expression, else set_body)
-        # also accepts that content as the first positional argument, so
-        # Plot.create("f=sin(x)") / Function.create("sin(x)") work. Raises
-        # YettyError on any failing setter (or on an unknown keyword).
         setter_names = {op["slot"][4:] for op in cls.get("ops", []) if op["slot"].startswith("set_")}
-        primary_setter = next((name for name in ("expression", "body") if name in setter_names), None)
+        # The model names the primary-content slot (`primary@` annotation);
+        # the expression/body name probe remains as pre-annotation fallback.
+        model_primary = cls.get("primary_slot")
+        if model_primary and model_primary.startswith("set_"):
+            primary_setter = model_primary[4:]
+        else:
+            primary_setter = next(
+                (name for name in ("expression", "body") if name in setter_names), None)
+        if primary_setter is not None:
+            parts.append(f"    def __init__(self, {primary_setter}: Any = None, "
+                         "_handle: Any = None, **kwargs: Any) -> None:")
+        else:
+            parts.append("    def __init__(self, _handle: Any = None, **kwargs: Any) -> None:")
+        parts.append("        if _handle is not None:")
+        parts.append("            _rt.YClass.__init__(self, _handle)")
+        parts.append("            return")
+        parts.append(
+            f'        _fn = _rt.cfn("{create_sym}", _t.yetty_yclass_object_ptr_result, [c_void_p])')
+        parts.append("        res = _rt.result_from_c(_fn(None))")
+        parts.append("        if res.error is not None:")
+        parts.append("            raise _rt.YettyError(res.error.message)")
+        parts.append("        _rt.YClass.__init__(self, res.value)")
+        if cls["domain"] in FINALIZED_DOMAINS:
+            parts.append("        self._owned = True")
+        if primary_setter is not None:
+            parts.append(f"        if {primary_setter} is not None:")
+            parts.append(f"            self.set_{primary_setter}({primary_setter})")
+        parts.append("        self._apply_kwargs(kwargs)")
+        # create(...) stays as a classmethod alias of the constructor.
         parts.append("    @classmethod")
         if primary_setter is not None:
             parts.append(f"    def create(cls, {primary_setter}: Any = None, **kwargs: Any) -> {cname!r}:")
-            parts.append("        obj = cls()")
-            parts.append(f"        if {primary_setter} is not None:")
-            parts.append(f"            obj.set_{primary_setter}({primary_setter})")
+            parts.append(f"        return cls({primary_setter}, **kwargs)")
         else:
             parts.append(f"    def create(cls, **kwargs: Any) -> {cname!r}:")
-            parts.append("        obj = cls()")
-        parts.append("        for _key, _value in kwargs.items():")
-        parts.append('            _setter = getattr(obj, "set_" + _key, None)')
-        parts.append("            if _setter is None:")
-        parts.append(f'                raise TypeError(f"{cname}.create: unknown property {{_key!r}}")')
-        parts.append(
-            "            _setter(*_value) if isinstance(_value, (tuple, list)) else _setter(_value)")
-        parts.append("        return obj")
+            parts.append("        return cls(**kwargs)")
         # methods introduced by this class. Inherited slots remain inherited
         # Python methods; the C public stub still dispatches dynamically through
         # the yclass vtable using this instance's handle.
@@ -577,23 +598,36 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
             ret_ann = py_result_value_annot(m["return_type"])
             sig = f"self, {params}" if params else "self"
             sym = f"yetty_{m['domain']}_{slot}"
+            destructive = slot == "destroy"
             parts.append(f"    def {py_method_pyname(slot)}({sig}) -> {ret_ann}:")
-            parts.append(f'        """Call `{sym}`; raises _rt.YettyError on failure."""')
-            parts.append("        if self._handle is None:")
-            parts.append('            raise _rt.YettyError("uninitialized yclass handle")')
+            if destructive:
+                # The destroy slot consumes the handle: invalidate the wrapper
+                # before surfacing any error, and make repeat calls no-ops
+                # (matching the runtime fallback destroy).
+                parts.append(f'        """Call `{sym}`; idempotent; raises _rt.YettyError on failure."""')
+                parts.append("        if self._handle is None:")
+                parts.append("            return None")
+            else:
+                parts.append(f'        """Call `{sym}`; raises _rt.YettyError on failure."""')
+                parts.append("        if self._handle is None:")
+                parts.append('            raise _rt.YettyError("uninitialized yclass handle")')
             parts.append(
                 f'        _fn = _rt.cfn("{sym}", _t.{classify(m["return_type"])[1]}, {argtypes_expr(args)})')
 
             def pass_expr(arg):
                 # str -> bytes for char* params; a yclass object arg -> its raw
                 # handle (_rt.handle passes a bare pointer through unchanged, so
-                # it is safe for any opaque pointer); everything else as-is.
+                # it is safe for any opaque pointer); a by-value ycore_buffer
+                # accepts bytes / list-of-floats via the runtime coercion;
+                # everything else as-is.
                 ctype = py_ctype(arg["type"], type_names)
                 name = py_arg_name(arg)
                 if ctype == "c_char_p":
                     return f"_rt.cstr({name})"
                 if ctype == "c_void_p":
                     return f"_rt.handle({name})"
+                if classify(arg["type"]) == ("struct", "yetty_ycore_buffer"):
+                    return f"_rt.as_buffer({name})"
                 return name
 
             passed = ["self._handle"] + [pass_expr(a) for a in args[1:]]
@@ -601,6 +635,8 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
             unwrap = f"_rt.result_from_c(_fn({', '.join(passed)})"
             unwrap += f", {converter})" if converter else ")"
             parts.append(f"        res = {unwrap}")
+            if destructive:
+                parts.append("        self._handle = None")
             parts.append("        if res.error is not None:")
             parts.append("            raise _rt.YettyError(res.error.message)")
             parts.append("        return res.value")
@@ -708,7 +744,7 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
             parts.append(f"    return {call}")
         parts.append("")
 
-    out_path.write_text("\n".join(parts) + "\n")
+    out_path.write_text("\n".join(parts).rstrip("\n") + "\n")
 
 # ---------------------------------------------------------------------------
 # Connection facade (#439). The reactor-seam contract every binding rides —

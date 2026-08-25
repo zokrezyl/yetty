@@ -9,6 +9,7 @@ add_library(yetty_yvideo_core STATIC
     yvideo.c
     yvideo-gen-wire.c
     yvideo-mp4.c
+    h264-dims.c
 )
 
 target_include_directories(yetty_yvideo_core PUBLIC

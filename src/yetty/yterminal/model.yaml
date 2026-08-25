@@ -260,21 +260,27 @@ classes:
     ops:
       - slot: pty_write
         slot_domain: ytermsink
+        slot_class: sink
         impl: terminal_sink_pty_write
       - slot: mouse_sub
         slot_domain: ytermsink
+        slot_class: sink
         impl: terminal_sink_mouse_sub
       - slot: clipboard_write
         slot_domain: ytermsink
+        slot_class: sink
         impl: terminal_sink_clipboard_write
       - slot: sixel_write
         slot_domain: ytermsink
+        slot_class: sink
         impl: terminal_sink_sixel_write
       - slot: request_render
         slot_domain: ytermsink
+        slot_class: sink
         impl: terminal_sink_request_render
       - slot: figure_root_container
         slot_domain: yterminal
+        slot_class: terminal
         impl: terminal_figure_root_container
     internal: false
     doc: null

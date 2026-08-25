@@ -157,132 +157,158 @@ typedef struct yetty_ycore_void_result (*yetty_yscene_apply_content_transaction_
     struct yetty_yclass_object *, struct yetty_ycore_buffer);
 
 YETTY_MAYBE_UNUSED
-static yetty_yscene_constructor_fn yetty_yscene_scene_yetty_yscene_constructor_check =
-    scene_constructor;
+static yetty_yscene_constructor_fn
+    yetty_yscene_scene_yetty_yscene_constructor_scene_constructor_check = scene_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_set_registry_fn yetty_yscene_scene_yetty_yscene_set_registry_check =
-    scene_set_registry;
+static yetty_yscene_set_registry_fn
+    yetty_yscene_scene_yetty_yscene_set_registry_scene_set_registry_check = scene_set_registry;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_node_declare_fn yetty_yscene_scene_yetty_yscene_node_declare_check =
-    scene_node_declare;
+static yetty_yscene_node_declare_fn
+    yetty_yscene_scene_yetty_yscene_node_declare_scene_node_declare_check = scene_node_declare;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_node_set_transform_fn yetty_yscene_scene_yetty_yscene_node_set_transform_check =
-    scene_node_set_transform;
+static yetty_yscene_node_set_transform_fn
+    yetty_yscene_scene_yetty_yscene_node_set_transform_scene_node_set_transform_check =
+        scene_node_set_transform;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_node_set_clip_fn yetty_yscene_scene_yetty_yscene_node_set_clip_check =
-    scene_node_set_clip;
+static yetty_yscene_node_set_clip_fn
+    yetty_yscene_scene_yetty_yscene_node_set_clip_scene_node_set_clip_check = scene_node_set_clip;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_node_clear_clip_fn yetty_yscene_scene_yetty_yscene_node_clear_clip_check =
-    scene_node_clear_clip;
+static yetty_yscene_node_clear_clip_fn
+    yetty_yscene_scene_yetty_yscene_node_clear_clip_scene_node_clear_clip_check =
+        scene_node_clear_clip;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_node_set_opacity_fn yetty_yscene_scene_yetty_yscene_node_set_opacity_check =
-    scene_node_set_opacity;
+static yetty_yscene_node_set_opacity_fn
+    yetty_yscene_scene_yetty_yscene_node_set_opacity_scene_node_set_opacity_check =
+        scene_node_set_opacity;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_node_set_z_fn yetty_yscene_scene_yetty_yscene_node_set_z_check =
-    scene_node_set_z;
+static yetty_yscene_node_set_z_fn
+    yetty_yscene_scene_yetty_yscene_node_set_z_scene_node_set_z_check = scene_node_set_z;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_node_set_content_fn yetty_yscene_scene_yetty_yscene_node_set_content_check =
-    scene_node_set_content;
+static yetty_yscene_node_set_content_fn
+    yetty_yscene_scene_yetty_yscene_node_set_content_scene_node_set_content_check =
+        scene_node_set_content;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_node_append_batch_fn yetty_yscene_scene_yetty_yscene_node_append_batch_check =
-    scene_node_append_batch;
+static yetty_yscene_node_append_batch_fn
+    yetty_yscene_scene_yetty_yscene_node_append_batch_scene_node_append_batch_check =
+        scene_node_append_batch;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_node_replace_batch_fn yetty_yscene_scene_yetty_yscene_node_replace_batch_check =
-    scene_node_replace_batch;
+static yetty_yscene_node_replace_batch_fn
+    yetty_yscene_scene_yetty_yscene_node_replace_batch_scene_node_replace_batch_check =
+        scene_node_replace_batch;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_node_remove_batch_fn yetty_yscene_scene_yetty_yscene_node_remove_batch_check =
-    scene_node_remove_batch;
+static yetty_yscene_node_remove_batch_fn
+    yetty_yscene_scene_yetty_yscene_node_remove_batch_scene_node_remove_batch_check =
+        scene_node_remove_batch;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_node_delete_fn yetty_yscene_scene_yetty_yscene_node_delete_check =
-    scene_node_delete;
+static yetty_yscene_node_delete_fn
+    yetty_yscene_scene_yetty_yscene_node_delete_scene_node_delete_check = scene_node_delete;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_zero_fn yetty_yscene_scene_yetty_yscene_zero_check = scene_zero;
+static yetty_yscene_zero_fn yetty_yscene_scene_yetty_yscene_zero_scene_zero_check = scene_zero;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_commit_fn yetty_yscene_scene_yetty_yscene_commit_check = scene_commit;
+static yetty_yscene_commit_fn yetty_yscene_scene_yetty_yscene_commit_scene_commit_check =
+    scene_commit;
 YETTY_MAYBE_UNUSED
 static yetty_yscene_layout_barrier_begin_fn
-    yetty_yscene_scene_yetty_yscene_layout_barrier_begin_check = scene_layout_barrier_begin_impl;
+    yetty_yscene_scene_yetty_yscene_layout_barrier_begin_scene_layout_barrier_begin_impl_check =
+        scene_layout_barrier_begin_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_layout_barrier_end_fn yetty_yscene_scene_yetty_yscene_layout_barrier_end_check =
-    scene_layout_barrier_end_impl;
+static yetty_yscene_layout_barrier_end_fn
+    yetty_yscene_scene_yetty_yscene_layout_barrier_end_scene_layout_barrier_end_impl_check =
+        scene_layout_barrier_end_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yscene_terminal_grid_generation_fn
-    yetty_yscene_scene_yetty_yscene_terminal_grid_generation_check =
+    yetty_yscene_scene_yetty_yscene_terminal_grid_generation_scene_terminal_grid_generation_impl_check =
         scene_terminal_grid_generation_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yscene_terminal_grid_create_fn
-    yetty_yscene_scene_yetty_yscene_terminal_grid_create_check = scene_terminal_grid_create_impl;
+    yetty_yscene_scene_yetty_yscene_terminal_grid_create_scene_terminal_grid_create_impl_check =
+        scene_terminal_grid_create_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yscene_terminal_grid_write_fn
-    yetty_yscene_scene_yetty_yscene_terminal_grid_write_check = scene_terminal_grid_write_impl;
+    yetty_yscene_scene_yetty_yscene_terminal_grid_write_scene_terminal_grid_write_impl_check =
+        scene_terminal_grid_write_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yscene_terminal_write_content_fn
-    yetty_yscene_scene_yetty_yscene_terminal_write_content_check =
+    yetty_yscene_scene_yetty_yscene_terminal_write_content_scene_terminal_write_content_impl_check =
         scene_terminal_write_content_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yscene_terminal_grid_resize_fn
-    yetty_yscene_scene_yetty_yscene_terminal_grid_resize_check = scene_terminal_grid_resize_impl;
+    yetty_yscene_scene_yetty_yscene_terminal_grid_resize_scene_terminal_grid_resize_impl_check =
+        scene_terminal_grid_resize_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_render_fn yetty_yscene_scene_yetty_yfigure_render_check = scene_render_slot;
+static yetty_yfigure_render_fn yetty_yscene_scene_yetty_yfigure_render_scene_render_slot_check =
+    scene_render_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_destroy_fn yetty_yscene_scene_yetty_yfigure_destroy_check = scene_destroy_slot;
+static yetty_yfigure_destroy_fn yetty_yscene_scene_yetty_yfigure_destroy_scene_destroy_slot_check =
+    scene_destroy_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_process_bytes_fn yetty_yscene_scene_yetty_yfigure_process_bytes_check =
-    scene_process_bytes_slot;
+static yetty_yfigure_process_bytes_fn
+    yetty_yscene_scene_yetty_yfigure_process_bytes_scene_process_bytes_slot_check =
+        scene_process_bytes_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_reset_content_fn yetty_yscene_scene_yetty_yfigure_reset_content_check =
-    scene_reset_content_slot;
+static yetty_yfigure_reset_content_fn
+    yetty_yscene_scene_yetty_yfigure_reset_content_scene_reset_content_slot_check =
+        scene_reset_content_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_set_scroll_fn yetty_yscene_scene_yetty_yfigure_set_scroll_check =
-    scene_set_scroll_slot;
+static yetty_yfigure_set_scroll_fn
+    yetty_yscene_scene_yetty_yfigure_set_scroll_scene_set_scroll_slot_check = scene_set_scroll_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_set_content_size_fn yetty_yscene_scene_yetty_yfigure_set_content_size_check =
-    scene_set_content_size_slot;
+static yetty_yfigure_set_content_size_fn
+    yetty_yscene_scene_yetty_yfigure_set_content_size_scene_set_content_size_slot_check =
+        scene_set_content_size_slot;
 YETTY_MAYBE_UNUSED
 static yetty_yfigure_apply_scroll_anchor_fn
-    yetty_yscene_scene_yetty_yfigure_apply_scroll_anchor_check = scene_apply_scroll_anchor_slot;
+    yetty_yscene_scene_yetty_yfigure_apply_scroll_anchor_scene_apply_scroll_anchor_slot_check =
+        scene_apply_scroll_anchor_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_dump_state_fn yetty_yscene_scene_yetty_yfigure_dump_state_check =
-    scene_dump_state_slot;
+static yetty_yfigure_dump_state_fn
+    yetty_yscene_scene_yetty_yfigure_dump_state_scene_dump_state_slot_check = scene_dump_state_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_hit_opaque_fn yetty_yscene_scene_yetty_yfigure_hit_opaque_check =
-    scene_hit_opaque_impl;
+static yetty_yfigure_hit_opaque_fn
+    yetty_yscene_scene_yetty_yfigure_hit_opaque_scene_hit_opaque_impl_check = scene_hit_opaque_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yscene_terminal_reply_pending_fn
-    yetty_yscene_scene_yetty_yscene_terminal_reply_pending_check =
+    yetty_yscene_scene_yetty_yscene_terminal_reply_pending_scene_terminal_reply_pending_impl_check =
         scene_terminal_reply_pending_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yscene_terminal_reply_word_fn
-    yetty_yscene_scene_yetty_yscene_terminal_reply_word_check = scene_terminal_reply_word_impl;
+    yetty_yscene_scene_yetty_yscene_terminal_reply_word_scene_terminal_reply_word_impl_check =
+        scene_terminal_reply_word_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yscene_terminal_reply_consume_fn
-    yetty_yscene_scene_yetty_yscene_terminal_reply_consume_check =
+    yetty_yscene_scene_yetty_yscene_terminal_reply_consume_scene_terminal_reply_consume_impl_check =
         scene_terminal_reply_consume_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_input_event_head_fn yetty_yscene_scene_yetty_yscene_input_event_head_check =
-    scene_input_event_head_impl;
+static yetty_yscene_input_event_head_fn
+    yetty_yscene_scene_yetty_yscene_input_event_head_scene_input_event_head_impl_check =
+        scene_input_event_head_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_input_event_word_fn yetty_yscene_scene_yetty_yscene_input_event_word_check =
-    scene_input_event_word_impl;
+static yetty_yscene_input_event_word_fn
+    yetty_yscene_scene_yetty_yscene_input_event_word_scene_input_event_word_impl_check =
+        scene_input_event_word_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_input_event_pop_fn yetty_yscene_scene_yetty_yscene_input_event_pop_check =
-    scene_input_event_pop_impl;
+static yetty_yscene_input_event_pop_fn
+    yetty_yscene_scene_yetty_yscene_input_event_pop_scene_input_event_pop_impl_check =
+        scene_input_event_pop_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_dispatch_key_fn yetty_yscene_scene_yetty_yscene_dispatch_key_check =
-    scene_dispatch_key_impl;
+static yetty_yscene_dispatch_key_fn
+    yetty_yscene_scene_yetty_yscene_dispatch_key_scene_dispatch_key_impl_check =
+        scene_dispatch_key_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_note_key_intake_fn yetty_yscene_scene_yetty_yscene_note_key_intake_check =
-    scene_note_key_intake_impl;
+static yetty_yscene_note_key_intake_fn
+    yetty_yscene_scene_yetty_yscene_note_key_intake_scene_note_key_intake_impl_check =
+        scene_note_key_intake_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yscene_set_terminal_selection_fn
-    yetty_yscene_scene_yetty_yscene_set_terminal_selection_check =
+    yetty_yscene_scene_yetty_yscene_set_terminal_selection_scene_set_terminal_selection_impl_check =
         scene_set_terminal_selection_impl;
 YETTY_MAYBE_UNUSED
-static yetty_yscene_dispatch_pointer_fn yetty_yscene_scene_yetty_yscene_dispatch_pointer_check =
-    scene_dispatch_pointer_impl;
+static yetty_yscene_dispatch_pointer_fn
+    yetty_yscene_scene_yetty_yscene_dispatch_pointer_scene_dispatch_pointer_impl_check =
+        scene_dispatch_pointer_impl;
 YETTY_MAYBE_UNUSED
 static yetty_yscene_apply_content_transaction_fn
-    yetty_yscene_scene_yetty_yscene_apply_content_transaction_check =
+    yetty_yscene_scene_yetty_yscene_apply_content_transaction_scene_apply_content_transaction_impl_check =
         scene_apply_content_transaction_impl;
 
 struct yetty_yclass_ptr_result yetty_yscene_scene_class_get(void)

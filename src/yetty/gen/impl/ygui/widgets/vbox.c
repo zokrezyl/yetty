@@ -16,7 +16,8 @@ struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object
 typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_vbox_yetty_ygui_constructor_check = vbox_constructor;
+static yetty_ygui_constructor_fn yetty_ygui_vbox_yetty_ygui_constructor_vbox_constructor_check =
+    vbox_constructor;
 
 struct yetty_yclass_ptr_result yetty_ygui_vbox_class_get(void)
 {

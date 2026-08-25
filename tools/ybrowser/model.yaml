@@ -110,9 +110,11 @@ classes:
     ops:
       - slot: init
         slot_domain: yapp
+        slot_class: app
         impl: ybrowser_app_init
       - slot: run
         slot_domain: yapp
+        slot_class: app
         impl: sa_worker
     internal: false
     doc: "/*

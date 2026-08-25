@@ -12,9 +12,11 @@
 #include <string.h> /* memcpy/strcmp/strlen */
 
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_render_fn yetty_yvterm_vterm_yetty_yfigure_render_check = vterm_render_slot;
+static yetty_yfigure_render_fn yetty_yvterm_vterm_yetty_yfigure_render_vterm_render_slot_check =
+    vterm_render_slot;
 YETTY_MAYBE_UNUSED
-static yetty_yfigure_destroy_fn yetty_yvterm_vterm_yetty_yfigure_destroy_check = vterm_destroy_slot;
+static yetty_yfigure_destroy_fn yetty_yvterm_vterm_yetty_yfigure_destroy_vterm_destroy_slot_check =
+    vterm_destroy_slot;
 
 struct yetty_yclass_ptr_result yetty_yvterm_vterm_class_get(void)
 {

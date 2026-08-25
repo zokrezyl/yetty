@@ -20,7 +20,8 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
 
 YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_emit_body_fn
-    yetty_ygui_primitive_widget_yetty_ygui_widget_emit_body_check = primitive_emit_body;
+    yetty_ygui_primitive_widget_yetty_ygui_widget_emit_body_primitive_emit_body_check =
+        primitive_emit_body;
 
 struct yetty_yclass_ptr_result yetty_ygui_primitive_widget_class_get(void)
 {

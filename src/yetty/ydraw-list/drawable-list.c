@@ -44,7 +44,7 @@ struct yetty_ydraw_drawable_list {
  *   u8  drawable_bytes[byte_count]
  */
 #define YDRAW_SERIAL_MAGIC 0x31425059u /* 'YPB1' little-endian */
-#define YDRAW_SERIAL_HEADER_BYTES (4 + 16 + 4)
+#define YDRAW_SERIAL_HEADER_BYTES YETTY_YDRAW_SERIAL_HEADER_BYTES
 
 static struct yetty_ycore_void_result parse_framed_payload(struct yetty_ydraw_drawable_list *buf,
                                                            const uint8_t *data, size_t size)
@@ -832,6 +832,56 @@ struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font_named(
     free(staging);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "add_font_named: add_prim failed");
     return YETTY_OK(yetty_ycore_int, next_id);
+}
+
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_font_with_id(
+    struct yetty_ydraw_drawable_list *buf, int32_t font_id, const char *name,
+    const uint8_t *ttf_data, size_t ttf_len)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "buf is NULL");
+    }
+    if (!name || name[0] == '\0') {
+        return YETTY_ERR(yetty_ycore_void, "font name is empty");
+    }
+    if (!ttf_data && ttf_len > 0) {
+        return YETTY_ERR(yetty_ycore_void, "ttf_len > 0 with NULL ttf_data");
+    }
+    uint32_t name_len = (uint32_t)strlen(name);
+    /* A byte-less declaration is a name reference; a bare 16-hex-char name
+     * would be read as a content-hash ref by the receiver — reject it, same
+     * rule as add_font_named. */
+    if (ttf_len == 0 && name_len == 16) {
+        bool all_hex = true;
+        for (uint32_t i = 0; i < 16; i++) {
+            char ch = name[i];
+            bool ok =
+                (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
+            if (!ok) {
+                all_hex = false;
+                break;
+            }
+        }
+        if (all_hex) {
+            return YETTY_ERR(
+                yetty_ycore_void,
+                "named font must not be exactly 16 hex chars (ambiguous with hash ref)");
+        }
+    }
+
+    size_t drawable_size = yetty_ydraw_font_resource_size_for(name_len, (uint32_t)ttf_len);
+    uint8_t *staging = malloc(drawable_size);
+    if (!staging) {
+        return YETTY_ERR(yetty_ycore_void, "alloc failed");
+    }
+
+    yetty_ydraw_font_resource_write(staging, font_id, name, name_len, ttf_data, (uint32_t)ttf_len);
+
+    struct yetty_ydraw_id_result r =
+        yetty_ydraw_drawable_list_add_prim(buf, staging, drawable_size);
+    free(staging);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_font_with_id: add_prim failed");
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_text_full(

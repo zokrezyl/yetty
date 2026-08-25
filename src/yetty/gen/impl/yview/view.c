@@ -54,24 +54,33 @@ typedef struct yetty_ycore_void_result (*yetty_yview_set_rect_fn)(struct yetty_y
 typedef struct yetty_ycore_void_result (*yetty_yview_destroy_fn)(struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_yview_configure_fn yetty_yview_view_yetty_yview_configure_check = view_configure;
+static yetty_yview_configure_fn yetty_yview_view_yetty_yview_configure_view_configure_check =
+    view_configure;
 YETTY_MAYBE_UNUSED
-static yetty_yview_set_content_fn yetty_yview_view_yetty_yview_set_content_check = view_set_content;
+static yetty_yview_set_content_fn yetty_yview_view_yetty_yview_set_content_view_set_content_check =
+    view_set_content;
 YETTY_MAYBE_UNUSED
-static yetty_yview_set_text_fn yetty_yview_view_yetty_yview_set_text_check = view_set_text;
+static yetty_yview_set_text_fn yetty_yview_view_yetty_yview_set_text_view_set_text_check =
+    view_set_text;
 YETTY_MAYBE_UNUSED
-static yetty_yview_set_plot_fn yetty_yview_view_yetty_yview_set_plot_check = view_set_plot;
+static yetty_yview_set_plot_fn yetty_yview_view_yetty_yview_set_plot_view_set_plot_check =
+    view_set_plot;
 YETTY_MAYBE_UNUSED
-static yetty_yview_set_content_size_fn yetty_yview_view_yetty_yview_set_content_size_check =
-    view_set_content_size;
+static yetty_yview_set_content_size_fn
+    yetty_yview_view_yetty_yview_set_content_size_view_set_content_size_check =
+        view_set_content_size;
 YETTY_MAYBE_UNUSED
-static yetty_yview_scroll_to_fn yetty_yview_view_yetty_yview_scroll_to_check = view_scroll_to;
+static yetty_yview_scroll_to_fn yetty_yview_view_yetty_yview_scroll_to_view_scroll_to_check =
+    view_scroll_to;
 YETTY_MAYBE_UNUSED
-static yetty_yview_scroll_by_fn yetty_yview_view_yetty_yview_scroll_by_check = view_scroll_by;
+static yetty_yview_scroll_by_fn yetty_yview_view_yetty_yview_scroll_by_view_scroll_by_check =
+    view_scroll_by;
 YETTY_MAYBE_UNUSED
-static yetty_yview_set_rect_fn yetty_yview_view_yetty_yview_set_rect_check = view_set_rect;
+static yetty_yview_set_rect_fn yetty_yview_view_yetty_yview_set_rect_view_set_rect_check =
+    view_set_rect;
 YETTY_MAYBE_UNUSED
-static yetty_yview_destroy_fn yetty_yview_view_yetty_yview_destroy_check = view_destroy;
+static yetty_yview_destroy_fn yetty_yview_view_yetty_yview_destroy_view_destroy_check =
+    view_destroy;
 
 struct yetty_yclass_ptr_result yetty_yview_view_class_get(void)
 {

@@ -122,9 +122,11 @@ classes:
     ops:
       - slot: init
         slot_domain: yapp
+        slot_class: app
         impl: ycompositorygui_app_init
       - slot: run
         slot_domain: yapp
+        slot_class: app
         impl: ycompositorygui_app_run
     internal: false
     doc: null

@@ -12,9 +12,9 @@
 #include <string.h> /* memcpy/strcmp/strlen */
 
 YETTY_MAYBE_UNUSED
-static yetty_yapp_init_fn yetty_yaudio_app_yetty_yapp_init_check = yaudio_app_init;
+static yetty_yapp_init_fn yetty_yaudio_app_yetty_yapp_init_yaudio_app_init_check = yaudio_app_init;
 YETTY_MAYBE_UNUSED
-static yetty_yapp_run_fn yetty_yaudio_app_yetty_yapp_run_check = yaudio_app_run;
+static yetty_yapp_run_fn yetty_yaudio_app_yetty_yapp_run_yaudio_app_run_check = yaudio_app_run;
 
 struct yetty_yclass_ptr_result yetty_yaudio_app_class_get(void)
 {

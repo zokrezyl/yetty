@@ -134,21 +134,27 @@ classes:
     ops:
       - slot: configure
         slot_domain: ymusic
+        slot_class: music
         impl: music_configure
       - slot: parse
         slot_domain: ymusic
+        slot_class: music
         impl: music_parse
       - slot: render
         slot_domain: ymusic
+        slot_class: music
         impl: music_render
       - slot: hit_test
         slot_domain: ymusic
+        slot_class: music
         impl: music_hit_test
       - slot: set_highlight
         slot_domain: ymusic
+        slot_class: music
         impl: music_set_highlight
       - slot: destroy
         slot_domain: ymusic
+        slot_class: music
         impl: music_obj_destroy
     internal: false
     doc: null

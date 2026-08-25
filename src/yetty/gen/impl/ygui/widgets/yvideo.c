@@ -27,15 +27,15 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
     struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_yvideo_yetty_ygui_constructor_check = ctor;
+static yetty_ygui_constructor_fn yetty_ygui_yvideo_yetty_ygui_constructor_ctor_check = ctor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_destructor_fn yetty_ygui_yvideo_yetty_ygui_destructor_check = dtor;
+static yetty_ygui_destructor_fn yetty_ygui_yvideo_yetty_ygui_destructor_dtor_check = dtor;
 YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_emit_container_fn
-    yetty_ygui_yvideo_yetty_ygui_widget_emit_container_check = emit_container;
+    yetty_ygui_yvideo_yetty_ygui_widget_emit_container_emit_container_check = emit_container;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_emit_body_fn yetty_ygui_yvideo_yetty_ygui_widget_emit_body_check =
-    emit_body;
+static yetty_ygui_widget_emit_body_fn
+    yetty_ygui_yvideo_yetty_ygui_widget_emit_body_emit_body_check = emit_body;
 
 struct yetty_yclass_ptr_result yetty_ygui_yvideo_class_get(void)
 {

@@ -30,16 +30,17 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(
     struct yetty_yclass_object *, float, float);
 
 YETTY_MAYBE_UNUSED
-static yetty_ygui_constructor_fn yetty_ygui_slider_yetty_ygui_constructor_check =
+static yetty_ygui_constructor_fn yetty_ygui_slider_yetty_ygui_constructor_slider_constructor_check =
     slider_constructor;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_paint_fn yetty_ygui_slider_yetty_ygui_widget_paint_check = slider_paint;
+static yetty_ygui_widget_paint_fn yetty_ygui_slider_yetty_ygui_widget_paint_slider_paint_check =
+    slider_paint;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_press_fn yetty_ygui_slider_yetty_ygui_widget_on_press_check =
-    slider_on_press;
+static yetty_ygui_widget_on_press_fn
+    yetty_ygui_slider_yetty_ygui_widget_on_press_slider_on_press_check = slider_on_press;
 YETTY_MAYBE_UNUSED
-static yetty_ygui_widget_on_motion_fn yetty_ygui_slider_yetty_ygui_widget_on_motion_check =
-    slider_on_motion;
+static yetty_ygui_widget_on_motion_fn
+    yetty_ygui_slider_yetty_ygui_widget_on_motion_slider_on_motion_check = slider_on_motion;
 
 struct yetty_yclass_ptr_result yetty_ygui_slider_class_get(void)
 {

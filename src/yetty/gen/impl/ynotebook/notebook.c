@@ -120,29 +120,33 @@ typedef struct yetty_ycore_void_result (*yetty_ynotebook_notebook_destroy_fn)(
     struct yetty_yclass_object *);
 
 YETTY_MAYBE_UNUSED
-static yetty_ynotebook_output_type_fn yetty_ynotebook_output_yetty_ynotebook_output_type_check =
-    output_type;
+static yetty_ynotebook_output_type_fn
+    yetty_ynotebook_output_yetty_ynotebook_output_type_output_type_check = output_type;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_output_stream_name_fn
-    yetty_ynotebook_output_yetty_ynotebook_output_stream_name_check = output_stream_name;
+    yetty_ynotebook_output_yetty_ynotebook_output_stream_name_output_stream_name_check =
+        output_stream_name;
 YETTY_MAYBE_UNUSED
-static yetty_ynotebook_output_text_fn yetty_ynotebook_output_yetty_ynotebook_output_text_check =
-    output_text;
+static yetty_ynotebook_output_text_fn
+    yetty_ynotebook_output_yetty_ynotebook_output_text_output_text_check = output_text;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_output_execution_count_fn
-    yetty_ynotebook_output_yetty_ynotebook_output_execution_count_check = output_execution_count;
+    yetty_ynotebook_output_yetty_ynotebook_output_execution_count_output_execution_count_check =
+        output_execution_count;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_output_error_name_fn
-    yetty_ynotebook_output_yetty_ynotebook_output_error_name_check = output_error_name;
+    yetty_ynotebook_output_yetty_ynotebook_output_error_name_output_error_name_check =
+        output_error_name;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_output_error_value_fn
-    yetty_ynotebook_output_yetty_ynotebook_output_error_value_check = output_error_value;
+    yetty_ynotebook_output_yetty_ynotebook_output_error_value_output_error_value_check =
+        output_error_value;
 YETTY_MAYBE_UNUSED
-static yetty_ynotebook_output_bundle_fn yetty_ynotebook_output_yetty_ynotebook_output_bundle_check =
-    output_bundle;
+static yetty_ynotebook_output_bundle_fn
+    yetty_ynotebook_output_yetty_ynotebook_output_bundle_output_bundle_check = output_bundle;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_output_destroy_fn
-    yetty_ynotebook_output_yetty_ynotebook_output_destroy_check = output_destroy;
+    yetty_ynotebook_output_yetty_ynotebook_output_destroy_output_destroy_check = output_destroy;
 
 struct yetty_yclass_ptr_result yetty_ynotebook_output_class_get(void)
 {
@@ -228,34 +232,39 @@ struct yetty_yclass_object_ptr_result yetty_ynotebook_output_to(struct yetty_yno
 }
 
 YETTY_MAYBE_UNUSED
-static yetty_ynotebook_cell_type_fn yetty_ynotebook_cell_yetty_ynotebook_cell_type_check =
+static yetty_ynotebook_cell_type_fn yetty_ynotebook_cell_yetty_ynotebook_cell_type_cell_type_check =
     cell_type;
 YETTY_MAYBE_UNUSED
-static yetty_ynotebook_cell_id_fn yetty_ynotebook_cell_yetty_ynotebook_cell_id_check = cell_id;
+static yetty_ynotebook_cell_id_fn yetty_ynotebook_cell_yetty_ynotebook_cell_id_cell_id_check =
+    cell_id;
 YETTY_MAYBE_UNUSED
-static yetty_ynotebook_cell_source_fn yetty_ynotebook_cell_yetty_ynotebook_cell_source_check =
-    cell_source;
+static yetty_ynotebook_cell_source_fn
+    yetty_ynotebook_cell_yetty_ynotebook_cell_source_cell_source_check = cell_source;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_cell_set_source_fn
-    yetty_ynotebook_cell_yetty_ynotebook_cell_set_source_check = cell_set_source;
+    yetty_ynotebook_cell_yetty_ynotebook_cell_set_source_cell_set_source_check = cell_set_source;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_cell_execution_count_fn
-    yetty_ynotebook_cell_yetty_ynotebook_cell_execution_count_check = cell_execution_count;
+    yetty_ynotebook_cell_yetty_ynotebook_cell_execution_count_cell_execution_count_check =
+        cell_execution_count;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_cell_output_count_fn
-    yetty_ynotebook_cell_yetty_ynotebook_cell_output_count_check = cell_output_count;
+    yetty_ynotebook_cell_yetty_ynotebook_cell_output_count_cell_output_count_check =
+        cell_output_count;
 YETTY_MAYBE_UNUSED
-static yetty_ynotebook_cell_output_at_fn yetty_ynotebook_cell_yetty_ynotebook_cell_output_at_check =
-    cell_output_at;
+static yetty_ynotebook_cell_output_at_fn
+    yetty_ynotebook_cell_yetty_ynotebook_cell_output_at_cell_output_at_check = cell_output_at;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_cell_metadata_json_fn
-    yetty_ynotebook_cell_yetty_ynotebook_cell_metadata_json_check = cell_metadata_json;
+    yetty_ynotebook_cell_yetty_ynotebook_cell_metadata_json_cell_metadata_json_check =
+        cell_metadata_json;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_cell_apply_message_fn
-    yetty_ynotebook_cell_yetty_ynotebook_cell_apply_message_check = cell_apply_message;
+    yetty_ynotebook_cell_yetty_ynotebook_cell_apply_message_cell_apply_message_check =
+        cell_apply_message;
 YETTY_MAYBE_UNUSED
-static yetty_ynotebook_cell_destroy_fn yetty_ynotebook_cell_yetty_ynotebook_cell_destroy_check =
-    cell_destroy;
+static yetty_ynotebook_cell_destroy_fn
+    yetty_ynotebook_cell_yetty_ynotebook_cell_destroy_cell_destroy_check = cell_destroy;
 
 struct yetty_yclass_ptr_result yetty_ynotebook_cell_class_get(void)
 {
@@ -343,35 +352,44 @@ struct yetty_yclass_object_ptr_result yetty_ynotebook_cell_to(struct yetty_ynote
 
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_notebook_load_text_fn
-    yetty_ynotebook_notebook_yetty_ynotebook_notebook_load_text_check = notebook_load_text;
+    yetty_ynotebook_notebook_yetty_ynotebook_notebook_load_text_notebook_load_text_check =
+        notebook_load_text;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_notebook_load_file_fn
-    yetty_ynotebook_notebook_yetty_ynotebook_notebook_load_file_check = notebook_load_file;
+    yetty_ynotebook_notebook_yetty_ynotebook_notebook_load_file_notebook_load_file_check =
+        notebook_load_file;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_notebook_to_text_fn
-    yetty_ynotebook_notebook_yetty_ynotebook_notebook_to_text_check = notebook_to_text;
+    yetty_ynotebook_notebook_yetty_ynotebook_notebook_to_text_notebook_to_text_check =
+        notebook_to_text;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_notebook_save_file_fn
-    yetty_ynotebook_notebook_yetty_ynotebook_notebook_save_file_check = notebook_save_file;
+    yetty_ynotebook_notebook_yetty_ynotebook_notebook_save_file_notebook_save_file_check =
+        notebook_save_file;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_notebook_nbformat_fn
-    yetty_ynotebook_notebook_yetty_ynotebook_notebook_nbformat_check = notebook_nbformat;
+    yetty_ynotebook_notebook_yetty_ynotebook_notebook_nbformat_notebook_nbformat_check =
+        notebook_nbformat;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_notebook_nbformat_minor_fn
-    yetty_ynotebook_notebook_yetty_ynotebook_notebook_nbformat_minor_check =
+    yetty_ynotebook_notebook_yetty_ynotebook_notebook_nbformat_minor_notebook_nbformat_minor_check =
         notebook_nbformat_minor;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_notebook_cell_count_fn
-    yetty_ynotebook_notebook_yetty_ynotebook_notebook_cell_count_check = notebook_cell_count;
+    yetty_ynotebook_notebook_yetty_ynotebook_notebook_cell_count_notebook_cell_count_check =
+        notebook_cell_count;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_notebook_cell_at_fn
-    yetty_ynotebook_notebook_yetty_ynotebook_notebook_cell_at_check = notebook_cell_at;
+    yetty_ynotebook_notebook_yetty_ynotebook_notebook_cell_at_notebook_cell_at_check =
+        notebook_cell_at;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_notebook_metadata_json_fn
-    yetty_ynotebook_notebook_yetty_ynotebook_notebook_metadata_json_check = notebook_metadata_json;
+    yetty_ynotebook_notebook_yetty_ynotebook_notebook_metadata_json_notebook_metadata_json_check =
+        notebook_metadata_json;
 YETTY_MAYBE_UNUSED
 static yetty_ynotebook_notebook_destroy_fn
-    yetty_ynotebook_notebook_yetty_ynotebook_notebook_destroy_check = notebook_destroy;
+    yetty_ynotebook_notebook_yetty_ynotebook_notebook_destroy_notebook_destroy_check =
+        notebook_destroy;
 
 struct yetty_yclass_ptr_result yetty_ynotebook_notebook_class_get(void)
 {

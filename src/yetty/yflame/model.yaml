@@ -279,48 +279,63 @@ classes:
     ops:
       - slot: configure
         slot_domain: yflame
+        slot_class: flame
         impl: flame_configure
       - slot: parse
         slot_domain: yflame
+        slot_class: flame
         impl: flame_parse
       - slot: render
         slot_domain: yflame
+        slot_class: flame
         impl: flame_render
       - slot: hit_test
         slot_domain: yflame
+        slot_class: flame
         impl: flame_hit_test
       - slot: focus
         slot_domain: yflame
+        slot_class: flame
         impl: flame_focus
       - slot: focus_parent
         slot_domain: yflame
+        slot_class: flame
         impl: flame_focus_parent
       - slot: reset
         slot_domain: yflame
+        slot_class: flame
         impl: flame_reset
       - slot: set_highlight
         slot_domain: yflame
+        slot_class: flame
         impl: flame_set_highlight
       - slot: highlight_name
         slot_domain: yflame
+        slot_class: flame
         impl: flame_highlight_name
       - slot: focus_name
         slot_domain: yflame
+        slot_class: flame
         impl: flame_focus_name
       - slot: set_baseline
         slot_domain: yflame
+        slot_class: flame
         impl: flame_set_baseline
       - slot: node_name
         slot_domain: yflame
+        slot_class: flame
         impl: flame_node_name
       - slot: node_value
         slot_domain: yflame
+        slot_class: flame
         impl: flame_node_value
       - slot: root_value
         slot_domain: yflame
+        slot_class: flame
         impl: flame_root_value
       - slot: destroy
         slot_domain: yflame
+        slot_class: flame
         impl: flame_obj_destroy
     internal: false
     doc: null

@@ -1,6 +1,6 @@
 #!/bin/bash
 # host-mime — raster images decoded by the TERMINAL (yimage/stb), not the
-# client. Each file becomes one yimage complex figure.
+# client. Each file becomes one yimage complex drawable.
 #
 # Usage (from inside yetty):
 #   ./build-desktop-ytrace-release/yetty -e demo/scripts/host-mime/image.sh
