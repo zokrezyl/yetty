@@ -193,172 +193,20 @@ if(YETTY_ENABLE_FEATURE_ASSETS)
 endif()
 
 # =============================================================================
-# libygreeter.so — the ygui feature-showcase app as a second NativeActivity.
-#
-# Mirrors the webasm ygreeter target (build-tools/yetty/platform/webasm/cmake.cmake):
-# ygreeter's standalone mode rendered into its own surface, no terminal / shell /
-# VM. The Android entry (yetty_android_program_init / _term) lives at the foot of
-# tools/ygreeter/main.c and is driven by the SHARED NDK glue (android-glue.c,
-# compiled in below) — the same android_main path libyetty.so uses. Both libs
-# ship in the one APK; AndroidManifest's .Ygreeter activity-alias selects this
-# lib via its android.app.lib_name meta-data.
-# =============================================================================
-add_library(ygreeter SHARED
-    ${YETTY_ROOT}/tools/ygreeter/main.c
-    ${YETTY_ROOT}/tools/ygreeter/embedded-assets.c
-    ${YETTY_ROOT}/src/yetty/yshadertoy/demo-shaders.c
-    # Shared NDK app glue — window/input/IME/looper + android_main, calls
-    # ygreeter's yetty_android_program_init/_term (resolved here).
-    ${YETTY_ROOT}/src/yetty/yplatform/ymain/android-glue.c
-    # The platform/window/clipboard yclass layer (yframework calls the
-    # yetty_yplatform_platform_* stubs + yetty_yplatform_register). Same set the
-    # yetty lib gets via YETTY_PLATFORM_SOURCES.
-    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
-    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/android.c
-    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
-    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/android.c
-    ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/android.c
-    ${YETTY_ROOT}/src/yetty/gen/impl/yplatform/rpc.gen.c
-    # Core sources ygreeter compiles directly (not provided as libs) —
-    # mirrors tools/ygreeter/CMakeLists.txt's YGREETER_SOURCES + the
-    # Android platform backends (default.c, not glfw/webasm).
-    ${YETTY_ROOT}/src/yetty/yframework/yframework.c
-    ${YETTY_ROOT}/src/yetty/yconfig/config.c
-    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/android.c
-    ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
-    ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
-)
-
-target_include_directories(ygreeter BEFORE PRIVATE
-    ${YETTY_ROOT}/src
-    ${YETTY_ROOT}/include
-    ${YETTY_INCLUDES}
-    ${YETTY_RENDERER_INCLUDES}
-    ${JPEG_INCLUDE_DIRS}
-    ${BROTLI_INCLUDE_DIR}
-    # incbin_add_directory emits ygreeter_data_manifest.h here;
-    # embedded-assets.c includes it directly.
-    ${CMAKE_CURRENT_BINARY_DIR}
-)
-
-target_compile_definitions(ygreeter PRIVATE
-    ${YETTY_DEFINITIONS}
-    YETTY_WEB=0
-    YETTY_ANDROID=1
-    YETTY_USE_PREBUILT_ATLAS=1
-    YETTY_ASSETS_FROM_APK=1
-    YETTY_YGREETER_HAS_STANDALONE
-    YETTY_YGREETER_HAS_CHROME
-)
-
-set_target_properties(ygreeter PROPERTIES
-    LIBRARY_OUTPUT_NAME "ygreeter"
-    LINKER_LANGUAGE CXX)
-
-if(NOT MSVC)
-    target_compile_options(ygreeter PRIVATE -Wall -Wextra)
-endif()
-
-# Showcase lib set — mirrors the webasm ygreeter link line + the Android
-# app glue libs (native_app_glue whole-archived so ANativeActivity_onCreate
-# is retained; android + log for the NDK).
-target_link_libraries(ygreeter PRIVATE
-    yetty_ygui
-    yetty_ywire
-    yetty_ychrome
-    yetty_ycircuit
-    yetty_ymusic
-    yetty_yfigure
-    yetty_yscene
-    yetty_yshadertoy
-    yetty_yfont_core
-    yetty_ydraw_factory
-    yetty_yimage
-    yetty_yplot
-    ${YETTY_LIBS}
-    yetty_yco
-    yetty_yplatform_core
-    -Wl,--whole-archive
-    native_app_glue
-    -Wl,--no-whole-archive
-    android
-    log
-)
-
-# Embed ygreeter's runtime assets into libygreeter.so so it is self-sufficient
-# (the terminal's incbin extractor is hardcoded to the yetty manifest, so
-# ygreeter ships its own "data" manifest via embedded-assets.c). The MSDF
-# font + shaders are taken from the set yetty_embed_assets(yetty) already
-# staged into <build>/embed-data; the logos / intro video / sample pdf /
-# README sit at the data-dir root. Extracted at first launch by
-# ygreeter_embedded_assets_extract into <data_dir>/.
-if(YETTY_ENABLE_LIB_INCBIN)
-    yetty_compute_build_version()
-    target_compile_definitions(ygreeter PRIVATE
-        YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
-
-    set(_YGREETER_ANDROID_EMBED "${CMAKE_BINARY_DIR}/ygreeter-embed-data")
-    file(REMOVE_RECURSE "${_YGREETER_ANDROID_EMBED}")
-    file(MAKE_DIRECTORY "${_YGREETER_ANDROID_EMBED}")
-
-    # shaders / msdf-fonts — reuse what yetty_embed_assets(yetty) already
-    # collected for libyetty.so (same render stack, same fonts).
-    foreach(_SUB shaders msdf-fonts)
-        if(EXISTS "${CMAKE_BINARY_DIR}/embed-data/${_SUB}")
-            file(COPY "${CMAKE_BINARY_DIR}/embed-data/${_SUB}"
-                 DESTINATION "${_YGREETER_ANDROID_EMBED}")
-        endif()
-    endforeach()
-    # fonts — exclude the world-coverage Noto set: libyetty.so already ships
-    # it once into the shared data dir, and embedding ~90 MB a second time
-    # per companion .so would balloon the APK. The greeter UI only needs the
-    # base faces.
-    file(GLOB _YGREETER_FONT_FILES "${CMAKE_BINARY_DIR}/embed-data/fonts/*")
-    list(FILTER _YGREETER_FONT_FILES EXCLUDE REGEX "/Noto[^/]+$")
-    foreach(_YGREETER_FONT_FILE ${_YGREETER_FONT_FILES})
-        file(COPY "${_YGREETER_FONT_FILE}" DESTINATION "${_YGREETER_ANDROID_EMBED}/fonts")
-    endforeach()
-
-    # ygreeter's own showcase assets, extracted to the data-dir root.
-    foreach(_F
-            "assets/logo-1.jpeg"
-            "assets/logo-2.jpeg"
-            "assets/logo-3.jpeg"
-            "assets/logo-4.jpeg"
-            "assets/yetty-unchained-2.mp4"
-            "test/ut/ypdf/pdf-sample.pdf"
-            "README.md")
-        if(EXISTS "${YETTY_ROOT}/${_F}")
-            get_filename_component(_NAME "${_F}" NAME)
-            configure_file("${YETTY_ROOT}/${_F}"
-                "${_YGREETER_ANDROID_EMBED}/${_NAME}" COPYONLY)
-        endif()
-    endforeach()
-
-    include(${YETTY_ROOT}/build-tools/yetty/incbin.cmake)
-    incbin_add_directory(ygreeter "data" "${_YGREETER_ANDROID_EMBED}" "*" TRUE)
-endif()
-
-# =============================================================================
-# libyhello.so — the direct-yfigures greeter as a third NativeActivity.
+# libyhello.so — the direct-yfigures greeter as a second NativeActivity.
 #
 # yhello is ygreeter's UI running standalone directly against yfigures: it opens
 # its own surface and wires ygui to a local yfigure_container, with no terminal,
 # no PTY, no OSC/DCS and no wire state machine. Its Android entry
 # (yetty_android_program_init / _term) lives at the foot of tools/yhello/main.c
 # and is driven by the SHARED NDK glue (android-glue.c, compiled in below) — the
-# same android_main path libyetty.so / libygreeter.so use. The library ships in
-# its own APK; AndroidManifest's ${appLibName} placeholder selects it per flavor.
+# same android_main path libyetty.so uses. The library ships in its own APK;
+# AndroidManifest's ${appLibName} placeholder selects it per flavor.
 #
-# yhello is a strict subset of ygreeter (standalone only), so its source/link
-# set drops ygreeter's client-mode pieces: no yetty_ywire, no memory-pty.c, no
-# coroutine backend (none of yhello's compiled sources reference them).
+# yhello took over the showcase-APK role when ygreeter went in-terminal-only
+# (client mode has no Android entry points). Standalone only, so its source/link
+# set has no client-mode pieces: no yetty_ywire, no memory-pty.c, no coroutine
+# backend (none of yhello's compiled sources reference them).
 # =============================================================================
 add_library(yhello SHARED
     ${YETTY_ROOT}/tools/yhello/main.c
@@ -470,8 +318,10 @@ if(YETTY_ENABLE_LIB_INCBIN)
                  DESTINATION "${_YHELLO_ANDROID_EMBED}")
         endif()
     endforeach()
-    # fonts — exclude the world-coverage Noto set (libyetty.so ships it once;
-    # see the ygreeter block above for the why).
+    # fonts — exclude the world-coverage Noto set: libyetty.so already ships
+    # it once into the shared data dir, and embedding ~90 MB a second time
+    # per companion .so would balloon the APK. The showcase UI only needs the
+    # base faces.
     file(GLOB _YHELLO_FONT_FILES "${CMAKE_BINARY_DIR}/embed-data/fonts/*")
     list(FILTER _YHELLO_FONT_FILES EXCLUDE REGEX "/Noto[^/]+$")
     foreach(_YHELLO_FONT_FILE ${_YHELLO_FONT_FILES})
@@ -498,6 +348,6 @@ if(YETTY_ENABLE_LIB_INCBIN)
     incbin_add_directory(yhello "data" "${_YHELLO_ANDROID_EMBED}" "*" TRUE)
 endif()
 
-# Each gradle product flavor (yetty / ygreeter / yhello) drives its own CMake
-# target (externalNativeBuild.cmake.targets), so the libraries build and package
+# Each gradle product flavor (yetty / yhello) drives its own CMake target
+# (externalNativeBuild.cmake.targets), so the libraries build and package
 # independently into separate APKs — no add_dependencies tying them together.
