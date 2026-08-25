@@ -1,9 +1,9 @@
-# ygreeter — first-contact tool. IN-TERMINAL ONLY on desktop:
+# ygreeter — first-contact tool. IN-TERMINAL ONLY:
 # CLIENT mode ships OSC envelopes over stdout to the host yetty
 # (libuv-driven, no GPU, no window). Outside a hosting yetty the binary
-# prints an error and exits — the desktop build carries NO WebGPU/Dawn/GLFW.
-# main.c still contains the YETTY_YGREETER_HAS_STANDALONE-guarded standalone
-# host — it is compiled ONLY by the Android/web packagings, never here.
+# prints an error and exits — the build carries NO WebGPU/Dawn/GLFW.
+# The standalone window host is gone from main.c; the standalone showcase
+# APK/page role belongs to yhello (tools/yhello).
 
 # Builds on Linux and macOS (shared POSIX forkpty / termios path). Windows
 # only had the standalone GPU mode — client mode's termios/ioctl/SIGWINCH/

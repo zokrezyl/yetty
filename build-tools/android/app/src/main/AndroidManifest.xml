@@ -25,7 +25,7 @@
         android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
 
         <!-- Native activity - no Java code needed. The library it loads
-             (libyetty.so or libygreeter.so) is chosen per product flavor
+             (libyetty.so or libyhello.so) is chosen per product flavor
              via the ${appLibName} manifest placeholder, so each flavor is a
              separate installable app with its own launcher. -->
         <activity
