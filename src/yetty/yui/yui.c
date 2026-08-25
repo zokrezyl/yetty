@@ -2325,6 +2325,33 @@ static struct yetty_ycore_void_result yui_titlebar_sync(struct yetty_yui *yui)
     }
     yui->titlebar_synced_count = count;
 
+    /* Reconcile tab labels: each tab shows the title of its workspace's
+     * focused pane (what the running program set via OSC 0/2), falling back
+     * to "Tab N". Compare against the widget's current label first — an
+     * unconditional set_label would dirty the tabbar every frame. */
+    for (size_t idx = 0; idx < count; idx++) {
+        struct yetty_yui_workspace *ws =
+            yetty_yui_tabbar_model_workspace_at(yui->tabbar_model, idx);
+        const char *wanted = yetty_yui_workspace_focused_view_title(ws);
+        char fallback[16];
+        if (!wanted || !wanted[0]) {
+            snprintf(fallback, sizeof(fallback), "Tab %zu", idx + 1);
+            wanted = fallback;
+        }
+        struct yetty_ycore_const_char_ptr_result current_res =
+            yetty_ygui_tabbar_label(yui->titlebar_tabbar, (int)idx);
+        const char *current = NULL;
+        if (YETTY_IS_OK(current_res)) {
+            current = current_res.value;
+        } else {
+            yetty_ycore_error_destroy(current_res.error);
+        }
+        if (!current || strcmp(current, wanted) != 0) {
+            yetty_ycore_error_destroy_safe(
+                yetty_ygui_tabbar_set_label(yui->titlebar_tabbar, (int)idx, wanted));
+        }
+    }
+
     struct yetty_ycore_int_result wactive_r = yetty_ygui_tabbar_active(yui->titlebar_tabbar);
     int wactive = -1;
     if (YETTY_IS_OK(wactive_r)) {

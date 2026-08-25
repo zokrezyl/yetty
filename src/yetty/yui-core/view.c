@@ -85,3 +85,11 @@ struct yetty_yui_rect yetty_yui_view_bounds(const struct yetty_yui_view *view)
     }
     return view->bounds;
 }
+
+const char *yetty_yui_view_title(const struct yetty_yui_view *view)
+{
+    if (!view || !view->ops || !view->ops->title) {
+        return NULL;
+    }
+    return view->ops->title(view);
+}

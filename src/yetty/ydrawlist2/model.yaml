@@ -378,29 +378,29 @@ local_typedefs:
     source_file: src/yetty/ydrawlist2/drawable.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_ydrawlist2_pack_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/drawable.h
+    source_file: src/yetty/gen/impl/ydrawlist2/drawable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_pack_fn)(struct yetty_yclass_object *, struct yetty_ydraw_drawable_list *);"
   yetty_ydrawlist2_set_name_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/drawable.h
+    source_file: src/yetty/gen/impl/ydrawlist2/drawable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_set_name_fn)(struct yetty_yclass_object *, const char *);"
   yetty_ydrawlist2_set_body_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/drawable.h
+    source_file: src/yetty/gen/impl/ydrawlist2/drawable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_set_body_fn)(struct yetty_yclass_object *, const char *);"
   yetty_ydrawlist2_set_color_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/drawable.h
+    source_file: src/yetty/gen/impl/ydrawlist2/drawable.h
     text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_set_color_fn)(struct yetty_yclass_object *, const char *);"
   yetty_ydrawlist2_add_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/list.c
+    source_file: src/yetty/gen/impl/ydrawlist2/list.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_add_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *);"
   yetty_ydrawlist2_dcs_emit_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/list.c
+    source_file: src/yetty/gen/impl/ydrawlist2/list.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_dcs_emit_fn)(struct yetty_yclass_object *);"
   yetty_ydrawlist2_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/list.c
+    source_file: src/yetty/gen/impl/ydrawlist2/list.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_destroy_fn)(struct yetty_yclass_object *);"
   yetty_ydrawlist2_set_fill_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/shape.c
+    source_file: src/yetty/gen/impl/ydrawlist2/shape.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_set_fill_fn)(struct yetty_yclass_object *, const char *);"
   yetty_ydrawlist2_set_stroke_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/ydrawlist2/shape.c
+    source_file: src/yetty/gen/impl/ydrawlist2/shape.c
     text: "typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_set_stroke_fn)(struct yetty_yclass_object *, const char *);"

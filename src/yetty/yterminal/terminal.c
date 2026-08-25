@@ -101,6 +101,7 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
                                                                struct yetty_yui_rect bounds);
 static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_view *view,
                                                             const struct yetty_yui_event *event);
+static const char *terminal_view_title(const struct yetty_yui_view *view);
 static struct yetty_ycore_void_result terminal_apply_pane_geometry(
     struct yetty_yterminal_terminal *terminal, float pane_w, float pane_h);
 /* Selection helpers (defined below) — reached early by the reinject path,
@@ -122,6 +123,7 @@ static const struct yetty_yui_view_ops terminal_view_ops = {
     .render = terminal_view_render,
     .set_bounds = terminal_view_set_bounds,
     .on_event = terminal_view_on_event,
+    .title = terminal_view_title,
 };
 
 /* Terminal context - contains yetty context plus terminal-owned objects */
@@ -167,6 +169,10 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
      * (block vs hollow), and we'll forward FocusIn/FocusOut CSI to the
      * PTY once focus reporting (DECSET 1004) is wired through. */
     int focused;
+    /* Terminal title reported by the running program (OSC 0/2), delivered
+     * through the ytermsink set_title override and surfaced via the view
+     * title op so yui can label the tab. Empty = none set yet. */
+    char title[256];
     yetty_yevent_pipe_id pty_pipe_id;
     int shutting_down;
     struct yetty_ywire_wire_statemachine *sm;
@@ -2330,6 +2336,27 @@ static struct yetty_ycore_void_result terminal_sink_request_render(struct yetty_
     return terminal_request_render_impl(terminal_res.value);
 }
 
+/* set_title: the running program set the terminal title (OSC 0/2). Store it
+ * (truncating to the local buffer) and kick a frame so yui's titlebar sync
+ * picks the new label up even when no visible cell changed. */
+YETTY_ANNOTATE("override@ytermsink:sink:set_title")
+static struct yetty_ycore_void_result terminal_sink_set_title(struct yetty_yclass_object *obj,
+                                                              const char *title, size_t len)
+{
+    struct yetty_yterminal_terminal_ptr_result terminal_res = yetty_yterminal_terminal_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, terminal_res, "terminal sink set_title: from_obj");
+    struct yetty_yterminal_terminal *terminal = terminal_res.value;
+    size_t take = len < sizeof(terminal->title) - 1 ? len : sizeof(terminal->title) - 1;
+    if (take > 0 && title) {
+        memcpy(terminal->title, title, take);
+    } else {
+        take = 0;
+    }
+    terminal->title[take] = 0;
+    ydebug("terminal set_title: \"%s\"", terminal->title);
+    return terminal_request_render_impl(terminal);
+}
+
 /*-------------------------------------------------------------------------
  * Cell-precise selection.
  *
@@ -3789,6 +3816,13 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "terminal_view_set_bounds: resize");
     }
     return YETTY_OK_VOID();
+}
+
+static const char *terminal_view_title(const struct yetty_yui_view *view)
+{
+    /* view is the first member of the terminal struct — direct cast. */
+    const struct yetty_yterminal_terminal *terminal = (const struct yetty_yterminal_terminal *)view;
+    return terminal->title[0] ? terminal->title : NULL;
 }
 
 static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_view *view,

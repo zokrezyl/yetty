@@ -472,8 +472,9 @@ async def _play_step(client: RpcClient, step, defaults: dict,
             raise ValueError(f"{verb}: expected mapping {{x, y, button?}}, got {payload!r}")
         x = float(payload["x"])
         y = float(payload["y"])
-        # button: 0=left, 1=middle, 2=right (matches GLFW mouse-button codes
-        # used elsewhere in the RPC). Default to left for ergonomics.
+        # button: 0=left, 1=right, 2=middle (GLFW mouse-button codes; the
+        # pane context menu triggers on button 1, see yetty.c's MOUSE_DOWN
+        # handler). Default to left for ergonomics.
         button = int(payload.get("button", 0))
         if verb == "mouse-down":
             await client.mouse_down(x, y, button)

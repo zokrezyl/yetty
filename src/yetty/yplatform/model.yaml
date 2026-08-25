@@ -1357,77 +1357,77 @@ local_typedefs:
     source_file: src/yetty/yplatform/yclipboard/android.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_yplatform_clipboard_set_text_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yplatform/yclipboard/clipboard.h
+    source_file: src/yetty/gen/impl/yplatform/yclipboard/clipboard.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_set_text_fn)(struct yetty_yclass_object *, const char *, size_t);"
   yetty_yplatform_clipboard_request_paste_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yplatform/yclipboard/clipboard.h
+    source_file: src/yetty/gen/impl/yplatform/yclipboard/clipboard.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_request_paste_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_clipboard_drain_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yplatform/yclipboard/clipboard.h
+    source_file: src/yetty/gen/impl/yplatform/yclipboard/clipboard.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_drain_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_platform_init_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yplatform/yplatform/platform.h
+    source_file: src/yetty/gen/impl/yplatform/yplatform/platform.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_init_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);"
   yetty_yplatform_platform_run_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yplatform/yplatform/platform.h
+    source_file: src/yetty/gen/impl/yplatform/yplatform/platform.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_run_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);"
   ythread_func_t:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/thread.h
+    source_file: include/yetty/yplatform/thread.h
     text: "typedef int (*ythread_func_t)(void *);"
   yetty_yplatform_window_open_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
+    source_file: include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_open_fn)(struct yetty_yclass_object *, int, int, const char *);"
   yetty_yplatform_window_get_size_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
+    source_file: include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_get_size_fn)(struct yetty_yclass_object *, int *, int *);"
   yetty_yplatform_window_get_framebuffer_size_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
+    source_file: include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_get_framebuffer_size_fn)(struct yetty_yclass_object *, int *, int *);"
   yetty_yplatform_window_get_content_scale_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
+    source_file: include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_get_content_scale_fn)(struct yetty_yclass_object *, float *, float *);"
   yetty_yplatform_window_should_close_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
+    source_file: include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_int_result (*yetty_yplatform_window_should_close_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_set_title_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
+    source_file: include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_set_title_fn)(struct yetty_yclass_object *, const char *);"
   yetty_yplatform_window_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
+    source_file: include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_destroy_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_create_surface_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow/window.h
+    source_file: include/yetty/yplatform/ywindow/window.h
     text: "typedef struct yetty_yclass_void_ptr_result (*yetty_yplatform_window_create_surface_fn)(struct yetty_yclass_object *, void *);"
   yetty_yplatform_window_chrome_destroy_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_destroy_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_chrome_handle_event_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_handle_event_fn)(struct yetty_yclass_object *, const struct yetty_yui_event *);"
   yetty_yplatform_window_chrome_configure_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_configure_fn)(struct yetty_yclass_object *, struct yetty_ycore_xthread_event_pipe *);"
   yetty_yplatform_window_chrome_iconify_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_iconify_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_chrome_toggle_maximize_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_toggle_maximize_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_chrome_request_close_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_request_close_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_chrome_drag_by_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_drag_by_fn)(struct yetty_yclass_object *, int, int);"
   yetty_yplatform_window_chrome_resize_by_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_resize_by_fn)(struct yetty_yclass_object *, int, int, int);"
   yetty_yplatform_window_chrome_begin_interactive_move_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_begin_interactive_move_fn)(struct yetty_yclass_object *);"
   yetty_yplatform_window_chrome_begin_interactive_resize_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_begin_interactive_resize_fn)(struct yetty_yclass_object *, int);"
   yetty_yplatform_window_chrome_set_cursor_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yplatform/ywindow-chrome/window-chrome.h
+    source_file: include/yetty/yplatform/ywindow-chrome/window-chrome.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yplatform_window_chrome_set_cursor_fn)(struct yetty_yclass_object *, int);"

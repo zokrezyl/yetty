@@ -47,6 +47,12 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_yclass_
                                                             int index);
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_label(struct yetty_yclass_object *tabbar,
                                                            int index, const char *label);
+/* Current label of the tab at `index`, NULL when the index is out of range
+ * (or the header has no label). Borrowed pointer — valid until the next
+ * set_label/remove_tab on this tabbar. Lets callers compare before calling
+ * set_label so an unchanged label doesn't dirty the widget every frame. */
+struct yetty_ycore_const_char_ptr_result yetty_ygui_tabbar_label(
+    const struct yetty_yclass_object *tabbar, int index);
 struct yetty_ycore_int_result yetty_ygui_tabbar_count(const struct yetty_yclass_object *tabbar);
 struct yetty_ycore_int_result yetty_ygui_tabbar_active(const struct yetty_yclass_object *tabbar);
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_yclass_object *tabbar,

@@ -79,6 +79,11 @@ struct yetty_yui_tile *yetty_yui_workspace_root(const struct yetty_yui_workspace
 float yetty_yui_workspace_width(const struct yetty_yui_workspace *ws);
 float yetty_yui_workspace_height(const struct yetty_yui_workspace *ws);
 
+/* Title of the focused pane's active view (falling back to the first pane
+ * when nothing is focused yet), or NULL when the workspace has no titled
+ * view. yui uses this as the tab label. Borrowed pointer — copy to keep. */
+const char *yetty_yui_workspace_focused_view_title(const struct yetty_yui_workspace *ws);
+
 /* Tree operations */
 struct yetty_ycore_void_result yetty_yui_workspace_split_pane(
     struct yetty_yui_workspace *ws, yetty_ycore_object_id pane_id,

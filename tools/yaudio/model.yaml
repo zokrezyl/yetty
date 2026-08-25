@@ -237,5 +237,5 @@ local_types:
   yetty_yaudio_app_ptr_result: tools/yaudio/main.c
 local_typedefs:
   yetty_yaudio_progress_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yaudio/progress.h
+    source_file: include/yetty/yaudio/progress.h
     text: "typedef void (*yetty_yaudio_progress_fn)(void *, double);"

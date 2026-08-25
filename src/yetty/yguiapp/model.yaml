@@ -206,8 +206,8 @@ local_typedefs:
     source_file: src/yetty/yguiapp/app.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"
   yetty_yguiapp_terminal_build_fn:
-    source_file: /home/misi/work/my/yetty-ffi/include/yetty/yguiapp/run.h
+    source_file: include/yetty/yguiapp/run.h
     text: "typedef struct yetty_ycore_void_result (*yetty_yguiapp_terminal_build_fn)(struct yetty_yclass_object *, void *);"
   yetty_yguiapp_build_fn:
-    source_file: /home/misi/work/my/yetty-ffi/src/yetty/gen/impl/yguiapp/app.c
+    source_file: src/yetty/gen/impl/yguiapp/app.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yguiapp_build_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *);"

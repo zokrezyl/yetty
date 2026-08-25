@@ -22,6 +22,8 @@ struct yetty_ycore_void_result yetty_ytermsink_clipboard_write(struct yetty_ycla
                                                                int clipboard);
 struct yetty_ycore_void_result yetty_ytermsink_sixel_write(struct yetty_yclass_object *obj,
                                                            const char *data, size_t len);
+struct yetty_ycore_void_result yetty_ytermsink_set_title(struct yetty_yclass_object *obj,
+                                                         const char *title, size_t len);
 typedef struct yetty_ycore_void_result (*yetty_ytermsink_pty_write_fn)(struct yetty_yclass_object *,
                                                                        const char *, size_t);
 typedef struct yetty_ycore_void_result (*yetty_ytermsink_request_render_fn)(
@@ -32,6 +34,8 @@ typedef struct yetty_ycore_void_result (*yetty_ytermsink_clipboard_write_fn)(
     struct yetty_yclass_object *, const char *, size_t, int);
 typedef struct yetty_ycore_void_result (*yetty_ytermsink_sixel_write_fn)(
     struct yetty_yclass_object *, const char *, size_t);
+typedef struct yetty_ycore_void_result (*yetty_ytermsink_set_title_fn)(struct yetty_yclass_object *,
+                                                                       const char *, size_t);
 
 YETTY_MAYBE_UNUSED
 static yetty_ytermsink_pty_write_fn
@@ -53,6 +57,10 @@ YETTY_MAYBE_UNUSED
 static yetty_ytermsink_sixel_write_fn
     yetty_ytermsink_sink_yetty_ytermsink_sixel_write_yetty_ytermsink_sink_default_sixel_write_check =
         yetty_ytermsink_sink_default_sixel_write;
+YETTY_MAYBE_UNUSED
+static yetty_ytermsink_set_title_fn
+    yetty_ytermsink_sink_yetty_ytermsink_set_title_yetty_ytermsink_sink_default_set_title_check =
+        yetty_ytermsink_sink_default_set_title;
 
 struct yetty_yclass_ptr_result yetty_ytermsink_sink_class_get(void)
 {
@@ -81,6 +89,8 @@ struct yetty_yclass_ptr_result yetty_ytermsink_sink_class_get(void)
          (yetty_yclass_impl_t)yetty_ytermsink_sink_default_clipboard_write},
         {"yetty_ytermsink", "sixel_write", (yetty_yclass_method_id_t)yetty_ytermsink_sixel_write,
          (yetty_yclass_impl_t)yetty_ytermsink_sink_default_sixel_write},
+        {"yetty_ytermsink", "set_title", (yetty_yclass_method_id_t)yetty_ytermsink_set_title,
+         (yetty_yclass_impl_t)yetty_ytermsink_sink_default_set_title},
     };
     struct yetty_yclass_ptr_result register_class_r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]), NULL, NULL, 0);

@@ -313,6 +313,24 @@ def _load_compile_db() -> dict:
     return _COMPILE_DB
 
 
+def _repo_relative(file_path):
+    """Strip the repo-root prefix from a clang-reported file path.
+
+    clang reports an #include-resolved file with whatever prefix the -I flag
+    carried — ABSOLUTE for the compile-DB include dirs (e.g. the generated
+    impl headers). model.yaml is committed, so every path stored into it must
+    be stable across clones and machines; an absolute path re-stamps on every
+    fresh checkout and poisons the diff. Paths outside the repo (system
+    headers) pass through unchanged."""
+    if not file_path or not os.path.isabs(file_path):
+        return file_path
+    root = os.path.realpath(os.getcwd()) + os.sep
+    resolved = os.path.realpath(file_path)
+    if resolved.startswith(root):
+        return resolved[len(root):]
+    return file_path
+
+
 def _compile_flags_for(path: Path):
     """The build's include/define flags for this source, or None if the compile
     database has no usable entry. A source not compiled in THIS build config
@@ -1067,7 +1085,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             if decl.get("name") and kind == "TypedefDecl":
                 if decl["name"] not in local_typedefs:
                     local_typedefs[decl["name"]] = {
-                        "source_file": decl_file, "text": _typedef_text(decl)}
+                        "source_file": _repo_relative(decl_file), "text": _typedef_text(decl)}
             elif decl_file == str(path) and decl.get("name"):
                 if kind in ("RecordDecl", "EnumDecl"):
                     record_body = _record_field_list(decl) if kind == "RecordDecl" else None
