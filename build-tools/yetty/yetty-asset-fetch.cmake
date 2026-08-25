@@ -68,7 +68,7 @@ function(yetty_asset_fetch NAME)
             if(NOT _DL_CODE EQUAL 0)
                 file(REMOVE "${_TARBALL}")
                 # Hard-fail at configure time when the pinned release
-                # isn't downloadable. The complex stage-rootfs-riscv
+                # isn't downloadable. The composite stage-rootfs-riscv
                 # action populates ${YETTY_3RDPARTY_CACHE_DIR} from the
                 # build-rootfs-riscv job's workflow artifact, so this
                 # branch fires only when (a) the pinned version has no
