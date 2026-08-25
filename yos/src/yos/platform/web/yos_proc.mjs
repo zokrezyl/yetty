@@ -33,7 +33,7 @@
 // not the production yos surface. Imports it does not implement fail loudly
 // via strictImportEnv, never via a catch-all return-0 fallback.
 
-import { loadLiblua, installLuaForwarders } from "./lua/lua_bridge.mjs";
+import { loadLiblua, installLuaForwarders, luaCallDepth } from "./lua/lua_bridge.mjs";
 import { strictImportEnv } from "./import_manifest.mjs";
 
 const ASYNCIFY_NORMAL = 0, ASYNCIFY_UNWINDING = 1, ASYNCIFY_REWINDING = 2;
@@ -474,6 +474,14 @@ function buildLibc(state, env_vars, io, mgr, proc) {
     // function") that top produced before its build was instrumented.
     if (typeof proc.inst.exports.asyncify_start_unwind !== "function") {
       throw new Error(`'${proc.comm}' blocked in ${kind}() but its wasm is not asyncify-instrumented — rebuild it with wasm-opt --asyncify (see nixpkgs/lib/build-yos-package.nix)`);
+    }
+    // liblua shares the guest's stack but is NOT asyncify-instrumented:
+    // an unwind across its frames corrupts the rewind into an
+    // `unreachable` trap. Fail loudly instead — callers that can satisfy
+    // the request synchronously (open() on a cold yfs body) must do so
+    // before reaching here.
+    if (luaCallDepth() > 0) {
+      throw new Error(`'${proc.comm}' blocked in ${kind}() inside a lua_* call — liblua frames cannot asyncify-suspend`);
     }
     if (proc.asyncifyPtr === 0) proc.asyncifyPtr = state.alloc(ASYNCIFY_BUF_SIZE, 8);
     const b = proc.asyncifyPtr;
@@ -1091,16 +1099,27 @@ function buildLibc(state, env_vars, io, mgr, proc) {
       // stable across unwind/rewind, so the resuming() branch pairs with
       // exactly this open. O_TRUNC skips the fetch — the old bytes are
       // dead anyway.
+      //
+      // Suspension is UNSOUND while a lua_* forwarder is on the stack:
+      // liblua is not asyncify-instrumented, so the unwind would skip its
+      // frames and the rewind traps `unreachable` (that killed nvim's
+      // Lua-driven runtime opens — termcap.lua — on the static deploy,
+      // issue #724). Read the body synchronously instead; same for
+      // non-interactive procs, which have no scheduler to resume them.
       if (node.type === "file" && node.yfs) {
         if (proc.interactive && resuming()) proc.inst.exports.asyncify_stop_rewind();
         if (!node.data && !(flags & 0x400)) {
           if (node.yfs.error) { setErrno(5); return -1; } // EIO
-          mgr.yfsStart(node);
-          if (!node.data) {
-            if (node.yfs.error) { setErrno(5); return -1; }
-            if (!proc.interactive) { setErrno(5); return -1; } // no scheduler to resume us
-            beginBlock("open", () => !!node.data || !!(node.yfs && node.yfs.error));
-            return -1;
+          if (proc.interactive && luaCallDepth() === 0) {
+            mgr.yfsStart(node);
+            if (!node.data) {
+              if (node.yfs.error) { setErrno(5); return -1; }
+              beginBlock("open", () => !!node.data || !!(node.yfs && node.yfs.error));
+              return -1;
+            }
+          } else {
+            mgr.yfsStartSync(node);
+            if (!node.data) { setErrno(5); return -1; }
           }
         }
       }
@@ -2295,6 +2314,25 @@ export class Manager {
       (bytes) => { node.data = bytes; },
       (err) => { node.yfs.error = (err && err.message) || "yfs fetch failed"; },
     ).finally(() => { if (this.onAsyncBoot) this.onAsyncBoot(); });
+  }
+
+  // Synchronous body read for contexts that cannot asyncify-suspend (a
+  // lua_* forwarder on the stack, or a non-interactive proc with no
+  // scheduler to resume it). Prefers the client's native sync reader
+  // (node dir client); the browser client provides a sync-XHR fallback,
+  // which blocks the thread and is therefore only used here.
+  yfsStartSync(node) {
+    if (!node.yfs || node.data || node.yfs.error) return;
+    const client = this.yfsClient;
+    const readSync = client.readBodySync || client.readBodySyncFallback;
+    if (!readSync) {
+      // Not a body error — don't poison the node: a later open outside
+      // the non-suspendable context can still fetch it asynchronously.
+      console.error(`yfs: cold body for ${node.yfs.dir}/${node.yfs.entry.n} needed in a non-suspendable context and the client has no synchronous reader — open fails EIO`);
+      return;
+    }
+    try { node.data = readSync(node.yfs.dir, node.yfs.entry); }
+    catch (err) { node.yfs.error = (err && err.message) || "yfs sync read failed"; }
   }
 
   // Resolve an execve path to a runnable file node: the literal VFS

@@ -90,6 +90,18 @@ native yos host mounting yfs over HTTP) reads the per-directory files.
   opens yfs-backed files must be asyncify-instrumented** (all shipped
   tools are — the instrumentation is the same one fork needs).
   `O_TRUNC` opens skip the fetch (the old bytes are dead anyway).
+- **…except inside liblua — then read synchronously.** liblua.wasm
+  (nvim's Lua C API companion) shares the guest's memory and function
+  table but is NOT asyncify-instrumented: an unwind across a `lua_*`
+  forwarder frame corrupts the rewind into an `unreachable` trap.
+  nvim's TUI `require`s `vim/termcap.lua` from inside a `lua_pcall`,
+  which killed nvim on the static deploy (issue #724). While
+  `luaCallDepth() > 0` a cold open therefore reads the body
+  synchronously — the node dir client's `readBodySync`, or the browser
+  client's `readBodySyncFallback` (sync XHR; blocks the thread, which
+  is acceptable for the rare cold-open-inside-Lua). Any other blocking
+  syscall entered at lua depth fails loudly instead of corrupting.
+  Pinned by `web/lua/nvim_yfs_async_test.mjs`.
 - **Exec on demand.** `execve` of a cold binary parks the process in
   the existing async-boot state ("booting"), fetches the body, compiles
   it, and swaps the image in — the same path oversized modules already
