@@ -43,6 +43,7 @@ enum ssh_websocket_pty_state {
     SSH_STATE_AUTH,           /* password auth in progress */
     SSH_STATE_CHANNEL_OPEN,   /* opening the session channel */
     SSH_STATE_PTY_REQUEST,    /* requesting the remote pty */
+    SSH_STATE_SETENV,         /* pushing the optional ssh/setenv var */
     SSH_STATE_SHELL_REQUEST,  /* requesting the shell */
     SSH_STATE_READY,          /* shell running, bytes flow */
     SSH_STATE_CLOSED,         /* remote closed / transport gone */
@@ -74,6 +75,13 @@ struct yetty_yssh_ssh_websocket_pty {
     char *username;
     char *password;
     char *term_type;
+
+    /* Optional single environment variable to push to the remote before the
+     * shell starts (SSH "env" channel request). Both NULL when unused. The
+     * server only honours it when its sshd AcceptEnv whitelists the name —
+     * a refusal is non-fatal (see SSH_STATE_SETENV). */
+    char *setenv_name;
+    char *setenv_value;
 
     /* Encrypted inbound bytes waiting for libssh2's recv callback. */
     struct ssh_byte_ring rx_ring;
@@ -395,6 +403,29 @@ static void ssh_websocket_pty_pump(struct yetty_yssh_ssh_websocket_pty *pty)
             return;
         }
         pty->size_dirty = 0; /* initial size travelled with the pty-req */
+        pty->state = SSH_STATE_SETENV;
+        /* fallthrough */
+
+    case SSH_STATE_SETENV:
+        if (pty->setenv_name && pty->setenv_name[0]) {
+            const char *value = pty->setenv_value ? pty->setenv_value : "";
+            rc = libssh2_channel_setenv_ex(pty->channel, pty->setenv_name,
+                                           (unsigned int)strlen(pty->setenv_name), value,
+                                           (unsigned int)strlen(value));
+            if (rc == LIBSSH2_ERROR_EAGAIN) {
+                return;
+            }
+            /* Best-effort: the server rejects the request unless its sshd
+             * AcceptEnv whitelists this name. A refusal must NOT abort the
+             * session — the plain shell is still perfectly usable — so we
+             * log it and fall through to the shell request regardless. */
+            if (rc != 0) {
+                yinfo("ssh-ws: setenv %s not accepted by server (rc=%d) — continuing",
+                      pty->setenv_name, rc);
+            } else {
+                yinfo("ssh-ws: setenv %s=%s", pty->setenv_name, value);
+            }
+        }
         pty->state = SSH_STATE_SHELL_REQUEST;
         /* fallthrough */
 
@@ -580,6 +611,8 @@ static struct yetty_ycore_void_result ssh_websocket_pty_destroy(struct yetty_pla
     free(pty->username);
     free(pty->password);
     free(pty->term_type);
+    free(pty->setenv_name);
+    free(pty->setenv_value);
     free(pty);
 
     if (YETTY_IS_ERR(stop_res)) {
@@ -622,6 +655,8 @@ static void ssh_websocket_pty_destroy_partial(struct yetty_yssh_ssh_websocket_pt
     free(pty->username);
     free(pty->password);
     free(pty->term_type);
+    free(pty->setenv_name);
+    free(pty->setenv_value);
     free(pty);
 }
 
@@ -665,6 +700,25 @@ struct yetty_yplatform_pty_ptr_result yetty_yssh_ssh_websocket_pty_create(
         transport->ops->destroy(transport);
         ssh_websocket_pty_destroy_partial(pty);
         return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to copy ssh credentials");
+    }
+
+    /* Optional "NAME=VALUE" env var pushed to the remote before the shell
+     * starts (ssh/setenv). Split on the first '='; a bare "NAME" means an
+     * empty value. Left NULL when unset — the state machine then skips the
+     * setenv request entirely. */
+    const char *setenv_spec = config ? config->ops->get_string(config, "ssh/setenv", "") : "";
+    if (setenv_spec && setenv_spec[0]) {
+        const char *eq = strchr(setenv_spec, '=');
+        size_t name_len = eq ? (size_t)(eq - setenv_spec) : strlen(setenv_spec);
+        pty->setenv_name = malloc(name_len + 1);
+        pty->setenv_value = strdup(eq ? eq + 1 : "");
+        if (!pty->setenv_name || !pty->setenv_value) {
+            transport->ops->destroy(transport);
+            ssh_websocket_pty_destroy_partial(pty);
+            return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to copy ssh setenv");
+        }
+        memcpy(pty->setenv_name, setenv_spec, name_len);
+        pty->setenv_name[name_len] = '\0';
     }
 
     /* libssh2_init is internally refcounted; paired with libssh2_exit
