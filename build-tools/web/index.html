@@ -615,8 +615,11 @@
                     through a WebSocket↔TCP bridge
                     (<code>telnet-websocket.sh</code>); SSH crypto runs in the
                     browser, the bridge only relays encrypted bytes.</li>
-                <li><strong>ygreeter</strong> — the ygui feature showcase
-                    (plots, images, diagrams, shaders), no shell.</li>
+                <li><strong>ygreeter — feature showcase</strong> and
+                    <strong>yetty.dev demo shell</strong> — one-click SSH into
+                    the hosted throwaway demo (yetty / yetty). The showcase
+                    auto-launches the ygui feature demo in the terminal; the
+                    demo shell drops you straight at a prompt.</li>
                 <li><strong>lwIP relay</strong> — experimental in-browser
                     TCP/IP stack; telnets to a real host:port through an L2
                     relay.</li>
@@ -634,8 +637,7 @@
                 <code>?mode=yos</code>, <code>?mode=temu</code>,
                 <code>?mode=websocket&amp;url=ws://host:8090</code>,
                 <code>?mode=telnet&amp;url=ws://host:8024</code>,
-                <code>?mode=ssh&amp;user=you</code>,
-                <code>?mode=ygreeter</code>.</p>
+                <code>?mode=ssh&amp;user=you</code>.</p>
 
             <h2>Downloads and caching</h2>
             <p>The first visit downloads the terminal, its assets and — if
@@ -681,11 +683,19 @@
                 <span class="mode-desc">Real SSH, crypto in the browser. The bridge only
                     relays encrypted bytes: tools/telnet-websocket.sh HOST:22 8025</span>
             </button>
-            <button class="mode-option" type="button" data-mode="ygreeter">
+            <button class="mode-option" type="button" data-mode="ssh"
+                    data-direct="1" data-greeter="1" data-label="ygreeter showcase">
                 <span class="mode-name">ygreeter — feature showcase</span>
-                <span class="mode-desc">The ygui showcase app (plots, images, diagrams,
-                    shadertoys, …) rendered straight to the canvas — no terminal, no shell.
-                    Loads as its own wasm module.</span>
+                <span class="mode-desc">One click: SSHes into the hosted yetty.dev demo
+                    (yetty / yetty) and auto-launches the ygui showcase (plots, images,
+                    diagrams, shadertoys, …) in the terminal. Exit it to drop to a shell.</span>
+            </button>
+            <button class="mode-option" type="button" data-mode="ssh"
+                    data-direct="1" data-label="yetty.dev demo shell">
+                <span class="mode-name">yetty.dev demo shell</span>
+                <span class="mode-desc">One click: a plain shell on the same hosted yetty.dev
+                    demo over SSH (yetty / yetty) — a throwaway sandbox, no showcase. Try the
+                    rich-content tools: ycat, yplot, ydiagram-cli, …</span>
             </button>
             <button class="mode-option" type="button" data-mode="relay">
                 <span class="mode-name">In-browser networking (lwIP relay)</span>
@@ -1141,14 +1151,6 @@
                 urlLabel: 'Relay URL',
                 needsRelayTarget: true,
                 hint: 'Deep link: <code>?mode=relay&amp;url=wss://host/&amp;target=host:23</code>'
-            },
-            ygreeter: {
-                name: 'ygreeter',
-                desc: 'The ygui feature showcase (plots, images, diagrams, ' +
-                      'shadertoys, …) rendered straight to the canvas — no ' +
-                      'terminal, no shell. Loads as its own wasm module.',
-                needsUrl: false,
-                hint: 'Deep link: <code>?mode=ygreeter</code>'
             }
         };
 
@@ -1209,7 +1211,6 @@
         function instanceEndpointLabel(config) {
             if (config.mode === 'temu') return 'shared emulator';
             if (config.mode === 'yos') return 'shared yos engine';
-            if (config.mode === 'ygreeter') return '';
             if (config.mode === 'relay') {
                 return (config.wsUrl || '') +
                        (config.relayTarget ? ' → ' + config.relayTarget : '');
@@ -1236,7 +1237,7 @@
             const title = document.createElement('span');
             title.className = 'term-panel-title';
             title.textContent = '#' + instanceId + ' · ' +
-                (modeInfo ? modeInfo.name : config.mode);
+                (config.label || (modeInfo ? modeInfo.name : config.mode));
             const endpoint = document.createElement('span');
             endpoint.className = 'term-panel-endpoint';
             endpoint.textContent = instanceEndpointLabel(config);
@@ -1250,12 +1251,9 @@
             header.appendChild(closeBtn);
 
             const iframe = document.createElement('iframe');
-            // ygreeter is its own wasm module with no terminal — its page
-            // needs no session config. Everything else loads terminal.html
-            // bare and receives the config over postMessage (keeps ssh
-            // passwords out of iframe URLs).
-            iframe.src = config.mode === 'ygreeter'
-                ? 'ygreeter.html' : 'terminal.html';
+            // Every instance loads terminal.html bare and receives its config
+            // over postMessage (keeps ssh passwords out of iframe URLs).
+            iframe.src = 'terminal.html';
 
             const grip = document.createElement('div');
             grip.className = 'term-panel-grip';
@@ -1602,6 +1600,22 @@
             menuDialog.querySelectorAll('.mode-option').forEach(function (option) {
                 option.addEventListener('click', function () {
                     closeMenu();
+                    // data-direct entries skip the config dialog: fixed hosted
+                    // endpoint + demo login, opened in one click. data-greeter
+                    // additionally asks the remote to auto-launch ygreeter
+                    // (see buildModuleArguments / the SSH env var).
+                    if (option.dataset.direct) {
+                        openInstance({
+                            mode: option.dataset.mode,
+                            wsUrl: MODE_DEFAULT_URLS[option.dataset.mode] || '',
+                            sshUser: SSH_DEMO_USER,
+                            sshPassword: SSH_DEMO_PASSWORD,
+                            greeter: !!option.dataset.greeter,
+                            label: option.dataset.label || '',
+                            trace: traceOn
+                        });
+                        return;
+                    }
                     openConfig(option.dataset.mode, null);
                 });
             });

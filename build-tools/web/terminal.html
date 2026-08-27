@@ -1031,6 +1031,13 @@
                               (config.sshUser || SSH_DEMO_USER) + '@websocket',
                               '--ssh-password', config.sshPassword || SSH_DEMO_PASSWORD];
                 if (wsUrl) args.push('--websocket-url', wsUrl);
+                // Showcase entry: ask the remote login to auto-launch ygreeter.
+                // Delivered as an SSH env var the demo container's login shell
+                // detects (the bridge only relays ciphertext, so the signal
+                // must ride inside the SSH session). The server ignores it
+                // unless its sshd AcceptEnv whitelists the name, so plain SSH
+                // hosts are unaffected.
+                if (config.greeter) args.push('--ssh-setenv', 'YETTY_GREETER=1');
                 return args;
             }
             if (mode === 'relay') {

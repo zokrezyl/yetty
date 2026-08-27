@@ -74,6 +74,16 @@ if [ -d "${SOURCES_DIR}" ]; then
     yetty_mounts+=(--mount "type=bind,source=${SOURCES_DIR},target=/usr/share/yetty/sources,readonly")
 fi
 
+# The browser "ygreeter showcase" entry sends YETTY_GREETER=1 over the SSH
+# session (sshd's per-user AcceptEnv lets exactly this one var through). Forward
+# it into the container as a FIXED literal — never the raw, client-controlled
+# value — so the login shell (profile.sh) auto-launches ygreeter. Anything other
+# than the exact "1" is ignored, and the plain "demo shell" entry omits it.
+greeter_env=()
+if [ "${YETTY_GREETER:-}" = "1" ]; then
+    greeter_env=(--env YETTY_GREETER=1)
+fi
+
 # Unique per-session container name so teardown can target exactly this one.
 name="yetty-demo-$$-${RANDOM}"
 
@@ -108,6 +118,7 @@ timeout --signal=TERM --foreground "${SESSION_TIMEOUT}" \
         --tmpfs /tmp:rw,nosuid,nodev,size=128m \
         --tmpfs /home/yetty:rw,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700 \
         "${yetty_mounts[@]}" \
+        "${greeter_env[@]}" \
         --cap-drop ALL \
         --security-opt no-new-privileges \
         --user 1000:1000 \

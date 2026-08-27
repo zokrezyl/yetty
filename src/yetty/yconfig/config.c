@@ -1226,6 +1226,7 @@ enum {
     OPT_QEMU,
     OPT_SSH,
     OPT_SSH_PASSWORD,
+    OPT_SSH_SETENV,
     OPT_TELNET,
     OPT_WEBSOCKET,
     OPT_WEBSOCKET_URL,
@@ -1269,6 +1270,7 @@ static struct yetty_yplatform_option long_options[] = {
     {"qemu", no_argument, 0, OPT_QEMU},
     {"ssh", optional_argument, 0, OPT_SSH},
     {"ssh-password", required_argument, 0, OPT_SSH_PASSWORD},
+    {"ssh-setenv", required_argument, 0, OPT_SSH_SETENV},
     {"telnet", optional_argument, 0, OPT_TELNET},
     {"websocket", optional_argument, 0, OPT_WEBSOCKET},
     {"websocket-url", required_argument, 0, OPT_WEBSOCKET_URL},
@@ -1333,6 +1335,8 @@ static void print_usage(FILE *out, const char *prog)
     fprintf(out, "      --ssh [USER@HOST[:PORT]]       Connect to SSH remote shell\n");
     fprintf(out, "      --ssh-password=PASSWORD        SSH password (webasm; desktop can also "
                  "use keys)\n");
+    fprintf(out, "      --ssh-setenv=NAME=VALUE        Push env var to the remote before the "
+                 "shell (needs sshd AcceptEnv)\n");
     fprintf(out, "      --telnet [[HOST]:PORT]         Connect to a telnet server (default host "
                  "127.0.0.1)\n");
     fprintf(out, "      --websocket [URL]              Connect to a websocket PTY server "
@@ -1529,6 +1533,12 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             /* Endpoint credential only — no session-mode claim, rides
              * along with --ssh. */
             set_config(impl, "ssh/password", yetty_yplatform_optarg);
+            break;
+        case OPT_SSH_SETENV:
+            /* NAME=VALUE pushed to the remote before the shell starts.
+             * Best-effort — honoured only when the server's sshd AcceptEnv
+             * whitelists NAME. Rides along with --ssh. */
+            set_config(impl, "ssh/setenv", yetty_yplatform_optarg);
             break;
         case OPT_TELNET: {
             claim_session_mode(&session_mode, "telnet");

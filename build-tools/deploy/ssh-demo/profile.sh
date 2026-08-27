@@ -50,3 +50,21 @@ PS1='\[\e[38;2;107;168;146m\]yetty-demo\[\e[0m\]:\w\$ '
 if [ -f /etc/motd ]; then
     cat /etc/motd
 fi
+
+# The browser "ygreeter showcase" entry sets YETTY_GREETER=1 over the SSH
+# session (whitelisted by sshd AcceptEnv, forwarded into the container by
+# yetty-demo-session.sh). Auto-launch the ygui showcase for that entry only —
+# the plain "yetty.dev demo shell" entry leaves the var unset and lands the
+# visitor straight at the prompt, same login otherwise.
+#
+# The variable is exported, so every subshell in this container inherits it.
+# Gate the launch on a control file so ygreeter fires exactly ONCE per
+# container: `set -C` (noclobber) makes the create atomic, and /tmp is this
+# session's private tmpfs, so the marker is naturally per-connection. A later
+# login shell (a new yetty tab reusing this session) or a re-sourced profile
+# finds the marker and falls through to a plain shell — further tabs will not
+# relaunch the greeter. When ygreeter exits the visitor is dropped at the shell.
+if [ "${YETTY_GREETER:-}" = "1" ] && command -v ygreeter >/dev/null 2>&1 &&
+    (set -C; : > /tmp/.ygreeter-launched) 2>/dev/null; then
+    ygreeter
+fi
