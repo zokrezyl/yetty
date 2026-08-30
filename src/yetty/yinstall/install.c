@@ -63,14 +63,15 @@ static const struct yetty_yinstall_component *yinstall_components(size_t *count)
 /*
  * Streaming brotli decode. The one-shot API returns ERROR mid-stream on
  * the version we link against once the output buffer fills, so grow the
- * buffer between chunks with the streaming decoder. Returns a malloc'd
- * buffer the caller frees, or NULL on failure.
+ * buffer between chunks with the streaming decoder. On success the value
+ * is a malloc'd buffer the caller frees; *out_size holds its length.
  */
-static uint8_t *decompress_brotli(const uint8_t *data, size_t size, size_t *out_size)
+static struct yetty_ycore_uint8_ptr_result decompress_brotli(const uint8_t *data, size_t size,
+                                                             size_t *out_size)
 {
     BrotliDecoderState *state = BrotliDecoderCreateInstance(NULL, NULL, NULL);
     if (!state) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_uint8_ptr, "brotli: cannot create decoder (OOM)");
     }
 
     size_t capacity = size * 10;
@@ -80,7 +81,7 @@ static uint8_t *decompress_brotli(const uint8_t *data, size_t size, size_t *out_
     uint8_t *output = malloc(capacity);
     if (!output) {
         BrotliDecoderDestroyInstance(state);
-        return NULL;
+        return YETTY_ERR(yetty_ycore_uint8_ptr, "brotli: OOM allocating output buffer");
     }
 
     size_t input_remaining = size;
@@ -101,19 +102,23 @@ static uint8_t *decompress_brotli(const uint8_t *data, size_t size, size_t *out_
             if (!grown) {
                 free(output);
                 BrotliDecoderDestroyInstance(state);
-                return NULL;
+                return YETTY_ERR(yetty_ycore_uint8_ptr, "brotli: OOM growing output buffer");
             }
             output = grown;
             continue;
         }
+        /* NEEDS_MORE_INPUT on a complete blob, or a hard decode error:
+         * the embedded stream is corrupt. */
+        yerror("brotli: decode failed: %s",
+               BrotliDecoderErrorString(BrotliDecoderGetErrorCode(state)));
         free(output);
         BrotliDecoderDestroyInstance(state);
-        return NULL;
+        return YETTY_ERR(yetty_ycore_uint8_ptr, "brotli: corrupt embedded stream");
     }
 
     BrotliDecoderDestroyInstance(state);
     *out_size = used;
-    return output;
+    return YETTY_OK(yetty_ycore_uint8_ptr, output);
 }
 
 /* Render a byte count as a short human string into `buf`. */
@@ -235,13 +240,21 @@ struct component_install_ctx {
 };
 
 /* Write `data`/`size` to `path`, creating parents. Sets the exec bit when
- * `executable`. Returns a Result. */
+ * `executable`. On failure no partial file is left behind — the skip check
+ * in install_asset takes existence as proof of a good install, so a
+ * leftover partial file would freeze the corruption in place across runs. */
 static struct yetty_ycore_void_result write_file(const char *path, const uint8_t *data, size_t size,
                                                  int executable)
 {
     char parent[PATH_MAX];
-    if (yetty_yplatform_path_dirname(path, parent, sizeof(parent)) == 0) {
-        yetty_yplatform_mkdir_p(parent);
+    if (yetty_yplatform_path_dirname(path, parent, sizeof(parent)) != 0) {
+        yerror("yinstall: cannot derive parent dir of %s", path);
+        return YETTY_ERR(yetty_ycore_void, "cannot derive parent directory of install path");
+    }
+    struct yetty_ycore_void_result mkdir_res = yetty_yplatform_mkdir_p(parent);
+    if (YETTY_IS_ERR(mkdir_res)) {
+        yerror("yinstall: cannot create directory %s", parent);
+        return YETTY_ERR(yetty_ycore_void, "cannot create install directory", mkdir_res);
     }
 
     FILE *file = fopen(path, "wb");
@@ -251,14 +264,24 @@ static struct yetty_ycore_void_result write_file(const char *path, const uint8_t
     }
     if (size && fwrite(data, 1, size, file) != size) {
         fclose(file);
+        yetty_yplatform_unlink(path);
         yerror("yinstall: short write on %s", path);
         return YETTY_ERR(yetty_ycore_void, "short write installing file");
     }
-    fclose(file);
+    if (fclose(file) != 0) {
+        /* The libc buffer flush happens here — ENOSPC/EIO surface on
+         * fclose, not fwrite. The file on disk is incomplete. */
+        yetty_yplatform_unlink(path);
+        yerror("yinstall: flush failed on %s: %s", path, strerror(errno));
+        return YETTY_ERR(yetty_ycore_void, "flush failed installing file (disk full?)");
+    }
 
     if (executable) {
         /* No-op on Windows; gives +x to the apps and qemu binary on POSIX. */
-        yetty_yplatform_chmod(path, 0755);
+        if (yetty_yplatform_chmod(path, 0755) != 0) {
+            yerror("yinstall: cannot set exec bit on %s: %s", path, strerror(errno));
+            return YETTY_ERR(yetty_ycore_void, "cannot make installed file executable");
+        }
     }
     return YETTY_OK_VOID();
 }
@@ -286,7 +309,13 @@ static void install_asset(const char *name, const uint8_t *data, size_t size, in
     }
 
     char path[PATH_MAX];
-    snprintf(path, sizeof(path), "%s/%s", ctx->dest_dir, relative);
+    int path_len = snprintf(path, sizeof(path), "%s/%s", ctx->dest_dir, relative);
+    if (path_len < 0 || (size_t)path_len >= sizeof(path)) {
+        yerror("yinstall: install path too long for %s", name);
+        ctx->failed = 1;
+        ctx->result = YETTY_ERR(yetty_ycore_void, "install path too long");
+        return;
+    }
 
     /* Skip if already present. Baked-in bytes are fixed for a build, so an
      * existing file is correct. For uncompressed entries we also confirm
@@ -313,13 +342,15 @@ static void install_asset(const char *name, const uint8_t *data, size_t size, in
     size_t write_size = size;
     uint8_t *decompressed = NULL;
     if (compressed) {
-        decompressed = decompress_brotli(data, size, &write_size);
-        if (!decompressed) {
+        struct yetty_ycore_uint8_ptr_result decomp_res = decompress_brotli(data, size, &write_size);
+        if (YETTY_IS_ERR(decomp_res)) {
             yerror("yinstall: brotli decode failed for %s", name);
             ctx->failed = 1;
-            ctx->result = YETTY_ERR(yetty_ycore_void, "failed to decompress embedded asset");
+            ctx->result =
+                YETTY_ERR(yetty_ycore_void, "failed to decompress embedded asset", decomp_res);
             return;
         }
+        decompressed = decomp_res.value;
         write_data = decompressed;
     }
 
@@ -356,16 +387,28 @@ static struct yetty_ycore_void_result install_component(
     if (!root || !*root) {
         return YETTY_ERR(yetty_ycore_void, "could not resolve a destination directory");
     }
+    int dest_len;
     if (comp->subdir && *comp->subdir) {
-        snprintf(ctx.dest_dir, sizeof(ctx.dest_dir), "%s/%s", root, comp->subdir);
+        dest_len = snprintf(ctx.dest_dir, sizeof(ctx.dest_dir), "%s/%s", root, comp->subdir);
     } else {
-        snprintf(ctx.dest_dir, sizeof(ctx.dest_dir), "%s", root);
+        dest_len = snprintf(ctx.dest_dir, sizeof(ctx.dest_dir), "%s", root);
     }
-    yetty_yplatform_mkdir_p(ctx.dest_dir);
+    if (dest_len < 0 || (size_t)dest_len >= sizeof(ctx.dest_dir)) {
+        return YETTY_ERR(yetty_ycore_void, "component destination path too long");
+    }
+    struct yetty_ycore_void_result mkdir_res = yetty_yplatform_mkdir_p(ctx.dest_dir);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mkdir_res, "cannot create component destination dir");
 
     struct yetty_ycore_void_result walk =
         yetty_yplatform_install_foreach_asset(install_asset, &ctx);
     if (YETTY_IS_ERR(walk)) {
+        if (ctx.failed) {
+            /* Both the walk and a per-asset write failed. The asset error
+             * is the specific one; keep it and drop the walk's chain so
+             * neither is leaked. */
+            yetty_ycore_error_destroy(walk.error);
+            return ctx.result;
+        }
         return YETTY_ERR(yetty_ycore_void, "asset enumeration failed", walk);
     }
     if (ctx.failed) {
@@ -407,47 +450,88 @@ static struct yetty_ycore_void_result install_component(
 /* Version marker                                                     */
 /* ------------------------------------------------------------------ */
 
-static void marker_path(char *out, size_t out_size, const struct yetty_yplatform_paths *paths)
+static struct yetty_ycore_void_result marker_path(char *out, size_t out_size,
+                                                  const struct yetty_yplatform_paths *paths)
 {
-    snprintf(out, out_size, "%s/.yinstall/version", paths->data_dir_buf);
+    int written = snprintf(out, out_size, "%s/.yinstall/version", paths->data_dir_buf);
+    if (written < 0 || (size_t)written >= out_size) {
+        return YETTY_ERR(yetty_ycore_void, "install-marker path too long");
+    }
+    return YETTY_OK_VOID();
 }
 
-static void write_marker(const char *version, const struct yetty_yplatform_paths *paths)
+static struct yetty_ycore_void_result write_marker(const char *version,
+                                                   const struct yetty_yplatform_paths *paths)
 {
     char path[PATH_MAX];
     char dir[PATH_MAX];
-    marker_path(path, sizeof(path), paths);
-    if (yetty_yplatform_path_dirname(path, dir, sizeof(dir)) == 0) {
-        yetty_yplatform_mkdir_p(dir);
+    struct yetty_ycore_void_result path_res = marker_path(path, sizeof(path), paths);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, path_res, "cannot build install-marker path");
+    if (yetty_yplatform_path_dirname(path, dir, sizeof(dir)) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "cannot derive install-marker directory");
     }
+    struct yetty_ycore_void_result mkdir_res = yetty_yplatform_mkdir_p(dir);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mkdir_res, "cannot create install-marker directory");
+
     FILE *file = fopen(path, "w");
-    if (file) {
-        fprintf(file, "%s", version);
-        fclose(file);
+    if (!file) {
+        yerror("yinstall: cannot create marker %s: %s", path, strerror(errno));
+        return YETTY_ERR(yetty_ycore_void, "cannot create install marker");
     }
+    /* A partial marker could pass the next run's version compare, so any
+     * failed write removes the file — absence forces a clean refresh. */
+    if (fprintf(file, "%s", version) < 0) {
+        fclose(file);
+        yetty_yplatform_unlink(path);
+        return YETTY_ERR(yetty_ycore_void, "cannot write install marker");
+    }
+    if (fclose(file) != 0) {
+        yetty_yplatform_unlink(path);
+        return YETTY_ERR(yetty_ycore_void, "flush failed writing install marker");
+    }
+    return YETTY_OK_VOID();
 }
 
-/* Read the installed-version marker into `out`. Returns 1 when a marker
- * was read, 0 when none exists (first install). */
-static int read_marker(char *out, size_t out_size, const struct yetty_yplatform_paths *paths)
+/* Read the installed-version marker into `out`. Value 1 when a marker was
+ * read, 0 when none exists (first install). A marker that exists but cannot
+ * be opened is an error — mapping it to "first install" would silently flip
+ * the refresh policy. */
+static struct yetty_ycore_int_result read_marker(char *out, size_t out_size,
+                                                 const struct yetty_yplatform_paths *paths)
 {
     char path[PATH_MAX];
-    marker_path(path, sizeof(path), paths);
+    struct yetty_ycore_void_result path_res = marker_path(path, sizeof(path), paths);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, path_res, "cannot build install-marker path");
     FILE *file = fopen(path, "r");
     if (!file) {
-        return 0;
+        if (errno == ENOENT) {
+            return YETTY_OK(yetty_ycore_int, 0);
+        }
+        yerror("yinstall: cannot open marker %s: %s", path, strerror(errno));
+        return YETTY_ERR(yetty_ycore_int, "cannot open existing install marker");
     }
     int have_line = fgets(out, (int)out_size, file) != NULL;
     fclose(file);
     if (have_line) {
         out[strcspn(out, "\n")] = 0;
     }
-    return have_line;
+    return YETTY_OK(yetty_ycore_int, have_line);
 }
 
 /* ------------------------------------------------------------------ */
 /* Entry point                                                        */
 /* ------------------------------------------------------------------ */
+
+/* Error-path teardown: the install error being propagated outranks a
+ * paths-release failure, so absorb the latter. The success path checks
+ * the destroy result properly. */
+static void release_paths_absorb(struct yetty_yplatform_paths *paths)
+{
+    struct yetty_ycore_void_result destroy_res = yetty_yplatform_paths_destroy(paths);
+    if (YETTY_IS_ERR(destroy_res)) {
+        yetty_ycore_error_destroy(destroy_res.error);
+    }
+}
 
 struct yetty_ycore_void_result yetty_yinstall_run(const struct yetty_yinstall_options *options)
 {
@@ -479,7 +563,13 @@ struct yetty_ycore_void_result yetty_yinstall_run(const struct yetty_yinstall_op
     struct yetty_yinstall_options effective_options = *options;
     if (!effective_options.force) {
         char installed_version[64] = {0};
-        int have_marker = read_marker(installed_version, sizeof(installed_version), paths);
+        struct yetty_ycore_int_result marker_res =
+            read_marker(installed_version, sizeof(installed_version), paths);
+        if (YETTY_IS_ERR(marker_res)) {
+            release_paths_absorb(paths);
+            return YETTY_ERR(yetty_ycore_void, "cannot read install marker", marker_res);
+        }
+        int have_marker = marker_res.value;
         size_t version_len = strlen(version);
         int dirty_build = version_len >= 6 && strcmp(version + version_len - 6, "-dirty") == 0;
         if (!have_marker || dirty_build || strcmp(installed_version, version) != 0) {
@@ -500,12 +590,16 @@ struct yetty_ycore_void_result yetty_yinstall_run(const struct yetty_yinstall_op
             &components[index], &effective_options, paths, &total_bytes, &total_files);
         if (YETTY_IS_ERR(result)) {
             printf("\n  %s: install failed.\n", components[index].name);
-            yetty_yplatform_paths_destroy(paths);
+            release_paths_absorb(paths);
             return YETTY_ERR(yetty_ycore_void, "component install failed", result);
         }
     }
 
-    write_marker(version, paths);
+    struct yetty_ycore_void_result marker_write = write_marker(version, paths);
+    if (YETTY_IS_ERR(marker_write)) {
+        release_paths_absorb(paths);
+        return YETTY_ERR(yetty_ycore_void, "cannot record installed version", marker_write);
+    }
 
     char total_str[32];
     format_size(total_bytes, total_str, sizeof(total_str));
@@ -543,6 +637,7 @@ struct yetty_ycore_void_result yetty_yinstall_run(const struct yetty_yinstall_op
         }
     }
 
-    yetty_yplatform_paths_destroy(paths);
+    struct yetty_ycore_void_result destroy_res = yetty_yplatform_paths_destroy(paths);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, destroy_res, "cannot release platform paths");
     return YETTY_OK_VOID();
 }

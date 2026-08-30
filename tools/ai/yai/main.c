@@ -5587,7 +5587,8 @@ static struct yetty_ycore_void_result transcript_open(struct yai_app *app)
     if (yai_transcript_dir(dir, sizeof(dir)) != 0) {
         return YETTY_ERR(yetty_ycore_void, "transcript_open: state dir unavailable");
     }
-    yetty_yplatform_mkdir_p(dir);
+    struct yetty_ycore_void_result mkdir_res = yetty_yplatform_mkdir_p(dir);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mkdir_res, "transcript_open: cannot create dir");
     int written = snprintf(app->transcript_path, sizeof(app->transcript_path),
                            "%s/transcript-%s.jsonl", dir, app->transcript_tag);
     if (written < 0 || (size_t)written >= sizeof(app->transcript_path)) {
@@ -5608,7 +5609,8 @@ static struct yetty_ycore_int_result child_stderr_log_open(const char *file_tag)
     if (yai_transcript_dir(dir, sizeof(dir)) != 0) {
         return YETTY_ERR(yetty_ycore_int, "child_stderr_log_open: state dir unavailable");
     }
-    yetty_yplatform_mkdir_p(dir);
+    struct yetty_ycore_void_result mkdir_res = yetty_yplatform_mkdir_p(dir);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, mkdir_res, "child_stderr_log_open: cannot create dir");
     char stderr_log_path[PATH_MAX];
     int written =
         snprintf(stderr_log_path, sizeof(stderr_log_path), "%s/stderr-%s.log", dir, file_tag);

@@ -232,7 +232,11 @@ struct yetty_ycore_void_result yetty_ymap_tile_fetch(CURL *curl_handle, const ch
      * the render. */
     char cache_tile_dir[1024];
     snprintf(cache_tile_dir, sizeof(cache_tile_dir), "%s/%u/%u", cache_root, zoom, tile_x);
-    yetty_yplatform_mkdir_p(cache_tile_dir);
+    struct yetty_ycore_void_result cache_dir_res = yetty_yplatform_mkdir_p(cache_tile_dir);
+    if (YETTY_IS_ERR(cache_dir_res)) {
+        ywarn("ymap: cache dir create failed for %s: %s", cache_tile_dir, cache_dir_res.error.msg);
+        yetty_ycore_error_destroy(cache_dir_res.error);
+    }
     struct yetty_ycore_void_result write_res = write_entire_file(cache_path, *out_bytes, *out_len);
     if (YETTY_IS_ERR(write_res)) {
         ywarn("ymap: cache write failed for %s: %s", cache_path, write_res.error.msg);
@@ -314,7 +318,11 @@ static struct yetty_ycore_void_result tile_transfer_finish(CURL *easy_handle, CU
              transfer->request->tile_x);
     snprintf(cache_path, sizeof(cache_path), "%s/%u.%s", cache_tile_dir, transfer->request->tile_y,
              cache_file_extension);
-    yetty_yplatform_mkdir_p(cache_tile_dir);
+    struct yetty_ycore_void_result cache_dir_res = yetty_yplatform_mkdir_p(cache_tile_dir);
+    if (YETTY_IS_ERR(cache_dir_res)) {
+        ywarn("ymap: cache dir create failed for %s: %s", cache_tile_dir, cache_dir_res.error.msg);
+        yetty_ycore_error_destroy(cache_dir_res.error);
+    }
     struct yetty_ycore_void_result write_res =
         write_entire_file(cache_path, transfer->request->bytes, transfer->request->len);
     if (YETTY_IS_ERR(write_res)) {

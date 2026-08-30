@@ -2,7 +2,9 @@
 
 #include <yetty/yplatform/fs.h>
 #include <dirent.h>
+#include <errno.h>
 #include <libgen.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <string.h>
@@ -14,24 +16,41 @@ int yetty_yplatform_mkdir(const char *path)
     return mkdir(path, 0755);
 }
 
-void yetty_yplatform_mkdir_p(const char *path)
+struct yetty_ycore_void_result yetty_yplatform_mkdir_p(const char *path)
 {
-    char tmp[512];
-    snprintf(tmp, sizeof(tmp), "%s", path);
+    if (!path || !*path) {
+        return YETTY_ERR(yetty_ycore_void, "mkdir_p: empty path");
+    }
+    char tmp[PATH_MAX];
+    int written = snprintf(tmp, sizeof(tmp), "%s", path);
+    if (written < 0 || (size_t)written >= sizeof(tmp)) {
+        return YETTY_ERR(yetty_ycore_void, "mkdir_p: path too long");
+    }
 
     size_t len = strlen(tmp);
     if (len > 0 && tmp[len - 1] == '/') {
         tmp[len - 1] = '\0';
     }
 
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p == '/') {
-            *p = '\0';
+    for (char *cursor = tmp + 1; *cursor; cursor++) {
+        if (*cursor == '/') {
+            *cursor = '\0';
+            /* Parent steps: an already-existing component is normal; any
+             * real failure makes the final mkdir below fail too, which is
+             * where the error surfaces. */
             mkdir(tmp, 0755);
-            *p = '/';
+            *cursor = '/';
         }
     }
-    mkdir(tmp, 0755);
+    if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
+        return YETTY_ERR(yetty_ycore_void, "mkdir_p: cannot create directory");
+    }
+    /* EEXIST also fires when a regular file sits at `path` — verify. */
+    struct stat st;
+    if (stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        return YETTY_ERR(yetty_ycore_void, "mkdir_p: path exists but is not a directory");
+    }
+    return YETTY_OK_VOID();
 }
 
 int yetty_yplatform_file_exists(const char *path)

@@ -54,6 +54,9 @@ YETTY_YRESULT_DECLARE(yetty_ycore_uint32, uint32_t);
 YETTY_YRESULT_DECLARE(yetty_ycore_uint64, uint64_t);
 /* Owned heap string (caller frees value). Used by figure dump_state. */
 YETTY_YRESULT_DECLARE(yetty_ycore_char_ptr, char *);
+/* Owned heap bytes (caller frees value). Used by decompressors that hand
+ * back a malloc'd buffer. */
+YETTY_YRESULT_DECLARE(yetty_ycore_uint8_ptr, uint8_t *);
 /* Borrowed strings/bytes (caller does NOT free). Used by ygui value accessors
  * that return a pointer into the widget's own state. */
 YETTY_YRESULT_DECLARE(yetty_ycore_const_char_ptr, const char *);

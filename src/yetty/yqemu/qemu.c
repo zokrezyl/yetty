@@ -210,8 +210,19 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
     snprintf(qemu_cfg_dir, sizeof(qemu_cfg_dir), "%s/qemu", config_dir);
     snprintf(qemu_cfg_path, sizeof(qemu_cfg_path), "%s/qemu.cfg", qemu_cfg_dir);
     snprintf(share_path, sizeof(share_path), "%s/share", qemu_cfg_dir);
-    yetty_yplatform_mkdir_p(qemu_cfg_dir);
-    yetty_yplatform_mkdir_p(share_path);
+    /* Best-effort: with no cfg dir the settings fall back to defaults, and
+     * a missing share dir only degrades the 9p host-share mount — qemu
+     * itself reports that at launch. */
+    struct yetty_ycore_void_result cfg_dir_res = yetty_yplatform_mkdir_p(qemu_cfg_dir);
+    if (YETTY_IS_ERR(cfg_dir_res)) {
+        ywarn("qemu: cannot create cfg dir %s: %s", qemu_cfg_dir, cfg_dir_res.error.msg);
+        yetty_ycore_error_destroy(cfg_dir_res.error);
+    }
+    struct yetty_ycore_void_result share_dir_res = yetty_yplatform_mkdir_p(share_path);
+    if (YETTY_IS_ERR(share_dir_res)) {
+        ywarn("qemu: cannot create share dir %s: %s", share_path, share_dir_res.error.msg);
+        yetty_ycore_error_destroy(share_dir_res.error);
+    }
     qemu_settings_ensure_default(qemu_cfg_path);
     qemu_settings_defaults(&settings);
     qemu_settings_load(&settings, qemu_cfg_path);
